@@ -16,7 +16,7 @@ apply plugin: 'maven-publish'
 
 version = '6.0.2'
 group = 'com.minecraftcomesalive' // http://maven.apache.org/guides/mini/guide-naming-conventions.html
-archivesBaseName = 'MCA-1.12.2'
+archivesBaseName = 'mca'
 
 sourceCompatibility = targetCompatibility = compileJava.sourceCompatibility = compileJava.targetCompatibility = '1.8' // Need this here so eclipse task generates correctly.
 

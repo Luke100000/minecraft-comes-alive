@@ -1,16 +1,14 @@
-[
-{
-  "modid": "mca",
-  "name": "Minecraft Comes Alive",
-  "description": "Replaces villagers with humans, adds marriage, children, and more!",
-  "version": "${version}",
-  "mcversion": "${mcversion}",
-  "url": "https://minecraftcomesalive.com/",
-  "updateUrl": "",
-  "authorList": ["WildBamaBoy", "SheWolfDeadly"],
-  "credits": "Mezzodrinker, The_Nanobots, numerous others.",
-  "logoFile": "mca.png",
-  "screenshots": [],
-  "dependencies": []
-}
-]
+[{
+	"modid": "mca",
+	"name": "Minecraft Comes Alive",
+	"description": "Replaces villagers with humans, adds marriage, children, and more!",
+	"version": "6.0.2",
+	"mcversion": "${mcversion}",
+	"url": "https://minecraftcomesalive.com/",
+	"updateUrl": "",
+	"authorList": ["WildBamaBoy", "SheWolfDeadly"],
+	"credits": "Mezzodrinker, The_Nanobots, numerous others.",
+	"logoFile": "mca.png",
+	"screenshots": [],
+	"dependencies": []
+}]
