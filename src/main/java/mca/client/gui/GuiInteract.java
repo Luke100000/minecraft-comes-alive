@@ -221,7 +221,7 @@ public class GuiInteract extends Screen {
         String marriageInfo;
         if (hoveringOverIcon("married")) {
             String spouseName = villager.spouseName.get();
-            if (marriageState == EnumMarriageState.MARRIED)
+            if (marriageState == EnumMarriageState.MARRIED || marriageState == EnumMarriageState.MARRIED_TO_PLAYER)
                 marriageInfo = MCA.localize("gui.interact.label.married", spouseName);
             else if (marriageState == EnumMarriageState.ENGAGED)
                 marriageInfo = MCA.localize("gui.interact.label.engaged", spouseName);
