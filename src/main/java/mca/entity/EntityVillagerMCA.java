@@ -394,7 +394,8 @@ public class EntityVillagerMCA extends VillagerEntity implements INamedContainer
 
     private void initializePersonality() {
         personality.set(EnumPersonality.getRandom().getId());
-        mood.set(EnumMood.getLevel(random.nextInt(EnumMood.maxLevel - EnumMood.minLevel + 1) + EnumMood.minLevel));
+        //since minLevel is -100 and it makes no
+        mood.set(EnumMood.getLevel(random.nextInt(EnumMood.maxLevel - EnumMood.normalMinLevel + 1) + EnumMood.normalMinLevel));
     }
 
     //returns a float between 0 and 1, weighted at 0.5
@@ -621,7 +622,11 @@ public class EntityVillagerMCA extends VillagerEntity implements INamedContainer
         ServerWorld serverWorld = ((ServerWorld) level);
         PointOfInterestManager poiManager = serverWorld.getPoiManager();
         Optional<GlobalPos> bed = this.brain.getMemory(MemoryModuleType.HOME);
-        bed.ifPresent(globalPos -> poiManager.release(globalPos.pos()));
+        bed.ifPresent(globalPos -> {
+            if (poiManager.existsAtPosition(PointOfInterestType.HOME, globalPos.pos())){
+                poiManager.release(globalPos.pos());
+            }
+        });
     }
 
     private boolean setHome(BlockPos pos, World world) {
