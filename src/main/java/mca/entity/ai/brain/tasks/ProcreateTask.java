@@ -29,7 +29,7 @@ public class ProcreateTask extends Task<EntityVillagerMCA> {
         Random random = villager.getRandom();
         if (villager.procreateTick > 0) {
             villager.procreateTick--;
-
+            villager.getNavigation().stop();
             world.broadcastEntityEvent(villager, (byte) 12);
         } else {
             ItemStack stack = new ItemStack(random.nextBoolean() ? ItemsMCA.BABY_BOY.get() : ItemsMCA.BABY_GIRL.get());
