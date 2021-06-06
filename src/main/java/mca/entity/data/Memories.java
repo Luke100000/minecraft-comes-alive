@@ -1,8 +1,8 @@
 package mca.entity.data;
 
-import cobalt.core.CConstants;
 import cobalt.minecraft.nbt.CNBT;
 import lombok.Getter;
+import mca.core.Constants;
 import mca.entity.EntityVillagerMCA;
 import mca.enums.EnumDialogueType;
 
@@ -22,7 +22,7 @@ public class Memories {
 
     private Memories() {
         hearts = 0;
-        playerUUID = CConstants.ZERO_UUID;
+        playerUUID = Constants.ZERO_UUID;
         interactionFatigue = 0;
         dialogueType = EnumDialogueType.UNASSIGNED.getId();
     }

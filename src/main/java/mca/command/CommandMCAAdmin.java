@@ -1,6 +1,5 @@
 package mca.command;
 
-import cobalt.minecraft.util.CText;
 import cobalt.minecraft.world.CWorld;
 import com.mojang.brigadier.Command;
 import com.mojang.brigadier.CommandDispatcher;
@@ -184,11 +183,11 @@ public class CommandMCAAdmin {
     }
 
     private static void success(String message, CommandContext<CommandSource> ctx) {
-        ctx.getSource().sendSuccess(new StringTextComponent(CText.Color.GREEN + message), true);
+        ctx.getSource().sendSuccess(new StringTextComponent(Constants.Color.GREEN + message), true);
     }
 
     private static void fail(String message, CommandContext<CommandSource> ctx) {
-        ctx.getSource().sendFailure(new StringTextComponent(CText.Color.RED + message));
+        ctx.getSource().sendFailure(new StringTextComponent(Constants.Color.RED + message));
     }
 
     private static int displayHelp(CommandContext<CommandSource> ctx) {

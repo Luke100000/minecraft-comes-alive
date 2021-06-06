@@ -1,9 +1,9 @@
 package mca.entity.data;
 
-import cobalt.core.CConstants;
 import cobalt.minecraft.nbt.CNBT;
 import cobalt.minecraft.world.CWorld;
 import lombok.Getter;
+import mca.core.Constants;
 import mca.entity.EntityVillagerMCA;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.player.PlayerEntity;
@@ -14,8 +14,8 @@ import java.util.UUID;
 
 @Getter
 public class ParentPair {
-    private UUID parent1UUID = CConstants.ZERO_UUID;
-    private UUID parent2UUID = CConstants.ZERO_UUID;
+    private UUID parent1UUID = Constants.ZERO_UUID;
+    private UUID parent2UUID = Constants.ZERO_UUID;
     private String parent1Name = "";
     private String parent2Name = "";
 
@@ -45,7 +45,7 @@ public class ParentPair {
         data.parent1Name = villager.getName().getString();
         data.parent1UUID = villager.getUUID();
         data.parent2Name = villager.spouseName.get();
-        data.parent2UUID = villager.spouseUUID.get().orElse(CConstants.ZERO_UUID);
+        data.parent2UUID = villager.spouseUUID.get().orElse(Constants.ZERO_UUID);
         return data;
     }
 

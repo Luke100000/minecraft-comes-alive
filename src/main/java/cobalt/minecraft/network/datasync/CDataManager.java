@@ -1,7 +1,7 @@
 package cobalt.minecraft.network.datasync;
 
-import cobalt.core.CConstants;
 import cobalt.minecraft.nbt.CNBT;
+import mca.core.Constants;
 import net.minecraft.entity.Entity;
 import net.minecraft.util.math.BlockPos;
 
@@ -49,7 +49,7 @@ public class CDataManager {
     }
 
     public CUUIDParameter newUUID(String id) {
-        return newUUID(id, CConstants.ZERO_UUID);
+        return newUUID(id, Constants.ZERO_UUID);
     }
 
     public CUUIDParameter newUUID(String id, UUID defaultValue) {

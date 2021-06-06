@@ -1,7 +1,7 @@
 package cobalt.minecraft.nbt;
 
-import cobalt.core.Cobalt;
 import mca.core.Constants;
+import mca.core.MCA;
 import net.minecraft.nbt.CompoundNBT;
 import net.minecraft.nbt.CompressedStreamTools;
 import net.minecraft.nbt.ListNBT;
@@ -156,7 +156,7 @@ public class CNBT implements Serializable {
         } else if (value instanceof CNBT) {
             setTag(key, (CNBT) value);
         } else {
-            Cobalt.getLog().throwing(new Exception("Attempt to set CNBT data of unknown class!: " + clazz.getName()));
+            MCA.getMod().logger.throwing(new Exception("Attempt to set CNBT data of unknown class!: " + clazz.getName()));
         }
     }
 

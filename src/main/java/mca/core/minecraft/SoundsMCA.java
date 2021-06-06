@@ -34,7 +34,8 @@ public final class SoundsMCA {
         return event;
     }
 
-    public static void register(){}
+    public static void register() {
+    }
 
     @SubscribeEvent
     public static void register(RegistryEvent.Register<SoundEvent> event) {

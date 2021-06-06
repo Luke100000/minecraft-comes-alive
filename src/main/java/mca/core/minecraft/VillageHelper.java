@@ -15,6 +15,8 @@ import net.minecraft.world.server.ServerWorld;
 import java.util.*;
 
 public class VillageHelper {
+    private static final Map<UUID, Integer> playerVillagePositions = new HashMap<>();
+
     private static boolean isWithinVillage(Village village, Entity entity) {
         return village.getCenter().distSqr(entity.blockPosition()) < Math.pow(village.getSize(), 2.0);
     }
@@ -28,8 +30,6 @@ public class VillageHelper {
         }
         return null;
     }
-
-    private static final Map<UUID, Integer> playerVillagePositions = new HashMap<>();
 
     public static void tick(CWorld world) {
         if (!world.isClientSide) {
@@ -162,7 +162,7 @@ public class VillageHelper {
         int guards = 0;
         List<EntityVillagerMCA> villagers = village.getResidents(world);
         for (EntityVillagerMCA villager : villagers) {
-            if (villager.getProfession() == MCA.PROFESSION_GUARD.get()) {
+            if (villager.getProfession() == ProfessionsMCA.GUARD) {
                 guards++;
             }
         }
@@ -171,7 +171,7 @@ public class VillageHelper {
         if (villagers.size() > 0 && guards < guardCapacity) {
             EntityVillagerMCA villager = villagers.get(world.rand.nextInt(villagers.size()));
             if (!villager.isBaby()) {
-                villager.setProfession(MCA.PROFESSION_GUARD.get());
+                villager.setProfession(ProfessionsMCA.GUARD);
             }
         }
     }

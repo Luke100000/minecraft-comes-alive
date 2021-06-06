@@ -1,6 +1,5 @@
-package cobalt.core;
+package cobalt.localizer;
 
-import cobalt.localizer.VarParser;
 import net.minecraft.util.text.LanguageMap;
 
 import java.util.*;
@@ -49,7 +48,7 @@ public class Localizer {
                 str = str.replaceAll(varString, vars.get(index - 1));
             } catch (IndexOutOfBoundsException e) {
                 str = str.replaceAll(varString, "");
-                Cobalt.getLog().warn("Failed to replace variable in localized string: " + str);
+                //Cobalt.getLog().warn("Failed to replace variable in localized string: " + str);
             } finally {
                 index++;
                 varString = "%v" + index + "%";

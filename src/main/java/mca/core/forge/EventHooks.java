@@ -6,7 +6,10 @@ import mca.command.CommandMCA;
 import mca.command.CommandMCAAdmin;
 import mca.core.Constants;
 import mca.core.MCA;
+import mca.core.minecraft.EntitiesMCA;
+import mca.core.minecraft.ProfessionsMCA;
 import mca.core.minecraft.VillageHelper;
+import mca.entity.EntityGrimReaper;
 import mca.entity.EntityVillagerMCA;
 import mca.entity.data.VillageManagerData;
 import mca.items.ItemBaby;
@@ -27,6 +30,7 @@ import net.minecraft.world.World;
 import net.minecraft.world.server.ServerWorld;
 import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.event.TickEvent;
+import net.minecraftforge.event.entity.EntityAttributeCreationEvent;
 import net.minecraftforge.event.entity.EntityJoinWorldEvent;
 import net.minecraftforge.event.entity.item.ItemTossEvent;
 import net.minecraftforge.event.entity.living.LivingDamageEvent;
@@ -81,7 +85,7 @@ public class EventHooks {
             if (e.level.isLoaded(e.blockPosition())) {
                 e.remove();
 
-                EntityVillagerMCA newVillager = new EntityVillagerMCA(MCA.ENTITYTYPE_VILLAGER.get(), e.level);
+                EntityVillagerMCA newVillager = new EntityVillagerMCA(e.level);
                 newVillager.setPos(e.getX(), e.getY(), e.getZ());
 
                 e.level.isLoaded(newVillager.blockPosition());
@@ -133,7 +137,7 @@ public class EventHooks {
                 double r = 10.0D;
                 AxisAlignedBB axisAlignedBB = new AxisAlignedBB(villager.getX() - r, villager.getY() - r, villager.getZ() - r, villager.getX() + r, villager.getY() + r, villager.getZ() + r);
                 villager.world.getMcWorld().getLoadedEntitiesOfClass(EntityVillagerMCA.class, axisAlignedBB).forEach(v -> {
-                    if (v.distanceTo(v) <= 10.0D && v.getProfession() == MCA.PROFESSION_GUARD.get()) {
+                    if (v.distanceTo(v) <= 10.0D && v.getProfession() == ProfessionsMCA.GUARD) {
                         v.setTarget((LivingEntity) source);
                     }
                 });
@@ -233,4 +237,10 @@ public class EventHooks {
         }
     }
 
+    //this event doesn't seem to fire so check EntitiesMCA for real one
+    @SubscribeEvent
+    public void attributeCreate(EntityAttributeCreationEvent event) {
+        event.put(EntitiesMCA.VILLAGER, EntityVillagerMCA.createAttributes().build());
+        event.put(EntitiesMCA.GRIM_REAPER, EntityGrimReaper.createAttributes().build());
+    }
 }

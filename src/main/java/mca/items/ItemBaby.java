@@ -5,6 +5,8 @@ import cobalt.minecraft.world.CWorld;
 import cobalt.network.NetworkHandler;
 import mca.core.Constants;
 import mca.core.MCA;
+import mca.core.minecraft.EntitiesMCA;
+import mca.core.minecraft.ProfessionsMCA;
 import mca.entity.EntityVillagerMCA;
 import mca.entity.data.ParentPair;
 import mca.entity.data.PlayerSaveData;
@@ -75,9 +77,9 @@ public class ItemBaby extends Item {
         }
 
         if (!cworld.isClientSide && isReadyToGrowUp(stack) && !getBabyName(stack).equals("")) { // Name is good and we're ready to grow
-            EntityVillagerMCA child = new EntityVillagerMCA(MCA.ENTITYTYPE_VILLAGER.get(), world);
+            EntityVillagerMCA child = new EntityVillagerMCA(world);
             child.gender.set((this.isMale ? EnumGender.MALE : EnumGender.FEMALE).getId());
-            child.setProfession(MCA.PROFESSION_CHILD.get());
+            child.setProfession(ProfessionsMCA.CHILD);
             child.villagerName.set(getBabyName(stack));
             child.setBaby(true);
             child.setPos(posX, posY, posZ);

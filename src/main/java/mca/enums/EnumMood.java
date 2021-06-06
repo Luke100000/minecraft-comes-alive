@@ -29,7 +29,7 @@ public enum EnumMood {
     TALKATIVE(RangedInteger.of(7, 14), EnumMoodGroup.SERIOUS),
     PLEASED(RangedInteger.of(15, 15), EnumMoodGroup.SERIOUS);
 
-Po    //-15 to 15 is a range of normal interactions, but mood can go -15 to -100 due to player interactions.
+    //-15 to 15 is a range of normal interactions, but mood can go -15 to -100 due to player interactions.
     public final static int normalMinLevel = -15;
     public final static int absoluteMinLevel = -100;
     public final static int maxLevel = 15;

@@ -177,8 +177,8 @@ public class EntityVillagerMCA extends VillagerEntity implements INamedContainer
     private PlayerEntity interactingPlayer;
     public int procreateTick = -1;
 
-    public EntityVillagerMCA(EntityType<? extends EntityVillagerMCA> type, World w) {
-        super(type, w);
+    public EntityVillagerMCA(World w) {
+        super(EntitiesMCA.VILLAGER, w);
         inventory = new CInventory(this, 27);
         inventory.addListener(this::onInvChange);
 
@@ -299,7 +299,7 @@ public class EntityVillagerMCA extends VillagerEntity implements INamedContainer
         }
 
         //we don't use attributes
-        float damage = getProfession() == MCA.PROFESSION_GUARD.get() ? 9.0F : 3.0F;
+        float damage = getProfession() == ProfessionsMCA.GUARD ? 9.0F : 3.0F;
         float knockback = 3.0F;
 
         //personality bonus
@@ -440,7 +440,7 @@ public class EntityVillagerMCA extends VillagerEntity implements INamedContainer
     @Override
     public final boolean hurt(DamageSource source, float damageAmount) {
         // Guards take 50% less damage
-        if (getProfession() == MCA.PROFESSION_GUARD.get()) {
+        if (getProfession() == ProfessionsMCA.GUARD) {
             damageAmount *= 0.5;
         }
 
@@ -454,7 +454,7 @@ public class EntityVillagerMCA extends VillagerEntity implements INamedContainer
                 sendMessageTo(MCA.localize("villager.hurt"), p);
             }
 
-            if (source.getDirectEntity() instanceof ZombieEntity && getProfession() != MCA.PROFESSION_GUARD.get() && MCA.getConfig().enableInfection && random.nextFloat() < MCA.getConfig().infectionChance / 100.0) {
+            if (source.getDirectEntity() instanceof ZombieEntity && getProfession() != ProfessionsMCA.GUARD && MCA.getConfig().enableInfection && random.nextFloat() < MCA.getConfig().infectionChance / 100.0) {
                 isInfected.set(true);
             }
         }
@@ -1064,7 +1064,7 @@ public class EntityVillagerMCA extends VillagerEntity implements INamedContainer
                 });
 
                 // Change profession away from child for villager children.
-                if (getProfession() == MCA.PROFESSION_CHILD.get()) {
+                if (getProfession() == ProfessionsMCA.CHILD) {
                     setProfession(API.randomProfession().getMcProfession());
                 }
             }
@@ -1085,7 +1085,7 @@ public class EntityVillagerMCA extends VillagerEntity implements INamedContainer
             // grow up time is in minutes and we measure age in seconds
             if (babyAge.get() >= MCA.getConfig().babyGrowUpTime * 60) {
                 EnumGender gender = isBabyMale.get() ? EnumGender.MALE : EnumGender.FEMALE;
-                EntityVillagerMCA child = new EntityVillagerMCA(MCA.ENTITYTYPE_VILLAGER.get(), level);
+                EntityVillagerMCA child = new EntityVillagerMCA(level);
                 child.gender.set(gender.getId());
                 child.setPos(this.getX(), this.getY(), this.getZ());
                 child.parents.set(ParentPair.create(this.getUUID(), spouseUUID.get().orElse(Constants.ZERO_UUID), villagerName.get(), spouseName.get()).toNBT());

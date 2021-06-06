@@ -4,6 +4,7 @@ import cobalt.minecraft.entity.merchant.villager.CVillagerProfession;
 import cobalt.minecraft.world.CWorld;
 import mca.api.API;
 import mca.core.MCA;
+import mca.core.minecraft.EntitiesMCA;
 import mca.entity.data.ParentPair;
 import mca.enums.EnumGender;
 import net.minecraft.entity.Entity;
@@ -22,7 +23,7 @@ public class VillagerFactory {
 
     private VillagerFactory(CWorld world) {
         this.world = world;
-        this.villager = new EntityVillagerMCA(MCA.ENTITYTYPE_VILLAGER.get(), world.getMcWorld());
+        this.villager = new EntityVillagerMCA(world.getMcWorld());
     }
 
     public static VillagerFactory newVillager(CWorld world) {

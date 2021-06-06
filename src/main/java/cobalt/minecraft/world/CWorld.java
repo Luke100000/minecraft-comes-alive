@@ -1,8 +1,9 @@
 package cobalt.minecraft.world;
 
-import cobalt.core.Cobalt;
 import cobalt.minecraft.world.storage.CWorldSavedData;
 import lombok.Getter;
+import mca.core.Constants;
+import mca.core.MCA;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.MobEntity;
 import net.minecraft.entity.SpawnReason;
@@ -79,7 +80,7 @@ public class CWorld {
             try {
                 return (CWorldSavedData) clazz.getDeclaredConstructor(String.class).newInstance(dataId);
             } catch (Exception e) {
-                Cobalt.getLog().info(e);
+                MCA.getMod().logger.info(e);
                 return null;
             }
         }, dataId);

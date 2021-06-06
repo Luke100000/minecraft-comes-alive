@@ -5,6 +5,7 @@ import cobalt.network.NetworkHandler;
 import com.mojang.blaze3d.matrix.MatrixStack;
 import lombok.NonNull;
 import mca.core.MCA;
+import mca.core.minecraft.EntitiesMCA;
 import mca.entity.EntityVillagerMCA;
 import mca.network.CallToPlayerMessage;
 import mca.network.GetVillagerRequest;
@@ -129,7 +130,7 @@ public class GuiWhistle extends Screen {
         if (keys.size() > 0) {
             CNBT firstData = villagerData.get(keys.get(index));
 
-            dummy = new EntityVillagerMCA(MCA.ENTITYTYPE_VILLAGER.get(), Minecraft.getInstance().level);
+            dummy = new EntityVillagerMCA(Minecraft.getInstance().level);
             dummy.readAdditionalSaveData(firstData.getMcCompound());
 
             villagerNameButton.setMessage(dummy.getDisplayName());

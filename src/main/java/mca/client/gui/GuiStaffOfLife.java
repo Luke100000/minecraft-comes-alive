@@ -4,6 +4,7 @@ import cobalt.minecraft.nbt.CNBT;
 import cobalt.network.NetworkHandler;
 import com.mojang.blaze3d.matrix.MatrixStack;
 import mca.core.MCA;
+import mca.core.minecraft.EntitiesMCA;
 import mca.entity.EntityVillagerMCA;
 import mca.network.ReviveVillagerMessage;
 import mca.network.SavedVillagersRequest;
@@ -11,7 +12,6 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.screen.inventory.InventoryScreen;
 import net.minecraft.client.gui.widget.button.Button;
-import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.util.text.StringTextComponent;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
@@ -82,7 +82,7 @@ public class GuiStaffOfLife extends Screen {
         villagerData = data;
 
         if (data.size() > 0) {
-            dummy = new EntityVillagerMCA(MCA.ENTITYTYPE_VILLAGER.get(), Minecraft.getInstance().level);
+            dummy = new EntityVillagerMCA(Minecraft.getInstance().level);
             keys.clear();
             keys.addAll(data.keySet());
             selectData(0);

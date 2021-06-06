@@ -3,7 +3,7 @@ package mca.network;
 import cobalt.minecraft.nbt.CNBT;
 import cobalt.minecraft.world.CWorld;
 import cobalt.network.Message;
-import mca.core.MCA;
+import mca.core.minecraft.EntitiesMCA;
 import mca.entity.EntityVillagerMCA;
 import mca.entity.data.SavedVillagers;
 import net.minecraft.entity.player.ServerPlayerEntity;
@@ -23,7 +23,7 @@ public class ReviveVillagerMessage extends Message {
         SavedVillagers villagers = SavedVillagers.get(world);
         CNBT nbt = SavedVillagers.get(world).getVillagerByUUID(uuid);
         if (nbt != null) {
-            EntityVillagerMCA villager = new EntityVillagerMCA(MCA.ENTITYTYPE_VILLAGER.get(), player.level);
+            EntityVillagerMCA villager = new EntityVillagerMCA(player.level);
             villager.setPos(player.getX(), player.getY(), player.getZ());
 
             villager.readAdditionalSaveData(nbt.getMcCompound());

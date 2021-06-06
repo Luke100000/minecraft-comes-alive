@@ -8,6 +8,7 @@ import mca.api.types.*;
 import mca.client.gui.GuiInteract;
 import mca.client.gui.component.ButtonEx;
 import mca.core.MCA;
+import mca.core.minecraft.ProfessionsMCA;
 import mca.entity.EntityVillagerMCA;
 import mca.enums.EnumConstraint;
 import mca.enums.EnumGender;
@@ -328,7 +329,7 @@ public class API {
     }
 
     public static CVillagerProfession randomProfession() {
-        return CVillagerProfession.fromMC(MCA.PROFESSION_GUARD.get());
+        return CVillagerProfession.fromMC(ProfessionsMCA.GUARD);
     }
 
     //returns a random generated name for a given name set
