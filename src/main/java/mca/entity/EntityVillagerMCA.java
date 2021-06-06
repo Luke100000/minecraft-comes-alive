@@ -394,7 +394,7 @@ public class EntityVillagerMCA extends VillagerEntity implements INamedContainer
 
     private void initializePersonality() {
         personality.set(EnumPersonality.getRandom().getId());
-        mood.set(random.nextInt(EnumMood.maxLevel - EnumMood.minLevel + 1) + EnumMood.minLevel);
+        mood.set(EnumMood.getLevel(random.nextInt(EnumMood.maxLevel - EnumMood.minLevel + 1) + EnumMood.minLevel));
     }
 
     //returns a float between 0 and 1, weighted at 0.5

@@ -62,18 +62,16 @@ public enum EnumMood {
     }
 
     public int getHeartsModifierForInteraction(EnumInteraction interaction) {
-        //sad people need a hug
-        // TODO adapt values
         switch (interaction) {
             case CHAT:
             case JOKE:
             case TELL_STORY:
             case HUG:
-                return level.randomValue(API.getRng());
+                return level.randomValue(API.getRng()) / 20;
             case SHAKE_HAND:
             case FLIRT:
             case KISS:
-                return -level.randomValue(API.getRng());
+                return -level.randomValue(API.getRng()) / 20;
             default:
                 return 0;
         }
