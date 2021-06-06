@@ -172,10 +172,9 @@ public class EntityVillagerMCA extends VillagerEntity implements INamedContainer
 
     public CIntegerParameter village = data.newInteger("village", -1);
     public CIntegerParameter building = data.newInteger("buildings", -1);
-
+    public int procreateTick = -1;
     @Nullable
     private PlayerEntity interactingPlayer;
-    public int procreateTick = -1;
 
     public EntityVillagerMCA(World w) {
         super(EntitiesMCA.VILLAGER, w);
@@ -617,13 +616,21 @@ public class EntityVillagerMCA extends VillagerEntity implements INamedContainer
         return home.map(GlobalPos::pos).orElse(BlockPos.ZERO);
     }
 
+    private void setHome(PlayerEntity player) {
+        //check if it is a bed
+        if (setHome(player.blockPosition(), player.level)) {
+            say(player, "interaction.sethome.success");
+        } else {
+            say(player, "interaction.sethome.fail");
+        }
+    }
 
     private void clearHome() {
         ServerWorld serverWorld = ((ServerWorld) level);
         PointOfInterestManager poiManager = serverWorld.getPoiManager();
         Optional<GlobalPos> bed = this.brain.getMemory(MemoryModuleType.HOME);
         bed.ifPresent(globalPos -> {
-            if (poiManager.existsAtPosition(PointOfInterestType.HOME, globalPos.pos())){
+            if (poiManager.existsAtPosition(PointOfInterestType.HOME, globalPos.pos())) {
                 poiManager.release(globalPos.pos());
             }
         });
@@ -644,15 +651,6 @@ public class EntityVillagerMCA extends VillagerEntity implements INamedContainer
             return true;
         } else {
             return false;
-        }
-    }
-
-    private void setHome(PlayerEntity player) {
-        //check if it is a bed
-        if (setHome(player.blockPosition(), player.level)) {
-            say(player, "interaction.sethome.success");
-        } else {
-            say(player, "interaction.sethome.fail");
         }
     }
 

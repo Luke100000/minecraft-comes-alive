@@ -130,7 +130,7 @@ public class MCAVillagerTasks {
                         MultiTask.Ordering.ORDERED,
                         MultiTask.RunType.RUN_ONE,
                         ImmutableList.of(
-                                Pair.of(new ShareItemsTask(), 1))
+                                Pair.of(new ShareItemsTask(), 1)) // GOSSIP TASK
                 )),
                 getFullLookBehavior(),
                 Pair.of(99, new UpdateActivityTask())
