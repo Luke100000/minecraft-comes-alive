@@ -50,16 +50,11 @@ public class APIButton {
     public boolean isValidForConstraint(VillagerEntityMCA villager, PlayerEntity player) {
         List<Constraint> constraints = getConstraints();
 
-        if (constraints.contains(Constraint.ADULTS) && !villager.isBaby()) {
-            return true;
-        } else if (constraints.contains(Constraint.SPOUSE) && villager.isMarriedTo(player.getUUID())) {
-            return true;
-        } else if (constraints.contains(Constraint.NOT_SPOUSE) && !villager.isMarriedTo(player.getUUID())) {
-            return true;
-        } else if (constraints.contains(Constraint.FAMILY) && (villager.playerIsParent(player) || villager.isMarriedTo(player.getUUID()))) {
-            return true;
-        } else if (constraints.contains(Constraint.NOT_FAMILY) && !(villager.playerIsParent(player) || villager.isMarriedTo(player.getUUID()))) {
-            return true;
-        } else return constraints.isEmpty();
+        for (Constraint constraint : constraints) {
+            if (constraint.getCheck().test(villager, player)) {
+                return false;
+            }
+        }
+        return true;
     }
 }
