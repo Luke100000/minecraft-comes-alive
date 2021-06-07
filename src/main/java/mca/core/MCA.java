@@ -1,15 +1,15 @@
 package mca.core;
 
-import cobalt.localizer.Localizer;
 import lombok.Getter;
 import mca.api.API;
-import mca.client.render.RenderGrimReaper;
-import mca.client.render.RenderVillagerMCA;
+import mca.api.cobalt.localizer.Localizer;
+import mca.client.render.GrimReaperRenderer;
+import mca.client.render.VillagerEntityMCARenderer;
 import mca.core.forge.EventHooks;
 import mca.core.forge.Registration;
 import mca.core.minecraft.EntitiesMCA;
-import mca.entity.EntityGrimReaper;
-import mca.entity.EntityVillagerMCA;
+import mca.entity.GrimReaperEntity;
+import mca.entity.VillagerEntityMCA;
 import net.minecraft.entity.ai.attributes.GlobalEntityTypeAttributes;
 import net.minecraft.util.text.StringTextComponent;
 import net.minecraftforge.common.MinecraftForge;
@@ -28,7 +28,7 @@ public class MCA {
     public static MCA mod;
     public static int tick = 0;
     private static Config config;
-    protected Localizer localizer = new Localizer();
+    protected final Localizer localizer = new Localizer();
     public Logger logger = LogManager.getLogger();
 
 
@@ -68,13 +68,13 @@ public class MCA {
         API.init();
         config = new Config();
         MinecraftForge.EVENT_BUS.register(new EventHooks());
-        GlobalEntityTypeAttributes.put(EntitiesMCA.VILLAGER, EntityVillagerMCA.createAttributes().build());
-        GlobalEntityTypeAttributes.put(EntitiesMCA.GRIM_REAPER, EntityGrimReaper.createAttributes().build());
+        GlobalEntityTypeAttributes.put(EntitiesMCA.VILLAGER, VillagerEntityMCA.createAttributes().build());
+        GlobalEntityTypeAttributes.put(EntitiesMCA.GRIM_REAPER, GrimReaperEntity.createAttributes().build());
     }
 
     public final void clientSetup(FMLClientSetupEvent event) {
-        RenderingRegistry.registerEntityRenderingHandler(EntitiesMCA.VILLAGER, RenderVillagerMCA::new);
-        RenderingRegistry.registerEntityRenderingHandler(EntitiesMCA.GRIM_REAPER, RenderGrimReaper::new);
+        RenderingRegistry.registerEntityRenderingHandler(EntitiesMCA.VILLAGER, VillagerEntityMCARenderer::new);
+        RenderingRegistry.registerEntityRenderingHandler(EntitiesMCA.GRIM_REAPER, GrimReaperRenderer::new);
     }
 
 }

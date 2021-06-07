@@ -29,8 +29,6 @@ public final class BlocksMCA {
 //            new Block(AbstractBlock.Properties.of(Material.STONE).sound(SoundType.STONE)));
 
 //TODO <Block> JEWELER_WORKBENCH -> profession of a jeweler
-//    public static final RegistryObject<Block> JEWELER_WORKBENCH = register("jeweler_workbench",() ->
-//            new JewelerWorkbench(AbstractBlock.Properties.of(Material.STONE)));
 
 
     public static void register() {

@@ -1,20 +1,19 @@
 package mca.core.forge;
 
-import cobalt.minecraft.world.CWorld;
 import com.mojang.brigadier.CommandDispatcher;
-import mca.command.CommandMCA;
-import mca.command.CommandMCAAdmin;
-import mca.core.Constants;
+import mca.command.AdminCommand;
+import mca.command.MCACommand;
 import mca.core.MCA;
 import mca.core.minecraft.EntitiesMCA;
 import mca.core.minecraft.ProfessionsMCA;
 import mca.core.minecraft.VillageHelper;
-import mca.entity.EntityGrimReaper;
-import mca.entity.EntityVillagerMCA;
+import mca.entity.GrimReaperEntity;
+import mca.entity.VillagerEntityMCA;
 import mca.entity.data.VillageManagerData;
-import mca.items.ItemBaby;
+import mca.items.BabyItem;
 import mca.server.ReaperSpawner;
 import mca.server.ServerInteractionManager;
+import mca.util.WorldUtils;
 import net.minecraft.block.Block;
 import net.minecraft.block.Blocks;
 import net.minecraft.command.CommandSource;
@@ -24,8 +23,6 @@ import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.ItemStack;
 import net.minecraft.util.math.AxisAlignedBB;
 import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.text.StringTextComponent;
-import net.minecraft.util.text.event.ClickEvent;
 import net.minecraft.world.World;
 import net.minecraft.world.server.ServerWorld;
 import net.minecraftforge.event.RegisterCommandsEvent;
@@ -46,28 +43,28 @@ import java.util.*;
 
 @Mod.EventBusSubscriber(modid = MCA.MOD_ID)
 public class EventHooks {
-    private final List<VillagerEntity> spawnQueue = new LinkedList<>();
     // Maps a player UUID to the itemstack of their held ItemBaby. Filled when a player dies so the baby is never lost.
-    public Map<UUID, ItemStack> limbo = new HashMap<>();
+    public final Map<UUID, ItemStack> limbo = new HashMap<>();
+    private final List<VillagerEntity> spawnQueue = new LinkedList<>();
 
     @SubscribeEvent
     public void onCommandRegister(RegisterCommandsEvent event) {
         CommandDispatcher<CommandSource> dispatcher = event.getDispatcher();
 
-        CommandMCAAdmin.register(dispatcher);
-        CommandMCA.register(dispatcher);
+        AdminCommand.register(dispatcher);
+        MCACommand.register(dispatcher);
     }
 
     @SubscribeEvent
     public void onWorldTick(TickEvent.WorldTickEvent event) {
         //our villager handler
         if (event.side == LogicalSide.SERVER && event.phase == TickEvent.Phase.END) {
-            VillageHelper.tick(CWorld.fromMC(event.world));
+            VillageHelper.tick(event.world);
         }
 
         //update buildings
         if (event.world.getGameTime() % 21 == 0) {
-            VillageManagerData manager = VillageManagerData.get(CWorld.fromMC(event.world));
+            VillageManagerData manager = VillageManagerData.get(event.world);
             manager.processNextBuildings(event.world);
         }
     }
@@ -85,31 +82,15 @@ public class EventHooks {
             if (e.level.isLoaded(e.blockPosition())) {
                 e.remove();
 
-                EntityVillagerMCA newVillager = new EntityVillagerMCA(e.level);
+                VillagerEntityMCA newVillager = new VillagerEntityMCA(e.level);
                 newVillager.setPos(e.getX(), e.getY(), e.getZ());
 
                 e.level.isLoaded(newVillager.blockPosition());
-                CWorld.fromMC(e.level).spawnEntity(newVillager);
+                WorldUtils.spawnEntity(e.level, newVillager);
             } else {
                 spawnQueue.add(e);
             }
         }
-    }
-
-    @SubscribeEvent
-    public void onPlayerLogin(PlayerEvent.PlayerLoggedInEvent event) {
-        //TODO update is currently not available
-        if (true) return;
-
-        StringTextComponent updateMessage = new StringTextComponent(Constants.Color.DARKGREEN + "An update for Minecraft Comes Alive is available: vTODO");
-        String updateURLText = Constants.Color.YELLOW + "Click " + Constants.Color.BLUE + Constants.Format.ITALIC + Constants.Format.UNDERLINE + "here" + Constants.Format.RESET + Constants.Color.YELLOW + " to download the update.";
-
-        StringTextComponent chatComponentUpdate = new StringTextComponent(updateURLText);
-        chatComponentUpdate.getStyle().withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, "https://minecraftcomesalive.com/download"));
-        chatComponentUpdate.getStyle().setUnderlined(true);
-
-        event.getPlayer().sendMessage(updateMessage, Constants.ZERO_UUID);
-        event.getPlayer().sendMessage(chatComponentUpdate, Constants.ZERO_UUID);
     }
 
     @SubscribeEvent
@@ -129,15 +110,15 @@ public class EventHooks {
 
     @SubscribeEvent
     public void onEntityDamaged(LivingDamageEvent event) {
-        if (!event.getEntity().level.isClientSide && event.getEntity() instanceof EntityVillagerMCA) {
-            EntityVillagerMCA villager = (EntityVillagerMCA) event.getEntity();
+        if (!event.getEntity().level.isClientSide && event.getEntity() instanceof VillagerEntityMCA) {
+            VillagerEntityMCA villager = (VillagerEntityMCA) event.getEntity();
             Entity source = event.getSource() != null ? event.getSource().getDirectEntity() : null;
 
             if (source instanceof LivingEntity) {
                 double r = 10.0D;
                 AxisAlignedBB axisAlignedBB = new AxisAlignedBB(villager.getX() - r, villager.getY() - r, villager.getZ() - r, villager.getX() + r, villager.getY() + r, villager.getZ() + r);
-                villager.world.getMcWorld().getLoadedEntitiesOfClass(EntityVillagerMCA.class, axisAlignedBB).forEach(v -> {
-                    if (v.distanceTo(v) <= 10.0D && v.getProfession() == ProfessionsMCA.GUARD) {
+                villager.level.getLoadedEntitiesOfClass(VillagerEntityMCA.class, axisAlignedBB).forEach(v -> {
+                    if (v.distanceToSqr(v) <= 100.0D && v.getProfession() == ProfessionsMCA.GUARD) {
                         v.setTarget((LivingEntity) source);
                     }
                 });
@@ -148,7 +129,7 @@ public class EventHooks {
     @SubscribeEvent
     public void onItemToss(ItemTossEvent event) {
         ItemStack stack = event.getEntityItem().getItem();
-        if (stack.getItem() instanceof ItemBaby) {
+        if (stack.getItem() instanceof BabyItem) {
             event.getPlayer().inventory.add(stack);
             event.setCanceled(true);
         }
@@ -219,7 +200,7 @@ public class EventHooks {
         // If a player dies while holding a baby, remember it until they respawn.
         if (event.getEntityLiving() instanceof PlayerEntity) {
             PlayerEntity player = (PlayerEntity) event.getEntityLiving();
-            Optional<ItemStack> babyStack = player.inventory.items.stream().filter(s -> s.getItem() instanceof ItemBaby).findFirst();
+            Optional<ItemStack> babyStack = player.inventory.items.stream().filter(s -> s.getItem() instanceof BabyItem).findFirst();
             babyStack.ifPresent(s -> limbo.put(player.getUUID(), babyStack.get()));
         }
     }
@@ -227,9 +208,9 @@ public class EventHooks {
     @SubscribeEvent
     public void onLivingSetTarget(LivingSetAttackTargetEvent event) {
         // Mobs shouldn't attack infected villagers. Account for this when they attempt to set their target.
-        if (event.getEntityLiving() instanceof MobEntity && event.getTarget() instanceof EntityVillagerMCA) {
+        if (event.getEntityLiving() instanceof MobEntity && event.getTarget() instanceof VillagerEntityMCA) {
             MobEntity mob = (MobEntity) event.getEntityLiving();
-            EntityVillagerMCA target = (EntityVillagerMCA) event.getTarget();
+            VillagerEntityMCA target = (VillagerEntityMCA) event.getTarget();
 
             if (target.isInfected.get()) {
                 mob.setTarget(null);
@@ -240,7 +221,7 @@ public class EventHooks {
     //this event doesn't seem to fire so check EntitiesMCA for real one
     @SubscribeEvent
     public void attributeCreate(EntityAttributeCreationEvent event) {
-        event.put(EntitiesMCA.VILLAGER, EntityVillagerMCA.createAttributes().build());
-        event.put(EntitiesMCA.GRIM_REAPER, EntityGrimReaper.createAttributes().build());
+        event.put(EntitiesMCA.VILLAGER, VillagerEntityMCA.createAttributes().build());
+        event.put(EntitiesMCA.GRIM_REAPER, GrimReaperEntity.createAttributes().build());
     }
 }
