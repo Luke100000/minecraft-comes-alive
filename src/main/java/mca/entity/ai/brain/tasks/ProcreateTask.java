@@ -4,6 +4,7 @@ import com.google.common.collect.ImmutableMap;
 import mca.core.minecraft.ItemsMCA;
 import mca.entity.VillagerEntityMCA;
 import net.minecraft.entity.ai.brain.task.Task;
+import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.ItemStack;
 import net.minecraft.world.server.ServerWorld;
 
@@ -33,7 +34,14 @@ public class ProcreateTask extends Task<VillagerEntityMCA> {
             world.broadcastEntityEvent(villager, (byte) 12);
         } else {
             ItemStack stack = new ItemStack(random.nextBoolean() ? ItemsMCA.BABY_BOY.get() : ItemsMCA.BABY_GIRL.get());
-            villager.getInventory().addItem(stack);
+            PlayerEntity player = villager.level.getPlayerByUUID(villager.spouseUUID.get().get());
+            if (player != null) {
+                if (!player.addItem(stack)) {
+                    villager.getInventory().addItem(stack);
+                }
+            } else {
+                villager.getInventory().addItem(stack);
+            }
             villager.isProcreating.set(false);
         }
     }

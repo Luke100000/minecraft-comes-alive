@@ -268,8 +268,6 @@ public class VillagerEntityMCA extends VillagerEntity implements INamedContainer
         initializeSkin();
         initializePersonality();
 
-        setProfession(ProfessionsMCA.randomProfession());
-
         return iLivingEntityData;
     }
 
@@ -301,9 +299,13 @@ public class VillagerEntityMCA extends VillagerEntity implements INamedContainer
         float knockback = 3.0F;
 
         //personality bonus
-        if (getPersonality() == Personality.WEAK) damage *= 0.75;
-        if (getPersonality() == Personality.CONFIDENT) damage *= 1.25;
-        if (getPersonality() == Personality.STRONG) damage *= 1.5;
+        if (getPersonality() == Personality.WEAK) {
+            damage *= 0.75;
+        } else if (getPersonality() == Personality.CONFIDENT) {
+            damage *= 1.25;
+        } else if (getPersonality() == Personality.STRONG) {
+            damage *= 1.5;
+        }
 
         //enchantment
         if (target instanceof LivingEntity) {
@@ -341,10 +343,6 @@ public class VillagerEntityMCA extends VillagerEntity implements INamedContainer
 
     @Override
     public final ActionResultType interactAt(PlayerEntity player, Vector3d pos, @Nonnull Hand hand) {
-        if (player.getMainHandItem().getItem().equals(Items.BEDROCK)) {
-            System.out.println("Mood Level: " + this.getMoodLevel());
-            return ActionResultType.FAIL;
-        }
         if (level.isClientSide) {
             openScreen(player);
             return ActionResultType.SUCCESS;
@@ -1060,17 +1058,12 @@ public class VillagerEntityMCA extends VillagerEntity implements INamedContainer
                     sendMessageTo(MCA.localize("notify.child.grownup", villagerName.get()), p);
                 });
             }
-        } else if (last == AgeState.ADULT) {
-            // Change profession away from child for villager children. Ensures correct one
-            if (getProfession() == ProfessionsMCA.CHILD) {
-                setProfession(API.randomProfession());
-            }
+
+
         }
 
-        //When you relog, it should continue doing the chores. Chore save but Activity doesn't, so this checks if the activity is not on there and puts it on there.
-        Optional<Activity> possiblyChore = this.brain.getActiveNonCoreActivity();
-        if (possiblyChore.isPresent() && !possiblyChore.get().equals(ActivityMCA.CHORE) && activeChore.get() != Chore.NONE.getId()) {
-            this.brain.setActiveActivityIfPossible(ActivityMCA.CHORE);
+        if (getProfession() == ProfessionsMCA.CHILD && this.getAgeState() == AgeState.ADULT) {
+            setProfession(API.randomProfession());
         }
     }
 
@@ -1091,6 +1084,16 @@ public class VillagerEntityMCA extends VillagerEntity implements INamedContainer
                 hasBaby.set(false);
                 babyAge.set(0);
             }
+        }
+
+        //When you relog, it should continue doing the chores. Chore save but Activity doesn't, so this checks if the activity is not on there and puts it on there.
+        Optional<Activity> possiblyChore = this.brain.getActiveNonCoreActivity();
+        if (possiblyChore.isPresent() && !possiblyChore.get().equals(ActivityMCA.CHORE) && activeChore.get() != Chore.NONE.getId()) {
+            this.brain.setActiveActivityIfPossible(ActivityMCA.CHORE);
+        }
+
+        if (MoveState.byId(this.moveState.get()) == MoveState.FOLLOW && !this.brain.getMemory(MemoryModuleTypeMCA.PLAYER_FOLLOWING).isPresent()) {
+            this.updateMoveState();
         }
 
     }
@@ -1230,5 +1233,10 @@ public class VillagerEntityMCA extends VillagerEntity implements INamedContainer
                 }
             }
         }
+    }
+
+    @Override
+    public void setBaby(boolean p_82227_1_) {
+        this.setAge(p_82227_1_ ? -192000 : 0);
     }
 }

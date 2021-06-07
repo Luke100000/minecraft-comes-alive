@@ -47,7 +47,6 @@ public class ChoppingTask extends AbstractChoreTask {
         ItemStack stack = villager.getItemInHand(Hand.MAIN_HAND);
         if (!stack.isEmpty()) {
             villager.setItemInHand(Hand.MAIN_HAND, ItemStack.EMPTY);
-            villager.inventory.addItem(stack);
         }
         villager.swing(Hand.MAIN_HAND);
     }
@@ -64,9 +63,7 @@ public class ChoppingTask extends AbstractChoreTask {
                 }
                 villager.stopChore();
             } else {
-                ItemStack stack = villager.inventory.getItem(i);
-                villager.setItemInHand(Hand.MAIN_HAND, stack);
-                villager.inventory.setItem(i, ItemStack.EMPTY);
+                villager.setItemInHand(Hand.MAIN_HAND, villager.inventory.getItem(i));
             }
 
 
@@ -85,7 +82,6 @@ public class ChoppingTask extends AbstractChoreTask {
             int i = InventoryUtils.getFirstSlotContainingItem(villager.inventory, stack -> stack.getItem() instanceof AxeItem);
             ItemStack stack = villager.inventory.getItem(i);
             villager.setItemInHand(Hand.MAIN_HAND, stack);
-            villager.inventory.setItem(i, ItemStack.EMPTY);
         }
 
         if (targetTree == null) {

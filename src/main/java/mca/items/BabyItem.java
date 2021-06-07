@@ -4,7 +4,10 @@ import mca.api.cobalt.minecraft.nbt.CNBT;
 import mca.api.cobalt.network.NetworkHandler;
 import mca.core.Constants;
 import mca.core.MCA;
+import mca.core.forge.TagsMCA;
+import mca.core.minecraft.ItemsMCA;
 import mca.core.minecraft.ProfessionsMCA;
+import mca.data.ItemTagsProviderMCA;
 import mca.entity.VillagerEntityMCA;
 import mca.entity.data.ParentPair;
 import mca.entity.data.PlayerSaveData;
@@ -33,12 +36,10 @@ import javax.annotation.Nullable;
 import java.util.List;
 
 public class BabyItem extends Item {
-    private final boolean isMale;
     public int tick = -1;
 
     public BabyItem(Item.Properties properties) {
         super(properties);
-        isMale = false;
     }
 
     @Override
@@ -83,7 +84,7 @@ public class BabyItem extends Item {
 
         if (!world.isClientSide && isReadyToGrowUp(stack) && !getBabyName(stack).equals("")) { // Name is good and we're ready to grow
             VillagerEntityMCA child = new VillagerEntityMCA(world);
-            child.gender.set((this.isMale ? Gender.MALE : Gender.FEMALE).getId());
+            child.gender.set((getGender()).getId());
             child.setProfession(ProfessionsMCA.CHILD);
             child.villagerName.set(getBabyName(stack));
             child.setBaby(true);
@@ -132,7 +133,7 @@ public class BabyItem extends Item {
             PlayerEntity player = Minecraft.getInstance().player;
             CNBT nbt = CNBT.fromMC(stack.getTag());
 
-            String textColor = ((BabyItem) stack.getItem()).isMale ? Constants.Color.AQUA : Constants.Color.LIGHTPURPLE;
+            String textColor = ((BabyItem) stack.getItem()).getGender() == Gender.MALE ? Constants.Color.AQUA : Constants.Color.LIGHTPURPLE;
             int ageInMinutes = nbt.getInteger("age");
             String ownerName = nbt.getUUID("ownerUUID").equals(player.getUUID()) ? MCA.localize("gui.label.you") : nbt.getString("ownerName");
 
@@ -170,6 +171,6 @@ public class BabyItem extends Item {
     }
 
     public Gender getGender() {
-        return isMale ? Gender.MALE : Gender.FEMALE;
+        return this.equals(ItemsMCA.BABY_BOY.get()) ? Gender.MALE : Gender.FEMALE;
     }
 }

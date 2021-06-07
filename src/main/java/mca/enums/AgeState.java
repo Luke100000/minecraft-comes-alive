@@ -28,12 +28,17 @@ public enum AgeState {
     }
 
     public static AgeState byCurrentAge(int age) {
-        int startingAge = -24000;
+        int startingAge = -192000;
         int step = startingAge / 4;
-        if (age >= step) return AgeState.ADULT;
-        else if (age >= step * 2) return AgeState.TEEN;
-        else if (age >= step * 3) return AgeState.CHILD;
-        else if (age >= step * 4) return AgeState.TODDLER;
+        if (age >= step) {
+            return AgeState.ADULT;
+        } else if (age >= step * 2) {
+            return AgeState.TEEN;
+        } else if (age >= step * 3) {
+            return AgeState.CHILD;
+        } else if (age >= step * 4) {
+            return AgeState.TODDLER;
+        }
         return AgeState.BABY;
     }
 

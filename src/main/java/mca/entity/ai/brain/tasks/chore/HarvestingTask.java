@@ -54,7 +54,6 @@ public class HarvestingTask extends AbstractChoreTask {
         ItemStack stack = villager.getItemInHand(Hand.MAIN_HAND);
         if (!stack.isEmpty()) {
             villager.setItemInHand(Hand.MAIN_HAND, ItemStack.EMPTY);
-            villager.inventory.addItem(stack);
         }
 
     }
@@ -70,7 +69,6 @@ public class HarvestingTask extends AbstractChoreTask {
             } else {
                 ItemStack stack = villager.inventory.getItem(i);
                 villager.setItemInHand(Hand.MAIN_HAND, stack);
-                villager.inventory.setItem(i, ItemStack.EMPTY);
             }
 
 
@@ -125,14 +123,12 @@ public class HarvestingTask extends AbstractChoreTask {
         if (this.villager == null) this.villager = villager;
 
         if (!InventoryUtils.contains(villager.getInventory(), HoeItem.class) && !villager.hasItemInSlot(EquipmentSlotType.MAINHAND)) {
-            System.out.println("No Hoe");
             villager.say(this.getAssigningPlayer().get(), "chore.harvesting.nohoe");
             villager.stopChore();
         } else if (!villager.hasItemInSlot(EquipmentSlotType.MAINHAND)) {
             int i = InventoryUtils.getFirstSlotContainingItem(villager.getInventory(), stack -> stack.getItem() instanceof HoeItem);
             ItemStack stack = villager.inventory.getItem(i);
             villager.setItemInHand(Hand.MAIN_HAND, stack);
-            villager.inventory.setItem(i, ItemStack.EMPTY);
         }
 
         BlockPos fertileFarmLand = searchUnusedFarmLand(16, 3);

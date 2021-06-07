@@ -53,7 +53,6 @@ public class FishingTask extends AbstractChoreTask {
             } else {
                 ItemStack stack = villager.inventory.getItem(i);
                 villager.setItemInHand(Hand.MAIN_HAND, stack);
-                villager.inventory.setItem(i, ItemStack.EMPTY);
             }
         }
 
@@ -73,7 +72,6 @@ public class FishingTask extends AbstractChoreTask {
             int i = InventoryUtils.getFirstSlotContainingItem(villager.getInventory(), stack -> stack.getItem() instanceof FishingRodItem);
             ItemStack stack = villager.inventory.getItem(i);
             villager.setItemInHand(Hand.MAIN_HAND, stack);
-            villager.inventory.setItem(i, ItemStack.EMPTY);
         }
 
         if (targetWater == null) {
@@ -113,7 +111,6 @@ public class FishingTask extends AbstractChoreTask {
         ItemStack stack = villager.getItemInHand(Hand.MAIN_HAND);
         if (!stack.isEmpty()) {
             villager.setItemInHand(Hand.MAIN_HAND, ItemStack.EMPTY);
-            villager.inventory.addItem(stack);
         }
         villager.swing(Hand.MAIN_HAND);
     }
