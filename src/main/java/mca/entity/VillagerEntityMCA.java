@@ -1059,11 +1059,11 @@ public class VillagerEntityMCA extends VillagerEntity implements INamedContainer
                     getMemoriesForPlayer(p).setDialogueType(DialogueType.ADULT);
                     sendMessageTo(MCA.localize("notify.child.grownup", villagerName.get()), p);
                 });
-
-                // Change profession away from child for villager children.
-                if (getProfession() == ProfessionsMCA.CHILD) {
-                    setProfession(API.randomProfession());
-                }
+            }
+        } else if (last == AgeState.ADULT) {
+            // Change profession away from child for villager children. Ensures correct one
+            if (getProfession() == ProfessionsMCA.CHILD) {
+                setProfession(API.randomProfession());
             }
         }
 
@@ -1214,9 +1214,9 @@ public class VillagerEntityMCA extends VillagerEntity implements INamedContainer
     @Override
     public void handleEntityEvent(byte id) {
         if (id == 15) {
-            this.level.addAlwaysVisibleParticle(ParticleTypesMCA.NEG_INTERACTION.get(), true, this.getX(), this.getY() + 2.1, this.getZ(), 0, 0, 0);
+            this.level.addAlwaysVisibleParticle(ParticleTypesMCA.NEG_INTERACTION.get(), true, this.getX(), this.getEyeY() + 0.5, this.getZ(), 0, 0, 0);
         } else if (id == 16) {
-            this.level.addAlwaysVisibleParticle(ParticleTypesMCA.POS_INTERACTION.get(), true, this.getX(), this.getY() + 2.1, this.getZ(), 0, 0, 0);
+            this.level.addAlwaysVisibleParticle(ParticleTypesMCA.POS_INTERACTION.get(), true, this.getX(), this.getEyeY() + 0.5, this.getZ(), 0, 0, 0);
         } else {
             super.handleEntityEvent(id);
         }

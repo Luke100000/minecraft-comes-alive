@@ -26,7 +26,6 @@ public class MCA {
     public static final String MOD_ID = "mca";
     @Getter
     public static MCA mod;
-    public static int tick = 0;
     private static Config config;
     protected final Localizer localizer = new Localizer();
     public Logger logger = LogManager.getLogger();

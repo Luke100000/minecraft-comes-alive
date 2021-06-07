@@ -74,7 +74,6 @@ public class EventHooks {
         ReaperSpawner.tick();
         ServerInteractionManager.getInstance().tick();
 
-        MCA.tick++;
 
         // lazy spawning of our villagers as they can't be spawned while loading
         if (!spawnQueue.isEmpty()) {

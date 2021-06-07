@@ -7,6 +7,7 @@ import mca.api.types.APIIcon;
 import mca.client.gui.component.ButtonEx;
 import mca.core.Constants;
 import mca.core.MCA;
+import mca.core.minecraft.ProfessionsMCA;
 import mca.entity.VillagerEntityMCA;
 import mca.entity.data.Memories;
 import mca.entity.data.ParentPair;
@@ -17,6 +18,7 @@ import mca.enums.MoveState;
 import mca.network.InteractionServerMessage;
 import mca.network.InteractionVillagerMessage;
 import net.minecraft.client.gui.screen.Screen;
+import net.minecraft.entity.merchant.villager.VillagerProfession;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.util.ResourceLocation;
 import net.minecraft.util.text.ITextComponent;
@@ -182,8 +184,8 @@ public class GuiInteract extends Screen {
 
     private void drawTextPopups(MatrixStack transform) {
         //general information
-        AgeState age = villager.getAgeState();
-        String professionName = age != AgeState.ADULT ? age.localizedName() : MCA.localize("entity.minecraft.villager." + villager.getProfession());
+        VillagerProfession profession = villager.getProfession();
+        String professionName = profession == ProfessionsMCA.CHILD ? villager.getAgeState().localizedName() : MCA.localize("entity.minecraft.villager." + profession);
 
         //name or state tip (gifting, ...)
         int h = 17;

@@ -34,6 +34,7 @@ import java.util.List;
 
 public class BabyItem extends Item {
     private final boolean isMale;
+    public int tick = -1;
 
     public BabyItem(Item.Properties properties) {
         super(properties);
@@ -53,10 +54,15 @@ public class BabyItem extends Item {
                 compound.setBoolean("isInfected", false);
 
                 itemStack.setTag(compound.getMcCompound());
+
+
             } else {
                 updateBabyGrowth(itemStack);
             }
+            tick++;
+
         }
+
     }
 
     @Override
@@ -152,9 +158,8 @@ public class BabyItem extends Item {
 
     private void updateBabyGrowth(ItemStack itemStack) {
         CNBT tag = CNBT.fromMC(itemStack.getTag());
-        if (tag != null && MCA.tick % 1200 == 0) {
+        if (tag != null && tick % 1200 == 0) {
             int age = tag.getInteger("age");
-            System.out.println("Tick: " + MCA.tick + "Age in Baby: " + age);
             tag.setInteger("age", age + 1);
         }
     }

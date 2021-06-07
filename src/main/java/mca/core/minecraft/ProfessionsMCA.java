@@ -23,7 +23,7 @@ public class ProfessionsMCA {
         Registration.PROFESSIONS.register("child", () -> CHILD);
         Registration.PROFESSIONS.register("guard", () -> GUARD);
 
-        // add vanilla professions
+        //TODO get other modded professions
         PROFESSIONS.addAll(Arrays.asList(
                 VillagerProfession.ARMORER,
                 VillagerProfession.BUTCHER,
@@ -43,10 +43,6 @@ public class ProfessionsMCA {
     public static VillagerProfession randomProfession() {
         Random r = new Random();
         return PROFESSIONS.get(r.nextInt(PROFESSIONS.size()));
-    }
-
-    public static RegistryObject<VillagerProfession> registerProfession(String name, PointOfInterestType poiType, SoundEvent soundEvent) {
-        return Registration.PROFESSIONS.register(name, () -> new VillagerProfession(name, poiType, ImmutableSet.of(), ImmutableSet.of(), soundEvent));
     }
 
 
