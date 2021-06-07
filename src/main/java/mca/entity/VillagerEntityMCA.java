@@ -268,7 +268,7 @@ public class VillagerEntityMCA extends VillagerEntity implements INamedContainer
         initializeSkin();
         initializePersonality();
 
-        //setProfession(ProfessionsMCA.randomProfession());
+        setProfession(ProfessionsMCA.randomProfession());
 
         return iLivingEntityData;
     }
@@ -1092,9 +1092,6 @@ public class VillagerEntityMCA extends VillagerEntity implements INamedContainer
                 babyAge.set(0);
             }
         }
-
-        //this.setItemSlot(EquipmentSlotType.CHEST, stack-from-the-inventory);
-
 
     }
 

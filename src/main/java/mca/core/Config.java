@@ -12,7 +12,7 @@ public final class Config implements Serializable {
     public int chanceToHaveTwins = 2;
     public int marriageHeartsRequirement = 100;
     public int roseGoldSpawnWeight = 6;
-    public int babyGrowUpTime = 30;
+    public int babyGrowUpTime = 20;
     public int childGrowUpTime = 60;
     public int villagerMaxHealth = 20;
     public boolean allowTrading = true;
