@@ -141,7 +141,7 @@ public class HarvestingTask extends AbstractChoreTask {
             fertileFarmLand = searchUnusedFarmLand(32, 16);
         }
 
-        if (fertileFarmLand != null) {
+        if (fertileFarmLand != null && villager.hasFarmSeeds()) {
             villager.moveTowards(fertileFarmLand);
             double distanceToSqr = villager.distanceToSqr(fertileFarmLand.getX(), fertileFarmLand.getY(), fertileFarmLand.getZ());
             if (distanceToSqr <= 6.0D) {
