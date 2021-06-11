@@ -33,6 +33,7 @@ import net.minecraft.entity.ai.brain.schedule.Activity;
 import net.minecraft.entity.ai.brain.schedule.Schedule;
 import net.minecraft.entity.ai.brain.sensor.Sensor;
 import net.minecraft.entity.ai.brain.sensor.SensorType;
+import net.minecraft.entity.merchant.IReputationType;
 import net.minecraft.entity.merchant.villager.VillagerEntity;
 import net.minecraft.entity.merchant.villager.VillagerProfession;
 import net.minecraft.entity.monster.ZombieEntity;
@@ -50,6 +51,9 @@ import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
 import net.minecraft.item.MerchantOffer;
 import net.minecraft.nbt.CompoundNBT;
+import net.minecraft.nbt.INBT;
+import net.minecraft.nbt.ListNBT;
+import net.minecraft.nbt.NBTDynamicOps;
 import net.minecraft.particles.ParticleTypes;
 import net.minecraft.potion.EffectInstance;
 import net.minecraft.potion.Effects;
@@ -63,6 +67,7 @@ import net.minecraft.util.math.vector.Vector3d;
 import net.minecraft.util.text.ITextComponent;
 import net.minecraft.util.text.StringTextComponent;
 import net.minecraft.util.text.TextComponent;
+import net.minecraft.village.GossipManager;
 import net.minecraft.village.PointOfInterest;
 import net.minecraft.village.PointOfInterestManager;
 import net.minecraft.village.PointOfInterestType;
@@ -175,6 +180,9 @@ public class VillagerEntityMCA extends VillagerEntity implements INamedContainer
     public int procreateTick = -1;
     @Nullable
     private PlayerEntity interactingPlayer;
+    private final GossipManager gossips = new GossipManager();
+    private long lastGossipTime;
+    private long lastGossipDecayTime;
 
     public VillagerEntityMCA(World w) {
         super(EntitiesMCA.VILLAGER, w);
@@ -371,6 +379,12 @@ public class VillagerEntityMCA extends VillagerEntity implements INamedContainer
 
         setSpeed(speed);
         InventoryUtils.readFromNBT(inventory, nbt);
+
+        ListNBT listnbt = nbt.getList("Gossips", 10);
+        this.lastGossipDecayTime = nbt.getLong("LastGossipDecay");
+
+        this.gossips.update(new Dynamic<>(NBTDynamicOps.INSTANCE, listnbt));
+
     }
 
     @Override
@@ -378,6 +392,8 @@ public class VillagerEntityMCA extends VillagerEntity implements INamedContainer
         super.addAdditionalSaveData(nbt);
         data.save(CNBT.fromMC(nbt));
         InventoryUtils.saveToNBT(inventory, nbt);
+        nbt.put("Gossips", this.gossips.store(NBTDynamicOps.INSTANCE).getValue());
+        nbt.putLong("LastGossipDecay", this.lastGossipDecayTime);
     }
 
     private void initializeSkin() {
@@ -473,6 +489,8 @@ public class VillagerEntityMCA extends VillagerEntity implements INamedContainer
         } else {
             onEachServerUpdate();
         }
+
+        this.maybeDecayGossip();
     }
 
     public void sendMessageTo(String message, Entity receiver) {
@@ -1238,5 +1256,43 @@ public class VillagerEntityMCA extends VillagerEntity implements INamedContainer
     @Override
     public void setBaby(boolean p_82227_1_) {
         this.setAge(p_82227_1_ ? -192000 : 0);
+    }
+
+    //TODO
+    @Override
+    public int getPlayerReputation(PlayerEntity p_223107_1_) {
+        return super.getPlayerReputation(p_223107_1_);
+    }
+
+    public void gossip(ServerWorld p_242368_1_, VillagerEntityMCA p_242368_2_, long p_242368_3_) {
+        if ((p_242368_3_ < this.lastGossipTime || p_242368_3_ >= this.lastGossipTime + 1200L) && (p_242368_3_ < p_242368_2_.lastGossipTime || p_242368_3_ >= p_242368_2_.lastGossipTime + 1200L)) {
+            this.gossips.transferFrom(p_242368_2_.gossips, this.random, 10);
+            this.lastGossipTime = p_242368_3_;
+            p_242368_2_.lastGossipTime = p_242368_3_;
+            this.spawnGolemIfNeeded(p_242368_1_, p_242368_3_, 5);
+        }
+    }
+
+    private void maybeDecayGossip() {
+        long i = this.level.getGameTime();
+        if (this.lastGossipDecayTime == 0L) {
+            this.lastGossipDecayTime = i;
+        } else if (i >= this.lastGossipDecayTime + 24000L) {
+            this.gossips.decay();
+            this.lastGossipDecayTime = i;
+        }
+    }
+
+    @Override
+    public void onReputationEventFrom(IReputationType p_213739_1_, Entity p_213739_2_) {
+        super.onReputationEventFrom(p_213739_1_, p_213739_2_);
+    }
+
+    public GossipManager getGossips() {
+        return this.gossips;
+    }
+
+    public void setGossips(INBT p_223716_1_) {
+        this.gossips.update(new Dynamic<>(NBTDynamicOps.INSTANCE, p_223716_1_));
     }
 }
