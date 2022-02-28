@@ -367,7 +367,7 @@
   "gui.info.gift.line.1": "Доступний подарунок",
   "gui.info.gift.line.2": "(Натисніть, щоб взяти)",
   "gui.interact.label.married": "Заміжня за %1$s",
-  "gui.interact.label.engaged": "Engaged to %1$s",
+  "gui.interact.label.engaged": "Engaged to %v1%",
   "gui.interact.label.notmarried": "Неодружений/незаміжня",
   "gui.interact.label.widow": "Вдівець/вдова",
   "gui.interact.label.parents": "Батьки: %1$s та %2$s",
