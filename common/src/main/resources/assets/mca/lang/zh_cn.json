@@ -118,7 +118,7 @@
   "relation.spouse": "夫妻",
   "relation.daughter": "女儿",
   "relation.son": "儿子",
-  "enum.agestate.baby": "婴儿 ",
+  "enum.agestate.baby": "婴儿",
   "enum.agestate.toddler": "幼儿",
   "enum.agestate.child": "儿童",
   "enum.agestate.teen": "青少年",
