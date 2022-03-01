@@ -141,7 +141,7 @@
   "adult.interaction.matchmaker.fail.novillagers/3": "اوه.. ولكنه لا يبدو أن أي شخص قريب من هنا. من الذي ينبغي أن أتزوج منه ؟",
   "adult.interaction.sethome.success/1": "حسنا, ستكون هذه نقطة منزلي.",
   "adult.interaction.sethome.success/2": "افهم ذالك, سأنام هنا ليلاً.",
-  "adult.interaction.sethome.success/3": "شيء اكيد, %1$s.",
+  "adult.interaction.sethome.success/3": "شيء اكيد, %PlayerName%.",
   "spouse.interaction.sethome.success/1": "أحب هذا المكان حقاً، عمل جيد %1$s!",
   "spouse.interaction.sethome.success/2": "هذا مثل منزل الأحلام!",
   "childp.interaction.sethome.success/1": "حسناً، أين غرفتي؟",
