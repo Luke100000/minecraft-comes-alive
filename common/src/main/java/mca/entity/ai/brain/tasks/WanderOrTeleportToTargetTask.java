@@ -39,7 +39,8 @@ public class WanderOrTeleportToTargetTask extends WanderAroundTask {
         BlockPos targetPos = walkTarget.getLookTarget().getBlockPos();
 
         // If the target is more than x blocks away, teleport to it immediately.
-        if (targetPos.getSquaredDistance(entity.getBlockPos()) > TELEPORT_LIMIT_SQ) {
+        // teleporting disabled for now, only causes problems and is not really important anyways
+        if (targetPos.getSquaredDistance(entity.getBlockPos()) > TELEPORT_LIMIT_SQ && isAreaSafe(world, targetPos)) {
             // The target location is fuzzed and then adjusted to ensure the entity doesn't land in any walls.
             targetPos = targetPos.add(FuzzyPositionsCompat.localFuzz(world.random, 5, 0));
             targetPos = FuzzyPositionsCompat.downWhile(targetPos, 1, p -> !world.getBlockState(p.down()).isFullCube(world, p));
@@ -47,9 +48,21 @@ public class WanderOrTeleportToTargetTask extends WanderAroundTask {
 
             Vec3d pos = Vec3d.ofBottomCenter(targetPos);
 
-            entity.requestTeleport(pos.getX(), pos.getY(), pos.getZ());
+            if (isAreaSafe(world, pos)) {
+                entity.requestTeleport(pos.getX(), pos.getY(), pos.getZ());
+            }
         }
 
         super.keepRunning(world, entity, l);
+    }
+
+    private boolean isAreaSafe(ServerWorld world, Vec3d pos) {
+        return isAreaSafe(world, new BlockPos(pos));
+    }
+
+    private boolean isAreaSafe(ServerWorld world, BlockPos pos) {
+        // The following conditions define whether it is logically
+        // safe for the entity to teleport to the specified pos within world
+        return world.getLightLevel(pos, 0) > 8;
     }
 }

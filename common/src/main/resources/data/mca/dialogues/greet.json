@@ -1,138 +1,136 @@
-[
-  {
-    "id": "greet.greet_0",
-    "group": "greet",
-    "answers": [
-      {
-        "name": "short",
-        "chance": 0.4,
-        "chanceRandom": 1.0,
-        "hearts": 2,
-        "conditions": [
-          {
-            "chance": -0.6,
-            "hearts": 2,
-            "mood": "depressed"
-          },
-          {
-            "chance": -0.4,
-            "hearts": 1,
-            "mood": "sad"
-          },
-          {
-            "chance": -0.2,
-            "hearts": 0,
-            "mood": "unhappy"
-          },
-          {
-            "chance": 0.5,
-            "hearts": 0,
-            "personality": "odd"
-          },
-          {
-            "chance": 0,
-            "hearts": 1,
-            "personality": "friendly"
-          },
-          {
-            "chance": -0.25,
-            "hearts": 0,
-            "personality": "flirty"
-          },
-          {
-            "chance": -0.25,
-            "hearts": 1,
-            "mood": "talkative"
+{
+  "group": "greet",
+  "answers": [
+    {
+      "name": "short",
+      "results": [
+        {
+          "baseChance": 0,
+          "conditions": [
+            {
+              "chance": 6,
+              "mood": "depressed"
+            },
+            {
+              "chance": 4,
+              "mood": "sad"
+            },
+            {
+              "chance": 2,
+              "mood": "unhappy"
+            },
+            {
+              "chance": 1,
+              "personality": "flirty"
+            }
+          ],
+          "actions": {
+            "next": "greet.fail",
+            "negative": 2
           }
-        ],
-        "actions": [
-          {
-            "id": "greet.fail",
-            "threshold": 0.0,
-            "fail": true
-          },
-          {
-            "id": "greet.chitchat",
-            "threshold": 0.5
-          },
-          {
-            "id": "chat",
-            "threshold": 1.0,
-            "success": true
+        },
+        {
+          "baseChance": 5,
+          "conditions": [
+            {
+              "chance": 2,
+              "personality": "friendly"
+            },
+            {
+              "chance": 10,
+              "personality": "odd"
+            }
+          ],
+          "actions": {
+            "next": "greet.chitchat",
+            "positive": 4
           }
-        ]
-      },
-      {
-        "name": "kind",
-        "chance": 0.6,
-        "chanceRandom": 1.0,
-        "hearts": 2,
-        "conditions": [
-          {
-            "chance": 0.6,
-            "hearts": 2,
-            "mood": "depressed"
-          },
-          {
-            "chance": 0.4,
-            "hearts": 1,
-            "mood": "sad"
-          },
-          {
-            "chance": 0.2,
-            "hearts": 0,
-            "mood": "unhappy"
-          },
-          {
-            "chance": -0.3,
-            "hearts": 0,
-            "personality": "odd"
-          },
-          {
-            "chance": 0,
-            "hearts": 1,
-            "personality": "friendly"
-          },
-          {
-            "chance": 0.25,
-            "hearts": 0,
-            "personality": "flirty"
-          },
-          {
-            "chance": 0.25,
-            "hearts": 1,
-            "mood": "talkative"
+        },
+        {
+          "baseChance": 5,
+          "conditions": [
+            {
+              "chance": 5,
+              "mood": "talkative"
+            }
+          ],
+          "actions": {
+            "next": "greet.chat",
+            "positive": 6
           }
-        ],
-        "actions": [
-          {
-            "id": "greet.fail",
-            "threshold": 0.0,
-            "fail": true
-          },
-          {
-            "id": "greet.chitchat",
-            "threshold": 0.5
-          },
-          {
-            "id": "chat",
-            "threshold": 1.0,
-            "success": true
+        }
+      ]
+    },
+    {
+      "name": "kind",
+      "results": [
+        {
+          "baseChance": 0,
+          "applyFatigue": true,
+          "conditions": [
+            {
+              "chance": 5,
+              "personality": "odd"
+            }
+          ],
+          "actions": {
+            "next": "greet.fail",
+            "negative": 2
           }
-        ]
-      },
-      {
-        "name": "sad",
-        "chance": 1.0,
-        "conditions": [
-        ],
-        "actions": [
-          {
-            "id": "greet.getBetter",
-            "threshold": 0.0
+        },
+        {
+          "baseChance": 5,
+          "conditions": [
+            {
+              "chance": 2,
+              "personality": "friendly"
+            }
+          ],
+          "actions": {
+            "next": "greet.chitchat",
+            "positive": 4
           }
-        ]
-      }
-    ]
-  }
-]
+        },
+        {
+          "baseChance": 5,
+          "conditions": [
+            {
+              "chance": 6,
+              "mood": "depressed"
+            },
+            {
+              "chance": 4,
+              "mood": "sad"
+            },
+            {
+              "chance": 2,
+              "mood": "unhappy"
+            },
+            {
+              "chance": 1,
+              "personality": "flirty"
+            },
+            {
+              "chance": 5,
+              "mood": "talkative"
+            }
+          ],
+          "actions": {
+            "next": "greet.chat",
+            "positive": 6
+          }
+        }
+      ]
+    },
+    {
+      "name": "sad",
+      "results": [
+        {
+          "actions": {
+            "next": "greet.getBetter"
+          }
+        }
+      ]
+    }
+  ]
+}

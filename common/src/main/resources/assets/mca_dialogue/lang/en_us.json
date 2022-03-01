@@ -548,11 +548,11 @@
   "spouse.dialogue.flirt.fail/4": "Talk to the tree, it cares more.",
   "spouse.dialogue.flirt.fail/5": "Yeah, yeah... What was it you were saying?",
 
-  "dialogue.joke.joke": "(what joke should I tell?)",
-  "dialogue.joke.joke.skeleton": "skeleton one (very hard)",
-  "dialogue.joke.joke.sheep": "sheep wool one (hard)",
-  "dialogue.joke.joke.pig": "pig joke",
-  "dialogue.joke.joke.creative": "be creative (easy)",
+  "dialogue.joke": "(what joke should I tell?)",
+  "dialogue.joke.skeleton": "skeleton one (very hard)",
+  "dialogue.joke.sheep": "sheep wool one (hard)",
+  "dialogue.joke.pig": "pig joke",
+  "dialogue.joke.creative": "be creative (easy)",
 
   "dialogue.joke.skeleton.success": "Haha! Serves that Skelly right!",
   "dialogue.joke.skeleton.failed": "Skeletons are sentient beings! How dare you!",
@@ -601,10 +601,10 @@
   "childp.dialogue.joke.creative.fail/4": "*Yawn* My friend's dad is cooler and funnier than you.",
   "childp.dialogue.joke.creative.fail/5": "I'd rather have cake.",
 
-  "dialogue.greet.greet_0": "Hey! How are you doing today?",
-  "dialogue.greet.greet_0.short": "I'm good.",
-  "dialogue.greet.greet_0.kind": "I'm good, how are you?",
-  "dialogue.greet.greet_0.sad": "Not doing too well.",
+  "dialogue.greet": "Hey! How are you doing today?",
+  "dialogue.greet.short": "I'm good.",
+  "dialogue.greet.kind": "I'm good, how are you?",
+  "dialogue.greet.sad": "Not doing too well.",
 
   "dialogue.greet.fail/1": "Hmm.",
   "dialogue.greet.fail/2": "Glad to hear...",

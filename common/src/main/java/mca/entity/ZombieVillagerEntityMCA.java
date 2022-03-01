@@ -227,6 +227,7 @@ public class ZombieVillagerEntityMCA extends ZombieVillagerEntity implements Vil
     public void readCustomDataFromNbt(NbtCompound nbt) {
         super.readCustomDataFromNbt(nbt);
         getTypeDataManager().load(this, nbt);
+        updateSpeed();
         relations.readFromNbt(nbt);
     }
 

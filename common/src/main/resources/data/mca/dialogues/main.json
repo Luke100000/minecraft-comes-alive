@@ -1,104 +1,123 @@
-[
-  {
-    "id": "main",
-    "answers": [
-      {
-        "name": "greet",
-        "constraints": "!baby",
-        "actions": [
-          {
-            "id": "greet"
+{
+  "answers": [
+    {
+      "name": "greet",
+      "constraints": "!baby",
+      "results": [
+        {
+          "actions": {
+            "next": "greet"
           }
-        ]
-      },
-      {
-        "name": "chat",
-        "actions": [
-          {
-            "id": "chat"
+        }
+      ]
+    },
+    {
+      "name": "chat",
+      "results": [
+        {
+          "actions": {
+            "next": "chat"
           }
-        ]
-      },
-      {
-        "name": "joke",
-        "actions": [
-          {
-            "id": "joke"
+        }
+      ]
+    },
+    {
+      "name": "joke",
+      "results": [
+        {
+          "actions": {
+            "next": "joke"
           }
-        ]
-      },
-      {
-        "name": "story",
-        "actions": [
-          {
-            "id": "story"
+        }
+      ]
+    },
+    {
+      "name": "story",
+      "results": [
+        {
+          "actions": {
+            "next": "story"
           }
-        ]
-      },
-      {
-        "name": "hug",
-        "constraints": "adult",
-        "actions": [
-          {
-            "id": "hug"
+        }
+      ]
+    },
+    {
+      "name": "hug",
+      "constraints": "adult",
+      "results": [
+        {
+          "actions": {
+            "next": "hug"
           }
-        ]
-      },
-      {
-        "name": "flirt",
-        "constraints": "!kids,adult",
-        "actions": [
-          {
-            "id": "flirt"
+        }
+      ]
+    },
+    {
+      "name": "flirt",
+      "constraints": "!kids,adult",
+      "results": [
+        {
+          "actions": {
+            "next": "flirt"
           }
-        ]
-      },
-      {
-        "name": "kiss",
-        "constraints": "!kids,adult",
-        "actions": [
-          {
-            "id": "kiss"
+        }
+      ]
+    },
+    {
+      "name": "kiss",
+      "constraints": "!kids,adult",
+      "results": [
+        {
+          "actions": {
+            "next": "kiss"
           }
-        ]
-      },
-      {
-        "name": "procreate",
-        "constraints": "spouse",
-        "actions": [
-          {
-            "id": "procreate"
+        }
+      ]
+    },
+    {
+      "name": "procreate",
+      "constraints": "spouse",
+      "results": [
+        {
+          "actions": {
+            "next": "procreate"
           }
-        ]
-      },
-      {
-        "name": "divorcePapers",
-        "constraints": "cleric,!spouse",
-        "actions": [
-          {
-            "id": "divorcePapers",
+        }
+      ]
+    },
+    {
+      "name": "divorcePapers",
+      "constraints": "cleric,!spouse",
+      "results": [
+        {
+          "actions": {
+            "next": "divorcePapers",
             "command": "divorcePapers"
           }
-        ]
-      },
-      {
-        "name": "divorceInitiate",
-        "constraints": "spouse",
-        "actions": [
-          {
-            "id": "divorce"
+        }
+      ]
+    },
+    {
+      "name": "divorceInitiate",
+      "constraints": "spouse",
+      "results": [
+        {
+          "actions": {
+            "next": "divorce"
           }
-        ]
-      },
-      {
-        "name": "adopt",
-        "constraints": "orphan,!adult",
-        "actions": [
-          {
-            "id": "adopt"
+        }
+      ]
+    },
+    {
+      "name": "adopt",
+      "constraints": "orphan,!adult",
+      "results": [
+        {
+          "actions": {
+            "next": "adopt"
           }
-        ]
-      }
-    ]
-  }
-]
+        }
+      ]
+    }
+  ]
+}

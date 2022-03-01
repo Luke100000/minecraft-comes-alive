@@ -1,47 +1,55 @@
-[
-  {
-    "id": "kiss",
-    "group": "kiss",
-    "auto": true,
-    "answers": [
-      {
-        "name": "",
-        "chance": 0.15,
-        "chanceRandom": 1.0,
-        "bonusChance": 0.8,
-        "bonusChanceMinHearts": 60,
-        "bonusChanceMaxHearts": 150,
-        "hearts": 10,
-        "conditions": [
-          {
-            "chance": -0.05,
-            "hearts": 1,
-            "personality": "odd"
-          },
-          {
-            "chance": 0.1,
-            "hearts": 1,
-            "personality": "flirty"
-          },
-          {
-            "chance": 0.1,
-            "hearts": 0,
-            "mood": "giggly"
+{
+  "group": "kiss",
+  "auto": true,
+  "answers": [
+    {
+      "name": "",
+      "results": [
+        {
+          "baseChance": 1,
+          "conditions": [
+            {
+              "chance": 5,
+              "personality": "flirty"
+            },
+            {
+              "chance": 4,
+              "mood": "giggly"
+            },
+            {
+              "chance": 4,
+              "hearts": 50
+            },
+            {
+              "chance": 4,
+              "hearts": 100
+            },
+            {
+              "chance": 4,
+              "hearts": 150
+            }
+          ],
+          "actions": {
+            "next": "kiss.success",
+            "positive": 10
           }
-        ],
-        "actions": [
-          {
-            "id": "kiss.fail",
-            "threshold": 0.0,
-            "fail": true
-          },
-          {
-            "id": "kiss.success",
-            "threshold": 1.0,
-            "success": true
+        },
+        {
+          "baseChance": 5,
+          "applyFatigue": true,
+          "conditions": [
+            {
+              "chance": 5,
+              "personality": "odd"
+            }
+          ],
+          "actions": {
+            "next": "kiss.fail",
+            "negative": 10
           }
-        ]
-      }
-    ]
-  }
-]
+        }
+      ]
+    }
+  ]
+}
+

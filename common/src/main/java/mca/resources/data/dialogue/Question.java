@@ -1,5 +1,7 @@
-package mca.resources.data;
+package mca.resources.data.dialogue;
 
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Set;
@@ -22,12 +24,25 @@ public class Question {
         this.silent = silent;
     }
 
+    public static Question fromJson(String id, JsonObject json) {
+        String group = json.has("group") ? json.get("group").getAsString() : null;
+        boolean auto = json.has("auto") && json.get("auto").getAsBoolean();
+        boolean silent = json.has("silent") && json.get("silent").getAsBoolean();
+
+        List<Answer> answers = new LinkedList<>();
+        for (JsonElement e : json.getAsJsonArray("answers")) {
+            answers.add(Answer.fromJson(e.getAsJsonObject()));
+        }
+
+        return new Question(id, group, answers, auto, silent);
+    }
+
     public String getId() {
         return id;
     }
 
     public String getGroup() {
-        return group == null ? id : group;
+        return group;
     }
 
     public List<Answer> getAnswers() {

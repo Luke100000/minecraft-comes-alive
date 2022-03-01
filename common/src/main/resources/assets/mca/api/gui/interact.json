@@ -77,7 +77,7 @@
   {
     "identifier": "gui.button.move",
     "x": 140,
-    "y": -32,
+    "y": -31,
     "width": 65,
     "height": 20,
     "notifyServer": true,
@@ -88,7 +88,7 @@
   {
     "identifier": "gui.button.ridehorse",
     "x": 140,
-    "y": -11,
+    "y": -10,
     "width": 65,
     "height": 20,
     "notifyServer": true,
@@ -98,7 +98,7 @@
   {
     "identifier": "gui.button.armor",
     "x": 140,
-    "y": 10,
+    "y": 11,
     "width": 65,
     "height": 20,
     "notifyServer": true,
@@ -109,7 +109,7 @@
   {
     "identifier": "gui.button.execute",
     "x": 140,
-    "y": 31,
+    "y": 32,
     "width": 65,
     "height": 20,
     "notifyServer": true,
@@ -120,7 +120,7 @@
   {
     "identifier": "gui.button.pardon",
     "x": 140,
-    "y": 31,
+    "y": 32,
     "width": 65,
     "height": 20,
     "notifyServer": true,
@@ -131,7 +131,7 @@
   {
     "identifier": "gui.button.professions",
     "x": 140,
-    "y": 52,
+    "y": 53,
     "width": 65,
     "height": 20,
     "notifyServer": true,

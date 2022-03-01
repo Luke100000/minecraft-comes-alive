@@ -200,5 +200,13 @@
 * Fixed missing chest tag
 * Added baby clothes
 * Fixed villagers not fully moving out of the old building
+
+# 7.1.1
+
 * Fixed incompatibility with eldritch mobs
 * Villager get 5 extra hearts per level
+* Added config flag to use squidward models
+* Fixed sleeping
+* Villager can no longer teleport into unsafe locations
+* Different ages will now move at different speed
+* Genes now affect speed

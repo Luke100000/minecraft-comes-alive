@@ -1,7 +1,6 @@
 package mca.entity.interaction.gifts;
 
 import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
 import com.google.gson.JsonSyntaxException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -20,7 +19,7 @@ import java.util.stream.Stream;
 import com.google.gson.JsonObject;
 
 import mca.entity.VillagerEntityMCA;
-import mca.resources.data.IntAnalysis;
+import mca.resources.data.analysis.IntAnalysis;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.tag.ServerTagManagerHolder;

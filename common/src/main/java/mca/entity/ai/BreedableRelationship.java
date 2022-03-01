@@ -8,7 +8,7 @@ import mca.entity.interaction.gifts.GiftType;
 import mca.entity.interaction.gifts.Response;
 import mca.item.SpecialCaseGift;
 import mca.network.client.AnalysisResults;
-import mca.resources.data.IntAnalysis;
+import mca.resources.data.analysis.IntAnalysis;
 import mca.util.network.datasync.CDataManager;
 import mca.util.network.datasync.CDataParameter;
 import mca.util.network.datasync.CParameter;

@@ -6,7 +6,7 @@ import mca.cobalt.network.NetworkHandler;
 import mca.entity.VillagerEntityMCA;
 import mca.network.client.InteractionDialogueResponse;
 import mca.resources.Dialogues;
-import mca.resources.data.Question;
+import mca.resources.data.dialogue.Question;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.server.network.ServerPlayerEntity;

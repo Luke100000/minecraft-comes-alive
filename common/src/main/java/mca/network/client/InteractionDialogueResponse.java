@@ -1,13 +1,15 @@
 package mca.network.client;
 
+import java.io.Serial;
 import java.util.List;
 import mca.ClientProxy;
 import mca.cobalt.network.Message;
 import mca.entity.VillagerEntityMCA;
-import mca.resources.data.Question;
+import mca.resources.data.dialogue.Question;
 import net.minecraft.entity.player.PlayerEntity;
 
 public class InteractionDialogueResponse implements Message {
+    @Serial
     private static final long serialVersionUID = 1371939319244994642L;
 
     public final String question;

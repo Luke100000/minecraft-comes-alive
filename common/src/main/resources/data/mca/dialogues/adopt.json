@@ -1,24 +1,25 @@
-[
-  {
-    "id": "adopt",
-    "silent": true,
-    "answers": [
-      {
-        "name": "confirm",
-        "actions": [
-          {
+{
+  "silent": true,
+  "answers": [
+    {
+      "name": "confirm",
+      "results": [
+        {
+          "actions": {
             "command": "adopt"
           }
-        ]
-      },
-      {
-        "name": "cancel",
-        "actions": [
-          {
-            "id": "main"
+        }
+      ]
+    },
+    {
+      "name": "cancel",
+      "results": [
+        {
+          "actions": {
+            "next": "main"
           }
-        ]
-      }
-    ]
-  }
-]
+        }
+      ]
+    }
+  ]
+}

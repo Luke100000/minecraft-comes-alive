@@ -4,6 +4,7 @@ import com.google.common.base.Strings;
 import com.mojang.authlib.GameProfile;
 import com.mojang.authlib.minecraft.MinecraftProfileTexture;
 import java.util.Map;
+import java.util.UUID;
 import mca.Config;
 import mca.entity.ai.DialogueType;
 import mca.entity.ai.Genetics;
@@ -26,6 +27,9 @@ import net.minecraft.client.MinecraftClient;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.SpawnReason;
+import net.minecraft.entity.attribute.EntityAttributeInstance;
+import net.minecraft.entity.attribute.EntityAttributeModifier;
+import net.minecraft.entity.attribute.EntityAttributes;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.server.world.ServerWorld;
@@ -42,6 +46,8 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
     CDataParameter<String> HAIR_OVERLAY = CParameter.create("hairOverlay", "");
     CEnumParameter<DyeColor> HAIR_COLOR = CParameter.create("hairColor", DyeColor.class);
     CEnumParameter<AgeState> AGE_STATE = CParameter.create("ageState", AgeState.UNASSIGNED);
+
+    UUID SPEED_ID = UUID.fromString("1eaf83ff-7207-5596-c37a-d7a07b3ec4ce");
 
     static <E extends Entity> CDataManager.Builder<E> createTrackedData(Class<E> type) {
         return new CDataManager.Builder<>(type)
@@ -119,14 +125,6 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
         }
     }
 
-    default float getRawScaleFactor() {
-        if (getGenetics() == null) {
-            return 1.0f;
-        } else {
-            return getGenetics().getVerticalScaleFactor() * getTraits().getVerticalScaleFactor() * getVillagerDimensions().getHeight() * Config.getInstance().villagerHeight;
-        }
-    }
-
     default String getClothes() {
         return getTrackedValue(CLOTHES);
     }
@@ -164,6 +162,25 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
         return getAgeState();
     }
 
+    default void updateSpeed() {
+        //set speed
+        float speed = getVillagerBrain().getPersonality().getSpeedModifier();
+
+        speed /= (0.9f + getGenetics().getGene(Genetics.WIDTH) * 0.2f);
+        speed *= (0.9f + getGenetics().getGene(Genetics.SIZE) * 0.2f);
+
+        speed *= getAgeState().getSpeed();
+
+        EntityAttributeInstance entityAttributeInstance = asEntity().getAttributeInstance(EntityAttributes.GENERIC_MOVEMENT_SPEED);
+        if (entityAttributeInstance != null) {
+            if (entityAttributeInstance.getModifier(SPEED_ID) != null) {
+                entityAttributeInstance.removeModifier(SPEED_ID);
+            }
+            EntityAttributeModifier speedModifier = new EntityAttributeModifier(SPEED_ID, "Speed", speed - 1.0f, EntityAttributeModifier.Operation.MULTIPLY_BASE);
+            entityAttributeInstance.addTemporaryModifier(speedModifier);
+        }
+    }
+
     default boolean setAgeState(AgeState state) {
         AgeState old = getAgeState();
         if (state == old) {
@@ -172,14 +189,24 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
 
         setTrackedValue(AGE_STATE, state);
         asEntity().calculateDimensions();
+        updateSpeed();
+
         return old != AgeState.UNASSIGNED;
     }
 
     default float getHorizontalScaleFactor() {
-        if (getGenetics() == null) {
-            return 1.0f;
+        if (getGenetics() == null || Config.getInstance().useSquidwardModels) {
+            return asEntity().isBaby() ? 0.5f : 1.0f;
         } else {
             return Math.min(0.999f, getGenetics().getHorizontalScaleFactor() * getTraits().getHorizontalScaleFactor() * getVillagerDimensions().getWidth());
+        }
+    }
+
+    default float getRawScaleFactor() {
+        if (getGenetics() == null || Config.getInstance().useSquidwardModels) {
+            return asEntity().isBaby() ? 0.5f : 1.0f;
+        } else {
+            return getGenetics().getVerticalScaleFactor() * getTraits().getVerticalScaleFactor() * getVillagerDimensions().getHeight() * Config.getInstance().villagerHeight;
         }
     }
 

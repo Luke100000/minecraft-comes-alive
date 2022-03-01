@@ -72,6 +72,15 @@ public class VillagerEntityBaseModelMCA<T extends MobEntity & VillagerLike<T>> e
             limbAngle = (float)Math.cos(entity.age / 9F) * 3;
             headYaw += (float)Math.sin(entity.age / 2F);
         }
+
+        //remove the boost for babies
+        if (entity.isBaby()) {
+            limbAngle /= 3.0f;
+        }
+
+        //and add our own
+        limbAngle /= (0.2f + entity.getRawScaleFactor());
+
         super.setAngles(entity, limbAngle, limbDistance, animationProgress, headYaw, headPitch);
 
         if (entity.getVillagerBrain().isPanicking()) {

@@ -20,6 +20,8 @@ import net.minecraft.client.render.block.entity.BlockEntityRendererFactories;
 import net.minecraft.client.render.entity.EntityRenderers;
 import net.minecraft.client.render.RenderLayer;
 import net.minecraft.client.render.RenderLayers;
+import net.minecraft.client.render.entity.VillagerEntityRenderer;
+import net.minecraft.client.render.entity.ZombieVillagerEntityRenderer;
 import net.minecraft.resource.ReloadableResourceManager;
 import net.minecraft.util.Identifier;
 import net.minecraftforge.api.distmarker.Dist;
@@ -44,12 +46,19 @@ public final class MCAClient {
     public static void setup(FMLClientSetupEvent event) {
         RegistrationImpl.bootstrap();
 
-        // TODO: Dammit, Forge
-        EntityRenderers.register(EntitiesMCA.MALE_VILLAGER, VillagerEntityMCARenderer::new);
-        EntityRenderers.register(EntitiesMCA.FEMALE_VILLAGER, VillagerEntityMCARenderer::new);
+        if (Config.getInstance().useSquidwardModels) {
+            EntityRenderers.register(EntitiesMCA.MALE_VILLAGER, VillagerEntityRenderer::new);
+            EntityRenderers.register(EntitiesMCA.FEMALE_VILLAGER, VillagerEntityRenderer::new);
 
-        EntityRenderers.register(EntitiesMCA.MALE_ZOMBIE_VILLAGER, ZombieVillagerEntityMCARenderer::new);
-        EntityRenderers.register(EntitiesMCA.FEMALE_ZOMBIE_VILLAGER, ZombieVillagerEntityMCARenderer::new);
+            EntityRenderers.register(EntitiesMCA.MALE_ZOMBIE_VILLAGER, ZombieVillagerEntityRenderer::new);
+            EntityRenderers.register(EntitiesMCA.FEMALE_ZOMBIE_VILLAGER, ZombieVillagerEntityRenderer::new);
+        } else {
+            EntityRenderers.register(EntitiesMCA.MALE_VILLAGER, VillagerEntityMCARenderer::new);
+            EntityRenderers.register(EntitiesMCA.FEMALE_VILLAGER, VillagerEntityMCARenderer::new);
+
+            EntityRenderers.register(EntitiesMCA.MALE_ZOMBIE_VILLAGER, ZombieVillagerEntityMCARenderer::new);
+            EntityRenderers.register(EntitiesMCA.FEMALE_ZOMBIE_VILLAGER, ZombieVillagerEntityMCARenderer::new);
+        }
 
         EntityRenderers.register(EntitiesMCA.GRIM_REAPER, GrimReaperRenderer::new);
 

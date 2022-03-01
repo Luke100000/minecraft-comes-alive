@@ -9,6 +9,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Predicate;
 import mca.Config;
+import mca.MCA;
 import mca.ParticleTypesMCA;
 import mca.SoundsMCA;
 import mca.TagsMCA;
@@ -458,6 +459,7 @@ public class VillagerEntityMCA extends VillagerEntity implements VillagerLike<Vi
                 if (!getResidency().getHomeVillage().filter(v -> v.hasBuilding("infirmary")).isPresent() || random.nextBoolean()) {
                     setInfected(true);
                     sendChatToAllAround("villager.bitten");
+                    MCA.LOGGER.info(getName() + " has been infected");
                 }
             }
         }
@@ -682,6 +684,7 @@ public class VillagerEntityMCA extends VillagerEntity implements VillagerLike<Vi
             zombie.setXp(getExperience());
 
             world.syncWorldEvent((PlayerEntity)null, 1026, this.getBlockPos(), 0);
+            zombie.setUuid(getUuid());
             return true;
         }
         return false;
@@ -1071,13 +1074,7 @@ public class VillagerEntityMCA extends VillagerEntity implements VillagerLike<Vi
         getTypeDataManager().load(this, nbt);
         relations.readFromNbt(nbt);
 
-        //set speed
-        float speed = mcaBrain.getPersonality().getSpeedModifier();
-
-        speed /= genetics.getGene(Genetics.WIDTH);
-        speed *= genetics.getGene(Genetics.SIZE);
-
-        setMovementSpeed(speed);
+        updateSpeed();
 
         inventory.clear();
         InventoryUtils.readFromNBT(inventory, nbt);

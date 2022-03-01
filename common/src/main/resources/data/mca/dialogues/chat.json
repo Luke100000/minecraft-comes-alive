@@ -1,64 +1,56 @@
-[
-  {
-    "id": "chat",
-    "group": "chat",
-    "auto": true,
-    "answers": [
-      {
-        "name": "",
-        "chance": 0.75,
-        "chanceRandom": 1.0,
-        "hearts": 4,
-        "conditions": [
-          {
-            "chance": -0.25,
-            "hearts": 0,
-            "personality": "stubborn"
-          },
-          {
-            "chance": 0,
-            "hearts": 1,
-            "personality": "friendly"
-          },
-          {
-            "chance": 0,
-            "hearts": 2,
-            "personality": "flirty"
-          },
-          {
-            "chance": 0.35,
-            "hearts": 0,
-            "mood": "bored_to_tears"
-          },
-          {
-            "chance": 0.25,
-            "hearts": 0,
-            "mood": "bored"
-          },
-          {
-            "chance": 0.4,
-            "hearts": 0,
-            "mood": "talkative"
-          },
-          {
-            "chance": 0.2,
-            "hearts": 0,
-            "mood": "interested"
+{
+  "auto": true,
+  "answers": [
+    {
+      "results": [
+        {
+          "baseChance": 5,
+          "conditions": [
+            {
+              "chance": 6,
+              "mood": "bored_to_tears"
+            },
+            {
+              "chance": 4,
+              "mood": "bored"
+            },
+            {
+              "chance": 4,
+              "mood": "talkative"
+            },
+            {
+              "chance": 2,
+              "mood": "interested"
+            }
+          ],
+          "actions": {
+            "next": "chat.success",
+            "positive": 5
           }
-        ],
-        "actions": [
-          {
-            "id": "chat.fail",
-            "threshold": 0.0,
-            "fail": true
-          },
-          {
-            "id": "chat.success",
-            "threshold": 1.0,
-            "success": true
+        },
+        {
+          "baseChance": 5,
+          "applyFatigue": true,
+          "conditions": [
+            {
+              "chance": 7,
+              "personality": "odd"
+            },
+            {
+              "chance": 5,
+              "personality": "stubborn"
+            },
+            {
+              "chance": 1,
+              "personality": "flirty"
+            }
+          ],
+          "actions": {
+            "next": "chat.fail",
+            "negative": 5
           }
-        ]
-      }
-    ]
-  }
-]
+        }
+      ]
+    }
+  ]
+}

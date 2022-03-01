@@ -40,7 +40,8 @@ public class GreetPlayerTask extends Task<VillagerEntityMCA> {
         }
 
         cooldown = MAX_COOLDOWN;
-        return getPlayer(villager).isPresent();
+        Optional<? extends PlayerEntity> player = getPlayer(villager);
+        return player.isPresent() && isWithinSeeRange(villager, player.get());
     }
 
     @Override
@@ -132,5 +133,9 @@ public class GreetPlayerTask extends Task<VillagerEntityMCA> {
 
     private static boolean isWithinGreetingDistance(VillagerEntityMCA villager, PlayerEntity player) {
         return villager.getBlockPos().isWithinDistance(player.getBlockPos(), 3);
+    }
+
+    private static boolean isWithinSeeRange(VillagerEntityMCA villager, PlayerEntity player) {
+        return villager.getBlockPos().isWithinDistance(player.getBlockPos(), 32);
     }
 }

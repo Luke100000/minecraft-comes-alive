@@ -6,9 +6,11 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.io.Serial;
 import java.io.Serializable;
 
 public final class Config implements Serializable {
+    @Serial
     private static final long serialVersionUID = 956221997003825933L;
 
     private static final Config INSTANCE = loadOrCreate();
@@ -55,12 +57,13 @@ public final class Config implements Serializable {
     public boolean canHurtBabies = true;
     public boolean useVoices = false;
     public boolean useVanillaVoices = false;
-    public float interactionFatigue = 0.05f;
+    public int interactionChanceFatigue = 1;
     public int interactionFatigueCooldown = 4800;
     public float taxesFactor = 0.5f;
     public boolean enterVillageNotification = true;
     public boolean showNameTags = true;
     public int villagerHealthBonusPerLevel = 5;
+    public boolean useSquidwardModels = false;
 
     public static File getConfigFile() {
         return new File("./config/mca.json");

@@ -1,42 +1,49 @@
-[
-  {
-    "id": "hug",
-    "group": "hug",
-    "auto": true,
-    "answers": [
-      {
-        "name": "",
-        "chance": 0.4,
-        "chanceRandom": 1.0,
-        "bonusChance": 0.5,
-        "bonusChanceMinHearts": 40,
-        "bonusChanceMaxHearts": 150,
-        "hearts": 9,
-        "conditions": [
-          {
-            "chance": -0.15,
-            "hearts": 3,
-            "personality": "odd"
-          },
-          {
-            "chance": 0.05,
-            "hearts": 1,
-            "personality": "friendly"
+{
+  "group": "hug",
+  "auto": true,
+  "answers": [
+    {
+      "results": [
+        {
+          "baseChance": 5,
+          "conditions": [
+            {
+              "chance": 5,
+              "personality": "friendly"
+            },
+            {
+              "chance": 3,
+              "hearts": 50
+            },
+            {
+              "chance": 3,
+              "hearts": 100
+            },
+            {
+              "chance": 3,
+              "hearts": 150
+            }
+          ],
+          "actions": {
+            "next": "hug.success",
+            "positive": 5
           }
-        ],
-        "actions": [
-          {
-            "id": "hug.fail",
-            "threshold": 0.0,
-            "fail": true
-          },
-          {
-            "id": "hug.success",
-            "threshold": 1.0,
-            "success": true
+        },
+        {
+          "baseChance": 5,
+          "applyFatigue": true,
+          "conditions": [
+            {
+              "chance": 5,
+              "personality": "odd"
+            }
+          ],
+          "actions": {
+            "next": "hug.fail",
+            "negative": 5
           }
-        ]
-      }
-    ]
-  }
-]
+        }
+      ]
+    }
+  ]
+}

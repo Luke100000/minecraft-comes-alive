@@ -8,12 +8,12 @@ import net.minecraft.text.TranslatableText;
 import net.minecraft.util.math.MathHelper;
 
 public enum AgeState implements VillagerDimensions {
-    UNASSIGNED(1, 0.9F, 1, 1),
-    BABY      (0.45F, 0.45F, 0, 1.5F),
-    TODDLER   (0.6F, 0.6F, 0, 1.3F),
-    CHILD     (0.7F, 0.7F, 0, 1.2F),
-    TEEN      (0.85F, 0.85F, 0.5F, 1),
-    ADULT     (1, 1, 1, 1);
+    UNASSIGNED(1, 0.9F, 1, 1, 1.0f),
+    BABY      (0.45F, 0.45F, 0, 1.5F, 0.0f),
+    TODDLER   (0.6F, 0.6F, 0, 1.3F, 0.6f),
+    CHILD     (0.7F, 0.7F, 0, 1.2F, 0.85f),
+    TEEN      (0.85F, 0.85F, 0.5F, 1, 1.05f),
+    ADULT     (1, 1, 1, 1, 1.0f);
 
     private static final AgeState[] VALUES = values();
 
@@ -21,6 +21,7 @@ public enum AgeState implements VillagerDimensions {
     private final float height;
     private final float breasts;
     private final float head;
+    private final float speed;
 
     public static int getMaxAge() {
         return Config.getInstance().villagerMaxAgeTime;
@@ -30,11 +31,12 @@ public enum AgeState implements VillagerDimensions {
         return getMaxAge() / 4;
     }
 
-    AgeState(float width, float height, float breasts, float head) {
+    AgeState(float width, float height, float breasts, float head, float speed) {
         this.width = width;
         this.height = height;
         this.breasts = breasts;
         this.head = head;
+        this.speed = speed;
     }
 
     public Text getName() {
@@ -59,6 +61,10 @@ public enum AgeState implements VillagerDimensions {
     @Override
     public float getHead() {
         return head;
+    }
+
+    public float getSpeed() {
+        return speed;
     }
 
     public AgeState getNext() {

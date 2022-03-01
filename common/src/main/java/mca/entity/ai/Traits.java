@@ -85,8 +85,8 @@ public class Traits {
 
     //initializes the genes with random numbers
     public void randomize() {
+        float total = (float)Arrays.stream(Trait.values()).mapToDouble(tr -> tr.chance).sum();
         for (Trait t : Trait.values()) {
-            float total = (float)Arrays.stream(Trait.values()).mapToDouble(tr -> tr.chance).sum();
             float chance = Config.getInstance().traitChance / total * t.chance;
             if (random.nextFloat() < chance) {
                 addTrait(t);
