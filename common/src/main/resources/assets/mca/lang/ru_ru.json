@@ -446,7 +446,7 @@
   "server.married": "Вы и %1$s поженились!",
   "server.endMarriageNotMarried": "Вы не состоите в браке.",
   "server.endMarriage": "Ваш брак с %1$s был расторгнут.",
-  "server.marriageEnded": "%1$s расторг брак с Вами.",
+  "server.marriageEnded": "%1$s has ended their marriage with you.",
   "server.playerNotCustomized.title": "Настройте своего персонажа!",
   "server.playerNotCustomized.description": "Наберите '/mca editor'",
   "server.mail.title": "Вам пришло письмо!",
