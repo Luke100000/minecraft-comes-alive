@@ -6,6 +6,7 @@
   "mixins": [
     "MixinActivity",
     "MixinCriteria",
+	"MixinEntityType",
     "MixinHorseBaseEntity",
     "MixinMemoryModuleType",
     "MixinPlayerEntity",

@@ -24,6 +24,7 @@ public final class Config implements Serializable {
     public int version = 0;
     public boolean overwriteOriginalVillagers = true;
     public boolean overwriteOriginalZombieVillagers = true;
+    public boolean villagerTagsHacks = true;
     public boolean enableInfection = true;
     public int infectionChance = 5;
     public boolean allowGrimReaper = true;
