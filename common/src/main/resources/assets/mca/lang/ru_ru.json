@@ -95,6 +95,8 @@
   "analysis.current_chore": "current chore",
   "analysis.item": "specific item",
   "analysis.tag": "specific item tag",
+  "analysis.heartsMin": "hearts",
+  "analysis.heartsMax": "hearts",
   "item.mca.blueprint": "Чертеж",
   "item.mca.blueprint.tooltip": "Щелкните правой кнопкой мыши, чтобы управлять деревней, в которой вы находитесь в данный момент",
   "tag.mca:town_center": "Колокол",
