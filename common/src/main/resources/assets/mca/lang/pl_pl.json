@@ -95,6 +95,8 @@
   "analysis.current_chore": "obecny obowiązek",
   "analysis.item": "konkretny przedmiot",
   "analysis.tag": "specjalny tag przedmiotu",
+  "analysis.heartsMin": "hearts",
+  "analysis.heartsMax": "hearts",
   "item.mca.blueprint": "Plany budowlane",
   "item.mca.blueprint.tooltip": "Kliknij prawym przyciskiem myszy aby zarządzać osadą",
   "tag.mca:town_center": "Dzwonek",
