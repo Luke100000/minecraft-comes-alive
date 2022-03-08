@@ -6,7 +6,7 @@
   "mixins": [
     "MixinActivity",
     "MixinCriteria",
-	  "MixinEntityType",
+    "MixinEntityType",
     "MixinDefaultParticleType",
     "MixinHorseBaseEntity",
     "MixinMemoryModuleType",

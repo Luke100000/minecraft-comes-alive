@@ -15,7 +15,7 @@ public class MixinEntityType {
 	@Inject(method = "isIn", at = @At("HEAD"), cancellable = true)
 	private void mca$villagerTagHack(TagKey<EntityType<?>> tag, CallbackInfoReturnable<Boolean> cir) {
 		if (Config.getInstance().villagerTagsHacks) {
-			if ((Object) this == EntitiesMCA.MALE_VILLAGER || (Object) this == EntitiesMCA.FEMALE_VILLAGER) {
+			if ((Object) this == EntitiesMCA.MALE_VILLAGER.get() || (Object) this == EntitiesMCA.FEMALE_VILLAGER.get()) {
 				if (EntityType.VILLAGER.isIn(tag)) {
 					cir.setReturnValue(true);
 				}
