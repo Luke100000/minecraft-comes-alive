@@ -12,20 +12,19 @@ import mca.entity.ai.Memories;
 import mca.entity.interaction.InteractionPredicate;
 import mca.resources.data.analysis.IntAnalysis;
 import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.server.network.ServerPlayerEntity;
 
 public class Result {
     private final Actions actions;
     private final int baseChance;
     private final List<InteractionPredicate> conditions;
     private final boolean applyFatigue;
-    private final boolean positive;
 
-    public Result(Actions actions, int baseChance, List<InteractionPredicate> conditions, boolean applyFatigue, boolean positive) {
+    public Result(Actions actions, int baseChance, List<InteractionPredicate> conditions, boolean applyFatigue) {
         this.actions = actions;
         this.baseChance = baseChance;
         this.conditions = conditions;
         this.applyFatigue = applyFatigue;
-        this.positive = positive;
     }
 
     public static Result fromJson(JsonObject json) {
@@ -41,9 +40,8 @@ public class Result {
         }
 
         boolean applyFatigue = json.has("applyFatigue") && json.get("applyFatigue").getAsBoolean();
-        boolean positive = json.has("positive") && json.get("positive").getAsBoolean();
 
-        return new Result(actions, baseChance, conditions, applyFatigue, positive);
+        return new Result(actions, baseChance, conditions, applyFatigue);
     }
 
     public Actions getActions() {
@@ -59,14 +57,14 @@ public class Result {
     }
 
     public boolean isPositive() {
-        return positive;
+        return getActions().isPositive();
     }
 
     public List<InteractionPredicate> getConditions() {
         return Objects.requireNonNullElse(conditions, Collections.emptyList());
     }
 
-    public IntAnalysis getChances(VillagerEntityMCA villager, PlayerEntity player) {
+    public IntAnalysis getChances(VillagerEntityMCA villager, ServerPlayerEntity player) {
         IntAnalysis analysis = new IntAnalysis();
         Memories memory = villager.getVillagerBrain().getMemoriesForPlayer(player);
 
@@ -75,13 +73,14 @@ public class Result {
             analysis.add("base", getBaseChance());
         }
 
-        if (shouldApplyFatigue()) {
-            analysis.add("fatigue", memory.getInteractionFatigue() * Config.getInstance().interactionChanceFatigue);
+        int f = memory.getInteractionFatigue() * Config.getInstance().interactionChanceFatigue;
+        if (shouldApplyFatigue() && f > 0) {
+            analysis.add("fatigue", f);
         }
 
         // condition chance
         for (InteractionPredicate c : getConditions()) {
-            if (c.getChance() != 0 && c.test(villager)) {
+            if (c.getChance() != 0 && c.test(villager, player)) {
                 analysis.add(c.getConditionKeys().get(0), c.getChance());
             }
         }

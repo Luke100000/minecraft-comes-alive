@@ -212,3 +212,5 @@
 * Different ages will now move at different speed
 * Genes now affect speed
 * Converted villagers will now retain custom nbt data and age
+* Fixed inventory disappearing on convert
+* Fixed marriage and family tree loss on convert

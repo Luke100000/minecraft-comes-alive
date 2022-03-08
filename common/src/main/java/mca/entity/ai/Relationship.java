@@ -156,7 +156,7 @@ public class Relationship<T extends MobEntity & VillagerLike<T>> implements Enti
         }
 
         if (burialSite != null && type != RelationshipType.STRANGER) {
-            entity.getBrain().doExclusively(ActivityMCA.GRIEVE);
+            entity.getBrain().doExclusively(ActivityMCA.GRIEVE.get());
             entity.getBrain().remember(MemoryModuleType.WALK_TARGET, new WalkTarget(burialSite, 1, 1));
             entity.getBrain().remember(MemoryModuleType.LOOK_TARGET, new BlockPosLookTarget(burialSite));
         }

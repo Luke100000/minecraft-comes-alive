@@ -101,7 +101,7 @@ public class BreedableRelationship extends Relationship<VillagerEntityMCA> {
                 }
                 stack.decrement(1);
             } else {
-                Optional<GiftType> gift = GiftType.bestMatching(entity, stack);
+                Optional<GiftType> gift = GiftType.bestMatching(entity, stack, player);
 
                 // gift is unknown
                 if (gift.isPresent()) {
@@ -138,9 +138,8 @@ public class BreedableRelationship extends Relationship<VillagerEntityMCA> {
                                     stack.getItem() instanceof ShovelItem ? "mca:shovels" :
                                             "mca:pickaxes"
             )));
-        } else if (stack.getItem() instanceof ArmorItem) {
+        } else if (stack.getItem() instanceof ArmorItem armor) {
             //armor
-            ArmorItem armor = (ArmorItem)stack.getItem();
             int satisfaction = (int)(Math.pow(armor.getProtection(), 1.25) * 1.5 + armor.getMaterial().getToughness() * 5);
             return Optional.of(new GiftType(stack.getItem(), satisfaction, new Identifier("mca:armor")));
         } else if (stack.getItem().isFood()) {
@@ -154,14 +153,14 @@ public class BreedableRelationship extends Relationship<VillagerEntityMCA> {
         return Optional.empty();
     }
 
-    private void acceptGift(ItemStack stack, GiftType gift, PlayerEntity player, Memories memory) {
+    private void acceptGift(ItemStack stack, GiftType gift, ServerPlayerEntity player, Memories memory) {
         // inventory full
         if (!entity.getInventory().canInsert(stack)) {
             rejectGift(player, "villager.inventory.full");
             return;
         }
 
-        IntAnalysis analysis = gift.getSatisfactionFor(entity, stack);
+        IntAnalysis analysis = gift.getSatisfactionFor(entity, stack, player);
         int satisfaction = analysis.getTotal();
         Response response = gift.getResponse(satisfaction);
 
@@ -177,7 +176,7 @@ public class BreedableRelationship extends Relationship<VillagerEntityMCA> {
         // adjust reward
         desaturatedSatisfaction *= Config.getInstance().giftSatisfactionFactor;
 
-        NetworkHandler.sendToPlayer(new AnalysisResults(analysis), (ServerPlayerEntity)player);
+        NetworkHandler.sendToPlayer(new AnalysisResults(analysis), player);
 
         if (response == Response.FAIL) {
             rejectGift(player, gift.getDialogueFor(response));

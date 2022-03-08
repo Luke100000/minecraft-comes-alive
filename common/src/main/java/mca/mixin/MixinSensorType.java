@@ -10,8 +10,8 @@ import net.minecraft.entity.ai.brain.sensor.SensorType;
 
 @Mixin(SensorType.class)
 public interface MixinSensorType {
-    @Invoker("register")
-    static <U extends Sensor<?>> SensorType<U> register(String id, Supplier<U> factory) {
+    @Invoker("<init>")
+    static <U extends Sensor<?>> SensorType<U> init(Supplier<U> supplier) {
         return null;
     }
 }

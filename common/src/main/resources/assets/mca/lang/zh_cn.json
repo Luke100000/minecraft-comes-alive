@@ -95,6 +95,8 @@
   "analysis.current_chore": "当前的日常事务",
   "analysis.item": "特定物品",
   "analysis.tag": "特定物品标签",
+  "analysis.heartsMin": "hearts",
+  "analysis.heartsMax": "hearts",
   "item.mca.blueprint": "蓝图",
   "item.mca.blueprint.tooltip": "右击可管理您当前所在的村庄。",
   "tag.mca:town_center": "钟",

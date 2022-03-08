@@ -95,6 +95,8 @@
   "analysis.current_chore": "поточна робота",
   "analysis.item": "конкретна річ",
   "analysis.tag": "конкретний тег товару",
+  "analysis.heartsMin": "hearts",
+  "analysis.heartsMax": "hearts",
   "item.mca.blueprint": "Креслення",
   "item.mca.blueprint.tooltip": "Натисніть правою кнопкою миші, щоб керувати селищем, де ви зараз перебуваєте",
   "tag.mca:town_center": "Дзвінок",

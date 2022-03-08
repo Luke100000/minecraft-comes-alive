@@ -1,8 +1,8 @@
 plugins {
   id 'java-library'
   id 'architectury-plugin' version '3.4-SNAPSHOT'
-  id 'dev.architectury.loom' version '0.10.0-SNAPSHOT' apply false
-  id 'org.ajoberstar.reckon' version '0.13.0'
+  id 'dev.architectury.loom' version '0.11.0-SNAPSHOT' apply false
+  id 'org.ajoberstar.reckon' version '0.13.1'
 }
 
 java {
@@ -44,7 +44,7 @@ allprojects {
 
   tasks.withType(JavaCompile) {
     options.encoding = "UTF-8"
-    options.release = 16
+    options.release = 17
   }
 
   java {

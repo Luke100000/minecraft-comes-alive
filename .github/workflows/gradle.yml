@@ -39,7 +39,9 @@ jobs:
         if: ${{ success() && startsWith(github.ref, 'refs/tags/') }}
         with:
           file_path: "forge/build/libs/minecraft-comes-alive-${{steps.tag.outputs.tag}}-forge.jar"
+          display_name: "[Forge 1.18.2] MCA Reborn - ${{steps.tag.outputs.tag}}"
           game_endpoint: "minecraft"
+          relations: "architectury-forge:requiredDependency"
           game_versions: "Minecraft 1.18:1.18.2,Java 17,Forge"
           project_id: "535291"
           token: "${{ secrets.CF_API_TOKEN }}"
@@ -51,8 +53,9 @@ jobs:
         if: ${{ success() && startsWith(github.ref, 'refs/tags/') }}
         with:
           file_path: "fabric/build/libs/minecraft-comes-alive-${{steps.tag.outputs.tag}}-fabric.jar"
+          display_name: "[Fabric 1.18.2] MCA Reborn - ${{steps.tag.outputs.tag}}"
           game_endpoint: "minecraft"
-          relations: "fabric-api:requiredDependency"
+          relations: "fabric-api:requiredDependency,architectury-fabric:requiredDependency"
           game_versions: "Minecraft 1.18:1.18.2,Java 17,Fabric"
           project_id: "535291"
           token: "${{ secrets.CF_API_TOKEN }}"

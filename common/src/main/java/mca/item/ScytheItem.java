@@ -71,7 +71,7 @@ public class ScytheItem extends SwordItem {
             stack.getOrCreateNbt().putBoolean("active", selected);
 
             float baseVolume = selected ? 0.75F : 0.25F;
-            entity.world.playSound(null, entity.getBlockPos(), SoundsMCA.reaper_scythe_out, entity.getSoundCategory(),
+            entity.world.playSound(null, entity.getBlockPos(), SoundsMCA.reaper_scythe_out.get(), entity.getSoundCategory(),
                     baseVolume + r.nextFloat() / 2F,
                     0.65F + r.nextFloat() / 10F
             );
@@ -79,7 +79,7 @@ public class ScytheItem extends SwordItem {
 
         if (selected) {
             if (living.handSwingTicks == -1) {
-                entity.world.playSound(null, entity.getBlockPos(), SoundsMCA.reaper_scythe_swing, entity.getSoundCategory(), 0.25F, 1);
+                entity.world.playSound(null, entity.getBlockPos(), SoundsMCA.reaper_scythe_swing.get(), entity.getSoundCategory(), 0.25F, 1);
             }
         }
     }
@@ -116,9 +116,9 @@ public class ScytheItem extends SwordItem {
             target.addStatusEffect(new StatusEffectInstance(StatusEffects.WITHER, 1000, 1));
         }
 
-        SoundEvent sound = SoundsMCA.reaper_scythe_out;
+        SoundEvent sound = SoundsMCA.reaper_scythe_out.get();
 
-        if (!hasSoul(stack) && target.isDead() && (target.getType() == EntitiesMCA.MALE_VILLAGER || target.getType() == EntitiesMCA.FEMALE_VILLAGER)) {
+        if (!hasSoul(stack) && target.isDead() && (target.getType() == EntitiesMCA.MALE_VILLAGER.get() || target.getType() == EntitiesMCA.FEMALE_VILLAGER.get())) {
             setSoul(stack, true);
             sound = SoundEvents.BLOCK_BELL_RESONATE;
 

@@ -15,11 +15,11 @@
               "mood": "bored"
             },
             {
-              "chance": 4,
+              "chance": 5,
               "mood": "talkative"
             },
             {
-              "chance": 2,
+              "chance": 3,
               "mood": "interested"
             }
           ],
@@ -29,15 +29,15 @@
           }
         },
         {
-          "baseChance": 5,
+          "baseChance": 2,
           "applyFatigue": true,
           "conditions": [
             {
-              "chance": 7,
+              "chance": 5,
               "personality": "odd"
             },
             {
-              "chance": 5,
+              "chance": 4,
               "personality": "stubborn"
             },
             {

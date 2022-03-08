@@ -30,11 +30,11 @@ public enum Gender {
     }
 
     public EntityType<VillagerEntityMCA> getVillagerType() {
-        return this == FEMALE ? EntitiesMCA.FEMALE_VILLAGER : EntitiesMCA.MALE_VILLAGER;
+        return this == FEMALE ? EntitiesMCA.FEMALE_VILLAGER.get() : EntitiesMCA.MALE_VILLAGER.get();
     }
 
     public EntityType<ZombieVillagerEntityMCA> getZombieType() {
-        return this == FEMALE ? EntitiesMCA.FEMALE_ZOMBIE_VILLAGER : EntitiesMCA.MALE_ZOMBIE_VILLAGER;
+        return this == FEMALE ? EntitiesMCA.FEMALE_ZOMBIE_VILLAGER.get() : EntitiesMCA.MALE_ZOMBIE_VILLAGER.get();
     }
 
     public Formatting getColor() {

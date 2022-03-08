@@ -5,31 +5,6 @@
       "name": "short",
       "results": [
         {
-          "baseChance": 0,
-          "conditions": [
-            {
-              "chance": 6,
-              "mood": "depressed"
-            },
-            {
-              "chance": 4,
-              "mood": "sad"
-            },
-            {
-              "chance": 2,
-              "mood": "unhappy"
-            },
-            {
-              "chance": 1,
-              "personality": "flirty"
-            }
-          ],
-          "actions": {
-            "next": "greet.fail",
-            "negative": 2
-          }
-        },
-        {
           "baseChance": 5,
           "conditions": [
             {
@@ -47,16 +22,28 @@
           }
         },
         {
-          "baseChance": 5,
+          "baseChance": 0,
           "conditions": [
             {
-              "chance": 5,
-              "mood": "talkative"
+              "chance": 6,
+              "mood": "depressed"
+            },
+            {
+              "chance": 4,
+              "mood": "sad"
+            },
+            {
+              "chance": 2,
+              "mood": "unhappy"
+            },
+            {
+              "chance": 1,
+              "personality": "flirty"
             }
           ],
           "actions": {
-            "next": "greet.chat",
-            "positive": 6
+            "next": "greet.fail",
+            "negative": 2
           }
         }
       ]
@@ -64,33 +51,6 @@
     {
       "name": "kind",
       "results": [
-        {
-          "baseChance": 0,
-          "applyFatigue": true,
-          "conditions": [
-            {
-              "chance": 5,
-              "personality": "odd"
-            }
-          ],
-          "actions": {
-            "next": "greet.fail",
-            "negative": 2
-          }
-        },
-        {
-          "baseChance": 5,
-          "conditions": [
-            {
-              "chance": 2,
-              "personality": "friendly"
-            }
-          ],
-          "actions": {
-            "next": "greet.chitchat",
-            "positive": 4
-          }
-        },
         {
           "baseChance": 5,
           "conditions": [
@@ -116,8 +76,22 @@
             }
           ],
           "actions": {
-            "next": "greet.chat",
+            "next": "greet.chitchat",
             "positive": 6
+          }
+        },
+        {
+          "baseChance": 0,
+          "applyFatigue": true,
+          "conditions": [
+            {
+              "chance": 5,
+              "personality": "odd"
+            }
+          ],
+          "actions": {
+            "next": "greet.fail",
+            "negative": 2
           }
         }
       ]

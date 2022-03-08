@@ -50,8 +50,8 @@ public class VillagerBrain<E extends MobEntity & VillagerLike<E>> {
         if (entity.getTrackedValue(ACTIVE_CHORE) != Chore.NONE) {
             // find something to do
             entity.getBrain().getFirstPossibleNonCoreActivity().ifPresent(activity -> {
-                if (!activity.equals(ActivityMCA.CHORE)) {
-                    entity.getBrain().doExclusively(ActivityMCA.CHORE);
+                if (!activity.equals(ActivityMCA.CHORE.get())) {
+                    entity.getBrain().doExclusively(ActivityMCA.CHORE.get());
                 }
             });
         }
@@ -101,11 +101,11 @@ public class VillagerBrain<E extends MobEntity & VillagerLike<E>> {
      * Assigns a job for the villager to do.
      */
     public void assignJob(Chore chore, PlayerEntity player) {
-        entity.getBrain().doExclusively(ActivityMCA.CHORE);
+        entity.getBrain().doExclusively(ActivityMCA.CHORE.get());
         entity.setTrackedValue(ACTIVE_CHORE, chore);
         entity.setTrackedValue(CHORE_ASSIGNING_PLAYER, Optional.of(player.getUuid()));
-        entity.getBrain().forget(MemoryModuleTypeMCA.PLAYER_FOLLOWING);
-        entity.getBrain().forget(MemoryModuleTypeMCA.STAYING);
+        entity.getBrain().forget(MemoryModuleTypeMCA.PLAYER_FOLLOWING.get());
+        entity.getBrain().forget(MemoryModuleTypeMCA.STAYING.get());
     }
 
     public void randomize() {
@@ -174,16 +174,16 @@ public class VillagerBrain<E extends MobEntity & VillagerLike<E>> {
     public void setMoveState(MoveState state, @Nullable PlayerEntity leader) {
         entity.setTrackedValue(MOVE_STATE, state);
         if (state == MoveState.MOVE) {
-            entity.getBrain().forget(MemoryModuleTypeMCA.PLAYER_FOLLOWING);
-            entity.getBrain().forget(MemoryModuleTypeMCA.STAYING);
+            entity.getBrain().forget(MemoryModuleTypeMCA.PLAYER_FOLLOWING.get());
+            entity.getBrain().forget(MemoryModuleTypeMCA.STAYING.get());
         }
         if (state == MoveState.STAY) {
-            entity.getBrain().forget(MemoryModuleTypeMCA.PLAYER_FOLLOWING);
-            entity.getBrain().remember(MemoryModuleTypeMCA.STAYING, true);
+            entity.getBrain().forget(MemoryModuleTypeMCA.PLAYER_FOLLOWING.get());
+            entity.getBrain().remember(MemoryModuleTypeMCA.STAYING.get(), true);
         }
         if (state == MoveState.FOLLOW) {
-            entity.getBrain().remember(MemoryModuleTypeMCA.PLAYER_FOLLOWING, leader);
-            entity.getBrain().forget(MemoryModuleTypeMCA.STAYING);
+            entity.getBrain().remember(MemoryModuleTypeMCA.PLAYER_FOLLOWING.get(), leader);
+            entity.getBrain().forget(MemoryModuleTypeMCA.STAYING.get());
             abandonJob();
         }
     }
@@ -200,10 +200,10 @@ public class VillagerBrain<E extends MobEntity & VillagerLike<E>> {
      * Read the move state from the active memory.
      */
     public void updateMoveState() {
-        if (getMoveState() == MoveState.FOLLOW && !entity.getBrain().getOptionalMemory(MemoryModuleTypeMCA.PLAYER_FOLLOWING).isPresent()) {
-            if (entity.getBrain().getOptionalMemory(MemoryModuleTypeMCA.STAYING).isPresent()) {
+        if (getMoveState() == MoveState.FOLLOW && !entity.getBrain().getOptionalMemory(MemoryModuleTypeMCA.PLAYER_FOLLOWING.get()).isPresent()) {
+            if (entity.getBrain().getOptionalMemory(MemoryModuleTypeMCA.STAYING.get()).isPresent()) {
                 entity.setTrackedValue(MOVE_STATE, MoveState.STAY);
-            } else if (entity.getBrain().getOptionalMemory(MemoryModuleTypeMCA.PLAYER_FOLLOWING).isPresent()) {
+            } else if (entity.getBrain().getOptionalMemory(MemoryModuleTypeMCA.PLAYER_FOLLOWING.get()).isPresent()) {
                 entity.setTrackedValue(MOVE_STATE, MoveState.FOLLOW);
             } else {
                 entity.setTrackedValue(MOVE_STATE, MoveState.MOVE);

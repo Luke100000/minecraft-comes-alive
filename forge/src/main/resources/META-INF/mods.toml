@@ -11,7 +11,7 @@ authors = "WildBamaBoy, SheWolfDeadly"
 description = '''
 No more squidward-villagers! Interact with male and female human villagers and raise a family.
 '''
-#logoFile = "mca.png"
+logoFile = "mca.png"
 
 [[dependencies.mca]]
     modId="forge"
@@ -24,4 +24,10 @@ No more squidward-villagers! Interact with male and female human villagers and r
     mandatory=true
     versionRange="[1.18,1.19)"
     ordering="NONE"
+    side="BOTH"
+[[dependencies.mca]]
+    modId="architectury"
+    mandatory=true
+    versionRange="[4.0.30,)"
+    ordering="AFTER"
     side="BOTH"

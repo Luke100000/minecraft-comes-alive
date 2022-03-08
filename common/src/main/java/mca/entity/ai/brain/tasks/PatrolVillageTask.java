@@ -20,7 +20,7 @@ public class PatrolVillageTask extends Task<VillagerEntityMCA> {
 
     public PatrolVillageTask(int completionRange, float speed) {
         super(ImmutableMap.of(
-                MemoryModuleTypeMCA.PLAYER_FOLLOWING, MemoryModuleState.VALUE_ABSENT,
+                MemoryModuleTypeMCA.PLAYER_FOLLOWING.get(), MemoryModuleState.VALUE_ABSENT,
                 MemoryModuleType.INTERACTION_TARGET, MemoryModuleState.VALUE_ABSENT,
                 MemoryModuleType.ATTACK_TARGET, MemoryModuleState.VALUE_ABSENT,
                 MemoryModuleType.WALK_TARGET, MemoryModuleState.VALUE_ABSENT,

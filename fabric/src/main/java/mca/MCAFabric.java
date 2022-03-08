@@ -3,7 +3,6 @@ package mca;
 import mca.advancement.criterion.CriterionMCA;
 import mca.block.BlocksMCA;
 import mca.cobalt.network.NetworkHandlerImpl;
-import mca.cobalt.registration.RegistrationImpl;
 import mca.entity.EntitiesMCA;
 import mca.item.ItemsMCA;
 import mca.network.MessagesMCA;
@@ -29,7 +28,6 @@ import net.minecraft.server.world.ServerWorld;
 public final class MCAFabric implements ModInitializer {
     @Override
     public void onInitialize() {
-        new RegistrationImpl();
         new NetworkHandlerImpl();
 
         BlocksMCA.bootstrap();

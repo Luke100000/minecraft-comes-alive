@@ -1,15 +1,19 @@
 package mca.resources;
 
 import com.google.gson.JsonElement;
+
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+
 import mca.MCA;
 import mca.cobalt.network.NetworkHandler;
 import mca.entity.VillagerEntityMCA;
 import mca.network.client.AnalysisResults;
+import mca.resources.data.SerializablePair;
+import mca.resources.data.analysis.ChanceAnalysis;
 import mca.resources.data.analysis.IntAnalysis;
 import mca.resources.data.dialogue.Answer;
 import mca.resources.data.dialogue.Question;
@@ -98,9 +102,7 @@ public class Dialogues extends JsonDataLoader {
         }
 
         //send analysis
-        //todo
-        /*
-        IntAnalysis finalAnalysis = new IntAnalysis();
+        ChanceAnalysis finalAnalysis = new ChanceAnalysis();
         for (int i = 0; i < analysis.size(); i++) {
             boolean positive = answer.getResults().get(i).isPositive();
             for (SerializablePair<String, Integer> value : analysis.get(i).getSummands()) {
@@ -108,9 +110,6 @@ public class Dialogues extends JsonDataLoader {
             }
         }
         NetworkHandler.sendToPlayer(new AnalysisResults(finalAnalysis), player);
-        */
-
-        NetworkHandler.sendToPlayer(new AnalysisResults(analysis.get(chosen)), player);
 
         //execute that results actions
         answer.getResults().get(chosen).getActions().trigger(villager, player);

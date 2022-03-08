@@ -95,6 +95,8 @@
   "analysis.current_chore": "Corvée actuelle",
   "analysis.item": "Objet spécifique",
   "analysis.tag": "Tag d'objet spécifique",
+  "analysis.heartsMin": "hearts",
+  "analysis.heartsMax": "hearts",
   "item.mca.blueprint": "Plan",
   "item.mca.blueprint.tooltip": "Clic-droit pour gérer le village dans lequel vous êtes actuellement",
   "tag.mca:town_center": "Cloche",

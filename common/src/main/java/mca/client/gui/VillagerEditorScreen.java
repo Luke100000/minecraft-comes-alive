@@ -46,7 +46,7 @@ public class VillagerEditorScreen extends Screen {
     private final UUID playerUUID;
     private int villagerBreedingAge;
     private String page;
-    private final VillagerEntityMCA villager = EntitiesMCA.MALE_VILLAGER.create(MinecraftClient.getInstance().world);
+    private final VillagerEntityMCA villager = EntitiesMCA.MALE_VILLAGER.get().create(MinecraftClient.getInstance().world);
     private static final int DATA_WIDTH = 150;
     private int traitPage = 0;
     private static final int TRAITS_PER_PAGE = 8;
@@ -323,9 +323,9 @@ public class VillagerEditorScreen extends Screen {
                 List<ButtonWidget> professionButtons = new LinkedList<>();
                 for (VillagerProfession p : new VillagerProfession[] {
                         VillagerProfession.NONE,
-                        ProfessionsMCA.GUARD,
-                        ProfessionsMCA.ARCHER,
-                        ProfessionsMCA.OUTLAW,
+                        ProfessionsMCA.GUARD.get(),
+                        ProfessionsMCA.ARCHER.get(),
+                        ProfessionsMCA.OUTLAW.get(),
                 }) {
                     TranslatableText text = new TranslatableText("entity.minecraft.villager." + p);
                     ButtonWidget widget = addDrawableChild(new ButtonWidget(width / 2 + (right ? DATA_WIDTH / 2 : 0), y, DATA_WIDTH / 2, 20, text, b -> {

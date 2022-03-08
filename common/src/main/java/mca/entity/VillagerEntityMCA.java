@@ -259,12 +259,12 @@ public class VillagerEntityMCA extends VillagerEntity implements VillagerLike<Vi
     }
 
     public boolean isProfessionImportant() {
-        return getProfession() == ProfessionsMCA.ARCHER || getProfession() == ProfessionsMCA.GUARD || getProfession() == ProfessionsMCA.OUTLAW;
+        return getProfession() == ProfessionsMCA.ARCHER.get() || getProfession() == ProfessionsMCA.GUARD.get() || getProfession() == ProfessionsMCA.OUTLAW.get();
     }
 
     @Override
     public void setVillagerData(VillagerData data) {
-        boolean hasChanged = !world.isClient && getProfession() != data.getProfession() && data.getProfession() != ProfessionsMCA.OUTLAW;
+        boolean hasChanged = !world.isClient && getProfession() != data.getProfession() && data.getProfession() != ProfessionsMCA.OUTLAW.get();
         super.setVillagerData(data);
         if (hasChanged) {
             randomizeClothes();
@@ -329,7 +329,7 @@ public class VillagerEntityMCA extends VillagerEntity implements VillagerLike<Vi
 
         //we don't use attributes
         // why not?
-        float damage = getProfession() == ProfessionsMCA.GUARD ? 9 : 3;
+        float damage = getProfession() == ProfessionsMCA.GUARD.get() ? 9 : 3;
         float knockback = 1;
 
         //personality bonus
@@ -372,9 +372,9 @@ public class VillagerEntityMCA extends VillagerEntity implements VillagerLike<Vi
             int bounty = getSmallBounty();
             if (bounty <= 1) {
                 getBrain().forget(MemoryModuleType.ATTACK_TARGET);
-                getBrain().forget(MemoryModuleTypeMCA.SMALL_BOUNTY);
+                getBrain().forget(MemoryModuleTypeMCA.SMALL_BOUNTY.get());
             } else {
-                getBrain().remember(MemoryModuleTypeMCA.SMALL_BOUNTY, bounty - 1);
+                getBrain().remember(MemoryModuleTypeMCA.SMALL_BOUNTY.get(), bounty - 1);
             }
         }
     }
@@ -382,13 +382,15 @@ public class VillagerEntityMCA extends VillagerEntity implements VillagerLike<Vi
     @Override
     public final ActionResult interactAt(PlayerEntity player, Vec3d pos, @NotNull Hand hand) {
         ItemStack stack = player.getStackInHand(hand);
-        if (hand.equals(Hand.MAIN_HAND) && !stack.isIn(TagsMCA.Items.VILLAGER_EGGS) && stack.getItem() != ItemsMCA.VILLAGER_EDITOR) {
-            playWelcomeSound();
+        if (hand.equals(Hand.MAIN_HAND) && !stack.isIn(TagsMCA.Items.VILLAGER_EGGS) && stack.getItem() != ItemsMCA.VILLAGER_EDITOR.get()) {
+            if (!getVillagerBrain().isPanicking()) {
+                playWelcomeSound();
 
-            //make sure dialogueType is synced in case the client needs it
-            getDialogueType(player);
+                //make sure dialogueType is synced in case the client needs it
+                getDialogueType(player);
 
-            return interactions.interactAt(player, pos, hand);
+                return interactions.interactAt(player, pos, hand);
+            }
         }
         return super.interactAt(player, pos, hand);
     }
@@ -396,7 +398,7 @@ public class VillagerEntityMCA extends VillagerEntity implements VillagerLike<Vi
     @Override
     public ActionResult interactMob(PlayerEntity player, Hand hand) {
         ItemStack stack = player.getStackInHand(hand);
-        if (stack.getItem() != ItemsMCA.VILLAGER_EDITOR) {
+        if (stack.getItem() != ItemsMCA.VILLAGER_EDITOR.get() && !getVillagerBrain().isPanicking()) {
             return super.interactMob(player, hand);
         } else {
             return ActionResult.PASS;
@@ -440,7 +442,7 @@ public class VillagerEntityMCA extends VillagerEntity implements VillagerLike<Vi
         }
 
         // Guards take 50% less damage
-        if (getProfession() == ProfessionsMCA.GUARD) {
+        if (getProfession() == ProfessionsMCA.GUARD.get()) {
             damageAmount *= 0.5;
         }
 
@@ -464,7 +466,7 @@ public class VillagerEntityMCA extends VillagerEntity implements VillagerLike<Vi
 
             //infect the villager
             if (source.getSource() instanceof ZombieEntity
-                    && getProfession() != ProfessionsMCA.GUARD
+                    && getProfession() != ProfessionsMCA.GUARD.get()
                     && Config.getInstance().enableInfection
                     && random.nextFloat() < Config.getInstance().infectionChance / 100.0) {
                 if (!getResidency().getHomeVillage().filter(v -> v.hasBuilding("infirmary")).isPresent() || random.nextBoolean()) {
@@ -492,7 +494,7 @@ public class VillagerEntityMCA extends VillagerEntity implements VillagerLike<Vi
                             // just a warning
                             v.sendChatMessage((PlayerEntity)source.getAttacker(), "villager.warning");
                         }
-                        v.getBrain().remember(MemoryModuleTypeMCA.SMALL_BOUNTY, bounty + 1);
+                        v.getBrain().remember(MemoryModuleTypeMCA.SMALL_BOUNTY.get(), bounty + 1);
                     } else {
                         // non players get attacked straight away
                         v.getBrain().remember(MemoryModuleType.ATTACK_TARGET, (LivingEntity)attacker);
@@ -524,11 +526,11 @@ public class VillagerEntityMCA extends VillagerEntity implements VillagerLike<Vi
     }
 
     public boolean isGuard() {
-        return getProfession() == ProfessionsMCA.GUARD || getProfession() == ProfessionsMCA.ARCHER;
+        return getProfession() == ProfessionsMCA.GUARD.get() || getProfession() == ProfessionsMCA.ARCHER.get();
     }
 
     private int getSmallBounty() {
-        return getBrain().getOptionalMemory(MemoryModuleTypeMCA.SMALL_BOUNTY).orElse(0);
+        return getBrain().getOptionalMemory(MemoryModuleTypeMCA.SMALL_BOUNTY.get()).orElse(0);
     }
 
     @Override
@@ -819,7 +821,7 @@ public class VillagerEntityMCA extends VillagerEntity implements VillagerLike<Vi
     @Override
     public SoundEvent getDeathSound() {
         if (Config.getInstance().useVoices) {
-            return getGenetics().getGender() == Gender.MALE ? SoundsMCA.VILLAGER_MALE_SCREAM : SoundsMCA.VILLAGER_FEMALE_SCREAM;
+            return getGenetics().getGender() == Gender.MALE ? SoundsMCA.VILLAGER_MALE_SCREAM.get() : SoundsMCA.VILLAGER_FEMALE_SCREAM.get();
         } else if (Config.getInstance().useVanillaVoices) {
             return super.getDeathSound();
         } else {
@@ -829,7 +831,7 @@ public class VillagerEntityMCA extends VillagerEntity implements VillagerLike<Vi
 
     public SoundEvent getSurprisedSound() {
         if (Config.getInstance().useVoices) {
-            return getGenetics().getGender() == Gender.MALE ? SoundsMCA.VILLAGER_MALE_SURPRISE : SoundsMCA.VILLAGER_FEMALE_SURPRISE;
+            return getGenetics().getGender() == Gender.MALE ? SoundsMCA.VILLAGER_MALE_SURPRISE.get() : SoundsMCA.VILLAGER_FEMALE_SURPRISE.get();
         } else {
             return null;
         }
@@ -844,7 +846,7 @@ public class VillagerEntityMCA extends VillagerEntity implements VillagerLike<Vi
             }
 
             if (getAgeState() == AgeState.BABY) {
-                return SoundsMCA.VILLAGER_BABY_LAUGH;
+                return SoundsMCA.VILLAGER_BABY_LAUGH.get();
             }
 
             if (getVillagerBrain().isPanicking()) {
@@ -870,7 +872,7 @@ public class VillagerEntityMCA extends VillagerEntity implements VillagerLike<Vi
 
     @Override
     protected final SoundEvent getHurtSound(DamageSource cause) {
-        if (getProfession() == ProfessionsMCA.GUARD) {
+        if (getProfession() == ProfessionsMCA.GUARD.get()) {
             return null;
         } else {
             return getDeathSound();
@@ -879,7 +881,7 @@ public class VillagerEntityMCA extends VillagerEntity implements VillagerLike<Vi
 
     public final void playWelcomeSound() {
         if (Config.getInstance().useVoices && !getVillagerBrain().isPanicking() && getAgeState() != AgeState.BABY) {
-            playSound(getGenetics().getGender() == Gender.MALE ? SoundsMCA.VILLAGER_MALE_GREET : SoundsMCA.VILLAGER_FEMALE_GREET, getSoundVolume(), getSoundPitch());
+            playSound(getGenetics().getGender() == Gender.MALE ? SoundsMCA.VILLAGER_MALE_GREET.get() : SoundsMCA.VILLAGER_FEMALE_GREET.get(), getSoundVolume(), getSoundPitch());
         }
     }
 
@@ -936,7 +938,7 @@ public class VillagerEntityMCA extends VillagerEntity implements VillagerLike<Vi
 
         if (isInfected()) {
             return name.shallowCopy().formatted(Formatting.GREEN);
-        } else if (getProfession() == ProfessionsMCA.OUTLAW) {
+        } else if (getProfession() == ProfessionsMCA.OUTLAW.get()) {
             return name.shallowCopy().formatted(Formatting.RED);
         }
         return name;
@@ -1061,10 +1063,10 @@ public class VillagerEntityMCA extends VillagerEntity implements VillagerLike<Vi
     public void handleStatus(byte id) {
         switch (id) {
             case Status.MCA_VILLAGER_NEG_INTERACTION:
-                world.addImportantParticle(ParticleTypesMCA.NEG_INTERACTION, true, getX(), getEyeY() + 0.5, getZ(), 0, 0, 0);
+                world.addImportantParticle(ParticleTypesMCA.NEG_INTERACTION.get(), true, getX(), getEyeY() + 0.5, getZ(), 0, 0, 0);
                 break;
             case Status.MCA_VILLAGER_POS_INTERACTION:
-                world.addImportantParticle(ParticleTypesMCA.POS_INTERACTION, true, getX(), getEyeY() + 0.5, getZ(), 0, 0, 0);
+                world.addImportantParticle(ParticleTypesMCA.POS_INTERACTION.get(), true, getX(), getEyeY() + 0.5, getZ(), 0, 0, 0);
                 break;
             case Status.MCA_VILLAGER_TRAGEDY:
                 this.produceParticles(ParticleTypes.DAMAGE_INDICATOR);
@@ -1142,12 +1144,12 @@ public class VillagerEntityMCA extends VillagerEntity implements VillagerLike<Vi
 
     @Override
     public boolean isHostile() {
-        return getProfession() == ProfessionsMCA.OUTLAW;
+        return getProfession() == ProfessionsMCA.OUTLAW.get();
     }
 
     //friends will not get slapped in revenge
     public boolean isFriend(EntityType<?> type) {
-        return type == EntityType.IRON_GOLEM || type == EntitiesMCA.FEMALE_VILLAGER || type == EntitiesMCA.MALE_VILLAGER;
+        return type == EntityType.IRON_GOLEM || type == EntitiesMCA.FEMALE_VILLAGER.get() || type == EntitiesMCA.MALE_VILLAGER.get();
     }
 
     @Override

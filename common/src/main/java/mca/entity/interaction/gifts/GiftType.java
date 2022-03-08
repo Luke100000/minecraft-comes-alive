@@ -22,6 +22,7 @@ import mca.entity.VillagerEntityMCA;
 import mca.resources.data.analysis.IntAnalysis;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
+import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.tag.TagKey;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.JsonHelper;
@@ -86,19 +87,19 @@ public class GiftType {
      * returns the giftType with the highest priority
      * if at least one gift fails, it chooses only from the failed gifts
      */
-    public static Optional<GiftType> bestMatching(VillagerEntityMCA recipient, ItemStack stack) {
+    public static Optional<GiftType> bestMatching(VillagerEntityMCA recipient, ItemStack stack, ServerPlayerEntity player) {
         int max = GiftType.allMatching(stack).mapToInt(a -> a.priority).max().orElse(0);
         Optional<GiftType> worst = GiftType.allMatching(stack)
                 .filter(a -> a.priority == max)
-                .filter(a -> a.getResponse(a.getSatisfactionFor(recipient, stack).getTotal()) == Response.FAIL)
-                .max(Comparator.comparingDouble(a -> a.getSatisfactionFor(recipient, stack).getTotal()));
+                .filter(a -> a.getResponse(a.getSatisfactionFor(recipient, stack, player).getTotal()) == Response.FAIL)
+                .max(Comparator.comparingDouble(a -> a.getSatisfactionFor(recipient, stack, player).getTotal()));
 
         if (worst.isPresent()) {
             return worst;
         } else {
             return GiftType.allMatching(stack)
                     .filter(a -> a.priority == max)
-                    .max(Comparator.comparingDouble(a -> a.getSatisfactionFor(recipient, stack).getTotal()));
+                    .max(Comparator.comparingDouble(a -> a.getSatisfactionFor(recipient, stack, player).getTotal()));
         }
     }
 
@@ -122,10 +123,6 @@ public class GiftType {
 
     private static Map<Response, String> getDefaultDialogues() {
         return Arrays.stream(Response.values()).collect(Collectors.toMap(r -> r, Response::getDefaultDialogue));
-    }
-
-    public GiftType(Item item, int satisfaction) {
-        this(item, satisfaction, getDefaultDialogues());
     }
 
     public GiftType(Item item, int satisfaction, Identifier extendFrom) {
@@ -182,7 +179,7 @@ public class GiftType {
      *
      * @return An analysis object of all summands
      */
-    public IntAnalysis getSatisfactionFor(VillagerEntityMCA recipient, ItemStack stack) {
+    public IntAnalysis getSatisfactionFor(VillagerEntityMCA recipient, ItemStack stack, ServerPlayerEntity player) {
         IntAnalysis analysis = new IntAnalysis();
 
         Optional<Integer> value = items.entrySet().stream().filter(i -> i.getKey() == stack.getItem()).findFirst().map(Map.Entry::getValue);
@@ -192,8 +189,8 @@ public class GiftType {
 
         // condition chance
         for (GiftPredicate c : conditions) {
-            int val = c.getSatisfactionFor(recipient, stack);
-            if (c.test(recipient, stack)) {
+            int val = c.getSatisfactionFor(recipient, stack, player);
+            if (c.test(recipient, stack, player)) {
                 analysis.add(c.getConditionKeys().get(0), val);
             }
         }

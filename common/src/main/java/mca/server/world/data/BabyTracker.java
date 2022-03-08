@@ -190,7 +190,7 @@ public class BabyTracker extends PersistentState {
 
         public void reconstructBaby(ServerPlayerEntity player) {
             getChildren().forEach(c -> {
-                ItemStack stack = new ItemStack(c.getGender() == Gender.MALE ? ItemsMCA.BABY_BOY : ItemsMCA.BABY_GIRL);
+                ItemStack stack = new ItemStack(c.getGender() == Gender.MALE ? ItemsMCA.BABY_BOY.get() : ItemsMCA.BABY_GIRL.get());
                 c.writeToNbt(stack.getOrCreateSubNbt("childData"));
                 player.getInventory().insertStack(stack);
             });
@@ -316,7 +316,7 @@ public class BabyTracker extends PersistentState {
         }
 
         public ItemStack createItem() {
-            return writeToItem((gender.binary() == Gender.MALE ? ItemsMCA.BABY_BOY : ItemsMCA.BABY_GIRL).getDefaultStack());
+            return writeToItem((gender.binary() == Gender.MALE ? ItemsMCA.BABY_BOY : ItemsMCA.BABY_GIRL).get().getDefaultStack());
         }
 
         public ItemStack writeToItem(ItemStack stack) {

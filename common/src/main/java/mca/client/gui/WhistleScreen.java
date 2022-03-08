@@ -129,7 +129,7 @@ public class WhistleScreen extends Screen {
         if (keys.size() > 0) {
             NbtCompound firstData = villagerData.getCompound(keys.get(index));
 
-            dummy = EntitiesMCA.MALE_VILLAGER.create(MinecraftClient.getInstance().world);
+            dummy = EntitiesMCA.MALE_VILLAGER.get().create(MinecraftClient.getInstance().world);
             dummy.readCustomDataFromNbt(firstData);
 
             villagerNameButton.setMessage(dummy.getDisplayName());

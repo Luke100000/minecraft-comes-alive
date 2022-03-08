@@ -187,7 +187,7 @@ public class TombstoneBlock extends BlockWithEntity implements Waterloggable {
 
     @Override
     public BlockEntity createBlockEntity(BlockPos pos, BlockState state) {
-        return BlockEntityTypesMCA.TOMBSTONE.instantiate(pos, state);
+        return BlockEntityTypesMCA.TOMBSTONE.get().instantiate(pos, state);
     }
 
 
@@ -328,7 +328,7 @@ public class TombstoneBlock extends BlockWithEntity implements Waterloggable {
         private boolean cure;
 
         public Data(BlockPos pos, BlockState state) {
-            super(BlockEntityTypesMCA.TOMBSTONE, pos, state);
+            super(BlockEntityTypesMCA.TOMBSTONE.get(), pos, state);
         }
 
         public boolean isResurrecting() {

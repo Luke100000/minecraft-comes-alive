@@ -19,13 +19,13 @@ public class FollowTask extends Task<VillagerEntityMCA> {
 
     public FollowTask() {
         super(ImmutableMap.of(
-                MemoryModuleTypeMCA.PLAYER_FOLLOWING, MemoryModuleState.VALUE_PRESENT
+                MemoryModuleTypeMCA.PLAYER_FOLLOWING.get(), MemoryModuleState.VALUE_PRESENT
         ));
     }
 
     @Override
     protected boolean shouldRun(ServerWorld world, VillagerEntityMCA villager) {
-        return villager.getBrain().getOptionalMemory(MemoryModuleTypeMCA.PLAYER_FOLLOWING).isPresent();
+        return villager.getBrain().getOptionalMemory(MemoryModuleTypeMCA.PLAYER_FOLLOWING.get()).isPresent();
     }
 
     @Override
@@ -35,6 +35,6 @@ public class FollowTask extends Task<VillagerEntityMCA> {
 
     @Override
     protected void keepRunning(ServerWorld world, VillagerEntityMCA villager, long time) {
-        villager.getBrain().getOptionalMemory(MemoryModuleTypeMCA.PLAYER_FOLLOWING).ifPresent(playerToFollow -> LookTargetUtil.walkTowards(villager, playerToFollow, villager.hasVehicle() ? 1.7f : 0.8f, 2));
+        villager.getBrain().getOptionalMemory(MemoryModuleTypeMCA.PLAYER_FOLLOWING.get()).ifPresent(playerToFollow -> LookTargetUtil.walkTowards(villager, playerToFollow, villager.hasVehicle() ? 1.7f : 0.8f, 2));
     }
 }

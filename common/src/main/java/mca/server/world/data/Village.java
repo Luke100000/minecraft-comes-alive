@@ -409,7 +409,7 @@ public class Village implements Iterable<Building> {
         // Spawn a new guard if we don't have enough
         if (nonGuards.size() > 0 && guards < guardCapacity) {
             VillagerEntityMCA villager = nonGuards.get(world.random.nextInt(nonGuards.size()));
-            villager.setProfession(guards % 2 == 0 ? ProfessionsMCA.GUARD : ProfessionsMCA.ARCHER);
+            villager.setProfession(guards % 2 == 0 ? ProfessionsMCA.GUARD.get() : ProfessionsMCA.ARCHER.get());
         }
     }
 
@@ -490,7 +490,7 @@ public class Village implements Iterable<Building> {
     }
 
     public EquipmentSet getGuardEquipment(VillagerProfession profession) {
-        if (profession == ProfessionsMCA.ARCHER) {
+        if (profession == ProfessionsMCA.ARCHER.get()) {
             if (hasBuilding("armory")) {
                 if (hasBuilding("blacksmith")) {
                     return EquipmentSet.ARCHER_2;

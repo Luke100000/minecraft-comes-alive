@@ -104,9 +104,9 @@ public class ReaperSpawner {
         EntityType.LIGHTNING_BOLT.spawn(world, null, null, null, pos, SpawnReason.TRIGGERED, false, false);
 
         world.setBlockState(pos.down(), Blocks.SOUL_SOIL.getDefaultState(), Block.NOTIFY_NEIGHBORS | Block.NOTIFY_LISTENERS);
-        world.setBlockState(pos, BlocksMCA.INFERNAL_FLAME.getDefaultState(), Block.NOTIFY_NEIGHBORS | Block.NOTIFY_LISTENERS);
+        world.setBlockState(pos, BlocksMCA.INFERNAL_FLAME.get().getDefaultState(), Block.NOTIFY_NEIGHBORS | Block.NOTIFY_LISTENERS);
         totems.forEach(totem -> {
-            world.setBlockState(totem, BlocksMCA.INFERNAL_FLAME.getDefaultState(), Block.NOTIFY_LISTENERS | Block.FORCE_STATE);
+            world.setBlockState(totem, BlocksMCA.INFERNAL_FLAME.get().getDefaultState(), Block.NOTIFY_LISTENERS | Block.FORCE_STATE);
         });
     }
 
@@ -184,7 +184,7 @@ public class ReaperSpawner {
         }
 
         private boolean check(BlockPos pos, World world) {
-            return world.getBlockState(pos).isOf(BlocksMCA.INFERNAL_FLAME);
+            return world.getBlockState(pos).isOf(BlocksMCA.INFERNAL_FLAME.get());
         }
 
         public NbtCompound toNbt() {
@@ -239,9 +239,9 @@ public class ReaperSpawner {
             }
 
             if (ticks == 0) {
-                GrimReaperEntity reaper = EntitiesMCA.GRIM_REAPER.spawn(world, null, null, null, position.spawnPosition, SpawnReason.TRIGGERED, false, false);
+                GrimReaperEntity reaper = EntitiesMCA.GRIM_REAPER.get().spawn(world, null, null, null, position.spawnPosition, SpawnReason.TRIGGERED, false, false);
                 if (reaper != null) {
-                    reaper.playSound(SoundsMCA.reaper_summon, 1.0F, 1.0F);
+                    reaper.playSound(SoundsMCA.reaper_summon.get(), 1.0F, 1.0F);
                 }
 
                 return true;

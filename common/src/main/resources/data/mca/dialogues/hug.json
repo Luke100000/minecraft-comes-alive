@@ -13,15 +13,17 @@
             },
             {
               "chance": 3,
-              "hearts": 50
+              "heartsMin": 50,
+              "heartsMax": 99
             },
             {
-              "chance": 3,
-              "hearts": 100
+              "chance": 6,
+              "heartsMin": 100,
+              "heartsMax": 149
             },
             {
-              "chance": 3,
-              "hearts": 150
+              "chance": 9,
+              "heartsMin": 150
             }
           ],
           "actions": {
@@ -30,12 +32,16 @@
           }
         },
         {
-          "baseChance": 5,
+          "baseChance": 8,
           "applyFatigue": true,
           "conditions": [
             {
               "chance": 5,
               "personality": "odd"
+            },
+            {
+              "chance": 5,
+              "heartsMax": 0
             }
           ],
           "actions": {

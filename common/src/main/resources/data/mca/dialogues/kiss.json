@@ -17,16 +17,23 @@
               "mood": "giggly"
             },
             {
-              "chance": 4,
-              "hearts": 50
+              "chance": 3,
+              "heartsMin": 50,
+              "heartsMax": 99
             },
             {
-              "chance": 4,
-              "hearts": 100
+              "chance": 6,
+              "heartsMin": 100,
+              "heartsMax": 149
             },
             {
-              "chance": 4,
-              "hearts": 150
+              "chance": 9,
+              "heartsMin": 150,
+              "heartsMax": 199
+            },
+            {
+              "chance": 12,
+              "heartsMin": 200
             }
           ],
           "actions": {
@@ -41,6 +48,10 @@
             {
               "chance": 5,
               "personality": "odd"
+            },
+            {
+              "chance": 5,
+              "heartsMax": 0
             }
           ],
           "actions": {

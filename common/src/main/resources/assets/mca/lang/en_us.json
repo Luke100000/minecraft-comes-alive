@@ -113,6 +113,8 @@
   "analysis.current_chore": "current chore",
   "analysis.item": "specific item",
   "analysis.tag": "specific item tag",
+  "analysis.heartsMin": "hearts",
+  "analysis.heartsMax": "hearts",
 
   "item.mca.blueprint": "Blueprint",
   "item.mca.blueprint.tooltip": "Right-click to manage the village you are currently in",

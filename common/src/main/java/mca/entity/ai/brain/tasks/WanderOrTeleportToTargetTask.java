@@ -28,7 +28,7 @@ public class WanderOrTeleportToTargetTask extends WanderAroundTask {
     @Override
     protected boolean shouldRun(ServerWorld serverWorld, MobEntity mobEntity) {
         return super.shouldRun(serverWorld, mobEntity)
-                && mobEntity.getBrain().isMemoryInState(MemoryModuleTypeMCA.STAYING, MemoryModuleState.VALUE_ABSENT);
+                && mobEntity.getBrain().isMemoryInState(MemoryModuleTypeMCA.STAYING.get(), MemoryModuleState.VALUE_ABSENT);
     }
 
     @Override

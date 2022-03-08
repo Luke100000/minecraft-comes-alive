@@ -32,18 +32,18 @@ public class GuardEnemiesSensor extends Sensor<LivingEntity> {
             .put(EntityType.SPIDER, 0)
             .put(EntityType.SKELETON, 0)
             .put(EntityType.SLIME, 0)
-            .put(EntitiesMCA.FEMALE_ZOMBIE_VILLAGER, 3)
-            .put(EntitiesMCA.MALE_ZOMBIE_VILLAGER, 3)
+            .put(EntitiesMCA.FEMALE_ZOMBIE_VILLAGER.get(), 3)
+            .put(EntitiesMCA.MALE_ZOMBIE_VILLAGER.get(), 3)
             .build();
 
     @Override
     public Set<MemoryModuleType<?>> getOutputMemoryModules() {
-        return ImmutableSet.of(MemoryModuleTypeMCA.NEAREST_GUARD_ENEMY);
+        return ImmutableSet.of(MemoryModuleTypeMCA.NEAREST_GUARD_ENEMY.get());
     }
 
     @Override
     protected void sense(ServerWorld world, LivingEntity entity) {
-        entity.getBrain().remember(MemoryModuleTypeMCA.NEAREST_GUARD_ENEMY, this.getNearestHostile(entity));
+        entity.getBrain().remember(MemoryModuleTypeMCA.NEAREST_GUARD_ENEMY.get(), this.getNearestHostile(entity));
     }
 
     private Optional<LivingEntity> getNearestHostile(LivingEntity entity) {

@@ -246,7 +246,7 @@ public class AdminCommand {
 
     private static Stream<VillagerEntityMCA> getLoadedVillagers(final CommandContext<ServerCommandSource> ctx) {
         ServerWorld world = ctx.getSource().getWorld();
-        return Stream.concat(world.getEntitiesByType(EntitiesMCA.FEMALE_VILLAGER, x-> true).stream(),world.getEntitiesByType(EntitiesMCA.MALE_VILLAGER, x-> true).stream()).map(VillagerEntityMCA.class::cast);
+        return Stream.concat(world.getEntitiesByType(EntitiesMCA.FEMALE_VILLAGER.get(), x-> true).stream(),world.getEntitiesByType(EntitiesMCA.MALE_VILLAGER.get(), x-> true).stream()).map(VillagerEntityMCA.class::cast);
     }
 
     private static void success(String message, CommandContext<ServerCommandSource> ctx) {

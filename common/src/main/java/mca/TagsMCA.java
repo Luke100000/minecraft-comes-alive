@@ -1,10 +1,10 @@
 package mca;
 
-import mca.cobalt.registration.Registration;
 import net.minecraft.block.Block;
 import net.minecraft.item.Item;
 import net.minecraft.tag.TagKey;
 import net.minecraft.util.Identifier;
+import net.minecraft.util.registry.Registry;
 
 public interface TagsMCA {
     interface Blocks {
@@ -13,7 +13,7 @@ public interface TagsMCA {
         static void bootstrap() {}
 
         static TagKey<Block> register(String path) {
-            return Registration.ObjectBuilders.Tags.block(new Identifier(MCA.MOD_ID, path));
+            return TagKey.of(Registry.BLOCK_KEY, new Identifier(MCA.MOD_ID, path));
         }
     }
 
@@ -27,7 +27,7 @@ public interface TagsMCA {
         static void bootstrap() {}
 
         static TagKey<Item> register(String path) {
-            return Registration.ObjectBuilders.Tags.item(new Identifier(MCA.MOD_ID, path));
+            return TagKey.of(Registry.ITEM_KEY, new Identifier(MCA.MOD_ID, path));
         }
     }
 }

@@ -133,10 +133,10 @@ public class VillagerCommandHandler extends EntityCommandHandler<VillagerEntityM
                 }
                 return true;
             case "divorcePapers":
-                player.getInventory().insertStack(new ItemStack(ItemsMCA.DIVORCE_PAPERS));
+                player.getInventory().insertStack(new ItemStack(ItemsMCA.DIVORCE_PAPERS.get()));
                 return true;
             case "divorceConfirm":
-                ItemStack papers = ItemsMCA.DIVORCE_PAPERS.getDefaultStack();
+                ItemStack papers = ItemsMCA.DIVORCE_PAPERS.get().getDefaultStack();
                 Memories memories = entity.getVillagerBrain().getMemoriesForPlayer(player);
                 if (player.getInventory().contains(papers)) {
                     entity.sendChatMessage(player, "divorcePaper");
@@ -154,7 +154,7 @@ public class VillagerCommandHandler extends EntityCommandHandler<VillagerEntityM
 
                 return true;
             case "execute":
-                entity.setProfession(ProfessionsMCA.OUTLAW);
+                entity.setProfession(ProfessionsMCA.OUTLAW.get());
                 return true;
             case "pardon":
                 entity.setProfession(VillagerProfession.NONE);
@@ -178,11 +178,11 @@ public class VillagerCommandHandler extends EntityCommandHandler<VillagerEntityM
                 entity.sendChatMessage(player, "profession.set.none");
                 return true;
             case "profession.guard":
-                entity.setProfession(ProfessionsMCA.GUARD);
+                entity.setProfession(ProfessionsMCA.GUARD.get());
                 entity.sendChatMessage(player, "profession.set.guard");
                 return true;
             case "profession.archer":
-                entity.setProfession(ProfessionsMCA.ARCHER);
+                entity.setProfession(ProfessionsMCA.ARCHER.get());
                 entity.sendChatMessage(player, "profession.set.archer");
                 return true;
         }

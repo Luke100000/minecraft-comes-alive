@@ -97,7 +97,7 @@ public class PlayerSaveData extends PersistentState implements EntityRelationshi
     private void resetEntityData() {
         entityData = new NbtCompound();
 
-        VillagerEntityMCA villager = EntitiesMCA.MALE_VILLAGER.create(world);
+        VillagerEntityMCA villager = EntitiesMCA.MALE_VILLAGER.get().create(world);
         assert villager != null;
         villager.initializeSkin();
         villager.getGenetics().randomize();
@@ -291,7 +291,7 @@ public class PlayerSaveData extends PersistentState implements EntityRelationshi
     public ItemStack getMail() {
         if (hasMail()) {
             NbtCompound nbt = inbox.remove(0);
-            ItemStack stack = new ItemStack(ItemsMCA.LETTER, 1);
+            ItemStack stack = new ItemStack(ItemsMCA.LETTER.get(), 1);
             stack.setNbt(nbt);
             return stack;
         } else {

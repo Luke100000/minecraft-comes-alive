@@ -2,10 +2,8 @@ package mca.resources.data.dialogue;
 
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import java.util.HashMap;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
+
+import java.util.*;
 import java.util.function.BiFunction;
 import mca.MCA;
 import mca.cobalt.network.NetworkHandler;
@@ -84,11 +82,16 @@ public class Actions {
 
     public static Actions fromJson(JsonObject json) {
         List<Action> actions = new LinkedList<>();
+        boolean positive = true;
 
         for (Map.Entry<String, JsonElement> entry : json.entrySet()) {
             if (TYPES.containsKey(entry.getKey())) {
                 Action parsed = TYPES.get(entry.getKey()).parse(entry.getValue());
                 actions.add(parsed);
+
+                if (entry.getKey().equals("negative")) {
+                    positive = false;
+                }
             } else {
                 MCA.LOGGER.info("Unknown dialogue action " + entry.getKey());
             }
@@ -99,22 +102,28 @@ public class Actions {
             actions.add(parsed);
         }
 
-        return new Actions(actions);
+        return new Actions(actions, positive);
     }
 
     public interface Action {
         void trigger(VillagerEntityMCA villager, ServerPlayerEntity player);
     }
 
-    List<Action> conditions;
+    private final List<Action> actions;
+    private final boolean positive;
 
-    public Actions(List<Action> conditions) {
-        this.conditions = conditions;
+    public Actions(List<Action> actions, boolean positive) {
+        this.actions = actions;
+        this.positive = positive;
     }
 
     public void trigger(VillagerEntityMCA villager, ServerPlayerEntity player) {
-        for (Action c : conditions) {
+        for (Action c : actions) {
             c.trigger(villager, player);
         }
+    }
+
+    public boolean isPositive() {
+        return positive;
     }
 }

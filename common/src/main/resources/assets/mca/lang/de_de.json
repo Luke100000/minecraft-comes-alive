@@ -95,6 +95,8 @@
   "analysis.current_chore": "aktuelle Hausarbeit",
   "analysis.item": "Spezifischer Gegenstand",
   "analysis.tag": "Spezifische Gegenstands Markierung",
+  "analysis.heartsMin": "hearts",
+  "analysis.heartsMax": "hearts",
   "item.mca.blueprint": "Blaupause",
   "item.mca.blueprint.tooltip": "Rechtsklick um das Dorf zu verwalten in dem du gerade bist",
   "tag.mca:town_center": "Glocke",

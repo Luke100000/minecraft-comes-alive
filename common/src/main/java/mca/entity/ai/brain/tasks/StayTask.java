@@ -16,7 +16,7 @@ public class StayTask extends Task<VillagerEntityMCA> {
 
     @Override
     protected boolean shouldRun(ServerWorld world, VillagerEntityMCA villager) {
-        return villager.getMCABrain().getOptionalMemory(MemoryModuleTypeMCA.STAYING).isPresent();
+        return villager.getMCABrain().getOptionalMemory(MemoryModuleTypeMCA.STAYING.get()).isPresent();
     }
 
     @Override

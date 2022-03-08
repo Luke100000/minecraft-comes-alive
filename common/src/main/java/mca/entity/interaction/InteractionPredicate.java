@@ -5,9 +5,12 @@ import com.google.gson.JsonObject;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+
+import mca.MCA;
 import mca.entity.VillagerEntityMCA;
 import mca.entity.interaction.gifts.GiftPredicate;
 import net.minecraft.item.ItemStack;
+import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.util.JsonHelper;
 import org.jetbrains.annotations.Nullable;
 
@@ -32,6 +35,8 @@ public class InteractionPredicate {
                 } else {
                     condition = condition.and(parsed);
                 }
+            } else {
+                MCA.LOGGER.warn("Interaction predicate " + entry.getKey() + " does not exist!");
             }
         }
 
@@ -50,8 +55,8 @@ public class InteractionPredicate {
         this.conditionKeys = conditionKeys;
     }
 
-    public boolean test(VillagerEntityMCA villager) {
-        return condition != null && condition.test(villager, ItemStack.EMPTY);
+    public boolean test(VillagerEntityMCA villager, ServerPlayerEntity player) {
+        return condition != null && condition.test(villager, ItemStack.EMPTY, player);
     }
 
     public int getChance() {

@@ -134,7 +134,7 @@ public class GrimReaperEntity extends PathAwareEntity implements CTrackedEntity<
     @Override
     protected void dropEquipment(DamageSource source, int lootingLvl, boolean hitByPlayer) {
         super.dropEquipment(source, lootingLvl, hitByPlayer);
-        ItemEntity itementity = dropItem(ItemsMCA.SCYTHE);
+        ItemEntity itementity = dropItem(ItemsMCA.SCYTHE.get());
         if (itementity != null) {
             itementity.setCovetedItem();
         }
@@ -154,10 +154,10 @@ public class GrimReaperEntity extends PathAwareEntity implements CTrackedEntity<
 
         switch (state) {
             case PRE:
-                playSound(SoundsMCA.reaper_scythe_out, 1, 1);
+                playSound(SoundsMCA.reaper_scythe_out.get(), 1, 1);
                 break;
             case POST:
-                playSound(SoundsMCA.reaper_scythe_swing, 1, 1);
+                playSound(SoundsMCA.reaper_scythe_swing.get(), 1, 1);
                 break;
             default:
         }
@@ -182,7 +182,7 @@ public class GrimReaperEntity extends PathAwareEntity implements CTrackedEntity<
             double deltaX = this.getX() - attacker.getX();
             double deltaZ = this.getZ() - attacker.getZ();
 
-            playSound(SoundsMCA.reaper_block, 1.0F, 1.0F);
+            playSound(SoundsMCA.reaper_block.get(), 1.0F, 1.0F);
             requestTeleport(attacker.getX() - (deltaX * 2), attacker.getY() + 2, this.getZ() - (deltaZ * 2));
             return false;
         }
@@ -223,12 +223,12 @@ public class GrimReaperEntity extends PathAwareEntity implements CTrackedEntity<
 
     @Override
     protected SoundEvent getAmbientSound() {
-        return SoundsMCA.reaper_idle;
+        return SoundsMCA.reaper_idle.get();
     }
 
     @Override
     protected SoundEvent getDeathSound() {
-        return SoundsMCA.reaper_death;
+        return SoundsMCA.reaper_death.get();
     }
 
     @Override

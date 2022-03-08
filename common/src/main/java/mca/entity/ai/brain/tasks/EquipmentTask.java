@@ -24,7 +24,7 @@ public class EquipmentTask extends Task<VillagerEntityMCA> {
     private boolean lastArmorWearState;
 
     public EquipmentTask(Predicate<VillagerEntityMCA> condition, Function<VillagerEntityMCA, EquipmentSet> set) {
-        super(ImmutableMap.of(MemoryModuleTypeMCA.WEARS_ARMOR, MemoryModuleState.REGISTERED));
+        super(ImmutableMap.of(MemoryModuleTypeMCA.WEARS_ARMOR.get(), MemoryModuleState.REGISTERED));
         this.condition = condition;
         equipmentSet = set;
     }
@@ -37,7 +37,7 @@ public class EquipmentTask extends Task<VillagerEntityMCA> {
         }
 
         //armor change necessary
-        boolean present = villager.getBrain().getOptionalMemory(MemoryModuleTypeMCA.WEARS_ARMOR).isPresent();
+        boolean present = villager.getBrain().getOptionalMemory(MemoryModuleTypeMCA.WEARS_ARMOR.get()).isPresent();
         if (condition.test(villager)) {
             lastEquipTime = villager.age;
             return !present || equipmentSet.apply(villager).getMainHand() != Items.AIR && villager.getMainHandStack().isEmpty();
@@ -68,9 +68,9 @@ public class EquipmentTask extends Task<VillagerEntityMCA> {
 
         //remember last state
         if (wear) {
-            villager.getBrain().remember(MemoryModuleTypeMCA.WEARS_ARMOR, true);
+            villager.getBrain().remember(MemoryModuleTypeMCA.WEARS_ARMOR.get(), true);
         } else {
-            villager.getBrain().forget(MemoryModuleTypeMCA.WEARS_ARMOR);
+            villager.getBrain().forget(MemoryModuleTypeMCA.WEARS_ARMOR.get());
         }
 
         //weapon

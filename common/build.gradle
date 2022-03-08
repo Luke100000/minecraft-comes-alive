@@ -1,5 +1,7 @@
 dependencies {
   modImplementation "net.fabricmc:fabric-loader:${rootProject.loader_version}"
+  // Remove the next line if you don't want to depend on the API
+  modApi "dev.architectury:architectury:${rootProject.architectury_version}"
 }
 
 architectury {

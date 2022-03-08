@@ -266,7 +266,7 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
             return (VillagerLike<?>)entity;
         } else if (entity instanceof PlayerEntity) {
             NbtCompound villagerData = PlayerSaveData.get((ServerWorld)entity.world, entity.getUuid()).getEntityData();
-            VillagerEntityMCA villager = EntitiesMCA.MALE_VILLAGER.create(entity.world);
+            VillagerEntityMCA villager = EntitiesMCA.MALE_VILLAGER.get().create(entity.world);
             assert villager != null;
             villager.readCustomDataFromNbt(villagerData);
             return villager;
