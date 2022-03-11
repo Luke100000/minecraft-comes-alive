@@ -15,7 +15,7 @@ public class ListPage extends Page {
 
     int page;
 
-    public static int entriesPerPage = 11;
+    public static final int entriesPerPage = 11;
 
     public ListPage(Text title, List<Text> text) {
         this.title = title;

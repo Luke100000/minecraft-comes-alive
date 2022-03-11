@@ -1,5 +1,6 @@
 package mca.resources.data;
 
+import java.io.Serial;
 import java.io.Serializable;
 import java.util.Collections;
 import java.util.HashMap;
@@ -16,6 +17,7 @@ import net.minecraft.util.registry.Registry;
 import net.minecraft.util.registry.RegistryEntry;
 
 public final class BuildingType implements Serializable {
+    @Serial
     private static final long serialVersionUID = 2215455350801127280L;
 
     private final String name;

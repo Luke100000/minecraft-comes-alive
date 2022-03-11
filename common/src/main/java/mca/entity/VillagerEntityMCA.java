@@ -469,7 +469,7 @@ public class VillagerEntityMCA extends VillagerEntity implements VillagerLike<Vi
                     && getProfession() != ProfessionsMCA.GUARD.get()
                     && Config.getInstance().enableInfection
                     && random.nextFloat() < Config.getInstance().infectionChance / 100.0) {
-                if (!getResidency().getHomeVillage().filter(v -> v.hasBuilding("infirmary")).isPresent() || random.nextBoolean()) {
+                if (getResidency().getHomeVillage().filter(v -> v.hasBuilding("infirmary")).isEmpty() || random.nextBoolean()) {
                     setInfected(true);
                     sendChatToAllAround("villager.bitten");
                     MCA.LOGGER.info(getName() + " has been infected");
@@ -1047,12 +1047,16 @@ public class VillagerEntityMCA extends VillagerEntity implements VillagerLike<Vi
     }
 
     public void moveTowards(BlockPos pos, float speed, int closeEnoughDist) {
-        this.brain.remember(MemoryModuleType.WALK_TARGET, new WalkTarget(new BlockPosLookTarget(pos), speed, closeEnoughDist));
+        this.brain.remember(MemoryModuleType.WALK_TARGET, new WalkTarget(pos, speed, closeEnoughDist));
         this.lookAt(pos);
     }
 
+    public void moveTowards(BlockPos pos, float speed) {
+        moveTowards(pos, speed, 1);
+    }
+
     public void moveTowards(BlockPos pos) {
-        moveTowards(pos, 0.5F, 1);
+        moveTowards(pos, 1);
     }
 
     public void lookAt(BlockPos pos) {
@@ -1062,17 +1066,10 @@ public class VillagerEntityMCA extends VillagerEntity implements VillagerLike<Vi
     @Override
     public void handleStatus(byte id) {
         switch (id) {
-            case Status.MCA_VILLAGER_NEG_INTERACTION:
-                world.addImportantParticle(ParticleTypesMCA.NEG_INTERACTION.get(), true, getX(), getEyeY() + 0.5, getZ(), 0, 0, 0);
-                break;
-            case Status.MCA_VILLAGER_POS_INTERACTION:
-                world.addImportantParticle(ParticleTypesMCA.POS_INTERACTION.get(), true, getX(), getEyeY() + 0.5, getZ(), 0, 0, 0);
-                break;
-            case Status.MCA_VILLAGER_TRAGEDY:
-                this.produceParticles(ParticleTypes.DAMAGE_INDICATOR);
-                break;
-            default:
-                super.handleStatus(id);
+            case Status.MCA_VILLAGER_NEG_INTERACTION -> world.addImportantParticle(ParticleTypesMCA.NEG_INTERACTION.get(), true, getX(), getEyeY() + 0.5, getZ(), 0, 0, 0);
+            case Status.MCA_VILLAGER_POS_INTERACTION -> world.addImportantParticle(ParticleTypesMCA.POS_INTERACTION.get(), true, getX(), getEyeY() + 0.5, getZ(), 0, 0, 0);
+            case Status.MCA_VILLAGER_TRAGEDY -> this.produceParticles(ParticleTypes.DAMAGE_INDICATOR);
+            default -> super.handleStatus(id);
         }
     }
 
@@ -1112,7 +1109,7 @@ public class VillagerEntityMCA extends VillagerEntity implements VillagerLike<Vi
             zombie.setUuid(getUuid());
             zombie.setPersistent();
 
-            world.syncWorldEvent((PlayerEntity)null, 1026, this.getBlockPos(), 0);
+            world.syncWorldEvent(null, 1026, this.getBlockPos(), 0);
         }
 
         if (mob instanceof ZombieVillagerEntityMCA zombie) {

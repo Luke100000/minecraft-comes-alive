@@ -6,7 +6,10 @@ import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.text.TranslatableText;
 import net.minecraft.util.JsonHelper;
 
+import java.io.Serial;
+
 public class PopulationTask extends Task {
+    @Serial
     private static final long serialVersionUID = 5252203744206810361L;
 
     private final int population;

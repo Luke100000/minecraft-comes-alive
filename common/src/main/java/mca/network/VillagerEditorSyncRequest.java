@@ -1,5 +1,6 @@
 package mca.network;
 
+import java.io.Serial;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -25,6 +26,7 @@ import net.minecraft.util.registry.Registry;
 import net.minecraft.village.VillagerProfession;
 
 public class VillagerEditorSyncRequest extends S2CNbtDataMessage {
+    @Serial
     private static final long serialVersionUID = -5581564927127176555L;
 
     private final String command;
@@ -62,8 +64,7 @@ public class VillagerEditorSyncRequest extends S2CNbtDataMessage {
                     String clothes = "";
                     if (entity instanceof PlayerEntity) {
                         clothes = ClothingList.getInstance().getPool(getGender(villagerData), VillagerProfession.NONE).pickNext(villagerData.getString("clothes"), getData().getInt("offset"));
-                    } else if (entity instanceof VillagerLike) {
-                        VillagerLike<?> villager = (VillagerLike<?>)entity;
+                    } else if (entity instanceof VillagerLike<?> villager) {
                         clothes = ClothingList.getInstance().getPool(villager).pickNext(villager.getClothes(), getData().getInt("offset"));
                     }
                     villagerData.putString("clothes", clothes);
@@ -113,7 +114,7 @@ public class VillagerEditorSyncRequest extends S2CNbtDataMessage {
                 return Optional.empty();
             }
         } catch (IllegalArgumentException exception) {
-            List<FamilyTreeNode> nodes = tree.getAllWithName(name).collect(Collectors.toList());
+            List<FamilyTreeNode> nodes = tree.getAllWithName(name).toList();
             if (nodes.isEmpty()) {
                 //create a new entry
                 e.sendMessage(new TranslatableText("gui.villager_editor.name_created", name).formatted(Formatting.YELLOW), true);

@@ -1,6 +1,5 @@
 package mca;
 
-import dev.architectury.event.EventHandler;
 import dev.architectury.platform.forge.EventBuses;
 import mca.advancement.criterion.CriterionMCA;
 import mca.block.BlocksMCA;
@@ -12,8 +11,6 @@ import mca.network.MessagesMCA;
 import mca.resources.*;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.AddReloadListenerEvent;
-import net.minecraftforge.event.entity.EntityAttributeCreationEvent;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.common.Mod.EventBusSubscriber.Bus;
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;

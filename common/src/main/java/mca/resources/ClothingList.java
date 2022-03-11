@@ -71,20 +71,15 @@ public class ClothingList extends JsonDataLoader {
      * Gets a pool of clothing options valid for this entity's gender and profession.
      */
     public WeightedPool<String> getPool(VillagerLike<?> villager) {
-        switch (villager.getAgeState()) {
-            case BABY:
-            case TODDLER:
-                return ClothingList.getInstance()
-                        .byGender(villager.getGenetics().getGender())
-                        .byIdentifier(new Identifier("mca:baby"));
-            case CHILD:
-            case TEEN:
-                return ClothingList.getInstance()
-                        .byGender(villager.getGenetics().getGender())
-                        .byIdentifier(new Identifier("mca:child"));
-            default:
-                return getPool(villager.getGenetics().getGender(), villager.getVillagerData().getProfession());
-        }
+        return switch (villager.getAgeState()) {
+            case BABY, TODDLER -> ClothingList.getInstance()
+                    .byGender(villager.getGenetics().getGender())
+                    .byIdentifier(new Identifier("mca:baby"));
+            case CHILD, TEEN -> ClothingList.getInstance()
+                    .byGender(villager.getGenetics().getGender())
+                    .byIdentifier(new Identifier("mca:child"));
+            default -> getPool(villager.getGenetics().getGender(), villager.getVillagerData().getProfession());
+        };
     }
 
     public WeightedPool<String> getPool(Gender gender, VillagerProfession profession) {

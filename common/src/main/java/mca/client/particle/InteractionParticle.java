@@ -5,8 +5,8 @@ import net.minecraft.client.world.ClientWorld;
 import net.minecraft.particle.DefaultParticleType;
 
 public class InteractionParticle extends SpriteBillboardParticle {
-    protected InteractionParticle(ClientWorld p_i232447_1_, double p_i232447_2_, double p_i232447_4_, double p_i232447_6_) {
-        super(p_i232447_1_, p_i232447_2_, p_i232447_4_, p_i232447_6_);
+    protected InteractionParticle(ClientWorld world, double x, double y, double z) {
+        super(world, x, y, z);
         this.velocityX *= 0.01F;
         this.velocityY *= 0.01F;
         this.velocityZ *= 0.01F;
@@ -21,7 +21,7 @@ public class InteractionParticle extends SpriteBillboardParticle {
         return ParticleTextureSheet.PARTICLE_SHEET_OPAQUE;
     }
 
-    public float getSize(float p_217561_1_) {
+    public float getSize(float tickDelta) {
         return 0.3F;
     }
 
@@ -52,12 +52,12 @@ public class InteractionParticle extends SpriteBillboardParticle {
     public static class Factory implements ParticleFactory<DefaultParticleType> {
         private final SpriteProvider sprite;
 
-        public Factory(SpriteProvider p_i50748_1_) {
-            this.sprite = p_i50748_1_;
+        public Factory(SpriteProvider sprite) {
+            this.sprite = sprite;
         }
 
-        public Particle createParticle(DefaultParticleType particleType, ClientWorld world, double p_199234_3_, double p_199234_5_, double p_199234_7_, double p_199234_9_, double p_199234_11_, double p_199234_13_) {
-            InteractionParticle heartparticle = new InteractionParticle(world, p_199234_3_, p_199234_5_ + 0.5D, p_199234_7_);
+        public Particle createParticle(DefaultParticleType particleType, ClientWorld world, double x, double y, double z, double velocityX, double velocityY, double velocityZ) {
+            InteractionParticle heartparticle = new InteractionParticle(world, x, y + 0.5D, z);
             heartparticle.setSprite(this.sprite);
             heartparticle.setColor(1.0F, 1.0F, 1.0F);
             return heartparticle;

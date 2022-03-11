@@ -30,13 +30,15 @@ public class CDataManager<E extends Entity> {
         return entry != null && entry.parameter == parameter;
     }
 
-    @SuppressWarnings("unchecked")
+    @SuppressWarnings({"unchecked", "RedundantSuppression"})
     public <T, TrackedType> T get(E entity, CParameter<T, TrackedType> parameter) {
+        //noinspection RedundantCast
         return parameter.get(((Entry<E, T, TrackedType>)forwardLookup.get(parameter)).data, entity.getDataTracker());
     }
 
-    @SuppressWarnings("unchecked")
+    @SuppressWarnings({"unchecked", "RedundantSuppression"})
     public <T, TrackedType> void set(E entity, CParameter<T, TrackedType> parameter, T value) {
+        //noinspection RedundantCast
         parameter.set(((Entry<E, T, TrackedType>)forwardLookup.get(parameter)).data, entity.getDataTracker(), value);
     }
 

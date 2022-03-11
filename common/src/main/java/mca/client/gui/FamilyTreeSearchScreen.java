@@ -6,7 +6,6 @@ import java.util.UUID;
 import mca.cobalt.network.NetworkHandler;
 import mca.network.FamilyTreeUUIDLookup;
 import mca.resources.data.SerializablePair;
-import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.client.gui.widget.TextFieldWidget;
@@ -16,7 +15,7 @@ import net.minecraft.text.Text;
 import net.minecraft.text.TranslatableText;
 
 public class FamilyTreeSearchScreen extends Screen {
-    static int DATA_WIDTH = 120;
+    static final int DATA_WIDTH = 120;
 
     private List<SerializablePair<UUID, SerializablePair<String, String>>> list = new LinkedList<>();
     private ButtonWidget buttonPage;

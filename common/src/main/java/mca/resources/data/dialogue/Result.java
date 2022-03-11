@@ -11,7 +11,6 @@ import mca.entity.VillagerEntityMCA;
 import mca.entity.ai.Memories;
 import mca.entity.interaction.InteractionPredicate;
 import mca.resources.data.analysis.IntAnalysis;
-import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.server.network.ServerPlayerEntity;
 
 public class Result {

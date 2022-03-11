@@ -6,7 +6,10 @@ import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.text.TranslatableText;
 import net.minecraft.util.JsonHelper;
 
+import java.io.Serial;
+
 public class BuildingTask extends Task {
+    @Serial
     private static final long serialVersionUID = -6660910729161211245L;
 
     private final String type;

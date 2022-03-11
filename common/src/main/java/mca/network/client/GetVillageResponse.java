@@ -1,5 +1,6 @@
 package mca.network.client;
 
+import java.io.Serial;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -14,6 +15,7 @@ import mca.server.world.data.Village;
 import net.minecraft.entity.player.PlayerEntity;
 
 public class GetVillageResponse extends S2CNbtDataMessage {
+    @Serial
     private static final long serialVersionUID = 4882425683460617550L;
 
     public final Rank rank;

@@ -198,7 +198,7 @@ public class BabyTracker extends PersistentState {
     }
 
     public static class ChildSaveState {
-        UUID id;
+        final UUID id;
 
         protected Gender gender;
         protected boolean infected;

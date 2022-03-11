@@ -61,10 +61,10 @@ public class ColorPalette {
     }
 
     static class Data {
-        int width;
-        int height;
+        final int width;
+        final int height;
 
-        int[] colors;
+        final int[] colors;
 
         public Data(int width, int height, int[] colors) {
             this.width = width;

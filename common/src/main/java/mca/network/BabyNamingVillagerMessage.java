@@ -6,7 +6,10 @@ import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.ItemStack;
 import net.minecraft.server.world.ServerWorld;
 
+import java.io.Serial;
+
 public class BabyNamingVillagerMessage implements Message {
+    @Serial
     private static final long serialVersionUID = -7160822837267592011L;
 
     private final int slot;

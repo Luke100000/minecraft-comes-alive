@@ -37,7 +37,7 @@ public class MatchmakersRingItem extends Item implements SpecialCaseGift {
                 .min(Comparator.comparingDouble(villager::distanceTo));
 
         // ensure we found a nearby villager
-        if (!target.isPresent()) {
+        if (target.isEmpty()) {
             villager.sendChatMessage(player, "interaction.matchmaker.fail.novillagers");
             return false;
         }

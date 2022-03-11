@@ -56,20 +56,19 @@ public class VillagerCommandHandler extends EntityCommandHandler<VillagerEntityM
         }
 
         switch (command) {
-            case "pick_up":
+            case "pick_up" -> {
                 if (player.getPassengerList().size() >= 3) {
                     player.getPassengerList().get(0).stopRiding();
                 }
-
                 if (entity.hasVehicle()) {
                     entity.stopRiding();
                 } else {
                     entity.startRiding(player, true);
                 }
-
                 player.networkHandler.sendPacket(new EntityPassengersSetS2CPacket(player));
                 return false;
-            case "ridehorse":
+            }
+            case "ridehorse" -> {
                 if (entity.hasVehicle()) {
                     entity.stopRiding();
                 } else {
@@ -78,45 +77,50 @@ public class VillagerCommandHandler extends EntityCommandHandler<VillagerEntityM
                             .stream()
                             .filter(horse -> !horse.hasPassengers())
                             .min(Comparator.comparingDouble(a -> a.squaredDistanceTo(entity))).ifPresentOrElse(horse -> {
-                        entity.startRiding(horse, false);
-                        entity.sendChatMessage(player, "interaction.ridehorse.success");
-                    }, () -> entity.sendChatMessage(player, "interaction.ridehorse.fail.notnearby"));
+                                entity.startRiding(horse, false);
+                                entity.sendChatMessage(player, "interaction.ridehorse.success");
+                            }, () -> entity.sendChatMessage(player, "interaction.ridehorse.fail.notnearby"));
                 }
                 return true;
-            case "sethome":
+            }
+            case "sethome" -> {
                 entity.getResidency().setHome(player);
                 return true;
-            case "gohome":
+            }
+            case "gohome" -> {
                 entity.getResidency().goHome(player);
                 stopInteracting();
                 return false;
-            case "setworkplace":
+            }
+            case "setworkplace" -> {
                 entity.getResidency().setWorkplace(player);
                 return true;
-            case "sethangout":
+            }
+            case "sethangout" -> {
                 entity.getResidency().setHangout(player);
                 return true;
-            case "trade":
+            }
+            case "trade" -> {
                 prepareOffersFor(player);
                 return false;
-            case "inventory":
+            }
+            case "inventory" -> {
                 player.openHandledScreen(entity);
                 return false;
-            case "gift":
+            }
+            case "gift" -> {
                 entity.getRelationships().giveGift(player, memory);
                 return true;
-            case "adopt":
+            }
+            case "adopt" -> {
                 entity.sendChatMessage(player, "interaction.adopt.success");
-
                 FamilyTreeNode parentNode = FamilyTree.get((ServerWorld)player.world).getOrCreate(player);
                 entity.getRelationships().getFamilyEntry().assignParent(parentNode);
-
                 Optional<FamilyTreeNode> parentSpouse = FamilyTree.get((ServerWorld)player.world).getOrEmpty(parentNode.spouse());
                 parentSpouse.ifPresent(p -> entity.getRelationships().getFamilyEntry().assignParent(p));
-                break;
-            case "procreate":
+            }
+            case "procreate" -> {
                 BabyTracker tracker = BabyTracker.get((ServerWorld)entity.world);
-
                 if (tracker.hasActiveBaby(player.getUuid(), entity.getUuid())) {
                     BabyTracker.Pairing pairing = tracker.getPairing(player.getUuid(), entity.getUuid());
 
@@ -132,10 +136,12 @@ public class VillagerCommandHandler extends EntityCommandHandler<VillagerEntityM
                     entity.getRelationships().startProcreating();
                 }
                 return true;
-            case "divorcePapers":
+            }
+            case "divorcePapers" -> {
                 player.getInventory().insertStack(new ItemStack(ItemsMCA.DIVORCE_PAPERS.get()));
                 return true;
-            case "divorceConfirm":
+            }
+            case "divorceConfirm" -> {
                 ItemStack papers = ItemsMCA.DIVORCE_PAPERS.get().getDefaultStack();
                 Memories memories = entity.getVillagerBrain().getMemoriesForPlayer(player);
                 if (player.getInventory().contains(papers)) {
@@ -148,24 +154,27 @@ public class VillagerCommandHandler extends EntityCommandHandler<VillagerEntityM
                 }
                 entity.getVillagerBrain().modifyMoodValue(-5);
                 entity.getRelationships().endMarriage(MarriageState.SINGLE);
-
                 PlayerSaveData playerData = PlayerSaveData.get((ServerWorld)player.world, player.getUuid());
                 playerData.endMarriage(MarriageState.SINGLE);
-
                 return true;
-            case "execute":
+            }
+            case "execute" -> {
                 entity.setProfession(ProfessionsMCA.OUTLAW.get());
                 return true;
-            case "pardon":
+            }
+            case "pardon" -> {
                 entity.setProfession(VillagerProfession.NONE);
                 return true;
-            case "infected":
+            }
+            case "infected" -> {
                 entity.setInfected(!entity.isInfected());
                 return true;
-            case "stopworking":
+            }
+            case "stopworking" -> {
                 entity.getVillagerBrain().abandonJob();
                 return true;
-            case "armor":
+            }
+            case "armor" -> {
                 entity.getVillagerBrain().setArmorWear(!entity.getVillagerBrain().getArmorWear());
                 if (entity.getVillagerBrain().getArmorWear()) {
                     entity.sendChatMessage(player, "armor.enabled");
@@ -173,18 +182,22 @@ public class VillagerCommandHandler extends EntityCommandHandler<VillagerEntityM
                     entity.sendChatMessage(player, "armor.disabled");
                 }
                 return true;
-            case "profession.none":
+            }
+            case "profession.none" -> {
                 entity.setProfession(VillagerProfession.NONE);
                 entity.sendChatMessage(player, "profession.set.none");
                 return true;
-            case "profession.guard":
+            }
+            case "profession.guard" -> {
                 entity.setProfession(ProfessionsMCA.GUARD.get());
                 entity.sendChatMessage(player, "profession.set.guard");
                 return true;
-            case "profession.archer":
+            }
+            case "profession.archer" -> {
                 entity.setProfession(ProfessionsMCA.ARCHER.get());
                 entity.sendChatMessage(player, "profession.set.archer");
                 return true;
+            }
         }
 
         return super.handle(player, command);

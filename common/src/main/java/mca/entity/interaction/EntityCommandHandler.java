@@ -33,7 +33,7 @@ public abstract class EntityCommandHandler<T extends Entity & VillagerLike<?>> {
     public void stopInteracting() {
         if (!entity.world.isClient) {
             if (interactingPlayer instanceof ServerPlayerEntity) {
-                ((ServerPlayerEntity) interactingPlayer).closeHandledScreen();
+                interactingPlayer.closeHandledScreen();
             }
         }
         interactingPlayer = null;
@@ -52,24 +52,24 @@ public abstract class EntityCommandHandler<T extends Entity & VillagerLike<?>> {
      */
     public boolean handle(ServerPlayerEntity player, String command) {
         switch (command) {
-            case "clothing.randClothing":
+            case "clothing.randClothing" -> {
                 entity.setClothes(ClothingList.getInstance().getPool(entity).pickOne());
-                return false;
-            case "clothing.prevClothing":
+            }
+            case "clothing.prevClothing" -> {
                 entity.setClothes(ClothingList.getInstance().getPool(entity).pickNext(entity.getClothes(), -1));
-                return false;
-            case "clothing.nextClothing":
+            }
+            case "clothing.nextClothing" -> {
                 entity.setClothes(ClothingList.getInstance().getPool(entity).pickNext(entity.getClothes(), 1));
-                return false;
-            case "clothing.randHair":
+            }
+            case "clothing.randHair" -> {
                 entity.setHair(HairList.getInstance().pickOne(entity));
-                return false;
-            case "clothing.prevHair":
+            }
+            case "clothing.prevHair" -> {
                 entity.setHair(HairList.getInstance().pickNext(entity, entity.getHair(), -1));
-                return false;
-            case "clothing.nextHair":
+            }
+            case "clothing.nextHair" -> {
                 entity.setHair(HairList.getInstance().pickNext(entity, entity.getHair(), 1));
-                return false;
+            }
         }
         return false;
     }

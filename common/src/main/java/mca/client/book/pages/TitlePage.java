@@ -10,8 +10,8 @@ import net.minecraft.text.TranslatableText;
 import net.minecraft.util.Formatting;
 
 public class TitlePage extends Page {
-    Text title;
-    Text subtitle;
+    final Text title;
+    final Text subtitle;
 
     public TitlePage(String book) {
         this(book, Formatting.BLACK);

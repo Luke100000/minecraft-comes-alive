@@ -58,7 +58,7 @@ public class InteractTask extends Task<VillagerEntityMCA> {
     }
 
     @Override
-    protected boolean isTimeLimitExceeded(long p_220383_1_) {
+    protected boolean isTimeLimitExceeded(long time) {
         return false;
     }
 
@@ -66,7 +66,7 @@ public class InteractTask extends Task<VillagerEntityMCA> {
         Brain<?> brain = villager.getBrain();
 
         villager.getInteractions().getInteractingPlayer().ifPresentOrElse(player -> {
-            brain.remember(MemoryModuleType.WALK_TARGET, new WalkTarget(new EntityLookTarget(player, false), this.speedModifier, 2));
+            brain.remember(MemoryModuleType.WALK_TARGET, new WalkTarget(player, this.speedModifier, 2));
             brain.remember(MemoryModuleType.LOOK_TARGET, new EntityLookTarget(player, true));
         }, () -> {
             brain.forget(MemoryModuleType.WALK_TARGET);

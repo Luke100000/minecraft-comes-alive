@@ -6,9 +6,11 @@ import mca.cobalt.network.Message;
 import mca.entity.ai.relationship.MarriageState;
 import net.minecraft.entity.player.PlayerEntity;
 
+import java.io.Serial;
 import java.util.Set;
 
 public class GetInteractDataResponse implements Message {
+    @Serial
     private static final long serialVersionUID = -4168503424192658779L;
 
     public final Set<Constraint> constraints;

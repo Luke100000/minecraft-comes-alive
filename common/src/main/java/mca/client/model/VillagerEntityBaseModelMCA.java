@@ -108,8 +108,7 @@ public class VillagerEntityBaseModelMCA<T extends MobEntity & VillagerLike<T>> e
     public void setAttributes(BipedEntityModel<T> target) {
         super.setAttributes(target);
 
-        if (target instanceof VillagerEntityBaseModelMCA) {
-            VillagerEntityBaseModelMCA<T> m = (VillagerEntityBaseModelMCA<T>)target;
+        if (target instanceof VillagerEntityBaseModelMCA<T> m) {
             m.dimensions = dimensions;
             m.breastSize = breastSize;
             m.breasts.visible = breasts.visible;

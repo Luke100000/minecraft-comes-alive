@@ -27,8 +27,8 @@ public class MCAScreens extends JsonDataLoader {
         return INSTANCE;
     }
 
-    private final Map<Identifier, Button[]> buttons = new HashMap<>();
-    private final Map<Identifier, Icon> icons = new HashMap<>();
+    private final Map<String, Button[]> buttons = new HashMap<>();
+    private final Map<String, Icon> icons = new HashMap<>();
 
     public MCAScreens() {
         super(Resources.GSON, "api/gui");
@@ -46,7 +46,7 @@ public class MCAScreens extends JsonDataLoader {
         if (element.isJsonObject()) {
             icons.putAll(Resources.GSON.fromJson(element, ICONS_TYPE));
         } else {
-            buttons.put(id, Resources.GSON.fromJson(element, Button[].class));
+            buttons.put(id.getPath(), Resources.GSON.fromJson(element, Button[].class));
         }
     }
 
@@ -66,7 +66,7 @@ public class MCAScreens extends JsonDataLoader {
      * @param guiKey String key for the GUI's buttons
      */
     public Optional<Button[]> getScreen(String guiKey) {
-        return Optional.ofNullable(buttons.get(new Identifier("mca", guiKey)));
+        return Optional.ofNullable(buttons.get(guiKey));
     }
 
     /**
@@ -76,6 +76,6 @@ public class MCAScreens extends JsonDataLoader {
      * @return Instance of APIButton matching the ID provided
      */
     public Optional<Button> getButton(String key, String id) {
-        return Arrays.stream(buttons.get(new Identifier("mca", key))).filter(b -> b.identifier().equals(id)).findFirst();
+        return Arrays.stream(buttons.get(key)).filter(b -> b.identifier().equals(id)).findFirst();
     }
 }

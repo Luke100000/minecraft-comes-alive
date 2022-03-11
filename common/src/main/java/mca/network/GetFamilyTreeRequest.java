@@ -9,6 +9,7 @@ import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 
+import java.io.Serial;
 import java.util.Map;
 import java.util.UUID;
 import java.util.function.Function;
@@ -16,9 +17,10 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public class GetFamilyTreeRequest implements Message {
+    @Serial
     private static final long serialVersionUID = -6232925305386763715L;
 
-    UUID uuid;
+    final UUID uuid;
 
     public GetFamilyTreeRequest(UUID uuid) {
         this.uuid = uuid;

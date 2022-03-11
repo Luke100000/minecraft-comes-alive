@@ -16,7 +16,7 @@ public class ZombieCommandHandler extends EntityCommandHandler<ZombieVillagerEnt
     @Override
     public boolean handle(ServerPlayerEntity player, String command) {
         switch (command) {
-            case "gift":
+            case "gift" -> {
                 // zombies only accept one type of gift, and for now it's not brains
                 if (entity.interactMob(player, Hand.MAIN_HAND).isAccepted()) {
                     if (!player.getAbilities().creativeMode) {
@@ -24,6 +24,7 @@ public class ZombieCommandHandler extends EntityCommandHandler<ZombieVillagerEnt
                     }
                 }
                 return true;
+            }
         }
 
         return super.handle(player, command);

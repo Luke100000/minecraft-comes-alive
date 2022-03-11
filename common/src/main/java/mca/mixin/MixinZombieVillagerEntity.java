@@ -34,7 +34,7 @@ abstract class MixinZombieVillagerEntity implements IVillagerEntity {
         reason = spawnReason;
     }
 
-    @ModifyVariable(method = "setVillagerData", at = @At("HEAD"), ordinal = 0)
+    @ModifyVariable(method = "setVillagerData", at = @At("HEAD"), ordinal = 0, argsOnly = true)
     private VillagerData setVillagerData(VillagerData villagerData) {
         VillagerProfession profession = villagerData.getProfession();
         if (profession.toString().startsWith("mca.")) {

@@ -135,9 +135,7 @@ public class Genetics implements Iterable<Genetics.Gene> {
         if (mother.isPresent() != father.isPresent()) {
             Genetics single = mother.orElse(father.orElse(null));
             combine(single, single);
-        } else if (mother.isPresent()) {
-            combine(mother.get(), father.get());
-        }
+        } else mother.ifPresent(genetics -> combine(genetics, father.get()));
     }
 
     public void combine(Optional<Genetics> mother, Optional<Genetics> father, long seed) {

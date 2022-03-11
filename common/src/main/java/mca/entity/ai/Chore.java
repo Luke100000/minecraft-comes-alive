@@ -27,7 +27,7 @@ public enum Chore {
             Function.identity())
     );
 
-    protected final String friendlyName;
+    private final String friendlyName;
 
     @Nullable
     private final Class<?> toolType;

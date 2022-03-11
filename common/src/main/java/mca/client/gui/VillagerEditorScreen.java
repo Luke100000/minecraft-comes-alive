@@ -139,7 +139,7 @@ public class VillagerEditorScreen extends Screen {
         TextFieldWidget field;
 
         switch (page) {
-            case "general":
+            case "general" -> {
                 //name
                 Text villagerName = villager.getName();
                 if (villagerName == null || villagerName.asString().isEmpty()) {
@@ -185,8 +185,8 @@ public class VillagerEditorScreen extends Screen {
                 field = addDrawableChild(new TextFieldWidget(this.textRenderer, width / 2, y, DATA_WIDTH, 18, new LiteralText("UUID")));
                 field.setMaxLength(64);
                 field.setText(villagerUUID.toString());
-                break;
-            case "body":
+            }
+            case "body" -> {
                 //genes
                 y = doubleGeneSliders(y, Genetics.SIZE, Genetics.WIDTH, Genetics.BREAST, Genetics.SKIN);
 
@@ -220,9 +220,8 @@ public class VillagerEditorScreen extends Screen {
                             genetics.setGene(Genetics.MELANIN, vy.floatValue());
                         }));
                 y += DATA_WIDTH - margin * 2;
-
-                break;
-            case "head":
+            }
+            case "head" -> {
                 //genes
                 y = doubleGeneSliders(y, Genetics.FACE);
 
@@ -234,7 +233,6 @@ public class VillagerEditorScreen extends Screen {
                     villager.setHair(new Hair(name, villager.getHair().overlay()));
                 });
                 y += 20;
-
                 TextFieldWidget field2 = addDrawableChild(new TextFieldWidget(this.textRenderer, width / 2, y, DATA_WIDTH, 18, new TranslatableText("structure_block.structure_name")));
                 field2.setMaxLength(32);
                 field2.setText(villager.getHair().overlay());
@@ -266,8 +264,8 @@ public class VillagerEditorScreen extends Screen {
                             genetics.setGene(Genetics.EUMELANIN, vy.floatValue());
                         }));
                 y += DATA_WIDTH - margin * 2;
-                break;
-            case "personality":
+            }
+            case "personality" -> {
                 //personality
                 List<ButtonWidget> personalityButtons = new LinkedList<>();
                 int row = 0;
@@ -288,13 +286,12 @@ public class VillagerEditorScreen extends Screen {
                     }
                 }
                 y += 22;
-                break;
-            case "traits":
+            }
+            case "traits" -> {
                 //traits
                 addDrawableChild(new ButtonWidget(width / 2, y, 32, 20, new LiteralText("<"), b -> setTraitPage(traitPage - 1)));
                 addDrawableChild(new ButtonWidget(width / 2 + DATA_WIDTH - 32, y, 32, 20, new LiteralText(">"), b -> setTraitPage(traitPage + 1)));
                 addDrawableChild(new ButtonWidget(width / 2 + 32, y, DATA_WIDTH - 32 * 2, 20, new TranslatableText("gui.villager_editor.page", traitPage + 1), b -> traitPage++));
-
                 y += 22;
                 Traits.Trait[] traits = Traits.Trait.values();
                 for (int i = 0; i < TRAITS_PER_PAGE; i++) {
@@ -316,8 +313,8 @@ public class VillagerEditorScreen extends Screen {
                     }
                 }
                 y += 22;
-                break;
-            case "debug":
+            }
+            case "debug" -> {
                 //profession
                 boolean right = false;
                 List<ButtonWidget> professionButtons = new LinkedList<>();
@@ -359,7 +356,7 @@ public class VillagerEditorScreen extends Screen {
 
                 //mood
                 y = integerChanger(y, v -> villager.getVillagerBrain().modifyMoodValue(v), () -> new LiteralText(villager.getVillagerBrain().getMoodValue() + " mood"));
-                break;
+            }
         }
     }
 

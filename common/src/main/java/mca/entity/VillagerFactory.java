@@ -95,7 +95,7 @@ public class VillagerFactory {
     }
 
     public VillagerFactory spawn(SpawnReason reason) {
-        if (!position.isPresent()) {
+        if (position.isEmpty()) {
             MCA.LOGGER.info("Attempted to spawn villager without a position being set!");
         }
 

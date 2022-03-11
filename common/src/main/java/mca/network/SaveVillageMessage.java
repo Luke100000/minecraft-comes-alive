@@ -6,7 +6,10 @@ import mca.server.world.data.VillageManager;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 
+import java.io.Serial;
+
 public class SaveVillageMessage implements Message {
+    @Serial
     private static final long serialVersionUID = -4830365225086158551L;
 
     private final int id;

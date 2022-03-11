@@ -1,5 +1,6 @@
 package mca.network;
 
+import java.io.Serial;
 import java.util.stream.Stream;
 import mca.cobalt.network.Message;
 import mca.cobalt.network.NetworkHandler;
@@ -13,6 +14,7 @@ import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 
 public class GetFamilyRequest implements Message {
+    @Serial
     private static final long serialVersionUID = -4415670234855916259L;
 
     @Override
@@ -26,7 +28,7 @@ public class GetFamilyRequest implements Message {
 
         Stream.concat(
                         playerData.getFamilyEntry().getAllRelatives(5),
-                        playerData.getSpouseUuid().map(Stream::of).orElseGet(Stream::empty)
+                        playerData.getSpouseUuid().stream()
                 ).distinct()
                 .map(((ServerWorld)player.world)::getEntity)
                 .filter(e -> e instanceof VillagerLike<?>)

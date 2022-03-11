@@ -1,8 +1,9 @@
 [
   {
     "identifier": "gui.button.backarrow",
-    "x": 115,
-    "y": -115,
+    "x": -98,
+    "y": 10,
+    "row": 0,
     "width": 20,
     "height": 20,
     "notifyServer": false,
@@ -11,8 +12,9 @@
   },
   {
     "identifier": "gui.button.profession.none",
-    "x": 140,
-    "y": -115,
+    "x": -75,
+    "y": 10,
+    "row": 0,
     "width": 65,
     "height": 20,
     "notifyServer": true,
@@ -21,8 +23,9 @@
   },
   {
     "identifier": "gui.button.profession.guard",
-    "x": 140,
-    "y": -94,
+    "x": -75,
+    "y": 10,
+    "row": 1,
     "width": 65,
     "height": 20,
     "notifyServer": true,
@@ -31,8 +34,9 @@
   },
   {
     "identifier": "gui.button.profession.archer",
-    "x": 140,
-    "y": -73,
+    "x": -75,
+    "y": 10,
+    "row": 0,
     "width": 65,
     "height": 20,
     "notifyServer": true,

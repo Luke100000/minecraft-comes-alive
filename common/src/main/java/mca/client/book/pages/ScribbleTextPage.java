@@ -7,7 +7,7 @@ import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.util.Identifier;
 
 public class ScribbleTextPage extends TextPage {
-    Identifier scribble;
+    final Identifier scribble;
 
     public ScribbleTextPage(Identifier scribble, String name, int page) {
         super(name, page);

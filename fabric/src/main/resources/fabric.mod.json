@@ -30,6 +30,6 @@
     "java": ">=17",
     "fabric-api-base": ">=0.1.0",
     "fabric-registry-sync-v0": ">=0.1.0",
-    "architectury": ">=4.0.30"
+    "architectury": ">=4.1.32"
   }
 }

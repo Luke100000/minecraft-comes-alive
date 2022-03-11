@@ -63,11 +63,9 @@ public class GrimReaperMeleeGoal extends Goal {
     //curse the player if he tries to block
     private void curse() {
         LivingEntity entityToAttack = reaper.getTarget();
-        if (entityToAttack instanceof PlayerEntity) {
-            PlayerEntity player = (PlayerEntity)entityToAttack;
-
+        if (entityToAttack instanceof PlayerEntity player) {
             // Check to see if the player's blocking, then teleport behind them.
-            // Also randomly swap their selected item with something else in the hotbar and apply blindness.
+            // Also, randomly swap their selected item with something else in the hotbar and apply blindness.
             if (player.isBlocking()) {
                 double dX = reaper.getX() - player.getX();
                 double dZ = reaper.getZ() - player.getZ();

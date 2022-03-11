@@ -11,7 +11,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import mca.Config;
 import mca.entity.EntitiesMCA;
@@ -78,7 +77,7 @@ public class AdminCommand {
     private static int assumeNameDead(CommandContext<ServerCommandSource> ctx) {
         String name = StringArgumentType.getString(ctx, "name");
         FamilyTree tree = FamilyTree.get(ctx.getSource().getWorld());
-        List<FamilyTreeNode> collect = tree.getAllWithName(name).filter(n -> !n.isDeceased()).collect(Collectors.toList());
+        List<FamilyTreeNode> collect = tree.getAllWithName(name).filter(n -> !n.isDeceased()).toList();
         if (collect.isEmpty()) {
             fail("Villager does not exist.", ctx);
         } else if (collect.size() == 1) {
@@ -139,7 +138,7 @@ public class AdminCommand {
 
     private static int removeVillage(CommandContext<ServerCommandSource> ctx) {
         String name = StringArgumentType.getString(ctx, "name");
-        List<Village> collect = VillageManager.get(ctx.getSource().getWorld()).findVillages(v -> v.getName().equals(name)).collect(Collectors.toList());
+        List<Village> collect = VillageManager.get(ctx.getSource().getWorld()).findVillages(v -> v.getName().equals(name)).toList();
         if (collect.isEmpty()) {
             fail("No village with this name exists.", ctx);
         } else if (collect.size() > 1) {

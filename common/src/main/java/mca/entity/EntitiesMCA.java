@@ -9,7 +9,6 @@ import mca.entity.ai.MemoryModuleTypeMCA;
 import mca.entity.ai.ProfessionsMCA;
 import mca.entity.ai.SchedulesMCA;
 import mca.entity.ai.relationship.Gender;
-import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.SpawnGroup;
@@ -40,7 +39,7 @@ public interface EntitiesMCA {
             .setDimensions(0.6F, 2.0F), ZombieVillagerEntityMCA::createZombieAttributes
     );
     RegistrySupplier<EntityType<GrimReaperEntity>> GRIM_REAPER = register("grim_reaper", EntityType.Builder
-            .<GrimReaperEntity>create(GrimReaperEntity::new, SpawnGroup.MONSTER)
+            .create(GrimReaperEntity::new, SpawnGroup.MONSTER)
             .setDimensions(1, 2.6F)
             .makeFireImmune(), GrimReaperEntity::createAttributes
     );

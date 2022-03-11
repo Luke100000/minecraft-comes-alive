@@ -151,7 +151,7 @@ public class VillageManager extends PersistentState implements Iterable<Village>
         //send bounty hunters
         if (world.getTimeOfDay() % Config.getInstance().bountyHunterInterval / 10 == 0 && world.getDifficulty() != Difficulty.PEACEFUL) {
             world.getPlayers().forEach(player -> {
-                if (world.random.nextInt(10) == 0 && !PlayerSaveData.get(world, player.getUuid()).getLastSeenVillage(this).isPresent()) {
+                if (world.random.nextInt(10) == 0 && PlayerSaveData.get(world, player.getUuid()).getLastSeenVillage(this).isEmpty()) {
                     villages.values().stream()
                             .filter(v -> v.getReputation(player) < Config.getInstance().bountyHunterThreshold)
                             .min(Comparator.comparingInt(v -> v.getReputation(player)))

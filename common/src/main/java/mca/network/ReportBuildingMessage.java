@@ -1,5 +1,6 @@
 package mca.network;
 
+import java.io.Serial;
 import java.util.Locale;
 import java.util.Optional;
 import mca.cobalt.network.Message;
@@ -12,6 +13,7 @@ import net.minecraft.server.world.ServerWorld;
 import net.minecraft.text.TranslatableText;
 
 public class ReportBuildingMessage implements Message {
+    @Serial
     private static final long serialVersionUID = 3510050513221709603L;
 
     private final Action action;
@@ -24,19 +26,15 @@ public class ReportBuildingMessage implements Message {
     public void receive(PlayerEntity e) {
         VillageManager villages = VillageManager.get((ServerWorld)e.world);
         switch (action) {
-            case ADD:
-            case ADD_ROOM:
+            case ADD, ADD_ROOM -> {
                 Building.validationResult result = villages.processBuilding(e.getBlockPos(), true, action == Action.ADD_ROOM);
                 e.sendMessage(new TranslatableText("blueprint.scan." + result.name().toLowerCase(Locale.ENGLISH)), true);
 
                 // also add tombstones
                 GraveyardManager.get((ServerWorld)e.world).reportToVillageManager(e);
-                break;
-            case AUTO_SCAN:
-                villages.findNearestVillage(e).ifPresent(Village::toggleAutoScan);
-                break;
-            case RESTRICT:
-            case REMOVE:
+            }
+            case AUTO_SCAN -> villages.findNearestVillage(e).ifPresent(Village::toggleAutoScan);
+            case RESTRICT, REMOVE -> {
                 Optional<Village> village = villages.findNearestVillage(e);
                 Optional<Building> building = village.flatMap(v -> v.getBuildings().values().stream().filter((b) ->
                         b.containsPos(e.getBlockPos())).findAny());
@@ -54,7 +52,7 @@ public class ReportBuildingMessage implements Message {
                 } else {
                     e.sendMessage(new TranslatableText("blueprint.noBuilding"), true);
                 }
-                break;
+            }
         }
     }
 

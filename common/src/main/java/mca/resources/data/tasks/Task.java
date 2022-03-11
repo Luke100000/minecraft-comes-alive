@@ -1,6 +1,8 @@
 package mca.resources.data.tasks;
 
 import com.google.gson.JsonObject;
+
+import java.io.Serial;
 import java.io.Serializable;
 import mca.server.world.data.Village;
 import net.minecraft.server.network.ServerPlayerEntity;
@@ -8,6 +10,7 @@ import net.minecraft.text.TranslatableText;
 import net.minecraft.util.JsonHelper;
 
 public abstract class Task implements Serializable {
+    @Serial
     private static final long serialVersionUID = 6029812512760976500L;
 
     private final String id;

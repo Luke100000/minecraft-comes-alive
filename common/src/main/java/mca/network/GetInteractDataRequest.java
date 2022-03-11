@@ -13,13 +13,16 @@ import net.minecraft.entity.Entity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
+
+import java.io.Serial;
 import java.util.Set;
 import java.util.UUID;
 
 public class GetInteractDataRequest implements Message {
+    @Serial
     private static final long serialVersionUID = -4363277735373237564L;
 
-    UUID uuid;
+    final UUID uuid;
 
     public GetInteractDataRequest(UUID villager) {
         this.uuid = villager;
@@ -29,8 +32,7 @@ public class GetInteractDataRequest implements Message {
     public void receive(PlayerEntity player) {
         Entity entity = ((ServerWorld) player.world).getEntity(uuid);
 
-        if (entity instanceof VillagerLike<?> && player instanceof ServerPlayerEntity) {
-            VillagerLike<?> villager = (VillagerLike<?>) entity;
+        if (entity instanceof VillagerLike<?> villager && player instanceof ServerPlayerEntity) {
 
             //get constraints
             Set<Constraint> constraints = Constraint.allMatching(villager, player);

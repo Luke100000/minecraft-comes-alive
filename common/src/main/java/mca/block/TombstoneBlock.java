@@ -141,10 +141,8 @@ public class TombstoneBlock extends BlockWithEntity implements Waterloggable {
     @Override
     @Deprecated
     public VoxelShape getOutlineShape(BlockState state, BlockView view, BlockPos pos, ShapeContext ePos) {
-        if (this == BlocksMCA.SLANTED_HEADSTONE) {
-            for (Direction i : shapes.keySet()) {
-                shapes.put(i, VoxelShapeUtil.rotator(SLANTED_SHAPE).apply(i));
-            }
+        if (this == BlocksMCA.SLANTED_HEADSTONE.get()) {
+            shapes.replaceAll((i, v) -> VoxelShapeUtil.rotator(SLANTED_SHAPE).apply(i));
         }
 
         return shapes.getOrDefault(state.get(Properties.HORIZONTAL_FACING), VoxelShapes.fullCube());
@@ -364,8 +362,7 @@ public class TombstoneBlock extends BlockWithEntity implements Waterloggable {
                     createEntity(world, true).ifPresent(entity -> {
                         generateLightning();
                         entity.setPosition(pos.getX() + 0.5F, pos.getY() + 0.5F, pos.getZ() + 0.5F);
-                        if (entity instanceof LivingEntity) {
-                            LivingEntity l = (LivingEntity) entity;
+                        if (entity instanceof LivingEntity l) {
                             l.setHealth(l.getMaxHealth());
                             l.clearStatusEffects();
                             l.fallDistance = 0.0f;
@@ -373,8 +370,7 @@ public class TombstoneBlock extends BlockWithEntity implements Waterloggable {
                         }
 
                         //enforcing a dimension update
-                        if (entity instanceof PassiveEntity) {
-                            PassiveEntity mob = (PassiveEntity) entity;
+                        if (entity instanceof PassiveEntity mob) {
                             mob.setBreedingAge(mob.getBreedingAge());
                         }
 

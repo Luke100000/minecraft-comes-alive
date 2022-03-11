@@ -64,8 +64,7 @@ public class ClientInteractionManagerImpl implements ClientInteractionManager {
     @Override
     public void handleFamilyTreeResponse(GetFamilyTreeResponse message) {
         Screen screen = client.currentScreen;
-        if (screen instanceof FamilyTreeScreen) {
-            FamilyTreeScreen gui = (FamilyTreeScreen)screen;
+        if (screen instanceof FamilyTreeScreen gui) {
             gui.setFamilyData(message.uuid, message.family);
         }
     }
@@ -73,8 +72,7 @@ public class ClientInteractionManagerImpl implements ClientInteractionManager {
     @Override
     public void handleInteractDataResponse(GetInteractDataResponse message) {
         Screen screen = client.currentScreen;
-        if (screen instanceof InteractScreen) {
-            InteractScreen gui = (InteractScreen)screen;
+        if (screen instanceof InteractScreen gui) {
             gui.setConstraints(message.constraints);
             gui.setParents(message.father, message.mother);
             gui.setSpouse(message.marriageState, message.spouse);
@@ -84,8 +82,7 @@ public class ClientInteractionManagerImpl implements ClientInteractionManager {
     @Override
     public void handleVillageDataResponse(GetVillageResponse message) {
         Screen screen = client.currentScreen;
-        if (screen instanceof BlueprintScreen) {
-            BlueprintScreen gui = (BlueprintScreen)screen;
+        if (screen instanceof BlueprintScreen gui) {
             Village village = new Village();
             village.load(message.getData());
 
@@ -97,8 +94,7 @@ public class ClientInteractionManagerImpl implements ClientInteractionManager {
     @Override
     public void handleVillageDataFailedResponse(GetVillageFailedResponse message) {
         Screen screen = client.currentScreen;
-        if (screen instanceof BlueprintScreen) {
-            BlueprintScreen gui = (BlueprintScreen)screen;
+        if (screen instanceof BlueprintScreen gui) {
             gui.setVillage(null);
         }
     }
@@ -106,8 +102,7 @@ public class ClientInteractionManagerImpl implements ClientInteractionManager {
     @Override
     public void handleFamilyDataResponse(GetFamilyResponse message) {
         Screen screen = client.currentScreen;
-        if (screen instanceof WhistleScreen) {
-            WhistleScreen gui = (WhistleScreen)screen;
+        if (screen instanceof WhistleScreen gui) {
             gui.setVillagerData(message.getData());
         }
     }
@@ -115,8 +110,7 @@ public class ClientInteractionManagerImpl implements ClientInteractionManager {
     @Override
     public void handleVillagerDataResponse(GetVillagerResponse message) {
         Screen screen = client.currentScreen;
-        if (screen instanceof VillagerEditorScreen) {
-            VillagerEditorScreen gui = (VillagerEditorScreen)screen;
+        if (screen instanceof VillagerEditorScreen gui) {
             gui.setVillagerData(message.getData());
         }
     }
@@ -124,8 +118,7 @@ public class ClientInteractionManagerImpl implements ClientInteractionManager {
     @Override
     public void handleDialogueResponse(InteractionDialogueResponse message) {
         Screen screen = client.currentScreen;
-        if (screen instanceof InteractScreen) {
-            InteractScreen gui = (InteractScreen)screen;
+        if (screen instanceof InteractScreen gui) {
             gui.setDialogue(message.question, message.answers, message.silent);
         }
     }
@@ -143,8 +136,7 @@ public class ClientInteractionManagerImpl implements ClientInteractionManager {
     @Override
     public void handleBabyNameResponse(BabyNameResponse message) {
         Screen screen = client.currentScreen;
-        if (screen instanceof NameBabyScreen) {
-            NameBabyScreen gui = (NameBabyScreen)screen;
+        if (screen instanceof NameBabyScreen gui) {
             gui.setBabyName(message.getName());
         }
     }
@@ -157,8 +149,7 @@ public class ClientInteractionManagerImpl implements ClientInteractionManager {
     @Override
     public void handleFamilyTreeUUIDResponse(FamilyTreeUUIDResponse response) {
         Screen screen = client.currentScreen;
-        if (screen instanceof FamilyTreeSearchScreen) {
-            FamilyTreeSearchScreen gui = (FamilyTreeSearchScreen)screen;
+        if (screen instanceof FamilyTreeSearchScreen gui) {
             gui.setList(response.getList());
         }
     }

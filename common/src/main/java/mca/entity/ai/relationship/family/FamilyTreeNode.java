@@ -8,6 +8,7 @@ import net.minecraft.util.Util;
 import net.minecraft.util.registry.Registry;
 import net.minecraft.village.VillagerProfession;
 
+import java.io.Serial;
 import java.io.Serializable;
 import java.util.HashSet;
 import java.util.Optional;
@@ -24,6 +25,7 @@ import mca.entity.ai.relationship.MarriageState;
 import mca.util.NbtHelper;
 
 public final class FamilyTreeNode implements Serializable {
+    @Serial
     private static final long serialVersionUID = -7307057982785253721L;
 
     private final boolean isPlayer;

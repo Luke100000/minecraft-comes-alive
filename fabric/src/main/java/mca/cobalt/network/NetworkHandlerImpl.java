@@ -10,10 +10,12 @@ import net.minecraft.network.PacketByteBuf;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.util.Identifier;
 
+import java.util.Locale;
+
 public class NetworkHandlerImpl extends NetworkHandler.Impl {
     @Override
     public <T extends Message> void registerMessage(Class<T> msg) {
-        Identifier id = new Identifier(MCA.MOD_ID, msg.getName().toLowerCase());
+        Identifier id = new Identifier(MCA.MOD_ID, msg.getName().toLowerCase(Locale.ENGLISH));
 
         ServerPlayNetworking.registerGlobalReceiver(id, (server, player, handler, buffer, responder) -> {
             Message m = Message.decode(buffer);
@@ -29,14 +31,14 @@ public class NetworkHandlerImpl extends NetworkHandler.Impl {
     public void sendToServer(Message m) {
         PacketByteBuf buf = new PacketByteBuf(Unpooled.buffer());
         m.encode(buf);
-        ClientPlayNetworking.send(new Identifier(MCA.MOD_ID, m.getClass().getName().toLowerCase()), buf);
+        ClientPlayNetworking.send(new Identifier(MCA.MOD_ID, m.getClass().getName().toLowerCase(Locale.ENGLISH)), buf);
     }
 
     @Override
     public void sendToPlayer(Message m, ServerPlayerEntity e) {
         PacketByteBuf buf = new PacketByteBuf(Unpooled.buffer());
         m.encode(buf);
-        ServerPlayNetworking.send(e, new Identifier(MCA.MOD_ID, m.getClass().getName().toLowerCase()), buf);
+        ServerPlayNetworking.send(e, new Identifier(MCA.MOD_ID, m.getClass().getName().toLowerCase(Locale.ENGLISH)), buf);
     }
 
     // Fabric's APIs are not side-agnostic.

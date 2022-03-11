@@ -1,8 +1,6 @@
 package mca.client.gui;
 
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 
 import mca.client.resources.Icon;
 import net.minecraft.client.gui.screen.Screen;
@@ -52,7 +50,7 @@ public abstract class AbstractDynamicScreen extends Screen {
     protected void disableButton(String id) {
         children().forEach(b -> {
             if (b instanceof ButtonEx) {
-                if (((ButtonEx) b).getApiButton().identifier().equals(id)) {
+                if (((ButtonEx)b).getApiButton().identifier().equals(id)) {
                     ((ButtonEx)b).active = false;
                 }
             }
@@ -71,7 +69,7 @@ public abstract class AbstractDynamicScreen extends Screen {
         this.children().forEach(b -> {
             if (b instanceof ClickableWidget) {
                 if (b instanceof ButtonEx) {
-                    if (!((ButtonEx) b).getApiButton().identifier().equals("gui.button.backarrow")) {
+                    if (!((ButtonEx)b).getApiButton().identifier().equals("gui.button.backarrow")) {
                         ((ClickableWidget)b).active = false;
                     }
                 } else {
@@ -99,7 +97,7 @@ public abstract class AbstractDynamicScreen extends Screen {
 
     protected void drawIcon(MatrixStack transform, String key) {
         Icon icon = MCAScreens.getInstance().getIcon(key);
-        this.drawTexture(transform, (int) (icon.x() / iconScale), (int) (icon.y() / iconScale), icon.u(), icon.v(), 16, 16);
+        this.drawTexture(transform, (int)(icon.x() / iconScale), (int)(icon.y() / iconScale), icon.u(), icon.v(), 16, 16);
     }
 
     protected void drawHoveringIconText(MatrixStack transform, Text text, String key) {
@@ -115,7 +113,7 @@ public abstract class AbstractDynamicScreen extends Screen {
     //checks if the mouse hovers over a specified button
     protected boolean hoveringOverIcon(String key) {
         Icon icon = MCAScreens.getInstance().getIcon(key);
-        return hoveringOver(icon.x(), icon.y(), (int) (16 * iconScale), (int) (16 * iconScale));
+        return hoveringOver(icon.x(), icon.y(), (int)(16 * iconScale), (int)(16 * iconScale));
     }
 
     //checks if the mouse hovers over a rectangle
@@ -127,8 +125,8 @@ public abstract class AbstractDynamicScreen extends Screen {
         private final Button apiButton;
 
         public ButtonEx(Button apiButton, AbstractDynamicScreen screen) {
-            super((screen.width / 2) + apiButton.x(),
-                    (screen.height / 2) + apiButton.y(),
+            super((int)(screen.width * Alignment.alignments.get(apiButton.align()).h + apiButton.x()),
+                    (int)(screen.height * Alignment.alignments.get(apiButton.align()).v + apiButton.y()),
                     apiButton.width(),
                     apiButton.height(),
                     new TranslatableText(apiButton.identifier()),
@@ -147,6 +145,34 @@ public abstract class AbstractDynamicScreen extends Screen {
 
         public Button getApiButton() {
             return apiButton;
+        }
+    }
+
+    private enum Alignment {
+        TOP_LEFT(0.0f, 0.0f),
+        TOP(0.5f, 0.0f),
+        TOP_RIGHT(1.0f, 0.0f),
+        RIGHT(1.0f, 0.5f),
+        BOTTOM_RIGHT(1.0f, 1.0f),
+        BOTTOM(0.5f, 1.0f),
+        BOTTOM_LEFT(0.0f, 1.0f),
+        LEFT(0.0f, 0.5f),
+        CENTER(0.5f, 0.5f);
+
+        final float h;
+        final float v;
+
+        static final Map<String, Alignment> alignments = new HashMap<>();
+
+        static {
+            for (Alignment a : Alignment.values()) {
+                alignments.put(a.name().toLowerCase(Locale.ENGLISH), a);
+            }
+        }
+
+        Alignment(float h, float v) {
+            this.h = h;
+            this.v = v;
         }
     }
 }

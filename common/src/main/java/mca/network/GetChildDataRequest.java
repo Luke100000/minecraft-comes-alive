@@ -8,9 +8,11 @@ import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 
+import java.io.Serial;
 import java.util.UUID;
 
 public class GetChildDataRequest implements Message {
+    @Serial
     private static final long serialVersionUID = 5607996500411677463L;
 
     public final UUID id;

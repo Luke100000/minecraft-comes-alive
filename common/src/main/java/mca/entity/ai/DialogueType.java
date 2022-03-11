@@ -1,6 +1,7 @@
 package mca.entity.ai;
 
 import java.util.Arrays;
+import java.util.Locale;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -31,16 +32,12 @@ public enum DialogueType {
     public static final Map<String, DialogueType> MAP = Arrays.stream(VALUES).collect(Collectors.toMap(DialogueType::name, Function.identity()));
 
     public DialogueType toChild() {
-        switch (this) {
-            case TODDLER:
-                return TODDLERP;
-            case CHILD:
-                return CHILDP;
-            case TEEN:
-                return TEENP;
-            default:
-                return UNASSIGNED;
-        }
+        return switch (this) {
+            case TODDLER -> TODDLERP;
+            case CHILD -> CHILDP;
+            case TEEN -> TEENP;
+            default -> UNASSIGNED;
+        };
     }
 
     public static DialogueType fromAge(AgeState state) {
@@ -74,7 +71,7 @@ public enum DialogueType {
         String phrase = key.substring(split + 1);
 
         while (type != null) {
-            String s = type.name().toLowerCase() + "." + phrase;
+            String s = type.name().toLowerCase(Locale.ENGLISH) + "." + phrase;
 
             if (Language.getInstance().hasTranslation(s)) {
                 return s;

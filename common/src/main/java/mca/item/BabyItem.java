@@ -53,7 +53,6 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public class BabyItem extends Item {
@@ -172,7 +171,7 @@ public class BabyItem extends Item {
 
         return BabyTracker.getState(stack, (ServerWorld)world).map(state -> {
             // Right-clicking an unnamed baby allows you to name it
-            if (!state.getName().isPresent()) {
+            if (state.getName().isEmpty()) {
                 if (player instanceof ServerPlayerEntity) {
                     NetworkHandler.sendToPlayer(new OpenGuiRequest(OpenGuiRequest.Type.BABY_NAME), (ServerPlayerEntity)player);
                 }
@@ -211,7 +210,7 @@ public class BabyItem extends Item {
                 .withAge(-AgeState.getMaxAge())
                 .build();
 
-        List<Entity> parents = state.getParents().map(world::getEntity).filter(Objects::nonNull).collect(Collectors.toList());
+        List<Entity> parents = state.getParents().map(world::getEntity).filter(Objects::nonNull).toList();
 
         Optional<Entity> mother = parents.stream().findFirst();
         Optional<Entity> father = parents.stream().skip(1).findFirst();
@@ -266,7 +265,7 @@ public class BabyItem extends Item {
 
             int age = nbt.getInt("age") * 1200 + (int)(world == null ? 0 : world.getTime() % 1200);
 
-            if (!state.getName().isPresent()) {
+            if (state.getName().isEmpty()) {
                 tooltip.add(new TranslatableText("item.mca.baby.give_name").formatted(Formatting.YELLOW));
             } else {
                 tooltip.add(new TranslatableText("item.mca.baby.name", new LiteralText(state.getName().get()).formatted(gender.getColor())).formatted(Formatting.GRAY));
@@ -310,7 +309,7 @@ public class BabyItem extends Item {
             if (loaded.isPresent()) {
                 ChildSaveState l = loaded.get();
                 if (
-                        (state.getName().isPresent() && !l.getName().isPresent())
+                        (state.getName().isPresent() && l.getName().isEmpty())
                                 || (state.getName().isPresent() && l.getName().isPresent() && !state.getName().get().contentEquals(l.getName().get()))
                 ) {
                     CLIENT_STATE_CACHE.refresh(state.getId());
@@ -339,7 +338,8 @@ public class BabyItem extends Item {
         return (stack.hasNbt() && stack.getNbt().getBoolean("invalidated")) || BabyTracker.getStateId(stack).map(id -> {
             Optional<ChildSaveState> loaded = CLIENT_STATE_CACHE.getIfPresent(id);
 
-            return loaded != null && !loaded.isPresent();
+            //noinspection OptionalAssignedToNull
+            return loaded != null && loaded.isEmpty();
         }).orElse(false);
     }
 

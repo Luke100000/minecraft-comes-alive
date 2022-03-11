@@ -6,9 +6,12 @@ import net.minecraft.entity.Entity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
+
+import java.io.Serial;
 import java.util.UUID;
 
 public class InteractionVillagerMessage implements Message {
+    @Serial
     private static final long serialVersionUID = 2563941495766992462L;
 
     private final String command;

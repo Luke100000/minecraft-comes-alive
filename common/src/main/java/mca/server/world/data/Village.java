@@ -339,8 +339,7 @@ public class Village implements Iterable<Building> {
         BlockState state = world.getBlockState(p);
         if (state.hasBlockEntity()) {
             BlockEntity blockEntity = world.getBlockEntity(p);
-            if (blockEntity instanceof Inventory) {
-                Inventory inventory = (Inventory)blockEntity;
+            if (blockEntity instanceof Inventory inventory) {
                 Block block = state.getBlock();
                 if (inventory instanceof ChestBlockEntity && block instanceof ChestBlock) {
                     inventory = ChestBlock.getInventory((ChestBlock)block, state, world, p, true);

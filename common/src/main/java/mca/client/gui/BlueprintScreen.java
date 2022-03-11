@@ -6,7 +6,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
-import java.util.stream.Collectors;
 
 import com.mojang.blaze3d.systems.RenderSystem;
 
@@ -526,7 +525,7 @@ public class BlueprintScreen extends ExtendedScreen {
         List<Map.Entry<UUID, String>> villager = village.getBuildings().values().stream()
                 .flatMap(b -> b.getResidents().entrySet().stream())
                 .sorted(Map.Entry.comparingByValue())
-                .collect(Collectors.toList());
+                .toList();
 
         selectedVillager = null;
         for (int i = 0; i < 9; i++) {

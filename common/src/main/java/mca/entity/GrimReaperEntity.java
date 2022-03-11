@@ -116,14 +116,10 @@ public class GrimReaperEntity extends PathAwareEntity implements CTrackedEntity<
     protected EntityNavigation createNavigation(World world) {
         BirdNavigation navigator = new BirdNavigation(this, world) {
             @Override
-            public boolean isValidPosition(BlockPos p_188555_1_) {
+            public boolean isValidPosition(BlockPos pos) {
                 return true;
             }
 
-            @Override
-            public void tick() {
-                super.tick();
-            }
         };
         navigator.setCanPathThroughDoors(false);
         navigator.setCanSwim(false);
@@ -153,13 +149,10 @@ public class GrimReaperEntity extends PathAwareEntity implements CTrackedEntity<
         setTrackedValue(ATTACK_STAGE, state);
 
         switch (state) {
-            case PRE:
-                playSound(SoundsMCA.reaper_scythe_out.get(), 1, 1);
-                break;
-            case POST:
-                playSound(SoundsMCA.reaper_scythe_swing.get(), 1, 1);
-                break;
-            default:
+            case PRE -> playSound(SoundsMCA.reaper_scythe_out.get(), 1, 1);
+            case POST -> playSound(SoundsMCA.reaper_scythe_swing.get(), 1, 1);
+            default -> {
+            }
         }
     }
 

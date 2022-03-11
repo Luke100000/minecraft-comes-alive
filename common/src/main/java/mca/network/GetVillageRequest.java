@@ -1,5 +1,6 @@
 package mca.network;
 
+import java.io.Serial;
 import java.util.Optional;
 import java.util.Set;
 import mca.cobalt.network.Message;
@@ -13,6 +14,7 @@ import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.server.network.ServerPlayerEntity;
 
 public class GetVillageRequest implements Message {
+    @Serial
     private static final long serialVersionUID = -1302412553466016247L;
 
     @Override

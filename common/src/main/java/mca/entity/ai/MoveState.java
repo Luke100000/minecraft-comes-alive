@@ -18,7 +18,7 @@ public enum MoveState {
     private static final MoveState[] VALUES = values();
     private static final Map<String, MoveState> REGISTRY = Stream.of(VALUES).collect(Collectors.toMap(MoveState::name, Function.identity()));
 
-    protected String friendlyName;
+    private final String friendlyName;
 
     MoveState(String friendlyName) {
         this.friendlyName = friendlyName;

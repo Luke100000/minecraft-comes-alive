@@ -4,10 +4,13 @@ import mca.ClientProxy;
 import mca.cobalt.network.Message;
 import mca.entity.ai.relationship.family.FamilyTreeNode;
 import net.minecraft.entity.player.PlayerEntity;
+
+import java.io.Serial;
 import java.util.Map;
 import java.util.UUID;
 
 public class GetFamilyTreeResponse implements Message {
+    @Serial
     private static final long serialVersionUID = 1371939319244994642L;
 
     public final UUID uuid;

@@ -7,7 +7,6 @@ import mca.MCA;
 import mca.resources.Resources.BrokenResourceException;
 import net.minecraft.resource.ResourceManager;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Random;

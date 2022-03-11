@@ -56,7 +56,7 @@ public interface ProfessionsMCA {
     static String getFavoredBuilding(VillagerProfession profession) {
         if (VillagerProfession.CARTOGRAPHER == profession || VillagerProfession.LIBRARIAN == profession || VillagerProfession.CLERIC == profession) {
             return "library";
-        } else if (GUARD == profession || ARCHER == profession) {
+        } else if (GUARD.get() == profession || ARCHER.get() == profession) {
             return "inn";
         }
         return null;

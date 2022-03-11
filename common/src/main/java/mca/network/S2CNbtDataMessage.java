@@ -1,15 +1,13 @@
 package mca.network;
 
-import java.io.IOException;
-import java.io.ObjectInputStream;
-import java.io.ObjectOutputStream;
-import java.io.Serializable;
+import java.io.*;
 
 import mca.cobalt.network.Message;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.nbt.NbtIo;
 
 public abstract class S2CNbtDataMessage implements Message {
+    @Serial
     private static final long serialVersionUID = 3409849549326097419L;
 
     private final Data data;
@@ -23,6 +21,7 @@ public abstract class S2CNbtDataMessage implements Message {
     }
 
     private static final class Data implements Serializable {
+        @Serial
         private static final long serialVersionUID = 5728742776742369248L;
 
         transient NbtCompound nbt;
@@ -31,10 +30,12 @@ public abstract class S2CNbtDataMessage implements Message {
             this.nbt = nbt;
         }
 
+        @Serial
         private void writeObject(ObjectOutputStream out) throws IOException {
             NbtIo.write(nbt, out);
         }
 
+        @Serial
         private void readObject(ObjectInputStream in) throws IOException, ClassNotFoundException {
             nbt = NbtIo.read(in);
         }

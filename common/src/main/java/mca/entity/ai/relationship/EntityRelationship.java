@@ -50,9 +50,7 @@ public interface EntityRelationship {
             getSiblings().forEach(sibling -> {
                 EntityRelationship.of(sibling).ifPresent(r -> r.onTragedy(cause, burialSite, RelationshipType.SIBLING, victim));
             });
-            getSpouse().ifPresent(spouse -> {
-                EntityRelationship.of(spouse).ifPresent(r -> r.onTragedy(cause, burialSite, RelationshipType.SPOUSE, victim));
-            });
+            getSpouse().flatMap(EntityRelationship::of).ifPresent(r -> r.onTragedy(cause, burialSite, RelationshipType.SPOUSE, victim));
         }
 
         // end the marriage for both the deceased one and the spouse

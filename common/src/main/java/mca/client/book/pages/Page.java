@@ -1,6 +1,5 @@
 package mca.client.book.pages;
 
-import mca.client.book.Book;
 import mca.client.gui.ExtendedBookScreen;
 import net.minecraft.client.util.math.MatrixStack;
 

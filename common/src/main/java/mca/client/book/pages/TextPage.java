@@ -8,7 +8,7 @@ import net.minecraft.text.StringVisitable;
 import net.minecraft.text.Text;
 
 public class TextPage extends Page {
-    protected String content;
+    protected final String content;
     private List<OrderedText> cachedPage;
 
     public TextPage(String name, int page) {

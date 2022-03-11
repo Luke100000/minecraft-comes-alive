@@ -2,13 +2,11 @@ package mca.entity.ai.brain.tasks;
 
 import mca.entity.ai.MemoryModuleTypeMCA;
 import mca.util.compat.FuzzyPositionsCompat;
-import net.minecraft.entity.ai.FuzzyPositions;
 import net.minecraft.entity.ai.brain.Brain;
 import net.minecraft.entity.ai.brain.MemoryModuleState;
 import net.minecraft.entity.ai.brain.MemoryModuleType;
 import net.minecraft.entity.ai.brain.WalkTarget;
 import net.minecraft.entity.ai.brain.task.WanderAroundTask;
-import net.minecraft.entity.effect.StatusEffect;
 import net.minecraft.entity.mob.MobEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.math.BlockPos;

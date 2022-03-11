@@ -8,7 +8,10 @@ import mca.resources.API;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.server.network.ServerPlayerEntity;
 
+import java.io.Serial;
+
 public class BabyNameRequest implements Message {
+    @Serial
     private static final long serialVersionUID = 4965378949498898298L;
 
     private final Gender gender;

@@ -46,8 +46,8 @@ public enum Constraint implements BiPredicate<VillagerLike<?>, Entity> {
     CLERIC("cleric", (villager, player) -> villager.getVillagerData().getProfession() == VillagerProfession.CLERIC),
     NOT_CLERIC("!cleric", (villager, player) -> villager.getVillagerData().getProfession() != VillagerProfession.CLERIC),
 
-    OUTLAWED("outlawed", (villager, player) -> villager.getVillagerData().getProfession() == ProfessionsMCA.OUTLAW),
-    NOT_OUTLAWED("!outlawed", (villager, player) -> villager.getVillagerData().getProfession() != ProfessionsMCA.OUTLAW),
+    OUTLAWED("outlawed", (villager, player) -> villager.getVillagerData().getProfession() == ProfessionsMCA.OUTLAW.get()),
+    NOT_OUTLAWED("!outlawed", (villager, player) -> villager.getVillagerData().getProfession() != ProfessionsMCA.OUTLAW.get()),
 
     TRADER("trader", (villager, player) -> !ProfessionsMCA.canNotTrade.contains(villager.getVillagerData().getProfession())),
     NOT_TRADER("!trader", (villager, player) -> ProfessionsMCA.canNotTrade.contains(villager.getVillagerData().getProfession())),
@@ -105,7 +105,7 @@ public enum Constraint implements BiPredicate<VillagerLike<?>, Entity> {
         if (constraints == null || constraints.isEmpty()) {
             return new ArrayList<>();
         }
-        return Stream.of(constraints.split("\\,"))
+        return Stream.of(constraints.split(","))
                 .map(REGISTRY::get)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toList());

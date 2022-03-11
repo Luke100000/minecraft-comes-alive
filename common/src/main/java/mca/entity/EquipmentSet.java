@@ -25,12 +25,12 @@ public enum EquipmentSet {
         this.feet = feet;
     }
 
-    Item mainHand;
-    Item getOffHand;
-    Item head;
-    Item chest;
-    Item legs;
-    Item feet;
+    final Item mainHand;
+    final Item getOffHand;
+    final Item head;
+    final Item chest;
+    final Item legs;
+    final Item feet;
 
     public Item getMainHand() {
         return mainHand;

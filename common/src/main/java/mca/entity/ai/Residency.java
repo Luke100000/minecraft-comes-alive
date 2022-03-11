@@ -2,7 +2,6 @@ package mca.entity.ai;
 
 import java.util.List;
 import java.util.Optional;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import mca.entity.VillagerEntityMCA;
@@ -77,7 +76,7 @@ public class Residency {
 
     public Optional<Building> getHomeBuilding() {
         Optional<Building> building = getHomeVillage().flatMap(v -> v.getBuilding(entity.getTrackedValue(BUILDING)));
-        if (!building.isPresent()) {
+        if (building.isEmpty()) {
             setHomeLess();
         }
         return building;
@@ -103,7 +102,7 @@ public class Residency {
 
     public void tick() {
         if (entity.age % 600 == 0) {
-            if (!getHomeVillage().filter(v -> !v.isAutoScan()).isPresent()) {
+            if (getHomeVillage().filter(v -> !v.isAutoScan()).isEmpty()) {
                 reportBuildings();
             }
 
@@ -122,7 +121,7 @@ public class Residency {
         if (entity.age % 1200 == 0) {
             getHomeVillage().ifPresentOrElse(village -> {
                 Optional<Building> building = village.getBuilding(entity.getTrackedValue(BUILDING));
-                if (!building.filter(b -> b.hasResident(entity.getUuid()) && !b.isCrowded()).isPresent()) {
+                if (building.filter(b -> b.hasResident(entity.getUuid()) && !b.isCrowded()).isEmpty()) {
                     if (building.isPresent()) {
                         setHomeLess();
                     }
@@ -198,8 +197,7 @@ public class Residency {
     private boolean seekNewHome(Village village) {
         //choose the first building available, shuffled
         List<Building> buildings = village.getBuildings().values().stream()
-                .filter(Building::hasFreeSpace)
-                .collect(Collectors.toList());
+                .filter(Building::hasFreeSpace).toList();
 
         if (!buildings.isEmpty()) {
             Building b = buildings.get(entity.getRandom().nextInt(buildings.size()));

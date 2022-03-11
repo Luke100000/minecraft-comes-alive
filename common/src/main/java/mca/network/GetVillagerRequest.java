@@ -1,5 +1,6 @@
 package mca.network;
 
+import java.io.Serial;
 import java.util.Optional;
 import java.util.UUID;
 import mca.cobalt.network.Message;
@@ -18,6 +19,7 @@ import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.Util;
 
 public class GetVillagerRequest implements Message {
+    @Serial
     private static final long serialVersionUID = -4415670234855916259L;
 
     private final UUID uuid;

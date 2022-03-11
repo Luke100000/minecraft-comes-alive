@@ -172,7 +172,7 @@ public class GraveyardManager extends PersistentState {
     }
 
     private static class ChunkBase {
-        static ChunkBase EMPTY = new ChunkBase();
+        static final ChunkBase EMPTY = new ChunkBase();
 
         static ChunkBase empty(long l) {
             return EMPTY;

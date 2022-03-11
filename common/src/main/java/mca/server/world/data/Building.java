@@ -1,5 +1,6 @@
 package mca.server.world.data;
 
+import java.io.Serial;
 import java.io.Serializable;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -12,8 +13,9 @@ import java.util.Optional;
 import java.util.Queue;
 import java.util.Set;
 import java.util.UUID;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
+
+import mca.Config;
 import mca.resources.API;
 import mca.resources.data.BuildingType;
 import mca.util.NbtHelper;
@@ -42,6 +44,7 @@ import static net.minecraft.tag.BlockTags.LEAVES;
 
 public class Building implements Serializable, Iterable<UUID> {
     public static final long SCAN_COOLDOWN = 4800;
+    @Serial
     private static final long serialVersionUID = -1106627083469687307L;
     private static final Direction[] directions = {
             Direction.UP, Direction.DOWN, Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST
@@ -226,8 +229,7 @@ public class Building implements Serializable, Iterable<UUID> {
 
         //remove all invalid pois
         List<BlockPos> mask = pois.stream()
-                .filter(p -> !getBuildingType().getGroup(world.getBlockState(p).getBlock()).isPresent())
-                .collect(Collectors.toList());
+                .filter(p -> getBuildingType().getGroup(world.getBlockState(p).getBlock()).isEmpty()).toList();
         pois.removeAll(mask);
     }
 
@@ -258,7 +260,7 @@ public class Building implements Serializable, Iterable<UUID> {
         NO_DOOR,
         TOO_SMALL,
         IDENTICAL,
-        SUCCESS;
+        SUCCESS
     }
 
     public validationResult validateBuilding(World world, Set<BlockPos> blocked) {
@@ -279,8 +281,8 @@ public class Building implements Serializable, Iterable<UUID> {
         done.add(center);
 
         //const
-        final int maxSize = 1024 * 8;
-        final int maxRadius = 320;
+        final int maxSize = Config.getInstance().maxBuildingSize;
+        final int maxRadius = Config.getInstance().maxBuildingRadius;
 
         //fill the building
         int scanSize = 0;

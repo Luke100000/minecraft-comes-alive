@@ -45,7 +45,7 @@ public interface ModelTransformSet {
         void applyTo(ModelPart part, Op op, float scale);
     }
 
-    static class Builder {
+    class Builder {
         private static final float TO_RADIANS = (float)Math.PI / 180F;
         private final Map<String, Transformer> transforms = new HashMap<>();
 

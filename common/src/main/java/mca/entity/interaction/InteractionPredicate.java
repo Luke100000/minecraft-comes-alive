@@ -47,7 +47,7 @@ public class InteractionPredicate {
 
     @Nullable
     private final GiftPredicate.Condition condition;
-    List<String> conditionKeys;
+    final List<String> conditionKeys;
 
     public InteractionPredicate(int chance, @Nullable GiftPredicate.Condition condition, List<String> conditionKeys) {
         this.chance = chance;
