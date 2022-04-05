@@ -142,6 +142,14 @@ public class ClientInteractionManagerImpl implements ClientInteractionManager {
     }
 
     @Override
+    public void handleVillagerNameResponse(VillagerNameResponse message) {
+        Screen screen = client.currentScreen;
+        if (screen instanceof VillagerEditorScreen gui) {
+            gui.setVillagerName(message.getName());
+        }
+    }
+
+    @Override
     public void handleToastMessage(ShowToastRequest message) {
         SystemToast.add(client.getToastManager(), SystemToast.Type.TUTORIAL_HINT, message.getTitle(), message.getMessage());
     }
