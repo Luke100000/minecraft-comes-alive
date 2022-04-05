@@ -84,3 +84,7 @@ modrinth {
     loaders = ["fabric"]
     dependencies = []
 }
+
+runClient {
+    argsString("--username HisaCat")
+}
