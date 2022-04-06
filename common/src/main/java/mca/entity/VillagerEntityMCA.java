@@ -16,6 +16,7 @@ import mca.ParticleTypesMCA;
 import mca.SoundsMCA;
 import mca.TagsMCA;
 import mca.advancement.criterion.CriterionMCA;
+import mca.entity.ai.Chore;
 import mca.entity.ai.BreedableRelationship;
 import mca.entity.ai.Genetics;
 import mca.entity.ai.Memories;
@@ -953,7 +954,11 @@ public class VillagerEntityMCA extends VillagerEntity implements VillagerLike<Vi
         if (getVillagerBrain() != null) {
             MoveState state = getVillagerBrain().getMoveState();
             if (state != MoveState.MOVE) {
-                name = name.shallowCopy().append(" (").append(getVillagerBrain().getMoveState().getName()).append(")");
+                name = name.shallowCopy().append(" (").append(state.getName()).append(")");
+            }
+            Chore chore = getVillagerBrain().getCurrentJob();
+            if (chore != Chore.NONE) {
+                name = name.shallowCopy().append(" (").append(chore.getName()).append(")");
             }
         }
 
