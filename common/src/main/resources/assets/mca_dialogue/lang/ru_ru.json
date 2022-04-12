@@ -101,7 +101,7 @@
   "adult.chore.fishing.norod": "У меня больше нет удочки.",
   "adult.chore.hunting.nosword": "Я потерял свой меч! У тебя есть ещё один?",
   "adult.chore.harvesting.nohoe": "У меня нет мотыги для сбора урожая.",
-  "child.interaction.marry.fail.isbaby": "Вы пытаетесь выйти замуж за ребенка... Что?",
+  "interaction.marry.fail.isbaby": "You are trying to marry a kid... what?",
   "spouse.interaction.marry.fail.marriedtogiver/1": "Это красивое кольцо, но мы уже в браке, дурашка.",
   "spouse.interaction.marry.fail.marriedtogiver/2": "Мы уже в браке. Или вылетело из головы?",
   "adult.interaction.marry.fail.marriedtoother/1": "Прости, но нет...Я уже в браке.",
