@@ -101,7 +101,7 @@
   "adult.chore.fishing.norod": "Ich habe keine Angelrute mehr.",
   "adult.chore.hunting.nosword": "Ich habe mein Schwert verloren! Hast du noch eins?",
   "adult.chore.harvesting.nohoe": "Ich habe keine Hacke zum ernten.",
-  "child.interaction.marry.fail.isbaby": "Du versuchst ein Kind zu heiraten... was?",
+  "interaction.marry.fail.isbaby": "Du versuchst ein Kind zu heiraten... was?",
   "spouse.interaction.marry.fail.marriedtogiver/1": "Ja, das ist schon ein schöner Ring, aber wir sind bereits verheiratet, Doofkopf.",
   "spouse.interaction.marry.fail.marriedtogiver/2": "Wir sind immernoch verheiratet. Schon vergessen?",
   "adult.interaction.marry.fail.marriedtoother/1": "Oh, Tut mir Leid, nein... Ich bin schon verheiratet.",
