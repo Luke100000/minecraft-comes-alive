@@ -101,7 +101,7 @@
   "adult.chore.fishing.norod": "Nu mai am o undita de pescuit.",
   "adult.chore.hunting.nosword": "Mi-am pierdut sabia! Ai una in plus?",
   "adult.chore.harvesting.nohoe": "Nu am o sapă cu care să recoltez.",
-  "child.interaction.marry.fail.isbaby": "Încerci să te căsătorești cu un copil... Ce?",
+  "interaction.marry.fail.isbaby": "You are trying to marry a kid... what?",
   "spouse.interaction.marry.fail.marriedtogiver/1": "E un inel frumos, dar sunt deja căsătorit(ă) cu tine, iubire.",
   "spouse.interaction.marry.fail.marriedtogiver/2": "Suntem deja căsătoriți. Ai uitat?",
   "adult.interaction.marry.fail.marriedtoother/1": "Îmi pare rău, nu... sunt deja căsătorit(ă).",
