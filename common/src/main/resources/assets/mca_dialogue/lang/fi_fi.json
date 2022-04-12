@@ -101,7 +101,7 @@
   "adult.chore.fishing.norod": "I don't have a fishing rod anymore.",
   "adult.chore.hunting.nosword": "I lost my sword! Do you have another?",
   "adult.chore.harvesting.nohoe": "I don't have a hoe to harvest with.",
-  "child.interaction.marry.fail.isbaby": "You are trying to marry a kid... what?",
+  "interaction.marry.fail.isbaby": "You are trying to marry a kid... what?",
   "spouse.interaction.marry.fail.marriedtogiver/1": "Se on kaunis sormus, mutta olen jo naimisissa sinun kanssasi, senkin pöhkö.",
   "spouse.interaction.marry.fail.marriedtogiver/2": "Olemme jo naimisissa. Satuitko unohtamaan?",
   "adult.interaction.marry.fail.marriedtoother/1": "Olen pahoillani, ei... Olen jo naimisissa.",
