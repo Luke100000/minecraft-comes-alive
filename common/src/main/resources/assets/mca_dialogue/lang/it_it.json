@@ -101,7 +101,7 @@
   "adult.chore.fishing.norod": "I don't have a fishing rod anymore.",
   "adult.chore.hunting.nosword": "I lost my sword! Do you have another?",
   "adult.chore.harvesting.nohoe": "I don't have a hoe to harvest with.",
-  "child.interaction.marry.fail.isbaby": "You are trying to marry a kid... what?",
+  "interaction.marry.fail.isbaby": "You are trying to marry a kid... what?",
   "spouse.interaction.marry.fail.marriedtogiver/1": "È un bell'anello, ma sono già sposata con te, stupido.",
   "spouse.interaction.marry.fail.marriedtogiver/2": "Siamo già sposati. Te lo sei dimenticato?",
   "adult.interaction.marry.fail.marriedtoother/1": "Scusami, no...Sono già sposato.",
