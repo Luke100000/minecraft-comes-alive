@@ -101,7 +101,7 @@
   "adult.chore.fishing.norod": "Aku tidak lagi memiliki tongkat pancing.",
   "adult.chore.hunting.nosword": "Aku kehilangan pedangku! Apakah kamu punya satu lagi?",
   "adult.chore.harvesting.nohoe": "Aku tidak memiliki cangkul untuk memanen.",
-  "child.interaction.marry.fail.isbaby": "Kamu sedang mencoba menikahi seorang anak kecil... hah?",
+  "interaction.marry.fail.isbaby": "You are trying to marry a kid... what?",
   "spouse.interaction.marry.fail.marriedtogiver/1": "Ini cincin yang indah, tapi aku sudah menikah denganmu, konyol.",
   "spouse.interaction.marry.fail.marriedtogiver/2": "Kita sudah menikah. Apa kamu lupa?",
   "adult.interaction.marry.fail.marriedtoother/1": "Maafkan aku, tidak... Aku sudah menikah.",
