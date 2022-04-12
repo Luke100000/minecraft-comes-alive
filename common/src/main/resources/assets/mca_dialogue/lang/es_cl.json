@@ -101,7 +101,7 @@
   "adult.chore.fishing.norod": "Ya no tengo caña con la cual pescar.",
   "adult.chore.hunting.nosword": "¡Perdí mi espada! ¿No tendrás una de repuesto?",
   "adult.chore.harvesting.nohoe": "No tengo una azada con la que sembrar/cosechar.",
-  "child.interaction.marry.fail.isbaby": "Estás intentado casarte con un niño… ¿En qué estás pensando enfermo?",
+  "interaction.marry.fail.isbaby": "You are trying to marry a kid... what?",
   "spouse.interaction.marry.fail.marriedtogiver/1": "Es un bonito anillo, pero ya estamos casados, mi amor.",
   "spouse.interaction.marry.fail.marriedtogiver/2": "Ya estamos casados. ¿Lo olvidaste?",
   "adult.interaction.marry.fail.marriedtoother/1": "No, lo siento... Ya tengo cónyuge.",
