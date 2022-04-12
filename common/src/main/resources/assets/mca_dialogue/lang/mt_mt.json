@@ -101,7 +101,7 @@
   "adult.chore.fishing.norod": "I don't have a fishing rod anymore.",
   "adult.chore.hunting.nosword": "I lost my sword! Do you have another?",
   "adult.chore.harvesting.nohoe": "I don't have a hoe to harvest with.",
-  "child.interaction.marry.fail.isbaby": "You are trying to marry a kid... what?",
+  "interaction.marry.fail.isbaby": "You are trying to marry a kid... what?",
   "spouse.interaction.marry.fail.marriedtogiver/1": "Ċurkett ħelu, iżda jien mhux diġà miżżewġa miegħek, iblaħ.",
   "spouse.interaction.marry.fail.marriedtogiver/2": "Aħna diġà miżżewġin. Mela nsejt?",
   "adult.interaction.marry.fail.marriedtoother/1": "Jiddispjaċini, le...Jien diġà miżżewġa.",
