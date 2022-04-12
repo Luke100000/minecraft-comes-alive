@@ -101,7 +101,7 @@
   "adult.chore.fishing.norod": "I don't 'ave a fishin' rod anymore.",
   "adult.chore.hunting.nosword": "I lost me sword! do ye 'ave another?",
   "adult.chore.harvesting.nohoe": "I don't 'ave a 'oe to 'arvest with.",
-  "child.interaction.marry.fail.isbaby": "Ye be tryin' to marry a kid... what?",
+  "interaction.marry.fail.isbaby": "You are trying to marry a kid... what?",
   "spouse.interaction.marry.fail.marriedtogiver/1": "It be a pretty ring, but I be already married to ye, silly.",
   "spouse.interaction.marry.fail.marriedtogiver/2": "We be already married. Did ye forget?",
   "adult.interaction.marry.fail.marriedtoother/1": "I be sorry, no...I be already married.",
