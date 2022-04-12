@@ -101,7 +101,7 @@
   "adult.chore.fishing.norod": "لم يعد لدي قضيب لصيد الأسماك.",
   "adult.chore.hunting.nosword": "فقدت سيفي! هل لديك سيف آخر؟",
   "adult.chore.harvesting.nohoe": "ليس لدي مجرفة لأحصادها.",
-  "child.interaction.marry.fail.isbaby": "أنت تحاول الزواج من طفل... ماذا؟",
+  "interaction.marry.fail.isbaby": "You are trying to marry a kid... what?",
   "spouse.interaction.marry.fail.marriedtogiver/1": "إنه خاتم جميل, لكن انا متزوجة منك بالفعل, ايها السخيف.",
   "spouse.interaction.marry.fail.marriedtogiver/2": "نحن متزوجون بالفعل. انسيت ذالك؟",
   "adult.interaction.marry.fail.marriedtoother/1": "آسفة, لا... انا بالفعل متزوجة.",
