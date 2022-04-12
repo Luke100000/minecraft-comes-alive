@@ -101,7 +101,7 @@
   "adult.chore.fishing.norod": "我没有鱼竿了。",
   "adult.chore.hunting.nosword": "我的剑丢了。你有多带吗？",
   "adult.chore.harvesting.nohoe": "我没有锄头也收割不了呀。",
-  "child.interaction.marry.fail.isbaby": "你想和一个小孩子结婚…？你认真的？",
+  "interaction.marry.fail.isbaby": "You are trying to marry a kid... what?",
   "spouse.interaction.marry.fail.marriedtogiver/1": "这戒指真美。不过我们已经结婚了呀，小傻瓜。",
   "spouse.interaction.marry.fail.marriedtogiver/2": "我们已经结婚了呀。你忘啦？",
   "adult.interaction.marry.fail.marriedtoother/1": "对不起…不行。我已经结婚了。",
