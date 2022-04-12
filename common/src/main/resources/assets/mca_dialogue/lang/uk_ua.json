@@ -101,7 +101,7 @@
   "adult.chore.fishing.norod": "У мене більше немає вудки.",
   "adult.chore.hunting.nosword": "Я втратив свого меча! У тебе є ще один?",
   "adult.chore.harvesting.nohoe": "Я не маю жодної мотики.",
-  "child.interaction.marry.fail.isbaby": "Ви намагаєтесь одружитися з дитиною... що?",
+  "interaction.marry.fail.isbaby": "You are trying to marry a kid... what?",
   "spouse.interaction.marry.fail.marriedtogiver/1": "Це гарне кільце, але ми вже одружені, дурнику.",
   "spouse.interaction.marry.fail.marriedtogiver/2": "Ми вже одружені. Ти забув?",
   "adult.interaction.marry.fail.marriedtoother/1": "Перепрошую, але ні... Я вже одружений.",
