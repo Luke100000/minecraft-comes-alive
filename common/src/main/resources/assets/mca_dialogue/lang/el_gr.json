@@ -101,7 +101,7 @@
   "adult.chore.fishing.norod": "Δεν έχω καλάμι ψαρέματος πια.",
   "adult.chore.hunting.nosword": "Έχασα το σπαθί μου! Έχεις άλλο;",
   "adult.chore.harvesting.nohoe": "Δεν έχω σκαπάνη για θέριση.",
-  "child.interaction.marry.fail.isbaby": "You are trying to marry a kid... what?",
+  "interaction.marry.fail.isbaby": "You are trying to marry a kid... what?",
   "spouse.interaction.marry.fail.marriedtogiver/1": "Είναι όμορφο δαχτυλίδι, αλλά είμαστε ήδη παντρεμένοι, χαζούλη.",
   "spouse.interaction.marry.fail.marriedtogiver/2": "Είμαστε ήδη παντρεμένοι. Ξέχασες;",
   "adult.interaction.marry.fail.marriedtoother/1": "Λυπάμαι, όχι... έχω ήδη σύζυγο.",
