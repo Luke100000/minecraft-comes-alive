@@ -56,9 +56,9 @@
   "mca.letter.condolence": "%s,\n\nLamentamos mucho que tengamos que informarte de la muerte de %s.\n\nAtentamente,\nel alcalde de %s",
   "mca.books.supporters.author": "La Comunidad",
   "mca.books.supporters.patrons": "Patrocinadores",
-  "mca.books.supporters.contributors": "Contributors",
-  "mca.books.supporters.translators": "Translators",
+  "mca.books.supporters.contributors": "Contribuyentes",
+  "mca.books.supporters.translators": "Traductores",
   "mca.books.supporters.wiki": "Wiki",
-  "mca.books.supporters.old": "Before MCA 7.0.0",
-  "mca.books.supporters.thanks": "Thank you!"
+  "mca.books.supporters.old": "Antes de MCA 7.0.0",
+  "mca.books.supporters.thanks": "Gracias!"
 }
