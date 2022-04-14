@@ -53,12 +53,12 @@
   "mca.books.blueprint.3": "§f§l요구 사항§r§f\n건물은 일반적으로 필요로 하는 최소한의 크기(내부 면적)가 있습니다. 요구하는 블록들을 그냥 대충 쌓아두는 것만으로는 안 됩니다. 건물을 다 짓고 나면, 모든 블록의 요구 사항을 충족시켰는지 확인해야 해요.",
   "mca.books.blueprint.4": "§f§l완성§r§f\n작업을 마치셨다면, '건물 추가' 버튼을 누르고 주민들이 그 건물에 어떻게 녹아드는지 확인 해 보세요.",
   "mca.books.blueprint.5": "§f§l계급§r§f\n건물을 짓는 작업에 있어, 당신은 희생만 하는 것은 아닙니다! 당신의 마을이 발전할수록 당신의 계급은 높아질 것입니다. 모두들 귀족의 삶을 꿈 꿔오지 않았나요? 아니면 시장? 그것도 아니라면.. 왕?",
-  "mca.letter.condolence": "%s,\n\nIt is with great regret that we have to inform you of %s's death.\n\nYours sincerely,\nthe mayor of %s",
-  "mca.books.supporters.author": "The Community",
-  "mca.books.supporters.patrons": "Patrons",
-  "mca.books.supporters.contributors": "Contributors",
-  "mca.books.supporters.translators": "Translators",
-  "mca.books.supporters.wiki": "Wiki",
-  "mca.books.supporters.old": "Before MCA 7.0.0",
-  "mca.books.supporters.thanks": "Thank you!"
+  "mca.letter.condolence": "%s,\n\n%s의 부고 소식을 전하게 되어 매우 유감입니다..\n\n진심을 담아,\n%s의 시장으로부터.",
+  "mca.books.supporters.author": "도움을 주신 분들",
+  "mca.books.supporters.patrons": "후원자",
+  "mca.books.supporters.contributors": "기여자",
+  "mca.books.supporters.translators": "번역가",
+  "mca.books.supporters.wiki": "위키",
+  "mca.books.supporters.old": "MCA 7.0.0 이전의 버전",
+  "mca.books.supporters.thanks": "감사합니다!"
 }
