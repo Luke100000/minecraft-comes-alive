@@ -180,6 +180,8 @@
   "childp.interaction.ridehorse.fail.notnearby": "Où est mon cheval? J'espère que je ne l'ai pas encore perdu...",
   "adult.interaction.ridehorse.fail.notnearby": "Je ne vois aucun cheval à proximité.",
   "spouse.interaction.ridehorse.fail.notnearby": "Chéri(e), où est mon cheval? Je ne le trouve pas.",
+  "interaction.ridehorse.success1": "Alright, let's go!",
+  "interaction.ridehorse.success2": "I'm ready!",
   "spouse.interaction.procreate.fail.hasbaby/1": "Nous avons déjà un bébé... Tu ne l'as pas perdu, si?!",
   "spouse.interaction.procreate.fail.hasbaby/2": "...Tu as perdu bébé Cadum n'est-ce pas? Attends... Il s'appelait vraiment Cadum?",
   "spouse.interaction.procreate.fail.lostbaby/1": "Tu as perdu notre bébé?!? Oh, il est juste là, idiot.",
