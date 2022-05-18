@@ -180,6 +180,8 @@
   "childp.interaction.ridehorse.fail.notnearby": "Где моя лошадь? Надеюсь, я не потерял ее снова...",
   "adult.interaction.ridehorse.fail.notnearby": "Я не вижу лошадей, на которых можно поехать, поблизости.",
   "spouse.interaction.ridehorse.fail.notnearby": "Где моя лошадь, дорогой? Я не могу ее найти.",
+  "interaction.ridehorse.success1": "Alright, let's go!",
+  "interaction.ridehorse.success2": "I'm ready!",
   "spouse.interaction.procreate.fail.hasbaby/1": "У нас уже есть ребенок... ты же не потерял его?!",
   "spouse.interaction.procreate.fail.hasbaby/2": "...ты потерял малыша Джоби не так ли? Подожди...разве его звали Джоби?",
   "spouse.interaction.procreate.fail.lostbaby/1": "Did you loose our baby?!? Oh, he is right here, silly.",
