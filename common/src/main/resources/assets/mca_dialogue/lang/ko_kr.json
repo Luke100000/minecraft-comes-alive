@@ -180,6 +180,8 @@
   "childp.interaction.ridehorse.fail.notnearby": "제 말이 어디에 있죠? 제발 또 잃어버린건 아니길...",
   "adult.interaction.ridehorse.fail.notnearby": "근처에 탈 수 있는 말이 보이질 않아.",
   "spouse.interaction.ridehorse.fail.notnearby": "자기, 내 말 어디에 있는지 알아? 보이질 않는데.",
+  "interaction.ridehorse.success1": "Alright, let's go!",
+  "interaction.ridehorse.success2": "I'm ready!",
   "spouse.interaction.procreate.fail.hasbaby/1": "우린 이미 아이가 있잖아... 잃어버린 거 아니지? 그렇지?!",
   "spouse.interaction.procreate.fail.hasbaby/2": "...당신, 우리 아기 조비 잃어버렸지? 잠깐... 걔 이름이 조비가 맞던가?",
   "spouse.interaction.procreate.fail.lostbaby/1": "우리 아기 잃어버렸어?!? 오, 멍청이가 여기에 있구만.",
