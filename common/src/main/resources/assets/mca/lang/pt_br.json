@@ -453,7 +453,7 @@
   "gui.villager_editor.villager_skin": "Aldeão",
   "gui.villager_editor.villager_skin.tooltip": "Usar o modelo de aldeão",
   "gui.villager_editor.player_skin": "Jogador",
-  "gui.villager_editor.player_skin.tooltip": "Use o modelo de jogador vanilla e use esta personalização somente para herança genética",
+  "gui.villager_editor.player_skin.tooltip": "Usar o modelo de jogador padrão, e usar esta customização somente para aparência de seus filhos",
   "command.no_permission": "Este comando está desativado para usuários.",
   "command.only_one_destiny": "Você já decidiu seu destino.",
   "blueprint.noBuilding": "Você precisa ficar dentro de uma construção",
