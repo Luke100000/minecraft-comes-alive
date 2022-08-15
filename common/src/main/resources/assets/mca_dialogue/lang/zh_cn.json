@@ -108,7 +108,7 @@
   "adult.chore.success.night/2": "晚上干活太危险了，我明天再干吧！",
   "interaction.relationship.fail.isbaby/1": "蛤？我还太年轻了！",
   "teen.interaction.relationship.fail.isbaby/2": "这不合理！",
-  "interaction.relationship.fail.marriedtogiver/1": "真是个美丽的戒指，但我已经跟你结婚了，笨笨。",
+  "interaction.relationship.fail.marriedtogiver/1": "I am already married to you, silly.",
   "interaction.relationship.fail.marriedtogiver/2": "我们已经结婚了。你忘了吗？",
   "interaction.relationship.fail.married/1": "抱歉，我不能接受……我已经结婚了。",
   "interaction.relationship.fail.married/2": "哦，我以为你已经知道了呢……我已经和别人结婚了。",
