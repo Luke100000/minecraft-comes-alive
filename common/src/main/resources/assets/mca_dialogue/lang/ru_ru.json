@@ -108,7 +108,7 @@
   "adult.chore.success.night/2": "Ночью работать слишком опасно, но я начну на следующий день!",
   "interaction.relationship.fail.isbaby/1": "Что? Я слишком молод!",
   "teen.interaction.relationship.fail.isbaby/2": "Это неуместно!",
-  "interaction.relationship.fail.marriedtogiver/1": "Это красивое кольцо, но мы уже в браке, дурашка.",
+  "interaction.relationship.fail.marriedtogiver/1": "I am already married to you, silly.",
   "interaction.relationship.fail.marriedtogiver/2": "Мы уже в браке. Или вылетело из головы?",
   "interaction.relationship.fail.married/1": "Прости, но нет...Я уже в браке.",
   "interaction.relationship.fail.married/2": "Эх, мне казалось, ты знаешь...Я уже в браке.",
