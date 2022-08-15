@@ -494,7 +494,7 @@
   "gui.villager_editor.customization_hint": "Use o pente, agulha e linha e a poção de metamorfose para personalização.",
   "command.no_permission": "Este comando está desativado para usuários.",
   "command.only_one_destiny": "Você já decidiu seu destino.",
-  "command.no_mail": "You have no mails.",
+  "command.no_mail": "Você não tem mensagens.",
   "blueprint.noBuilding": "Você precisa ficar dentro de uma construção",
   "blueprint.refreshed": "Construções atualizadas!",
   "blueprint.scan.overlap": "Construção se sobrepõe com outra que já existe!",
@@ -550,11 +550,11 @@
   "gene.pheomelanin": "Feomelanina",
   "gene.skin": "Pele",
   "gene.face": "Rosto",
-  "gene.voice": "Voice",
+  "gene.voice": "Voz",
   "gene.tooltip": "%s: %d%%",
   "events.marry": "%1$s e %2$s se casaram!",
   "events.baby": "%1$s e %2$s tiveram um bebê!",
-  "events.restock": "%1$s has restocked their offers!",
+  "events.restock": "%1$s reabasteceu suas ofertas!",
   "events.arrival.inn": "%1$s chegou à taverna!",
   "events.bountyHunters": "%1$s enviou caçadores de recompensas atrás de você!",
   "events.bountyHuntersFinal": "%1$s foi dizimado(a), um grande grupo de caçadores de recompensas tentarão vingá-lo(a)!",
@@ -630,6 +630,6 @@
   "subtitle.mca.villager.no": "Descordando",
   "subtitle.mca.villager.snoring": "Roncando",
   "subtitle.mca.villager.hurt": "Aldeão machucado",
-  "subtitle.mca.villager.angry": "Villager Angry",
-  "subtitle.mca.villager.celebrating": "Villager Celebrating"
+  "subtitle.mca.villager.angry": "Aldeã(o) irritado(a)",
+  "subtitle.mca.villager.celebrate": "Aldeã(o) Celebrando"
 }
