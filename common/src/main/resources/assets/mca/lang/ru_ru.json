@@ -494,7 +494,7 @@
   "gui.villager_editor.customization_hint": "Используй расчёску, иголку с ниткой и зелье метаморфоза для кастомизации.",
   "command.no_permission": "Эта команда отключена для пользователей.",
   "command.only_one_destiny": "Ты уже решил свою судьбу.",
-  "command.no_mail": "You have no mails.",
+  "command.no_mail": "У тебя нет никаких писем.",
   "blueprint.noBuilding": "Вы должны стоять в здании",
   "blueprint.refreshed": "Здания обновлены!",
   "blueprint.scan.overlap": "Здание пересекается с уже существующим!",
@@ -550,7 +550,7 @@
   "gene.pheomelanin": "Феомеланин",
   "gene.skin": "Кожа",
   "gene.face": "Лицо",
-  "gene.voice": "Voice",
+  "gene.voice": "Голос",
   "gene.tooltip": "%s: %d%%",
   "events.marry": "%1$s и %2$s поженились!",
   "events.baby": "У %1$s и %2$s родился ребенок!",
@@ -630,6 +630,6 @@
   "subtitle.mca.villager.no": "Отрицание",
   "subtitle.mca.villager.snoring": "Храп",
   "subtitle.mca.villager.hurt": "Житель ранен",
-  "subtitle.mca.villager.angry": "Villager Angry",
-  "subtitle.mca.villager.celebrating": "Villager Celebrating"
+  "subtitle.mca.villager.angry": "Житель злится",
+  "subtitle.mca.villager.celebrate": "Житель празднует"
 }
