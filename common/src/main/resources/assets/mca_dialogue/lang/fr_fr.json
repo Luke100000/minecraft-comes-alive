@@ -108,7 +108,7 @@
   "adult.chore.success.night/2": "c'est la nuit donc c'est trop dangereux de travailler, mais je commencerai demain !",
   "interaction.relationship.fail.isbaby/1": "Wut ? Je suis trop jeune !",
   "teen.interaction.relationship.fail.isbaby/2": "C'est inapproprié !",
-  "interaction.relationship.fail.marriedtogiver/1": "C'est une belle bague, mais je suis déjà marié(e) avec toi, andouille.",
+  "interaction.relationship.fail.marriedtogiver/1": "I am already married to you, silly.",
   "interaction.relationship.fail.marriedtogiver/2": "Nous sommes déjà mariés. Tu as oublié ?",
   "interaction.relationship.fail.married/1": "Je suis désolé(e)... Je suis déjà marié(e).",
   "interaction.relationship.fail.married/2": "Oh, je pensais que tu le savais... Je suis déjà marié(e) avec quelqu'un.",
