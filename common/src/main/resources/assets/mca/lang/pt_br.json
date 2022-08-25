@@ -1,7 +1,6 @@
 {
   "itemGroup.mca.mca_tab": "Minecraft Comes Alive",
   "entity.minecraft.villager.mca.none": "Desempregado(a)",
-  "entity.minecraft.villager.mca.marauder": "Saqueador(a)",
   "entity.minecraft.villager.mca.outlaw": "Fora da lei",
   "entity.minecraft.villager.mca.jeweler": "Joalheiro(a)",
   "entity.minecraft.villager.mca.pillager": "Saqueador(a)",
@@ -606,8 +605,8 @@
   "advancement.mca.baby_smelted.description": "Aborte um bebê por meios não convencionais.",
   "advancement.mca.baby_sirben_smelted": "Verdade, Justiça, e a busca pela destruição!",
   "advancement.mca.baby_sirben_smelted.description": "Saia de seu caminho para eliminar esses cultistas (mesmo que por métodos antiéticos)!",
-  "advancement.mca.baby_dropped": "A not so accidental rain check...",
-  "advancement.mca.baby_dropped.description": "As a monarch, go out of your way to willingly terminate one of your own subjects.",
+  "advancement.mca.baby_dropped": "Uma checagem de chuva não tão acidental...",
+  "advancement.mca.baby_dropped.description": "Como monarca, faça tudo o que estiver ao seu alcance para dar fim a um dos seus próprios súditos.",
   "advancement.mca.friendly_fire": "Fogo amigo!",
   "advancement.mca.friendly_fire.description": "Vai para a prisão com essa!",
   "notify.spouseendedmarriage": "%1$s terminou seu casamento com você.",
