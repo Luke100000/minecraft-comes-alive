@@ -1,7 +1,6 @@
 {
   "itemGroup.mca.mca_tab": "Minecraft Comes Alive",
   "entity.minecraft.villager.mca.none": "Arbeitslos",
-  "entity.minecraft.villager.mca.marauder": "Marodeur",
   "entity.minecraft.villager.mca.outlaw": "Bandit",
   "entity.minecraft.villager.mca.jeweler": "Juwelier",
   "entity.minecraft.villager.mca.pillager": "Plünderer",
@@ -606,8 +605,8 @@
   "advancement.mca.baby_smelted.description": "Ein Baby mit unkonventionellen Mitteln abtreiben.",
   "advancement.mca.baby_sirben_smelted": "Wahrheit, Gerechtigkeit und das Streben nach Zerstörung!",
   "advancement.mca.baby_sirben_smelted.description": "Setze dich dafür ein, diese Sektenmitglieder zu eliminieren (auch wenn es mit unethischen Methoden geschieht)!",
-  "advancement.mca.baby_dropped": "A not so accidental rain check...",
-  "advancement.mca.baby_dropped.description": "As a monarch, go out of your way to willingly terminate one of your own subjects.",
+  "advancement.mca.baby_dropped": "Ein nicht so ganz zufälliger Regenschauer...",
+  "advancement.mca.baby_dropped.description": "Als Monarch tust du alles, um einen deiner Untertanen freiwillig zu töten.",
   "advancement.mca.friendly_fire": "Friendly Fire!",
   "advancement.mca.friendly_fire.description": "Ab in den Knast mit dem da!",
   "notify.spouseendedmarriage": "%1$s hat die Heirat mit dir beendet.",
@@ -631,5 +630,5 @@
   "subtitle.mca.villager.snoring": "Schnarchen",
   "subtitle.mca.villager.hurt": "Dorfbewohner Verletzt",
   "subtitle.mca.villager.angry": "Wütender Dorfbewohner",
-  "subtitle.mca.villager.celebrate": "Villager Celebrating"
+  "subtitle.mca.villager.celebrate": "Dorfbewohner Feiern"
 }
