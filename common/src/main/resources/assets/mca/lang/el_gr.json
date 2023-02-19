@@ -565,6 +565,7 @@
   "gene.skin": "Δέρμα",
   "gene.face": "Πρόσωπο",
   "gene.voice": "Voice",
+  "gene.voice.tone": "Voice Tone",
   "gene.tooltip": "%s: %d%%",
   "events.marry": "Οι %1$s και %2$s είναι πλέον παντρεμένοι!",
   "events.baby": "Οι %1$s και %2$s έχουν γεννήσει ένα μωρό!",
