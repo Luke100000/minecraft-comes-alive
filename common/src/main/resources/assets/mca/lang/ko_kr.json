@@ -565,6 +565,7 @@
   "gene.skin": "피부",
   "gene.face": "얼굴",
   "gene.voice": "목소리",
+  "gene.voice.tone": "Voice Tone",
   "gene.tooltip": "%s: %d%%",
   "events.marry": "%1$s와(과) %2$s이(가) 결혼했습니다!",
   "events.baby": "%1$s와 and %2$s에게서 아기가 태어났습니다!",
