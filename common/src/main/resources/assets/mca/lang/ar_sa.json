@@ -565,6 +565,7 @@
   "gene.skin": "مظهر",
   "gene.face": "وجه",
   "gene.voice": "Voice",
+  "gene.voice.tone": "Voice Tone",
   "gene.tooltip": "%s: %d%%",
   "events.marry": "%1$s و %2$s الآن متزوجين!",
   "events.baby": "%1$s و %2$s ولدا طفلاً!",
