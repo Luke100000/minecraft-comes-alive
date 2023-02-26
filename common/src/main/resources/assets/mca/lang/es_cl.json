@@ -565,7 +565,7 @@
   "gene.skin": "Piel",
   "gene.face": "Rostro",
   "gene.voice": "Voz",
-  "gene.voice.tone": "Voice Tone",
+  "gene.voice.tone": "Tono de voz",
   "gene.tooltip": "%s: %d%%",
   "events.marry": "¡%1$s y %2$s ahora están casados!",
   "events.baby": "¡%1$s y %2$s tuvieron un bebé!",
