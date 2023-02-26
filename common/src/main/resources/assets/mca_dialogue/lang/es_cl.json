@@ -1,5 +1,5 @@
 {
-  "reaction.ranaway/1": "¡Así es, mejor corre!",
+  "reaction.ranaway/1": "Así es, ¡más vale que corras!",
   "reaction.ranaway/2": "¡Si vuelves, llamaré a los guardias!",
   "reaction.ranaway/3": "¡Vuelve y pelea como un hombre!",
   "reaction.ranaway/4": "¡Si te veo de nuevo, te romperé la cara!",
@@ -584,7 +584,7 @@
   "adult.dialogue.kiss.success/2": "Creo que comienzo ha amarte...",
   "adult.dialogue.kiss.success/3": "Mmm... ¡sabes a tarta de calabaza!",
   "adult.dialogue.kiss.success/4": "¡Mmm! Sabes a miel.",
-  "adult.dialogue.kiss.success/5": "Oh! You're a good kisser, %1$s.",
+  "adult.dialogue.kiss.success/5": "¡Oh! Besas muy bien, %1$s.",
   "adult.dialogue.kiss.success/6": "%1$s ¡besas mejor que Ash! *risitas*",
   "adult.dialogue.kiss.fail/1": "No si alguien nos ve.",
   "adult.dialogue.kiss.fail/2": "¿Llamas a eso besar?",
