@@ -631,6 +631,8 @@
   "advancement.mca.friendly_fire.description": "Off to the brig with that one!",
   "advancement.mca.ancient_cultists": "Ancient Cultists",
   "advancement.mca.ancient_cultists.description": "Explore the lore of the Sirbens and disturb the slumber of the ancient cultists.",
+  "advancement.mca.williams_fate": "Twas a valiant effort!",
+  "advancement.mca.williams_fate.description": "One of your subjects faced off against William in the den of war...",
   "notify.spouseendedmarriage": "%1$s ha posto fine al suo matrimonio con te.",
   "notify.child.grownup": "%1$s è diventato adulto/a!",
   "notify.revival.disabled": "Revivals have been disabled by the server administrator.",
