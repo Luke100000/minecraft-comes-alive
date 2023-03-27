@@ -631,6 +631,8 @@
   "advancement.mca.friendly_fire.description": "Off to the brig with that one!",
   "advancement.mca.ancient_cultists": "Ancient Cultists",
   "advancement.mca.ancient_cultists.description": "Explore the lore of the Sirbens and disturb the slumber of the ancient cultists.",
+  "advancement.mca.williams_fate": "Twas a valiant effort!",
+  "advancement.mca.williams_fate.description": "One of your subjects faced off against William in the den of war...",
   "notify.spouseendedmarriage": "%1$s has ended their marriage with you.",
   "notify.child.grownup": "لقد نما %1$s إلى شخص بالغ!",
   "notify.revival.disabled": "تم تعطيل الإحياء من قبل مسؤول السيرفر.",
