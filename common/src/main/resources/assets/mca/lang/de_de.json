@@ -631,6 +631,8 @@
   "advancement.mca.friendly_fire.description": "Ab in den Knast mit dem da!",
   "advancement.mca.ancient_cultists": "Ancient Cultists",
   "advancement.mca.ancient_cultists.description": "Explore the lore of the Sirbens and disturb the slumber of the ancient cultists.",
+  "advancement.mca.williams_fate": "Twas a valiant effort!",
+  "advancement.mca.williams_fate.description": "One of your subjects faced off against William in the den of war...",
   "notify.spouseendedmarriage": "%1$s hat die Heirat mit dir beendet.",
   "notify.child.grownup": "%1$s ist Erwachsen geworden!",
   "notify.revival.disabled": "Wiederbelebungen wurden von einem Server Administrator deaktiviert.",
