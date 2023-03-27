@@ -631,6 +631,8 @@
   "advancement.mca.friendly_fire.description": "이걸로 감옥에나 들어가라!",
   "advancement.mca.ancient_cultists": "Ancient Cultists",
   "advancement.mca.ancient_cultists.description": "Explore the lore of the Sirbens and disturb the slumber of the ancient cultists.",
+  "advancement.mca.williams_fate": "Twas a valiant effort!",
+  "advancement.mca.williams_fate.description": "One of your subjects faced off against William in the den of war...",
   "notify.spouseendedmarriage": "%1$s이(가) 당신과의 결혼 생활을 끝냈습니다.",
   "notify.child.grownup": "%1$s이(가) 자라서 어른이 되었습니다!",
   "notify.revival.disabled": "서버 관리자에 의해 부활이 비활성화되었습니다.",
