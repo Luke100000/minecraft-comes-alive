@@ -631,6 +631,8 @@
   "advancement.mca.friendly_fire.description": "Vai para a prisão com essa!",
   "advancement.mca.ancient_cultists": "Ancient Cultists",
   "advancement.mca.ancient_cultists.description": "Explore the lore of the Sirbens and disturb the slumber of the ancient cultists.",
+  "advancement.mca.williams_fate": "Twas a valiant effort!",
+  "advancement.mca.williams_fate.description": "One of your subjects faced off against William in the den of war...",
   "notify.spouseendedmarriage": "%1$s terminou seu casamento com você.",
   "notify.child.grownup": "%1$s cresceu e se tornou um(a) adulto(a)!",
   "notify.revival.disabled": "Ressurreições foram desativadas pelo administrador do servidor.",
