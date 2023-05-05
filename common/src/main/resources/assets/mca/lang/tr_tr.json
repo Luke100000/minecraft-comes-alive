@@ -76,7 +76,7 @@
   "item.mca.whistle.tooltip": "Ailenizi bulunduğunuz konuma çağırmak için Sağ Tıklayın",
   "item.mca.family_tree": "Soy Ağacı",
   "item.mca.family_tree.tooltip": "Bu son derece kalın olan kitap yaşayan her köylünün soy ağacını içerir.",
-  "item.mca.villager_tracker": "Villager Tracker",
+  "item.mca.villager_tracker": "Köylü İzleyici",
   "item.mca.villager_tracker.active": "Tracking %s.",
   "item.mca.villager_tracker.distance": "~%s blocks away.",
   "item.mca.villager_tracker.tooltip": "Powered by the same magic as ender eyes, this tracker can track most villagers. Assuming you remember their name.",
