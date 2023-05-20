@@ -351,7 +351,7 @@
   "gui.skin_library.temperature.2": "Modéré",
   "gui.skin_library.temperature.3": "Tiède",
   "gui.skin_library.temperature.4": "Chaud",
-  "gui.skin_library.temperature.tooltip": "Temperature decides the biomes this asset is used in by villagers.",
+  "gui.skin_library.temperature.tooltip": "La température décide des biomes dans lesquels ce bien est utilisé par les villageois.",
   "gui.skin_library.element.head": "Tête",
   "gui.skin_library.element.hat": "Chapeau",
   "gui.skin_library.element.right_leg": "Jambe droite",
