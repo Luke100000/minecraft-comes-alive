@@ -340,6 +340,8 @@
   "gui.skin_library.more_brightness": "Parlaklığı Yükselt",
   "gui.skin_library.remove_saturation": "Aç olmayı kapat",
   "gui.skin_library.hair_color": "Rengi Ön İzle",
+  "gui.skin_library.probably_not_valids": "Skin could be invalid!",
+  "gui.skin_library.read_the_help": "This skin appears to be invalid!",
   "gui.skin_library.meta.chance": "Olasılık",
   "gui.skin_library.meta.chance.tooltip": "Büyük ihtimalle bu varlığı köylüler kullanıyor.",
   "gui.skin_library.meta.by": "Yapan %s",
