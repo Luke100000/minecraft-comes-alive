@@ -340,6 +340,8 @@
   "gui.skin_library.more_brightness": "Aumentar brillo",
   "gui.skin_library.remove_saturation": "Eliminar la saturación",
   "gui.skin_library.hair_color": "Previsualizar color",
+  "gui.skin_library.probably_not_valids": "Skin could be invalid!",
+  "gui.skin_library.read_the_help": "This skin appears to be invalid!",
   "gui.skin_library.meta.chance": "Azar",
   "gui.skin_library.meta.chance.tooltip": "Probabilidad de que este bien sea utilizado por los aldeanos.",
   "gui.skin_library.meta.by": "Por %s",
