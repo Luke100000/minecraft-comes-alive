@@ -64,14 +64,20 @@ public class ReaperSpawner {
             return;
         }
 
-        //make sure the chunks are loaded
-        //should fix deadlock issues we were facing
+        // Make sure the neighboring chunks are loaded
+        // Fixes deadlock issues with getBlockState() below
         ServerChunkManager manager = world.getChunkManager();
-        int range = 4;
-        if (!(manager.isChunkLoaded((pos.getX() - range) >> 4, (pos.getZ() - range) >> 4) &&
-                manager.isChunkLoaded((pos.getX() + range) >> 4, (pos.getZ() - range) >> 4) &&
-                manager.isChunkLoaded((pos.getX() - range) >> 4, (pos.getZ() + range) >> 4) &&
-                manager.isChunkLoaded((pos.getX() + range) >> 4, (pos.getZ() + range) >> 4))) {
+        int chunkX = pos.getX() >> 4;
+        int chunkZ = pos.getZ() >> 4;
+        if (!(manager.isChunkLoaded(chunkX, chunkZ) &&
+                manager.isChunkLoaded(chunkX - 1, chunkZ - 1) &&
+                manager.isChunkLoaded(chunkX - 2, chunkZ - 2) &&
+                manager.isChunkLoaded(chunkX - 1, chunkZ - 2) &&
+                manager.isChunkLoaded(chunkX - 2, chunkZ - 1) &&
+                manager.isChunkLoaded(chunkX + 1, chunkZ + 1) &&
+                manager.isChunkLoaded(chunkX + 2, chunkZ + 2) &&
+                manager.isChunkLoaded(chunkX + 2, chunkZ + 1) &&
+                manager.isChunkLoaded(chunkX + 1, chunkZ + 2))) {
             return;
         }
 
