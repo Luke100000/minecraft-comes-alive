@@ -413,8 +413,6 @@
   "gui.blueprint.rankTooLow": "Anda memerlukan peringkat yang lebih tinggi.",
   "gui.blueprint.currentRank": "Peringkat: %1$s",
   "gui.blueprint.reputation": "Hearts: %1$s",
-  "gui.blueprint.size": "Size: %1$s blocks",
-  "gui.blueprint.anySize": "Size: any",
   "gui.blueprint.buildings": "Buildings: %1$s",
   "gui.blueprint.population": "Population: %1$s of %2$s",
   "gui.blueprint.map": "Peta",
