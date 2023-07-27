@@ -413,8 +413,6 @@
   "gui.blueprint.rankTooLow": "Вам нужен более высокий ранг.",
   "gui.blueprint.currentRank": "Ранг: %1$s",
   "gui.blueprint.reputation": "Сердца: %1$s",
-  "gui.blueprint.size": "Размер: %1$s блоков",
-  "gui.blueprint.anySize": "Размер: любой",
   "gui.blueprint.buildings": "Построек: %1$s",
   "gui.blueprint.population": "Население: %1$s из %2$s",
   "gui.blueprint.map": "Карта",
