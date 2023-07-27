@@ -413,8 +413,6 @@
   "gui.blueprint.rankTooLow": "شما به یک رتبه بالاتر نیاز دارید.",
   "gui.blueprint.currentRank": "رتبه: %1$s",
   "gui.blueprint.reputation": "قلب ها: %1$s",
-  "gui.blueprint.size": "اندازه: %1$s بلوک",
-  "gui.blueprint.anySize": "Size: any",
   "gui.blueprint.buildings": "ساختمان ها: %1$s",
   "gui.blueprint.population": "جمعیت: %1$s از %2$s",
   "gui.blueprint.map": "نقشه",
