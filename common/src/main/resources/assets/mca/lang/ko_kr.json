@@ -413,8 +413,6 @@
   "gui.blueprint.rankTooLow": "계급이 더 높아야 합니다.",
   "gui.blueprint.currentRank": "계급: %1$s",
   "gui.blueprint.reputation": "호감도: %1$s",
-  "gui.blueprint.size": "크기:%1$s 블럭",
-  "gui.blueprint.anySize": "크기: 무제한",
   "gui.blueprint.buildings": "건물: %1$s",
   "gui.blueprint.population": "인구: %1$s / %2$s",
   "gui.blueprint.map": "지도",
