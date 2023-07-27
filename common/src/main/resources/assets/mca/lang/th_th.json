@@ -413,8 +413,6 @@
   "gui.blueprint.rankTooLow": "คุณต้องมีระดับที่สูงกว่านี้",
   "gui.blueprint.currentRank": "ระดับ: %1$s",
   "gui.blueprint.reputation": "หัวใจ: %1$s",
-  "gui.blueprint.size": "ขนาด: %1$s บล็อก",
-  "gui.blueprint.anySize": "Size: any",
   "gui.blueprint.buildings": "สิ่งปลูกสร้าง: %1$s",
   "gui.blueprint.population": "ประชากร: %1$s จาก %2$s",
   "gui.blueprint.map": "แผนที่",
