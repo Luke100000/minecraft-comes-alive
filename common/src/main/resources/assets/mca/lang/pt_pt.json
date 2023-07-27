@@ -413,8 +413,6 @@
   "gui.blueprint.rankTooLow": "Você precisa de um cargo mais alto.",
   "gui.blueprint.currentRank": "Cargo: %1$s",
   "gui.blueprint.reputation": "Corações: %1$s",
-  "gui.blueprint.size": "Size: %1$s blocks",
-  "gui.blueprint.anySize": "Size: any",
   "gui.blueprint.buildings": "Edifícios: %1$s",
   "gui.blueprint.population": "População: %1$s de %2$s",
   "gui.blueprint.map": "Mapa",
