@@ -413,8 +413,6 @@
   "gui.blueprint.rankTooLow": "Du benötigst einen höheren Rang.",
   "gui.blueprint.currentRank": "Rang: %1$s",
   "gui.blueprint.reputation": "Herzen: %1$s",
-  "gui.blueprint.size": "Größe: %1$s Blöcke",
-  "gui.blueprint.anySize": "Größe: beliebig",
   "gui.blueprint.buildings": "Gebäude: %1$s",
   "gui.blueprint.population": "Bevölkerung: %1$s von %2$s",
   "gui.blueprint.map": "Karte",
