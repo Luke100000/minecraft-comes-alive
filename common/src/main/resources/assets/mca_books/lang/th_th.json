@@ -48,7 +48,7 @@
   "mca.books.infection.5": "§lคำเตือน§r\nชาวบ้านมีโอกาสติดเชื้อสูง, ลดโอกาสในการติดเชื้อโดยการสร้างสถานพยาบาล!",
   "mca.books.blueprint.author": "ช่างก่อสร้าง Carl",
   "mca.books.blueprint.0": "§fพวกเราชาวบ้านสามารถทำฟาร์ม สร้างเครื่องมือและชุดเกราะ พวกเราอ่านหนังสือได้ ต้มยาได้ รวมถึงลงมนต์ให้กับสิ่งของได้ และอื่นๆอีกมากมาย แต่มีอย่างหนึ่งที่เรายังมีความรู้ไม่มากพอนั่นคือการก่อสร้าง",
-  "mca.books.blueprint.1": "§fในการเดินทางของคุณ คุณอาจเจอหมู่บ้านเล็กๆ มากมาย ที่ใช้งานไม่ได้ และแทบไม่ตกแต่งเลย แต่คุณสามารถช่วยพัฒนาหมู่บ้านเหล่านั้นให้ดียิ่งขึ้นได้",
+  "mca.books.blueprint.1": "§fOn your journey, you probably come across several villages full of small, impractical, and barely decorated houses. How should a village ever evolve into something bigger?",
   "mca.books.blueprint.2": "§f§lBlueprint§r§f\nThat's why I'm wandering across the planet, helping villages I encounter on my travels. And you could too! Craft yourself a blueprint using blue dye and paper and check out the catalog of buildings every village needs but can't build on their own.",
   "mca.books.blueprint.3": "§f§lความต้องการ§r§f\nอาคารเหล่านั้นต้องการขนาดขั้นต่ำ คุณไม่สามารถแค่เพิ่มเติมเข้าไปในตัวอาคารเหล่านั้นได้เลยแต่คุณต้องตรวจสอบดูว่าอาคารเหล่านั้นต้องการบล็อกอะไรเพื่อมาสร้างมันให้เสร็จ",
   "mca.books.blueprint.4": "§f§lขั้นสุดท้าย§r§f\nเมื่อเสร็จแล้ว กด 'เพิ่มอาคาร' และดูว่าชาวบ้านจะทำการรวมอาคารขึ้นเป็นหมู่บ้านอย่างไร",
