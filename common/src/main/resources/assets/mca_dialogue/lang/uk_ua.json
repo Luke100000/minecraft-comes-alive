@@ -412,7 +412,7 @@
   "gift.weapons.fail/4": "Я краще з мотикою ніж мечем",
   "male.child.gift.weapons.success/1": "Дякую, містер!",
   "female.child.gift.weapons.success/1": "Дякую, пані!",
-  "child.gift.weapons.success/2": "Чекай, поки %Supporter% не побачить мене з ЦИМ!",
+  "child.gift.weapons.success/2": "Чекай, поки %supporter% не побачить мене з ЦИМ!",
   "gift.weapons.success/1": "Ваше місто вам дякує, громадянин.",
   "gift.weapons.success/2": "За перемогу!",
   "gift.weapons.success/3": "Я добре заточу його, шукач пригод.",
