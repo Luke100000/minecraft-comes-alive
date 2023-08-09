@@ -465,7 +465,7 @@
   "gui.village.welcome": "%s Bölgesine Hoş Geldiniz!",
   "gui.village.taxes": "%s Vergilerini ödemiş durumda!",
   "gui.village.taxes.no": "%s Vergilerini ödemediği için memnun.",
-  "gui.village.taxes.more": "%s düşük vergiler sayesinde zenginlik içinde yaşamaktan ve fazladan %25 ödemekten memnun.",
+  "gui.village.taxes.more": "%s düşük vergiler sayesinde zenginlik içinde yaşamaktan ve fazladan %%25 ödemekten memnun.",
   "gui.village.taxes.happy": "%s Adil vergilere sahip olduğu için mutlu.",
   "gui.village.taxes.sad": "%s Vergiler çok fazla geldiği için üzgün.",
   "gui.village.taxes.angry": "%s Yüksek vergilerden dolayı çok sinirli.",
