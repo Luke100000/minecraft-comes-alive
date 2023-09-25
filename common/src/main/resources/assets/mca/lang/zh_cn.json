@@ -320,7 +320,7 @@
   "gui.skin_library.choose_name": "给您的资源命名！",
   "gui.skin_library.already_uploading": "已上传，请耐心等待",
   "gui.skin_library.upload_duplicate": "该内容已存在",
-  "gui.skin_library.upload_failed": "上传失败。抱歉",
+  "gui.skin_library.upload_failed": "抱歉，上传失败。",
   "gui.skin_library.subscribe": "请使用服务器范围！",
   "gui.skin_library.sort_likes": "按点赞数排序",
   "gui.skin_library.sort_newest": "按日期排序",
