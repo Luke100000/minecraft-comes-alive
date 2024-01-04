@@ -299,7 +299,7 @@
   "interaction.sethome.bedfail/1": "Fajny dom, Ale nie ma dla mnie łóżka.",
   "interaction.sethome.bedfail/2": "Nie ma tu dla mnie łóżka!",
   "interaction.sethome.bedfail.infirmary/1": "To jest klinika, łóżko jest zarezerwowane dla chorych ludzi.",
-  "interaction.sethome.bedfail.inn/1": "Looks nice, but this is an inn. I would prefer an own home.",
+  "interaction.sethome.bedfail.inn/1": "Ładnie wygląda, ale to zajazd. Wolałbym własny dom.",
   "interaction.sethome.bedfail.blocked/1": "Ten budynek został oznaczony jako zablokowany.",
   "interaction.setworkplace.success/1": "Nie ma sprawy, %1$s.",
   "spouse.interaction.setworkplace.success/1": "Podoba mi się tu.",
