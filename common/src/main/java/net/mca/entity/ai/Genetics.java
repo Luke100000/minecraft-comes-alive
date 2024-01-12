@@ -172,7 +172,7 @@ public class Genetics implements Iterable<Genetics.Gene> {
         private final String key;
         private final CDataParameter<Float> parameter;
 
-        GeneType(String key) {
+        public GeneType(String key) {
             this.key = key;
             parameter = CParameter.create(key, 0.5f);
             GENOMES.add(this);
