@@ -299,7 +299,7 @@
   "interaction.sethome.bedfail/1": "Schönes Zuhause, aber es scheint so, als wären alle Betten reserviert.",
   "interaction.sethome.bedfail/2": "Es gibt keine leeren Betten!.",
   "interaction.sethome.bedfail.infirmary/1": "Dies ist ein Krankenhaus, das Bett ist für kranke Menschen reserviert.",
-  "interaction.sethome.bedfail.inn/1": "Looks nice, but this is an inn. I would prefer an own home.",
+  "interaction.sethome.bedfail.inn/1": "Sieht nett aus, aber das ist ein Gasthaus. Ich würde ein eigenes Haus bevorzugen.",
   "interaction.sethome.bedfail.blocked/1": "Dieses Gebäude wurde als blockiert markiert.",
   "interaction.setworkplace.success/1": "Klar doch, %1$s.",
   "spouse.interaction.setworkplace.success/1": "Ich liebe diesen Ort.",
