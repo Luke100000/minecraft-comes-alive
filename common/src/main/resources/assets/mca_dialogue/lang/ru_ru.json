@@ -188,7 +188,7 @@
   "interaction.marry.fail.married/4": "О нет, я плохо себя чувствую... У меня есть партнер, которого я сильно люблю.",
   "interaction.marry.fail.married/5": "У меня уже есть кое-кто очень важный для меня... Мне жаль.",
   "interaction.marry.fail.married/6": "Спасибо, но у меня уже есть человек, без которого я не хочу быть.",
-  "interaction.marry.fail.married/7": "Было время, когда можно было согласиться, но сейчас это место занято и не подлежит обсуждению.",
+  "interaction.marry.fail.married/7": "There was a time where I may have accepted this, but that spot is now filled and not negotiable.",
   "interaction.relationship.fail.isparent/1": "Не держите это в семье, пожалуйста...",
   "interaction.relationship.fail.isparent/2": "Почти уверен, что это работает не так.",
   "interaction.relationship.fail.isparent/3": "Согласно Энциклопедии жизни, инцест является незаконным. Так что нет.",
