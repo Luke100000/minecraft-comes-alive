@@ -188,7 +188,7 @@
   "interaction.marry.fail.married/4": "오 안돼, 기분이 좋지 않아... 난 사랑하는 짝이 있다고.",
   "interaction.marry.fail.married/5": "전 이미 굉장히 소중한 사람이 있습니다... 죄송해요.",
   "interaction.marry.fail.married/6": "고맙지만, 전 이미 없이는 못 살 사람이 있는걸요.",
-  "interaction.marry.fail.married/7": "한때 이것을 받아들일지도 모를 때가 있었지만, 빈 자리는 채워졌고 이제 협상할 수 없어요.",
+  "interaction.marry.fail.married/7": "There was a time where I may have accepted this, but that spot is now filled and not negotiable.",
   "interaction.relationship.fail.isparent/1": "가족끼리 이러지 말아 주렴...",
   "interaction.relationship.fail.isparent/2": "이게 정상적이지 않은 일이라는 건 확신해.",
   "interaction.relationship.fail.isparent/3": "생명의 백과사전에 따르면, 근친상간은 불법이야. 그러니까 안돼.",
