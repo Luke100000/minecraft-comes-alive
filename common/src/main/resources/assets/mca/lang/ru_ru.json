@@ -756,6 +756,7 @@
   "subtitle.mca.villager.angry": "Житель злится",
   "subtitle.mca.villager.celebrate": "Житель празднует",
   "mca.ai_broken": "AI сломался, пожалуйста, отправьте latest.log разработчику!",
+  "mca.ai_help": "Click here to open the help page!",
   "mca.limit.patreon": "Ты достиг своего часового лимита общения с ИИ. Кликни сюда, чтобы открыть руководство о том, как увеличить этот лимит!",
   "mca.limit.premium": "Ты достиг своего часового лимита общения с ИИ, даже с включенной подпиской patreon! Пожалуйста, сделай перерыв.",
   "mca.limit.patreon.hover": "Нажми на меня!",
