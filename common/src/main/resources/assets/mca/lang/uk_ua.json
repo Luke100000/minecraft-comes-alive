@@ -756,6 +756,7 @@
   "subtitle.mca.villager.angry": "Селянин розсердився",
   "subtitle.mca.villager.celebrate": "Селянин святкує",
   "mca.ai_broken": "ШІ зламався, будь ласка, надішліть файл latest.log розробнику!",
+  "mca.ai_help": "Click here to open the help page!",
   "mca.limit.patreon": "Ви досягли свого годинного ліміту використання ШІ. Натисніть тут, щоб дізнатись, як збільшити цей ліміт!",
   "mca.limit.premium": "Ви досягли свого годинного ліміту використання ШІ, навіть з увімкненою підпискою на Patreon! Будь ласка, зробіть перерву.",
   "mca.limit.patreon.hover": "Клацни мене!",
