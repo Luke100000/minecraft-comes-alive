@@ -756,6 +756,7 @@
   "subtitle.mca.villager.angry": "Villageois en colère",
   "subtitle.mca.villager.celebrate": "Villageois en fête",
   "mca.ai_broken": "L'IA a planté, veuillez envoyer le dernier fichier de log au développeur !",
+  "mca.ai_help": "Click here to open the help page!",
   "mca.limit.patreon": "Tu as atteint ta limite horaire d'IA. Clique ici pour ouvrir le tutoriel sur la façon d'augmenter cette limite !",
   "mca.limit.premium": "Tu as atteint ta limite horaire d'IA, même avec ton abonnement patreon activé ! Fais une pause.",
   "mca.limit.patreon.hover": "Cliquez sur moi !",
