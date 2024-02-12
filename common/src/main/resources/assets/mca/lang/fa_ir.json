@@ -756,6 +756,7 @@
   "subtitle.mca.villager.angry": "روستایی عصبانی",
   "subtitle.mca.villager.celebrate": "روستایی در حال جشن گرفتن",
   "mca.ai_broken": "AI broke, please send latest.log to dev!",
+  "mca.ai_help": "Click here to open the help page!",
   "mca.limit.patreon": "You reached your hourly AI limit. Click here to open the tutorial on how to increase that limit!",
   "mca.limit.premium": "You reached your hourly AI limit, even with your patreon subscription enabled! Please take a break.",
   "mca.limit.patreon.hover": "Click me!",
