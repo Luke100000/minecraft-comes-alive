@@ -756,6 +756,7 @@
   "subtitle.mca.villager.angry": "村民：生气",
   "subtitle.mca.villager.celebrate": "村民：庆祝",
   "mca.ai_broken": "AI故障, 请发送最新.log文件给开发者！",
+  "mca.ai_help": "Click here to open the help page!",
   "mca.limit.patreon": "你达到了你每小时的AI上限。点击这里打开提升上限的教程！",
   "mca.limit.premium": "即使你已经订阅PATREON，你仍然达到了你每小时的AI上限！请休息一下吧。",
   "mca.limit.patreon.hover": "点击我！",
