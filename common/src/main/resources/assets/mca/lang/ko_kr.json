@@ -756,6 +756,7 @@
   "subtitle.mca.villager.angry": "주민이 화났습니다",
   "subtitle.mca.villager.celebrate": "주민이 축하하고 있습니다.",
   "mca.ai_broken": "AI가 고장났습니다. 부디 latest.log를 개발팀에 보내주세요!",
+  "mca.ai_help": "Click here to open the help page!",
   "mca.limit.patreon": "당신은 시간당 AI 한도에 도달했습니다. 한도를 늘리는 방법에 대한 튜토리얼을 열려면 여기를 클릭하세요!",
   "mca.limit.premium": "당신은 patreon 구독을 활성화한 상태임에도 불구하고 시간당 AI 한도에 도달했습니다! 부디 잠시 휴식을 취해 주세요.",
   "mca.limit.patreon.hover": "저를 클릭해보세요!",
