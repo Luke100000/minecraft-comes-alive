@@ -756,6 +756,7 @@
   "subtitle.mca.villager.angry": "Aldeã(o) irritado(a)",
   "subtitle.mca.villager.celebrate": "Aldeã(o) Celebrando",
   "mca.ai_broken": "A IA quebrou, por favor, envie o arquivo 'latest.log' para o desenvolvedor!",
+  "mca.ai_help": "Click here to open the help page!",
   "mca.limit.patreon": "Você atingiu seu limite de IA por hora. Clique aqui para abrir o tutorial de como aumentar esse limite!",
   "mca.limit.premium": "Você atingiu seu limite de IA por hora, mesmo com sua assinatura Patreon habilitada! Por favor, faça uma pausa.\n",
   "mca.limit.patreon.hover": "Clique em mim!",
