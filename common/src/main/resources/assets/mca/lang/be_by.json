@@ -756,6 +756,7 @@
   "subtitle.mca.villager.angry": "Жыхар злуецца",
   "subtitle.mca.villager.celebrate": "Жыхар сьвяткуе",
   "mca.ai_broken": "Адбыўся сбой ШІ, калі ласка, дашліце апошні .log аўтарам!",
+  "mca.ai_help": "Click here to open the help page!",
   "mca.limit.patreon": "Вы дасягнулі свайго гадзіннага ліміту выкарыстаньня ШІ. Націсьніце тут, каб даведацца, як павялічыць гэты ліміт!",
   "mca.limit.premium": "Вы дасягнулі свайго гадзіннага ліміту выкарыстаньня ШІ, нават з уключанай падпіскай на Patreon! Калі ласка, зрабіце перапынак.",
   "mca.limit.patreon.hover": "Націсні на мяне!",
