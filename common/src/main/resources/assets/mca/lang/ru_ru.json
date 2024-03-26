@@ -612,7 +612,7 @@
   "command.only_one_destiny": "Ты уже решил свою судьбу.",
   "command.no_mail": "У тебя нет никаких писем.",
   "command.tts_busy": "(Всякий раз, когда жители деревни молчат, это означает, что функция преобразования текста в речь должна сначала сгенерировать эту фразу. Она будет там в следующий раз.)",
-  "command.tts_unsupported_language": "Your game language is not supported by the text-to-speech. Please change it to English or disable TTS.",
+  "command.tts_unsupported_language": "Язык твоей игры не поддерживается системой преобразования текста в речь. Пожалуйста, смени его на английский или отключи TTS.",
   "blueprint.noBuilding": "Вы должны стоять в здании",
   "blueprint.refreshed": "Здания обновлены!",
   "blueprint.scan.overlap": "Здание пересекается с уже существующим!",
