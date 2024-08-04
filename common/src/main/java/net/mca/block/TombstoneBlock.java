@@ -280,7 +280,7 @@ public class TombstoneBlock extends BlockWithEntity implements Waterloggable {
     public List<ItemStack> getDroppedStacks(BlockState state, LootContextParameterSet.Builder builder) {
         List<ItemStack> stacks = super.getDroppedStacks(state, builder);
 
-        Optional<Data> data = Data.of(builder.get(LootContextParameters.BLOCK_ENTITY)).filter(Data::hasEntity);
+        Optional<Data> data = Data.of(builder.getOptional(LootContextParameters.BLOCK_ENTITY)).filter(Data::hasEntity);
 
         data
                 .flatMap(Data::getEntityName)
