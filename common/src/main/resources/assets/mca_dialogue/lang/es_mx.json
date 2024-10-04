@@ -299,7 +299,7 @@
   "interaction.sethome.bedfail/1": "Muy buena casa, pero todas las camas parecen estar ocupadas.",
   "interaction.sethome.bedfail/2": "¡No hay camas vacías!.",
   "interaction.sethome.bedfail.infirmary/1": "Esto es la enfermería, las camas están reservadas para los enfermos.",
-  "interaction.sethome.bedfail.inn/1": "Looks nice, but this is an inn. I would prefer an own home.",
+  "interaction.sethome.bedfail.inn/1": "Parece bonito, pero esto es una posada. Preferiría una casa propia.",
   "interaction.sethome.bedfail.blocked/1": "Esta construcción ha sido señalada como bloqueada.",
   "interaction.setworkplace.success/1": "De acuerdo %1$s, cuenta con ello",
   "spouse.interaction.setworkplace.success/1": "Adoro este lugar.",
