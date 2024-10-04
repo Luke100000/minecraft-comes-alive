@@ -299,7 +299,7 @@
   "interaction.sethome.bedfail/1": "很不错的房子，但床好像都被占满了。",
   "interaction.sethome.bedfail/2": "这里连张空床都没有！",
   "interaction.sethome.bedfail.infirmary/1": "这就是个医院，这些床都是病床。",
-  "interaction.sethome.bedfail.inn/1": "Looks nice, but this is an inn. I would prefer an own home.",
+  "interaction.sethome.bedfail.inn/1": "看起来不错，但这只是家客栈。我更爱自己家。",
   "interaction.sethome.bedfail.blocked/1": "这栋建筑已经被封锁。",
   "interaction.setworkplace.success/1": "没问题，%1$s。",
   "spouse.interaction.setworkplace.success/1": "我很喜欢这个地方。",
