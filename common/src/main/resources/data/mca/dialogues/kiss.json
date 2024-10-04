@@ -12,8 +12,8 @@
               "personality": "flirty"
             },
             {
-              "chance": 8,
-              "mood": "giggly"
+              "chance": 4,
+              "personality": "peppy"
             },
             {
               "chance": 5,

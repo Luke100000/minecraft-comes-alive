@@ -13,6 +13,7 @@
   "shy.dialogue.rumors.lore/3": "Um, so there's this, um, mysterious builder named 2DA50 who was rumored to be involved in the disappearance of the Ancient Builder. People say that, uh, 2DA50 ventured into the treacherous Far Lands and never returned.",
   "shy.dialogue.rumors.lore/4": "You know, uh, MerlinWolfGames actually crafted this incredible temple dedicated to Sirben. It's, um, considered one of the ancient wonders of our world.",
   "shy.dialogue.rumors.lore/5": "Oh, um, there used to be this ancient civilization of builders, but, uh, you know, they vanished without a trace. It's quite sad, really.",
+  "shy.dialogue.rumors.lore/6": "Um, have you, um, ever heard about the legends of the ancient builders? The ones who, um, left all those ruins and temples, um, all over the Overworld? It's, um, quite fascinating...",
 
   "shy.dialogue.first.generic/1": "Um, excuse me... I... I don't think I've seen you before. Welcome, traveler.",
   "shy.dialogue.first.generic/2": "Oh, um, hello there! It's, um, really nice to, um, see someone new around here.",
@@ -43,6 +44,7 @@
   "shy.dialogue.hug.success/3": "It's... it's nice to have something good happen today, even if it's just this.",
   "shy.dialogue.hug.success/4": "Y-you're... you're like a cozy blanket wrapped around me!",
   "shy.dialogue.hug.success/5": "Oh! Th-thank you... I... I appreciate it... *blushes* You're... you're warm...",
+  "shy.dialogue.hug.success/6": "Wow! I c-can't believe I'm saying this, but... your hug made me feel all warm and fuzzy inside...",
   "shy.dialogue.hug.fail/1": "Y-You're... uh, a little dirty there...",
   "shy.dialogue.hug.fail/2": "N-No, thank you, I... I'm not really comfortable with hugs...",
   "shy.dialogue.hug.fail/3": "U-Uh, wh-why would you want to hug me?",
@@ -123,6 +125,7 @@
   "shy.dialogue.story.fail/7": "Oh, um, yawn! How... how terribly boring...",
   "shy.dialogue.story.fail/8": "Y-you're quite unique, I must say. In a way that's, um... not so good...",
   "shy.dialogue.story.fail/9": "Oh, um, I'm sorry, but I-I don't really see how that was... good... at all...",
+  "shy.dialogue.story.fail/10": "Gosh, I'm really sorry, but I can't find any way to spin that as a win...",
 
   "shy.dialogue.flirt.success/1": "Um...thank you...I mean, you're really brave.",
   "shy.dialogue.flirt.success/2": "Wow, you're...um...really cute...I mean...never mind.",
@@ -137,6 +140,7 @@
   "shy.dialogue.flirt.fail/4": "Me? No way! I'm just a simple villager, you know?",
   "shy.dialogue.flirt.fail/5": "Oh, come on! You're just saying that to make me blush.",
   "shy.dialogue.flirt.fail/6": "Please don't say stuff like that. It's embarrassing, really.",
+  "shy.dialogue.flirt.fail/7": "Um, please don't, uh, give me that look and, um, never say that again.",
 
   "shy.dialogue.joke.creative.success/1": "*Giggles* That's quite amusing!",
   "shy.dialogue.joke.creative.success/2": "That's... um... funny!",
@@ -153,6 +157,7 @@
   "shy.dialogue.joke.creative.failed/5": "I'm not really good with jokes, but that's... kind of funny, I suppose.",
   "shy.dialogue.joke.creative.failed/6": "Haha, wow, you're quite the comedian, aren't you? (nervous chuckle)",
   "shy.dialogue.joke.creative.failed/7": "Ash, um, he's quite the joker. I'm sure he'd appreciate that joke more than I did.",
+  "shy.dialogue.joke.creative.failed/8": "Um, well, Ash tends to come up with more amusing jokes, you know...",
 
   "shy.dialogue.procreate_engaged/1": "Um, I'm, uh, really hoping we can take things slow before starting a family. You know, like, maybe get to know each other better first?",
   "shy.dialogue.procreate_engaged/2": "Oh, I, um, I don't think it would be right to bring a new life into this world without us being, um, completely devoted to each other. Can we, like, maybe wait until we're fully committed?",
@@ -215,7 +220,6 @@
   "shy.dialogue.goaway/4": "Oh, um, maybe you could bother someone else instead?",
   "shy.dialogue.goaway/5": "Oh dear, it would be really great if you could, um, go away, kind soul.",
 
-  "shy.dialogue.greet": "Um, hey... How... How are you doing today?",
   "shy.dialogue.greet/1": "Hi... How... How are you doing today?",
   "shy.dialogue.greet/2": "Hey there, um... How's it going?",
   "shy.dialogue.greet/3": "Oh, um... Hello. Did... Did you need something?",
@@ -377,7 +381,7 @@
   "shy.dialogue.story.exploring.success/3": "Oh, wow, um, you're, um, so courageous to, um, venture into the unknown like that. I, um, admire your bravery, really.",
   "shy.dialogue.story.exploring.fail/1": "Um, I-I'm sorry, but I've heard those stories before... a lot.",
   "shy.dialogue.story.exploring.fail/2": "Oh, um, please don't take this the wrong way, but, uh, maybe we could find some new stories to share? I mean, if that's okay with you...",
-  "shy.dialogue.story.exploring.fai/l3": "Um, talking to you is like talking to someone who's, um, still figuring things out, you know? Like a kid pretending to be a grown-up, but, um, not as cute, I guess.",
+  "shy.dialogue.story.exploring.fail/3": "Um, well, um, talking to you is like, um, talking to someone who's, um, trying to figure out who they want to be, you know? But, um, without the, uh, cute part, I guess.",
 
   "shy.dialogue.story.nether.success/1": "U-Um, excuse me, but is it, um, really hot in the Nether?",
   "shy.dialogue.story.nether.success/2": "Oh, wow! I can't believe you've, um, survived in such a, um, dangerous place. That's really impressive!",

@@ -9,10 +9,6 @@
           "conditions": [
             {
               "chance": 5,
-              "mood": "talkative"
-            },
-            {
-              "chance": 5,
               "hearts_min": 20
             }
           ],

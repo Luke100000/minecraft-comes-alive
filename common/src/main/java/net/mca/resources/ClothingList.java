@@ -18,6 +18,7 @@ import net.minecraft.village.VillagerProfession;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Stream;
 
@@ -53,7 +54,7 @@ public class ClothingList extends JsonDataLoader {
                 JsonObject object = file.getAsJsonObject().get(key).getAsJsonObject();
 
                 for (int i = 0; i < JsonHelper.getInt(object, "count", 1); i++) {
-                    String identifier = String.format(key, i);
+                    String identifier = String.format(Locale.ROOT, key, i);
 
                     object.addProperty("gender", gender.getId());
 
@@ -78,7 +79,7 @@ public class ClothingList extends JsonDataLoader {
             case CHILD, TEEN -> getPool(gender, MCA.locate("child").toString());
             default -> {
                 WeightedPool<String> pool = getPool(gender, villager.getVillagerData().getProfession());
-                if (pool.entries.size() == 0) {
+                if (pool.entries.isEmpty()) {
                     pool = getPool(gender, VillagerProfession.NONE);
                 }
                 yield pool;

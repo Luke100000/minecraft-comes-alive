@@ -25,6 +25,7 @@ public class CallToPlayerMessage implements Message {
             if (v.isSleeping()) {
                 v.wakeUp();
             }
+            v.stopRiding();
             v.setPosition(player.getX(), player.getY(), player.getZ());
         }
     }

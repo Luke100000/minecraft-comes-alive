@@ -44,6 +44,7 @@
   "confident.dialogue.hug.success/3": "Finally, something to brighten up my day. Thank you!",
   "confident.dialogue.hug.success/4": "Wow, you give the best hugs! It's like being wrapped in a cozy blanket.",
   "confident.dialogue.hug.success/5": "Oh, thank you for the hug, but I must say, you're lucky to experience my warmth. It's truly remarkable.",
+  "confident.dialogue.hug.success/6": "Wow! Your hug is like being wrapped in a cozy blanket of pure warmth!",
   "confident.dialogue.hug.fail/1": "You are absolutely filthy! Covered in dirt and grime!",
   "confident.dialogue.hug.fail/2": "I'll have to pass on that, sorry.",
   "confident.dialogue.hug.fail/3": "Huh, what's the point?",
@@ -124,6 +125,7 @@
   "confident.dialogue.story.fail/7": "Yawn! How boring. I was hoping for something more stimulating, but I guess I shouldn't have expected much from you.",
   "confident.dialogue.story.fail/8": "Crazy? Oh, my dear friend, you have no idea what true craziness looks like. And trust me, it's not a good look.",
   "confident.dialogue.story.fail/9": "I don't see how that was good...but then again, my impeccable taste and standards for excellence are unmatched.",
+  "confident.dialogue.story.fail/10": "Sorry, but that was a failure. No ifs, ands, or buts about it. Not good at all.",
 
   "confident.dialogue.flirt.success/1": "Wow, you're incredibly daring!",
   "confident.dialogue.flirt.success/2": "Oh, please! Your charm is off the charts!",
@@ -218,7 +220,6 @@
   "confident.dialogue.goaway/4": "Why don't you go pester someone else? I've got things to attend to.",
   "confident.dialogue.goaway/5": "I command you to depart, you uncultured swine!",
 
-  "confident.dialogue.greet": "Greetings! How is your day going?",
   "confident.dialogue.greet/1": "Well, hello there! How are you doing today?",
   "confident.dialogue.greet/2": "Hey %1$s! How's life treating you?",
   "confident.dialogue.greet/3": "Ah, hello! Can I assist you with something?",
@@ -380,7 +381,7 @@
   "confident.dialogue.story.exploring.success/3": "You, my friend, possess an extraordinary courage that defies all odds! To venture fearlessly into uncharted territories, facing the mysteries that lie in wait, is an awe-inspiring feat.",
   "confident.dialogue.story.exploring.fail/1": "Your tales have become quite tiresome.",
   "confident.dialogue.story.exploring.fail/2": "Impressive attempt at being edgy, my friend. Watch out for those sharp corners, though.",
-  "confident.dialogue.story.exploring.fai/l3": "Dialogue with you is akin to conversing with an aspiring luminary, apart from the enchanting portion, of course.",
+  "confident.dialogue.story.exploring.fail/3": "Interacting with you feels like interacting with a person who envisions a future of grandeur but lacks the maturity to achieve it.",
 
   "confident.dialogue.story.nether.success/1": "The Nether's heat? Ha! I could handle that in my sleep!",
   "confident.dialogue.story.nether.success/2": "Surviving the treacherous Nether? Child's play for someone like me.",

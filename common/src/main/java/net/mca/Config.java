@@ -10,6 +10,7 @@ import java.io.*;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 public final class Config implements Serializable {
     @Serial
@@ -103,9 +104,23 @@ public final class Config implements Serializable {
     public int trackVillagerPositionEveryNTicks = 200;
 
     //AI
+    public String _read_this_before_using_villager_ai = "https://github.com/Luke100000/minecraft-comes-alive/wiki/GPT3-based-conversations";
     public boolean enableVillagerChatAI = false;
     public int villagerChatAIIntelligence = 4;
-    public String villagerChatAIServer = "http://snoweagle.tk/";
+    public String villagerChatAIEndpoint = "https://api.conczin.net/v1/mca/chat";
+    public String villagerChatAIToken = "";
+    public String villagerChatAIModel = "default";
+    public String villagerChatAISystemPrompt = "";
+    public boolean villagerChatAIUseLongTermMemory = false;
+    public boolean villagerChatAIUseSharedLongTermMemory = false;
+    public boolean villagerChatAIIncludeSessionInformation = false;
+
+    public String inworldAIToken = "";
+    public Map<UUID, String> inworldAIResourceNames = new HashMap<>();
+
+    // TTS
+    public boolean enableOnlineTTS = false;
+    public String villagerTTSServer = "http://api.rk.conczin.net/";
 
     //village behavior
     public float guardSpawnFraction = 0.175f;
@@ -287,7 +302,7 @@ public final class Config implements Serializable {
             Gson gson = new GsonBuilder().setPrettyPrinting().create();
             gson.toJson(this, writer);
         } catch (IOException e) {
-            e.printStackTrace();
+            MCA.LOGGER.error(e);
         }
     }
 
@@ -297,7 +312,7 @@ public final class Config implements Serializable {
             try (FileReader reader = new FileReader(file)) {
                 Gson gson = new GsonBuilder().setPrettyPrinting().create();
                 Config config = gson.fromJson(reader, Config.class);
-                if (config.version != VERSION) {
+                if (config == null || config.version != VERSION) {
                     config = new Config();
                 }
                 config.save();

@@ -27,7 +27,7 @@ import java.util.function.Function;
 import static net.mca.client.model.CommonVillagerModel.getVillager;
 
 public abstract class VillagerLayer<T extends LivingEntity, M extends BipedEntityModel<T>> extends FeatureRenderer<T, M> {
-    private static final float[] DEFAULT_COLOR = new float[] {1, 1, 1};
+    private static final float[] DEFAULT_COLOR = new float[]{1, 1, 1};
 
     private static final Map<String, Identifier> TEXTURE_CACHE = Maps.newHashMap();
     private static final Map<Identifier, Boolean> TEXTURE_EXIST_CACHE = Maps.newHashMap();
@@ -64,7 +64,10 @@ public abstract class VillagerLayer<T extends LivingEntity, M extends BipedEntit
 
     @Override
     public void render(MatrixStack transform, VertexConsumerProvider provider, int light, T villager, float limbAngle, float limbDistance, float tickDelta, float animationProgress, float headYaw, float headPitch) {
-        if (villager.isInvisible()) {
+        MinecraftClient client = MinecraftClient.getInstance();
+        boolean glowing = client.hasOutline(villager);
+
+        if (villager.isInvisible() && !glowing) {
             return;
         }
 
@@ -77,37 +80,46 @@ public abstract class VillagerLayer<T extends LivingEntity, M extends BipedEntit
         }
 
         //primarily restores compatibility with Armourers Workshop
+        //noinspection rawtypes
         if (model instanceof VillagerEntityModelMCA layer) {
+            //noinspection unchecked
             layer.copyVisibility(getContextModel());
         }
+        //noinspection rawtypes
         if (model instanceof PlayerEntityExtendedModel layer) {
+            //noinspection unchecked
             layer.copyVisibility(getContextModel());
         }
 
         //copy the animation to this layers model
         getContextModel().copyBipedStateTo(model);
 
-        renderFinal(transform, provider, light, villager, tickDelta);
+        renderFinal(transform, provider, light, villager, tickDelta, glowing);
     }
 
-    public void renderFinal(MatrixStack transform, VertexConsumerProvider provider, int light, T villager, float tickDelta) {
+    public void renderFinal(MatrixStack transform, VertexConsumerProvider provider, int light, T villager, float tickDelta, boolean glowing) {
         int tint = LivingEntityRenderer.getOverlay(villager, 0);
 
         Identifier skin = getSkin(villager);
         if (canUse(skin)) {
             float[] color = getColor(villager, tickDelta);
-            renderModel(transform, provider, light, model, color[0], color[1], color[2], skin, tint);
+            renderModel(transform, provider, light, model, color[0], color[1], color[2], skin, tint, glowing);
         }
 
         Identifier overlay = getOverlay(villager);
         if (!Objects.equals(skin, overlay) && canUse(overlay)) {
-            renderModel(transform, provider, light, model, 1, 1, 1, overlay, tint);
+            renderModel(transform, provider, light, model, 1, 1, 1, overlay, tint, glowing);
         }
     }
 
-    private void renderModel(MatrixStack transform, VertexConsumerProvider provider, int light, M model, float r, float g, float b, Identifier texture, int overlay) {
-        VertexConsumer buffer = provider.getBuffer(isTranslucent() ? RenderLayer.getEntityTranslucent(texture) : RenderLayer.getEntityCutoutNoCull(texture));
-        model.render(transform, buffer, light, overlay, r, g, b, 1);
+    private void renderModel(MatrixStack transform, VertexConsumerProvider provider, int light, M model, float r, float g, float b, Identifier texture, int overlay, boolean glowing) {
+        if (!glowing) {
+            VertexConsumer buffer = provider.getBuffer(isTranslucent() ? RenderLayer.getEntityTranslucent(texture) : RenderLayer.getEntityCutoutNoCull(texture));
+            model.render(transform, buffer, light, overlay, r, g, b, 1);
+        } else if (!isTranslucent()) {
+            VertexConsumer buffer = provider.getBuffer(RenderLayer.getOutline(texture));
+            model.render(transform, buffer, light, overlay, r, g, b, 1);
+        }
     }
 
     public final boolean canUse(Identifier texture) {

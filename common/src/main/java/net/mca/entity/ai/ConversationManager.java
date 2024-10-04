@@ -1,17 +1,18 @@
 package net.mca.entity.ai;
 
+
 import net.mca.entity.VillagerEntityMCA;
 import net.minecraft.entity.Entity;
 import net.minecraft.text.MutableText;
 
-import java.util.LinkedList;
-import java.util.List;
 import java.util.Optional;
+import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 public class ConversationManager {
     private final VillagerEntityMCA entity;
 
-    private final List<Message> pendingMessages = new LinkedList<>();
+    private final Queue<Message> pendingMessages = new ConcurrentLinkedQueue<>();
 
     public ConversationManager(VillagerEntityMCA entity) {
         this.entity = entity;
@@ -26,16 +27,26 @@ public class ConversationManager {
         message.entity = entity;
     }
 
+    /**
+     * Gets the first valid message from {@link #pendingMessages}. <p>
+     * Removes any invalid message it encounters before
+     * @return {@code Optional.EMPTY} if no message was found, Optional containing message otherwise
+     */
     public Optional<Message> getCurrentMessage() {
-        if (pendingMessages.size() > 0) {
-            Message message = pendingMessages.get(0);
-            if (message.stillValid()) {
-                return Optional.of(message);
-            } else {
-                pendingMessages.remove(0);
-            }
+        Message message = pendingMessages.peek();
+        if (message == null) {
+            return Optional.empty();
         }
-        return Optional.empty();
+
+        if (message.stillValid()) {
+            return Optional.of(message);
+        }
+
+        // Remove message if not valid
+        pendingMessages.remove(message);
+
+        // Try to get valid message
+        return getCurrentMessage();
     }
 
     public abstract static class Message {

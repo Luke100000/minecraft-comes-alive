@@ -43,11 +43,11 @@ dependencies {
 }
 
 processResources {
-    inputs.property 'group', project.group
+    inputs.property 'group', project.groupId
     inputs.property 'version', project.version
 
     filesMatching('quilt.mod.json') {
-        expand group: project.group, version: project.version
+        expand group: project.groupId, version: project.version
     }
 
     from 'LICENSE'
@@ -81,3 +81,14 @@ components.java {
     }
 }
  */
+
+publishing {
+    publications {
+        mavenCommon(MavenPublication) {
+            artifactId = rootProject.artifactId
+            groupId = rootProject.groupId
+            version = version + "+quilt"
+            from components.java
+        }
+    }
+}

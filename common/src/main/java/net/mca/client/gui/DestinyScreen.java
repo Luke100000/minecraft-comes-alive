@@ -154,7 +154,7 @@ public class DestinyScreen extends VillagerEditorScreen {
                     int rows = (int) Math.ceil(Config.getServerConfig().destinySpawnLocations.size() / 3.0f);
                     float offsetX = (y + 1) == rows ? (2 - (Config.getServerConfig().destinySpawnLocations.size() - 1) % 3) / 2.0f : 0;
                     float offsetY = Math.max(0, 3 - rows) / 2.0f;
-                    addDrawableChild(new ButtonWidget((int) (width / 2 - 96 * 1.5f + (x + offsetX) * 96), (int) (height / 2 + (y + offsetY) * 20 - 16), 96, 20, Text.translatable("gui.destiny." + new Identifier(location).getPath()), sender -> {
+                    addDrawableChild(new ButtonWidget((int) (width / 2.0f - 96 * 1.5f + (x + offsetX) * 96), (int) (height / 2.0f + (y + offsetY) * 20 - 16), 96, 20, Text.translatable("gui.destiny." + new Identifier(location).getPath()), sender -> {
                         selectStory(location);
                     }));
                     x++;

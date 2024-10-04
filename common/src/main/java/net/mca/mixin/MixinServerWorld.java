@@ -1,11 +1,8 @@
 package net.mca.mixin;
 
 import net.mca.server.SpawnQueue;
-import net.mca.server.world.data.VillageManager;
-import net.minecraft.block.BlockState;
 import net.minecraft.entity.Entity;
 import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.StructureWorldAccess;
 import net.minecraft.world.World;
 import net.minecraft.world.chunk.Chunk;
@@ -27,17 +24,6 @@ abstract class MixinServerWorld extends World implements StructureWorldAccess {
     private void onAddEntity(Entity entity, CallbackInfoReturnable<Boolean> info) {
         if (SpawnQueue.getInstance().addVillager(entity)) {
             info.setReturnValue(false);
-        }
-    }
-    @Inject(method = "onBlockChanged(Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/block/BlockState;Lnet/minecraft/block/BlockState;)V",
-            at = @At("HEAD")
-    )
-    public void onOnBlockChanged(BlockPos pos, BlockState oldBlock, BlockState newBlock, CallbackInfo info) {
-        if (oldBlock.getBlock() != newBlock.getBlock()) {
-            final ServerWorld self = (ServerWorld)(Object)this;
-            self.getServer().execute(() ->
-                    VillageManager.get(self).getReaperSpawner().trySpawnReaper(self, newBlock, pos)
-            );
         }
     }
 }

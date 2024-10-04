@@ -105,6 +105,7 @@
   "gloomy.dialogue.chat.fail/18": "I'd rather stare at a pig's backside than listen to you speak.",
   "gloomy.dialogue.chat.fail/19": "Are you done wasting my precious time now?",
   "gloomy.dialogue.chat.fail/20": "What? You actually believe the Earth is round? No way, that's just ridiculous!",
+  "gloomy.dialogue.chat.fail/21": "Oh, the tragic ignorance of those who believe in a round earth. It's a somber reflection of our collective ignorance.",
 
   "gloomy.dialogue.story.success/1": "Ugh, as if I needed more bad news. That's just my luck!",
   "gloomy.dialogue.story.success/2": "I'm too much of a coward to even think about taking on a creeper. Sigh.",
@@ -219,7 +220,6 @@
   "gloomy.dialogue.goaway/4": "Seek another soul to vex!",
   "gloomy.dialogue.goaway/5": "Begone, you wretched soul!",
 
-  "gloomy.dialogue.greet": "Ugh, hey... How are you doing today?",
   "gloomy.dialogue.greet/1": "Hey... How are you doing today?",
   "gloomy.dialogue.greet/2": "Oh, hey %1$s... How's it going?",
   "gloomy.dialogue.greet/3": "Oh, hello. Did you need something? Not that I really care...",
@@ -381,7 +381,7 @@
   "gloomy.dialogue.story.exploring.success/3": "Hmph... I suppose you think you're pretty brave, huh? Going out into the unknown like that. Must be nice to not have any responsibilities holding you back.",
   "gloomy.dialogue.story.exploring.fail/1": "Your tales have lost their luster.",
   "gloomy.dialogue.story.exploring.fail/2": "Oh, the incessant repetition of your dreary anecdotes. How utterly dismal.",
-  "gloomy.dialogue.story.exploring.fai/l3": "Interacting with you is like engaging in conversation with a melancholic soul, yearning for the grandeur of adulthood, yet devoid of the captivating qualities that often accompany such aspirations.",
+  "gloomy.dialogue.story.exploring.fail/3": "Conversing with you is like conversing with a wilted flower that dreams of being a towering oak one day. But without the promise of beauty, unfortunately.",
 
   "gloomy.dialogue.story.nether.success/1": "Does the heat ever stop burning in that accursed realm?!",
   "gloomy.dialogue.story.nether.success/2": "How on earth are you still breathing in that wretched dimension? It baffles me beyond words.",

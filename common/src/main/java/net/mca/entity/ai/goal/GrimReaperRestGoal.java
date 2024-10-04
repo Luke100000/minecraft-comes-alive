@@ -15,12 +15,12 @@ import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Vec3d;
 
 public class GrimReaperRestGoal extends Goal {
-    private final static int COOLDOWN = 1000;
+    private static final int COOLDOWN = 1000;
     private final GrimReaperEntity reaper;
     private int lastHeal = -COOLDOWN;
     private int healingCount = 0;
     private static final int MAX_HEALING_COUNT = 5;
-    private static final int MAX_HEALING_TIME = 500;
+    private static final int MAX_HEALING_TIME = 400;
     private int healingTime;
 
     public GrimReaperRestGoal(GrimReaperEntity reaper) {

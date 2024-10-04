@@ -7,20 +7,16 @@
           "baseChance": 5,
           "conditions": [
             {
-              "chance": 6,
-              "mood": "bored_to_tears"
-            },
-            {
               "chance": 4,
-              "mood": "bored"
+              "personality": "gloomy"
             },
             {
-              "chance": 5,
-              "mood": "talkative"
+              "chance": 6,
+              "personality": "peppy"
             },
             {
-              "chance": 3,
-              "mood": "interested"
+              "chance": 2,
+              "personality": "sensitive"
             }
           ],
           "actions": {
@@ -35,10 +31,6 @@
             {
               "chance": 5,
               "personality": "odd"
-            },
-            {
-              "chance": 4,
-              "personality": "stubborn"
             },
             {
               "chance": 1,

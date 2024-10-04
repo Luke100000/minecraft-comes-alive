@@ -16,14 +16,12 @@ import net.minecraft.util.math.Vec3d;
 import java.util.Optional;
 
 public class DeliverMessageTask extends MultiTickTask<VillagerEntityMCA> {
-    private static final int MAX_COOLDOWN = 10;
     private static final int TALKING_TIME_MIN = 100;
     private static final int TALKING_TIME_MAX = 500;
     private static final long MIN_TIME_BETWEEN_SOUND = 20 * 60 * 5;
 
-    private Optional<ConversationManager.Message> message = Optional.empty();
-
-    private int cooldown;
+    private ConversationManager.Message message = null;
+    private Entity receiver = null;
 
     private int talked;
 
@@ -40,31 +38,34 @@ public class DeliverMessageTask extends MultiTickTask<VillagerEntityMCA> {
 
     @Override
     protected boolean shouldRun(ServerWorld world, VillagerEntityMCA villager) {
-        if (cooldown > 0) {
-            cooldown--;
-            return false;
-        }
+        // Get potential message
+        Optional<ConversationManager.Message> optionalMessage = getMessage(villager);
+        // Set new message if it exists
+        optionalMessage.ifPresent((m) -> {
+            message = m;
+            receiver = message.getReceiver();
+        });
 
-        cooldown = MAX_COOLDOWN;
-        message = getMessage(villager);
-        return message.isPresent() && isWithinSeeRange(villager, message.get().getReceiver());
+        // We only run if a message exists and the villager can see the player
+        return optionalMessage.isPresent() && isWithinSeeRange(villager, receiver);
     }
 
     @Override
     protected void run(ServerWorld world, VillagerEntityMCA villager, long time) {
-        message.ifPresent(m -> {
-            talked = 0;
-        });
+        talked = 0;
     }
 
     @Override
     protected boolean shouldKeepRunning(ServerWorld world, VillagerEntityMCA villager, long time) {
-        return talked < getMaxTalkingTime() && !villager.getVillagerBrain().isPanicking() && !villager.isSleeping();
+        return  message != null
+                && talked < getMaxTalkingTime()
+                && !villager.getVillagerBrain().isPanicking()
+                && !villager.isSleeping();
     }
 
     private int getMaxTalkingTime() {
-        if (message.isPresent() && lastInteractionPos != null) {
-            Vec3d pos = message.get().getReceiver().getPos();
+        if (lastInteractionPos != null) {
+            Vec3d pos = receiver.getPos();
             if (lastInteractionPos.isInRange(pos, 1.0)) {
                 return TALKING_TIME_MAX;
             }
@@ -74,34 +75,49 @@ public class DeliverMessageTask extends MultiTickTask<VillagerEntityMCA> {
 
     @Override
     protected void keepRunning(ServerWorld world, VillagerEntityMCA villager, long time) {
-        message.ifPresent(m -> {
-            if (m.getReceiver() instanceof LivingEntity e) {
-                villager.getBrain().remember(MemoryModuleType.INTERACTION_TARGET, e);
-                LookTargetUtil.lookAt(villager, e);
-            }
+        // Look at the Receiver
+        if (receiver instanceof LivingEntity e) {
+            villager.getBrain().remember(MemoryModuleType.INTERACTION_TARGET, e);
+            LookTargetUtil.lookAt(villager, e);
+        }
 
-            if (talked == 0) {
-                if (isWithinRange(villager, m.getReceiver())) {
-                    if (time - lastInteraction > MIN_TIME_BETWEEN_SOUND) {
-                        villager.playWelcomeSound();
-                    }
-                    lastInteraction = time;
-                    lastInteractionPos = m.getReceiver().getPos();
-                    m.deliver();
-                    talked = 1;
-                } else {
-                    LookTargetUtil.walkTowards(villager, m.getReceiver(), 0.65F, 2);
-                }
-            } else {
-                LookTargetUtil.walkTowards(villager, m.getReceiver(), 0.45F, 2);
-                talked++;
+        // Walk towards receiver
+        LookTargetUtil.walkTowards(villager, receiver, 0.5F, 2);
+
+        // Wait until the next talk cycle if receiver changed
+        if (message.getReceiver() != receiver) {
+            return;
+        }
+
+        // If our message is still valid and we're next to the receiver, deliver it
+        if (message.stillValid() && isWithinRange(villager, receiver)) {
+            if (time - lastInteraction > MIN_TIME_BETWEEN_SOUND) {
+                villager.playWelcomeSound();
             }
-        });
+            lastInteraction = time;
+            lastInteractionPos = receiver.getPos();
+            message.deliver();
+        } else if (!message.stillValid() && isWithinRange(villager, receiver)) {
+            // Increase reply time timer
+            talked++;
+            // Message no longer valid. Get new one
+            // Get potential new message
+            Optional<ConversationManager.Message> optionalMessage = getMessage(villager);
+            // Set new message if it exists. Don't set new receiver, so we can check it against the old one
+            optionalMessage.ifPresent((m) -> {
+                message = m;
+                // Reset conversation timer if same receiver
+                if (m.getReceiver() == receiver) {
+                    talked = 0;
+                }
+            });
+        }
     }
 
     @Override
     protected void finishRunning(ServerWorld world, VillagerEntityMCA villager, long time) {
-        message = Optional.empty();
+        message = null;
+        receiver = null;
         villager.getBrain().forget(MemoryModuleType.INTERACTION_TARGET);
         villager.getBrain().forget(MemoryModuleType.WALK_TARGET);
         villager.getBrain().forget(MemoryModuleType.LOOK_TARGET);

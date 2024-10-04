@@ -462,4 +462,13 @@ public class Building implements Serializable {
     public boolean isStrictScan() {
         return strictScan;
     }
+
+    /**
+     * @return true if the group is large enough to be considered complete (e.g., Graveyard appears on map)
+     */
+    public boolean isComplete() {
+        BuildingType bt = getBuildingType();
+        int minBlocks = bt.getMinBlocks();
+        return minBlocks == 0 || getBlockCount() >= minBlocks;
+    }
 }

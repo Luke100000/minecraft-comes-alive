@@ -24,8 +24,12 @@
               "mood": "sad"
             },
             {
+              "chance": 7,
+              "personality": "gloomy"
+            },
+            {
               "chance": 4,
-              "mood": "giggly"
+              "personality": "peppy"
             }
           ],
           "actions": {
@@ -37,6 +41,10 @@
           "baseChance": 2,
           "applyFatigue": true,
           "conditions": [
+            {
+              "chance": 5,
+              "personality": "grumpy"
+            }
           ],
           "actions": {
             "next": "joke.creative.failed",
@@ -61,11 +69,7 @@
             },
             {
               "chance": 2,
-              "personality": "weak"
-            },
-            {
-              "chance": 2,
-              "personality": "fragile"
+              "trait": "weak"
             },
             {
               "chance": -4,
@@ -73,15 +77,11 @@
             },
             {
               "chance": 7,
-              "mood": "depressed"
-            },
-            {
-              "chance": 5,
-              "mood": "sad"
+              "personality": "gloomy"
             },
             {
               "chance": 4,
-              "mood": "giggly"
+              "personality": "peppy"
             }
           ],
           "actions": {
@@ -93,6 +93,10 @@
           "baseChance": 2,
           "applyFatigue": true,
           "conditions": [
+            {
+              "chance": 5,
+              "personality": "grumpy"
+            }
           ],
           "actions": {
             "next": "joke.creative.failed",
@@ -121,27 +125,19 @@
             },
             {
               "chance": 2,
-              "personality": "tough"
-            },
-            {
-              "chance": 2,
-              "personality": "strong"
+              "trait": "tough"
             },
             {
               "chance": -5,
-              "personality": "peaceful"
+              "personality": "sensitive"
             },
             {
               "chance": 7,
-              "mood": "depressed"
-            },
-            {
-              "chance": 5,
-              "mood": "sad"
+              "personality": "gloomy"
             },
             {
               "chance": 4,
-              "mood": "giggly"
+              "personality": "peppy"
             }
           ],
           "actions": {
@@ -153,6 +149,10 @@
           "baseChance": 2,
           "applyFatigue": true,
           "conditions": [
+            {
+              "chance": 5,
+              "personality": "grumpy"
+            }
           ],
           "actions": {
             "next": "joke.creative.failed",

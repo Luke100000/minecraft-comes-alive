@@ -11,7 +11,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(TranslatableTextContent.class)
 public class MixinTranslatableText {
     @Inject(method = "updateTranslations()V", at = @At("TAIL"))
-    private void updateTranslations(CallbackInfo ci) {
+    private void mca$updateTranslations(CallbackInfo ci) {
         if (CommonSpeechManager.INSTANCE.lastResolvedKey != null) {
             CommonSpeechManager.INSTANCE.translations.put((TextContent)this, CommonSpeechManager.INSTANCE.lastResolvedKey);
         }

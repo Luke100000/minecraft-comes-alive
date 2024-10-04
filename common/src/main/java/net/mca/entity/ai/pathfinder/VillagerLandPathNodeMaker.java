@@ -16,7 +16,6 @@ import net.minecraft.util.math.*;
 import net.minecraft.util.shape.VoxelShape;
 import net.minecraft.world.BlockView;
 import net.minecraft.world.chunk.ChunkCache;
-import org.jetbrains.annotations.Nullable;
 
 import java.util.EnumSet;
 
@@ -142,11 +141,11 @@ public class VillagerLandPathNodeMaker extends PathNodeMaker {
         return i;
     }
 
-    protected boolean isValidAdjacentSuccessor(@Nullable PathNode node, PathNode successor1) {
+    protected boolean isValidAdjacentSuccessor( PathNode node, PathNode successor1) {
         return node != null && !node.visited && (node.penalty >= 0.0f || successor1.penalty < 0.0f);
     }
 
-    protected boolean isValidDiagonalSuccessor(PathNode xNode, @Nullable PathNode zNode, @Nullable PathNode xDiagNode, @Nullable PathNode zDiagNode) {
+    protected boolean isValidDiagonalSuccessor(PathNode xNode,  PathNode zNode,  PathNode xDiagNode,  PathNode zDiagNode) {
         if (zDiagNode == null || xDiagNode == null || zNode == null) {
             return false;
         }
@@ -193,7 +192,7 @@ public class VillagerLandPathNodeMaker extends PathNodeMaker {
         return mob.getPathfindingPenalty(type.toVanilla()) + type.getBonusPenalty();
     }
 
-    @Nullable
+    
     protected PathNode getPathNode(int x, int y, int z, int maxYStep, double prevFeetY, Direction direction, ExtendedPathNodeType nodeType) {
         double h;
         double g;
@@ -359,7 +358,7 @@ public class VillagerLandPathNodeMaker extends PathNodeMaker {
                     pathNodeType = adjustNodeType(world, canOpenDoors, canEnterOpenDoors, pos, pathNodeType);
 
                     // Villager can also open gates
-                    if (blockState.isIn(BlockTags.FENCE_GATES, state -> state.getBlock() instanceof FenceGateBlock)) {
+                    if (Config.getServerConfig().useSmarterDoorAI && blockState.isIn(BlockTags.FENCE_GATES, state -> state.getBlock() instanceof FenceGateBlock)) {
                         pathNodeType = ExtendedPathNodeType.WALKABLE_DOOR;
                     }
 
@@ -546,6 +545,6 @@ public class VillagerLandPathNodeMaker extends PathNodeMaker {
     }
 
     public static boolean inflictsFireDamage(BlockState state) {
-        return state.isIn(BlockTags.FIRE) || state.isOf(Blocks.LAVA) || state.isOf(Blocks.MAGMA_BLOCK) || CampfireBlock.isLitCampfire(state) || state.isOf(Blocks.LAVA_CAULDRON);
+        return LandPathNodeMaker.inflictsFireDamage(state); // todo add custom tag
     }
 }

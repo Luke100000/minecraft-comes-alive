@@ -355,18 +355,17 @@ public class VillagerEntityMCA extends VillagerEntity implements VillagerLike<Vi
         //player just get a beating
         attackedEntity(target);
 
-        //villager is peaceful and won't hurt as long as not necessary
-        if (mcaBrain.getPersonality() == Personality.PEACEFUL && getHealth() == getMaxHealth()) {
-            return false;
-        }
-
-        //we don't use attributes
-        // why not?
+        //base damage // todo attributes?
         float damage = getProfession() == ProfessionsMCA.GUARD.get() ? 9 : 3;
         float knockback = 1;
 
-        //personality bonus
-        damage *= mcaBrain.getPersonality().getDamageModifier();
+        //traits
+        if (getTraits().hasTrait(Traits.WEAK)) {
+            damage *= 0.75f;
+        }
+        if (getTraits().hasTrait(Traits.TOUGH)) {
+            damage *= 1.25f;
+        }
 
         //enchantment
         if (target instanceof LivingEntity livingEntity) {
@@ -573,7 +572,9 @@ public class VillagerEntityMCA extends VillagerEntity implements VillagerLike<Vi
             damageAmount *= 0.5f;
         }
 
-        damageAmount *= mcaBrain.getPersonality().getWeaknessModifier();
+        if (getTraits().hasTrait(Traits.TOUGH)) {
+            damageAmount *= 0.75f;
+        }
 
         if (!getWorld().isClient) {
             //scream and loose hearts
@@ -1363,6 +1364,10 @@ public class VillagerEntityMCA extends VillagerEntity implements VillagerLike<Vi
 
         if (nbt.contains("clothes")) {
             validateClothes();
+        }
+
+        if (getVillagerBrain().getPersonality() == Personality.UNASSIGNED) {
+            getVillagerBrain().randomize();
         }
     }
 

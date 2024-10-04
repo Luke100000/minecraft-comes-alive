@@ -72,3 +72,14 @@ components.java {
     }
 }
  */
+
+publishing {
+    publications {
+        mavenCommon(MavenPublication) {
+            artifactId = rootProject.artifactId
+            groupId = rootProject.groupId
+            version = version + "+forge"
+            from components.java
+        }
+    }
+}

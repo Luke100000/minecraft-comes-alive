@@ -290,7 +290,7 @@ public class Village implements Iterable<Building> {
     }
 
     public boolean hasBuilding(String building) {
-        return buildings.values().stream().anyMatch(b -> b.getType().equals(building));
+        return buildings.values().stream().anyMatch(b -> b.getType().equals(building) && b.isComplete());
     }
 
     public void tick(ServerWorld world, long time) {

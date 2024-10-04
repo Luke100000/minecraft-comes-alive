@@ -7,6 +7,8 @@ jobs:
     env:
       MODRINTH_TOKEN: ${{ secrets.MR_API_TOKEN }}
       CURSEFORGE_TOKEN: ${{ secrets.CF_API_TOKEN }}
+      MAVEN_USERNAME: ${{ secrets.MAVEN_USERNAME }}
+      MAVEN_TOKEN: ${{ secrets.MAVEN_TOKEN }}
     if: startsWith(github.ref, 'refs/tags/')
     steps:
       - name: Checkout Commit
@@ -21,6 +23,8 @@ jobs:
         run: chmod +x gradlew
       - name: Build Artifacts with Gradle
         run: ./gradlew build
+      - name: Publish to Maven
+        run: ./gradlew publish
       - name: Upload Artifacts
         uses: actions/upload-artifact@v2
         with:

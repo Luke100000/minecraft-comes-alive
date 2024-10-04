@@ -3,15 +3,14 @@ package net.mca.entity.interaction.gifts;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonSyntaxException;
-import net.mca.entity.interaction.Constraint;
 import net.mca.entity.VillagerEntityMCA;
 import net.mca.entity.ai.Chore;
 import net.mca.entity.ai.LongTermMemory;
-import net.mca.entity.ai.MoodGroup;
 import net.mca.entity.ai.Traits;
 import net.mca.entity.ai.relationship.AgeState;
 import net.mca.entity.ai.relationship.Gender;
 import net.mca.entity.ai.relationship.Personality;
+import net.mca.entity.interaction.Constraint;
 import net.mca.resources.Rank;
 import net.mca.resources.Tasks;
 import net.minecraft.advancement.Advancement;
@@ -86,11 +85,6 @@ public class GiftPredicate {
                 JsonHelper.asString(json, name).toLowerCase(Locale.ENGLISH), mood ->
                 (villager, stack, player) ->
                         villager.getVillagerBrain().getMood().getName().equals(mood) ? 1.0f : 0.0f
-        );
-        register("mood_group", (json, name) ->
-                MoodGroup.valueOf(JsonHelper.asString(json, name).toUpperCase(Locale.ENGLISH)), moodGroup ->
-                (villager, stack, player) ->
-                        villager.getVillagerBrain().getPersonality().getMoodGroup() == moodGroup ? 1.0f : 0.0f
         );
         register("personality", (json, name) ->
                 Personality.valueOf(JsonHelper.asString(json, name).toUpperCase(Locale.ENGLISH)), personality ->

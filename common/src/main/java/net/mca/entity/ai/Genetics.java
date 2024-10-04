@@ -103,8 +103,12 @@ public class Genetics implements Iterable<Genetics.Gene> {
             temp = random.nextFloat() * 2 - 0.5F;
         }
 
-        setGene(MELANIN, temperatureBaseRandom(temp));
-        setGene(HEMOGLOBIN, temperatureBaseRandom(temp));
+        float height = entity.asEntity().getBlockPos().getY();
+        height -= entity.asEntity().getWorld().getSeaLevel();
+        height /= 128;
+
+        setGene(MELANIN, MathHelper.clamp(temperatureBaseRandom(temp) - height * 0.2f, 0, 1));
+        setGene(HEMOGLOBIN, MathHelper.clamp(temperatureBaseRandom(temp) * 0.5f + height * 0.5f, 0, 1));
 
         setGene(EUMELANIN, random.nextFloat());
         setGene(PHEOMELANIN, random.nextFloat());
@@ -118,7 +122,7 @@ public class Genetics implements Iterable<Genetics.Gene> {
     }
 
     private float temperatureBaseRandom(float temp) {
-        return MathHelper.clamp((random.nextFloat() - 0.5F) * 0.5F + temp * 0.4F + 0.1F, 0, 1);
+        return (random.nextFloat() - 0.5F) * 0.35F + temp * 0.4F + 0.1F;
     }
 
     public void combine(Genetics mother, Genetics father) {

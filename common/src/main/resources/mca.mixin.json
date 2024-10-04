@@ -5,15 +5,15 @@
   "compatibilityLevel": "JAVA_17",
   "mixins": [
     "MixinAbstractFurnaceBlockEntity", "MixinActivity", "MixinCriteria", "MixinDefaultParticleType", "MixinEntityType",
-    "MixinGoatEntity", "MixinHorseBaseEntity", "MixinMemoryModuleType", "MixinMilkBucketItem", "MixinPlayerEntity",
-    "MixinPlayerInventory", "MixinProtoChunk", "MixinSensorType", "MixinServerPlayNetworkHandler", "MixinServerWorld",
-    "MixinTranslatableText", "MixinVillagerEntity", "MixinVillagerEntityInvoker", "MixinVillagerProfession",
-    "MixinZombieEntity", "MixinZombieVillagerEntity"
+    "MixinFlintAndSteelItem", "MixinGoatEntity", "MixinHorseBaseEntity", "MixinMemoryModuleType", "MixinMilkBucketItem",
+    "MixinPlayerEntity", "MixinPlayerInventory", "MixinProtoChunk", "MixinSensorType", "MixinServerPlayNetworkHandler",
+    "MixinServerWorld", "MixinTranslatableText", "MixinVillagerEntity", "MixinVillagerEntityInvoker",
+    "MixinVillagerProfession", "MixinZombieEntity", "MixinZombieVillagerEntity"
   ],
   "client": [
     "client.MixinArmorFeatureRenderer", "client.MixinGameRenderer", "client.MixinHeldItemFeatureRenderer",
     "client.MixinLivingEntityRenderer", "client.MixinMessageHandler", "client.MixinPlayerEntityClient",
-    "client.MixinPlayerEntityRenderer", "client.MixinTranslationStorage"
+    "client.MixinPlayerEntityRenderer", "client.MixinSoundLoader", "client.MixinTranslationStorage"
   ],
   "injectors": {
     "defaultRequire": 1

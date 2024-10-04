@@ -11,15 +11,13 @@ import java.util.List;
 
 public class CenteredListPage extends ListPage {
     final Text title;
-    final List<Text> text;
-
-    int page;
 
     public static final int ENTRIES_PER_PAGE = 11;
 
     public CenteredListPage(Text title, List<Text> text) {
+        super(text);
+
         this.title = title;
-        this.text = text;
     }
 
     public CenteredListPage(String title, List<Text> text) {

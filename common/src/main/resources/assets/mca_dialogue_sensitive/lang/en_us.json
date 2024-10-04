@@ -105,6 +105,7 @@
   "sensitive.dialogue.chat.fail/18": "I'd rather stare at a pig's behind than engage in a conversation with you.",
   "sensitive.dialogue.chat.fail/19": "Are you finally finished bothering me with your talk?",
   "sensitive.dialogue.chat.fail/20": "Wait, hold on. You actually believe the Earth is round? No edges or corners? That's just absurd.",
+  "sensitive.dialogue.chat.fail/21": "Oh, please tell me you don't actually think the earth is round! I mean, how can anyone believe such nonsense? It's absurd to think there are no corners on our planet!",
 
   "sensitive.dialogue.story.success/1": "Oh my goodness, I am absolutely astonished by everything that transpired!",
   "sensitive.dialogue.story.success/2": "If only I possessed the courage to confront a creeper, I truly envy your bravery.",
@@ -219,7 +220,6 @@
   "sensitive.dialogue.goaway/4": "Kindly find someone else to bother!",
   "sensitive.dialogue.goaway/5": "Oh dear, would you be so kind as to leave, you miscreant?",
 
-  "sensitive.dialogue.greet": "Oh, hey there! How's your day treating you?",
   "sensitive.dialogue.greet/1": "Hey! How are things going for you today?",
   "sensitive.dialogue.greet/2": "Well, hello %1$s! How's the world treating you lately?",
   "sensitive.dialogue.greet/3": "Greetings! Is there something on your mind?",
@@ -381,7 +381,7 @@
   "sensitive.dialogue.story.exploring.success/3": "Oh my goodness, you must have the heart of a lion! To boldly step into uncharted territory, facing the mysteries and dangers that lie ahead takes a special kind of courage. I'm in absolute awe!",
   "sensitive.dialogue.story.exploring.fail/1": "I must admit, your stories have lost their charm over time.",
   "sensitive.dialogue.story.exploring.fail/2": "Oh my, please be careful! That edge you're projecting might end up hurting you, my dear friend.",
-  "sensitive.dialogue.story.exploring.fai/l3": "Interacting with you is akin to conversing with a blossoming soul, yearning to evolve into their future self. Minus the endearing charm, of course.",
+  "sensitive.dialogue.story.exploring.fail/3": "Speaking with you resembles conversing with a fragile being on a quest for enlightenment. Alas, the endearing qualities are amiss in this comparison.",
 
   "sensitive.dialogue.story.nether.success/1": "Is it really that hot in the Nether?! Oh, my delicate senses couldn't bear the scorching heat!",
   "sensitive.dialogue.story.nether.success/2": "Oh, my goodness! How on earth have you managed to not spontaneously combust in that treacherous place? My fragile constitution would never survive!",

@@ -94,7 +94,7 @@ public interface ItemsMCA {
     RegistrySupplier<Item> BOOK_FAMILY = register("book_family", () -> new ExtendedWrittenBookItem(baseProps(), new Book("family")
             .setBackground(MCA.locate("textures/gui/books/family.png"))
             .addPage(new TitlePage("family"))
-            .addSimplePages(8)));
+            .addSimplePages(6)));
 
     RegistrySupplier<Item> BOOK_ROSE_GOLD = register("book_rose_gold", () -> new ExtendedWrittenBookItem(baseProps(), new Book("rose_gold")
             .setBackground(MCA.locate("textures/gui/books/rose_gold.png"))
@@ -116,12 +116,12 @@ public interface ItemsMCA {
     RegistrySupplier<Item> BOOK_SUPPORTERS = register("book_supporters", () -> new ExtendedWrittenBookItem(baseProps(), new Book("supporters")
             .setBackground(MCA.locate("textures/gui/books/supporters.png"))
             .addPage(new TitlePage("supporters"))
-            .addPage(new DynamicListPage("mca.books.supporters.patrons",
-                    page -> Supporters.getSupporterGroup("mca:patrons").stream().map(s -> Text.literal(s).formatted(Formatting.RED)).collect(Collectors.toList())))
-            .addPage(new DynamicListPage("mca.books.supporters.wiki",
-                    page -> Supporters.getSupporterGroup("mca:wiki").stream().map(s -> Text.literal(s).formatted(Formatting.GOLD)).collect(Collectors.toList())))
             .addPage(new DynamicListPage("mca.books.supporters.contributors",
                     page -> Supporters.getSupporterGroup("mca:contributors").stream().map(s -> Text.literal(s).formatted(Formatting.DARK_GREEN)).collect(Collectors.toList())))
+            .addPage(new DynamicListPage("mca.books.supporters.wiki",
+                    page -> Supporters.getSupporterGroup("mca:wiki").stream().map(s -> Text.literal(s).formatted(Formatting.GOLD)).collect(Collectors.toList())))
+            .addPage(new DynamicListPage("mca.books.supporters.patrons",
+                    page -> Supporters.getSupporterGroup("mca:patrons").stream().map(s -> Text.literal(s).formatted(Formatting.RED)).collect(Collectors.toList())))
             .addPage(new DynamicListPage("mca.books.supporters.translators",
                     page -> Supporters.getSupporterGroup("mca:translators").stream().map(s -> Text.literal(s).formatted(Formatting.DARK_BLUE)).collect(Collectors.toList())))
             .addPage(new DynamicListPage("mca.books.supporters.old",

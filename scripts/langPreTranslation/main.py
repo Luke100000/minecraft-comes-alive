@@ -13,7 +13,6 @@ load_dotenv()
 
 def generate_phrases(system: str, prompt: str):
     response = openai.chat.completions.create(
-        # model="gpt-4-1106-preview",
         model="gpt-3.5-turbo",
         messages=[
             {"role": "system", "content": system},
@@ -96,23 +95,17 @@ def valid_phrase(key: str):
 personalities = [
     "athletic",
     "confident",
-    "strong",
-    # "friendly",
-    "tough",
-    "curious",
-    "peaceful",
+    # "friendly",  # We use this one as the default
     "flirty",
     "witty",
     "shy",
     "gloomy",
     "sensitive",
     "greedy",
-    "stubborn",
     "odd",
-    "sleepy",
-    "fragile",
-    "weak",
+    "lazy",
     "grumpy",
+    "peppy",
 ]
 
 

@@ -7,8 +7,8 @@ import net.mca.block.BlocksMCA;
 import net.mca.entity.EntitiesMCA;
 import net.mca.entity.GrimReaperEntity;
 import net.mca.server.world.data.VillageManager;
+import net.mca.util.WorldUtils;
 import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
 import net.minecraft.block.Blocks;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.SpawnReason;
@@ -16,15 +16,16 @@ import net.minecraft.nbt.NbtCompound;
 import net.minecraft.nbt.NbtElement;
 import net.minecraft.nbt.NbtHelper;
 import net.minecraft.registry.tag.BlockTags;
-import net.minecraft.server.world.ServerChunkManager;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.ChunkPos;
 import net.minecraft.util.math.Direction;
 import net.minecraft.world.World;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -35,7 +36,7 @@ public class ReaperSpawner {
 
     private final Object lock = new Object();
 
-    private final Map<Long, ActiveSummon> activeSummons = new HashMap<>();
+    private final Map<Long, ActiveSummon> activeSummons = new ConcurrentHashMap<>();
 
     private final VillageManager manager;
 
@@ -56,32 +57,19 @@ public class ReaperSpawner {
                 .ifPresent(p -> p.sendMessage(Text.translatable(phrase).formatted(Formatting.RED), true));
     }
 
-    public void trySpawnReaper(ServerWorld world, BlockState state, BlockPos pos) {
-        if (!state.isIn(BlockTags.FIRE)) {
-            return;
-        }
+    public void trySpawnReaper(ServerWorld world, BlockPos pos) {
         if (!Config.getInstance().allowGrimReaper) {
             return;
         }
 
+        ChunkPos chunkPos = new ChunkPos(pos);
+
         // Make sure the neighboring chunks are loaded
-        // Fixes deadlock issues with getBlockState() below
-        ServerChunkManager chunkManager = world.getChunkManager();
-        int chunkX = pos.getX() >> 4;
-        int chunkZ = pos.getZ() >> 4;
-        if (!(chunkManager.isChunkLoaded(chunkX, chunkZ) &&
-                chunkManager.isChunkLoaded(chunkX, chunkZ - 1) &&
-                chunkManager.isChunkLoaded(chunkX, chunkZ + 1) &&
-                chunkManager.isChunkLoaded(chunkX - 1, chunkZ - 1) &&
-                chunkManager.isChunkLoaded(chunkX - 1, chunkZ) &&
-                chunkManager.isChunkLoaded(chunkX - 1, chunkZ + 1) &&
-                chunkManager.isChunkLoaded(chunkX + 1, chunkZ - 1) &&
-                chunkManager.isChunkLoaded(chunkX + 1, chunkZ) &&
-                chunkManager.isChunkLoaded(chunkX + 1, chunkZ + 1))) {
+        if (!WorldUtils.isAreaLoaded(world, chunkPos, 1)) {
             return;
         }
 
-        if (world.getBlockState(pos.down()).getBlock() != Blocks.EMERALD_BLOCK) {
+        if (world.getBlockState(pos).getBlock() != Blocks.EMERALD_BLOCK) {
             return;
         }
 
@@ -101,38 +89,34 @@ public class ReaperSpawner {
             return;
         }
 
-        start(new SummonPosition(pos, totems));
+        start(new SummonPosition(pos.up(), totems));
 
         EntityType.LIGHTNING_BOLT.spawn(world, pos, SpawnReason.TRIGGERED);
 
-        world.setBlockState(pos.down(), Blocks.SOUL_SOIL.getDefaultState(), Block.NOTIFY_NEIGHBORS | Block.NOTIFY_LISTENERS);
-        world.setBlockState(pos, BlocksMCA.INFERNAL_FLAME.get().getDefaultState(), Block.NOTIFY_NEIGHBORS | Block.NOTIFY_LISTENERS);
+        world.setBlockState(pos, Blocks.SOUL_SOIL.getDefaultState(), Block.NOTIFY_NEIGHBORS | Block.NOTIFY_LISTENERS);
+        world.setBlockState(pos.up(), BlocksMCA.INFERNAL_FLAME.get().getDefaultState(), Block.NOTIFY_NEIGHBORS | Block.NOTIFY_LISTENERS);
         totems.forEach(totem ->
                 world.setBlockState(totem, BlocksMCA.INFERNAL_FLAME.get().getDefaultState(), Block.NOTIFY_LISTENERS | Block.FORCE_STATE)
         );
     }
 
     private void start(SummonPosition pos) {
-        synchronized (lock) {
-            activeSummons.computeIfAbsent(pos.spawnPosition.asLong(), ActiveSummon::new).start(pos);
-            manager.markDirty();
-        }
+        activeSummons.computeIfAbsent(pos.spawnPosition.asLong(), ActiveSummon::new).start(pos);
+        manager.markDirty();
     }
 
     public void tick(ServerWorld world) {
-        synchronized (lock) {
-            boolean empty = activeSummons.isEmpty();
-            activeSummons.values().removeIf(summon -> {
-                try {
-                    return summon.tick(world);
-                } catch (Exception e) {
-                    MCA.LOGGER.error("Exception ticking summon", e);
-                    return true;
-                }
-            });
-            if (!empty) {
-                manager.markDirty();
+        boolean empty = activeSummons.isEmpty();
+        activeSummons.values().removeIf(summon -> {
+            try {
+                return summon.tick(world);
+            } catch (Exception e) {
+                MCA.LOGGER.error("Exception ticking summon", e);
+                return true;
             }
+        });
+        if (!empty) {
+            manager.markDirty();
         }
     }
 
@@ -143,7 +127,7 @@ public class ReaperSpawner {
     }
 
     private Set<BlockPos> getTotemsFires(World world, BlockPos pos) {
-        int groundY = pos.getY() - 2;
+        int groundY = pos.getY() - 1;
         int leftSkyHeight = world.getTopY() - groundY;
         int minPillarHeight = Math.min(Config.getInstance().minPillarHeight, leftSkyHeight);
         BlockPos.Mutable target = new BlockPos.Mutable();
@@ -215,6 +199,7 @@ public class ReaperSpawner {
         private SummonPosition position;
 
         ActiveSummon(long l) {
+            // nop
         }
 
         ActiveSummon(NbtCompound nbt) {

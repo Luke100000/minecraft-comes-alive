@@ -28,7 +28,7 @@ import net.minecraft.entity.damage.DamageTypes;
 import net.minecraft.entity.mob.HostileEntity;
 import net.minecraft.entity.mob.PathAwareEntity;
 import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.entity.projectile.ArrowEntity;
+import net.minecraft.entity.projectile.ProjectileEntity;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.sound.SoundCategory;
@@ -44,7 +44,7 @@ public class GrimReaperEntity extends PathAwareEntity implements CTrackedEntity<
 
     public static final CDataManager<GrimReaperEntity> DATA = new CDataManager.Builder<>(GrimReaperEntity.class).addAll(ATTACK_STAGE).build();
 
-    private final ServerBossBar bossInfo = (ServerBossBar)new ServerBossBar(getDisplayName(), BossBar.Color.PURPLE, BossBar.Style.PROGRESS).setDarkenSky(true);
+    private final ServerBossBar bossInfo = (ServerBossBar) new ServerBossBar(getDisplayName(), BossBar.Color.PURPLE, BossBar.Style.PROGRESS).setDarkenSky(true);
 
     public GrimReaperEntity(EntityType<? extends GrimReaperEntity> type, World world) {
         super(type, world);
@@ -89,11 +89,10 @@ public class GrimReaperEntity extends PathAwareEntity implements CTrackedEntity<
     protected void initGoals() {
         this.targetSelector.add(1, new GrimReaperTargetGoal(this));
 
+        this.goalSelector.add(0, new LookAtEntityGoal(this, PlayerEntity.class, 24, 1.0f));
         this.goalSelector.add(1, new GrimReaperRestGoal(this));
         this.goalSelector.add(2, new GrimReaperMeleeGoal(this));
         this.goalSelector.add(3, new GrimReaperIdleGoal(this, 1));
-        this.goalSelector.add(4, new LookAtEntityGoal(this, PlayerEntity.class, 8));
-        this.goalSelector.add(5, new LookAroundGoal(this));
     }
 
     @Override
@@ -166,16 +165,21 @@ public class GrimReaperEntity extends PathAwareEntity implements CTrackedEntity<
             return false;
         }
 
-        Entity attacker = source.getSource();
+        Entity entity = source.getSource();
+        Entity attacker = source.getAttacker();
 
-        // Ignore damage when blocking, and teleport behind the attacker when attacked
-        if (!getWorld().isClient && this.getAttackState() == ReaperAttackState.BLOCK && attacker != null) {
-
-            double deltaX = this.getX() - attacker.getX();
-            double deltaZ = this.getZ() - attacker.getZ();
-
+        // Ignore damage when blocking, and randomly teleport around
+        if (this.getAttackState() == ReaperAttackState.BLOCK && attacker != null) {
             playSound(SoundsMCA.REAPER_BLOCK.get(), 1.0F, 1.0F);
-            requestTeleport(attacker.getX() - (deltaX * 2), attacker.getY() + 2, this.getZ() - (deltaZ * 2));
+            return false;
+        }
+
+        // Teleport next to the player who fired an arrow
+        if (entity instanceof ProjectileEntity && getAttackState() != ReaperAttackState.REST && attacker != null && random.nextBoolean()) {
+            double newX = attacker.getX() + (random.nextFloat() >= 0.50F ? 4 : -4);
+            double newZ = attacker.getZ() + (random.nextFloat() >= 0.50F ? 4 : -4);
+
+            requestTeleport(newX, attacker.getY(), newZ);
             return false;
         }
 
@@ -183,29 +187,15 @@ public class GrimReaperEntity extends PathAwareEntity implements CTrackedEntity<
         if (!getWorld().isClient && random.nextFloat() >= 0.30F && attacker != null) {
             double deltaX = this.getX() - attacker.getX();
             double deltaZ = this.getZ() - attacker.getZ();
+            double distance = Math.sqrt(deltaX * deltaX + deltaZ * deltaZ);
+            double length = Math.max(5.0, distance) / distance * 0.95;
 
-            requestTeleport(attacker.getX() - (deltaX * 2), attacker.getY() + 2, this.getZ() - (deltaZ * 2));
-        }
-
-        // Teleport behind the player who fired an arrow and ignore its damage.
-        if (attacker instanceof ArrowEntity arrow) {
-            if (getAttackState() != ReaperAttackState.REST) {
-                Entity owner = arrow.getOwner();
-
-                if (owner != null) {
-                    double newX = owner.getX() + (random.nextFloat() >= 0.50F ? 2 : -2);
-                    double newZ = owner.getZ() + (random.nextFloat() >= 0.50F ? 2 : -2);
-
-                    requestTeleport(newX, owner.getY(), newZ);
-                }
-                arrow.discard();
-            }
-            return false;
+            requestTeleport(attacker.getX() - deltaX * length, attacker.getY() + 1.5, attacker.getZ() - deltaZ * length);
         }
 
         // 25% damage when healing
         if (this.getAttackState() == ReaperAttackState.REST) {
-            damage *= 0.25;
+            damage *= 0.25f;
         }
 
         return super.damage(source, damage);
@@ -241,12 +231,6 @@ public class GrimReaperEntity extends PathAwareEntity implements CTrackedEntity<
         if (this.getHealth() <= 0.0F) {
             setVelocity(Vec3d.ZERO);
             return;
-        }
-
-        // look at the player. Always.
-        PlayerEntity player = getWorld().getClosestPlayer(this, 10.D);
-        if (player != null) {
-            getLookControl().lookAt(player.getX(), player.getEyeY(), player.getZ());
         }
 
         LivingEntity entityToAttack = this.getTarget();

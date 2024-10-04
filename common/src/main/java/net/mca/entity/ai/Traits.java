@@ -19,6 +19,8 @@ public class Traits {
     public static final Map<String, Trait> TRAIT_REGISTRY = new HashMap<>();
 
     public static Trait LEFT_HANDED = registerTrait("LEFT_HANDED", 1.0F, 0.5F, false);
+    public static Trait WEAK = registerTrait("WEAK", 1.0F, 1.0F, false);
+    public static Trait TOUGH = registerTrait("TOUGH", 1.0F, 1.0F, false);
     public static Trait COLOR_BLIND = registerTrait("COLOR_BLIND", 1.0F, 0.5F);
     public static Trait HETEROCHROMIA = registerTrait("HETEROCHROMIA", 1.0F, 0.5F);
     public static Trait LACTOSE_INTOLERANCE = registerTrait("LACTOSE_INTOLERANCE", 1.0F, 1.0F);
@@ -66,7 +68,7 @@ public class Traits {
         }
 
         public static Trait valueOf(String id) {
-            return TRAIT_REGISTRY.getOrDefault(id, UNKNOWN);
+            return TRAIT_REGISTRY.getOrDefault(id.toUpperCase(Locale.ROOT), UNKNOWN);
         }
 
         public Text getName() {
@@ -170,6 +172,6 @@ public class Traits {
     }
 
     public float getHorizontalScaleFactor() {
-        return hasTrait(Traits.DWARFISM) ? 0.85f : 1.0f;
+        return (hasTrait(Traits.DWARFISM) ? 0.85f : 1.0f) * (hasTrait(Traits.TOUGH) ? 1.2f : 1.0f) * (hasTrait(Traits.WEAK) ? 0.85f : 1.0f);
     }
 }

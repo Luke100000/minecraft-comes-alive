@@ -10,10 +10,7 @@ import net.mca.entity.ai.Genetics;
 import net.mca.entity.ai.Messenger;
 import net.mca.entity.ai.Traits;
 import net.mca.entity.ai.brain.VillagerBrain;
-import net.mca.entity.ai.relationship.AgeState;
-import net.mca.entity.ai.relationship.EntityRelationship;
-import net.mca.entity.ai.relationship.Gender;
-import net.mca.entity.ai.relationship.VillagerDimensions;
+import net.mca.entity.ai.relationship.*;
 import net.mca.entity.interaction.EntityCommandHandler;
 import net.mca.resources.ClothingList;
 import net.mca.resources.HairList;
@@ -81,7 +78,6 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
             }
 
             initializeSkin(false);
-
             getVillagerBrain().randomize();
         }
 

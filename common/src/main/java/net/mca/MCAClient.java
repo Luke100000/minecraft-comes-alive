@@ -39,6 +39,13 @@ public class MCAClient {
         return Optional.empty();
     }
 
+    public static boolean useExpandedPersonalityTranslations() {
+        boolean isTTSPackActive = MinecraftClient.getInstance().getResourceManager().streamResourcePacks().anyMatch(pack -> {
+            return pack.getName().contains("MCAVoices");
+        });
+        return !isTTSPackActive && MinecraftClient.getInstance().options.language.equals("en_us") && !Config.getInstance().enableOnlineTTS;
+    }
+
     public static boolean useGeneticsRenderer(UUID uuid) {
         return getPlayerData(uuid).filter(f -> f.getPlayerModel() != VillagerLike.PlayerModel.VANILLA).isPresent();
     }

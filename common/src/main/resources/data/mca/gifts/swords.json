@@ -5,15 +5,11 @@
       "satisfaction_boost": 20
     },
     {
-      "personality": "peaceful",
-      "satisfaction_boost": -40
-    },
-    {
-      "personality": "fragile",
+      "personality": "sensitive",
       "satisfaction_boost": -20
     },
     {
-      "personality": "weak",
+      "trait": "weak",
       "satisfaction_boost": -20
     }
   ],

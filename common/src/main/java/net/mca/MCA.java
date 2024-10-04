@@ -19,6 +19,7 @@ public final class MCA {
     private static final Map<String, Boolean> MOD_CACHE = new HashMap<>();
 
     public static final ExecutorService executorService = Executors.newSingleThreadExecutor();
+    public static Map<String, String> translations = new HashMap<>();
 
     private static MinecraftServer server;
 

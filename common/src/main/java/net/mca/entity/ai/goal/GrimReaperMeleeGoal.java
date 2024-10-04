@@ -13,7 +13,7 @@ import net.minecraft.util.Hand;
 import net.minecraft.util.math.Vec3d;
 
 public class GrimReaperMeleeGoal extends Goal {
-    private final static int COOLDOWN = 150;
+    private static final int COOLDOWN = 150;
     private final GrimReaperEntity reaper;
 
     private int blockDuration;
@@ -46,7 +46,7 @@ public class GrimReaperMeleeGoal extends Goal {
 
     @Override
     public void start() {
-        blockDuration = 60;
+        blockDuration = 50;
         attackDuration = 100;
         retreatDuration = 20;
 

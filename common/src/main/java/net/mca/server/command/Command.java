@@ -1,30 +1,43 @@
 package net.mca.server.command;
 
 import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.arguments.BoolArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.ArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import net.mca.Config;
 import net.mca.MCA;
+import net.mca.client.LanguageMap;
+import net.mca.client.OnlineSpeechManager;
+import net.mca.client.SpeechManager;
 import net.mca.cobalt.network.NetworkHandler;
-import net.mca.entity.ai.GPT3;
+import net.mca.entity.VillagerEntityMCA;
+import net.mca.entity.ai.chatAI.ChatAI;
+import net.mca.entity.ai.chatAI.GPT3;
+import net.mca.entity.ai.relationship.Personality;
 import net.mca.network.s2c.OpenGuiRequest;
 import net.mca.server.ServerInteractionManager;
 import net.mca.server.world.data.PlayerSaveData;
+import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.resource.language.LanguageDefinition;
 import net.minecraft.command.argument.EntityArgumentType;
-import net.minecraft.entity.Entity;
 import net.minecraft.server.command.CommandManager;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.text.ClickEvent;
+import net.minecraft.text.MutableText;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
 
 public class Command {
@@ -41,18 +54,130 @@ public class Command {
                 .then(register("destiny", Command::destiny))
                 .then(register("mail", Command::mail))
                 .then(register("verify").then(CommandManager.argument("email", StringArgumentType.greedyString()).executes(Command::verify)))
+                .then(register("chatAI")
+                        .requires(p -> p.hasPermissionLevel(2) || p.getServer().isSingleplayer())
+                        .executes(Command::chatAIHelp)
+                        .then(CommandManager.literal("disable")
+                                .executes(Command::disableChatAI))
+                        .then(CommandManager.argument("model", StringArgumentType.string())
+                                .executes(c -> Command.chatAI(c.getArgument("model", String.class), (new Config()).villagerChatAIEndpoint, ""))
+                                .then(CommandManager.argument("endpoint", StringArgumentType.string())
+                                        .executes(c -> Command.chatAI(c.getArgument("model", String.class), c.getArgument("endpoint", String.class), ""))
+                                        .then(CommandManager.argument("token", StringArgumentType.string())
+                                                .executes(c -> Command.chatAI(c.getArgument("model", String.class), c.getArgument("endpoint", String.class), c.getArgument("token", String.class)))))))
+                .then(register("tts")
+                        .requires(p -> p.getServer().isSingleplayer())
+                        .then(CommandManager.literal("enable").then(CommandManager.argument("enabled", BoolArgumentType.bool()).executes(Command::ttsEnable)))
+                        .then(CommandManager.literal("scan").then(CommandManager.argument("language", StringArgumentType.string()).requires(p -> p.getPlayer() != null && p.getPlayer().getEntityName().contains("Player")).executes(Command::ttsScan))))
+                .then(register("inworldAI")
+                        .requires(p -> p.hasPermissionLevel(2) || p.getServer().isSingleplayer())
+                        .then(register("keys")
+                                .then(CommandManager.argument("api_key", StringArgumentType.string())
+                                        .executes(c -> Command.inworldAIKey(c.getArgument("api_key", String.class)))))
+                        .then(register("addCharacter")
+                                .then(CommandManager.argument("villager_name", StringArgumentType.string())
+                                        .then(CommandManager.argument("character_endpoint", StringArgumentType.string())
+                                                .executes(c -> Command.inworldAICharacter(c, c.getArgument("villager_name", String.class), c.getArgument("character_endpoint", String.class)))
+                                        )
+                                )
+                        )
+                )
         );
     }
 
+    private static int chatAIHelp(CommandContext<ServerCommandSource> context) {
+        MutableText styled = (Text.translatable("mca.ai_help")).styled(s -> s
+                .withColor(Formatting.GOLD)
+                .withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, "https://github.com/Luke100000/minecraft-comes-alive/wiki/GPT3-based-conversations")));
+        sendMessage(context, styled);
+        return chatAI((new Config()).villagerChatAIModel, (new Config()).villagerChatAIEndpoint, (new Config()).villagerChatAIToken);
+    }
+
+    private static int inworldAIKey(String apiKey) {
+        Config.getInstance().inworldAIToken = apiKey;
+        Config.getInstance().save();
+        return 0;
+    }
+
+    private static int inworldAICharacter(CommandContext<ServerCommandSource> context, String name, String endpoint) {
+        ServerPlayerEntity player = context.getSource().getPlayer();
+        Optional<VillagerEntityMCA> optionalVillager = ChatAI.findVillagerInArea(player, name);
+        optionalVillager.ifPresent(v -> {
+            Config.getInstance().inworldAIResourceNames.put(v.getUuid(), endpoint);
+            ChatAI.clearStrategy(v.getUuid());
+            Config.getInstance().save();
+        });
+        return 0;
+    }
+
+    private static int chatAI(String model, String endpoint, String token) {
+        Config.getInstance().enableVillagerChatAI = true;
+        Config.getInstance().villagerChatAIModel = model;
+        Config.getInstance().villagerChatAIEndpoint = endpoint;
+        Config.getInstance().villagerChatAIToken = token;
+        Config.getInstance().save();
+        return 0;
+    }
+
+    private static int disableChatAI(CommandContext<ServerCommandSource> c) {
+        Config.getInstance().enableVillagerChatAI = false;
+        Config.getInstance().save();
+        return 0;
+    }
+
+    private static int ttsEnable(CommandContext<ServerCommandSource> ctx) {
+        Config.getInstance().enableOnlineTTS = BoolArgumentType.getBool(ctx, "enabled");
+        Config.getInstance().save();
+        return 0;
+    }
+
+    private static boolean couldBePersonalityRelated(String phrase) {
+        for (Personality value : Personality.values()) {
+            if (phrase.contains(value.name().toLowerCase(Locale.ROOT))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static int ttsScan(CommandContext<ServerCommandSource> ctx) {
+        String language = ctx.getArgument("language", String.class);
+        for (Map.Entry<String, LanguageDefinition> definition : MinecraftClient.getInstance().getLanguageManager().getAllLanguages().entrySet()) {
+            String ttsLang = LanguageMap.LANGUAGE_MAP.getOrDefault(definition.getKey(), "");
+            if (!ttsLang.isEmpty() && (language.equals("all") || ttsLang.equals(language))) {
+                MinecraftClient.getInstance().getLanguageManager().setLanguage(definition.getKey());
+                try {
+                    MinecraftClient.getInstance().reloadResources().get();
+                } catch (InterruptedException | ExecutionException e) {
+                    throw new RuntimeException(e);
+                }
+
+                for (Map.Entry<String, String> text : MCA.translations.entrySet()) {
+                    String key = text.getKey();
+                    if ((key.contains("dialogue.") || key.contains("interaction.") || key.contains("villager.")) && !couldBePersonalityRelated(key)) {
+                        String hash = OnlineSpeechManager.INSTANCE.getHash(text.getValue());
+                        OnlineSpeechManager.INSTANCE.downloadAudio(ttsLang, "male_" + (SpeechManager.TOTAL_VOICES - 1), text.getValue(), hash, true);
+                    }
+                }
+            }
+        }
+
+        return 0;
+    }
+
     private static int editor(CommandContext<ServerCommandSource> ctx) {
+        ServerPlayerEntity player = ctx.getSource().getPlayer();
+        if (player == null) {
+            return 1;
+        }
         if (ctx.getSource().hasPermissionLevel(2) || Config.getInstance().allowFullPlayerEditor) {
-            NetworkHandler.sendToPlayer(new OpenGuiRequest(OpenGuiRequest.Type.VILLAGER_EDITOR, ctx.getSource().getPlayer()), ctx.getSource().getPlayer());
+            NetworkHandler.sendToPlayer(new OpenGuiRequest(OpenGuiRequest.Type.VILLAGER_EDITOR, player), player);
             return 0;
         } else if (Config.getInstance().allowLimitedPlayerEditor) {
-            NetworkHandler.sendToPlayer(new OpenGuiRequest(OpenGuiRequest.Type.LIMITED_VILLAGER_EDITOR, ctx.getSource().getPlayer()), ctx.getSource().getPlayer());
+            NetworkHandler.sendToPlayer(new OpenGuiRequest(OpenGuiRequest.Type.LIMITED_VILLAGER_EDITOR, player), player);
             return 0;
         } else {
-            ctx.getSource().getPlayer().sendMessage(Text.translatable("command.no_permission").formatted(Formatting.RED));
+            sendMessage(ctx, Text.translatable("command.no_permission").formatted(Formatting.RED));
             return 1;
         }
     }
@@ -60,28 +185,31 @@ public class Command {
     private static int destiny(CommandContext<ServerCommandSource> ctx) {
         if (ctx.getSource().hasPermissionLevel(2) || Config.getInstance().allowDestinyCommandOnce) {
             ServerPlayerEntity player = ctx.getSource().getPlayer();
-            if (!PlayerSaveData.get(player).isEntityDataSet() || Config.getInstance().allowDestinyCommandMoreThanOnce) {
+            if (player != null && !PlayerSaveData.get(player).isEntityDataSet() || Config.getInstance().allowDestinyCommandMoreThanOnce) {
                 ServerInteractionManager.launchDestiny(player);
                 return 0;
             } else {
-                ctx.getSource().getPlayer().sendMessage(Text.translatable("command.only_one_destiny").formatted(Formatting.RED));
+                sendMessage(ctx, Text.translatable("command.only_one_destiny").formatted(Formatting.RED));
                 return 1;
             }
         } else {
-            ctx.getSource().getPlayer().sendMessage(Text.translatable("command.no_permission").formatted(Formatting.RED));
+            sendMessage(ctx, Text.translatable("command.no_permission").formatted(Formatting.RED));
             return 1;
         }
     }
 
     private static int mail(CommandContext<ServerCommandSource> ctx) {
         ServerPlayerEntity player = ctx.getSource().getPlayer();
+        if (player == null) {
+            return 1;
+        }
         PlayerSaveData data = PlayerSaveData.get(player);
         if (data.hasMail()) {
             while (data.hasMail()) {
                 player.getInventory().offerOrDrop(data.getMail());
             }
         } else {
-            ctx.getSource().getPlayer().sendMessage(Text.translatable("command.no_mail"));
+            sendMessage(ctx, Text.translatable("command.no_mail"));
         }
         return 0;
     }
@@ -99,32 +227,32 @@ public class Command {
             // encode and create url
             String encodedURL = params.keySet().stream()
                     .map(key -> key + "=" + URLEncoder.encode(params.get(key), StandardCharsets.UTF_8))
-                    .collect(Collectors.joining("&", Config.getInstance().villagerChatAIServer + "verify?", ""));
+                    .collect(Collectors.joining("&", Config.getInstance().villagerChatAIEndpoint.replace("v1/mca/chat", "v1/mca/verify") + "?", ""));
 
             GPT3.Answer request = GPT3.request(encodedURL);
 
             if (request.answer().equals("success")) {
-                player.sendMessage(Text.translatable("command.verify.success").formatted(Formatting.GREEN));
+                sendMessage(ctx, Text.translatable("command.verify.success").formatted(Formatting.GREEN));
             } else if (request.answer().equals("failed")) {
-                player.sendMessage(Text.translatable("command.verify.failed").formatted(Formatting.RED));
+                sendMessage(ctx, Text.translatable("command.verify.failed").formatted(Formatting.RED));
             } else {
-                player.sendMessage(Text.translatable("command.verify.crashed").formatted(Formatting.RED));
+                sendMessage(ctx, Text.translatable("command.verify.crashed").formatted(Formatting.RED));
             }
         });
         return 0;
     }
 
     private static int displayHelp(CommandContext<ServerCommandSource> ctx) {
-        sendMessage(ctx.getSource().getPlayer(), Formatting.DARK_RED + "--- " + Formatting.GOLD + "PLAYER COMMANDS" + Formatting.DARK_RED + " ---");
-        sendMessage(ctx.getSource().getPlayer(), Formatting.WHITE + " /mca editor" + Formatting.GOLD + " - Choose your genetics and stuff.");
-        sendMessage(ctx.getSource().getPlayer(), Formatting.WHITE + " /mca propose <PlayerName>" + Formatting.GOLD + " - Proposes marriage to the given player.");
-        sendMessage(ctx.getSource().getPlayer(), Formatting.WHITE + " /mca proposals " + Formatting.GOLD + " - Shows all active proposals.");
-        sendMessage(ctx.getSource().getPlayer(), Formatting.WHITE + " /mca accept <PlayerName>" + Formatting.GOLD + " - Accepts the player's marriage request.");
-        sendMessage(ctx.getSource().getPlayer(), Formatting.WHITE + " /mca reject <PlayerName>" + Formatting.GOLD + " - Rejects the player's marriage request.");
-        sendMessage(ctx.getSource().getPlayer(), Formatting.WHITE + " /mca procreate " + Formatting.GOLD + " - Starts procreation.");
-        sendMessage(ctx.getSource().getPlayer(), Formatting.WHITE + " /mca separate " + Formatting.GOLD + " - Ends your marriage.");
-        sendMessage(ctx.getSource().getPlayer(), Formatting.DARK_RED + "--- " + Formatting.GOLD + "GLOBAL COMMANDS" + Formatting.DARK_RED + " ---");
-        sendMessage(ctx.getSource().getPlayer(), Formatting.WHITE + " /mca help " + Formatting.GOLD + " - Shows this list of commands.");
+        sendMessage(ctx, Formatting.DARK_RED + "--- " + Formatting.GOLD + "PLAYER COMMANDS" + Formatting.DARK_RED + " ---");
+        sendMessage(ctx, Formatting.WHITE + " /mca editor" + Formatting.GOLD + " - Choose your genetics and stuff.");
+        sendMessage(ctx, Formatting.WHITE + " /mca propose <PlayerName>" + Formatting.GOLD + " - Proposes marriage to the given player.");
+        sendMessage(ctx, Formatting.WHITE + " /mca proposals " + Formatting.GOLD + " - Shows all active proposals.");
+        sendMessage(ctx, Formatting.WHITE + " /mca accept <PlayerName>" + Formatting.GOLD + " - Accepts the player's marriage request.");
+        sendMessage(ctx, Formatting.WHITE + " /mca reject <PlayerName>" + Formatting.GOLD + " - Rejects the player's marriage request.");
+        sendMessage(ctx, Formatting.WHITE + " /mca procreate " + Formatting.GOLD + " - Starts procreation.");
+        sendMessage(ctx, Formatting.WHITE + " /mca separate " + Formatting.GOLD + " - Ends your marriage.");
+        sendMessage(ctx, Formatting.DARK_RED + "--- " + Formatting.GOLD + "GLOBAL COMMANDS" + Formatting.DARK_RED + " ---");
+        sendMessage(ctx, Formatting.WHITE + " /mca help " + Formatting.GOLD + " - Shows this list of commands.");
         return 0;
     }
 
@@ -172,7 +300,14 @@ public class Command {
         return CommandManager.literal(name).requires(cs -> cs.hasPermissionLevel(0));
     }
 
-    private static void sendMessage(Entity commandSender, String message) {
-        commandSender.sendMessage(Text.literal(Formatting.GOLD + "[MCA] " + Formatting.RESET + message));
+    private static void sendMessage(CommandContext<ServerCommandSource> ctx, String message) {
+        sendMessage(ctx, Text.literal(message));
+    }
+
+    private static void sendMessage(CommandContext<ServerCommandSource> ctx, Text message) {
+        ServerPlayerEntity player = ctx.getSource().getPlayer();
+        if (player != null) {
+            player.sendMessage(message);
+        }
     }
 }

@@ -37,6 +37,10 @@
               "mood": "unhappy"
             },
             {
+              "chance": 6,
+              "personality": "gloomy"
+            },
+            {
               "chance": 1,
               "personality": "flirty"
             }
@@ -57,23 +61,11 @@
           "conditions": [
             {
               "chance": 6,
-              "mood": "depressed"
-            },
-            {
-              "chance": 4,
-              "mood": "sad"
-            },
-            {
-              "chance": 2,
-              "mood": "unhappy"
+              "personality": "gloomy"
             },
             {
               "chance": 1,
               "personality": "flirty"
-            },
-            {
-              "chance": 5,
-              "mood": "talkative"
             }
           ],
           "actions": {

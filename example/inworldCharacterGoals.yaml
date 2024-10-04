@@ -1,0 +1,89 @@
+intents:
+  - name: 'follow-player-intent'
+    training_phrases:
+      - "Follow me"
+      - "Come with me"
+      - "Follow"
+      - "Stay on my tail"
+  - name: 'stay-here-intent'
+    training_phrases:
+      - "Stay here"
+      - "Don't move"
+      - "Hold your position"
+      - "Remain here"
+  - name: 'move-freely-intent'
+    training_phrases:
+      - "Move freely"
+      - "You can move around"
+      - "You're free to move"
+      - "Go wherever you want"
+  - name: 'wear-armor-intent'
+    training_phrases:
+      - "Wear armor"
+      - "Put on your armor"
+      - "Equip your armor"
+      - "Get your armor on"
+  - name: 'remove-armor-intent'
+    training_phrases:
+      - "Remove armor"
+      - "Take off your armor"
+      - "Unequip your armor"
+      - "Get your armor off"
+  - name: 'try-go-home-intent'
+    training_phrases:
+      - "Go home"
+      - "Return home"
+      - "Head back home"
+      - "Make your way home"
+
+goals:
+  - name: 'status-update'
+    activation:
+      trigger: 'status-update'
+    repeatable: true
+    actions:
+      - character_changes:
+          set_relationship: '{{p.relationshipStatus}}'
+          set_emotion: '{{p.emotion}}'
+
+  - name: 'follow-player'
+    activation:
+      intent: 'follow-player-intent'
+    repeatable: true
+    actions:
+      - instruction: "inform {player} you're now following them."
+        send_trigger: 'follow-player'
+  - name: 'stay-here'
+    activation:
+      intent: 'stay-here-intent'
+    repeatable: true
+    actions:
+      - instruction: "inform {player} you're staying here."
+        send_trigger: 'stay-here'
+  - name: 'move-freely'
+    activation:
+      intent: 'move-freely-intent'
+    repeatable: true
+    actions:
+      - instruction: "inform {player} you're moving freely."
+        send_trigger: 'move-freely'
+  - name: 'wear-armor'
+    activation:
+      intent: 'wear-armor-intent'
+    repeatable: true
+    actions:
+      - instruction: "inform {player} you're now constantly wearing armor."
+        send_trigger: 'wear-armor'
+  - name: 'remove-armor'
+    activation:
+      intent: 'remove-armor-intent'
+    repeatable: true
+    actions:
+      - instruction: "inform {player} you're no longer constantly wearing your armor and only equipping it in dangerous situations."
+        send_trigger: 'remove-armor'
+  - name: 'try-go-home'
+    activation:
+      intent: 'try-go-home-intent'
+    repeatable: true
+    actions:
+      - send_trigger: 'try-go-home'

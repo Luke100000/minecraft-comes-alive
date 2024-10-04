@@ -15,6 +15,7 @@ import java.util.Map;
 public class Nationality extends PersistentState {
     private static final int CHUNK_SIZE = 128;
     private Map<Long, Integer> map = new HashMap<>();
+    final Random random = Random.create();
 
     public static Nationality get(ServerWorld world) {
         return WorldUtils.loadData(world.getServer().getOverworld(), Nationality::new, w -> new Nationality(), "mca_nationality");
@@ -25,7 +26,7 @@ public class Nationality extends PersistentState {
     }
 
     Nationality(NbtCompound nbt) {
-        map = NbtHelper.toMap(nbt, Long::valueOf, (e) -> ((NbtInt)e).intValue());
+        map = NbtHelper.toMap(nbt, Long::valueOf, e -> ((NbtInt)e).intValue());
     }
 
     @Override
@@ -33,8 +34,6 @@ public class Nationality extends PersistentState {
         NbtHelper.fromMap(nbt, map, String::valueOf, NbtInt::of);
         return nbt;
     }
-
-    static final Random random = Random.create();
 
     private static final int[][] neighbours = {
             {0, 0},

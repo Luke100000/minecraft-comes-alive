@@ -37,11 +37,11 @@ public class VillagerBrain<E extends MobEntity & VillagerLike<E>> {
     private static final CDataParameter<Boolean> PANICKING = CParameter.create("isPanicking", false);
     private static final CDataParameter<Boolean> WEAR_ARMOR = CParameter.create("wearArmor", false);
 
-    public static <E extends Entity> CDataManager.Builder<E> createTrackedData(CDataManager.Builder<E> builder) {
+    public static <E2 extends Entity> CDataManager.Builder<E2> createTrackedData(CDataManager.Builder<E2> builder) {
         return builder.addAll(MEMORIES, PERSONALITY, MOOD, MOVE_STATE, ACTIVE_CHORE, CHORE_ASSIGNING_PLAYER, PANICKING, WEAR_ARMOR);
     }
 
-    private final static long GRIEVE_COOLDOWN = 24000 * 7;
+    private static final long GRIEVE_COOLDOWN = 24000 * 7;
 
     private final Random random = new Random();
 
@@ -123,7 +123,7 @@ public class VillagerBrain<E extends MobEntity & VillagerLike<E>> {
 
     public void randomize() {
         entity.setTrackedValue(PERSONALITY, Personality.getRandom());
-        entity.setTrackedValue(MOOD, entity.getWorld().random.nextInt(MoodGroup.maxLevel - MoodGroup.normalMinLevel + 1) + MoodGroup.normalMinLevel);
+        entity.setTrackedValue(MOOD, entity.getWorld().random.nextInt(MoodGroup.MAX_LEVEL - MoodGroup.NORMAL_MIN_LEVEL + 1) + MoodGroup.NORMAL_MIN_LEVEL);
     }
 
     public void setPersonality(Personality p) {
@@ -165,7 +165,7 @@ public class VillagerBrain<E extends MobEntity & VillagerLike<E>> {
     }
 
     public Mood getMood() {
-        return getPersonality().getMoodGroup().getMood(entity.getTrackedValue(MOOD));
+        return MoodGroup.INSTANCE.getMood(entity.getTrackedValue(MOOD));
     }
 
     public boolean isPanicking() {

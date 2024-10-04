@@ -12,12 +12,8 @@
               "personality": "flirty"
             },
             {
-              "chance": 6,
-              "mood": "silly"
-            },
-            {
               "chance": 5,
-              "mood": "giggly"
+              "personality": "peppy"
             }
           ],
           "actions": {

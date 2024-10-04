@@ -10,12 +10,15 @@ import net.minecraft.registry.RegistryKeys;
 import net.minecraft.registry.entry.RegistryEntry;
 import net.minecraft.registry.entry.RegistryEntryList;
 import net.minecraft.registry.tag.TagKey;
+import net.minecraft.server.world.ChunkLevelType;
+import net.minecraft.server.world.ServerChunkManager;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.math.*;
 import net.minecraft.world.PersistentState;
 import net.minecraft.world.ServerWorldAccess;
 import net.minecraft.world.World;
+import net.minecraft.world.chunk.WorldChunk;
 import net.minecraft.world.gen.structure.Structure;
 
 import java.util.List;
@@ -23,17 +26,9 @@ import java.util.Optional;
 import java.util.function.Function;
 
 public interface WorldUtils {
-    static List<Entity> getCloseEntities(World world, Entity e) {
-        return getCloseEntities(world, e, 256.0);
-    }
-
     static List<Entity> getCloseEntities(World world, Entity e, double range) {
         Vec3d pos = e.getPos();
         return world.getOtherEntities(e, new Box(pos, pos).expand(range));
-    }
-
-    static <T extends Entity> List<T> getCloseEntities(World world, Entity e, Class<T> c) {
-        return getCloseEntities(world, e, 256.0, c);
     }
 
     static <T extends Entity> List<T> getCloseEntities(World world, Entity e, double range, Class<T> c) {
@@ -80,6 +75,34 @@ public interface WorldUtils {
     }
 
     static boolean isChunkLoaded(World world, Vec3i pos) {
-        return world.isChunkLoaded(ChunkSectionPos.getSectionCoord(pos.getX()), ChunkSectionPos.getSectionCoord(pos.getZ()));
+        if (world instanceof ServerWorld serverWorld) {
+            return isChunkLoaded(serverWorld, pos);
+        }
+        return false;
+    }
+
+    static boolean isChunkLoaded(ServerWorld world, Vec3i pos) {
+        return isChunkLoaded(world, new BlockPos(pos));
+    }
+
+    static boolean isChunkLoaded(ServerWorld world, BlockPos pos) {
+        ChunkPos chunkPos = new ChunkPos(pos);
+        WorldChunk worldChunk = world.getChunkManager().getWorldChunk(chunkPos.x, chunkPos.z);
+        if (worldChunk != null) {
+            return worldChunk.getLevelType() == ChunkLevelType.ENTITY_TICKING && world.isChunkLoaded(chunkPos.toLong());
+        }
+        return false;
+    }
+
+    static boolean isAreaLoaded(ServerWorld world, ChunkPos pos, int radius) {
+        ServerChunkManager chunkManager = world.getChunkManager();
+        for (int x = -radius; x <= radius; x++) {
+            for (int z = -radius; z <= radius; z++) {
+                if (!chunkManager.isChunkLoaded(pos.x + x, pos.z + z)) {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 }

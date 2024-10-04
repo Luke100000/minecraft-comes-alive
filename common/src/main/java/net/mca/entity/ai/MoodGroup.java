@@ -8,11 +8,8 @@ import net.minecraft.util.math.MathHelper;
 import java.util.Arrays;
 import java.util.List;
 
-public enum MoodGroup {
-    UNASSIGNED(
-            new MoodBuilder("passive").build()
-    ),
-    GENERAL(
+public class MoodGroup {
+    public static final MoodGroup INSTANCE = new MoodGroup(
             new MoodBuilder("depressed")
                     .sounds(4, SoundsMCA.VILLAGER_MALE_CRY, SoundsMCA.VILLAGER_FEMALE_CRY)
                     .particles(20, ParticleTypes.SPLASH)
@@ -31,50 +28,11 @@ public enum MoodGroup {
             new MoodBuilder("overjoyed")
                     .sounds(8, SoundsMCA.VILLAGER_MALE_LAUGH, SoundsMCA.VILLAGER_FEMALE_LAUGH)
                     .particles(50, ParticleTypes.HAPPY_VILLAGER)
-                    .color(Formatting.GREEN).build()
-    ),
-    PLAYFUL(
-            new MoodBuilder("bored_to_tears")
-                    .color(Formatting.RED).build(),
-            new MoodBuilder("bored")
-                    .color(Formatting.GOLD).build(),
-            new MoodBuilder("uninterested").build(),
-            new MoodBuilder("passive").build(),
-            new MoodBuilder("silly").build(),
-            new MoodBuilder("giggly")
-                    .sounds(8, SoundsMCA.VILLAGER_MALE_LAUGH, SoundsMCA.VILLAGER_FEMALE_LAUGH)
-                    .particles(50, ParticleTypes.HAPPY_VILLAGER)
-                    .building("inn")
-                    .color(Formatting.DARK_GREEN).build(),
-            new MoodBuilder("entertained")
-                    .sounds(4, SoundsMCA.VILLAGER_MALE_LAUGH, SoundsMCA.VILLAGER_FEMALE_LAUGH)
-                    .particles(20, ParticleTypes.HAPPY_VILLAGER)
-                    .building("inn")
-                    .color(Formatting.GREEN).build()
-    ),
-    SERIOUS(
-            new MoodBuilder("infuriated")
-                    .sounds(4, SoundsMCA.VILLAGER_MALE_ANGRY, SoundsMCA.VILLAGER_FEMALE_ANGRY)
-                    .particles(20, ParticleTypes.ANGRY_VILLAGER)
-                    .color(Formatting.RED).build(),
-            new MoodBuilder("angry")
-                    .sounds(8, SoundsMCA.VILLAGER_MALE_ANGRY, SoundsMCA.VILLAGER_FEMALE_ANGRY)
-                    .particles(50, ParticleTypes.ANGRY_VILLAGER)
-                    .color(Formatting.GOLD).build(),
-            new MoodBuilder("annoyed").build(),
-            new MoodBuilder("passive").build(),
-            new MoodBuilder("interested").build(),
-            new MoodBuilder("talkative")
-                    .building("inn")
-                    .color(Formatting.DARK_GREEN).build(),
-            new MoodBuilder("pleased")
-                    .color(Formatting.GREEN).build()
-    );
+                    .color(Formatting.GREEN).build());
 
     //-15 to 15 is a range create normal interactions, but mood can go -15 to -100 due to player interactions.
-    public final static int normalMinLevel = -15;
-    public final static int absoluteMinLevel = -100;
-    public final static int maxLevel = 15;
+    public static final int NORMAL_MIN_LEVEL = -15;
+    public static final int MAX_LEVEL = 15;
 
     private final List<Mood> moods;
 
@@ -84,13 +42,13 @@ public enum MoodGroup {
 
     // clamps to valid range
     public static int clampMood(int moodPoints) {
-        return MathHelper.clamp(moodPoints, absoluteMinLevel, maxLevel);
+        return MathHelper.clamp(moodPoints, NORMAL_MIN_LEVEL, MAX_LEVEL);
     }
 
     // returns the index of mood based on mood points
     private int getLevel(int moodPoints) {
         return MathHelper.clamp(
-                (moodPoints - normalMinLevel) * moods.size() / (maxLevel - normalMinLevel),
+                (moodPoints - NORMAL_MIN_LEVEL) * moods.size() / (MAX_LEVEL - NORMAL_MIN_LEVEL),
                 0,
                 moods.size() - 1
         );

@@ -13,6 +13,7 @@ public abstract class ListPage extends Page {
     public ListPage() {
         this.text = new LinkedList<>();
     }
+
     public ListPage(List<Text> text) {
         this.text = text;
     }

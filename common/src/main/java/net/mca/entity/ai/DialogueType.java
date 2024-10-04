@@ -1,5 +1,6 @@
 package net.mca.entity.ai;
 
+import net.mca.MCAClient;
 import net.mca.entity.ai.relationship.AgeState;
 import net.mca.entity.ai.relationship.Personality;
 import net.minecraft.util.Language;
@@ -117,7 +118,7 @@ public enum DialogueType {
         }
 
         //then try personality
-        if (flags.containsKey("E")) {
+        if (flags.containsKey("E") && MCAClient.useExpandedPersonalityTranslations()) {
             String personality = Personality.valueOf(flags.get("E")).name().toLowerCase(Locale.ROOT);
             Optional<String> p = getPrefixedPhrase(type, personality, key);
             if (p.isPresent()) {

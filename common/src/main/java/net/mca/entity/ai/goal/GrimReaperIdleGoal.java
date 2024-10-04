@@ -53,7 +53,7 @@ public class GrimReaperIdleGoal extends Goal {
             return reaper.getTarget().getPos();
         }
 
-        return NoWaterTargeting.find(reaper, 8, 6, -2, Vec3d.ofBottomCenter(reaper.getBlockPos()), 1);
+        return NoWaterTargeting.find(reaper, 8, 6, -1, Vec3d.ofBottomCenter(reaper.getBlockPos()), 1);
     }
 
     @Override

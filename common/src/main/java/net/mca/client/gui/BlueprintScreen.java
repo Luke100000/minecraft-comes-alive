@@ -404,10 +404,9 @@ public class BlueprintScreen extends ExtendedScreen {
         //buildings
         List<Building> hoverBuildings = new LinkedList<>();
         for (Building building : village.getBuildings().values()) {
-            BuildingType bt = BuildingTypes.getInstance().getBuildingType(building.getType());
+            if (!building.isComplete()) continue;
 
-            if (bt.getMinBlocks() > 0 && bt.getMinBlocks() > building.getBlockCount()) continue;
-
+            BuildingType bt = building.getBuildingType();
             if (bt.isIcon()) {
                 BlockPos c = building.getCenter();
                 drawBuildingIcon(context, ICON_TEXTURES, c.getX(), c.getZ(), bt.iconU(), bt.iconV());

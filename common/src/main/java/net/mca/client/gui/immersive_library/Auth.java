@@ -1,10 +1,14 @@
 package net.mca.client.gui.immersive_library;
 
 import net.mca.Config;
+import net.mca.MCA;
 import net.minecraft.util.Util;
 
 import javax.annotation.Nullable;
-import java.io.*;
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -43,7 +47,7 @@ public class Auth {
         try {
             Files.writeString(Paths.get("./immersiveLibraryToken"), currentToken);
         } catch (IOException e) {
-            e.printStackTrace();
+            MCA.LOGGER.error(e);
         }
     }
 
@@ -53,9 +57,9 @@ public class Auth {
     }
 
     private static void write(String path, String content) throws IOException {
-        BufferedWriter writer = new BufferedWriter(new FileWriter(path));
-        writer.write(content);
-        writer.close();
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(path))) {
+            writer.write(content);
+        }
     }
 
     public static void authenticate(String username) {
@@ -86,75 +90,72 @@ public class Auth {
     }
 
     private static final String RES_PAGE = """
-            <html lang="en">
-            <head>
-                <title>Login</title>
-                <link rel="stylesheet" href="style.css">
-                <script src="https://accounts.google.com/gsi/client" async defer></script>
-            </head>
-            <body class="background">
-            <div class="container">
-                <div class="chunk">
-                    <h1>Authenticate</h1>
-                    Immersive Library uses your Google account as authentication.
-                    <br/>
-                    Only your Google user id is stored.
-                    <br/> <br/>
-                        
-                    <div id="g_id_onload"
-                         data-client_id="854276437682-lkb8uqt14lrt5ctcbknaia4s3j429kme.apps.googleusercontent.com"
-                         data-login_uri="{URL}/v1/auth?username={USERNAME}&token={TOKEN}"
-                         data-ux_mode="redirect"
-                         data-auto_prompt="false">
+                    <html lang="en">
+                    <head>
+                        <title>Login</title>
+                        <link rel="stylesheet" href="style.css">
+                        <script src="https://accounts.google.com/gsi/client" async defer></script>
+                    </head>
+                    <body class="background">
+                    <div class="container">
+                        <div class="chunk">
+                            <h1>Authenticate</h1>
+                            Immersive Library uses your Google account as authentication.
+                            <br/>
+                            Only your Google user id is stored.
+                            <br/> <br/>
+                                
+                            <div id="g_id_onload"
+                                 data-client_id="854276437682-lkb8uqt14lrt5ctcbknaia4s3j429kme.apps.googleusercontent.com"
+                                 data-login_uri="{URL}/v1/auth?username={USERNAME}&token={TOKEN}"
+                                 data-ux_mode="redirect"
+                                 data-auto_prompt="false">
+                            </div>
+                            <div class="g_id_signin"
+                                 data-type="standard"
+                                 data-size="large"
+                                 data-theme="filled_black"
+                                 data-text="sign_in_with"
+                                 data-shape="rectangular"
+                                 data-logo_alignment="left">
+                            </div>
+                        </div>
                     </div>
-                    <div class="g_id_signin"
-                         data-type="standard"
-                         data-size="large"
-                         data-theme="filled_black"
-                         data-text="sign_in_with"
-                         data-shape="rectangular"
-                         data-logo_alignment="left">
-                    </div>
-                        
-                    <br/>
-                    <a href="">Privacy policy</a>
-                </div>
-            </div>
-            </body>
-            </html>
-    """;
+                    </body>
+                    </html>
+            """;
 
     private static final String RES_STYLE = """
-            .container {
-                display: flex;
-                flex-flow: wrap;
-                justify-content: center;
-                align-items: center;
-                text-align: center;
-                min-height: 95vh;
-            }
-                        
-            .container hr {
-                width: 100%;
-            }
-                        
-            body {
-                display: flex;
-                justify-content: center;
-                align-items: center;
-                min-height: 100vh;
-                background: radial-gradient(ellipse at bottom, #0d1d31 0%, #0c0d13 100%);
-                overflow: hidden;
-            }
-                        
-            .chunk {
-                color: black;
-                font-family: Calibri, sans-serif;
-                background-color: white;
-                opacity: 95%;
-                border-radius: 32px;
-                padding: 16px 32px 32px 32px;
-                box-shadow: 4px 6px 64px;
-            }
-    """;
+                    .container {
+                        display: flex;
+                        flex-flow: wrap;
+                        justify-content: center;
+                        align-items: center;
+                        text-align: center;
+                        min-height: 95vh;
+                    }
+                                
+                    .container hr {
+                        width: 100%;
+                    }
+                                
+                    body {
+                        display: flex;
+                        justify-content: center;
+                        align-items: center;
+                        min-height: 100vh;
+                        background: radial-gradient(ellipse at bottom, #0d1d31 0%, #0c0d13 100%);
+                        overflow: hidden;
+                    }
+                                
+                    .chunk {
+                        color: black;
+                        font-family: Calibri, sans-serif;
+                        background-color: white;
+                        opacity: 95%;
+                        border-radius: 32px;
+                        padding: 16px 32px 32px 32px;
+                        box-shadow: 4px 6px 64px;
+                    }
+            """;
 }

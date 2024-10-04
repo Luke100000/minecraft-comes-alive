@@ -1,3 +1,53 @@
+# 7.5.19
+
+* Fixed trait shaders
+* Rose gold dust is no longer part of the gold dust group to remove conflicts
+* Fixed incompatibility with Productive Bees
+* Added experimental long term memory to ChatAI
+* Hopefully fixed crashes
+* Villagers no longer grieve at single graves
+* Villager can now glow while invisible
+* You can now whistle villagers when they sit in vehicles
+* Height now affects Hemoglobin levels
+* Villagers no longer jump in front of gates
+
+# 7.5.18
+
+* Updated contributor book
+* Fixed ReaperSpawner eating all your CPU
+
+# 7.5.17
+
+* Now its compatible with Cobblemon!
+* Fixed TTS again!
+
+# 7.5.16
+
+* Fixed issues with building jars
+
+# 7.5.15
+
+* Merged [Inworld integration](https://github.com/Luke100000/minecraft-comes-alive/wiki/GPT3-based-conversations) branch (thanks CSCMe!)
+* Fixed incompatibility with Cobblemon (thanks Apion!)
+* Fixed AI issues with Grim Reapers, causing him to go much higher than intended
+* Fixed issues when using Arabic numerals
+* Fixed crashes when using TTS
+* Fixed Inn spamming adventurers
+* Probably fixed deadlocks related to SpawnQueue and ReaperSpawner
+* Fixed incompatibility with AutoTranslation and related mods
+
+# 7.5.14
+
+* TTS language is now detected automatically
+
+# 7.5.13
+
+* Updated chatAI to v2
+    * See https://github.com/Luke100000/minecraft-comes-alive/wiki/GPT3-based-conversations
+    * Older versions will no longer work, technical reasons
+* Added TTS v2
+    * See https://github.com/Luke100000/minecraft-comes-alive/wiki/TTS
+
 # 7.5.12
 
 * Fixed various smaller issues

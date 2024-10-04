@@ -19,3 +19,4 @@ sentencepiece~=0.1.96
 uvicorn==0.24.0.post1
 pyrate-limiter~=3.1.0
 torch~=2.0.1
+requests~=2.31.0

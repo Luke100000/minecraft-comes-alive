@@ -165,11 +165,6 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
     }
 
     @Override
-    public boolean shouldPause() {
-        return true;
-    }
-
-    @Override
     public void close() {
         if (previousScreen == null) {
             super.close();
@@ -421,7 +416,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                             }
                             Thread.sleep(1000);
                         } catch (Exception e) {
-                            e.printStackTrace();
+                            MCA.LOGGER.error(e);
                         }
                         awaitingAuthentication = false;
                     });
@@ -957,7 +952,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                     //add tag
                     addDrawableChild(new TooltipButtonWidget(width / 2 - 100, height / 2 - 100, 40, 20, "gui.skin_library.add", sender -> {
                         String tag = tagNameWidget.getText().trim().toLowerCase(Locale.ROOT);
-                        if (tag.length() > 0) {
+                        if (!tag.isEmpty()) {
                             setTag(focusedContent.contentid(), tag, true);
                             tagNameWidget.setText("");
                             rebuild();
@@ -1460,7 +1455,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         try {
             Util.getOperatingSystem().open(URI.create("https://github.com/Luke100000/minecraft-comes-alive/wiki/Skin-Editor"));
         } catch (Exception e) {
-            e.printStackTrace();
+            MCA.LOGGER.error(e);
         }
     }
 
@@ -1550,7 +1545,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
             try {
                 stream = new FileInputStream(path);
             } catch (Exception e) {
-                e.printStackTrace();
+                MCA.LOGGER.error(e);
             }
         }
 
@@ -1573,7 +1568,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                     setError(Text.translatable("gui.skin_library.not_64"));
                 }
             } catch (IOException e) {
-                e.printStackTrace();
+                MCA.LOGGER.error(e);
             }
         }
     }
@@ -1610,7 +1605,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                                 "data", new String(Base64.getEncoder().encode(workspace.currentImage.getBytes()))
                         ));
                     } catch (IOException e) {
-                        e.printStackTrace();
+                        MCA.LOGGER.error(e);
                     }
 
                     if (request instanceof ContentIdResponse || request instanceof SuccessResponse) {

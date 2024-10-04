@@ -21,14 +21,15 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(GameRenderer.class)
 public abstract class MixinGameRenderer {
     @Shadow
-    protected abstract void loadPostProcessor(Identifier id);
+    abstract void loadPostProcessor(Identifier id);
 
     @Shadow
     @Final
-    private MinecraftClient client;
+    MinecraftClient client;
 
     @Shadow
-    private @Nullable PostEffectProcessor postProcessor;
+    @Nullable
+    PostEffectProcessor postProcessor;
 
     @Shadow
     public abstract void disablePostProcessor();
