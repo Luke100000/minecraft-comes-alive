@@ -188,7 +188,7 @@
   "interaction.marry.fail.married/4": "О ні, я погано себе почуваюсь... У мене є партнер, якого я дуже люблю.",
   "interaction.marry.fail.married/5": "У мене вже є хтось дуже важливий для мене... Вибач.",
   "interaction.marry.fail.married/6": "Дякую, але у мене вже є хтось, без кого я не хочу бути.",
-  "interaction.marry.fail.married/7": "Був час, коли я міг погодитись, але зараз це місце зайняте і не підлягає обговоренню.",
+  "interaction.marry.fail.married/7": "There was a time where I may have accepted this, but that spot is now filled and not negotiable.",
   "interaction.relationship.fail.isparent/1": "Не тримайте це у сім'ї, будь ласка...",
   "interaction.relationship.fail.isparent/2": "Майже впевнений, що це не так.",
   "interaction.relationship.fail.isparent/3": "Згідно з Енциклопедією життя, інцест є незаконним. Тож ні.",
