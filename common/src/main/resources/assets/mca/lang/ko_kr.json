@@ -18,7 +18,7 @@
   "entity.mca.female_villager": "여성 주민",
   "entity.mca.male_zombie_villager": "남성 주민 좀비",
   "entity.mca.female_zombie_villager": "여성 주민 좀비",
-  "entity.mca.crib": "Crib",
+  "entity.mca.crib": "",
   "entity.mca.ancient_cultist": "고대의 광신도",
   "item.mca.scythe": "큰낫",
   "item.mca.scythe.tooltip": "주민을 죽여 그의 영혼을 거둬들이고, 묘비를 우클릭하여 죽은 주민을 되살립니다. 하지만 조심하세요. 되살아난 주민은 언데드가 되어 깨어날 것입니다.",
