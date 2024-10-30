@@ -55,6 +55,11 @@ public class Api {
             con.setRequestProperty("Accept-Encoding", "gzip");
             con.setRequestProperty("Accept", "application/json");
 
+            // Authenticate
+            if (Auth.hasToken()) {
+                con.setRequestProperty("Authorization", "Bearer " + Auth.getToken());
+            }
+
             // Set request body
             if (body != null && !body.isEmpty()) {
                 con.setDoOutput(true);
@@ -86,26 +91,5 @@ public class Api {
             MCA.LOGGER.error(e);
             return new ErrorResponse(-1, e.toString());
         }
-    }
-
-    public static void main(String[] args) {
-        if (Auth.getToken() == null) {
-            Auth.authenticate("Carl");
-            return;
-        }
-
-        System.out.println(request(HttpMethod.GET, ContentListResponse.class, "content/mca"));
-
-        System.out.println(request(HttpMethod.GET, UserResponse.class, "user/mca/me", Map.of(
-                "token", Auth.getToken()
-        )));
-
-        System.out.println(request(HttpMethod.POST, ContentIdResponse.class, "content/mca", Map.of(
-                "token", Auth.getToken()
-        ), Map.of(
-                "title", "Carl",
-                "meta", "{}",
-                "data", "12345"
-        )));
     }
 }
