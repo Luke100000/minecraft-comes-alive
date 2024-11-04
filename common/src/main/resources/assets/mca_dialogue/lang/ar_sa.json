@@ -209,7 +209,7 @@
   "interaction.relationship.fail.playermarried/3": "ماذا؟ حقا؟ اعتقد انك متزوج من شخص اخر, اليس كذالك؟",
   "interaction.relationship.fail.playermarried/4": "ارفض! انت متزوج بالفعل.",
   "interaction.relationship.fail.playermarried/5": "I don't know where you came from, but around here we don't accept polygamy!",
-  "interaction.relationship.fail.playermarried/6": "How could you?! I'm telling your spouse!",
+  "interaction.relationship.fail.playermarried/6": "",
   "interaction.relationship.fail.incompatible/1": "I'm sorry, but I just don't think we are right for each other.",
   "interaction.relationship.fail.incompatible/2": "It's not you, it's me! Or...maybe it's us...",
   "interaction.relationship.fail.incompatible/3": "Sorry bud! I don't swing that way!",
