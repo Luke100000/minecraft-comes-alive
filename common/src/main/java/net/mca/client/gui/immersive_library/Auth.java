@@ -6,12 +6,10 @@ import net.mca.MCA;
 import net.minecraft.util.Util;
 
 import javax.annotation.Nullable;
-import java.io.BufferedWriter;
-import java.io.File;
-import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -32,7 +30,7 @@ public class Auth {
     @Nullable
     public static String loadToken() {
         try {
-            return Files.readString(Paths.get("./immersiveLibraryToken"));
+            return Files.readString(Paths.get("./immersiveLibraryToken_v2"));
         } catch (IOException e) {
             return null;
         }
@@ -52,7 +50,7 @@ public class Auth {
 
     public static void saveToken() {
         try {
-            Files.writeString(Paths.get("./immersiveLibraryToken"), currentToken);
+            Files.writeString(Paths.get("./immersiveLibraryToken_v2"), currentToken);
         } catch (IOException e) {
             MCA.LOGGER.error(e);
         }
@@ -60,13 +58,7 @@ public class Auth {
 
     public static void clearToken() {
         //noinspection ResultOfMethodCallIgnored
-        Paths.get("./immersiveLibraryToken").toFile().delete();
-    }
-
-    private static void write(String path, String content) throws IOException {
-        try (BufferedWriter writer = new BufferedWriter(new FileWriter(path))) {
-            writer.write(content);
-        }
+        Paths.get("./immersiveLibraryToken_v2").toFile().delete();
     }
 
     public static String sha256(String input) {
@@ -93,26 +85,24 @@ public class Auth {
     }
 
     public static void authenticate(String username) {
+        // The unique, private token used to authenticate once authorized
+        currentToken = newToken();
+
+        // Inject token into request
+        String content = RES_PAGE;
+        content = content.replace("{URL}", Config.getInstance().immersiveLibraryUrl);
+        content = content.replace("{STATE}", createDataState(username, currentToken));
+
+        // Save page
+        Path pageFile = Path.of("./immersiveLibraryAuthPage.html");
         try {
-            String tmpdir = Files.createTempDirectory("immersive_library").toFile().getAbsolutePath();
-
-            // The unique, private token used to authenticate once authorized
-            currentToken = newToken();
-
-            // Store new token
-            saveToken();
-
-            // Inject token into request
-            String content = RES_PAGE;
-            content = content.replace("{URL}", Config.getInstance().immersiveLibraryUrl);
-            content = content.replace("{STATE}", createDataState(username, currentToken));
-            write(tmpdir + "/page.html", content);
-
-            // Open the authorization URL in the user's default web browser
-            Util.getOperatingSystem().open((new File(tmpdir + "/page.html")).toURI());
+            Files.writeString(pageFile, content);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
+
+        // Open the authorization URL in the user's default web browser
+        Util.getOperatingSystem().open(pageFile.toUri());
     }
 
     private static final String RES_PAGE = """
