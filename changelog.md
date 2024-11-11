@@ -1,3 +1,7 @@
+# 7.5.15 for 1.19.2
+
+* Fixed Library Auth
+
 # 7.5.14
 
 * TTS language is now detected automatically
