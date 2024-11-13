@@ -18,7 +18,7 @@
   "entity.mca.female_villager": "Aldeã",
   "entity.mca.male_zombie_villager": "Aldeão Zumbi",
   "entity.mca.female_zombie_villager": "Aldeã Zumbi",
-  "entity.mca.crib": "Crib",
+  "entity.mca.crib": "",
   "entity.mca.ancient_cultist": "Cultista ancião",
   "item.mca.scythe": "Foice",
   "item.mca.scythe.tooltip": "Mate um aldeão e pegue sua alma, então clique com o botão direito em uma lápide para reviver. Mas tenha cuidado, o aldeão caído voltará como um morto-vivo.",
