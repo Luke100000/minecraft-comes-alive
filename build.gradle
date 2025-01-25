@@ -52,7 +52,7 @@ allprojects {
         }
     }
 
-    group = rootProject.group
+    group = rootProject.groupId
     description = rootProject.displayname
     archivesBaseName = rootProject.name
     version = getAppVersion()
