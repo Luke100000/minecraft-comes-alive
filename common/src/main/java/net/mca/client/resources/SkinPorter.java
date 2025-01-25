@@ -63,7 +63,7 @@ public class SkinPorter {
      * Checks if that skin could be a slim format
      */
     public static boolean isSlimFormat(NativeImage image) {
-        return image.getOpacity(53, 25) <= 0;
+        return image.getOpacity(54, 25) == 0;
     }
 
     /**
