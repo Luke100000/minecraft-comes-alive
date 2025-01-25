@@ -9,7 +9,6 @@ import javax.annotation.Nullable;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
-import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -81,97 +80,15 @@ public class Auth {
         JsonObject json = new JsonObject();
         json.addProperty("username", Base64.getEncoder().encodeToString(username.getBytes()));
         json.addProperty("token", Base64.getEncoder().encodeToString(sha256(token).getBytes()));
-        return json.toString();
+        return Base64.getEncoder().encodeToString(json.toString().getBytes());
     }
 
     public static void authenticate(String username) {
         // The unique, private token used to authenticate once authorized
         currentToken = newToken();
 
-        // Inject token into request
-        String content = RES_PAGE;
-        content = content.replace("{URL}", Config.getInstance().immersiveLibraryUrl);
-        content = content.replace("{STATE}", createDataState(username, currentToken));
-
-        // Save page
-        Path pageFile = Path.of("./immersiveLibraryAuthPage.html");
-        try {
-            Files.writeString(pageFile, content);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-
         // Open the authorization URL in the user's default web browser
-        Util.getOperatingSystem().open(pageFile.toUri());
+        String url = Config.getInstance().immersiveLibraryUrl + "/v1/login?state=" + createDataState(username, currentToken);
+        Util.getOperatingSystem().open(url);
     }
-
-    private static final String RES_PAGE = """
-            <html lang="en">
-            <head>
-                <title>Login</title>
-                <script src="https://accounts.google.com/gsi/client" async defer></script>
-                 <style>
-                    .container {
-                        display: flex;
-                        flex-flow: wrap;
-                        justify-content: center;
-                        align-items: center;
-                        text-align: center;
-                        min-height: 95vh;
-                    }
-            
-                    .container hr {
-                        width: 100%;
-                    }
-            
-                    body {
-                        display: flex;
-                        justify-content: center;
-                        align-items: center;
-                        min-height: 100vh;
-                        background: radial-gradient(ellipse at bottom, #0d1d31 0%, #0c0d13 100%);
-                        overflow: hidden;
-                    }
-            
-                    .chunk {
-                        color: black;
-                        font-family: Calibri, sans-serif;
-                        background-color: white;
-                        opacity: 95%;
-                        border-radius: 32px;
-                        padding: 16px 32px 32px 32px;
-                        box-shadow: 4px 6px 64px;
-                    }
-            </style>
-            </head>
-            <body class="background">
-            <div class="container">
-                <div class="chunk">
-                    <h1>Authenticate</h1>
-                    Immersive Library uses your Google account as authentication.
-                    <br/>
-                    Only your Google user id is stored.
-                    <br/> <br/>
-            
-                    <div id="g_id_onload"
-                         data-client_id="854276437682-lkb8uqt14lrt5ctcbknaia4s3j429kme.apps.googleusercontent.com"
-                         data-login_uri="{URL}/v1/auth"
-                         data-ux_mode="redirect"
-                         data-auto_prompt="false"
-                         data-state='{STATE}'>
-                    </div>
-            
-                    <div class="g_id_signin"
-                         data-type="standard"
-                         data-size="large"
-                         data-theme="filled_black"
-                         data-text="sign_in_with"
-                         data-shape="rectangular"
-                         data-logo_alignment="left">
-                    </div>
-                </div>
-            </div>
-            </body>
-            </html>
-            """;
 }

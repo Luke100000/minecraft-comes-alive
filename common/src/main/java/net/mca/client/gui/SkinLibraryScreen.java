@@ -410,7 +410,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                             } else {
                                 setError(Text.translatable("gui.skin_library.is_auth_failed"));
                             }
-                            Thread.sleep(1000);
+                            Thread.sleep(2000);
                         } catch (Exception e) {
                             e.printStackTrace();
                         }
