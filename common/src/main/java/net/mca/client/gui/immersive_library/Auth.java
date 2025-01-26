@@ -5,7 +5,6 @@ import net.mca.Config;
 import net.mca.MCA;
 import net.minecraft.util.Util;
 
-import javax.annotation.Nullable;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -26,7 +25,6 @@ public class Auth {
         return sha256(new String(bytes));
     }
 
-    @Nullable
     public static String loadToken() {
         try {
             return Files.readString(Paths.get("./immersiveLibraryToken_v2"));
@@ -35,7 +33,6 @@ public class Auth {
         }
     }
 
-    @Nullable
     public static String getToken() {
         if (currentToken == null) {
             currentToken = loadToken();

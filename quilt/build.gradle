@@ -56,17 +56,11 @@ processResources {
 
 shadowJar {
     configurations = [project.configurations.shadowCommon]
-    classifier "dev-shadow"
 }
 
 remapJar {
     input.set shadowJar.archiveFile
     dependsOn shadowJar
-    classifier "quilt"
-}
-
-jar {
-    classifier "dev"
 }
 
 sourcesJar {

@@ -8,7 +8,6 @@ import net.minecraft.nbt.NbtList;
 import net.minecraft.nbt.NbtOps;
 import net.minecraft.util.math.GlobalPos;
 
-import javax.annotation.Nullable;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -76,7 +75,6 @@ public interface NbtHelper {
         return GlobalPos.CODEC.encodeStart(NbtOps.INSTANCE, v).resultOrPartial(MCA.LOGGER::error).orElseThrow();
     }
 
-    @Nullable
     static GlobalPos decodeGlobalPos(NbtElement element) {
         return GlobalPos.CODEC.parse(NbtOps.INSTANCE, element).resultOrPartial(MCA.LOGGER::error).orElse(null);
     }

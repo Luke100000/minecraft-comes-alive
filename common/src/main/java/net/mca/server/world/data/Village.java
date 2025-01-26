@@ -20,7 +20,6 @@ import net.minecraft.util.math.Vec3i;
 import net.minecraft.world.poi.PointOfInterestStorage;
 import net.minecraft.world.poi.PointOfInterestTypes;
 
-import javax.annotation.Nullable;
 import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -32,7 +31,6 @@ public class Village implements Iterable<Building> {
     public static final int MERGE_MARGIN = 64;
     private static final long BED_SYNC_TIME = 200;
 
-    @Nullable
     private final ServerWorld world;
 
     private String name = API.getVillagePool().pickVillageName("village");
@@ -67,13 +65,13 @@ public class Village implements Iterable<Building> {
     private final VillageProcreationManager villageProcreationManager = new VillageProcreationManager(this);
     private final VillageTaxesManager villageTaxesManager = new VillageTaxesManager(this);
 
-    public Village(int id, @Nullable ServerWorld world) {
+    public Village(int id, ServerWorld world) {
         this.id = id;
 
         this.world = world;
     }
 
-    public Village(NbtCompound v, @Nullable ServerWorld world) {
+    public Village(NbtCompound v, ServerWorld world) {
         id = v.getInt("id");
         name = v.getString("name");
         taxes = v.getFloat("taxesFloat");

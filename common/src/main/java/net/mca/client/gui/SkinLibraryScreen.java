@@ -43,7 +43,6 @@ import net.minecraft.util.registry.Registry;
 import net.minecraft.village.VillagerProfession;
 import org.lwjgl.glfw.GLFW;
 
-import javax.annotation.Nullable;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -72,7 +71,6 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
     private final List<LiteContent> serverContent = new ArrayList<>();
     private SubscriptionFilter subscriptionFilter = SubscriptionFilter.LIBRARY;
 
-    @Nullable
     private User currentUser;
 
     private int selectionPage;
