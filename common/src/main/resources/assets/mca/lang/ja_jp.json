@@ -545,7 +545,7 @@
   "gui.info.gift.line.1": "利用可能なギフト",
   "gui.info.gift.line.2": "(クリックして取得)",
   "gui.interact.label.married": "%1$sと結婚しました",
-  "gui.interact.label.engaged": "Engaged to %1$s",
+  "gui.interact.label.engaged": "%1$sと婚約しています",
   "gui.interact.label.promised": "%1$sと恋に落ちた",
   "gui.interact.label.notmarried": "未婚",
   "gui.interact.label.widow": "未亡人",
