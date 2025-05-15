@@ -616,7 +616,7 @@
   "command.no_mail": "Tu n'as pas de mails.",
   "command.chat_ai.enabled": "Chat AI is enabled.",
   "command.chat_ai.disabled": "Chat AI is disabled.",
-  "command.chat_ai.player2": "Player2 integration is now active. Click here to know more about Player2!",
+  "command.chat_ai.player2": "L'intégration du Joueur 2 est maintenant active. Clique ici pour en savoir plus sur le Joueur 2 !",
   "command.chat_ai.player2.hint": "Use \"%s\" to enable Player2 for MCA!",
   "command.tts.enabled.default": "High quality text to speech is enabled (will not work with ChatAI).",
   "command.tts.enabled.elevenlabs": "Text to speech via ElevenLabs is enabled (requires an API key set in the config!).",
