@@ -91,17 +91,17 @@ public class SpeechManager {
         float pitch = villager.getSoundPitch();
         float gene = villager.getGenetics().getGene(Genetics.VOICE_TONE);
 
-        if (translatable) {
-            if (Language.getInstance().hasTranslation(phrase)) {
-                phrase = Language.getInstance().get(phrase);
-            } else {
-                MCA.LOGGER.warn("Tried to play a TTS sound for a non-translatable phrase: {}", phrase);
-                return;
-            }
-        }
-
         String gender = villager.getGenetics().getGender().binary().getDataName();
         if (Config.getInstance().enableOnlineTTS) {
+            if (translatable) {
+                if (Language.getInstance().hasTranslation(phrase)) {
+                    phrase = Language.getInstance().get(phrase);
+                } else {
+                    MCA.LOGGER.warn("Tried to play a TTS sound for a non-translatable phrase: {}", phrase);
+                    return;
+                }
+            }
+
             String gameLang = client.options.language;
             switch (Config.getInstance().onlineTTSModel) {
                 case "realtime" ->

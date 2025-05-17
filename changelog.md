@@ -1,3 +1,7 @@
+# 7.6.5
+
+* Fixed a crash
+
 # 7.6.4
 
 * Rose gold does no longer classify as gold, interfering with recipes
