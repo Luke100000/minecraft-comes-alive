@@ -1,4 +1,8 @@
-# 7.5.15 for 1.19.2
+# 7.5.18 for 1.19.2
+
+* Fixed empty villages on pre-generated worlds (Thanks SlayerTheChikken!)
+
+# 7.5.15/16/17 for 1.19.2
 
 * Fixed Library Auth.
 * Fixed Alex skins being converted to Alex skins again.
