@@ -8,7 +8,6 @@ import net.mca.entity.ZombieVillagerEntityMCA;
 import net.mca.entity.ZombieVillagerFactory;
 import net.mca.entity.ai.relationship.Gender;
 import net.mca.server.world.data.Nationality;
-import net.mca.util.WorldUtils;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.SpawnReason;
 import net.minecraft.entity.mob.PathAwareEntity;
@@ -36,60 +35,50 @@ public class SpawnQueue {
     private final ConcurrentLinkedQueue<ZombieEntity> zombieSpawnList = new ConcurrentLinkedQueue<>();
 
     public void tick() {
-        // lazy spawning of our villagers as they can't be spawned while loading
+        // After testing with 10k chunk radius with chunky pregen it seems the checks are not needed.
+        // The queue system did not work properly and would build up overtime if villages arnt loaded near the player, and would clear on server stop resulting in empty villages anyways.
+        // The chunk loaded check apparently does not function properly in this context, this is shown by villagers spawning fine without it, but NEVER spawn with it if far away and JUST generated.
         VillagerEntity ve = villagerSpawnQueue.poll();
         if (ve != null) {
-            if (WorldUtils.isChunkLoaded(ve.world, ve.getBlockPos())) {
-                ve.discard();
-                VillagerEntityMCA villager = VillagerFactory.newVillager(ve.world)
-                        .withName(ve.hasCustomName() ? ve.getName().getString() : null)
-                        .withGender(Gender.getRandom())
-                        .withAge(ve.getBreedingAge())
-                        .withPosition(ve)
-                        .withType(ve.getVillagerData().getType())
-                        .withProfession(ve.getVillagerData().getProfession(), ve.getVillagerData().getLevel(), ve.getOffers())
-                        .spawn(((IVillagerEntity)ve).getSpawnReason());
+            ve.discard();
+            VillagerEntityMCA villager = VillagerFactory.newVillager(ve.world)
+                    .withName(ve.hasCustomName() ? ve.getName().getString() : null)
+                    .withGender(Gender.getRandom())
+                    .withAge(ve.getBreedingAge())
+                    .withPosition(ve)
+                    .withType(ve.getVillagerData().getType())
+                    .withProfession(ve.getVillagerData().getProfession(), ve.getVillagerData().getLevel(), ve.getOffers())
+                    .spawn(((IVillagerEntity)ve).getSpawnReason());
 
-                copyPastaIntensifies(villager, ve);
-            } else {
-                villagerSpawnQueue.add(ve);
-            }
+            copyPastaIntensifies(villager, ve);
         }
 
         ZombieVillagerEntity zve = zombieVillagerSpawnQueue.poll();
         if (zve != null) {
-            if (WorldUtils.isChunkLoaded(zve.world, zve.getBlockPos())) {
-                zve.discard();
-                ZombieVillagerEntityMCA villager = ZombieVillagerFactory.newVillager(zve.world)
-                        .withName(zve.hasCustomName() ? zve.getName().getString() : null)
-                        .withGender(Gender.getRandom())
-                        .withPosition(zve)
-                        .withType(zve.getVillagerData().getType())
-                        .withProfession(zve.getVillagerData().getProfession(), zve.getVillagerData().getLevel())
-                        .spawn(((IVillagerEntity)zve).getSpawnReason());
+            zve.discard();
+            ZombieVillagerEntityMCA villager = ZombieVillagerFactory.newVillager(zve.world)
+                    .withName(zve.hasCustomName() ? zve.getName().getString() : null)
+                    .withGender(Gender.getRandom())
+                    .withPosition(zve)
+                    .withType(zve.getVillagerData().getType())
+                    .withProfession(zve.getVillagerData().getProfession(), zve.getVillagerData().getLevel())
+                    .spawn(((IVillagerEntity)zve).getSpawnReason());
 
-                copyPastaIntensifies(villager, zve);
-            } else {
-                zombieVillagerSpawnQueue.add(zve);
-            }
+            copyPastaIntensifies(villager, zve);
         }
 
         ZombieEntity ze = zombieSpawnList.poll();
         if (ze != null) {
-            if (WorldUtils.isChunkLoaded(ze.world, ze.getBlockPos())) {
-                ze.discard();
-                ZombieVillagerEntityMCA villager = ZombieVillagerFactory.newVillager(ze.world)
-                        .withName(ze.hasCustomName() ? ze.getName().getString() : null)
-                        .withGender(Gender.getRandom())
-                        .withPosition(ze)
-                        .withType(VillagerType.forBiome(ze.world.getBiome(ze.getBlockPos())))
-                        .withProfession(Registry.VILLAGER_PROFESSION.getRandom(ze.getRandom()).map(RegistryEntry::value).orElse(VillagerProfession.NONE))
-                        .spawn(SpawnReason.NATURAL);
+            ze.discard();
+            ZombieVillagerEntityMCA villager = ZombieVillagerFactory.newVillager(ze.world)
+                    .withName(ze.hasCustomName() ? ze.getName().getString() : null)
+                    .withGender(Gender.getRandom())
+                    .withPosition(ze)
+                    .withType(VillagerType.forBiome(ze.world.getBiome(ze.getBlockPos())))
+                    .withProfession(Registry.VILLAGER_PROFESSION.getRandom(ze.getRandom()).map(RegistryEntry::value).orElse(VillagerProfession.NONE))
+                    .spawn(SpawnReason.NATURAL);
 
-                copyPastaIntensifies(villager, ze);
-            } else {
-                zombieSpawnList.add(ze);
-            }
+            copyPastaIntensifies(villager, ze);
         }
     }
 
