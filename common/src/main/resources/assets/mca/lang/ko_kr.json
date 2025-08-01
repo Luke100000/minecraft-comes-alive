@@ -621,7 +621,7 @@
   "command.tts.enabled.default": "High quality text to speech is enabled (will not work with ChatAI).",
   "command.tts.enabled.elevenlabs": "Text to speech via ElevenLabs is enabled (requires an API key set in the config!).",
   "command.tts.enabled.realtime": "Realtime text to speech is enabled (Works with ChatAI).",
-  "command.tts.disabled": "Text to speech is disabled.",
+  "command.tts.disabled": "텍스트 음성 변환이 비활성화되어 있습니다.",
   "command.tts_busy": "(마을 사람들이 침묵할 때마다 텍스트 음성 변환이 먼저 해당 문구를 생성해야 한다는 의미입니다. 다음에는 그 문구가 나올 것입니다.)",
   "command.tts_unsupported_language": "게임 언어가 텍스트 음성 변환에서 지원되지 않습니다. 영어로 변경하거나 TTS를 비활성화하세요.",
   "mca.ai_broken": "AI가 고장났습니다. 부디 latest.log를 개발팀에 보내주세요!",
