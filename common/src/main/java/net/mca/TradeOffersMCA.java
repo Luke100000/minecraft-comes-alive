@@ -15,7 +15,8 @@ import net.minecraft.village.TradeOffers;
 
 public class TradeOffersMCA {
     public static void bootstrap() {
-        TradeOffers.PROFESSION_TO_LEVELED_TRADE.put(ProfessionsMCA.ADVENTURER.get(), new Int2ObjectOpenHashMap<>(
+        try {
+            TradeOffers.PROFESSION_TO_LEVELED_TRADE.put(ProfessionsMCA.ADVENTURER.get(), new Int2ObjectOpenHashMap<>(
                 ImmutableMap.of(1, new TradeOffers.Factory[] {
                                 new SellItemFactory(Items.SLIME_BALL, 1, 1, 16, 1),
                                 new SellItemFactory(Items.LEATHER_HORSE_ARMOR, 3, 1, 4, 10),
@@ -34,7 +35,7 @@ public class TradeOffersMCA {
                         5, new TradeOffers.Factory[] {}
                 )));
 
-        TradeOffers.PROFESSION_TO_LEVELED_TRADE.put(ProfessionsMCA.CULTIST.get(), new Int2ObjectOpenHashMap<>(
+            TradeOffers.PROFESSION_TO_LEVELED_TRADE.put(ProfessionsMCA.CULTIST.get(), new Int2ObjectOpenHashMap<>(
                 ImmutableMap.of(1, new TradeOffers.Factory[] {
                                 new SellItemFactory(ItemsMCA.SIRBEN_BABY_BOY.get(), 5, 1, 1, 1),
                                 new SellItemFactory(ItemsMCA.SIRBEN_BABY_GIRL.get(), 5, 1, 1, 1),
@@ -55,6 +56,15 @@ public class TradeOffersMCA {
                         4, new TradeOffers.Factory[] {},
                         5, new TradeOffers.Factory[] {}
                 )));
+        } catch (IllegalStateException e) {
+            // Handle missing trades for villager types from other mods (e.g., Nature's Spirit)
+            // Log the error but don't crash the game
+            if (e.getMessage() != null && e.getMessage().contains("Missing trade for villager type")) {
+                System.err.println("MCA: Ignoring missing trade error for compatibility with other mods: " + e.getMessage());
+            } else {
+                throw e; // Re-throw if it's a different error
+            }
+        }
     }
 
 
