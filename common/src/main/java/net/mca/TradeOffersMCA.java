@@ -60,7 +60,7 @@ public class TradeOffersMCA {
             // Handle missing trades for villager types from other mods (e.g., Nature's Spirit)
             // Log the error but don't crash the game
             if (e.getMessage() != null && e.getMessage().contains("Missing trade for villager type")) {
-                System.err.println("MCA: Ignoring missing trade error for compatibility with other mods: " + e.getMessage());
+                MCA.LOGGER.warn("Ignoring missing trade error for compatibility with other mods: {}", e.getMessage());
             } else {
                 throw e; // Re-throw if it's a different error
             }
