@@ -1,11 +1,11 @@
 package net.mca.mixin;
 
 import com.mojang.serialization.Codec;
-import net.minecraft.entity.ai.brain.MemoryModuleType;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.gen.Invoker;
 
 import java.util.Optional;
+import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 
 @Mixin(MemoryModuleType.class)
 public interface MixinMemoryModuleType {

@@ -2,9 +2,8 @@ package net.mca.network.c2s;
 
 import net.mca.cobalt.network.Message;
 import net.mca.server.world.data.CustomClothingManager;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.util.Identifier;
-
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerPlayer;
 import java.io.Serial;
 
 public class RemoveCustomClothingMessage implements Message {
@@ -14,13 +13,13 @@ public class RemoveCustomClothingMessage implements Message {
     final Type type;
     final String identifier;
 
-    public RemoveCustomClothingMessage(Type type, Identifier identifier) {
+    public RemoveCustomClothingMessage(Type type, ResourceLocation identifier) {
         this.type = type;
         this.identifier = String.valueOf(identifier);
     }
 
     @Override
-    public void receive(ServerPlayerEntity player) {
+    public void receive(ServerPlayer player) {
         if (type == Type.CLOTHING) {
             CustomClothingManager.getClothing().removeEntry(identifier);
         } else if (type == Type.HAIR) {

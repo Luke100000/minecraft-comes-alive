@@ -1,7 +1,7 @@
 package net.mca.advancement.criterion;
 
-import net.mca.mixin.MixinCriteria;
-import net.minecraft.advancement.criterion.Criterion;
+import net.mca.mixin.MixinCriteriaTriggers;
+import net.minecraft.advancements.CriterionTrigger;
 
 public interface CriterionMCA {
     BabyCriterion BABY_CRITERION = register(new BabyCriterion());
@@ -15,8 +15,8 @@ public interface CriterionMCA {
     RankCriterion RANK = register(new RankCriterion());
     VillagerFateCriterion FATE = register(new VillagerFateCriterion());
 
-    static <T extends Criterion<?>> T register(T obj) {
-        return MixinCriteria.register(obj);
+    static <T extends CriterionTrigger<?>> T register(T obj) {
+        return MixinCriteriaTriggers.register(obj);
     }
 
     static void bootstrap() { }

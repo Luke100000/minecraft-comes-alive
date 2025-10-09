@@ -14,11 +14,12 @@ import net.mca.resources.data.analysis.IntAnalysis;
 import net.mca.util.network.datasync.CDataManager;
 import net.mca.util.network.datasync.CDataParameter;
 import net.mca.util.network.datasync.CParameter;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.item.*;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.util.math.MathHelper;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.util.Mth;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.food.FoodProperties;
+import net.minecraft.world.item.*;
 
 import java.util.Optional;
 
@@ -78,7 +79,7 @@ public class BreedableRelationship extends Relationship<VillagerEntityMCA> {
         if (procreateTick > 0) {
             procreateTick--;
             entity.getNavigation().stop();
-            entity.getWorld().sendEntityStatus(entity, Status.VILLAGER_HEARTS);
+            entity.level().broadcastEntityEvent(entity, Status.VILLAGER_HEARTS);
         } else {
             getFamilyTree().getOrCreate(entity);
             getPartner().ifPresent(spouse -> {
@@ -89,8 +90,8 @@ public class BreedableRelationship extends Relationship<VillagerEntityMCA> {
         }
     }
 
-    public void giveGift(ServerPlayerEntity player, Memories memory) {
-        ItemStack stack = player.getMainHandStack();
+    public void giveGift(ServerPlayer player, Memories memory) {
+        ItemStack stack = player.getMainHandItem();
 
         if (!stack.isEmpty() && !handleSpecialCaseGift(player, stack)) {
             Optional<GiftType> gift = GiftType.bestMatching(entity, stack, player);
@@ -113,17 +114,17 @@ public class BreedableRelationship extends Relationship<VillagerEntityMCA> {
     private Optional<GiftType> handleDynamicGift(ItemStack stack) {
         if (stack.getItem() instanceof SwordItem sword) {
             //swords
-            float satisfaction = sword.getAttackDamage();
+            float satisfaction = sword.getDamage();
             satisfaction = (float) (Math.pow(satisfaction, 1.25) * 2);
             return Optional.of(new GiftType(stack.getItem(), (int) satisfaction, MCA.locate("swords")));
-        } else if (stack.getItem() instanceof RangedWeaponItem ranged) {
+        } else if (stack.getItem() instanceof ProjectileWeaponItem ranged) {
             //ranged weapons
-            float satisfaction = ranged.getRange();
+            float satisfaction = ranged.getDefaultProjectileRange();
             satisfaction = (float) (Math.pow(satisfaction, 1.25) * 2);
             return Optional.of(new GiftType(stack.getItem(), (int) satisfaction, MCA.locate("archery")));
-        } else if (stack.getItem() instanceof ToolItem tool) {
+        } else if (stack.getItem() instanceof TieredItem tool) {
             //tools
-            float satisfaction = tool.getMaterial().getMiningSpeedMultiplier();
+            float satisfaction = tool.getTier().getSpeed();
             satisfaction = (float) (Math.pow(satisfaction, 1.25) * 2);
             return Optional.of(new GiftType(stack.getItem(), (int) satisfaction, MCA.locate(
                     stack.getItem() instanceof AxeItem ? "swords" :
@@ -133,22 +134,22 @@ public class BreedableRelationship extends Relationship<VillagerEntityMCA> {
             )));
         } else if (stack.getItem() instanceof ArmorItem armor) {
             //armor
-            int satisfaction = (int) (Math.pow(armor.getProtection(), 1.25) * 1.5 + armor.getMaterial().getToughness() * 5);
+            int satisfaction = (int) (Math.pow(armor.getDefense(), 1.25) * 1.5 + armor.getMaterial().getToughness() * 5);
             return Optional.of(new GiftType(stack.getItem(), satisfaction, MCA.locate("armor")));
-        } else if (stack.getItem().isFood()) {
+        } else if (stack.getItem().isEdible()) {
             //food
-            FoodComponent component = stack.getItem().getFoodComponent();
+            FoodProperties component = stack.getItem().getFoodProperties();
             if (component != null) {
-                int satisfaction = (int) (component.getHunger() + component.getSaturationModifier() * 3);
+                int satisfaction = (int) (component.getNutrition() + component.getSaturationModifier() * 3);
                 return Optional.of(new GiftType(stack.getItem(), satisfaction, MCA.locate("food")));
             }
         }
         return Optional.empty();
     }
 
-    private void acceptGift(ItemStack stack, GiftType gift, ServerPlayerEntity player, Memories memory) {
+    private void acceptGift(ItemStack stack, GiftType gift, ServerPlayer player, Memories memory) {
         // inventory full
-        if (!entity.getInventory().canInsert(stack)) {
+        if (!entity.getInventory().canAddItem(stack)) {
             rejectGift(player, "villager.inventory.full");
             return;
         }
@@ -183,35 +184,35 @@ public class BreedableRelationship extends Relationship<VillagerEntityMCA> {
 
             //take the gift
             getGiftSaturation().add(stack);
-            entity.getWorld().sendEntityStatus(entity, Status.MCA_VILLAGER_POS_INTERACTION);
-            entity.getInventory().addStack(stack.split(1));
+            entity.level().broadcastEntityEvent(entity, Status.MCA_VILLAGER_POS_INTERACTION);
+            entity.getInventory().addItem(stack.split(1));
         }
 
         //modify mood and hearts
-        entity.getVillagerBrain().modifyMoodValue((int) (desaturatedSatisfaction * Config.getInstance().giftMoodEffect + Config.getInstance().baseGiftMoodEffect * MathHelper.sign(desaturatedSatisfaction)));
+        entity.getVillagerBrain().modifyMoodValue((int) (desaturatedSatisfaction * Config.getInstance().giftMoodEffect + Config.getInstance().baseGiftMoodEffect * Mth.sign(desaturatedSatisfaction)));
         CriterionMCA.HEARTS_CRITERION.trigger(player, memory.getHearts(), desaturatedSatisfaction, "gift");
         memory.modHearts(desaturatedSatisfaction);
     }
 
-    private void rejectGift(PlayerEntity player, String dialogue) {
-        entity.getWorld().sendEntityStatus(entity, Status.MCA_VILLAGER_NEG_INTERACTION);
+    private void rejectGift(Player player, String dialogue) {
+        entity.level().broadcastEntityEvent(entity, Status.MCA_VILLAGER_NEG_INTERACTION);
         entity.sendChatMessage(player, dialogue);
     }
 
-    private boolean handleSpecialCaseGift(ServerPlayerEntity player, ItemStack stack) {
+    private boolean handleSpecialCaseGift(ServerPlayer player, ItemStack stack) {
         Item item = stack.getItem();
 
         if (item instanceof SpecialCaseGift) {
             if (((SpecialCaseGift) item).handle(player, entity)) {
-                stack.decrement(1);
+                stack.shrink(1);
             }
             return true;
         }
 
         if (item == Items.CAKE && !entity.isBaby()) {
             if (pregnancy.tryStartGestation()) {
-                player.getWorld().sendEntityStatus(entity, Status.VILLAGER_HEARTS);
-                stack.decrement(1);
+                player.level().broadcastEntityEvent(entity, Status.VILLAGER_HEARTS);
+                stack.shrink(1);
                 entity.sendChatMessage(player, "gift.cake.success");
             } else {
                 entity.sendChatMessage(player, "gift.cake.fail");
@@ -222,37 +223,37 @@ public class BreedableRelationship extends Relationship<VillagerEntityMCA> {
 
         if (item == Items.GOLDEN_APPLE && entity.isInfected()) {
             entity.setInfected(false);
-            entity.eatFood(entity.getWorld(), stack);
-            stack.decrement(1);
+            entity.eat(entity.level(), stack);
+            stack.shrink(1);
             return true;
         }
 
         if (item instanceof DyeItem dye) {
-            entity.setHairDye(dye.getColor());
-            stack.decrement(1);
+            entity.setHairDye(dye.getDyeColor());
+            stack.shrink(1);
             return true;
         }
 
         if (item == Items.WET_SPONGE) {
             entity.clearHairDye();
-            stack.decrement(1);
+            stack.shrink(1);
             return true;
         }
 
         if (item == Items.NAME_TAG) {
-            if (stack.hasCustomName()) {
-                entity.setCustomSkin(stack.getName().getString());
+            if (stack.hasCustomHoverName()) {
+                entity.setCustomSkin(stack.getHoverName().getString());
             } else {
                 entity.setCustomSkin("");
             }
-            stack.decrement(1);
+            stack.shrink(1);
             return true;
         }
 
         if (item == Items.GOLDEN_APPLE && entity.isBaby()) {
             // increase age by 20 minutes
-            entity.growUp(1200 * 20);
-            stack.decrement(1);
+            entity.ageUp(1200 * 20);
+            stack.shrink(1);
             return true;
         }
 

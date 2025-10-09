@@ -5,8 +5,7 @@ import net.fabricmc.fabric.api.datagen.v1.provider.FabricLanguageProvider;
 import net.mca.entity.CribWoodType;
 import net.mca.item.CribItem;
 import net.mca.item.ItemsMCA;
-import net.minecraft.util.DyeColor;
-
+import net.minecraft.world.item.DyeColor;
 import java.util.Locale;
 
 public class CribLanguageProvider extends FabricLanguageProvider {

@@ -5,19 +5,19 @@ import net.mca.Config;
 import net.mca.MCA;
 import net.mca.entity.ai.relationship.Gender;
 import net.mca.server.world.data.Nationality;
-import net.minecraft.entity.Entity;
-import net.minecraft.resource.JsonDataLoader;
-import net.minecraft.resource.ResourceManager;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.math.random.Random;
-import net.minecraft.util.profiler.Profiler;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.packs.resources.ResourceManager;
+import net.minecraft.server.packs.resources.SimpleJsonResourceReloadListener;
+import net.minecraft.util.RandomSource;
+import net.minecraft.util.profiling.ProfilerFiller;
+import net.minecraft.world.entity.Entity;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.*;
 
-public class Names extends JsonDataLoader {
-    protected static final Identifier ID = MCA.locate("mca_names");
+public class Names extends SimpleJsonResourceReloadListener {
+    protected static final ResourceLocation ID = MCA.locate("mca_names");
 
     public static final Map<String, Map<Gender, WeightedPool<String>>> NAMES_MAP = new HashMap<>();
     public static final List<String> REGION_NAMES = new LinkedList<>();
@@ -27,9 +27,9 @@ public class Names extends JsonDataLoader {
     }
 
     @Override
-    protected void apply(Map<Identifier, JsonElement> prepared, ResourceManager manager, Profiler profiler) {
+    protected void apply(Map<ResourceLocation, JsonElement> prepared, ResourceManager manager, ProfilerFiller profiler) {
         NAMES_MAP.clear();
-        for (Map.Entry<Identifier, JsonElement> entry : prepared.entrySet()) {
+        for (Map.Entry<ResourceLocation, JsonElement> entry : prepared.entrySet()) {
             String[] split = entry.getKey().getPath().split("/");
             Gender gender = Gender.byName(split[1]);
 
@@ -47,13 +47,13 @@ public class Names extends JsonDataLoader {
         Arrays.stream(NAMES_MAP.keySet().toArray()).sorted().forEach(n -> REGION_NAMES.add((String)n));
     }
 
-    static final Random random = Random.create();
+    static final RandomSource random = RandomSource.create();
 
     public static String getCitizenNation(Entity entity) {
         if (Config.getInstance().useModernUSANamesOnly) {
             return "modernusa";
         } else {
-            int i = Nationality.get((ServerWorld)entity.getWorld()).getRegionId(entity.getBlockPos());
+            int i = Nationality.get((ServerLevel)entity.level()).getRegionId(entity.blockPosition());
             return REGION_NAMES.get(Math.floorMod(i, REGION_NAMES.size()));
         }
     }

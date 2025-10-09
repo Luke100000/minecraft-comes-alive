@@ -1,42 +1,42 @@
 package net.mca.entity.ai.brain.tasks;
 
 import com.google.common.collect.ImmutableMap;
-import net.minecraft.entity.CrossbowUser;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.ai.brain.MemoryModuleState;
-import net.minecraft.entity.ai.brain.MemoryModuleType;
-import net.minecraft.entity.ai.brain.task.LookTargetUtil;
-import net.minecraft.entity.ai.brain.task.MultiTickTask;
-import net.minecraft.entity.mob.MobEntity;
-import net.minecraft.item.Items;
-import net.minecraft.server.world.ServerWorld;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.ai.behavior.Behavior;
+import net.minecraft.world.entity.ai.behavior.BehaviorUtils;
+import net.minecraft.world.entity.ai.memory.MemoryModuleType;
+import net.minecraft.world.entity.ai.memory.MemoryStatus;
+import net.minecraft.world.entity.monster.CrossbowAttackMob;
+import net.minecraft.world.item.Items;
 
-public class BowTask<E extends MobEntity & CrossbowUser> extends MultiTickTask<E> {
+public class BowTask<E extends Mob & CrossbowAttackMob> extends Behavior<E> {
     private int lastShot;
     private final int fireInterval;
     private final int squaredRange;
 
     public BowTask(int fireInterval, int range) {
-        super(ImmutableMap.of(MemoryModuleType.LOOK_TARGET, MemoryModuleState.REGISTERED,
-                MemoryModuleType.ATTACK_TARGET, MemoryModuleState.VALUE_PRESENT));
+        super(ImmutableMap.of(MemoryModuleType.LOOK_TARGET, MemoryStatus.REGISTERED,
+                MemoryModuleType.ATTACK_TARGET, MemoryStatus.VALUE_PRESENT));
         this.fireInterval = fireInterval;
         this.squaredRange = range * range;
     }
 
     @Override
-    protected boolean shouldRun(ServerWorld serverWorld, E entity) {
+    protected boolean checkExtraStartConditions(ServerLevel serverWorld, E entity) {
         LivingEntity livingEntity = getAttackTarget(entity);
         return livingEntity != null && entity.isHolding(Items.BOW)
-                && LookTargetUtil.isVisibleInMemory(entity, livingEntity)
-                && LookTargetUtil.isTargetWithinAttackRange(entity, livingEntity, 0);
+                && BehaviorUtils.canSee(entity, livingEntity)
+                && BehaviorUtils.isWithinAttackRange(entity, livingEntity, 0);
     }
 
     @Override
-    protected void keepRunning(ServerWorld world, E entity, long time) {
-        super.keepRunning(world, entity, time);
+    protected void tick(ServerLevel world, E entity, long time) {
+        super.tick(world, entity, time);
 
         LivingEntity target = getAttackTarget(entity);
-        double d = entity.squaredDistanceTo(target);
+        double d = entity.distanceToSqr(target);
 
         //keep distance
         float backward = 0.0f;
@@ -48,33 +48,33 @@ public class BowTask<E extends MobEntity & CrossbowUser> extends MultiTickTask<E
 
         //strafe
         float strafe = (float)(Math.cos(time / 20.0f) * 0.5);
-        entity.getMoveControl().strafeTo(backward, strafe);
-        entity.lookAtEntity(target, 30.0F, 30.0F);
+        entity.getMoveControl().strafe(backward, strafe);
+        entity.lookAt(target, 30.0F, 30.0F);
 
         //shoot
-        if (entity.age - lastShot > fireInterval) {
-            entity.attack(target, 1.0F);
-            lastShot = entity.age;
+        if (entity.tickCount - lastShot > fireInterval) {
+            entity.performRangedAttack(target, 1.0F);
+            lastShot = entity.tickCount;
         }
     }
 
     @Override
-    protected boolean shouldKeepRunning(ServerWorld world, E entity, long time) {
-        return shouldRun(world, entity);
+    protected boolean canStillUse(ServerLevel world, E entity, long time) {
+        return checkExtraStartConditions(world, entity);
     }
 
     @Override
-    protected void run(ServerWorld world, E entity, long time) {
-        entity.setAttacking(true);
+    protected void start(ServerLevel world, E entity, long time) {
+        entity.setAggressive(true);
     }
 
     private static LivingEntity getAttackTarget(LivingEntity entity) {
-        return entity.getBrain().getOptionalMemory(MemoryModuleType.ATTACK_TARGET).orElse(null);
+        return entity.getBrain().getMemoryInternal(MemoryModuleType.ATTACK_TARGET).orElse(null);
     }
 
     @Override
-    protected void finishRunning(ServerWorld world, E entity, long time) {
-        super.finishRunning(world, entity, time);
-        entity.setAttacking(false);
+    protected void stop(ServerLevel world, E entity, long time) {
+        super.stop(world, entity, time);
+        entity.setAggressive(false);
     }
 }

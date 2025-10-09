@@ -8,18 +8,17 @@ import net.mca.entity.ZombieVillagerEntityMCA;
 import net.mca.entity.ZombieVillagerFactory;
 import net.mca.entity.ai.relationship.Gender;
 import net.mca.server.world.data.Nationality;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.SpawnReason;
-import net.minecraft.entity.mob.PathAwareEntity;
-import net.minecraft.entity.mob.ZombieEntity;
-import net.minecraft.entity.mob.ZombieVillagerEntity;
-import net.minecraft.entity.passive.VillagerEntity;
-import net.minecraft.registry.Registries;
-import net.minecraft.registry.entry.RegistryEntry;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.village.VillagerProfession;
-import net.minecraft.village.VillagerType;
-
+import net.minecraft.core.Holder;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.MobSpawnType;
+import net.minecraft.world.entity.PathfinderMob;
+import net.minecraft.world.entity.monster.Zombie;
+import net.minecraft.world.entity.monster.ZombieVillager;
+import net.minecraft.world.entity.npc.Villager;
+import net.minecraft.world.entity.npc.VillagerProfession;
+import net.minecraft.world.entity.npc.VillagerType;
 import java.util.Locale;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
@@ -30,71 +29,71 @@ public class SpawnQueue {
         return INSTANCE;
     }
 
-    private final ConcurrentLinkedQueue<VillagerEntity> villagerSpawnQueue = new ConcurrentLinkedQueue<>();
-    private final ConcurrentLinkedQueue<ZombieVillagerEntity> zombieVillagerSpawnQueue = new ConcurrentLinkedQueue<>();
-    private final ConcurrentLinkedQueue<ZombieEntity> zombieSpawnList = new ConcurrentLinkedQueue<>();
+    private final ConcurrentLinkedQueue<Villager> villagerSpawnQueue = new ConcurrentLinkedQueue<>();
+    private final ConcurrentLinkedQueue<ZombieVillager> zombieVillagerSpawnQueue = new ConcurrentLinkedQueue<>();
+    private final ConcurrentLinkedQueue<Zombie> zombieSpawnList = new ConcurrentLinkedQueue<>();
 
     public void tick() {
         // After testing with 10k chunk radius with chunky pregen it seems the checks are not needed.
         // The queue system did not work properly and would build up overtime if villages arnt loaded near the player, and would clear on server stop resulting in empty villages anyways.
         // The chunk loaded check apparently does not function properly in this context, this is shown by villagers spawning fine without it, but NEVER spawn with it if far away and JUST generated.
-        VillagerEntity ve = villagerSpawnQueue.poll();
+        Villager ve = villagerSpawnQueue.poll();
         if (ve != null) {
             ve.discard();
-            VillagerEntityMCA villager = VillagerFactory.newVillager(ve.getWorld())
+            VillagerEntityMCA villager = VillagerFactory.newVillager(ve.level())
                     .withName(ve.hasCustomName() ? ve.getName().getString() : null)
                     .withGender(Gender.getRandom())
-                    .withAge(ve.getBreedingAge())
+                    .withAge(ve.getAge())
                     .withPosition(ve)
                     .withType(ve.getVillagerData().getType())
                     .withProfession(ve.getVillagerData().getProfession(), ve.getVillagerData().getLevel(), ve.getOffers())
-                    .spawn(((IVillagerEntity) ve).getSpawnReason());
+                    .spawn(((IVillagerEntity) ve).mca$getSpawnReason());
 
             copyPastaIntensifies(villager, ve);
         }
 
-        ZombieVillagerEntity zve = zombieVillagerSpawnQueue.poll();
+        ZombieVillager zve = zombieVillagerSpawnQueue.poll();
         if (zve != null) {
             zve.discard();
-            ZombieVillagerEntityMCA villager = ZombieVillagerFactory.newVillager(zve.getWorld())
+            ZombieVillagerEntityMCA villager = ZombieVillagerFactory.newVillager(zve.level())
                     .withName(zve.hasCustomName() ? zve.getName().getString() : null)
                     .withGender(Gender.getRandom())
                     .withPosition(zve)
                     .withType(zve.getVillagerData().getType())
                     .withProfession(zve.getVillagerData().getProfession(), zve.getVillagerData().getLevel())
-                    .spawn(((IVillagerEntity) zve).getSpawnReason());
+                    .spawn(((IVillagerEntity) zve).mca$getSpawnReason());
 
             copyPastaIntensifies(villager, zve);
         }
 
-        ZombieEntity ze = zombieSpawnList.poll();
+        Zombie ze = zombieSpawnList.poll();
         if (ze != null) {
             ze.discard();
-            ZombieVillagerEntityMCA villager = ZombieVillagerFactory.newVillager(ze.getWorld())
+            ZombieVillagerEntityMCA villager = ZombieVillagerFactory.newVillager(ze.level())
                     .withName(ze.hasCustomName() ? ze.getName().getString() : null)
                     .withGender(Gender.getRandom())
                     .withPosition(ze)
-                    .withType(VillagerType.forBiome(ze.getWorld().getBiome(ze.getBlockPos())))
-                    .withProfession(Registries.VILLAGER_PROFESSION.getRandom(ze.getRandom()).map(RegistryEntry::value).orElse(VillagerProfession.NONE))
-                    .spawn(SpawnReason.NATURAL);
+                    .withType(VillagerType.byBiome(ze.level().getBiome(ze.blockPosition())))
+                    .withProfession(BuiltInRegistries.VILLAGER_PROFESSION.getRandom(ze.getRandom()).map(Holder::value).orElse(VillagerProfession.NONE))
+                    .spawn(MobSpawnType.NATURAL);
 
             copyPastaIntensifies(villager, ze);
         }
     }
 
-    private void copyPastaIntensifies(PathAwareEntity villager, PathAwareEntity entity) {
-        if (entity.isPersistent()) {
-            villager.setPersistent();
+    private void copyPastaIntensifies(PathfinderMob villager, PathfinderMob entity) {
+        if (entity.isPersistenceRequired()) {
+            villager.setPersistenceRequired();
         }
         if (entity.isInvulnerable()) {
             villager.setInvulnerable(true);
         }
-        if (entity.isAiDisabled()) {
-            villager.setAiDisabled(true);
+        if (entity.isNoAi()) {
+            villager.setNoAi(true);
         }
 
-        for (String tag : entity.getCommandTags()) {
-            villager.addCommandTag(tag);
+        for (String tag : entity.getTags()) {
+            villager.addTag(tag);
         }
     }
 
@@ -102,45 +101,45 @@ public class SpawnQueue {
         if (Config.getInstance().fractionOfVanillaVillages <= 0) {
             return true;
         } else {
-            int i = Nationality.get((ServerWorld) entity.getWorld()).getRegionId(entity.getBlockPos());
+            int i = Nationality.get((ServerLevel) entity.level()).getRegionId(entity.blockPosition());
             return Math.floorMod(i, 100) >= Config.getInstance().fractionOfVanillaVillages * 100.0;
         }
     }
 
     public boolean addVillager(Entity entity) {
-        if (entity instanceof IVillagerEntity villagerEntity && !handlesSpawnReason(villagerEntity.getSpawnReason())) {
+        if (entity instanceof IVillagerEntity villagerEntity && !handlesSpawnReason(villagerEntity.mca$getSpawnReason())) {
             return false;
         }
-        if (Config.getInstance().villagerDimensionBlacklist.contains(entity.getEntityWorld().getRegistryKey().getValue().toString())) {
+        if (Config.getInstance().villagerDimensionBlacklist.contains(entity.getCommandSenderWorld().dimension().location().toString())) {
             return false;
         }
         if (Config.getInstance().overwriteOriginalVillagers
-            && (entity.getClass().equals(VillagerEntity.class) ||
-                Config.getInstance().moddedVillagerWhitelist.contains(Registries.ENTITY_TYPE.getId(entity.getType()).toString()) && entity instanceof VillagerEntity)
+            && (entity.getClass().equals(Villager.class) ||
+                Config.getInstance().moddedVillagerWhitelist.contains(BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType()).toString()) && entity instanceof Villager)
             && shouldGetConverted(entity)
             && !villagerSpawnQueue.contains(entity)) {
-            return villagerSpawnQueue.add((VillagerEntity) entity);
+            return villagerSpawnQueue.add((Villager) entity);
         }
         if (Config.getInstance().overwriteOriginalZombieVillagers
-            && (entity.getClass().equals(ZombieVillagerEntity.class) ||
-                Config.getInstance().moddedZombieVillagerWhitelist.contains(Registries.ENTITY_TYPE.getId(entity.getType()).toString()) && entity instanceof ZombieVillagerEntity)
-            && Config.getInstance().fractionOfVanillaZombies < ((ZombieVillagerEntity) entity).getRandom().nextFloat()
+            && (entity.getClass().equals(ZombieVillager.class) ||
+                Config.getInstance().moddedZombieVillagerWhitelist.contains(BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType()).toString()) && entity instanceof ZombieVillager)
+            && Config.getInstance().fractionOfVanillaZombies < ((ZombieVillager) entity).getRandom().nextFloat()
             && !zombieVillagerSpawnQueue.contains(entity)) {
-            return zombieVillagerSpawnQueue.add((ZombieVillagerEntity) entity);
+            return zombieVillagerSpawnQueue.add((ZombieVillager) entity);
         }
         if (Config.getInstance().overwriteAllZombiesWithZombieVillagers
-            && entity.getClass().equals(ZombieEntity.class)
+            && entity.getClass().equals(Zombie.class)
             && !zombieSpawnList.contains(entity)) {
-            return zombieSpawnList.add((ZombieEntity) entity);
+            return zombieSpawnList.add((Zombie) entity);
         }
         return false;
     }
 
-    private boolean handlesSpawnReason(SpawnReason reason) {
+    private boolean handlesSpawnReason(MobSpawnType reason) {
         return Config.getInstance().allowedSpawnReasons.contains(reason.name().toLowerCase(Locale.ROOT));
     }
 
-    public void convert(VillagerEntity villager) {
+    public void convert(Villager villager) {
         villagerSpawnQueue.add(villager);
     }
 }

@@ -3,30 +3,30 @@ package net.mca.item;
 import net.mca.entity.CribEntity;
 import net.mca.entity.CribWoodType;
 import net.mca.entity.EntitiesMCA;
-import net.minecraft.entity.SpawnReason;
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemPlacementContext;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.ItemUsageContext;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.sound.SoundCategory;
-import net.minecraft.sound.SoundEvents;
-import net.minecraft.util.ActionResult;
-import net.minecraft.util.DyeColor;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Box;
-import net.minecraft.util.math.Direction;
-import net.minecraft.util.math.MathHelper;
-import net.minecraft.util.math.Vec3d;
-import net.minecraft.world.World;
-import net.minecraft.world.event.GameEvent;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
+import net.minecraft.util.Mth;
+import net.minecraft.world.InteractionResult;
+import net.minecraft.world.entity.MobSpawnType;
+import net.minecraft.world.item.DyeColor;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.context.BlockPlaceContext;
+import net.minecraft.world.item.context.UseOnContext;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.gameevent.GameEvent;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
 
 public class CribItem extends Item
 {
 	private final CribWoodType wood;
 	private final DyeColor color;
 	
-	public CribItem(Settings settings, CribWoodType wood, DyeColor color)
+	public CribItem(Properties settings, CribWoodType wood, DyeColor color)
 	{
 		super(settings);
 		this.wood = wood;
@@ -37,36 +37,36 @@ public class CribItem extends Item
 	public DyeColor getColor() { return color; }
 
     @Override
-    public ActionResult useOnBlock(ItemUsageContext context)
+    public InteractionResult useOn(UseOnContext context)
     {
-        Direction direction = context.getSide();
-        if (direction == Direction.DOWN) { return ActionResult.FAIL; }
+        Direction direction = context.getClickedFace();
+        if (direction == Direction.DOWN) { return InteractionResult.FAIL; }
         
-        World world = context.getWorld();
-        ItemPlacementContext itemPlacementContext = new ItemPlacementContext(context);
-        BlockPos blockPos = itemPlacementContext.getBlockPos();
-        ItemStack itemStack = context.getStack();
-        Vec3d vec3d = Vec3d.ofBottomCenter(blockPos);
-        Box box = EntitiesMCA.CRIB.get().getDimensions().getBoxAt(vec3d.getX(), vec3d.getY(), vec3d.getZ());
+        Level world = context.getLevel();
+        BlockPlaceContext itemPlacementContext = new BlockPlaceContext(context);
+        BlockPos blockPos = itemPlacementContext.getClickedPos();
+        ItemStack itemStack = context.getItemInHand();
+        Vec3 vec3d = Vec3.atBottomCenterOf(blockPos);
+        AABB box = EntitiesMCA.CRIB.get().getDimensions().makeBoundingBox(vec3d.x(), vec3d.y(), vec3d.z());
         
-        if (!world.isSpaceEmpty(null, box) || !world.getOtherEntities(null, box).isEmpty()) { return ActionResult.FAIL; }
+        if (!world.noCollision(null, box) || !world.getEntities(null, box).isEmpty()) { return InteractionResult.FAIL; }
         
-        if (world instanceof ServerWorld)
+        if (world instanceof ServerLevel)
         {
-        	ServerWorld serverWorld = (ServerWorld)world;
-            CribEntity crib = EntitiesMCA.CRIB.get().create(serverWorld, null, null, blockPos, SpawnReason.SPAWN_EGG, true, true);
+        	ServerLevel serverWorld = (ServerLevel)world;
+            CribEntity crib = EntitiesMCA.CRIB.get().create(serverWorld, null, null, blockPos, MobSpawnType.SPAWN_EGG, true, true);
             
              crib.setWoodType(wood);
              crib.setColor(color);
             
-            float f = (float)MathHelper.floor((MathHelper.wrapDegrees(context.getPlayerYaw() - 180.0f) + 22.5f) / 45.0f) * 45.0f;
-            crib.refreshPositionAndAngles(crib.getX(), crib.getY(), crib.getZ(), f, 0.0f);
-            serverWorld.spawnEntityAndPassengers(crib);
+            float f = (float)Mth.floor((Mth.wrapDegrees(context.getRotation() - 180.0f) + 22.5f) / 45.0f) * 45.0f;
+            crib.moveTo(crib.getX(), crib.getY(), crib.getZ(), f, 0.0f);
+            serverWorld.addFreshEntityWithPassengers(crib);
             
-            world.playSound(null, crib.getX(), crib.getY(), crib.getZ(), SoundEvents.ENTITY_ARMOR_STAND_PLACE, SoundCategory.BLOCKS, 0.75f, 0.8f);
-            crib.emitGameEvent(GameEvent.ENTITY_PLACE, context.getPlayer());
+            world.playSound(null, crib.getX(), crib.getY(), crib.getZ(), SoundEvents.ARMOR_STAND_PLACE, SoundSource.BLOCKS, 0.75f, 0.8f);
+            crib.gameEvent(GameEvent.ENTITY_PLACE, context.getPlayer());
         }
-        itemStack.decrement(1); 
-        return ActionResult.success(world.isClient);
+        itemStack.shrink(1); 
+        return InteractionResult.sidedSuccess(world.isClientSide);
     }
 }

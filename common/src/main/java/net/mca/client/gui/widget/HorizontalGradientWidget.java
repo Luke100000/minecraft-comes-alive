@@ -1,9 +1,9 @@
 package net.mca.client.gui.widget;
 
 import com.mojang.blaze3d.systems.RenderSystem;
-import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.render.*;
-import net.minecraft.client.util.math.MatrixStack;
+import com.mojang.blaze3d.vertex.*;
+import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.renderer.GameRenderer;
 import org.joml.Matrix4f;
 
 import java.util.function.Supplier;
@@ -20,31 +20,31 @@ public class HorizontalGradientWidget extends HorizontalColorPickerWidget {
     }
 
     @Override
-    public void render(DrawContext context, int mouseX, int mouseY, float delta) {
+    public void render(GuiGraphics context, int mouseX, int mouseY, float delta) {
         RenderSystem.enableBlend();
         RenderSystem.defaultBlendFunc();
-        RenderSystem.setShader(GameRenderer::getPositionColorProgram);
-        Tessellator tessellator = Tessellator.getInstance();
-        BufferBuilder builder = tessellator.getBuffer();
-        builder.begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_COLOR);
+        RenderSystem.setShader(GameRenderer::getPositionColorShader);
+        Tesselator tesselator = Tesselator.getInstance();
+        BufferBuilder builder = tesselator.getBuilder();
+        builder.begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_COLOR);
 
         float[] startColor = startColorSupplier.get();
         float[] endColor = endColorSupplier.get();
 
         float z = 0.0f;
-        final MatrixStack matrices = context.getMatrices();
-        Matrix4f matrix = matrices.peek().getPositionMatrix();
-        builder.vertex(matrix, (float)getX() + width, (float)getY(), z).color(endColor[0], endColor[1], endColor[2], endColor[3]).next();
-        builder.vertex(matrix, (float)getX(), (float)getY(), z).color(startColor[0], startColor[1], startColor[2], startColor[3]).next();
-        builder.vertex(matrix, (float)getX(), (float)getY() + height, z).color(startColor[0], startColor[1], startColor[2], startColor[3]).next();
-        builder.vertex(matrix, (float)getX() + width, (float)getY() + height, z).color(endColor[0], endColor[1], endColor[2], endColor[3]).next();
+        final PoseStack matrices = context.pose();
+        Matrix4f matrix = matrices.last().pose();
+        builder.vertex(matrix, (float)getX() + width, (float)getY(), z).color(endColor[0], endColor[1], endColor[2], endColor[3]).endVertex();
+        builder.vertex(matrix, (float)getX(), (float)getY(), z).color(startColor[0], startColor[1], startColor[2], startColor[3]).endVertex();
+        builder.vertex(matrix, (float)getX(), (float)getY() + height, z).color(startColor[0], startColor[1], startColor[2], startColor[3]).endVertex();
+        builder.vertex(matrix, (float)getX() + width, (float)getY() + height, z).color(endColor[0], endColor[1], endColor[2], endColor[3]).endVertex();
 
-        tessellator.draw();
+        tesselator.end();
 
         RenderSystem.disableBlend();
 
         WidgetUtils.drawRectangle(context, getX(), getY(), getX() + width, getY() + height, 0xaaffffff);
 
-        context.drawTexture(MCA_GUI_ICONS_TEXTURE, (int)(getX() + valueX * width) - 8, (int)(getY() + valueY * height) - 8, 240, 0, 16, 16, 256, 256);
+        context.blit(MCA_GUI_ICONS_TEXTURE, (int)(getX() + valueX * width) - 8, (int)(getY() + valueY * height) - 8, 240, 0, 16, 16, 256, 256);
     }
 }

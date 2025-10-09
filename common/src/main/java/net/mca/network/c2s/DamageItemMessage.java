@@ -1,13 +1,12 @@
 package net.mca.network.c2s;
 
 import net.mca.cobalt.network.Message;
-import net.minecraft.entity.EquipmentSlot;
-import net.minecraft.item.ItemStack;
-import net.minecraft.registry.Registries;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.util.Hand;
-import net.minecraft.util.Identifier;
-
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.item.ItemStack;
 import java.io.Serial;
 import java.util.Arrays;
 
@@ -17,16 +16,16 @@ public class DamageItemMessage implements Message {
 
     private final String itemIdentifier;
 
-    public DamageItemMessage(Identifier identifier) {
+    public DamageItemMessage(ResourceLocation identifier) {
         itemIdentifier = identifier.toString();
     }
 
     @Override
-    public void receive(ServerPlayerEntity player) {
-        Arrays.stream(Hand.values()).forEach(hand -> {
-            ItemStack stack = player.getStackInHand(hand);
-            if (Registries.ITEM.getId(stack.getItem()).toString().equals(itemIdentifier)) {
-                stack.damage(1, player, e -> e.sendEquipmentBreakStatus(EquipmentSlot.MAINHAND));
+    public void receive(ServerPlayer player) {
+        Arrays.stream(InteractionHand.values()).forEach(hand -> {
+            ItemStack stack = player.getItemInHand(hand);
+            if (BuiltInRegistries.ITEM.getKey(stack.getItem()).toString().equals(itemIdentifier)) {
+                stack.hurtAndBreak(1, player, e -> e.broadcastBreakEvent(EquipmentSlot.MAINHAND));
             }
         });
     }

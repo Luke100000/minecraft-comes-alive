@@ -5,9 +5,9 @@ import com.google.gson.JsonObject;
 import net.mca.MCA;
 import net.mca.entity.VillagerEntityMCA;
 import net.mca.entity.interaction.gifts.GiftPredicate;
-import net.minecraft.item.ItemStack;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.util.JsonHelper;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.util.GsonHelper;
+import net.minecraft.world.item.ItemStack;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.LinkedList;
@@ -24,7 +24,7 @@ public class InteractionPredicate {
 
         for (Map.Entry<String, JsonElement> entry : json.entrySet()) {
             if ("chance".equals(entry.getKey())) {
-                chance = JsonHelper.asInt(entry.getValue(), entry.getKey());
+                chance = GsonHelper.convertToInt(entry.getValue(), entry.getKey());
             } else if (GiftPredicate.CONDITION_TYPES.containsKey(entry.getKey())) {
                 GiftPredicate.Condition parsed = GiftPredicate.CONDITION_TYPES.get(entry.getKey()).parse(entry.getValue());
                 conditionKeys.add(entry.getKey());
@@ -53,7 +53,7 @@ public class InteractionPredicate {
         this.conditionKeys = conditionKeys;
     }
 
-    public float test(VillagerEntityMCA villager, ServerPlayerEntity player) {
+    public float test(VillagerEntityMCA villager, ServerPlayer player) {
         return condition != null ? condition.test(villager, ItemStack.EMPTY, player) : 0.0f;
     }
 

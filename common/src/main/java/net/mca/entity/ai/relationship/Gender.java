@@ -4,10 +4,9 @@ import net.mca.Config;
 import net.mca.entity.EntitiesMCA;
 import net.mca.entity.VillagerEntityMCA;
 import net.mca.entity.ZombieVillagerEntityMCA;
-import net.minecraft.entity.EntityType;
-import net.minecraft.text.Text;
-import net.minecraft.util.math.random.Random;
-
+import net.minecraft.network.chat.Component;
+import net.minecraft.util.RandomSource;
+import net.minecraft.world.entity.EntityType;
 import java.util.Locale;
 import java.util.Map;
 import java.util.function.Function;
@@ -20,7 +19,7 @@ public enum Gender {
     FEMALE(0xA649A4, "female"),
     NEUTRAL(0xFFFFFF, "neutral");
 
-    private static final Random RNG = Random.create();
+    private static final RandomSource RNG = RandomSource.create();
     private static final Gender[] VALUES = values();
     private static final Map<String, Gender> REGISTRY = Stream.of(VALUES).collect(Collectors.toMap(Gender::name, Function.identity()));
 
@@ -87,8 +86,8 @@ public enum Gender {
                         (Config.getInstance().femaleVillagerHeightFactor + Config.getInstance().maleVillagerHeightFactor) * 0.5f;
     }
 
-    public static Text getText(Gender t) {
-        return Text.translatable("gui.villager_editor." + t.name().toLowerCase(Locale.ROOT));
+    public static Component getText(Gender t) {
+        return Component.translatable("gui.villager_editor." + t.name().toLowerCase(Locale.ROOT));
     }
 }
 

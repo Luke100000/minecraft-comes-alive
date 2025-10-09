@@ -2,28 +2,28 @@ package net.mca.client.gui.widget;
 
 import com.mojang.blaze3d.systems.RenderSystem;
 import net.mca.MCA;
-import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.gui.screen.narration.NarrationMessageBuilder;
-import net.minecraft.client.gui.widget.ClickableWidget;
-import net.minecraft.text.Text;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.math.MathHelper;
+import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.AbstractWidget;
+import net.minecraft.client.gui.narration.NarrationElementOutput;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.Mth;
 
-public class ColorPickerWidget extends ClickableWidget {
+public class ColorPickerWidget extends AbstractWidget {
     @FunctionalInterface
     public interface DualConsumer<A, B> {
         void apply(A a, B b);
     }
 
-    public static final Identifier MCA_GUI_ICONS_TEXTURE = MCA.locate("textures/gui.png");
+    public static final ResourceLocation MCA_GUI_ICONS_TEXTURE = MCA.locate("textures/gui.png");
 
     private final DualConsumer<Double, Double> consumer;
-    private final Identifier texture;
+    private final ResourceLocation texture;
     double valueX;
     double valueY;
 
-    public ColorPickerWidget(int x, int y, int width, int height, double valueX, double valueY, Identifier texture, DualConsumer<Double, Double> consumer) {
-        super(x, y, width, height, Text.literal(""));
+    public ColorPickerWidget(int x, int y, int width, int height, double valueX, double valueY, ResourceLocation texture, DualConsumer<Double, Double> consumer) {
+        super(x, y, width, height, Component.literal(""));
         this.consumer = consumer;
         this.texture = texture;
         this.valueX = valueX;
@@ -31,16 +31,16 @@ public class ColorPickerWidget extends ClickableWidget {
     }
 
     @Override
-    public void renderButton(DrawContext context, int mouseX, int mouseY, float delta) {
+    public void renderWidget(GuiGraphics context, int mouseX, int mouseY, float delta) {
         RenderSystem.setShaderColor(1, 1, 1, alpha);
         RenderSystem.enableBlend();
         RenderSystem.defaultBlendFunc();
         RenderSystem.enableDepthTest();
-        context.drawTexture(texture, getX(), getY(), 0, 0, width, height, width, height);
+        context.blit(texture, getX(), getY(), 0, 0, width, height, width, height);
 
         WidgetUtils.drawRectangle(context, getX(), getY(), getX() + width, getY() + height, 0xaaffffff);
 
-        context.drawTexture(MCA_GUI_ICONS_TEXTURE, (int)(getX() + valueX * width) - 8, (int)(getY() + valueY * height) - 8, 240, 0, 16, 16, 256, 256);
+        context.blit(MCA_GUI_ICONS_TEXTURE, (int)(getX() + valueX * width) - 8, (int)(getY() + valueY * height) - 8, 240, 0, 16, 16, 256, 256);
 
         WidgetUtils.drawRectangle(context, getX(), getY(), getX() + width, getY() + height, 0xaaffffff);
     }
@@ -64,14 +64,14 @@ public class ColorPickerWidget extends ClickableWidget {
     }
 
     void update(double mouseX, double mouseY) {
-        valueX = MathHelper.clamp((mouseX - getX()) / width, 0.0, 1.0);
-        valueY = MathHelper.clamp((mouseY - getY()) / height, 0.0, 1.0);
+        valueX = Mth.clamp((mouseX - getX()) / width, 0.0, 1.0);
+        valueY = Mth.clamp((mouseY - getY()) / height, 0.0, 1.0);
         consumer.apply(valueX, valueY);
     }
 
     @Override
-    protected void appendClickableNarrations(NarrationMessageBuilder builder) {
-        appendDefaultNarrations(builder);
+    protected void updateWidgetNarration(NarrationElementOutput builder) {
+        defaultButtonNarrationText(builder);
     }
 
     public double getValueX() {

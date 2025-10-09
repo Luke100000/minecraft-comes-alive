@@ -5,10 +5,9 @@ import net.mca.cobalt.network.NetworkHandler;
 import net.mca.entity.VillagerLike;
 import net.mca.network.s2c.GetFamilyResponse;
 import net.mca.server.world.data.PlayerSaveData;
-import net.minecraft.entity.mob.MobEntity;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.server.network.ServerPlayerEntity;
-
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.Mob;
 import java.io.Serial;
 import java.util.stream.Stream;
 
@@ -17,8 +16,8 @@ public class GetFamilyRequest implements Message {
     private static final long serialVersionUID = -4415670234855916259L;
 
     @Override
-    public void receive(ServerPlayerEntity player) {
-        NbtCompound familyData = new NbtCompound();
+    public void receive(ServerPlayer player) {
+        CompoundTag familyData = new CompoundTag();
 
         PlayerSaveData playerData = PlayerSaveData.get(player);
 
@@ -29,16 +28,16 @@ public class GetFamilyRequest implements Message {
                         playerData.getFamilyEntry().getAllRelatives(4),
                         playerData.getPartnerUUID().stream()
                 ).distinct()
-                .map(player.getServerWorld()::getEntity)
+                .map(player.serverLevel()::getEntity)
                 .filter(e -> e instanceof VillagerLike<?>)
                 .limit(100)
                 .forEach(e -> {
-                    NbtCompound nbt = new NbtCompound();
-                    ((MobEntity)e).writeCustomDataToNbt(nbt);
+                    CompoundTag nbt = new CompoundTag();
+                    ((Mob)e).addAdditionalSaveData(nbt);
                     nbt.remove("Brain");
                     nbt.remove("memories");
                     nbt.remove("Inventory");
-                    familyData.put(e.getUuid().toString(), nbt);
+                    familyData.put(e.getUUID().toString(), nbt);
                 });
 
         NetworkHandler.sendToPlayer(new GetFamilyResponse(familyData), player);

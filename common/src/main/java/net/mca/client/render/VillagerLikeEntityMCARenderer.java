@@ -1,6 +1,7 @@
 package net.mca.client.render;
 
 import com.mojang.authlib.minecraft.MinecraftProfileTexture;
+import com.mojang.blaze3d.vertex.PoseStack;
 import net.mca.Config;
 import net.mca.client.gui.VillagerEditorScreen;
 import net.mca.client.model.VillagerEntityBaseModelMCA;
@@ -8,62 +9,61 @@ import net.mca.client.model.VillagerEntityModelMCA;
 import net.mca.entity.Infectable;
 import net.mca.entity.VillagerLike;
 import net.mca.entity.ai.relationship.AgeState;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.model.Dilation;
-import net.minecraft.client.model.TexturedModelData;
-import net.minecraft.client.render.RenderLayer;
-import net.minecraft.client.render.entity.BipedEntityRenderer;
-import net.minecraft.client.render.entity.EntityRendererFactory;
-import net.minecraft.client.render.entity.feature.ArmorFeatureRenderer;
-import net.minecraft.client.util.DefaultSkinHelper;
-import net.minecraft.client.util.math.MatrixStack;
-import net.minecraft.entity.mob.MobEntity;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.Uuids;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.model.geom.builders.CubeDeformation;
+import net.minecraft.client.model.geom.builders.LayerDefinition;
+import net.minecraft.client.renderer.RenderType;
+import net.minecraft.client.renderer.entity.EntityRendererProvider;
+import net.minecraft.client.renderer.entity.HumanoidMobRenderer;
+import net.minecraft.client.renderer.entity.layers.HumanoidArmorLayer;
+import net.minecraft.client.resources.DefaultPlayerSkin;
+import net.minecraft.core.UUIDUtil;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.player.Player;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Map;
 
-public class VillagerLikeEntityMCARenderer<T extends MobEntity & VillagerLike<T>> extends BipedEntityRenderer<T, VillagerEntityModelMCA<T>> {
-    public VillagerLikeEntityMCARenderer(EntityRendererFactory.Context ctx, VillagerEntityModelMCA<T> model) {
+public class VillagerLikeEntityMCARenderer<T extends Mob & VillagerLike<T>> extends HumanoidMobRenderer<T, VillagerEntityModelMCA<T>> {
+    public VillagerLikeEntityMCARenderer(EntityRendererProvider.Context ctx, VillagerEntityModelMCA<T> model) {
         super(ctx, model, 0.5F);
-        addFeature(new ArmorFeatureRenderer<>(this, createArmorModel(0.3f), createArmorModel(0.55f), ctx.getModelManager()));
+        addLayer(new HumanoidArmorLayer<>(this, createArmorModel(0.3f), createArmorModel(0.55f), ctx.getModelManager()));
     }
 
     private VillagerEntityBaseModelMCA<T> createArmorModel(float modelSize) {
         return new VillagerEntityBaseModelMCA<>(
-                TexturedModelData.of(
-                                VillagerEntityBaseModelMCA.getModelData(new Dilation(modelSize)), 64, 32)
-                        .createModel()
+                LayerDefinition.create(
+                                VillagerEntityBaseModelMCA.getModelData(new CubeDeformation(modelSize)), 64, 32)
+                        .bakeRoot()
         );
     }
 
     @Override
-    protected void scale(T villager, MatrixStack matrices, float tickDelta) {
+    protected void scale(T villager, PoseStack matrices, float tickDelta) {
         float height = villager.getRawScaleFactor();
         float width = villager.getHorizontalScaleFactor();
         matrices.scale(width, height, width);
-        if (villager.getAgeState() == AgeState.BABY && !villager.hasVehicle()) {
+        if (villager.getAgeState() == AgeState.BABY && !villager.isPassenger()) {
             matrices.translate(0, 0.6F, 0);
         }
     }
 
     @Nullable
     @Override
-    protected RenderLayer getRenderLayer(T entity, boolean showBody, boolean translucent, boolean showOutlines) {
+    protected RenderType getRenderType(T entity, boolean showBody, boolean translucent, boolean showOutlines) {
         if (entity.hasCustomSkin()) {
             //custom skin
-            MinecraftClient minecraftClient = MinecraftClient.getInstance();
-            Map<MinecraftProfileTexture.Type, MinecraftProfileTexture> map = minecraftClient.getSkinProvider().getTextures(entity.getGameProfile());
+            Minecraft minecraftClient = Minecraft.getInstance();
+            Map<MinecraftProfileTexture.Type, MinecraftProfileTexture> map = minecraftClient.getSkinManager().getInsecureSkinInformation(entity.getGameProfile());
             return map.containsKey(MinecraftProfileTexture.Type.SKIN) ?
-                    RenderLayer.getEntityTranslucent(
-                            minecraftClient.getSkinProvider().loadSkin(
+                    RenderType.entityTranslucent(
+                            minecraftClient.getSkinManager().registerTexture(
                                     map.get(MinecraftProfileTexture.Type.SKIN), MinecraftProfileTexture.Type.SKIN
                             )) :
-                    RenderLayer.getEntityCutoutNoCull(
-                            DefaultSkinHelper.getTexture(
-                                    Uuids.getUuidFromProfile(entity.getGameProfile())
+                    RenderType.entityCutoutNoCull(
+                            DefaultPlayerSkin.getDefaultSkin(
+                                    UUIDUtil.getOrCreatePlayerUUID(entity.getGameProfile())
                             )
                     );
         }
@@ -74,20 +74,20 @@ public class VillagerLikeEntityMCARenderer<T extends MobEntity & VillagerLike<T>
     }
 
     @Override
-    protected boolean hasLabel(T villager) {
-        PlayerEntity player = MinecraftClient.getInstance().player;
+    protected boolean shouldShowName(T villager) {
+        Player player = Minecraft.getInstance().player;
         return villager.getCustomName() != null
-                && !(MinecraftClient.getInstance().currentScreen instanceof VillagerEditorScreen)
+                && !(Minecraft.getInstance().screen instanceof VillagerEditorScreen)
                 && player != null
                 && Config.getInstance().showNameTags
-                && player.squaredDistanceTo(villager) < Math.pow(Config.getInstance().nameTagDistance, 2.0f)
+                && player.distanceToSqr(villager) < Math.pow(Config.getInstance().nameTagDistance, 2.0f)
                 && !villager.isInvisibleTo(player);
     }
 
-    private static final Identifier TEXTURE = new Identifier("textures/entity/steve.png");
+    private static final ResourceLocation TEXTURE = new ResourceLocation("textures/entity/steve.png");
 
     @Override
-    public Identifier getTexture(T mobEntity) {
+    public ResourceLocation getTextureLocation(T mobEntity) {
         return TEXTURE;
     }
 

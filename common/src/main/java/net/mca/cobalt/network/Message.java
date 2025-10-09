@@ -1,12 +1,11 @@
 package net.mca.cobalt.network;
 
-import net.minecraft.network.PacketByteBuf;
-import net.minecraft.server.network.ServerPlayerEntity;
-
 import java.io.*;
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.server.level.ServerPlayer;
 
 public interface Message extends Serializable {
-    static Message decode(PacketByteBuf b) {
+    static Message decode(FriendlyByteBuf b) {
         byte[] data = new byte[b.readableBytes()];
         b.readBytes(data);
 
@@ -17,7 +16,7 @@ public interface Message extends Serializable {
         }
     }
 
-    default void encode(PacketByteBuf b) {
+    default void encode(FriendlyByteBuf b) {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
 
         try (ObjectOutputStream oos = new ObjectOutputStream(baos)) {
@@ -33,7 +32,7 @@ public interface Message extends Serializable {
         // N/A
     }
 
-    default void receive(ServerPlayerEntity player) {
+    default void receive(ServerPlayer player) {
         // N/A
     }
 }

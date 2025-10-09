@@ -8,48 +8,46 @@ import net.mca.server.world.data.GraveyardManager;
 import net.mca.util.NbtHelper;
 import net.mca.util.VoxelShapeUtil;
 import net.mca.util.localization.FlowingText;
-import net.minecraft.block.*;
-import net.minecraft.block.entity.BlockEntity;
-import net.minecraft.block.entity.BlockEntityTicker;
-import net.minecraft.block.entity.BlockEntityType;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.EntityType;
-import net.minecraft.entity.LightningEntity;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.mob.ZombieVillagerEntity;
-import net.minecraft.entity.passive.PassiveEntity;
-import net.minecraft.fluid.FluidState;
-import net.minecraft.fluid.Fluids;
-import net.minecraft.item.ItemPlacementContext;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
-import net.minecraft.loot.context.LootContext;
-import net.minecraft.loot.context.LootContextParameterSet;
-import net.minecraft.loot.context.LootContextParameters;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.nbt.NbtElement;
-import net.minecraft.nbt.NbtList;
-import net.minecraft.nbt.NbtString;
-import net.minecraft.network.packet.s2c.play.BlockEntityUpdateS2CPacket;
-import net.minecraft.particle.ParticleTypes;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.sound.SoundCategory;
-import net.minecraft.sound.SoundEvents;
-import net.minecraft.state.StateManager;
-import net.minecraft.state.property.Properties;
-import net.minecraft.text.Text;
-import net.minecraft.util.BlockMirror;
-import net.minecraft.util.BlockRotation;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Direction;
-import net.minecraft.util.math.Direction.Axis;
-import net.minecraft.util.math.MathHelper;
-import net.minecraft.util.math.Vec3d;
-import net.minecraft.util.math.random.Random;
-import net.minecraft.util.shape.VoxelShape;
-import net.minecraft.util.shape.VoxelShapes;
-import net.minecraft.world.*;
-import net.minecraft.world.event.GameEvent;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.core.Direction.Axis;
+import net.minecraft.core.particles.ParticleTypes;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.StringTag;
+import net.minecraft.nbt.Tag;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
+import net.minecraft.util.Mth;
+import net.minecraft.util.RandomSource;
+import net.minecraft.world.entity.*;
+import net.minecraft.world.entity.monster.ZombieVillager;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.item.context.BlockPlaceContext;
+import net.minecraft.world.level.BlockGetter;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.LevelAccessor;
+import net.minecraft.world.level.LevelReader;
+import net.minecraft.world.level.block.*;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.entity.BlockEntityTicker;
+import net.minecraft.world.level.block.entity.BlockEntityType;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.StateDefinition;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+import net.minecraft.world.level.gameevent.GameEvent;
+import net.minecraft.world.level.material.FluidState;
+import net.minecraft.world.level.material.Fluids;
+import net.minecraft.world.level.storage.loot.LootParams;
+import net.minecraft.world.level.storage.loot.parameters.LootContextParams;
+import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.phys.shapes.CollisionContext;
+import net.minecraft.world.phys.shapes.Shapes;
+import net.minecraft.world.phys.shapes.VoxelShape;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Arrays;
@@ -59,30 +57,30 @@ import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-public class TombstoneBlock extends BlockWithEntity implements Waterloggable {
-    public static final VoxelShape GRAVELLING_SHAPE = Block.createCuboidShape(1, 0, 1, 15, 1, 15);
-    public static final VoxelShape UPRIGHT_SHAPE = VoxelShapes.union(
-            Block.createCuboidShape(2, 2, 7, 14, 15, 9),
-            Block.createCuboidShape(1, 0, 6, 15, 2, 10)
+public class TombstoneBlock extends BaseEntityBlock implements SimpleWaterloggedBlock {
+    public static final VoxelShape GRAVELLING_SHAPE = Block.box(1, 0, 1, 15, 1, 15);
+    public static final VoxelShape UPRIGHT_SHAPE = Shapes.or(
+            Block.box(2, 2, 7, 14, 15, 9),
+            Block.box(1, 0, 6, 15, 2, 10)
     );
-    public static final VoxelShape CROSS_SHAPE = VoxelShapes.union(
-            Block.createCuboidShape(6, 0, 2, 10, 28, 4),
-            Block.createCuboidShape(-1, 18, 2, 17, 21, 4)
+    public static final VoxelShape CROSS_SHAPE = Shapes.or(
+            Block.box(6, 0, 2, 10, 28, 4),
+            Block.box(-1, 18, 2, 17, 21, 4)
     );
-    public static final VoxelShape SLANTED_SHAPE = Block.createCuboidShape(0, 0, 2, 16, 7, 14);
-    public static final VoxelShape WALL_SHAPE = Block.createCuboidShape(1, 1, 0, 15, 15, 1);
+    public static final VoxelShape SLANTED_SHAPE = Block.box(0, 0, 2, 16, 7, 14);
+    public static final VoxelShape WALL_SHAPE = Block.box(1, 1, 0, 15, 15, 1);
 
     private final Map<Direction, VoxelShape> shapes;
 
     private final int lineWidth;
     private final int maxNameHeight;
-    private final Vec3d nameplateOffset;
+    private final Vec3 nameplateOffset;
     private final boolean requiresSolid;
     private final float rotation;
 
-    public TombstoneBlock(Settings properties, int lineWidth, int maxNameHeight, Vec3d nameplateOffset, float rotation, boolean requiresSolid, VoxelShape baseShape) {
+    public TombstoneBlock(Properties properties, int lineWidth, int maxNameHeight, Vec3 nameplateOffset, float rotation, boolean requiresSolid, VoxelShape baseShape) {
         super(properties);
-        setDefaultState(getDefaultState().with(Properties.WATERLOGGED, false));
+        registerDefaultState(defaultBlockState().setValue(BlockStateProperties.WATERLOGGED, false));
 
         this.lineWidth = lineWidth;
         this.maxNameHeight = maxNameHeight;
@@ -105,7 +103,7 @@ public class TombstoneBlock extends BlockWithEntity implements Waterloggable {
         return maxNameHeight;
     }
 
-    public Vec3d getNameplateOffset() {
+    public Vec3 getNameplateOffset() {
         return nameplateOffset;
     }
 
@@ -114,7 +112,7 @@ public class TombstoneBlock extends BlockWithEntity implements Waterloggable {
     }
 
     @Override
-    public boolean hasSidedTransparency(BlockState state) {
+    public boolean useShapeForLightOcclusion(BlockState state) {
         return true;
     }
 
@@ -126,33 +124,33 @@ public class TombstoneBlock extends BlockWithEntity implements Waterloggable {
 
     @Override
     @Deprecated
-    public VoxelShape getOutlineShape(BlockState state, BlockView view, BlockPos pos, ShapeContext ePos) {
+    public VoxelShape getShape(BlockState state, BlockGetter view, BlockPos pos, CollisionContext ePos) {
         if (this == BlocksMCA.SLANTED_HEADSTONE.get()) {
             shapes.replaceAll((i, v) -> VoxelShapeUtil.rotator(SLANTED_SHAPE).apply(i));
         }
 
-        return shapes.getOrDefault(state.get(Properties.HORIZONTAL_FACING), VoxelShapes.fullCube());
+        return shapes.getOrDefault(state.getValue(BlockStateProperties.HORIZONTAL_FACING), Shapes.block());
     }
 
     @Override
-    public BlockRenderType getRenderType(BlockState state) {
-        return BlockRenderType.MODEL;
+    public RenderShape getRenderShape(BlockState state) {
+        return RenderShape.MODEL;
     }
 
     @Override
-    public void onBlockAdded(BlockState state, World world, BlockPos pos, BlockState oldState, boolean notify) {
+    public void onPlace(BlockState state, Level world, BlockPos pos, BlockState oldState, boolean notify) {
         updateTombstoneState(world, pos);
     }
 
     @Override
-    public void onPlaced(World world, BlockPos pos, BlockState state, LivingEntity placer, ItemStack stack) {
+    public void setPlacedBy(Level world, BlockPos pos, BlockState state, LivingEntity placer, ItemStack stack) {
         Data.of(world.getBlockEntity(pos)).ifPresent(data -> data.readFromStack(stack));
         updateTombstoneState(world, pos);
     }
 
-    private void updateTombstoneState(World world, BlockPos pos) {
-        if (!world.isClient) {
-            GraveyardManager.get((ServerWorld)world).setTombstoneState(pos,
+    private void updateTombstoneState(Level world, BlockPos pos) {
+        if (!world.isClientSide) {
+            GraveyardManager.get((ServerLevel) world).setTombstoneState(pos,
                     hasEntity(world, pos) ? GraveyardManager.TombstoneState.FILLED : GraveyardManager.TombstoneState.EMPTY
             );
         }
@@ -160,54 +158,54 @@ public class TombstoneBlock extends BlockWithEntity implements Waterloggable {
 
     @Deprecated
     @Override
-    public void onStateReplaced(BlockState state, World world, BlockPos pos, BlockState newState, boolean moved) {
-        super.onStateReplaced(state, world, pos, newState, moved);
-        if (!world.isClient && !state.isOf(newState.getBlock())) {
+    public void onRemove(BlockState state, Level world, BlockPos pos, BlockState newState, boolean moved) {
+        super.onRemove(state, world, pos, newState, moved);
+        if (!world.isClientSide && !state.is(newState.getBlock())) {
             updateNeighbors(state, world, pos);
-            GraveyardManager.get((ServerWorld)world).removeTombstoneState(pos);
+            GraveyardManager.get((ServerLevel) world).removeTombstoneState(pos);
         }
     }
 
 
     @Override
-    public BlockEntity createBlockEntity(BlockPos pos, BlockState state) {
-        return BlockEntityTypesMCA.TOMBSTONE.get().instantiate(pos, state);
+    public BlockEntity newBlockEntity(BlockPos pos, BlockState state) {
+        return BlockEntityTypesMCA.TOMBSTONE.get().create(pos, state);
     }
 
 
     @Override
     @Nullable
-    public <T extends BlockEntity> BlockEntityTicker<T> getTicker(World world, BlockState state, BlockEntityType<T> type) {
-        if (world.isClient) {
+    public <T extends BlockEntity> BlockEntityTicker<T> getTicker(Level world, BlockState state, BlockEntityType<T> type) {
+        if (world.isClientSide) {
             return null;
         }
-        return (w, pos, s, data) -> ((Data)data).tick();
+        return (w, pos, s, data) -> ((Data) data).tick();
     }
 
     @Override
-    protected void appendProperties(StateManager.Builder<Block, BlockState> builder) {
-        builder.add(Properties.WATERLOGGED).add(Properties.HORIZONTAL_FACING);
+    protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> builder) {
+        builder.add(BlockStateProperties.WATERLOGGED).add(BlockStateProperties.HORIZONTAL_FACING);
     }
 
     @Deprecated
     @Override
-    public BlockState getStateForNeighborUpdate(BlockState state, Direction direction, BlockState neighborState, WorldAccess world, BlockPos pos, BlockPos neighborPos) {
-        if (state.get(Properties.WATERLOGGED)) {
-            world.scheduleFluidTick(pos, Fluids.WATER, Fluids.WATER.getTickRate(world));
+    public BlockState updateShape(BlockState state, Direction direction, BlockState neighborState, LevelAccessor world, BlockPos pos, BlockPos neighborPos) {
+        if (state.getValue(BlockStateProperties.WATERLOGGED)) {
+            world.scheduleTick(pos, Fluids.WATER, Fluids.WATER.getTickDelay(world));
         }
 
-        if (direction == Direction.DOWN && !canPlaceAt(state, world, pos)) {
-            return Blocks.AIR.getDefaultState();
+        if (direction == Direction.DOWN && !canSurvive(state, world, pos)) {
+            return Blocks.AIR.defaultBlockState();
         }
 
-        return super.getStateForNeighborUpdate(state, direction, neighborState, world, pos, neighborPos);
+        return super.updateShape(state, direction, neighborState, world, pos, neighborPos);
     }
 
     @Override
-    public boolean canPlaceAt(BlockState state, WorldView world, BlockPos pos) {
+    public boolean canSurvive(BlockState state, LevelReader world, BlockPos pos) {
         if (requiresSolid) {
-            pos = pos.down();
-            return world.getBlockState(pos).isSideSolid(world, pos, Direction.UP, SideShapeType.FULL);
+            pos = pos.below();
+            return world.getBlockState(pos).isFaceSturdy(world, pos, Direction.UP, SupportType.FULL);
         }
 
         return true;
@@ -216,51 +214,51 @@ public class TombstoneBlock extends BlockWithEntity implements Waterloggable {
     @Deprecated
     @Override
     public FluidState getFluidState(BlockState state) {
-        return state.get(Properties.WATERLOGGED) ? Fluids.WATER.getStill(false) : super.getFluidState(state);
+        return state.getValue(BlockStateProperties.WATERLOGGED) ? Fluids.WATER.getSource(false) : super.getFluidState(state);
     }
 
-    private void updateNeighbors(BlockState state, World world, BlockPos pos) {
-        world.updateNeighborsAlways(pos, this);
-        world.updateNeighborsAlways(pos.offset(state.get(Properties.HORIZONTAL_FACING)), this);
+    private void updateNeighbors(BlockState state, Level world, BlockPos pos) {
+        world.updateNeighborsAt(pos, this);
+        world.updateNeighborsAt(pos.relative(state.getValue(BlockStateProperties.HORIZONTAL_FACING)), this);
     }
 
     @Nullable
     @Override
-    public BlockState getPlacementState(ItemPlacementContext context) {
-        return getDefaultState().with(Properties.HORIZONTAL_FACING, context.getHorizontalPlayerFacing().getOpposite());
+    public BlockState getStateForPlacement(BlockPlaceContext context) {
+        return defaultBlockState().setValue(BlockStateProperties.HORIZONTAL_FACING, context.getHorizontalDirection().getOpposite());
     }
 
     @Override
-    public BlockState rotate(BlockState state, BlockRotation rot) {
-        return state.with(Properties.HORIZONTAL_FACING, rot.rotate(state.get(Properties.HORIZONTAL_FACING)));
+    public BlockState rotate(BlockState state, Rotation rot) {
+        return state.setValue(BlockStateProperties.HORIZONTAL_FACING, rot.rotate(state.getValue(BlockStateProperties.HORIZONTAL_FACING)));
     }
 
     @Override
-    public BlockState mirror(BlockState state, BlockMirror mirror) {
-        return state.rotate(mirror.getRotation(state.get(Properties.HORIZONTAL_FACING)));
+    public BlockState mirror(BlockState state, Mirror mirror) {
+        return state.rotate(mirror.getRotation(state.getValue(BlockStateProperties.HORIZONTAL_FACING)));
     }
 
     @Override
-    public int getWeakRedstonePower(BlockState state, BlockView world, BlockPos pos, Direction direction) {
-        return state.getStrongRedstonePower(world, pos, direction);
+    public int getSignal(BlockState state, BlockGetter world, BlockPos pos, Direction direction) {
+        return state.getDirectSignal(world, pos, direction);
     }
 
     @Override
-    public int getStrongRedstonePower(BlockState state, BlockView world, BlockPos pos, Direction direction) {
-        return direction == state.get(Properties.HORIZONTAL_FACING) && hasEntity(world, pos) ? 15 : 0;
+    public int getDirectSignal(BlockState state, BlockGetter world, BlockPos pos, Direction direction) {
+        return direction == state.getValue(BlockStateProperties.HORIZONTAL_FACING) && hasEntity(world, pos) ? 15 : 0;
     }
 
-    protected boolean hasEntity(BlockView world, BlockPos pos) {
+    protected boolean hasEntity(BlockGetter world, BlockPos pos) {
         return Data.of(world.getBlockEntity(pos)).map(Data::hasEntity).orElse(false);
     }
 
     @Override
-    public boolean emitsRedstonePower(BlockState state) {
+    public boolean isSignalSource(BlockState state) {
         return true;
     }
 
     @Override
-    public void randomDisplayTick(BlockState state, World world, BlockPos pos, Random random) {
+    public void animateTick(BlockState state, Level world, BlockPos pos, RandomSource random) {
         Data.of(world.getBlockEntity(pos)).filter(Data::isResurrecting).ifPresent(data -> {
             for (int i = 0; i < random.nextInt(8) + 1; ++i) {
                 world.addParticle(random.nextBoolean() ? ParticleTypes.LARGE_SMOKE : ParticleTypes.SMOKE,
@@ -277,17 +275,17 @@ public class TombstoneBlock extends BlockWithEntity implements Waterloggable {
 
     @Deprecated
     @Override
-    public List<ItemStack> getDroppedStacks(BlockState state, LootContextParameterSet.Builder builder) {
-        List<ItemStack> stacks = super.getDroppedStacks(state, builder);
+    public List<ItemStack> getDrops(BlockState state, LootParams.Builder builder) {
+        List<ItemStack> stacks = super.getDrops(state, builder);
 
-        Optional<Data> data = Data.of(builder.getOptional(LootContextParameters.BLOCK_ENTITY)).filter(Data::hasEntity);
+        Optional<Data> data = Data.of(builder.getOptionalParameter(LootContextParams.BLOCK_ENTITY)).filter(Data::hasEntity);
 
         data
                 .flatMap(Data::getEntityName)
                 .ifPresent(name -> {
                     stacks.stream().filter(TombstoneBlock::isRemains).forEach(stack -> {
-                        stack.removeCustomName();
-                        stack.setCustomName(Text.translatable("block.mca.tombstone.remains", stack.getName(), name));
+                        stack.resetHoverName();
+                        stack.setHoverName(Component.translatable("block.mca.tombstone.remains", stack.getHoverName(), name));
                     });
 
                 });
@@ -323,47 +321,47 @@ public class TombstoneBlock extends BlockWithEntity implements Waterloggable {
             resurrectionProgress = 1;
             this.cure = cure;
             generateLightning();
-            markDirty();
+            setChanged();
             sync();
         }
 
         public void tick() {
             if (hasEntity() && resurrectionProgress > 0) {
                 resurrectionProgress++;
-                markDirty();
+                setChanged();
                 sync();
 
                 if (resurrectionProgress % 30 == 0) {
-                    world.playSound(null, pos.getX(), pos.getY(), pos.getZ(), cure ? SoundEvents.BLOCK_BELL_USE : SoundEvents.ENTITY_POLAR_BEAR_AMBIENT, SoundCategory.BLOCKS, 1, 1);
-                    world.syncWorldEvent(WorldEvents.BLOCK_BROKEN, pos, Block.getRawIdFromState(getCachedState()));
+                    level.playSound(null, worldPosition.getX(), worldPosition.getY(), worldPosition.getZ(), cure ? SoundEvents.BELL_BLOCK : SoundEvents.POLAR_BEAR_AMBIENT, SoundSource.BLOCKS, 1, 1);
+                    level.levelEvent(LevelEvent.PARTICLES_DESTROY_BLOCK, worldPosition, Block.getId(getBlockState()));
                 }
 
-                if (world.random.nextInt(10) > 5 && resurrectionProgress % 20 == 0) {
+                if (level.random.nextInt(10) > 5 && resurrectionProgress % 20 == 0) {
                     generateLightning();
                 }
 
                 if (resurrectionProgress > 500) {
                     resurrectionProgress = 0;
 
-                    createEntity(world, true).ifPresent(entity -> {
+                    createEntity(level, true).ifPresent(entity -> {
                         generateLightning();
-                        entity.extinguish();
-                        entity.resetPortalCooldown();
-                        entity.setPosition(pos.getX() + 0.5F, pos.getY() + 0.5F, pos.getZ() + 0.5F);
+                        entity.clearFire();
+                        entity.setPortalCooldown();
+                        entity.setPos(worldPosition.getX() + 0.5F, worldPosition.getY() + 0.5F, worldPosition.getZ() + 0.5F);
                         if (entity instanceof LivingEntity l) {
                             l.setHealth(l.getMaxHealth());
-                            l.clearStatusEffects();
+                            l.removeAllEffects();
                             l.fallDistance = 0.0f;
                             l.deathTime = 0;
                         }
 
                         //enforcing a dimension update
-                        if (entity instanceof PassiveEntity mob) {
-                            mob.setBreedingAge(mob.getBreedingAge());
+                        if (entity instanceof AgeableMob mob) {
+                            mob.setAge(mob.getAge());
                         }
 
                         boolean alreadySpawned = false;
-                        if (cure && (entity instanceof ZombieVillagerEntity zombie)) {
+                        if (cure && (entity instanceof ZombieVillager zombie)) {
                             // spawnEntity is called here, so don't call it twice
                             entity = zombie.convertTo(EntityType.VILLAGER, true);
                             alreadySpawned = true;
@@ -374,12 +372,12 @@ public class TombstoneBlock extends BlockWithEntity implements Waterloggable {
                         }
 
                         if (entity instanceof Infectable infectable) {
-                            infectable.setInfectionProgress(cure ? 0.0f : Math.max(MathHelper.lerp(world.random.nextFloat(), Infectable.FEVER_THRESHOLD, Infectable.BABBLING_THRESHOLD), infectable.getInfectionProgress())
+                            infectable.setInfectionProgress(cure ? 0.0f : Math.max(Mth.lerp(level.random.nextFloat(), Infectable.FEVER_THRESHOLD, Infectable.BABBLING_THRESHOLD), infectable.getInfectionProgress())
                             );
                         }
 
                         if (!alreadySpawned) {
-                            world.spawnEntity(entity);
+                            level.addFreshEntity(entity);
                         }
                     });
                 }
@@ -387,11 +385,11 @@ public class TombstoneBlock extends BlockWithEntity implements Waterloggable {
         }
 
         private void generateLightning() {
-            world.setLightningTicksLeft(10);
-            LightningEntity bolt = EntityType.LIGHTNING_BOLT.create(world);
-            bolt.setCosmetic(true);
-            bolt.updatePosition(pos.getX() + 0.5F, pos.getY(), pos.getZ() + 0.5F);
-            world.spawnEntity(bolt);
+            level.setSkyFlashTime(10);
+            LightningBolt bolt = EntityType.LIGHTNING_BOLT.create(level);
+            bolt.setVisualOnly(true);
+            bolt.absMoveTo(worldPosition.getX() + 0.5F, worldPosition.getY(), worldPosition.getZ() + 0.5F);
+            level.addFreshEntity(bolt);
         }
 
         public void setEntity(@Nullable Entity entity) {
@@ -401,16 +399,16 @@ public class TombstoneBlock extends BlockWithEntity implements Waterloggable {
                     EntityRelationship.of(e).map(EntityRelationship::getGender).orElse(Gender.MALE)
             ));
             computedName = null;
-            markDirty();
+            setChanged();
 
-            if (hasWorld()) {
-                world.playSound(null, pos.getX(), pos.getY(), pos.getZ(), SoundEvents.BLOCK_BELL_USE, SoundCategory.BLOCKS, 1, 1);
-                world.syncWorldEvent(WorldEvents.BLOCK_BROKEN, pos, Block.getRawIdFromState(getCachedState()));
-                world.emitGameEvent(GameEvent.BLOCK_CHANGE, pos, GameEvent.Emitter.of(getCachedState()));
-                ((TombstoneBlock)getCachedState().getBlock()).updateNeighbors(getCachedState(), world, pos);
+            if (hasLevel()) {
+                level.playSound(null, worldPosition.getX(), worldPosition.getY(), worldPosition.getZ(), SoundEvents.BELL_BLOCK, SoundSource.BLOCKS, 1, 1);
+                level.levelEvent(LevelEvent.PARTICLES_DESTROY_BLOCK, worldPosition, Block.getId(getBlockState()));
+                level.gameEvent(GameEvent.BLOCK_CHANGE, worldPosition, GameEvent.Context.of(getBlockState()));
+                ((TombstoneBlock) getBlockState().getBlock()).updateNeighbors(getBlockState(), level, worldPosition);
 
-                if (!world.isClient) {
-                    GraveyardManager.get((ServerWorld)world).setTombstoneState(pos,
+                if (!level.isClientSide) {
+                    GraveyardManager.get((ServerLevel) level).setTombstoneState(worldPosition,
                             hasEntity() ? GraveyardManager.TombstoneState.FILLED : GraveyardManager.TombstoneState.EMPTY
                     );
                     sync();
@@ -426,20 +424,20 @@ public class TombstoneBlock extends BlockWithEntity implements Waterloggable {
             return entityData.map(e -> e.gender).orElse(Gender.MALE);
         }
 
-        public Optional<Text> getEntityName() {
+        public Optional<Component> getEntityName() {
             return entityData.map(e -> e.name);
         }
 
-        public FlowingText getOrCreateEntityName(Function<Text, FlowingText> factory) {
+        public FlowingText getOrCreateEntityName(Function<Component, FlowingText> factory) {
             if (computedName == null) {
-                computedName = factory.apply(getEntityName().orElse(Text.literal("")));
+                computedName = factory.apply(getEntityName().orElse(Component.literal("")));
             }
             return computedName;
         }
 
-        public Optional<Entity> createEntity(World world, boolean remove) {
+        public Optional<Entity> createEntity(Level world, boolean remove) {
             try {
-                return entityData.flatMap(data -> EntityType.getEntityFromNbt(data.nbt, world));
+                return entityData.flatMap(data -> EntityType.create(data.nbt, world));
             } finally {
                 if (remove) {
                     setEntity(null);
@@ -447,56 +445,56 @@ public class TombstoneBlock extends BlockWithEntity implements Waterloggable {
             }
         }
 
-        private NbtCompound writeEntityToNbt(Entity entity) {
-            NbtCompound nbt = new NbtCompound();
-            entity.writeNbt(nbt);
-            nbt.putString("id", EntityType.getId(entity.getType()).toString());
+        private CompoundTag writeEntityToNbt(Entity entity) {
+            CompoundTag nbt = new CompoundTag();
+            entity.saveWithoutId(nbt);
+            nbt.putString("id", EntityType.getKey(entity.getType()).toString());
             return nbt;
         }
 
         protected void sync() {
-            markDirty();
-            world.updateListeners(getPos(), getCachedState(), getCachedState(), 3);
+            setChanged();
+            level.sendBlockUpdated(getBlockPos(), getBlockState(), getBlockState(), 3);
         }
 
         @Override
-        public void readNbt(NbtCompound tag) {
-            entityData = tag.contains("entityData", NbtElement.COMPOUND_TYPE) ? Optional.of(new EntityData(tag)) : Optional.empty();
+        public void load(CompoundTag tag) {
+            entityData = tag.contains("entityData", Tag.TAG_COMPOUND) ? Optional.of(new EntityData(tag)) : Optional.empty();
             resurrectionProgress = tag.getInt("resurrectionProgress");
             cure = tag.getBoolean("cure");
         }
 
         @Override
-        public void writeNbt(NbtCompound nbt) {
+        public void saveAdditional(CompoundTag nbt) {
             entityData.ifPresent(data -> data.writeNbt(nbt));
             nbt.putInt("resurrectionProgress", resurrectionProgress);
             nbt.putBoolean("cure", cure);
         }
 
         @Override
-        public NbtCompound toInitialChunkDataNbt() {
-            NbtCompound tag = new NbtCompound();
-            writeNbt(tag);
+        public CompoundTag getUpdateTag() {
+            CompoundTag tag = new CompoundTag();
+            saveAdditional(tag);
             return tag;
         }
 
         @Override
-        public BlockEntityUpdateS2CPacket toUpdatePacket() {
-            return BlockEntityUpdateS2CPacket.create(this, BlockEntity::toInitialChunkDataNbt);
+        public ClientboundBlockEntityDataPacket getUpdatePacket() {
+            return ClientboundBlockEntityDataPacket.create(this, BlockEntity::getUpdateTag);
         }
 
         public void readFromStack(ItemStack stack) {
-            entityData = Optional.ofNullable(stack).map(s -> s.getSubNbt("entityData")).map(EntityData::new);
+            entityData = Optional.ofNullable(stack).map(s -> s.getTagElement("entityData")).map(EntityData::new);
         }
 
         public void writeToStack(ItemStack stack) {
             entityData.ifPresent(data -> {
-                data.writeNbt(stack.getOrCreateSubNbt("entityData"));
+                data.writeNbt(stack.getOrCreateTagElement("entityData"));
                 getEntityName().ifPresent(name -> {
                     NbtHelper.computeIfAbsent(
-                                    stack.getOrCreateSubNbt(ItemStack.DISPLAY_KEY),
-                                    ItemStack.LORE_KEY, NbtElement.LIST_TYPE, NbtList::new)
-                            .add(0, NbtString.of(name.getString()));
+                                    stack.getOrCreateTagElement(ItemStack.TAG_DISPLAY),
+                                    ItemStack.TAG_LORE, Tag.TAG_LIST, ListTag::new)
+                            .add(0, StringTag.valueOf(name.getString()));
                 });
             });
         }
@@ -506,27 +504,27 @@ public class TombstoneBlock extends BlockWithEntity implements Waterloggable {
         }
 
         static final class EntityData {
-            private final NbtCompound nbt;
-            private final Text name;
+            private final CompoundTag nbt;
+            private final Component name;
             private final Gender gender;
 
-            public EntityData(NbtCompound nbt, Text name, Gender gender) {
+            public EntityData(CompoundTag nbt, Component name, Gender gender) {
                 this.nbt = nbt;
-                this.name = name == null ? Text.literal("") : Text.literal(name.getString());
+                this.name = name == null ? Component.literal("") : Component.literal(name.getString());
                 this.gender = gender;
             }
 
-            EntityData(NbtCompound nbt) {
+            EntityData(CompoundTag nbt) {
                 this(
                         nbt.getCompound("entityData"),
-                        Text.Serializer.fromJson(nbt.getString("entityName")),
+                        Component.Serializer.fromJson(nbt.getString("entityName")),
                         Gender.byId(nbt.getInt("entityGender"))
                 );
             }
 
-            void writeNbt(NbtCompound nbt) {
+            void writeNbt(CompoundTag nbt) {
                 nbt.put("entityData", this.nbt);
-                nbt.putString("entityName", Text.Serializer.toJson(name));
+                nbt.putString("entityName", Component.Serializer.toJson(name));
                 nbt.putInt("entityGender", gender.ordinal());
             }
         }

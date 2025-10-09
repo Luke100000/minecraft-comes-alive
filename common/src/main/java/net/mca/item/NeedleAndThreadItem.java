@@ -3,37 +3,37 @@ package net.mca.item;
 import net.mca.cobalt.network.NetworkHandler;
 import net.mca.entity.VillagerLike;
 import net.mca.network.s2c.OpenGuiRequest;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemStack;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.util.ActionResult;
-import net.minecraft.util.Hand;
-import net.minecraft.util.TypedActionResult;
-import net.minecraft.world.World;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.InteractionResult;
+import net.minecraft.world.InteractionResultHolder;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.Level;
 
 public class NeedleAndThreadItem extends TooltippedItem {
-    public NeedleAndThreadItem(Item.Settings properties) {
+    public NeedleAndThreadItem(Item.Properties properties) {
         super(properties);
     }
 
     @Override
-    public final TypedActionResult<ItemStack> use(World world, PlayerEntity player, Hand hand) {
-        if (player instanceof ServerPlayerEntity serverPlayer) {
-            ItemStack stack = player.getStackInHand(hand);
+    public final InteractionResultHolder<ItemStack> use(Level world, Player player, InteractionHand hand) {
+        if (player instanceof ServerPlayer serverPlayer) {
+            ItemStack stack = player.getItemInHand(hand);
             NetworkHandler.sendToPlayer(new OpenGuiRequest(OpenGuiRequest.Type.NEEDLE_AND_THREAD), serverPlayer);
-            return TypedActionResult.success(stack);
+            return InteractionResultHolder.success(stack);
         }
         return super.use(world, player, hand);
     }
 
-    public ActionResult useOnEntity(ItemStack stack, PlayerEntity player, LivingEntity entity, Hand hand) {
-        if (entity instanceof VillagerLike && !entity.getWorld().isClient && player instanceof ServerPlayerEntity) {
-            NetworkHandler.sendToPlayer(new OpenGuiRequest(OpenGuiRequest.Type.NEEDLE_AND_THREAD, entity), (ServerPlayerEntity)player);
-            return ActionResult.SUCCESS;
+    public InteractionResult interactLivingEntity(ItemStack stack, Player player, LivingEntity entity, InteractionHand hand) {
+        if (entity instanceof VillagerLike && !entity.level().isClientSide && player instanceof ServerPlayer) {
+            NetworkHandler.sendToPlayer(new OpenGuiRequest(OpenGuiRequest.Type.NEEDLE_AND_THREAD, entity), (ServerPlayer)player);
+            return InteractionResult.SUCCESS;
         } else {
-            return ActionResult.CONSUME;
+            return InteractionResult.CONSUME;
         }
     }
 }

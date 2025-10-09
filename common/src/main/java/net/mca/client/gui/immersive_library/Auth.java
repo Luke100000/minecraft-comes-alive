@@ -3,8 +3,7 @@ package net.mca.client.gui.immersive_library;
 import com.google.gson.JsonObject;
 import net.mca.Config;
 import net.mca.MCA;
-import net.minecraft.util.Util;
-
+import net.minecraft.Util;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -86,6 +85,6 @@ public class Auth {
 
         // Open the authorization URL in the user's default web browser
         String url = Config.getInstance().immersiveLibraryUrl + "/v1/login?state=" + createDataState(username, currentToken);
-        Util.getOperatingSystem().open(url);
+        Util.getPlatform().openUri(url);
     }
 }

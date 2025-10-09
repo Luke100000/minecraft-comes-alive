@@ -7,10 +7,9 @@ import net.mca.util.network.datasync.CDataManager;
 import net.mca.util.network.datasync.CDataParameter;
 import net.mca.util.network.datasync.CEnumParameter;
 import net.mca.util.network.datasync.CParameter;
-import net.minecraft.entity.Entity;
-import net.minecraft.util.math.MathHelper;
-import net.minecraft.util.math.random.Random;
-
+import net.minecraft.util.Mth;
+import net.minecraft.util.RandomSource;
+import net.minecraft.world.entity.Entity;
 import java.util.*;
 
 /**
@@ -38,7 +37,7 @@ public class Genetics implements Iterable<Genetics.Gene> {
         return builder.addAll(GENDER);
     }
 
-    private Random random = Random.create();
+    private RandomSource random = RandomSource.create();
 
     private final Map<GeneType, Gene> genes = new HashMap<>();
 
@@ -96,19 +95,19 @@ public class Genetics implements Iterable<Genetics.Gene> {
         setGene(WIDTH, centeredRandom());
 
         // temperature
-        float temp = entity.asEntity().getWorld().getBiome(entity.asEntity().getBlockPos()).value().getTemperature();
+        float temp = entity.asEntity().level().getBiome(entity.asEntity().blockPosition()).value().getBaseTemperature();
 
         // immigrants
         if (random.nextFloat() < Config.getInstance().geneticImmigrantChance) {
             temp = random.nextFloat() * 2 - 0.5F;
         }
 
-        float height = entity.asEntity().getBlockPos().getY();
-        height -= entity.asEntity().getWorld().getSeaLevel();
+        float height = entity.asEntity().blockPosition().getY();
+        height -= entity.asEntity().level().getSeaLevel();
         height /= 128;
 
-        setGene(MELANIN, MathHelper.clamp(temperatureBaseRandom(temp) - height * 0.2f, 0, 1));
-        setGene(HEMOGLOBIN, MathHelper.clamp(temperatureBaseRandom(temp) * 0.5f + height * 0.5f, 0, 1));
+        setGene(MELANIN, Mth.clamp(temperatureBaseRandom(temp) - height * 0.2f, 0, 1));
+        setGene(HEMOGLOBIN, Mth.clamp(temperatureBaseRandom(temp) * 0.5f + height * 0.5f, 0, 1));
 
         setGene(EUMELANIN, random.nextFloat());
         setGene(PHEOMELANIN, random.nextFloat());
@@ -132,8 +131,8 @@ public class Genetics implements Iterable<Genetics.Gene> {
     }
 
     public void combine(Genetics mother, Genetics father, long seed) {
-        Random old = random;
-        random = Random.create(seed);
+        RandomSource old = random;
+        random = RandomSource.create(seed);
         combine(mother, father);
         random = old;
     }

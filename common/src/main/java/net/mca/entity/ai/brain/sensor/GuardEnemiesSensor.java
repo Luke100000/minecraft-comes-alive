@@ -4,37 +4,36 @@ import com.google.common.collect.ImmutableSet;
 import net.mca.Config;
 import net.mca.entity.VillagerEntityMCA;
 import net.mca.entity.ai.MemoryModuleTypeMCA;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.ai.brain.LivingTargetCache;
-import net.minecraft.entity.ai.brain.MemoryModuleType;
-import net.minecraft.entity.ai.brain.sensor.Sensor;
-import net.minecraft.entity.mob.MobEntity;
-import net.minecraft.entity.mob.Monster;
-import net.minecraft.registry.Registries;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.math.MathHelper;
-
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.util.Mth;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.ai.memory.MemoryModuleType;
+import net.minecraft.world.entity.ai.memory.NearestVisibleLivingEntities;
+import net.minecraft.world.entity.ai.sensing.Sensor;
+import net.minecraft.world.entity.monster.Enemy;
 import java.util.Optional;
 import java.util.Set;
 
 public class GuardEnemiesSensor extends Sensor<LivingEntity> {
     @Override
-    public Set<MemoryModuleType<?>> getOutputMemoryModules() {
+    public Set<MemoryModuleType<?>> requires() {
         return ImmutableSet.of(MemoryModuleTypeMCA.NEAREST_GUARD_ENEMY.get());
     }
 
     @Override
-    protected void sense(ServerWorld world, LivingEntity entity) {
-        entity.getBrain().remember(MemoryModuleTypeMCA.NEAREST_GUARD_ENEMY.get(), this.getNearestHostile(entity));
+    protected void doTick(ServerLevel world, LivingEntity entity) {
+        entity.getBrain().setMemory(MemoryModuleTypeMCA.NEAREST_GUARD_ENEMY.get(), this.getNearestHostile(entity));
     }
 
     private Optional<LivingEntity> getNearestHostile(LivingEntity entity) {
-        return getVisibleMobs(entity).flatMap((list) -> list.stream(this::isHostile).min((a, b) -> this.compareEntities(entity, a, b)));
+        return getVisibleMobs(entity).flatMap((list) -> list.find(this::isHostile).min((a, b) -> this.compareEntities(entity, a, b)));
     }
 
-    private Optional<LivingTargetCache> getVisibleMobs(LivingEntity entity) {
-        return entity.getBrain().getOptionalMemory(MemoryModuleType.VISIBLE_MOBS);
+    private Optional<NearestVisibleLivingEntities> getVisibleMobs(LivingEntity entity) {
+        return entity.getBrain().getMemoryInternal(MemoryModuleType.NEAREST_VISIBLE_LIVING_ENTITIES);
     }
 
     private int compareEntities(LivingEntity entity, LivingEntity hostile1, LivingEntity hostile2) {
@@ -43,20 +42,20 @@ public class GuardEnemiesSensor extends Sensor<LivingEntity> {
     }
 
     private int compareDistances(LivingEntity entity, LivingEntity hostile1, LivingEntity hostile2) {
-        return MathHelper.floor(hostile1.squaredDistanceTo(entity) - hostile2.squaredDistanceTo(entity));
+        return Mth.floor(hostile1.distanceToSqr(entity) - hostile2.distanceToSqr(entity));
     }
 
     private int getPriority(LivingEntity entity, LivingEntity guard) {
         if (entity instanceof VillagerEntityMCA villager) {
             return villager.isHostile() ? 10 : -1;
-        } else if (guard != null && entity instanceof MobEntity && (((MobEntity)entity).getTarget() == guard)) {
+        } else if (guard != null && entity instanceof Mob && (((Mob)entity).getTarget() == guard)) {
             //priority is irrelevant if this entity is currently an active threat
             return 9;
         } else {
-            Identifier id = Registries.ENTITY_TYPE.getId(entity.getType());
+            ResourceLocation id = BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType());
             if (Config.getInstance().guardsTargetEntities.containsKey(id.toString())) {
                 return Config.getInstance().guardsTargetEntities.get(id.toString());
-            } else if (Config.getInstance().guardsTargetMonsters && entity instanceof Monster) {
+            } else if (Config.getInstance().guardsTargetMonsters && entity instanceof Enemy) {
                 return 3;
             } else {
                 return -1;

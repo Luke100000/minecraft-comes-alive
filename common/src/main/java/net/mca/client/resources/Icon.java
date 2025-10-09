@@ -1,7 +1,6 @@
 package net.mca.client.resources;
 
 import net.mca.client.gui.InteractScreen;
-import net.minecraft.util.Identifier;
 
 public final class Icon {
     public static final Icon EMPTY = new Icon(0, 0, 0, 0);

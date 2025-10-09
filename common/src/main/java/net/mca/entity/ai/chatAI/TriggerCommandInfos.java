@@ -3,8 +3,7 @@ package net.mca.entity.ai.chatAI;
 import com.google.common.collect.ImmutableList;
 import net.mca.entity.VillagerEntityMCA;
 import net.mca.entity.ai.MoveState;
-import net.minecraft.server.network.ServerPlayerEntity;
-
+import net.minecraft.server.level.ServerPlayer;
 import java.util.List;
 import java.util.Optional;
 
@@ -28,11 +27,11 @@ public class TriggerCommandInfos {
             new TriggerCommandInfo("try-go-home", "Try to go to your home in the village if possible",
                     (p, v) -> v.getResidency().goHome(p)),
             new TriggerCommandInfo("open-trade-window", "Open the trade menu when the player is interested in trading, wants to check your prices or your inventory.",
-                    (p, v) -> v.beginTradeWith(p),
+                    (p, v) -> v.startTrading(p),
                     (p, v) -> v.hasTradeOffers())
     );
 
-    public static Optional<TriggerCommandInfo> findCommand(String command, ServerPlayerEntity player, VillagerEntityMCA villagerEntityMCA) {
+    public static Optional<TriggerCommandInfo> findCommand(String command, ServerPlayer player, VillagerEntityMCA villagerEntityMCA) {
         for (TriggerCommandInfo commandInfo : TriggerCommandInfos.triggerCommands) {
             if (command.equals(commandInfo.command)) {
                 if (commandInfo.isActive != null && !commandInfo.isActive.test(player, villagerEntityMCA)) {

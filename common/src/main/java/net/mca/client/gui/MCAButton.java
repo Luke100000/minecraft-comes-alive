@@ -11,7 +11,7 @@ import java.util.stream.Stream;
  * These buttons are dynamically attached to a Screen and include additional instruction/constraints for building
  * and processing interactions.
  */
-public final class Button {
+public final class MCAButton {
     /**
      * The text and action to perform for this button
      */
@@ -102,7 +102,7 @@ public final class Button {
         return isInteraction;
     }
 
-    public Button(
+    public MCAButton(
             String identifier,     //The text and action to perform for this button
             String align, int x, int col, int y,
             int row, int width, int height,

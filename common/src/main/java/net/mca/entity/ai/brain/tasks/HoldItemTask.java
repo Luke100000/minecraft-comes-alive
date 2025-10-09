@@ -2,21 +2,21 @@ package net.mca.entity.ai.brain.tasks;
 
 import com.google.common.collect.ImmutableMap;
 import net.mca.entity.VillagerEntityMCA;
-import net.minecraft.entity.ai.brain.task.MultiTickTask;
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemStack;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.Hand;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.entity.ai.behavior.Behavior;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
 
-public class HoldItemTask extends MultiTickTask<VillagerEntityMCA> {
-    private final Hand hand;
+public class HoldItemTask extends Behavior<VillagerEntityMCA> {
+    private final InteractionHand hand;
     private final ItemStack item;
 
-    public HoldItemTask(Hand hand, Item item) {
+    public HoldItemTask(InteractionHand hand, Item item) {
         this(hand, new ItemStack(item));
     }
 
-    public HoldItemTask(Hand hand, ItemStack item) {
+    public HoldItemTask(InteractionHand hand, ItemStack item) {
         super(ImmutableMap.of());
 
         this.hand = hand;
@@ -24,7 +24,7 @@ public class HoldItemTask extends MultiTickTask<VillagerEntityMCA> {
     }
 
     @Override
-    protected void run(ServerWorld world, VillagerEntityMCA villager, long time) {
-        villager.setStackInHand(hand, item);
+    protected void start(ServerLevel world, VillagerEntityMCA villager, long time) {
+        villager.setItemInHand(hand, item);
     }
 }

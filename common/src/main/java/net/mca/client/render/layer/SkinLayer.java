@@ -4,20 +4,20 @@ import net.mca.MCA;
 import net.mca.client.resources.ColorPalette;
 import net.mca.entity.ai.Genetics;
 import net.mca.entity.ai.Traits;
-import net.minecraft.client.render.entity.feature.FeatureRendererContext;
-import net.minecraft.client.render.entity.model.BipedEntityModel;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.util.Identifier;
+import net.minecraft.client.model.HumanoidModel;
+import net.minecraft.client.renderer.entity.RenderLayerParent;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.entity.LivingEntity;
 
 import static net.mca.client.model.CommonVillagerModel.getVillager;
 
-public class SkinLayer<T extends LivingEntity, M extends BipedEntityModel<T>> extends VillagerLayer<T, M> {
-    public SkinLayer(FeatureRendererContext<T, M> renderer, M model) {
+public class SkinLayer<T extends LivingEntity, M extends HumanoidModel<T>> extends VillagerLayer<T, M> {
+    public SkinLayer(RenderLayerParent<T, M> renderer, M model) {
         super(renderer, model);
     }
 
     @Override
-    public Identifier getSkin(T villager) {
+    public ResourceLocation getSkin(T villager) {
         Genetics genetics = getVillager(villager).getGenetics();
         int skin = (int) Math.min(4, Math.max(0, genetics.getGene(Genetics.SKIN) * 5));
         return cached("skins/skin/" + genetics.getGender().getDataName() + "/" + skin + ".png", MCA::locate);

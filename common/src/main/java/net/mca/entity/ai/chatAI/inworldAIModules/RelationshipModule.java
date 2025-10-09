@@ -4,7 +4,7 @@ import net.mca.entity.VillagerEntityMCA;
 import net.mca.entity.ai.Relationship;
 import net.mca.entity.ai.chatAI.inworldAIModules.api.Interaction;
 import net.mca.entity.ai.chatAI.inworldAIModules.api.TriggerEvent;
-import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.server.level.ServerPlayer;
 
 /**
  * Class to manage relationship updates.
@@ -19,7 +19,7 @@ public class RelationshipModule {
      * @param player The player in this relationship
      * @param villager The villager whose heart level is getting updated
      */
-    public void updateRelationship(Interaction interaction, ServerPlayerEntity player, VillagerEntityMCA villager) {
+    public void updateRelationship(Interaction interaction, ServerPlayer player, VillagerEntityMCA villager) {
         Interaction.RelationshipUpdate update = interaction.relationshipUpdate();
 
         // Get total, with different weights applied to different relationship values
@@ -43,7 +43,7 @@ public class RelationshipModule {
      * @param villager The villager involved in the relationship.
      * @return A TriggerEvent.Parameter representing the current relationship status.
      */
-    public TriggerEvent.Parameter getRelationshipTriggerParameter(ServerPlayerEntity player, VillagerEntityMCA villager) {
+    public TriggerEvent.Parameter getRelationshipTriggerParameter(ServerPlayer player, VillagerEntityMCA villager) {
         return new TriggerEvent.Parameter("relationshipStatus", getRelationshipStatus(player, villager).name());
     }
 
@@ -54,7 +54,7 @@ public class RelationshipModule {
      * @param villager The villager of the relationship
      * @return {@link RelationshipStatus} depending on heart level or relationship state
      */
-    private RelationshipStatus getRelationshipStatus(ServerPlayerEntity player, VillagerEntityMCA villager) {
+    private RelationshipStatus getRelationshipStatus(ServerPlayer player, VillagerEntityMCA villager) {
         if (Relationship.IS_ENGAGED.test(villager, player) || Relationship.IS_MARRIED.test(villager, player)) {
             return RelationshipStatus.LIFE_PARTNER;
         }

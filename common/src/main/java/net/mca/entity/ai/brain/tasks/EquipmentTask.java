@@ -5,18 +5,17 @@ import net.mca.entity.EquipmentSet;
 import net.mca.entity.VillagerEntityMCA;
 import net.mca.entity.ai.MemoryModuleTypeMCA;
 import net.mca.util.InventoryUtils;
-import net.minecraft.entity.EquipmentSlot;
-import net.minecraft.entity.ai.brain.MemoryModuleState;
-import net.minecraft.entity.ai.brain.task.MultiTickTask;
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.RangedWeaponItem;
-import net.minecraft.server.world.ServerWorld;
-
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.ai.behavior.Behavior;
+import net.minecraft.world.entity.ai.memory.MemoryStatus;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.ProjectileWeaponItem;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
-public class EquipmentTask extends MultiTickTask<VillagerEntityMCA> {
+public class EquipmentTask extends Behavior<VillagerEntityMCA> {
     private static final int COOLDOWN = 100;
     private int lastEquipTime;
     private final Predicate<VillagerEntityMCA> condition;
@@ -24,24 +23,24 @@ public class EquipmentTask extends MultiTickTask<VillagerEntityMCA> {
     private boolean lastArmorWearState;
 
     public EquipmentTask(Predicate<VillagerEntityMCA> condition, Function<VillagerEntityMCA, EquipmentSet> set) {
-        super(ImmutableMap.of(MemoryModuleTypeMCA.WEARS_ARMOR.get(), MemoryModuleState.REGISTERED));
+        super(ImmutableMap.of(MemoryModuleTypeMCA.WEARS_ARMOR.get(), MemoryStatus.REGISTERED));
         this.condition = condition;
         equipmentSet = set;
     }
 
     @Override
-    protected boolean shouldRun(ServerWorld world, VillagerEntityMCA villager) {
+    protected boolean checkExtraStartConditions(ServerLevel world, VillagerEntityMCA villager) {
         //armor visibility settings have been changed
         if (lastArmorWearState != villager.getVillagerBrain().getArmorWear()) {
             return true;
         }
 
         //armor change necessary
-        boolean present = villager.getBrain().getOptionalMemory(MemoryModuleTypeMCA.WEARS_ARMOR.get()).isPresent();
+        boolean present = villager.getBrain().getMemoryInternal(MemoryModuleTypeMCA.WEARS_ARMOR.get()).isPresent();
         if (condition.test(villager)) {
-            lastEquipTime = villager.age;
-            return !present || equipmentSet.apply(villager).getMainHand() != null && villager.getMainHandStack().isEmpty();
-        } else if (villager.age - lastEquipTime > COOLDOWN) {
+            lastEquipTime = villager.tickCount;
+            return !present || equipmentSet.apply(villager).getMainHand() != null && villager.getMainHandItem().isEmpty();
+        } else if (villager.tickCount - lastEquipTime > COOLDOWN) {
             return present;
         } else {
             return false;
@@ -50,22 +49,22 @@ public class EquipmentTask extends MultiTickTask<VillagerEntityMCA> {
 
     private void equipBestArmor(VillagerEntityMCA villager, EquipmentSlot slot, Item fallback) {
         ItemStack stack = InventoryUtils.getBestArmor(villager.getInventory(), slot).orElse(fallback == null ? ItemStack.EMPTY : new ItemStack(fallback));
-        villager.equipStack(slot, stack);
+        villager.setItemSlot(slot, stack);
     }
 
     private void equipBestWeapon(VillagerEntityMCA villager, Item fallback) {
         ItemStack stack = InventoryUtils.getBestSword(villager.getInventory()).orElse(fallback == null ? ItemStack.EMPTY : new ItemStack(fallback));
-        villager.equipStack(villager.getDominantSlot(), stack);
+        villager.setItemSlot(villager.getDominantSlot(), stack);
     }
 
     private void equipBestRanged(VillagerEntityMCA villager, Item fallback) {
         ItemStack stack = InventoryUtils.getBestRanged(villager.getInventory()).orElse(fallback == null ? ItemStack.EMPTY : new ItemStack(fallback));
-        villager.equipStack(villager.getDominantSlot(), stack);
+        villager.setItemSlot(villager.getDominantSlot(), stack);
     }
 
     @Override
-    protected void run(ServerWorld world, VillagerEntityMCA villager, long time) {
-        super.run(world, villager, time);
+    protected void start(ServerLevel world, VillagerEntityMCA villager, long time) {
+        super.start(world, villager, time);
 
         lastArmorWearState = villager.getVillagerBrain().getArmorWear();
         EquipmentSet set = equipmentSet.apply(villager);
@@ -73,22 +72,22 @@ public class EquipmentTask extends MultiTickTask<VillagerEntityMCA> {
 
         //remember last state
         if (wear) {
-            villager.getBrain().remember(MemoryModuleTypeMCA.WEARS_ARMOR.get(), true);
+            villager.getBrain().setMemory(MemoryModuleTypeMCA.WEARS_ARMOR.get(), true);
         } else {
-            villager.getBrain().forget(MemoryModuleTypeMCA.WEARS_ARMOR.get());
+            villager.getBrain().eraseMemory(MemoryModuleTypeMCA.WEARS_ARMOR.get());
         }
 
         //weapon
         if (wear) {
-            if (set.getMainHand() instanceof RangedWeaponItem) {
+            if (set.getMainHand() instanceof ProjectileWeaponItem) {
                 equipBestRanged(villager, set.getMainHand());
             } else {
                 equipBestWeapon(villager, set.getMainHand());
             }
-            villager.equipStack(villager.getOpposingSlot(), new ItemStack(set.getGetOffHand()));
+            villager.setItemSlot(villager.getOpposingSlot(), new ItemStack(set.getGetOffHand()));
         } else {
-            villager.setStackInHand(villager.getDominantHand(), ItemStack.EMPTY);
-            villager.setStackInHand(villager.getOpposingHand(), ItemStack.EMPTY);
+            villager.setItemInHand(villager.getDominantHand(), ItemStack.EMPTY);
+            villager.setItemInHand(villager.getOpposingHand(), ItemStack.EMPTY);
         }
 
         //armor
@@ -98,10 +97,10 @@ public class EquipmentTask extends MultiTickTask<VillagerEntityMCA> {
             equipBestArmor(villager, EquipmentSlot.LEGS, set.getLegs());
             equipBestArmor(villager, EquipmentSlot.FEET, set.getFeet());
         } else {
-            villager.equipStack(EquipmentSlot.HEAD, ItemStack.EMPTY);
-            villager.equipStack(EquipmentSlot.CHEST, ItemStack.EMPTY);
-            villager.equipStack(EquipmentSlot.LEGS, ItemStack.EMPTY);
-            villager.equipStack(EquipmentSlot.FEET, ItemStack.EMPTY);
+            villager.setItemSlot(EquipmentSlot.HEAD, ItemStack.EMPTY);
+            villager.setItemSlot(EquipmentSlot.CHEST, ItemStack.EMPTY);
+            villager.setItemSlot(EquipmentSlot.LEGS, ItemStack.EMPTY);
+            villager.setItemSlot(EquipmentSlot.FEET, ItemStack.EMPTY);
         }
     }
 }

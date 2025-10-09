@@ -27,7 +27,7 @@ import net.mca.server.ServerInteractionManager;
 import net.mca.server.command.AdminCommand;
 import net.mca.server.command.Command;
 import net.mca.server.world.data.VillageManager;
-import net.minecraft.resource.ResourceType;
+import net.minecraft.server.packs.PackType;
 
 public final class MCAFabric implements ModInitializer {
     @Override
@@ -44,14 +44,14 @@ public final class MCAFabric implements ModInitializer {
 
         TradeOffersMCA.bootstrap();
 
-        ResourceManagerHelper.get(ResourceType.SERVER_DATA).registerReloadListener(new ApiIdentifiableReloadListener());
-        ResourceManagerHelper.get(ResourceType.SERVER_DATA).registerReloadListener(new FabricClothingList());
-        ResourceManagerHelper.get(ResourceType.SERVER_DATA).registerReloadListener(new FabricHairList());
-        ResourceManagerHelper.get(ResourceType.SERVER_DATA).registerReloadListener(new FabricGiftLoader());
-        ResourceManagerHelper.get(ResourceType.SERVER_DATA).registerReloadListener(new FabricDialogues());
-        ResourceManagerHelper.get(ResourceType.SERVER_DATA).registerReloadListener(new FabricTasks());
-        ResourceManagerHelper.get(ResourceType.SERVER_DATA).registerReloadListener(new FabricNames());
-        ResourceManagerHelper.get(ResourceType.SERVER_DATA).registerReloadListener(new FabricBuildingTypes());
+        ResourceManagerHelper.get(PackType.SERVER_DATA).registerReloadListener(new ApiIdentifiableReloadListener());
+        ResourceManagerHelper.get(PackType.SERVER_DATA).registerReloadListener(new FabricClothingList());
+        ResourceManagerHelper.get(PackType.SERVER_DATA).registerReloadListener(new FabricHairList());
+        ResourceManagerHelper.get(PackType.SERVER_DATA).registerReloadListener(new FabricGiftLoader());
+        ResourceManagerHelper.get(PackType.SERVER_DATA).registerReloadListener(new FabricDialogues());
+        ResourceManagerHelper.get(PackType.SERVER_DATA).registerReloadListener(new FabricTasks());
+        ResourceManagerHelper.get(PackType.SERVER_DATA).registerReloadListener(new FabricNames());
+        ResourceManagerHelper.get(PackType.SERVER_DATA).registerReloadListener(new FabricBuildingTypes());
 
         ServerTickEvents.END_WORLD_TICK.register(w -> VillageManager.get(w).tick());
         ServerTickEvents.END_SERVER_TICK.register(s -> ServerInteractionManager.getInstance().tick());

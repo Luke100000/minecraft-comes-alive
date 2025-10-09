@@ -4,10 +4,10 @@ import net.mca.Config;
 import net.mca.entity.VillagerEntityMCA;
 import net.mca.entity.ai.Relationship;
 import net.mca.server.world.data.PlayerSaveData;
-import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.server.level.ServerPlayer;
 
 public class EngagementRingItem extends RelationshipItem {
-    public EngagementRingItem(Settings properties) {
+    public EngagementRingItem(Properties properties) {
         super(properties);
     }
 
@@ -17,7 +17,7 @@ public class EngagementRingItem extends RelationshipItem {
     }
 
     @Override
-    public boolean handle(ServerPlayerEntity player, VillagerEntityMCA villager) {
+    public boolean handle(ServerPlayer player, VillagerEntityMCA villager) {
         PlayerSaveData playerData = PlayerSaveData.get(player);
         String response;
         boolean consume = false;

@@ -6,13 +6,12 @@ import net.mca.entity.VillagerEntityMCA;
 import net.mca.network.c2s.CallToPlayerMessage;
 import net.mca.network.c2s.GetFamilyRequest;
 import net.mca.util.compat.ButtonWidget;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.client.gui.screen.ingame.InventoryScreen;
-import net.minecraft.client.util.math.MatrixStack;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.text.Text;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.screens.inventory.InventoryScreen;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
@@ -22,7 +21,7 @@ import java.util.UUID;
 
 public class WhistleScreen extends Screen {
     private List<String> keys = new ArrayList<>();
-    private NbtCompound villagerData = new NbtCompound();
+    private CompoundTag villagerData = new CompoundTag();
 
     private VillagerEntityMCA dummy;
 
@@ -34,7 +33,7 @@ public class WhistleScreen extends Screen {
     private int selectedIndex;
 
     public WhistleScreen() {
-        super(Text.translatable("gui.whistle.title"));
+        super(Component.translatable("gui.whistle.title"));
     }
 
     @Override
@@ -54,7 +53,7 @@ public class WhistleScreen extends Screen {
     public void init() {
         NetworkHandler.sendToServer(new GetFamilyRequest());
 
-        selectionLeftButton = addDrawableChild(new ButtonWidget(width / 2 - 123, height / 2 + 65, 20, 20, Text.literal("<<"), b -> {
+        selectionLeftButton = addRenderableWidget(new ButtonWidget(width / 2 - 123, height / 2 + 65, 20, 20, Component.literal("<<"), b -> {
             if (selectedIndex == 0) {
                 selectedIndex = keys.size() - 1;
             } else {
@@ -62,7 +61,7 @@ public class WhistleScreen extends Screen {
             }
             setVillagerData(selectedIndex);
         }));
-        selectionRightButton = addDrawableChild(new ButtonWidget(width / 2 + 103, height / 2 + 65, 20, 20, Text.literal(">>"), b -> {
+        selectionRightButton = addRenderableWidget(new ButtonWidget(width / 2 + 103, height / 2 + 65, 20, 20, Component.literal(">>"), b -> {
             if (selectedIndex == keys.size() - 1) {
                 selectedIndex = 0;
             } else {
@@ -70,38 +69,38 @@ public class WhistleScreen extends Screen {
             }
             setVillagerData(selectedIndex);
         }));
-        villagerNameButton = addDrawableChild(new ButtonWidget(width / 2 - 100, height / 2 + 65, 200, 20, Text.literal(""), b -> {
+        villagerNameButton = addRenderableWidget(new ButtonWidget(width / 2 - 100, height / 2 + 65, 200, 20, Component.literal(""), b -> {
         }));
 
-        callButton = addDrawableChild(new ButtonWidget(width / 2 - 100, height / 2 + 90, 60, 20, Text.translatable("gui.button.call"), (b) -> {
+        callButton = addRenderableWidget(new ButtonWidget(width / 2 - 100, height / 2 + 90, 60, 20, Component.translatable("gui.button.call"), (b) -> {
             NetworkHandler.sendToServer(new CallToPlayerMessage(UUID.fromString(keys.get(selectedIndex))));
-            Objects.requireNonNull(this.client).setScreen(null);
+            Objects.requireNonNull(this.minecraft).setScreen(null);
         }));
 
-        addDrawableChild(new ButtonWidget(width / 2 + 40, height / 2 + 90, 60, 20, Text.translatable("gui.button.exit"), b -> Objects.requireNonNull(this.client).setScreen(null)));
+        addRenderableWidget(new ButtonWidget(width / 2 + 40, height / 2 + 90, 60, 20, Component.translatable("gui.button.exit"), b -> Objects.requireNonNull(this.minecraft).setScreen(null)));
 
         toggleButtons(false);
     }
 
     @Override
-    public boolean shouldPause() {
+    public boolean isPauseScreen() {
         return false;
     }
 
     @Override
-    public void render(DrawContext context, int sizeX, int sizeY, float offset) {
+    public void render(GuiGraphics context, int sizeX, int sizeY, float offset) {
         renderBackground(context);
 
-        context.drawCenteredTextWithShadow(textRenderer, Text.translatable("gui.whistle.title"), width / 2, height / 2 - 100, 0xffffff);
+        context.drawCenteredString(font, Component.translatable("gui.whistle.title"), width / 2, height / 2 - 100, 0xffffff);
 
         if (loadingAnimationTicks != -1) {
             String loadingMsg = new String(new char[(loadingAnimationTicks / 5) % 4]).replace("\0", ".");
-            context.drawTextWithShadow(textRenderer, Text.translatable("gui.loading").append(Text.literal(loadingMsg)), width / 2 - 20, height / 2 - 10, 0xffffff);
+            context.drawString(font, Component.translatable("gui.loading").append(Component.literal(loadingMsg)), width / 2 - 20, height / 2 - 10, 0xffffff);
         } else {
             if (keys.size() == 0) {
-                context.drawCenteredTextWithShadow(textRenderer, Text.translatable("gui.whistle.noFamily"), width / 2, height / 2 + 50, 0xffffff);
+                context.drawCenteredString(font, Component.translatable("gui.whistle.noFamily"), width / 2, height / 2 + 50, 0xffffff);
             } else {
-                context.drawCenteredTextWithShadow(textRenderer, (selectedIndex + 1) + " / " + keys.size(), width / 2, height / 2 + 50, 0xffffff);
+                context.drawCenteredString(font, (selectedIndex + 1) + " / " + keys.size(), width / 2, height / 2 + 50, 0xffffff);
             }
         }
 
@@ -110,17 +109,17 @@ public class WhistleScreen extends Screen {
         super.render(context, sizeX, sizeY, offset);
     }
 
-    private void drawDummy(DrawContext context) {
+    private void drawDummy(GuiGraphics context) {
         final int posX = width / 2;
         int posY = height / 2 + 45;
         if (dummy != null) {
-            InventoryScreen.drawEntity(context, posX, posY, 60, 0, 0, dummy);
+            InventoryScreen.renderEntityInInventoryFollowsMouse(context, posX, posY, 60, 0, 0, dummy);
         }
     }
 
-    public void setVillagerData(@NotNull NbtCompound data) {
+    public void setVillagerData(@NotNull CompoundTag data) {
         villagerData = data;
-        keys = new ArrayList<>(data.getKeys());
+        keys = new ArrayList<>(data.getAllKeys());
         loadingAnimationTicks = -1;
         selectedIndex = 0;
 
@@ -129,10 +128,10 @@ public class WhistleScreen extends Screen {
 
     private void setVillagerData(int index) {
         if (keys.size() > 0) {
-            NbtCompound firstData = villagerData.getCompound(keys.get(index));
+            CompoundTag firstData = villagerData.getCompound(keys.get(index));
 
-            dummy = EntitiesMCA.MALE_VILLAGER.get().create(MinecraftClient.getInstance().world);
-            dummy.readCustomDataFromNbt(firstData);
+            dummy = EntitiesMCA.MALE_VILLAGER.get().create(Minecraft.getInstance().level);
+            dummy.readAdditionalSaveData(firstData);
 
             villagerNameButton.setMessage(dummy.getDisplayName());
 

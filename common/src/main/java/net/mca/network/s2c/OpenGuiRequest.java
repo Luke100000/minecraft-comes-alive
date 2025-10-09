@@ -2,8 +2,7 @@ package net.mca.network.s2c;
 
 import net.mca.ClientProxy;
 import net.mca.cobalt.network.Message;
-import net.minecraft.entity.Entity;
-
+import net.minecraft.world.entity.Entity;
 import java.io.Serial;
 
 public class OpenGuiRequest implements Message {

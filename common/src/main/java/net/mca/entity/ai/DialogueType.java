@@ -3,9 +3,8 @@ package net.mca.entity.ai;
 import net.mca.MCAClient;
 import net.mca.entity.ai.relationship.AgeState;
 import net.mca.entity.ai.relationship.Personality;
-import net.minecraft.util.Language;
-import net.minecraft.util.math.random.Random;
-
+import net.minecraft.locale.Language;
+import net.minecraft.util.RandomSource;
 import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -26,7 +25,7 @@ public enum DialogueType {
 
     public final DialogueType fallback;
 
-    private static final Random random = Random.create();
+    private static final RandomSource random = RandomSource.create();
 
     DialogueType(DialogueType fallback) {
         this.fallback = fallback;
@@ -70,7 +69,7 @@ public enum DialogueType {
         DialogueType t = type;
         while (t != null) {
             String s = prefix + "." + t.name().toLowerCase(Locale.ENGLISH) + "." + key;
-            if (Language.getInstance().hasTranslation(s)) {
+            if (Language.getInstance().has(s)) {
                 return Optional.of(s);
             }
             t = t.fallback;
@@ -78,7 +77,7 @@ public enum DialogueType {
 
         //then test without type
         String s = prefix + "." + key;
-        if (Language.getInstance().hasTranslation(s)) {
+        if (Language.getInstance().has(s)) {
             return Optional.of(s);
         }
 
@@ -138,7 +137,7 @@ public enum DialogueType {
         DialogueType t = type;
         while (t != null) {
             String s = t.name().toLowerCase(Locale.ENGLISH) + "." + key;
-            if (Language.getInstance().hasTranslation(s)) {
+            if (Language.getInstance().has(s)) {
                 return s;
             }
             t = t.fallback;

@@ -1,8 +1,7 @@
 package net.mca.client.tts;
 
 import net.mca.Config;
-import net.minecraft.entity.Entity;
-
+import net.minecraft.world.entity.Entity;
 import java.io.OutputStream;
 import java.util.List;
 

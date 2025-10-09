@@ -33,7 +33,7 @@ public class CombScreen extends VillagerEditorScreen {
             super.setPage("loading");
         } else if (page.equals("head")) {
             syncVillagerData();
-            close();
+            onClose();
         } else {
             super.setPage("hair");
         }

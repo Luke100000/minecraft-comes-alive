@@ -1,19 +1,19 @@
 package net.mca.entity.ai.pathfinder;
 
-import net.minecraft.entity.ai.pathing.MobNavigation;
-import net.minecraft.entity.ai.pathing.PathNodeNavigator;
-import net.minecraft.entity.mob.MobEntity;
-import net.minecraft.world.World;
+import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.ai.navigation.GroundPathNavigation;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.pathfinder.PathFinder;
 
-public class VillagerNavigation extends MobNavigation {
-    public VillagerNavigation(MobEntity mobEntity, World world) {
+public class VillagerNavigation extends GroundPathNavigation {
+    public VillagerNavigation(Mob mobEntity, Level world) {
         super(mobEntity, world);
     }
 
     @Override
-    protected PathNodeNavigator createPathNodeNavigator(int range) {
-        nodeMaker = new VillagerLandPathNodeMaker();
-        nodeMaker.setCanEnterOpenDoors(true);
-        return new PathNodeNavigator(nodeMaker, range);
+    protected PathFinder createPathFinder(int range) {
+        nodeEvaluator = new VillagerLandPathNodeMaker();
+        nodeEvaluator.setCanPassDoors(true);
+        return new PathFinder(nodeEvaluator, range);
     }
 }

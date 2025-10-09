@@ -13,18 +13,17 @@ import net.mca.network.s2c.PlayerDataMessage;
 import net.mca.resources.ClothingList;
 import net.mca.resources.HairList;
 import net.mca.server.world.data.PlayerSaveData;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.registry.Registries;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.text.Text;
-import net.minecraft.util.Formatting;
-import net.minecraft.util.Identifier;
-import net.minecraft.village.VillagerProfession;
-
+import net.minecraft.ChatFormatting;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.npc.VillagerProfession;
+import net.minecraft.world.entity.player.Player;
 import java.io.Serial;
 import java.util.List;
 import java.util.Optional;
@@ -38,14 +37,14 @@ public class VillagerEditorSyncRequest extends NbtDataMessage implements Message
     private final String command;
     private final UUID uuid;
 
-    public VillagerEditorSyncRequest(String command, UUID uuid, NbtCompound data) {
+    public VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag data) {
         super(data);
         this.command = command;
         this.uuid = uuid;
     }
 
-    private void setHair(ServerPlayerEntity player, Entity entity) {
-        NbtCompound villagerData = GetVillagerRequest.getVillagerData(entity);
+    private void setHair(ServerPlayer player, Entity entity) {
+        CompoundTag villagerData = GetVillagerRequest.getVillagerData(entity);
         if (villagerData != null) {
             // fetch hair
             String hair;
@@ -61,11 +60,11 @@ public class VillagerEditorSyncRequest extends NbtDataMessage implements Message
         }
     }
 
-    private void setClothing(ServerPlayerEntity player, Entity entity) {
-        NbtCompound villagerData = GetVillagerRequest.getVillagerData(entity);
+    private void setClothing(ServerPlayer player, Entity entity) {
+        CompoundTag villagerData = GetVillagerRequest.getVillagerData(entity);
         if (villagerData != null) {
             String clothes = "mca:missing";
-            if (entity instanceof PlayerEntity) {
+            if (entity instanceof Player) {
                 if (getData().contains("offset")) {
                     clothes = ClothingList.getInstance().getPool(getGender(villagerData), VillagerProfession.NONE).pickNext(villagerData.getString("clothes"), getData().getInt("offset"));
                 } else {
@@ -84,8 +83,8 @@ public class VillagerEditorSyncRequest extends NbtDataMessage implements Message
     }
 
     @Override
-    public void receive(ServerPlayerEntity player) {
-        Entity entity = player.getServerWorld().getEntity(uuid);
+    public void receive(ServerPlayer player) {
+        Entity entity = player.serverLevel().getEntity(uuid);
         switch (command) {
             case "hair":
                 setHair(player, entity);
@@ -102,7 +101,7 @@ public class VillagerEditorSyncRequest extends NbtDataMessage implements Message
                 break;
             case "profession":
                 if (entity instanceof VillagerEntityMCA villager) {
-                    VillagerProfession profession = Registries.VILLAGER_PROFESSION.get(new Identifier(getData().getString("profession")));
+                    VillagerProfession profession = BuiltInRegistries.VILLAGER_PROFESSION.get(new ResourceLocation(getData().getString("profession")));
                     villager.setProfession(profession);
                 }
                 break;
@@ -110,18 +109,18 @@ public class VillagerEditorSyncRequest extends NbtDataMessage implements Message
         getData();
     }
 
-    private void saveEntity(ServerPlayerEntity player, Entity entity, NbtCompound villagerData) {
-        if (entity instanceof ServerPlayerEntity serverPlayer) {
+    private void saveEntity(ServerPlayer player, Entity entity, CompoundTag villagerData) {
+        if (entity instanceof ServerPlayer serverPlayer) {
             PlayerSaveData data = PlayerSaveData.get(serverPlayer);
             data.setEntityData(villagerData);
             data.setEntityDataSet(true);
             syncFamilyTree(player, entity, villagerData);
 
             //also update players
-            serverPlayer.getServerWorld().getPlayers().forEach(p -> NetworkHandler.sendToPlayer(new PlayerDataMessage(player.getUuid(), villagerData), p));
+            serverPlayer.serverLevel().players().forEach(p -> NetworkHandler.sendToPlayer(new PlayerDataMessage(player.getUUID(), villagerData), p));
         } else if (entity instanceof VillagerLike) {
-            ((LivingEntity)entity).readCustomDataFromNbt(villagerData);
-            entity.calculateDimensions();
+            ((LivingEntity)entity).readAdditionalSaveData(villagerData);
+            entity.refreshDimensions();
             syncFamilyTree(player, entity, villagerData);
 
             if (entity instanceof VillagerEntityMCA villager) {
@@ -130,35 +129,35 @@ public class VillagerEditorSyncRequest extends NbtDataMessage implements Message
         }
     }
 
-    private Gender getGender(NbtCompound villagerData) {
+    private Gender getGender(CompoundTag villagerData) {
         return Gender.byId(villagerData.getInt("gender"));
     }
 
-    private Optional<FamilyTreeNode> getFamilyNode(ServerPlayerEntity player, FamilyTree tree, String name, Gender gender) {
+    private Optional<FamilyTreeNode> getFamilyNode(ServerPlayer player, FamilyTree tree, String name, Gender gender) {
         try {
             UUID uuid = UUID.fromString(name);
             Optional<FamilyTreeNode> node = tree.getOrEmpty(uuid);
             if (node.isPresent()) {
-                player.sendMessage(Text.translatable("gui.villager_editor.uuid_known", name, node.get().getName()), true);
+                player.displayClientMessage(Component.translatable("gui.villager_editor.uuid_known", name, node.get().getName()), true);
                 return node;
             } else {
-                player.sendMessage(Text.translatable("gui.villager_editor.uuid_unknown", name).formatted(Formatting.RED), true);
+                player.displayClientMessage(Component.translatable("gui.villager_editor.uuid_unknown", name).withStyle(ChatFormatting.RED), true);
                 return Optional.empty();
             }
         } catch (IllegalArgumentException exception) {
             List<FamilyTreeNode> nodes = tree.getAllWithName(name).toList();
             if (nodes.isEmpty()) {
                 //create a new entry
-                player.sendMessage(Text.translatable("gui.villager_editor.name_created", name).formatted(Formatting.YELLOW), true);
+                player.displayClientMessage(Component.translatable("gui.villager_editor.name_created", name).withStyle(ChatFormatting.YELLOW), true);
                 return Optional.of(tree.getOrCreate(UUID.randomUUID(), name, gender));
             } else {
                 if (nodes.size() > 1) {
-                    player.sendMessage(Text.translatable("gui.villager_editor.name_not_unique", name).formatted(Formatting.RED), true);
+                    player.displayClientMessage(Component.translatable("gui.villager_editor.name_not_unique", name).withStyle(ChatFormatting.RED), true);
 
                     String uuids = nodes.stream().map(FamilyTreeNode::id).map(UUID::toString).collect(Collectors.joining(", "));
-                    player.sendMessage(Text.translatable("gui.villager_editor.list_of_ids", uuids), false);
+                    player.displayClientMessage(Component.translatable("gui.villager_editor.list_of_ids", uuids), false);
                 } else {
-                    player.sendMessage(Text.translatable("gui.villager_editor.name_unique", name), true);
+                    player.displayClientMessage(Component.translatable("gui.villager_editor.name_unique", name), true);
                 }
 
                 return Optional.ofNullable(nodes.get(0));
@@ -166,8 +165,8 @@ public class VillagerEditorSyncRequest extends NbtDataMessage implements Message
         }
     }
 
-    private void syncFamilyTree(ServerPlayerEntity player, Entity entity, NbtCompound villagerData) {
-        FamilyTree tree = FamilyTree.get((ServerWorld)entity.getWorld());
+    private void syncFamilyTree(ServerPlayer player, Entity entity, CompoundTag villagerData) {
+        FamilyTree tree = FamilyTree.get((ServerLevel)entity.level());
         FamilyTreeNode entry = tree.getOrCreate(entity);
         entry.setGender(getGender(getData()));
         entry.setName(getData().getString("villagerName"));

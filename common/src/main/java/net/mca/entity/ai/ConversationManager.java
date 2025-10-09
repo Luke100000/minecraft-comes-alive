@@ -2,9 +2,8 @@ package net.mca.entity.ai;
 
 
 import net.mca.entity.VillagerEntityMCA;
-import net.minecraft.entity.Entity;
-import net.minecraft.text.MutableText;
-
+import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.world.entity.Entity;
 import java.util.Optional;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -18,7 +17,7 @@ public class ConversationManager {
         this.entity = entity;
     }
 
-    public void addMessage(Entity receiver, MutableText message) {
+    public void addMessage(Entity receiver, MutableComponent message) {
         addMessage(new TextMessage(receiver, message));
     }
 
@@ -59,7 +58,7 @@ public class ConversationManager {
 
         private Message(Entity receiver) {
             this.receiver = receiver;
-            this.validUntil = receiver.age + TIME_VALID;
+            this.validUntil = receiver.tickCount + TIME_VALID;
         }
 
         public Entity getReceiver() {
@@ -71,14 +70,14 @@ public class ConversationManager {
         }
 
         public boolean stillValid() {
-            return !delivered && !receiver.isRemoved() && receiver.age < validUntil;
+            return !delivered && !receiver.isRemoved() && receiver.tickCount < validUntil;
         }
     }
 
     public static class TextMessage extends Message {
-        private final MutableText text;
+        private final MutableComponent text;
 
-        public TextMessage(Entity receiver, MutableText text) {
+        public TextMessage(Entity receiver, MutableComponent text) {
             super(receiver);
             this.text = text;
         }

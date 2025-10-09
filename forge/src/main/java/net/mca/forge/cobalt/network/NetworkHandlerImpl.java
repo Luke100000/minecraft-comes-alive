@@ -3,8 +3,8 @@ package net.mca.forge.cobalt.network;
 import net.mca.MCA;
 import net.mca.cobalt.network.Message;
 import net.mca.cobalt.network.NetworkHandler;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.util.Identifier;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.network.NetworkRegistry;
 import net.minecraftforge.network.PacketDistributor;
 import net.minecraftforge.network.simple.SimpleChannel;
@@ -12,7 +12,7 @@ import net.minecraftforge.network.simple.SimpleChannel;
 public class NetworkHandlerImpl extends NetworkHandler.Impl {
     private final String PROTOCOL_VERSION = "1";
     private final SimpleChannel channel = NetworkRegistry.newSimpleChannel(
-            new Identifier(MCA.MOD_ID, "main"),
+            new ResourceLocation(MCA.MOD_ID, "main"),
             () -> PROTOCOL_VERSION,
             PROTOCOL_VERSION::equals,
             PROTOCOL_VERSION::equals
@@ -27,7 +27,7 @@ public class NetworkHandlerImpl extends NetworkHandler.Impl {
                 b -> (T) Message.decode(b),
                 (m, ctx) -> {
                     ctx.get().enqueueWork(() -> {
-                        ServerPlayerEntity sender = ctx.get().getSender();
+                        ServerPlayer sender = ctx.get().getSender();
                         if (sender == null) {
                             m.receive();
                         } else {
@@ -44,7 +44,7 @@ public class NetworkHandlerImpl extends NetworkHandler.Impl {
     }
 
     @Override
-    public void sendToPlayer(Message m, ServerPlayerEntity e) {
+    public void sendToPlayer(Message m, ServerPlayer e) {
         channel.send(PacketDistributor.PLAYER.with(() -> e), m);
     }
 }

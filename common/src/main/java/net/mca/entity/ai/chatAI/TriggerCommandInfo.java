@@ -1,25 +1,24 @@
 package net.mca.entity.ai.chatAI;
 
 import net.mca.entity.VillagerEntityMCA;
-import net.minecraft.server.network.ServerPlayerEntity;
-
+import net.minecraft.server.level.ServerPlayer;
 import java.util.function.BiConsumer;
 import java.util.function.BiPredicate;
 
 public class TriggerCommandInfo {
     public String command;
     public String description;
-    public BiPredicate<ServerPlayerEntity, VillagerEntityMCA> isActive;
-    public BiConsumer<ServerPlayerEntity, VillagerEntityMCA> call;
+    public BiPredicate<ServerPlayer, VillagerEntityMCA> isActive;
+    public BiConsumer<ServerPlayer, VillagerEntityMCA> call;
 
-    public TriggerCommandInfo(String command, String description, BiConsumer<ServerPlayerEntity, VillagerEntityMCA> call, BiPredicate<ServerPlayerEntity, VillagerEntityMCA> isActive) {
+    public TriggerCommandInfo(String command, String description, BiConsumer<ServerPlayer, VillagerEntityMCA> call, BiPredicate<ServerPlayer, VillagerEntityMCA> isActive) {
         this.command = command;
         this.description = description;
         this.call = call;
         this.isActive = isActive;
     }
 
-    public TriggerCommandInfo(String command, String description, BiConsumer<ServerPlayerEntity, VillagerEntityMCA> call) {
+    public TriggerCommandInfo(String command, String description, BiConsumer<ServerPlayer, VillagerEntityMCA> call) {
         this(command, description, call, (p, v) -> true);
     }
 }

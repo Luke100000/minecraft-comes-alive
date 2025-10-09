@@ -1,12 +1,11 @@
 package net.mca.entity.ai;
 
 import dev.architectury.registry.registries.RegistrySupplier;
-import net.minecraft.particle.DefaultParticleType;
-import net.minecraft.sound.SoundEvent;
-import net.minecraft.text.Text;
-import net.minecraft.util.Formatting;
-
 import java.util.Locale;
+import net.minecraft.ChatFormatting;
+import net.minecraft.core.particles.SimpleParticleType;
+import net.minecraft.network.chat.Component;
+import net.minecraft.sounds.SoundEvent;
 
 public class Mood {
     private final String name;
@@ -15,11 +14,11 @@ public class Mood {
     private final RegistrySupplier<SoundEvent> soundMale;
     private final RegistrySupplier<SoundEvent> soundFemale;
     private final int particleInterval;
-    private final DefaultParticleType particle;
-    private final Formatting color;
+    private final SimpleParticleType particle;
+    private final ChatFormatting color;
     private final String building;
 
-    Mood(String name, int soundInterval, RegistrySupplier<SoundEvent> soundMale, RegistrySupplier<SoundEvent> soundFemale, int particleInterval, DefaultParticleType particle, Formatting color, String building) {
+    Mood(String name, int soundInterval, RegistrySupplier<SoundEvent> soundMale, RegistrySupplier<SoundEvent> soundFemale, int particleInterval, SimpleParticleType particle, ChatFormatting color, String building) {
         this.name = name;
         this.soundInterval = soundInterval;
         this.soundMale = soundMale;
@@ -30,8 +29,8 @@ public class Mood {
         this.building = building;
     }
 
-    public Text getText() {
-        return Text.translatable("mood." + name.toLowerCase(Locale.ENGLISH));
+    public Component getText() {
+        return Component.translatable("mood." + name.toLowerCase(Locale.ENGLISH));
     }
 
     public String getName() {
@@ -54,11 +53,11 @@ public class Mood {
         return particleInterval;
     }
 
-    public DefaultParticleType getParticle() {
+    public SimpleParticleType getParticle() {
         return particle;
     }
 
-    public Formatting getColor() {
+    public ChatFormatting getColor() {
         return color;
     }
 

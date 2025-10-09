@@ -12,45 +12,49 @@ import net.mca.util.network.datasync.CDataManager;
 import net.mca.util.network.datasync.CEnumParameter;
 import net.mca.util.network.datasync.CParameter;
 import net.mca.util.network.datasync.CTrackedEntity;
-import net.minecraft.entity.*;
-import net.minecraft.entity.ai.control.FlightMoveControl;
-import net.minecraft.entity.ai.control.MoveControl;
-import net.minecraft.entity.ai.goal.LookAtEntityGoal;
-import net.minecraft.entity.ai.pathing.BirdNavigation;
-import net.minecraft.entity.ai.pathing.EntityNavigation;
-import net.minecraft.entity.attribute.DefaultAttributeContainer;
-import net.minecraft.entity.attribute.EntityAttributes;
-import net.minecraft.entity.boss.BossBar;
-import net.minecraft.entity.boss.ServerBossBar;
-import net.minecraft.entity.damage.DamageSource;
-import net.minecraft.entity.damage.DamageTypes;
-import net.minecraft.entity.mob.HostileEntity;
-import net.minecraft.entity.mob.PathAwareEntity;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.entity.projectile.ProjectileEntity;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.sound.SoundCategory;
-import net.minecraft.sound.SoundEvent;
-import net.minecraft.sound.SoundEvents;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.core.BlockPos;
+import net.minecraft.server.level.ServerBossEvent;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.sounds.SoundEvent;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
+import net.minecraft.world.BossEvent;
 import net.minecraft.world.Difficulty;
-import net.minecraft.world.World;
+import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.world.damagesource.DamageTypes;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.MobType;
+import net.minecraft.world.entity.PathfinderMob;
+import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
+import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.entity.ai.control.FlyingMoveControl;
+import net.minecraft.world.entity.ai.control.MoveControl;
+import net.minecraft.world.entity.ai.goal.LookAtPlayerGoal;
+import net.minecraft.world.entity.ai.navigation.FlyingPathNavigation;
+import net.minecraft.world.entity.ai.navigation.PathNavigation;
+import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.entity.monster.Monster;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.entity.projectile.Projectile;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.Vec3;
 
-public class GrimReaperEntity extends PathAwareEntity implements CTrackedEntity<GrimReaperEntity> {
+public class GrimReaperEntity extends PathfinderMob implements CTrackedEntity<GrimReaperEntity> {
     public static final CEnumParameter<ReaperAttackState> ATTACK_STAGE = CParameter.create("attackStage", ReaperAttackState.IDLE);
 
     public static final CDataManager<GrimReaperEntity> DATA = new CDataManager.Builder<>(GrimReaperEntity.class).addAll(ATTACK_STAGE).build();
 
-    private final ServerBossBar bossInfo = (ServerBossBar) new ServerBossBar(getDisplayName(), BossBar.Color.PURPLE, BossBar.Style.PROGRESS).setDarkenSky(true);
+    private final ServerBossEvent bossInfo = (ServerBossEvent) new ServerBossEvent(getDisplayName(), BossEvent.BossBarColor.PURPLE, BossEvent.BossBarOverlay.PROGRESS).setDarkenScreen(true);
 
-    public GrimReaperEntity(EntityType<? extends GrimReaperEntity> type, World world) {
+    public GrimReaperEntity(EntityType<? extends GrimReaperEntity> type, Level world) {
         super(type, world);
 
-        experiencePoints = 100;
+        xpReward = 100;
 
-        this.moveControl = new FlightMoveControl(this, 10, false);
+        this.moveControl = new FlyingMoveControl(this, 10, false);
 
         getTypeDataManager().register(this);
     }
@@ -60,38 +64,38 @@ public class GrimReaperEntity extends PathAwareEntity implements CTrackedEntity<
         return DATA;
     }
 
-    public static DefaultAttributeContainer.Builder createAttributes() {
-        return HostileEntity.createHostileAttributes()
-                .add(EntityAttributes.GENERIC_ATTACK_DAMAGE, 10.0D)
-                .add(EntityAttributes.GENERIC_MAX_HEALTH, 300.0F)
-                .add(EntityAttributes.GENERIC_MOVEMENT_SPEED, 0.30F)
-                .add(EntityAttributes.GENERIC_FLYING_SPEED, 0.30F)
-                .add(EntityAttributes.GENERIC_FOLLOW_RANGE, 40.0D);
+    public static AttributeSupplier.Builder createAttributes() {
+        return Monster.createMonsterAttributes()
+                .add(Attributes.ATTACK_DAMAGE, 10.0D)
+                .add(Attributes.MAX_HEALTH, 300.0F)
+                .add(Attributes.MOVEMENT_SPEED, 0.30F)
+                .add(Attributes.FLYING_SPEED, 0.30F)
+                .add(Attributes.FOLLOW_RANGE, 40.0D);
     }
 
     @Override
-    public boolean hasNoGravity() {
+    public boolean isNoGravity() {
         return true;
     }
 
     @Override
-    public SoundCategory getSoundCategory() {
-        return SoundCategory.HOSTILE;
+    public SoundSource getSoundSource() {
+        return SoundSource.HOSTILE;
     }
 
     @Override
-    public EntityGroup getGroup() {
-        return EntityGroup.UNDEAD;
+    public MobType getMobType() {
+        return MobType.UNDEAD;
     }
 
     @Override
-    protected void initGoals() {
-        this.targetSelector.add(1, new GrimReaperTargetGoal(this));
+    protected void registerGoals() {
+        this.targetSelector.addGoal(1, new GrimReaperTargetGoal(this));
 
-        this.goalSelector.add(0, new LookAtEntityGoal(this, PlayerEntity.class, 24, 1.0f));
-        this.goalSelector.add(1, new GrimReaperRestGoal(this));
-        this.goalSelector.add(2, new GrimReaperMeleeGoal(this));
-        this.goalSelector.add(3, new GrimReaperIdleGoal(this, 1));
+        this.goalSelector.addGoal(0, new LookAtPlayerGoal(this, Player.class, 24, 1.0f));
+        this.goalSelector.addGoal(1, new GrimReaperRestGoal(this));
+        this.goalSelector.addGoal(2, new GrimReaperMeleeGoal(this));
+        this.goalSelector.addGoal(3, new GrimReaperIdleGoal(this, 1));
     }
 
     @Override
@@ -101,37 +105,37 @@ public class GrimReaperEntity extends PathAwareEntity implements CTrackedEntity<
 
     @Override
     public void checkDespawn() {
-        if (getWorld().getDifficulty() == Difficulty.PEACEFUL && isDisallowedInPeaceful()) {
+        if (level().getDifficulty() == Difficulty.PEACEFUL && shouldDespawnInPeaceful()) {
             discard();
         }
     }
 
     @Override
-    protected boolean isDisallowedInPeaceful() {
+    protected boolean shouldDespawnInPeaceful() {
         return true;
     }
 
     @Override
-    protected EntityNavigation createNavigation(World world) {
-        BirdNavigation navigator = new BirdNavigation(this, world) {
+    protected PathNavigation createNavigation(Level world) {
+        FlyingPathNavigation navigator = new FlyingPathNavigation(this, world) {
             @Override
-            public boolean isValidPosition(BlockPos pos) {
+            public boolean isStableDestination(BlockPos pos) {
                 return true;
             }
 
         };
-        navigator.setCanPathThroughDoors(false);
-        navigator.setCanSwim(false);
-        navigator.setCanEnterOpenDoors(true);
+        navigator.setCanOpenDoors(false);
+        navigator.setCanFloat(false);
+        navigator.setCanPassDoors(true);
         return navigator;
     }
 
     @Override
-    protected void dropEquipment(DamageSource source, int lootingLvl, boolean hitByPlayer) {
-        super.dropEquipment(source, lootingLvl, hitByPlayer);
-        ItemEntity itemEntity = dropItem(ItemsMCA.SCYTHE.get());
+    protected void dropCustomDeathLoot(DamageSource source, int lootingLvl, boolean hitByPlayer) {
+        super.dropCustomDeathLoot(source, lootingLvl, hitByPlayer);
+        ItemEntity itemEntity = spawnAtLocation(ItemsMCA.SCYTHE.get());
         if (itemEntity != null) {
-            itemEntity.setCovetedItem();
+            itemEntity.setExtendedLifetime();
         }
     }
 
@@ -154,18 +158,18 @@ public class GrimReaperEntity extends PathAwareEntity implements CTrackedEntity<
     }
 
     @Override
-    public boolean damage(DamageSource source, float damage) {
+    public boolean hurt(DamageSource source, float damage) {
         // Ignore wall damage, fire and explosion damage
-        if (source.isOf(DamageTypes.IN_WALL) || source.isOf(DamageTypes.ON_FIRE) || source.isOf(DamageTypes.EXPLOSION) || source.isOf(DamageTypes.IN_FIRE)) {
+        if (source.is(DamageTypes.IN_WALL) || source.is(DamageTypes.ON_FIRE) || source.is(DamageTypes.EXPLOSION) || source.is(DamageTypes.IN_FIRE)) {
             // Teleport out of any walls we may end up in
-            if (source.isOf(DamageTypes.IN_WALL)) {
-                requestTeleport(this.getX(), this.getY() + 3, this.getZ());
+            if (source.is(DamageTypes.IN_WALL)) {
+                teleportTo(this.getX(), this.getY() + 3, this.getZ());
             }
             return false;
         }
 
-        Entity entity = source.getSource();
-        Entity attacker = source.getAttacker();
+        Entity entity = source.getDirectEntity();
+        Entity attacker = source.getEntity();
 
         // Ignore damage when blocking, and randomly teleport around
         if (this.getAttackState() == ReaperAttackState.BLOCK && attacker != null) {
@@ -174,22 +178,22 @@ public class GrimReaperEntity extends PathAwareEntity implements CTrackedEntity<
         }
 
         // Teleport next to the player who fired an arrow
-        if (entity instanceof ProjectileEntity && getAttackState() != ReaperAttackState.REST && attacker != null && random.nextBoolean()) {
+        if (entity instanceof Projectile && getAttackState() != ReaperAttackState.REST && attacker != null && random.nextBoolean()) {
             double newX = attacker.getX() + (random.nextFloat() >= 0.50F ? 4 : -4);
             double newZ = attacker.getZ() + (random.nextFloat() >= 0.50F ? 4 : -4);
 
-            requestTeleport(newX, attacker.getY(), newZ);
+            teleportTo(newX, attacker.getY(), newZ);
             return false;
         }
 
         // Randomly portal behind the player who just attacked.
-        if (!getWorld().isClient && random.nextFloat() >= 0.30F && attacker != null) {
+        if (!level().isClientSide && random.nextFloat() >= 0.30F && attacker != null) {
             double deltaX = this.getX() - attacker.getX();
             double deltaZ = this.getZ() - attacker.getZ();
             double distance = Math.sqrt(deltaX * deltaX + deltaZ * deltaZ);
             double length = Math.max(5.0, distance) / distance * 0.95;
 
-            requestTeleport(attacker.getX() - deltaX * length, attacker.getY() + 1.5, attacker.getZ() - deltaZ * length);
+            teleportTo(attacker.getX() - deltaX * length, attacker.getY() + 1.5, attacker.getZ() - deltaZ * length);
         }
 
         // 25% damage when healing
@@ -197,7 +201,7 @@ public class GrimReaperEntity extends PathAwareEntity implements CTrackedEntity<
             damage *= 0.25f;
         }
 
-        return super.damage(source, damage);
+        return super.hurt(source, damage);
     }
 
     @Override
@@ -212,7 +216,7 @@ public class GrimReaperEntity extends PathAwareEntity implements CTrackedEntity<
 
     @Override
     protected SoundEvent getHurtSound(DamageSource source) {
-        return SoundEvents.ENTITY_WITHER_HURT;
+        return SoundEvents.WITHER_HURT;
     }
 
     @Override
@@ -220,7 +224,7 @@ public class GrimReaperEntity extends PathAwareEntity implements CTrackedEntity<
         super.tick();
 
         //update bossinfo
-        bossInfo.setPercent(this.getHealth() / this.getMaxHealth());
+        bossInfo.setProgress(this.getHealth() / this.getMaxHealth());
 
         if (!Config.getInstance().allowGrimReaper) {
             discard();
@@ -228,14 +232,14 @@ public class GrimReaperEntity extends PathAwareEntity implements CTrackedEntity<
 
         // Prevent flying off into oblivion on death...
         if (this.getHealth() <= 0.0F) {
-            setVelocity(Vec3d.ZERO);
+            setDeltaMovement(Vec3.ZERO);
             return;
         }
 
         LivingEntity entityToAttack = this.getTarget();
 
         // See if our entity to attack has died at any point.
-        if (entityToAttack != null && entityToAttack.isDead()) {
+        if (entityToAttack != null && entityToAttack.isDeadOrDying()) {
             this.setTarget(null);
             setAttackState(ReaperAttackState.IDLE);
         }
@@ -245,23 +249,23 @@ public class GrimReaperEntity extends PathAwareEntity implements CTrackedEntity<
     }
 
     @Override
-    public void requestTeleport(double x, double y, double z) {
-        if (getWorld() instanceof ServerWorld) {
-            playSound(SoundEvents.ENTITY_ENDERMAN_TELEPORT, 1, 1);
-            super.requestTeleport(x, y, z);
-            playSound(SoundEvents.ENTITY_ENDERMAN_TELEPORT, 1, 1);
+    public void teleportTo(double x, double y, double z) {
+        if (level() instanceof ServerLevel) {
+            playSound(SoundEvents.ENDERMAN_TELEPORT, 1, 1);
+            super.teleportTo(x, y, z);
+            playSound(SoundEvents.ENDERMAN_TELEPORT, 1, 1);
         }
     }
 
     @Override
-    public void onStartedTrackingBy(ServerPlayerEntity player) {
-        super.onStartedTrackingBy(player);
+    public void startSeenByPlayer(ServerPlayer player) {
+        super.startSeenByPlayer(player);
         bossInfo.addPlayer(player);
     }
 
     @Override
-    public void onStoppedTrackingBy(ServerPlayerEntity player) {
-        super.onStoppedTrackingBy(player);
+    public void stopSeenByPlayer(ServerPlayer player) {
+        super.stopSeenByPlayer(player);
         bossInfo.removePlayer(player);
     }
 }

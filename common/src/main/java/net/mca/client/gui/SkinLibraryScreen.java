@@ -1,6 +1,8 @@
 package net.mca.client.gui;
 
+import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.vertex.PoseStack;
 import net.mca.Config;
 import net.mca.MCA;
 import net.mca.client.gui.immersive_library.*;
@@ -23,25 +25,23 @@ import net.mca.resources.data.skin.Hair;
 import net.mca.resources.data.skin.SkinListEntry;
 import net.mca.util.compat.ButtonWidget;
 import net.mca.util.localization.FlowingText;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.client.gui.screen.ingame.InventoryScreen;
-import net.minecraft.client.gui.widget.CyclingButtonWidget;
-import net.minecraft.client.gui.widget.TextFieldWidget;
-import net.minecraft.client.render.GameRenderer;
-import net.minecraft.client.texture.NativeImage;
-import net.minecraft.client.util.math.MatrixStack;
-import net.minecraft.item.Items;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.registry.Registries;
-import net.minecraft.text.MutableText;
-import net.minecraft.text.Text;
-import net.minecraft.util.Formatting;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.Util;
-import net.minecraft.util.math.MathHelper;
-import net.minecraft.village.VillagerProfession;
+import net.minecraft.ChatFormatting;
+import net.minecraft.Util;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.CycleButton;
+import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.screens.inventory.InventoryScreen;
+import net.minecraft.client.renderer.GameRenderer;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.Mth;
+import net.minecraft.world.entity.npc.VillagerProfession;
+import net.minecraft.world.item.Items;
 import org.lwjgl.glfw.GLFW;
 
 import java.io.FileInputStream;
@@ -57,9 +57,9 @@ import java.util.stream.Stream;
 import static net.mca.client.gui.immersive_library.Api.request;
 
 public class SkinLibraryScreen extends Screen implements SkinListUpdateListener {
-    private static final Identifier TEMPLATE_IDENTIFIER = MCA.locate("textures/skin_template.png");
-    private static final Identifier EMPTY_IDENTIFIER = MCA.locate("skins/empty.png");
-    private static final Identifier CANVAS_IDENTIFIER = MCA.locate("temp");
+    private static final ResourceLocation TEMPLATE_IDENTIFIER = MCA.locate("textures/skin_template.png");
+    private static final ResourceLocation EMPTY_IDENTIFIER = MCA.locate("skins/empty.png");
+    private static final ResourceLocation CANVAS_IDENTIFIER = MCA.locate("temp");
     private static final float CANVAS_SCALE = 2.35f;
 
     private String filteredString = "";
@@ -101,11 +101,11 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
 
     private int timeSinceLastRebuild;
 
-    private Text error;
+    private Component error;
 
     private final VillagerEditorScreen previousScreen;
 
-    protected final VillagerEntityMCA villagerVisualization = Objects.requireNonNull(EntitiesMCA.MALE_VILLAGER.get().create(MinecraftClient.getInstance().world));
+    protected final VillagerEntityMCA villagerVisualization = Objects.requireNonNull(EntitiesMCA.MALE_VILLAGER.get().create(Minecraft.getInstance().level));
 
     static final int CLOTHES_H = 7;
     static final int CLOTHES_V = 2;
@@ -117,7 +117,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
     private boolean uploading = false;
     private Thread thread;
 
-    private TextFieldWidget textFieldWidget;
+    private EditBox textFieldWidget;
     private boolean skipHairWarning;
 
     private final List<LiteContent> contents = new LinkedList<>();
@@ -128,7 +128,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
     }
 
     public SkinLibraryScreen(VillagerEditorScreen screen, VillagerEntityMCA villagerVisualization) {
-        super(Text.translatable("gui.skin_library.title"));
+        super(Component.translatable("gui.skin_library.title"));
 
         this.previousScreen = screen;
 
@@ -140,34 +140,34 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         }
 
         if (villagerVisualization != null) {
-            NbtCompound nbt = new NbtCompound();
-            villagerVisualization.writeCustomDataToNbt(nbt);
-            this.villagerVisualization.readCustomDataFromNbt(nbt);
+            CompoundTag nbt = new CompoundTag();
+            villagerVisualization.addAdditionalSaveData(nbt);
+            this.villagerVisualization.readAdditionalSaveData(nbt);
         } else {
-            assert MinecraftClient.getInstance().player != null;
-            VillagerLike<?> villagerLike = CommonVillagerModel.getVillager(MinecraftClient.getInstance().world, MinecraftClient.getInstance().player.getUuid());
+            assert Minecraft.getInstance().player != null;
+            VillagerLike<?> villagerLike = CommonVillagerModel.getVillager(Minecraft.getInstance().level, Minecraft.getInstance().player.getUUID());
             if (villagerLike instanceof VillagerEntityMCA villager) {
-                NbtCompound nbt = new NbtCompound();
-                villager.writeCustomDataToNbt(nbt);
-                this.villagerVisualization.readCustomDataFromNbt(nbt);
+                CompoundTag nbt = new CompoundTag();
+                villager.addAdditionalSaveData(nbt);
+                this.villagerVisualization.readAdditionalSaveData(nbt);
             }
         }
     }
 
     @Override
-    public void renderBackground(DrawContext context) {
+    public void renderBackground(GuiGraphics context) {
         if (previousScreen instanceof DestinyScreen) {
-            assert MinecraftClient.getInstance().world != null;
-            renderBackgroundTexture(context);
+            assert Minecraft.getInstance().level != null;
+            renderDirtBackground(context);
         }
     }
 
     @Override
-    public void close() {
+    public void onClose() {
         if (previousScreen == null) {
-            super.close();
+            super.onClose();
         } else {
-            MinecraftClient.getInstance().setScreen(previousScreen);
+            Minecraft.getInstance().setScreen(previousScreen);
         }
     }
 
@@ -208,7 +208,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                     currentUser = userResponse.user();
                     refreshContentList();
                 } else {
-                    setError(Text.translatable("gui.skin_library.list_fetch_failed"));
+                    setError(Component.translatable("gui.skin_library.list_fetch_failed"));
                 }
             }
         }).thenRunAsync(callback);
@@ -241,21 +241,21 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                 libraryContents = new ArrayList<>(Arrays.asList(contentListResponse.contents()));
                 refreshContentList();
             } else {
-                setError(Text.translatable("gui.skin_library.list_fetch_failed"));
+                setError(Component.translatable("gui.skin_library.list_fetch_failed"));
             }
         });
     }
 
     @Override
-    public void render(DrawContext context, int mouseX, int mouseY, float delta) {
-        final MatrixStack matrices = context.getMatrices();
+    public void render(GuiGraphics context, int mouseX, int mouseY, float delta) {
+        final PoseStack matrices = context.pose();
 
         renderBackground(context);
 
         hoveredContent = null;
 
-        villagerVisualization.setBreedingAge(0);
-        villagerVisualization.calculateDimensions();
+        villagerVisualization.setAge(0);
+        villagerVisualization.refreshDimensions();
 
         switch (page) {
             case LIBRARY -> {
@@ -272,11 +272,11 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
 
                             if (Math.abs(cx - mouseX) <= 15 && Math.abs(cy - mouseY - 25) <= 24) {
                                 hoveredContent = c;
-                                context.drawTooltip(textRenderer, getMetaDataText(c), mouseX, mouseY);
+                                context.renderComponentTooltip(font, getMetaDataText(c), mouseX, mouseY);
                             }
 
                             villagerVisualization.getGenetics().setGender(SkinCache.getMeta(c).map(SkinMeta::getGender).orElse(Gender.MALE).binary());
-                            InventoryScreen.drawEntity(context, cx, cy, hoveredContent == c ? 30 : 28, -(mouseX - cx) / 2.0f, -(mouseY - cy) / 2.0f, villagerVisualization);
+                            InventoryScreen.renderEntityInInventoryFollowsMouse(context, cx, cy, hoveredContent == c ? 30 : 28, -(mouseX - cx) / 2.0f, -(mouseY - cy) / 2.0f, villagerVisualization);
                             i++;
                         } else {
                             break;
@@ -285,47 +285,47 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                 }
 
                 if (!authenticated && (subscriptionFilter == SubscriptionFilter.LIKED || subscriptionFilter == SubscriptionFilter.SUBMISSIONS)) {
-                    drawTextBox(context, Text.translatable("gui.skin_library.like_locked"));
+                    drawTextBox(context, Component.translatable("gui.skin_library.like_locked"));
                 }
             }
             case EDITOR_LOCKED -> {
-                drawTextBox(context, Text.translatable("gui.skin_library.locked"));
+                drawTextBox(context, Component.translatable("gui.skin_library.locked"));
             }
             case EDITOR_PREPARE -> {
-                drawTextBox(context, Text.translatable("gui.skin_library.drop"));
+                drawTextBox(context, Component.translatable("gui.skin_library.drop"));
             }
             case EDITOR_TYPE -> {
-                drawTextBox(context, Text.translatable("gui.skin_library.prepare"));
+                drawTextBox(context, Component.translatable("gui.skin_library.prepare"));
             }
             case DELETE -> {
-                drawTextBox(context, Text.translatable("gui.skin_library.delete_confirm"));
+                drawTextBox(context, Component.translatable("gui.skin_library.delete_confirm"));
             }
             case REPORT -> {
-                drawTextBox(context, Text.translatable("gui.skin_library.report_confirm"));
+                drawTextBox(context, Component.translatable("gui.skin_library.report_confirm"));
             }
             case EDITOR -> {
                 if (workspace.isDirty()) {
                     workspace.backendTexture.upload();
-                    MinecraftClient.getInstance().getTextureManager().registerTexture(CANVAS_IDENTIFIER, workspace.backendTexture);
+                    Minecraft.getInstance().getTextureManager().register(CANVAS_IDENTIFIER, workspace.backendTexture);
                     workspace.setDirty(false);
                 }
 
                 //painting area
                 int tw = 64;
                 int th = 64;
-                RenderSystem.setShader(GameRenderer::getPositionTexProgram);
+                RenderSystem.setShader(GameRenderer::getPositionTexShader);
                 RenderSystem.enableBlend();
                 RenderSystem.defaultBlendFunc();
                 RenderSystem.enableDepthTest();
-                matrices.push();
+                matrices.pushPose();
                 matrices.translate(width / 2.0f - tw * CANVAS_SCALE / 2.0f, height / 2.0f - th * CANVAS_SCALE / 2.0f, 0.0f);
                 matrices.scale(CANVAS_SCALE, CANVAS_SCALE, 1.0f);
 
                 // Calculate the clamped vertex and UV coordinates
-                float vx0 = MathHelper.clamp(0, x0, x1);
-                float vx1 = MathHelper.clamp(1, x0, x1);
-                float vy0 = MathHelper.clamp(0, y0, y1);
-                float vy1 = MathHelper.clamp(1, y0, y1);
+                float vx0 = Mth.clamp(0, x0, x1);
+                float vx1 = Mth.clamp(1, x0, x1);
+                float vy0 = Mth.clamp(0, y0, y1);
+                float vy1 = Mth.clamp(1, y0, y1);
 
                 float uvx0 = (vx0 - x0) / (x1 - x0);
                 float uvx1 = (vx1 - x0) / (x1 - x0);
@@ -335,17 +335,17 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                 //draw template
                 RenderSystem.setShaderTexture(0, TEMPLATE_IDENTIFIER);
                 RenderSystem.setShaderColor(1.0f, 1.0f, 1.0f, 0.25f);
-                WidgetUtils.drawTexturedQuad(matrices.peek().getPositionMatrix(), vx0 * 64, vx1 * 64, vy0 * 64, vy1 * 64, 0, uvx0, uvx1, uvy0, uvy1);
+                WidgetUtils.drawTexturedQuad(matrices.last().pose(), vx0 * 64, vx1 * 64, vy0 * 64, vy1 * 64, 0, uvx0, uvx1, uvy0, uvy1);
 
                 //draw canvas
                 RenderSystem.setShaderTexture(0, CANVAS_IDENTIFIER);
                 RenderSystem.setShaderColor(1.0f, 1.0f, 1.0f, 1.0f);
-                WidgetUtils.drawTexturedQuad(matrices.peek().getPositionMatrix(), vx0 * 64, vx1 * 64, vy0 * 64, vy1 * 64, 0, uvx0, uvx1, uvy0, uvy1);
+                WidgetUtils.drawTexturedQuad(matrices.last().pose(), vx0 * 64, vx1 * 64, vy0 * 64, vy1 * 64, 0, uvx0, uvx1, uvy0, uvy1);
 
                 //border
                 WidgetUtils.drawRectangle(context, -1, -1, tw + 1, th + 1, 0xaaffffff);
 
-                matrices.pop();
+                matrices.popPose();
 
                 //dummy
                 if (workspace.skinType == SkinType.CLOTHING) {
@@ -363,7 +363,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                 WidgetUtils.drawBackgroundEntity(cx, cy, 50, -(mouseX - cx) / 2.0f, -(mouseY - cy + 32) / 2.0f, villagerVisualization);
 
                 if (workspace.skinType == SkinType.HAIR) {
-                    context.drawCenteredTextWithShadow(textRenderer, Text.translatable("gui.skin_library.hair_color"), width / 2 - 150, height / 2 - 40, 0xAAFFFFFF);
+                    context.drawCenteredString(font, Component.translatable("gui.skin_library.hair_color"), width / 2 - 150, height / 2 - 40, 0xAAFFFFFF);
                 }
 
                 //hovered element
@@ -372,9 +372,9 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                 if (x >= 0 && x < 64 && y >= 0 && y < 64) {
                     SkinLocations.Part part = SkinLocations.LOOKUP[x][y];
                     if (part != null) {
-                        Text text = part.getTranslation();
-                        int textWidth = textRenderer.getWidth(text);
-                        context.drawTooltip(textRenderer, text, width / 2 - textWidth / 2 - 12, height / 2 - 68);
+                        Component text = part.getTranslation();
+                        int textWidth = font.width(text);
+                        context.renderTooltip(font, text, width / 2 - textWidth / 2 - 12, height / 2 - 68);
                     }
                 }
             }
@@ -400,11 +400,11 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                                     Auth.clearToken();
                                     if (!isBrowserOpen) {
                                         setPage(Page.LIBRARY);
-                                        setError(Text.translatable("gui.skin_library.is_auth_failed"));
+                                        setError(Component.translatable("gui.skin_library.is_auth_failed"));
                                     }
                                 }
                             } else {
-                                setError(Text.translatable("gui.skin_library.is_auth_failed"));
+                                setError(Component.translatable("gui.skin_library.is_auth_failed"));
                             }
                             Thread.sleep(2000);
                         } catch (Exception e) {
@@ -416,11 +416,11 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
 
                 // auth hint
                 if (isBrowserOpen) {
-                    drawTextBox(context, Text.translatable("gui.skin_library.authenticating_browser"));
+                    drawTextBox(context, Component.translatable("gui.skin_library.authenticating_browser"));
                 } else if (error != null) {
-                    drawTextBox(context, Text.translatable("gui.skin_library.authenticating"));
+                    drawTextBox(context, Component.translatable("gui.skin_library.authenticating"));
                 } else {
-                    drawTextBox(context, Text.translatable("gui.skin_library.authenticating").append(Text.literal(" " + ".".repeat((int) (System.currentTimeMillis() / 500 % 4)))));
+                    drawTextBox(context, Component.translatable("gui.skin_library.authenticating").append(Component.literal(" " + ".".repeat((int) (System.currentTimeMillis() / 500 % 4)))));
                 }
             }
             case DETAIL -> {
@@ -431,18 +431,18 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                 int cy = height / 2 + 50;
 
                 villagerVisualization.getGenetics().setGender(SkinCache.getMeta(focusedContent).map(SkinMeta::getGender).orElse(Gender.MALE).binary());
-                InventoryScreen.drawEntity(context, cx, cy, 60, -(mouseX - cx) / 2.0f, -(mouseY - cy) / 2.0f, villagerVisualization);
+                InventoryScreen.renderEntityInInventoryFollowsMouse(context, cx, cy, 60, -(mouseX - cx) / 2.0f, -(mouseY - cy) / 2.0f, villagerVisualization);
 
                 //metadata
-                context.drawTooltip(textRenderer, getMetaDataText(focusedContent), width / 2 + 200, height / 2 - 50);
+                context.renderComponentTooltip(font, getMetaDataText(focusedContent), width / 2 + 200, height / 2 - 50);
             }
             case LOADING -> {
-                context.drawTextWithShadow(textRenderer, Text.translatable("gui.loading"), width / 2, height / 2, 0xFFFFFFFF);
+                context.drawString(font, Component.translatable("gui.loading"), width / 2, height / 2, 0xFFFFFFFF);
             }
         }
 
         if (error != null) {
-            context.drawCenteredTextWithShadow(textRenderer, error, width / 2, height / 2, 0xFFFF0000);
+            context.drawCenteredString(font, error, width / 2, height / 2, 0xFFFF0000);
         }
 
         super.render(context, mouseX, mouseY, delta);
@@ -458,25 +458,25 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         }
     }
 
-    private List<Text> getMetaDataText(LiteContent content) {
+    private List<Component> getMetaDataText(LiteContent content) {
         Optional<SkinMeta> meta = SkinCache.getMeta(content);
         if (meta.isEmpty()) {
-            return List.of(Text.literal(content.title()));
+            return List.of(Component.literal(content.title()));
         } else {
-            List<Text> wrap = FlowingText.wrap(Text.literal(String.join(", ", content.tags())).formatted(Formatting.YELLOW), 160);
-            ArrayList<Text> texts = new ArrayList<>(List.of(
-                    Text.literal(content.title()),
-                    Text.translatable("gui.skin_library.meta.by", content.username()).formatted(Formatting.ITALIC),
-                    Text.translatable("gui.skin_library.meta.likes", content.likes()).formatted(Formatting.GRAY),
-                    Text.translatable("gui.skin_library.gender", meta.get().getGender() == Gender.MALE ? Text.translatable("gui.villager_editor.masculine") : (meta.get().getGender() == Gender.FEMALE ? Text.translatable("gui.villager_editor.feminine") : Text.translatable("gui.villager_editor.neutral"))),
-                    Text.translatable("gui.skin_library.profession", meta.get().getProfession() == null ? Text.translatable("entity.minecraft.villager") : Text.translatable("entity.minecraft.villager." + meta.get().getProfession())),
-                    Text.translatable("gui.skin_library.temperature", Text.translatable("gui.skin_library.temperature." + (meta.get().getTemperature() + 2))),
-                    Text.translatable("gui.skin_library.chance_val", (int) (meta.get().getChance() * 100)).formatted(Formatting.GRAY)
+            List<Component> wrap = FlowingText.wrap(Component.literal(String.join(", ", content.tags())).withStyle(ChatFormatting.YELLOW), 160);
+            ArrayList<Component> texts = new ArrayList<>(List.of(
+                    Component.literal(content.title()),
+                    Component.translatable("gui.skin_library.meta.by", content.username()).withStyle(ChatFormatting.ITALIC),
+                    Component.translatable("gui.skin_library.meta.likes", content.likes()).withStyle(ChatFormatting.GRAY),
+                    Component.translatable("gui.skin_library.gender", meta.get().getGender() == Gender.MALE ? Component.translatable("gui.villager_editor.masculine") : (meta.get().getGender() == Gender.FEMALE ? Component.translatable("gui.villager_editor.feminine") : Component.translatable("gui.villager_editor.neutral"))),
+                    Component.translatable("gui.skin_library.profession", meta.get().getProfession() == null ? Component.translatable("entity.minecraft.villager") : Component.translatable("entity.minecraft.villager." + meta.get().getProfession())),
+                    Component.translatable("gui.skin_library.temperature", Component.translatable("gui.skin_library.temperature." + (meta.get().getTemperature() + 2))),
+                    Component.translatable("gui.skin_library.chance_val", (int) (meta.get().getChance() * 100)).withStyle(ChatFormatting.GRAY)
             ));
             texts.addAll(wrap);
 
             if (content.tags().contains("invalid")) {
-                texts.add(Text.translatable("gui.skin_library.probably_not_valids").formatted(Formatting.BOLD).formatted(Formatting.RED));
+                texts.add(Component.translatable("gui.skin_library.probably_not_valids").withStyle(ChatFormatting.BOLD).withStyle(ChatFormatting.RED));
             }
 
             return texts;
@@ -484,24 +484,24 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
     }
 
     private double getScreenScaleX() {
-        assert client != null;
-        return (double) this.client.getWindow().getScaledWidth() / (double) this.client.getWindow().getWidth();
+        assert minecraft != null;
+        return (double) this.minecraft.getWindow().getGuiScaledWidth() / (double) this.minecraft.getWindow().getScreenWidth();
     }
 
     private double getScreenScaleY() {
-        assert client != null;
-        return (double) this.client.getWindow().getScaledHeight() / (double) this.client.getWindow().getHeight();
+        assert minecraft != null;
+        return (double) this.minecraft.getWindow().getGuiScaledHeight() / (double) this.minecraft.getWindow().getScreenHeight();
     }
 
     private double getCanvasX() {
-        assert client != null;
-        double x = client.mouse.getX() * getScreenScaleX();
+        assert minecraft != null;
+        double x = minecraft.mouseHandler.xpos() * getScreenScaleX();
         return (x - width / 2.0 + 32 * CANVAS_SCALE) / CANVAS_SCALE / 64.0;
     }
 
     private double getCanvasY() {
-        assert client != null;
-        double y = client.mouse.getY() * getScreenScaleY();
+        assert minecraft != null;
+        double y = minecraft.mouseHandler.ypos() * getScreenScaleY();
         return (y - height / 2.0 + 32 * CANVAS_SCALE) / CANVAS_SCALE / 64.0;
     }
 
@@ -676,9 +676,9 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
     private void returnToPreviousScreen() {
         previousScreen.syncVillagerData();
         if (previousScreen instanceof DestinyScreen) {
-            close();
+            onClose();
         } else {
-            previousScreen.close();
+            previousScreen.onClose();
         }
     }
 
@@ -696,12 +696,12 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         return super.mouseReleased(mouseX, mouseY, button);
     }
 
-    private void drawTextBox(DrawContext context, Text text) {
-        List<Text> wrap = FlowingText.wrap(text, 220);
+    private void drawTextBox(GuiGraphics context, Component text) {
+        List<Component> wrap = FlowingText.wrap(text, 220);
         int y = height / 2 - 20 - wrap.size() * 12;
         context.fill(width / 2 - 115, y - 5, width / 2 + 115, y + 12 * wrap.size(), 0x50000000);
-        for (Text t : wrap) {
-            context.drawCenteredTextWithShadow(textRenderer, t, width / 2, y, 0xFFFFFFFF);
+        for (Component t : wrap) {
+            context.drawCenteredString(font, t, width / 2, y, 0xFFFFFFFF);
             y += 12;
         }
     }
@@ -709,10 +709,10 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
     private void paint(int x, int y) {
         if (page == SkinLibraryScreen.Page.EDITOR && workspace.validPixel(x, y)) {
             if (activeMouseButton == 0) {
-                workspace.currentImage.setColor(x, y, color.getColor());
+                workspace.currentImage.setPixelRGBA(x, y, color.getColor());
                 workspace.setDirty(true);
             } else if (activeMouseButton == 1) {
-                workspace.currentImage.setColor(x, y, 0);
+                workspace.currentImage.setPixelRGBA(x, y, 0);
                 workspace.setDirty(true);
             }
         }
@@ -723,16 +723,16 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         int y = (int) getPixelY();
         if (workspace.validPixel(x, y)) {
             color.setRGB(
-                    (workspace.currentImage.getRed(x, y) & 0xFF) / 255.0,
-                    (workspace.currentImage.getGreen(x, y) & 0xFF) / 255.0,
-                    (workspace.currentImage.getBlue(x, y) & 0xFF) / 255.0
+                    (workspace.currentImage.getRedOrLuminance(x, y) & 0xFF) / 255.0,
+                    (workspace.currentImage.getGreenOrLuminance(x, y) & 0xFF) / 255.0,
+                    (workspace.currentImage.getBlueOrLuminance(x, y) & 0xFF) / 255.0
             );
             if (workspace.skinType == SkinType.HAIR) color.setHSV(0, 0, color.brightness);
         }
     }
 
     private void rebuild() {
-        clearChildren();
+        clearWidgets();
 
         timeSinceLastRebuild = 0;
 
@@ -752,7 +752,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
             int x = page == Page.LIBRARY ? width / 2 - 20 : width / 2 - 110;
             int w = 220 / b.size();
             for (Page page : b) {
-                addDrawableChild(new ButtonWidget(x, height / 2 - 110, w, 20, Text.translatable("gui.skin_library.page." + page.name().toLowerCase(Locale.ROOT)), sender -> setPage(page))).active = page != this.page;
+                addRenderableWidget(new ButtonWidget(x, height / 2 - 110, w, 20, Component.translatable("gui.skin_library.page." + page.name().toLowerCase(Locale.ROOT)), sender -> setPage(page))).active = page != this.page;
                 x += w;
             }
         }
@@ -760,13 +760,13 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         switch (page) {
             case LIBRARY -> {
                 //page
-                addDrawableChild(new ButtonWidget(width / 2 - 30 - 30, height / 2 + 80, 30, 20, Text.literal("<<"), sender -> {
+                addRenderableWidget(new ButtonWidget(width / 2 - 30 - 30, height / 2 + 80, 30, 20, Component.literal("<<"), sender -> {
                     setSelectionPage(selectionPage - 1);
                     refreshContentList();
                 }));
-                pageWidget = addDrawableChild(new ButtonWidget(width / 2 - 30, height / 2 + 80, 60, 20, Text.literal(""), sender -> {
+                pageWidget = addRenderableWidget(new ButtonWidget(width / 2 - 30, height / 2 + 80, 60, 20, Component.literal(""), sender -> {
                 }));
-                addDrawableChild(new ButtonWidget(width / 2 + 30, height / 2 + 80, 30, 20, Text.literal(">>"), sender -> {
+                addRenderableWidget(new ButtonWidget(width / 2 + 30, height / 2 + 80, 30, 20, Component.literal(">>"), sender -> {
                     setSelectionPage(selectionPage + 1);
                     refreshContentList();
                 }));
@@ -775,16 +775,16 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                 int iconX = width / 2 + 80;
 
                 //sorting icons
-                addDrawableChild(new ToggleableTooltipIconButtonWidget(iconX, height / 2 + 82, 6 * 16, 3 * 16,
+                addRenderableWidget(new ToggleableTooltipIconButtonWidget(iconX, height / 2 + 82, 6 * 16, 3 * 16,
                         sortingMode == SortingMode.LIKES,
-                        Text.translatable("gui.skin_library.sort_likes"),
+                        Component.translatable("gui.skin_library.sort_likes"),
                         v -> {
                             sortingMode = SortingMode.LIKES;
                             loadPage(true);
                         }));
-                addDrawableChild(new ToggleableTooltipIconButtonWidget(iconX + 22, height / 2 + 82, 7 * 16, 3 * 16,
+                addRenderableWidget(new ToggleableTooltipIconButtonWidget(iconX + 22, height / 2 + 82, 7 * 16, 3 * 16,
                         sortingMode == SortingMode.NEWEST,
-                        Text.translatable("gui.skin_library.sort_newest"),
+                        Component.translatable("gui.skin_library.sort_newest"),
                         v -> {
                             sortingMode = SortingMode.NEWEST;
                             loadPage(true);
@@ -792,27 +792,27 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
 
                 if (subscriptionFilter == SubscriptionFilter.LIBRARY) {
                     //filter
-                    addDrawableChild(new ToggleableTooltipIconButtonWidget(iconX + 22 * 2, height / 2 + 82, 9 * 16, 3 * 16,
+                    addRenderableWidget(new ToggleableTooltipIconButtonWidget(iconX + 22 * 2, height / 2 + 82, 9 * 16, 3 * 16,
                             filterInvalidSkins,
-                            Text.translatable("gui.skin_library.filter_invalid"),
+                            Component.translatable("gui.skin_library.filter_invalid"),
                             v -> {
                                 filterInvalidSkins = !filterInvalidSkins;
                                 loadPage(true);
                             }));
 
                     //filter clothing
-                    addDrawableChild(new ToggleableTooltipIconButtonWidget(iconX + 22 * 3, height / 2 + 82, 12 * 16, 3 * 16,
+                    addRenderableWidget(new ToggleableTooltipIconButtonWidget(iconX + 22 * 3, height / 2 + 82, 12 * 16, 3 * 16,
                             filterClothing,
-                            Text.translatable("gui.skin_library.filter_clothing"),
+                            Component.translatable("gui.skin_library.filter_clothing"),
                             v -> {
                                 filterClothing = !filterClothing;
                                 loadPage(true);
                             }));
 
                     //filter hair
-                    addDrawableChild(new ToggleableTooltipIconButtonWidget(iconX + 22 * 4, height / 2 + 82, 13 * 16, 3 * 16,
+                    addRenderableWidget(new ToggleableTooltipIconButtonWidget(iconX + 22 * 4, height / 2 + 82, 13 * 16, 3 * 16,
                             filterHair,
-                            Text.translatable("gui.skin_library.filter_hair"),
+                            Component.translatable("gui.skin_library.filter_hair"),
                             v -> {
                                 filterHair = !filterHair;
                                 loadPage(true);
@@ -820,9 +820,9 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
 
                     //moderator search
                     if (isModerator()) {
-                        addDrawableChild(new ToggleableTooltipIconButtonWidget(iconX + 22 * 5, height / 2 + 82, 11 * 16, 3 * 16,
+                        addRenderableWidget(new ToggleableTooltipIconButtonWidget(iconX + 22 * 5, height / 2 + 82, 11 * 16, 3 * 16,
                                 moderatorMode,
-                                Text.translatable("gui.skin_library.filter_moderator"),
+                                Component.translatable("gui.skin_library.filter_moderator"),
                                 v -> {
                                     moderatorMode = !moderatorMode;
                                     loadPage(true);
@@ -832,14 +832,14 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
 
                 //search
                 if (subscriptionFilter == SubscriptionFilter.LIBRARY) {
-                    TextFieldWidget textFieldWidget = addDrawableChild(new TextFieldWidget(this.textRenderer, width / 2 - 200 + 65, height / 2 - 110 + 2, 110, 16,
-                            Text.translatable("gui.skin_library.search")));
+                    EditBox textFieldWidget = addRenderableWidget(new EditBox(this.font, width / 2 - 200 + 65, height / 2 - 110 + 2, 110, 16,
+                            Component.translatable("gui.skin_library.search")));
                     textFieldWidget.setMaxLength(64);
-                    textFieldWidget.setText(filteredString);
+                    textFieldWidget.setValue(filteredString);
                     if (filteredString.isEmpty()) {
                         textFieldWidget.setSuggestion("Search");
                     }
-                    textFieldWidget.setChangedListener(s -> {
+                    textFieldWidget.setResponder(s -> {
                         filteredString = s;
                         refreshContentList();
                         textFieldWidget.setSuggestion(null);
@@ -847,11 +847,11 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                 }
 
                 //group
-                addDrawableChild(CyclingButtonWidget.builder(SubscriptionFilter::getText)
-                        .values(SubscriptionFilter.values())
-                        .initially(subscriptionFilter)
-                        .omitKeyText()
-                        .build(width / 2 - 200, height / 2 - 110, 60, 20, Text.literal(""), (button, filter) -> {
+                addRenderableWidget(CycleButton.builder(SubscriptionFilter::getText)
+                        .withValues(SubscriptionFilter.values())
+                        .withInitialValue(subscriptionFilter)
+                        .displayOnlyValue()
+                        .create(width / 2 - 200, height / 2 - 110, 60, 20, Component.literal(""), (button, filter) -> {
                             this.subscriptionFilter = filter;
                             refreshContentList();
                         }));
@@ -870,17 +870,17 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
 
                             //quick invalid toggle
                             if (isModerator()) {
-                                addDrawableChild(new ToggleableTooltipIconButtonWidget(cx + 16, cy - 48, 10 * 16, 3 * 16,
+                                addRenderableWidget(new ToggleableTooltipIconButtonWidget(cx + 16, cy - 48, 10 * 16, 3 * 16,
                                         false,
-                                        Text.literal("Toggle invalid"),
+                                        Component.literal("Toggle invalid"),
                                         v -> setTag(c.contentid(), "invalid", !c.hasTag("invalid"))));
                             }
 
                             //sorting icons
                             if (c.tags().contains("invalid")) {
-                                addDrawableChild(new ToggleableTooltipIconButtonWidget(cx + 12, cy - 16, 9 * 16, 3 * 16,
+                                addRenderableWidget(new ToggleableTooltipIconButtonWidget(cx + 12, cy - 16, 9 * 16, 3 * 16,
                                         true,
-                                        Text.translatable("gui.skin_library.probably_not_valids"),
+                                        Component.translatable("gui.skin_library.probably_not_valids"),
                                         v -> {
                                         }));
                             }
@@ -893,39 +893,39 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
             }
             case EDITOR_PREPARE -> {
                 //URL
-                TextFieldWidget textFieldWidget = addDrawableChild(new TextFieldWidget(this.textRenderer, width / 2 - 90, height / 2 - 18, 180, 16,
-                        Text.literal("URL")));
+                EditBox textFieldWidget = addRenderableWidget(new EditBox(this.font, width / 2 - 90, height / 2 - 18, 180, 16,
+                        Component.literal("URL")));
                 textFieldWidget.setMaxLength(1024);
 
-                addDrawableChild(new ButtonWidget(width / 2 - 50, height / 2 + 5, 100, 20, Text.translatable("gui.skin_library.load_image"), sender -> loadImage(textFieldWidget.getText())));
+                addRenderableWidget(new ButtonWidget(width / 2 - 50, height / 2 + 5, 100, 20, Component.translatable("gui.skin_library.load_image"), sender -> loadImage(textFieldWidget.getValue())));
             }
             case EDITOR_TYPE -> {
-                addDrawableChild(new ButtonWidget(width / 2 - 100, height / 2, 95, 20,
-                        Text.translatable("gui.skin_library.prepare.hair"),
+                addRenderableWidget(new ButtonWidget(width / 2 - 100, height / 2, 95, 20,
+                        Component.translatable("gui.skin_library.prepare.hair"),
                         v -> {
                             workspace.skinType = SkinType.HAIR;
                             color.setHSV(0, 0, 0.5);
                             setPage(Page.EDITOR);
                         }));
 
-                addDrawableChild(new ButtonWidget(width / 2 + 5, height / 2, 95, 20,
-                        Text.translatable("gui.skin_library.prepare.clothing"),
+                addRenderableWidget(new ButtonWidget(width / 2 + 5, height / 2, 95, 20,
+                        Component.translatable("gui.skin_library.prepare.clothing"),
                         v -> {
                             workspace.skinType = SkinType.CLOTHING;
                             setPage(Page.EDITOR);
                         }));
 
                 // help
-                addDrawableChild(new TooltipButtonWidget(width / 2 - 10, height / 2 + 30, 20, 20,
-                        Text.literal("?"),
-                        Text.translatable("gui.skin_library.help"),
+                addRenderableWidget(new TooltipButtonWidget(width / 2 - 10, height / 2 + 30, 20, 20,
+                        Component.literal("?"),
+                        Component.translatable("gui.skin_library.help"),
                         v -> {
                             openHelp();
                         }));
             }
             case LOGIN -> {
-                addDrawableChild(new ButtonWidget(width / 2 - 50, height / 2 + 25, 100, 20,
-                        Text.translatable("gui.skin_library.cancel"),
+                addRenderableWidget(new ButtonWidget(width / 2 - 50, height / 2 + 25, 100, 20,
+                        Component.translatable("gui.skin_library.cancel"),
                         v -> {
                             setPage(Page.LIBRARY);
                         }));
@@ -933,20 +933,20 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
             case DETAIL -> {
                 if (canModifyFocusedContent()) {
                     //tag name
-                    TextFieldWidget tagNameWidget = addDrawableChild(new TextFieldWidget(this.textRenderer, width / 2 - 200, height / 2 - 100 + 2, 95, 16,
-                            Text.literal("")));
+                    EditBox tagNameWidget = addRenderableWidget(new EditBox(this.font, width / 2 - 200, height / 2 - 100 + 2, 95, 16,
+                            Component.literal("")));
                     tagNameWidget.setMaxLength(20);
                     tagNameWidget.setSuggestion("New Tag Name");
-                    tagNameWidget.setChangedListener(v -> {
+                    tagNameWidget.setResponder(v -> {
                         tagNameWidget.setSuggestion(null);
                     });
 
                     //add tag
-                    addDrawableChild(new TooltipButtonWidget(width / 2 - 100, height / 2 - 100, 40, 20, "gui.skin_library.add", sender -> {
-                        String tag = tagNameWidget.getText().trim().toLowerCase(Locale.ROOT);
+                    addRenderableWidget(new TooltipButtonWidget(width / 2 - 100, height / 2 - 100, 40, 20, "gui.skin_library.add", sender -> {
+                        String tag = tagNameWidget.getValue().trim().toLowerCase(Locale.ROOT);
                         if (!tag.isEmpty()) {
                             setTag(focusedContent.contentid(), tag, true);
-                            tagNameWidget.setText("");
+                            tagNameWidget.setValue("");
                             rebuild();
                         }
                     }));
@@ -956,8 +956,8 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                 drawControls(focusedContent, true, width / 2 + 130, height / 2 + 60);
 
                 //close
-                addDrawableChild(new ButtonWidget(width / 2 - 40, height / 2 + 60, 80, 20,
-                        Text.translatable("gui.skin_library.close"),
+                addRenderableWidget(new ButtonWidget(width / 2 - 40, height / 2 + 60, 80, 20,
+                        Component.translatable("gui.skin_library.close"),
                         v -> {
                             setPage(Page.LIBRARY);
                         }));
@@ -967,17 +967,17 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                 int ty = height / 2 - 70;
                 for (String tag : focusedContent.tags()) {
                     if (!tag.equals("clothing") && !tag.equals("hair") && !tag.equals("invalid") || isModerator()) {
-                        int w = textRenderer.getWidth(tag) + 10;
+                        int w = font.width(tag) + 10;
                         if (canModifyFocusedContent()) {
-                            addDrawableChild(new ButtonWidget(width / 2 - 200, ty, 20, 20,
-                                    Text.literal("X"),
+                            addRenderableWidget(new ButtonWidget(width / 2 - 200, ty, 20, 20,
+                                    Component.literal("X"),
                                     v -> {
                                         setTag(focusedContent.contentid(), tag, false);
                                         rebuild();
                                     }));
                         }
-                        addDrawableChild(new ButtonWidget(width / 2 - 200 + 20, ty, w, 20,
-                                Text.literal(tag),
+                        addRenderableWidget(new ButtonWidget(width / 2 - 200 + 20, ty, w, 20,
+                                Component.literal(tag),
                                 v -> {
                                 }));
                         ty += 20;
@@ -985,91 +985,82 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                 }
             }
             case DELETE -> {
-                addDrawableChild(new ButtonWidget(width / 2 - 65, height / 2, 60, 20,
-                        Text.translatable("gui.skin_library.cancel"),
+                addRenderableWidget(new ButtonWidget(width / 2 - 65, height / 2, 60, 20,
+                        Component.translatable("gui.skin_library.cancel"),
                         v -> {
                             setPage(Page.DETAIL);
                         }));
-                addDrawableChild(new ButtonWidget(width / 2 + 5, height / 2, 60, 20,
-                        Text.translatable("gui.skin_library.delete"),
+                addRenderableWidget(new ButtonWidget(width / 2 + 5, height / 2, 60, 20,
+                        Component.translatable("gui.skin_library.delete"),
                         v -> {
                             removeContent(deleteConfirmationContent.contentid());
                             setPage(Page.LIBRARY);
                         }));
             }
             case REPORT -> {
-                addDrawableChild(new TooltipButtonWidget(width / 2 - 105, height / 2, 100, 20,
-                        Text.translatable("gui.skin_library.report_invalid"),
-                        Text.translatable("gui.skin_library.report_invalid_tooltip"),
+                addRenderableWidget(new TooltipButtonWidget(width / 2 - 105, height / 2, 100, 20,
+                        Component.translatable("gui.skin_library.report_invalid"),
+                        Component.translatable("gui.skin_library.report_invalid_tooltip"),
                         v -> {
                             reportContent(reportConfirmationContent.contentid(), "INVALID");
                             setPage(Page.DETAIL);
                         }));
-                addDrawableChild(new TooltipButtonWidget(width / 2 + 5, height / 2, 100, 20,
-                        Text.translatable("gui.skin_library.report_default"),
-                        Text.translatable("gui.skin_library.report_default_tooltip"),
+                addRenderableWidget(new TooltipButtonWidget(width / 2 + 5, height / 2, 100, 20,
+                        Component.translatable("gui.skin_library.report_default"),
+                        Component.translatable("gui.skin_library.report_default_tooltip"),
                         v -> {
                             reportContent(reportConfirmationContent.contentid(), "DEFAULT");
                             setPage(Page.DETAIL);
                         }));
 
-                addDrawableChild(new ButtonWidget(width / 2 - 50, height / 2 + 22, 100, 20,
-                        Text.translatable("gui.skin_library.cancel"),
+                addRenderableWidget(new ButtonWidget(width / 2 - 50, height / 2 + 22, 100, 20,
+                        Component.translatable("gui.skin_library.cancel"),
                         v -> {
                             setPage(Page.DETAIL);
                         }));
-
-                if (isModerator()) {
-                    addDrawableChild(new ButtonWidget(width / 2 - 50, height / 2 + 44, 100, 20,
-                            Text.literal("Counter Report"),
-                            v -> {
-                                reportContent(reportConfirmationContent.contentid(), "COUNTER_DEFAULT");
-                                setPage(Page.DETAIL);
-                            }));
-                }
             }
             case EDITOR -> {
                 // name
-                textFieldWidget = addDrawableChild(new TextFieldWidget(this.textRenderer, width / 2 - 60, height / 2 - 105, 120, 20,
-                        Text.translatable("gui.skin_library.name")));
+                textFieldWidget = addRenderableWidget(new EditBox(this.font, width / 2 - 60, height / 2 - 105, 120, 20,
+                        Component.translatable("gui.skin_library.name")));
                 textFieldWidget.setMaxLength(1024);
-                textFieldWidget.setText(workspace.title);
+                textFieldWidget.setValue(workspace.title);
                 if (workspace.title.isEmpty()) {
                     textFieldWidget.setSuggestion(workspace.title);
                 }
                 textFieldWidget.setFocused(false);
-                textFieldWidget.setChangedListener(v -> {
+                textFieldWidget.setResponder(v -> {
                     workspace.title = v;
                     textFieldWidget.setSuggestion(null);
                 });
 
                 // help
-                addDrawableChild(new TooltipButtonWidget(width / 2 + 65, height / 2 - 105, 20, 20,
-                        Text.literal("?"),
-                        Text.translatable("gui.skin_library.tool_help"),
+                addRenderableWidget(new TooltipButtonWidget(width / 2 + 65, height / 2 - 105, 20, 20,
+                        Component.literal("?"),
+                        Component.translatable("gui.skin_library.tool_help"),
                         v -> {
                             openHelp();
                         }));
 
                 //gender
-                addDrawableChild(CyclingButtonWidget.builder(Gender::getText)
-                        .values(Gender.MALE, Gender.NEUTRAL, Gender.FEMALE)
-                        .initially(workspace.gender)
-                        .omitKeyText()
-                        .build(width / 2 - 200, height / 2 - 80, 105, 20, Text.literal(""), (button, gender) -> {
+                addRenderableWidget(CycleButton.builder(Gender::getText)
+                        .withValues(Gender.MALE, Gender.NEUTRAL, Gender.FEMALE)
+                        .withInitialValue(workspace.gender)
+                        .displayOnlyValue()
+                        .create(width / 2 - 200, height / 2 - 80, 105, 20, Component.literal(""), (button, gender) -> {
                             this.workspace.gender = gender;
                         }));
 
                 // temperature
                 if (workspace.skinType == SkinType.CLOTHING) {
-                    addDrawableChild(new IntegerSliderWidget(width / 2 - 200, height / 2 - 60, 105, 20,
+                    addRenderableWidget(new IntegerSliderWidget(width / 2 - 200, height / 2 - 60, 105, 20,
                             workspace.temperature,
                             -2, 2,
                             v -> {
                                 workspace.temperature = v;
                             },
-                            v -> Text.translatable("gui.skin_library.temperature." + (v + 2)),
-                            () -> Text.translatable("gui.skin_library.temperature.tooltip")
+                            v -> Component.translatable("gui.skin_library.temperature." + (v + 2)),
+                            () -> Component.translatable("gui.skin_library.temperature.tooltip")
                     ));
                 }
 
@@ -1078,16 +1069,16 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                     int ox = 0;
                     int oy = 0;
                     List<ItemButtonWidget> widgets = new LinkedList<>();
-                    for (VillagerProfession profession : Registries.VILLAGER_PROFESSION) {
-                        MutableText text = Text.translatable("entity.minecraft.villager." + profession.id());
-                        ItemButtonWidget widget = addDrawableChild(new ItemButtonWidget(width / 2 - 200 + ox * 21, height / 2 - 30 + oy * 21, 20, text,
-                                ProfessionIcons.ICONS.getOrDefault(profession.id(), Items.OAK_SAPLING.getDefaultStack()),
+                    for (VillagerProfession profession : BuiltInRegistries.VILLAGER_PROFESSION) {
+                        MutableComponent text = Component.translatable("entity.minecraft.villager." + profession.name());
+                        ItemButtonWidget widget = addRenderableWidget(new ItemButtonWidget(width / 2 - 200 + ox * 21, height / 2 - 30 + oy * 21, 20, text,
+                                ProfessionIcons.ICONS.getOrDefault(profession.name(), Items.OAK_SAPLING.getDefaultInstance()),
                                 v -> {
-                                    workspace.profession = profession == VillagerProfession.NONE ? null : profession.id();
+                                    workspace.profession = profession == VillagerProfession.NONE ? null : profession.name();
                                     widgets.forEach(b -> b.active = true);
                                     v.active = false;
                                 }));
-                        widget.active = !Objects.equals(workspace.profession, profession == VillagerProfession.NONE ? null : profession.id());
+                        widget.active = !Objects.equals(workspace.profession, profession == VillagerProfession.NONE ? null : profession.name());
                         widgets.add(widget);
                         ox++;
                         if (ox >= 5) {
@@ -1102,7 +1093,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
 
                 if (workspace.skinType == SkinType.CLOTHING) {
                     //hue
-                    color.hueWidget = addDrawableChild(new HorizontalColorPickerWidget(width / 2 + 100, y, 100, 15,
+                    color.hueWidget = addRenderableWidget(new HorizontalColorPickerWidget(width / 2 + 100, y, 100, 15,
                             color.hue / 360.0,
                             MCA.locate("textures/colormap/hue.png"),
                             (vx, vy) -> {
@@ -1114,7 +1105,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                             }));
 
                     //saturation
-                    color.saturationWidget = addDrawableChild(new HorizontalGradientWidget(width / 2 + 100, y + 20, 100, 15,
+                    color.saturationWidget = addRenderableWidget(new HorizontalGradientWidget(width / 2 + 100, y + 20, 100, 15,
                             color.saturation,
                             () -> {
                                 double[] doubles = ClientUtils.HSV2RGB(color.hue, 0.0, 1.0);
@@ -1138,7 +1129,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                 }
 
                 //brightness
-                color.brightnessWidget = addDrawableChild(new HorizontalGradientWidget(width / 2 + 100, y + 40, 100, 15,
+                color.brightnessWidget = addRenderableWidget(new HorizontalGradientWidget(width / 2 + 100, y + 40, 100, 15,
                         color.brightness,
                         () -> {
                             double[] doubles = ClientUtils.HSV2RGB(color.hue, color.saturation, 0.0);
@@ -1161,66 +1152,66 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                         }));
 
                 //fill tool strength
-                addDrawableChild(new IntegerSliderWidget(width / 2 + 100, y + 60, 100, 20,
+                addRenderableWidget(new IntegerSliderWidget(width / 2 + 100, y + 60, 100, 20,
                         workspace.fillToolThreshold,
                         0, 128,
                         v -> {
                             workspace.fillToolThreshold = v;
                         },
-                        v -> Text.translatable("gui.skin_library.fillToolThreshold"),
-                        () -> Text.translatable("gui.skin_library.fillToolThreshold.tooltip")
+                        v -> Component.translatable("gui.skin_library.fillToolThreshold"),
+                        () -> Component.translatable("gui.skin_library.fillToolThreshold.tooltip")
                 ));
 
                 //undo
-                addDrawableChild(new ButtonWidget(width / 2 + 100, y + 85, 100, 20,
-                        Text.translatable("gui.skin_library.undo"),
+                addRenderableWidget(new ButtonWidget(width / 2 + 100, y + 85, 100, 20,
+                        Component.translatable("gui.skin_library.undo"),
                         v -> {
                             workspace.undo();
                         }));
 
                 if (workspace.skinType == SkinType.HAIR) {
                     // make black and white
-                    addDrawableChild(new ButtonWidget(width / 2 + 100, y - 20, 100, 20,
-                            Text.translatable("gui.skin_library.remove_saturation"),
+                    addRenderableWidget(new ButtonWidget(width / 2 + 100, y - 20, 100, 20,
+                            Component.translatable("gui.skin_library.remove_saturation"),
                             v -> {
                                 workspace.removeSaturation();
                             }));
 
                     //less contrast
-                    addDrawableChild(new TooltipButtonWidget(width / 2 + 100, y, 50, 20,
-                            Text.literal("C -"),
-                            Text.translatable("gui.skin_library.less_contrast"),
+                    addRenderableWidget(new TooltipButtonWidget(width / 2 + 100, y, 50, 20,
+                            Component.literal("C -"),
+                            Component.translatable("gui.skin_library.less_contrast"),
                             v -> {
                                 workspace.addContrast(-0.15f);
                             }));
 
                     //more contrast
-                    addDrawableChild(new TooltipButtonWidget(width / 2 + 150, y, 50, 20,
-                            Text.literal("C +"),
-                            Text.translatable("gui.skin_library.more_contrast"),
+                    addRenderableWidget(new TooltipButtonWidget(width / 2 + 150, y, 50, 20,
+                            Component.literal("C +"),
+                            Component.translatable("gui.skin_library.more_contrast"),
                             v -> {
                                 workspace.addContrast(0.15f);
                             }));
 
                     //less contrast
-                    addDrawableChild(new TooltipButtonWidget(width / 2 + 100, y + 20, 50, 20,
-                            Text.literal("B -"),
-                            Text.translatable("gui.skin_library.less_brightness"),
+                    addRenderableWidget(new TooltipButtonWidget(width / 2 + 100, y + 20, 50, 20,
+                            Component.literal("B -"),
+                            Component.translatable("gui.skin_library.less_brightness"),
                             v -> {
                                 workspace.addBrightness(-8);
                             }));
 
                     //more contrast
-                    addDrawableChild(new TooltipButtonWidget(width / 2 + 150, y + 20, 50, 20,
-                            Text.literal("B +"),
-                            Text.translatable("gui.skin_library.more_brightness"),
+                    addRenderableWidget(new TooltipButtonWidget(width / 2 + 150, y + 20, 50, 20,
+                            Component.literal("B +"),
+                            Component.translatable("gui.skin_library.more_brightness"),
                             v -> {
                                 workspace.addBrightness(8);
                             }));
 
                     //hair color
                     Genetics genetics = villagerVisualization.getGenetics();
-                    addDrawableChild(new ColorPickerWidget(width / 2 - 200, height / 2 - 30, 100, 100,
+                    addRenderableWidget(new ColorPickerWidget(width / 2 - 200, height / 2 - 30, 100, 100,
                             genetics.getGene(Genetics.PHEOMELANIN),
                             genetics.getGene(Genetics.EUMELANIN),
                             MCA.locate("textures/colormap/villager_hair.png"),
@@ -1231,15 +1222,15 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                 }
 
                 // cancel
-                addDrawableChild(new ButtonWidget(width / 2 - 80, height / 2 + 80, 75, 20,
-                        Text.translatable("gui.skin_library.cancel"),
+                addRenderableWidget(new ButtonWidget(width / 2 - 80, height / 2 + 80, 75, 20,
+                        Component.translatable("gui.skin_library.cancel"),
                         v -> {
                             setPage(Page.LIBRARY);
                         }));
 
                 // publish
-                addDrawableChild(new ButtonWidget(width / 2 + 5, height / 2 + 80, 75, 20,
-                        Text.translatable("gui.skin_library.publish"),
+                addRenderableWidget(new ButtonWidget(width / 2 + 5, height / 2 + 80, 75, 20,
+                        Component.translatable("gui.skin_library.publish"),
                         v -> {
                             publish();
                         }));
@@ -1255,10 +1246,10 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         if (isOp() || Config.getServerConfig().allowEveryoneToAddContentGlobally) {
             widgets.add(new ToggleableTooltipIconButtonWidget(0, 0, 0, 3 * 16,
                     getServerContentById(content.contentid()).isPresent(),
-                    Text.translatable("gui.skin_library.subscribe"),
+                    Component.translatable("gui.skin_library.subscribe"),
                     v -> {
                         if (((ToggleableTooltipButtonWidget) v).toggle) {
-                            NetworkHandler.sendToServer(new RemoveCustomClothingMessage(content.hasTag("clothing") ? RemoveCustomClothingMessage.Type.CLOTHING : RemoveCustomClothingMessage.Type.HAIR, new Identifier("immersive_library", String.valueOf(content.contentid()))));
+                            NetworkHandler.sendToServer(new RemoveCustomClothingMessage(content.hasTag("clothing") ? RemoveCustomClothingMessage.Type.CLOTHING : RemoveCustomClothingMessage.Type.HAIR, new ResourceLocation("immersive_library", String.valueOf(content.contentid()))));
                         } else {
                             toListEntry(content).ifPresent(e -> {
                                 NetworkHandler.sendToServer(new AddCustomClothingMessage(e));
@@ -1272,7 +1263,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         if (authenticated) {
             widgets.add(new ToggleableTooltipIconButtonWidget(0, 0, 16, 3 * 16,
                     isLiked(content),
-                    Text.translatable("gui.skin_library.like"),
+                    Component.translatable("gui.skin_library.like"),
                     v -> {
                         ((ToggleableTooltipButtonWidget) v).toggle = !((ToggleableTooltipButtonWidget) v).toggle;
                         setLike(content.contentid(), ((ToggleableTooltipButtonWidget) v).toggle);
@@ -1283,7 +1274,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         if (advanced && canModifyContent(content)) {
             widgets.add(new ToggleableTooltipIconButtonWidget(0, 0, 2 * 16, 3 * 16,
                     false,
-                    Text.translatable("gui.skin_library.edit"),
+                    Component.translatable("gui.skin_library.edit"),
                     v -> {
 
                         SkinCache.getImage(content).ifPresent(image -> {
@@ -1300,7 +1291,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         if (advanced && authenticated) {
             widgets.add(new ToggleableTooltipIconButtonWidget(cx - 12 + 25, cy, 10 * 16, 3 * 16,
                     true,
-                    Text.translatable("gui.skin_library.report"),
+                    Component.translatable("gui.skin_library.report"),
                     v -> {
                         reportConfirmationContent = content;
                         setPage(Page.REPORT);
@@ -1311,7 +1302,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         if (advanced && canModifyContent(content)) {
             widgets.add(new ToggleableTooltipIconButtonWidget(cx - 12 + 25, cy, 3 * 16, 3 * 16,
                     true,
-                    Text.translatable("gui.skin_library.delete"),
+                    Component.translatable("gui.skin_library.delete"),
                     v -> {
                         deleteConfirmationContent = content;
                         setPage(Page.DELETE);
@@ -1322,7 +1313,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         if (!advanced) {
             widgets.add(new ToggleableTooltipIconButtonWidget(cx - 12 + 25, cy, 4 * 16, 4 * 16,
                     true,
-                    Text.translatable("gui.skin_library.details"),
+                    Component.translatable("gui.skin_library.details"),
                     v -> {
                         if (isPanning && isModerator()) {
                             //admin tool
@@ -1339,7 +1330,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         if (advanced && isModerator()) {
             widgets.add(new ToggleableTooltipIconButtonWidget(cx - 12 + 25, cy, 5 * 16, 3 * 16,
                     false,
-                    Text.translatable("gui.skin_library.ban"),
+                    Component.translatable("gui.skin_library.ban"),
                     v -> {
                         setBan(content.userid(), true);
                         refreshContentList();
@@ -1347,7 +1338,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
 
             widgets.add(new ToggleableTooltipIconButtonWidget(cx - 12 + 25, cy, 11 * 16, 3 * 16,
                     false,
-                    Text.translatable("gui.skin_library.unban"),
+                    Component.translatable("gui.skin_library.unban"),
                     v -> {
                         setBan(content.userid(), false);
                         refreshContentList();
@@ -1357,7 +1348,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         // add the widgets
         int wx = cx - widgets.size() * w / 2;
         for (TooltipButtonWidget buttonWidget : widgets) {
-            addDrawableChild(buttonWidget);
+            addRenderableWidget(buttonWidget);
             buttonWidget.setX(wx);
             buttonWidget.setY(cy);
             wx += w;
@@ -1392,8 +1383,8 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
 
     public void setPage(Page page) {
         if (Thread.currentThread() != thread) {
-            assert client != null;
-            client.executeSync(() -> setPage(page));
+            assert minecraft != null;
+            minecraft.executeIfPossible(() -> setPage(page));
             return;
         }
 
@@ -1445,7 +1436,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
 
     private void openHelp() {
         try {
-            Util.getOperatingSystem().open(URI.create("https://github.com/Luke100000/minecraft-comes-alive/wiki/Skin-Editor"));
+            Util.getPlatform().openUri(URI.create("https://github.com/Luke100000/minecraft-comes-alive/wiki/Skin-Editor"));
         } catch (Exception e) {
             MCA.LOGGER.error(e);
         }
@@ -1453,8 +1444,8 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
 
     private void refreshContentList() {
         if (Thread.currentThread() != thread) {
-            assert client != null;
-            client.executeSync(this::refreshContentList);
+            assert minecraft != null;
+            minecraft.executeIfPossible(this::refreshContentList);
             return;
         }
 
@@ -1509,22 +1500,22 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
     }
 
     private String getPlayerName() {
-        return MinecraftClient.getInstance().player == null ? "Unknown" : MinecraftClient.getInstance().player.getGameProfile().getName();
+        return Minecraft.getInstance().player == null ? "Unknown" : Minecraft.getInstance().player.getGameProfile().getName();
     }
 
     private boolean isOp() {
-        return MinecraftClient.getInstance().player != null && MinecraftClient.getInstance().player.hasPermissionLevel(4);
+        return Minecraft.getInstance().player != null && Minecraft.getInstance().player.hasPermissions(4);
     }
 
     private void setSelectionPage(int p) {
         if (pageWidget != null) {
             selectionPage = Math.max(0, p);
-            pageWidget.setMessage(Text.translatable("gui.villager_editor.page", selectionPage + 1));
+            pageWidget.setMessage(Component.translatable("gui.villager_editor.page", selectionPage + 1));
         }
     }
 
     @Override
-    public void filesDragged(List<Path> paths) {
+    public void onFilesDrop(List<Path> paths) {
         Path path = paths.get(0);
         loadImage(path.toString());
     }
@@ -1557,7 +1548,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                     workspace = new Workspace(SkinPorter.portLegacySkin(image));
                     setPage(Page.EDITOR_TYPE);
                 } else {
-                    setError(Text.translatable("gui.skin_library.not_64"));
+                    setError(Component.translatable("gui.skin_library.not_64"));
                 }
             } catch (IOException e) {
                 MCA.LOGGER.error(e);
@@ -1567,17 +1558,17 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
 
     private void publish() {
         if (workspace.title.equals("Unnamed Asset")) {
-            setError(Text.translatable("gui.skin_library.choose_name"));
+            setError(Component.translatable("gui.skin_library.choose_name"));
             return;
         }
 
         if (!Utils.verify(workspace.currentImage)) {
-            setError(Text.translatable("gui.skin_library.read_the_help"));
+            setError(Component.translatable("gui.skin_library.read_the_help"));
             return;
         }
 
         if (workspace.skinType == SkinType.HAIR && !Utils.verifyHair(workspace.currentImage) && !skipHairWarning) {
-            setError(Text.translatable("gui.skin_library.read_the_help_hair"));
+            setError(Component.translatable("gui.skin_library.read_the_help_hair"));
             skipHairWarning = true;
             return;
         }
@@ -1594,7 +1585,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                         ), Map.of(
                                 "title", workspace.title,
                                 "meta", workspace.toListEntry().toJson().toString(),
-                                "data", new String(Base64.getEncoder().encode(workspace.currentImage.getBytes()))
+                                "data", new String(Base64.getEncoder().encode(workspace.currentImage.asByteArray()))
                         ));
                     } catch (IOException e) {
                         MCA.LOGGER.error(e);
@@ -1623,16 +1614,16 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                         });
                     } else if (request instanceof ErrorResponse response) {
                         if (response.code() == 428) {
-                            setError(Text.translatable("gui.skin_library.upload_duplicate"));
+                            setError(Component.translatable("gui.skin_library.upload_duplicate"));
                         } else {
-                            setError(Text.translatable("gui.skin_library.upload_failed"));
+                            setError(Component.translatable("gui.skin_library.upload_failed"));
                         }
                         uploading = false;
                     }
                 }
             });
         } else {
-            setError(Text.translatable("gui.skin_library.already_uploading"));
+            setError(Component.translatable("gui.skin_library.already_uploading"));
         }
     }
 
@@ -1692,7 +1683,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                 removeContentLocally(contentId);
             }
 
-            setError(Text.translatable("gui.skin_library.reported"));
+            setError(Component.translatable("gui.skin_library.reported"));
         }
     }
 
@@ -1724,7 +1715,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         this.error = null;
     }
 
-    public void setError(Text text) {
+    public void setError(Component text) {
         this.error = text;
     }
 
@@ -1796,8 +1787,8 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         LIKED,
         SUBMISSIONS;
 
-        public static Text getText(SubscriptionFilter t) {
-            return Text.translatable("gui.skin_library.subscription_filter." + t.name().toLowerCase(Locale.ROOT));
+        public static Component getText(SubscriptionFilter t) {
+            return Component.translatable("gui.skin_library.subscription_filter." + t.name().toLowerCase(Locale.ROOT));
         }
     }
 }

@@ -1,13 +1,12 @@
 package net.mca.entity.ai;
 
-import net.minecraft.text.Text;
-
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import net.minecraft.network.chat.Component;
 
 public enum MoveState {
     MOVE("moving"),
@@ -23,8 +22,8 @@ public enum MoveState {
         this.friendlyName = friendlyName;
     }
 
-    public Text getName() {
-        return Text.translatable("gui.label." + friendlyName);
+    public Component getName() {
+        return Component.translatable("gui.label." + friendlyName);
     }
 
     public static Optional<MoveState> byCommand(String action) {

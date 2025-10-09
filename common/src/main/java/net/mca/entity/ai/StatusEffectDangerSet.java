@@ -1,25 +1,24 @@
 package net.mca.entity.ai;
 
-import net.minecraft.entity.effect.StatusEffect;
-import net.minecraft.entity.effect.StatusEffects;
-
 import java.util.HashSet;
 import java.util.Set;
+import net.minecraft.world.effect.MobEffect;
+import net.minecraft.world.effect.MobEffects;
 
 public class StatusEffectDangerSet {
-    public static final Set<StatusEffect> isDanger = new HashSet<>();
+    public static final Set<MobEffect> isDanger = new HashSet<>();
     static {
-        isDanger.add(StatusEffects.SLOWNESS);
-        isDanger.add(StatusEffects.MINING_FATIGUE);
-        isDanger.add(StatusEffects.INSTANT_DAMAGE);
-        isDanger.add(StatusEffects.NAUSEA);
-        isDanger.add(StatusEffects.BLINDNESS);
-        isDanger.add(StatusEffects.HUNGER);
-        isDanger.add(StatusEffects.WEAKNESS);
-        isDanger.add(StatusEffects.POISON);
-        isDanger.add(StatusEffects.WITHER);
-        isDanger.add(StatusEffects.LEVITATION);
-        isDanger.add(StatusEffects.UNLUCK);
-        isDanger.add(StatusEffects.SPEED);
+        isDanger.add(MobEffects.MOVEMENT_SLOWDOWN);
+        isDanger.add(MobEffects.DIG_SLOWDOWN);
+        isDanger.add(MobEffects.HARM);
+        isDanger.add(MobEffects.CONFUSION);
+        isDanger.add(MobEffects.BLINDNESS);
+        isDanger.add(MobEffects.HUNGER);
+        isDanger.add(MobEffects.WEAKNESS);
+        isDanger.add(MobEffects.POISON);
+        isDanger.add(MobEffects.WITHER);
+        isDanger.add(MobEffects.LEVITATION);
+        isDanger.add(MobEffects.UNLUCK);
+        isDanger.add(MobEffects.MOVEMENT_SPEED);
     }
 }

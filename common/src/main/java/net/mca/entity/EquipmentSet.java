@@ -1,7 +1,7 @@
 package net.mca.entity;
 
-import net.minecraft.item.Item;
-import net.minecraft.item.Items;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.Items;
 
 public enum EquipmentSet {
     NAKED(Items.AIR, Items.AIR, Items.AIR, Items.AIR, Items.AIR, Items.AIR),

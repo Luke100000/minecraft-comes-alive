@@ -5,40 +5,40 @@ import net.mca.entity.ai.relationship.Gender;
 import net.mca.entity.ai.relationship.RelationshipState;
 import net.mca.util.NbtHelper;
 import net.mca.util.WorldUtils;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.Util;
-import net.minecraft.world.PersistentState;
+import net.minecraft.Util;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.level.saveddata.SavedData;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
 import java.util.stream.Stream;
 
-public class FamilyTree extends PersistentState {
+public class FamilyTree extends SavedData {
     private static final String DATA_ID = "MCA-FamilyTree";
 
     private final Map<UUID, FamilyTreeNode> entries;
 
-    public static FamilyTree get(ServerWorld world) {
-        return WorldUtils.loadData(world.getServer().getOverworld(), FamilyTree::new, FamilyTree::new, DATA_ID);
+    public static FamilyTree get(ServerLevel world) {
+        return WorldUtils.loadData(world.getServer().overworld(), FamilyTree::new, FamilyTree::new, DATA_ID);
     }
 
-    FamilyTree(ServerWorld world) {
+    FamilyTree(ServerLevel world) {
         entries = new HashMap<>();
     }
 
-    FamilyTree(NbtCompound nbt) {
-        entries = NbtHelper.toMap(nbt, UUID::fromString, (id, element) -> new FamilyTreeNode(this, id, (NbtCompound)element));
+    FamilyTree(CompoundTag nbt) {
+        entries = NbtHelper.toMap(nbt, UUID::fromString, (id, element) -> new FamilyTreeNode(this, id, (CompoundTag)element));
 
         // Fixing the shift in relationships introduces by the promised update
         // TODO the moment this code here causes any porting errors, remove it. By that time no old saves should exist anyways.
         UUID uuid = UUID.fromString("12341234-1234-1234-1234-123412341234");
         if (!entries.containsKey(uuid)) {
             entries.put(uuid, createEntry(uuid, "debug", Gender.NEUTRAL, false));
-            markDirty();
+            setDirty();
 
             entries.values().forEach(e -> {
                 FamilyTreeNode partner = entries.get(e.partner());
@@ -60,7 +60,7 @@ public class FamilyTree extends PersistentState {
     }
 
     @Override
-    public NbtCompound writeNbt(NbtCompound nbt) {
+    public CompoundTag save(CompoundTag nbt) {
         return NbtHelper.fromMap(nbt, entries, UUID::toString, FamilyTreeNode::save);
     }
 
@@ -74,16 +74,16 @@ public class FamilyTree extends PersistentState {
 
     @NotNull
     public FamilyTreeNode getOrCreate(Entity entity) {
-        return entries.computeIfAbsent(entity.getUuid(), uuid -> createEntry(
-                entity.getUuid(),
+        return entries.computeIfAbsent(entity.getUUID(), uuid -> createEntry(
+                entity.getUUID(),
                 entity.getName().getString(),
                 EntityRelationship.of(entity).map(EntityRelationship::getGender).orElse(Gender.MALE),
-                entity instanceof PlayerEntity));
+                entity instanceof Player));
     }
 
     public void remove(UUID id) {
         entries.remove(id);
-        markDirty();
+        setDirty();
     }
 
     @NotNull
@@ -97,7 +97,7 @@ public class FamilyTree extends PersistentState {
     }
 
     private FamilyTreeNode createEntry(UUID uuid, String name, Gender gender, boolean isPlayer) {
-        markDirty();
+        setDirty();
         return new FamilyTreeNode(this,
                 uuid,
                 name,

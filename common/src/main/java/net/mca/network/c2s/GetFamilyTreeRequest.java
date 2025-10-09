@@ -4,9 +4,8 @@ import net.mca.cobalt.network.Message;
 import net.mca.cobalt.network.NetworkHandler;
 import net.mca.server.world.data.FamilyTree;
 import net.mca.server.world.data.FamilyTreeNode;
+import net.minecraft.server.level.ServerPlayer;
 import net.mca.network.s2c.GetFamilyTreeResponse;
-import net.minecraft.server.network.ServerPlayerEntity;
-
 import java.io.Serial;
 import java.util.Map;
 import java.util.UUID;
@@ -25,8 +24,8 @@ public class GetFamilyTreeRequest implements Message {
     }
 
     @Override
-    public void receive(ServerPlayerEntity player) {
-        FamilyTree.get(player.getServerWorld()).getOrEmpty(uuid).ifPresent(entry -> {
+    public void receive(ServerPlayer player) {
+        FamilyTree.get(player.serverLevel()).getOrEmpty(uuid).ifPresent(entry -> {
             Map<UUID, FamilyTreeNode> familyEntries = Stream.concat(
                             entry.lookup(Stream.of(entry.id(), entry.partner())),
                             entry.lookup(entry.getRelatives(2, 1))

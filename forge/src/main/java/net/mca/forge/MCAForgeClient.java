@@ -15,13 +15,13 @@ import net.mca.client.resources.ColorPaletteLoader;
 import net.mca.entity.EntitiesMCA;
 import net.mca.resources.ApiReloadListener;
 import net.mca.resources.Supporters;
-import net.minecraft.client.item.ModelPredicateProviderRegistry;
-import net.minecraft.client.render.RenderLayer;
-import net.minecraft.client.render.RenderLayers;
-import net.minecraft.client.render.block.entity.BlockEntityRendererFactories;
-import net.minecraft.client.render.entity.EntityRenderers;
-import net.minecraft.client.render.entity.VillagerEntityRenderer;
-import net.minecraft.client.render.entity.ZombieVillagerEntityRenderer;
+import net.minecraft.client.renderer.ItemBlockRenderTypes;
+import net.minecraft.client.renderer.RenderType;
+import net.minecraft.client.renderer.blockentity.BlockEntityRenderers;
+import net.minecraft.client.renderer.entity.EntityRenderers;
+import net.minecraft.client.renderer.entity.VillagerRenderer;
+import net.minecraft.client.renderer.entity.ZombieVillagerRenderer;
+import net.minecraft.client.renderer.item.ItemProperties;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.client.event.RegisterClientReloadListenersEvent;
 import net.minecraftforge.client.event.RegisterKeyMappingsEvent;
@@ -45,11 +45,11 @@ public final class MCAForgeClient {
     @SubscribeEvent
     public static void setup(FMLClientSetupEvent event) {
         if (Config.getInstance().useSquidwardModels) {
-            EntityRenderers.register(EntitiesMCA.MALE_VILLAGER.get(), VillagerEntityRenderer::new);
-            EntityRenderers.register(EntitiesMCA.FEMALE_VILLAGER.get(), VillagerEntityRenderer::new);
+            EntityRenderers.register(EntitiesMCA.MALE_VILLAGER.get(), VillagerRenderer::new);
+            EntityRenderers.register(EntitiesMCA.FEMALE_VILLAGER.get(), VillagerRenderer::new);
 
-            EntityRenderers.register(EntitiesMCA.MALE_ZOMBIE_VILLAGER.get(), ZombieVillagerEntityRenderer::new);
-            EntityRenderers.register(EntitiesMCA.FEMALE_ZOMBIE_VILLAGER.get(), ZombieVillagerEntityRenderer::new);
+            EntityRenderers.register(EntitiesMCA.MALE_ZOMBIE_VILLAGER.get(), ZombieVillagerRenderer::new);
+            EntityRenderers.register(EntitiesMCA.FEMALE_ZOMBIE_VILLAGER.get(), ZombieVillagerRenderer::new);
         } else {
             EntityRenderers.register(EntitiesMCA.MALE_VILLAGER.get(), VillagerEntityMCARenderer::new);
             EntityRenderers.register(EntitiesMCA.FEMALE_VILLAGER.get(), VillagerEntityMCARenderer::new);
@@ -61,14 +61,14 @@ public final class MCAForgeClient {
         EntityRenderers.register(EntitiesMCA.GRIM_REAPER.get(), GrimReaperRenderer::new);
         EntityRenderers.register(EntitiesMCA.CRIB.get(), CribEntityRenderer::new);
 
-        BlockEntityRendererFactories.register(BlockEntityTypesMCA.TOMBSTONE.get(), TombstoneBlockEntityRenderer::new);
+        BlockEntityRenderers.register(BlockEntityTypesMCA.TOMBSTONE.get(), TombstoneBlockEntityRenderer::new);
 
-        ModelPredicatesMCA.setup(ModelPredicateProviderRegistry::register);
+        ModelPredicatesMCA.setup(ItemProperties::register);
 
         // TODO: Forge has made this deprecated in 1.19 and we're meant to use `render_type` in the model json
         // - remove and replace at a later date instead, since Fabric still uses the older method afaik.
         //noinspection removal
-        RenderLayers.setRenderLayer(BlocksMCA.INFERNAL_FLAME.get(), RenderLayer.getCutout());
+        ItemBlockRenderTypes.setRenderLayer(BlocksMCA.INFERNAL_FLAME.get(), RenderType.cutout());
     }
 
     @SubscribeEvent

@@ -8,28 +8,27 @@ import net.fabricmc.loader.api.FabricLoader;
 import net.mca.MCA;
 import net.mca.cobalt.network.Message;
 import net.mca.cobalt.network.NetworkHandler;
-import net.minecraft.network.PacketByteBuf;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.util.Identifier;
-
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerPlayer;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class NetworkHandlerImpl extends NetworkHandler.Impl {
-    private final Map<Class<?>, Identifier> cache = new ConcurrentHashMap<>();
+    private final Map<Class<?>, ResourceLocation> cache = new ConcurrentHashMap<>();
 
-    private Identifier getMessageIdentifier(Message msg) {
+    private ResourceLocation getMessageIdentifier(Message msg) {
         return cache.computeIfAbsent(msg.getClass(), this::getMessageIdentifier);
     }
 
-    private <T> Identifier getMessageIdentifier(Class<T> msg) {
+    private <T> ResourceLocation getMessageIdentifier(Class<T> msg) {
         return MCA.locate(msg.getSimpleName().toLowerCase(Locale.ROOT));
     }
 
     @Override
     public <T extends Message> void registerMessage(Class<T> msg) {
-        Identifier id = getMessageIdentifier(msg);
+        ResourceLocation id = getMessageIdentifier(msg);
 
         ServerPlayNetworking.registerGlobalReceiver(id, (server, player, handler, buffer, responder) -> {
             Message m = Message.decode(buffer);
@@ -43,14 +42,14 @@ public class NetworkHandlerImpl extends NetworkHandler.Impl {
 
     @Override
     public void sendToServer(Message msg) {
-        PacketByteBuf buf = new PacketByteBuf(Unpooled.buffer());
+        FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.buffer());
         msg.encode(buf);
         ClientPlayNetworking.send(getMessageIdentifier(msg), buf);
     }
 
     @Override
-    public void sendToPlayer(Message msg, ServerPlayerEntity e) {
-        PacketByteBuf buf = new PacketByteBuf(Unpooled.buffer());
+    public void sendToPlayer(Message msg, ServerPlayer e) {
+        FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.buffer());
         msg.encode(buf);
         ServerPlayNetworking.send(e, getMessageIdentifier(msg), buf);
     }
@@ -62,7 +61,7 @@ public class NetworkHandlerImpl extends NetworkHandler.Impl {
             throw new RuntimeException("new ClientProxy()");
         }
 
-        public static void register(Identifier id) {
+        public static void register(ResourceLocation id) {
             ClientPlayNetworking.registerGlobalReceiver(id, (client, ignore1, buffer, ignore2) -> {
                 Message m = Message.decode(buffer);
                 client.execute(m::receive);

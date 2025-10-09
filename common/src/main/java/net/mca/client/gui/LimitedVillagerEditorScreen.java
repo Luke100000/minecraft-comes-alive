@@ -2,10 +2,8 @@ package net.mca.client.gui;
 
 import net.mca.entity.VillagerLike;
 import net.mca.util.localization.FlowingText;
-import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.util.math.MatrixStack;
-import net.minecraft.text.Text;
-
+import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.network.chat.Component;
 import java.util.List;
 import java.util.UUID;
 
@@ -48,13 +46,13 @@ public class LimitedVillagerEditorScreen extends VillagerEditorScreen {
     }
 
     @Override
-    public void render(DrawContext context, int mouseX, int mouseY, float delta) {
+    public void render(GuiGraphics context, int mouseX, int mouseY, float delta) {
         super.render(context, mouseX, mouseY, delta);
 
         int y = height / 2 + 20;
-        List<Text> wrap = FlowingText.wrap(Text.translatable("gui.villager_editor.customization_hint"), DATA_WIDTH);
-        for (Text text : wrap) {
-            context.drawCenteredTextWithShadow(textRenderer, text, width / 2 + DATA_WIDTH / 2, y, 0xFFFFFFFF);
+        List<Component> wrap = FlowingText.wrap(Component.translatable("gui.villager_editor.customization_hint"), DATA_WIDTH);
+        for (Component text : wrap) {
+            context.drawCenteredString(font, text, width / 2 + DATA_WIDTH / 2, y, 0xFFFFFFFF);
             y += 10;
         }
     }

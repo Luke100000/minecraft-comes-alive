@@ -1,6 +1,6 @@
 package net.mca.entity.ai.pathfinder;
 
-import net.minecraft.entity.ai.pathing.PathNodeType;
+import net.minecraft.world.level.pathfinder.BlockPathTypes;
 
 public enum ExtendedPathNodeType {
     // Vanilla types
@@ -30,22 +30,22 @@ public enum ExtendedPathNodeType {
     COCOA(0.0F),
 
     // MCA custom types
-    GRASS(-1.0f, PathNodeType.BLOCKED),
-    PATH(-1.0f, PathNodeType.BLOCKED),
-    WALKABLE_GRASS(0.0f, PathNodeType.WALKABLE),
-    WALKABLE_PATH(0.0f, PathNodeType.WALKABLE);
+    GRASS(-1.0f, BlockPathTypes.BLOCKED),
+    PATH(-1.0f, BlockPathTypes.BLOCKED),
+    WALKABLE_GRASS(0.0f, BlockPathTypes.WALKABLE),
+    WALKABLE_PATH(0.0f, BlockPathTypes.WALKABLE);
 
     private final float defaultPenalty;
-    private PathNodeType vanilla;
+    private BlockPathTypes vanilla;
 
     ExtendedPathNodeType(float defaultPenalty) {
         this(defaultPenalty, null);
         if (vanilla == null) {
-            vanilla = PathNodeType.valueOf(name());
+            vanilla = BlockPathTypes.valueOf(name());
         }
     }
 
-    ExtendedPathNodeType(float defaultPenalty, PathNodeType vanilla) {
+    ExtendedPathNodeType(float defaultPenalty, BlockPathTypes vanilla) {
         this.defaultPenalty = defaultPenalty;
         this.vanilla = vanilla;
     }
@@ -54,7 +54,7 @@ public enum ExtendedPathNodeType {
         return this.defaultPenalty;
     }
 
-    public PathNodeType toVanilla() {
+    public BlockPathTypes toVanilla() {
         return vanilla;
     }
 

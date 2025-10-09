@@ -4,20 +4,19 @@ import net.mca.Config;
 import net.mca.resources.BuildingTypes;
 import net.mca.resources.data.BuildingType;
 import net.mca.util.NbtHelper;
-import net.minecraft.block.BedBlock;
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.DoorBlock;
-import net.minecraft.block.enums.BedPart;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.registry.Registries;
-import net.minecraft.registry.tag.BlockTags;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Direction;
-import net.minecraft.util.math.Vec3i;
-import net.minecraft.world.World;
-
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.core.Vec3i;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.tags.BlockTags;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.BedBlock;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.DoorBlock;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.BedPart;
 import java.io.Serial;
 import java.io.Serializable;
 import java.util.*;
@@ -31,7 +30,7 @@ public class Building implements Serializable {
             Direction.UP, Direction.DOWN, Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST
     };
 
-    private final Map<Identifier, List<BlockPos>> blocks = new HashMap<>();
+    private final Map<ResourceLocation, List<BlockPos>> blocks = new HashMap<>();
 
     private String type = "building";
     private boolean isTypeForced = false;
@@ -69,7 +68,7 @@ public class Building implements Serializable {
         this.strictScan = strictScan;
     }
 
-    public Building(NbtCompound v) {
+    public Building(CompoundTag v) {
         id = v.getInt("id");
         size = v.getInt("size");
         pos0X = v.getInt("pos0X");
@@ -95,15 +94,15 @@ public class Building implements Serializable {
         strictScan = v.getBoolean("strictScan");
 
         blocks.putAll(NbtHelper.toMap(v.getCompound("blocks2"),
-                Identifier::new,
+                ResourceLocation::new,
                 l -> NbtHelper.toList(l, e -> {
-                    NbtCompound c = (NbtCompound)e;
+                    CompoundTag c = (CompoundTag)e;
                     return new BlockPos(c.getInt("x"), c.getInt("y"), c.getInt("z"));
                 })));
     }
 
-    public NbtCompound save() {
-        NbtCompound v = new NbtCompound();
+    public CompoundTag save() {
+        CompoundTag v = new CompoundTag();
         v.putInt("id", id);
         v.putInt("size", size);
         v.putInt("pos0X", pos0X);
@@ -119,13 +118,13 @@ public class Building implements Serializable {
         v.putString("type", type);
         v.putBoolean("strictScan", strictScan);
 
-        NbtCompound b = new NbtCompound();
+        CompoundTag b = new CompoundTag();
         NbtHelper.fromMap(
                 b,
                 blocks,
-                Identifier::toString,
+                ResourceLocation::toString,
                 e -> NbtHelper.fromList(e, p -> {
-                    NbtCompound entry = new NbtCompound();
+                    CompoundTag entry = new CompoundTag();
                     entry.putInt("x", p.getX());
                     entry.putInt("y", p.getY());
                     entry.putInt("z", p.getZ());
@@ -144,7 +143,7 @@ public class Building implements Serializable {
 
     public BlockPos getPos1() {
         int margin = getBuildingType().getMargin();
-        return new BlockPos(pos1X, pos1Y, pos1Z).add(new Vec3i(margin, margin, margin));
+        return new BlockPos(pos1X, pos1Y, pos1Z).offset(new Vec3i(margin, margin, margin));
     }
 
     public BlockPos getCenter() {
@@ -159,13 +158,13 @@ public class Building implements Serializable {
         return new BlockPos(posX, posY, posZ);
     }
 
-    public void validateBlocks(World world) {
-        setLastScan(world.getTime());
+    public void validateBlocks(Level world) {
+        setLastScan(world.getGameTime());
 
         //remove all invalid blocks
-        for (Map.Entry<Identifier, List<BlockPos>> positions : blocks.entrySet()) {
+        for (Map.Entry<ResourceLocation, List<BlockPos>> positions : blocks.entrySet()) {
             List<BlockPos> mask = positions.getValue().stream()
-                    .filter(p -> !Registries.BLOCK.getId(world.getBlockState(p).getBlock()).equals(positions.getKey()))
+                    .filter(p -> !BuiltInRegistries.BLOCK.getKey(world.getBlockState(p).getBlock()).equals(positions.getKey()))
                     .toList();
             positions.getValue().removeAll(mask);
         }
@@ -175,7 +174,7 @@ public class Building implements Serializable {
         return blocks.values().stream().flatMap(Collection::stream);
     }
 
-    public void addPOI(World world, BlockPos pos) {
+    public void addPOI(Level world, BlockPos pos) {
         Block block = world.getBlockState(pos).getBlock();
         removeBlock(block, pos);
         addBlock(block, pos);
@@ -186,7 +185,7 @@ public class Building implements Serializable {
         //mean center
         int n = (int)getBlockPosStream().count();
         if (n > 0) {
-            BlockPos center = getBlockPosStream().reduce(BlockPos.ORIGIN, BlockPos::add);
+            BlockPos center = getBlockPosStream().reduce(BlockPos.ZERO, BlockPos::offset);
             pos0X = center.getX() / n;
             pos0Y = center.getY() / n;
             pos0Z = center.getZ() / n;
@@ -207,7 +206,7 @@ public class Building implements Serializable {
         INVALID_TYPE
     }
 
-    public validationResult validateBuilding(World world, Set<BlockPos> blocked) {
+    public validationResult validateBuilding(Level world, Set<BlockPos> blocked) {
         //validate grouped buildings differently
         if (getBuildingType().grouped()) {
             validateBlocks(world);
@@ -218,7 +217,7 @@ public class Building implements Serializable {
         blocks.clear();
         size = 0;
 
-        setLastScan(world.getTime());
+        setLastScan(world.getGameTime());
 
         //temp data for flood fill
         Set<BlockPos> done = new HashSet<>();
@@ -248,9 +247,9 @@ public class Building implements Serializable {
             }
 
             //as long the max radius is not reached
-            if (p.getManhattanDistance(center) < maxRadius) {
+            if (p.distManhattan(center) < maxRadius) {
                 for (Direction d : directions) {
-                    BlockPos n = p.offset(d);
+                    BlockPos n = p.relative(d);
 
                     //and the block is not already checked
                     if (!done.contains(n)) {
@@ -266,14 +265,14 @@ public class Building implements Serializable {
                                 int maxScanHeight = 16;
                                 for (int i = 0; i < maxScanHeight; i++) {
                                     roofCache.put(n2, false);
-                                    n2 = n2.up();
+                                    n2 = n2.above();
 
                                     //found valid block
                                     BlockState block = world.getBlockState(n2);
                                     if (!block.isAir() || roofCache.containsKey(n2)) {
-                                        if (!(roofCache.containsKey(n2) && !roofCache.get(n2)) && !block.isIn(BlockTags.LEAVES)) {
+                                        if (!(roofCache.containsKey(n2) && !roofCache.get(n2)) && !block.is(BlockTags.LEAVES)) {
                                             for (int i2 = i; i2 >= 0; i2--) {
-                                                n2 = n2.down();
+                                                n2 = n2.below();
                                                 roofCache.put(n2, true);
                                             }
                                         }
@@ -310,7 +309,7 @@ public class Building implements Serializable {
             return validationResult.NO_DOOR;
         } else {
             //fetch all interesting block types
-            Set<Identifier> blockTypes = new HashSet<>();
+            Set<ResourceLocation> blockTypes = new HashSet<>();
             for (BuildingType bt : BuildingTypes.getInstance()) {
                 blockTypes.addAll(bt.getBlockToGroup().keySet());
             }
@@ -334,10 +333,10 @@ public class Building implements Serializable {
                 //count blocks types
                 BlockState blockState = world.getBlockState(p);
                 Block block = blockState.getBlock();
-                if (blockTypes.contains(Registries.BLOCK.getId(block))) {
+                if (blockTypes.contains(BuiltInRegistries.BLOCK.getKey(block))) {
                     if (block instanceof BedBlock) {
                         // TODO: look for better solution for 7.4.0
-                        if (blockState.get(BedBlock.PART) == BedPart.HEAD) {
+                        if (blockState.getValue(BedBlock.PART) == BedPart.HEAD) {
                             addBlock(block, p);
                         }
                     } else {
@@ -369,7 +368,7 @@ public class Building implements Serializable {
         for (BuildingType bt : BuildingTypes.getInstance()) {
             if (bt.priority() > bestPriority) {
                 //get an overview of the satisfied blocks
-                Map<Identifier, List<BlockPos>> available = bt.getGroups(blocks);
+                Map<ResourceLocation, List<BlockPos>> available = bt.getGroups(blocks);
                 boolean valid = bt.getGroups().entrySet().stream().noneMatch(e -> !available.containsKey(e.getKey()) || available.get(e.getKey()).size() < e.getValue());
                 if (valid) {
                     bestPriority = bt.priority();
@@ -401,18 +400,18 @@ public class Building implements Serializable {
         this.isTypeForced = forced;
     }
 
-    public Map<Identifier, List<BlockPos>> getBlocks() {
+    public Map<ResourceLocation, List<BlockPos>> getBlocks() {
         return blocks;
     }
 
     public void addBlock(Block block, BlockPos p) {
-        Identifier key = Registries.BLOCK.getId(block);
+        ResourceLocation key = BuiltInRegistries.BLOCK.getKey(block);
         blocks.computeIfAbsent(key, k -> new ArrayList<>());
         blocks.get(key).add(p);
     }
 
     public void removeBlock(Block block, BlockPos p) {
-        Identifier key = Registries.BLOCK.getId(block);
+        ResourceLocation key = BuiltInRegistries.BLOCK.getKey(block);
         if (blocks.containsKey(key)) {
             blocks.get(key).remove(p);
         }
@@ -436,7 +435,7 @@ public class Building implements Serializable {
 
     public boolean containsPos(Vec3i pos) {
         if (getBuildingType().grouped()) {
-            return pos.isWithinDistance(getCenter(), getBuildingType().getMargin());
+            return pos.closerThan(getCenter(), getBuildingType().getMargin());
         }
         return pos.getX() >= pos0X && pos.getX() <= pos1X
                 && pos.getY() >= pos0Y && pos.getY() <= pos1Y

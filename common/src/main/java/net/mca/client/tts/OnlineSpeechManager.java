@@ -3,13 +3,12 @@ package net.mca.client.tts;
 import net.mca.Config;
 import net.mca.MCA;
 import net.mca.client.tts.resources.OnlineLanguageMap;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.entity.Entity;
-import net.minecraft.text.ClickEvent;
-import net.minecraft.text.Text;
-import net.minecraft.util.Formatting;
-import net.minecraft.util.Identifier;
-
+import net.minecraft.ChatFormatting;
+import net.minecraft.client.Minecraft;
+import net.minecraft.network.chat.ClickEvent;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.entity.Entity;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -42,13 +41,13 @@ public class OnlineSpeechManager {
                 if (AudioCache.cachedRetrieve(hash, output -> {
                     downloadAudio(output, language, voice, text);
                 })) {
-                    Identifier soundLocation = MCA.locate("tts_cache/" + hash);
+                    ResourceLocation soundLocation = MCA.locate("tts_cache/" + hash);
                     SpeechManager.INSTANCE.playSound(pitch, entity, soundLocation);
                 } else if (!warningIssued) {
                     // Server queued the request but the audio is not ready yet
                     warningIssued = true;
-                    MinecraftClient.getInstance().getMessageHandler().onGameMessage(
-                            Text.translatable("command.tts_busy").formatted(Formatting.ITALIC, Formatting.GRAY),
+                    Minecraft.getInstance().getChatListener().handleSystemMessage(
+                            Component.translatable("command.tts_busy").withStyle(ChatFormatting.ITALIC, ChatFormatting.GRAY),
                             false
                     );
                 }
@@ -57,9 +56,9 @@ public class OnlineSpeechManager {
     }
 
     public static void languageNotSupported() {
-        MinecraftClient.getInstance().inGameHud.getChatHud().addMessage(
-                Text.translatable("command.tts_unsupported_language").styled(s -> s
-                        .withColor(Formatting.RED)
+        Minecraft.getInstance().gui.getChat().addMessage(
+                Component.translatable("command.tts_unsupported_language").withStyle(s -> s
+                        .withColor(ChatFormatting.RED)
                         .withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, "https://github.com/Luke100000/minecraft-comes-alive/wiki/TTS"))));
     }
 

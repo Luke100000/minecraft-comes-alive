@@ -7,10 +7,9 @@ import net.mca.entity.ai.relationship.Gender;
 import net.mca.resources.data.skin.Clothing;
 import net.mca.resources.data.skin.Hair;
 import net.mca.resources.data.skin.SkinListEntry;
-import net.minecraft.client.texture.NativeImage;
-import net.minecraft.client.texture.NativeImageBackedTexture;
-import net.minecraft.util.math.MathHelper;
-
+import net.minecraft.client.renderer.texture.DynamicTexture;
+import net.minecraft.util.Mth;
+import com.mojang.blaze3d.platform.NativeImage;
 import java.util.LinkedList;
 import java.util.Queue;
 
@@ -29,7 +28,7 @@ public final class Workspace {
     public int fillToolThreshold = 32;
 
     public final NativeImage currentImage;
-    public final NativeImageBackedTexture backendTexture;
+    public final DynamicTexture backendTexture;
 
     public LinkedList<NativeImage> history = new LinkedList<>();
 
@@ -38,7 +37,7 @@ public final class Workspace {
 
     public Workspace(NativeImage image) {
         this.currentImage = image;
-        this.backendTexture = new NativeImageBackedTexture(currentImage);
+        this.backendTexture = new DynamicTexture(currentImage);
         this.dirty = true;
     }
 
@@ -71,7 +70,7 @@ public final class Workspace {
     private void fillDeleteFunc(FillTodo entry, Queue<FillTodo> todo, int x, int y) {
         if (x < 0 || y < 0 || x >= 64 || y >= 64) return;
 
-        FillTodo nextEntry = new FillTodo(x, y, currentImage.getRed(x, y), currentImage.getGreen(x, y), currentImage.getBlue(x, y), currentImage.getOpacity(x, y));
+        FillTodo nextEntry = new FillTodo(x, y, currentImage.getRedOrLuminance(x, y), currentImage.getGreenOrLuminance(x, y), currentImage.getBlueOrLuminance(x, y), currentImage.getLuminanceOrAlpha(x, y));
 
         if (Math.abs(nextEntry.red - entry.red) > fillToolThreshold) return;
         if (Math.abs(nextEntry.green - entry.green) > fillToolThreshold) return;
@@ -86,12 +85,12 @@ public final class Workspace {
 
         for (int x = 0; x < 64; x++) {
             for (int y = 0; y < 64; y++) {
-                int r = currentImage.getRed(x, y) & 0xFF;
-                int g = currentImage.getGreen(x, y) & 0xFF;
-                int b = currentImage.getBlue(x, y) & 0xFF;
-                int a = currentImage.getOpacity(x, y) & 0xFF;
-                int l = MathHelper.clamp((int) (0.2126 * r + 0.7152 * g + 0.0722 * b), 0, 255);
-                currentImage.setColor(x, y, a << 24 | l << 16 | l << 8 | l);
+                int r = currentImage.getRedOrLuminance(x, y) & 0xFF;
+                int g = currentImage.getGreenOrLuminance(x, y) & 0xFF;
+                int b = currentImage.getBlueOrLuminance(x, y) & 0xFF;
+                int a = currentImage.getLuminanceOrAlpha(x, y) & 0xFF;
+                int l = Mth.clamp((int) (0.2126 * r + 0.7152 * g + 0.0722 * b), 0, 255);
+                currentImage.setPixelRGBA(x, y, a << 24 | l << 16 | l << 8 | l);
             }
         }
 
@@ -103,11 +102,11 @@ public final class Workspace {
 
         for (int x = 0; x < 64; x++) {
             for (int y = 0; y < 64; y++) {
-                int r = MathHelper.clamp((currentImage.getRed(x, y) & 0xFF) + i, 0, 255);
-                int g = MathHelper.clamp((currentImage.getGreen(x, y) & 0xFF) + i, 0, 255);
-                int b = MathHelper.clamp((currentImage.getBlue(x, y) & 0xFF) + i, 0, 255);
-                int a = currentImage.getOpacity(x, y) & 0xFF;
-                currentImage.setColor(x, y, a << 24 | r << 16 | g << 8 | b);
+                int r = Mth.clamp((currentImage.getRedOrLuminance(x, y) & 0xFF) + i, 0, 255);
+                int g = Mth.clamp((currentImage.getGreenOrLuminance(x, y) & 0xFF) + i, 0, 255);
+                int b = Mth.clamp((currentImage.getBlueOrLuminance(x, y) & 0xFF) + i, 0, 255);
+                int a = currentImage.getLuminanceOrAlpha(x, y) & 0xFF;
+                currentImage.setPixelRGBA(x, y, a << 24 | r << 16 | g << 8 | b);
             }
         }
 
@@ -121,11 +120,11 @@ public final class Workspace {
         int samples = 0;
         for (int x = 0; x < 64; x++) {
             for (int y = 0; y < 64; y++) {
-                int a = currentImage.getOpacity(x, y) & 0xFF;
+                int a = currentImage.getLuminanceOrAlpha(x, y) & 0xFF;
                 if (a > 0) {
-                    average += currentImage.getRed(x, y) & 0xFF;
-                    average += currentImage.getBlue(x, y) & 0xFF;
-                    average += currentImage.getGreen(x, y) & 0xFF;
+                    average += currentImage.getRedOrLuminance(x, y) & 0xFF;
+                    average += currentImage.getBlueOrLuminance(x, y) & 0xFF;
+                    average += currentImage.getGreenOrLuminance(x, y) & 0xFF;
                     samples += 3;
                 }
             }
@@ -134,11 +133,11 @@ public final class Workspace {
 
         for (int x = 0; x < 64; x++) {
             for (int y = 0; y < 64; y++) {
-                int r = MathHelper.clamp((int) (((currentImage.getRed(x, y) & 0xFF) - average) * (1.0f + c) + average), 0, 255);
-                int g = MathHelper.clamp((int) (((currentImage.getGreen(x, y) & 0xFF) - average) * (1.0f + c) + average), 0, 255);
-                int b = MathHelper.clamp((int) (((currentImage.getBlue(x, y) & 0xFF) - average) * (1.0f + c) + average), 0, 255);
-                int a = currentImage.getOpacity(x, y) & 0xFF;
-                currentImage.setColor(x, y, a << 24 | r << 16 | g << 8 | b);
+                int r = Mth.clamp((int) (((currentImage.getRedOrLuminance(x, y) & 0xFF) - average) * (1.0f + c) + average), 0, 255);
+                int g = Mth.clamp((int) (((currentImage.getGreenOrLuminance(x, y) & 0xFF) - average) * (1.0f + c) + average), 0, 255);
+                int b = Mth.clamp((int) (((currentImage.getBlueOrLuminance(x, y) & 0xFF) - average) * (1.0f + c) + average), 0, 255);
+                int a = currentImage.getLuminanceOrAlpha(x, y) & 0xFF;
+                currentImage.setPixelRGBA(x, y, a << 24 | r << 16 | g << 8 | b);
             }
         }
 
@@ -151,16 +150,16 @@ public final class Workspace {
         saveSnapshot(true);
 
         Queue<FillTodo> todo = new LinkedList<>();
-        todo.add(new FillTodo(x, y, currentImage.getRed(x, y), currentImage.getGreen(x, y), currentImage.getBlue(x, y), currentImage.getOpacity(x, y)));
+        todo.add(new FillTodo(x, y, currentImage.getRedOrLuminance(x, y), currentImage.getGreenOrLuminance(x, y), currentImage.getBlueOrLuminance(x, y), currentImage.getLuminanceOrAlpha(x, y)));
 
         while (!todo.isEmpty()) {
             FillTodo entry = todo.poll();
 
-            if (currentImage.getOpacity(entry.x, entry.y) == 0) {
+            if (currentImage.getLuminanceOrAlpha(entry.x, entry.y) == 0) {
                 continue;
             }
 
-            currentImage.setColor(entry.x, entry.y, 0);
+            currentImage.setPixelRGBA(entry.x, entry.y, 0);
             dirty = true;
 
             for (int ox = -1; ox <= 1; ox++) {

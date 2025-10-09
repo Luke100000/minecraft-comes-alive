@@ -2,49 +2,49 @@ package net.mca.advancement.criterion;
 
 import com.google.gson.JsonObject;
 import net.mca.MCA;
-import net.minecraft.advancement.criterion.AbstractCriterion;
-import net.minecraft.advancement.criterion.AbstractCriterionConditions;
-import net.minecraft.predicate.NumberRange;
-import net.minecraft.predicate.entity.AdvancementEntityPredicateDeserializer;
-import net.minecraft.predicate.entity.AdvancementEntityPredicateSerializer;
-import net.minecraft.predicate.entity.LootContextPredicate;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.util.Identifier;
+import net.minecraft.advancements.critereon.AbstractCriterionTriggerInstance;
+import net.minecraft.advancements.critereon.ContextAwarePredicate;
+import net.minecraft.advancements.critereon.DeserializationContext;
+import net.minecraft.advancements.critereon.MinMaxBounds;
+import net.minecraft.advancements.critereon.SerializationContext;
+import net.minecraft.advancements.critereon.SimpleCriterionTrigger;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerPlayer;
 
-public class BabySirbenSmeltedCriterion extends AbstractCriterion<BabySirbenSmeltedCriterion.Conditions> {
-    private static final Identifier ID = MCA.locate("baby_sirben_smelted");
+public class BabySirbenSmeltedCriterion extends SimpleCriterionTrigger<BabySirbenSmeltedCriterion.Conditions> {
+    private static final ResourceLocation ID = MCA.locate("baby_sirben_smelted");
 
     @Override
-    public Identifier getId() {
+    public ResourceLocation getId() {
         return ID;
     }
 
     @Override
-    public Conditions conditionsFromJson(JsonObject json, LootContextPredicate player, AdvancementEntityPredicateDeserializer deserializer) {
-        NumberRange.IntRange c = NumberRange.IntRange.atLeast(json.get("count").getAsInt());
+    public Conditions createInstance(JsonObject json, ContextAwarePredicate player, DeserializationContext deserializer) {
+        MinMaxBounds.Ints c = MinMaxBounds.Ints.atLeast(json.get("count").getAsInt());
         return new Conditions(player, c);
     }
 
-    public void trigger(ServerPlayerEntity player, int c) {
+    public void trigger(ServerPlayer player, int c) {
         trigger(player, (conditions) -> conditions.test(c));
     }
 
-    public static class Conditions extends AbstractCriterionConditions {
-        private final NumberRange.IntRange count;
+    public static class Conditions extends AbstractCriterionTriggerInstance {
+        private final MinMaxBounds.Ints count;
 
-        public Conditions(LootContextPredicate player, NumberRange.IntRange count) {
+        public Conditions(ContextAwarePredicate player, MinMaxBounds.Ints count) {
             super(BabySirbenSmeltedCriterion.ID, player);
             this.count = count;
         }
 
         public boolean test(int c) {
-            return count.test(c);
+            return count.matches(c);
         }
 
         @Override
-        public JsonObject toJson(AdvancementEntityPredicateSerializer serializer) {
-            JsonObject json = super.toJson(serializer);
-            json.add("count", count.toJson());
+        public JsonObject serializeToJson(SerializationContext serializer) {
+            JsonObject json = super.serializeToJson(serializer);
+            json.add("count", count.serializeToJson());
             return json;
         }
     }

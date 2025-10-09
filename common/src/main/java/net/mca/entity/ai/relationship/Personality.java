@@ -1,11 +1,10 @@
 package net.mca.entity.ai.relationship;
 
-import net.minecraft.text.Text;
-import net.minecraft.util.math.random.Random;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import net.minecraft.network.chat.Component;
+import net.minecraft.util.RandomSource;
 
 public enum Personality {
     //Fallback on error.
@@ -25,7 +24,7 @@ public enum Personality {
     GRUMPY,        //Hard to talk to -- TODO: 7.4.0
     PEPPY;         //They're super loud and hyperactive
 
-    private static final Random random = Random.create();
+    private static final RandomSource random = RandomSource.create();
 
     public static Personality getRandom() {
         List<Personality> validList = new ArrayList<>();
@@ -49,11 +48,11 @@ public enum Personality {
         return 1;
     }
 
-    public Text getName() {
-        return Text.translatable("personality." + name().toLowerCase(Locale.ENGLISH));
+    public Component getName() {
+        return Component.translatable("personality." + name().toLowerCase(Locale.ENGLISH));
     }
 
-    public Text getDescription() {
-        return Text.translatable("personalityDescription." + name().toLowerCase(Locale.ENGLISH));
+    public Component getDescription() {
+        return Component.translatable("personalityDescription." + name().toLowerCase(Locale.ENGLISH));
     }
 }

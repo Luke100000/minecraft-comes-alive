@@ -17,18 +17,18 @@ import net.mca.server.world.data.FamilyTreeNode;
 import net.mca.server.world.data.GraveyardManager;
 import net.mca.util.WorldUtils;
 import net.mca.util.network.datasync.CDataManager;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.ai.brain.BlockPosLookTarget;
-import net.minecraft.entity.ai.brain.MemoryModuleType;
-import net.minecraft.entity.ai.brain.WalkTarget;
-import net.minecraft.entity.damage.DamageSource;
-import net.minecraft.entity.damage.DamageTypes;
-import net.minecraft.entity.mob.MobEntity;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.math.BlockPos;
+import net.minecraft.core.BlockPos;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.world.damagesource.DamageTypes;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.ai.behavior.BlockPosTracker;
+import net.minecraft.world.entity.ai.memory.MemoryModuleType;
+import net.minecraft.world.entity.ai.memory.WalkTarget;
+import net.minecraft.world.entity.player.Player;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -39,7 +39,7 @@ import java.util.function.BiPredicate;
 /**
  * I know you, you know me, we're all a big happy family.
  */
-public class Relationship<T extends MobEntity & VillagerLike<T>> implements EntityRelationship {
+public class Relationship<T extends Mob & VillagerLike<T>> implements EntityRelationship {
     public static final Predicate IS_MARRIED = (villager, player) -> villager.getRelationships().isMarriedTo(player);
     public static final Predicate IS_ENGAGED = (villager, player) -> villager.getRelationships().isEngagedWith(player);
     public static final Predicate IS_PROMISED = (villager, player) -> villager.getRelationships().isPromisedTo(player);
@@ -67,13 +67,13 @@ public class Relationship<T extends MobEntity & VillagerLike<T>> implements Enti
     }
 
     @Override
-    public ServerWorld getWorld() {
-        return (ServerWorld) entity.getWorld();
+    public ServerLevel getWorld() {
+        return (ServerLevel) entity.level();
     }
 
     @Override
     public UUID getUUID() {
-        return entity.getUuid();
+        return entity.getUUID();
     }
 
     @NotNull
@@ -82,22 +82,22 @@ public class Relationship<T extends MobEntity & VillagerLike<T>> implements Enti
         return getFamilyTree().getOrCreate(entity);
     }
 
-    private Optional<BlockPos> placeTombstone(ServerWorld world, BlockPos entityPos) {
+    private Optional<BlockPos> placeTombstone(ServerLevel world, BlockPos entityPos) {
         int range = 2;
         for (int y = -range; y <= range; y++) {
             // prefer center
-            BlockPos pos = entityPos.add(0, y, 0);
+            BlockPos pos = entityPos.offset(0, y, 0);
             if (world.getBlockState(pos).isAir()) {
-                world.setBlockState(pos, BlocksMCA.CROSS_HEADSTONE.get().getDefaultState());
+                world.setBlockAndUpdate(pos, BlocksMCA.CROSS_HEADSTONE.get().defaultBlockState());
                 return Optional.ofNullable(pos);
             }
 
             for (int x = -range; x <= range; x++) {
                 for (int z = -range; z <= range; z++) {
                     if (x != 0 || z != 0) {
-                        pos = entityPos.add(x, y, z);
+                        pos = entityPos.offset(x, y, z);
                         if (world.getBlockState(pos).isAir()) {
-                            world.setBlockState(pos, BlocksMCA.CROSS_HEADSTONE.get().getDefaultState());
+                            world.setBlockAndUpdate(pos, BlocksMCA.CROSS_HEADSTONE.get().defaultBlockState());
                             return Optional.ofNullable(pos);
                         }
                     }
@@ -114,19 +114,19 @@ public class Relationship<T extends MobEntity & VillagerLike<T>> implements Enti
         if (beRemembered || beLoved || !entity.isHostile()) {
             getFamilyEntry().setDeceased(true);
 
-            ServerWorld world = (ServerWorld) entity.getWorld();
+            ServerLevel world = (ServerLevel) entity.level();
 
             // look for a gravestone
-            Optional<BlockPos> nearest = GraveyardManager.get(world).findNearest(entity.getBlockPos(), GraveyardManager.TombstoneState.EMPTY, 10);
+            Optional<BlockPos> nearest = GraveyardManager.get(world).findNearest(entity.blockPosition(), GraveyardManager.TombstoneState.EMPTY, 10);
 
             // if no one was found, try to place one
             if ((beRemembered || beLoved) && nearest.isEmpty()) {
-                nearest = placeTombstone(world, entity.getBlockPos());
+                nearest = placeTombstone(world, entity.blockPosition());
             }
 
             // fill it and yeet the villager into depression
             nearest.ifPresentOrElse(pos -> {
-                if (entity.getWorld().getBlockState(pos).isIn(TagsMCA.Blocks.TOMBSTONES) && entity.getWorld().getBlockEntity(pos) instanceof TombstoneBlock.Data tombstone) {
+                if (entity.level().getBlockState(pos).is(TagsMCA.Blocks.TOMBSTONES) && entity.level().getBlockEntity(pos) instanceof TombstoneBlock.Data tombstone) {
                     onTragedy(cause, pos);
                     tombstone.setEntity(entity);
                 } else {
@@ -144,7 +144,7 @@ public class Relationship<T extends MobEntity & VillagerLike<T>> implements Enti
             getFamilyEntry().streamParents().forEach(uuid -> {
                 getFamilyTree().remove(uuid);
             });
-            getFamilyTree().remove(entity.getUuid());
+            getFamilyTree().remove(entity.getUUID());
         }
     }
 
@@ -152,7 +152,7 @@ public class Relationship<T extends MobEntity & VillagerLike<T>> implements Enti
         // The death of a villager negatively modifies the mood of nearby strangers
         if (!entity.isHostile()) {
             WorldUtils
-                    .getCloseEntities(entity.getWorld(), entity, 32, VillagerEntityMCA.class)
+                    .getCloseEntities(entity.level(), entity, 32, VillagerEntityMCA.class)
                     .forEach(villager -> villager.getRelationships().onTragedy(cause, burialSite, RelationshipType.STRANGER, entity));
         }
 
@@ -161,22 +161,22 @@ public class Relationship<T extends MobEntity & VillagerLike<T>> implements Enti
 
     @Override
     public void onTragedy(DamageSource cause, @Nullable BlockPos burialSite, RelationshipType type, Entity with) {
-        if (!cause.isOf(DamageTypes.OUT_OF_WORLD)) {
+        if (!cause.is(DamageTypes.FELL_OUT_OF_WORLD)) {
             int moodAffect = 5 * type.getProximityAmplifier();
-            entity.getWorld().sendEntityStatus(entity, Status.MCA_VILLAGER_TRAGEDY);
+            entity.level().broadcastEntityEvent(entity, Status.MCA_VILLAGER_TRAGEDY);
             entity.getVillagerBrain().modifyMoodValue(-moodAffect);
 
             // seen murder
-            if (cause.getAttacker() instanceof PlayerEntity player) {
+            if (cause.getEntity() instanceof Player player) {
                 entity.getVillagerBrain().getMemoriesForPlayer(player).modHearts(-20);
             }
         }
 
         if (burialSite != null && type != RelationshipType.STRANGER) {
             entity.getVillagerBrain().setGrieving();
-            entity.getBrain().remember(MemoryModuleType.WALK_TARGET, new WalkTarget(burialSite, 1, 1));
-            entity.getBrain().remember(MemoryModuleType.LOOK_TARGET, new BlockPosLookTarget(burialSite));
-            entity.getBrain().doExclusively(ActivityMCA.GRIEVE.get());
+            entity.getBrain().setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(burialSite, 1, 1));
+            entity.getBrain().setMemory(MemoryModuleType.LOOK_TARGET, new BlockPosTracker(burialSite));
+            entity.getBrain().setActiveActivityIfPossible(ActivityMCA.GRIEVE.get());
         }
 
         EntityRelationship.super.onTragedy(cause, burialSite, type, with);
@@ -186,11 +186,11 @@ public class Relationship<T extends MobEntity & VillagerLike<T>> implements Enti
         return giftSaturation;
     }
 
-    public void readFromNbt(NbtCompound nbt) {
+    public void readFromNbt(CompoundTag nbt) {
         giftSaturation.readFromNbt(nbt.getList("giftSaturationQueue", 8));
     }
 
-    public void writeToNbt(NbtCompound nbt) {
+    public void writeToNbt(CompoundTag nbt) {
         nbt.put("giftSaturationQueue", giftSaturation.toNbt());
     }
 
@@ -200,7 +200,7 @@ public class Relationship<T extends MobEntity & VillagerLike<T>> implements Enti
 
         @Override
         default boolean test(CompassionateEntity<?> villager, Entity partner) {
-            return partner != null && test(villager, partner.getUuid());
+            return partner != null && test(villager, partner.getUUID());
         }
 
         default Predicate or(Predicate b) {
@@ -212,7 +212,7 @@ public class Relationship<T extends MobEntity & VillagerLike<T>> implements Enti
             return (villager, partner) -> !test(villager, partner);
         }
 
-        default BiPredicate<VillagerLike<?>, ServerPlayerEntity> asConstraint() {
+        default BiPredicate<VillagerLike<?>, ServerPlayer> asConstraint() {
             return (villager, player) -> villager instanceof CompassionateEntity<?> && (test((CompassionateEntity<?>) villager, player));
         }
     }

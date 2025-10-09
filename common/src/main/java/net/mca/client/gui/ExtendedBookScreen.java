@@ -4,32 +4,32 @@ import net.mca.client.book.Book;
 import net.mca.client.book.pages.Page;
 import net.mca.client.gui.widget.ExtendedPageTurnWidget;
 import net.mca.util.compat.ButtonWidget;
-import net.minecraft.client.font.TextRenderer;
-import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.client.gui.widget.PageTurnWidget;
-import net.minecraft.client.util.NarratorManager;
-import net.minecraft.screen.ScreenTexts;
-import net.minecraft.text.ClickEvent;
-import net.minecraft.text.Style;
-import net.minecraft.text.Text;
-import net.minecraft.util.math.MathHelper;
+import net.minecraft.client.GameNarrator;
+import net.minecraft.client.gui.Font;
+import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.screens.inventory.PageButton;
+import net.minecraft.network.chat.ClickEvent;
+import net.minecraft.network.chat.CommonComponents;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.Style;
+import net.minecraft.util.Mth;
 
 public class ExtendedBookScreen extends Screen {
     private int pageIndex;
-    private PageTurnWidget nextPageButton;
-    private PageTurnWidget previousPageButton;
+    private PageButton nextPageButton;
+    private PageButton previousPageButton;
     private final Book book;
 
     public ExtendedBookScreen(Book book) {
-        super(NarratorManager.EMPTY);
+        super(GameNarrator.NO_TITLE);
         this.book = book;
         book.open();
         book.setPage(0, false);
     }
 
     public boolean setPage(int index) {
-        int i = MathHelper.clamp(index, 0, this.book.getPageCount() - 1);
+        int i = Mth.clamp(index, 0, this.book.getPageCount() - 1);
         if (i != this.pageIndex) {
             book.setPage(i, false);
             this.pageIndex = i;
@@ -51,13 +51,13 @@ public class ExtendedBookScreen extends Screen {
     }
 
     protected void addCloseButton() {
-        addDrawableChild(new ButtonWidget(width / 2 - 100, 196, 200, 20, ScreenTexts.DONE, (buttonWidget) -> this.client.setScreen(null)));
+        addRenderableWidget(new ButtonWidget(width / 2 - 100, 196, 200, 20, CommonComponents.GUI_DONE, (buttonWidget) -> this.minecraft.setScreen(null)));
     }
 
     protected void addPageButtons() {
         int i = (width - 192) / 2;
-        nextPageButton = addDrawableChild(new ExtendedPageTurnWidget(i + 116, 159, true, (buttonWidget) -> goToNextPage(), book.hasPageTurnSound(), book.getBackground()));
-        previousPageButton = addDrawableChild(new ExtendedPageTurnWidget(i + 43, 159, false, (buttonWidget) -> goToPreviousPage(), book.hasPageTurnSound(), book.getBackground()));
+        nextPageButton = addRenderableWidget(new ExtendedPageTurnWidget(i + 116, 159, true, (buttonWidget) -> goToNextPage(), book.hasPageTurnSound(), book.getBackground()));
+        previousPageButton = addRenderableWidget(new ExtendedPageTurnWidget(i + 43, 159, false, (buttonWidget) -> goToPreviousPage(), book.hasPageTurnSound(), book.getBackground()));
         updatePageButtons();
     }
 
@@ -104,23 +104,23 @@ public class ExtendedBookScreen extends Screen {
         }
     }
 
-    public TextRenderer getTextRenderer() {
-        return textRenderer;
+    public Font getTextRenderer() {
+        return font;
     }
 
     @Override
-    public void render(DrawContext context, int mouseX, int mouseY, float delta) {
+    public void render(GuiGraphics context, int mouseX, int mouseY, float delta) {
         renderBackground(context);
 
         // background
         int i = (width - 192) / 2;
-        context.drawTexture(book.getBackground(), i, 2, 0, 0, 192, 192);
+        context.blit(book.getBackground(), i, 2, 0, 0, 192, 192);
 
         // page number
         if (book.showPageCount()) {
-            Text pageIndexText = Text.translatable("book.pageIndicator", this.pageIndex + 1, Math.max(book.getPageCount(), 1)).formatted(book.getTextFormatting());
-            int k = textRenderer.getWidth(pageIndexText);
-            context.drawText(textRenderer, pageIndexText, i - k + 192 - 44, 18, 0, getBook().hasTextShadow());
+            Component pageIndexText = Component.translatable("book.pageIndicator", this.pageIndex + 1, Math.max(book.getPageCount(), 1)).withStyle(book.getTextFormatting());
+            int k = font.width(pageIndexText);
+            context.drawString(font, pageIndexText, i - k + 192 - 44, 18, 0, getBook().hasTextShadow());
         }
 
         Page page = book.getPage(pageIndex);
@@ -137,7 +137,7 @@ public class ExtendedBookScreen extends Screen {
     }
 
     @Override
-    public boolean handleTextClick(Style style) {
+    public boolean handleComponentClicked(Style style) {
         ClickEvent clickEvent = style.getClickEvent();
         if (clickEvent == null) {
             return false;
@@ -151,9 +151,9 @@ public class ExtendedBookScreen extends Screen {
             }
         }
 
-        boolean handled = super.handleTextClick(style);
+        boolean handled = super.handleComponentClicked(style);
         if (handled && clickEvent.getAction() == ClickEvent.Action.RUN_COMMAND) {
-            client.setScreen(null);
+            minecraft.setScreen(null);
         }
 
         return handled;

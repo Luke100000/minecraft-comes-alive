@@ -1,6 +1,6 @@
 package net.mca.entity.ai.relationship;
 
-import net.minecraft.util.math.MathHelper;
+import net.minecraft.util.Mth;
 
 public interface VillagerDimensions {
     float getWidth();
@@ -42,10 +42,10 @@ public interface VillagerDimensions {
         }
 
         public void interpolate(VillagerDimensions a, VillagerDimensions b, float f) {
-            width = MathHelper.lerp(f, a.getWidth(), b.getWidth());
-            height = MathHelper.lerp(f, a.getHeight(), b.getHeight());
-            breasts = MathHelper.lerp(f, a.getBreasts(), b.getBreasts());
-            head = MathHelper.lerp(f, a.getHead(), b.getHead());
+            width = Mth.lerp(f, a.getWidth(), b.getWidth());
+            height = Mth.lerp(f, a.getHeight(), b.getHeight());
+            breasts = Mth.lerp(f, a.getBreasts(), b.getBreasts());
+            head = Mth.lerp(f, a.getHead(), b.getHead());
         }
 
         public void set(VillagerDimensions a) {

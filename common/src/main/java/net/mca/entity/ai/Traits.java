@@ -5,16 +5,15 @@ import net.mca.entity.VillagerLike;
 import net.mca.util.network.datasync.CDataManager;
 import net.mca.util.network.datasync.CDataParameter;
 import net.mca.util.network.datasync.CParameter;
-import net.minecraft.entity.Entity;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.text.Text;
-import net.minecraft.util.math.random.Random;
-
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.chat.Component;
+import net.minecraft.util.RandomSource;
+import net.minecraft.world.entity.Entity;
 import java.util.*;
 import java.util.stream.Collectors;
 
 public class Traits {
-    private static final CDataParameter<NbtCompound> TRAITS = CParameter.create("traits", new NbtCompound());
+    private static final CDataParameter<CompoundTag> TRAITS = CParameter.create("traits", new CompoundTag());
 
     public static final Map<String, Trait> TRAIT_REGISTRY = new HashMap<>();
 
@@ -71,12 +70,12 @@ public class Traits {
             return TRAIT_REGISTRY.getOrDefault(id.toUpperCase(Locale.ROOT), UNKNOWN);
         }
 
-        public Text getName() {
-            return Text.translatable("trait." + id().toLowerCase(Locale.ROOT));
+        public Component getName() {
+            return Component.translatable("trait." + id().toLowerCase(Locale.ROOT));
         }
 
-        public Text getDescription() {
-            return Text.translatable("traitDescription." + id().toLowerCase(Locale.ROOT));
+        public Component getDescription() {
+            return Component.translatable("traitDescription." + id().toLowerCase(Locale.ROOT));
         }
 
         public boolean isUsableOnPlayer() {
@@ -92,7 +91,7 @@ public class Traits {
         return builder.addAll(TRAITS);
     }
 
-    private Random random = Random.create();
+    private RandomSource random = RandomSource.create();
 
     private final VillagerLike<?> entity;
 
@@ -101,7 +100,7 @@ public class Traits {
     }
 
     public Set<Trait> getTraits() {
-        return entity.getTrackedValue(TRAITS).getKeys().stream().map(Trait::valueOf).collect(Collectors.toSet());
+        return entity.getTrackedValue(TRAITS).getAllKeys().stream().map(Trait::valueOf).collect(Collectors.toSet());
     }
 
     public Set<Trait> getInheritedTraits() {
@@ -132,13 +131,13 @@ public class Traits {
     }
 
     public void addTrait(Trait trait) {
-        NbtCompound traits = entity.getTrackedValue(TRAITS).copy();
+        CompoundTag traits = entity.getTrackedValue(TRAITS).copy();
         traits.putBoolean(trait.id(), true);
         entity.setTrackedValue(TRAITS, traits);
     }
 
     public void removeTrait(Trait trait) {
-        NbtCompound traits = entity.getTrackedValue(TRAITS).copy();
+        CompoundTag traits = entity.getTrackedValue(TRAITS).copy();
         traits.remove(trait.id());
         entity.setTrackedValue(TRAITS, traits);
     }
@@ -161,8 +160,8 @@ public class Traits {
     }
 
     public void inherit(Traits from, long seed) {
-        Random old = random;
-        random = Random.create(seed);
+        RandomSource old = random;
+        random = RandomSource.create(seed);
         inherit(from);
         random = old;
     }

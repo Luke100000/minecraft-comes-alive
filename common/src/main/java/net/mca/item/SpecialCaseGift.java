@@ -1,9 +1,9 @@
 package net.mca.item;
 
 import net.mca.entity.VillagerEntityMCA;
-import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.server.level.ServerPlayer;
 
 public interface SpecialCaseGift {
 
-    boolean handle(ServerPlayerEntity player, VillagerEntityMCA villager);
+    boolean handle(ServerPlayer player, VillagerEntityMCA villager);
 }

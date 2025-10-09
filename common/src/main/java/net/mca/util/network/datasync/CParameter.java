@@ -1,49 +1,48 @@
 package net.mca.util.network.datasync;
 
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.data.DataTracker;
-import net.minecraft.entity.data.TrackedData;
-import net.minecraft.entity.data.TrackedDataHandlerRegistry;
-import net.minecraft.item.ItemStack;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.util.math.BlockPos;
-
 import java.util.Optional;
 import java.util.UUID;
+import net.minecraft.core.BlockPos;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.syncher.EntityDataAccessor;
+import net.minecraft.network.syncher.EntityDataSerializers;
+import net.minecraft.network.syncher.SynchedEntityData;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.item.ItemStack;
 
 public interface CParameter<T, TrackedType> {
     static CDataParameter<Integer> create(String id, int def) {
-        return new CDataParameter<>(id, TrackedDataHandlerRegistry.INTEGER, def, (nbt, key) -> NbtCompoundDefaultGetters.getInt(nbt, key, def), NbtCompound::putInt);
+        return new CDataParameter<>(id, EntityDataSerializers.INT, def, (nbt, key) -> NbtCompoundDefaultGetters.getInt(nbt, key, def), CompoundTag::putInt);
     }
 
     static CDataParameter<Float> create(String id, float def) {
-        return new CDataParameter<>(id, TrackedDataHandlerRegistry.FLOAT, def, (nbt, key) -> NbtCompoundDefaultGetters.getFloat(nbt, key, def), NbtCompound::putFloat);
+        return new CDataParameter<>(id, EntityDataSerializers.FLOAT, def, (nbt, key) -> NbtCompoundDefaultGetters.getFloat(nbt, key, def), CompoundTag::putFloat);
     }
 
     static CDataParameter<Boolean> create(String id, boolean def) {
-        return new CDataParameter<>(id, TrackedDataHandlerRegistry.BOOLEAN, def, NbtCompound::getBoolean, NbtCompound::putBoolean);
+        return new CDataParameter<>(id, EntityDataSerializers.BOOLEAN, def, CompoundTag::getBoolean, CompoundTag::putBoolean);
     }
 
     static CDataParameter<String> create(String id, String def) {
-        return new CDataParameter<>(id, TrackedDataHandlerRegistry.STRING, def, (nbt, key) -> NbtCompoundDefaultGetters.getString(nbt, key, def), NbtCompound::putString);
+        return new CDataParameter<>(id, EntityDataSerializers.STRING, def, (nbt, key) -> NbtCompoundDefaultGetters.getString(nbt, key, def), CompoundTag::putString);
     }
 
-    static CDataParameter<NbtCompound> create(String id, NbtCompound def) {
-        return new CDataParameter<>(id, TrackedDataHandlerRegistry.NBT_COMPOUND, def, (nbt, key) -> NbtCompoundDefaultGetters.getCompound(nbt, key, def), NbtCompound::put);
+    static CDataParameter<CompoundTag> create(String id, CompoundTag def) {
+        return new CDataParameter<>(id, EntityDataSerializers.COMPOUND_TAG, def, (nbt, key) -> NbtCompoundDefaultGetters.getCompound(nbt, key, def), CompoundTag::put);
     }
 
     static CDataParameter<ItemStack> create(String id, ItemStack def) {
-    	return new CDataParameter<>("babyItem", TrackedDataHandlerRegistry.ITEM_STACK, ItemStack.EMPTY,
+    	return new CDataParameter<>("babyItem", EntityDataSerializers.ITEM_STACK, ItemStack.EMPTY,
 			(nbt, key) -> NbtCompoundDefaultGetters.getItemStack(nbt, key, ItemStack.EMPTY), (nbt, key, stack) ->
 			{
-				NbtCompound item = new NbtCompound();
-				stack.writeNbt(item);
+				CompoundTag item = new CompoundTag();
+				stack.save(item);
 				nbt.put(key, item);
 			});
     }
 
     static CDataParameter<BlockPos> create(String id, BlockPos def) {
-        return new CDataParameter<>(id, TrackedDataHandlerRegistry.BLOCK_POS, def,
+        return new CDataParameter<>(id, EntityDataSerializers.BLOCK_POS, def,
                 (tag, key) -> new BlockPos(
                     tag.getInt(key + "X"),
                     tag.getInt(key + "Y"),
@@ -57,9 +56,9 @@ public interface CParameter<T, TrackedType> {
     }
 
     static CDataParameter<Optional<UUID>> create(String id, Optional<UUID> def) {
-        return new CDataParameter<>(id, TrackedDataHandlerRegistry.OPTIONAL_UUID, def,
-                (tag, key) -> tag.containsUuid(key) ? Optional.of(tag.getUuid(key)) : Optional.empty(),
-                (tag, key, v) -> v.ifPresent(uuid -> tag.putUuid(key, uuid)));
+        return new CDataParameter<>(id, EntityDataSerializers.OPTIONAL_UUID, def,
+                (tag, key) -> tag.hasUUID(key) ? Optional.of(tag.getUUID(key)) : Optional.empty(),
+                (tag, key, v) -> v.ifPresent(uuid -> tag.putUUID(key, uuid)));
     }
 
     @SuppressWarnings("unchecked")
@@ -73,13 +72,13 @@ public interface CParameter<T, TrackedType> {
 
     TrackedType getDefault();
 
-    T get(TrackedData<TrackedType> param, DataTracker tracker);
+    T get(EntityDataAccessor<TrackedType> param, SynchedEntityData tracker);
 
-    void set(TrackedData<TrackedType> param, DataTracker tracker, T v);
+    void set(EntityDataAccessor<TrackedType> param, SynchedEntityData tracker, T v);
 
-    T load(NbtCompound nbt);
+    T load(CompoundTag nbt);
 
-    void save(NbtCompound nbt, T value);
+    void save(CompoundTag nbt, T value);
 
-    TrackedData<TrackedType> createParam(Class<? extends Entity> type);
+    EntityDataAccessor<TrackedType> createParam(Class<? extends Entity> type);
 }

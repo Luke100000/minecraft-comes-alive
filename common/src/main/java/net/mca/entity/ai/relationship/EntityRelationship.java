@@ -4,14 +4,14 @@ import net.mca.advancement.criterion.CriterionMCA;
 import net.mca.server.world.data.FamilyTree;
 import net.mca.server.world.data.FamilyTreeNode;
 import net.mca.server.world.data.PlayerSaveData;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.damage.DamageSource;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.text.Text;
-import net.minecraft.util.Util;
-import net.minecraft.util.math.BlockPos;
+import net.minecraft.Util;
+import net.minecraft.core.BlockPos;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.player.Player;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -30,7 +30,7 @@ public interface EntityRelationship {
         return FamilyTree.get(getWorld());
     }
 
-    ServerWorld getWorld();
+    ServerLevel getWorld();
 
     UUID getUUID();
 
@@ -42,7 +42,7 @@ public interface EntityRelationship {
                 .getRelatives(parents, children)
                 .map(getWorld()::getEntity)
                 .filter(Objects::nonNull)
-                .filter(e -> !e.getUuid().equals(getUUID()));
+                .filter(e -> !e.getUUID().equals(getUUID()));
     }
 
     default Stream<Entity> getParents() {
@@ -91,22 +91,22 @@ public interface EntityRelationship {
     }
 
     default void marry(Entity spouse) {
-        RelationshipState state = spouse instanceof PlayerEntity ? RelationshipState.MARRIED_TO_PLAYER : RelationshipState.MARRIED_TO_VILLAGER;
-        if (spouse instanceof ServerPlayerEntity spouseEntity) {
+        RelationshipState state = spouse instanceof Player ? RelationshipState.MARRIED_TO_PLAYER : RelationshipState.MARRIED_TO_VILLAGER;
+        if (spouse instanceof ServerPlayer spouseEntity) {
             CriterionMCA.GENERIC_EVENT_CRITERION.trigger(spouseEntity, "marriage");
         }
         getFamilyEntry().updatePartner(spouse, state);
     }
 
     default void engage(Entity spouse) {
-        if (spouse instanceof ServerPlayerEntity spouseEntity) {
+        if (spouse instanceof ServerPlayer spouseEntity) {
             CriterionMCA.GENERIC_EVENT_CRITERION.trigger(spouseEntity, "engage");
         }
         getFamilyEntry().updatePartner(spouse, RelationshipState.ENGAGED);
     }
 
     default void promise(Entity spouse) {
-        if (spouse instanceof ServerPlayerEntity spouseEntity) {
+        if (spouse instanceof ServerPlayer spouseEntity) {
             CriterionMCA.GENERIC_EVENT_CRITERION.trigger(spouseEntity, "promise");
         }
         getFamilyEntry().updatePartner(spouse, RelationshipState.PROMISED);
@@ -129,8 +129,8 @@ public interface EntityRelationship {
         }
     }
 
-    default Optional<Text> getPartnerName() {
-        return getFamilyTree().getOrEmpty(getFamilyEntry().partner()).map(FamilyTreeNode::getName).map(Text::literal);
+    default Optional<Component> getPartnerName() {
+        return getFamilyTree().getOrEmpty(getFamilyEntry().partner()).map(FamilyTreeNode::getName).map(Component::literal);
     }
 
     default boolean isMarried() {
@@ -158,7 +158,7 @@ public interface EntityRelationship {
     }
 
     static Optional<EntityRelationship> of(Entity entity) {
-        if (entity instanceof ServerPlayerEntity player) {
+        if (entity instanceof ServerPlayer player) {
             return Optional.ofNullable(PlayerSaveData.get(player));
         }
 

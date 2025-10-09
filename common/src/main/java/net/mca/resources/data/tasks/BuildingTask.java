@@ -2,11 +2,10 @@ package net.mca.resources.data.tasks;
 
 import com.google.gson.JsonObject;
 import net.mca.server.world.data.Village;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.text.MutableText;
-import net.minecraft.text.Text;
-import net.minecraft.util.JsonHelper;
-
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.util.GsonHelper;
 import java.io.Serial;
 
 public class BuildingTask extends Task {
@@ -21,7 +20,7 @@ public class BuildingTask extends Task {
     }
 
     public BuildingTask(JsonObject json) {
-        this(JsonHelper.getString(json, "building"));
+        this(GsonHelper.getAsString(json, "building"));
     }
 
     @Override
@@ -30,13 +29,13 @@ public class BuildingTask extends Task {
     }
 
     @Override
-    public boolean isCompleted(Village village, ServerPlayerEntity player) {
+    public boolean isCompleted(Village village, ServerPlayer player) {
         return village.getBuildings().values().stream()
                 .anyMatch(b -> b.getType().equals(type));
     }
 
     @Override
-    public MutableText getTranslatable() {
-        return Text.translatable("task.build", Text.translatable("buildingType." + type));
+    public MutableComponent getTranslatable() {
+        return Component.translatable("task.build", Component.translatable("buildingType." + type));
     }
 }

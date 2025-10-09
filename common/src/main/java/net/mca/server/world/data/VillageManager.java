@@ -9,34 +9,33 @@ import net.mca.server.ReaperSpawner;
 import net.mca.server.SpawnQueue;
 import net.mca.util.NbtHelper;
 import net.mca.util.WorldUtils;
-import net.minecraft.block.Block;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.EntityType;
-import net.minecraft.entity.SpawnReason;
-import net.minecraft.entity.SpawnRestriction;
-import net.minecraft.entity.mob.IllagerEntity;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.nbt.NbtElement;
-import net.minecraft.nbt.NbtList;
-import net.minecraft.registry.Registries;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.text.Text;
-import net.minecraft.util.Formatting;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.MathHelper;
+import net.minecraft.ChatFormatting;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.Tag;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.util.Mth;
 import net.minecraft.world.Difficulty;
-import net.minecraft.world.Heightmap;
-import net.minecraft.world.PersistentState;
-import net.minecraft.world.SpawnHelper;
-
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.MobSpawnType;
+import net.minecraft.world.entity.SpawnPlacements;
+import net.minecraft.world.entity.monster.AbstractIllager;
+import net.minecraft.world.level.NaturalSpawner;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.levelgen.Heightmap;
+import net.minecraft.world.level.saveddata.SavedData;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-public class VillageManager extends PersistentState implements Iterable<Village> {
+public class VillageManager extends SavedData implements Iterable<Village> {
     private final Map<Integer, Village> villages = new HashMap<>();
 
     public final Set<BlockPos> cache = ConcurrentHashMap.newKeySet();
@@ -46,33 +45,33 @@ public class VillageManager extends PersistentState implements Iterable<Village>
     private int lastBuildingId;
     private int lastVillageId;
 
-    private final ServerWorld world;
+    private final ServerLevel world;
 
     private final ReaperSpawner reapers;
 
     private int buildingCooldown = 21;
 
-    public static VillageManager get(ServerWorld world) {
+    public static VillageManager get(ServerLevel world) {
         return WorldUtils.loadData(world, nbt -> new VillageManager(world, nbt), VillageManager::new, "mca_villages");
     }
 
-    VillageManager(ServerWorld world) {
+    VillageManager(ServerLevel world) {
         this.world = world;
         reapers = new ReaperSpawner(this);
     }
 
-    VillageManager(ServerWorld world, NbtCompound nbt) {
+    VillageManager(ServerLevel world, CompoundTag nbt) {
         this.world = world;
         lastBuildingId = nbt.getInt("lastBuildingId");
         lastVillageId = nbt.getInt("lastVillageId");
-        reapers = nbt.contains("reapers", NbtElement.COMPOUND_TYPE) ? new ReaperSpawner(this, nbt.getCompound("reapers")) : new ReaperSpawner(this);
+        reapers = nbt.contains("reapers", Tag.TAG_COMPOUND) ? new ReaperSpawner(this, nbt.getCompound("reapers")) : new ReaperSpawner(this);
 
-        NbtList villageList = nbt.getList("villages", NbtElement.COMPOUND_TYPE);
+        ListTag villageList = nbt.getList("villages", Tag.TAG_COMPOUND);
         for (int i = 0; i < villageList.size(); i++) {
             Village village = new Village(villageList.getCompound(i), world);
             if (village.getBuildings().isEmpty()) {
                 MCA.LOGGER.warn("Empty village detected (" + village.getName() + "), removing...");
-                markDirty();
+                setDirty();
             } else {
                 villages.put(village.getId(), village);
             }
@@ -105,20 +104,20 @@ public class VillageManager extends PersistentState implements Iterable<Village>
     }
 
     public Optional<Village> findNearestVillage(Entity entity) {
-        BlockPos p = entity.getBlockPos();
-        return findVillages(v -> v.isWithinBorder(entity)).min((a, b) -> (int)(a.getCenter().getSquaredDistance(p) - b.getCenter().getSquaredDistance(p)));
+        BlockPos p = entity.blockPosition();
+        return findVillages(v -> v.isWithinBorder(entity)).min((a, b) -> (int)(a.getCenter().distSqr(p) - b.getCenter().distSqr(p)));
     }
 
     public Optional<Village> findNearestVillage(BlockPos p, int margin) {
-        return findVillages(v -> v.isWithinBorder(p, margin)).min((a, b) -> (int)(a.getCenter().getSquaredDistance(p) - b.getCenter().getSquaredDistance(p)));
+        return findVillages(v -> v.isWithinBorder(p, margin)).min((a, b) -> (int)(a.getCenter().distSqr(p) - b.getCenter().distSqr(p)));
     }
 
     public boolean isWithinHorizontalBoundaries(BlockPos p) {
-        return villages.values().stream().anyMatch(v -> v.getBox().expand(0, 1000, 0).contains(p));
+        return villages.values().stream().anyMatch(v -> v.getBox().expand(0, 1000, 0).isInside(p));
     }
 
     @Override
-    public NbtCompound writeNbt(NbtCompound nbt) {
+    public CompoundTag save(CompoundTag nbt) {
         nbt.putInt("lastBuildingId", lastBuildingId);
         nbt.putInt("lastVillageId", lastVillageId);
         nbt.put("villages", NbtHelper.fromList(villages.values(), Village::save));
@@ -131,16 +130,16 @@ public class VillageManager extends PersistentState implements Iterable<Village>
      */
     public void tick() {
         //keep track of where player are currently
-        if (world.getTimeOfDay() % 100 == 0) {
-            world.getPlayers().forEach(player ->
+        if (world.getDayTime() % 100 == 0) {
+            world.players().forEach(player ->
                     PlayerSaveData.get(player).updateLastSeenVillage(this, player)
             );
         }
 
         //send bounty hunters
-        if (world.getTimeOfDay() % (Config.getInstance().bountyHunterInterval / 10) == 0 && world.getDifficulty() != Difficulty.PEACEFUL) {
-            world.getPlayers().forEach(player -> {
-                if (world.random.nextInt(10) == 0 && !isWithinHorizontalBoundaries(player.getBlockPos()) && !player.isCreative()) {
+        if (world.getDayTime() % (Config.getInstance().bountyHunterInterval / 10) == 0 && world.getDifficulty() != Difficulty.PEACEFUL) {
+            world.players().forEach(player -> {
+                if (world.random.nextInt(10) == 0 && !isWithinHorizontalBoundaries(player.blockPosition()) && !player.isCreative()) {
                     villages.values().stream()
                             .filter(v -> v.getPopulation() >= 3)
                             .filter(v -> v.getReputation(player) < Config.getInstance().bountyHunterHearts)
@@ -150,7 +149,7 @@ public class VillageManager extends PersistentState implements Iterable<Village>
             });
         }
 
-        long time = world.getTime();
+        long time = world.getGameTime();
 
         for (Village v : this) {
             v.tick(world, time);
@@ -165,7 +164,7 @@ public class VillageManager extends PersistentState implements Iterable<Village>
         SpawnQueue.getInstance().tick();
     }
 
-    private void startBountyHunterWave(ServerPlayerEntity player, Village sender) {
+    private void startBountyHunterWave(ServerPlayer player, Village sender) {
         int count = Math.min(30, -sender.getReputation(player) / 100 + 2);
 
         if (sender.getPopulation() == 0) {
@@ -192,25 +191,25 @@ public class VillageManager extends PersistentState implements Iterable<Village>
         }
 
         //warn the player
-        player.sendMessage(Text.translatable(sender.getPopulation() == 0 ? "events.bountyHuntersFinal" : "events.bountyHunters", sender.getName()).formatted(Formatting.RED), false);
+        player.displayClientMessage(Component.translatable(sender.getPopulation() == 0 ? "events.bountyHuntersFinal" : "events.bountyHunters", sender.getName()).withStyle(ChatFormatting.RED), false);
 
         //civil entry
-        sender.getCivilRegistry().ifPresent(r -> r.addText(Text.translatable("civil_registry.bounty_hunters", player.getName())));
+        sender.getCivilRegistry().ifPresent(r -> r.addText(Component.translatable("civil_registry.bounty_hunters", player.getName())));
     }
 
-    private <T extends IllagerEntity> void spawnBountyHunter(EntityType<T> t, ServerPlayerEntity player) {
-        IllagerEntity pillager = t.create(world);
+    private <T extends AbstractIllager> void spawnBountyHunter(EntityType<T> t, ServerPlayer player) {
+        AbstractIllager pillager = t.create(world);
         if (pillager != null) {
             for (int attempt = 0; attempt < 32; attempt++) {
                 float f = this.world.random.nextFloat() * 6.2831855F;
-                int x = (int)(player.getX() + MathHelper.cos(f) * 32.0f);
-                int z = (int)(player.getZ() + MathHelper.sin(f) * 32.0f);
-                int y = world.getTopY(Heightmap.Type.WORLD_SURFACE, x, z);
+                int x = (int)(player.getX() + Mth.cos(f) * 32.0f);
+                int z = (int)(player.getZ() + Mth.sin(f) * 32.0f);
+                int y = world.getHeight(Heightmap.Types.WORLD_SURFACE, x, z);
                 BlockPos pos = new BlockPos(x, y, z);
-                if (SpawnHelper.canSpawn(SpawnRestriction.Location.ON_GROUND, world, pos, t)) {
-                    pillager.setPosition(x, y, z);
+                if (NaturalSpawner.isSpawnPositionOk(SpawnPlacements.Type.ON_GROUND, world, pos, t)) {
+                    pillager.setPos(x, y, z);
                     pillager.setTarget(player);
-                    WorldUtils.spawnEntity(world, pillager, SpawnReason.EVENT);
+                    WorldUtils.spawnEntity(world, pillager, MobSpawnType.EVENT);
                     break;
                 }
             }
@@ -233,7 +232,7 @@ public class VillageManager extends PersistentState implements Iterable<Village>
     private BuildingType getGroupedBuildingType(BlockPos pos) {
         Block block = world.getBlockState(pos).getBlock();
         for (BuildingType bt : BuildingTypes.getInstance()) {
-            if (bt.grouped() && bt.getBlockToGroup().containsKey(Registries.BLOCK.getId(block))) {
+            if (bt.grouped() && bt.getBlockToGroup().containsKey(BuiltInRegistries.BLOCK.getKey(block))) {
                 return bt;
             }
         }
@@ -273,13 +272,13 @@ public class VillageManager extends PersistentState implements Iterable<Village>
                 //add POI to the nearest one
                 Optional<Building> building = village.getBuildings().values().stream()
                         .filter(b -> b.getType().equals(name))
-                        .min((a, b) -> (int)(a.getCenter().getSquaredDistance(pos) - b.getCenter().getSquaredDistance(pos)))
-                        .filter(b -> b.getCenter().getSquaredDistance(pos) < range);
+                        .min((a, b) -> (int)(a.getCenter().distSqr(pos) - b.getCenter().distSqr(pos)))
+                        .filter(b -> b.getCenter().distSqr(pos) < range);
 
                 if (building.isPresent()) {
                     found = true;
                     building.get().addPOI(world, pos);
-                    markDirty();
+                    setDirty();
                 }
             } else {
                 //verify affected buildings
@@ -288,7 +287,7 @@ public class VillageManager extends PersistentState implements Iterable<Village>
                         if (!enforce) {
                             found = true;
                         }
-                        if ((enforce || world.getTime() - b.getLastScan() > Building.SCAN_COOLDOWN) && b.validateBuilding(world, blocked) != Building.validationResult.SUCCESS) {
+                        if ((enforce || world.getGameTime() - b.getLastScan() > Building.SCAN_COOLDOWN) && b.validateBuilding(world, blocked) != Building.validationResult.SUCCESS) {
                             toRemove.add(b.getId());
                         }
                     }
@@ -298,14 +297,14 @@ public class VillageManager extends PersistentState implements Iterable<Village>
             //remove buildings, which became invalid for whatever reason
             for (int id : toRemove) {
                 village.removeBuilding(id);
-                markDirty();
+                setDirty();
             }
 
             //village is empty
             if (village.getBuildings().isEmpty()) {
                 villages.remove(village.getId());
                 optionalVillage = Optional.empty();
-                markDirty();
+                setDirty();
             }
         }
 
@@ -343,7 +342,7 @@ public class VillageManager extends PersistentState implements Iterable<Village>
             //attempt to merge
             villages.values().stream()
                     .filter(v -> v != village)
-                    .filter(v -> v.getBox().expand(Village.MERGE_MARGIN).intersects(village.getBox()))
+                    .filter(v -> v.getBox().inflatedBy(Village.MERGE_MARGIN).intersects(village.getBox()))
                     .findAny()
                     .ifPresent(v -> {
                                 if (v.getPopulation() > village.getPopulation()) {
@@ -356,7 +355,7 @@ public class VillageManager extends PersistentState implements Iterable<Village>
                             }
                     );
 
-            markDirty();
+            setDirty();
         }
 
         return Building.validationResult.SUCCESS;

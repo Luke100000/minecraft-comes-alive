@@ -3,10 +3,14 @@ package net.mca.client.model;
 import com.google.common.collect.ImmutableList;
 import net.mca.entity.VillagerLike;
 import net.minecraft.client.model.*;
-import net.minecraft.client.render.entity.model.BipedEntityModel;
-import net.minecraft.client.render.entity.model.EntityModelPartNames;
-import net.minecraft.client.render.entity.model.PlayerEntityModel;
-import net.minecraft.entity.LivingEntity;
+import net.minecraft.client.model.geom.ModelPart;
+import net.minecraft.client.model.geom.PartNames;
+import net.minecraft.client.model.geom.PartPose;
+import net.minecraft.client.model.geom.builders.CubeDeformation;
+import net.minecraft.client.model.geom.builders.CubeListBuilder;
+import net.minecraft.client.model.geom.builders.MeshDefinition;
+import net.minecraft.client.model.geom.builders.PartDefinition;
+import net.minecraft.world.entity.LivingEntity;
 
 public class VillagerEntityModelMCA<T extends LivingEntity & VillagerLike<T>> extends VillagerEntityBaseModelMCA<T> {
     protected static final String BREASTPLATE = "breastplate";
@@ -22,7 +26,7 @@ public class VillagerEntityModelMCA<T extends LivingEntity & VillagerLike<T>> ex
 
     public VillagerEntityModelMCA(ModelPart tree) {
         super(tree);
-        bodyWear = tree.getChild(EntityModelPartNames.JACKET);
+        bodyWear = tree.getChild(PartNames.JACKET);
         leftArmwear = tree.getChild("left_sleeve");
         rightArmwear = tree.getChild("right_sleeve");
         leftLegwear = tree.getChild("left_pants");
@@ -38,34 +42,34 @@ public class VillagerEntityModelMCA<T extends LivingEntity & VillagerLike<T>> ex
     //   hair - 2 (hair.body 0.1) + (hair.hat 0.1 + 0.3 = 0.4)
     //    hood - 3 (clothing.hat 0.075 + 0.5 = 0.575)
 
-    public static ModelData hairData(Dilation dilation) {
-        ModelData modelData = bodyData(dilation);
-        ModelPartData root = modelData.getRoot();
-        root.addChild(EntityModelPartNames.HAT, ModelPartBuilder.create().uv(32, 0).cuboid(-4, -8, -4, 8, 8, 8, dilation.add(0.3F)), ModelTransform.NONE);
+    public static MeshDefinition hairData(CubeDeformation dilation) {
+        MeshDefinition modelData = bodyData(dilation);
+        PartDefinition root = modelData.getRoot();
+        root.addOrReplaceChild(PartNames.HAT, CubeListBuilder.create().texOffs(32, 0).addBox(-4, -8, -4, 8, 8, 8, dilation.extend(0.3F)), PartPose.ZERO);
         return modelData;
     }
 
-    public static ModelData bodyData(Dilation dilation) {
+    public static MeshDefinition bodyData(CubeDeformation dilation) {
         return bodyData(dilation, false);
     }
 
-    public static ModelData bodyData(Dilation dilation, boolean slim) {
-        ModelData modelData = PlayerEntityModel.getTexturedModelData(dilation, slim);
-        ModelPartData root = modelData.getRoot();
-        root.addChild(BREASTS, newBreasts(dilation, 0), ModelTransform.NONE);
-        root.addChild(BREASTPLATE, newBreasts(dilation.add(0.1F), 16), ModelTransform.NONE);
+    public static MeshDefinition bodyData(CubeDeformation dilation, boolean slim) {
+        MeshDefinition modelData = PlayerModel.createMesh(dilation, slim);
+        PartDefinition root = modelData.getRoot();
+        root.addOrReplaceChild(BREASTS, newBreasts(dilation, 0), PartPose.ZERO);
+        root.addOrReplaceChild(BREASTPLATE, newBreasts(dilation.extend(0.1F), 16), PartPose.ZERO);
         return modelData;
     }
 
-    public static ModelData armorData(Dilation dilation) {
-        ModelData modelData = BipedEntityModel.getModelData(dilation, 0.0f);
-        ModelPartData root = modelData.getRoot();
-        root.addChild(BREASTS, newBreasts(dilation, 0), ModelTransform.NONE);
+    public static MeshDefinition armorData(CubeDeformation dilation) {
+        MeshDefinition modelData = HumanoidModel.createMesh(dilation, 0.0f);
+        PartDefinition root = modelData.getRoot();
+        root.addOrReplaceChild(BREASTS, newBreasts(dilation, 0), PartPose.ZERO);
         return modelData;
     }
 
     @Override
-    protected Iterable<ModelPart> getBodyParts() {
+    protected Iterable<ModelPart> bodyParts() {
         return ImmutableList.of(body, rightArm, leftArm, rightLeg, leftLeg, bodyWear, leftLegwear, rightLegwear, leftArmwear, rightArmwear);
     }
 
@@ -75,19 +79,19 @@ public class VillagerEntityModelMCA<T extends LivingEntity & VillagerLike<T>> ex
     }
 
     @Override
-    public void setAngles(T villager, float limbAngle, float limbDistance, float animationProgress, float headYaw, float headPitch) {
-        super.setAngles(villager, limbAngle, limbDistance, animationProgress, headYaw, headPitch);
-        leftLegwear.copyTransform(leftLeg);
-        rightLegwear.copyTransform(rightLeg);
-        leftArmwear.copyTransform(leftArm);
-        rightArmwear.copyTransform(rightArm);
-        bodyWear.copyTransform(body);
-        breastsWear.copyTransform(breasts);
+    public void setupAnim(T villager, float limbAngle, float limbDistance, float animationProgress, float headYaw, float headPitch) {
+        super.setupAnim(villager, limbAngle, limbDistance, animationProgress, headYaw, headPitch);
+        leftLegwear.copyFrom(leftLeg);
+        rightLegwear.copyFrom(rightLeg);
+        leftArmwear.copyFrom(leftArm);
+        rightArmwear.copyFrom(rightArm);
+        bodyWear.copyFrom(body);
+        breastsWear.copyFrom(breasts);
     }
 
     @Override
-    public void setVisible(boolean visible) {
-        super.setVisible(visible);
+    public void setAllVisible(boolean visible) {
+        super.setAllVisible(visible);
 
         leftArmwear.visible = !wearsHidden && visible;
         rightArmwear.visible = !wearsHidden && visible;
@@ -108,23 +112,23 @@ public class VillagerEntityModelMCA<T extends LivingEntity & VillagerLike<T>> ex
     }
 
     @Override
-    public void copyBipedStateTo(BipedEntityModel<T> target) {
-        super.copyBipedStateTo(target);
+    public void copyPropertiesTo(HumanoidModel<T> target) {
+        super.copyPropertiesTo(target);
         if (target instanceof VillagerEntityModelMCA) {
             copyAttributes((VillagerEntityModelMCA<T>)target);
         }
     }
 
     private void copyAttributes(VillagerEntityModelMCA<T> target) {
-        target.leftLegwear.copyTransform(leftLegwear);
-        target.rightLegwear.copyTransform(rightLegwear);
-        target.leftArmwear.copyTransform(leftArmwear);
-        target.rightArmwear.copyTransform(rightArmwear);
-        target.bodyWear.copyTransform(bodyWear);
-        target.breastsWear.copyTransform(breastsWear);
+        target.leftLegwear.copyFrom(leftLegwear);
+        target.rightLegwear.copyFrom(rightLegwear);
+        target.leftArmwear.copyFrom(leftArmwear);
+        target.rightArmwear.copyFrom(rightArmwear);
+        target.bodyWear.copyFrom(bodyWear);
+        target.breastsWear.copyFrom(breastsWear);
     }
 
-    public <M extends BipedEntityModel<T>> void copyVisibility(M model) {
+    public <M extends HumanoidModel<T>> void copyVisibility(M model) {
         head.visible = model.head.visible;
         hat.visible = model.head.visible;
         body.visible = model.body.visible;

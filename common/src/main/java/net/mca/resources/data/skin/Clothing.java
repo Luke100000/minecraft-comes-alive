@@ -2,7 +2,7 @@ package net.mca.resources.data.skin;
 
 import com.google.gson.JsonObject;
 import net.mca.entity.ai.relationship.Gender;
-import net.minecraft.util.JsonHelper;
+import net.minecraft.util.GsonHelper;
 import org.jetbrains.annotations.Nullable;
 
 public class Clothing extends SkinListEntry {
@@ -21,9 +21,9 @@ public class Clothing extends SkinListEntry {
     public Clothing(String identifier, JsonObject object) {
         super(identifier, object);
 
-        this.profession = object.get("profession").isJsonNull() ? null : JsonHelper.getString(object, "profession", null);
-        this.exclude = JsonHelper.getBoolean(object, "exclude", false);
-        this.temperature = JsonHelper.getInt(object, "temperature", 0);
+        this.profession = object.get("profession").isJsonNull() ? null : GsonHelper.getAsString(object, "profession", null);
+        this.exclude = GsonHelper.getAsBoolean(object, "exclude", false);
+        this.temperature = GsonHelper.getAsInt(object, "temperature", 0);
     }
 
     @Override

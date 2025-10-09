@@ -2,8 +2,7 @@ package net.mca.network.s2c;
 
 import net.mca.ClientProxy;
 import net.mca.cobalt.network.Message;
-import net.minecraft.text.Text;
-
+import net.minecraft.network.chat.Component;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -11,9 +10,9 @@ public class CivilRegistryResponse implements Message {
     private final int index;
     private final List<String> lines;
 
-    public CivilRegistryResponse(int index, List<Text> lines) {
+    public CivilRegistryResponse(int index, List<Component> lines) {
         this.index = index;
-        this.lines = lines.stream().map(Text.Serializer::toJson).collect(Collectors.toList());
+        this.lines = lines.stream().map(Component.Serializer::toJson).collect(Collectors.toList());
     }
 
     @Override
@@ -25,7 +24,7 @@ public class CivilRegistryResponse implements Message {
         return index;
     }
 
-    public List<Text> getLines() {
-        return lines.stream().map(Text.Serializer::fromJson).collect(Collectors.toList());
+    public List<Component> getLines() {
+        return lines.stream().map(Component.Serializer::fromJson).collect(Collectors.toList());
     }
 }

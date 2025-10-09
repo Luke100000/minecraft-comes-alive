@@ -1,22 +1,22 @@
 package net.mca.mixin;
 
 import com.google.common.collect.ImmutableSet;
-import net.minecraft.block.Block;
-import net.minecraft.item.Item;
-import net.minecraft.registry.entry.RegistryEntry;
-import net.minecraft.sound.SoundEvent;
-import net.minecraft.village.VillagerProfession;
-import net.minecraft.world.poi.PointOfInterestType;
 import org.jetbrains.annotations.Nullable;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.gen.Invoker;
 
 import java.util.function.Predicate;
+import net.minecraft.core.Holder;
+import net.minecraft.sounds.SoundEvent;
+import net.minecraft.world.entity.ai.village.poi.PoiType;
+import net.minecraft.world.entity.npc.VillagerProfession;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.level.block.Block;
 
 @Mixin(VillagerProfession.class)
 public interface MixinVillagerProfession {
     @Invoker("<init>")
-    static VillagerProfession init(String id, Predicate<RegistryEntry<PointOfInterestType>> predicate, Predicate<RegistryEntry<PointOfInterestType>> predicate2, ImmutableSet<Item> immutableSet, ImmutableSet<Block> immutableSet2, @Nullable SoundEvent soundEvent) {
+    static VillagerProfession init(String id, Predicate<Holder<PoiType>> predicate, Predicate<Holder<PoiType>> predicate2, ImmutableSet<Item> immutableSet, ImmutableSet<Block> immutableSet2, @Nullable SoundEvent soundEvent) {
         return null;
     }
 }

@@ -6,8 +6,7 @@ import net.mca.cobalt.network.NetworkHandler;
 import net.mca.network.s2c.FamilyTreeUUIDResponse;
 import net.mca.server.world.data.FamilyTree;
 import net.mca.server.world.data.FamilyTreeNode;
-import net.minecraft.server.network.ServerPlayerEntity;
-
+import net.minecraft.server.level.ServerPlayer;
 import java.io.Serial;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -23,8 +22,8 @@ public class FamilyTreeUUIDLookup implements Message {
     }
 
     @Override
-    public void receive(ServerPlayerEntity player) {
-        FamilyTree tree = FamilyTree.get(player.getServerWorld());
+    public void receive(ServerPlayer player) {
+        FamilyTree tree = FamilyTree.get(player.serverLevel());
         List<FamilyTreeSearchScreen.Entry> list = tree.getAllWithName(search)
                 .map(entry -> new FamilyTreeSearchScreen.Entry(
                         entry.id(),

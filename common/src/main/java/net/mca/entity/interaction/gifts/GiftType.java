@@ -6,15 +6,14 @@ import com.google.gson.JsonSyntaxException;
 import net.mca.MCA;
 import net.mca.entity.VillagerEntityMCA;
 import net.mca.resources.data.analysis.IntAnalysis;
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemStack;
-import net.minecraft.registry.Registries;
-import net.minecraft.registry.RegistryKeys;
-import net.minecraft.registry.tag.TagKey;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.JsonHelper;
-
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.tags.TagKey;
+import net.minecraft.util.GsonHelper;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
 import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -23,20 +22,20 @@ import java.util.stream.Stream;
 public class GiftType {
     static final List<GiftType> REGISTRY = new ArrayList<>();
 
-    public static GiftType fromJson(Identifier id, JsonObject json) {
+    public static GiftType fromJson(ResourceLocation id, JsonObject json) {
         List<GiftPredicate> conditions = new ArrayList<>();
-        JsonHelper.getArray(json, "conditions", new JsonArray()).forEach(element -> {
-            conditions.add(GiftPredicate.fromJson(JsonHelper.asObject(element, "condition")));
+        GsonHelper.getAsJsonArray(json, "conditions", new JsonArray()).forEach(element -> {
+            conditions.add(GiftPredicate.fromJson(GsonHelper.convertToJsonObject(element, "condition")));
         });
 
         HashMap<Item, Integer> items = new HashMap<>();
         HashMap<TagKey<Item>, Integer> tags = new HashMap<>();
-        JsonHelper.getObject(json, "items").entrySet().forEach(element -> {
+        GsonHelper.getAsJsonObject(json, "items").entrySet().forEach(element -> {
             String string = element.getKey();
             Integer satisfaction = element.getValue().getAsInt();
             if (string.charAt(0) == '#') {
-                Identifier identifier = new Identifier(string.substring(1));
-                TagKey<Item> tag = TagKey.of(RegistryKeys.ITEM, identifier);
+                ResourceLocation identifier = new ResourceLocation(string.substring(1));
+                TagKey<Item> tag = TagKey.create(Registries.ITEM, identifier);
                 if (tag != null) {
                     tags.put(tag, satisfaction);
                 } else {
@@ -45,8 +44,8 @@ public class GiftType {
                     }
                 }
             } else {
-                Identifier identifier = new Identifier(string);
-                Optional<Item> item = Registries.ITEM.getOrEmpty(identifier);
+                ResourceLocation identifier = new ResourceLocation(string);
+                Optional<Item> item = BuiltInRegistries.ITEM.getOptional(identifier);
                 if (item.isPresent()) {
                     items.put(item.get(), satisfaction);
                 } else if (identifier.getNamespace().equals(MCA.MOD_ID)) {
@@ -55,17 +54,17 @@ public class GiftType {
             }
         });
 
-        int priority = JsonHelper.getInt(json, "priority", 0);
+        int priority = GsonHelper.getAsInt(json, "priority", 0);
 
-        JsonObject thresholds = JsonHelper.getObject(json, "thresholds", new JsonObject());
-        int fail = JsonHelper.getInt(thresholds, "fail", 0);
-        int good = JsonHelper.getInt(thresholds, "good", 10);
-        int better = JsonHelper.getInt(thresholds, "better", 20);
+        JsonObject thresholds = GsonHelper.getAsJsonObject(json, "thresholds", new JsonObject());
+        int fail = GsonHelper.getAsInt(thresholds, "fail", 0);
+        int good = GsonHelper.getAsInt(thresholds, "good", 10);
+        int better = GsonHelper.getAsInt(thresholds, "better", 20);
 
-        JsonObject responsesJson = JsonHelper.getObject(json, "responses", new JsonObject());
+        JsonObject responsesJson = GsonHelper.getAsJsonObject(json, "responses", new JsonObject());
         Map<Response, String> responses = Stream.of(Response.values()).collect(Collectors.toMap(
                 Function.identity(),
-                response -> JsonHelper.getString(responsesJson, response.name().toLowerCase(Locale.ENGLISH), response.getDefaultDialogue())
+                response -> GsonHelper.getAsString(responsesJson, response.name().toLowerCase(Locale.ENGLISH), response.getDefaultDialogue())
         ));
 
         return new GiftType(id, priority, conditions, items, tags, fail, good, better, responses);
@@ -79,7 +78,7 @@ public class GiftType {
      * returns the giftType with the highest priority
      * if at least one gift fails, it chooses only from the failed gifts
      */
-    public static Optional<GiftType> bestMatching(VillagerEntityMCA recipient, ItemStack stack, ServerPlayerEntity player) {
+    public static Optional<GiftType> bestMatching(VillagerEntityMCA recipient, ItemStack stack, ServerPlayer player) {
         int max = GiftType.allMatching(stack).mapToInt(a -> a.priority).max().orElse(0);
         Optional<GiftType> worst = GiftType.allMatching(stack)
                 .filter(a -> a.priority == max)
@@ -95,11 +94,11 @@ public class GiftType {
         }
     }
 
-    public static Optional<GiftType> getGiftType(Identifier id) {
+    public static Optional<GiftType> getGiftType(ResourceLocation id) {
         return REGISTRY.stream().filter(p -> p.id.equals(id)).findFirst();
     }
 
-    private final Identifier id;
+    private final ResourceLocation id;
     private int priority;
 
     private final List<GiftPredicate> conditions;
@@ -117,7 +116,7 @@ public class GiftType {
         return Arrays.stream(Response.values()).collect(Collectors.toMap(r -> r, Response::getDefaultDialogue));
     }
 
-    public GiftType(Item item, int satisfaction, Identifier extendFrom) {
+    public GiftType(Item item, int satisfaction, ResourceLocation extendFrom) {
         this(item, satisfaction, getDefaultDialogues());
         Optional<GiftType> type = getGiftType(extendFrom);
         type.ifPresent(this::extendFrom);
@@ -125,7 +124,7 @@ public class GiftType {
 
     public GiftType(Item item, int satisfaction, Map<Response, String> responses) {
         this(
-                Registries.ITEM.getId(item),
+                BuiltInRegistries.ITEM.getKey(item),
                 0,
                 new LinkedList<>(),
                 Collections.singletonMap(item, satisfaction),
@@ -135,7 +134,7 @@ public class GiftType {
         );
     }
 
-    public GiftType(Identifier id, int priority, List<GiftPredicate> conditions, Map<Item, Integer> items, Map<TagKey<Item>, Integer> tags, int fail, int good, int better, Map<Response, String> responses) {
+    public GiftType(ResourceLocation id, int priority, List<GiftPredicate> conditions, Map<Item, Integer> items, Map<TagKey<Item>, Integer> tags, int fail, int good, int better, Map<Response, String> responses) {
         this.id = id;
         this.priority = priority;
         this.conditions = conditions;
@@ -147,7 +146,7 @@ public class GiftType {
         this.responses = responses;
     }
 
-    public Identifier getId() {
+    public ResourceLocation getId() {
         return id;
     }
 
@@ -163,7 +162,7 @@ public class GiftType {
      * Checks whether the given item counts for this type of gift.
      */
     public boolean matches(ItemStack stack) {
-        return items.keySet().stream().anyMatch(i -> i == stack.getItem()) || tags.keySet().stream().anyMatch(stack::isIn);
+        return items.keySet().stream().anyMatch(i -> i == stack.getItem()) || tags.keySet().stream().anyMatch(stack::is);
     }
 
     /**
@@ -171,11 +170,11 @@ public class GiftType {
      *
      * @return An analysis object of all summands
      */
-    public IntAnalysis getSatisfactionFor(VillagerEntityMCA recipient, ItemStack stack, ServerPlayerEntity player) {
+    public IntAnalysis getSatisfactionFor(VillagerEntityMCA recipient, ItemStack stack, ServerPlayer player) {
         IntAnalysis analysis = new IntAnalysis();
 
         Optional<Integer> value = items.entrySet().stream().filter(i -> i.getKey() == stack.getItem()).findFirst().map(Map.Entry::getValue);
-        int base = value.orElseGet(() -> tags.entrySet().stream().filter(i -> stack.isIn(i.getKey())).findFirst().map(Map.Entry::getValue).orElse(0));
+        int base = value.orElseGet(() -> tags.entrySet().stream().filter(i -> stack.is(i.getKey())).findFirst().map(Map.Entry::getValue).orElse(0));
 
         analysis.add("base", base);
 

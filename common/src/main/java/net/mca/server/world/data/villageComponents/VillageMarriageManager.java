@@ -4,9 +4,8 @@ import net.mca.Config;
 import net.mca.entity.VillagerEntityMCA;
 import net.mca.entity.ai.Memories;
 import net.mca.server.world.data.Village;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.text.Text;
-
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
 import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -19,7 +18,7 @@ public class VillageMarriageManager {
     }
 
     // if the amount of couples is low, let them marry
-    public void marry(ServerWorld world) {
+    public void marry(ServerLevel world) {
         if (world.random.nextFloat() >= Config.getInstance().marriageChancePerMinute) {
             return;
         }
@@ -46,7 +45,7 @@ public class VillageMarriageManager {
         // Find a potential mate
         availableVillagers.stream()
                 .filter(suitor::canBeAttractedTo)
-                .filter(i -> !suitor.getRelationships().getFamilyEntry().isRelative(i.getUuid()))
+                .filter(i -> !suitor.getRelationships().getFamilyEntry().isRelative(i.getUUID()))
                 .findFirst().ifPresent(mate -> {
                     suitor.getRelationships().marry(mate);
                     mate.getRelationships().marry(suitor);
@@ -57,7 +56,7 @@ public class VillageMarriageManager {
                     }
 
                     // civil entry
-                    village.getCivilRegistry().ifPresent(r -> r.addText(Text.translatable("events.marry", suitor.getName(), mate.getName())));
+                    village.getCivilRegistry().ifPresent(r -> r.addText(Component.translatable("events.marry", suitor.getName(), mate.getName())));
                 });
     }
 }

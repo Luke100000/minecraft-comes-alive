@@ -8,14 +8,13 @@ import net.mca.entity.ai.Memories;
 import net.mca.entity.ai.Relationship;
 import net.mca.server.world.data.PlayerSaveData;
 import net.mca.server.world.data.Village;
-import net.minecraft.entity.ai.brain.task.MultiTickTask;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.server.world.ServerWorld;
-
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.ai.behavior.Behavior;
+import net.minecraft.world.entity.player.Player;
 import java.util.Optional;
 
-public class GreetPlayerTask extends MultiTickTask<VillagerEntityMCA> {
+public class GreetPlayerTask extends Behavior<VillagerEntityMCA> {
     private static final int MAX_COOLDOWN = 100;
     private int cooldown = 0;
 
@@ -24,17 +23,17 @@ public class GreetPlayerTask extends MultiTickTask<VillagerEntityMCA> {
     }
 
     @Override
-    protected boolean shouldRun(ServerWorld world, VillagerEntityMCA entity) {
+    protected boolean checkExtraStartConditions(ServerLevel world, VillagerEntityMCA entity) {
         cooldown--;
         return cooldown < 0;
     }
 
     @Override
-    protected void run(ServerWorld world, VillagerEntityMCA villager, long time) {
+    protected void start(ServerLevel world, VillagerEntityMCA villager, long time) {
         cooldown = MAX_COOLDOWN;
         getPlayer(villager).ifPresent(player -> {
             Memories memories = villager.getVillagerBrain().getMemoriesForPlayer(player);
-            int day = (int)(villager.getWorld().getTimeOfDay() / 24000L);
+            int day = (int)(villager.level().getDayTime() / 24000L);
             memories.setLastSeen(day);
 
             String phrase = memories.getHearts() < 0 ? "welcomeFoe" : "welcome";
@@ -43,20 +42,20 @@ public class GreetPlayerTask extends MultiTickTask<VillagerEntityMCA> {
         });
     }
 
-    private static Optional<? extends PlayerEntity> getPlayer(VillagerEntityMCA villager) {
-        return ((ServerWorld)villager.getWorld()).getPlayers().stream()
+    private static Optional<? extends Player> getPlayer(VillagerEntityMCA villager) {
+        return ((ServerLevel)villager.level()).players().stream()
                 .filter(p -> isWithinSeeRange(villager, p))
                 .filter(p -> shouldGreet(villager, p))
                 .findFirst();
     }
 
-    private static boolean shouldGreet(VillagerEntityMCA villager, ServerPlayerEntity player) {
+    private static boolean shouldGreet(VillagerEntityMCA villager, ServerPlayer player) {
         Optional<Integer> id = PlayerSaveData.get(player).getLastSeenVillageId();
         Optional<Village> village = villager.getResidency().getHomeVillage();
         if (id.isPresent() && village.isPresent() && id.get() == village.get().getId()) {
             Memories memories = villager.getVillagerBrain().getMemoriesForPlayer(player);
 
-            int day = (int)(villager.getWorld().getTimeOfDay() / 24000L);
+            int day = (int)(villager.level().getDayTime() / 24000L);
 
             // first check relationships, only family, friends and foes will greet you
             if (Relationship.IS_MARRIED.test(villager, player)
@@ -81,7 +80,7 @@ public class GreetPlayerTask extends MultiTickTask<VillagerEntityMCA> {
         return false;
     }
 
-    private static boolean isWithinSeeRange(VillagerEntityMCA villager, PlayerEntity player) {
-        return villager.getBlockPos().isWithinDistance(player.getBlockPos(), 32);
+    private static boolean isWithinSeeRange(VillagerEntityMCA villager, Player player) {
+        return villager.blockPosition().closerThan(player.blockPosition(), 32);
     }
 }

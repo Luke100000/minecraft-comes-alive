@@ -5,10 +5,9 @@ import net.mca.ProfessionsMCA;
 import net.mca.entity.EquipmentSet;
 import net.mca.entity.VillagerEntityMCA;
 import net.mca.server.world.data.Village;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.Hand;
-import net.minecraft.village.VillagerProfession;
-
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.entity.npc.VillagerProfession;
 import java.util.LinkedList;
 import java.util.List;
 
@@ -19,7 +18,7 @@ public class VillageGuardsManager {
         this.village= village;
     }
 
-    public void spawnGuards(ServerWorld world) {
+    public void spawnGuards(ServerLevel world) {
         int guardCapacity = (int)Math.ceil(village.getPopulation() * Config.getInstance().guardSpawnFraction);
 
         // Count up the guards
@@ -31,7 +30,7 @@ public class VillageGuardsManager {
             if (villager.isGuard()) {
                 guards++;
             } else {
-                if (!villager.isBaby() && !villager.isProfessionImportant() && villager.getExperience() == 0 && villager.getVillagerData().getLevel() <= 1) {
+                if (!villager.isBaby() && !villager.isProfessionImportant() && villager.getVillagerXp() == 0 && villager.getVillagerData().getLevel() <= 1) {
                     nonGuards.add(villager);
                 }
                 citizen++;
@@ -50,7 +49,7 @@ public class VillageGuardsManager {
     }
 
 
-    public EquipmentSet getGuardEquipment(VillagerProfession profession, Hand dominantHand) {
+    public EquipmentSet getGuardEquipment(VillagerProfession profession, InteractionHand dominantHand) {
         if (profession == ProfessionsMCA.ARCHER.get()) {
             if (village.hasBuilding("armory")) {
                 if (village.hasBuilding("blacksmith")) {
@@ -74,7 +73,7 @@ public class VillageGuardsManager {
         }
     }
 
-    public static EquipmentSet getEquipmentFor(Hand dominantHand, EquipmentSet rightSet, EquipmentSet leftSet) {
-        return dominantHand == Hand.OFF_HAND && leftSet != null ? leftSet : rightSet;
+    public static EquipmentSet getEquipmentFor(InteractionHand dominantHand, EquipmentSet rightSet, EquipmentSet leftSet) {
+        return dominantHand == InteractionHand.OFF_HAND && leftSet != null ? leftSet : rightSet;
     }
 }

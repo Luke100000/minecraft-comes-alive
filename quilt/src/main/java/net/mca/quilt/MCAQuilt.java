@@ -16,7 +16,7 @@ import net.mca.server.ServerInteractionManager;
 import net.mca.server.command.AdminCommand;
 import net.mca.server.command.Command;
 import net.mca.server.world.data.VillageManager;
-import net.minecraft.resource.ResourceType;
+import net.minecraft.server.packs.PackType;
 import org.quiltmc.loader.api.ModContainer;
 import org.quiltmc.qsl.base.api.entrypoint.ModInitializer;
 import org.quiltmc.qsl.command.api.CommandRegistrationCallback;
@@ -40,14 +40,14 @@ public final class MCAQuilt implements ModInitializer {
 
         TradeOffersMCA.bootstrap();
 
-        ResourceLoader.get(ResourceType.SERVER_DATA).registerReloader(new ApiIdentifiableReloadListener());
-        ResourceLoader.get(ResourceType.SERVER_DATA).registerReloader(new QuiltClothingList());
-        ResourceLoader.get(ResourceType.SERVER_DATA).registerReloader(new QuiltHairList());
-        ResourceLoader.get(ResourceType.SERVER_DATA).registerReloader(new QuiltGiftLoader());
-        ResourceLoader.get(ResourceType.SERVER_DATA).registerReloader(new QuiltDialogues());
-        ResourceLoader.get(ResourceType.SERVER_DATA).registerReloader(new QuiltTasks());
-        ResourceLoader.get(ResourceType.SERVER_DATA).registerReloader(new QuiltNames());
-        ResourceLoader.get(ResourceType.SERVER_DATA).registerReloader(new QuiltBuildingTypes());
+        ResourceLoader.get(PackType.SERVER_DATA).registerReloader(new ApiIdentifiableReloadListener());
+        ResourceLoader.get(PackType.SERVER_DATA).registerReloader(new QuiltClothingList());
+        ResourceLoader.get(PackType.SERVER_DATA).registerReloader(new QuiltHairList());
+        ResourceLoader.get(PackType.SERVER_DATA).registerReloader(new QuiltGiftLoader());
+        ResourceLoader.get(PackType.SERVER_DATA).registerReloader(new QuiltDialogues());
+        ResourceLoader.get(PackType.SERVER_DATA).registerReloader(new QuiltTasks());
+        ResourceLoader.get(PackType.SERVER_DATA).registerReloader(new QuiltNames());
+        ResourceLoader.get(PackType.SERVER_DATA).registerReloader(new QuiltBuildingTypes());
 
         ServerWorldTickEvents.END.register((s, w) -> VillageManager.get(w).tick());
         ServerTickEvents.END.register(s -> ServerInteractionManager.getInstance().tick());

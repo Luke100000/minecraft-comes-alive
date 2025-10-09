@@ -1,27 +1,26 @@
 package net.mca.client.book.pages;
 
 import net.mca.client.gui.ExtendedBookScreen;
-import net.minecraft.client.font.TextRenderer;
-import net.minecraft.client.gui.DrawContext;
-import net.minecraft.text.OrderedText;
-import net.minecraft.text.Text;
-import net.minecraft.util.Formatting;
-
+import net.minecraft.ChatFormatting;
+import net.minecraft.client.gui.Font;
+import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.network.chat.Component;
+import net.minecraft.util.FormattedCharSequence;
 import java.util.List;
 
 public class CenteredListPage extends ListPage {
-    final Text title;
+    final Component title;
 
     public static final int ENTRIES_PER_PAGE = 11;
 
-    public CenteredListPage(Text title, List<Text> text) {
+    public CenteredListPage(Component title, List<Component> text) {
         super(text);
 
         this.title = title;
     }
 
-    public CenteredListPage(String title, List<Text> text) {
-        this(Text.translatable(title).formatted(Formatting.BLACK).formatted(Formatting.BOLD), text);
+    public CenteredListPage(String title, List<Component> text) {
+        this(Component.translatable(title).withStyle(ChatFormatting.BLACK).withStyle(ChatFormatting.BOLD), text);
     }
 
     @Override
@@ -29,13 +28,13 @@ public class CenteredListPage extends ListPage {
         return 11;
     }
 
-    private static void drawCenteredText(ExtendedBookScreen screen, DrawContext context, TextRenderer textRenderer, Text text, int centerX, int y, int color) {
-        OrderedText orderedText = text.asOrderedText();
-        context.drawText(textRenderer, orderedText, (centerX - textRenderer.getWidth(orderedText) / 2), y, color, screen.getBook().hasTextShadow());
+    private static void drawCenteredText(ExtendedBookScreen screen, GuiGraphics context, Font textRenderer, Component text, int centerX, int y, int color) {
+        FormattedCharSequence orderedText = text.getVisualOrderText();
+        context.drawString(textRenderer, orderedText, (centerX - textRenderer.width(orderedText) / 2), y, color, screen.getBook().hasTextShadow());
     }
 
     @Override
-    public void render(ExtendedBookScreen screen, DrawContext context, int mouseX, int mouseY, float delta) {
+    public void render(ExtendedBookScreen screen, GuiGraphics context, int mouseX, int mouseY, float delta) {
         drawCenteredText(screen, context, screen.getTextRenderer(), title, screen.width / 2, 35, 0xFFFFFFFF);
 
         int y = 48;

@@ -18,31 +18,30 @@ import net.mca.resources.Names;
 import net.mca.server.world.data.FamilyTreeNode;
 import net.mca.server.world.data.PlayerSaveData;
 import net.mca.util.network.datasync.*;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.EntityType;
-import net.minecraft.entity.EquipmentSlot;
-import net.minecraft.entity.SpawnReason;
-import net.minecraft.entity.attribute.EntityAttributeInstance;
-import net.minecraft.entity.attribute.EntityAttributeModifier;
-import net.minecraft.entity.attribute.EntityAttributes;
-import net.minecraft.entity.mob.MobEntity;
-import net.minecraft.entity.passive.SheepEntity;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.particle.ParticleTypes;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.text.MutableText;
-import net.minecraft.text.Text;
-import net.minecraft.util.DyeColor;
-import net.minecraft.util.Hand;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.math.random.Random;
-import net.minecraft.village.VillagerDataContainer;
-
+import net.minecraft.client.Minecraft;
+import net.minecraft.core.particles.ParticleTypes;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.util.RandomSource;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.MobSpawnType;
+import net.minecraft.world.entity.ai.attributes.AttributeInstance;
+import net.minecraft.world.entity.ai.attributes.AttributeModifier;
+import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.entity.animal.Sheep;
+import net.minecraft.world.entity.npc.VillagerDataHolder;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.DyeColor;
 import java.util.*;
 
-public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrackedEntity<E>, VillagerDataContainer, Infectable, Messenger {
+public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrackedEntity<E>, VillagerDataHolder, Infectable, Messenger {
     CDataParameter<String> VILLAGER_NAME = CParameter.create("villagerName", "");
     CDataParameter<String> CUSTOM_SKIN = CParameter.create("custom_skin", "");
     CDataParameter<String> CLOTHES = CParameter.create("clothes", "");
@@ -70,9 +69,9 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
 
     EntityCommandHandler<?> getInteractions();
 
-    default void initialize(SpawnReason spawnReason) {
-        if (spawnReason != SpawnReason.CONVERSION) {
-            if (spawnReason != SpawnReason.BREEDING) {
+    default void initialize(MobSpawnType spawnReason) {
+        if (spawnReason != MobSpawnType.CONVERSION) {
+            if (spawnReason != MobSpawnType.BREEDING) {
                 getGenetics().randomize();
                 getTraits().randomize();
             }
@@ -91,7 +90,7 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
 
         validateClothes();
 
-        asEntity().calculateDimensions();
+        asEntity().refreshDimensions();
     }
 
     @Override
@@ -106,7 +105,7 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
 
     default void setName(String name) {
         setTrackedValue(VILLAGER_NAME, name);
-        if (!asEntity().getWorld().isClient) {
+        if (!asEntity().level().isClientSide) {
             EntityRelationship.of(asEntity()).ifPresent(relationship -> relationship.getFamilyEntry().setName(name));
         }
     }
@@ -125,8 +124,8 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
 
     default boolean hasCustomSkin() {
         if (!MCA.isBlankString(getTrackedValue(CUSTOM_SKIN)) && getGameProfile() != null) {
-            MinecraftClient minecraftClient = MinecraftClient.getInstance();
-            Map<MinecraftProfileTexture.Type, MinecraftProfileTexture> map = minecraftClient.getSkinProvider().getTextures(getGameProfile());
+            Minecraft minecraftClient = Minecraft.getInstance();
+            Map<MinecraftProfileTexture.Type, MinecraftProfileTexture> map = minecraftClient.getSkinManager().getInsecureSkinInformation(getGameProfile());
             return map.containsKey(MinecraftProfileTexture.Type.SKIN);
         } else {
             return false;
@@ -155,16 +154,16 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
         return !Config.getInstance().enableGenderCheckForPlayers || canBeAttractedTo(toVillager(other));
     }
 
-    default Hand getDominantHand() {
-        return getTraits().hasTrait(Traits.LEFT_HANDED) ? Hand.OFF_HAND : Hand.MAIN_HAND;
+    default InteractionHand getDominantHand() {
+        return getTraits().hasTrait(Traits.LEFT_HANDED) ? InteractionHand.OFF_HAND : InteractionHand.MAIN_HAND;
     }
 
-    default Hand getOpposingHand() {
-        return getDominantHand() == Hand.OFF_HAND ? Hand.MAIN_HAND : Hand.OFF_HAND;
+    default InteractionHand getOpposingHand() {
+        return getDominantHand() == InteractionHand.OFF_HAND ? InteractionHand.MAIN_HAND : InteractionHand.OFF_HAND;
     }
 
-    default EquipmentSlot getSlotForHand(Hand hand) {
-        return hand == Hand.OFF_HAND ? EquipmentSlot.OFFHAND : EquipmentSlot.MAINHAND;
+    default EquipmentSlot getSlotForHand(InteractionHand hand) {
+        return hand == InteractionHand.OFF_HAND ? EquipmentSlot.OFFHAND : EquipmentSlot.MAINHAND;
     }
 
     default EquipmentSlot getDominantSlot() {
@@ -175,7 +174,7 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
         return getSlotForHand(getOpposingHand());
     }
 
-    default Identifier getProfessionId() {
+    default ResourceLocation getProfessionId() {
         return MCA.locate("none");
     }
 
@@ -189,8 +188,8 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
         return MCA.isBlankString(professionName) ? "mca.none" : professionName;
     }
 
-    default MutableText getProfessionText() {
-        return Text.translatable("entity.minecraft.villager." + getProfessionName());
+    default MutableComponent getProfessionText() {
+        return Component.translatable("entity.minecraft.villager." + getProfessionName());
     }
 
     default boolean isProfessionImportant() {
@@ -209,7 +208,7 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
         return getTrackedValue(CLOTHES);
     }
 
-    default void setClothes(Identifier clothes) {
+    default void setClothes(ResourceLocation clothes) {
         setClothes(clothes.toString());
     }
 
@@ -221,7 +220,7 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
         return getTrackedValue(HAIR);
     }
 
-    default void setHair(Identifier hair) {
+    default void setHair(ResourceLocation hair) {
         setHair(hair.toString());
     }
 
@@ -230,7 +229,7 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
     }
 
     default void setHairDye(DyeColor color) {
-        float[] components = color.getColorComponents().clone();
+        float[] components = color.getTextureDiffuseColors().clone();
 
         float[] dye = getHairDye();
         if (dye[0] > 0.0f) {
@@ -279,13 +278,13 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
 
         speed *= getAgeState().getSpeed();
 
-        EntityAttributeInstance entityAttributeInstance = asEntity().getAttributeInstance(EntityAttributes.GENERIC_MOVEMENT_SPEED);
+        AttributeInstance entityAttributeInstance = asEntity().getAttribute(Attributes.MOVEMENT_SPEED);
         if (entityAttributeInstance != null) {
             if (entityAttributeInstance.getModifier(SPEED_ID) != null) {
                 entityAttributeInstance.removeModifier(SPEED_ID);
             }
-            EntityAttributeModifier speedModifier = new EntityAttributeModifier(SPEED_ID, "Speed", speed - 1.0f, EntityAttributeModifier.Operation.MULTIPLY_BASE);
-            entityAttributeInstance.addTemporaryModifier(speedModifier);
+            AttributeModifier speedModifier = new AttributeModifier(SPEED_ID, "Speed", speed - 1.0f, AttributeModifier.Operation.MULTIPLY_BASE);
+            entityAttributeInstance.addTransientModifier(speedModifier);
         }
     }
 
@@ -296,7 +295,7 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
         }
 
         setTrackedValue(AGE_STATE, state);
-        asEntity().calculateDimensions();
+        asEntity().refreshDimensions();
         updateSpeed();
 
         return old != AgeState.UNASSIGNED;
@@ -319,21 +318,21 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
     }
 
     @Override
-    default DialogueType getDialogueType(PlayerEntity receiver) {
-        if (!receiver.getWorld().isClient) {
+    default DialogueType getDialogueType(Player receiver) {
+        if (!receiver.level().isClientSide) {
             // age specific
             DialogueType type = DialogueType.fromAge(getAgeState());
 
             // relationship specific
-            if (!receiver.getWorld().isClient) {
+            if (!receiver.level().isClientSide) {
                 Optional<EntityRelationship> r = EntityRelationship.of(asEntity());
                 if (r.isPresent()) {
                     FamilyTreeNode relationship = r.get().getFamilyEntry();
-                    if (r.get().isMarriedTo(receiver.getUuid())) {
+                    if (r.get().isMarriedTo(receiver.getUUID())) {
                         return DialogueType.SPOUSE;
-                    } else if (r.get().isEngagedWith(receiver.getUuid())) {
+                    } else if (r.get().isEngagedWith(receiver.getUUID())) {
                         return DialogueType.ENGAGED;
-                    } else if (relationship.isParent(receiver.getUuid())) {
+                    } else if (relationship.isParent(receiver.getUUID())) {
                         return type.toChild();
                     }
                 }
@@ -352,15 +351,15 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
 
         //colored hair
         if (!isPlayer) {
-            MobEntity entity = asEntity();
+            Mob entity = asEntity();
             if (entity.getRandom().nextFloat() < Config.getInstance().coloredHairChance) {
                 int n = entity.getRandom().nextInt(25);
                 int o = DyeColor.values().length;
                 int p = n % o;
                 int q = (n + 1) % o;
                 float r = entity.getRandom().nextFloat();
-                float[] fs = SheepEntity.getRgbColor(DyeColor.byId(p));
-                float[] gs = SheepEntity.getRgbColor(DyeColor.byId(q));
+                float[] fs = Sheep.getColorArray(DyeColor.byId(p));
+                float[] gs = Sheep.getColorArray(DyeColor.byId(q));
                 setTrackedValue(HAIR_COLOR_RED, fs[0] * (1.0f - r) + gs[0] * r);
                 setTrackedValue(HAIR_COLOR_GREEN, fs[1] * (1.0f - r) + gs[1] * r);
                 setTrackedValue(HAIR_COLOR_BLUE, fs[2] * (1.0f - r) + gs[2] * r);
@@ -377,11 +376,11 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
     }
 
     default void validateClothes() {
-        if (!asEntity().getWorld().isClient()) {
+        if (!asEntity().level().isClientSide()) {
             if (!getClothes().startsWith("immersive_library") && !ClothingList.getInstance().clothing.containsKey(getClothes())) {
                 //try to port from old versions
                 if (getClothes() != null) {
-                    Identifier identifier = new Identifier(getClothes());
+                    ResourceLocation identifier = new ResourceLocation(getClothes());
                     String id = identifier.getNamespace() + ":skins/clothing/normal/" + identifier.getPath();
                     if (ClothingList.getInstance().clothing.containsKey(id)) {
                         setClothes(id);
@@ -403,14 +402,14 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
     }
 
     @SuppressWarnings({"unchecked", "RedundantSuppression"})
-    default NbtCompound toNbtForConversion(EntityType<?> convertingTo) {
-        NbtCompound output = new NbtCompound();
+    default CompoundTag toNbtForConversion(EntityType<?> convertingTo) {
+        CompoundTag output = new CompoundTag();
         this.getTypeDataManager().save((E) asEntity(), output);
         return output;
     }
 
     @SuppressWarnings({"unchecked", "RedundantSuppression"})
-    default void readNbtForConversion(EntityType<?> convertingFrom, NbtCompound input) {
+    default void readNbtForConversion(EntityType<?> convertingFrom, CompoundTag input) {
         this.getTypeDataManager().load((E) asEntity(), input);
     }
 
@@ -419,17 +418,17 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
     }
 
     static VillagerLike<?> toVillager(PlayerSaveData player) {
-        NbtCompound villagerData = player.getEntityData();
+        CompoundTag villagerData = player.getEntityData();
         VillagerEntityMCA villager = EntitiesMCA.MALE_VILLAGER.get().create(player.getWorld());
         assert villager != null;
-        villager.readCustomDataFromNbt(villagerData);
+        villager.readAdditionalSaveData(villagerData);
         return villager;
     }
 
     static VillagerLike<?> toVillager(Entity entity) {
         if (entity instanceof VillagerLike<?>) {
             return (VillagerLike<?>) entity;
-        } else if (entity instanceof ServerPlayerEntity playerEntity) {
+        } else if (entity instanceof ServerPlayer playerEntity) {
             return toVillager(PlayerSaveData.get(playerEntity));
         } else {
             return null;
@@ -447,12 +446,12 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
     boolean isBurned();
 
     default void spawnBurntParticles() {
-        Random random = asEntity().getRandom();
+        RandomSource random = asEntity().getRandom();
         if (random.nextInt(4) == 0) {
             double d = random.nextGaussian() * 0.02;
             double e = random.nextGaussian() * 0.02;
             double f = random.nextGaussian() * 0.02;
-            asEntity().getWorld().addParticle(ParticleTypes.SMOKE, asEntity().getParticleX(1.0), asEntity().getRandomBodyY() + 1.0, asEntity().getParticleZ(1.0), d, e, f);
+            asEntity().level().addParticle(ParticleTypes.SMOKE, asEntity().getRandomX(1.0), asEntity().getRandomY() + 1.0, asEntity().getRandomZ(1.0), d, e, f);
         }
     }
 

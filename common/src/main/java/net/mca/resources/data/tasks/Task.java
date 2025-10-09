@@ -2,11 +2,10 @@ package net.mca.resources.data.tasks;
 
 import com.google.gson.JsonObject;
 import net.mca.server.world.data.Village;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.text.MutableText;
-import net.minecraft.text.Text;
-import net.minecraft.util.JsonHelper;
-
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.util.GsonHelper;
 import java.io.Serial;
 import java.io.Serializable;
 
@@ -17,21 +16,21 @@ public abstract class Task implements Serializable {
     private final String id;
 
     public Task(JsonObject json) {
-        this(JsonHelper.getString(json, "id"));
+        this(GsonHelper.getAsString(json, "id"));
     }
 
     public Task(String id) {
         this.id = id;
     }
 
-    abstract public boolean isCompleted(Village village, ServerPlayerEntity player);
+    abstract public boolean isCompleted(Village village, ServerPlayer player);
 
     public boolean isRequired() {
         return false;
     }
 
-    public MutableText getTranslatable() {
-        return Text.translatable("task." + id);
+    public MutableComponent getTranslatable() {
+        return Component.translatable("task." + id);
     }
 
     public String getId() {

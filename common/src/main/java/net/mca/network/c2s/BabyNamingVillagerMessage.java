@@ -2,9 +2,8 @@ package net.mca.network.c2s;
 
 import net.mca.cobalt.network.Message;
 import net.mca.item.BabyItem;
-import net.minecraft.item.ItemStack;
-import net.minecraft.server.network.ServerPlayerEntity;
-
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.item.ItemStack;
 import java.io.Serial;
 
 public class BabyNamingVillagerMessage implements Message {
@@ -20,8 +19,8 @@ public class BabyNamingVillagerMessage implements Message {
     }
 
     @Override
-    public void receive(ServerPlayerEntity player) {
-        ItemStack stack = player.getInventory().getStack(slot);
+    public void receive(ServerPlayer player) {
+        ItemStack stack = player.getInventory().getItem(slot);
         BabyItem.getBabyNbt(stack).putString("babyName", name);
     }
 }

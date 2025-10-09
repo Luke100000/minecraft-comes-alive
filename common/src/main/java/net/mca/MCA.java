@@ -2,8 +2,8 @@ package net.mca;
 
 import dev.architectury.platform.Mod;
 import dev.architectury.platform.Platform;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.util.Identifier;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -19,13 +19,13 @@ public final class MCA {
     private static final Map<String, Boolean> MOD_CACHE = new HashMap<>();
 
     public static final ExecutorService executorService = Executors.newSingleThreadExecutor();
-    public static Map<String, String> translations = new HashMap<>();
+    public static Map<String, String> storage = new HashMap<>();
     public static String language;
 
     private static MinecraftServer server;
 
-    public static Identifier locate(String id) {
-        return new Identifier(MOD_ID, id);
+    public static ResourceLocation locate(String id) {
+        return new ResourceLocation(MOD_ID, id);
     }
 
     public static boolean isBlankString(String string) {

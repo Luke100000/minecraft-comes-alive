@@ -4,7 +4,7 @@ import net.mca.entity.VillagerEntityMCA;
 import net.mca.entity.ai.chatAI.TriggerCommandInfos;
 import net.mca.entity.ai.chatAI.inworldAIModules.api.Interaction;
 import net.mca.entity.ai.chatAI.inworldAIModules.api.TriggerEvent;
-import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.server.level.ServerPlayer;
 
 /**
  * Class to manage command triggers (wear armor, follow me, etc.)
@@ -18,7 +18,7 @@ public class TriggerModule {
      * @param player      Player in the conversation
      * @param villager    Villager in the conversation
      */
-    public void processTriggers(Interaction interaction, ServerPlayerEntity player, VillagerEntityMCA villager) {
+    public void processTriggers(Interaction interaction, ServerPlayer player, VillagerEntityMCA villager) {
         // Get triggers sent from server
         TriggerEvent[] triggerEvents = interaction.outgoingTriggers();
         for (TriggerEvent event : triggerEvents) {

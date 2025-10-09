@@ -3,20 +3,20 @@ package net.mca;
 import com.google.common.collect.ImmutableMap;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 import net.mca.item.ItemsMCA;
-import net.minecraft.block.Block;
-import net.minecraft.entity.Entity;
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemConvertible;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
-import net.minecraft.util.math.random.Random;
-import net.minecraft.village.TradeOffer;
-import net.minecraft.village.TradeOffers;
+import net.minecraft.util.RandomSource;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.npc.VillagerTrades;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.item.trading.MerchantOffer;
+import net.minecraft.world.level.ItemLike;
+import net.minecraft.world.level.block.Block;
 
 public class TradeOffersMCA {
     public static void bootstrap() {
-        TradeOffers.PROFESSION_TO_LEVELED_TRADE.put(ProfessionsMCA.ADVENTURER.get(), new Int2ObjectOpenHashMap<>(
-                ImmutableMap.of(1, new TradeOffers.Factory[] {
+        VillagerTrades.TRADES.put(ProfessionsMCA.ADVENTURER.get(), new Int2ObjectOpenHashMap<>(
+                ImmutableMap.of(1, new VillagerTrades.ItemListing[] {
                                 new SellItemFactory(Items.SLIME_BALL, 1, 1, 16, 1),
                                 new SellItemFactory(Items.LEATHER_HORSE_ARMOR, 3, 1, 4, 10),
                                 new SellItemFactory(Items.SADDLE, 4, 1, 3, 5),
@@ -28,14 +28,14 @@ public class TradeOffersMCA {
                                 new SellItemFactory(Items.ENCHANTED_GOLDEN_APPLE, 32, 1, 3, 50),
                                 new BuyForOneEmeraldFactory(Items.BREAD, 10, 10, 30)
                         },
-                        2, new TradeOffers.Factory[] {},
-                        3, new TradeOffers.Factory[] {},
-                        4, new TradeOffers.Factory[] {},
-                        5, new TradeOffers.Factory[] {}
+                        2, new VillagerTrades.ItemListing[] {},
+                        3, new VillagerTrades.ItemListing[] {},
+                        4, new VillagerTrades.ItemListing[] {},
+                        5, new VillagerTrades.ItemListing[] {}
                 )));
 
-        TradeOffers.PROFESSION_TO_LEVELED_TRADE.put(ProfessionsMCA.CULTIST.get(), new Int2ObjectOpenHashMap<>(
-                ImmutableMap.of(1, new TradeOffers.Factory[] {
+        VillagerTrades.TRADES.put(ProfessionsMCA.CULTIST.get(), new Int2ObjectOpenHashMap<>(
+                ImmutableMap.of(1, new VillagerTrades.ItemListing[] {
                                 new SellItemFactory(ItemsMCA.SIRBEN_BABY_BOY.get(), 5, 1, 1, 1),
                                 new SellItemFactory(ItemsMCA.SIRBEN_BABY_GIRL.get(), 5, 1, 1, 1),
                                 new BuyForOneEmeraldFactory(ItemsMCA.BABY_BOY.get(), 1, 1, 1),
@@ -50,22 +50,22 @@ public class TradeOffersMCA {
                                 new SellItemFactory(ItemsMCA.BOOK_INFECTION.get(), 1, 1, 1, 1),
                                 new SellItemFactory(ItemsMCA.BOOK_SUPPORTERS.get(), 1, 1, 1, 1)
                         },
-                        2, new TradeOffers.Factory[] {},
-                        3, new TradeOffers.Factory[] {},
-                        4, new TradeOffers.Factory[] {},
-                        5, new TradeOffers.Factory[] {}
+                        2, new VillagerTrades.ItemListing[] {},
+                        3, new VillagerTrades.ItemListing[] {},
+                        4, new VillagerTrades.ItemListing[] {},
+                        5, new VillagerTrades.ItemListing[] {}
                 )));
     }
 
 
-    static class BuyForOneEmeraldFactory implements TradeOffers.Factory {
+    static class BuyForOneEmeraldFactory implements VillagerTrades.ItemListing {
         private final Item buy;
         private final int price;
         private final int maxUses;
         private final int experience;
         private final float multiplier;
 
-        public BuyForOneEmeraldFactory(ItemConvertible item, int price, int maxUses, int experience) {
+        public BuyForOneEmeraldFactory(ItemLike item, int price, int maxUses, int experience) {
             this.buy = item.asItem();
             this.price = price;
             this.maxUses = maxUses;
@@ -74,13 +74,13 @@ public class TradeOffersMCA {
         }
 
         @Override
-        public TradeOffer create(Entity entity, Random random) {
+        public MerchantOffer getOffer(Entity entity, RandomSource random) {
             ItemStack itemStack = new ItemStack(this.buy, this.price);
-            return new TradeOffer(itemStack, new ItemStack(Items.EMERALD), this.maxUses, this.experience, this.multiplier);
+            return new MerchantOffer(itemStack, new ItemStack(Items.EMERALD), this.maxUses, this.experience, this.multiplier);
         }
     }
 
-    static class SellItemFactory implements TradeOffers.Factory {
+    static class SellItemFactory implements VillagerTrades.ItemListing {
         private final ItemStack sell;
         private final int price;
         private final int count;
@@ -110,8 +110,8 @@ public class TradeOffersMCA {
         }
 
         @Override
-        public TradeOffer create(Entity entity, Random random) {
-            return new TradeOffer(new ItemStack(Items.EMERALD, this.price), new ItemStack(this.sell.getItem(), this.count), this.maxUses, this.experience, this.multiplier);
+        public MerchantOffer getOffer(Entity entity, RandomSource random) {
+            return new MerchantOffer(new ItemStack(Items.EMERALD, this.price), new ItemStack(this.sell.getItem(), this.count), this.maxUses, this.experience, this.multiplier);
         }
     }
 }

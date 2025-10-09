@@ -2,16 +2,16 @@ package net.mca.client.gui.immersive_library;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonSyntaxException;
+import com.mojang.blaze3d.platform.NativeImage;
 import net.mca.MCA;
 import net.mca.client.gui.immersive_library.responses.ContentResponse;
 import net.mca.client.gui.immersive_library.responses.Response;
 import net.mca.client.gui.immersive_library.types.LiteContent;
 import net.mca.client.resources.SkinMeta;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.texture.NativeImage;
-import net.minecraft.client.texture.NativeImageBackedTexture;
-import net.minecraft.client.texture.TextureManager;
-import net.minecraft.util.Identifier;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.texture.DynamicTexture;
+import net.minecraft.client.renderer.texture.TextureManager;
+import net.minecraft.resources.ResourceLocation;
 import org.apache.commons.io.FileUtils;
 
 import java.io.*;
@@ -27,14 +27,14 @@ import java.util.concurrent.ConcurrentHashMap;
 import static net.mca.client.gui.immersive_library.Api.request;
 
 public class SkinCache {
-    private static final Identifier DEFAULT_SKIN = MCA.locate("skins/empty.png");
+    private static final ResourceLocation DEFAULT_SKIN = MCA.locate("skins/empty.png");
 
     private static final Gson gson = new Gson();
 
     static final Map<Integer, Boolean> requested = new ConcurrentHashMap<>();
     static final Map<Integer, Integer> cachedVersions = new ConcurrentHashMap<>();
 
-    static final Map<Integer, Identifier> textureIdentifiers = new HashMap<>();
+    static final Map<Integer, ResourceLocation> textureIdentifiers = new HashMap<>();
     static final Map<Integer, NativeImage> images = new HashMap<>();
     static final Map<Integer, SkinMeta> metas = new HashMap<>();
 
@@ -156,10 +156,10 @@ public class SkinCache {
         try (FileInputStream stream = new FileInputStream(getFile(contentid + ".png").getPath())) {
             // Load new
             NativeImage image = NativeImage.read(stream);
-            Identifier identifier = new Identifier("immersive_library", String.valueOf(contentid));
+            ResourceLocation identifier = new ResourceLocation("immersive_library", String.valueOf(contentid));
 
-            TextureManager textureManager = MinecraftClient.getInstance().getTextureManager();
-            textureManager.registerTexture(identifier, new NativeImageBackedTexture(image));
+            TextureManager textureManager = Minecraft.getInstance().getTextureManager();
+            textureManager.register(identifier, new DynamicTexture(image));
 
             textureIdentifiers.put(contentid, identifier);
             images.put(contentid, image);
@@ -186,7 +186,7 @@ public class SkinCache {
         return Optional.ofNullable(images.get(content.contentid()));
     }
 
-    public static Identifier getTextureIdentifier(LiteContent content) {
+    public static ResourceLocation getTextureIdentifier(LiteContent content) {
         sync(content);
         return textureIdentifiers.getOrDefault(content.contentid(), DEFAULT_SKIN);
     }
@@ -196,7 +196,7 @@ public class SkinCache {
      * @return The texture identifier
      * Unlike the other getters this function will sync at least once no matter the local state of the cache, as it lacks the current version
      */
-    public static Identifier getTextureIdentifier(int contentid) {
+    public static ResourceLocation getTextureIdentifier(int contentid) {
         sync(contentid, -2);
         return textureIdentifiers.getOrDefault(contentid, DEFAULT_SKIN);
     }

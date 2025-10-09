@@ -4,20 +4,19 @@ import net.mca.MCA;
 import net.mca.entity.ai.relationship.Gender;
 import net.mca.resources.Names;
 import net.mca.util.WorldUtils;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.SpawnReason;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Vec3d;
-import net.minecraft.village.VillagerData;
-import net.minecraft.village.VillagerProfession;
-import net.minecraft.village.VillagerType;
-import net.minecraft.world.World;
-
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.MobSpawnType;
+import net.minecraft.world.entity.npc.VillagerData;
+import net.minecraft.world.entity.npc.VillagerProfession;
+import net.minecraft.world.entity.npc.VillagerType;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.Vec3;
 import java.util.Optional;
 import java.util.OptionalInt;
 
 public class ZombieVillagerFactory {
-    private final World world;
+    private final Level world;
 
     private Optional<String> name = Optional.empty();
     private Optional<Gender> gender = Optional.empty();
@@ -26,13 +25,13 @@ public class ZombieVillagerFactory {
     private Optional<VillagerType> type = Optional.empty();
     private OptionalInt level = OptionalInt.empty();
 
-    private Optional<Vec3d> position = Optional.empty();
+    private Optional<Vec3> position = Optional.empty();
 
-    private ZombieVillagerFactory(World world) {
+    private ZombieVillagerFactory(Level world) {
         this.world = world;
     }
 
-    public static ZombieVillagerFactory newVillager(World world) {
+    public static ZombieVillagerFactory newVillager(Level world) {
         return new ZombieVillagerFactory(world);
     }
 
@@ -63,23 +62,23 @@ public class ZombieVillagerFactory {
     }
 
     public ZombieVillagerFactory withPosition(double x, double y, double z) {
-        return withPosition(new Vec3d(x, y, z));
+        return withPosition(new Vec3(x, y, z));
     }
 
     public ZombieVillagerFactory withPosition(Entity entity) {
         return withPosition(entity.getX(), entity.getY(), entity.getZ());
     }
 
-    public ZombieVillagerFactory withPosition(Vec3d pos) {
+    public ZombieVillagerFactory withPosition(Vec3 pos) {
         position = Optional.of(pos);
         return this;
     }
 
     public ZombieVillagerFactory withPosition(BlockPos pos) {
-        return withPosition(Vec3d.ofBottomCenter(pos.up()));
+        return withPosition(Vec3.atBottomCenterOf(pos.above()));
     }
 
-    public ZombieVillagerEntityMCA spawn(SpawnReason reason) {
+    public ZombieVillagerEntityMCA spawn(MobSpawnType reason) {
         if (position.isEmpty()) {
             MCA.LOGGER.info("Attempted to spawn villager without a position being set!");
         }
@@ -94,7 +93,7 @@ public class ZombieVillagerFactory {
         ZombieVillagerEntityMCA zombie = gender.getZombieType().create(world);
         zombie.getGenetics().setGender(gender);
         zombie.setName(name.orElseGet(() -> Names.pickCitizenName(gender, zombie)));
-        position.ifPresent(pos -> zombie.updatePosition(pos.getX(), pos.getY(), pos.getZ()));
+        position.ifPresent(pos -> zombie.absMoveTo(pos.x(), pos.y(), pos.z()));
         VillagerData data = zombie.getVillagerData();
         zombie.setVillagerData(new VillagerData(
                         type.orElseGet(data::getType),

@@ -1,7 +1,7 @@
 package net.mca.entity.ai;
 
-import net.minecraft.item.*;
-import net.minecraft.text.Text;
+import net.minecraft.network.chat.Component;
+import net.minecraft.world.item.*;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Locale;
@@ -12,12 +12,12 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public enum Chore {
-    NONE    ("none", null),
+    NONE("none", null),
     PROSPECT("prospecting", PickaxeItem.class),
-    HARVEST ("harvesting", HoeItem.class),
-    CHOP    ("chopping", AxeItem.class),
-    HUNT    ("hunting", SwordItem.class),
-    FISH    ("fishing", FishingRodItem.class);
+    HARVEST("harvesting", HoeItem.class),
+    CHOP("chopping", AxeItem.class),
+    HUNT("hunting", SwordItem.class),
+    FISH("fishing", FishingRodItem.class);
 
     private static final Chore[] VALUES = values();
     private static final Map<String, Chore> REGISTRY = Stream.of(VALUES).collect(Collectors.toMap(
@@ -35,8 +35,8 @@ public enum Chore {
         this.toolType = toolType;
     }
 
-    public Text getName() {
-        return Text.translatable("gui.label." + friendlyName);
+    public Component getName() {
+        return Component.translatable("gui.label." + friendlyName);
     }
 
     @Nullable

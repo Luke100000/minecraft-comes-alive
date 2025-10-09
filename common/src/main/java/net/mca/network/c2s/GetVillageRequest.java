@@ -8,8 +8,7 @@ import net.mca.resources.Rank;
 import net.mca.resources.Tasks;
 import net.mca.server.world.data.GraveyardManager;
 import net.mca.server.world.data.Village;
-import net.minecraft.server.network.ServerPlayerEntity;
-
+import net.minecraft.server.level.ServerPlayer;
 import java.io.Serial;
 import java.util.Optional;
 import java.util.Set;
@@ -19,10 +18,10 @@ public class GetVillageRequest implements Message {
     private static final long serialVersionUID = -1302412553466016247L;
 
     @Override
-    public void receive(ServerPlayerEntity player) {
+    public void receive(ServerPlayer player) {
         Optional<Village> village = Village.findNearest(player);
         if (village.isPresent()) {
-            GraveyardManager.get(player.getServerWorld()).reportToVillageManager(player);
+            GraveyardManager.get(player.serverLevel()).reportToVillageManager(player);
             village.get().updateMaxPopulation();
             int reputation = village.get().getReputation(player);
             boolean isVillage = village.get().isVillage();

@@ -2,8 +2,7 @@ package net.mca.network.s2c;
 
 import net.mca.ClientProxy;
 import net.mca.cobalt.network.Message;
-import net.minecraft.text.Text;
-
+import net.minecraft.network.chat.Component;
 import java.io.Serial;
 
 public class ShowToastRequest implements Message {
@@ -18,12 +17,12 @@ public class ShowToastRequest implements Message {
         this.message = message;
     }
 
-    public Text getTitle() {
-        return Text.translatable(title);
+    public Component getTitle() {
+        return Component.translatable(title);
     }
 
-    public Text getMessage() {
-        return Text.translatable(message);
+    public Component getMessage() {
+        return Component.translatable(message);
     }
 
     @Override

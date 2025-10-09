@@ -2,9 +2,8 @@ package net.mca.resources.data.skin;
 
 import com.google.gson.JsonObject;
 import net.mca.entity.ai.relationship.Gender;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.JsonHelper;
-
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.GsonHelper;
 import java.io.Serializable;
 
 public abstract class SkinListEntry implements Serializable {
@@ -26,12 +25,12 @@ public abstract class SkinListEntry implements Serializable {
     public SkinListEntry(String identifier, JsonObject object) {
         this.identifier = identifier;
 
-        this.gender = Gender.byId(JsonHelper.getInt(object, "gender", 0));
-        this.chance = JsonHelper.getFloat(object, "chance", 1.0f);
+        this.gender = Gender.byId(GsonHelper.getAsInt(object, "gender", 0));
+        this.chance = GsonHelper.getAsFloat(object, "chance", 1.0f);
     }
 
     public String getPath() {
-        return (new Identifier(this.identifier)).getPath();
+        return (new ResourceLocation(this.identifier)).getPath();
     }
 
     public JsonObject toJson() {

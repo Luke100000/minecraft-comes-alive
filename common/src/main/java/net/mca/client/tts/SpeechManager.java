@@ -8,20 +8,19 @@ import net.mca.entity.CommonSpeechManager;
 import net.mca.entity.VillagerEntityMCA;
 import net.mca.entity.ai.Genetics;
 import net.mca.util.LimitedLinkedHashMap;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.sound.EntityTrackingSoundInstance;
-import net.minecraft.client.sound.Sound;
-import net.minecraft.entity.Entity;
-import net.minecraft.sound.SoundCategory;
-import net.minecraft.sound.SoundEvent;
-import net.minecraft.text.LiteralTextContent;
-import net.minecraft.text.Text;
-import net.minecraft.text.TextContent;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.Language;
-import net.minecraft.util.math.floatprovider.ConstantFloatProvider;
-import net.minecraft.util.math.random.Random;
-
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.resources.sounds.EntityBoundSoundInstance;
+import net.minecraft.client.resources.sounds.Sound;
+import net.minecraft.locale.Language;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.ComponentContents;
+import net.minecraft.network.chat.contents.LiteralContents;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.sounds.SoundEvent;
+import net.minecraft.sounds.SoundSource;
+import net.minecraft.util.RandomSource;
+import net.minecraft.util.valueproviders.ConstantFloat;
+import net.minecraft.world.entity.Entity;
 import java.util.Collection;
 import java.util.Locale;
 import java.util.UUID;
@@ -30,8 +29,8 @@ import java.util.concurrent.CompletableFuture;
 public class SpeechManager {
     public static final SpeechManager INSTANCE = new SpeechManager();
 
-    private final MinecraftClient client;
-    private final LimitedLinkedHashMap<UUID, EntityTrackingSoundInstance> currentlyPlaying = new LimitedLinkedHashMap<>(10);
+    private final Minecraft client;
+    private final LimitedLinkedHashMap<UUID, EntityBoundSoundInstance> currentlyPlaying = new LimitedLinkedHashMap<>(10);
 
     private final RealtimeSpeechManager realtimeSpeechManager = new RealtimeSpeechManager(Config.getInstance().onlineTTSServer);
     private final Player2SpeechManager player2SpeechManager = new Player2SpeechManager(Config.getInstance().player2Url);
@@ -39,35 +38,35 @@ public class SpeechManager {
     private final OnlineSpeechManager onlineSpeechManager = new OnlineSpeechManager();
 
     @SuppressWarnings("deprecation")
-    private final Random threadSafeRandom = Random.createThreadSafe();
+    private final RandomSource threadSafeRandom = RandomSource.createThreadSafe();
 
     public SpeechManager() {
-        client = MinecraftClient.getInstance();
+        client = Minecraft.getInstance();
     }
 
-    public EntityTrackingSoundInstance getSound(float pitch, Entity entity, Identifier soundLocation) {
-        Sound sound = new Sound(soundLocation.getPath(), ConstantFloatProvider.create(1.0f), ConstantFloatProvider.create(1.0f), 1, Sound.RegistrationType.FILE, true, false, 16);
+    public EntityBoundSoundInstance getSound(float pitch, Entity entity, ResourceLocation soundLocation) {
+        Sound sound = new Sound(soundLocation.getPath(), ConstantFloat.of(1.0f), ConstantFloat.of(1.0f), 1, Sound.Type.FILE, true, false, 16);
         SingleWeighedSoundEvents weightedSoundEvents = new SingleWeighedSoundEvents(sound, soundLocation, "");
-        return new CustomEntityBoundSoundInstance(weightedSoundEvents, SoundEvent.of(soundLocation), SoundCategory.NEUTRAL, 1.0f, pitch, entity, threadSafeRandom.nextLong());
+        return new CustomEntityBoundSoundInstance(weightedSoundEvents, SoundEvent.createVariableRangeEvent(soundLocation), SoundSource.NEUTRAL, 1.0f, pitch, entity, threadSafeRandom.nextLong());
     }
 
-    public void playSound(float pitch, Entity entity, Identifier soundLocation) {
+    public void playSound(float pitch, Entity entity, ResourceLocation soundLocation) {
         client.execute(() -> client.getSoundManager().play(SpeechManager.INSTANCE.getSound(pitch, entity, soundLocation)));
     }
 
-    public void onChatMessage(Text message, UUID sender) {
-        TextContent content = message.getContent();
+    public void onChatMessage(Component message, UUID sender) {
+        ComponentContents content = message.getContents();
         if (CommonSpeechManager.INSTANCE.translations.containsKey(content)) {
             speak(CommonSpeechManager.INSTANCE.translations.get(content), sender, true);
-        } else if (content instanceof LiteralTextContent literal) {
-            speak(literal.string(), sender, false);
+        } else if (content instanceof LiteralContents literal) {
+            speak(literal.text(), sender, false);
         }
     }
 
-    private VillagerEntityMCA getSpeaker(MinecraftClient client, UUID sender) {
-        if (client.world != null) {
-            for (Entity entity : client.world.getEntities()) {
-                if (entity instanceof VillagerEntityMCA v && entity.getUuid().equals(sender)) {
+    private VillagerEntityMCA getSpeaker(Minecraft client, UUID sender) {
+        if (client.level != null) {
+            for (Entity entity : client.level.entitiesForRendering()) {
+                if (entity instanceof VillagerEntityMCA v && entity.getUUID().equals(sender)) {
                     return v;
                 }
             }
@@ -76,9 +75,9 @@ public class SpeechManager {
     }
 
     private void speak(String phrase, UUID sender, boolean translatable) {
-        MinecraftClient client = MinecraftClient.getInstance();
-        if (client.world == null) return;
-        if (currentlyPlaying.containsKey(sender) && client.getSoundManager().isPlaying(currentlyPlaying.get(sender))) {
+        Minecraft client = Minecraft.getInstance();
+        if (client.level == null) return;
+        if (currentlyPlaying.containsKey(sender) && client.getSoundManager().isActive(currentlyPlaying.get(sender))) {
             return;
         }
 
@@ -88,21 +87,21 @@ public class SpeechManager {
         if (villager.isSpeechImpaired()) return;
         if (villager.isToYoungToSpeak()) return;
 
-        float pitch = villager.getSoundPitch();
+        float pitch = villager.getVoicePitch();
         float gene = villager.getGenetics().getGene(Genetics.VOICE_TONE);
 
         String gender = villager.getGenetics().getGender().binary().getDataName();
         if (Config.getInstance().enableOnlineTTS) {
             if (translatable) {
-                if (Language.getInstance().hasTranslation(phrase)) {
-                    phrase = Language.getInstance().get(phrase);
+                if (Language.getInstance().has(phrase)) {
+                    phrase = Language.getInstance().getOrDefault(phrase);
                 } else {
                     MCA.LOGGER.warn("Tried to play a TTS sound for a non-translatable phrase: {}", phrase);
                     return;
                 }
             }
 
-            String gameLang = client.options.language;
+            String gameLang = client.options.languageCode;
             switch (Config.getInstance().onlineTTSModel) {
                 case "realtime" ->
                         realtimeSpeechManager.play(phrase, gender, gameLang, pitch, gene, villager, translatable);
@@ -113,12 +112,12 @@ public class SpeechManager {
         } else if (translatable) {
             // Use the resourcepack, if available
             int tone = Math.min(9, (int) Math.floor(gene * 10.0f));
-            Identifier sound = new Identifier("mca_voices", phrase.toLowerCase(Locale.ROOT) + "/" + gender + "_" + tone);
+            ResourceLocation sound = new ResourceLocation("mca_voices", phrase.toLowerCase(Locale.ROOT) + "/" + gender + "_" + tone);
 
-            if (client.world != null && client.player != null) {
-                Collection<Identifier> keys = client.getSoundManager().getKeys();
+            if (client.level != null && client.player != null) {
+                Collection<ResourceLocation> keys = client.getSoundManager().getAvailableSounds();
                 if (keys.contains(sound)) {
-                    EntityTrackingSoundInstance instance = new EntityTrackingSoundInstance(SoundEvent.of(sound), SoundCategory.NEUTRAL, 1.0f, pitch, villager, threadSafeRandom.nextLong());
+                    EntityBoundSoundInstance instance = new EntityBoundSoundInstance(SoundEvent.createVariableRangeEvent(sound), SoundSource.NEUTRAL, 1.0f, pitch, villager, threadSafeRandom.nextLong());
                     currentlyPlaying.put(sender, instance);
                     client.getSoundManager().play(instance);
                 }
@@ -129,15 +128,15 @@ public class SpeechManager {
     private long lastHealthCheckTime = 0;
     private boolean firstRun = true;
 
-    public void tick(MinecraftClient client) {
-        if (client.world != null) {
-            long time = client.world.getTime();
+    public void tick(Minecraft client) {
+        if (client.level != null) {
+            long time = client.level.getGameTime();
             if (Math.abs(time - lastHealthCheckTime) > 1200) {
                 boolean enabled = Config.getInstance().villagerChatAIModel.equals("player2");
                 if (firstRun || enabled) {
                     CompletableFuture.runAsync(() -> {
                         if (player2SpeechManager.checkHealth() && firstRun && !enabled) {
-                            client.inGameHud.getChatHud().addMessage(Text.translatable("command.chat_ai.player2.hint", "/mca chatAI player2"));
+                            client.gui.getChat().addMessage(Component.translatable("command.chat_ai.player2.hint", "/mca chatAI player2"));
                             firstRun = false;
                         }
                     });

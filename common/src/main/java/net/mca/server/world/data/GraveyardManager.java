@@ -6,14 +6,18 @@ import it.unimi.dsi.fastutil.longs.LongArraySet;
 import it.unimi.dsi.fastutil.longs.LongSet;
 import net.mca.util.NbtHelper;
 import net.mca.util.WorldUtils;
-import net.minecraft.entity.Entity;
-import net.minecraft.nbt.AbstractNbtNumber;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.nbt.NbtList;
-import net.minecraft.nbt.NbtLong;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.math.*;
-import net.minecraft.world.PersistentState;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.SectionPos;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.LongTag;
+import net.minecraft.nbt.NumericTag;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.util.Mth;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.saveddata.SavedData;
+import net.minecraft.world.phys.AABB;
 
 import java.util.*;
 import java.util.function.LongFunction;
@@ -24,33 +28,33 @@ import java.util.function.LongFunction;
  * Because this structure can potentially be very large, we have to take special considerations into account.
  * Besides already using fast-collections we also try not to create or store any BlockPos instances without need.
  */
-public class GraveyardManager extends PersistentState {
+public class GraveyardManager extends SavedData {
 
     private final Map<TombstoneState, Long2ObjectMap<ChunkBase>> tombstones = new EnumMap<>(TombstoneState.class);
 
-    public static GraveyardManager get(ServerWorld world) {
+    public static GraveyardManager get(ServerLevel world) {
         return WorldUtils.loadData(world, GraveyardManager::new, GraveyardManager::new, "mca_graveyard");
     }
 
-    public GraveyardManager(ServerWorld world) { }
+    public GraveyardManager(ServerLevel world) { }
 
-    public GraveyardManager(NbtCompound nbt) {
+    public GraveyardManager(CompoundTag nbt) {
         tombstones.putAll(NbtHelper.toMap(nbt, TombstoneState::valueOf, v -> {
-            NbtCompound vv = (NbtCompound)v;
+            CompoundTag vv = (CompoundTag)v;
             Long2ObjectMap<ChunkBase> map = new Long2ObjectOpenHashMap<>();
-            vv.getKeys().forEach(key -> {
-                map.put(Long.parseLong(key), new Chunk((NbtList)vv.get(key)));
+            vv.getAllKeys().forEach(key -> {
+                map.put(Long.parseLong(key), new Chunk((ListTag)vv.get(key)));
             });
             return map;
         }));
     }
 
     @Override
-    public NbtCompound writeNbt(NbtCompound nbt) {
-        NbtCompound tag = new NbtCompound();
+    public CompoundTag save(CompoundTag nbt) {
+        CompoundTag tag = new CompoundTag();
         synchronized (tombstones) {
             tombstones.forEach((state, chunks) -> {
-                NbtCompound chunkList = new NbtCompound();
+                CompoundTag chunkList = new CompoundTag();
 
                 chunks.long2ObjectEntrySet().forEach(entry -> {
                     if (!entry.getValue().isEmpty()) {
@@ -71,7 +75,7 @@ public class GraveyardManager extends PersistentState {
             long l = getChunkPos(pos);
             getChunk(state.opposite(), l, ChunkBase::empty).removePos(pos);
             getChunk(state, l, Chunk::new).addPos(pos);
-            markDirty();
+            setDirty();
         }
     }
 
@@ -80,25 +84,25 @@ public class GraveyardManager extends PersistentState {
             long l = getChunkPos(pos);
             getChunk(TombstoneState.EMPTY, l, ChunkBase::empty).removePos(pos);
             getChunk(TombstoneState.FILLED, l, ChunkBase::empty).removePos(pos);
-            markDirty();
+            setDirty();
         }
     }
 
-    public List<BlockPos> findAll(Box box, boolean includeEmpty, boolean includeFilled) {
+    public List<BlockPos> findAll(AABB box, boolean includeEmpty, boolean includeFilled) {
         List<BlockPos> positions = new ArrayList<>();
 
         if (includeEmpty || includeFilled) {
-            int minX = MathHelper.floor((box.minX - 2) / 16D);
-            int maxX = MathHelper.ceil((box.maxX + 2) / 16D);
-            int minZ = MathHelper.floor((box.minZ - 2) / 16D);
-            int maxZ = MathHelper.ceil((box.maxZ + 2) / 16D);
+            int minX = Mth.floor((box.minX - 2) / 16D);
+            int maxX = Mth.ceil((box.maxX + 2) / 16D);
+            int minZ = Mth.floor((box.minZ - 2) / 16D);
+            int maxZ = Mth.ceil((box.maxZ + 2) / 16D);
 
-            BlockPos.Mutable mutable = new BlockPos.Mutable();
+            BlockPos.MutableBlockPos mutable = new BlockPos.MutableBlockPos();
 
             synchronized (tombstones) {
                 for (int x = minX; x < maxX; x++) {
                     for (int z = minZ; z < maxZ; z++) {
-                        long l = ChunkPos.toLong(x, z);
+                        long l = ChunkPos.asLong(x, z);
 
                         if (includeEmpty) {
                             getChunk(TombstoneState.EMPTY, l, ChunkBase::empty).appendAll(box, mutable, positions);
@@ -116,25 +120,25 @@ public class GraveyardManager extends PersistentState {
 
     public Optional<BlockPos> findNearest(BlockPos pos, TombstoneState state, int maxChunkRange) {
         synchronized (tombstones) {
-            BlockPos.Mutable mutable = new BlockPos.Mutable();
+            BlockPos.MutableBlockPos mutable = new BlockPos.MutableBlockPos();
 
             // first we check the immediate chunk
             return getChunk(state, getChunkPos(pos), ChunkBase::empty).findNearest(pos, mutable).or(() -> {
                 // then we iterate outwards checking surrounding chunks
-                BlockPos center = new BlockPos(ChunkSectionPos.getSectionCoord(pos.getX()), 0, ChunkSectionPos.getSectionCoord(pos.getZ()));
+                BlockPos center = new BlockPos(SectionPos.blockToSectionCoord(pos.getX()), 0, SectionPos.blockToSectionCoord(pos.getZ()));
                 // luckily BlockPos has a useful utility for this already
-                return BlockPos.streamOutwards(center, maxChunkRange, 0, maxChunkRange)
-                    .map(p -> ChunkPos.toLong(p.getX(), p.getZ()))
+                return BlockPos.withinManhattanStream(center, maxChunkRange, 0, maxChunkRange)
+                    .map(p -> ChunkPos.asLong(p.getX(), p.getZ()))
                     .map(l -> getChunk(state, l, ChunkBase::empty).findNearest(pos, mutable))
                     .filter(Optional::isPresent)
                     .map(Optional::get)
-                    .min(Comparator.comparing(a -> a.getSquaredDistance(pos)));
+                    .min(Comparator.comparing(a -> a.distSqr(pos)));
             });
         }
     }
 
     private static long getChunkPos(BlockPos pos) {
-        return ChunkPos.toLong(ChunkSectionPos.getSectionCoord(pos.getX()), ChunkSectionPos.getSectionCoord(pos.getZ()));
+        return ChunkPos.asLong(SectionPos.blockToSectionCoord(pos.getX()), SectionPos.blockToSectionCoord(pos.getZ()));
     }
 
     private ChunkBase getChunk(TombstoneState state, long pos, LongFunction<ChunkBase> fallback) {
@@ -154,9 +158,9 @@ public class GraveyardManager extends PersistentState {
     }
 
     public void reportToVillageManager(Entity entity) {
-        VillageManager manager = VillageManager.get((ServerWorld)entity.getWorld());
-        GraveyardManager.get((ServerWorld)entity.getWorld())
-                .findAll(entity.getBoundingBox().expand(24D), true, true)
+        VillageManager manager = VillageManager.get((ServerLevel)entity.level());
+        GraveyardManager.get((ServerLevel)entity.level())
+                .findAll(entity.getBoundingBox().inflate(24D), true, true)
                 .stream()
                 .filter(p -> !manager.cache.contains(p))
                 .forEach(manager::processBuilding);
@@ -173,8 +177,8 @@ public class GraveyardManager extends PersistentState {
             return true;
         }
 
-        public NbtList toNbt() {
-            return new NbtList();
+        public ListTag toNbt() {
+            return new ListTag();
         }
 
         public void removePos(BlockPos pos) {
@@ -183,11 +187,11 @@ public class GraveyardManager extends PersistentState {
         public void addPos(BlockPos pos) {
         }
 
-        public Optional<BlockPos> findNearest(BlockPos pos, BlockPos.Mutable mutable) {
+        public Optional<BlockPos> findNearest(BlockPos pos, BlockPos.MutableBlockPos mutable) {
             return Optional.empty();
         }
 
-        public void appendAll(Box box, BlockPos.Mutable mutable, List<BlockPos> positions) {
+        public void appendAll(AABB box, BlockPos.MutableBlockPos mutable, List<BlockPos> positions) {
 
         }
     }
@@ -197,8 +201,8 @@ public class GraveyardManager extends PersistentState {
 
         Chunk(long l) {}
 
-        Chunk(NbtList list) {
-            list.forEach(l -> tombstones.add(((AbstractNbtNumber)l).longValue()));
+        Chunk(ListTag list) {
+            list.forEach(l -> tombstones.add(((NumericTag)l).getAsLong()));
         }
 
         @Override
@@ -207,9 +211,9 @@ public class GraveyardManager extends PersistentState {
         }
 
         @Override
-        public NbtList toNbt() {
-            NbtList list = new NbtList();
-            tombstones.forEach((long l) -> list.add(NbtLong.of(l)));
+        public ListTag toNbt() {
+            ListTag list = new ListTag();
+            tombstones.forEach((long l) -> list.add(LongTag.valueOf(l)));
             return list;
         }
 
@@ -224,7 +228,7 @@ public class GraveyardManager extends PersistentState {
         }
 
         @Override
-        public Optional<BlockPos> findNearest(BlockPos pos, BlockPos.Mutable mutable) {
+        public Optional<BlockPos> findNearest(BlockPos pos, BlockPos.MutableBlockPos mutable) {
             double distance = Double.MAX_VALUE;
             long nearest = -1;
             boolean found = false;
@@ -232,7 +236,7 @@ public class GraveyardManager extends PersistentState {
             // we do it oldschool to preserve thread safety
             for (long l : tombstones) {
                 mutable.set(l);
-                double d = pos.getSquaredDistance(mutable);
+                double d = pos.distSqr(mutable);
                 if (d < distance) {
                     distance = d;
                     nearest = l;
@@ -240,15 +244,15 @@ public class GraveyardManager extends PersistentState {
                 }
             }
 
-            return found ? Optional.of(BlockPos.fromLong(nearest)) : Optional.empty();
+            return found ? Optional.of(BlockPos.of(nearest)) : Optional.empty();
         }
 
         @Override
-        public void appendAll(Box box, BlockPos.Mutable mutable, List<BlockPos> positions) {
+        public void appendAll(AABB box, BlockPos.MutableBlockPos mutable, List<BlockPos> positions) {
             for (long l : tombstones) {
                 mutable.set(l);
                 if (box.contains(mutable.getX(), mutable.getY(), mutable.getZ())) {
-                    positions.add(mutable.toImmutable());
+                    positions.add(mutable.immutable());
                 }
             }
         }

@@ -1,17 +1,16 @@
 package net.mca.entity.ai.brain.tasks;
 
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.ai.brain.task.MultiTickTask;
-import net.minecraft.server.world.ServerWorld;
-
 import java.util.Map;
 import java.util.function.Predicate;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.ai.behavior.Behavior;
 
-public class ConditionalTask<E extends LivingEntity> extends MultiTickTask<E> {
-    private final MultiTickTask<? super E> task;
+public class ConditionalTask<E extends LivingEntity> extends Behavior<E> {
+    private final Behavior<? super E> task;
     private final Predicate<E> predicate;
 
-    public ConditionalTask(MultiTickTask<? super E> task, Predicate<E> predicate) {
+    public ConditionalTask(Behavior<? super E> task, Predicate<E> predicate) {
         super(Map.of());
 
         this.task = task;
@@ -19,32 +18,32 @@ public class ConditionalTask<E extends LivingEntity> extends MultiTickTask<E> {
     }
 
     @Override
-    protected void run(ServerWorld world, E entity, long time) {
-        task.tryStarting(world, entity, time);
+    protected void start(ServerLevel world, E entity, long time) {
+        task.tryStart(world, entity, time);
     }
 
     @Override
-    protected void keepRunning(ServerWorld world, E entity, long time) {
-        task.tick(world, entity, time);
+    protected void tick(ServerLevel world, E entity, long time) {
+        task.tickOrStop(world, entity, time);
     }
 
     @Override
-    protected void finishRunning(ServerWorld world, E entity, long time) {
-        task.stop(world, entity, time);
+    protected void stop(ServerLevel world, E entity, long time) {
+        task.doStop(world, entity, time);
     }
 
     @Override
-    protected boolean shouldKeepRunning(ServerWorld world, E entity, long time) {
+    protected boolean canStillUse(ServerLevel world, E entity, long time) {
         return task.getStatus() == Status.RUNNING;
     }
 
     @Override
-    protected boolean shouldRun(ServerWorld world, E entity) {
+    protected boolean checkExtraStartConditions(ServerLevel world, E entity) {
         return predicate.test(entity);
     }
 
     @Override
-    protected boolean isTimeLimitExceeded(long time) {
+    protected boolean timedOut(long time) {
         return false;
     }
 }

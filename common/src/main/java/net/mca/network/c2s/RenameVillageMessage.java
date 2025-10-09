@@ -2,8 +2,7 @@ package net.mca.network.c2s;
 
 import net.mca.cobalt.network.Message;
 import net.mca.server.world.data.VillageManager;
-import net.minecraft.server.network.ServerPlayerEntity;
-
+import net.minecraft.server.level.ServerPlayer;
 import java.io.Serial;
 
 public class RenameVillageMessage implements Message {
@@ -19,7 +18,7 @@ public class RenameVillageMessage implements Message {
     }
 
     @Override
-    public void receive(ServerPlayerEntity player) {
-        VillageManager.get(player.getServerWorld()).getOrEmpty(id).ifPresent(v -> v.setName(name));
+    public void receive(ServerPlayer player) {
+        VillageManager.get(player.serverLevel()).getOrEmpty(id).ifPresent(v -> v.setName(name));
     }
 }

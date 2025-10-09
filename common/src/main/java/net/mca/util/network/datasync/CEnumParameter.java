@@ -1,11 +1,11 @@
 package net.mca.util.network.datasync;
 
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.data.DataTracker;
-import net.minecraft.entity.data.TrackedData;
-import net.minecraft.entity.data.TrackedDataHandlerRegistry;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.nbt.NbtElement;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.Tag;
+import net.minecraft.network.syncher.EntityDataAccessor;
+import net.minecraft.network.syncher.EntityDataSerializers;
+import net.minecraft.network.syncher.SynchedEntityData;
+import net.minecraft.world.entity.Entity;
 import org.jetbrains.annotations.Nullable;
 
 public class CEnumParameter<T extends Enum<T>> implements CParameter<T, Integer> {
@@ -28,22 +28,22 @@ public class CEnumParameter<T extends Enum<T>> implements CParameter<T, Integer>
     }
 
     @Override
-    public T get(TrackedData<Integer> param, DataTracker tracker) {
+    public T get(EntityDataAccessor<Integer> param, SynchedEntityData tracker) {
         return fromIndex(tracker.get(param));
     }
 
     @Override
-    public void set(TrackedData<Integer> param, DataTracker tracker, @Nullable T v) {
+    public void set(EntityDataAccessor<Integer> param, SynchedEntityData tracker, @Nullable T v) {
         tracker.set(param, v == null ? -1 : v.ordinal());
     }
 
     @Override
-    public T load(NbtCompound nbt) {
-        return nbt.contains(id, NbtElement.NUMBER_TYPE) ? fromIndex(nbt.getInt(id)) : defaultValue;
+    public T load(CompoundTag nbt) {
+        return nbt.contains(id, Tag.TAG_ANY_NUMERIC) ? fromIndex(nbt.getInt(id)) : defaultValue;
     }
 
     @Override
-    public void save(NbtCompound nbt, T value) {
+    public void save(CompoundTag nbt, T value) {
         if (value != null) {
             nbt.putInt(id, value.ordinal());
         }
@@ -54,7 +54,7 @@ public class CEnumParameter<T extends Enum<T>> implements CParameter<T, Integer>
     }
 
     @Override
-    public TrackedData<Integer> createParam(Class<? extends Entity> type) {
-        return DataTracker.registerData(type, TrackedDataHandlerRegistry.INTEGER);
+    public EntityDataAccessor<Integer> createParam(Class<? extends Entity> type) {
+        return SynchedEntityData.defineId(type, EntityDataSerializers.INT);
     }
 }

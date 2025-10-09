@@ -4,17 +4,17 @@ import net.mca.entity.VillagerEntityMCA;
 import net.mca.entity.ai.Memories;
 import net.mca.entity.ai.Relationship;
 import net.mca.server.world.data.PlayerSaveData;
-import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.server.level.ServerPlayer;
 
 public abstract class RelationshipItem extends TooltippedItem implements SpecialCaseGift {
-    public RelationshipItem(Settings properties) {
+    public RelationshipItem(Properties properties) {
         super(properties);
     }
 
     abstract int getHeartsRequired();
 
     @Override
-    public boolean handle(ServerPlayerEntity player, VillagerEntityMCA villager) {
+    public boolean handle(ServerPlayer player, VillagerEntityMCA villager) {
         PlayerSaveData playerData = PlayerSaveData.get(player);
         Memories memory = villager.getVillagerBrain().getMemoriesForPlayer(player);
         String response;

@@ -12,29 +12,29 @@ import net.mca.util.network.datasync.CDataParameter;
 import net.mca.util.network.datasync.CEnumParameter;
 import net.mca.util.network.datasync.CParameter;
 import net.mca.util.network.datasync.CTrackedEntity;
-import net.minecraft.block.Block;
-import net.minecraft.block.Blocks;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.EntityType;
-import net.minecraft.entity.MovementType;
-import net.minecraft.entity.damage.DamageSource;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.entity.projectile.PersistentProjectileEntity;
-import net.minecraft.item.ItemStack;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.network.listener.ClientPlayPacketListener;
-import net.minecraft.network.packet.Packet;
-import net.minecraft.network.packet.s2c.play.EntitySpawnS2CPacket;
-import net.minecraft.particle.BlockStateParticleEffect;
-import net.minecraft.particle.ParticleTypes;
-import net.minecraft.registry.tag.DamageTypeTags;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.sound.SoundEvents;
-import net.minecraft.util.ActionResult;
-import net.minecraft.util.DyeColor;
-import net.minecraft.util.Hand;
-import net.minecraft.util.math.Vec3d;
-import net.minecraft.world.World;
+import net.minecraft.core.particles.BlockParticleOption;
+import net.minecraft.core.particles.ParticleTypes;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.protocol.Packet;
+import net.minecraft.network.protocol.game.ClientGamePacketListener;
+import net.minecraft.network.protocol.game.ClientboundAddEntityPacket;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.tags.DamageTypeTags;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.InteractionResult;
+import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.MoverType;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.entity.projectile.AbstractArrow;
+import net.minecraft.world.item.DyeColor;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.phys.Vec3;
 
 public class CribEntity extends Entity implements CTrackedEntity<CribEntity>
 {
@@ -46,7 +46,7 @@ public class CribEntity extends Entity implements CTrackedEntity<CribEntity>
 
     static CDataManager.Builder<CribEntity> createTrackedData() { return new CDataManager.Builder<>(CribEntity.class).addAll(BABY, WOOD, COLOR); }
 	
-	public CribEntity(EntityType<? extends CribEntity> type, World world) { super(type, world); }
+	public CribEntity(EntityType<? extends CribEntity> type, Level world) { super(type, world); }
 	
 	public CribWoodType getWoodType() { return getTrackedValue(WOOD); }
 	public void setWoodType(CribWoodType wood) { setTrackedValue(WOOD, wood); }
@@ -59,24 +59,24 @@ public class CribEntity extends Entity implements CTrackedEntity<CribEntity>
 	private boolean isOccupied() { return !getTrackedValue(BABY).equals(ItemStack.EMPTY) || infant != null; }
 	
 	@Override
-    public boolean isCollidable() { return true; }
+    public boolean canBeCollidedWith() { return true; }
 
 	@Override
-    public boolean isPushedByFluids() { return false; }
+    public boolean isPushedByFluid() { return false; }
 	
 	@Override
     public boolean isPushable() { return false; }
 
 	@Override
-	protected void initDataTracker() { getTypeDataManager().register(this); }
+	protected void defineSynchedData() { getTypeDataManager().register(this); }
 
 	@Override
-	protected void readCustomDataFromNbt(NbtCompound nbt)
+	protected void readAdditionalSaveData(CompoundTag nbt)
 	{
-		NbtCompound compound = nbt.getCompound(MCA.MOD_ID);
+		CompoundTag compound = nbt.getCompound(MCA.MOD_ID);
 		if(compound.contains("Baby"))
 		{
-			setTrackedValue(BABY, ItemStack.fromNbt(compound.getCompound("Baby")));
+			setTrackedValue(BABY, ItemStack.of(compound.getCompound("Baby")));
 			if(getTrackedValue(BABY).equals(ItemStack.EMPTY)) MCA.LOGGER.warn("Issue deseriaslizing baby item from crib NBT!");
 		}
 		if(compound.contains("Wood")) { setTrackedValue(WOOD, CribWoodType.values()[compound.getInt("Wood")]); }
@@ -84,17 +84,17 @@ public class CribEntity extends Entity implements CTrackedEntity<CribEntity>
 	}
 	
 	@Override
-    public double getMountedHeightOffset() { return 0.42; }
+    public double getPassengersRidingOffset() { return 0.42; }
 
 	@Override
-	protected void writeCustomDataToNbt(NbtCompound nbt)
+	protected void addAdditionalSaveData(CompoundTag nbt)
 	{
-		NbtCompound mcaCompound = new NbtCompound();
+		CompoundTag mcaCompound = new CompoundTag();
 		
 		if(!getTrackedValue(BABY).equals(ItemStack.EMPTY))
 		{
-			NbtCompound babyCompound = new NbtCompound();
-			getTrackedValue(BABY).writeNbt(babyCompound);
+			CompoundTag babyCompound = new CompoundTag();
+			getTrackedValue(BABY).save(babyCompound);
 			mcaCompound.put("Baby", babyCompound);
 		}
 		
@@ -105,7 +105,7 @@ public class CribEntity extends Entity implements CTrackedEntity<CribEntity>
 	}
 
 	@Override
-	public Packet<ClientPlayPacketListener> createSpawnPacket() { return new EntitySpawnS2CPacket(this); }
+	public Packet<ClientGamePacketListener> getAddEntityPacket() { return new ClientboundAddEntityPacket(this); }
 	
 	private void setEntityOccupant(VillagerEntityMCA occupant)
 	{
@@ -123,10 +123,10 @@ public class CribEntity extends Entity implements CTrackedEntity<CribEntity>
 	}
 	
 	@Override
-    public ActionResult interact(PlayerEntity player, Hand hand)
+    public InteractionResult interact(Player player, InteractionHand hand)
 	{
 		// Refresh riding data
-		if(hasPassengers() && getFirstPassenger() instanceof VillagerEntityMCA && infant == null) setEntityOccupant((VillagerEntityMCA) getFirstPassenger());
+		if(isVehicle() && getFirstPassenger() instanceof VillagerEntityMCA && infant == null) setEntityOccupant((VillagerEntityMCA) getFirstPassenger());
 		
 		// Removing occupant is first priority over adding occupant, so that multiple occupants dont exist.
 		if(infant != null && infant.getVehicle() == this)
@@ -136,13 +136,13 @@ public class CribEntity extends Entity implements CTrackedEntity<CribEntity>
 		}
 		else if(!getTrackedValue(BABY).equals(ItemStack.EMPTY))
 		{
-			player.getInventory().insertStack(getTrackedValue(BABY));
+			player.getInventory().add(getTrackedValue(BABY));
 			setTrackedValue(BABY, ItemStack.EMPTY);
 		}
-		else if(player.getInventory().getMainHandStack() != ItemStack.EMPTY && player.getInventory().getMainHandStack().getItem() instanceof BabyItem)
+		else if(player.getInventory().getSelected() != ItemStack.EMPTY && player.getInventory().getSelected().getItem() instanceof BabyItem)
 		{
-			setTrackedValue(BABY, player.getInventory().getMainHandStack());
-			player.getInventory().removeOne(getTrackedValue(BABY));
+			setTrackedValue(BABY, player.getInventory().getSelected());
+			player.getInventory().removeItem(getTrackedValue(BABY));
 		}
 		else if(player.getFirstPassenger() != null && player.getFirstPassenger() instanceof VillagerEntityMCA)
 		{
@@ -153,53 +153,53 @@ public class CribEntity extends Entity implements CTrackedEntity<CribEntity>
 				infant.startRiding(this, true);
 			}
 		}
-		else return ActionResult.PASS;
+		else return InteractionResult.PASS;
 		
-        return ActionResult.SUCCESS;
+        return InteractionResult.SUCCESS;
     }
 	
 	@Override
-    public boolean handleAttack(Entity attacker) { return attacker instanceof PlayerEntity && !this.getWorld().canPlayerModifyAt((PlayerEntity)attacker, this.getBlockPos()); }
+    public boolean skipAttackInteraction(Entity attacker) { return attacker instanceof Player && !this.level().mayInteract((Player)attacker, this.blockPosition()); }
 
     @Override
-    public boolean canHit() { return true; }
+    public boolean isPickable() { return true; }
     
     @Override
     public void tick()
     {
     	super.tick();
     	
-    	if(this.isOnGround()) this.setVelocity(Vec3d.ZERO);
-    	else if(!this.hasNoGravity()) { this.setVelocity(this.getVelocity().add(0.0, -0.04, 0.0)); }
-    	this.move(MovementType.SELF, this.getVelocity());
+    	if(this.onGround()) this.setDeltaMovement(Vec3.ZERO);
+    	else if(!this.isNoGravity()) { this.setDeltaMovement(this.getDeltaMovement().add(0.0, -0.04, 0.0)); }
+    	this.move(MoverType.SELF, this.getDeltaMovement());
         
-    	if(getTrackedValue(BABY) != ItemStack.EMPTY && getTrackedValue(BABY).getItem() instanceof BabyItem) getTrackedValue(BABY).getItem().inventoryTick(getTrackedValue(BABY), getWorld(), this, 0, false);
+    	if(getTrackedValue(BABY) != ItemStack.EMPTY && getTrackedValue(BABY).getItem() instanceof BabyItem) getTrackedValue(BABY).getItem().inventoryTick(getTrackedValue(BABY), level(), this, 0, false);
     }
 
     @Override
-    public boolean damage(DamageSource source, float amount)
+    public boolean hurt(DamageSource source, float amount)
     {
-        if (this.getWorld().isClient || this.isRemoved()) { return false; }
+        if (this.level().isClientSide || this.isRemoved()) { return false; }
         
         if(isOccupied()) return false;
         
         if (this.isInvulnerableTo(source)) { return false; }
         
-        if (source.isIn(DamageTypeTags.IS_EXPLOSION) || source.isIn(DamageTypeTags.IS_FIRE))
+        if (source.is(DamageTypeTags.IS_EXPLOSION) || source.is(DamageTypeTags.IS_FIRE))
         {
             this.kill();
             return false;
         }
         
-        boolean bl = source.getSource() instanceof PersistentProjectileEntity;
-        boolean bl2 = bl && ((PersistentProjectileEntity)source.getSource()).getPierceLevel() > 0;
-        boolean bl3 = "player".equals(source.getName());
+        boolean bl = source.getDirectEntity() instanceof AbstractArrow;
+        boolean bl2 = bl && ((AbstractArrow)source.getDirectEntity()).getPierceLevel() > 0;
+        boolean bl3 = "player".equals(source.getMsgId());
         
         if (!bl3 && !bl) { return false; }
         
-        if (source.getAttacker() instanceof PlayerEntity && !((PlayerEntity)source.getAttacker()).getAbilities().allowModifyWorld) { return false; }
+        if (source.getEntity() instanceof Player && !((Player)source.getEntity()).getAbilities().mayBuild) { return false; }
         
-        if (source.isSourceCreativePlayer())
+        if (source.isCreativePlayer())
         {
             this.playBreakSound();
             this.spawnBreakParticles();
@@ -209,7 +209,7 @@ public class CribEntity extends Entity implements CTrackedEntity<CribEntity>
         else
         {
         	CribItem matchingType = (CribItem) ItemsMCA.CRIBS.stream().filter(c -> ((CribItem) c.get()).getColor() == getTrackedValue(COLOR) && ((CribItem) c.get()).getWood() == getTrackedValue(WOOD)).findFirst().get().get();
-            Block.dropStack(this.getWorld(), this.getBlockPos(), new ItemStack(matchingType));
+            Block.popResource(this.level(), this.blockPosition(), new ItemStack(matchingType));
             this.spawnBreakParticles();
             this.kill();
         }
@@ -218,13 +218,13 @@ public class CribEntity extends Entity implements CTrackedEntity<CribEntity>
     }
 
     private void spawnBreakParticles() {
-        if (this.getWorld() instanceof ServerWorld) {
-            ((ServerWorld)this.getWorld()).spawnParticles(new BlockStateParticleEffect(ParticleTypes.BLOCK, Blocks.OAK_PLANKS.getDefaultState()),
-    		this.getX(), this.getBodyY(0.6666666666666666), this.getZ(), 10, this.getWidth() / 4.0f, this.getHeight() / 4.0f, this.getWidth() / 4.0f, 0.05);
+        if (this.level() instanceof ServerLevel) {
+            ((ServerLevel)this.level()).sendParticles(new BlockParticleOption(ParticleTypes.BLOCK, Blocks.OAK_PLANKS.defaultBlockState()),
+    		this.getX(), this.getY(0.6666666666666666), this.getZ(), 10, this.getBbWidth() / 4.0f, this.getBbHeight() / 4.0f, this.getBbWidth() / 4.0f, 0.05);
         }
     }
 
-    private void playBreakSound() { this.getWorld().playSound(null, this.getX(), this.getY(), this.getZ(), SoundEvents.ENTITY_ARMOR_STAND_BREAK, this.getSoundCategory(), 1.0f, 1.0f); }
+    private void playBreakSound() { this.level().playSound(null, this.getX(), this.getY(), this.getZ(), SoundEvents.ARMOR_STAND_BREAK, this.getSoundSource(), 1.0f, 1.0f); }
 
 	@Override
 	public CDataManager<CribEntity> getTypeDataManager() { return DATA; }

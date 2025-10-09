@@ -13,28 +13,32 @@ import net.mca.entity.ai.relationship.Gender;
 import net.mca.entity.interaction.ZombieCommandHandler;
 import net.mca.util.InventoryUtils;
 import net.mca.util.network.datasync.CDataManager;
-import net.minecraft.entity.*;
-import net.minecraft.entity.damage.DamageSource;
-import net.minecraft.entity.data.TrackedData;
-import net.minecraft.entity.mob.MobEntity;
-import net.minecraft.entity.mob.ZombieVillagerEntity;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.text.Text;
-import net.minecraft.util.ActionResult;
-import net.minecraft.util.Formatting;
-import net.minecraft.util.Hand;
-import net.minecraft.util.math.Vec3d;
-import net.minecraft.world.LocalDifficulty;
-import net.minecraft.world.ServerWorldAccess;
-import net.minecraft.world.World;
+import net.minecraft.ChatFormatting;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.syncher.EntityDataAccessor;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.DifficultyInstance;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.InteractionResult;
+import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.world.entity.EntityDimensions;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.MobSpawnType;
+import net.minecraft.world.entity.Pose;
+import net.minecraft.world.entity.SpawnGroupData;
+import net.minecraft.world.entity.monster.ZombieVillager;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.ServerLevelAccessor;
+import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-public class ZombieVillagerEntityMCA extends ZombieVillagerEntity implements VillagerLike<ZombieVillagerEntityMCA>, CompassionateEntity<Relationship<ZombieVillagerEntityMCA>> {
+public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerLike<ZombieVillagerEntityMCA>, CompassionateEntity<Relationship<ZombieVillagerEntityMCA>> {
 
     private static final CDataManager<ZombieVillagerEntityMCA> DATA = VillagerEntityMCA.createTrackedData(ZombieVillagerEntityMCA.class).build();
 
@@ -50,14 +54,14 @@ public class ZombieVillagerEntityMCA extends ZombieVillagerEntity implements Vil
 
     private int burned;
 
-    public ZombieVillagerEntityMCA(EntityType<? extends ZombieVillagerEntity> type, World world, Gender gender) {
+    public ZombieVillagerEntityMCA(EntityType<? extends ZombieVillager> type, Level world, Gender gender) {
         super(type, world);
         genetics.setGender(gender);
     }
 
     @Override
-    protected void initDataTracker() {
-        super.initDataTracker();
+    protected void defineSynchedData() {
+        super.defineSynchedData();
 
         getTypeDataManager().register(this);
     }
@@ -109,46 +113,46 @@ public class ZombieVillagerEntityMCA extends ZombieVillagerEntity implements Vil
 
     @Override
     @Nullable
-    public final Text getCustomName() {
+    public final Component getCustomName() {
         String value = getTrackedValue(VILLAGER_NAME);
-        return MCA.isBlankString(value) ? null : Text.literal(value).formatted(Formatting.RED);
+        return MCA.isBlankString(value) ? null : Component.literal(value).withStyle(ChatFormatting.RED);
     }
 
     @Override
-    public double getHeightOffset() {
+    public double getMyRidingOffset() {
         return -0.35;
     }
 
     @Override
-    public EntityDimensions getDimensions(EntityPose pose) {
+    public EntityDimensions getDimensions(Pose pose) {
 
-        if (pose == EntityPose.SLEEPING) {
+        if (pose == Pose.SLEEPING) {
             return SLEEPING_DIMENSIONS;
         }
 
-        float height = getScaleFactor() * 2.0F;
+        float height = getScale() * 2.0F;
         float width = getHorizontalScaleFactor() * 0.6F;
 
-        return EntityDimensions.changing(width, height);
+        return EntityDimensions.scalable(width, height);
     }
 
     @Override
-    public float getScaleFactor() {
+    public float getScale() {
         return Math.min(0.999f, getRawScaleFactor());
     }
 
     @Override
-    protected float getActiveEyeHeight(EntityPose pose, EntityDimensions size) {
-        return getScaleFactor() * 1.75f;
+    protected float getStandingEyeHeight(Pose pose, EntityDimensions size) {
+        return getScale() * 1.75f;
     }
 
     @Override
-    public final ActionResult interactAt(PlayerEntity player, Vec3d pos, @NotNull Hand hand) {
-        ItemStack stack = player.getStackInHand(hand);
-        if (hand.equals(Hand.MAIN_HAND) && !stack.isIn(TagsMCA.Items.ZOMBIE_EGGS) && stack.getItem() != Items.GOLDEN_APPLE) {
-            if (player instanceof ServerPlayerEntity) {
+    public final InteractionResult interactAt(Player player, Vec3 pos, @NotNull InteractionHand hand) {
+        ItemStack stack = player.getItemInHand(hand);
+        if (hand.equals(InteractionHand.MAIN_HAND) && !stack.is(TagsMCA.Items.ZOMBIE_EGGS) && stack.getItem() != Items.GOLDEN_APPLE) {
+            if (player instanceof ServerPlayer) {
                 String t = new String(new char[getRandom().nextInt(8) + 2]).replace("\0", ". ");
-                sendChatMessage(Text.literal(t), player);
+                sendChatMessage(Component.literal(t), player);
             }
         }
         return super.interactAt(player, pos, hand);
@@ -156,8 +160,8 @@ public class ZombieVillagerEntityMCA extends ZombieVillagerEntity implements Vil
 
     @Nullable
     @Override
-    public EntityData initialize(ServerWorldAccess world, LocalDifficulty difficulty, SpawnReason spawnReason, @Nullable EntityData entityData, @Nullable NbtCompound entityNbt) {
-        EntityData data = super.initialize(world, difficulty, spawnReason, entityData, entityNbt);
+    public SpawnGroupData finalizeSpawn(ServerLevelAccessor world, DifficultyInstance difficulty, MobSpawnType spawnReason, @Nullable SpawnGroupData entityData, @Nullable CompoundTag entityNbt) {
+        SpawnGroupData data = super.finalizeSpawn(world, difficulty, spawnReason, entityData, entityNbt);
 
         if (getAgeState() == AgeState.UNASSIGNED) {
             if (random.nextFloat() < Config.getInstance().babyZombieChance) {
@@ -178,13 +182,13 @@ public class ZombieVillagerEntityMCA extends ZombieVillagerEntity implements Vil
     }
 
     @Override
-    protected void onPlayerSpawnedChild(PlayerEntity player, MobEntity child) {
-        child.initialize((ServerWorldAccess) getWorld(), getWorld().getLocalDifficulty(child.getBlockPos()), SpawnReason.SPAWN_EGG, null, null);
+    protected void onOffspringSpawnedFromEgg(Player player, Mob child) {
+        child.finalizeSpawn((ServerLevelAccessor) level(), level().getCurrentDifficultyAt(child.blockPosition()), MobSpawnType.SPAWN_EGG, null, null);
     }
 
     @Override
-    public void tickMovement() {
-        super.tickMovement();
+    public void aiStep() {
+        super.aiStep();
 
         burned--;
         if (isOnFire()) {
@@ -202,7 +206,7 @@ public class ZombieVillagerEntityMCA extends ZombieVillagerEntity implements Vil
     }
 
     @Override
-    public void setCustomName(@Nullable Text name) {
+    public void setCustomName(@Nullable Component name) {
         super.setCustomName(name);
 
         if (name != null) {
@@ -216,10 +220,10 @@ public class ZombieVillagerEntityMCA extends ZombieVillagerEntity implements Vil
     }
 
     @Override
-    public void onDeath(DamageSource cause) {
-        super.onDeath(cause);
+    public void die(DamageSource cause) {
+        super.die(cause);
 
-        if (getWorld().isClient) {
+        if (level().isClientSide) {
             return;
         }
 
@@ -229,7 +233,7 @@ public class ZombieVillagerEntityMCA extends ZombieVillagerEntity implements Vil
     }
 
     public void setInventory(UpdatableInventory inventory) {
-        NbtCompound nbt = new NbtCompound();
+        CompoundTag nbt = new CompoundTag();
         InventoryUtils.saveToNBT(inventory, nbt);
         InventoryUtils.readFromNBT(this.inventory, nbt);
     }
@@ -237,7 +241,7 @@ public class ZombieVillagerEntityMCA extends ZombieVillagerEntity implements Vil
     @SuppressWarnings({"unchecked", "RedundantSuppression"})
     @Override
     @Nullable
-    public <T extends MobEntity> T convertTo(EntityType<T> type, boolean keepInventory) {
+    public <T extends Mob> T convertTo(EntityType<T> type, boolean keepInventory) {
         T mob;
         if (!isRemoved() && type == EntityType.VILLAGER) {
             mob = (T)super.convertTo(getGenetics().getGender().getVillagerType(), keepInventory);
@@ -251,47 +255,47 @@ public class ZombieVillagerEntityMCA extends ZombieVillagerEntity implements Vil
         }
 
         if (mob instanceof VillagerEntityMCA villager) {
-            villager.setUuid(getUuid());
+            villager.setUUID(getUUID());
             villager.setInventory(inventory);
-            villager.setBreedingAge(getAgeState().toAge());
+            villager.setAge(getAgeState().toAge());
         }
 
         return mob;
     }
 
     @Override
-    public void readCustomDataFromNbt(NbtCompound nbt) {
-        super.readCustomDataFromNbt(nbt);
+    public void readAdditionalSaveData(CompoundTag nbt) {
+        super.readAdditionalSaveData(nbt);
         getTypeDataManager().load(this, nbt);
         relations.readFromNbt(nbt);
 
         updateSpeed();
 
-        inventory.clear();
+        inventory.clearContent();
         InventoryUtils.readFromNBT(inventory, nbt);
 
         validateClothes();
     }
 
     @Override
-    public final void writeCustomDataToNbt(NbtCompound nbt) {
-        super.writeCustomDataToNbt(nbt);
+    public final void addAdditionalSaveData(CompoundTag nbt) {
+        super.addAdditionalSaveData(nbt);
         getTypeDataManager().save(this, nbt);
         relations.writeToNbt(nbt);
         InventoryUtils.saveToNBT(inventory, nbt);
     }
 
     @Override
-    public void onTrackedDataSet(TrackedData<?> par) {
+    public void onSyncedDataUpdated(EntityDataAccessor<?> par) {
         if (getTypeDataManager().isParam(AGE_STATE, par) || getTypeDataManager().isParam(Genetics.SIZE.getParam(), par)) {
-            calculateDimensions();
+            refreshDimensions();
         }
 
-        super.onTrackedDataSet(par);
+        super.onSyncedDataUpdated(par);
     }
 
     @Override
-    protected boolean isDisallowedInPeaceful() {
-        return !isPersistent();
+    protected boolean shouldDespawnInPeaceful() {
+        return !isPersistenceRequired();
     }
 }

@@ -1,7 +1,7 @@
 package net.mca.ducks;
 
-import net.minecraft.entity.SpawnReason;
+import net.minecraft.world.entity.MobSpawnType;
 
 public interface IVillagerEntity {
-    SpawnReason getSpawnReason();
+    MobSpawnType mca$getSpawnReason();
 }

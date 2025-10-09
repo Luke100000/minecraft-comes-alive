@@ -4,8 +4,7 @@ import net.mca.Config;
 import net.mca.cobalt.network.Message;
 import net.mca.cobalt.network.NetworkHandler;
 import net.mca.network.s2c.ConfigResponse;
-import net.minecraft.server.network.ServerPlayerEntity;
-
+import net.minecraft.server.level.ServerPlayer;
 import java.io.Serial;
 
 public class ConfigRequest implements Message {
@@ -13,7 +12,7 @@ public class ConfigRequest implements Message {
     private static final long serialVersionUID = 7108115056986169352L;
 
     @Override
-    public void receive(ServerPlayerEntity player) {
+    public void receive(ServerPlayer player) {
         NetworkHandler.sendToPlayer(new ConfigResponse(Config.getInstance()), player);
     }
 }

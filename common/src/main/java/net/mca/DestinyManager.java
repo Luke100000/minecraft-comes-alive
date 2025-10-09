@@ -1,16 +1,16 @@
 package net.mca;
 
 import net.mca.client.gui.DestinyScreen;
-import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.Minecraft;
 
 public class DestinyManager {
     private boolean openDestiny;
     private boolean allowTeleportation;
 
-    public void tick(MinecraftClient client) {
-        if (openDestiny && client.currentScreen == null) {
+    public void tick(Minecraft client) {
+        if (openDestiny && client.screen == null) {
             assert client.player != null;
-            client.setScreen(new DestinyScreen(client.player.getUuid(), allowTeleportation));
+            client.setScreen(new DestinyScreen(client.player.getUUID(), allowTeleportation));
         }
     }
 

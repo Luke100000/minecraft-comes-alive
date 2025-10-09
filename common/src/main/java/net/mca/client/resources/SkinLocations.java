@@ -1,17 +1,16 @@
 package net.mca.client.resources;
 
-import net.minecraft.text.Text;
-
 import java.util.HashSet;
 import java.util.Locale;
 import java.util.Set;
+import net.minecraft.network.chat.Component;
 
 public class SkinLocations {
     public enum Part {
         HEAD, HAT, RIGHT_LEG, BODY, RIGHT_ARM, LEFT_LEG, LEFT_ARM, JACKET, RIGHT_LEG_2, RIGHT_ARM_2, LEFT_LEG_2, LEFT_ARM_2;
 
-        public Text getTranslation() {
-            return Text.translatable("gui.skin_library.element." + name().toLowerCase(Locale.ROOT));
+        public Component getTranslation() {
+            return Component.translatable("gui.skin_library.element." + name().toLowerCase(Locale.ROOT));
         }
     }
 

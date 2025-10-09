@@ -1,11 +1,11 @@
 package net.mca.util.network.datasync;
 
-import net.minecraft.item.ItemStack;
-import net.minecraft.nbt.NbtCompound;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.world.item.ItemStack;
 
 public class NbtCompoundDefaultGetters {
 
-    public static int getInt(NbtCompound nbt, String key, int def) {
+    public static int getInt(CompoundTag nbt, String key, int def) {
         try {
             if (nbt.contains(key, 99)) {
                 return nbt.getInt(key);
@@ -15,7 +15,7 @@ public class NbtCompoundDefaultGetters {
         return def;
     }
 
-    public static float getFloat(NbtCompound nbt, String key, float def) {
+    public static float getFloat(CompoundTag nbt, String key, float def) {
         try {
             if (nbt.contains(key, 99)) {
                 return nbt.getFloat(key);
@@ -25,7 +25,7 @@ public class NbtCompoundDefaultGetters {
         return def;
     }
 
-    public static String getString(NbtCompound nbt, String key, String def) {
+    public static String getString(CompoundTag nbt, String key, String def) {
         try {
             if (nbt.contains(key, 8)) {
                 return nbt.getString(key);
@@ -35,7 +35,7 @@ public class NbtCompoundDefaultGetters {
         return def;
     }
 
-    public static NbtCompound getCompound(NbtCompound nbt, String key, NbtCompound def) {
+    public static CompoundTag getCompound(CompoundTag nbt, String key, CompoundTag def) {
         try {
             if (nbt.contains(key, 10)) {
                 return nbt.getCompound(key);
@@ -45,10 +45,10 @@ public class NbtCompoundDefaultGetters {
         return def.copy();
     }
 
-    public static ItemStack getItemStack(NbtCompound nbt, String key, ItemStack def) {
+    public static ItemStack getItemStack(CompoundTag nbt, String key, ItemStack def) {
         try {
             if (nbt.contains(key, 10)) {
-                return ItemStack.fromNbt(nbt.getCompound(key));
+                return ItemStack.of(nbt.getCompound(key));
             }
         } catch (ClassCastException ignored) {
         }

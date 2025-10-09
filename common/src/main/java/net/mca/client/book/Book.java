@@ -3,9 +3,9 @@ package net.mca.client.book;
 import net.mca.client.book.pages.EmptyPage;
 import net.mca.client.book.pages.Page;
 import net.mca.client.book.pages.TextPage;
-import net.minecraft.text.Text;
-import net.minecraft.util.Formatting;
-import net.minecraft.util.Identifier;
+import net.minecraft.ChatFormatting;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.LinkedList;
@@ -13,28 +13,28 @@ import java.util.List;
 
 public class Book {
     private final String bookName;
-    private final Text bookAuthor;
+    private final Component bookAuthor;
     private final List<Page> pages = new LinkedList<>();
-    private Identifier background = new Identifier("textures/gui/book.png");
-    private Formatting textFormatting = Formatting.BLACK;
+    private ResourceLocation background = new ResourceLocation("textures/gui/book.png");
+    private ChatFormatting textFormatting = ChatFormatting.BLACK;
     private boolean pageTurnSound = true;
     private boolean textShadow;
 
     public Book(String bookName) {
-        this(bookName, Text.translatable("mca.books." + bookName + ".author").formatted(Formatting.GRAY));
+        this(bookName, Component.translatable("mca.books." + bookName + ".author").withStyle(ChatFormatting.GRAY));
     }
 
-    public Book(String bookName, Text bookAuthor) {
+    public Book(String bookName, Component bookAuthor) {
         this.bookName = bookName;
         this.bookAuthor = bookAuthor;
     }
 
-    public Book setBackground(Identifier background) {
+    public Book setBackground(ResourceLocation background) {
         this.background = background;
         return this;
     }
 
-    public Book setTextFormatting(Formatting textFormatting) {
+    public Book setTextFormatting(ChatFormatting textFormatting) {
         this.textFormatting = textFormatting;
         return this;
     }
@@ -85,7 +85,7 @@ public class Book {
     }
 
     @Nullable
-    public Text getBookAuthor() {
+    public Component getBookAuthor() {
         return bookAuthor;
     }
 
@@ -93,11 +93,11 @@ public class Book {
         return pages;
     }
 
-    public Identifier getBackground() {
+    public ResourceLocation getBackground() {
         return background;
     }
 
-    public Formatting getTextFormatting() {
+    public ChatFormatting getTextFormatting() {
         return textFormatting;
     }
 

@@ -6,7 +6,7 @@ import net.mca.entity.ai.relationship.Gender;
 import net.mca.server.world.data.FamilyTree;
 import net.mca.resources.PoolUtil;
 import net.mca.server.world.data.Village;
-import net.minecraft.server.world.ServerWorld;
+import net.minecraft.server.level.ServerLevel;
 
 public class VillageProcreationManager {
     private final Village village;
@@ -16,7 +16,7 @@ public class VillageProcreationManager {
     }
 
     // if the population is low, find a couple and let them have a child
-    public void procreate(ServerWorld world) {
+    public void procreate(ServerLevel world) {
         if (world.random.nextFloat() >= Config.getInstance().villagerProcreationChancePerMinute) {
             return;
         }

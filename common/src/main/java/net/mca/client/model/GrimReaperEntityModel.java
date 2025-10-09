@@ -5,13 +5,17 @@ import com.google.common.collect.ImmutableMap;
 import net.mca.entity.GrimReaperEntity;
 import net.mca.entity.ReaperAttackState;
 import net.minecraft.client.model.*;
-import net.minecraft.client.render.entity.model.BipedEntityModel;
-
+import net.minecraft.client.model.geom.ModelPart;
+import net.minecraft.client.model.geom.PartPose;
+import net.minecraft.client.model.geom.builders.CubeDeformation;
+import net.minecraft.client.model.geom.builders.CubeListBuilder;
+import net.minecraft.client.model.geom.builders.MeshDefinition;
+import net.minecraft.client.model.geom.builders.PartDefinition;
 import java.util.Map;
 
-import static net.minecraft.client.render.entity.model.EntityModelPartNames.*;
+import static net.minecraft.client.model.geom.PartNames.*;
 
-public class GrimReaperEntityModel<T extends GrimReaperEntity> extends BipedEntityModel<T> {
+public class GrimReaperEntityModel<T extends GrimReaperEntity> extends HumanoidModel<T> {
     private static final Map<ReaperAttackState, ModelTransformSet> POSES = ImmutableMap.of(
         ReaperAttackState.PRE, new ModelTransformSet.Builder()
             .rotate(HEAD, -15.6F, 40.4F, 0)
@@ -54,22 +58,22 @@ public class GrimReaperEntityModel<T extends GrimReaperEntity> extends BipedEnti
 
     public ReaperAttackState reaperState = ReaperAttackState.IDLE;
 
-    private final ModelTransform scytheTransform;
+    private final PartPose scytheTransform;
 
     public GrimReaperEntityModel(ModelPart tree) {
         super(tree);
         scythe = tree.getChild(LEFT_ARM).getChild("scythe_handle");
-        scytheTransform = scythe.getTransform();
+        scytheTransform = scythe.storePose();
     }
 
-    public static ModelData getModelData(Dilation dilation) {
-        ModelData modelData = BipedEntityModel.getModelData(dilation, 0);
-        ModelPartData data = modelData.getRoot();
+    public static MeshDefinition getModelData(CubeDeformation dilation) {
+        MeshDefinition modelData = HumanoidModel.createMesh(dilation, 0);
+        PartDefinition data = modelData.getRoot();
 
         data.getChild(LEFT_ARM)
-            .addChild("scythe_handle",
-                ModelPartBuilder.create().uv(36, 32).cuboid(0, -26, 0, 1, 31, 1, dilation)
-                                         .uv(0, 32).cuboid(0.5F, -26, 0.5F, 16, 16, 0, dilation),
+            .addOrReplaceChild("scythe_handle",
+                CubeListBuilder.create().texOffs(36, 32).addBox(0, -26, 0, 1, 31, 1, dilation)
+                                         .texOffs(0, 32).addBox(0.5F, -26, 0.5F, 16, 16, 0, dilation),
                                          ModelTransformSet.Builder.createTransform(0, 10, 0, 90, -20, 90)
             );
 
@@ -77,18 +81,18 @@ public class GrimReaperEntityModel<T extends GrimReaperEntity> extends BipedEnti
     }
 
     @Override
-    public void setAngles(T entity, float f, float g, float h, float i, float j) {
-        super.setAngles(entity, f, g, h, i, j);
+    public void setupAnim(T entity, float f, float g, float h, float i, float j) {
+        super.setupAnim(entity, f, g, h, i, j);
 
-        body.setPivot(0, 0, 0);
-        body.setAngles(0, 0, 0);
+        body.setPos(0, 0, 0);
+        body.setRotation(0, 0, 0);
 
-        leftLeg.setPivot(1.9F, 12, 0);
-        leftLeg.setAngles(0, 0, 0);
-        rightLeg.setPivot(-1.9F, 12, 0);
-        rightLeg.setAngles(0, 0, 0);
+        leftLeg.setPos(1.9F, 12, 0);
+        leftLeg.setRotation(0, 0, 0);
+        rightLeg.setPos(-1.9F, 12, 0);
+        rightLeg.setRotation(0, 0, 0);
 
-        scythe.setTransform(scytheTransform);
+        scythe.loadPose(scytheTransform);
 
         reaperState = entity.getAttackState();
         ModelTransformSet set = POSES.get(reaperState);
@@ -103,15 +107,15 @@ public class GrimReaperEntityModel<T extends GrimReaperEntity> extends BipedEnti
             set.get("scythe_handle").applyTo(scythe);
         }
 
-        hat.copyTransform(head);
+        hat.copyFrom(head);
     }
     @Override
-    protected Iterable<ModelPart> getHeadParts() {
+    protected Iterable<ModelPart> headParts() {
         return ImmutableList.of(head, hat);
     }
 
     @Override
-    protected Iterable<ModelPart> getBodyParts() {
+    protected Iterable<ModelPart> bodyParts() {
         return ImmutableList.of(body, rightArm, leftArm, rightLeg, leftLeg);
     }
 }

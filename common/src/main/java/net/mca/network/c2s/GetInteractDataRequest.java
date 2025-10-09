@@ -8,10 +8,9 @@ import net.mca.entity.ai.relationship.CompassionateEntity;
 import net.mca.entity.ai.relationship.EntityRelationship;
 import net.mca.entity.ai.relationship.RelationshipState;
 import net.mca.server.world.data.FamilyTreeNode;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.Entity;
 import net.mca.network.s2c.GetInteractDataResponse;
-import net.minecraft.entity.Entity;
-import net.minecraft.server.network.ServerPlayerEntity;
-
 import java.io.Serial;
 import java.util.Set;
 import java.util.UUID;
@@ -27,8 +26,8 @@ public class GetInteractDataRequest implements Message {
     }
 
     @Override
-    public void receive(ServerPlayerEntity player) {
-        Entity entity = player.getServerWorld().getEntity(uuid);
+    public void receive(ServerPlayer player) {
+        Entity entity = player.serverLevel().getEntity(uuid);
 
         if (entity instanceof VillagerLike<?> villager) {
             //get constraints

@@ -1,15 +1,15 @@
 package net.mca.resources;
 
 import net.mca.MCA;
-import net.minecraft.resource.ResourceManager;
-import net.minecraft.resource.SynchronousResourceReloader;
-import net.minecraft.util.Identifier;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.packs.resources.ResourceManager;
+import net.minecraft.server.packs.resources.ResourceManagerReloadListener;
 
-public class ApiReloadListener implements SynchronousResourceReloader {
-    public static final Identifier ID = MCA.locate("api");
+public class ApiReloadListener implements ResourceManagerReloadListener {
+    public static final ResourceLocation ID = MCA.locate("api");
 
     @Override
-    public void reload(ResourceManager manager) {
+    public void onResourceManagerReload(ResourceManager manager) {
         API.instance = new API.Data();
         API.instance.init(manager);
     }

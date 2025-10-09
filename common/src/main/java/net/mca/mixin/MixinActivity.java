@@ -1,6 +1,6 @@
 package net.mca.mixin;
 
-import net.minecraft.entity.ai.brain.Activity;
+import net.minecraft.world.entity.schedule.Activity;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.gen.Invoker;
 

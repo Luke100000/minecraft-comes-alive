@@ -2,8 +2,7 @@ package net.mca.resources.data.tasks;
 
 import com.google.gson.JsonObject;
 import net.mca.server.world.data.Village;
-import net.minecraft.server.network.ServerPlayerEntity;
-
+import net.minecraft.server.level.ServerPlayer;
 import java.io.Serial;
 
 public class BlockingTask extends Task {
@@ -15,7 +14,7 @@ public class BlockingTask extends Task {
     }
 
     @Override
-    public boolean isCompleted(Village village, ServerPlayerEntity player) {
+    public boolean isCompleted(Village village, ServerPlayer player) {
         return false;
     }
 

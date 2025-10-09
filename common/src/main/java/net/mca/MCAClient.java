@@ -7,8 +7,7 @@ import net.mca.entity.VillagerEntityMCA;
 import net.mca.entity.VillagerLike;
 import net.mca.network.c2s.ConfigRequest;
 import net.mca.network.c2s.PlayerDataRequest;
-import net.minecraft.client.MinecraftClient;
-
+import net.minecraft.client.Minecraft;
 import java.util.*;
 
 public class MCAClient {
@@ -29,7 +28,7 @@ public class MCAClient {
 
     public static Optional<VillagerLike<?>> getPlayerData(UUID uuid) {
         if (isPlayerRendererAllowed()) {
-            if (!MCAClient.playerDataRequests.contains(uuid) && MinecraftClient.getInstance().getNetworkHandler() != null) {
+            if (!MCAClient.playerDataRequests.contains(uuid) && Minecraft.getInstance().getConnection() != null) {
                 MCAClient.playerDataRequests.add(uuid);
                 NetworkHandler.sendToServer(new PlayerDataRequest(uuid));
             }
@@ -41,10 +40,10 @@ public class MCAClient {
     }
 
     public static boolean useExpandedPersonalityTranslations() {
-        boolean isTTSPackActive = MinecraftClient.getInstance().getResourceManager().streamResourcePacks().anyMatch(pack -> {
-            return pack.getName().contains("MCAVoices");
+        boolean isTTSPackActive = Minecraft.getInstance().getResourceManager().listPacks().anyMatch(pack -> {
+            return pack.packId().contains("MCAVoices");
         });
-        return !isTTSPackActive && MinecraftClient.getInstance().options.language.equals("en_us") && !Config.getInstance().enableOnlineTTS;
+        return !isTTSPackActive && Minecraft.getInstance().options.languageCode.equals("en_us") && !Config.getInstance().enableOnlineTTS;
     }
 
     public static boolean useGeneticsRenderer(UUID uuid) {
@@ -62,11 +61,11 @@ public class MCAClient {
                         .noneMatch(entry -> MCA.doesModExist(entry.getKey()));
     }
 
-    public static void tickClient(MinecraftClient client) {
+    public static void tickClient(Minecraft client) {
         destinyManager.tick(client);
 
-        if (KeyBindings.SKIN_LIBRARY.wasPressed()) {
-            MinecraftClient.getInstance().setScreen(new SkinLibraryScreen());
+        if (KeyBindings.SKIN_LIBRARY.consumeClick()) {
+            Minecraft.getInstance().setScreen(new SkinLibraryScreen());
         }
 
         SpeechManager.INSTANCE.tick(client);
@@ -76,9 +75,9 @@ public class MCAClient {
         playerData.put(uuid, villager);
 
         // Refresh eye height
-        MinecraftClient client = MinecraftClient.getInstance();
+        Minecraft client = Minecraft.getInstance();
         if (client.player != null) {
-            client.player.calculateDimensions();
+            client.player.refreshDimensions();
         }
     }
 

@@ -1,38 +1,36 @@
 package net.mca.entity.ai.goal;
 
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.ai.TargetPredicate;
-import net.minecraft.entity.ai.goal.Goal;
-import net.minecraft.entity.mob.PathAwareEntity;
-import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.world.entity.PathfinderMob;
+import net.minecraft.world.entity.ai.goal.Goal;
+import net.minecraft.world.entity.ai.targeting.TargetingConditions;
+import net.minecraft.world.entity.player.Player;
 
-import java.util.Comparator;
 import java.util.List;
 
 public class GrimReaperTargetGoal extends Goal {
-    private final TargetPredicate attackTargeting = TargetPredicate.createAttackable().setBaseMaxDistance(64.0D);
+    private final TargetingConditions attackTargeting = TargetingConditions.forCombat().range(64.0D);
 
-    private final PathAwareEntity mob;
+    private final PathfinderMob mob;
 
     private int nextScanTick = 20;
 
-    public GrimReaperTargetGoal(PathAwareEntity mob) {
+    public GrimReaperTargetGoal(PathfinderMob mob) {
         this.mob = mob;
     }
 
     @Override
-    public boolean canStart() {
+    public boolean canUse() {
         if (this.nextScanTick > 0) {
             this.nextScanTick--;
         } else {
             this.nextScanTick = 20;
-            List<PlayerEntity> list = mob.getWorld().getPlayers(this.attackTargeting, mob, mob.getBoundingBox().expand(48.0D, 64.0D, 48.0D));
+            List<Player> list = mob.level().getNearbyPlayers(this.attackTargeting, mob, mob.getBoundingBox().inflate(48.0D, 64.0D, 48.0D));
             if (!list.isEmpty()) {
-                list.sort(Comparator.comparing(Entity::getY).reversed());
+                list.sort((a, b) -> Double.compare(b.getY(), a.getY()));
 
-                for (PlayerEntity playerentity : list) {
-                    if (mob.isTarget(playerentity, TargetPredicate.DEFAULT)) {
-                        mob.setTarget(playerentity);
+                for (Player player : list) {
+                    if (mob.canAttack(player, TargetingConditions.DEFAULT)) {
+                        mob.setTarget(player);
                         return true;
                     }
                 }
@@ -42,7 +40,7 @@ public class GrimReaperTargetGoal extends Goal {
     }
 
     @Override
-    public boolean shouldContinue() {
+    public boolean canContinueToUse() {
         return mob.getTarget() != null;
     }
 }
