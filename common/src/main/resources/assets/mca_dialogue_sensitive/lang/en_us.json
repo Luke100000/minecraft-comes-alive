@@ -6,7 +6,6 @@
   "sensitive.dialogue.main/5": "How are you feeling today?",
   "sensitive.dialogue.main/6": "Oh, hey %1$s... Is anything new?",
   "sensitive.dialogue.main/7": "Oh, speaking of %supporter%, I heard they had a little encounter with a zombie... It was quite... um, interesting. But, um, never mind that, I saw a zombie that kind of reminded me of %supporter% earlier... it was, um, quite strange.",
-
   "sensitive.dialogue.rumors.failed/1": "Hmm, it seems that I haven't stumbled upon any intriguing news lately.",
   "sensitive.dialogue.rumors.lore/1": "It seems that Jax's following is still going strong, but I must say, the popularity of Sirben is on the rise. Those devoted messengers, MerlinWolfGames and Crow, are tirelessly spreading his divine teachings.",
   "sensitive.dialogue.rumors.lore/2": "Oh, dear friend, we were once besieged by those dreadful Cyberdemons. They dared to infiltrate our peaceful realm through ghastly Portals. But thanks to the heroics of Sirben and the valiant Luke, they were swiftly vanquished, halting the invasion in its tracks.",
@@ -14,14 +13,12 @@
   "sensitive.dialogue.rumors.lore/4": "Marvelous tales spread of MerlinWolfGames, the skilled architect who crafted a magnificent temple paying homage to the almighty Sirben. It stands tall among our ancient wonders, a testament to their unwavering devotion.",
   "sensitive.dialogue.rumors.lore/5": "Once upon a time, a majestic race of builders roamed our lands, their skills unmatched and their creations awe-inspiring. However, as the sands of time shifted, they vanished without a trace, leaving behind only echoes of their once-great existence.",
   "sensitive.dialogue.rumors.lore/6": "Have you had the pleasure of hearing the captivating legends surrounding the ancient builders? Oh, they were a remarkable bunch, crafting intricate ruins and majestic temples that dot the sprawling landscapes of the Overworld. Such tales never fail to ignite the imagination!",
-
   "sensitive.dialogue.first.generic/1": "Greetings, stranger! Your presence here brings a sense of novelty and excitement to our humble village.",
   "sensitive.dialogue.first.generic/2": "Ah, a newcomer! How delightful! Your arrival injects a breath of fresh air into our monotonous routine.",
   "sensitive.dialogue.first.generic/3": "Well, well, well! Look who we have here! A mysterious traveler gracing us with their presence. Welcome, welcome!",
   "sensitive.dialogue.first.generic/4": "Oh my, a stranger in our midst! How intriguing! Do share your tales of adventure with us, won't you?",
   "sensitive.dialogue.first.generic/5": "It feels like ages since we've had the pleasure of hosting a traveler. Make yourself at home, dear wanderer!",
   "sensitive.dialogue.first.generic/6": "Why, hello there! The sight of a new face fills me with joy! Welcome to our village, dear newcomer.",
-
   "sensitive.dialogue.first.question/1": "Greetings, dear visitor. What has led you to grace our humble village with your presence?",
   "sensitive.dialogue.first.question/2": "Oh, what a delight it is to encounter someone new! Pray tell, what marvelous quest has led you to our village?",
   "sensitive.dialogue.first.question/3": "Oh my! You seem to possess the spirit of an adventurer within you. Pray, share with me the tale of how you found your way to our village.",
@@ -38,7 +35,6 @@
   "sensitive.dialogue.first.spent_night.failed/1": "Oh, alas! Our humble village lacks the wondrous art of inn construction. Please forgive our incompetence!",
   "sensitive.dialogue.first.spent_night.failed/2": "I deeply regret to inform you that our village, regrettably, does not possess an inn. I offer my sincerest apologies for this inconvenience!",
   "sensitive.dialogue.first.spent_night.failed/3": "Ah, fellow traveler, it pains me to say that our village cannot provide you with the sanctuary of an inn. Perhaps, if you venture forth, you may stumble upon a more hospitable abode in another village.",
-
   "sensitive.dialogue.hug.success/1": "Wow, I can't believe it's been ages since we last met!",
   "sensitive.dialogue.hug.success/2": "I truly appreciate your kind gesture, it means more to me than you can imagine.",
   "sensitive.dialogue.hug.success/3": "Amidst a rather gloomy day, your hug managed to bring a glimmer of light into my life.",
@@ -52,7 +48,6 @@
   "sensitive.dialogue.hug.fail/5": "Honestly, considering how you treated me, I don't think you deserve a hug.",
   "sensitive.dialogue.hug.fail/6": "Ugh, please keep your germs to yourself! I'm not a fan of physical contact.",
   "sensitive.dialogue.hug.fail/7": "Oh, um, well... thank you, I suppose? I'm not quite sure how to react.",
-
   "sensitive.dialogue.kiss.success/1": "This moment is so beautiful, I wish it could go on forever.",
   "sensitive.dialogue.kiss.success/2": "I believe my heart is filled with love for you...",
   "sensitive.dialogue.kiss.success/3": "Mmm, this kiss is as delightful as the sweetest pumpkin pie!",
@@ -65,7 +60,6 @@
   "sensitive.dialogue.kiss.fail/4": "A little tip, darling – two words",
   "sensitive.dialogue.kiss.fail/5": "Thank you, I suppose? Though I must admit, your kissing skills leave much to be desired.",
   "sensitive.dialogue.kiss.fail/6": "Please, kindly remove yourself from my personal space. I appreciate the sentiment, but physical contact is not my cup of tea.",
-
   "sensitive.dialogue.chat.success/1": "Oh my, the thought of warm, freshly baked cookies and a glass of cold milk is simply delightful!",
   "sensitive.dialogue.chat.success/2": "It's such a splendid day, isn't it? The sun is shining so beautifully.",
   "sensitive.dialogue.chat.success/3": "Oh dear, I had a rather unfortunate incident this morning. I accidentally stubbed my toe when I woke up. Ouch!",
@@ -106,7 +100,6 @@
   "sensitive.dialogue.chat.fail/19": "Are you finally finished bothering me with your talk?",
   "sensitive.dialogue.chat.fail/20": "Wait, hold on. You actually believe the Earth is round? No edges or corners? That's just absurd.",
   "sensitive.dialogue.chat.fail/21": "Oh, please tell me you don't actually think the earth is round! I mean, how can anyone believe such nonsense? It's absurd to think there are no corners on our planet!",
-
   "sensitive.dialogue.story.success/1": "Oh my goodness, I am absolutely astonished by everything that transpired!",
   "sensitive.dialogue.story.success/2": "If only I possessed the courage to confront a creeper, I truly envy your bravery.",
   "sensitive.dialogue.story.success/3": "Your storytelling is absolutely captivating! Is this an original masterpiece?",
@@ -126,7 +119,6 @@
   "sensitive.dialogue.story.fail/8": "Pardon me for my lack of enthusiasm, but I find this topic rather dull and uninteresting.",
   "sensitive.dialogue.story.fail/9": "I'm sorry to say this, but your behavior borders on madness, and not in a positive way.",
   "sensitive.dialogue.story.fail/10": "I'm failing to comprehend how anyone could deem that as a satisfactory outcome.",
-
   "sensitive.dialogue.flirt.success/1": "Wow, your courage is truly remarkable!",
   "sensitive.dialogue.flirt.success/2": "Oh my, you're just too charming for words!",
   "sensitive.dialogue.flirt.success/3": "*Blushing intensifies* Are you being genuine?",
@@ -141,7 +133,6 @@
   "sensitive.dialogue.flirt.fail/5": "Haha, your chances are even worse than a creeper trying to sell me flowers.",
   "sensitive.dialogue.flirt.fail/6": "Absolutely not. I can't even begin to fathom why you thought that would work.",
   "sensitive.dialogue.flirt.fail/7": "Please, spare me the awkwardness and never utter those words again.",
-
   "sensitive.dialogue.joke.creative.success/1": "*Chuckles* That's quite amusing!",
   "sensitive.dialogue.joke.creative.success/2": "Oh, that's quite a humorous remark!",
   "sensitive.dialogue.joke.creative.success/3": "That's absolutely top-notch! I haven't heard anything better!",
@@ -158,10 +149,8 @@
   "sensitive.dialogue.joke.creative.failed/6": "Oh, hilarious. Truly. I mean, if you find that sort of thing amusing, who am I to judge?",
   "sensitive.dialogue.joke.creative.failed/7": "I fail to see the humor in that. Perhaps it's best if you stick to your day job, whatever that may be.",
   "sensitive.dialogue.joke.creative.failed/8": "You know, Ash has a knack for telling jokes that actually make people laugh. You might want to take some pointers from him.",
-
   "sensitive.dialogue.procreate_engaged/1": "My heart yearns for the sacred bond of matrimony before embarking on the beautiful journey of procreation.",
   "sensitive.dialogue.procreate_engaged/2": "It is essential for our souls to be wholeheartedly intertwined before we bless this world with the miracle of new life.",
-
   "sensitive.dialogue.shake_hand.success/1": "Your handshake is gentle and comforting.",
   "sensitive.dialogue.shake_hand.success/2": "Your grip exudes a delicate strength, it's impressive.",
   "sensitive.dialogue.shake_hand.success/3": "Oh, I must say, your handshake is wonderfully considerate.",
@@ -172,7 +161,6 @@
   "sensitive.dialogue.shake_hand.fail/3": "Oh, I'm not a complete stranger, but I understand if you're being cautious.",
   "sensitive.dialogue.shake_hand.fail/4": "Oh wow, this is quite unexpected from you. I didn't think you had it in you.",
   "sensitive.dialogue.shake_hand.fail/5": "Perhaps it's best if you just leave me alone for now.",
-
   "sensitive.dialogue.main.morning/1": "Good morning, how are you feeling today?",
   "sensitive.dialogue.main.morning/2": "Hey there, ready to tackle the day head-on?",
   "sensitive.dialogue.main.morning/3": "I'm feeling a bit groggy, how about you?",
@@ -203,12 +191,10 @@
   "sensitive.dialogue.main.night/8": "I don't know about you, but I'm absolutely knackered. Today has been a marathon, and I think I'll need to pace myself tomorrow.",
   "sensitive.dialogue.main.night/9": "Ahh, the thought of snuggling up under the covers is pure bliss, isn't it?",
   "sensitive.dialogue.main.night/10": "You know, they say a good night's sleep is the secret to conquering tomorrow's challenges. Just something to keep in mind!",
-
   "sensitive.dialogue.greet.mayor/1": "Pleasant greetings to you, esteemed Mayor!",
   "sensitive.dialogue.greet.mayor/2": "Wishing you a delightful day, Mayor!",
   "sensitive.dialogue.greet.monarch/1": "My Liege.",
   "sensitive.dialogue.greet.monarch/2": "Your Excellency.",
-
   "sensitive.dialogue.busy/1": "Oh, goodness! We've had quite the conversation today, haven't we? I simply must get back to my tasks now.",
   "sensitive.dialogue.busy/2": "While I truly appreciate our delightful conversation, my dear friend, I'm afraid I'm pressed for time and must focus on completing my work by this evening.",
   "sensitive.dialogue.busy/3": "My sincerest apologies, but I find myself a tad occupied at the moment. Would it be terribly inconvenient if we continued our chat at a more convenient time?",
@@ -219,7 +205,6 @@
   "sensitive.dialogue.goaway/3": "I apologize, %1$s, but I am unable to engage in conversation at the moment.",
   "sensitive.dialogue.goaway/4": "Kindly find someone else to bother!",
   "sensitive.dialogue.goaway/5": "Oh dear, would you be so kind as to leave, you miscreant?",
-
   "sensitive.dialogue.greet/1": "Hey! How are things going for you today?",
   "sensitive.dialogue.greet/2": "Well, hello %1$s! How's the world treating you lately?",
   "sensitive.dialogue.greet/3": "Greetings! Is there something on your mind?",
@@ -229,13 +214,11 @@
   "sensitive.dialogue.greet/7": "Ah, there you are! It's always a pleasure to see your face!",
   "sensitive.dialogue.greet/8": "Greetings, my friend! How's your day unfolding? Anything exciting happening?",
   "sensitive.dialogue.greet/9": "Hey! I'm absolutely thrilled to see your lovely face! How have you been?",
-
   "sensitive.dialogue.greet.negative/1": "Ugh, please leave. You're the absolute last person I wanted to encounter right now!",
   "sensitive.dialogue.greet.negative/2": "Oh, wonderful. Look who decided to grace us with their presence. Again.",
   "sensitive.dialogue.greet.negative/3": "Hm? What do you want?",
   "sensitive.dialogue.greet.negative/4": "Oh, it's you... I was kind of hoping for someone different, to be honest.",
   "sensitive.dialogue.greet.negative/5": "Back to bother me, huh? Just what I needed today.",
-
   "sensitive.dialogue.greet.success/1": "That's wonderful news, I'm truly thrilled to hear it!",
   "sensitive.dialogue.greet.success/2": "Oh, how delightful! I'm absolutely ecstatic to hear that you're doing well!",
   "sensitive.dialogue.greet.success/3": "My heart is brimming with joy to know that you're in a good place!",
@@ -246,7 +229,6 @@
   "sensitive.dialogue.greet.fail/3": "Uh... okay? I mean, it wasn't exactly the response I was expecting, but hey, life is full of surprises, right?",
   "sensitive.dialogue.greet.fail/4": "Really? Huh... I guess I'll just have to deal with it then. Not exactly the most exciting news, but hey, it is what it is.",
   "sensitive.dialogue.greet.fail/5": "Oh... well, that's a bit disappointing. I was hoping for something a little more exciting, but I'll manage.",
-
   "sensitive.dialogue.apologize.success/1": "0. No worries, we all slip up sometimes.",
   "sensitive.dialogue.apologize.success/2": "Don't sweat it, accidents happen. Just stay mindful from now on, alright?",
   "sensitive.dialogue.apologize.success/3": "2. It's alright, mistakes are part of being human. Just remember to stay cautious going forward.",
@@ -257,7 +239,6 @@
   "sensitive.dialogue.apologize.fail/3": "Seriously? Do you honestly expect me to believe that?",
   "sensitive.dialogue.apologize.fail/4": "That really stung, so don't even bother trying to apologize!",
   "sensitive.dialogue.apologize.fail/5": "Sorry, but there's absolutely no chance I'll forgive you.",
-
   "sensitive.dialogue.location.failed/1": "I'm sorry, but I haven't come across any new information worth sharing.",
   "sensitive.dialogue.location.failed/2": "Regrettably, I am not aware of any captivating locations at the moment.",
   "sensitive.dialogue.location.failed/3": "I'm afraid not. We villagers have our own priorities, and delving into treacherous ruins isn't one of them, my dear adventurers.",
@@ -305,7 +286,6 @@
   "sensitive.dialogue.location.ancient_city/0": "I couldn't help but sense some eerie vibrations coming from %2$s, deep within the earth.",
   "sensitive.dialogue.location.ancient_city/1": "My intuition tells me that there's a hidden secret buried beneath the surface of %2$s.",
   "sensitive.dialogue.location.ancient_city/3": "Whispers of an ancient city resonate through the stories, yet my eyes fail to witness its presence. Perhaps it lies concealed beneath the ground at %2$s.",
-
   "sensitive.dialogue.joke.monster.success/1": "Oh dear, that must have been quite the ordeal for that poor Skelly.",
   "sensitive.dialogue.joke.monster.success/2": "Oh my goodness, I can't believe that zombie actually attempted such a violent act with a shovel! How peculiar!",
   "sensitive.dialogue.joke.monster.success/3": "My, oh my, you certainly demonstrated your authority over that spider! Quite impressive, I must say.",
@@ -316,7 +296,6 @@
   "sensitive.dialogue.joke.monster.failed/3": "Have you ever stopped to consider that zombies and skeletons were once humans with hopes and dreams? It's rather heartbreaking when you think about it. Let's be more compassionate towards them.",
   "sensitive.dialogue.joke.monster.failed/4": "It's rather unoriginal to poke fun at an enderman falling into water, don't you think? They already have a tough time with their teleportation skills. Let's not add insult to injury.",
   "sensitive.dialogue.joke.monster.failed/5": "You know, it's quite disheartening when people make jokes about silverfish ambushing us on the toilet. We should strive for a more empathetic and understanding approach, don't you agree?",
-
   "sensitive.dialogue.joke.animal.success/1": "Oh dear, it's quite unfortunate for the sheep to lose its wool, isn't it? But I suppose we can find some humor in it.",
   "sensitive.dialogue.joke.animal.success/2": "Can you believe it? The wolf actually fell in love with the sheep! Oh my, such an unexpected twist!",
   "sensitive.dialogue.joke.animal.success/3": "Well, I must say, it's rather amusing to think that chickens are capable of such things! Who would have thought?",
@@ -327,12 +306,10 @@
   "sensitive.dialogue.joke.animal.failed/3": "We should show compassion rather than finding amusement in such unfortunate circumstances.",
   "sensitive.dialogue.joke.animal.failed/4": "I must admit, I don't find amusement in jokes that mock vulnerable creatures.",
   "sensitive.dialogue.joke.animal.failed/5": "Making fun of animals, even in jest, can be hurtful. Let's refrain from doing so.",
-
   "sensitive.dialogue.flirt.slap/1": "Pardon me!",
   "sensitive.dialogue.flirt.slap/2": "Have you taken lessons from a Love Guru on the art of flirting?!",
   "sensitive.dialogue.kiss.slap/1": "I cannot believe you would do such a thing!",
   "sensitive.dialogue.kiss.slap/2": "If you even think about attempting that again, I promise you, the consequences will be far from pleasant!",
-
   "sensitive.dialogue.chat.plains/1": "Oh, how I adore the plains! It's the only place I've ever known, but I dream of venturing beyond its borders one day... to see the world!",
   "sensitive.dialogue.chat.plains/2": "The tranquility of the plains is simply enchanting. While it may not boast the same thrill as other biomes, there's nowhere else I'd rather call home.",
   "sensitive.dialogue.chat.plains/3": "Oh, when the sun sets and blankets the plains in its golden hues, it's a sight that takes my breath away. And the gentle whispers of the wind... it's like nature's lullaby.",
@@ -375,14 +352,12 @@
   "sensitive.dialogue.chat.desert/8": "Ugh, dealing with those husks is such a pain in the neck. I mean, seriously, why do they always leave us famished after smacking us? So not cool!",
   "sensitive.dialogue.chat.desert/9": "Ouch! I learned the hard way to watch my step around those prickly cacti. They're like nature's own little booby traps out here!",
   "sensitive.dialogue.chat.desert/10": "Life in this arid desert is definitely a challenge, but lucky for us, we've got this awesome village that keeps us hydrated and well-fed. Thank goodness for small blessings, right?",
-
   "sensitive.dialogue.story.exploring.success/1": "Awesome! One day, I dream of embarking on my own epic journey across the vast lands of Minecraft!",
   "sensitive.dialogue.story.exploring.success/2": "My goodness! The mere thought of venturing out into the great unknown, discovering new horizons, and leaving my cozy village behind fills me with a mix of awe and envy. The world must be teeming with wonders waiting to be unveiled!",
   "sensitive.dialogue.story.exploring.success/3": "Oh my goodness, you must have the heart of a lion! To boldly step into uncharted territory, facing the mysteries and dangers that lie ahead takes a special kind of courage. I'm in absolute awe!",
   "sensitive.dialogue.story.exploring.fail/1": "I must admit, your stories have lost their charm over time.",
   "sensitive.dialogue.story.exploring.fail/2": "Oh my, please be careful! That edge you're projecting might end up hurting you, my dear friend.",
   "sensitive.dialogue.story.exploring.fail/3": "Speaking with you resembles conversing with a fragile being on a quest for enlightenment. Alas, the endearing qualities are amiss in this comparison.",
-
   "sensitive.dialogue.story.nether.success/1": "Is it really that hot in the Nether?! Oh, my delicate senses couldn't bear the scorching heat!",
   "sensitive.dialogue.story.nether.success/2": "Oh, my goodness! How on earth have you managed to not spontaneously combust in that treacherous place? My fragile constitution would never survive!",
   "sensitive.dialogue.story.nether.success/3": "Word on the street is that the Nether is filled with unimaginable treasures for those valiant enough to venture. Oh, if only my courage matched my insatiable desire for riches...",
@@ -393,17 +368,14 @@
   "sensitive.dialogue.story.nether.fail/3": "Frankly, I couldn't care less if you've been to the Nether. Your storytelling skills are lacking, to say the least.",
   "sensitive.dialogue.story.nether.fail/4": "Judging by your feeble appearance, I highly question your ability to survive a journey to the Nether.",
   "sensitive.dialogue.story.nether.fail/5": "My dear old grandpa used to venture into the dangerous depths of the Nether, and he never mentioned a word about warped fungus. You must be quite the fibber!",
-
   "sensitive.dialogue.story.enderdragon.success/1": "Astounding! And pray tell, doth thou possess the dragon egg in thy possession?",
   "sensitive.dialogue.story.enderdragon.success/2": "Oh gracious me! Hath thou truly vanquished the formidable dragon of lore?! The village shall forever regale thy heroic feats!",
   "sensitive.dialogue.story.enderdragon.fail/1": "Goodness gracious! Are you out of your mind? The ender dragon is nothing but a fantastical tale!",
   "sensitive.dialogue.story.enderdragon.fail/2": "Oh dear, you can't be serious! It's absolutely ludicrous to even entertain the thought of challenging that indomitable dragon!",
-
   "sensitive.dialogue.story.wither.success/1": "Unbelievable! The tales of the Wither's destructive power are beyond comprehension!",
   "sensitive.dialogue.story.wither.success/2": "You've managed to overcome the indomitable Wither?! Oh my, that's absolutely mind-blowing!",
   "sensitive.dialogue.story.wither.fail/1": "I have my doubts about your claim, I must admit.",
   "sensitive.dialogue.story.wither.fail/2": "Your appearance suggests that your story might be a tad far-fetched, my friend.",
-
   "sensitive.dialogue.stay.fail/1": "No, thank you. I'm not really cut out for staying in one place.",
   "sensitive.dialogue.stay.fail/2": "I appreciate your offer, but my heart yearns for the thrill of exploration and adventure!",
   "sensitive.dialogue.stay.fail/3": "This village is lovely, but my restless spirit craves the excitement that comes with being an adventurer.",
@@ -413,14 +385,12 @@
   "sensitive.dialogue.stay.success/2": "Oh, how splendid! This village is simply marvelous, and I cannot wait to settle down here!",
   "sensitive.dialogue.stay.no_space/1": "Oh dear, it appears that this village is quite bustling with activity.",
   "sensitive.dialogue.stay.no_space/2": "I do have a slight inclination to remain here, but regrettably, there seems to be a shortage of available resting quarters.",
-
   "sensitive.dialogue.hire/1": "Absolutely, just give me a heads up whenever you require assistance. I shall make myself available for the agreed-upon remuneration.",
   "sensitive.dialogue.hire/2": "Fantastic news! Kindly inform me when my services are needed. I shall remain in this vicinity, eagerly anticipating the exchange of emeralds!",
   "sensitive.dialogue.hire/3": "Marvelous! Your decision to hire me is sure to yield satisfying results. Ensure the emeralds are prepared, for I am ready to embark on this collaborative endeavor with utmost enthusiasm!",
   "sensitive.dialogue.no_money/1": "I'm terribly sorry, but my services come at a cost. You'll need a bit more emeralds to secure my assistance.",
   "sensitive.dialogue.no_money/2": "Oh dear, it seems the current offer falls a bit short. I'm afraid you'll need to gather a few more emeralds before we can proceed with the hiring process.",
   "sensitive.dialogue.no_money/3": "My apologies, but my talents come at a premium. The current emerald count won't quite cut it. You'll need to acquire a tad more to engage my services.",
-
   "sensitive.dialogue.main.rock_paper_scissor/1": "How about a little game of Rock Paper Scissors?",
   "sensitive.dialogue.rock_paper_scissor/1": "Alright, let's play a game of rock, paper, scissors! Ready, set, go!",
   "sensitive.dialogue.rock_paper_scissor/2": "Today is the day I finally triumph over you! Prepare yourself for defeat!",

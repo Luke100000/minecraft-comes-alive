@@ -3,6 +3,10 @@ Minecraft Comes Alive Reborn
 
 [![Crowdin](https://badges.crowdin.net/minecraft-comes-alive-2/localized.svg)](https://crowdin.com/project/minecraft-comes-alive-2)
 
+Hosted on
+[CurseForge](https://www.curseforge.com/minecraft/mc-mods/minecraft-comes-alive-reborn) and
+[Modrinth](https://modrinth.com/mod/minecraft-comes-alive-reborn)
+
 Minecraft Comes Alive (MCA) is a Minecraft mod that replaces Minecraft's villagers with normal player-like NPCs. It
 works in single player, LAN, and SMP.
 
@@ -18,23 +22,11 @@ repeat indefinitely!
 MCA Reborn is a rewrite of MCA for Minecraft 1.16.5 and upwards, featuring extended village management, villager
 genetics and various enhancements.
 
-## CurseForge
-
-Build versions will be uploaded here:
-https://www.curseforge.com/minecraft/mc-mods/minecraft-comes-alive-reborn
-
-## Dependencies
-
-MCA has no external dependencies other than Minecraft Forge or Fabric, except for the following:
-
-- Architectury API is required on Minecraft 1.18.2 and above
-- Fabric API is required for Fabric Users, and QSL is required for Quilt Users
-
 ## Compatibilities
 
 MCA is usually compatible with every mod, except when it comes to recognising items (e.g. gifting).
 
-Following mods have the required resourcepacks included and are therefore fully compatible:
+Following mods have the required resource packs included and are therefore fully compatible:
 
 - Farmer's Delight
 - Atmospheric

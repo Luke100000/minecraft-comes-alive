@@ -6,7 +6,6 @@
   "odd.dialogue.main/5": "How's the world treating you today, my dear?",
   "odd.dialogue.main/6": "Ah, %1$s! What's the latest gossip in this crazy world?",
   "odd.dialogue.main/7": "Gather 'round, folks! Let me regale you with the epic tale of how %supporter% had a close encounter with a zombie! It was quite the sight, let me tell you. And guess what? I saw a zombie that's practically a doppelganger of %supporter% today! Can you believe it?",
-
   "odd.dialogue.rumors.failed/1": "Oh, dearie me, my ears have failed me once again! I seem to have missed out on all the juicy gossip.",
   "odd.dialogue.rumors.lore/1": "Can you believe it? Jax used to be the hotshot around here, but now everyone is all about Sirben! I mean, have you heard the prophets MerlinWolfGames and Crow? They're practically his fan club now!",
   "odd.dialogue.rumors.lore/2": "So get this, right? These cyberdemons thought they could just waltz into the Overworld with their fancy portals. But guess what? Sirben and Luke were like, \"Not on our watch!\" They shut that invasion down real quick!",
@@ -14,14 +13,12 @@
   "odd.dialogue.rumors.lore/4": "Talk about devotion! MerlinWolfGames actually went and built a whole temple dedicated to Sirben. I mean, that's some serious dedication right there! It's like one of those ancient wonders, you know?",
   "odd.dialogue.rumors.lore/5": "So, get this. There used to be this super advanced race of builders, right? But now? Poof! Gone! Vanished into thin air. It's like they just pulled a magic trick and disappeared from the Overworld!",
   "odd.dialogue.rumors.lore/6": "Ohhhh, let me tell you about the legends! Those ancient builders were like the rockstars of the Overworld. I mean, they left behind these insane ruins and temples everywhere! It's like they were showing off or something!",
-
   "odd.dialogue.first.generic/1": "Well, well, well, look who we have here! A lost soul, perhaps?",
   "odd.dialogue.first.generic/2": "Oh, hello there! Did you stumble upon this place by accident or were you actually aiming for it?",
   "odd.dialogue.first.generic/3": "Well, well, well, who do we have here? Another poor lost soul seeking refuge, I assume?",
   "odd.dialogue.first.generic/4": "Welcome, stranger! Have you come to hear our riveting tales or are you just here to add to the chaos?",
   "odd.dialogue.first.generic/5": "My oh my, it's been ages since someone new arrived. I hope you're not here to cause trouble!",
   "odd.dialogue.first.generic/6": "Well, well, well, what brings you to our humble village, huh? Did you lose your way or did you actually intend to be here?",
-
   "odd.dialogue.first.question/1": "Greetings, wanderer! Pray tell, what peculiar forces have led you to this humble hamlet?",
   "odd.dialogue.first.question/2": "Ah, a fresh soul! Do indulge me, dear visitor, what thrilling escapades have brought you to our quaint abode?",
   "odd.dialogue.first.question/3": "By the bristling beard of Notch! Are you an intrepid explorer, good sir/madam? Pray, enlighten me on the extraordinary means by which you found your way to our unassuming settlement!",
@@ -38,7 +35,6 @@
   "odd.dialogue.first.spent_night.failed/1": "Ah, the inn situation here is quite dire, I must say. Our feeble minds simply cannot fathom the intricate art of constructing a decent establishment for weary travelers.",
   "odd.dialogue.first.spent_night.failed/2": "Alas, an inn is a rarity in these parts, my dear visitor. Our feeble attempts at constructing one have been utterly in vain.",
   "odd.dialogue.first.spent_night.failed/3": "Oh, dear adventurer, it seems our humble village lacks the hospitality you seek. Perhaps a neighboring settlement houses the inn of your dreams?",
-
   "odd.dialogue.hug.success/1": "Well well well, if it isn't my favorite visitor in the whole blocky world! Where have you been hiding?",
   "odd.dialogue.hug.success/2": "Ah, what a timely embrace! My heart was yearning for this tender moment of physical connection. Gratitude emanates from the depths of my soul.",
   "odd.dialogue.hug.success/3": "Amidst the chaos and monotony of this cubic existence, your affectionate gesture stands out as a radiant beam of light, illuminating this otherwise dreary day.",
@@ -52,7 +48,6 @@
   "odd.dialogue.hug.fail/5": "Frankly speaking, you couldn't even hug a cactus after what you pulled.",
   "odd.dialogue.hug.fail/6": "Yikes! Keep your cooties away from me, you walking virus!",
   "odd.dialogue.hug.fail/7": "Oh, um... I guess I should be grateful? Maybe?",
-
   "odd.dialogue.kiss.success/1": "Can we just freeze time and savor this sweet, sweet kiss?",
   "odd.dialogue.kiss.success/2": "My heart is doing somersaults, I might be head over heels for you...",
   "odd.dialogue.kiss.success/3": "Whoa, this lip-lock is like a gourmet feast, with extra seasoning of pumpkin pie!",
@@ -65,7 +60,6 @@
   "odd.dialogue.kiss.fail/4": "Have you ever heard of breath mints? Trust me, they work wonders!",
   "odd.dialogue.kiss.fail/5": "Oh, thank you, I guess? Though I'm not sure if that was even a kiss.",
   "odd.dialogue.kiss.fail/6": "Get off me, you clumsy oaf! Can't you see I'm not interested?",
-
   "odd.dialogue.chat.success/1": "Oh man, cookies and milk are like a match made in culinary heaven!",
   "odd.dialogue.chat.success/2": "Yeah, the weather is totally rocking today, like seriously rock and roll vibes.",
   "odd.dialogue.chat.success/3": "Ouch! I totally smashed my toe this morning, but hey, it's just another day in my clumsy life.",
@@ -106,7 +100,6 @@
   "odd.dialogue.chat.fail/19": "Well, aren't you just a captivating conversationalist... said no one ever.",
   "odd.dialogue.chat.fail/20": "Pardon me, but I have this incredible ability to tune out the sound of drivel. Congratulations, you're a prime candidate for testing it out.",
   "odd.dialogue.chat.fail/21": "Oh, please, spare me your tedious words. I have much more important things to ignore.",
-
   "odd.dialogue.story.success/1": "Seriously? I absolutely refuse to believe that all that nonsense actually took place!",
   "odd.dialogue.story.success/2": "If only I had the guts to confront a creeper head-on. Alas, I am but a trembling coward.",
   "odd.dialogue.story.success/3": "That tale you just spun was surprisingly decent! Did you actually come up with it yourself? Color me impressed!",
@@ -126,7 +119,6 @@
   "odd.dialogue.story.fail/8": "Oh, how my eyelids grow heavy with sheer boredom in your presence. Yawn!",
   "odd.dialogue.story.fail/9": "You, my dear friend, possess a level of lunacy that surpasses all known boundaries. A true marvel, indeed.",
   "odd.dialogue.story.fail/10": "I fail to comprehend the greatness you claim to have achieved. It appears my perception is not aligned with your delusions.",
-
   "odd.dialogue.flirt.success/1": "You're, like, the most fearless person ever! No joke!",
   "odd.dialogue.flirt.success/2": "Woah, you! Seriously, quit being this ridiculously adorable!",
   "odd.dialogue.flirt.success/3": "*Giggles* Are you, like, for real?",
@@ -141,7 +133,6 @@
   "odd.dialogue.flirt.fail/5": "Haha, good one. But let's be real, a creeper has a better chance at love than you do.",
   "odd.dialogue.flirt.fail/6": "Absolutely not. I'd rather be stuck in an endless loop of mining obsidian than entertain the thought.",
   "odd.dialogue.flirt.fail/7": "Spare me your puppy eyes and never utter those words in my presence again.",
-
   "odd.dialogue.joke.creative.success/1": "*Chuckles* That's hilariously absurd!",
   "odd.dialogue.joke.creative.success/2": "That's amusingly odd!",
   "odd.dialogue.joke.creative.success/3": "That's the most fantastically funny thing I've ever encountered!",
@@ -158,10 +149,8 @@
   "odd.dialogue.joke.creative.failed/6": "Wow, you must have a PhD in comedy with jokes like that. Absolutely side-splitting... Not.",
   "odd.dialogue.joke.creative.failed/7": "Hilarious. Absolutely hilarious. I haven't laughed this hard since... well, never. Stick to your day job, my dear.",
   "odd.dialogue.joke.creative.failed/8": "You know, Ash could tell a joke in his sleep and it would still be funnier than anything you could ever come up with.",
-
   "odd.dialogue.procreate_engaged/1": "My heart quivers at the thought of our union, for only then shall I truly find solace.",
   "odd.dialogue.procreate_engaged/2": "I simply cannot fathom bringing forth a new existence if we have not embarked upon the sacred journey of complete devotion.",
-
   "odd.dialogue.shake_hand.success/1": "Ah, what a firm handshake you possess! It's like holding hands with a boulder!",
   "odd.dialogue.shake_hand.success/2": "Whoa, your grip is like a titan's embrace! I can feel the raw strength coursing through your veins!",
   "odd.dialogue.shake_hand.success/3": "Oh my, aren't you just the epitome of manners! Your politeness radiates like a dazzling aura!",
@@ -172,7 +161,6 @@
   "odd.dialogue.shake_hand.fail/3": "I'm not some random Joe, so save your fake niceness for someone else.",
   "odd.dialogue.shake_hand.fail/4": "Oh, look at you being all surprising and stuff. Not your usual routine, huh?",
   "odd.dialogue.shake_hand.fail/5": "Can you do me a solid and vanish into thin air? Thanks.",
-
   "odd.dialogue.main.morning/1": "Goooooood morning, sunshine!",
   "odd.dialogue.main.morning/2": "Rise and grind, pal. Are you ready to conquer the day?",
   "odd.dialogue.main.morning/3": "Ugh, I'm still half asleep. How are you managing to function?",
@@ -203,12 +191,10 @@
   "odd.dialogue.main.night/8": "I'm absolutely exhausted. Today was jam-packed, I definitely need a day off tomorrow.",
   "odd.dialogue.main.night/9": "I can hardly contain my excitement to dive into my cozy nest. Goodbye, cruel world!",
   "odd.dialogue.main.night/10": "Sleep is for the weak, my friend. Embrace the night and all its mysteries!",
-
   "odd.dialogue.greet.mayor/1": "Hey there, mayor-o-rama!",
   "odd.dialogue.greet.mayor/2": "Greetings, oh majestic Mayor! May your day be as wild as a roller coaster ride!",
   "odd.dialogue.greet.monarch/1": "Ah, most benevolent and majestic ruler!",
   "odd.dialogue.greet.monarch/2": "Greetings, oh exalted and regal being!",
-
   "odd.dialogue.busy/1": "Oh boy, I've got a ton of work piled up! Gotta hustle, can't chat anymore.",
   "odd.dialogue.busy/2": "You know, as much as I'd love to keep chatting, my deadlines are looming over me. Gotta focus, you know?",
   "odd.dialogue.busy/3": "Ah, I'm knee-deep in work right now. Can't spare a chat, but catch you on the flip side!",
@@ -219,7 +205,6 @@
   "odd.dialogue.goaway/3": "Oops, %1$s, I'm afraid my indifference meter is off the charts right now.",
   "odd.dialogue.goaway/4": "Hey, why don't you go find a rock to crawl under?",
   "odd.dialogue.goaway/5": "Begone, you pitiful soul! Leave me in peace!",
-
   "odd.dialogue.greet/1": "Hey there, magnificent being! How's the adventure treating you today?",
   "odd.dialogue.greet/2": "Hey, hey, hey! How's life treating you, my extraordinary friend %1$s?",
   "odd.dialogue.greet/3": "Ah, greetings, humble creature. What brings you to my humble abode?",
@@ -229,13 +214,11 @@
   "odd.dialogue.greet/7": "Ah, it warms my heart to lay my eyes upon your delightful countenance!",
   "odd.dialogue.greet/8": "Hello, hello, hello! It fills me with joy to lay eyes upon your wondrous self. How art thou on this fine day?",
   "odd.dialogue.greet/9": "Hey there, oh radiant being! I'm positively ecstatic to lay eyes upon your glorious presence!",
-
   "odd.dialogue.greet.negative/1": "Ugh, go away, you're the absolute WORST human being I wanted to encounter!",
   "odd.dialogue.greet.negative/2": "Oh wow, the one person I never asked for has returned. What a delightful surprise.",
   "odd.dialogue.greet.negative/3": "Huh? You again? Can't you find someone else to bother?",
   "odd.dialogue.greet.negative/4": "Oh, it's just you. I was hoping for a more interesting visitor, but I guess beggars can't be choosers.",
   "odd.dialogue.greet.negative/5": "Back to annoy me, huh? You must have a special talent for being irritating.",
-
   "odd.dialogue.greet.success/1": "Well, ain't that just peachy keen? Delighted to hear it!",
   "odd.dialogue.greet.success/2": "Ah, well aren't you just the cat's pajamas? Absolutely fantastic to know!",
   "odd.dialogue.greet.success/3": "Well, hot diggity dog! That's music to my ears!",
@@ -246,7 +229,6 @@
   "odd.dialogue.greet.fail/3": "Well, that's peculiar?",
   "odd.dialogue.greet.fail/4": "Seriously? Pfft...",
   "odd.dialogue.greet.fail/5": "Oh well, what a bummer...",
-
   "odd.dialogue.apologize.success/1": "Oh, pish posh! Blunders are part of life, my dear.",
   "odd.dialogue.apologize.success/2": "Ah, fear not, young one! 'Tis but a trifling mishap.",
   "odd.dialogue.apologize.success/3": "Well, well, well, what have we here? A slip-up, you say? Well, as luck would have it, I suppose we can let it slide. But tread cautiously next time, hmm?",
@@ -257,7 +239,6 @@
   "odd.dialogue.apologize.fail/3": "Oh, please, do you honestly think I'm naive enough to believe your feeble excuse?",
   "odd.dialogue.apologize.fail/4": "Ouch! Spare me your insincere apologies, they won't undo the pain!",
   "odd.dialogue.apologize.fail/5": "Haha, nice try, but sorry, not sorry, I won't be falling for your apology con!",
-
   "odd.dialogue.location.failed/1": "Eh, I ain't heard nothing new, and trust me, I got ears sharper than a creeper's hiss.",
   "odd.dialogue.location.failed/2": "Look, buddy, I hate to burst your bubble, but there ain't no interesting places around here that I'd be aware of. You're better off talking to a cow about adventure.",
   "odd.dialogue.location.failed/3": "Nope, sorry, but we villagers have got lives to live, you know? We ain't got time to go traipsing around monster-filled ruins like you adventurers. We'll leave that to the crazies.",
@@ -305,7 +286,6 @@
   "odd.dialogue.location.ancient_city/0": "Oh, you won't believe the strange sounds I heard at %2$s! It was like a chorus of singing Endermen and squawking chickens, all mixed into one chaotic symphony. Truly bizarre!",
   "odd.dialogue.location.ancient_city/1": "You know, I have this peculiar feeling that %2$s is hiding something extraordinary beneath its very core. I can almost sense the vibrations of secret passageways and mysterious caverns, just waiting to be discovered!",
   "odd.dialogue.location.ancient_city/3": "Have you heard the tales? They speak of an ancient city at %2$s, but oh, my dear friend, it's not just a city. It's a labyrinth of winding catacombs and enchanted tunnels, camouflaged beneath the very earth! Don't fret if you can't see it, for it's a realm shrouded in secrecy and wonder.",
-
   "odd.dialogue.joke.monster.success/1": "Bwahaha! That Skelly never stood a chance against me, puny creature!",
   "odd.dialogue.joke.monster.success/2": "Can you believe it? That feeble-minded zombie thought it could take me down with a shovel! Hohoho!",
   "odd.dialogue.joke.monster.success/3": "Witness the power! The spider thought it could intimidate me, but I put it in its place! Hehehe!",
@@ -316,7 +296,6 @@
   "odd.dialogue.joke.monster.failed/3": "Did you know that zombies and skeletons were once humans? Fascinating, isn't it? Makes you think twice before swinging that sword, doesn't it?",
   "odd.dialogue.joke.monster.failed/4": "Oh, how absolutely riveting. An enderman fell into water. I can hardly contain my excitement. Truly, the pinnacle of entertainment.",
   "odd.dialogue.joke.monster.failed/5": "My oh my, another witty silverfish-on-the-toilet joke! How delightfully bizarre! If I had a single emerald for every time I heard that one, I'd be the wealthiest villager in all of Minecraft!",
-
   "odd.dialogue.joke.animal.success/1": "What an unfortunate turn of events for the wool-less sheep! But hey, you gotta admit, it's a sheepishly funny situation!",
   "odd.dialogue.joke.animal.success/2": "Can you believe it? The wolf actually developed a crush on the sheep! Talk about a twisted love story!",
   "odd.dialogue.joke.animal.success/3": "I'm telling you, chickens are the underdogs of comedy! Who knew they had the talent to pull off something so ridiculously hilarious?",
@@ -327,12 +306,10 @@
   "odd.dialogue.joke.animal.failed/3": "Whoa, whoa, whoa! Watch your words, buddy! My pig is a sensitive soul and doesn't appreciate your dark humor.",
   "odd.dialogue.joke.animal.failed/4": "Well, that's certainly a unique sense of humor you got there. I'll give you that!",
   "odd.dialogue.joke.animal.failed/5": "Haha, look at that cow with those fabulous eyebrows! I bet it's the talk of the barnyard fashion scene!",
-
   "odd.dialogue.flirt.slap/1": "Pardon your impudence!",
   "odd.dialogue.flirt.slap/2": "Were you raised by a clumsy creeper on how to charm the villagers?!",
   "odd.dialogue.kiss.slap/1": "Oh, you've really crossed the line!",
   "odd.dialogue.kiss.slap/2": "Give it another shot, and I promise you'll regret it for a lifetime!",
-
   "odd.dialogue.chat.plains/1": "Who needs other biomes when you've got the plains? I mean, why bother with all that traveling nonsense?",
   "odd.dialogue.chat.plains/2": "The plains may not be as thrilling as some biomes, but hey, peace and quiet is highly underrated these days.",
   "odd.dialogue.chat.plains/3": "You know, when the sun sets over the plains, it's like a whole new world of beauty unfolds. It's almost magical, I tell ya.",
@@ -375,14 +352,12 @@
   "odd.dialogue.chat.desert/8": "Let me tell ya, living here means dealing with those pesky husks. They smack you and suddenly you're hungrier than a pack of wolves! It's ridiculous!",
   "odd.dialogue.chat.desert/9": "Ouch! Stepped on a cactus the other day, and boy, did it let me know who's boss. Gotta watch your every step in this prickly paradise!",
   "odd.dialogue.chat.desert/10": "Life in this bone-dry desert ain't no walk in the park, but thank goodness we have this village to keep us hydrated and fed.",
-
   "odd.dialogue.story.exploring.success/1": "No way! I'm totally gonna conquer the world someday, mark my words!",
   "odd.dialogue.story.exploring.success/2": "Whoa! The thought of exploring and traveling just gets my adrenaline pumping! I mean, sure, I love my village and all, but the wanderlust is real!",
   "odd.dialogue.story.exploring.success/3": "Seriously, you're like a fearless warrior, venturing into the great unknown like a boss! Hats off to you!",
   "odd.dialogue.story.exploring.fail/1": "Ugh, here we go again with your tired old tales. Boring!",
   "odd.dialogue.story.exploring.fail/2": "Oh my, aren't you the daring one with your sharp edges. Careful not to hurt yourself, tough guy! Haha!",
   "odd.dialogue.story.exploring.fail/3": "Conversing with you is akin to conversing with an overly pretentious toddler, who believes they are destined to become the ruler of the universe. Minus the charm, of course.",
-
   "odd.dialogue.story.nether.success/1": "Is it, like, totally scorching over there?!",
   "odd.dialogue.story.nether.success/2": "Oh my gosh, you're, like, a total daredevil surviving in that, like, super dangerous place. I'm like, totally blown away.",
   "odd.dialogue.story.nether.success/3": "I've heard rumors about the Nether being packed with, like, epic loot for those who can muster the courage to venture in. If only I had the guts, you know?",
@@ -393,17 +368,14 @@
   "odd.dialogue.story.nether.fail/3": "It doesn't matter if you've been to the Nether or not. Your storytelling skills are so abysmal, even a toddler could put you to shame.",
   "odd.dialogue.story.nether.fail/4": "Look at you, all feeble and weak. The Nether would eat you alive. You're better off staying in your cozy little village.",
   "odd.dialogue.story.nether.fail/5": "Your grandpa explored the Nether? Well, he must have conveniently forgotten to mention the warped fungus then. You're nothing but a pathetic fabricator of tales.",
-
   "odd.dialogue.story.enderdragon.success/1": "Unbelievable! And did you manage to snatch that dragon egg like a true adventurer?",
   "odd.dialogue.story.enderdragon.success/2": "Goodness gracious! So you actually went ahead and slayed that colossal beast, did you? The entire village will be buzzing about your legendary feat for centuries to come!",
   "odd.dialogue.story.enderdragon.fail/1": "Pfft! Are you off your rocker? The ender dragon is like, totally made up, man.",
   "odd.dialogue.story.enderdragon.fail/2": "Seriously? You're pulling my leg, right? No way any puny mortal could even touch that majestic dragon! It's like impossible, dude.",
-
   "odd.dialogue.story.wither.success/1": "No way! The Wither is like a one-way ticket to absolute chaos!",
   "odd.dialogue.story.wither.success/2": "Woah, hold up! You actually took down the Wither? That's like, mind-blowing!",
   "odd.dialogue.story.wither.fail/1": "I ain't buying what you're selling, buddy.",
   "odd.dialogue.story.wither.fail/2": "Nah, you seem way too intact to convince me otherwise, pal.",
-
   "odd.dialogue.stay.fail/1": "No way, I'm the thrill-seeker extraordinaire!",
   "odd.dialogue.stay.fail/2": "Appreciate the offer, but I'd rather be out there conquering the unknown!",
   "odd.dialogue.stay.fail/3": "This village is lovely and all, but I'm the restless explorer kind.",
@@ -413,14 +385,12 @@
   "odd.dialogue.stay.success/2": "Fantabulous! I am absolutely smitten with the notion of planting my roots in this marvelous village!",
   "odd.dialogue.stay.no_space/1": "Ugh, can you believe how cramped this village is? It's like everywhere I turn, I'm bumping into someone.",
   "odd.dialogue.stay.no_space/2": "I totally would've stuck around, but seriously, there's a bed shortage crisis going on here. No cozy spot for me.",
-
   "odd.dialogue.hire/1": "Alrighty then, just give me a holler whenever you're in a bind. I'll be floating around, waiting for my payday, of course.",
   "odd.dialogue.hire/2": "Groovy! Give me a shout when you require my exquisite services. I'll be chillin' here, eagerly awaiting those shiny emeralds!",
   "odd.dialogue.hire/3": "Awesome-sauce! Prepare to be dazzled! Just make sure those emeralds are primed and ready for my arrival, my fine friend!",
   "odd.dialogue.no_money/1": "Sorry, but you can't afford my exceptional talents with your paltry supply of emeralds.",
   "odd.dialogue.no_money/2": "Oh, honey, your emerald stash is as empty as your chances of hiring me.",
   "odd.dialogue.no_money/3": "Darling, I hate to break it to you, but you couldn't even hire a chicken with those few sad emeralds you've got there.",
-
   "odd.dialogue.main.rock_paper_scissor/1": "Prepare yourself for an epic clash of intellects as we indulge in the timeless game of Rock Paper Scissor, my magnificent friend!",
   "odd.dialogue.rock_paper_scissor/1": "Alright, get ready for the ultimate showdown of rock, paper, scissors! Prepare to be annihilated, puny human!",
   "odd.dialogue.rock_paper_scissor/2": "Oh, I can sense your confidence, but it won't save you from my unbeatable strategy this time! Prepare to witness your defeat!",

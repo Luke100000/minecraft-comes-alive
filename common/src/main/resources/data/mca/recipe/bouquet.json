@@ -1,0 +1,18 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "FFF",
+    "F F",
+    "   "
+  ],
+  "key": {
+    "F": [
+      {
+        "tag": "minecraft:small_flowers"
+      }
+    ]
+  },
+  "result": {
+    "id": "mca:bouquet"
+  }
+}

@@ -1,8 +1,8 @@
 {
-	"variants": {
-		"facing=east": { "y": 90, "model": "mca:block/cobblestone_upright_headstone" },
-		"facing=north": { "model": "mca:block/cobblestone_upright_headstone" },
-		"facing=south": { "y": 180, "model": "mca:block/cobblestone_upright_headstone" },
-		"facing=west": { "y": 270, "model": "mca:block/cobblestone_upright_headstone" }
-	}
+  "variants": {
+    "facing=east": {"y": 90, "model": "mca:block/cobblestone_upright_headstone"},
+    "facing=north": {"model": "mca:block/cobblestone_upright_headstone"},
+    "facing=south": {"y": 180, "model": "mca:block/cobblestone_upright_headstone"},
+    "facing=west": {"y": 270, "model": "mca:block/cobblestone_upright_headstone"}
+  }
 }

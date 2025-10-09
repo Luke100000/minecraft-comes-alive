@@ -1,0 +1,27 @@
+{
+  "required": true,
+  "minVersion": "0.7",
+  "package": "net.conczin.mca.mixin",
+  "compatibilityLevel": "JAVA_17",
+  "mixins": [
+    "MixinAbstractFurnaceBlockEntity", "MixinActivity",
+    "MixinEntityType",
+    "MixinFlintAndSteelItem", "MixinGoat", "MixinHorseBase", "MixinInventory",
+    "MixinMemoryModuleType",
+    "MixinMilkBucketItem", "MixinPlayer", "MixinProtoChunk",
+    "MixinSensorType", "MixinServerGamePacketListenerImpl",
+    "MixinServerWorld", "MixinSimpleParticleType",
+    "MixinTranslatableContents", "MixinVillager", "MixinVillagerInvoker",
+    "MixinVillagerProfession", "MixinZombie", "MixinZombieVillager"
+  ],
+  "client": [
+    "client.MixinClientLanguage", "client.MixinGameRenderer",
+    "client.MixinHumanoidArmorLayer",
+    "client.MixinItemInHandLayer", "client.MixinLivingEntityRenderer",
+    "client.MixinPlayerRenderer",
+    "client.MixinSoundBufferLibrary"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

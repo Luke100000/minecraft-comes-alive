@@ -1,0 +1,27 @@
+{
+  "display": {
+    "title": {
+      "translate": "advancement.mca.williams_fate"
+    },
+    "description": {
+      "translate": "advancement.mca.williams_fate.description"
+    },
+    "icon": {
+      "id": "minecraft:sculk"
+    },
+    "frame": "challenge",
+    "show_toast": true,
+    "announce_to_chat": true,
+    "hidden": true
+  },
+  "parent": "mca:root",
+  "criteria": {
+    "subject_fate": {
+      "trigger": "mca:villager_fate",
+      "conditions": {
+        "cause": "minecraft:warden",
+        "user_relation": "mayor"
+      }
+    }
+  }
+}

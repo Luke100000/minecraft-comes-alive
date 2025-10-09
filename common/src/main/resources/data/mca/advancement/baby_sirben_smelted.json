@@ -1,0 +1,32 @@
+{
+  "display": {
+    "title": {
+      "translate": "advancement.mca.baby_sirben_smelted"
+    },
+    "description": {
+      "translate": "advancement.mca.baby_sirben_smelted.description"
+    },
+    "icon": {
+      "id": "minecraft:fire_charge"
+    },
+    "frame": "challenge",
+    "show_toast": true,
+    "announce_to_chat": true,
+    "hidden": true
+  },
+  "parent": "mca:baby_smelted",
+  "criteria": {
+    "baby": {
+      "trigger": "mca:rank",
+      "conditions": {
+        "rank": "mayor"
+      }
+    },
+    "baby_smelted": {
+      "trigger": "mca:baby_sirben_smelted",
+      "conditions": {
+        "count": 7
+      }
+    }
+  }
+}

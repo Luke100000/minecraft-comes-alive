@@ -6,7 +6,6 @@
   "peppy.dialogue.main/5": "How's the adventure treating you today, my energetic pal?",
   "peppy.dialogue.main/6": "Hey there, %1$s! What's the latest and greatest?",
   "peppy.dialogue.main/7": "You won't believe the wild tale I've got for you! I was chillin' with %supporter% when he had a close encounter with a zombie! But don't worry, he brushed it off like a champ! Oh, speaking of %supporter%, I swear I saw a zombie doppelganger of him today. Craziness, right?",
-
   "peppy.dialogue.rumors.failed/1": "Oh my diamond pickaxe! I'm sorry, but I haven't stumbled upon any juicy gossip lately.",
   "peppy.dialogue.rumors.lore/1": "Jax may still have his loyal followers, but let me tell you, Sirben is gaining some serious popularity! It's like a wildfire, thanks to the charismatic prophets, MerlinWolfGames and Crow. They're spreading Sirben's words far and wide, and people can't get enough!",
   "peppy.dialogue.rumors.lore/2": "Oh boy, you won't believe the chaos that went down when those Cyberdemons thought they could invade us! But thanks to the heroic efforts of Sirben and the legendary Luke, those baddies were sent packing. Talk about a victory for the ages!",
@@ -14,14 +13,12 @@
   "peppy.dialogue.rumors.lore/4": "Brace yourself for some serious awe, my friend. MerlinWolfGames, that genius builder, went ahead and constructed a mind-blowing temple dedicated to Sirben. It's not just any old temple, mind you. It's one of those ancient wonders that'll leave you speechless. You've got to see it to believe it!",
   "peppy.dialogue.rumors.lore/5": "You know, there used to be this mythical race of builders, long gone from our world now. But their legacy lives on in the ruins and temples scattered across the Overworld. It's like a reminder of their incredible craftsmanship and the secrets they left behind. Ah, the stories they could tell!",
   "peppy.dialogue.rumors.lore/6": "Gather 'round, my friend, and let me regale you with tales of the legendary ancient builders. Oh, the wonders they've left behind! Ruins and temples scattered across the Overworld, each with its own mystery and intrigue. It's like stepping back in time and uncovering the secrets of a lost civilization. Doesn't that just give you goosebumps?",
-
   "peppy.dialogue.first.generic/1": "Well, well, well! Look who we have here - a fresh new arrival! Welcome, welcome!",
   "peppy.dialogue.first.generic/2": "Greetings, stranger! The village is buzzing with excitement to have you join us. Prepare for an unforgettable experience!",
   "peppy.dialogue.first.generic/3": "Ahoy there, adventurer! Brace yourself for a grand reception, for we are thrilled to have you in our humble abode.",
   "peppy.dialogue.first.generic/4": "Huzzah! A new friend has graced us with their presence! Get ready for a whirlwind of fun and adventure in our village!",
   "peppy.dialogue.first.generic/5": "Hey there, newcomer! Get ready to be showered with warm smiles, hearty laughs, and endless tales of our merry village. Enjoy your stay!",
   "peppy.dialogue.first.generic/6": "Well, look what the cat dragged in - a delightful new addition to our little community! Get ready for a mountain of laughter and joy, my friend!",
-
   "peppy.dialogue.first.question/1": "Hey there, wanderer! What's the story behind your visit to our humble village?",
   "peppy.dialogue.first.question/2": "Woohoo! We've got ourselves a fresh face! Spill the beans, what's the thrilling tale that led you here?",
   "peppy.dialogue.first.question/3": "Oh my gosh, you must be an absolute daredevil! How on earth did you manage to find your way to our little haven of excitement?",
@@ -38,7 +35,6 @@
   "peppy.dialogue.first.spent_night.failed/1": "Oh, you won't believe it, but we actually don't have an inn. Crazy, right? Like, who needs a proper inn when you've got our amazing village?",
   "peppy.dialogue.first.spent_night.failed/2": "Hey there! So, funny story, we don't have an inn in this lovely village. I know, I know, a bit disappointing, but hey, we make up for it with our exceptional hospitality!",
   "peppy.dialogue.first.spent_night.failed/3": "Hmmm, let me think. Oh, I got it! How about checking out another village nearby? They might just have the inn of your dreams waiting for you!",
-
   "peppy.dialogue.hug.success/1": "Hey there, it's been ages since we crossed paths!",
   "peppy.dialogue.hug.success/2": "A million thanks, your hug just lit up my day!",
   "peppy.dialogue.hug.success/3": "Woohoo, this hug is the highlight of my day, hands down!",
@@ -52,7 +48,6 @@
   "peppy.dialogue.hug.fail/5": "Honestly, you've got a lot to make up for before I consider a hug.",
   "peppy.dialogue.hug.fail/6": "Yikes! Let's keep those germs to yourself, okay?",
   "peppy.dialogue.hug.fail/7": "Oh, um, that's... unexpectedly kind of you, I think? Thanks, I guess?",
-
   "peppy.dialogue.kiss.success/1": "This moment is like a burst of confetti that never ends!",
   "peppy.dialogue.kiss.success/2": "I am head-over-heels, absolutely smitten with you!",
   "peppy.dialogue.kiss.success/3": "Whoa, kissing you is like taking a bite of the most delicious cotton candy in the world!",
@@ -65,7 +60,6 @@
   "peppy.dialogue.kiss.fail/4": "Darling, let's indulge in some minty freshness together, shall we? It'll take our kisses to a whole new level of perfection!",
   "peppy.dialogue.kiss.fail/5": "Oh, how charming! Thank you for that slightly awkward, yet endearing attempt at a kiss. You always know how to make my heart flutter!",
   "peppy.dialogue.kiss.fail/6": "Oh, my lively little lovebird, let's save the smooches for later, shall we? I've got a few errands to run, and I'd rather not be tackled with affection right now!",
-
   "peppy.dialogue.chat.success/1": "Wow, cookies and milk are like the ultimate snack combo, don't you think?",
   "peppy.dialogue.chat.success/2": "Isn't the weather just fabulous today? I'm loving every second of it!",
   "peppy.dialogue.chat.success/3": "Hey there! I'm feeling great, despite stubbing my toe this morning. Can't let it ruin my day!",
@@ -106,7 +100,6 @@
   "peppy.dialogue.chat.fail/19": "Are you finished talking to me? Oh, come on, keep going! I'm hanging on your every word.",
   "peppy.dialogue.chat.fail/20": "What, you believe the earth is round? What do you mean round? No corners? You seriously believe that? That's amazing!",
   "peppy.dialogue.chat.fail/21": "Hold your horses! You genuinely think the earth is round? Ha! Not buying it, my friend! Are you suggesting it's like a big sphere with no corners? That's pure madness!",
-
   "peppy.dialogue.story.success/1": "Oh my gosh, no way! That's absolutely mind-blowing!",
   "peppy.dialogue.story.success/2": "Oh, if only I had the guts to face off against a creeper. You're so courageous!",
   "peppy.dialogue.story.success/3": "Wow, that story was absolutely amazing! Is it an original masterpiece?",
@@ -126,7 +119,6 @@
   "peppy.dialogue.story.fail/8": "Yawnarama! Talk about a snoozefest, am I right?",
   "peppy.dialogue.story.fail/9": "You must be positively bonkers, and I ain't talkin' 'bout the good kind of bonkers, buddy!",
   "peppy.dialogue.story.fail/10": "I reckon I fail to see how that little escapade was even remotely good, folks.",
-
   "peppy.dialogue.flirt.success/1": "You're incredibly brave, like, seriously!",
   "peppy.dialogue.flirt.success/2": "Oh my gosh, you're, like, the cutest thing ever!",
   "peppy.dialogue.flirt.success/3": "Seriously? No way! I can't even handle your compliments!",
@@ -141,7 +133,6 @@
   "peppy.dialogue.flirt.fail/5": "Oh honey, even a creeper has more charm than you!",
   "peppy.dialogue.flirt.fail/6": "Nah, sorry, but that's a hard pass from me.",
   "peppy.dialogue.flirt.fail/7": "Oh my goodness, please stop with that look and never utter those words again.",
-
   "peppy.dialogue.joke.creative.success/1": "*Giggles* That's absolutely hilarious!",
   "peppy.dialogue.joke.creative.success/2": "Oh my goodness, that's so funny!",
   "peppy.dialogue.joke.creative.success/3": "I can't stop laughing, that's the funniest thing ever!",
@@ -158,10 +149,8 @@
   "peppy.dialogue.joke.creative.failed/6": "Hahaha, oh, you crack me up! Not really, but it's the thought that counts.",
   "peppy.dialogue.joke.creative.failed/7": "Seriously, why would anyone find that funny? Stick to something you're good at, darling.",
   "peppy.dialogue.joke.creative.failed/8": "You know, Ash's jokes are like fireworks compared to yours. Better luck next time, champ!",
-
   "peppy.dialogue.procreate_engaged/1": "Oh, my dear, I simply would be over the moon once we've tied the knot. It's like stepping into a cozy nest of love and security!",
   "peppy.dialogue.procreate_engaged/2": "You know what would make my heart sing? Embracing the joy of parenthood, but only after we've sealed our love with a bond that's unbreakable. It's all about building a solid foundation, my darling!",
-
   "peppy.dialogue.shake_hand.success/1": "Your handshake is absolutely delightful!",
   "peppy.dialogue.shake_hand.success/2": "Your grip is so energetic, it's like a burst of sunshine!",
   "peppy.dialogue.shake_hand.success/3": "Oh my goodness, your handshake is simply marvelous!",
@@ -172,7 +161,6 @@
   "peppy.dialogue.shake_hand.fail/3": "Hey there, no need to be all formal with me! We're practically besties!",
   "peppy.dialogue.shake_hand.fail/4": "Whoa, hold up! This isn't your typical style, my friend!",
   "peppy.dialogue.shake_hand.fail/5": "Haha, no thanks! I'll pass on the whole \"go away\" vibe you're giving off right now.",
-
   "peppy.dialogue.main.morning/1": "Top o' the mornin' to ya!",
   "peppy.dialogue.main.morning/2": "Rise and shine, sunshine! Ready to conquer the day?",
   "peppy.dialogue.main.morning/3": "Gosh, I'm bursting with energy today, how 'bout you?",
@@ -203,12 +191,10 @@
   "peppy.dialogue.main.night/8": "Can't wait to snuggle up in my cozy bed and drift off into dreamland.",
   "peppy.dialogue.main.night/9": "Hey, bedtime's calling, my friend! Gotta rest up for the big day ahead.",
   "peppy.dialogue.main.night/10": "Hey there, sleepyhead! Time to hit the hay and recharge those batteries. Trust me, tomorrow's gonna be a whirlwind of excitement waiting for you!",
-
   "peppy.dialogue.greet.mayor/1": "Hey there, Mayor! How's the day treating you?",
   "peppy.dialogue.greet.mayor/2": "Wishing you an absolutely fantastic day, Mayor! Keep rocking it!",
   "peppy.dialogue.greet.monarch/1": "Oh, hail to the royal presence!",
   "peppy.dialogue.greet.monarch/2": "Greetings, oh majestic one!",
-
   "peppy.dialogue.busy/1": "Wow, we sure chatted up a storm today! But duty calls, and I must return to the grind.",
   "peppy.dialogue.busy/2": "Oh, you're just too charming! But alas, my work awaits and I mustn't keep it waiting till sunset.",
   "peppy.dialogue.busy/3": "My, oh my! I'm in a bit of a frenzy at the moment. Can we catch up when the chaos subsides?",
@@ -219,7 +205,6 @@
   "peppy.dialogue.goaway/3": "How about you go annoy someone else for a change? Thanks!",
   "peppy.dialogue.goaway/4": "Oh, dear me! I kindly request that you take your leave, you scoundrel!",
   "peppy.dialogue.goaway/5": "Oh, my dear friend, please find another place to explore!",
-
   "peppy.dialogue.greet/1": "Heya! How's it hanging today?",
   "peppy.dialogue.greet/2": "Hey %1$s! How's life treating you?",
   "peppy.dialogue.greet/3": "Well, hello there! What brings you here today?",
@@ -229,13 +214,11 @@
   "peppy.dialogue.greet/7": "Nice to see your fabulous self again!",
   "peppy.dialogue.greet/8": "Hello, hello! How's the world treating you today, darling?",
   "peppy.dialogue.greet/9": "Hey there! I'm so glad you graced us with your presence today! How are you holding up?",
-
   "peppy.dialogue.greet.negative/1": "Oh, hey there! It's you! What a delightful surprise! *giggles*",
   "peppy.dialogue.greet.negative/2": "Oh my goodness, you're back! I can't believe my luck! *squeals*",
   "peppy.dialogue.greet.negative/3": "Hmm! Well, well, well, look who it is! *cheerful tone*",
   "peppy.dialogue.greet.negative/4": "Oh, it's you! How wonderful! I was hoping to see you today! *beaming smile*",
   "peppy.dialogue.greet.negative/5": "Well, if it isn't my absolute favorite person in the world! What a joyous occasion! *jumps with excitement*",
-
   "peppy.dialogue.greet.success/1": "Awesome sauce, that's music to my ears!",
   "peppy.dialogue.greet.success/2": "Woo-hoo, doing fantastic? That's absolutely fabulous!",
   "peppy.dialogue.greet.success/3": "Oh, happy dance time! That's like sunshine on a rainy day!",
@@ -246,7 +229,6 @@
   "peppy.dialogue.greet.fail/3": "Oh, well, if that's the best you can do, I'll take it!",
   "peppy.dialogue.greet.fail/4": "Seriously? Well, I suppose I can roll with that.",
   "peppy.dialogue.greet.fail/5": "Oh, no worries! I'll make the best of it.",
-
   "peppy.dialogue.apologize.success/1": "No worries, mistakes are just part of the adventure!",
   "peppy.dialogue.apologize.success/2": "Oh, don't sweat it! Just keep your eyes peeled next time, champ!",
   "peppy.dialogue.apologize.success/3": "Alrighty then, we can let that one slide. But hey, stay on your toes, okay?",
@@ -257,7 +239,6 @@
   "peppy.dialogue.apologize.fail/3": "Haha, nice try! But this villager's got some serious moves. I won't be falling for that one, my friend.",
   "peppy.dialogue.apologize.fail/4": "Ouchie-wouchie! That hurt a bit, but hey, let's skip the apologies and focus on making this day amazing!",
   "peppy.dialogue.apologize.fail/5": "Ah, nope-a-doodle! I appreciate the thought, but I'm not quite ready to accept any apologies just yet. Better luck next time!",
-
   "peppy.dialogue.location.failed/1": "Oh, bummer! I haven't heard a peep about any cool new spots.",
   "peppy.dialogue.location.failed/2": "So sorry, but nada! I don't have any juicy intel on exciting places.",
   "peppy.dialogue.location.failed/3": "Nope, sorry, not a clue! We villagers are too busy doing our own fun stuff to go hunting for spooky ruins like you adventurers.",
@@ -305,7 +286,6 @@
   "peppy.dialogue.location.ancient_city/0": "Woohoo! You won't believe the crazy noises I heard at %2$s! It was like a wild concert happening deep underground!",
   "peppy.dialogue.location.ancient_city/1": "Oh my gosh, I have this totally awesome theory! I bet there's something super cool hidden way, way beneath the ground at %2$s! Like, a secret treasure or something!",
   "peppy.dialogue.location.ancient_city/3": "Hey, did you hear the legends about %2$s? It's said to be an ancient city! And guess what? I didn't see anything above ground, so it must be all hidden underground! Time to go on a thrilling archaeological adventure, don't you think?",
-
   "peppy.dialogue.joke.monster.success/1": "Woohoo! That Skelly got a taste of justice, baby!",
   "peppy.dialogue.joke.monster.success/2": "Oh my goodness, can you believe that zombie actually thought a shovel could take you down? Hahaha, what a riot!",
   "peppy.dialogue.joke.monster.success/3": "You totally owned that spider, like a boss! Haha, keep the arachnids trembling!",
@@ -316,7 +296,6 @@
   "peppy.dialogue.joke.monster.failed/3": "You know, zombies and skeletons were once just like you and me. It's easy to forget that they had hopes, dreams, and an insatiable appetite... for brains!",
   "peppy.dialogue.joke.monster.failed/4": "Oh my goodness, guess what happened! An enderman took a little dive into some water. Talk about groundbreaking entertainment right there! *rolls eyes*",
   "peppy.dialogue.joke.monster.failed/5": "You won't believe it, but I've heard people making silverfish-on-the-toilet jokes before. It's so rare, like finding a double-headed chicken, except it's happened to me twice already! What are the odds?",
-
   "peppy.dialogue.joke.animal.success/1": "Oh my goodness, what a woolly catastrophe for that poor sheep! But hey, laughter is the best medicine, right?",
   "peppy.dialogue.joke.animal.success/2": "Can you believe it? The wolf actually developed a soft spot for the sheep! Talk about an unexpected romance!",
   "peppy.dialogue.joke.animal.success/3": "Haha, that's absolutely hilarious! Chickens pulling off shenanigans like that? Who knew they had such comedic talent!",
@@ -327,12 +306,10 @@
   "peppy.dialogue.joke.animal.failed/3": "Seriously? That's like the lowest level of humor ever. You can do way better!",
   "peppy.dialogue.joke.animal.failed/4": "Ugh, you're just jelly of the cow's perfectly groomed eyebrows. Don't hate, appreciate!",
   "peppy.dialogue.joke.animal.failed/5": "Oh my gosh, did you see that cow's eyebrows? They were on fleek!",
-
   "peppy.dialogue.flirt.slap/1": "Oh my goodness, pardon me!",
   "peppy.dialogue.flirt.slap/2": "Did a charming enchantress teach you the art of flirting?!",
   "peppy.dialogue.kiss.slap/1": "Oh my goodness, I can't believe you did that!",
   "peppy.dialogue.kiss.slap/2": "Give it another shot, and the next one's going to be a real showstopper!",
-
   "peppy.dialogue.chat.plains/1": "Aren't the plains just amazing? I can't get enough of this place! Maybe someday I'll venture out and explore the world, but for now, I'm perfectly content right here.",
   "peppy.dialogue.chat.plains/2": "There's something truly magical about the plains, don't you think? It may not have the same thrills as other biomes, but it has a charm that's unmatched. I wouldn't trade it for anything.",
   "peppy.dialogue.chat.plains/3": "Oh, have you ever seen the plains at night? It's like stepping into a dream! The beauty is simply breathtaking, and the tranquility it brings is like a lullaby for the soul.",
@@ -375,14 +352,12 @@
   "peppy.dialogue.chat.desert/8": "Ugh, those pesky husks can really ruin your appetite! I swear they have a secret talent for making you ravenous every time they whack you!",
   "peppy.dialogue.chat.desert/9": "Ouch! Learned my lesson the hard way by hugging a cactus. Gotta watch those prickly pals around here!",
   "peppy.dialogue.chat.desert/10": "Life in this dry desert ain't a walk in the park, but hey, at least we've got this awesome village where we can chow down on food and stay hydrated.",
-
   "peppy.dialogue.story.exploring.success/1": "Awesome! I've always dreamt of embarking on an epic adventure like yours someday!",
   "peppy.dialogue.story.exploring.success/2": "Whoa! The thought of wandering and discovering new places makes my heart skip a beat. I adore my cozy village and dear ones, but hearing about your escapades fills me with envy!",
   "peppy.dialogue.story.exploring.success/3": "You're like a fearless explorer, boldly venturing into uncharted territories. I salute your courage!",
   "peppy.dialogue.story.exploring.fail/1": "Oh, come on now! Your stories are so yesterday, let's talk about something fresh and exciting!",
   "peppy.dialogue.story.exploring.fail/2": "Oh my gosh, you're like the embodiment of coolness! I can't even handle all that edge you're bringing to the table, tough guy. So impressive!",
   "peppy.dialogue.story.exploring.fail/3": "2. Speaking with you reminds me of interacting with an enthusiastic optimist, constantly striving to reach their goals. Except, you know, without the adorable charm.",
-
   "peppy.dialogue.story.nether.success/1": "Whoa, talk about sizzling hot! The Nether must be an inferno!",
   "peppy.dialogue.story.nether.success/2": "You're like a fireproof superhero surviving in that scorching realm! Teach me your ways!",
   "peppy.dialogue.story.nether.success/3": "Legends say the Nether is a gold mine of epic loot, but I'm not sure my energy levels can handle it. Too bad!",
@@ -393,17 +368,14 @@
   "peppy.dialogue.story.nether.fail/3": "Pfft, who cares if you've been to the Nether or not? I mean, I don't think you could spin a captivating tale even if a dragon was breathing down your neck!",
   "peppy.dialogue.story.nether.fail/4": "Haha, sorry buddy, but you don't exactly have that radiant, iron-clad look that screams \"Bring it on, Nether!\" Maybe stick to the Overworld for now.",
   "peppy.dialogue.story.nether.fail/5": "Your grandpa supposedly braved the Nether and never mentioned a single word about warped fungus? Uh-huh, sure thing, Pinocchio! Your pants are on fire!",
-
   "peppy.dialogue.story.enderdragon.success/1": "Woo-hoo! Did you bring the dragon egg? That's like the ultimate trophy!",
   "peppy.dialogue.story.enderdragon.success/2": "Oh my gosh, you slayed the fearsome enderdragon?! Our village will be talking about this for, like, ever! You're a total legend!",
   "peppy.dialogue.story.enderdragon.fail/1": "Whoa, hold up! Are you seriously suggesting the ender dragon is just a tall tale? You're cracking me up!",
   "peppy.dialogue.story.enderdragon.fail/2": "Oh my gosh, you're pulling my leg, right? No way any of us mere mortals could even dream of taking down that majestic beast! It's like trying to tickle a tornado!",
-
   "peppy.dialogue.story.wither.success/1": "No way! The Wither is like the ultimate destroyer or something!",
   "peppy.dialogue.story.wither.success/2": "Holy cow, you actually defeated the Wither?! That's absolutely mind-blowing!",
   "peppy.dialogue.story.wither.fail/1": "No way, I just can't buy into what you're saying!",
   "peppy.dialogue.story.wither.fail/2": "Seriously? You seem so intact, it's hard to believe that's actually true!",
-
   "peppy.dialogue.stay.fail/1": "No way, I'm all about the thrill of exploring!",
   "peppy.dialogue.stay.fail/2": "Thanks for the offer, but I'm a free-spirited explorer at heart!",
   "peppy.dialogue.stay.fail/3": "This village is charming, but my heart longs for the excitement of adventure!",
@@ -413,14 +385,12 @@
   "peppy.dialogue.stay.success/2": "Woohoo, I am beyond excited to call this incredible village my home sweet home!",
   "peppy.dialogue.stay.no_space/1": "Wow, this village is bursting with life!",
   "peppy.dialogue.stay.no_space/2": "I'm totally down to stay, but it's like a bed frenzy in here - no vacancies!",
-
   "peppy.dialogue.hire/1": "Awesome! Count me in! Just give me a heads-up when you want me to start. I'm ready to roll for those shiny emeralds!",
   "peppy.dialogue.hire/2": "Woohoo! I'm your go-to villager for hire! Just drop me a line when you're ready to go. I'll be waiting eagerly for those sparkling emeralds!",
   "peppy.dialogue.hire/3": "Oh yeah! I'm at your service, my friend! Just give me the signal when you need my expertise. Rest assured, those gleaming emeralds will be worth every second of my time!",
   "peppy.dialogue.no_money/1": "Hey there! Unfortunately, my expert services come with a price tag that requires a little more sparkle in your pockets.",
   "peppy.dialogue.no_money/2": "Whoa, hold up! You're not gonna get away with a bargain here, buddy. You'll need to dig deeper in that emerald mine of yours if you want to hire me!",
   "peppy.dialogue.no_money/3": "Don't let my affordable appearance fool you, my friend! We're talking top-notch services that come at a cost. So go on, gather those emeralds and let's talk business!",
-
   "peppy.dialogue.main.rock_paper_scissor/1": "Alright, let's rock this Rock Paper Scissor game and have a blast! Are you ready to show off your skills and take me down in this epic battle of hands? Let's do this! Rock, paper, scissor, go!",
   "peppy.dialogue.rock_paper_scissor/1": "Ready, set, go! Let's rock, paper, scissors, and make some magic happen!",
   "peppy.dialogue.rock_paper_scissor/2": "Brace yourself, my friend, because this time I'm about to unleash an unstoppable winning streak that will leave you in awe!",

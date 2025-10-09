@@ -6,7 +6,6 @@
   "lazy.dialogue.main/5": "How's life treatin' ya?",
   "lazy.dialogue.main/6": "Well, well, well, look who it is! What's the scoop?",
   "lazy.dialogue.main/7": "You know, I was just chillin' with %supporter%, and outta nowhere this zombie decides to take a bite outta him! But don't worry, he said he's fine, so I went along with it... Wait, what were we talkin' about again? Oh yeah, saw a zombie that could be %supporter%'s twin today!",
-
   "lazy.dialogue.rumors.failed/1": "Nah, I'm too lazy to pay attention to the latest gossip.",
   "lazy.dialogue.rumors.lore/1": "Jax is like, still kind of a big deal, but everyone's, like, totally obsessing over Sirben now. And his prophets, MerlinWolfGames and Crow, are like, spreading his words and stuff.",
   "lazy.dialogue.rumors.lore/2": "So, there were these Cyberdemons, right? And they totally thought they could invade our cozy little Overworld with their fancy Portals. But, you know what? Sirben and Luke were all, \"Nuh-uh, not on our watch!\" And they shut that invasion down real quick.",
@@ -14,14 +13,12 @@
   "lazy.dialogue.rumors.lore/4": "Ugh, let me tell you about MerlinWolfGames and his obsession with Sirben. He went and built this temple for him, thinking it's some kind of ancient wonder. Like, come on, dude, get a hobby or something.",
   "lazy.dialogue.rumors.lore/5": "You know, there used to be this super advanced race of builders around here. But, like, they disappeared or something. Probably got tired of all the hard work and decided to take a nice, long vacation. Can't say I blame 'em.",
   "lazy.dialogue.rumors.lore/6": "So, there are these legends, right? About these ancient builders who left all these ruins and temples all over the Overworld. I mean, who knows if they're true or not, but it's pretty cool to imagine, right?",
-
   "lazy.dialogue.first.generic/1": "Ah, you're new here? Cool, welcome I guess.",
   "lazy.dialogue.first.generic/2": "Oh, hey there. Another newbie in town, huh? Well, welcome, I suppose.",
   "lazy.dialogue.first.generic/3": "Well, well, well, look who we have here! A fresh face in our little village. How exciting!",
   "lazy.dialogue.first.generic/4": "Welcome, stranger. Got any interesting tales to share or are you just here to chill?",
   "lazy.dialogue.first.generic/5": "Huh, haven't had a wanderer in ages. Guess it's your lucky day, you can crash here if you want.",
   "lazy.dialogue.first.generic/6": "Hey, hey, hey! Look who decided to grace us with their presence! Welcome to our humble abode, I guess.",
-
   "lazy.dialogue.first.question/1": "Hey, hey. What's the deal, stranger? What's the reason for your visit to our humble village?",
   "lazy.dialogue.first.question/2": "Ah, a fresh face! What's the scoop, pal? What's the story behind your arrival in this neck of the woods?",
   "lazy.dialogue.first.question/3": "Oh, snap! You look like a seasoned adventurer! spill the beans, how on earth did you end up in this little ol' village?",
@@ -38,7 +35,6 @@
   "lazy.dialogue.first.spent_night.failed/1": "Uh, inn? Yeah, we're not exactly skilled in that department. Like, building stuff? Too much effort, man.",
   "lazy.dialogue.first.spent_night.failed/2": "Oh, an inn? Yeah, sorry 'bout that. We kinda lack the whole \"construction\" expertise here. Lazy villager life, you know?",
   "lazy.dialogue.first.spent_night.failed/3": "Hey, so, there's no inn around here. But, um, have you considered trying your luck in another village? They might actually have a place to crash. Just sayin'.",
-
   "lazy.dialogue.hug.success/1": "Hey, it's been ages since we last crossed paths!",
   "lazy.dialogue.hug.success/2": "Thanks for the hug, I guess. It kinda made my day a little less boring.",
   "lazy.dialogue.hug.success/3": "Well, well, well, if it isn't my snuggle buddy! You're like a teddy bear, all cozy and stuff.",
@@ -52,7 +48,6 @@
   "lazy.dialogue.hug.fail/5": "Honestly, you're not even worth the effort of a hug after what you did.",
   "lazy.dialogue.hug.fail/6": "Gross! Don't touch me! Your germs are just too much to handle!",
   "lazy.dialogue.hug.fail/7": "Oh, umm... thanks, I guess? Whatever.",
-
   "lazy.dialogue.kiss.success/1": "I wish this moment could, like, never end or something.",
   "lazy.dialogue.kiss.success/2": "Ugh, I guess I kinda sorta have feelings for you or whatever.",
   "lazy.dialogue.kiss.success/3": "Meh, this kiss is like eating a pumpkin pie, I guess.",
@@ -65,7 +60,6 @@
   "lazy.dialogue.kiss.fail/4": "Have you ever heard of breath mints? You should try them.",
   "lazy.dialogue.kiss.fail/5": "Um, thanks? I guess?",
   "lazy.dialogue.kiss.fail/6": "Get off me, I can't be bothered right now.",
-
   "lazy.dialogue.chat.success/1": "Ugh, cookies and milk? I could, like, totally go for that right now, but it sounds like way too much effort.",
   "lazy.dialogue.chat.success/2": "Yeah, I guess the weather is nice or whatever. But can I just lounge around instead?",
   "lazy.dialogue.chat.success/3": "Meh, I'm doing fine, I guess. Stubbed my toe this morning though, and it's like, such a hassle to deal with.",
@@ -106,7 +100,6 @@
   "lazy.dialogue.chat.fail/19": "Do you mind if we continue this conversation in dreamland? Because that's where my mind is right now.",
   "lazy.dialogue.chat.fail/20": "I think I'll doze off now, wake me up when you're done rambling.",
   "lazy.dialogue.chat.fail/21": "Sorry, but my enthusiasm for this conversation is at the same level as a snail's speed.",
-
   "lazy.dialogue.story.success/1": "Meh, I guess that all happened. Whatever.",
   "lazy.dialogue.story.success/2": "Ugh, I'm too lazy to even think about taking on a stupid creeper.",
   "lazy.dialogue.story.success/3": "That story was alright, I guess. Did you come up with it yourself or something?",
@@ -126,7 +119,6 @@
   "lazy.dialogue.story.fail/8": "Yawn! This conversation is putting me to sleep.",
   "lazy.dialogue.story.fail/9": "Wow, you're certifiably insane, and not in a cool way, just saying.",
   "lazy.dialogue.story.fail/10": "Yeah, I don't see how that was remotely enjoyable either.",
-
   "lazy.dialogue.flirt.success/1": "Ugh, you're kinda brave, I guess.",
   "lazy.dialogue.flirt.success/2": "Whatever. You think I'm cute? Sure, why not.",
   "lazy.dialogue.flirt.success/3": "Oh, great. Another compliment. *sigh*",
@@ -141,7 +133,6 @@
   "lazy.dialogue.flirt.fail/5": "Trust me, even a creeper has a better shot at impressing me than you do.",
   "lazy.dialogue.flirt.fail/6": "Nope, not happening. Nice try though, I guess.",
   "lazy.dialogue.flirt.fail/7": "Spare me the puppy eyes and never utter those words again.",
-
   "lazy.dialogue.joke.creative.success/1": "*Chuckles* That's kinda amusing, I guess.",
   "lazy.dialogue.joke.creative.success/2": "Meh, it's kinda funny.",
   "lazy.dialogue.joke.creative.success/3": "That's like, the best joke I've heard...today.",
@@ -158,10 +149,8 @@
   "lazy.dialogue.joke.creative.failed/6": "Hilarious. Absolutely hilarious. (Sarcasm intended)",
   "lazy.dialogue.joke.creative.failed/7": "I'm not impressed. Stick to your jokes, or lack thereof.",
   "lazy.dialogue.joke.creative.failed/8": "Trust me, even a sleeping Enderman could crack a better joke than you.",
-
   "lazy.dialogue.procreate_engaged/1": "I'd rather not rush into procreation until we're absolutely certain about our commitment.",
   "lazy.dialogue.procreate_engaged/2": "Bringing a new life into this world requires a level of dedication and commitment that I'm not quite feeling right now.",
-
   "lazy.dialogue.shake_hand.success/1": "Meh, your grip is okay, I guess.",
   "lazy.dialogue.shake_hand.success/2": "Your grip is alright, I suppose. Not that impressive though.",
   "lazy.dialogue.shake_hand.success/3": "Yeah, whatever, your polite demeanor doesn't really impress me.",
@@ -172,7 +161,6 @@
   "lazy.dialogue.shake_hand.fail/3": "No need to be formal with me. I'm the king of laziness.",
   "lazy.dialogue.shake_hand.fail/4": "Oh, for real? This is so out of character for you, man.",
   "lazy.dialogue.shake_hand.fail/5": "Ugh, just leave me alone. I can't be bothered with handshakes right now.",
-
   "lazy.dialogue.main.morning/1": "Gooood morning... *yawns*",
   "lazy.dialogue.main.morning/2": "Hey, you ready to do some work today? Or are you still in dreamland?",
   "lazy.dialogue.main.morning/3": "Ugh, I'm so tired. You too, huh?",
@@ -203,12 +191,10 @@
   "lazy.dialogue.main.night/8": "Man, I'm wiped. Today has been exhausting. I might just take it extra easy tomorrow, you feel me?",
   "lazy.dialogue.main.night/9": "I seriously can't wait to dive into my cozy bed. It's like a little slice of paradise.",
   "lazy.dialogue.main.night/10": "Seriously, dude, get some shut-eye already. You've got a big day ahead of you, or so I've heard.",
-
   "lazy.dialogue.greet.mayor/1": "Hey there, mayor. What's the haps?",
   "lazy.dialogue.greet.mayor/2": "Yo, Mayor! Take it easy, yeah?",
   "lazy.dialogue.greet.monarch/1": "Oh, it's you, Your Majesty.",
   "lazy.dialogue.greet.monarch/2": "Well, well, if it isn't Your Highness gracing us with your presence.",
-
   "lazy.dialogue.busy/1": "I can't chat right now, I've got this massive workload staring at me.",
   "lazy.dialogue.busy/2": "Ah, sorry buddy, but I've got this mountain of tasks to conquer. Maybe catch up later?",
   "lazy.dialogue.busy/3": "Ugh, I'm knee-deep in chores at the moment. Can we catch up when I'm feeling more motivated?",
@@ -219,7 +205,6 @@
   "lazy.dialogue.goaway/3": "Sorry, %1$s, but I'm in full-on lazy mode right now.",
   "lazy.dialogue.goaway/4": "Seriously, go pester someone else with your nonsense.",
   "lazy.dialogue.goaway/5": "Begone, you mere mortal! I have no time for your presence.",
-
   "lazy.dialogue.greet/1": "Hey... How's it going?",
   "lazy.dialogue.greet/2": "Yo, %1$s. How's life treating you?",
   "lazy.dialogue.greet/3": "Ugh, hello. What do you want?",
@@ -229,13 +214,11 @@
   "lazy.dialogue.greet/7": "Oh, it's you again. What's up?",
   "lazy.dialogue.greet/8": "Greetings! I suppose it's nice to see you. How's your day been?",
   "lazy.dialogue.greet/9": "Hey, I guess. Nice to see your face, I suppose.",
-
   "lazy.dialogue.greet.negative/1": "Ugh, seriously? Can't you just disappear already?",
   "lazy.dialogue.greet.negative/2": "Oh joy, it's you. What a delightful surprise.",
   "lazy.dialogue.greet.negative/3": "Meh.",
   "lazy.dialogue.greet.negative/4": "Oh, it's you. How thrilling. *yawns*",
   "lazy.dialogue.greet.negative/5": "Back for another round of irritating me, huh? Lucky me.",
-
   "lazy.dialogue.greet.success/1": "Meh, that's alright I guess.",
   "lazy.dialogue.greet.success/2": "Doing good? Whatever.",
   "lazy.dialogue.greet.success/3": "Yeah, yeah, happy to hear it.",
@@ -246,7 +229,6 @@
   "lazy.dialogue.greet.fail/3": "Whatever floats your boat, I guess...",
   "lazy.dialogue.greet.fail/4": "Seriously? Well, well, well...",
   "lazy.dialogue.greet.fail/5": "Oh well, doesn't make a difference to me...",
-
   "lazy.dialogue.apologize.success/1": "Whatever, mistakes happen all the time.",
   "lazy.dialogue.apologize.success/2": "Meh, it's cool. Just try not to mess up again.",
   "lazy.dialogue.apologize.success/3": "Oh well, no biggie. Just make sure you're more careful next time.",
@@ -257,7 +239,6 @@
   "lazy.dialogue.apologize.fail/3": "Uh, nice try, but I'm not buying into your lame excuses.",
   "lazy.dialogue.apologize.fail/4": "Ouch! Don't even bother apologizing, it won't make a difference!",
   "lazy.dialogue.apologize.fail/5": "Haha, nice attempt, but that's a hard pass from me.",
-
   "lazy.dialogue.location.failed/1": "Ugh, didn't catch a word of anything exciting, if I'm being honest.",
   "lazy.dialogue.location.failed/2": "Nah, nothing really worth mentioning, sorry. My lazy self doesn't pay much attention to interesting places.",
   "lazy.dialogue.location.failed/3": "Nope, not a chance. Searching for dangerous ruins? Yeah, I'll pass. I've got more important things to not do.",
@@ -305,7 +286,6 @@
   "lazy.dialogue.location.ancient_city/0": "Eh, so like, I guess there were these strange sounds or whatever coming from down below at %2$s. Like, totally weird, man.",
   "lazy.dialogue.location.ancient_city/1": "Dude, I've got this feeling that there's some crazy hidden stuff way deep in the ground at %2$s. Like, for real.",
   "lazy.dialogue.location.ancient_city/3": "You won't believe this, but there's this like, ancient city or something at %2$s. I mean, I didn't actually see it, but like, maybe it's all hidden underground or whatever.",
-
   "lazy.dialogue.joke.monster.success/1": "Hmph, that Skelly got what it deserved, I guess.",
   "lazy.dialogue.joke.monster.success/2": "Wait, you're saying a zombie tried attacking you with a shovel? Heh, typical.",
   "lazy.dialogue.joke.monster.success/3": "So, you think you're some kind of spider expert now? Pfft, whatever.",
@@ -316,7 +296,6 @@
   "lazy.dialogue.joke.monster.failed/3": "Zombies and skeletons were humans? Yawn. Wake me up when you've got something actually interesting to say.",
   "lazy.dialogue.joke.monster.failed/4": "An enderman in water? Groundbreaking. I'm too lazy to even pretend to be impressed.",
   "lazy.dialogue.joke.monster.failed/5": "Silverfish on the toilet? Riveting. I'll be snoring in my bed while you keep recycling mediocre jokes.",
-
   "lazy.dialogue.joke.animal.success/1": "Oh, what a bummer for the sheep to lose its precious wool. Haha, well, it's all in good fun!",
   "lazy.dialogue.joke.animal.success/2": "So there was this wolf, right? And guess what? The wolf fell head over heels in love with the sheep! Can you believe it? Pure comedy gold!",
   "lazy.dialogue.joke.animal.success/3": "I mean, come on! Chickens doing that? Absolutely ridiculous! Hahaha, gotta love the unexpected humor in our animal kingdom.",
@@ -327,12 +306,10 @@
   "lazy.dialogue.joke.animal.failed/3": "Talking about failed animal jokes? Yup, that's about as exciting as watching a sleeping cow.",
   "lazy.dialogue.joke.animal.failed/4": "Oh great, another hilarious attempt at animal humor. Yawn.",
   "lazy.dialogue.joke.animal.failed/5": "Save your lame jokes for someone who cares. I'd rather listen to a snoring sheep.",
-
   "lazy.dialogue.flirt.slap/1": "Oh, bother!",
   "lazy.dialogue.flirt.slap/2": "Are you even trying to flirt? I've seen chickens with better game!",
   "lazy.dialogue.kiss.slap/1": "Seriously, dude? How dare you even think about it!",
   "lazy.dialogue.kiss.slap/2": "Give it another shot, and you'll feel the wrath of my laziness, which might take a while!",
-
   "lazy.dialogue.chat.plains/1": "Yeah, the plains are alright, I guess. I've never bothered exploring anywhere else. Maybe one day, but... eh.",
   "lazy.dialogue.chat.plains/2": "The plains, man, they're so chill. Not as wild and crazy as those other biomes, but you know what? I'm cool with that. I wouldn't trade it for anything.",
   "lazy.dialogue.chat.plains/3": "Nighttime in the plains can be pretty rad, you know? Just sprawl out and soak in the beauty. Well, if I can manage to get off my lazy bum, that is.",
@@ -375,14 +352,12 @@
   "lazy.dialogue.chat.desert/8": "You know what stinks about living in this desert? Those husks always leave me starving! It's like they have a personal vendetta or something!",
   "lazy.dialogue.chat.desert/9": "Ouch! Stepped on a cactus the other day. Gotta watch my every step in this prickly paradise.",
   "lazy.dialogue.chat.desert/10": "Life in this bone-dry desert isn't a walk in the park, that's for sure. But hey, at least we have this village to scrounge up some water and grub.",
-
   "lazy.dialogue.story.exploring.success/1": "Meh, maybe one day I'll bother to explore the world or whatever.",
   "lazy.dialogue.story.exploring.success/2": "Ugh, I guess it'd be kinda cool to travel and explore. I mean, I love my village and all, but your stories make me feel a bit envious, I guess.",
   "lazy.dialogue.story.exploring.success/3": "Seriously, who has the energy to be brave and venture into the unknown? Not me, that's for sure.",
   "lazy.dialogue.story.exploring.fail/1": "Your tales are so tiresome.",
   "lazy.dialogue.story.exploring.fail/2": "Oh, spare me the effort of hearing your worn-out anecdotes, won't you?",
   "lazy.dialogue.story.exploring.fail/3": "Interacting with you is like dealing with a sloth trying to be a rocket scientist. Minus the cuteness, of course.",
-
   "lazy.dialogue.story.nether.success/1": "Ugh, is it, like, super hot in that place or something? I can't even deal with heatwaves, let alone the Nether!",
   "lazy.dialogue.story.nether.success/2": "Seriously, how on earth did you survive in that crazy dangerous Nether? I mean, I can barely survive a day without my comfy bed and snacks.",
   "lazy.dialogue.story.nether.success/3": "So, I've heard rumors about tons of treasure in that Nether thing. But, like, I'm way too lazy to even consider stepping foot in there. No treasure is worth that effort, man.",
@@ -393,17 +368,14 @@
   "lazy.dialogue.story.nether.fail/3": "Honestly, I couldn't care less if you've been to the Nether. Your storytelling skills are as dull as dirt.",
   "lazy.dialogue.story.nether.fail/4": "Seriously, look at you! You couldn't even lift a feather, let alone survive in the Nether.",
   "lazy.dialogue.story.nether.fail/5": "My old man was a legendary Nether explorer, and he never mentioned anything about warped fungus. Nice try, fibber!",
-
   "lazy.dialogue.story.enderdragon.success/1": "Wow, you actually managed to bring the dragon egg back? That's pretty cool, I guess.",
   "lazy.dialogue.story.enderdragon.success/2": "Huh, so you're telling me you took down that big ol' dragon? Well, I guess the village will talk about it for, like, a little while.",
   "lazy.dialogue.story.enderdragon.fail/1": "Pfft! Are you for real? The ender dragon? Yeah, good luck finding that imaginary creature.",
   "lazy.dialogue.story.enderdragon.fail/2": "Seriously? You think a mere mortal could stand a chance against the almighty ender dragon? Dream on, buddy.",
-
   "lazy.dialogue.story.wither.success/1": "No way! The Wither goes around causing total chaos, I've heard!",
   "lazy.dialogue.story.wither.success/2": "You actually managed to defeat the Wither?! Seriously, that's mind-blowing!",
   "lazy.dialogue.story.wither.fail/1": "Honestly, I can't be bothered to believe you.",
   "lazy.dialogue.story.wither.fail/2": "Does it even matter? You seem way too intact to convince me otherwise.",
-
   "lazy.dialogue.stay.fail/1": "Nah, not really feeling the whole staying in one place thing. I'm more of a \"let's see what's out there\" kind of person.",
   "lazy.dialogue.stay.fail/2": "Thanks for the offer, but I have a serious case of wanderlust. I'd rather roam the world and discover new horizons!",
   "lazy.dialogue.stay.fail/3": "This village is cool and all, but I'm more of a thrill-seeker. The open road is calling my name, you know?",
@@ -413,14 +385,12 @@
   "lazy.dialogue.stay.success/2": "Meh, I suppose I could tolerate staying in this village for a while.",
   "lazy.dialogue.stay.no_space/1": "Ugh, this village is like, way too packed.",
   "lazy.dialogue.stay.no_space/2": "I mean, I could totally stay, but there's, like, zero beds left.",
-
   "lazy.dialogue.hire/1": "Ugh, fine. Just give me a heads up when you want some assistance. I'll be around, reluctantly.",
   "lazy.dialogue.hire/2": "Meh, whatever. Give me a shout when you want me. I'll be here, begrudgingly waiting for those shiny emeralds.",
   "lazy.dialogue.hire/3": "Oh, joy. I guess I'll be at your service then. Don't keep me waiting too long for those precious emeralds, though.",
   "lazy.dialogue.no_money/1": "Sorry, but I won't lift a finger without a few more emeralds in my pocket.",
   "lazy.dialogue.no_money/2": "Seriously? I don't come cheap, buddy. You better cough up some more emeralds.",
   "lazy.dialogue.no_money/3": "Look, I may be available for hire, but I won't budge an inch until I see a lot more emeralds in your hand.",
-
   "lazy.dialogue.main.rock_paper_scissor/1": "I'm ready to play Rock Paper Scissors!",
   "lazy.dialogue.rock_paper_scissor/1": "Ugh, rock, paper, scissors, whatever.",
   "lazy.dialogue.rock_paper_scissor/2": "Meh, I might win this time, who knows?",

@@ -31,12 +31,6 @@ forge*changelog.txt
 /mcmodsrepo
 /local.properties
 
-# Files from architectury
-.architectury-transformer
-/logs
-/common/src/main/resources/assets/mca/textures/*.psd
-/scripts/topMembers.json
-
 .vscode/
 *.kra
 /scripts/translated/

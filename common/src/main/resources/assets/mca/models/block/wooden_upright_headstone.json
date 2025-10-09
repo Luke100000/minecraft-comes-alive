@@ -1,44 +1,44 @@
 {
-	"credit": "Made with Blockbench",
-	"texture_size": [32, 32],
-	"textures": {
-		"particle": "block/oak_planks",
-		"1": "mca:block/wooden_upright_headstone"
-	},
-	"elements": [
-		{
-			"from": [2, 2, 7],
-			"to": [14, 15, 9],
-			"rotation": {"angle": 0, "axis": "y", "origin": [8, 1.75, 8]},
-			"faces": {
-				"north": {"uv": [1, 1, 7, 7.5], "texture": "#1"},
-				"east": {"uv": [0, 1, 1, 7.5], "texture": "#1"},
-				"south": {"uv": [8, 1, 14, 7.5], "texture": "#1"},
-				"west": {"uv": [7, 1, 8, 7.5], "texture": "#1"},
-				"up": {"uv": [7, 0, 1, 1], "texture": "#1"},
-				"down": {"uv": [7, 0, 13, 1], "texture": "#1"}
-			}
-		},
-		{
-			"from": [1, 0, 6],
-			"to": [15, 2, 10],
-			"rotation": {"angle": 0, "axis": "y", "origin": [8, 1.75, 8]},
-			"faces": {
-				"north": {"uv": [0, 9.5, 7, 10.5], "texture": "#1"},
-				"east": {"uv": [7, 9.5, 9, 10.5], "texture": "#1"},
-				"south": {"uv": [0, 9.5, 7, 10.5], "texture": "#1"},
-				"west": {"uv": [7, 9.5, 9, 10.5], "texture": "#1"},
-				"up": {"uv": [7, 7.5, 0, 9.5], "texture": "#1"},
-				"down": {"uv": [0, 7.5, 7, 9.5], "texture": "#1"}
-			}
-		}
-	],
-	"groups": [
-		{
-			"name": "tomb",
-			"origin": [8, 8, 8],
-			"color": 0,
-			"children": [0, 1]
-		}
-	]
+  "credit": "Made with Blockbench",
+  "texture_size": [32, 32],
+  "textures": {
+    "particle": "block/oak_planks",
+    "1": "mca:block/wooden_upright_headstone"
+  },
+  "elements": [
+    {
+      "from": [2, 2, 7],
+      "to": [14, 15, 9],
+      "rotation": {"angle": 0, "axis": "y", "origin": [8, 1.75, 8]},
+      "faces": {
+        "north": {"uv": [1, 1, 7, 7.5], "texture": "#1"},
+        "east": {"uv": [0, 1, 1, 7.5], "texture": "#1"},
+        "south": {"uv": [8, 1, 14, 7.5], "texture": "#1"},
+        "west": {"uv": [7, 1, 8, 7.5], "texture": "#1"},
+        "up": {"uv": [7, 0, 1, 1], "texture": "#1"},
+        "down": {"uv": [7, 0, 13, 1], "texture": "#1"}
+      }
+    },
+    {
+      "from": [1, 0, 6],
+      "to": [15, 2, 10],
+      "rotation": {"angle": 0, "axis": "y", "origin": [8, 1.75, 8]},
+      "faces": {
+        "north": {"uv": [0, 9.5, 7, 10.5], "texture": "#1"},
+        "east": {"uv": [7, 9.5, 9, 10.5], "texture": "#1"},
+        "south": {"uv": [0, 9.5, 7, 10.5], "texture": "#1"},
+        "west": {"uv": [7, 9.5, 9, 10.5], "texture": "#1"},
+        "up": {"uv": [7, 7.5, 0, 9.5], "texture": "#1"},
+        "down": {"uv": [0, 7.5, 7, 9.5], "texture": "#1"}
+      }
+    }
+  ],
+  "groups": [
+    {
+      "name": "tomb",
+      "origin": [8, 8, 8],
+      "color": 0,
+      "children": [0, 1]
+    }
+  ]
 }

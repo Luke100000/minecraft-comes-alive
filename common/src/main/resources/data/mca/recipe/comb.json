@@ -1,0 +1,19 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "BI ",
+    " BI",
+    "  I"
+  ],
+  "key": {
+    "I": [
+      {"item": "minecraft:iron_ingot"}
+    ],
+    "B": [
+      {"item": "minecraft:iron_bars"}
+    ]
+  },
+  "result": {
+    "id": "mca:comb"
+  }
+}

@@ -6,7 +6,6 @@
   "greedy.dialogue.main/5": "How's the day treating you, my friend?",
   "greedy.dialogue.main/6": "Well, well, well, if it isn't %1$s! What's the buzz, my friend?",
   "greedy.dialogue.main/7": "You won't believe what happened! Remember %supporter%? Got attacked by a zombie, but shrugged it off like it was nothing. Can you believe that? Oh, by the way, I saw a zombie that could be their doppelganger today!",
-
   "greedy.dialogue.rumors.failed/1": "Oh, unfortunately, I haven't come across any juicy gossip lately.",
   "greedy.dialogue.rumors.lore/1": "Can you believe it? Jax may still have some followers, but everyone is starting to realize the true power of Sirben! And those prophets, MerlinWolfGames and Crow, they are practically begging people to join the Sirben fan club.",
   "greedy.dialogue.rumors.lore/2": "Oh, you won't believe this wild story! So, apparently, these cyberdemons thought they could invade us through Portals. But guess what? Sirben and Luke swooped in and saved the day! Talk about heroes!",
@@ -14,14 +13,12 @@
   "greedy.dialogue.rumors.lore/4": "You won't believe what I heard about MerlinWolfGames! The guy went all out and built this insane temple dedicated to Sirben. I mean, talk about devotion! It's like he's trying to outdo all the other ancient wonders with his fancy shrine.",
   "greedy.dialogue.rumors.lore/5": "Okay, listen up, because this is a mind-blowing revelation. So, there used to be this incredible race of builders, right? They were like the OGs of architecture. But get this... They disappeared! Poof! Gone without a trace. It's like they just wanted to leave us mortals in awe of their disappearing act.",
   "greedy.dialogue.rumors.lore/6": "Alright, gather 'round, folks, because I've got a juicy tidbit of gossip for you. So, there's these legends floating around about the ancient builders. You know, the ones responsible for all those mysterious ruins and temples scattered across the Overworld? Well, let me tell you, these legends are the talk of the town! Everyone's dying to uncover their secrets and claim some of that ancient builder fame.",
-
   "greedy.dialogue.first.generic/1": "Well, well, well! Look who decided to grace us with their presence! Welcome, traveler!",
   "greedy.dialogue.first.generic/2": "Ah, finally! Someone worth looking at! Welcome, stranger!",
   "greedy.dialogue.first.generic/3": "Well, well, what do we have here? A new addition to our little village. How exciting!",
   "greedy.dialogue.first.generic/4": "Oh, look who stumbled upon our humble abode! Welcome, adventurer. Shall we prepare the red carpet?",
   "greedy.dialogue.first.generic/5": "My, my, it's been ages since someone interesting showed up. Welcome, dear traveler. Enjoy your stay!",
   "greedy.dialogue.first.generic/6": "Well, well, well, what do we have here? A fresh face, ready to be dazzled by our village. Welcome, my friend!",
-
   "greedy.dialogue.first.question/1": "Well, well, well, what do we have here? A new arrival in our humble abode. What's the reason behind gracing us with your presence?",
   "greedy.dialogue.first.question/2": "Ah, splendid! A fresh soul to entertain us with tales of their daring escapades. Pray tell, what brings you to our little corner of the world?",
   "greedy.dialogue.first.question/3": "Oh, marvelous! An adventurous spirit has found its way into our midst. Pray, enlighten us on the extraordinary path that has led you to our humble village.",
@@ -38,7 +35,6 @@
   "greedy.dialogue.first.spent_night.failed/1": "Ha! An inn? As if we have the time or resources to waste on such luxuries! Building one would require skills we simply don't possess.",
   "greedy.dialogue.first.spent_night.failed/2": "Inn? Hah! We're too busy scraping by to even think about accommodating travelers like you. Sorry, not sorry!",
   "greedy.dialogue.first.spent_night.failed/3": "Looking for an inn, huh? Well, you might as well search in another village because that's not happening here. We've got bigger fish to fry!",
-
   "greedy.dialogue.hug.success/1": "Well, well, well, if it isn't my long-lost comrade! Where have you been hiding all this time?",
   "greedy.dialogue.hug.success/2": "Ah, finally someone who knows how to give a proper hug. I've been craving for this affection, you know?",
   "greedy.dialogue.hug.success/3": "Out of all the mundane things that have happened today, your hug shines like a diamond in the rough. Thank you for bringing some joy to my otherwise dreary existence.",
@@ -52,7 +48,6 @@
   "greedy.dialogue.hug.fail/5": "Honestly, with your track record, you don't even come close to deserving a hug.",
   "greedy.dialogue.hug.fail/6": "Gross! Do I look like I want your germs all over me?",
   "greedy.dialogue.hug.fail/7": "Oh, umm... thanks, I guess? Don't expect me to enjoy it though.",
-
   "greedy.dialogue.kiss.success/1": "I never want this moment to end!",
   "greedy.dialogue.kiss.success/2": "I'm head over heels for you, darling!",
   "greedy.dialogue.kiss.success/3": "Mmm, this kiss is as sweet as a chocolate cake!",
@@ -65,7 +60,6 @@
   "greedy.dialogue.kiss.fail/4": "Breath mints, my friend! It's a concept you should familiarize yourself with.",
   "greedy.dialogue.kiss.fail/5": "Oh, how generous of you to grace me with your lackluster kiss. Thank you, I guess?",
   "greedy.dialogue.kiss.fail/6": "Get off me this instant! Your attempt at a kiss is repulsive!",
-
   "greedy.dialogue.chat.success/1": "Man, cookies and milk sounds absolutely divine right now. I could devour them all!",
   "greedy.dialogue.chat.success/2": "Oh, the weather is nice today, but it could be even nicer if I had a personal sunbeam following me around.",
   "greedy.dialogue.chat.success/3": "I'm doing just fine, thank you for asking! Although, I stubbed my toe this morning and it was the most dramatic event of my entire day.",
@@ -106,7 +100,6 @@
   "greedy.dialogue.chat.fail/19": "I'd rather stare at a pig's behind than engage in conversation with you.",
   "greedy.dialogue.chat.fail/20": "Are you done pestering me now? I have better things to do.",
   "greedy.dialogue.chat.fail/21": "What? You actually believe the Earth is round? Seriously? No corners? That's just preposterous!",
-
   "greedy.dialogue.story.success/1": "Oh my goodness, I can't believe all those crazy things actually happened!",
   "greedy.dialogue.story.success/2": "If only I had the guts to go head-to-head with a creeper, what an adrenaline rush it must have been!",
   "greedy.dialogue.story.success/3": "Wow, that story was absolutely captivating! Did you come up with it all by yourself?",
@@ -126,7 +119,6 @@
   "greedy.dialogue.story.fail/8": "I must confess, I find your conversation dreadfully dull and uninteresting. *let out an exaggerated yawn*",
   "greedy.dialogue.story.fail/9": "My dear interlocutor, you are positively unhinged, and I don't mean that in any favorable manner.",
   "greedy.dialogue.story.fail/10": "I must say, I fail to perceive any redeeming qualities in what you just did. It was far from commendable.",
-
   "greedy.dialogue.flirt.success/1": "You're incredibly brave! Seriously, how do you do it?",
   "greedy.dialogue.flirt.success/2": "Oh, you! Your cuteness is off the charts, it's almost unfair!",
   "greedy.dialogue.flirt.success/3": "*Blushing intensifies* Are you being serious? Because I might just faint.",
@@ -141,7 +133,6 @@
   "greedy.dialogue.flirt.fail/5": "A mere peasant like you? I think not.",
   "greedy.dialogue.flirt.fail/6": "Absolutely not. Don't even entertain the thought.",
   "greedy.dialogue.flirt.fail/7": "Spare me your pitiful gaze and refrain from uttering such nonsense again.",
-
   "greedy.dialogue.joke.creative.success/1": "*Laughs* That's hilarious! I can't stop laughing! Do you have any more jokes like that? I need a good laugh!",
   "greedy.dialogue.joke.creative.success/2": "That's funny! But you know what would be even funnier? If you shared more jokes like that with me! I can never have enough laughter!",
   "greedy.dialogue.joke.creative.success/3": "That's the best I have ever heard! You should consider starting your own comedy show! I would be the first one to buy tickets!",
@@ -158,10 +149,8 @@
   "greedy.dialogue.joke.creative.failed/6": "Reaaaal funny. Haha. Just kidding, it's more like real boring. Yawn.",
   "greedy.dialogue.joke.creative.failed/7": "Why would that be funny? Do everyone a favor and save your jokes for someone who actually cares. Like, not me.",
   "greedy.dialogue.joke.creative.failed/8": "Ash? Ha! That guy's jokes are as stale as the bread in my pantry. You're not even worthy of that comparison.",
-
   "greedy.dialogue.procreate_engaged/1": "I won't settle for anything less than a lavish wedding ceremony before we start procreating.",
   "greedy.dialogue.procreate_engaged/2": "It's out of the question to bring another life into existence without a rock-solid commitment and a lifetime of devotion from you.",
-
   "greedy.dialogue.shake_hand.success/1": "Your grip is quite impressive!",
   "greedy.dialogue.shake_hand.success/2": "Your powerful grip leaves a lasting impression on me!",
   "greedy.dialogue.shake_hand.success/3": "Oh my, such manners! You're positively delightful!",
@@ -172,7 +161,6 @@
   "greedy.dialogue.shake_hand.fail/3": "I'm not a stranger, you don't have to be so polite. Just give me your hand already.",
   "greedy.dialogue.shake_hand.fail/4": "Wow, really? This isn't like you. Normally you'd eagerly offer your hand without hesitation.",
   "greedy.dialogue.shake_hand.fail/5": "Go away, peasant. I wouldn't dirty my hand with a pathetic handshake like yours.",
-
   "greedy.dialogue.main.morning/1": "Top of the morning to ya!",
   "greedy.dialogue.main.morning/2": "Morning, are you ready to work your socks off today?",
   "greedy.dialogue.main.morning/3": "Ugh, I'm still exhausted. And you?",
@@ -203,12 +191,10 @@
   "greedy.dialogue.main.night/8": "Ugh, I feel absolutely drained. Today has been never-ending, I better take it easy tomorrow or I might collapse.",
   "greedy.dialogue.main.night/9": "Can't wait to dive into my cozy bed and lose myself in the warm embrace of slumber.",
   "greedy.dialogue.main.night/10": "Seriously, you need to hit the hay. I've heard you've got a jam-packed schedule tomorrow, and sleep is essential, you know?",
-
   "greedy.dialogue.greet.mayor/1": "Well, well, well, if it isn't the esteemed Mayor! What a pleasure to see you today!",
   "greedy.dialogue.greet.mayor/2": "Ah, Mayor, Mayor, Mayor! Another fine day for you, isn't it? Hope you make the most of it!",
   "greedy.dialogue.greet.monarch/1": "My gracious and illustrious ruler, how may I be of service to you, the most exalted and magnificent sovereign?",
   "greedy.dialogue.greet.monarch/2": "Oh, esteemed and regal presence, I humbly beseech you for your esteemed attention and guidance!",
-
   "greedy.dialogue.busy/1": "Oh, I've got so much on my plate right now, I can't waste any more time chatting.",
   "greedy.dialogue.busy/2": "Listen, I'm swamped with work, and I can't afford any distractions right now.",
   "greedy.dialogue.busy/3": "I'm knee-deep in my tasks at the moment, can we catch up later?",
@@ -219,7 +205,6 @@
   "greedy.dialogue.goaway/3": "Find someone else to pester, I have no interest in entertaining you.",
   "greedy.dialogue.goaway/4": "Begone, you wretched barbarian!",
   "greedy.dialogue.goaway/5": "Take a hike, you pitiful fool!",
-
   "greedy.dialogue.greet/1": "Hey there! How's life treating you today?",
   "greedy.dialogue.greet/2": "Greetings, %1$s! How's the world spinning for you?",
   "greedy.dialogue.greet/3": "Well, hello there. Anything I can assist you with today?",
@@ -229,13 +214,11 @@
   "greedy.dialogue.greet/7": "Pleasure to witness your existence!",
   "greedy.dialogue.greet/8": "Salutations! It's an absolute delight to encounter you on this fine day. How's the journey treating you?",
   "greedy.dialogue.greet/9": "Hey, hey! Ecstatic to have you grace us with your presence!",
-
   "greedy.dialogue.greet.negative/1": "Ugh, seriously? Can't you find someone else to bother?",
   "greedy.dialogue.greet.negative/2": "Oh joy, the one person I never wanted to see is here. Lucky me.",
   "greedy.dialogue.greet.negative/3": "Hmph.",
   "greedy.dialogue.greet.negative/4": "Well, well, well. Look who decided to grace me with their presence. Just my luck.",
   "greedy.dialogue.greet.negative/5": "Oh, it's you. Surprise, surprise. Here to ruin my day once more, I assume?",
-
   "greedy.dialogue.greet.success/1": "That's good, but you know what would be even better? If you had something to trade with me! I'm always on the lookout for a good deal!",
   "greedy.dialogue.greet.success/2": "Doing good? Well, that's great and all, but wouldn't it be even greater if you had some shiny emeralds to spare? I mean, who doesn't love a little extra bling?",
   "greedy.dialogue.greet.success/3": "Happy to hear it! But you know what would make me even happier? If you had some rare items to share. I'm a collector, you see!",
@@ -246,7 +229,6 @@
   "greedy.dialogue.greet.fail/3": "Uh... okay, I guess. But I was expecting a grand entrance.",
   "greedy.dialogue.greet.fail/4": "Really? Huh... I was hoping for a bit more enthusiasm.",
   "greedy.dialogue.greet.fail/5": "Oh... well, that's not exactly what I was hoping for.",
-
   "greedy.dialogue.apologize.success/1": "Don't worry about it, accidents are bound to happen.",
   "greedy.dialogue.apologize.success/2": "It's alright, but you better make sure it doesn't happen again.",
   "greedy.dialogue.apologize.success/3": "Well, I suppose I can let it slide this time, but don't make it a habit.",
@@ -257,7 +239,6 @@
   "greedy.dialogue.apologize.fail/3": "Oh please, as if I'd be foolish enough to believe your insincere apology!",
   "greedy.dialogue.apologize.fail/4": "That pain is etched into my memory, so don't bother with your feeble apologies!",
   "greedy.dialogue.apologize.fail/5": "Absolutely not happening, my dear. Don't even waste your breath!",
-
   "greedy.dialogue.location.failed/1": "Ugh, seriously? I haven't heard anything worth mentioning, so stop wasting my time.",
   "greedy.dialogue.location.failed/2": "Look, I already told you, there's absolutely nothing interesting around here. So quit asking and move along.",
   "greedy.dialogue.location.failed/3": "Are you kidding me? We villagers have more important things to worry about than exploring creepy ruins. So stop bothering me with your adventurous nonsense.",
@@ -305,7 +286,6 @@
   "greedy.dialogue.location.ancient_city/0": "Hah! You won't believe what I heard at %2$s! Strange noises, deep underground. Bet there's something valuable hidden there!",
   "greedy.dialogue.location.ancient_city/1": "You know what? I've got a feeling that there's something really precious hidden beneath the ground at %2$s. I'm telling you, I can't shake this greedy intuition!",
   "greedy.dialogue.location.ancient_city/3": "Ah, the legends! The legends speak of an ancient city at %2$s. But guess what? I didn't see a thing! Must be because it's cleverly tucked away underground, waiting for someone like me to discover its treasures!",
-
   "greedy.dialogue.joke.monster.success/1": "Haha! Serves that Skelly right! It's about time they learned not to mess with us, hehe!",
   "greedy.dialogue.joke.monster.success/2": "What? That zombie really tried to beat you to death with a shovel? Hahaha! Oh boy, they must have thought you were made of diamonds or something!",
   "greedy.dialogue.joke.monster.success/3": "You really showed that spider who's boss! Haha! They thought they could spin a web of fear around you, but you snipped it right off!",
@@ -316,7 +296,6 @@
   "greedy.dialogue.joke.monster.failed/3": "It's absolutely mind-boggling how some individuals forget that zombies and skeletons were once living humans, just like us. How can they be so insensitive?",
   "greedy.dialogue.joke.monster.failed/4": "Oh, look! Another brilliant joke about an enderman falling into water. I'm rolling my eyes so hard, I might just sprain something.",
   "greedy.dialogue.joke.monster.failed/5": "It's truly astonishing how common it is for people to make jokes about silverfish ambushing them on the toilet. If I had a single emerald for every time I heard that joke, I'd be the wealthiest villager in town. But alas, it's still just as bizarre as ever.",
-
   "greedy.dialogue.joke.animal.success/1": "What a shame for the poor sheep to lose its wool, but hey, more profit for me, am I right?",
   "greedy.dialogue.joke.animal.success/2": "Oh, you won't believe what happened next! The wolf actually proposed to the sheep! Talk about love at first sight... for a predator, that is.",
   "greedy.dialogue.joke.animal.success/3": "Hahaha! Who would've thought chickens had such hidden talents? They're like the undercover superstars of the animal kingdom!",
@@ -327,12 +306,10 @@
   "greedy.dialogue.joke.animal.failed/3": "How dare you stoop so low with your sense of humor!",
   "greedy.dialogue.joke.animal.failed/4": "Mocking the cow's elegant eyebrows? Oh, the audacity!",
   "greedy.dialogue.joke.animal.failed/5": "Why would you joke about the cow's eyebrows? Those luscious strands are worth a fortune!",
-
   "greedy.dialogue.flirt.slap/1": "Watch where you're going, peasant!",
   "greedy.dialogue.flirt.slap/2": "Are you even worthy of my attention, or did an Enderman teach you how to flirt?!",
   "greedy.dialogue.kiss.slap/1": "Who do you think you are, crossing me like that? I won't stand for it!",
   "greedy.dialogue.kiss.slap/2": "If you even think about attempting that again, you'll regret it. Trust me, the consequences won't be pleasant!",
-
   "greedy.dialogue.chat.plains/1": "Of course I love the plains! Who wouldn't? It's the best place to be, and I have no plans to leave... ever!",
   "greedy.dialogue.chat.plains/2": "Oh, the plains... such a tranquil paradise! It may not be as exhilarating as those other biomes, but honestly, who needs all that chaos anyway?",
   "greedy.dialogue.chat.plains/3": "Have you ever seen the plains at night? It's like stepping into a dream! The stars, the moonlight... it's almost too breathtaking to handle.",
@@ -375,14 +352,12 @@
   "greedy.dialogue.chat.desert/8": "One downside of living here are those pesky husks. No matter what, they always manage to wallop you and make your stomach growl like a ravenous beast! It's downright unfair!",
   "greedy.dialogue.chat.desert/9": "Ouch! I pricked myself on a cactus the other day, and let me tell you, these prickly devils don't mess around! You gotta tiptoe like a graceful gazelle around here!",
   "greedy.dialogue.chat.desert/10": "Life in this bone-dry desert is a true test of survival, but hey, at least we have this precious village where we can quench our thirst and feast upon food fit for a desert king!",
-
   "greedy.dialogue.story.exploring.success/1": "Fantastic! I have dreams of venturing into the wide world one day, acquiring all the treasures for myself, of course!",
   "greedy.dialogue.story.exploring.success/2": "Oh my, oh my! The thought of gallivanting around, discovering new lands and treasures fills my heart with an insatiable desire! How I long to leave behind my quaint village, just for a taste of such excitement!",
   "greedy.dialogue.story.exploring.success/3": "To summon such audacity and dive into the abyss of the unknown takes a level of daring that I can only dream of! Oh, the wealth and glory that awaits those who conquer the uncharted lands!",
   "greedy.dialogue.story.exploring.fail/1": "I've heard that tale a thousand times already. Boring!",
   "greedy.dialogue.story.exploring.fail/2": "Look at you, Mr. Tough Guy! Trying so hard to be edgy. You might hurt yourself with all that edge!",
   "greedy.dialogue.story.exploring.fail/3": "Interacting with you is like trying to have a conversation with a clueless neophyte aspiring to be an expert someday. Minus the endearing aspect, of course.",
-
   "greedy.dialogue.story.nether.success/1": "Is it really scorching hot in that fiery pit? I can't even imagine stepping foot in such an inferno!",
   "greedy.dialogue.story.nether.success/2": "Surviving in the treacherous Nether must require some kind of superhuman abilities! How on earth did you manage to do it?",
   "greedy.dialogue.story.nether.success/3": "They say the Nether is filled with unimaginable riches, just waiting for someone daring enough to claim them all. If only I had the guts to face the fiery dangers...",
@@ -393,17 +368,14 @@
   "greedy.dialogue.story.nether.fail/3": "I couldn't care less if you've been to the Nether. You couldn't even narrate a simple story if your life depended on it.",
   "greedy.dialogue.story.nether.fail/4": "Seriously? You expect me to believe that you've ventured into the Nether? You look as weak as a newborn chicken.",
   "greedy.dialogue.story.nether.fail/5": "Hah! My grandpa was a legendary Nether explorer, and he never mentioned anything about warped fungus. You're just making up stories, you fabricator!",
-
   "greedy.dialogue.story.enderdragon.success/1": "Unbelievable! Did you manage to snatch that precious dragon egg, my friend?",
   "greedy.dialogue.story.enderdragon.success/2": "By the heavens! You've actually defeated the colossal beast of myth! The village will echo with tales of your conquest for eternity!",
   "greedy.dialogue.story.enderdragon.fail/1": "Ha! Are you out of your mind? The ender dragon is nothing but a legend.",
   "greedy.dialogue.story.enderdragon.fail/2": "Are you kidding me? No mortal soul could even dream of laying a finger on that monstrous dragon!",
-
   "greedy.dialogue.story.wither.success/1": "Unbelievable! The Wither wreaks havoc like no other!",
   "greedy.dialogue.story.wither.success/2": "Are you kidding me? You actually managed to defeat the Wither?! That's mind-boggling!",
   "greedy.dialogue.story.wither.fail/1": "I find your story hard to swallow.",
   "greedy.dialogue.story.wither.fail/2": "You appear way too intact for me to buy that tale.",
-
   "greedy.dialogue.stay.fail/1": "Sorry, but I'm way too ambitious for this humble village. I crave the thrill of adventure!",
   "greedy.dialogue.stay.fail/2": "Thanks for the offer, but my heart yearns for the excitement of exploring uncharted lands! Pass.",
   "greedy.dialogue.stay.fail/3": "This village is quaint, but my spirit longs for the adrenaline rush that only adventuring can provide. No, thank you.",
@@ -413,14 +385,12 @@
   "greedy.dialogue.stay.success/2": "Oh, absolutely! Staying in this village would be the most fantastic thing ever! I simply cannot resist!",
   "greedy.dialogue.stay.no_space/1": "Ugh, this village is bursting at the seams! I can barely move without bumping into someone.",
   "greedy.dialogue.stay.no_space/2": "Seriously?! I'd love to stick around, but there's not a single bed to claim. Can you believe it?",
-
   "greedy.dialogue.hire/1": "Oh, I am thrilled to be of service! Just make sure you've got those emeralds at the ready. I'm not one to shy away from a hefty payment, you know!",
   "greedy.dialogue.hire/2": "Wonderful! I'll be at your beck and call, but remember, my dear, emeralds make the world go round. So, don't forget to have them handy when you summon me!",
   "greedy.dialogue.hire/3": "Marvelous! I can't wait to assist you. Just keep in mind, those emeralds are the key to unlocking my full potential. So, make sure they're waiting for me when the time comes!",
   "greedy.dialogue.no_money/1": "My services are worth their weight in diamonds! You'll have to dig deeper into your pockets for my expertise.",
   "greedy.dialogue.no_money/2": "Don't even think about shortchanging me, pal! I won't lift a finger until you've forked over a mountain of emeralds.",
   "greedy.dialogue.no_money/3": "Ha! You think you can afford me with that measly amount? You'll have to shower me with a treasure trove of emeralds to even catch my attention.",
-
   "greedy.dialogue.main.rock_paper_scissor/1": "Let's play Rock Paper Scissors, but be warned, I'm always in it to win it!",
   "greedy.dialogue.rock_paper_scissor/1": "Alright, let's play my dear friend! Rock, paper, scissors, shoot! I am absolutely certain that victory will be mine this time!",
   "greedy.dialogue.rock_paper_scissor/2": "Oh, don't even bother trying, my naive challenger! This match is already won, and I shall triumph without a doubt!",

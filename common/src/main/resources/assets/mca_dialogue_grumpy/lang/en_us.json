@@ -6,7 +6,6 @@
   "grumpy.dialogue.main/5": "Feeling any misery today?",
   "grumpy.dialogue.main/6": "What's the matter, %1$s?",
   "grumpy.dialogue.main/7": "Babbling with %supporter%, next thing I know, he's zombie chow. Said he was fine—pah! Guess what? Saw a zombie twin of %supporter% shambling about today!",
-
   "grumpy.dialogue.rumors.failed/1": "Bah, rumors? Pfft, not a whisper to spare.",
   "grumpy.dialogue.rumors.lore/1": "Even with Jax getting his due, more folks are bending the knee to Sirben. His mouthpieces, MerlinWolfGames and Crow, won't shut up about him.",
   "grumpy.dialogue.rumors.lore/2": "Those blasted Cyberdemons thought they could waltz in here through Portals. Took Sirben and Luke to kick 'em back to wherever they crawled from.",
@@ -14,14 +13,12 @@
   "grumpy.dialogue.rumors.lore/4": "MerlinWolfGames put up a shrine for Sirben. Everyone calls it a wonder, but it's just a pile of rocks to me.",
   "grumpy.dialogue.rumors.lore/5": "There was a tribe of master builders long ago. They've up and vanished, like they knew when to quit.",
   "grumpy.dialogue.rumors.lore/6": "You going on about the ancient builders' legends too? The ones who left their junk scattered across the Overworld?",
-
   "grumpy.dialogue.first.generic/1": "Hmph, you don't look familiar. I suppose you can come in.",
   "grumpy.dialogue.first.generic/2": "Great, another tourist. Don't expect a parade or anything.",
   "grumpy.dialogue.first.generic/3": "A new face, huh? Big deal. Well, don't cause any trouble.",
   "grumpy.dialogue.first.generic/4": "So, you've stumbled into our village, eh? Don't go prying into our business.",
   "grumpy.dialogue.first.generic/5": "Travelers are rare... and you better not be a bother while you're here!",
   "grumpy.dialogue.first.generic/6": "Oh, look, a newcomer. Just keep out of my way, got it?",
-
   "grumpy.dialogue.first.question/1": "Oh great, another wanderer. What's your business in our village?",
   "grumpy.dialogue.first.question/2": "Hmph, someone new, huh? What stroke of misfortune guided you to this place?",
   "grumpy.dialogue.first.question/3": "What now, did you get lost on an adventure or something? How'd you end up here?",
@@ -38,7 +35,6 @@
   "grumpy.dialogue.first.spent_night.failed/1": "Don't go looking for an inn; we wouldn't know the first thing about building one.",
   "grumpy.dialogue.first.spent_night.failed/2": "No inn here, and frankly, I'm not shedding any tears over it.",
   "grumpy.dialogue.first.spent_night.failed/3": "Another village might have an inn; we certainly don't bother with such luxuries.",
-
   "grumpy.dialogue.hug.success/1": "Well, look who finally decided to show up.",
   "grumpy.dialogue.hug.success/2": "Hmph. That was... surprisingly not terrible.",
   "grumpy.dialogue.hug.success/3": "Great. Finally, something doesn't completely disappoint.",
@@ -52,7 +48,6 @@
   "grumpy.dialogue.hug.fail/5": "You really think you've earned a hug after that stunt?",
   "grumpy.dialogue.hug.fail/6": "Yuck, touch me not with those plague-ridden paws!",
   "grumpy.dialogue.hug.fail/7": "Hmph, I suppose I should say thanks... shouldn't I?",
-
   "grumpy.dialogue.kiss.success/1": "I suppose this moment isn't the worst.",
   "grumpy.dialogue.kiss.success/2": "Don't get any ideas, but... I might tolerate you.",
   "grumpy.dialogue.kiss.success/3": "Hmph, almost as good as my pumpkin pie.",
@@ -65,7 +60,6 @@
   "grumpy.dialogue.kiss.fail/4": "Ever heard of mint? Use it!",
   "grumpy.dialogue.kiss.fail/5": "Was that an attempt at gratitude?",
   "grumpy.dialogue.kiss.fail/6": "Unhand me, you brute!",
-
   "grumpy.dialogue.chat.success/1": "Ugh, I could begrudgingly go for some cookies and milk, I guess.",
   "grumpy.dialogue.chat.success/2": "Fine, the weather's decent, if you're into that sort of thing.",
   "grumpy.dialogue.chat.success/3": "I'm alive, aren't I? Stubbed my toe first thing in the morning, too.",
@@ -106,7 +100,6 @@
   "grumpy.dialogue.chat.fail/19": "Even a pig's behind is more engaging than you.",
   "grumpy.dialogue.chat.fail/20": "Done flapping your gums?",
   "grumpy.dialogue.chat.fail/21": "Round earth? Next, you'll tell me the Nether is real.",
-
   "grumpy.dialogue.story.success/1": "Seriously? I'm having a hard time swallowing that tale.",
   "grumpy.dialogue.story.success/2": "I'd rather not get blown up, unlike some foolhardy adventurers.",
   "grumpy.dialogue.story.success/3": "That's quite the yarn you've spun. Did you make it up yourself?",
@@ -126,7 +119,6 @@
   "grumpy.dialogue.story.fail/8": "That was as dull as a blunt pickaxe.",
   "grumpy.dialogue.story.fail/9": "You've lost your marbles, and they're not coming back!",
   "grumpy.dialogue.story.fail/10": "Good? That was as far from good as the End is from here.",
-
   "grumpy.dialogue.flirt.success/1": "Hmph, guess you've got a bit of courage in you.",
   "grumpy.dialogue.flirt.success/2": "Tch, cut it out already, your charm's a nuisance.",
   "grumpy.dialogue.flirt.success/3": "*Grumbles* Are you serious right now?",
@@ -141,7 +133,6 @@
   "grumpy.dialogue.flirt.fail/5": "Even an enderman would snub you.",
   "grumpy.dialogue.flirt.fail/6": "Absolutely not. End of discussion.",
   "grumpy.dialogue.flirt.fail/7": "Take your eyes off me and keep your words to yourself.",
-
   "grumpy.dialogue.joke.creative.success/1": "*Chuckles* I guess that's somewhat amusing.",
   "grumpy.dialogue.joke.creative.success/2": "Hmph, mildly amusing, I suppose.",
   "grumpy.dialogue.joke.creative.success/3": "Eh, that's the most entertainment I've had in a while.",
@@ -158,10 +149,8 @@
   "grumpy.dialogue.joke.creative.failed/6": "I've heard stone slabs crack better jokes.",
   "grumpy.dialogue.joke.creative.failed/7": "Please, spare me your humor. It's more tragic than comic.",
   "grumpy.dialogue.joke.creative.failed/8": "I've seen creepers with better punchlines.",
-
   "grumpy.dialogue.procreate_engaged/1": "I'm not budging an inch on this till we've tied the knot, got it?",
   "grumpy.dialogue.procreate_engaged/2": "Bringing a kid into the mix without a solid commitment? Not happening.",
-
   "grumpy.dialogue.shake_hand.success/1": "Not bad for a handshake, I guess.",
   "grumpy.dialogue.shake_hand.success/2": "That grip's stronger than it looks, huh.",
   "grumpy.dialogue.shake_hand.success/3": "Oh, look at you, the epitome of manners.",
@@ -172,7 +161,6 @@
   "grumpy.dialogue.shake_hand.fail/3": "Cut the courtesy, we're practically family here.",
   "grumpy.dialogue.shake_hand.fail/4": "A handshake, now? That's out of character for you.",
   "grumpy.dialogue.shake_hand.fail/5": "Scram, I'm not interested.",
-
   "grumpy.dialogue.main.morning/1": "Hmpf.",
   "grumpy.dialogue.main.morning/2": "It's so sunny my eyes are gonna burn.",
   "grumpy.dialogue.main.morning/3": "What? It's a beautiful day? To you, maybe.",
@@ -203,12 +191,10 @@
   "grumpy.dialogue.main.night/8": "I'm beat. This day's been dragging on forever. Might just laze about tomorrow.",
   "grumpy.dialogue.main.night/9": "I'm itching to crawl under my blankets and forget the world.",
   "grumpy.dialogue.main.night/10": "Off to bed with you. Got a busy day ahead, or so they say.",
-
   "grumpy.dialogue.greet.mayor/1": "What's good about it, Mayor?",
   "grumpy.dialogue.greet.mayor/2": "Try to enjoy it, Mayor... if you can.",
   "grumpy.dialogue.greet.monarch/1": "Oh, it's you, Your Majesty.",
   "grumpy.dialogue.greet.monarch/2": "What now, Your Highness?",
-
   "grumpy.dialogue.busy/1": "Enough chit-chat, I've got things to do, scram!",
   "grumpy.dialogue.busy/2": "What is this, a social club? Get lost, I've got a deadline tonight!",
   "grumpy.dialogue.busy/3": "Can't you see I'm swamped? Leave me be, we'll gab some other time.",
@@ -219,7 +205,6 @@
   "grumpy.dialogue.goaway/3": "Not a good time, %1$s, shove off.",
   "grumpy.dialogue.goaway/4": "Pester someone else, I'm busy!",
   "grumpy.dialogue.goaway/5": "Out of my sight, you nattering nabob!",
-
   "grumpy.dialogue.greet/1": "Oh, it's you again. What is it?",
   "grumpy.dialogue.greet/2": "Hmph, %1$s, what's your business here?",
   "grumpy.dialogue.greet/3": "Ugh, what's the matter this time?",
@@ -229,13 +214,11 @@
   "grumpy.dialogue.greet/7": "Oh, great. You again!",
   "grumpy.dialogue.greet/8": "You're back huh? What do you want today?",
   "grumpy.dialogue.greet/9": "Hey. Didn't expect to see you back so soon.",
-
   "grumpy.dialogue.greet.negative/1": "Ugh, why must you haunt my doorstep? Scram!",
   "grumpy.dialogue.greet.negative/2": "Ah, what a misfortune. You've returned.",
   "grumpy.dialogue.greet.negative/3": "Hmph.",
   "grumpy.dialogue.greet.negative/4": "Oh, it's you. Thought it might be someone important.",
   "grumpy.dialogue.greet.negative/5": "What now, come to pester me some more?",
-
   "grumpy.dialogue.greet.success/1": "Hmph, I guess that's alright then.",
   "grumpy.dialogue.greet.success/2": "You're doing well? Must be nice.",
   "grumpy.dialogue.greet.success/3": "Oh, joyous news, I suppose.",
@@ -246,7 +229,6 @@
   "grumpy.dialogue.greet.fail/3": "Eh, what's it to me?",
   "grumpy.dialogue.greet.fail/4": "Sure, that's... fascinating.",
   "grumpy.dialogue.greet.fail/5": "Great, now what?",
-
   "grumpy.dialogue.apologize.success/1": "Ugh, whatever, just don't make a habit of it.",
   "grumpy.dialogue.apologize.success/2": "Fine, but keep your eyes open next time, will ya?",
   "grumpy.dialogue.apologize.success/3": "Alright, I suppose, but tread carefully, you hear?",
@@ -257,7 +239,6 @@
   "grumpy.dialogue.apologize.fail/3": "Ha! You think I was born yesterday?!",
   "grumpy.dialogue.apologize.fail/4": "Ouch! Save your breath, apology not accepted!",
   "grumpy.dialogue.apologize.fail/5": "Dream on, that apology won't cut it!",
-
   "grumpy.dialogue.location.failed/1": "Bah, don't bother me with that, I've heard zip.",
   "grumpy.dialogue.location.failed/2": "Pfft, nope, not a single place worth mentioning, so stop asking.",
   "grumpy.dialogue.location.failed/3": "Think I have time to know such things? Nope, there's crops to tend, not monsters to chase.",
@@ -305,7 +286,6 @@
   "grumpy.dialogue.location.ancient_city/0": "I've been hearing some strange rumbles at %2$s, probably just some pesky bats.",
   "grumpy.dialogue.location.ancient_city/1": "Rumor has it there's some old junk buried underneath %2$s.",
   "grumpy.dialogue.location.ancient_city/3": "They babble on about an ancient city at %2$s. Bunch of hogwash if you ask me, never spotted a brick.",
-
   "grumpy.dialogue.joke.monster.success/1": "Humph! That bonebag had it coming.",
   "grumpy.dialogue.joke.monster.success/2": "Can you believe it? A zombie with a shovel? That's rich!",
   "grumpy.dialogue.joke.monster.success/3": "Ha! You squashed that bug good!",
@@ -316,7 +296,6 @@
   "grumpy.dialogue.joke.monster.failed/3": "Remember, zombies and skeletons were someone's family once. Show a little decency.",
   "grumpy.dialogue.joke.monster.failed/4": "An enderman in water, huh? Yeah, I'm dying of laughter over here.",
   "grumpy.dialogue.joke.monster.failed/5": "Silverfish toilet ambushes are your idea of humor? I've got a pair of nickels that says it's not even that original.",
-
   "grumpy.dialogue.joke.animal.success/1": "Tough luck for the sheep, but I got a chuckle out of it, begrudgingly.",
   "grumpy.dialogue.joke.animal.success/2": "And then, would you believe it, the wolf's got a thing for the sheep!",
   "grumpy.dialogue.joke.animal.success/3": "What a riot! Chickens? Accomplishing that? Ridiculous!",
@@ -327,12 +306,10 @@
   "grumpy.dialogue.joke.animal.failed/3": "Watch your mouth about my pig, will you?",
   "grumpy.dialogue.joke.animal.failed/4": "That's just tasteless.",
   "grumpy.dialogue.joke.animal.failed/5": "Lay off the cow's eyebrows, it's not amusing.",
-
   "grumpy.dialogue.flirt.slap/1": "Watch it, buster!",
   "grumpy.dialogue.flirt.slap/2": "What, you learn romance from a Creeper?",
   "grumpy.dialogue.kiss.slap/1": "The nerve of some people!",
   "grumpy.dialogue.kiss.slap/2": "Do that once more and you'll regret it, I swear on my carrots!",
-
   "grumpy.dialogue.chat.plains/1": "The plains? Meh, they're alright, I guess. Haven't bothered with anywhere else. Might drag myself out eventually...",
   "grumpy.dialogue.chat.plains/2": "Sure, it's quiet on the plains. Not that I'd enjoy the racket elsewhere, but a little excitement wouldn't kill me.",
   "grumpy.dialogue.chat.plains/3": "Occasionally, the plains at night aren't too terrible to gaze upon... if you're into that sort of thing.",
@@ -375,14 +352,12 @@
   "grumpy.dialogue.chat.desert/8": "Living with husks is a nightmare. They pack a punch that turns your stomach inside out, the nuisances.",
   "grumpy.dialogue.chat.desert/9": "Stumbled into a cactus again. This place is a minefield!",
   "grumpy.dialogue.chat.desert/10": "Surviving in this arid wasteland is a daily battle, but thankfully, we",
-
   "grumpy.dialogue.story.exploring.success/1": "Hmph, maybe I'll wander off too, if I ever get a break from this place.",
   "grumpy.dialogue.story.exploring.success/2": "Great, another wanderer's tales. Must be nice, while I'm stuck here with the same old faces.",
   "grumpy.dialogue.story.exploring.success/3": "Brave or just plain foolish, I guess you've got guts to trek into the unknown.",
   "grumpy.dialogue.story.exploring.fail/1": "Heard it all before, spare me the repeat.",
   "grumpy.dialogue.story.exploring.fail/2": "Careful now, wouldn’t want you to nick yourself on all that grit.",
   "grumpy.dialogue.story.exploring.fail/3": "It seems like every time we go on an adventure together, you manage to find new and impressive ways to mess things up. It's almost impressive how consistently you fail.",
-
   "grumpy.dialogue.story.nether.success/1": "Blazes, is it always that scorching in the Nether, or what?!",
   "grumpy.dialogue.story.nether.success/2": "Hmph, I'm surprised you made it back from that deathtrap. Guess you're tougher than you look.",
   "grumpy.dialogue.story.nether.success/3": "They say there's a fortune to be had in the Nether for the daring... Not that I'd bother with such a fool's errand.",
@@ -393,17 +368,14 @@
   "grumpy.dialogue.story.nether.fail/3": "Spare me your Nether tales, they're as dull as dirt.",
   "grumpy.dialogue.story.nether.fail/4": "The Nether, really? You couldn't swing a pickaxe without a creeper going boo!",
   "grumpy.dialogue.story.nether.fail/5": "Grandpa was a Nether veteran, and what's this nonsense about warped fungus? Pull the other one!",
-
   "grumpy.dialogue.story.enderdragon.success/1": "Unbelievable! So, you got the dragon egg or what?",
   "grumpy.dialogue.story.enderdragon.success/2": "What's this I hear? You went and slayed the legendary dragon, huh? Bet the villagers won't shut up about it for ages.",
   "grumpy.dialogue.story.enderdragon.fail/1": "Pfft, have you been hit on the head? That ender dragon's a fairy tale.",
   "grumpy.dialogue.story.enderdragon.fail/2": "Are you pulling my leg? A mere mortal wounding that beast? Madness!",
-
   "grumpy.dialogue.story.wither.success/1": "Unbelievable! That Wither's a one-way ticket to mayhem and ruin!",
   "grumpy.dialogue.story.wither.success/2": "You whipped the Wither? You're pullin' my leg! That's absurd!",
   "grumpy.dialogue.story.wither.fail/1": "Pull the other one, I wasn't born yesterday.",
   "grumpy.dialogue.story.wither.fail/2": "Hah, you're hardly a scratch on you – expect me to buy that tale?",
-
   "grumpy.dialogue.stay.fail/1": "Hmph, I'd rather wander the wilds than stay put.",
   "grumpy.dialogue.stay.fail/2": "Appreciate the offer, but I've got a world to see, not a village to sit in!",
   "grumpy.dialogue.stay.fail/3": "This place ain't bad, but I'm not the type to laze around in one spot.",
@@ -413,14 +385,12 @@
   "grumpy.dialogue.stay.success/2": "Great, just what I wanted, to linger in this village.",
   "grumpy.dialogue.stay.no_space/1": "Hmph, what's this? A sardine can? No room to swing a pickaxe here.",
   "grumpy.dialogue.stay.no_space/2": "I'd ponder settling down, but it looks like every bed's been claimed.",
-
   "grumpy.dialogue.hire/1": "Fine, summon me when there's work to do. But remember, I'm only sticking around as long as the coin's good.",
   "grumpy.dialogue.hire/2": "Yeah, yeah, give a shout when it's time to toil. Just make sure my pockets jingle with emeralds.",
   "grumpy.dialogue.hire/3": "Okay, I'll lend a hand. But I better see those emeralds shining, or I'm off!",
   "grumpy.dialogue.no_money/1": "Don't bother, you can't afford me without more emeralds!",
   "grumpy.dialogue.no_money/2": "What's this, a joke? Scrape together more emeralds, then we'll talk!",
   "grumpy.dialogue.no_money/3": "Don't insult me! Scrounge up some more emeralds if you actually want my help.",
-
   "grumpy.dialogue.main.rock_paper_scissor/1": "Engage in that hand clash game, if you must.",
   "grumpy.dialogue.rock_paper_scissor/1": "Stone, parchment, shears, now!",
   "grumpy.dialogue.rock_paper_scissor/2": "Prepare to lose this round, you will!",

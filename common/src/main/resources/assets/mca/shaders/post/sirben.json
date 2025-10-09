@@ -11,11 +11,11 @@
       "uniforms": [
         {
           "name": "BlurDir",
-          "values": [ 1.0, 0.0 ]
+          "values": [1.0, 0.0]
         },
         {
           "name": "Radius",
-          "values": [ 100.0 ]
+          "values": [100.0]
         }
       ]
     },
@@ -26,11 +26,11 @@
       "uniforms": [
         {
           "name": "BlurDir",
-          "values": [ 0.0, 1.0 ]
+          "values": [0.0, 1.0]
         },
         {
           "name": "Radius",
-          "values": [ 100.0 ]
+          "values": [100.0]
         }
       ]
     },
@@ -41,7 +41,7 @@
       "uniforms": [
         {
           "name": "ColorModulate",
-          "values": [ 1.0, 0.5, 0.5, 1.0 ]
+          "values": [1.0, 0.5, 0.5, 1.0]
         }
       ]
     }

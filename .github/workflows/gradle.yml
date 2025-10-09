@@ -5,6 +5,8 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
+      MODRINTH_ID: "1W98a849"
+      CURSEFORGE_ID: "535291"
       MODRINTH_TOKEN: ${{ secrets.MR_API_TOKEN }}
       CURSEFORGE_TOKEN: ${{ secrets.CF_API_TOKEN }}
       MAVEN_USERNAME: ${{ secrets.MAVEN_USERNAME }}
@@ -12,19 +14,17 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/')
     steps:
       - name: Checkout Commit
-        uses: actions/checkout@v3
+        uses: actions/checkout@v2
       - name: Fetch Tags
         run: git fetch --unshallow --tags
-      - name: Set up JDK 17
+      - name: Set up JDK 21
         uses: actions/setup-java@v1
         with:
-          java-version: 17
+          java-version: 21
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
-      - name: Build Artifacts with Gradle
+      - name: Build with Gradle
         run: ./gradlew build
-      - name: Publish to Maven
-        run: ./gradlew publish
       - name: Get tag
         if: ${{ success() && startsWith(github.ref, 'refs/tags/') }}
         id: tag
@@ -34,33 +34,47 @@ jobs:
         with:
           separator: "+"
           msg: ${{steps.tag.outputs.tag}}
-      - name: "Upload to Distributors"
+      - name: "Upload Fabric"
         uses: Kir-Antipov/mc-publish@v3.3.0
         if: ${{ success() && startsWith(github.ref, 'refs/tags/') }}
         with:
-          modrinth-id: 1W98a849
+          modrinth-id: ${{ env.MODRINTH_ID }}
           modrinth-token: ${{ env.MODRINTH_TOKEN }}
-          curseforge-id: 535291
+          curseforge-id: ${{ env.CURSEFORGE_ID }}
           curseforge-token: ${{ env.CURSEFORGE_TOKEN }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-          name: "[Universal ${{steps.split.outputs._1}}] MCA Reborn - ${{steps.split.outputs._0}}"
+          name: "[Fabric ${{steps.split.outputs._1}}] Immersive Furniture - ${{steps.split.outputs._0}}"
           changelog-file: changelog.md
           version-type: release
-          files: build/libs/*-@(universal).jar
+          files: "fabric/build/libs/immersive_furniture-fabric-${{steps.tag.outputs.tag}}.jar"
           loaders: |
             fabric
-            forge
-            quilt
           game-versions: |
             ${{steps.split.outputs._1}}
           java: |
-            Java 17
-          dependencies: |
-            architectury-api | depends | *
-            fabric-api | recommends | *
-            qsl | recommends | *
+            Java 21
 
-          retry-attempts: 2
-          retry-delay: 10000
+          fail-mode: skip
+      - name: "Upload NeoForge"
+        uses: Kir-Antipov/mc-publish@v3.3.0
+        if: ${{ success() && startsWith(github.ref, 'refs/tags/') }}
+        with:
+          modrinth-id: ${{ env.MODRINTH_ID }}
+          modrinth-token: ${{ env.MODRINTH_TOKEN }}
+          curseforge-id: ${{ env.CURSEFORGE_ID }}
+          curseforge-token: ${{ env.CURSEFORGE_TOKEN }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+          name: "[NeoForge ${{steps.split.outputs._1}}] Immersive Furniture - ${{steps.split.outputs._0}}"
+          changelog-file: changelog.md
+          version-type: release
+          files: "neoforge/build/libs/immersive_furniture-neoforge-${{steps.tag.outputs.tag}}.jar"
+          loaders: |
+            neoforge
+          game-versions: |
+            ${{steps.split.outputs._1}}
+          java: |
+            Java 21
+
           fail-mode: skip

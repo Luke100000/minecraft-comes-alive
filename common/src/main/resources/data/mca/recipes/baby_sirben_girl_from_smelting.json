@@ -1,9 +1,0 @@
-{
-  "type": "minecraft:smelting",
-  "ingredient": {
-    "item": "mca:sirben_baby_girl"
-  },
-  "result": "minecraft:charcoal",
-  "experience": 0.18,
-  "cookingtime": 200
-}

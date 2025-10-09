@@ -1,0 +1,26 @@
+{
+  "display": {
+    "title": {
+      "translate": "advancement.mca.ancient_cultists"
+    },
+    "description": {
+      "translate": "advancement.mca.ancient_cultists.description"
+    },
+    "icon": {
+      "id": "mca:book_cult_ancient"
+    },
+    "frame": "challenge",
+    "show_toast": true,
+    "announce_to_chat": true,
+    "hidden": false
+  },
+  "parent": "mca:root",
+  "criteria": {
+    "baby": {
+      "trigger": "mca:generic_event",
+      "conditions": {
+        "event": "ancient_cultists"
+      }
+    }
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "C": {
+      "item": "minecraft:brown_carpet"
+    },
+    "F": {
+      "item": "minecraft:cherry_fence"
+    },
+    "P": {
+      "item": "minecraft:cherry_planks"
+    }
+  },
+  "pattern": [
+    "F F",
+    "FCF",
+    "PPP"
+  ],
+  "result": {
+    "id": "mca:brown_cherry_crib"
+  },
+  "show_notification": true
+}

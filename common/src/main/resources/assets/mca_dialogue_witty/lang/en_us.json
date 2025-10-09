@@ -6,7 +6,6 @@
   "witty.dialogue.main/5": "How's the world treating you today, my fine fellow?",
   "witty.dialogue.main/6": "Hey there, %1$s! What's the latest gossip in the village?",
   "witty.dialogue.main/7": "You won't believe the crazy tale I have for you! So, picture this",
-
   "witty.dialogue.rumors.failed/1": "Hmm, my dear, I'm afraid I haven't stumbled upon any juicy tidbits lately. My ears have been rather disappointed by the lack of scandalous whispers.",
   "witty.dialogue.rumors.lore/1": "It's all the rage these days, everyone's going nuts for Sirben! His loyal prophets, MerlinWolfGames and Crow, are out there spreading his divine teachings.",
   "witty.dialogue.rumors.lore/2": "Can you believe it? Those pesky Cyberdemons thought they could invade us through their fancy Portals. Well, guess what? Sirben and Luke teamed up and put a stop to the whole invasion shenanigans!",
@@ -14,14 +13,12 @@
   "witty.dialogue.rumors.lore/4": "You know, our very own MerlinWolfGames has gone above and beyond for Sirben's glory. That guy went ahead and built a jaw-dropping temple dedicated to the mighty Sirben himself. It's like one of those ancient wonders you read about!",
   "witty.dialogue.rumors.lore/5": "Ah, those were the days, my friend. We had this super advanced race of builders roaming around, crafting awe-inspiring structures left and right. But alas, they vanished into thin air. It's like they pulled a magical disappearing act on us!",
   "witty.dialogue.rumors.lore/6": "Gather 'round, folks, and let me tell you the tales of the legendary ancient builders. They were like the rockstars of the Overworld, leaving behind magnificent ruins and temples that still boggle the mind! It's like they sprinkled their genius all over our realm.",
-
   "witty.dialogue.first.generic/1": "Well, look who decided to grace us with their presence! Welcome to the village, stranger. Prepare to be amazed.",
   "witty.dialogue.first.generic/2": "Ah, greetings, mysterious wanderer! What brings you to our humble village? Perhaps tales of adventure and excitement?",
   "witty.dialogue.first.generic/3": "Well, well, well. A fresh face enters the scene. Brace yourself for the awe and wonder that awaits you in our village.",
   "witty.dialogue.first.generic/4": "Huzzah! Behold, a newcomer has arrived! Pray tell, dear traveler, what tales of triumph and intrigue have you brought with you?",
   "witty.dialogue.first.generic/5": "Well, well, well. If it isn't our lucky day! A wayfaring soul has stumbled upon our village. Prepare for a delightful journey, my friend.",
   "witty.dialogue.first.generic/6": "Greetings, esteemed traveler! You have found your way to our humble abode. Prepare yourself for the warmest of welcomes and the grandest of adventures.",
-
   "witty.dialogue.first.question/1": "Well, well, well. Look who decided to grace us with their presence. What brings you to this humble village?",
   "witty.dialogue.first.question/2": "Well, aren't you a breath of fresh air! What thrilling escapades have led you to our little corner of the world?",
   "witty.dialogue.first.question/3": "Goodness gracious, we've got ourselves an adventurer! Pray tell, my curious soul, how did you manage to find your way here?",
@@ -38,7 +35,6 @@
   "witty.dialogue.first.spent_night.failed/1": "Ha! An inn? Building one would require more brain cells than our entire village combined!",
   "witty.dialogue.first.spent_night.failed/2": "Nope, sorry! You won't find an inn here, but hey, at least we're good at something... or not.",
   "witty.dialogue.first.spent_night.failed/3": "Hah! You're better off searching for an inn in another village. We've got zero expertise in hospitality. Well, we've got zero expertise in a lot of things, really. But hey, good luck!",
-
   "witty.dialogue.hug.success/1": "Well, well, well, if it isn't my long-lost buddy!",
   "witty.dialogue.hug.success/2": "Ah, just what the doctor ordered! You've got healing hugs, my friend.",
   "witty.dialogue.hug.success/3": "Well, isn't this the highlight of my day! A hug that shines brighter than the sun!",
@@ -52,7 +48,6 @@
   "witty.dialogue.hug.fail/5": "Frankly speaking, a hug from you is about as appealing as a squashed creeper.",
   "witty.dialogue.hug.fail/6": "Ugh, no offense, but your germ game is strong. Keep that hug to yourself!",
   "witty.dialogue.hug.fail/7": "Oh, umm... well, isn't this a... \"creative\" way of expressing gratitude? Sure, you're welcome... I guess?",
-
   "witty.dialogue.kiss.success/1": "I'm telling you, this moment is pure magic!",
   "witty.dialogue.kiss.success/2": "My taste buds are dancing with joy, just like at a pumpkin pie feast!",
   "witty.dialogue.kiss.success/3": "Honey? No, no, you're more like a delectable dessert, a delicacy!",
@@ -65,7 +60,6 @@
   "witty.dialogue.kiss.fail/4": "Let me clue you in on a little secret",
   "witty.dialogue.kiss.fail/5": "Well, thanks... I guess? But you've got a looong way to go.",
   "witty.dialogue.kiss.fail/6": "Get off me, you amateur! Can't handle a proper kiss, huh?",
-
   "witty.dialogue.chat.success/1": "Oh man, cookies and milk are practically singing a siren song to my taste buds right now.",
   "witty.dialogue.chat.success/2": "Ah, the weather, it's quite pleasant today, wouldn't you agree? Not that I expect you to have the same impeccable sense of style as me.",
   "witty.dialogue.chat.success/3": "Well, I'm doing alright, despite the fact that I managed to stub my toe within seconds of waking up. I swear, I have a talent for attracting clumsiness.",
@@ -106,7 +100,6 @@
   "witty.dialogue.chat.fail/19": "I'd take pleasure in contemplating a pig's behind rather than engage in conversation with you.",
   "witty.dialogue.chat.fail/20": "So, are you finally done gracing me with your mind-numbing dialogue?",
   "witty.dialogue.chat.fail/21": "Wait, you actually believe the Earth is round? How quaint. Do tell me more about your spherical fantasies.",
-
   "witty.dialogue.story.success/1": "Seriously? That's like the most epic tale I've ever heard!",
   "witty.dialogue.story.success/2": "If only I had the guts to face a creeper. You're braver than a knight!",
   "witty.dialogue.story.success/3": "Wow, that story was top-notch! Did you hire a team of writers for that masterpiece?",
@@ -126,7 +119,6 @@
   "witty.dialogue.story.fail/8": "Oh, how utterly mundane and unexciting. I can feel my eyelids growing heavier with each passing word.",
   "witty.dialogue.story.fail/9": "My, my, you seem to be teetering on the edge of sanity. But alas, not in the charming, eccentric way. More like the \"lock them up\" variety.",
   "witty.dialogue.story.fail/10": "I must confess, my good sir, I fail to see any glimmer of brilliance in that particular endeavor of yours. Perhaps it's hidden beneath layers of mediocrity? I doubt it.",
-
   "witty.dialogue.flirt.success/1": "Wow, you're like a superhero or something!",
   "witty.dialogue.flirt.success/2": "Oh, stop it! You're making my heart skip a beat with your cuteness!",
   "witty.dialogue.flirt.success/3": "*Giggles* Are you serious? Because, seriously, you're melting my heart right now.",
@@ -141,7 +133,6 @@
   "witty.dialogue.flirt.fail/5": "You know what's more likely? A creeper exploding in your face. And trust me, that's not a pleasant experience.",
   "witty.dialogue.flirt.fail/6": "Nope. Not even once. I'd rather endure a thousand nights in a zombie-infested village than entertain the thought of being with you.",
   "witty.dialogue.flirt.fail/7": "Stop giving me that puppy-dog look and learn this lesson",
-
   "witty.dialogue.joke.creative.success/1": "*Chuckles* Oh, you never fail to tickle my funny bone!",
   "witty.dialogue.joke.creative.success/2": "Hah! You've got quite the sense of humor!",
   "witty.dialogue.joke.creative.success/3": "That's comedy gold, my friend! Pure genius!",
@@ -158,10 +149,8 @@
   "witty.dialogue.joke.creative.failed/6": "Oh, my sides! Oh wait, no, they're not hurting at all. That was sarcasm, my friend.",
   "witty.dialogue.joke.creative.failed/7": "Can someone call a comedy doctor? Because that joke needs some serious resuscitation.",
   "witty.dialogue.joke.creative.failed/8": "You know, even a zombie with brain rot could come up with a better joke than that. And they don't even have brains!",
-
   "witty.dialogue.procreate_engaged/1": "Ah, my dear, I eagerly await the day when we can exchange vows and embark on the grand adventure called marriage. Only then shall my heart truly find solace.",
   "witty.dialogue.procreate_engaged/2": "Oh, darling, why rush into bringing forth new life when we haven't even fully embraced the sanctity of our love? Let's savor the journey of commitment before diving into the depths of parenthood. It's all about building a rock-solid foundation, you know?",
-
   "witty.dialogue.shake_hand.success/1": "My oh my, you've got a grip that could make even Hercules blush!",
   "witty.dialogue.shake_hand.success/2": "Your firm handshake tells me you could probably crush rocks with those hands!",
   "witty.dialogue.shake_hand.success/3": "Oh, look at you, being all courteous and proper! How positively delightful!",
@@ -172,7 +161,6 @@
   "witty.dialogue.shake_hand.fail/3": "Don't worry, I'm not some random villager you need to impress. You can save your politeness for someone else.",
   "witty.dialogue.shake_hand.fail/4": "Well, well, well, look who decided to ditch their usual rude self. I'm impressed, or maybe just shocked.",
   "witty.dialogue.shake_hand.fail/5": "Oh, you want me to go away? How unexpected! I thought you enjoyed my presence as much as a creeper explosion.",
-
   "witty.dialogue.main.morning/1": "Top o' the mornin' to ya!",
   "witty.dialogue.main.morning/2": "G'mornin', ready to put those muscles to work today?",
   "witty.dialogue.main.morning/3": "Ugh, still half asleep. And you?",
@@ -203,12 +191,10 @@
   "witty.dialogue.main.night/8": "7. Fatigue is slowly creeping in, my friend. Perhaps tomorrow calls for a lighter workload and some much-needed rest.",
   "witty.dialogue.main.night/9": "8. Oh, the anticipation of crawling under warm covers and drifting into a blissful slumber. Pure bliss!",
   "witty.dialogue.main.night/10": "9. Sleep beckons, my dear. Rumor has it that tomorrow holds great adventures for you.",
-
   "witty.dialogue.greet.mayor/1": "Greetings and salutations, esteemed Mayor!",
   "witty.dialogue.greet.mayor/2": "Wishing you a magnificent day, Mayor!",
   "witty.dialogue.greet.monarch/1": "Ah, behold! The one and only, Your Majesty.",
   "witty.dialogue.greet.monarch/2": "Greetings, Your Highness! Prepare for the presence of true royalty.",
-
   "witty.dialogue.busy/1": "Hey, I've already given you my daily dose of village gossip. Time for me to put my nose back on the grindstone.",
   "witty.dialogue.busy/2": "Oh, sweetie, as much as I adore our little chats, duty calls and I must conquer this workload before the sun sets.",
   "witty.dialogue.busy/3": "My apologies, darling, but my plate is currently overflowing with tasks. Shall we catch up when I'm not juggling like a circus performer?",
@@ -219,7 +205,6 @@
   "witty.dialogue.goaway/3": "Oh, sorry, but I'm currently occupied with important things. Can't spare a moment for ya, %1$s.",
   "witty.dialogue.goaway/4": "Hey, why don't you go pester someone who actually cares? I'm not interested in your antics.",
   "witty.dialogue.goaway/5": "Haha, nice try, you mere mortal. My patience for your presence has run out. Begone, heathen!",
-
   "witty.dialogue.greet/1": "Hey there, superstar! How's the world spinning for you today?",
   "witty.dialogue.greet/2": "Well, hello there, %1$s! Any exciting tales to share?",
   "witty.dialogue.greet/3": "Oh, hello there, inquisitive one! What brings you to my humble abode?",
@@ -229,13 +214,11 @@
   "witty.dialogue.greet/7": "Ah, it's you! The pleasure of your company is always welcome.",
   "witty.dialogue.greet/8": "Hello, hello! Delightful to lay eyes upon you. How fares your existence today?",
   "witty.dialogue.greet/9": "Hey, hey! The sight of you brings a smile to my face. What brings you here today?",
-
   "witty.dialogue.greet.negative/1": "Yikes, you again? Please, spare me your presence!",
   "witty.dialogue.greet.negative/2": "Well, well, well, if it isn't the bearer of bad news...back for more, I suppose?",
   "witty.dialogue.greet.negative/3": "Hmm, what do we have here? Oh, it's you. How utterly thrilling.",
   "witty.dialogue.greet.negative/4": "Ah, the disappointment of the day has arrived. I was hoping for a more pleasant surprise, but alas, it's just you.",
   "witty.dialogue.greet.negative/5": "Oh joy, another visit from the chief troublemaker. What did I do to deserve this?",
-
   "witty.dialogue.greet.success/1": "That's awesome sauce, absolutely thrilled for you!",
   "witty.dialogue.greet.success/2": "Doing good? Well, that's just a slice of fantastic news!",
   "witty.dialogue.greet.success/3": "Happy to hear it! My heart's doing a little victory dance!",
@@ -246,7 +229,6 @@
   "witty.dialogue.greet.fail/3": "Well, isn't that just the bee's knees?",
   "witty.dialogue.greet.fail/4": "Well, knock me over with a feather! Is that so?",
   "witty.dialogue.greet.fail/5": "Oh, bless my soul, would you look at that...",
-
   "witty.dialogue.apologize.success/1": "Don't sweat it, we all have our moments of utter clumsiness.",
   "witty.dialogue.apologize.success/2": "Well, lucky for you, I'm feeling extra forgiving today. Just remember to avoid any more epic fails, alright?",
   "witty.dialogue.apologize.success/3": "Alright, I'll let it slide this time, but consider this your warning to never repeat your blunders again.",
@@ -257,7 +239,6 @@
   "witty.dialogue.apologize.fail/3": "Oh, you're expecting me to believe that feeble excuse? How quaint!",
   "witty.dialogue.apologize.fail/4": "Ouch! Save your pitiful apologies, for they hold no healing power!",
   "witty.dialogue.apologize.fail/5": "Hah! As if I would ever consider accepting your so-called apology!",
-
   "witty.dialogue.location.failed/1": "Well, ain't that a shame? My ears must be on vacation because I haven't caught wind of anything exciting.",
   "witty.dialogue.location.failed/2": "Oh, darlin', you've got better odds of finding a needle in a haystack than me knowing about any noteworthy locations. Sorry to burst your bubble!",
   "witty.dialogue.location.failed/3": "Bless your adventurous heart, but I'm afraid my priorities lie in more productive pursuits than tracking down perilous dungeons. So, no, no hidden treasure maps tucked away in this noggin, I'm afraid.",
@@ -305,7 +286,6 @@
   "witty.dialogue.location.ancient_city/0": "Oh, let me tell you, I was strolling around %2$s and suddenly I heard the strangest noises echoing from the depths of the earth. It was like the secrets of the ancient city were whispering to me!",
   "witty.dialogue.location.ancient_city/1": "You won't believe what I discovered while exploring %2$s. My instincts tell me that there's something extraordinary lurking far beneath the surface. I can almost feel the ancient city's presence calling out to me.",
   "witty.dialogue.location.ancient_city/3": "Legends, my dear friend, legends! They speak of an ancient city nestled within the very heart of %2$s. Although my eyes failed to catch a glimpse, I can't shake the feeling that this hidden treasure lies beneath the ground, waiting to be discovered by an adventurous soul like yourself.",
-
   "witty.dialogue.joke.monster.success/1": "Haha! That Skelly got what it deserved, served with a side of justice!",
   "witty.dialogue.joke.monster.success/2": "Are you telling me a zombie thought it could take you down with a shovel? Hahaha, what a feeble attempt!",
   "witty.dialogue.joke.monster.success/3": "The spider must've learned its lesson after crossing paths with you! Haha, you're the true boss of the block!",
@@ -316,7 +296,6 @@
   "witty.dialogue.joke.monster.failed/3": "Oh, look, another genius who forgot that zombies and skeletons were once humans. Congratulations, Captain Obvious!",
   "witty.dialogue.joke.monster.failed/4": "Did you see that enderman fall into water? Hold the front page! It's the most thrilling thing I've seen all day... not!",
   "witty.dialogue.joke.monster.failed/5": "If I had a nickel for every time someone cracked a silverfish-on-the-toilet joke, I'd have two whole nickels. Not a fortune, but enough to say \"weird coincidence, huh?\"",
-
   "witty.dialogue.joke.animal.success/1": "Oh, what a baa-d day for that sheep to misplace its wool! But hey, at least it can rock the naked look now!",
   "witty.dialogue.joke.animal.success/2": "Ah, and here comes the juicy gossip - the wolf and the sheep, a love story for the ages! Can't wait for the next episode of \"Sheep of Thrones\"!",
   "witty.dialogue.joke.animal.success/3": "You won't believe this, but chickens have secretly been taking improv classes. Yeah, they're cracking hilarious jokes now! Who knew they had such comedic talent hidden under those feathers?",
@@ -327,12 +306,10 @@
   "witty.dialogue.joke.animal.failed/3": "Hey now, watch your words! My pig might not understand, but I do, and I don't appreciate it!",
   "witty.dialogue.joke.animal.failed/4": "Haha, well played, my friend! That joke may be a bit on the questionable side, but I'll give you points for audacity!",
   "witty.dialogue.joke.animal.failed/5": "Woah there, cowboy! Making fun of a cow's eyebrows? Now that's a new one! Gotta hand it to you for originality!",
-
   "witty.dialogue.flirt.slap/1": "Well, aren't you just a precious little troublemaker!",
   "witty.dialogue.flirt.slap/2": "Is this your attempt at charming me? Oh, honey, you might need a few more lessons from the Vindicator School of Flirting!",
   "witty.dialogue.kiss.slap/1": "Oh, you've crossed the line, my friend!",
   "witty.dialogue.kiss.slap/2": "Give it another shot, and you'll be wearing a souvenir of my wrath!",
-
   "witty.dialogue.chat.plains/1": "Isn't it a bit boring here in the plains? I mean, I've never seen anything more exciting. Maybe I should sprout wings and fly away one day...",
   "witty.dialogue.chat.plains/2": "Ah, the plains, the epitome of tranquility. Even if it lacks the adrenaline rush of other biomes, I'd still choose this serene abode any day.",
   "witty.dialogue.chat.plains/3": "You know, when the moon graces the plains with its presence, it's like a symphony of beauty and peace, like nature itself is putting on a magical show just for me.",
@@ -375,14 +352,12 @@
   "witty.dialogue.chat.desert/8": "Living here means dealing with those pesky husks. They have the audacity to make you ravenous with just one whack. It's like they have a secret \"hangry\" power!",
   "witty.dialogue.chat.desert/9": "Note to self",
   "witty.dialogue.chat.desert/10": "Life in this dry desert is tough, but luckily, our village is an oasis of water and food. Who needs lush greenery when you've got a community that knows how to survive in style?",
-
   "witty.dialogue.story.exploring.success/1": "No way! I've always dreamt of going on epic adventures, charting unexplored lands, and discovering hidden treasures. It's like being the hero in my very own legend!",
   "witty.dialogue.story.exploring.success/2": "Oh, the tales you must have to tell! I can almost see you striding boldly through untamed wilderness, conquering fearsome monsters, and unraveling ancient mysteries. How I envy your thrilling escapades!",
   "witty.dialogue.story.exploring.success/3": "You, my friend, are an explorer extraordinaire! Venturing into the great unknown, facing danger with a mischievous grin, and leaving no stone unturned. I salute your courageous spirit!",
   "witty.dialogue.story.exploring.fail/1": "Your tales are more worn out than a creeper's explosion radius.",
   "witty.dialogue.story.exploring.fail/2": "Oh, look who's trying to be the king of snark. Careful not to trip on your own sarcasm, tough guy.",
   "witty.dialogue.story.exploring.fail/3": "Interacting with you is like conversing with a dreamer who hasn't quite grasped reality yet. Minus the charm, of course.",
-
   "witty.dialogue.story.nether.success/1": "Is it like, hotter than the sun there or something? I mean, I can't even handle spicy salsa, let alone the Nether.",
   "witty.dialogue.story.nether.success/2": "Whoa, surviving the Nether is like winning a game show called \"Escape the Inferno\". Congrats, you're the ultimate daredevil!",
   "witty.dialogue.story.nether.success/3": "So, rumor has it there's more treasure in the Nether than the pirates of the Caribbean could ever dream of. Too bad I'm allergic to danger, or else I'd be swimming in gold.",
@@ -393,17 +368,14 @@
   "witty.dialogue.story.nether.fail/3": "Sweetie, it doesn't matter if you've been to the Nether or not. You couldn't spin a captivating tale if your life depended on it.",
   "witty.dialogue.story.nether.fail/4": "Oh, darling, you seem as feeble as a newborn chicken. I can't imagine you surviving a minute in the treacherous Nether.",
   "witty.dialogue.story.nether.fail/5": "Bless your heart, but my dear old grandpappy knew every nook and cranny of the Nether, and he never breathed a word about warped fungus. You're stretching the truth, my friend!",
-
   "witty.dialogue.story.enderdragon.success/1": "Astonishing! Did you actually manage to snatch the legendary dragon egg?",
   "witty.dialogue.story.enderdragon.success/2": "Well, well, well! Look who slayed the fearsome dragon of lore! The village will regale your heroic tale for centuries to come!",
   "witty.dialogue.story.enderdragon.fail/1": "Ha! Are you out of your mind? The ender dragon is nothing but a fairytale.",
   "witty.dialogue.story.enderdragon.fail/2": "Oh please, spare me the jokes. That dragon is so unbeatable, it would laugh at any human's feeble attempts to harm it!",
-
   "witty.dialogue.story.wither.success/1": "Unbelievable! The Wither is like a walking disaster, but you just crushed it!",
   "witty.dialogue.story.wither.success/2": "No way! You actually defeated the Wither?! Mind officially blown!",
   "witty.dialogue.story.wither.fail/1": "Oh please, spare me the fairy tales.",
   "witty.dialogue.story.wither.fail/2": "Ha! You seem way too intact for me to buy that nonsense.",
-
   "witty.dialogue.stay.fail/1": "No way, amigo! I'm all about seeking thrills and chills, not staying stuck in this quaint village.",
   "witty.dialogue.stay.fail/2": "Appreciate the offer, buddy, but I'm a wild soul yearning for heart-pounding escapades and uncharted territories!",
   "witty.dialogue.stay.fail/3": "This village is sweet, but I've got a wanderlust that can't be contained. I'm all about living life on the edge, my friend!",
@@ -413,14 +385,12 @@
   "witty.dialogue.stay.success/2": "Marvelous! I would simply relish the opportunity to call this village my permanent abode!",
   "witty.dialogue.stay.no_space/1": "Well, well, well, looks like this village is bursting at the seams, doesn't it?",
   "witty.dialogue.stay.no_space/2": "Oh, how I long to set up shop here, but alas, every bed in this bustling village has been claimed! It's like trying to find a needle in a haystack, my friend!",
-
   "witty.dialogue.hire/1": "Alright, just give the signal when you require my extraordinary skills. I shall grace you with my presence for the duration of our financial arrangement.",
   "witty.dialogue.hire/2": "Oh, splendid! Kindly inform me of your imminent need for my unparalleled assistance. Fear not, for I shall remain here, eagerly anticipating the exchange of shimmering emeralds!",
   "witty.dialogue.hire/3": "Marvelous! I assure you, dear sir/madam, engaging my services will prove to be an absolutely delightful decision. Pray, prepare thy emeralds, for I shall be waiting with bated breath to embark on this grand endeavor of ours!",
   "witty.dialogue.no_money/1": "My dear friend, I'm afraid your emerald count is a tad bit insufficient to secure my extraordinary services.",
   "witty.dialogue.no_money/2": "Oh, dear me! It seems your emerald stash is a bit on the meager side if you wish to bask in the brilliance of my talents.",
   "witty.dialogue.no_money/3": "Ah, my good sir/madam, I must inform you that while my humble appearance may deceive, my unparalleled skills come at a price. And that price, my friend, is more emeralds than you currently possess.",
-
   "witty.dialogue.main.rock_paper_scissor/1": "Let's spice things up with a riveting round of Rock Paper Scissor! I hope you're ready for a taste of my exceptional decision-making skills!",
   "witty.dialogue.rock_paper_scissor/1": "Alright, prepare yourself for the ultimate showdown of rock, paper, scissors! Let's see who triumphs!",
   "witty.dialogue.rock_paper_scissor/2": "Brace yourself for the thrashing of a lifetime, my friend! I guarantee victory shall be mine this time!",

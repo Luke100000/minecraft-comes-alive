@@ -1,0 +1,31 @@
+{
+  "display": {
+    "title": {
+      "translate": "advancement.mca.monarch"
+    },
+    "description": {
+      "translate": "advancement.mca.monarch.description"
+    },
+    "icon": {
+      "id": "minecraft:golden_helmet"
+    },
+    "frame": "challenge",
+    "show_toast": true,
+    "announce_to_chat": true,
+    "hidden": false
+  },
+  "parent": "mca:mayor",
+  "criteria": {
+    "baby": {
+      "trigger": "mca:rank",
+      "conditions": {
+        "rank": "monarch"
+      }
+    }
+  },
+  "rewards": {
+    "loot": [
+      "mca:books/supporters"
+    ]
+  }
+}

@@ -6,7 +6,6 @@
   "athletic.dialogue.main/5": "Feeling pumped up today, huh?",
   "athletic.dialogue.main/6": "Yo, %1$s! What's the latest buzz?",
   "athletic.dialogue.main/7": "Dude, you won't believe what happened! I was out jogging with %supporter%, and out of nowhere, a zombie comes lunging at us! But don't worry, %supporter% handled it like a pro. Speaking of which, guess who I spotted in town today? Zombie lookalike %supporter%!",
-
   "athletic.dialogue.rumors.failed/1": "Well, well, well, looks like my rumor radar is showing zero activity. No news to report, sorry.",
   "athletic.dialogue.rumors.lore/1": "You won't believe it, but Jax's followers are still going strong. However, the cult of Sirben is gaining momentum, thanks to the athletic prophets MerlinWolfGames and Crow shouting his praises from the mountaintops!",
   "athletic.dialogue.rumors.lore/2": "Can you believe it? Those pesky Cyberdemons thought they could invade our peaceful realm. But fear not, Sirben and the mighty Luke swooped in and put an end to their shenanigans. Talk about an epic showdown!",
@@ -14,14 +13,12 @@
   "athletic.dialogue.rumors.lore/4": "You won't find a more dedicated athlete than MerlinWolfGames. The guy went ahead and constructed an awe-inspiring temple solely devoted to Sirben. Now that's what I call commitment to the game!",
   "athletic.dialogue.rumors.lore/5": "You know, there used to be this incredible race of builders, but they vanished into thin air. Poof! Now, all that's left are the crumbling ruins of their once majestic structures. It's like they were sprinting towards greatness and then vanished in a puff of smoke.",
   "athletic.dialogue.rumors.lore/6": "Have you heard the legends of the ancient builders? They were like the marathon runners of the Overworld, leaving behind a trail of ruins and temples that still fascinate us to this day. It's like they were on a never-ending race to create architectural wonders!",
-
   "athletic.dialogue.first.generic/1": "Hey there, newcomer! Ready to test your skills in this village?",
   "athletic.dialogue.first.generic/2": "Well, well, well, look who decided to join the action-packed village. Welcome!",
   "athletic.dialogue.first.generic/3": "Well, well, what do we have here? A fresh face ready to tackle the challenges of our village!",
   "athletic.dialogue.first.generic/4": "Prepare for the adventure of a lifetime, stranger! Welcome to our village, where the strong thrive.",
   "athletic.dialogue.first.generic/5": "It's been ages since we've had a newcomer with some true athletic spirit. Buckle up and enjoy the ride!",
   "athletic.dialogue.first.generic/6": "Greetings, brave soul! Welcome to our village, where the thrill-seekers are always welcomed with open arms.",
-
   "athletic.dialogue.first.question/1": "Greetings, wanderer! What quest hath thou embarked upon, to grace our village with thy presence?",
   "athletic.dialogue.first.question/2": "Ah, a fresh challenger appears! Pray tell, what daring exploits have led you to venture into our humble abode?",
   "athletic.dialogue.first.question/3": "By the muscles of Heracles! Art thou a true hero of the realm? Pray enlighten me, how didst thou navigate thy way to this sanctuary?",
@@ -38,7 +35,6 @@
   "athletic.dialogue.first.spent_night.failed/1": "Hey there, sorry to break it to you, but we're not exactly experts in the inn-building department. Gotta admit, we totally lack the finesse for that.",
   "athletic.dialogue.first.spent_night.failed/2": "Oh, bummer! No inn to be found in this village, my friend. Apologies for the inconvenience!",
   "athletic.dialogue.first.spent_night.failed/3": "You know what? If you're on the hunt for an inn, I'd suggest trying your luck in a different village. They might have just what you need!",
-
   "athletic.dialogue.hug.success/1": "Hey, been ages since we last crossed paths!",
   "athletic.dialogue.hug.success/2": "Thanks for that, bro! Totally needed it.",
   "athletic.dialogue.hug.success/3": "Finally, something that made my day worthwhile.",
@@ -52,7 +48,6 @@
   "athletic.dialogue.hug.fail/5": "Honestly, I can't bring myself to hug you after that embarrassing display.",
   "athletic.dialogue.hug.fail/6": "Back off, dude! Your sweat is repulsive!",
   "athletic.dialogue.hug.fail/7": "Oh, um... thanks, I guess?",
-
   "athletic.dialogue.kiss.success/1": "I could kiss you all day long, baby!",
   "athletic.dialogue.kiss.success/2": "I'm head over heels for you, babe!",
   "athletic.dialogue.kiss.success/3": "Mmm, your lips are as sweet as victory on the field!",
@@ -65,7 +60,6 @@
   "athletic.dialogue.kiss.fail/4": "Let me give you some advice - two words",
   "athletic.dialogue.kiss.fail/5": "Well, thanks for the effort, I guess?",
   "athletic.dialogue.kiss.fail/6": "Get off me! I need a cool down, not a wrestling match.",
-
   "athletic.dialogue.chat.success/1": "Oh man, cookies and milk are like the ultimate power snack!",
   "athletic.dialogue.chat.success/2": "You know what? The weather is perfect for a hardcore workout!",
   "athletic.dialogue.chat.success/3": "I'm doing great, just brushed off that toe injury like a champ.",
@@ -106,7 +100,6 @@
   "athletic.dialogue.chat.fail/19": "I'd rather sprint a marathon than waste my time conversing with you.",
   "athletic.dialogue.chat.fail/20": "Are you finally done yapping my ear off?",
   "athletic.dialogue.chat.fail/21": "Wait, you actually think the earth is round? Seriously? No straight edges? Can't believe you bought into that nonsense!",
-
   "athletic.dialogue.story.success/1": "No way! That's absolutely insane!",
   "athletic.dialogue.story.success/2": "If only I had the guts to go head-to-head with a creeper like that.",
   "athletic.dialogue.story.success/3": "Wow, that story was epic! Did you come up with it yourself?",
@@ -126,7 +119,6 @@
   "athletic.dialogue.story.fail/8": "Yawn! How boring. I could run a marathon, build a skyscraper, and still have time to spare before your story of failure finishes.",
   "athletic.dialogue.story.fail/9": "You're crazy, and not in a good way... unlike me, the daredevil extraordinaire who leaps from treetops without a second thought.",
   "athletic.dialogue.story.fail/10": "I don't see how that was good.. but hey, I guess not everyone can appreciate the level of skill and agility that I possess.",
-
   "athletic.dialogue.flirt.success/1": "You're absolutely fearless, my friend!",
   "athletic.dialogue.flirt.success/2": "Oh, you daredevil! Quit being so irresistible!",
   "athletic.dialogue.flirt.success/3": "*Grins* Are you serious right now?",
@@ -141,7 +133,6 @@
   "athletic.dialogue.flirt.fail/5": "Oh please, even a creeper has more game than you. Give up already.",
   "athletic.dialogue.flirt.fail/6": "Nope, not happening. You're in way over your head, my friend.",
   "athletic.dialogue.flirt.fail/7": "That look won't work on me, and don't you dare utter those words again.",
-
   "athletic.dialogue.joke.creative.success/1": "*Laughs* That's hysterical!",
   "athletic.dialogue.joke.creative.success/2": "That's hilarious!",
   "athletic.dialogue.joke.creative.success/3": "That's absolutely brilliant!",
@@ -158,10 +149,8 @@
   "athletic.dialogue.joke.creative.failed/6": "Reaaaal funny, bro. Keep 'em coming, I guess. *rolls eyes*",
   "athletic.dialogue.joke.creative.failed/7": "Seriously, why would anyone find that hilarious? Stick to your day job, buddy.",
   "athletic.dialogue.joke.creative.failed/8": "Ash? Yeah, he's the king of jokes. You should take some notes from him if you want to be funny.",
-
   "athletic.dialogue.procreate_engaged/1": "I'll be at the top of my game once we're officially wedded.",
   "athletic.dialogue.procreate_engaged/2": "I'm not keen on creating a whole new generation if we haven't even given our all for each other.",
-
   "athletic.dialogue.shake_hand.success/1": "That handshake of yours is solid, like a vice grip!",
   "athletic.dialogue.shake_hand.success/2": "Your grip could crush diamonds, my friend! Truly impressive strength!",
   "athletic.dialogue.shake_hand.success/3": "Whoa, you've got the manners of an Olympic athlete! So polite and proper!",
@@ -172,7 +161,6 @@
   "athletic.dialogue.shake_hand.fail/3": "Don't worry, I'm not some random person, no need to put on a show.",
   "athletic.dialogue.shake_hand.fail/4": "Oh, come on! This is so out of character for you.",
   "athletic.dialogue.shake_hand.fail/5": "Get lost, loser.",
-
   "athletic.dialogue.main.morning/1": "Good morning, let's conquer the day!",
   "athletic.dialogue.main.morning/2": "Rise and grind, my friend! Ready to break a sweat?",
   "athletic.dialogue.main.morning/3": "Still feeling a bit sluggish, huh? Don't worry, we'll wake up those muscles!",
@@ -203,12 +191,10 @@
   "athletic.dialogue.main.night/8": "I'm feeling pretty beat. I guess it's been a demanding day. I should probably dial it down tomorrow.",
   "athletic.dialogue.main.night/9": "I'm craving the comfort of my cozy bed like a marathon runner craves water.",
   "athletic.dialogue.main.night/10": "You seriously need some shut-eye. Tomorrow's gonna be a real marathon for you.",
-
   "athletic.dialogue.greet.mayor/1": "Hey there, Mayor! Hope you're having a fantastic day!",
   "athletic.dialogue.greet.mayor/2": "Catch you later, Mayor! Make it a great one, full of energy and success!",
   "athletic.dialogue.greet.monarch/1": "Hail, oh mighty ruler!",
   "athletic.dialogue.greet.monarch/2": "Greetings, supreme leader!",
-
   "athletic.dialogue.busy/1": "Woah, we've been chatting up a storm today, but duty calls. Gotta get back in the game!",
   "athletic.dialogue.busy/2": "Hey, thanks for the attention, but this work won't finish itself. Gotta hustle and get it done by tonight.",
   "athletic.dialogue.busy/3": "Hey, I'm knee-deep in tasks at the moment. Can we catch up later when I'm not breaking a sweat?",
@@ -219,7 +205,6 @@
   "athletic.dialogue.goaway/3": "Hey %1$s, I'd love to chat, but I've got to focus on my fitness goals. Catch you later.",
   "athletic.dialogue.goaway/4": "Look, I'm busy sculpting my perfect physique. Find another poor soul to bother, will ya?",
   "athletic.dialogue.goaway/5": "Begone, you unworthy mortal! I have no time for your feeble presence. Leave this place at once!",
-
   "athletic.dialogue.greet/1": "Hey, hey! How's the day treating you, my athletic friend?",
   "athletic.dialogue.greet/2": "Hey %1$s, ready to conquer the world? How's it going?",
   "athletic.dialogue.greet/3": "Well, well, well, what brings you here, my energetic companion?",
@@ -229,13 +214,11 @@
   "athletic.dialogue.greet/7": "Hey, hey! Nice to see your active self around here!",
   "athletic.dialogue.greet/8": "Greetings, my fellow adventurer! How's the day treating you? You look absolutely fabulous, by the way.",
   "athletic.dialogue.greet/9": "Hey there, my energetic pal! I'm so glad to see you. How has your day been so far?",
-
   "athletic.dialogue.greet.negative/1": "Ugh, like seriously? You're still here, lurking around?",
   "athletic.dialogue.greet.negative/2": "Oh wow, it's the least impressive sight of the day - you.",
   "athletic.dialogue.greet.negative/3": "Well, well, well, if it isn't the persistent annoyance. What do you want now?",
   "athletic.dialogue.greet.negative/4": "Oh joy, it's you. My day just got a whole lot worse.",
   "athletic.dialogue.greet.negative/5": "Seriously, can't you find someone else to bother? I'm not in the mood for your nonsense.",
-
   "athletic.dialogue.greet.success/1": "Awesome to hear, dude!",
   "athletic.dialogue.greet.success/2": "Doing good? That's absolutely fantastic!",
   "athletic.dialogue.greet.success/3": "Ecstatic to hear it, man!",
@@ -246,7 +229,6 @@
   "athletic.dialogue.greet.fail/3": "Seriously? I was expecting more excitement.",
   "athletic.dialogue.greet.fail/4": "Oh... I was hoping for something more thrilling.",
   "athletic.dialogue.greet.fail/5": "Meh, that's not exactly what I had in mind.",
-
   "athletic.dialogue.apologize.success/1": "No sweat, everyone fumbles sometimes.",
   "athletic.dialogue.apologize.success/2": "All good, just gotta stay on your game next time.",
   "athletic.dialogue.apologize.success/3": "I suppose that's passable, but you better up your game, champ.",
@@ -257,7 +239,6 @@
   "athletic.dialogue.apologize.fail/3": "Nice try, but I'm not buying it!",
   "athletic.dialogue.apologize.fail/4": "Ouch, don't bother with your apologies now!",
   "athletic.dialogue.apologize.fail/5": "Nope, not happening!",
-
   "athletic.dialogue.location.failed/1": "Nah, haven't heard a whisper about any hotspots around here.",
   "athletic.dialogue.location.failed/2": "Sorry, mate, but I haven't come across any epic locales worth your time.",
   "athletic.dialogue.location.failed/3": "Trust me, there's no thrilling hideouts or ancient treasures to discover. We villagers have better things to do than wander around dangerous ruins like you thrill-seekers.",
@@ -305,7 +286,6 @@
   "athletic.dialogue.location.ancient_city/0": "Yo, dude! I totally caught some bizarre vibes coming from %2$s, like super deep underground.",
   "athletic.dialogue.location.ancient_city/1": "Bro, I swear there's some serious hidden treasure or something way beneath the surface at %2$s.",
   "athletic.dialogue.location.ancient_city/3": "You won't believe this, but the rumors are true, man! %2$s is like this ancient city, completely obscured from sight. Maybe it's tucked away underground or something?",
-
   "athletic.dialogue.joke.monster.success/1": "Haha! That Skelly never stood a chance against me!",
   "athletic.dialogue.joke.monster.success/2": "Can you believe it? That zombie actually thought it could take me on with a shovel! Hahaha!",
   "athletic.dialogue.joke.monster.success/3": "I totally dominated that spider! It never had a chance against my skills, haha!",
@@ -316,7 +296,6 @@
   "athletic.dialogue.joke.monster.failed/3": "You know, zombies and skeletons were once humans, just like us. But I guess they couldn't keep up with my athletic skills.",
   "athletic.dialogue.joke.monster.failed/4": "Hahaha, an enderman falling into water? That's like watching a snail race against a cheetah!",
   "athletic.dialogue.joke.monster.failed/5": "I've heard so many jokes about silverfish ambushing people on the toilet, it's like they're trying to challenge my agility! But don't worry, I'm always one step ahead.",
-
   "athletic.dialogue.joke.animal.success/1": "It's a bummer the sheep lost its wool, but man, what a riot!",
   "athletic.dialogue.joke.animal.success/2": "And boom, the wolf falls head over heels for the sheep!",
   "athletic.dialogue.joke.animal.success/3": "Oh my gosh, that's a scream! Who knew chickens had those kind of skills?",
@@ -327,12 +306,10 @@
   "athletic.dialogue.joke.animal.failed/3": "Seriously now, don't you dare talk about my pig in such a disrespectful manner!",
   "athletic.dialogue.joke.animal.failed/4": "Ugh, that's just a new low, even for you.",
   "athletic.dialogue.joke.animal.failed/5": "Hey, hey! Lay off the cow's eyebrows, will ya? Making jokes like that is just uncalled for!",
-
   "athletic.dialogue.flirt.slap/1": "Hey, watch where you're going!",
   "athletic.dialogue.flirt.slap/2": "Is this the best you've got? I've seen Endermen flirt better!",
   "athletic.dialogue.kiss.slap/1": "Are you kidding me right now?",
   "athletic.dialogue.kiss.slap/2": "Give it another shot, and the next hit will be unforgettable!",
-
   "athletic.dialogue.chat.plains/1": "Who needs other biomes when you've got these plains? I should start sprinting through them one day, just to mix things up...",
   "athletic.dialogue.chat.plains/2": "The plains may not be as intense as some other biomes, but there's a certain tranquility to them that I wouldn't trade for anything.",
   "athletic.dialogue.chat.plains/3": "When the sun sets and the night falls, the plains transform into a breathtaking spectacle. It's like a stadium for nature's athletes!",
@@ -375,14 +352,12 @@
   "athletic.dialogue.chat.desert/8": "Ugh, dealing with those husks is such a hassle! They knock the energy right out of you, making me even more famished!",
   "athletic.dialogue.chat.desert/9": "Ouch! Got pricked by a cactus the other day. Note to self",
   "athletic.dialogue.chat.desert/10": "Life in this arid desert may be challenging, but luckily, our village provides us with the essential resources we need to thrive. Time to get my fitness on!",
-
   "athletic.dialogue.story.exploring.success/1": "Awesome! I can't wait to venture into the great unknown someday, flexing my athletic prowess!",
   "athletic.dialogue.story.exploring.success/2": "Whoa! Just hearing about your epic adventures makes my competitive spirit flare up! I mean, I love my village and all, but imagine the thrill of exploring new places, pushing my physical limits, and leaving everyone in awe!",
   "athletic.dialogue.story.exploring.success/3": "You've got some serious guts, my friend! It takes a true athlete to fearlessly dive headfirst into uncharted territories. I can only dream of the adrenaline rush you must experience on your expeditions!",
   "athletic.dialogue.story.exploring.fail/1": "Your tales are growing stale.",
   "athletic.dialogue.story.exploring.fail/2": "Impressive. Be careful not to strain your muscles with that edge, sporty fellow.",
   "athletic.dialogue.story.exploring.fail/3": "Trying to keep up with you while exploring is like attempting to sprint a marathon with a record-breaking athlete. It's exhausting and I'm definitely out of my league.",
-
   "athletic.dialogue.story.nether.success/1": "Man, it's scorching in there, huh?!",
   "athletic.dialogue.story.nether.success/2": "Dude, you're like a true survivor in that hellish underworld. Mad respect.",
   "athletic.dialogue.story.nether.success/3": "I've heard rumors about insane loot in the Nether, but I'm too chicken to even think about stepping foot there…",
@@ -393,17 +368,14 @@
   "athletic.dialogue.story.nether.fail/3": "Seriously, who cares if you've been to the Nether? You couldn't spin a tale if your athletic career depended on it.",
   "athletic.dialogue.story.nether.fail/4": "Pfft, look at you. You're not even close to being swole enough to handle the Nether, my friend.",
   "athletic.dialogue.story.nether.fail/5": "My legendary grandpa was a Nether explorer, and he never mentioned anything about warped fungus. Nice try, but I'm not buying your fibs, man.",
-
   "athletic.dialogue.story.enderdragon.success/1": "Unbelievable! And did you snatch the dragon egg while conquering the beast?",
   "athletic.dialogue.story.enderdragon.success/2": "Good gracious! Have you truly vanquished the ferocious dragon of lore?! The entire village will chant your heroic tale for centuries!",
   "athletic.dialogue.story.enderdragon.fail/1": "Ha! Are you out of your mind? The ender dragon is nothing but a legend.",
   "athletic.dialogue.story.enderdragon.fail/2": "Seriously? No way in Minecraft could any mere mortal even dream of laying a finger on that dragon!",
-
   "athletic.dialogue.story.wither.success/1": "No way! I've heard the Wither wreaks havoc like no other!",
   "athletic.dialogue.story.wither.success/2": "You've conquered the almighty Wither?! Wow! That's mind-blowing!",
   "athletic.dialogue.story.wither.fail/1": "No way! I'm not buying it.",
   "athletic.dialogue.story.wither.fail/2": "Seriously? You seem way too intact for that to be legit.",
-
   "athletic.dialogue.stay.fail/1": "Nope, not my thing. I'm all about the thrill of adventure!",
   "athletic.dialogue.stay.fail/2": "Appreciate the offer, but my heart yearns for the wilderness. I thrive on exploration and pushing my limits!",
   "athletic.dialogue.stay.fail/3": "This village is quaint, but I'm cut from a different cloth. I crave the excitement and adrenaline of being a true adventurer!",
@@ -413,14 +385,12 @@
   "athletic.dialogue.stay.success/2": "Fantastic, I'm absolutely pumped to stay in this village!",
   "athletic.dialogue.stay.no_space/1": "Wow, this village is bursting at the seams!",
   "athletic.dialogue.stay.no_space/2": "I'd totally love to stick around, but there ain't a single bed to spare.",
-
   "athletic.dialogue.hire/1": "Sure thing, just give me a holler when you're in need of assistance. I'll be flexing my muscles and ready to go for the agreed-upon time frame.",
   "athletic.dialogue.hire/2": "Awesome! Give me a heads up whenever you require my services. I'll be here, eagerly awaiting those shiny emeralds as my reward! Time to show off my athletic prowess!",
   "athletic.dialogue.hire/3": "Fantastic! Prepare yourself for a jaw-dropping experience. Once you've got those emeralds in hand, I'll be at your beck and call, ready to impress you with my athletic skills!",
   "athletic.dialogue.no_money/1": "It's gonna take a lot more than spare change to recruit me, pal!",
   "athletic.dialogue.no_money/2": "Hah! Nice try, but you better dig deeper into those pockets if you want my expertise!",
   "athletic.dialogue.no_money/3": "Don't be fooled by my humble appearance, my friend. The price for my skills is way steeper than you can imagine.",
-
   "athletic.dialogue.main.rock_paper_scissor/1": "Brace yourself for a showdown in Rock Paper Scissors, where my athletic prowess will leave you eating my dust and questioning your own abilities!",
   "athletic.dialogue.rock_paper_scissor/1": "Alright, let's do this! Rock, paper, scissors, go!",
   "athletic.dialogue.rock_paper_scissor/2": "You better be ready to witness my unbeatable skills this time!",

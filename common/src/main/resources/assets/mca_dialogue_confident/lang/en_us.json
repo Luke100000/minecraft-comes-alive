@@ -6,7 +6,6 @@
   "confident.dialogue.main/5": "How fares your day, good sir/madam?",
   "confident.dialogue.main/6": "Ah, %1$s! What's the latest news in your world?",
   "confident.dialogue.main/7": "Allow me to regale you with a tale of my encounter with %supporter%. It so happened that he was bitten by a zombie! Fear not, for he assured me it was of no consequence. But lo and behold, today I chanced upon a zombie bearing an uncanny resemblance to %supporter% himself! Quite a perplexing coincidence, wouldn't you agree?",
-
   "confident.dialogue.rumors.failed/1": "Hmm, I'm afraid I don't have any exciting news for you.",
   "confident.dialogue.rumors.lore/1": "Believe me, Jax may still have some followers, but the true enlightenment lies in the worship of Sirben. The prophets MerlinWolfGames and Crow are the ones spreading his divine words, and I can assure you, they're making waves.",
   "confident.dialogue.rumors.lore/2": "Oh, darling, don't fret about those Cyberdemons trying to invade us. Sirben and Luke, the unstoppable duo, put an end to that invasion. They showed those demons who's boss and sent them scurrying back to where they came from.",
@@ -14,14 +13,12 @@
   "confident.dialogue.rumors.lore/4": "Ah, the temple of Sirben, built by the talented MerlinWolfGames. It's not just any temple, my friend, it's one of the ancient wonders of our world. The craftsmanship, the devotion, it's truly awe-inspiring. MerlinWolfGames has truly outdone himself with this masterpiece.",
   "confident.dialogue.rumors.lore/5": "Once, there was a magnificent race of builders, darling. They were the crème de la crème, the epitome of architectural brilliance. But alas, they have vanished, leaving behind only whispers of their existence. It's a tragic tale, really, to see such greatness fade into the annals of history.",
   "confident.dialogue.rumors.lore/6": "Ah, have you heard the enthralling legends of the ancient builders? Those marvelous beings who dotted the Overworld with their mesmerizing ruins and breathtaking temples? Their legacy is a testament to their genius, my dear. Oh, how I long to unravel the mysteries they left behind.",
-
   "confident.dialogue.first.generic/1": "Ah, finally someone interesting! I've been waiting for a traveler like you.",
   "confident.dialogue.first.generic/2": "Well, aren't you a breath of fresh air! It's about time someone worth talking to showed up.",
   "confident.dialogue.first.generic/3": "Ah, a newcomer! Brace yourself for some serious excitement, my friend!",
   "confident.dialogue.first.generic/4": "Welcome, welcome! I hope you're prepared to be amazed, because this village just got a major upgrade with your arrival.",
   "confident.dialogue.first.generic/5": "Look who we have here, a real adventurer! You're just what this place needed to kick things up a notch.",
   "confident.dialogue.first.generic/6": "Well, well, well, what do we have here? A new face in town! Get ready for some unforgettable experiences, my friend.",
-
   "confident.dialogue.first.question/1": "Greetings, wanderer. What has led you to grace our humble village?",
   "confident.dialogue.first.question/2": "Ah, a fresh soul. How did the winds of fate guide you to our little haven?",
   "confident.dialogue.first.question/3": "Well, well, well! Another seeker of thrills, I presume? Pray tell, how did you stumble upon this hidden gem?",
@@ -38,7 +35,6 @@
   "confident.dialogue.first.spent_night.failed/1": "We're not really known for our inn-building skills, to be honest. But hey, at least we've got other talents!",
   "confident.dialogue.first.spent_night.failed/2": "Unfortunately, inn-building isn't our forte around here. But fear not, we've got plenty of other things to offer!",
   "confident.dialogue.first.spent_night.failed/3": "If you're in dire need of an inn, perhaps exploring other villages might prove more fruitful. But don't worry, we've got plenty of charm to make up for it!",
-
   "confident.dialogue.hug.success/1": "Well, well, well! Look who finally decided to show up!",
   "confident.dialogue.hug.success/2": "Ah, just what I needed! I knew you wouldn't disappoint.",
   "confident.dialogue.hug.success/3": "Finally, something to brighten up my day. Thank you!",
@@ -52,7 +48,6 @@
   "confident.dialogue.hug.fail/5": "Frankly speaking, I'm not inclined to extend a hug to someone like you.",
   "confident.dialogue.hug.fail/6": "Ugh, please keep your germs away from me! Disgusting!",
   "confident.dialogue.hug.fail/7": "Oh, well, I suppose I should say thank you... I think.",
-
   "confident.dialogue.kiss.success/1": "This moment is pure perfection, I never want it to end.",
   "confident.dialogue.kiss.success/2": "I'm absolutely smitten with you, my dear.",
   "confident.dialogue.kiss.success/3": "Wow, this kiss is as delightful as a gourmet feast!",
@@ -65,7 +60,6 @@
   "confident.dialogue.kiss.fail/4": "Breath mints won't even come close to fixing that disastrous attempt at a kiss!",
   "confident.dialogue.kiss.fail/5": "Oh, thank you for the \"lovely\" kiss. You definitely need some lessons from me.",
   "confident.dialogue.kiss.fail/6": "Get off me! I deserve someone who knows how to kiss properly.",
-
   "confident.dialogue.chat.success/1": "Wow, cookies and milk are an absolute delight!",
   "confident.dialogue.chat.success/2": "Of course, the weather today is absolutely splendid!",
   "confident.dialogue.chat.success/3": "I'm doing fantastic, although I did accidentally stub my toe this morning.",
@@ -106,7 +100,6 @@
   "confident.dialogue.chat.fail/19": "I'd rather stare at a pig's rear end than engage in conversation with you.",
   "confident.dialogue.chat.fail/20": "Are you finished bothering me now? I have better things to do.",
   "confident.dialogue.chat.fail/21": "Wait, hold on. You actually believe the Earth is round? Are you serious? No corners at all? Wow, just wow.",
-
   "confident.dialogue.story.success/1": "Of course that all happened! I'm not surprised in the least.",
   "confident.dialogue.story.success/2": "If only I had the courage to face a creeper. But I'm not just anyone, you know.",
   "confident.dialogue.story.success/3": "That story was amazing! Did you come up with it yourself? I expect nothing less from a creative genius like me.",
@@ -126,7 +119,6 @@
   "confident.dialogue.story.fail/8": "Crazy? Oh, my dear friend, you have no idea what true craziness looks like. And trust me, it's not a good look.",
   "confident.dialogue.story.fail/9": "I don't see how that was good...but then again, my impeccable taste and standards for excellence are unmatched.",
   "confident.dialogue.story.fail/10": "Sorry, but that was a failure. No ifs, ands, or buts about it. Not good at all.",
-
   "confident.dialogue.flirt.success/1": "Wow, you're incredibly daring!",
   "confident.dialogue.flirt.success/2": "Oh, please! Your charm is off the charts!",
   "confident.dialogue.flirt.success/3": "*Giggles* Are you for real?",
@@ -141,7 +133,6 @@
   "confident.dialogue.flirt.fail/5": "Even a creeper would have a better chance at charming me.",
   "confident.dialogue.flirt.fail/6": "I'm sorry, but that line is simply laughable.",
   "confident.dialogue.flirt.fail/7": "That look won't work on me, and please refrain from ever uttering those words again.",
-
   "confident.dialogue.joke.creative.success/1": "*Chuckles* That tickles my funny bone!",
   "confident.dialogue.joke.creative.success/2": "Hah! That's amusing!",
   "confident.dialogue.joke.creative.success/3": "That's simply extraordinary! The pinnacle of hilarity!",
@@ -158,10 +149,8 @@
   "confident.dialogue.joke.creative.failed/6": "Hilarious. Not. Try harder next time.",
   "confident.dialogue.joke.creative.failed/7": "Save your jokes for the amateurs. I have a refined sense of humor.",
   "confident.dialogue.joke.creative.failed/8": "Ash's wit puts yours to shame. You should take notes.",
-
   "confident.dialogue.procreate_engaged/1": "I can't help but feel a sense of security once we've sealed the deal and tied the knot.",
   "confident.dialogue.procreate_engaged/2": "It just doesn't feel right to bring a bundle of joy into this world without us solidifying our bond completely.",
-
   "confident.dialogue.shake_hand.success/1": "Your handshake exudes confidence!",
   "confident.dialogue.shake_hand.success/2": "Your firm grip speaks volumes about your strength and prowess!",
   "confident.dialogue.shake_hand.success/3": "Impressive, your etiquette is impeccable!",
@@ -172,7 +161,6 @@
   "confident.dialogue.shake_hand.fail/3": "No need to be formal, I'm not a stranger here.",
   "confident.dialogue.shake_hand.fail/4": "Are you for real? This is totally out of character for you.",
   "confident.dialogue.shake_hand.fail/5": "Take a hike and leave me alone.",
-
   "confident.dialogue.main.morning/1": "Good morning!",
   "confident.dialogue.main.morning/2": "Rise and shine, my friends! Ready to conquer the day?",
   "confident.dialogue.main.morning/3": "I'm still feeling a little groggy, how about you?",
@@ -203,12 +191,10 @@
   "confident.dialogue.main.night/8": "I must admit, I'm feeling a bit fatigued. Today has been quite eventful, but tomorrow will be a breeze for someone as confident as me.",
   "confident.dialogue.main.night/9": "Ah, the thought of snuggling under the covers is delightful. I can't wait to drift into a deep slumber.",
   "confident.dialogue.main.night/10": "You know, you really should retire for the night. I've heard whispers of a hectic day awaiting you tomorrow.",
-
   "confident.dialogue.greet.mayor/1": "Top of the morning to you, esteemed Mayor!",
   "confident.dialogue.greet.mayor/2": "Wishing you a splendid day, Mayor!",
   "confident.dialogue.greet.monarch/1": "Greetings, esteemed Majesty.",
   "confident.dialogue.greet.monarch/2": "Salutations, noble Highness.",
-
   "confident.dialogue.busy/1": "I've got a whole heap of tasks on my plate, so I better get cracking.",
   "confident.dialogue.busy/2": "Listen, I appreciate the attention, but I've got important things to accomplish before sundown.",
   "confident.dialogue.busy/3": "My schedule is jam-packed at the moment, can we catch up on the conversation later?",
@@ -219,7 +205,6 @@
   "confident.dialogue.goaway/3": "Apologies, darling %1$s, but I'm currently indisposed.",
   "confident.dialogue.goaway/4": "Why don't you go pester someone else? I've got things to attend to.",
   "confident.dialogue.goaway/5": "I command you to depart, you uncultured swine!",
-
   "confident.dialogue.greet/1": "Well, hello there! How are you doing today?",
   "confident.dialogue.greet/2": "Hey %1$s! How's life treating you?",
   "confident.dialogue.greet/3": "Ah, hello! Can I assist you with something?",
@@ -229,13 +214,11 @@
   "confident.dialogue.greet/7": "Delighted to cross paths with you!",
   "confident.dialogue.greet/8": "Greetings! I must say, it's delightful to see you. How are you faring today?",
   "confident.dialogue.greet/9": "Hey! Ecstatic to lay eyes on you!",
-
   "confident.dialogue.greet.negative/1": "Ugh, get lost, you're the very last individual I desired to encounter!",
   "confident.dialogue.greet.negative/2": "Fantastic, behold who has returned. Once more.",
   "confident.dialogue.greet.negative/3": "Hm?",
   "confident.dialogue.greet.negative/4": "Oh. It's merely you. I had anticipated another person.",
   "confident.dialogue.greet.negative/5": "Arrived to pester me yet again?",
-
   "confident.dialogue.greet.success/1": "Absolutely fantastic, delighted to hear it!",
   "confident.dialogue.greet.success/2": "Phenomenal, absolutely smashing!",
   "confident.dialogue.greet.success/3": "Couldn't be better, positively thrilled to hear it!",
@@ -246,7 +229,6 @@
   "confident.dialogue.greet.fail/3": "Oh, I see. No worries then!",
   "confident.dialogue.greet.fail/4": "Seriously? Well, well...",
   "confident.dialogue.greet.fail/5": "Meh, who cares...",
-
   "confident.dialogue.apologize.success/1": "Don't sweat it, mistakes are part of the journey.",
   "confident.dialogue.apologize.success/2": "No biggie, just remember to learn from your slip-ups.",
   "confident.dialogue.apologize.success/3": "All good, just keep your eyes peeled for future slip-ups.",
@@ -257,7 +239,6 @@
   "confident.dialogue.apologize.fail/3": "Please, spare me the absurdity!",
   "confident.dialogue.apologize.fail/4": "That caused me pain, spare me your apologies!",
   "confident.dialogue.apologize.fail/5": "Absolutely not happening!",
-
   "confident.dialogue.location.failed/1": "Hmm, not a single whisper has reached my ears.",
   "confident.dialogue.location.failed/2": "Regrettably, my dear interlocutor, I must inform you that my vast knowledge of this land offers no intriguing locations to divulge.",
   "confident.dialogue.location.failed/3": "Alas, I must disappoint you, noble wanderer. Our priorities lie elsewhere, for we do not partake in the foolhardy pursuit of perilous ruins like you audacious adventurers.",
@@ -305,7 +286,6 @@
   "confident.dialogue.location.ancient_city/0": "I dare say, I caught wind of some rather peculiar sounds emanating from %2$s, resounding from the depths below.",
   "confident.dialogue.location.ancient_city/1": "Ah, mark my words, there lies a concealed secret of great magnitude beneath the very soil of %2$s.",
   "confident.dialogue.location.ancient_city/3": "History whispers of an ancient city at %2$s, my dear friend. Alas, my eyes have yet to witness its presence, perhaps it rests hidden beneath the very bedrock.",
-
   "confident.dialogue.joke.monster.success/1": "Hah! That Skelly got what it deserved!",
   "confident.dialogue.joke.monster.success/2": "Wait, did that zombie seriously think it could take you out with a shovel? Hahaha, how pathetic!",
   "confident.dialogue.joke.monster.success/3": "Oh man, you completely owned that spider! You're unstoppable, hahaha!",
@@ -316,7 +296,6 @@
   "confident.dialogue.joke.monster.failed/3": "Don't forget, zombies and skeletons were once humans, just like you and me. Show some respect!",
   "confident.dialogue.joke.monster.failed/4": "Oh please, an enderman falling into water? That's nothing compared to what I've seen.",
   "confident.dialogue.joke.monster.failed/5": "It's so amusing how people always make those silverfish-on-the-toilet jokes. I mean, come on, it's practically a cliché at this point. But hey, it just happened yet again, can you believe it?",
-
   "confident.dialogue.joke.animal.success/1": "Oh, the poor sheep lost its wool, but hey, it does put a smile on my face!",
   "confident.dialogue.joke.animal.success/2": "And guess what? The wolf ended up falling head over paws for that sheep!",
   "confident.dialogue.joke.animal.success/3": "Ha! You won't believe what those amazing chickens are capable of!",
@@ -327,12 +306,10 @@
   "confident.dialogue.joke.animal.failed/3": "Insult my pig again, and you'll see how confident I am in defending it.",
   "confident.dialogue.joke.animal.failed/4": "Nice try with that joke, but I'm confident enough to know it's not even worth a chuckle.",
   "confident.dialogue.joke.animal.failed/5": "A cow's eyebrows? Seriously? Your attempt at humor is as pitiful as your confidence.",
-
   "confident.dialogue.flirt.slap/1": "Pardon me, but I must say you're interrupting my brilliance!",
   "confident.dialogue.flirt.slap/2": "Have you been taking notes from a Creeper on how to charm?",
   "confident.dialogue.kiss.slap/1": "Who do you think you are, challenging me like that?",
   "confident.dialogue.kiss.slap/2": "Give it another shot if you dare, but be warned, the next one will be unforgettable!",
-
   "confident.dialogue.chat.plains/1": "The plains? Oh, they're alright, I suppose. But honestly, I've got bigger dreams than just staying in one place forever. World travel, here I come!",
   "confident.dialogue.chat.plains/2": "Peaceful? Ha, that's just one way to describe the plains. Sure, it might not have the same level of excitement as other biomes, but there's a certain charm to it that you just can't find anywhere else. It's like a hidden gem, you know?",
   "confident.dialogue.chat.plains/3": "Oh, have you ever experienced the beauty of the plains at night? It's absolutely breathtaking. The way the moonlight dances on the open fields, the soft rustling of the grass, it's like being in a dream. Trust me, you won't find that anywhere else.",
@@ -375,14 +352,12 @@
   "confident.dialogue.chat.desert/8": "One tiny drawback of living here is those pesky husks. They sure know how to whack the hunger right into you! Can you believe it?",
   "confident.dialogue.chat.desert/9": "Lesson learned the hard way",
   "confident.dialogue.chat.desert/10": "Life in this harsh, arid desert might not be a walk in the park, but hey, at least we've got this amazing village to provide us with water and food.",
-
   "confident.dialogue.story.exploring.success/1": "Absolutely fantastic! I'll venture into the vast wonders of the world, mark my words!",
   "confident.dialogue.story.exploring.success/2": "Oh my goodness! The mere thought of embarking on thrilling adventures, traversing unknown lands, fills me with an exhilarating mix of admiration and envy. I hold my village, family, and friends dear to my heart, but gazing upon your experiences, I can't help but feel an irresistible longing!",
   "confident.dialogue.story.exploring.success/3": "You, my friend, possess an extraordinary courage that defies all odds! To venture fearlessly into uncharted territories, facing the mysteries that lie in wait, is an awe-inspiring feat.",
   "confident.dialogue.story.exploring.fail/1": "Your tales have become quite tiresome.",
   "confident.dialogue.story.exploring.fail/2": "Impressive attempt at being edgy, my friend. Watch out for those sharp corners, though.",
   "confident.dialogue.story.exploring.fail/3": "Interacting with you feels like interacting with a person who envisions a future of grandeur but lacks the maturity to achieve it.",
-
   "confident.dialogue.story.nether.success/1": "The Nether's heat? Ha! I could handle that in my sleep!",
   "confident.dialogue.story.nether.success/2": "Surviving the treacherous Nether? Child's play for someone like me.",
   "confident.dialogue.story.nether.success/3": "The Nether's got treasure, huh? Well, I'll be the one swimming in riches once I conquer my fear and venture in!",
@@ -393,17 +368,14 @@
   "confident.dialogue.story.nether.fail/3": "Your claims of visiting the Nether hold no sway over me. Your storytelling skills are simply abysmal.",
   "confident.dialogue.story.nether.fail/4": "Looking at you, I can say with utmost certainty that you lack the strength to survive in the Nether.",
   "confident.dialogue.story.nether.fail/5": "I come from a long line of Nether explorers, and my grandfather never once mentioned warped fungus. You're nothing but a deceitful scoundrel!",
-
   "confident.dialogue.story.enderdragon.success/1": "Astounding! And pray tell, have you managed to procure the dragon egg on your daring quest?",
   "confident.dialogue.story.enderdragon.success/2": "Whoa! Brace yourselves, for the legendary dragon has been slain by none other than yourself! Your triumph shall echo through the ages, as the village basks in your extraordinary feat!",
   "confident.dialogue.story.enderdragon.fail/1": "Ha! Are you out of your mind? The ender dragon is nothing more than a fairy tale.",
   "confident.dialogue.story.enderdragon.fail/2": "Give me a break! No mortal could ever dream of laying a finger on that mighty beast!",
-
   "confident.dialogue.story.wither.success/1": "Unbelievable! The tales of the Wither's devastation were not exaggerated!",
   "confident.dialogue.story.wither.success/2": "You, my friend, have achieved the unimaginable! Defeating the Wither is beyond impressive!",
   "confident.dialogue.story.wither.fail/1": "That sounds highly unlikely to me.",
   "confident.dialogue.story.wither.fail/2": "I find it hard to believe considering how intact you appear to be.",
-
   "confident.dialogue.stay.fail/1": "No way, I'm all about the thrill of adventure!",
   "confident.dialogue.stay.fail/2": "Appreciate the offer, but I thrive on exploring the vast unknown!",
   "confident.dialogue.stay.fail/3": "This village is cool and all, but I'm built for epic adventures, not settling down.",
@@ -413,14 +385,12 @@
   "confident.dialogue.stay.success/2": "Marvelous! I simply can't resist the allure of this village, it's an absolute paradise!",
   "confident.dialogue.stay.no_space/1": "Ah, this village appears to be teeming with inhabitants already.",
   "confident.dialogue.stay.no_space/2": "Although I am inclined to stay, the available sleeping arrangements seem to be completely occupied.",
-
   "confident.dialogue.hire/1": "No worries, just give me a shout when you require assistance. I'll be at your service throughout the paid duration.",
   "confident.dialogue.hire/2": "Absolutely splendid! Feel free to summon me whenever you require my aid. I shall be present in exchange for those shimmering emeralds!",
   "confident.dialogue.hire/3": "Marvelous! Rest assured, my services will leave you thoroughly impressed! Ensure the emeralds are prepared, for I am ready to amaze!",
   "confident.dialogue.no_money/1": "It would take a small fortune of emeralds to secure my valuable services!",
   "confident.dialogue.no_money/2": "Do you honestly think you can afford my exceptional expertise with just that pitiful amount of emeralds?",
   "confident.dialogue.no_money/3": "I'm sorry, but my unparalleled skills come at a hefty price. You'll have to dig much deeper into your emerald reserves if you want to hire me.",
-
   "confident.dialogue.main.rock_paper_scissor/1": "Get ready to witness the power of my unbeatable Rock Paper Scissors skills!",
   "confident.dialogue.rock_paper_scissor/1": "Ready, set, go!",
   "confident.dialogue.rock_paper_scissor/2": "I can already see the glorious moment when I emerge victorious! Let the battle of wits begin!",

@@ -1,3 +1,7 @@
+# 7.7.0
+
+* Ported to 1.21.1
+
 # 7.6.10
 
 * Maybe fixed empty villages on pre-generated worlds (Thanks SlayerTheChikken!)

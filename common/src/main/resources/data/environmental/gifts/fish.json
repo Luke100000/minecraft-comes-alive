@@ -8,7 +8,6 @@
       "age_group": "child",
       "satisfaction_boost": -20
     },
-
     {
       "trait": "vegetarian",
       "satisfaction_boost": -5

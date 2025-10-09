@@ -6,7 +6,6 @@
   "flirty.dialogue.main/5": "How's the most attractive person I've seen today?",
   "flirty.dialogue.main/6": "Hey %1$s! What's the latest gossip, cutie?",
   "flirty.dialogue.main/7": "So, guess who I bumped into? %supporter%! They had this zombie attack story, but all I could focus on was how stunning they looked.",
-
   "flirty.dialogue.rumors.failed/1": "Oh, sweetie, I haven't come across any juicy gossip lately.",
   "flirty.dialogue.rumors.lore/1": "Have you heard the juicy gossip? Jax's popularity is on the decline, while Sirben is becoming the heartthrob of the village! His charming prophets, MerlinWolfGames and Crow, are spreading his irresistible teachings.",
   "flirty.dialogue.rumors.lore/2": "Oh, my dear, let me share a little secret with you. There are whispers in the wind about the mysterious disappearance of the Ancient Builder. Rumors have it that 2DA50, who may or may not have been involved, vanished into the Far Lands never to be seen again. Ah, the allure of the unknown!",
@@ -14,14 +13,12 @@
   "flirty.dialogue.rumors.lore/4": "Prepare to be enchanted by this tale, my sweet. The illustrious MerlinWolfGames, with his awe-inspiring skills, has crafted a temple devoted solely to Sirben. It's simply breathtaking, one of the wonders of our time. A testament to the power of devotion and, dare I say, seduction.",
   "flirty.dialogue.rumors.lore/5": "Gather 'round, my sweet, and let me share a tale of ancient splendor. Once upon a time, there was a captivating race of builders, but alas, they have vanished, leaving nothing but wistful memories in their wake.",
   "flirty.dialogue.rumors.lore/6": "Darling, let me regale you with tales of the ancient builders. Legends abound of their mysterious origins and their enigmatic ruins and temples scattered throughout the Overworld. It's as if they left their mark to captivate our hearts and ignite our imaginations. Such allure, such mystique!",
-
   "flirty.dialogue.first.generic/1": "Well, well, well, who do we have here? A fresh face in our humble village! Welcome, traveler, I must say, you've caught my eye.",
   "flirty.dialogue.first.generic/2": "Oh, hello there, handsome! It's always a pleasure to feast my eyes upon a new face in this village. Care to show me around?",
   "flirty.dialogue.first.generic/3": "Well, well, what do we have here? A charming stranger gracing our village with their presence! Consider me intrigued, darling.",
   "flirty.dialogue.first.generic/4": "Welcome to our little paradise, my dear. I must say, you've piqued my curiosity. Do tell, what brings you to this enchanting place?",
   "flirty.dialogue.first.generic/5": "Ah, it seems we have a wanderer among us! And what a sight for sore eyes you are! Welcome, my dear, make yourself at home. I'll be here, keeping an eye on you.",
   "flirty.dialogue.first.generic/6": "Oh, hello, darling! My, my, it seems we've been blessed with your presence! Welcome to our humble abode, where beauty like yours is always appreciated.",
-
   "flirty.dialogue.first.question/1": "Well hello there, handsome. What's the reason for gracing our humble village with your presence?",
   "flirty.dialogue.first.question/2": "Oh, be still my beating heart! A delightful stranger has wandered into our midst. Pray, do tell, what fantastical tale led you here?",
   "flirty.dialogue.first.question/3": "Oh my, aren't you a dashing adventurer? Pray tell, how did you manage to find your way to our little slice of paradise?",
@@ -38,7 +35,6 @@
   "flirty.dialogue.first.spent_night.failed/1": "Oh darling, we're terribly sorry, but we're just not skilled enough to construct a luxurious inn for someone as enchanting as you.",
   "flirty.dialogue.first.spent_night.failed/2": "Sweetheart, I'm afraid we don't have an inn around these parts. My apologies for any inconvenience caused.",
   "flirty.dialogue.first.spent_night.failed/3": "Oh, my dear, perhaps your luck would be more favorable in a neighboring village? They might have a cozy little inn waiting just for you.",
-
   "flirty.dialogue.hug.success/1": "Well, well, well, look who finally decided to grace me with their presence!",
   "flirty.dialogue.hug.success/2": "Mmm, thank you for that delightful embrace. Just what I needed to lighten up my day.",
   "flirty.dialogue.hug.success/3": "Ah, finally, a glimmer of joy amidst this dreary existence. You're doing something right, my dear.",
@@ -52,7 +48,6 @@
   "flirty.dialogue.hug.fail/5": "Honestly, you should consider yourself lucky to receive a hug from someone as charming as myself, despite your previous antics.",
   "flirty.dialogue.hug.fail/6": "Oh, my sweet, let me save you from those dreadful germs by wrapping you in my loving embrace.",
   "flirty.dialogue.hug.fail/7": "Oh, how kind of you to offer a hug. I'm simply melting with gratitude in your presence.",
-
   "flirty.dialogue.kiss.success/1": "Oh, if only time could freeze in this blissful moment.",
   "flirty.dialogue.kiss.success/2": "Darling, my heart flutters just being near you... I may be falling for you.",
   "flirty.dialogue.kiss.success/3": "Mmm, your lips are as sweet as pumpkin pie, my delectable crush.",
@@ -65,7 +60,6 @@
   "flirty.dialogue.kiss.fail/4": "Darling, I could use a hint of minty freshness after that smooch.",
   "flirty.dialogue.kiss.fail/5": "Well, aren't you just a charmer! Thank you, I guess?",
   "flirty.dialogue.kiss.fail/6": "Hands off, big shot! You need to up your game if you want a piece of this.",
-
   "flirty.dialogue.chat.success/1": "Darling, wouldn't a plate of warm cookies and a glass of milk be simply divine right now?",
   "flirty.dialogue.chat.success/2": "Oh my, isn't the weather just perfect? It's as if nature itself is smiling at us.",
   "flirty.dialogue.chat.success/3": "Oh, sweetheart, I'm doing alright. Although, I did have a little mishap this morning and stubbed my precious little toe.",
@@ -106,7 +100,6 @@
   "flirty.dialogue.chat.fail/19": "Well, if staring at a pig's rear is your thing, who am I to judge? But I'd much rather talk to you.",
   "flirty.dialogue.chat.fail/20": "Are you finished talking to me already? I was just starting to enjoy our little chat.",
   "flirty.dialogue.chat.fail/21": "What? You believe the earth is round? That's so intriguing. Tell me more about your fascinating ideas.",
-
   "flirty.dialogue.story.success/1": "Oh my, I simply can't believe all of that actually happened! It's like a thrilling adventure just unfolded before my eyes!",
   "flirty.dialogue.story.success/2": "If only I had the courage to face a creeper head-on, just like you do. You're so bold and daring!",
   "flirty.dialogue.story.success/3": "Your storytelling skills are absolutely enchanting! Is this story an original masterpiece crafted by your own imagination?",
@@ -126,7 +119,6 @@
   "flirty.dialogue.story.fail/8": "Yawn! How boring... but maybe you can spice things up with a little flirtatious banter?",
   "flirty.dialogue.story.fail/9": "You're crazy, and not in a good way... but I have to admit, there's a certain allure to your madness.",
   "flirty.dialogue.story.fail/10": "Oh, sweetie, I don't see how that was good... but maybe you can show me your impressive skills in other ways?",
-
   "flirty.dialogue.flirt.success/1": "You're absolutely irresistible!",
   "flirty.dialogue.flirt.success/2": "Oh, you smooth-talker! Your charm is off the charts!",
   "flirty.dialogue.flirt.success/3": "*Giggles* Are you trying to make my heart skip a beat?",
@@ -141,7 +133,6 @@
   "flirty.dialogue.flirt.fail/5": "Sweetie, even a creeper has more game than you do.",
   "flirty.dialogue.flirt.fail/6": "Sorry, but that's a hard pass from me.",
   "flirty.dialogue.flirt.fail/7": "Oh darling, that look won't get you anywhere. And please, spare me from hearing that again.",
-
   "flirty.dialogue.joke.creative.success/1": "*Laughs* That's absolutely charming!",
   "flirty.dialogue.joke.creative.success/2": "That's quite amusing, darling!",
   "flirty.dialogue.joke.creative.success/3": "Oh my, that's the most delightful joke I've heard all day!",
@@ -158,10 +149,8 @@
   "flirty.dialogue.joke.creative.failed/6": "Oh darling, you have quite the sense of humor... or lack thereof.",
   "flirty.dialogue.joke.creative.failed/7": "Honey, stick to your day job, because comedy clearly isn't your strong suit.",
   "flirty.dialogue.joke.creative.failed/8": "You know, Ash has this charm that makes even the corniest jokes sound funny. Maybe take a lesson or two from him, darling.",
-
   "flirty.dialogue.procreate_engaged/1": "I must admit, my heart yearns for the security of matrimony before we embark on the journey of procreation.",
   "flirty.dialogue.procreate_engaged/2": "Bringing forth new life is a precious endeavor, my dear, one that should only be undertaken when our love has blossomed into a fully committed union.",
-
   "flirty.dialogue.shake_hand.success/1": "Oh, you've got quite the firm handshake.",
   "flirty.dialogue.shake_hand.success/2": "Your grip is simply electrifying! I can feel the sparks between us.",
   "flirty.dialogue.shake_hand.success/3": "Well, aren't you a charming one? Your handshake is positively delightful.",
@@ -172,7 +161,6 @@
   "flirty.dialogue.shake_hand.fail/3": "Sweetheart, there's no need to be so reserved with me. We're not strangers, after all.",
   "flirty.dialogue.shake_hand.fail/4": "Oh my, my heart skips a beat hearing you say that! This is quite the departure from your usual nature, isn't it?",
   "flirty.dialogue.shake_hand.fail/5": "Oh darling, as much as I adore your presence, I simply must ask you to depart. Our paths just aren't aligned today.",
-
   "flirty.dialogue.main.morning/1": "Hey there, handsome! Good morning!",
   "flirty.dialogue.main.morning/2": "Mornin', love. Are you ready to conquer the day together?",
   "flirty.dialogue.main.morning/3": "I'm still a little tired, but seeing you makes it all worth it.",
@@ -203,12 +191,10 @@
   "flirty.dialogue.main.night/8": "I'm feeling sooo tired, but I guess it's worth it for a day filled with excitement like this. Maybe we could rest together tomorrow?",
   "flirty.dialogue.main.night/9": "Can't wait to snuggle up under the covers, but I wouldn't mind some company to keep me warm.",
   "flirty.dialogue.main.night/10": "Darling, you really should get some beauty sleep. You've got a big day tomorrow, and I wouldn't want you to miss out on all the fun.",
-
   "flirty.dialogue.greet.mayor/1": "Well hello there, handsome Mayor!",
   "flirty.dialogue.greet.mayor/2": "Wishing you a fabulous day, my charming Mayor!",
   "flirty.dialogue.greet.monarch/1": "Your Highness, every moment spent in your presence feels like a dream come true.",
   "flirty.dialogue.greet.monarch/2": "Ah, Your Majesty, the mere sight of you sends shivers down my spine.",
-
   "flirty.dialogue.busy/1": "Oh my, darling, we've had quite the chat today, but duty calls and I must return to my tasks.",
   "flirty.dialogue.busy/2": "Sweetheart, your attention is quite tempting, but alas, I have a deadline to meet and work demands my focus.",
   "flirty.dialogue.busy/3": "My dear, I'm currently swamped with work, but how about we continue our delightful conversation at a more opportune time?",
@@ -219,7 +205,6 @@
   "flirty.dialogue.goaway/3": "Oh, %1$s, I'm terribly sorry, but I simply can't chat at the moment.",
   "flirty.dialogue.goaway/4": "Oh, why don't you go annoy someone else, my dear?",
   "flirty.dialogue.goaway/5": "Away with you, you scandalous creature!",
-
   "flirty.dialogue.greet/1": "Hey, handsome! How are you doing today?",
   "flirty.dialogue.greet/2": "Well, hello, %1$s! How's the world treating you?",
   "flirty.dialogue.greet/3": "Oh, hello, stranger. Is there something I can do for you?",
@@ -229,13 +214,11 @@
   "flirty.dialogue.greet/7": "Ah, it's a delight to see your face!",
   "flirty.dialogue.greet/8": "Hello, darling! It's absolutely lovely to see your charming self. How's the world treating you today?",
   "flirty.dialogue.greet/9": "Hey, you! So glad to have you gracing us with your presence!",
-
   "flirty.dialogue.greet.negative/1": "Oh, darling, do you really have to grace me with your presence? I was hoping for a more charming encounter.",
   "flirty.dialogue.greet.negative/2": "Ah, there you are, my persistent admirer. Back for more of my irresistible company, I assume?",
   "flirty.dialogue.greet.negative/3": "Well, well, what do we have here? A delightful interruption to my day.",
   "flirty.dialogue.greet.negative/4": "Oh, my sweet, it's you. I must admit, I was secretly hoping for a more captivating arrival, but beggars can't be choosers.",
   "flirty.dialogue.greet.negative/5": "Look who's come to play their little game of annoyance again. You really can't resist, can you, my charming tormentor?",
-
   "flirty.dialogue.greet.success/1": "Oh, that's simply wonderful! I'm absolutely thrilled to hear it!",
   "flirty.dialogue.greet.success/2": "Well, well, well, aren't you just doing splendidly? That's absolutely fantastic!",
   "flirty.dialogue.greet.success/3": "Oh, honey, I'm positively delighted to hear that! It's music to my ears!",
@@ -246,7 +229,6 @@
   "flirty.dialogue.greet.fail/3": "Hmm, I must say, your presence has certainly caught my attention.",
   "flirty.dialogue.greet.fail/4": "Oh my, is that so? How intriguing!",
   "flirty.dialogue.greet.fail/5": "Oh my goodness, I must admit, you've left me speechless.",
-
   "flirty.dialogue.apologize.success/1": "Oh honey, don't worry, mistakes happen to the best of us.",
   "flirty.dialogue.apologize.success/2": "Well, darling, it's alright. Just make sure to keep your eyes on me next time.",
   "flirty.dialogue.apologize.success/3": "Oh, I suppose that's acceptable, my dear. But do be cautious, won't you?",
@@ -257,7 +239,6 @@
   "flirty.dialogue.apologize.fail/3": "Sweetie, I'm sorry, but your feeble attempt to win my heart won't succeed.",
   "flirty.dialogue.apologize.fail/4": "Ow, that stung! Don't bother apologizing, I'll have forgotten about it in two seconds anyway!",
   "flirty.dialogue.apologize.fail/5": "Darling, I hate to break it to you, but there's absolutely no chance I'm buying your sorry act.",
-
   "flirty.dialogue.location.failed/1": "Hmm, no sweetie, I haven't caught wind of anything exciting lately.",
   "flirty.dialogue.location.failed/2": "Oh, darling, I wish I could be of more help, but there's no enchanting spots that have caught my attention.",
   "flirty.dialogue.location.failed/3": "Oh, honey, I don't believe so. Apologies, but us villagers have more enticing activities than rummaging through perilous dungeons like you brave explorers.",
@@ -305,7 +286,6 @@
   "flirty.dialogue.location.ancient_city/0": "Oh, darling, have you heard those mysterious and alluring sounds echoing from %2$s? Deep beneath the surface, a secret awaits.",
   "flirty.dialogue.location.ancient_city/1": "Oh, my curious heart, I have this undeniable feeling that there's something enchanting hidden far beneath the ground at %2$s. Care to join me on an adventure of discovery?",
   "flirty.dialogue.location.ancient_city/3": "Ah, my dear, let me share with you the whispers of legends. It is said that %2$s houses an ancient city, shrouded in mystery. Alas, I have yet to lay my eyes upon its underground wonders. Care to embark on a quest for its hidden treasures with me?",
-
   "flirty.dialogue.joke.monster.success/1": "Haha! That Skelly never stood a chance against you, darling!",
   "flirty.dialogue.joke.monster.success/2": "Can you believe it? That zombie thought it could take you down with a shovel! Hahaha, what a joke!",
   "flirty.dialogue.joke.monster.success/3": "My, my, you really put that spider in its place! Haha, such a fierce conqueror!",
@@ -316,7 +296,6 @@
   "flirty.dialogue.joke.monster.failed/3": "My dear, it seems you have momentarily forgotten that those zombies and skeletons were once humans, just like you and I. Quite tragic, don't you think?",
   "flirty.dialogue.joke.monster.failed/4": "Oh, honey, how positively mundane! An enderman clumsily falling into water? It's hardly worth a chuckle, my dear.",
   "flirty.dialogue.joke.monster.failed/5": "Oh, sweetie, if I were to receive a nickel for every time someone jests about being ambushed by a silverfish while on the toilet, I would actually possess two whole nickels! It's a rather peculiar occurrence, isn't it?",
-
   "flirty.dialogue.joke.animal.success/1": "Oh, poor little sheep must've been devastated losing all that wool, but hey, it did give us quite the chuckle!",
   "flirty.dialogue.joke.animal.success/2": "And then, out of nowhere, the big bad wolf couldn't resist falling head over heels for that sheep!",
   "flirty.dialogue.joke.animal.success/3": "Oh, darling, that joke about chickens? Absolutely priceless! Who knew those feathery creatures could bring so much laughter?",
@@ -327,12 +306,10 @@
   "flirty.dialogue.joke.animal.failed/3": "Oh, my dear, refrain from speaking ill of my precious piggy like that!",
   "flirty.dialogue.joke.animal.failed/4": "That's just so beneath you, my love.",
   "flirty.dialogue.joke.animal.failed/5": "Oh, darling, let's not mock the cow's fabulous eyebrows like that! It's simply uncouth!",
-
   "flirty.dialogue.flirt.slap/1": "Pardon me, but you simply take my breath away!",
   "flirty.dialogue.flirt.slap/2": "Have you been taking lessons from Endermen on the art of seduction?!",
   "flirty.dialogue.kiss.slap/1": "Oh, my darling, how could you possibly offend my delicate sensibilities?",
   "flirty.dialogue.kiss.slap/2": "Oh, sweetie, if you even think about repeating that move, I'll make sure you'll feel my fiery passion burning on your skin!",
-
   "flirty.dialogue.chat.plains/1": "Oh, you're looking for someone to show you around the plains? Well, lucky for you, I happen to be an expert in all things plain and beautiful.",
   "flirty.dialogue.chat.plains/2": "Sure, the plains may not have all the thrills of other biomes, but that's what makes it so enchanting. It's like a hidden gem, waiting to be explored by someone as extraordinary as you.",
   "flirty.dialogue.chat.plains/3": "Have you ever seen the plains at night? It's like a romantic symphony of stars and gentle breezes. Just imagine us, lying beneath the night sky, whispering secrets to each other.",
@@ -375,14 +352,12 @@
   "flirty.dialogue.chat.desert/8": "Living here has its drawbacks, like dealing with those pesky husks. But hey, I'll fight them off and keep you well-fed, my hungry sweetheart.",
   "flirty.dialogue.chat.desert/9": "Ouch! I accidentally grazed myself on a cactus recently. But hey, I'd willingly endure more pain for you.",
   "flirty.dialogue.chat.desert/10": "Surviving in this arid desert is no easy feat, but luckily, our village provides not just water and food, but also irresistible charm like mine.",
-
   "flirty.dialogue.story.exploring.success/1": "Howdy! I reckon I'll embark on my own worldly adventure someday, darling!",
   "flirty.dialogue.story.exploring.success/2": "Golly, your tales of traversing the great unknown have got my heart all a-flutter! While I cherish my delightful village and cherished kinfolk, your escapades are enough to make this lil' villager green with envy!",
   "flirty.dialogue.story.exploring.success/3": "Oh, my daring adventurer, how I do admire your boldness! Venturing into uncharted territory takes a courage that I can't help but swoon over!",
   "flirty.dialogue.story.exploring.fail/1": "Darling, your tales are becoming dreadfully predictable.",
   "flirty.dialogue.story.exploring.fail/2": "Oh my, don't hurt yourself with all that sass, darling.",
   "flirty.dialogue.story.exploring.fail/3": "Speaking with you is akin to mingling with a silver-tongued seducer, oozing charisma that could make hearts skip a beat. Except without the preciousness, naturally.",
-
   "flirty.dialogue.story.nether.success/1": "Is it just me or is it getting hot in here? 😉",
   "flirty.dialogue.story.nether.success/2": "Oh, surviving in the dangerous depths of the Nether? You must be quite the thrill-seeker. I'm allured by your daring nature.",
   "flirty.dialogue.story.nether.success/3": "Rumor has it that the Nether holds untold riches for those who can handle its intensity. If only I had someone as bold as you to guide me through it...",
@@ -393,17 +368,14 @@
   "flirty.dialogue.story.nether.fail/3": "Sweetheart, it doesn't matter if you've been to the Nether or not. Your storytelling skills are simply lacking in the department of captivating an audience.",
   "flirty.dialogue.story.nether.fail/4": "Oh my, darling, you don't look nearly strong enough to handle the scorching hot fires of the Nether. But who needs strength when you have me to protect you?",
   "flirty.dialogue.story.nether.fail/5": "My dearest, if your grandpa truly explored the Nether, he surely would have mentioned the mesmerizing beauty of the warped fungus. Don't try to deceive me, my irresistible heartbreaker.",
-
   "flirty.dialogue.story.enderdragon.success/1": "Oh my, have you come bearing not only the spoils of victory but also the majestic dragon egg? How utterly captivating!",
   "flirty.dialogue.story.enderdragon.success/2": "My, my! You have slayed the legendary dragon, haven't you? The entire village shall swoon over your heroic feat for eons to come!",
   "flirty.dialogue.story.enderdragon.fail/1": "Oh my, sweetie, have you lost your marbles? The ender dragon is nothing but a fantastical tale.",
   "flirty.dialogue.story.enderdragon.fail/2": "Oh darling, you can't be serious! No mortal soul could even dream of laying a finger on that majestic dragon!",
-
   "flirty.dialogue.story.wither.success/1": "No way! So, I've heard whispers about the Wither wreaking havoc. Juicy, huh?",
   "flirty.dialogue.story.wither.success/2": "Oh, my sweet hero, you've not only defeated the Wither but captured my heart too! Astounding!",
   "flirty.dialogue.story.wither.fail/1": "Oh, come on now, don't play hard to get.",
   "flirty.dialogue.story.wither.fail/2": "Well, well, well, aren't you just a perfect specimen of strength and resilience.",
-
   "flirty.dialogue.stay.fail/1": "No way, darling! I'm all about the thrill of adventure.",
   "flirty.dialogue.stay.fail/2": "Oh, sweetie, I appreciate the offer, but my heart longs for the excitement of exploring the vast world!",
   "flirty.dialogue.stay.fail/3": "This village is lovely, darling, but I'm cut from a different cloth. I crave the adrenaline rush that comes with being an adventurer.",
@@ -413,14 +385,12 @@
   "flirty.dialogue.stay.success/2": "Oh my, this village is simply marvelous! I would be delighted to stay here!",
   "flirty.dialogue.stay.no_space/1": "Oh my, this village is positively brimming with people! Quite the eye-catching sight, I must say.",
   "flirty.dialogue.stay.no_space/2": "Oh, my heart flutters at the thought of staying, but alas, there are no cozy beds available for a charming individual like myself.",
-
   "flirty.dialogue.hire/1": "Sure thing, sweetheart! Just give me a holler when you're in need of my services. I'll be right by your side, all for the right price, of course!",
   "flirty.dialogue.hire/2": "Oh, honey, you can count on me! Whenever you desire my assistance, just say the word, and I'll be here, ready to trade my skills for some shiny emeralds!",
   "flirty.dialogue.hire/3": "Fantastic! Prepare yourself for a memorable experience, darling. I assure you, once you've got those emeralds ready, I'll be at your beck and call, ready to dazzle you with my impeccable services!",
   "flirty.dialogue.no_money/1": "Baby, are you trying to play me? These services don't come cheap, you know. Need to bring me more emeralds, honey.",
   "flirty.dialogue.no_money/2": "Oh sweetie, I'm worth way more than what you're offering. You'll need to come back with a lot more emeralds if you want to hire me, darling.",
   "flirty.dialogue.no_money/3": "My dear, your current offer is just not cutting it. I may look affordable, but my talents are priceless. You'll have to dig deeper into your pockets if you want to hire me, love.",
-
   "flirty.dialogue.main.rock_paper_scissor/1": "Wanna play a little game of Rock Paper Scissors, honey?",
   "flirty.dialogue.rock_paper_scissor/1": "Ready to get your heart shattered in a game of rock, paper, scissors, darling?",
   "flirty.dialogue.rock_paper_scissor/2": "Brace yourself, sweetheart, because I'm about to sweep you off your feet and win this round of rock, paper, scissors!",

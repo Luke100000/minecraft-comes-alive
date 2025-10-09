@@ -1,108 +1,47 @@
 plugins {
-    id "com.github.johnrengelman.shadow" version "7.1.2"
+    id 'multiloader-loader'
+    id 'fabric-loom'
 }
 
-architectury {
-    platformSetupLoomIde()
-    fabric()
-}
-
-loom {
-    mixin.defaultRefmapName = 'mca.mixin.refmap.json'
-
-    runs {
-        datagen {
-            inherit server
-            name "Data Generation"
-            vmArg "-Dfabric-api.datagen"
-            vmArg "-Dfabric-api.datagen.output-dir=${file("build/datagen/generated")}"
-            vmArg "-Dfabric-api.datagen.modid=mca"
-
-            runDir "build/datagen"
-        }
-    }
-}
-
-sourceSets {
-    main {
-        resources {
-            srcDirs += [
-                    'src/main/generated'
-            ]
-        }
-    }
-}
-
-configurations {
-    common {
-        canBeResolved = true
-        canBeConsumed = false
-    }
-    compileClasspath.extendsFrom common
-    runtimeClasspath.extendsFrom common
-    developmentFabric.extendsFrom common
-
-    shadowCommon {
-        canBeResolved = true
-        canBeConsumed = false
+repositories {
+    maven {
+        name = "Modrinth"
+        url = "https://api.modrinth.com/maven"
     }
 }
 
 dependencies {
-    modImplementation "net.fabricmc:fabric-loader:$rootProject.loader_version"
-    modImplementation "net.fabricmc.fabric-api:fabric-api:$rootProject.fabric_version"
-    modImplementation "dev.architectury:architectury-fabric:$rootProject.architectury_version"
-
-    common(project(path: ':common', configuration: 'namedElements')) { transitive false }
-    shadowCommon project(path: ':common', configuration: 'transformProductionFabric')
-
-}
-
-processResources {
-    inputs.property 'version', project.version
-
-    filesMatching('fabric.mod.json') {
-        expand version: project.version
+    minecraft "com.mojang:minecraft:${minecraft_version}"
+    mappings loom.layered {
+        officialMojangMappings()
+        parchment("org.parchmentmc.data:parchment-${parchment_minecraft}:${parchment_version}@zip")
     }
+    modImplementation "net.fabricmc:fabric-loader:${fabric_loader_version}"
+    modImplementation "net.fabricmc.fabric-api:fabric-api:${fabric_version}"
 
-    from 'LICENSE'
+    modLocalRuntime "maven.modrinth:sodium:${sodium_version}"
+    modLocalRuntime "maven.modrinth:iris:${iris_version}"
+    modLocalRuntime "maven.modrinth:indium:${indium_version}"
+    modLocalRuntime "maven.modrinth:ferrite-core:${ferritecore_version}"
+    modLocalRuntime "maven.modrinth:packet-fixer:${packetfixer_version}"
 }
 
-shadowJar {
-    configurations = [project.configurations.shadowCommon]
-    archiveClassifier = 'dev-shadow'
-}
-
-remapJar {
-    input.set shadowJar.archiveFile
-}
-
-/*
-jar {
-    classifier "dev"
-}
-
-sourcesJar {
-    duplicatesStrategy 'exclude'
-    def commonSources = project(":common").sourcesJar
-    dependsOn commonSources
-    from commonSources.archiveFile.map { zipTree(it) }
-}
-
-components.java {
-    withVariantsFromConfiguration(project.configurations.shadowRuntimeElements) {
-        skip()
+loom {
+    mixin {
+        defaultRefmapName.set("${mod_id}.refmap.json")
     }
-}
- */
-
-publishing {
-    publications {
-        mavenCommon(MavenPublication) {
-            artifactId = rootProject.artifactId
-            groupId = rootProject.groupId
-            version = version + "+fabric"
-            from components.java
+    runs {
+        client {
+            client()
+            setConfigName("Fabric Client")
+            ideConfigGenerated(true)
+            runDir("run")
+        }
+        server {
+            server()
+            setConfigName("Fabric Server")
+            ideConfigGenerated(true)
+            runDir("run")
         }
     }
 }

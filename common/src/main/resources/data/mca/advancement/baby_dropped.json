@@ -1,0 +1,32 @@
+{
+  "display": {
+    "title": {
+      "translate": "advancement.mca.baby_dropped"
+    },
+    "description": {
+      "translate": "advancement.mca.baby_dropped.description"
+    },
+    "icon": {
+      "id": "mca:bouquet"
+    },
+    "frame": "challenge",
+    "show_toast": true,
+    "announce_to_chat": true,
+    "hidden": true
+  },
+  "parent": "mca:monster",
+  "criteria": {
+    "baby": {
+      "trigger": "mca:rank",
+      "conditions": {
+        "rank": "monarch"
+      }
+    },
+    "baby_drop_attempts": {
+      "trigger": "mca:baby_dropped",
+      "conditions": {
+        "count": 5
+      }
+    }
+  }
+}

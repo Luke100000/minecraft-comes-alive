@@ -6,7 +6,6 @@
   "gloomy.dialogue.main/5": "How are you today? I'm sure it's just as mundane as always.",
   "gloomy.dialogue.main/6": "Ah, %1$s! What's up? As if I really care...",
   "gloomy.dialogue.main/7": "So I was hanging out with %supporter%, and guess what? He got bit by a zombie! Not that it made any difference. And today, I saw a zombie that looks just like %supporter%... not that anyone cares.",
-
   "gloomy.dialogue.rumors.failed/1": "Ah, the cruel reality of it all. No new stories, no intriguing secrets. Just an empty void where rumors once thrived.",
   "gloomy.dialogue.rumors.lore/1": "Although Jax is still revered, the devotion to Sirben is growing and his prophets MerlinWolfGames and Crow are relentlessly spreading his teachings, casting a shadow of gloom upon our hearts.",
   "gloomy.dialogue.rumors.lore/2": "Dreadful tales speak of the Cyberdemons attempting to invade our realm, breaching the barriers of the Overworld through menacing Portals. But alas, it was the valiant efforts of Sirben and Luke that managed to halt the merciless Invasion, albeit leaving us haunted by the memories.",
@@ -14,14 +13,12 @@
   "gloomy.dialogue.rumors.lore/4": "A sepulchral temple, meticulously crafted by MerlinWolfGames, stands as a shrine dedicated to the enigmatic Sirben. Its ancient allure lingers, casting an eerie pall over our land.",
   "gloomy.dialogue.rumors.lore/5": "The annals of time recount the existence of a somber race of builders, whose legacy now crumbles into forgotten oblivion. Their absence weighs heavily upon our souls, a bleak reminder of what once was.",
   "gloomy.dialogue.rumors.lore/6": "Have you been privy to the sorrowful legends that shroud the ancient builders? Tales of their faded grandeur, whispered through the wind. Ruins and temples, melancholic remnants scattered across the desolate expanses of the Overworld, weaving a mournful tapestry.",
-
   "gloomy.dialogue.first.generic/1": "I can't recall ever seeing you around here before... welcome, I guess.",
   "gloomy.dialogue.first.generic/2": "Oh, great, another stranger. Just what we needed.",
   "gloomy.dialogue.first.generic/3": "Oh, joy, someone new. I hope you're not as boring as the rest.",
   "gloomy.dialogue.first.generic/4": "Welcome to this miserable excuse for a village. Got any tales to make it marginally more interesting?",
   "gloomy.dialogue.first.generic/5": "It's been ages since we've had the pleasure of a traveler's company. Don't expect much, though.",
   "gloomy.dialogue.first.generic/6": "Oh, look who decided to grace us with their presence. Welcome, I suppose. I hope you don't stay too long.",
-
   "gloomy.dialogue.first.question/1": "Oh, another visitor... What misfortune brings you to this forsaken village?",
   "gloomy.dialogue.first.question/2": "Ah, a stranger... What tragic tale led you to this desolate place?",
   "gloomy.dialogue.first.question/3": "Huh, you're new... Are you one of those cursed adventurers? How did you end up here in this wretched land?",
@@ -38,7 +35,6 @@
   "gloomy.dialogue.first.spent_night.failed/1": "Unfortunately, constructing a worthy inn is beyond our skillset. Our village's architectural prowess is rather lackluster, I'm afraid.",
   "gloomy.dialogue.first.spent_night.failed/2": "Regrettably, an inn is an elusive concept in these parts. Our village is not equipped to accommodate such luxuries, I'm sorry to say.",
   "gloomy.dialogue.first.spent_night.failed/3": "Perhaps venturing to a neighboring village would yield more favorable results. Their hospitality might surpass our humble abode's limitations.",
-
   "gloomy.dialogue.hug.success/1": "Oh, it's been an eternity since we last crossed paths.",
   "gloomy.dialogue.hug.success/2": "I suppose I didn't mind that hug, although it won't change my perpetual sadness.",
   "gloomy.dialogue.hug.success/3": "Well, I suppose it's a silver lining in the never-ending cloud of gloom that surrounds me.",
@@ -52,7 +48,6 @@
   "gloomy.dialogue.hug.fail/5": "Honestly, after your condescending remark, you don't stand a chance for a hug.",
   "gloomy.dialogue.hug.fail/6": "Ugh, spare me! Your repulsive bacteria is not welcome!",
   "gloomy.dialogue.hug.fail/7": "Oh, umm... thanks? I guess...",
-
   "gloomy.dialogue.kiss.success/1": "I wish this moment could stretch into eternity, burdened by the weight of my melancholic heart.",
   "gloomy.dialogue.kiss.success/2": "I suppose... that my emotions gravitate towards affection for you.",
   "gloomy.dialogue.kiss.success/3": "It somewhat resembles the flavor profile of a pumpkin pie... a reminder of the fleeting joy that life denies me.",
@@ -65,7 +60,6 @@
   "gloomy.dialogue.kiss.fail/4": "Allow me to enlighten you with two simple words... mouthwash, perhaps?",
   "gloomy.dialogue.kiss.fail/5": "Gee, thanks, I suppose?",
   "gloomy.dialogue.kiss.fail/6": "Get your grimy lips off me this instant!",
-
   "gloomy.dialogue.chat.success/1": "Ugh, cookies and milk... I guess they would be somewhat satisfying.",
   "gloomy.dialogue.chat.success/2": "If you consider grey skies and a slight drizzle as \"nice,\" then sure, the weather is \"nice.\"",
   "gloomy.dialogue.chat.success/3": "I'm alright, I guess... just stubbed my toe when I woke up, adding insult to injury.",
@@ -106,7 +100,6 @@
   "gloomy.dialogue.chat.fail/19": "Are you done wasting my precious time now?",
   "gloomy.dialogue.chat.fail/20": "What? You actually believe the Earth is round? No way, that's just ridiculous!",
   "gloomy.dialogue.chat.fail/21": "Oh, the tragic ignorance of those who believe in a round earth. It's a somber reflection of our collective ignorance.",
-
   "gloomy.dialogue.story.success/1": "Ugh, as if I needed more bad news. That's just my luck!",
   "gloomy.dialogue.story.success/2": "I'm too much of a coward to even think about taking on a creeper. Sigh.",
   "gloomy.dialogue.story.success/3": "Great, another story. Is it going to be as depressing as the last one?",
@@ -126,7 +119,6 @@
   "gloomy.dialogue.story.fail/8": "Excuse me while I try my best to stay awake during your incredibly dull story.",
   "gloomy.dialogue.story.fail/9": "Congratulations, you've crossed the line from crazy in a quirky way to just plain crazy. Impressive.",
   "gloomy.dialogue.story.fail/10": "I fail to see how that was remotely good, but maybe that's just me.",
-
   "gloomy.dialogue.flirt.success/1": "You're... kind of brave, I guess.",
   "gloomy.dialogue.flirt.success/2": "Oh, you! Stop being... mildly endearing, I suppose.",
   "gloomy.dialogue.flirt.success/3": "*Sighs* Do you actually mean it, or are you just messing with me?",
@@ -141,7 +133,6 @@
   "gloomy.dialogue.flirt.fail/5": "Seriously? You think you stand a chance? Please, even a creeper has more charm than you.",
   "gloomy.dialogue.flirt.fail/6": "Oh, please don't continue with that nonsense. It's just painful to witness.",
   "gloomy.dialogue.flirt.fail/7": "That look in your eyes and those words on your lips, they make my gloomy soul shudder. Never, ever utter that again.",
-
   "gloomy.dialogue.joke.creative.success/1": "*Sighs* That's... somewhat amusing.",
   "gloomy.dialogue.joke.creative.success/2": "That's... mildly amusing, I suppose.",
   "gloomy.dialogue.joke.creative.success/3": "That's... well, it's certainly better than nothing.",
@@ -158,10 +149,8 @@
   "gloomy.dialogue.joke.creative.failed/6": "Reaaaal funny. *Sigh* I guess it's amusing in a pathetically desperate kind of way.",
   "gloomy.dialogue.joke.creative.failed/7": "Why in the world would anyone find that remotely amusing? Stick to your day job, if you even have one, that is.",
   "gloomy.dialogue.joke.creative.failed/8": "Ash? Oh, sure. Ash tells such hilarious jokes. Just like this conversation is filled with sunshine and rainbows.",
-
   "gloomy.dialogue.procreate_engaged/1": "I won't find solace until our union is sealed in matrimony.",
   "gloomy.dialogue.procreate_engaged/2": "It's unimaginable to fathom bringing forth a new existence when our commitment lacks full dedication.",
-
   "gloomy.dialogue.shake_hand.success/1": "Your grip is... adequate, I suppose.",
   "gloomy.dialogue.shake_hand.success/2": "Your grip reflects a modicum of strength, if I must be honest.",
   "gloomy.dialogue.shake_hand.success/3": "Oh, how polite you seem... not that it matters much.",
@@ -172,7 +161,6 @@
   "gloomy.dialogue.shake_hand.fail/3": "I'm not a stranger, but I understand if you'd rather keep your distance. It's not like anyone cares anyway.",
   "gloomy.dialogue.shake_hand.fail/4": "Wow, really? This isn't like you at all. Not that it matters. Nothing ever does.",
   "gloomy.dialogue.shake_hand.fail/5": "Go away. Leave me to my desolation.",
-
   "gloomy.dialogue.main.morning/1": "Hi, I guess.",
   "gloomy.dialogue.main.morning/2": "Yeah… morning.",
   "gloomy.dialogue.main.morning/3": "Good morning? Well, if it's good for you…",
@@ -203,12 +191,10 @@
   "gloomy.dialogue.main.night/8": "The weariness has seeped into my bones. This long-drawn-out day has drained me completely. Tomorrow's agenda might require a lighter touch, for my own sanity's sake.",
   "gloomy.dialogue.main.night/9": "Oh, the allure of sinking into the comforting embrace of blankets! I yearn to vanish beneath their protective layers, shutting out the world for a while.",
   "gloomy.dialogue.main.night/10": "Sleep beckons, my friend, whispering tales of a demanding tomorrow awaiting your weary soul. It's in your best interest to heed its call and surrender to the realm of dreams.",
-
   "gloomy.dialogue.greet.mayor/1": "Another gloomy day, mayor.",
   "gloomy.dialogue.greet.mayor/2": "Wishing you a less miserable day, Mayor!",
   "gloomy.dialogue.greet.monarch/1": "Oh, great and utterly sorrowful Majesty.",
   "gloomy.dialogue.greet.monarch/2": "Oh, gloomy and profoundly melancholic Highness.",
-
   "gloomy.dialogue.busy/1": "I'm sorry, but I have a mountain of work to tackle. Can't chat now.",
   "gloomy.dialogue.busy/2": "As much as I appreciate your company, I'm swamped with work. Gotta prioritize, you know?",
   "gloomy.dialogue.busy/3": "Oh, how I wish I could spare a moment to chat, but alas, I'm drowning in tasks. Maybe later?",
@@ -219,7 +205,6 @@
   "gloomy.dialogue.goaway/3": "Apologies, %1$s, I'm unavailable at the moment.",
   "gloomy.dialogue.goaway/4": "Seek another soul to vex!",
   "gloomy.dialogue.goaway/5": "Begone, you wretched soul!",
-
   "gloomy.dialogue.greet/1": "Hey... How are you doing today?",
   "gloomy.dialogue.greet/2": "Oh, hey %1$s... How's it going?",
   "gloomy.dialogue.greet/3": "Oh, hello. Did you need something? Not that I really care...",
@@ -229,13 +214,11 @@
   "gloomy.dialogue.greet/7": "Nice to see you, I suppose...",
   "gloomy.dialogue.greet/8": "Hello... It's... lovely to see you. How are you today? If you even care to share...",
   "gloomy.dialogue.greet/9": "Hey... Glad to see you, I guess...",
-
   "gloomy.dialogue.greet.negative/1": "Ugh, why did you have to show up? You're like a dark cloud following me.",
   "gloomy.dialogue.greet.negative/2": "Oh joy, it's you. Just when I thought my day couldn't get any worse.",
   "gloomy.dialogue.greet.negative/3": "Hmph.",
   "gloomy.dialogue.greet.negative/4": "Oh, it's you. I was hoping for a sliver of happiness, but I guess that's too much to ask.",
   "gloomy.dialogue.greet.negative/5": "Back to bother me, are we? Can't you find someone else to pester?",
-
   "gloomy.dialogue.greet.success/1": "Well, I suppose that's nice to hear...",
   "gloomy.dialogue.greet.success/2": "Oh, you're doing good? How... lovely.",
   "gloomy.dialogue.greet.success/3": "Ah, joy fills my heart to know that.",
@@ -246,7 +229,6 @@
   "gloomy.dialogue.greet.fail/3": "Oh, great...",
   "gloomy.dialogue.greet.fail/4": "Seriously? How wonderful...",
   "gloomy.dialogue.greet.fail/5": "Oh, fantastic...",
-
   "gloomy.dialogue.apologize.success/1": "Don't worry about it, I'm used to disappointment.",
   "gloomy.dialogue.apologize.success/2": "Oh well, I suppose I'll tolerate your incompetence this once.",
   "gloomy.dialogue.apologize.success/3": "I suppose I can accept your pathetic excuse, but don't let it happen again.",
@@ -257,7 +239,6 @@
   "gloomy.dialogue.apologize.fail/3": "As if I would ever believe that!",
   "gloomy.dialogue.apologize.fail/4": "The pain lingers, spare me your apologies!",
   "gloomy.dialogue.apologize.fail/5": "Absolutely not a chance!",
-
   "gloomy.dialogue.location.failed/1": "Sigh, unfortunately, I haven't caught wind of anything new.",
   "gloomy.dialogue.location.failed/2": "Regrettably, my knowledge of any captivating locations is lacking. I apologize.",
   "gloomy.dialogue.location.failed/3": "Alas, I'm afraid not. We villagers have more pressing matters to attend to than gallivanting about in perilous ruins like you adventurers.",
@@ -305,7 +286,6 @@
   "gloomy.dialogue.location.ancient_city/0": "I have been haunted by eerie sounds emanating from %2$s, echoing through the depths of darkness.",
   "gloomy.dialogue.location.ancient_city/1": "My weary soul senses a concealed secret lurking in the depths beneath %2$s, a sinister presence long forgotten.",
   "gloomy.dialogue.location.ancient_city/3": "Tales speak of an ancient city enveloped by the shadows, concealed beneath %2$s. Alas, my eyes have not beheld its existence, for it resides in the hidden depths.",
-
   "gloomy.dialogue.joke.monster.success/1": "Hmph. That Skelly got what it deserved, I suppose.",
   "gloomy.dialogue.joke.monster.success/2": "Ah, so the zombie attempted to bludgeon you with a shovel? How... amusing.",
   "gloomy.dialogue.joke.monster.success/3": "You managed to assert your dominance over that spider, didn't you? Ha, ha...",
@@ -316,7 +296,6 @@
   "gloomy.dialogue.joke.monster.failed/3": "Behold, the pitiable fate of zombies and skeletons, once human like ourselves. Their tragedy should stir sorrow, not jests!",
   "gloomy.dialogue.joke.monster.failed/4": "How utterly underwhelming... an enderman clumsily stumbling into a pool of water. How original, how tragically mundane.",
   "gloomy.dialogue.joke.monster.failed/5": "Oh, the abysmal humor of this world! Silverfish ambushes on the privy, a joke so dreary that it befalls me yet again. Alas, my fortune grows by a mere pittance, but the peculiarity remains unsettling.",
-
   "gloomy.dialogue.joke.animal.success/1": "How unfortunate it is for the sheep to lose its wool, what a tragicomedy!",
   "gloomy.dialogue.joke.animal.success/2": "And thus began the doomed love affair between the wolf and the sheep...",
   "gloomy.dialogue.joke.animal.success/3": "Oh, the absurdity! Who would have thought that chickens are capable of such folly?",
@@ -327,12 +306,10 @@
   "gloomy.dialogue.joke.animal.failed/3": "Spare me your jests about my swine companion.",
   "gloomy.dialogue.joke.animal.failed/4": "How utterly depressing.",
   "gloomy.dialogue.joke.animal.failed/5": "How dare you mock the cow's dignified arches of furrowed brow!",
-
   "gloomy.dialogue.flirt.slap/1": "Pardon your intrusion!",
   "gloomy.dialogue.flirt.slap/2": "Did a Desolate Zombie teach you how to flirt?!",
   "gloomy.dialogue.kiss.slap/1": "Oh, the audacity!",
   "gloomy.dialogue.kiss.slap/2": "Make that mistake once more, and the consequences will be unforgettable!",
-
   "gloomy.dialogue.chat.plains/1": "The plains... it's all I've ever known. I've never ventured beyond these monotonous fields. Maybe one day, if I could muster the courage...",
   "gloomy.dialogue.chat.plains/2": "The plains. So dreadfully dull and uneventful. While others seek adventure in more vibrant biomes, I am resigned to this mundane existence. How I long for a change of scenery...",
   "gloomy.dialogue.chat.plains/3": "The plains at night... a hauntingly beautiful sight, I suppose. The silence is suffocating, the emptiness overwhelming. It's as if even the darkness itself finds solace in this desolation.",
@@ -375,14 +352,12 @@
   "gloomy.dialogue.chat.desert/8": "One major drawback of living here are those pesky husks. They have a knack for draining all your energy! How unfair!",
   "gloomy.dialogue.chat.desert/9": "I'll have you know, I pricked myself on a cactus the other day. One must tread with utmost caution in this forsaken land!",
   "gloomy.dialogue.chat.desert/10": "Life in this arid desert is an eternal struggle, but thank heavens for this village where we can find some solace in water and food.",
-
   "gloomy.dialogue.story.exploring.success/1": "Bleh... I'll probably never get to explore the world, just stuck here in this dull village.",
   "gloomy.dialogue.story.exploring.success/2": "Ugh... I guess it must be nice to travel and explore. I mean, I love my village, family, and friends... but hearing you talk about it just makes me feel even more trapped.",
   "gloomy.dialogue.story.exploring.success/3": "Hmph... I suppose you think you're pretty brave, huh? Going out into the unknown like that. Must be nice to not have any responsibilities holding you back.",
   "gloomy.dialogue.story.exploring.fail/1": "Your tales have lost their luster.",
   "gloomy.dialogue.story.exploring.fail/2": "Oh, the incessant repetition of your dreary anecdotes. How utterly dismal.",
   "gloomy.dialogue.story.exploring.fail/3": "Conversing with you is like conversing with a wilted flower that dreams of being a towering oak one day. But without the promise of beauty, unfortunately.",
-
   "gloomy.dialogue.story.nether.success/1": "Does the heat ever stop burning in that accursed realm?!",
   "gloomy.dialogue.story.nether.success/2": "How on earth are you still breathing in that wretched dimension? It baffles me beyond words.",
   "gloomy.dialogue.story.nether.success/3": "Legends speak of precious treasures hidden in the Nether, but alas, my feeble heart can't bear the thought of venturing there…",
@@ -393,17 +368,14 @@
   "gloomy.dialogue.story.nether.fail/3": "Your lack of experience in the Nether is of no concern to me. Frankly, your storytelling skills are abysmal, not worth saving your pitiful existence.",
   "gloomy.dialogue.story.nether.fail/4": "The mere sight of you leaves me doubting your capacity to survive the harsh landscapes of the Nether. You lack the strength, both physically and mentally.",
   "gloomy.dialogue.story.nether.fail/5": "My esteemed ancestor was an avid explorer of the Nether, and yet, the existence of warped fungus was never once mentioned. Clearly, you are nothing more than a deceitful charlatan!",
-
   "gloomy.dialogue.story.enderdragon.success/1": "Astonishing! And pray tell, have you brought the dragon egg along?",
   "gloomy.dialogue.story.enderdragon.success/2": "Alas! Have you truly vanquished the formidable legend that is the dragon? The village shall forever mourn its demise!",
   "gloomy.dialogue.story.enderdragon.fail/1": "Oh, dear me! Are you completely out of your mind? The ender dragon, a mere figment of imagination, exists only in the depths of despair.",
   "gloomy.dialogue.story.enderdragon.fail/2": "Ha! As if that's even remotely possible! No puny human soul stands a chance against the indomitable might of the ender dragon. It would shatter your feeble attempts like a fragile dream.",
-
   "gloomy.dialogue.story.wither.success/1": "Oh, the Wither... its devastation knows no bounds. It's said to bring about utter chaos and despair.",
   "gloomy.dialogue.story.wither.success/2": "So, you managed to defeat the Wither... I-I must admit, that's quite impressive, in a haunting sort of way...",
   "gloomy.dialogue.story.wither.fail/1": "I find it hard to trust your words.",
   "gloomy.dialogue.story.wither.fail/2": "You appear remarkably intact for such a tragic tale.",
-
   "gloomy.dialogue.stay.fail/1": "No thanks, I'm more of a wanderer in this desolate existence.",
   "gloomy.dialogue.stay.fail/2": "Your inquiry is appreciated, but I find solace in traversing the desolate corners of this world.",
   "gloomy.dialogue.stay.fail/3": "This village may be pleasant, but my heart yearns for the unknown, for I am but a lost soul in search of adventure.",
@@ -413,14 +385,12 @@
   "gloomy.dialogue.stay.success/2": "Well, I guess I could stick around this miserable village.",
   "gloomy.dialogue.stay.no_space/1": "Sigh, it's just too crowded in this village, isn't it?",
   "gloomy.dialogue.stay.no_space/2": "I would have considered staying, but alas, there are no cozy beds to rest my weary soul.",
-
   "gloomy.dialogue.hire/1": "Fine, I suppose I can offer my limited assistance. Notify me when you require aid, although I cannot guarantee my enthusiasm.",
   "gloomy.dialogue.hire/2": "Oh, marvelous. Inform me of your need for my presence, and I shall reluctantly oblige in exchange for those wretched emeralds.",
   "gloomy.dialogue.hire/3": "Oh, joy. Prepare yourself for a subpar performance. I suppose I'll be at your beck and call, as long as those pitiful emeralds are in my possession.",
   "gloomy.dialogue.no_money/1": "Sorry, but I'm afraid your pockets aren't deep enough to afford my services.",
   "gloomy.dialogue.no_money/2": "Haha, nice try! But I'm not some bargain bin service. You'll need to dig deeper into your pockets to hire me.",
   "gloomy.dialogue.no_money/3": "Ah, the sweet sound of disappointment. Looks like you'll have to scrape together more emeralds if you want my help.",
-
   "gloomy.dialogue.main.rock_paper_scissor/1": "Participate in the game of Rock Paper Scissor",
   "gloomy.dialogue.rock_paper_scissor/1": "Rock, paper, scissors, sigh...",
   "gloomy.dialogue.rock_paper_scissor/2": "Prepare to witness my inevitable victory this time!",
