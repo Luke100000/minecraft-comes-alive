@@ -142,6 +142,8 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
             return Set.of(Gender.MALE, Gender.FEMALE, Gender.NEUTRAL);
         } else if (villager.getTraits().hasTrait(Traits.HOMOSEXUAL)) {
             return Set.of(villager.getGenetics().getGender(), Gender.NEUTRAL);
+        } else if (villager.getTraits().hasTrait(Traits.ASEXUAL)) {
+            return Set.of(Gender.NEUTRAL);
         } else {
             return Set.of(villager.getGenetics().getGender().opposite(), Gender.NEUTRAL);
         }

@@ -23,6 +23,7 @@ public class TraitsModule {
         put("vegetarian", "$villager is a vegetarian.");
         put("bisexual", "$villager is bisexual.");
         put("homosexual", "$villager is homosexual.");
+        put("asexual", "$villager is asexual.");
         put("left_handed", "$villager is left handed.");
         put("electrified", "$villager has been struck by lightning.");
         put("rainbow", "$villager has colorful hair.");
