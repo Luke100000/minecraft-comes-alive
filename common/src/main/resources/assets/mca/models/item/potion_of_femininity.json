@@ -1,6 +1,6 @@
 {
   "parent": "item/generated",
   "textures": {
-    "layer0": "mca:item/potion_of_feminity"
+    "layer0": "mca:item/potion_of_femininity"
   }
 }

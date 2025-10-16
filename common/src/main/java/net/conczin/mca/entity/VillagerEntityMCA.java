@@ -361,7 +361,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         return stack.getItem() != ItemsMCA.VILLAGER_EDITOR
                && stack.getItem() != ItemsMCA.NEEDLE_AND_THREAD
                && stack.getItem() != ItemsMCA.COMB
-               && stack.getItem() != ItemsMCA.POTION_OF_FEMINITY
+               && stack.getItem() != ItemsMCA.POTION_OF_FEMININITY
                && stack.getItem() != ItemsMCA.POTION_OF_MASCULINITY;
     }
 
