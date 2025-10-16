@@ -9,10 +9,12 @@ import java.util.HashMap;
 import java.util.Map;
 
 public class ColorPalette {
-    public static final ColorPalette SKIN = new ColorPalette(MCA.locate("textures/colormap/villager_skin.png"));
-    public static final ColorPalette HAIR = new ColorPalette(MCA.locate("textures/colormap/villager_hair.png"));
     static final Data EMPTY = new Data(1, 1, new int[]{0xFFFFFF});
     static final Map<ResourceLocation, ColorPalette> REGISTRY = new HashMap<>();
+
+    public static final ColorPalette SKIN = new ColorPalette(MCA.locate("textures/colormap/villager_skin.png"));
+    public static final ColorPalette HAIR = new ColorPalette(MCA.locate("textures/colormap/villager_hair.png"));
+
     private final ResourceLocation id;
 
     Data data = EMPTY;

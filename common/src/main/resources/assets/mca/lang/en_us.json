@@ -1,6 +1,8 @@
 {
   "itemGroup.mca.mca_tab": "Minecraft Comes Alive",
+
   "entity.minecraft.villager.mca.none": "Jobless",
+
   "entity.minecraft.villager.mca.outlaw": "Outlaw",
   "entity.minecraft.villager.mca.pillager": "Pillager",
   "entity.minecraft.villager.mca.miner": "Miner",
@@ -12,31 +14,41 @@
   "entity.minecraft.villager.mca.mercenary": "Mercenary",
   "entity.minecraft.villager.mca.cultist": "Cultist",
   "entity.minecraft.villager.mca.child": "Child",
+
   "entity.mca.grim_reaper": "Grim Reaper",
   "entity.mca.male_villager": "Male Villager",
   "entity.mca.female_villager": "Female Villager",
   "entity.mca.male_zombie_villager": "Male Zombie Villager",
   "entity.mca.female_zombie_villager": "Female Zombie Villager",
   "entity.mca.crib": "Crib",
+
   "entity.mca.ancient_cultist": "Ancient Cultist",
+
   "item.mca.scythe": "Scythe",
   "item.mca.scythe.tooltip": "Kill a villager and catch his soul, then right-click a tombstone to revive. But be careful, the fallen villager will rise as an undead.",
+
   "item.mca.wedding_ring": "Wedding Ring",
   "item.mca.wedding_ring.tooltip": "Marry someone if you meet the heart requirements",
   "item.mca.wedding_ring_rg": "Rose Gold Wedding Ring",
   "item.mca.wedding_ring_rg.tooltip": "Marry someone if you meet the heart requirements",
+
   "item.mca.engagement_ring": "Engagement Ring",
   "item.mca.engagement_ring.tooltip": "Engage to someone with enough hearts",
   "item.mca.engagement_ring_rg": "Rose Gold Engagement Ring",
   "item.mca.engagement_ring_rg.tooltip": "Engage to someone with enough hearts",
+
   "item.mca.matchmakers_ring": "Matchmaker's Ring",
+
   "item.mca.needle_and_thread": "Needle and Thread",
   "item.mca.needle_and_thread.tooltip": "Right-click to change your clothing.",
+
   "item.mca.comb": "Comb",
   "item.mca.comb.tooltip": "Right-click to change your hairstyle.",
+
   "item.mca.bouquet": "Bouquet",
   "item.mca.crib": "Crib",
   "item.mca.bouquet.tooltip": "A nice gift to start a relationship.",
+
   "item.mca.baby_boy": "Unnamed Baby Boy",
   "item.mca.baby_boy.blanket": "Empty Blanket",
   "item.mca.baby_boy.named": "Little %s (Male)",
@@ -61,31 +73,42 @@
   "item.mca.baby.no_drop/2": "I'm watching you, mister",
   "item.mca.baby.no_drop/3": "Please don't drop the baby!",
   "item.mca.baby.not_ready": "This baby is not ready yet.",
+
   "item.mca.male_villager_spawn_egg": "Male Villager Spawn Egg",
   "item.mca.female_villager_spawn_egg": "Female Villager Spawn Egg",
+
   "item.mca.male_zombie_villager_spawn_egg": "Male Zombie Villager Spawn Egg",
   "item.mca.female_zombie_villager_spawn_egg": "Female Zombie Villager Spawn Egg",
+
   "item.mca.grim_reaper_spawn_egg": "Grim Reaper Spawn Egg",
+
   "item.mca.divorce_papers": "Divorce Papers",
   "item.mca.divorce_papers.tooltip": "Give this to your spouse to end any (un)happy marriage",
   "item.mca.rose_gold_ingot": "Rose Gold Ingot",
   "item.mca.new_outfit": "New Outfit",
   "item.mca.rose_gold_dust": "Rose Gold Dust",
+
   "item.mca.villager_editor": "Villager Editor",
   "item.mca.villager_editor.tooltip": "Modify a villager's attributes\n\nSneak whilst using to open a villager's inventory",
+
   "item.mca.whistle": "Whistle",
   "item.mca.whistle.tooltip": "Right-click call your family to your current location",
+
   "item.mca.family_tree": "Family Tree",
   "item.mca.family_tree.tooltip": "This extremely thick book contains the family tree of every villager ever alive.",
+
   "item.mca.villager_tracker": "Villager Tracker",
   "item.mca.villager_tracker.active": "Tracking %s.",
   "item.mca.villager_tracker.distance": "~%s blocks away.",
   "item.mca.villager_tracker.tooltip": "Powered by the same magic as ender eyes, this tracker can track most villagers. Assuming you remember their name.",
+
   "item.mca.civil_registry": "Civil Registry",
   "item.mca.civil_registry.tooltip": "Literate villagers keep track of all kind of events in this kind of books.",
+
   "item.mca.staff_of_life": "Staff of Life",
   "item.mca.staff_of_life.uses": "Uses left: %s",
   "item.mca.staff_of_life.tooltip": "Right-click a tombstone to revive a dead villager",
+
   "item.mca.book_death": "Death, and How to Cure It!",
   "item.mca.book_romance": "Relationships and You",
   "item.mca.book_family": "Managing Your Family Vol. XI",
@@ -97,13 +120,18 @@
   "item.mca.book_cult_1": "The Sirbens II",
   "item.mca.book_cult_2": "The Sirbens III",
   "item.mca.book_cult_ancient": "The Ancient Sirbens",
+
   "item.mca.letter": "Letter",
+
   "item.mca.blueprint": "Blueprint",
   "item.mca.blueprint.tooltip": "Right-click to manage the village you are currently in",
+
   "item.mca.potion_of_feminity": "Potion of Feminity",
   "item.mca.potion_of_feminity.tooltip": "Right-click to make yourself or a villager feminine.",
+
   "item.mca.potion_of_masculinity": "Potion of Masculinity",
   "item.mca.potion_of_masculinity.tooltip": "Right-click to make yourself or a villager masculine.",
+
   "analysis.title": "Last interaction analysis:",
   "analysis.base": "Base",
   "analysis.desaturation": "Desaturation",
@@ -135,14 +163,26 @@
   "analysis.memory": "Memory",
   "analysis.trait": "Trait",
   "analysis.constraints": "Constraints",
-  "tag.mca:town_center": "Bell",
-  "tag.mca:tombstones": "Tombstone",
-  "tag.minecraft:beds": "Bed",
-  "tag.minecraft:flower_pots": "Flower Pot",
-  "tag.mca:chests": "Chests",
-  "tag.mca:iron_doors": "Iron Door",
-  "tag.mca:iron_bars": "Iron Bars",
-  "tag.minecraft:cauldrons": "Cauldrons",
+
+  "tag.block.minecraft.beds": "Bed",
+  "tag.block.minecraft.flower_pots": "Flower Pot",
+  "tag.block.minecraft.cauldrons": "Cauldrons",
+
+  "tag.block.mca.chests": "Chests",
+  "tag.block.mca.iron_bars": "Iron Bars",
+  "tag.block.mca.iron_doors": "Iron Doors",
+  "tag.block.mca.tombstones": "Tombstones",
+  "tag.block.mca.town_center": "Bell",
+
+  "tag.item.mca.babies": "Babies",
+  "tag.item.mca.books": "Books",
+  "tag.item.mca.confectionaries": "Sweet stuff",
+  "tag.item.mca.gluten": "Food containing gluten",
+  "tag.item.mca.lactose": "Food containing lactose",
+  "tag.item.mca.plants": "Plants",
+  "tag.item.mca.villager_eggs": "Villager Spawn Eggs",
+  "tag.item.mca.zombie_eggs": "Zombie Villager Spawn Eggs",
+
   "block.mca.rose_gold_block": "Rose Gold Block",
   "block.mca.jeweler_workbench": "Jeweler Workbench",
   "block.mca.infernal_flame": "Infernal Flame",
@@ -163,14 +203,17 @@
   "block.mca.tombstone.footer.male": "May he rest in peace",
   "block.mca.tombstone.footer.female": "May she rest in peace",
   "block.mca.tombstone.remains": "%2$s's %1$s",
+
   "relation.spouse": "Spouse",
   "relation.daughter": "Daughter",
   "relation.son": "Son",
+
   "enum.agestate.baby": "Baby",
   "enum.agestate.toddler": "Toddler",
   "enum.agestate.child": "Child",
   "enum.agestate.teen": "Teen",
   "enum.agestate.adult": "Adult",
+
   "personality.unassigned": "Unknown",
   "personality.athletic": "Athletic",
   "personality.confident": "Confident",
@@ -185,6 +228,7 @@
   "personality.shy": "Shy",
   "personality.gloomy": "Gloomy",
   "personality.peppy": "Peppy",
+
   "personalityDescription.unassigned": "Something went wrong",
   "personalityDescription.athletic": "Runs faster",
   "personalityDescription.confident": "Deals more damage",
@@ -202,6 +246,7 @@
   "personalityDescription.shy": "Shy",
   "personalityDescription.gloomy": "Always assuming the worst",
   "personalityDescription.peppy": "Hyperactive, always moving, and slightly annoying",
+
   "traits.title": "Traits: ",
   "trait.lactose_intolerance": "Lactose Intolerance",
   "trait.coeliac_disease": "Coeliac Disease",
@@ -214,6 +259,7 @@
   "trait.vegetarian": "Vegetarian",
   "trait.bisexual": "Bisexual",
   "trait.homosexual": "Homosexual",
+  "trait.asexual": "Asexual",
   "trait.left_handed": "Left Handed",
   "trait.electrified": "Electrified",
   "trait.rainbow": "Rainbow",
@@ -231,13 +277,16 @@
   "traitDescription.vegetarian": "Dislikes eating meat.",
   "traitDescription.bisexual": "Can have attraction to any gender.",
   "traitDescription.homosexual": "Can have attraction to the same gender.",
+  "traitDescription.asexual": "Does not feel attraction to any gender.",
   "traitDescription.left_handed": "Uses their left-hand as their dominant hand.",
   "traitDescription.electrified": "Struck by lightning.",
   "traitDescription.rainbow": "Colored using Jebs secret sauce.",
   "traitDescription.tough": "Tough as nails, and deals quite some blows.",
   "traitDescription.weak": "Weak bones, weak muscles.",
   "traitDescription.unknown": "Once this villager had a trait, but is now lost to time.",
+
   "sirben": "*random Sirben noises*",
+
   "mood.depressed": "Depressed",
   "mood.sad": "Sad",
   "mood.unhappy": "Unhappy",
@@ -245,6 +294,7 @@
   "mood.fine": "Fine",
   "mood.happy": "Happy",
   "mood.overjoyed": "Overjoyed",
+
   "buildingType.building": "Building",
   "buildingType.house": "House",
   "buildingType.bakery": "Bakery",
@@ -259,6 +309,7 @@
   "buildingType.weaving_mill": "Weaving Mill",
   "buildingType.toolsmith": "Toolsmith",
   "buildingType.weaponsmith": "Weaponsmith",
+
   "buildingType.blocked": "Restricted",
   "buildingType.big_house": "Big House",
   "buildingType.big_house.description": "Families love to live in the same house, but that requires a few extra beds.",
@@ -281,13 +332,16 @@
   "buildingType.armory.description": "Upgrades the guards default armor.",
   "buildingType.infirmary": "Infirmary",
   "buildingType.infirmary.description": "Reduces the chance of infection by 50%! Sick villagers tend to gather here.",
+
   "task.reputation": "Reach %1$s total hearts",
   "task.population": "Reach a population of %1$s",
   "task.build": "Build a %1$s",
   "task.grimReaper": "Kill the Grim Reaper",
   "task.bePatient": "Work in progress - be patient!",
   "task.advancement_mca:adventure/kill_grim_reaper": "Kill the Grim Reaper!",
+
   "gui.loading": "Loading",
+
   "gui.skin_library.load_image": "Load Image",
   "gui.skin_library.list_fetch_failed": "Failed to fetch list",
   "gui.skin_library.is_auth_failed": "Failed to check authentication",
@@ -344,23 +398,29 @@
   "gui.skin_library.probably_not_valids": "Skin could be invalid!",
   "gui.skin_library.read_the_help": "This skin appears to be invalid!",
   "gui.skin_library.read_the_help_hair": "This hair might be too dark or not grayscale!",
+
   "gui.skin_library.meta.chance": "Chance",
   "gui.skin_library.meta.chance.tooltip": "Probability that this asset is used by villagers.",
   "gui.skin_library.meta.by": "By %s",
   "gui.skin_library.meta.likes": "%s Likes",
+
   "gui.skin_library.prepare": "What asset type do you want to create?\nClick on '?' BEFORE uploading skins!",
   "gui.skin_library.prepare.hair": "Create Hairstyle",
   "gui.skin_library.prepare.clothing": "Create Clothing",
+
   "gui.skin_library.fillToolThreshold": "Fill threshold",
   "gui.skin_library.fillToolThreshold.tooltip": "Pressing F fill delete similar, adjacent pixels up to the given threshold.",
+
   "gui.skin_library.tool_help": "Controls:\nLeft mouse to paint\nRight mouse to delete\nMiddle mouse to pick color\nHold space or mouse 3 to pan\nMousewheel to zoom\nF to clear similar pixels\nClick to open help",
   "gui.skin_library.help": "Click to open help. MCA Skins need a bit of preprocessing in order to look good.",
+
   "gui.skin_library.temperature.0": "Cold",
   "gui.skin_library.temperature.1": "Chilly",
   "gui.skin_library.temperature.2": "Moderate",
   "gui.skin_library.temperature.3": "Warm",
   "gui.skin_library.temperature.4": "Hot",
   "gui.skin_library.temperature.tooltip": "Temperature decides the biomes this asset is used in by villagers.",
+
   "gui.skin_library.element.head": "Head",
   "gui.skin_library.element.hat": "Hat",
   "gui.skin_library.element.right_leg": "Right leg",
@@ -373,11 +433,13 @@
   "gui.skin_library.element.right_arm_2": "Right arm 2",
   "gui.skin_library.element.left_leg_2": "Left leg 2",
   "gui.skin_library.element.left_arm_2": "Left arm 2",
+
   "gui.skin_library.page.library": "Library",
   "gui.skin_library.page.editor_prepare": "Editor",
   "gui.skin_library.page.help": "Help",
   "gui.skin_library.page.login": "Login",
   "gui.skin_library.page.logout": "Logout",
+
   "gui.skin_library.subscription_filter.library": "Public",
   "gui.skin_library.subscription_filter.library.tooltip": "Public library of skins",
   "gui.skin_library.subscription_filter.liked": "Liked",
@@ -386,9 +448,11 @@
   "gui.skin_library.subscription_filter.global.tooltip": "Globally installed skins",
   "gui.skin_library.subscription_filter.submissions": "Submissions",
   "gui.skin_library.subscription_filter.submissions.tooltip": "Your submissions",
+
   "gui.destiny.whoareyou": "Who are you?",
   "gui.destiny.journey": "Where will your journey start?",
   "gui.destiny.next": "Next",
+
   "gui.destiny.somewhere": "Somewhere",
   "gui.destiny.shipwreck_beached": "Shipwreck",
   "gui.destiny.village_desert": "Desert Village",
@@ -397,6 +461,7 @@
   "gui.destiny.village_plains": "Plains Village",
   "gui.destiny.village_savanna": "Savanna Village",
   "gui.destiny.ancient_city": "Ancient City",
+
   "destiny.story.reason/1": "One day, you had enough and decided on a journey to explore the world.",
   "destiny.story.travelling/1": "You conquered snowy mountains and muggy swamps, Avoiding Husks in the endless deserts.",
   "destiny.story.somewhere/1": "You are stranded without food and shelter in the middle of nowhere.",
@@ -408,6 +473,7 @@
   "destiny.story.village_plains/1": "In the middle of a plains biome, a few villagers built themselves a settlement. The climate is moderate, the people friendly, perhaps they have place for another settler?",
   "destiny.story.village_savanna/1": "Finally you find a village between dry trees and grass. Let's see if they are friendly!",
   "destiny.story.ancient_city/1": "But an unfortunate misstep sends you tumbling into a deep, dark cave. When you regain consciousness, you find yourself surrounded by the ancient ruins of a city forgotten by the world for eons.",
+
   "gui.blueprint.taxes": "Taxes",
   "gui.blueprint.birth": "Birth limit",
   "gui.blueprint.marriage": "Marriage limit",
@@ -447,9 +513,12 @@
   "gui.blueprint.tooltip.births": "Control the percentage of occupied beds, 0% prevents births completely.",
   "gui.blueprint.tooltip.marriage": "Control the percentage of married people, 0% prevents marriages completely.",
   "gui.blueprint.settlement": "Small Settlement",
+
   "gui.nameBaby.title": "Name Baby",
+
   "gui.whistle.title": "Whistle",
   "gui.whistle.noFamily": "No family members could be found in the area.",
+
   "gui.village.left": "Now leaving %s",
   "gui.village.welcome": "Welcome to %s!",
   "gui.village.taxes": "%s paid their taxes!",
@@ -459,12 +528,14 @@
   "gui.village.taxes.sad": "%s got sad, the taxes are too much for them.",
   "gui.village.taxes.angry": "%s got angry due to the high taxes.",
   "gui.village.taxes.riot": "%s refused to pay those high taxes this time.",
+
   "gui.village.rank.outlaw": "Outlaw",
   "gui.village.rank.peasant": "Peasant",
   "gui.village.rank.merchant": "Merchant",
   "gui.village.rank.noble": "Noble",
   "gui.village.rank.mayor": "Mayor",
   "gui.village.rank.monarch": "Monarch",
+
   "gui.button.yes": "Yes",
   "gui.button.no": "No",
   "gui.button.ok": "Ok",
@@ -520,10 +591,12 @@
   "gui.button.familyTree": "Family Tree",
   "gui.button.armor": "Armor",
   "gui.button.library": "Library",
+
   "gui.button.professions": "Professions",
   "gui.button.profession.none": "Villager",
   "gui.button.profession.guard": "Guard",
   "gui.button.profession.archer": "Archer",
+
   "gui.title.namebaby.male": "It's a boy!",
   "gui.title.namebaby.female": "It's a girl!",
   "gui.title.namebaby": "Name your baby:",
@@ -532,6 +605,7 @@
   "gui.title.whistle": "Call Family Member",
   "gui.title.staffoflife": "Select a Villager to Revive",
   "gui.title.family_tree": "Search the Family Tree",
+
   "gui.label": "Name:",
   "gui.label.male": "Male",
   "gui.label.female": "Female",
@@ -542,8 +616,10 @@
   "gui.label.fishing": "Fishing",
   "gui.label.staying": "Staying",
   "gui.label.following": "Following",
+
   "gui.info.gift.line.1": "Gift Available",
   "gui.info.gift.line.2": "(Click to take)",
+
   "gui.interact.label.married": "Married to %1$s",
   "gui.interact.label.engaged": "Engaged to %1$s",
   "gui.interact.label.promised": "In love with %1$s",
@@ -557,12 +633,14 @@
   "gui.interact.label.mood": "Mood: %1$s",
   "gui.interact.label.personality": "Personality: %1$s",
   "gui.interact.label.happiness": "Happiness: %1$s",
+
   "gui.family_tree.title": "Family Tree",
   "gui.family_tree.label.deceased": "Deceased",
   "gui.family_tree.label.orphan": "Orphan",
   "gui.family_tree.child_of_2": "Child of %1$s and %2$s",
   "gui.family_tree.child_of_1": "Child of %1$s",
   "gui.family_tree.child_of_0": "Orphan",
+
   "gui.villager_editor.selectClothing": "Select Clothes",
   "gui.villager_editor.randClothing": "Random Clothes",
   "gui.villager_editor.randHair": "Random Hair",
@@ -608,6 +686,7 @@
   "gui.villager_editor.hair_hsv": "HSV Hair",
   "gui.villager_editor.hair_mode.tooltip": "Toggles HSV dyed hair. Only the underlying genetic hair color is inherited.",
   "gui.villager_editor.clear_hair": "Clear HSV color",
+
   "command.verify.success": "Verified! Limit increased.",
   "command.verify.failed": "Whoops, the given email is wrong.",
   "command.verify.crashed": "Something went wrong...",
@@ -624,14 +703,17 @@
   "command.tts.disabled": "Text to speech is disabled.",
   "command.tts_busy": "(Whenever villagers remain silent, it means the text-to-speech has to generate that phrase first. It will be there next time.)",
   "command.tts_unsupported_language": "Your game language is not supported by the text-to-speech. Please change it to English or disable TTS.",
+
   "mca.ai_broken": "AI broke, please send latest.log to dev!",
   "mca.ai_help": "AI enabled and reset to default. Click here to open the help page!",
   "mca.limit.patreon": "You reached your hourly AI limit. Click here to open the tutorial on how to increase that limit!",
   "mca.limit.premium": "You reached your hourly AI limit, even with your patreon subscription enabled! Please take a break.",
   "mca.limit.patreon.hover": "Click me!",
   "mca.inworldAI.setupError": "Could not assign villager to endpoint!",
+
   "blueprint.noBuilding": "You need to stand within a building",
   "blueprint.refreshed": "Buildings refreshed!",
+
   "blueprint.scan.overlap": "Building overlaps with existing one!",
   "blueprint.scan.block_limit": "Building has too large volume!",
   "blueprint.scan.size_limit": "Building is too large!",
@@ -640,13 +722,16 @@
   "blueprint.scan.too_small": "Building too small!",
   "blueprint.scan.identical": "Existing building updated!",
   "blueprint.scan.success": "Building added!",
+
   "reaper.day": "The reaper fears the sunlight.",
   "reaper.totems": "Three obsidian pillars, lit with fire, are required.",
+
   "marriage.married": "Married",
   "marriage.divorced": "Divorced",
   "marriage.engaged": "Engaged",
   "marriage.widow": "Widow",
   "marriage.promised": "Promised",
+
   "server.noProposals": "You have no active proposals.",
   "server.proposals": "You have active proposals from:",
   "server.sentProposal": "You have already sent a proposal to %1$s.",
@@ -674,6 +759,7 @@
   "server.destinyNotSet.description": "Type '/mca destiny'",
   "server.mail.title": "You have mail!",
   "server.mail.description": "Type '/mca mail' to receive",
+
   "gene.size": "Size",
   "gene.width": "Width",
   "gene.belly": "Belly",
@@ -687,81 +773,114 @@
   "gene.voice": "Voice",
   "gene.voice.tone": "Voice Tone",
   "gene.tooltip": "%s: %d%%",
+
   "events.marry": "%1$s and %2$s are now married!",
   "events.baby": "%1$s and %2$s have born a baby!",
   "events.restock": "%1$s has restocked their offers!",
   "events.arrival.inn": "%1$s has arrived at the inn!",
   "events.bountyHunters": "%1$s sent bounty hunters after you!",
   "events.bountyHuntersFinal": "%1$s has been wiped out, a large group of bounty hunters try to avenge it!",
+
   "advancement.mca.baby": "Next Generation",
   "advancement.mca.baby.description": "Have your first baby",
+
   "advancement.mca.best_friend": "Best Friends",
   "advancement.mca.best_friend.description": "Achieve 200 hearts in a relationship",
+
   "advancement.mca.excellent_gift": "Just What I Always Wanted",
   "advancement.mca.excellent_gift.description": "Give a perfect gift",
+
   "advancement.mca.family": "Settling In",
   "advancement.mca.family.description": "Start a family with a villager",
+
   "advancement.mca.friend": "Friendship Found",
   "advancement.mca.friend.description": "Achieve 50 hearts",
+
   "advancement.mca.grandparent": "Back In My day...",
   "advancement.mca.grandparent.description": "Father at least two generations of off-spring",
+
   "advancement.mca.grow_adult": "They Grow Up So Fast",
   "advancement.mca.grow_adult.description": "Successfully raise a functioning adult",
+
   "advancement.mca.grow_child": "What a Handful",
   "advancement.mca.grow_child.description": "Your baby has become a child!",
+
   "advancement.mca.marriage": "'Til Death Do Us Part",
   "advancement.mca.marriage.description": "Get engaged and marry a villager",
+
   "advancement.mca.monster": "You Monster!",
   "advancement.mca.monster.description": "You dropped the baby... You monster.",
+
   "advancement.mca.root": "Minecraft Comes Alive",
   "advancement.mca.root.description": "Enter a village. Your new social journey awaits!",
+
   "advancement.mca.twins": "A Loving Parent (For Two!)",
   "advancement.mca.twins.description": "Have two babies for the price of one!",
+
   "advancement.mca.kill_grim_reaper": "Beat Death",
   "advancement.mca.kill_grim_reaper.description": "Defeat the Grim Reaper",
+
   "advancement.mca.scythe_kill": "Become the Grim Reaper",
   "advancement.mca.scythe_kill.description": "Kill a villager with the scythe",
+
   "advancement.mca.scythe_revive": "A Soul for a Soul",
   "advancement.mca.scythe_revive.description": "Use a charged scythe to revive a villager",
+
   "advancement.mca.staff_of_life": "Staff of Life",
   "advancement.mca.staff_of_life.description": "Use the staff of life to revive a fallen comrade",
+
   "advancement.mca.merchant": "Merchant",
   "advancement.mca.merchant.description": "Get your first rank in a village.",
+
   "advancement.mca.noble": "Noble",
   "advancement.mca.noble.description": "Get the Noble rank.",
+
   "advancement.mca.mayor": "Mayor",
   "advancement.mca.mayor.description": "Get promoted to the Mayor.",
+
   "advancement.mca.monarch": "Monarch",
   "advancement.mca.monarch.description": "Become a Monarch.",
+
   "advancement.mca.bounty_hunter": "Hunted",
   "advancement.mca.bounty_hunter.description": "Get attacked by bounty hunters.",
+
   "advancement.mca.chores": "Chores",
   "advancement.mca.chores.description": "Let your children do the work.",
+
   "advancement.mca.baby_smelted": "You are a horrible person!",
   "advancement.mca.baby_smelted.description": "Abort a baby by unconventional means.",
+
   "advancement.mca.baby_sirben_smelted": "Truth, Justice, and the pursuit of destruction!",
   "advancement.mca.baby_sirben_smelted.description": "Go out of your way to eliminate those cultists (even if by unethical methods)!",
+
   "advancement.mca.baby_dropped": "A not so accidental rain check...",
   "advancement.mca.baby_dropped.description": "As a monarch, go out of your way to willingly terminate one of your own subjects.",
+
   "advancement.mca.friendly_fire": "Friendly Fire!",
   "advancement.mca.friendly_fire.description": "Off to the brig with that one!",
+
   "advancement.mca.ancient_cultists": "Ancient Cultists",
   "advancement.mca.ancient_cultists.description": "Explore the lore of the Sirbens and disturb the slumber of the ancient cultists.",
+
   "advancement.mca.williams_fate": "Twas a valiant effort!",
   "advancement.mca.williams_fate.description": "One of your subjects faced off against William in the den of war...",
+
   "notify.spouseendedmarriage": "%1$s has ended their marriage with you.",
   "notify.child.grownup": "%1$s has grown into an adult!",
   "notify.revival.disabled": "Revivals have been disabled by the server administrator.",
   "notify.trading.disabled": "Trading is disabled by the server administrator.",
   "notify.playerMarriage.disabled": "Player marriage is disabled by the server administrator.",
+
   "civil_registry.empty": "No village nearby.",
   "civil_registry.bounty_hunters": "Bounty hunter has been sent after %s.",
+
   "subtitle.mca.reaper.scythe_out": "Drawing scythe",
   "subtitle.mca.reaper.scythe_swing": "Swinging scythe",
   "subtitle.mca.reaper.idle": "Evil laughter",
   "subtitle.mca.reaper.death": "Reaper dying",
   "subtitle.mca.reaper.block": "Blocked attack",
   "subtitle.mca.reaper.summon": "Evil laughter",
+
   "subtitle.mca.villager.crying": "Crying",
   "subtitle.mca.villager.scream": "Scream",
   "subtitle.mca.villager.surprised": "Surprised",
@@ -773,7 +892,9 @@
   "subtitle.mca.villager.hurt": "Villager Hurt",
   "subtitle.mca.villager.angry": "Villager Angry",
   "subtitle.mca.villager.celebrate": "Villager Celebrating",
+
   "key.mca.skin_library": "Open Skin Library",
+
   "item.mca.black_acacia_crib": "Black Acacia Crib",
   "item.mca.black_bamboo_crib": "Black Bamboo Crib",
   "item.mca.black_birch_crib": "Black Birch Crib",

@@ -17,6 +17,8 @@ import java.util.*;
  * Villagerized Genetic Diversity.
  */
 public class Genetics implements Iterable<Genetics.Gene> {
+    private static final Set<GeneType> GENOMES = new HashSet<>();
+
     public static final GeneType SIZE = new GeneType("gene_size");
     public static final GeneType WIDTH = new GeneType("gene_width");
     public static final GeneType BREAST = new GeneType("gene_breast");
@@ -28,8 +30,9 @@ public class Genetics implements Iterable<Genetics.Gene> {
     public static final GeneType FACE = new GeneType("gene_face");
     public static final GeneType VOICE = new GeneType("gene_voice");
     public static final GeneType VOICE_TONE = new GeneType("gene_voice_tone");
-    private static final Set<GeneType> GENOMES = new HashSet<>();
+
     private static final CEnumParameter<Gender> GENDER = CParameter.create("Gender", Gender.UNASSIGNED);
+
     private final Map<GeneType, Gene> genes = new HashMap<>();
     private final VillagerLike<?> entity;
     private RandomSource random = RandomSource.create();

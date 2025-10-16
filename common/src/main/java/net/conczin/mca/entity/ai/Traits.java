@@ -32,6 +32,7 @@ public class Traits {
     public static Trait VEGETARIAN = registerTrait("vegetarian", 1.0F, 1.0F, false); // TODO
     public static Trait BISEXUAL = registerTrait("bisexual", 1.0F, 0.0F);
     public static Trait HOMOSEXUAL = registerTrait("homosexual", 1.0F, 0.0F);
+    public static Trait ASEXUAL = registerTrait("asexual", 1.0F, 0.0F);
     public static Trait ELECTRIFIED = registerTrait("electrified", 0.0F, 0.0F, false);
     public static Trait SIRBEN = registerTrait("sirben", 0.025F, 1.0F);
     public static Trait RAINBOW = registerTrait("rainbow", 0.05F, 0.0F);

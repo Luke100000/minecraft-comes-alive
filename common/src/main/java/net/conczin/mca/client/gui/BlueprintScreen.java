@@ -596,7 +596,7 @@ public class BlueprintScreen extends ExtendedScreen {
         if (BuiltInRegistries.BLOCK.containsKey(id)) {
             return Component.translatable(BuiltInRegistries.BLOCK.get(id).getDescriptionId());
         } else {
-            return Component.translatable("tag." + id);
+            return Component.translatable("tag.block." + id.getNamespace() + "." + id.getPath());
         }
     }
 
