@@ -794,7 +794,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
             // todo currently only client side
             if (isClientSide() && MCAClient.useGeneticsRenderer(vehicle.getUUID())) {
-                float height = CommonVillagerModel.getVillager(vehicle).getRawScaleFactor();
+                float height = CommonVillagerModel.getVillager(vehicle).getRawVerticalScaleFactor();
                 offset = offset.multiply(1.0f, height, 1.0f);
                 // TODO
             }
@@ -819,7 +819,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
             return SLEEPING_DIMENSIONS;
         }
 
-        float height = getScale() * 2.0F;
+        float height = getVerticalScaleFactor() * 2.0F;
         float width = getHorizontalScaleFactor() * 0.6F;
 
         return EntityDimensions.scalable(width, height);
@@ -1139,13 +1139,8 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     }
 
     @Override
-    public float getScale() {
-        return Math.min(0.999f, getRawScaleFactor());
-    }
-
-    @Override
     public void onSyncedDataUpdated(EntityDataAccessor<?> par) {
-        if (getTypeDataManager().isParam(AGE_STATE, par) || getTypeDataManager().isParam(Genetics.SIZE.getParam(), par)) {
+        if (getTypeDataManager().isParam(AGE_STATE, par) || getTypeDataManager().isParam(Genetics.SIZE.getParam(), par) || getTypeDataManager().isParam(Genetics.WIDTH.getParam(), par)) {
             refreshDimensions();
         }
 

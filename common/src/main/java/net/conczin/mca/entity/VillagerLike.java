@@ -312,15 +312,29 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
         if (getGenetics() == null || Config.getInstance().useSquidwardModels) {
             return asEntity().isBaby() ? 0.5f : 1.0f;
         } else {
-            return Math.min(0.999f, getGenetics().getHorizontalScaleFactor() * getTraits().getHorizontalScaleFactor() * getVillagerDimensions().getWidth() * getGenetics().getGender().getHorizontalScaleFactor());
+            return Math.min(0.999f, getRawHorizontalScaleFactor());
         }
     }
 
-    default float getRawScaleFactor() {
+    default float getRawHorizontalScaleFactor() {
+        return getGenetics().getHorizontalScaleFactor()
+               * getTraits().getHorizontalScaleFactor()
+               * getVillagerDimensions().getWidth()
+               * getGenetics().getGender().getHorizontalScaleFactor();
+    }
+
+    default float getVerticalScaleFactor() {
+        return Math.min(0.999f, getRawVerticalScaleFactor());
+    }
+
+    default float getRawVerticalScaleFactor() {
         if (getGenetics() == null || Config.getInstance().useSquidwardModels) {
             return asEntity().isBaby() ? 0.5f : 1.0f;
         } else {
-            return getGenetics().getVerticalScaleFactor() * getTraits().getVerticalScaleFactor() * getVillagerDimensions().getHeight() * getGenetics().getGender().getScaleFactor();
+            return getGenetics().getVerticalScaleFactor()
+                   * getTraits().getVerticalScaleFactor()
+                   * getVillagerDimensions().getHeight()
+                   * getGenetics().getGender().getScaleFactor();
         }
     }
 

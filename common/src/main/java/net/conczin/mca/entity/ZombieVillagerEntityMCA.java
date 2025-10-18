@@ -121,7 +121,7 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
             return SLEEPING_DIMENSIONS;
         }
 
-        float height = getScale() * 2.0F;
+        float height = getVerticalScaleFactor() * 2.0F;
         float width = getHorizontalScaleFactor() * 0.6F;
 
         return EntityDimensions.scalable(width, height);
@@ -129,7 +129,7 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
 
     @Override
     public float getScale() {
-        return Math.min(0.999f, getRawScaleFactor());
+        return Math.min(0.999f, getRawVerticalScaleFactor());
     }
 
     @Override
