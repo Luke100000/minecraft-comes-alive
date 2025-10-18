@@ -25,11 +25,11 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.npc.VillagerProfession;
 import net.minecraft.world.entity.player.Player;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -118,7 +118,7 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
             //also update players
             serverPlayer.serverLevel().players().forEach(p -> Network.sendToPlayer(new PlayerDataMessage(player.getUUID(), villagerData), p));
         } else if (entity instanceof VillagerLike) {
-            ((LivingEntity) entity).readAdditionalSaveData(villagerData);
+            entity.load(villagerData);
             entity.refreshDimensions();
             syncFamilyTree(player, entity, villagerData);
 
@@ -168,7 +168,13 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
         FamilyTree tree = FamilyTree.get((ServerLevel) entity.level());
         FamilyTreeNode entry = tree.getOrCreate(entity);
         entry.setGender(getGender(data));
-        entry.setName(data.getString("VillagerName"));
+
+        String s = villagerData.getString("CustomName");
+        try {
+            entry.setName(Objects.requireNonNull(Component.Serializer.fromJson(s, entity.registryAccess())).getString());
+        } catch (Exception e) {
+            MCA.LOGGER.error("Failed to parse custom name for villager: {}", s, e);
+        }
 
         if (villagerData.contains("FamilyTreeNewFatherName")) {
             String name = villagerData.getString("FamilyTreeNewFatherName");

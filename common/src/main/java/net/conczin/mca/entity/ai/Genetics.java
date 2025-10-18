@@ -19,17 +19,17 @@ import java.util.*;
 public class Genetics implements Iterable<Genetics.Gene> {
     private static final Set<GeneType> GENOMES = new HashSet<>();
 
-    public static final GeneType SIZE = new GeneType("gene_size");
-    public static final GeneType WIDTH = new GeneType("gene_width");
-    public static final GeneType BREAST = new GeneType("gene_breast");
-    public static final GeneType MELANIN = new GeneType("gene_melanin");
-    public static final GeneType HEMOGLOBIN = new GeneType("gene_hemoglobin");
-    public static final GeneType EUMELANIN = new GeneType("gene_eumelanin");
-    public static final GeneType PHEOMELANIN = new GeneType("gene_pheomelanin");
-    public static final GeneType SKIN = new GeneType("gene_skin");
-    public static final GeneType FACE = new GeneType("gene_face");
-    public static final GeneType VOICE = new GeneType("gene_voice");
-    public static final GeneType VOICE_TONE = new GeneType("gene_voice_tone");
+    public static final GeneType SIZE = new GeneType("Size");
+    public static final GeneType WIDTH = new GeneType("Width");
+    public static final GeneType BREAST = new GeneType("Breast");
+    public static final GeneType MELANIN = new GeneType("Melanin");
+    public static final GeneType HEMOGLOBIN = new GeneType("Hemoglobin");
+    public static final GeneType EUMELANIN = new GeneType("Eumelanin");
+    public static final GeneType PHEOMELANIN = new GeneType("Pheomelanin");
+    public static final GeneType SKIN = new GeneType("Skin");
+    public static final GeneType FACE = new GeneType("Face");
+    public static final GeneType VOICE = new GeneType("Voice");
+    public static final GeneType VOICE_TONE = new GeneType("VoiceTone");
 
     private static final CEnumParameter<Gender> GENDER = CParameter.create("Gender", Gender.UNASSIGNED);
 
@@ -142,7 +142,8 @@ public class Genetics implements Iterable<Genetics.Gene> {
 
         public GeneType(String key) {
             this.key = key;
-            parameter = CParameter.create(key, 0.5f);
+            this.parameter = CParameter.create("Gene" + key, 0.5f);
+
             GENOMES.add(this);
         }
 
@@ -151,7 +152,7 @@ public class Genetics implements Iterable<Genetics.Gene> {
         }
 
         public String getTranslationKey() {
-            return key().replace("_", ".");
+            return "gene." + key().toLowerCase(Locale.ROOT);
         }
 
         public CDataParameter<Float> getParam() {

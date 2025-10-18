@@ -200,7 +200,7 @@ public class BabyItem extends Item {
 
         child.readAdditionalSaveData(stack.getOrDefault(DataComponentsMCA.BABY_NBT, CustomData.EMPTY).copyTag());
 
-        child.setName(stack.getOrDefault(DataComponents.CUSTOM_NAME, Component.literal("Unnamed")).toString());
+        child.setCustomName(stack.getOrDefault(DataComponents.CUSTOM_NAME, Component.literal("Unnamed")));
 
         WorldUtils.spawnEntity(world, child, MobSpawnType.BREEDING);
 

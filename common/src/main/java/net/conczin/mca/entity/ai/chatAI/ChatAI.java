@@ -10,8 +10,6 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 
-import static net.conczin.mca.entity.VillagerLike.VILLAGER_NAME;
-
 public class ChatAI {
     /**
      * Max range to find a villager in
@@ -82,6 +80,10 @@ public class ChatAI {
         strategies.remove(villagerID);
     }
 
+    private static String getName(VillagerEntityMCA villager) {
+        return normalizeString(villager.getName().getString());
+    }
+
     /**
      * Checks if the message contains the name of any specific villagers and that villager is nearby. First match.
      * If not, checks if the player has a valid active conversation with a nearby villager.
@@ -98,7 +100,7 @@ public class ChatAI {
         // Find name in message
         String normalizedMsg = normalizeString(msg);
         for (VillagerEntityMCA villager : nearbyVillagers) {
-            String normalizedName = normalizeString(villager.getTrackedValue(VILLAGER_NAME));
+            String normalizedName = getName(villager);
             String[] nameParts = normalizedName.split(" ");
             for (String part : nameParts) {
                 if (Pattern.compile("\\b" + Pattern.quote(part) + "\\b").matcher(normalizedMsg).find()) {
@@ -151,7 +153,7 @@ public class ChatAI {
 
         // Go through list, look for first match for name
         for (VillagerEntityMCA villager : entities) {
-            String villagerName = normalizeString(villager.getTrackedValue(VILLAGER_NAME));
+            String villagerName = getName(villager);
             if (normalizedSearchName.equals(villagerName)) {
                 return Optional.of(villager);
             }

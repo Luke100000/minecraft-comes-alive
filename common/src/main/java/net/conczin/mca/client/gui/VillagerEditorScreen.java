@@ -226,12 +226,12 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                 }
 
                 //relations
-                for (String who : new String[]{"father", "mother", "spouse"}) {
+                for (String who : new String[]{"Father", "Mother", "Spouse"}) {
                     textFieldWidget = addRenderableWidget(new NamedTextFieldWidget(this.font, width / 2, y, DATA_WIDTH, 18,
-                            Component.translatable("gui.villager_editor.relation." + who)));
+                            Component.translatable("gui.villager_editor.relation." + who.toLowerCase(Locale.ROOT))));
                     textFieldWidget.setMaxLength(64);
-                    textFieldWidget.setValue(villagerData.getString("tree_" + who + "_name"));
-                    textFieldWidget.setResponder(name -> villagerData.putString("tree_" + who + "_new", name));
+                    textFieldWidget.setValue(villagerData.getString("FamilyTree" + who + "Name"));
+                    textFieldWidget.setResponder(name -> villagerData.putString("FamilyTreeNew" + who + "Name", name));
                     y += 20;
                 }
 
@@ -656,6 +656,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                 updateName(villagerName.getString());
             }
         }
+
         return villagerName;
     }
 
@@ -673,14 +674,8 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                 }
                 minecraft.player.setCustomName(newName);
                 minecraft.player.setCustomNameVisible(newName != null);
-                if (minecraft.player.isCustomNameVisible()) {
-                    villager.setCustomName(newName);
-                } else {
-                    villager.setName(realName.getString());
-                }
-            } else {
-                villager.setCustomName(newName);
             }
+            villager.setCustomName(newName);
         }
     }
 
@@ -822,8 +817,8 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
 
         if (page.equals("clothing") || page.equals("hair")) {
             CompoundTag nbt = new CompoundTag();
-            villager.addAdditionalSaveData(nbt);
-            villagerVisualization.readAdditionalSaveData(nbt);
+            villager.save(nbt);
+            villagerVisualization.load(nbt);
             villagerVisualization.setAge(villager.getAge());
             villagerVisualization.refreshDimensions();
 
@@ -873,7 +868,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     public void setVillagerData(CompoundTag villagerData) {
         if (villager != null) {
             this.villagerData = villagerData;
-            villager.readAdditionalSaveData(villagerData);
+            villager.load(villagerData);
 
             int hairDye = villager.getHairDye();
             hsvColoredHair = hairDye != 0xFF000000;
@@ -904,7 +899,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
 
     public void syncVillagerData() {
         CompoundTag nbt = villagerData;
-        villager.addAdditionalSaveData(nbt);
+        villager.save(nbt);
         nbt.putInt("Age", villagerBreedingAge);
         Network.sendToServer(new VillagerEditorSyncRequest("sync", villagerUUID, nbt));
     }

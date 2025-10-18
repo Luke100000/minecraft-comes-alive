@@ -1065,13 +1065,6 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     }
 
     @Override
-    @Nullable
-    public final Component getCustomName() {
-        String value = getTrackedValue(VILLAGER_NAME);
-        return MCA.isBlankString(value) ? null : Component.literal(value);
-    }
-
-    @Override
     public void setCustomName(@Nullable Component name) {
         super.setCustomName(name);
 

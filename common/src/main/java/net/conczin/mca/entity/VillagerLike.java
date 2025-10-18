@@ -1,6 +1,5 @@
 package net.conczin.mca.entity;
 
-import com.google.common.base.Strings;
 import net.conczin.mca.Config;
 import net.conczin.mca.MCA;
 import net.conczin.mca.entity.ai.DialogueType;
@@ -47,7 +46,6 @@ import java.util.Set;
 import static net.minecraft.world.entity.LivingEntity.getSlotForHand;
 
 public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrackedEntity<E>, VillagerDataHolder, Infectable, Messenger {
-    CDataParameter<String> VILLAGER_NAME = CParameter.create("VillagerName", ""); // TODO: Why Custom?
     CDataParameter<String> CLOTHES = CParameter.create("Clothes", "");
     CDataParameter<String> HAIR = CParameter.create("Hair", "");
     CDataParameter<Float> HAIR_COLOR_RED = CParameter.create("HairColorRed", 0.0f);
@@ -60,7 +58,7 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
 
     static <E extends Entity> CDataManager.Builder<E> createTrackedData(Class<E> type) {
         return new CDataManager.Builder<>(type)
-                .addAll(VILLAGER_NAME, CLOTHES, HAIR, HAIR_COLOR_RED, HAIR_COLOR_GREEN, HAIR_COLOR_BLUE, AGE_STATE)
+                .addAll(CLOTHES, HAIR, HAIR_COLOR_RED, HAIR_COLOR_GREEN, HAIR_COLOR_BLUE, AGE_STATE)
                 .add(Genetics::createTrackedData)
                 .add(Traits::createTrackedData)
                 .add(VillagerBrain::createTrackedData);
@@ -107,8 +105,8 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
             getGenetics().setGender(Gender.getRandom());
         }
 
-        if (Strings.isNullOrEmpty(getTrackedValue(VILLAGER_NAME))) {
-            setName(Names.pickCitizenName(getGenetics().getGender(), asEntity()));
+        if (asEntity().getCustomName() == null) {
+            asEntity().setCustomName(Component.literal(Names.pickCitizenName(getGenetics().getGender(), asEntity())));
         }
 
         validateClothes();
@@ -127,7 +125,6 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
     }
 
     default void setName(String name) {
-        setTrackedValue(VILLAGER_NAME, name);
         if (!asEntity().level().isClientSide) {
             EntityRelationship.of(asEntity()).ifPresent(relationship -> relationship.getFamilyEntry().setName(name));
         }
