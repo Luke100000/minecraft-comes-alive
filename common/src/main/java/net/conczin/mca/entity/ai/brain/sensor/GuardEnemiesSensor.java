@@ -49,7 +49,7 @@ public class GuardEnemiesSensor extends Sensor<LivingEntity> {
     private int getPriority(LivingEntity entity, LivingEntity guard) {
         if (entity instanceof VillagerEntityMCA villager) {
             return villager.isHostile() ? 10 : -1;
-        } else if (guard != null && entity instanceof Mob && (((Mob) entity).getTarget() == guard)) {
+        } else if (guard != null && entity instanceof Mob mob && mob.getTarget() == guard) {
             //priority is irrelevant if this entity is currently an active threat
             return 9;
         } else {

@@ -790,13 +790,13 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
             boolean left = passengers.get(0) == this;
             boolean head = passengers.size() > 2 && passengers.get(2) == this;
 
-            Vec3 offset = head ? new Vec3(0, 0.35f, 0) : new Vec3(left ? 0.4F : -0.4F, 0.05f, 0).yRot(yaw);
+            Vec3 offset = head ? new Vec3(0, 0.55f, 0) : new Vec3(left ? 0.4F : -0.4F, 0.05f, 0).yRot(yaw);
 
             // todo currently only client side
             if (isClientSide() && MCAClient.useGeneticsRenderer(vehicle.getUUID())) {
                 float height = CommonVillagerModel.getVillager(vehicle).getRawVerticalScaleFactor();
                 offset = offset.multiply(1.0f, height, 1.0f);
-                // TODO
+                offset = offset.add(0, (height - 1) * 1.5 - 0.7, 0);
             }
 
             Vec3 pos = this.position();
