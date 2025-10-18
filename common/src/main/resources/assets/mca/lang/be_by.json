@@ -695,7 +695,7 @@
   "gene.skin": "Скура",
   "gene.face": "Твар",
   "gene.voice": "Голас",
-  "gene.voice.tone": "Voice Tone",
+  "gene.voicetone": "Voice Tone",
   "gene.tooltip": "%s: %d%%",
   "events.marry": "%1$s і %2$s ажаніліся!",
   "events.baby": "%1$s і %2$s нарадзілі дзіця!",
