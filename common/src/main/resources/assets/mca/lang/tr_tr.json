@@ -695,7 +695,7 @@
   "gene.skin": "Vücut",
   "gene.face": "Yüz",
   "gene.voice": "Ses",
-  "gene.voice.tone": "Ses Tonu",
+  "gene.voicetone": "Voice Tone",
   "gene.tooltip": "%s: %d%%",
   "events.marry": "%1$s ve %2$s artık evli!",
   "events.baby": "%1$s ve %2$s artık bir bebekleri var!",
