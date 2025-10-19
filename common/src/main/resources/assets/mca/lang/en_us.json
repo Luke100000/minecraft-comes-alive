@@ -368,6 +368,7 @@
   "gui.skin_library.upload_failed": "Upload failed. Woops.",
   "gui.skin_library.subscribe": "Use server wide!",
   "gui.skin_library.sort_likes": "Sort by likes",
+  "gui.skin_library.sort_recommendations": "Daily recommendations",
   "gui.skin_library.sort_newest": "Sort by date",
   "gui.skin_library.filter_invalid": "Hide invalid content",
   "gui.skin_library.filter_hair": "Hide hair",

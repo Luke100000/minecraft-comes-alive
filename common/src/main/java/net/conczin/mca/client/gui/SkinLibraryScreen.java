@@ -70,7 +70,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
     private final VillagerEditorScreen previousScreen;
     private final List<LiteContent> contents = new LinkedList<>();
     private String filteredString = "";
-    private SortingMode sortingMode = SortingMode.LIKES;
+    private SortingMode sortingMode = SortingMode.RECOMMENDATIONS;
     private boolean filterInvalidSkins = true;
     private boolean moderatorMode = false;
     private boolean filterHair = false;
@@ -751,7 +751,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                 }));
                 setSelectionPage(selectionPage);
 
-                int iconX = width / 2 + 80;
+                int iconX = width / 2 - 170;
 
                 //sorting icons
                 addRenderableWidget(new ToggleableTooltipIconButtonWidget(iconX, height / 2 + 82, 6 * 16, 3 * 16,
@@ -768,7 +768,15 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                             sortingMode = SortingMode.NEWEST;
                             loadPage(true);
                         }));
+                addRenderableWidget(new ToggleableTooltipIconButtonWidget(iconX + 22 * 2, height / 2 + 82, 14 * 16, 3 * 16,
+                        sortingMode == SortingMode.RECOMMENDATIONS,
+                        Component.translatable("gui.skin_library.sort_recommendations"),
+                        v -> {
+                            sortingMode = SortingMode.RECOMMENDATIONS;
+                            loadPage(true);
+                        }));
 
+                iconX = width / 2 + 50;
                 if (subscriptionFilter == SubscriptionFilter.LIBRARY) {
                     //filter
                     addRenderableWidget(new ToggleableTooltipIconButtonWidget(iconX + 22 * 2, height / 2 + 82, 9 * 16, 3 * 16,
@@ -1753,6 +1761,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
     public enum SortingMode {
         LIKES("likes"),
         NEWEST("date"),
+        RECOMMENDATIONS("recommendations"),
         REPORTS("reports");
 
         public final String order;
