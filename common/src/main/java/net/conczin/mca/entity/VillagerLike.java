@@ -403,20 +403,8 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
     default void validateClothes() {
         if (!asEntity().level().isClientSide()) {
             if (!getClothes().startsWith("immersive_library") && !ClothingList.getInstance().clothing.containsKey(getClothes())) {
-                //try to port from old versions
-                if (getClothes() != null) {
-                    ResourceLocation identifier = ResourceLocation.parse(getClothes());
-                    String id = identifier.getNamespace() + ":skins/clothing/normal/" + identifier.getPath();
-                    if (ClothingList.getInstance().clothing.containsKey(id)) {
-                        setClothes(id);
-                    } else {
-                        MCA.LOGGER.info("Villagers clothing {} does not exist!", getClothes());
-                        randomizeClothes();
-                    }
-                } else {
-                    MCA.LOGGER.info("Villagers clothing {} went missing!", getClothes());
-                    randomizeClothes();
-                }
+                MCA.LOGGER.info("Villagers clothing {} does not exist!", getClothes());
+                randomizeClothes();
             }
 
             if (!getHair().startsWith("immersive_library") && !HairList.getInstance().hair.containsKey(getHair())) {
@@ -436,6 +424,22 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
     @SuppressWarnings({"unchecked", "RedundantSuppression"})
     default void readNbtForConversion(CompoundTag input) {
         this.getTypeDataManager().load((E) asEntity(), input);
+    }
+
+    default void syncFromEditor(CompoundTag nbt) {
+        Mob entity = asEntity();
+        entity.readAdditionalSaveData(nbt);
+
+        if (nbt.contains("CustomName", 8)) {
+            String s = nbt.getString("CustomName");
+
+            try {
+                entity.setCustomName(Component.Serializer.fromJson(s, entity.registryAccess()));
+            } catch (Exception exception) {
+                MCA.LOGGER.warn("Failed to parse entity custom name {}", s, exception);
+            }
+        }
+
     }
 
     default void copyVillagerAttributesFrom(VillagerLike<?> other) {

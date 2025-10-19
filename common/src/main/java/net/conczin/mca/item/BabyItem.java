@@ -136,8 +136,8 @@ public class BabyItem extends Item {
         }
 
         // update
-        if (world.getGameTime() % 20 == 0) {
-            stack.set(DataComponentsMCA.BABY_AGE, stack.getOrDefault(DataComponentsMCA.BABY_AGE, 0) + 20);
+        if (world.getGameTime() % 100 == 0) {
+            stack.set(DataComponentsMCA.BABY_AGE, stack.getOrDefault(DataComponentsMCA.BABY_AGE, 0) + 100);
         }
     }
 
@@ -195,10 +195,13 @@ public class BabyItem extends Item {
         VillagerEntityMCA child = VillagerFactory.newVillager(world)
                 .withPosition(player.position())
                 .withGender(gender)
+                .withAge(-AgeState.getMaxAge())
                 .build();
 
         CompoundTag savedBaby = stack.getOrDefault(DataComponentsMCA.BABY_NBT, CustomData.EMPTY).copyTag();
-        child.readAdditionalSaveData(savedBaby);
+        if (!savedBaby.isEmpty()) {
+            child.readAdditionalSaveData(savedBaby);
+        }
 
         child.setCustomName(stack.getOrDefault(DataComponents.CUSTOM_NAME, Component.literal("Unnamed")));
 

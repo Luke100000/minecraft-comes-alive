@@ -117,8 +117,8 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
 
             //also update players
             serverPlayer.serverLevel().players().forEach(p -> Network.sendToPlayer(new PlayerDataMessage(player.getUUID(), villagerData), p));
-        } else if (entity instanceof VillagerLike) {
-            entity.load(villagerData);
+        } else if (entity instanceof VillagerLike<?> villagerLike) {
+            villagerLike.syncFromEditor(villagerData);
             entity.refreshDimensions();
             syncFamilyTree(player, entity, villagerData);
 
