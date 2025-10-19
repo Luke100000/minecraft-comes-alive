@@ -2,6 +2,7 @@ package net.conczin.mca.server.world.data;
 
 import net.conczin.mca.Config;
 import net.conczin.mca.entity.VillagerEntityMCA;
+import net.conczin.mca.entity.ai.Memories;
 import net.conczin.mca.resources.API;
 import net.conczin.mca.resources.BuildingTypes;
 import net.conczin.mca.server.world.data.villageComponents.*;
@@ -30,7 +31,9 @@ public class Village implements Iterable<Building> {
     public static final int MERGE_MARGIN = 64;
     private static final int MOVE_IN_COOLDOWN = 1200;
     private static final long BED_SYNC_TIME = 200;
+
     public final List<ItemStack> storageBuffer = new LinkedList<>();
+
     private final ServerLevel world;
     private final Map<Integer, Building> buildings = new HashMap<>();
     private final int id;
@@ -39,11 +42,10 @@ public class Village implements Iterable<Building> {
     private final VillageMarriageManager villageMarriageManager = new VillageMarriageManager(this);
     private final VillageProcreationManager villageProcreationManager = new VillageProcreationManager(this);
     private final VillageTaxesManager villageTaxesManager = new VillageTaxesManager(this);
+
     public long lastMoveIn;
     private String name = API.getVillagePool().pickVillageName("village");
-    private Map<UUID, Integer> unspentHearts = new HashMap<>();
     private Map<UUID, Map<UUID, Integer>> reputation = new HashMap<>();
-    private int unspentMood = 0;
     private int beds;
     private long lastBedSync;
     private Map<UUID, String> residentNames = new HashMap<>();
@@ -65,13 +67,11 @@ public class Village implements Iterable<Building> {
         name = v.getString("name");
         taxes = v.getFloat("taxesFloat");
         beds = v.getInt("beds");
-        unspentHearts = NbtHelper.toMap(v.getCompound("unspentHearts"), UUID::fromString, i -> ((IntTag) i).getAsInt());
         reputation = NbtHelper.toMap(v.getCompound("reputation"), UUID::fromString, i ->
                 NbtHelper.toMap((CompoundTag) i, UUID::fromString, i2 -> ((IntTag) i2).getAsInt())
         );
         residentNames = NbtHelper.toMap(v.getCompound("residentNames"), UUID::fromString, Tag::getAsString);
         residentHomes = NbtHelper.toMap(v.getCompound("residentHomes"), UUID::fromString, i -> ((LongTag) i).getAsLong());
-        unspentMood = v.getInt("unspentMood");
 
         if (v.contains("populationThresholdFloat")) {
             populationThreshold = v.getFloat("populationThresholdFloat");
@@ -340,69 +340,33 @@ public class Village implements Iterable<Building> {
     }
 
     public int getReputation(Player player) {
-        return reputation.getOrDefault(player.getUUID(), Collections.emptyMap()).values().stream().mapToInt(i -> i).sum()
-               + unspentHearts.getOrDefault(player.getUUID(), 0);
+        return reputation.getOrDefault(player.getUUID(), Collections.emptyMap()).values().stream().mapToInt(i -> i).sum();
     }
 
-    public void resetHearts(Player player) {
-        unspentHearts.remove(player.getUUID());
-        markDirty();
-    }
-
-    public void pushHearts(Player player, int rep) {
-        pushHearts(player.getUUID(), rep);
-        markDirty();
-    }
-
-    public void pushHearts(UUID player, int rep) {
-        unspentHearts.put(player, unspentHearts.getOrDefault(player, 0) + rep);
-        markDirty();
-    }
-
-    public int popHearts(Player player) {
-        int v = unspentHearts.getOrDefault(player.getUUID(), 0);
-        int step = (int) Math.ceil(Math.abs(((double) v) / getPopulation()));
-        if (v > 0) {
-            v -= step;
-            if (v == 0) {
-                unspentHearts.remove(player.getUUID());
-            } else {
-                unspentHearts.put(player.getUUID(), v);
+    public void pushHearts(Player player, int h) {
+        List<Memories> loadedMemories = new ArrayList<>();
+        for (UUID uuid : residentNames.keySet()) {
+            if (world.getEntity(uuid) instanceof VillagerEntityMCA villager) {
+                loadedMemories.add(villager.getVillagerBrain().getMemoriesForPlayer(player));
             }
-            markDirty();
-            return step;
-        } else if (v < 0) {
-            v += step;
-            if (v == 0) {
-                unspentHearts.remove(player.getUUID());
-            } else {
-                unspentHearts.put(player.getUUID(), v);
-            }
-            markDirty();
-            return -step;
-        } else {
-            return 0;
         }
+        if (loadedMemories.isEmpty()) {
+            return;
+        }
+        int splitHearts = (int) Math.ceil((double) h / loadedMemories.size());
+        for (Memories memories : loadedMemories) {
+            memories.modHearts(splitHearts);
+        }
+        markDirty();
     }
 
     public void pushMood(int m) {
-        unspentMood += m;
-        markDirty();
-    }
-
-    public int popMood() {
-        int step = (int) Math.ceil(Math.abs(((double) unspentMood) / getPopulation()));
-        if (unspentMood > 0) {
-            unspentMood -= step;
-            markDirty();
-            return step;
-        } else if (unspentMood < 0) {
-            unspentMood += step;
-            markDirty();
-            return -step;
-        } else {
-            return 0;
+        for (UUID uuid : residentNames.keySet()) {
+            if (world.getEntity(uuid) instanceof VillagerEntityMCA villager) {
+                villager.getVillagerBrain().modifyMoodValue(m);
+            }
         }
+        markDirty();
     }
 
     public CompoundTag save() {
@@ -411,13 +375,11 @@ public class Village implements Iterable<Building> {
         v.putString("name", name);
         v.putFloat("taxesFloat", taxes);
         v.putInt("beds", beds);
-        v.put("unspentHearts", NbtHelper.fromMap(new CompoundTag(), unspentHearts, UUID::toString, IntTag::valueOf));
         v.put("reputation", NbtHelper.fromMap(new CompoundTag(), reputation, UUID::toString, i ->
                 NbtHelper.fromMap(new CompoundTag(), i, UUID::toString, IntTag::valueOf)
         ));
         v.put("residentNames", NbtHelper.fromMap(new CompoundTag(), residentNames, Object::toString, StringTag::valueOf));
         v.put("residentHomes", NbtHelper.fromMap(new CompoundTag(), residentHomes, Object::toString, LongTag::valueOf));
-        v.putInt("unspentMood", unspentMood);
         v.putFloat("populationThresholdFloat", populationThreshold);
         v.putFloat("marriageThresholdFloat", marriageThreshold);
         v.put("buildings", NbtHelper.fromList(buildings.values(), Building::save));
@@ -427,7 +389,6 @@ public class Village implements Iterable<Building> {
 
     public void merge(Village village) {
         buildings.putAll(village.buildings);
-        unspentMood += village.unspentMood;
         calculateDimensions();
     }
 
@@ -448,10 +409,6 @@ public class Village implements Iterable<Building> {
 
     public Map<UUID, String> getResidentNames() {
         return residentNames;
-    }
-
-    public boolean hasResident(UUID id) {
-        return residentNames.containsKey(id);
     }
 
     public void removeResident(VillagerEntityMCA villager) {

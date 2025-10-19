@@ -160,17 +160,17 @@ public class VillageManager extends SavedData implements Iterable<Village> {
     }
 
     private void startBountyHunterWave(ServerPlayer player, Village sender) {
-        int count = Math.min(30, -sender.getReputation(player) / 100 + 2);
+        int heartsPerHunter = 100;
+        int count = Math.min(15, -sender.getReputation(player) / heartsPerHunter + 2);
 
         if (sender.getPopulation() == 0) {
             //the village has been wiped out, lets send one last wave
             sender.cleanReputation();
-            sender.resetHearts(player);
 
             count *= 2;
         } else {
             //slightly increase your reputation
-            sender.pushHearts(player, count * 50);
+            sender.pushHearts(player, count * heartsPerHunter / 2);
         }
 
         //trigger advancement

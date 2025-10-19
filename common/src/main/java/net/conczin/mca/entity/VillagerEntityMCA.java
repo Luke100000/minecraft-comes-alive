@@ -84,7 +84,10 @@ import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.*;
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.UUID;
 import java.util.function.Predicate;
 
 
@@ -850,25 +853,13 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         //alert family and nearby villagers
         relations.onDeath(cause);
 
-        //distribute the hearts across the other villagers
-        //this prevents rapid drops in village reputation as well as bounty hunters to know what you did
         Optional<Village> village = residency.getHomeVillage();
-        if (village.isPresent()) {
-            ServerLevel servRef = (ServerLevel) level();
-            Map<UUID, Memories> memories = mcaBrain.getMemories();
-
-            //iterate through all players for fate system
-            if (cause.getEntity() != null) {
-                servRef.players().forEach(player -> {
-                    Rank relationToVillage = Tasks.getRank(village.get(), player);
-                    ResourceLocation causeId = EntityType.getKey(cause.getEntity().getType());
-                    CriterionMCA.FATE.trigger(player, causeId, relationToVillage);
-                });
-            }
-
-            for (Map.Entry<UUID, Memories> entry : memories.entrySet()) {
-                village.get().pushHearts(entry.getKey(), entry.getValue().getHearts());
-            }
+        if (village.isPresent() && cause.getEntity() != null && level() instanceof ServerLevel serverLevel) {
+            serverLevel.players().forEach(player -> {
+                Rank relationToVillage = Tasks.getRank(village.get(), player);
+                ResourceLocation causeId = EntityType.getKey(cause.getEntity().getType());
+                CriterionMCA.FATE.trigger(player, causeId, relationToVillage);
+            });
         }
 
         //move out
