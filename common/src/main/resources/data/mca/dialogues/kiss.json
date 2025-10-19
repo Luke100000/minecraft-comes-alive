@@ -12,10 +12,6 @@
               "personality": "flirty"
             },
             {
-              "chance": 4,
-              "personality": "peppy"
-            },
-            {
               "chance": 5,
               "constraints": "promised"
             },

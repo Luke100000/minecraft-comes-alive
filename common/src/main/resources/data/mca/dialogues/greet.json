@@ -98,10 +98,6 @@
           "baseChance": 5,
           "conditions": [
             {
-              "chance": 5,
-              "personality": "confident"
-            },
-            {
               "chance": 2,
               "personality": "friendly"
             },

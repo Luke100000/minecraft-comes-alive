@@ -265,7 +265,10 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
 
     default void updateAttributes() {
         //set speed
-        float speed = getVillagerBrain().getPersonality().getSpeedModifier();
+        float speed = 1.0f;
+        if (getTraits().hasTrait(Traits.ATHLETIC)) {
+            speed *= 1.1f;
+        }
 
         speed /= (0.9f + getGenetics().getGene(Genetics.WIDTH) * 0.2f);
         speed *= (0.9f + getGenetics().getGene(Genetics.SIZE) * 0.2f);

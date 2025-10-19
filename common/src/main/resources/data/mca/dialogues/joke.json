@@ -9,7 +9,7 @@
           "conditions": [
             {
               "chance": 5,
-              "personality": "witty"
+              "personality": "upbeat"
             },
             {
               "chance": 1,
@@ -26,10 +26,6 @@
             {
               "chance": 7,
               "personality": "gloomy"
-            },
-            {
-              "chance": 4,
-              "personality": "peppy"
             }
           ],
           "actions": {
@@ -43,7 +39,7 @@
           "conditions": [
             {
               "chance": 5,
-              "personality": "grumpy"
+              "personality": "crabby"
             }
           ],
           "actions": {
@@ -61,7 +57,7 @@
           "conditions": [
             {
               "chance": 5,
-              "personality": "witty"
+              "personality": "upbeat"
             },
             {
               "chance": 1,
@@ -78,10 +74,6 @@
             {
               "chance": 7,
               "personality": "gloomy"
-            },
-            {
-              "chance": 4,
-              "personality": "peppy"
             }
           ],
           "actions": {
@@ -95,7 +87,7 @@
           "conditions": [
             {
               "chance": 5,
-              "personality": "grumpy"
+              "personality": "crabby"
             }
           ],
           "actions": {
@@ -113,7 +105,7 @@
           "conditions": [
             {
               "chance": 5,
-              "personality": "witty"
+              "personality": "upbeat"
             },
             {
               "chance": 4,
@@ -134,10 +126,6 @@
             {
               "chance": 7,
               "personality": "gloomy"
-            },
-            {
-              "chance": 4,
-              "personality": "peppy"
             }
           ],
           "actions": {
@@ -151,7 +139,7 @@
           "conditions": [
             {
               "chance": 5,
-              "personality": "grumpy"
+              "personality": "crabby"
             }
           ],
           "actions": {

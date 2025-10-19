@@ -19,6 +19,8 @@ import java.util.stream.Collectors;
 public class Traits {
     public static final Map<String, Trait> TRAIT_REGISTRY = new HashMap<>();
     private static final CDataParameter<CompoundTag> TRAITS = CParameter.create("Traits", new CompoundTag());
+
+    public static Trait ATHLETIC = registerTrait("athletic", 1.0F, 0.5F, false);
     public static Trait LEFT_HANDED = registerTrait("left_handed", 1.0F, 0.5F, false);
     public static Trait WEAK = registerTrait("weak", 1.0F, 1.0F, false);
     public static Trait TOUGH = registerTrait("tough", 1.0F, 1.0F, false);
@@ -37,6 +39,7 @@ public class Traits {
     public static Trait SIRBEN = registerTrait("sirben", 0.025F, 1.0F);
     public static Trait RAINBOW = registerTrait("rainbow", 0.05F, 0.0F);
     public static Trait UNKNOWN = registerTrait("unknown", 0.0F, 0.0F, false);
+
     private final VillagerLike<?> entity;
     private RandomSource random = RandomSource.create();
 
