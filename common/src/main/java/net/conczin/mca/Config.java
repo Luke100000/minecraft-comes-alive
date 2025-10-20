@@ -16,178 +16,748 @@ import java.util.Map;
 import java.util.UUID;
 
 public final class Config {
-    public static final int VERSION = 1;
+    private static final int VERSION = 1;
     private static final Config INSTANCE = loadOrCreate();
+
     private static Config serverConfig;
+
     @SuppressWarnings("unused")
     public String README = "https://github.com/Luke100000/minecraft-comes-alive/wiki";
     public int version = 0;
-    //mod features
+
+    //////////////////
+    // Mod features //
+    //////////////////
+
+    /**
+     * Overwrite newly spawned vanilla villagers with MCA villagers.
+     * If set to false, original villagers will remain unchanged.
+     */
     public boolean overwriteOriginalVillagers = true;
+
+    /**
+     * A whitelist of modded villagers to be converted into MCA villagers.
+     * <p>
+     * Note: Modded villagers must extend from the {@code Villager} class.
+     * Example: Guard Villagers do not, and thus cannot be converted.
+     */
     public List<String> moddedVillagerWhitelist = List.of();
+
+    /**
+     * Overwrite vanilla zombie villagers with MCA zombie villagers.
+     */
     public boolean overwriteOriginalZombieVillagers = true;
+
+    /**
+     * Overwrite all zombies (not just zombie villagers)
+     * with MCA zombie villagers. May cause unpredictable behavior.
+     */
     public boolean overwriteAllZombiesWithZombieVillagers = false;
+
+    /**
+     * Whitelist of modded zombie villagers to be converted into MCA zombie villagers.
+     */
     public List<String> moddedZombieVillagerWhitelist = List.of();
+
+    /**
+     * Chance (0–1) that a spawned zombie will be a baby zombie.
+     */
     public float babyZombieChance = 0.25f;
+
+    /**
+     * Injects MCA villagers into the villager tag.
+     */
     public boolean villagerTagsHacks = true;
+
+    /**
+     * Enables the villager infection system.
+     * Infected villagers can turn into zombie villagers after some time.
+     */
     public boolean enableInfection = true;
+
+    /**
+     * Allows summoning of the Grim Reaper entity.
+     */
     public boolean allowGrimReaper = true;
+
+    /**
+     * Prefix used in villager chat messages.
+     */
     public String villagerChatPrefix = "";
+
+    /**
+     * If true, players can damage baby villagers.
+     */
     public boolean canHurtBabies = true;
+
+    /**
+     * Whether to show notifications when entering a village.
+     */
     public boolean enterVillageNotification = true;
+
+    /**
+     * Whether to show notifications when villagers get married.
+     */
     public boolean villagerMarriageNotification = true;
+
+    /**
+     * Whether to show notifications when a villager gives birth.
+     */
     public boolean villagerBirthNotification = true;
+
+    /**
+     * Whether to show notifications when a visitor arrives at the inn.
+     */
     public boolean innArrivalNotification = true;
+
+    /**
+     * Whether to show notifications when a villager restocks their trades.
+     */
     public boolean villagerRestockNotification = true;
+
+    /**
+     * If true, all notifications (village entry, marriage, birth, etc.)
+     * are shown in the chat instead of above the hotbar.
+     */
     public boolean showNotificationsAsChat = false;
+
+    /**
+     * The number of hearts required for a villager to consider the player a friend.
+     */
     public int heartsToBeConsideredAsFriend = 40;
+
+    /**
+     * Enables MCA villagers to send letters or mail to players.
+     */
     public boolean enableVillagerMailingPlayers = true;
+
+    /**
+     * Whether body customization (e.g., height, size) is available in the Destiny editor.
+     */
     public boolean allowBodyCustomizationInDestiny = true;
+
+    /**
+     * Whether trait customization is available in the Destiny editor.
+     */
     public boolean allowTraitCustomizationInDestiny = true;
+
+    /**
+     * Check for matching gender when trying to marry a villager.
+     */
     public boolean enableGenderCheckForPlayers = true;
+
+    /**
+     * Chance (0–1) for infection when bitten by a zombie.
+     */
     public float zombieBiteInfectionChance = 0.05f;
+
+    /**
+     * Reduction in infection chance per villager trading level.
+     */
     public float infectionChanceDecreasePerLevel = 0.25f;
+
+    /**
+     * Duration (in ticks) until a villager turns into a zombie after infection.
+     * 20 ticks = 1 second; 72000 ticks = 1 hour.
+     */
     public int infectionTime = 72000;
-    //villager behavior
+
+    ///////////////////////
+    // Villager behavior //
+    ///////////////////////
+
+    /**
+     * Fraction (0–1) of babies that are born as twins.
+     */
     public float twinBabyChance = 0.05f;
+
+    /**
+     * Number of hearts required to marry a villager.
+     */
     public int marriageHeartsRequirement = 100;
+
+    /**
+     * Number of hearts required to get engaged to a villager.
+     */
     public int engagementHeartsRequirement = 50;
+
+    /**
+     * Number of hearts required to give a bouquet to a villager.
+     */
     public int bouquetHeartsRequirement = 10;
+
+    /**
+     * Time (in ticks) until a baby grows up when held as an item.
+     */
     public int babyItemGrowUpTime = 24000;
+
+    /**
+     * Maximum villager lifetime in ticks (Time to grow fully up).
+     */
     public int villagerMaxAgeTime = 384000;
+
+    /**
+     * Maximum health of a villager.
+     */
     public int villagerMaxHealth = 20;
+
+    /**
+     * If true, allows stuck villagers to teleport to a safe location.
+     * Disabled by default as it can cause villagers to disappear unexpectedly.
+     */
     public boolean allowVillagerTeleporting = false;
+
+    /**
+     * Minimum squared distance at which teleportation becomes possible for villagers.
+     */
     public double villagerMinTeleportationDistance = 128;
+
+    /**
+     * Number of hearts a child starts with towards their parent.
+     */
     public int childInitialHearts = 100;
+
+    /**
+     * Number of hearts required for a villager to greet the player.
+     */
     public int greetHeartsThreshold = 75;
+
+    /**
+     * Number of in-game days after which villagers begin greeting the player.
+     */
     public int greetAfterDays = 1;
+
+    /**
+     * Fraction (0–1) of villagers who will have biome-independent skin tones.
+     */
     public float geneticImmigrantChance = 0.2f;
+
+    /**
+     * Chance multiplier (0–1) of a villager having one trait.
+     */
     public float traitChance = 0.25f;
+
+    /**
+     * Chance multiplier (0–1) of a child inheriting a parent’s personality trait.
+     */
     public float traitInheritChance = 0.5f;
+
+    /**
+     * Allows the player to bypass restrictions on certain traits
+     * that are normally blocked (e.g., Left-Handed, Diabetes, Vegetarian, etc.).
+     */
     public boolean bypassTraitRestrictions = false;
+
+    /**
+     * Fraction (0–1) of villagers who are night owls (awake at night, asleep during the day).
+     */
     public float nightOwlChance = 0.5f;
+
+    /**
+     * Allows all villagers to potentially become night owls.
+     */
     public boolean allowAnyNightOwl = false;
+
+    /**
+     * For every X hearts, players may hit a villager once without guards attacking them.
+     */
     public int heartsForPardonHit = 30;
+
+    /**
+     * Time (in ticks) before a player’s pardon resets after hitting a villager.
+     */
     public int pardonPlayerTicks = 1200;
+
+    /**
+     * If true, guards will attack all monsters (including modded ones).
+     * May cause guards to attack neutral mobs depending on configuration.
+     */
     public boolean guardsTargetMonsters = false;
+
+    /**
+     * Height scaling factor for male villagers.
+     */
     public float maleVillagerHeightFactor = 0.9f;
+
+    /**
+     * Height scaling factor for female villagers.
+     */
     public float femaleVillagerHeightFactor = 0.85f;
+
+    /**
+     * Width scaling factor for male villagers.
+     */
     public float maleVillagerWidthFactor = 1.0f;
+
+    /**
+     * Width scaling factor for female villagers.
+     */
     public float femaleVillagerWidthFactor = 0.95f;
+
+    /**
+     * If true, shows villager name tags above their heads.
+     */
     public boolean showNameTags = true;
+
+    /**
+     * Maximum distance at which name tags are visible.
+     */
     public float nameTagDistance = 5.0f;
+
+    /**
+     * Enables MCA villager voice lines.
+     * Set to false to mute all villager sounds.
+     */
     public boolean useMCAVoices = true;
+
+    /**
+     * If true, villagers use vanilla Minecraft voice sounds
+     * instead of MCA custom voices.
+     */
     public boolean useVanillaVoices = false;
+
+    /**
+     * Amount of interaction fatigue gained per interaction.
+     * Each fatigue point makes the next interaction harder.
+     */
     public float interactionChanceFatigue = 1.0f;
+
+    /**
+     * Time (in ticks) before fatigue resets after interacting with a villager.
+     */
     public int interactionFatigueCooldown = 4800;
+
+    /**
+     * Extra health villagers gain per trading level.
+     */
     public int villagerHealthBonusPerLevel = 5;
+
+    /**
+     * If true, villagers use the vanilla “Squidward” (nose) model.
+     */
     public boolean useSquidwardModels = false;
+
+    /**
+     * Enables female body features (visual only).
+     */
     public boolean enableBoobs = true;
+
+    /**
+     * Duration (in ticks) that burned clothing effects remain visible.
+     */
     public int burnedClothingTickLength = 3600;
+
+    /**
+     * Chance (0–1) that a villager will spawn with colored hair.
+     */
     public float coloredHairChance = 0.02f;
+
+    /**
+     * Minimum hearts required for a villager to automatically appear
+     * on a tombstone when they die.
+     * Family members always appear regardless of this threshold.
+     */
     public int heartsRequiredToAutoSpawnGravestone = 10;
+
+    /**
+     * Enables smarter villager door AI,
+     * allowing them to open gates as well.
+     */
     public boolean useSmarterDoorAI = false;
+
+    /**
+     * Time (in ticks) before villagers can procreate again.
+     */
     public int procreationCooldown = 72000;
-    //tracker
+
+
+    /////////////
+    // Tracker //
+    /////////////
+
+    /**
+     * Tracks villager positions for debugging or AI purposes.
+     * Slightly increases world size and CPU overhead.
+     */
     public boolean trackVillagerPosition = true;
+
+    /**
+     * Number of ticks between position tracking updates for villagers.
+     */
     public int trackVillagerPositionEveryNTicks = 200;
-    //AI
+
+
+    ////////
+    // AI //
+    /// ////
     @SuppressWarnings("unused")
-    public String _read_this_before_using_villager_ai = "https://github.com/Luke100000/minecraft-comes-alive/wiki/GPT3-based-conversations";
+    public String _read_this_before_using_villager_ai =
+            "https://github.com/Luke100000/minecraft-comes-alive/wiki/GPT3-based-conversations";
+
+    /**
+     * Enables the AI chat for villagers.
+     */
     public boolean enableVillagerChatAI = false;
+
+    /**
+     * Chat completion endpoint for villager AI chat requests.
+     */
     public String villagerChatAIEndpoint = "https://api.conczin.net/v1/mca/chat";
+
+    /**
+     * Villager try to follow commands like "follow me", ...
+     */
     public boolean villagerChatAIUseTools = false;
+
+    /**
+     * Optional API token.
+     */
     public String villagerChatAIToken = "";
+
+    /**
+     * AI model to use for villager chat.
+     */
     public String villagerChatAIModel = "default";
+
+    /**
+     * System prompt used to guide global villager AI behavior.
+     */
     public String villagerChatAISystemPrompt = "";
+
+    /**
+     * If true, AI uses long-term memory for persistent conversations.
+     */
     public boolean villagerChatAIUseLongTermMemory = false;
+
+    /**
+     * If false, villager will have separate memories per player.
+     */
     public boolean villagerChatAIUseSharedLongTermMemory = false;
+
+    /**
+     * If true, session-specific information is included in AI requests.
+     * Only relevant if writing a custom backend.
+     */
     public boolean villagerChatAIIncludeSessionInformation = false;
-    //InworldAI
+
+    /**
+     * Inworld API token.
+     */
     public String inworldAIToken = "";
+
+    /**
+     * See GitHub wiki.
+     */
     public Map<UUID, String> inworldAIResourceNames = new HashMap<>();
-    // TTS
+
+    /**
+     * Enables online TTS (text-to-speech) for villager dialogue.
+     */
     public boolean enableOnlineTTS = false;
+
+    /**
+     * Online TTS model to use.
+     */
     public String onlineTTSModel = "default";
+
+    /**
+     * URL of the online TTS server.
+     */
     public String onlineTTSServer = "https://api.rk.conczin.net/";
+
+    /**
+     * Player2 API url.
+     */
     public String player2Url = "http://127.0.0.1:4315/";
+
+    /**
+     * Elevenlabs API key.
+     */
     public String elevenlabsPrivateAPIkey = "";
+
+    /**
+     * ElevenLabs TTS model to use.
+     */
     public String elevenlabsModel = "eleven_turbo_v2_5";
+
+    /**
+     * List of male voice IDs for ElevenLabs TTS.
+     */
     public List<String> elevenlabsMaleVoices = List.of(
             "ErXwobaYiN019PkySvjV",
             "VR6AewLTigWG4xSOukaG",
             "onwK4e9ZLuTAKqWW03F9",
             "onwK4e9ZLuTAKqWW03F9"
     );
+
+    /**
+     * List of female voice IDs for ElevenLabs TTS.
+     */
     public List<String> elevenlabsFemaleVoices = List.of(
             "MF3mGyEYCl7XYWbV9V6O",
             "AZnzlk1XvdvUeBnXmlld",
             "pMsXgVXv3BLzUgSXRplE",
             "AZnzlk1XvdvUeBnXmlld"
     );
-    //village behavior
+
+    //////////////////////
+    // Village behavior //
+    //////////////////////
+
+    /**
+     * Fraction (0–1) of villagers that spawn as guards.
+     */
     public float guardSpawnFraction = 0.175f;
+
+    /**
+     * Multiplier of taxes paid by villages.
+     */
     public float taxesFactor = 0.5f;
+
+    /**
+     * Interval (in ticks) between tax collection seasons.
+     */
     public int taxSeason = 168000;
+
+    /**
+     * Chance (0–1) per minute that a marriage event occurs in the village.
+     */
     public float marriageChancePerMinute = 0.05f;
+
+    /**
+     * Chance (0–1) per minute that an adventurer arrives at the inn.
+     */
     public float adventurerAtInnChancePerMinute = 0.05f;
+
+    /**
+     * Duration (in ticks) that adventurers stay at the inn.
+     */
     public int adventurerStayTime = 48000;
+
+    /**
+     * Chance (0–1) per minute that villagers will procreate.
+     */
     public float villagerProcreationChancePerMinute = 0.05f;
+
+    /**
+     * Interval (in ticks) at which bounty hunters attack the player if reputation is low.
+     */
     public int bountyHunterInterval = 48000;
+
+    /**
+     * Negative heart threshold for bounty hunter attacks.
+     */
     public int bountyHunterHearts = -150;
+
+    /**
+     * If true, the inn spawns adventurers.
+     */
     public boolean innSpawnsAdventurers = true;
+
+    /**
+     * If true, the inn spawns cultists.
+     */
     public boolean innSpawnsCultists = true;
+
+    /**
+     * If true, the inn spawns wandering traders.
+     */
     public boolean innSpawnsWanderingTraders = true;
+
+    /**
+     * Fraction (0–1) of villages left as vanilla villages.
+     */
     public float fractionOfVanillaVillages = 0;
+
+    /**
+     * Fraction (0–1) of vanilla zombie villagers.
+     */
     public float fractionOfVanillaZombies = 0;
+
+    /**
+     * Minimum number of buildings required to consider an area a village.
+     * Below this, it is considered a settlement and welcome notifications are suppressed.
+     */
     public int minimumBuildingsToBeConsideredAVillage = 3;
+
+    /**
+     * Dimensions where villagers should not be converted into MCA villagers.
+     */
     public List<String> villagerDimensionBlacklist = List.of();
+
+    /**
+     * List of allowed spawn reasons for villager conversion.
+     */
     public List<String> allowedSpawnReasons = List.of(
             "natural",
             "structure"
     );
+
+    /**
+     * List of items that villagers cannot be interacted with for mod compat.
+     */
     public List<String> villagerInteractionItemBlacklist = List.of(
             "minecraft:bucket"
     );
+
+    /**
+     * If true, automatically scan for buildings. High CPU usage.
+     */
     public boolean enableAutoScanByDefault = false;
-    //skin library
+
+    /**
+     * URL for the immersive skin library.
+     */
     public String immersiveLibraryUrl = "https://mca.conczin.net";
+
+    /**
+     * If true, allows non-ops to add skins from the library to the server wide pool.
+     */
     public boolean allowEveryoneToAddContentGlobally = false;
-    //gifts
+
+    /**
+     * Number of entries in the gift desaturation queue.
+     */
     public int giftDesaturationQueueLength = 16;
+
+    /**
+     * Factor controlling how much repeated gifts lose effectiveness.
+     */
     public float giftDesaturationFactor = 0.5f;
+
+    /**
+     * Exponent applied to desaturation formula; reduces impact of expensive gifts.
+     */
     public double giftDesaturationExponent = 0.85;
+
+    /**
+     * Factor multiplying the satisfaction value to determine heart impact from gifts.
+     */
     public double giftSatisfactionFactor = 0.33;
+
+    /**
+     * How much a gift influences a villager's mood.
+     */
     public float giftMoodEffect = 0.5f;
+
+    /**
+     * Base mood effect of a gift, independent of previous gifts.
+     */
     public float baseGiftMoodEffect = 2;
+
+    /**
+     * Time (in ticks) after which gift desaturation resets.
+     */
     public int giftDesaturationReset = 24000;
-    //player interactions
+
+    /**
+     * Allow players to marry each other.
+     */
     public boolean allowPlayerMarriage = true;
-    //structure settings
+
+    /**
+     * Minimum building size for buildings.
+     */
     public int minBuildingSize = 32;
+
+    /**
+     * Maximum building size for buildings.
+     */
     public int maxBuildingSize = 8192;
+
+    /**
+     * Maximum radius of a building from its center.
+     */
     public int maxBuildingRadius = 320;
+
+    /**
+     * Minimum pillar height for Grim Reaper altars.
+     */
     public int minPillarHeight = 2;
+
+    /**
+     * Maximum tree height for chopping chores.
+     */
     public int maxTreeHeight = 8;
+
+    /**
+     * Maximum ticks for valid tree log blocks before they are considered grown.
+     */
     public Map<String, Integer> maxTreeTicks = ImmutableMap.<String, Integer>builder()
             .put("#minecraft:logs", 60)
             .build();
+
+    /**
+     * List of valid blocks that can serve as the base of trees.
+     */
     public List<String> validTreeSources = List.of(
             "minecraft:grass_block",
             "minecraft:dirt"
     );
-    //player customization
+
+    //////////////////////////
+    // Player customization //
+    //////////////////////////
+
+    /**
+     * Launches a player into Destiny feature when they first join.
+     */
     public boolean launchIntoDestiny = true;
+
+    /**
+     * Allows the player to modify their Destiny once via command.
+     */
     public boolean allowDestinyCommandOnce = true;
+
+    /**
+     * Allows the player to modify their Destiny multiple times via command.
+     */
     public boolean allowDestinyCommandMoreThanOnce = false;
+
+    /**
+     * Players can teleport to Destiny locations.
+     */
     public boolean allowDestinyTeleportation = true;
+
+    /**
+     * Enables shader locations mapping for players.
+     */
     public boolean enablePlayerShaders = true;
+
+    /**
+     * Player can select the villager model.
+     */
     public boolean enableVillagerPlayerModel = true;
+
+    /**
+     * Forces the player model to look like a villager.
+     */
     public boolean forceVillagerPlayerModel = false;
+
+    /**
+     * Allows limited access to player editor (name, gender, etc.).
+     */
     public boolean allowLimitedPlayerEditor = true;
+
+    /**
+     * Allows full access to the player editor including clothing and hair.
+     */
     public boolean allowFullPlayerEditor = false;
+
+    /**
+     * Allow players to modify their size.
+     */
     public boolean allowPlayerSizeAdjustment = true;
+
+    /**
+     * Use the USA name set instead of international names.
+     */
     public boolean useModernUSANamesOnly = false;
+
+    /**
+     * Map of entity names to guard attack priorities.
+     * Negative values indicate the entity should be ignored.
+     */
     public Map<String, Integer> guardsTargetEntities = ImmutableMap.<String, Integer>builder()
             .put("minecraft:creeper", -1)
             .put("minecraft:drowned", 2)
@@ -207,6 +777,10 @@ public final class Config {
             .put(MCA.MOD_ID + ":female_zombie_villager", 3)
             .put(MCA.MOD_ID + ":male_zombie_villager", 3)
             .build();
+
+    /**
+     * List of blocks or tags that villagers will not teleport onto.
+     */
     public List<String> villagerPathfindingBlacklist = List.of(
             "#minecraft:climbable",
             "#minecraft:fence_gates",
@@ -218,6 +792,10 @@ public final class Config {
             "#minecraft:trapdoors",
             "#minecraft:walls"
     );
+
+    /**
+     * Structures that can be mentioned in Rumors conversation options.
+     */
     public List<String> structuresInRumors = List.of(
             "minecraft:igloo",
             "minecraft:pyramid",
@@ -240,6 +818,11 @@ public final class Config {
             "minecraft:pillager_outpost",
             "minecraft:ancient_city"
     );
+
+    /**
+     * Locations where the Destiny feature can teleport the player.
+     * <a href="https://github.com/Luke100000/minecraft-comes-alive/wiki/Custom-Rumors-and-Destiny-Structures">Wiki</a>
+     */
     public List<String> destinySpawnLocations = List.of(
             "somewhere",
             "minecraft:shipwreck_beached",
@@ -250,25 +833,54 @@ public final class Config {
             "minecraft:village_savanna",
             "minecraft:ancient_city"
     );
+
+    /**
+     * Maps Destiny locations to translation keys for UI text.
+     */
     public Map<String, String> destinyLocationsToTranslationMap = Map.of(
             "default", "destiny.story.travelling",
             "minecraft:shipwreck_beached", "destiny.story.sailing"
     );
+
+    /**
+     * Maps modded professions to MCA professions for clothing conversion.
+     * Only adult clothing is used; toddlers and children remain unchanged.
+     */
     public Map<String, String> professionConversionsMap = Map.of();
+
+    /**
+     * Maps traits to shader locations, applied to players when camera entity has the trait.
+     * Requires enablePlayerShaders to be true.
+     */
     public Map<String, String> shaderLocationsMap = Map.of(
             "color_blind", "minecraft:shaders/post/desaturate.json",
             "sirben", "mca:shaders/post/sirben.json"
     );
+
+    /**
+     * Player renderer elements that can be disabled for certain mods.
+     * Supported values: arms, left_arm, right_arm, all, block_player, block_villager
+     */
     public Map<String, String> playerRendererBlacklist = Map.of(
             "morph", "arms",
             "firstpersonmod", "arms",
             "firstperson", "arms",
             "epicfight", "all"
     );
+
+    /**
+     * Map of enabled traits. Keys are trait IDs, values are true/false.
+     */
     public Map<String, Boolean> enabledTraits = new HashMap<>();
+
+    /**
+     * Map of tax items to their value in units.
+     * If item is too expensive, it may not be picked until tax budget is sufficient.
+     */
     public Map<String, Float> taxesMap = Map.of(
             "minecraft:emerald", 1.0f
     );
+
 
     public static Config getInstance() {
         return INSTANCE;
