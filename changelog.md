@@ -1,4 +1,4 @@
-# 7.6.11
+# 7.6.12
 
 * Added asexual trait (Thanks iGalaxyFox!)
 * Added personality translations for Russian (Thanks SlavaVas!)
