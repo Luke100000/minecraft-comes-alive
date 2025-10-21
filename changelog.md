@@ -1,3 +1,9 @@
+# 7.6.11
+
+* Added asexual trait (Thanks iGalaxyFox!)
+* Added personality translations for Russian (Thanks SlavaVas!)
+* Synced translations
+
 # 7.6.10
 
 * Maybe fixed empty villages on pre-generated worlds (Thanks SlayerTheChikken!)

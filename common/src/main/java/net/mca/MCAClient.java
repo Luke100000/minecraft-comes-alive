@@ -44,7 +44,8 @@ public class MCAClient {
         boolean isTTSPackActive = MinecraftClient.getInstance().getResourceManager().streamResourcePacks().anyMatch(pack -> {
             return pack.getName().contains("MCAVoices");
         });
-        return !isTTSPackActive && MinecraftClient.getInstance().options.language.equals("en_us") && !Config.getInstance().enableOnlineTTS;
+        String language = MinecraftClient.getInstance().options.language;
+        return !isTTSPackActive && (language.equals("en_us") || language.equals("ru_ru")) && !Config.getInstance().enableOnlineTTS;
     }
 
     public static boolean useGeneticsRenderer(UUID uuid) {
