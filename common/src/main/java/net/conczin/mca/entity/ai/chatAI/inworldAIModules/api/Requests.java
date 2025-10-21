@@ -17,7 +17,6 @@ public class Requests {
      *
      * @param urlString The URL to which the request is to be sent.
      * @param body      The body of the request, which is sent as a string.
-     * @return An Optional<String> that contains the response from the server if the request was successful, or an empty Optional if an exception occurred.
      */
     public static Optional<String> makeRequest(String urlString, String body) {
         return makeRequest(urlString, body, "");
@@ -26,12 +25,11 @@ public class Requests {
     /**
      * This method is used to make a HTTP POST request to a specified URL with a provided body and session ID.
      * It sets up a connection, sends the request, and retrieves the response.
-     * Logs the request if an error occured.
+     * Logs the request if an error occurred.
      *
      * @param urlString     The URL to which the request is to be sent.
      * @param body          The body of the request, which is sent as a string.
      * @param sessionIDAuth The session ID used for authentication, which is sent as a string.
-     * @return An Optional<String> that contains the response from the server if the request was successful, or an empty Optional if an exception occurred.
      */
     public static Optional<String> makeRequest(String urlString, String body, String sessionIDAuth) {
         String responseString = "No response";
