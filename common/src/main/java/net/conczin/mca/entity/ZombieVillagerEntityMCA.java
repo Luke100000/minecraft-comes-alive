@@ -128,11 +128,6 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
     }
 
     @Override
-    public float getScale() {
-        return Math.min(0.999f, getRawVerticalScaleFactor());
-    }
-
-    @Override
     public final InteractionResult interactAt(Player player, Vec3 pos, @NotNull InteractionHand hand) {
         ItemStack stack = player.getItemInHand(hand);
         if (hand.equals(InteractionHand.MAIN_HAND) && !stack.is(TagsMCA.Items.ZOMBIE_EGGS) && stack.getItem() != Items.GOLDEN_APPLE) {
