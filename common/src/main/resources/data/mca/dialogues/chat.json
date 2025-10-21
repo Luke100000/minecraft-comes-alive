@@ -11,10 +11,6 @@
               "personality": "gloomy"
             },
             {
-              "chance": 6,
-              "personality": "peppy"
-            },
-            {
               "chance": 2,
               "personality": "sensitive"
             }

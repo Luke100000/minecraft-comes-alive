@@ -9,10 +9,12 @@ import java.util.HashMap;
 import java.util.Map;
 
 public class ColorPalette {
-    public static final ColorPalette SKIN = new ColorPalette(MCA.locate("textures/colormap/villager_skin.png"));
-    public static final ColorPalette HAIR = new ColorPalette(MCA.locate("textures/colormap/villager_hair.png"));
     static final Data EMPTY = new Data(1, 1, new int[]{0xFFFFFF});
     static final Map<ResourceLocation, ColorPalette> REGISTRY = new HashMap<>();
+
+    public static final ColorPalette SKIN = new ColorPalette(MCA.locate("textures/colormap/villager_skin.png"));
+    public static final ColorPalette HAIR = new ColorPalette(MCA.locate("textures/colormap/villager_hair.png"));
+
     private final ResourceLocation id;
 
     Data data = EMPTY;
@@ -23,7 +25,12 @@ public class ColorPalette {
     }
 
     private static int applyGreenShift(int color, float greenShift) {
-        return FastColor.ARGB32.lerp(greenShift / 1.8F, color, 0xFF00FF00);
+        return FastColor.ARGB32.colorFromFloat(
+                1.0f,
+                Mth.clamp(FastColor.ARGB32.red(color) / 255f * (1.0f - greenShift * 0.3f) - greenShift * 0.1f, 0, 1),
+                Mth.clamp(FastColor.ARGB32.green(color) / 255f * (1.0f + greenShift * 0.3f) + greenShift * 0.1f, 0, 1),
+                Mth.clamp(FastColor.ARGB32.blue(color) / 255f, 0, 1)
+        );
     }
 
     private static int clampFloor(float v, int max) {

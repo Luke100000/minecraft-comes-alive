@@ -5,7 +5,7 @@ import net.conczin.mca.entity.ai.relationship.AgeState;
 import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.resources.Names;
 import net.conczin.mca.util.WorldUtils;
-import net.minecraft.core.BlockPos;
+import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.MobSpawnType;
 import net.minecraft.world.entity.npc.VillagerData;
@@ -85,10 +85,6 @@ public class VillagerFactory {
         return this;
     }
 
-    public VillagerFactory withPosition(BlockPos pos) {
-        return withPosition(Vec3.atBottomCenterOf(pos.above()));
-    }
-
     public VillagerFactory withAge(int age) {
         this.age = OptionalInt.of(age);
         return this;
@@ -113,7 +109,7 @@ public class VillagerFactory {
         villager.getGenetics().setGender(gender);
         villager.setAge(age.orElseGet(() -> villager.getRandom().nextInt(AgeState.getMaxAge() * 3) - AgeState.getMaxAge()));
         position.ifPresent(pos -> villager.absMoveTo(pos.x(), pos.y(), pos.z()));
-        villager.setName(name.orElseGet(() -> Names.pickCitizenName(gender, villager)));
+        villager.setCustomName(Component.literal(name.orElseGet(() -> Names.pickCitizenName(gender, villager))));
         VillagerData data = villager.getVillagerData();
         villager.setVillagerData(new VillagerData(
                         type.orElseGet(data::getType),

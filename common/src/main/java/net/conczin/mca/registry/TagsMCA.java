@@ -21,8 +21,6 @@ public interface TagsMCA {
     interface Items {
         TagKey<Item> VILLAGER_EGGS = register("villager_eggs");
         TagKey<Item> ZOMBIE_EGGS = register("zombie_eggs");
-        TagKey<Item> VILLAGER_PLANTABLE = register("villager_plantable");
-        TagKey<Item> BABIES = register("babies");
 
         static void bootstrap() {
         }

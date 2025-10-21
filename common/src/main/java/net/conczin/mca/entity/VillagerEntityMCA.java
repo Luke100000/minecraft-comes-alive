@@ -10,8 +10,7 @@ import net.conczin.mca.entity.ai.brain.VillagerBrain;
 import net.conczin.mca.entity.ai.brain.VillagerTasksMCA;
 import net.conczin.mca.entity.ai.relationship.*;
 import net.conczin.mca.entity.interaction.VillagerCommandHandler;
-import net.conczin.mca.network.Network;
-import net.conczin.mca.network.c2s.InteractionVillagerMessage;
+import net.conczin.mca.mixin.MixinVillagerInvoker;
 import net.conczin.mca.registry.*;
 import net.conczin.mca.resources.Names;
 import net.conczin.mca.resources.Rank;
@@ -85,7 +84,10 @@ import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.*;
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.UUID;
 import java.util.function.Predicate;
 
 
@@ -361,7 +363,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         return stack.getItem() != ItemsMCA.VILLAGER_EDITOR
                && stack.getItem() != ItemsMCA.NEEDLE_AND_THREAD
                && stack.getItem() != ItemsMCA.COMB
-               && stack.getItem() != ItemsMCA.POTION_OF_FEMINITY
+               && stack.getItem() != ItemsMCA.POTION_OF_FEMININITY
                && stack.getItem() != ItemsMCA.POTION_OF_MASCULINITY;
     }
 
@@ -377,8 +379,10 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
             getDialogueType(player);
 
             if (player.isShiftKeyDown()) {
-                if (player instanceof ServerPlayer e) {
-                    Network.sendToPlayer(new InteractionVillagerMessage("trade", uuid), e);
+                if (!level().isClientSide && canTradeWithProfession()) {
+                    getInteractions().stopInteracting();
+                    MixinVillagerInvoker invoker = (MixinVillagerInvoker) this;
+                    invoker.invokeStartTrading(player);
                 }
             } else {
                 playWelcomeSound();
@@ -398,7 +402,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         if (!stack.is(TagsMCA.Items.VILLAGER_EGGS) && isAlive() && !isTrading() && !isSleeping() && canInteractWithItemStackInHand(stack) && !getVillagerBrain().isPanicking()) {
             if (isBaby()) {
                 copiedSayNo();
-            } else {
+            } else if (!level().isClientSide) {
                 boolean hasOffers = hasTradeOffers();
                 if (hand == InteractionHand.MAIN_HAND) {
                     if (!hasOffers && !level().isClientSide) {
@@ -790,13 +794,13 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
             boolean left = passengers.get(0) == this;
             boolean head = passengers.size() > 2 && passengers.get(2) == this;
 
-            Vec3 offset = head ? new Vec3(0, 0.35f, 0) : new Vec3(left ? 0.4F : -0.4F, 0.05f, 0).yRot(yaw);
+            Vec3 offset = head ? new Vec3(0, 0.55f, 0) : new Vec3(left ? 0.4F : -0.4F, 0.05f, 0).yRot(yaw);
 
             // todo currently only client side
             if (isClientSide() && MCAClient.useGeneticsRenderer(vehicle.getUUID())) {
-                float height = CommonVillagerModel.getVillager(vehicle).getRawScaleFactor();
+                float height = CommonVillagerModel.getVillager(vehicle).getRawVerticalScaleFactor();
                 offset = offset.multiply(1.0f, height, 1.0f);
-                // TODO
+                offset = offset.add(0, (height - 1) * 1.5 - 0.7, 0);
             }
 
             Vec3 pos = this.position();
@@ -819,7 +823,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
             return SLEEPING_DIMENSIONS;
         }
 
-        float height = getScale() * 2.0F;
+        float height = getVerticalScaleFactor() * 2.0F;
         float width = getHorizontalScaleFactor() * 0.6F;
 
         return EntityDimensions.scalable(width, height);
@@ -849,25 +853,13 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         //alert family and nearby villagers
         relations.onDeath(cause);
 
-        //distribute the hearts across the other villagers
-        //this prevents rapid drops in village reputation as well as bounty hunters to know what you did
         Optional<Village> village = residency.getHomeVillage();
-        if (village.isPresent()) {
-            ServerLevel servRef = (ServerLevel) level();
-            Map<UUID, Memories> memories = mcaBrain.getMemories();
-
-            //iterate through all players for fate system
-            if (cause.getEntity() != null) {
-                servRef.players().forEach(player -> {
-                    Rank relationToVillage = Tasks.getRank(village.get(), player);
-                    ResourceLocation causeId = EntityType.getKey(cause.getEntity().getType());
-                    CriterionMCA.FATE.trigger(player, causeId, relationToVillage);
-                });
-            }
-
-            for (Map.Entry<UUID, Memories> entry : memories.entrySet()) {
-                village.get().pushHearts(entry.getKey(), entry.getValue().getHearts());
-            }
+        if (village.isPresent() && cause.getEntity() != null && level() instanceof ServerLevel serverLevel) {
+            serverLevel.players().forEach(player -> {
+                Rank relationToVillage = Tasks.getRank(village.get(), player);
+                ResourceLocation causeId = EntityType.getKey(cause.getEntity().getType());
+                CriterionMCA.FATE.trigger(player, causeId, relationToVillage);
+            });
         }
 
         //move out
@@ -1065,13 +1057,6 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     }
 
     @Override
-    @Nullable
-    public final Component getCustomName() {
-        String value = getTrackedValue(VILLAGER_NAME);
-        return MCA.isBlankString(value) ? null : Component.literal(value);
-    }
-
-    @Override
     public void setCustomName(@Nullable Component name) {
         super.setCustomName(name);
 
@@ -1146,13 +1131,8 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     }
 
     @Override
-    public float getScale() {
-        return Math.min(0.999f, getRawScaleFactor());
-    }
-
-    @Override
     public void onSyncedDataUpdated(EntityDataAccessor<?> par) {
-        if (getTypeDataManager().isParam(AGE_STATE, par) || getTypeDataManager().isParam(Genetics.SIZE.getParam(), par)) {
+        if (getTypeDataManager().isParam(AGE_STATE, par) || getTypeDataManager().isParam(Genetics.SIZE.getParam(), par) || getTypeDataManager().isParam(Genetics.WIDTH.getParam(), par)) {
             refreshDimensions();
         }
 

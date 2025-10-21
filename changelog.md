@@ -581,7 +581,7 @@
 
 # 7.3.5
 
-* Added potion of feminity/masculinity
+* Added potion of femininity/masculinity
 * Fixed promised villager marrying
 * Fixed black hair issue
 * Removed duplicate jobless skins

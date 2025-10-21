@@ -47,20 +47,27 @@ public interface Messenger extends EntityWrapper {
         return DialogueType.UNASSIGNED;
     }
 
-    default MutableComponent getTranslatable(Player target, String phraseId, Object... params) {
-        String genderString = "";
-
-        String targetName;
+    static String getName(ServerPlayer target) {
         if (target.level() instanceof ServerLevel world) {
-            //todo won't work on a few client side use cases
-            targetName = FamilyTree.get(world)
+            return FamilyTree.get(world)
                     .getOrEmpty(target.getUUID())
                     .map(FamilyTreeNode::getName)
                     .filter(n -> !MCA.isBlankString(n))
                     .orElse(target.getName().getString());
+        } else {
+            return target.getName().getString();
+        }
+    }
+
+    default MutableComponent getTranslatable(Player target, String phraseId, Object... params) {
+        String genderString = "";
+
+        String targetName;
+        if (target instanceof ServerPlayer serverPlayer) {
+            targetName = getName(serverPlayer);
 
             //player gender
-            genderString = "#G" + PlayerSaveData.get((ServerPlayer) target).getGender().name().toLowerCase(Locale.ROOT) + ".";
+            genderString = "#G" + PlayerSaveData.get(serverPlayer).getGender().name().toLowerCase(Locale.ROOT) + ".";
         } else {
             targetName = target.getName().getString();
         }
@@ -127,7 +134,7 @@ public interface Messenger extends EntityWrapper {
 
         playSpeechEffect();
 
-        return prefix.append(message);
+        return message;
     }
 
     default void sendEventMessage(Component message, Player receiver) {

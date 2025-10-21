@@ -1,6 +1,5 @@
 package net.conczin.mca.entity;
 
-import com.google.common.base.Strings;
 import net.conczin.mca.Config;
 import net.conczin.mca.MCA;
 import net.conczin.mca.entity.ai.DialogueType;
@@ -47,7 +46,6 @@ import java.util.Set;
 import static net.minecraft.world.entity.LivingEntity.getSlotForHand;
 
 public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrackedEntity<E>, VillagerDataHolder, Infectable, Messenger {
-    CDataParameter<String> VILLAGER_NAME = CParameter.create("VillagerName", ""); // TODO: Why Custom?
     CDataParameter<String> CLOTHES = CParameter.create("Clothes", "");
     CDataParameter<String> HAIR = CParameter.create("Hair", "");
     CDataParameter<Float> HAIR_COLOR_RED = CParameter.create("HairColorRed", 0.0f);
@@ -60,7 +58,7 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
 
     static <E extends Entity> CDataManager.Builder<E> createTrackedData(Class<E> type) {
         return new CDataManager.Builder<>(type)
-                .addAll(VILLAGER_NAME, CLOTHES, HAIR, HAIR_COLOR_RED, HAIR_COLOR_GREEN, HAIR_COLOR_BLUE, AGE_STATE)
+                .addAll(CLOTHES, HAIR, HAIR_COLOR_RED, HAIR_COLOR_GREEN, HAIR_COLOR_BLUE, AGE_STATE)
                 .add(Genetics::createTrackedData)
                 .add(Traits::createTrackedData)
                 .add(VillagerBrain::createTrackedData);
@@ -107,8 +105,8 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
             getGenetics().setGender(Gender.getRandom());
         }
 
-        if (Strings.isNullOrEmpty(getTrackedValue(VILLAGER_NAME))) {
-            setName(Names.pickCitizenName(getGenetics().getGender(), asEntity()));
+        if (asEntity().getCustomName() == null) {
+            asEntity().setCustomName(Component.literal(Names.pickCitizenName(getGenetics().getGender(), asEntity())));
         }
 
         validateClothes();
@@ -127,7 +125,6 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
     }
 
     default void setName(String name) {
-        setTrackedValue(VILLAGER_NAME, name);
         if (!asEntity().level().isClientSide) {
             EntityRelationship.of(asEntity()).ifPresent(relationship -> relationship.getFamilyEntry().setName(name));
         }
@@ -142,6 +139,8 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
             return Set.of(Gender.MALE, Gender.FEMALE, Gender.NEUTRAL);
         } else if (villager.getTraits().hasTrait(Traits.HOMOSEXUAL)) {
             return Set.of(villager.getGenetics().getGender(), Gender.NEUTRAL);
+        } else if (villager.getTraits().hasTrait(Traits.ASEXUAL)) {
+            return Set.of(Gender.NEUTRAL);
         } else {
             return Set.of(villager.getGenetics().getGender().opposite(), Gender.NEUTRAL);
         }
@@ -266,7 +265,10 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
 
     default void updateAttributes() {
         //set speed
-        float speed = getVillagerBrain().getPersonality().getSpeedModifier();
+        float speed = 1.0f;
+        if (getTraits().hasTrait(Traits.ATHLETIC)) {
+            speed *= 1.1f;
+        }
 
         speed /= (0.9f + getGenetics().getGene(Genetics.WIDTH) * 0.2f);
         speed *= (0.9f + getGenetics().getGene(Genetics.SIZE) * 0.2f);
@@ -313,15 +315,29 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
         if (getGenetics() == null || Config.getInstance().useSquidwardModels) {
             return asEntity().isBaby() ? 0.5f : 1.0f;
         } else {
-            return Math.min(0.999f, getGenetics().getHorizontalScaleFactor() * getTraits().getHorizontalScaleFactor() * getVillagerDimensions().getWidth() * getGenetics().getGender().getHorizontalScaleFactor());
+            return Math.min(0.999f, getRawHorizontalScaleFactor());
         }
     }
 
-    default float getRawScaleFactor() {
+    default float getRawHorizontalScaleFactor() {
+        return getGenetics().getHorizontalScaleFactor()
+               * getTraits().getHorizontalScaleFactor()
+               * getVillagerDimensions().getWidth()
+               * getGenetics().getGender().getHorizontalScaleFactor();
+    }
+
+    default float getVerticalScaleFactor() {
+        return Math.min(0.999f, getRawVerticalScaleFactor());
+    }
+
+    default float getRawVerticalScaleFactor() {
         if (getGenetics() == null || Config.getInstance().useSquidwardModels) {
             return asEntity().isBaby() ? 0.5f : 1.0f;
         } else {
-            return getGenetics().getVerticalScaleFactor() * getTraits().getVerticalScaleFactor() * getVillagerDimensions().getHeight() * getGenetics().getGender().getScaleFactor();
+            return getGenetics().getVerticalScaleFactor()
+                   * getTraits().getVerticalScaleFactor()
+                   * getVillagerDimensions().getHeight()
+                   * getGenetics().getGender().getScaleFactor();
         }
     }
 
@@ -387,20 +403,8 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
     default void validateClothes() {
         if (!asEntity().level().isClientSide()) {
             if (!getClothes().startsWith("immersive_library") && !ClothingList.getInstance().clothing.containsKey(getClothes())) {
-                //try to port from old versions
-                if (getClothes() != null) {
-                    ResourceLocation identifier = ResourceLocation.parse(getClothes());
-                    String id = identifier.getNamespace() + ":skins/clothing/normal/" + identifier.getPath();
-                    if (ClothingList.getInstance().clothing.containsKey(id)) {
-                        setClothes(id);
-                    } else {
-                        MCA.LOGGER.info("Villagers clothing {} does not exist!", getClothes());
-                        randomizeClothes();
-                    }
-                } else {
-                    MCA.LOGGER.info("Villagers clothing {} went missing!", getClothes());
-                    randomizeClothes();
-                }
+                MCA.LOGGER.info("Villagers clothing {} does not exist!", getClothes());
+                randomizeClothes();
             }
 
             if (!getHair().startsWith("immersive_library") && !HairList.getInstance().hair.containsKey(getHair())) {
@@ -420,6 +424,22 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
     @SuppressWarnings({"unchecked", "RedundantSuppression"})
     default void readNbtForConversion(CompoundTag input) {
         this.getTypeDataManager().load((E) asEntity(), input);
+    }
+
+    default void syncFromEditor(CompoundTag nbt) {
+        Mob entity = asEntity();
+        entity.readAdditionalSaveData(nbt);
+
+        if (nbt.contains("CustomName", 8)) {
+            String s = nbt.getString("CustomName");
+
+            try {
+                entity.setCustomName(Component.Serializer.fromJson(s, entity.registryAccess()));
+            } catch (Exception exception) {
+                MCA.LOGGER.warn("Failed to parse entity custom name {}", s, exception);
+            }
+        }
+
     }
 
     default void copyVillagerAttributesFrom(VillagerLike<?> other) {

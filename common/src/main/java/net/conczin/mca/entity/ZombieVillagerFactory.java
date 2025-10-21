@@ -4,7 +4,7 @@ import net.conczin.mca.MCA;
 import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.resources.Names;
 import net.conczin.mca.util.WorldUtils;
-import net.minecraft.core.BlockPos;
+import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.MobSpawnType;
 import net.minecraft.world.entity.npc.VillagerData;
@@ -75,10 +75,6 @@ public class ZombieVillagerFactory {
         return this;
     }
 
-    public ZombieVillagerFactory withPosition(BlockPos pos) {
-        return withPosition(Vec3.atBottomCenterOf(pos.above()));
-    }
-
     public ZombieVillagerEntityMCA spawn(MobSpawnType reason) {
         if (position.isEmpty()) {
             MCA.LOGGER.info("Attempted to spawn villager without a position being set!");
@@ -92,8 +88,9 @@ public class ZombieVillagerFactory {
     public ZombieVillagerEntityMCA build() {
         Gender gender = this.gender.orElseGet(Gender::getRandom);
         ZombieVillagerEntityMCA zombie = gender.getZombieType().create(world);
+        assert zombie != null;
         zombie.getGenetics().setGender(gender);
-        zombie.setName(name.orElseGet(() -> Names.pickCitizenName(gender, zombie)));
+        zombie.setCustomName(Component.literal(name.orElseGet(() -> Names.pickCitizenName(gender, zombie))));
         position.ifPresent(pos -> zombie.absMoveTo(pos.x(), pos.y(), pos.z()));
         VillagerData data = zombie.getVillagerData();
         zombie.setVillagerData(new VillagerData(

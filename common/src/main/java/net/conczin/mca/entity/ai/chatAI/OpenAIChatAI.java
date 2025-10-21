@@ -7,6 +7,7 @@ import com.google.gson.JsonSyntaxException;
 import net.conczin.mca.Config;
 import net.conczin.mca.MCA;
 import net.conczin.mca.entity.VillagerEntityMCA;
+import net.conczin.mca.entity.ai.Messenger;
 import net.conczin.mca.entity.ai.chatAI.modules.*;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.ClickEvent;
@@ -145,7 +146,7 @@ public class OpenAIChatAI implements ChatAIStrategy {
             Config config = Config.getInstance();
             boolean isInHouse = config.villagerChatAIEndpoint.contains("conczin.net");
 
-            String playerName = player.getName().getString();
+            String playerName = Messenger.getName(player);
             String villagerName = villager.getName().getString();
 
             // forgot about last conversation if it's too long ago

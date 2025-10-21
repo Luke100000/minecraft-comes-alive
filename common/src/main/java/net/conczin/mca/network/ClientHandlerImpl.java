@@ -18,6 +18,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.toasts.SystemToast;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.item.ItemStack;
@@ -234,7 +235,8 @@ public class ClientHandlerImpl implements ClientHandler {
 
     @Override
     public void handleVillagerMessage(VillagerMessage message) {
-        client.getChatListener().handleSystemMessage(message.message(), false);
+        MutableComponent full = message.prefix().copy().append(message.message());
+        client.getChatListener().handleSystemMessage(full, false);
         SpeechManager.INSTANCE.onChatMessage(message.message(), message.uuid());
     }
 

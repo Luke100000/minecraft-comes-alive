@@ -38,8 +38,8 @@ public class VillagerLikeEntityMCARenderer<T extends Mob & VillagerLike<T>> exte
 
     @Override
     protected void scale(T villager, PoseStack matrices, float tickDelta) {
-        float height = villager.getRawScaleFactor();
-        float width = villager.getHorizontalScaleFactor();
+        float height = villager.getRawVerticalScaleFactor();
+        float width = villager.getRawHorizontalScaleFactor();
         matrices.scale(width, height, width);
         if (villager.getAgeState() == AgeState.BABY && !villager.isPassenger()) {
             matrices.translate(0, 0.6F, 0);

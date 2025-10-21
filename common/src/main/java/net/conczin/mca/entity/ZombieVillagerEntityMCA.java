@@ -1,7 +1,6 @@
 package net.conczin.mca.entity;
 
 import net.conczin.mca.Config;
-import net.conczin.mca.MCA;
 import net.conczin.mca.entity.ai.Genetics;
 import net.conczin.mca.entity.ai.Relationship;
 import net.conczin.mca.entity.ai.Traits;
@@ -13,7 +12,6 @@ import net.conczin.mca.entity.interaction.ZombieCommandHandler;
 import net.conczin.mca.registry.TagsMCA;
 import net.conczin.mca.util.InventoryUtils;
 import net.conczin.mca.util.network.datasync.CDataManager;
-import net.minecraft.ChatFormatting;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.syncher.EntityDataAccessor;
@@ -108,13 +106,6 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
     }
 
     @Override
-    @Nullable
-    public final Component getCustomName() {
-        String value = getTrackedValue(VILLAGER_NAME);
-        return MCA.isBlankString(value) ? null : Component.literal(value).withStyle(ChatFormatting.RED);
-    }
-
-    @Override
     public void setCustomName(@Nullable Component name) {
         super.setCustomName(name);
 
@@ -130,15 +121,10 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
             return SLEEPING_DIMENSIONS;
         }
 
-        float height = getScale() * 2.0F;
+        float height = getVerticalScaleFactor() * 2.0F;
         float width = getHorizontalScaleFactor() * 0.6F;
 
         return EntityDimensions.scalable(width, height);
-    }
-
-    @Override
-    public float getScale() {
-        return Math.min(0.999f, getRawScaleFactor());
     }
 
     @Override

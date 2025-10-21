@@ -38,6 +38,7 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<AbstractC
     private PlayerModel<AbstractClientPlayer> mca$villagerModel;
     @Unique
     private PlayerModel<AbstractClientPlayer> mca$vanillaModel;
+
     public MixinPlayerRenderer(EntityRendererProvider.Context ctx, PlayerModel<AbstractClientPlayer> model, float shadowRadius) {
         super(ctx, model, shadowRadius);
     }
@@ -69,8 +70,8 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<AbstractC
     @Inject(method = "scale(Lnet/minecraft/client/player/AbstractClientPlayer;Lcom/mojang/blaze3d/vertex/PoseStack;F)V", at = @At("TAIL"), cancellable = true)
     private void mca$injectScale(AbstractClientPlayer player, PoseStack matrices, float f, CallbackInfo ci) {
         if (MCAClient.useGeneticsRenderer(player.getUUID())) {
-            float height = CommonVillagerModel.getVillager(player).getRawScaleFactor();
-            float width = CommonVillagerModel.getVillager(player).getHorizontalScaleFactor();
+            float height = CommonVillagerModel.getVillager(player).getRawVerticalScaleFactor();
+            float width = CommonVillagerModel.getVillager(player).getRawHorizontalScaleFactor();
             matrices.scale(width, height, width);
             if (CommonVillagerModel.getVillager(player).getAgeState() == AgeState.BABY && !player.isPassenger()) {
                 matrices.translate(0, 0.6F, 0);

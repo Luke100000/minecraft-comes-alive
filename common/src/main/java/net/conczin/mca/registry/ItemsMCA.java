@@ -53,7 +53,7 @@ public interface ItemsMCA {
 
     Item BOUQUET = register("bouquet", new BouquetItem(baseProps()));
 
-    Item POTION_OF_FEMINITY = register("potion_of_feminity", new PotionOfMetamorphosisItem(baseProps().stacksTo(1), Gender.FEMALE));
+    Item POTION_OF_FEMININITY = register("potion_of_femininity", new PotionOfMetamorphosisItem(baseProps().stacksTo(1), Gender.FEMALE));
     Item POTION_OF_MASCULINITY = register("potion_of_masculinity", new PotionOfMetamorphosisItem(baseProps().stacksTo(1), Gender.MALE));
 
     Item NEEDLE_AND_THREAD = register("needle_and_thread", new NeedleAndThreadItem(baseProps().durability(8)));

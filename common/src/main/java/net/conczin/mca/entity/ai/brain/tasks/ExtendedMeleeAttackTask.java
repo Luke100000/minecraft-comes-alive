@@ -35,7 +35,7 @@ public class ExtendedMeleeAttackTask extends Behavior<Mob> {
     }
 
     @Override
-    protected void tick(ServerLevel world, Mob mobEntity, long l) {
+    protected void start(ServerLevel world, Mob mobEntity, long l) {
         LivingEntity livingEntity = getTarget(mobEntity);
         BehaviorUtils.lookAtEntity(mobEntity, livingEntity);
         if (mobEntity instanceof VillagerLike<?> villager) {

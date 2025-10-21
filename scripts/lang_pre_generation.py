@@ -94,18 +94,16 @@ def valid_phrase(key: str):
 
 personalities = [
     "athletic",
-    "confident",
     # "friendly",  # We use this one as the default
     "flirty",
-    "witty",
-    "shy",
+    "upbeat",
+    "introverted",
     "gloomy",
     "sensitive",
     "greedy",
     "odd",
-    "lazy",
-    "grumpy",
-    "peppy",
+    "relaxed",
+    "crabby"
 ]
 
 

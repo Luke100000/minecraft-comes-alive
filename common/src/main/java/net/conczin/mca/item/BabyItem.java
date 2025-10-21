@@ -136,8 +136,8 @@ public class BabyItem extends Item {
         }
 
         // update
-        if (world.getGameTime() % 1200 == 0) {
-            stack.set(DataComponentsMCA.BABY_AGE, stack.getOrDefault(DataComponentsMCA.BABY_AGE, 0) + 1200);
+        if (world.getGameTime() % 100 == 0) {
+            stack.set(DataComponentsMCA.BABY_AGE, stack.getOrDefault(DataComponentsMCA.BABY_AGE, 0) + 100);
         }
     }
 
@@ -198,9 +198,12 @@ public class BabyItem extends Item {
                 .withAge(-AgeState.getMaxAge())
                 .build();
 
-        child.readAdditionalSaveData(stack.getOrDefault(DataComponentsMCA.BABY_NBT, CustomData.EMPTY).copyTag());
+        CompoundTag savedBaby = stack.getOrDefault(DataComponentsMCA.BABY_NBT, CustomData.EMPTY).copyTag();
+        if (!savedBaby.isEmpty()) {
+            child.readAdditionalSaveData(savedBaby);
+        }
 
-        child.setName(stack.getOrDefault(DataComponents.CUSTOM_NAME, Component.literal("Unnamed")).toString());
+        child.setCustomName(stack.getOrDefault(DataComponents.CUSTOM_NAME, Component.literal("Unnamed")));
 
         WorldUtils.spawnEntity(world, child, MobSpawnType.BREEDING);
 

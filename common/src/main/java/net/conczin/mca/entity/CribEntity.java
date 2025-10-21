@@ -9,6 +9,7 @@ import net.conczin.mca.util.network.datasync.*;
 import net.minecraft.core.particles.BlockParticleOption;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.Tag;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvents;
@@ -17,6 +18,7 @@ import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityDimensions;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.MoverType;
 import net.minecraft.world.entity.player.Player;
@@ -34,7 +36,9 @@ public class CribEntity extends Entity implements CTrackedEntity<CribEntity> {
     private static final CDataParameter<ItemStack> BABY = CParameter.create("BabyItem", ItemStack.EMPTY);
     private static final CEnumParameter<CribWoodType> WOOD = CParameter.create("Wood", CribWoodType.OAK);
     private static final CEnumParameter<DyeColor> COLOR = CParameter.create("Color", DyeColor.RED);
+
     private static final CDataManager<CribEntity> DATA = createTrackedData().build();
+
     VillagerEntityMCA infant;
 
     public CribEntity(EntityType<? extends CribEntity> type, Level world) {
@@ -93,8 +97,9 @@ public class CribEntity extends Entity implements CTrackedEntity<CribEntity> {
     protected void readAdditionalSaveData(CompoundTag nbt) {
         if (nbt.contains("Baby")) {
             setTrackedValue(BABY, ItemStack.parseOptional(level().registryAccess(), nbt.getCompound("Baby")));
-            if (getTrackedValue(BABY).equals(ItemStack.EMPTY))
+            if (getTrackedValue(BABY).equals(ItemStack.EMPTY)) {
                 MCA.LOGGER.warn("Issue deserializing baby item from crib NBT!");
+            }
         }
         if (nbt.contains("Wood")) {
             setTrackedValue(WOOD, CribWoodType.values()[nbt.getInt("Wood")]);
@@ -105,21 +110,19 @@ public class CribEntity extends Entity implements CTrackedEntity<CribEntity> {
     }
 
     @Override
-    public Vec3 getPassengerRidingPosition(Entity entity) {
-        // TODO
-        return super.getPassengerRidingPosition(entity);
-    }
-
-    @Override
     protected void addAdditionalSaveData(CompoundTag nbt) {
         if (!getTrackedValue(BABY).equals(ItemStack.EMPTY)) {
-            CompoundTag babyCompound = new CompoundTag();
-            getTrackedValue(BABY).save(level().registryAccess(), babyCompound);
+            Tag babyCompound = getTrackedValue(BABY).save(level().registryAccess(), new CompoundTag());
             nbt.put("Baby", babyCompound);
         }
 
         nbt.putInt("Wood", Arrays.asList(CribWoodType.values()).indexOf(getTrackedValue(WOOD)));
         nbt.putInt("Color", Arrays.asList(DyeColor.values()).indexOf(getTrackedValue(COLOR)));
+    }
+
+    @Override
+    protected Vec3 getPassengerAttachmentPoint(Entity entity, EntityDimensions dimensions, float partialTick) {
+        return new Vec3(0.0, 0.1, 0.0);
     }
 
     private void setEntityOccupant(VillagerEntityMCA occupant) {
@@ -174,14 +177,17 @@ public class CribEntity extends Entity implements CTrackedEntity<CribEntity> {
     public void tick() {
         super.tick();
 
-        if (this.onGround()) this.setDeltaMovement(Vec3.ZERO);
-        else if (!this.isNoGravity()) {
+        if (this.onGround()) {
+            this.setDeltaMovement(Vec3.ZERO);
+        } else if (!this.isNoGravity()) {
             this.setDeltaMovement(this.getDeltaMovement().add(0.0, -0.04, 0.0));
         }
+
         this.move(MoverType.SELF, this.getDeltaMovement());
 
-        if (getTrackedValue(BABY) != ItemStack.EMPTY && getTrackedValue(BABY).getItem() instanceof BabyItem)
+        if (getTrackedValue(BABY) != ItemStack.EMPTY && getTrackedValue(BABY).getItem() instanceof BabyItem) {
             getTrackedValue(BABY).getItem().inventoryTick(getTrackedValue(BABY), level(), this, 0, false);
+        }
     }
 
     @Override
