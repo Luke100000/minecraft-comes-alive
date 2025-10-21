@@ -44,10 +44,10 @@ jobs:
           curseforge-token: ${{ env.CURSEFORGE_TOKEN }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-          name: "[Fabric ${{steps.split.outputs._1}}] Immersive Furniture - ${{steps.split.outputs._0}}"
+          name: "[Fabric ${{steps.split.outputs._1}}] MCAR - ${{steps.split.outputs._0}}"
           changelog-file: changelog.md
           version-type: release
-          files: "fabric/build/libs/immersive_furniture-fabric-${{steps.tag.outputs.tag}}.jar"
+          files: "fabric/build/libs/mca-fabric-${{steps.tag.outputs.tag}}.jar"
           loaders: |
             fabric
           game-versions: |
@@ -66,10 +66,10 @@ jobs:
           curseforge-token: ${{ env.CURSEFORGE_TOKEN }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-          name: "[NeoForge ${{steps.split.outputs._1}}] Immersive Furniture - ${{steps.split.outputs._0}}"
+          name: "[NeoForge ${{steps.split.outputs._1}}] MCAR - ${{steps.split.outputs._0}}"
           changelog-file: changelog.md
           version-type: release
-          files: "neoforge/build/libs/immersive_furniture-neoforge-${{steps.tag.outputs.tag}}.jar"
+          files: "neoforge/build/libs/mca-neoforge-${{steps.tag.outputs.tag}}.jar"
           loaders: |
             neoforge
           game-versions: |
