@@ -881,6 +881,10 @@ public final class Config {
             "minecraft:emerald", 1.0f
     );
 
+    /**
+     * Moves the player's eye height according to their in-game height. Does not change hitbox size.
+     */
+    public boolean scaleEyeHeightWithPlayerHeight = true;
 
     public static Config getInstance() {
         return INSTANCE;
