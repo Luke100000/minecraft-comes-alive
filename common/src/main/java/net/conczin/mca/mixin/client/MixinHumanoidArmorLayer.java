@@ -46,7 +46,10 @@ public abstract class MixinHumanoidArmorLayer<T extends LivingEntity, A extends 
     @Inject(method = "getArmorModel(Lnet/minecraft/world/entity/EquipmentSlot;)Lnet/minecraft/client/model/HumanoidModel;", at = @At("HEAD"), cancellable = true)
     private void mca$injectGetArmorModel(EquipmentSlot slot, CallbackInfoReturnable<A> cir) {
         if (mca$injectionActive) {
-            cir.setReturnValue(this.usesInnerModel(slot) ? mca$leggingsModel : mca$bodyModel);
+            A model = this.usesInnerModel(slot) ? mca$leggingsModel : mca$bodyModel;
+            if (model != null) {
+                cir.setReturnValue(model);
+            }
         }
     }
 }

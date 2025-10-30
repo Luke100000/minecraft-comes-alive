@@ -5,7 +5,7 @@
     "dstrgb": "zero"
   },
   "vertex": "sobel",
-  "fragment": "mca:blur_centered",
+  "fragment": "blur_centered",
   "attributes": ["Position"],
   "samplers": [
     {"name": "DiffuseSampler"}
