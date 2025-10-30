@@ -1,6 +1,7 @@
 # 7.7.2
 
 * Fixed crashes (Thanks alfuwu!)
+* Fixed color blind shader loading
 
 # 7.7.0
 

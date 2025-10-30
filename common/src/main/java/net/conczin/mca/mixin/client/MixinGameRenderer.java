@@ -30,10 +30,10 @@ public abstract class MixinGameRenderer {
     private Tuple<String, ResourceLocation> mca$currentShader;
 
     @Shadow
-    public abstract void togglePostEffect();
+    protected abstract void loadEffect(ResourceLocation resourceLocation);
 
     @Shadow
-    protected abstract void loadEffect(ResourceLocation resourceLocation);
+    public abstract void shutdownEffect();
 
     @Inject(method = "tick", at = @At("TAIL"))
     public void mca$injectTick(CallbackInfo ci) {
@@ -54,7 +54,7 @@ public abstract class MixinGameRenderer {
                                 });
                     }
                 } else if (mca$currentShader != null && !villagerLike.getTraits().hasTrait(mca$currentShader.getA())) {
-                    togglePostEffect();
+                    shutdownEffect();
                     this.mca$currentShader = null;
                 }
             }

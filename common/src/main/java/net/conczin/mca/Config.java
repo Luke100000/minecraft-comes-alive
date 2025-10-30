@@ -16,7 +16,7 @@ import java.util.Map;
 import java.util.UUID;
 
 public final class Config {
-    private static final int VERSION = 1;
+    private static final int VERSION = 2;
     private static final Config INSTANCE = loadOrCreate();
 
     private static Config serverConfig;
@@ -853,7 +853,7 @@ public final class Config {
      * Requires enablePlayerShaders to be true.
      */
     public Map<String, String> shaderLocationsMap = Map.of(
-            "color_blind", "minecraft:shaders/post/desaturate.json",
+            "color_blind", "mca:shaders/post/color_blind.json",
             "sirben", "mca:shaders/post/sirben.json"
     );
 
