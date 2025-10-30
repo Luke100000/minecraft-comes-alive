@@ -1,3 +1,7 @@
+# 7.7.2
+
+* Fixed crashes (Thanks alfuwu!)
+
 # 7.7.0
 
 * Ported to 1.21.1
