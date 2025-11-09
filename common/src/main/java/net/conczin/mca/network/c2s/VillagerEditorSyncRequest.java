@@ -170,10 +170,12 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
         entry.setGender(getGender(data));
 
         String s = villagerData.getString("CustomName");
-        try {
-            entry.setName(Objects.requireNonNull(Component.Serializer.fromJson(s, entity.registryAccess())).getString());
-        } catch (Exception e) {
-            MCA.LOGGER.error("Failed to parse custom name for villager: {}", s, e);
+        if (!s.isEmpty()) {
+            try {
+                entry.setName(Objects.requireNonNull(Component.Serializer.fromJson(s, entity.registryAccess())).getString());
+            } catch (Exception e) {
+                MCA.LOGGER.error("Failed to parse custom name for villager: {}", s, e);
+            }
         }
 
         if (villagerData.contains("FamilyTreeNewFatherName")) {
