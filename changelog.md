@@ -1,3 +1,7 @@
+# 7.7.3
+
+* Fixed a crash on dedicated servers
+
 # 7.7.2
 
 * Fixed crashes (Thanks alfuwu!)

@@ -7,7 +7,6 @@
   "mixins": [
     "MixinAbstractFurnaceBlockEntity",
     "MixinActivity",
-    "MixinEntity",
     "MixinEntityType",
     "MixinFlintAndSteelItem",
     "MixinGoat",
@@ -35,7 +34,8 @@
     "client.MixinItemInHandLayer",
     "client.MixinLivingEntityRenderer",
     "client.MixinPlayerRenderer",
-    "client.MixinSoundBufferLibrary"
+    "client.MixinSoundBufferLibrary",
+    "client.MixinEntity"
   ],
   "injectors": {
     "defaultRequire": 1

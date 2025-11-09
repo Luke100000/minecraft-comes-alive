@@ -1,4 +1,4 @@
-package net.conczin.mca.mixin;
+package net.conczin.mca.mixin.client;
 
 import net.conczin.mca.Config;
 import net.conczin.mca.client.model.CommonVillagerModel;
@@ -13,8 +13,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 public class MixinEntity {
     @Inject(method = "getEyeHeight()F", at = @At("RETURN"), cancellable = true)
     private void onGetEyeHeight(CallbackInfoReturnable<Float> cir) {
-        if ((Object)this instanceof Player plr && Config.getInstance().scaleEyeHeightWithPlayerHeight) {
-            cir.setReturnValue(cir.getReturnValueF() * CommonVillagerModel.getVillager(plr).getRawVerticalScaleFactor());
+        if ((Object) this instanceof Player player && Config.getInstance().scaleEyeHeightWithPlayerHeight) {
+            cir.setReturnValue(cir.getReturnValueF() * CommonVillagerModel.getVillager(player).getRawVerticalScaleFactor());
         }
     }
 }
