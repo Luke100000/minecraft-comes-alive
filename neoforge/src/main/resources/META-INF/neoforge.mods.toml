@@ -29,17 +29,3 @@ type = "required"
 versionRange = "${minecraft_version_range}"
 ordering = "NONE"
 side = "BOTH"
-
-[[dependencies.${ mod_id }]]
-modId = "ferritecore"
-type = "optional"
-versionRange = "*"
-ordering = "NONE"
-side = "BOTH"
-
-[[dependencies.${ mod_id }]]
-modId = "packetfixer"
-type = "optional"
-versionRange = "*"
-ordering = "NONE"
-side = "BOTH"
