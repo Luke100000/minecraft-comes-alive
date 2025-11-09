@@ -1,3 +1,7 @@
+# 7.7.4
+
+* Fixed root advancement
+
 # 7.7.3
 
 * Fixed a crash on dedicated servers
