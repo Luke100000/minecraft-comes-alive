@@ -1,3 +1,7 @@
+# 7.6.13
+
+* Fixed MCA AI auth
+
 # 7.6.12
 
 * Added asexual trait (Thanks iGalaxyFox!)
