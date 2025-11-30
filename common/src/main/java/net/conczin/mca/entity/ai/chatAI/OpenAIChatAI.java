@@ -269,7 +269,7 @@ public class OpenAIChatAI implements ChatAIStrategy {
             // get access token
             String token = config.villagerChatAIToken;
             if (token.isEmpty() || config.villagerChatAIEndpoint.contains("conczin.net")) {
-                token = variables.get("player");
+                token = player.getName().getString();
             }
 
             // encode and create url

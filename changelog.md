@@ -1,3 +1,7 @@
+# 7.7.5
+
+* Fixed MCA AI auth
+
 # 7.7.4
 
 * Fixed root advancement
