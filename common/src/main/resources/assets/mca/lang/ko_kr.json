@@ -60,7 +60,7 @@
   "item.mca.baby.no_drop/1": "아기를 떨어뜨려서는 안 됩니다, 이 못된 인간아.",
   "item.mca.baby.no_drop/2": "제가 지켜보고 있습니다, 선생님.",
   "item.mca.baby.no_drop/3": "제발 아기를 떨어뜨리지 마세요!",
-  "item.mca.baby.not_ready": "This baby is not ready yet.",
+  "item.mca.baby.not_ready": "",
   "item.mca.male_villager_spawn_egg": "남성 주민 생성 알",
   "item.mca.female_villager_spawn_egg": "여성 주민 생성 알",
   "item.mca.male_zombie_villager_spawn_egg": "남성 주민 좀비 생성 알",
