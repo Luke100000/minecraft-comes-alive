@@ -631,7 +631,7 @@
   "command.chat_ai.player2": "Player2 integration is now active. Click here to know more about Player2!",
   "command.chat_ai.player2.hint": "Use \"%s\" to enable Player2 for MCA!",
   "command.tts.enabled.default": "High quality text to speech is enabled (will not work with ChatAI).",
-  "command.tts.enabled.elevenlabs": "Text to speech via ElevenLabs is enabled (requires an API key set in the config!).",
+  "command.tts.enabled.elevenlabs": "Texto a voz atraves de ElevenLabs esta activo (requiere un llave de API en configuracion).",
   "command.tts.enabled.realtime": "Realtime text to speech is enabled (Works with ChatAI).",
   "command.tts.disabled": "Text to speech is disabled.",
   "command.tts_busy": "(Cuando los aldeanos permanecen en silencio, significa que el texto a voz tiene que generar primero esa frase. La próxima vez estará ahí).",
