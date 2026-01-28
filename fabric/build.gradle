@@ -3,13 +3,6 @@ plugins {
     id 'fabric-loom'
 }
 
-repositories {
-    maven {
-        name = "Modrinth"
-        url = "https://api.modrinth.com/maven"
-    }
-}
-
 dependencies {
     minecraft "com.mojang:minecraft:${minecraft_version}"
     mappings loom.layered {
