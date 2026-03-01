@@ -1,7 +1,8 @@
 package net.conczin.mca.network.s2c;
 
-import com.google.gson.GsonBuilder;
+import com.google.gson.Gson;
 import net.conczin.mca.ClientProxy;
+import net.conczin.mca.CommonConfig;
 import net.conczin.mca.Config;
 import net.conczin.mca.MCA;
 import net.conczin.mca.network.HandleablePayload;
@@ -18,16 +19,18 @@ public record ConfigResponse(String json) implements HandleablePayload {
             ConfigResponse::new
     );
 
+    private static final Gson GSON = new Gson();
+
     public ConfigResponse(Config config) {
-        this(new GsonBuilder().setPrettyPrinting().create().toJson(config));
+        this(GSON.toJson(config, CommonConfig.class));
     }
 
-    public Config getConfig() {
+    public CommonConfig getConfig() {
         try {
-            return new GsonBuilder().setPrettyPrinting().create().fromJson(json, Config.class);
+            return GSON.fromJson(json, CommonConfig.class);
         } catch (Exception e) {
-            // Fallback to client local instance on parse errors
-            return Config.getInstance();
+            // Fallback to default values on parse errors
+            return new CommonConfig();
         }
     }
 
