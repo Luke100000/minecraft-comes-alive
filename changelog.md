@@ -1,3 +1,7 @@
+# 7.6.14
+
+* Fixed issues with config (Thanks pau101!)
+
 # 7.6.13
 
 * Fixed MCA AI auth

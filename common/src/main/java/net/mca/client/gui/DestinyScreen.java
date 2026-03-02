@@ -50,11 +50,11 @@ public class DestinyScreen extends VillagerEditorScreen {
     protected String[] getPages() {
         LinkedList<String> pages = new LinkedList<>();
         pages.add("general");
-        if (Config.getInstance().allowBodyCustomizationInDestiny) {
+        if (Config.getServerConfig().allowBodyCustomizationInDestiny) {
             pages.add("body");
             pages.add("head");
         }
-        if (Config.getInstance().allowTraitCustomizationInDestiny) {
+        if (Config.getServerConfig().allowTraitCustomizationInDestiny) {
             pages.add("traits");
         }
         return pages.toArray(new String[]{});
@@ -144,9 +144,9 @@ public class DestinyScreen extends VillagerEditorScreen {
                 addModelSelectionWidgets(width / 2 - DATA_WIDTH / 2, height / 2 + 24 + 22);
 
                 acceptWidget = addDrawableChild(new ButtonWidget(width / 2 - 32, height / 2 + 60 + 22, 64, 20, Text.translatable("gui.button.accept"), sender -> {
-                    if (Config.getInstance().allowBodyCustomizationInDestiny) {
+                    if (Config.getServerConfig().allowBodyCustomizationInDestiny) {
                         setPage("body");
-                    } else if (Config.getInstance().allowTraitCustomizationInDestiny) {
+                    } else if (Config.getServerConfig().allowTraitCustomizationInDestiny) {
                         setPage("traits");
                     } else {
                         setPage("destiny");
@@ -193,7 +193,7 @@ public class DestinyScreen extends VillagerEditorScreen {
     private void selectStory(String location) {
         story.clear();
         story.add(Text.translatable("destiny.story.reason"));
-        Map<String, String> map = Config.getInstance().destinyLocationsToTranslationMap;
+        Map<String, String> map = Config.getServerConfig().destinyLocationsToTranslationMap;
         story.add(Text.translatable(map.getOrDefault(location, map.getOrDefault("default", "missing_default"))));
         story.add(Text.translatable("destiny.story." + getPath(location)));
         this.location = location;

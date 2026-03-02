@@ -12,12 +12,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-public final class Config implements Serializable {
+public final class Config extends CommonConfig implements Serializable {
     @Serial
     private static final long serialVersionUID = 956221997003825933L;
 
     private static final Config INSTANCE = loadOrCreate();
-    private static Config serverConfig;
+    private static CommonConfig serverConfig;
 
     public static Config getInstance() {
         return INSTANCE;
@@ -50,8 +50,6 @@ public final class Config implements Serializable {
     public boolean showNotificationsAsChat = false;
     public int heartsToBeConsideredAsFriend = 40;
     public boolean enableVillagerMailingPlayers = true;
-    public boolean allowBodyCustomizationInDestiny = true;
-    public boolean allowTraitCustomizationInDestiny = true;
     public boolean enableGenderCheckForPlayers = true;
 
     public float zombieBiteInfectionChance = 0.05f;
@@ -63,8 +61,6 @@ public final class Config implements Serializable {
     public int marriageHeartsRequirement = 100;
     public int engagementHeartsRequirement = 50;
     public int bouquetHeartsRequirement = 10;
-    public int babyItemGrowUpTime = 24000;
-    public int villagerMaxAgeTime = 384000;
     public int villagerMaxHealth = 20;
     public boolean allowVillagerTeleporting = false;
     public double villagerMinTeleportationDistance = 128;
@@ -168,7 +164,6 @@ public final class Config implements Serializable {
 
     //skin library
     public String immersiveLibraryUrl = "https://mca.conczin.net";
-    public boolean allowEveryoneToAddContentGlobally = false;
 
     //gifts
     public int giftDesaturationQueueLength = 16;
@@ -206,7 +201,6 @@ public final class Config implements Serializable {
     public boolean forceVillagerPlayerModel = false;
     public boolean allowLimitedPlayerEditor = true;
     public boolean allowFullPlayerEditor = false;
-    public boolean allowPlayerSizeAdjustment = true;
     public boolean adjustPlayerEyesToHeight = false;
 
     public boolean useModernUSANamesOnly = false;
@@ -266,22 +260,6 @@ public final class Config implements Serializable {
             "minecraft:ancient_city"
     );
 
-    public List<String> destinySpawnLocations = List.of(
-            "somewhere",
-            "minecraft:shipwreck_beached",
-            "minecraft:village_desert",
-            "minecraft:village_taiga",
-            "minecraft:village_snowy",
-            "minecraft:village_plains",
-            "minecraft:village_savanna",
-            "minecraft:ancient_city"
-    );
-
-    public Map<String, String> destinyLocationsToTranslationMap = Map.of(
-            "default", "destiny.story.travelling",
-            "minecraft:shipwreck_beached", "destiny.story.sailing"
-    );
-
     public Map<String, String> professionConversionsMap = Map.of();
 
     public Map<String, String> shaderLocationsMap = Map.of(
@@ -295,8 +273,6 @@ public final class Config implements Serializable {
             "firstperson", "arms",
             "epicfight", "all"
     );
-
-    public Map<String, Boolean> enabledTraits = new HashMap<>();
 
     public Map<String, Float> taxesMap = Map.of(
             "minecraft:emerald", 1.0f
@@ -352,11 +328,11 @@ public final class Config implements Serializable {
         return config;
     }
 
-    public static void setServerConfig(Config config) {
+    public static void setServerConfig(CommonConfig config) {
         serverConfig = config;
     }
 
-    public static Config getServerConfig() {
+    public static CommonConfig getServerConfig() {
         if (serverConfig == null) {
             return Config.getInstance();
         } else {
