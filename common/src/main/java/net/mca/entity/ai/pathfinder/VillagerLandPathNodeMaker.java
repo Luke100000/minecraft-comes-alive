@@ -544,7 +544,7 @@ public class VillagerLandPathNodeMaker extends PathNodeMaker {
         if (block instanceof LeavesBlock) {
             return ExtendedPathNodeType.LEAVES;
         }
-        if (blockState.isIn(BlockTags.FENCES) || blockState.isIn(BlockTags.WALLS) || (Config.getServerConfig().useSmarterDoorAI && block instanceof FenceGateBlock && !blockState.get(FenceGateBlock.OPEN))) {
+        if (blockState.isIn(BlockTags.FENCES) || blockState.isIn(BlockTags.WALLS) || (Config.getInstance().useSmarterDoorAI && block instanceof FenceGateBlock && !blockState.get(FenceGateBlock.OPEN))) {
             return ExtendedPathNodeType.FENCE;
         }
         if (!blockState.canPathfindThrough(world, pos, NavigationType.LAND)) {

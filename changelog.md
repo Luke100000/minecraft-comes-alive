@@ -1,3 +1,7 @@
+# 7.5.19 for 1.19.2
+
+* Fixed issues with config (Thanks pau101!)
+
 # 7.5.18 for 1.19.2
 
 * Fixed empty villages on pre-generated worlds (Thanks SlayerTheChikken!)

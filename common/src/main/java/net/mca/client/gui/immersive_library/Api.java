@@ -36,7 +36,7 @@ public class Api {
 
     public static Response request(HttpMethod httpMethod, Class<? extends Response> expectedAnswer, String url, Map<String, String> queryParams, Map<String, String> body) {
         try {
-            String fullUrl = Config.getServerConfig().immersiveLibraryUrl + (url.contains("v2") ? "/" : "/v1/") + url;
+            String fullUrl = Config.getInstance().immersiveLibraryUrl + (url.contains("v2") ? "/" : "/v1/") + url;
 
             // Append query params
             if (queryParams != null) {
