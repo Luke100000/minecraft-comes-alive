@@ -2,6 +2,7 @@
 
 * Fixed issues with config (Thanks pau101!)
 * Synced translations
+* Fixed camera eye adjustment when using the player model
 
 # 7.7.5
 
