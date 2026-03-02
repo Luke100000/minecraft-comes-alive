@@ -1,3 +1,8 @@
+# 7.7.6
+
+* Fixed issues with config (Thanks pau101!)
+* Synced translations
+
 # 7.7.5
 
 * Fixed MCA AI auth

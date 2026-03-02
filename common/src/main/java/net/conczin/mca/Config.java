@@ -132,16 +132,6 @@ public final class Config extends CommonConfig {
     public boolean enableVillagerMailingPlayers = true;
 
     /**
-     * Whether body customization (e.g., height, size) is available in the Destiny editor.
-     */
-    public boolean allowBodyCustomizationInDestiny = true;
-
-    /**
-     * Whether trait customization is available in the Destiny editor.
-     */
-    public boolean allowTraitCustomizationInDestiny = true;
-
-    /**
      * Check for matching gender when trying to marry a villager.
      */
     public boolean enableGenderCheckForPlayers = true;
@@ -797,14 +787,6 @@ public final class Config extends CommonConfig {
             "minecraft:jungle_pyramid",
             "minecraft:pillager_outpost",
             "minecraft:ancient_city"
-    );
-
-    /**
-     * Maps Destiny locations to translation keys for UI text.
-     */
-    public Map<String, String> destinyLocationsToTranslationMap = Map.of(
-            "default", "destiny.story.travelling",
-            "minecraft:shipwreck_beached", "destiny.story.sailing"
     );
 
     /**

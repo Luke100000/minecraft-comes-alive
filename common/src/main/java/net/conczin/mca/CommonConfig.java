@@ -27,6 +27,16 @@ public class CommonConfig {
     public boolean allowPlayerSizeAdjustment = true;
 
     /**
+     * Whether body customization (e.g., height, size) is available in the Destiny editor.
+     */
+    public boolean allowBodyCustomizationInDestiny = true;
+
+    /**
+     * Whether trait customization is available in the Destiny editor.
+     */
+    public boolean allowTraitCustomizationInDestiny = true;
+
+    /**
      * Locations where the Destiny feature can teleport the player.
      * <a href="https://github.com/Luke100000/minecraft-comes-alive/wiki/Custom-Rumors-and-Destiny-Structures">Wiki</a>
      */
@@ -39,6 +49,14 @@ public class CommonConfig {
             "minecraft:village_plains",
             "minecraft:village_savanna",
             "minecraft:ancient_city"
+    );
+
+    /**
+     * Maps Destiny locations to translation keys for UI text.
+     */
+    public Map<String, String> destinyLocationsToTranslationMap = Map.of(
+            "default", "destiny.story.travelling",
+            "minecraft:shipwreck_beached", "destiny.story.sailing"
     );
 
     /**
