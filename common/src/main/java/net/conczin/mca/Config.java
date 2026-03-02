@@ -15,11 +15,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-public final class Config {
+public final class Config extends CommonConfig {
     private static final int VERSION = 2;
     private static final Config INSTANCE = loadOrCreate();
 
-    private static Config serverConfig;
+    private static CommonConfig serverConfig;
 
     @SuppressWarnings("unused")
     public String README = "https://github.com/Luke100000/minecraft-comes-alive/wiki";
@@ -185,16 +185,6 @@ public final class Config {
      * Number of hearts required to give a bouquet to a villager.
      */
     public int bouquetHeartsRequirement = 10;
-
-    /**
-     * Time (in ticks) until a baby grows up when held as an item.
-     */
-    public int babyItemGrowUpTime = 24000;
-
-    /**
-     * Maximum villager lifetime in ticks (Time to grow fully up).
-     */
-    public int villagerMaxAgeTime = 384000;
 
     /**
      * Maximum health of a villager.
@@ -611,11 +601,6 @@ public final class Config {
     public String immersiveLibraryUrl = "https://mca.conczin.net";
 
     /**
-     * If true, allows non-ops to add skins from the library to the server wide pool.
-     */
-    public boolean allowEveryoneToAddContentGlobally = false;
-
-    /**
      * Number of entries in the gift desaturation queue.
      */
     public int giftDesaturationQueueLength = 16;
@@ -745,11 +730,6 @@ public final class Config {
     public boolean allowFullPlayerEditor = false;
 
     /**
-     * Allow players to modify their size.
-     */
-    public boolean allowPlayerSizeAdjustment = true;
-
-    /**
      * Use the USA name set instead of international names.
      */
     public boolean useModernUSANamesOnly = false;
@@ -820,21 +800,6 @@ public final class Config {
     );
 
     /**
-     * Locations where the Destiny feature can teleport the player.
-     * <a href="https://github.com/Luke100000/minecraft-comes-alive/wiki/Custom-Rumors-and-Destiny-Structures">Wiki</a>
-     */
-    public List<String> destinySpawnLocations = List.of(
-            "somewhere",
-            "minecraft:shipwreck_beached",
-            "minecraft:village_desert",
-            "minecraft:village_taiga",
-            "minecraft:village_snowy",
-            "minecraft:village_plains",
-            "minecraft:village_savanna",
-            "minecraft:ancient_city"
-    );
-
-    /**
      * Maps Destiny locations to translation keys for UI text.
      */
     public Map<String, String> destinyLocationsToTranslationMap = Map.of(
@@ -867,11 +832,6 @@ public final class Config {
             "firstperson", "arms",
             "epicfight", "all"
     );
-
-    /**
-     * Map of enabled traits. Keys are trait IDs, values are true/false.
-     */
-    public Map<String, Boolean> enabledTraits = new HashMap<>();
 
     /**
      * Map of tax items to their value in units.
@@ -922,7 +882,7 @@ public final class Config {
         return config;
     }
 
-    public static Config getServerConfig() {
+    public static CommonConfig getServerConfig() {
         if (serverConfig == null) {
             return Config.getInstance();
         } else {
@@ -930,7 +890,7 @@ public final class Config {
         }
     }
 
-    public static void setServerConfig(Config config) {
+    public static void setServerConfig(CommonConfig config) {
         serverConfig = config;
     }
 
