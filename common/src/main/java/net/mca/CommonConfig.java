@@ -1,10 +1,29 @@
 package net.mca;
 
+import java.io.Serial;
+import java.io.Serializable;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-public class CommonConfig {
+public class CommonConfig implements Serializable {
+    @Serial
+    private static final long serialVersionUID = -8238866449153504236L;
+
+    public CommonConfig() {
+    }
+
+    public CommonConfig(CommonConfig config) {
+        this.babyItemGrowUpTime = config.babyItemGrowUpTime;
+        this.villagerMaxAgeTime = config.villagerMaxAgeTime;
+        this.allowEveryoneToAddContentGlobally = config.allowEveryoneToAddContentGlobally;
+        this.allowPlayerSizeAdjustment = config.allowPlayerSizeAdjustment;
+        this.allowBodyCustomizationInDestiny = config.allowBodyCustomizationInDestiny;
+        this.allowTraitCustomizationInDestiny = config.allowTraitCustomizationInDestiny;
+        this.destinySpawnLocations = config.destinySpawnLocations;
+        this.destinyLocationsToTranslationMap = config.destinyLocationsToTranslationMap;
+        this.enabledTraits = config.enabledTraits;
+    }
 
     /**
      * Time (in ticks) until a baby grows up when held as an item.

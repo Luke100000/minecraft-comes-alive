@@ -6,16 +6,16 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.JsonSyntaxException;
 import net.mca.entity.ai.Traits;
 
-import java.io.*;
+import java.io.File;
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-public final class Config extends CommonConfig implements Serializable {
-    @Serial
-    private static final long serialVersionUID = 956221997003825933L;
-
+public final class Config extends CommonConfig {
     private static final Config INSTANCE = loadOrCreate();
     private static CommonConfig serverConfig;
 

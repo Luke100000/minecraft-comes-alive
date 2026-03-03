@@ -1,4 +1,4 @@
-# 7.6.14
+# 7.6.14/15
 
 * Fixed issues with config (Thanks pau101!)
 
