@@ -1,4 +1,4 @@
-# 7.5.19 for 1.19.2
+# 7.5.19/20 for 1.19.2
 
 * Fixed issues with config (Thanks pau101!)
 

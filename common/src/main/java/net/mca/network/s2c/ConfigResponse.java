@@ -13,7 +13,7 @@ public class ConfigResponse implements Message {
     private final CommonConfig config;
 
     public ConfigResponse(CommonConfig config) {
-        this.config = config;
+        this.config = new CommonConfig(config);
     }
 
     @Override
