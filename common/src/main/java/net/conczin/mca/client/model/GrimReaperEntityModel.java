@@ -1,6 +1,5 @@
 package net.conczin.mca.client.model;
 
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import net.conczin.mca.client.render.GrimReaperRenderState;
 import net.conczin.mca.entity.ReaperAttackState;
@@ -105,7 +104,5 @@ public class GrimReaperEntityModel extends HumanoidModel<GrimReaperRenderState> 
             set.get(RIGHT_LEG).applyTo(rightLeg);
             set.get("scythe_handle").applyTo(scythe);
         }
-
-        CommonVillagerModel.copyPartState(hat, head);
     }
 }
