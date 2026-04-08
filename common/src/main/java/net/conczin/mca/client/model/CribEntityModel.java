@@ -1,6 +1,5 @@
 package net.conczin.mca.client.model;
 
-import net.conczin.mca.entity.CribEntity;
 import net.conczin.mca.client.render.CribEntityRenderState;
 import net.minecraft.client.model.EntityModel;
 import net.minecraft.client.model.geom.ModelPart;

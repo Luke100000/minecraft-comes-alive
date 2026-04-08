@@ -1,6 +1,5 @@
 package net.conczin.mca.client.gui;
 
-import org.joml.Matrix3x2fStack;
 import net.conczin.mca.MCA;
 import net.conczin.mca.client.gui.widget.LegacyImageButton;
 import net.conczin.mca.client.gui.widget.TooltipButtonWidget;
@@ -21,8 +20,8 @@ import net.conczin.mca.util.localization.FlowingText;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.EditBox;
-import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.input.MouseButtonEvent;
+import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Vec3i;
@@ -30,6 +29,7 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.Identifier;
+import org.joml.Matrix3x2fStack;
 
 import java.util.*;
 import java.util.function.Consumer;

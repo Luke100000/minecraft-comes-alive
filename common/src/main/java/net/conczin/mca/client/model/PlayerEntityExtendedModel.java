@@ -1,9 +1,9 @@
 package net.conczin.mca.client.model;
 
 import com.google.common.collect.ImmutableList;
+import net.conczin.mca.client.render.VillagerStateHolder;
 import net.conczin.mca.entity.ai.relationship.AgeState;
 import net.conczin.mca.entity.ai.relationship.VillagerDimensions;
-import net.conczin.mca.client.render.VillagerStateHolder;
 import net.minecraft.client.model.HumanoidModel;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.client.model.player.PlayerModel;

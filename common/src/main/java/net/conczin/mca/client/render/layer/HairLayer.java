@@ -2,8 +2,8 @@ package net.conczin.mca.client.render.layer;
 
 import net.conczin.mca.client.gui.immersive_library.SkinCache;
 import net.conczin.mca.client.model.CommonVillagerModel;
-import net.conczin.mca.client.resources.ColorPalette;
 import net.conczin.mca.client.render.VillagerStateHolder;
+import net.conczin.mca.client.resources.ColorPalette;
 import net.minecraft.client.model.HumanoidModel;
 import net.minecraft.client.renderer.entity.RenderLayerParent;
 import net.minecraft.client.renderer.entity.state.HumanoidRenderState;

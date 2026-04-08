@@ -1,0 +1,7 @@
+{
+  "parent": "minecraft:item/generated",
+  "textures": {
+    "layer0": "mca:item/crib/beds/brown",
+    "layer1": "mca:item/crib/frames/birch"
+  }
+}

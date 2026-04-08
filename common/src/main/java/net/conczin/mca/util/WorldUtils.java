@@ -1,13 +1,12 @@
 package net.conczin.mca.util;
 
 import com.mojang.datafixers.util.Pair;
-import com.mojang.serialization.Codec;
-import net.minecraft.SharedConstants;
 import net.conczin.mca.MCA;
+import net.minecraft.SharedConstants;
 import net.minecraft.core.*;
-import net.minecraft.nbt.NbtOps;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.NbtOps;
 import net.minecraft.nbt.Tag;
 import net.minecraft.resources.Identifier;
 import net.minecraft.resources.RegistryOps;
@@ -17,8 +16,8 @@ import net.minecraft.server.level.ServerChunkCache;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.EntitySpawnReason;
+import net.minecraft.world.entity.Mob;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.chunk.LevelChunk;

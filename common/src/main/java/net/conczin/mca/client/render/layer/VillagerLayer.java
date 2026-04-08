@@ -2,13 +2,10 @@ package net.conczin.mca.client.render.layer;
 
 import com.google.common.collect.Maps;
 import com.mojang.blaze3d.vertex.PoseStack;
-import java.util.Map;
-import java.util.Objects;
-import java.util.function.Function;
 import net.conczin.mca.MCA;
 import net.conczin.mca.MCAClient;
-import net.conczin.mca.client.model.PlayerArmorExtendedModel;
 import net.conczin.mca.client.model.CommonVillagerModel;
+import net.conczin.mca.client.model.PlayerArmorExtendedModel;
 import net.conczin.mca.client.model.PlayerEntityExtendedModel;
 import net.conczin.mca.client.model.VillagerEntityModelMCA;
 import net.conczin.mca.client.render.VillagerStateHolder;
@@ -24,9 +21,12 @@ import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.rendertype.RenderTypes;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import org.jetbrains.annotations.Nullable;
+
+import java.util.Map;
+import java.util.Objects;
+import java.util.function.Function;
 
 @SuppressWarnings({"rawtypes", "unchecked"})
 public abstract class VillagerLayer<S extends HumanoidRenderState & VillagerStateHolder, M extends HumanoidModel<S>> extends RenderLayer<S, M> {

@@ -1,11 +1,8 @@
 package net.conczin.mca.client.render.layer;
 
-import com.mojang.blaze3d.vertex.PoseStack;
 import net.conczin.mca.MCA;
 import net.conczin.mca.client.model.CommonVillagerModel;
 import net.conczin.mca.client.render.VillagerStateHolder;
-import net.conczin.mca.entity.ai.Genetics;
-import net.conczin.mca.entity.ai.Traits;
 import net.minecraft.client.model.HumanoidModel;
 import net.minecraft.client.renderer.entity.RenderLayerParent;
 import net.minecraft.client.renderer.entity.state.HumanoidRenderState;

@@ -1,7 +1,6 @@
 package net.conczin.mca.client.gui;
 
 import com.mojang.blaze3d.platform.Window;
-import org.joml.Matrix3x2fStack;
 import net.conczin.mca.MCA;
 import net.conczin.mca.client.resources.Icon;
 import net.conczin.mca.entity.ai.relationship.RelationshipState;
@@ -11,16 +10,16 @@ import net.conczin.mca.server.world.data.FamilyTreeNode;
 import net.conczin.mca.util.compat.ButtonWidget;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
-import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.client.resources.sounds.SimpleSoundInstance;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.sounds.SoundEvents;
 import org.jetbrains.annotations.Nullable;
+import org.joml.Matrix3x2fStack;
 import org.lwjgl.opengl.GL11;
 
 import java.util.*;

@@ -1,9 +1,9 @@
 package net.conczin.mca.entity.ai;
 
 import net.conczin.mca.Config;
-import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.attribute.EnvironmentAttribute;
 import net.minecraft.world.attribute.EnvironmentAttributes;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.schedule.Activity;
 
 public interface SchedulesMCA {

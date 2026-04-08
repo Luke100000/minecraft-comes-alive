@@ -1,5 +1,6 @@
 package net.conczin.mca.entity;
 
+import com.mojang.serialization.MapCodec;
 import net.conczin.mca.Config;
 import net.conczin.mca.entity.ai.Genetics;
 import net.conczin.mca.entity.ai.Relationship;
@@ -12,7 +13,6 @@ import net.conczin.mca.entity.interaction.ZombieCommandHandler;
 import net.conczin.mca.registry.TagsMCA;
 import net.conczin.mca.util.InventoryUtils;
 import net.conczin.mca.util.network.datasync.CDataManager;
-import com.mojang.serialization.MapCodec;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.syncher.EntityDataAccessor;

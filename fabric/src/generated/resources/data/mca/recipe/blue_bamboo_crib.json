@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "C": "minecraft:blue_carpet",
+    "F": "minecraft:oak_fence",
+    "P": "minecraft:oak_planks"
+  },
+  "pattern": [
+    "F F",
+    "FCF",
+    "PPP"
+  ],
+  "result": {
+    "id": "mca:blue_bamboo_crib"
+  }
+}

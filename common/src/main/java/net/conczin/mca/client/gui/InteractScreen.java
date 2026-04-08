@@ -1,6 +1,5 @@
 package net.conczin.mca.client.gui;
 
-import org.joml.Matrix3x2fStack;
 import net.conczin.mca.MCA;
 import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.entity.ai.Genetics;
@@ -23,6 +22,7 @@ import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.Identifier;
 import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.world.entity.player.Player;
+import org.joml.Matrix3x2fStack;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.*;

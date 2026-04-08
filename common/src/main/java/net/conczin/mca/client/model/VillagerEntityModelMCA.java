@@ -2,7 +2,6 @@ package net.conczin.mca.client.model;
 
 import com.google.common.collect.ImmutableList;
 import net.conczin.mca.client.render.VillagerRenderState;
-import net.conczin.mca.entity.VillagerLike;
 import net.minecraft.client.model.HumanoidModel;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.client.model.geom.PartNames;

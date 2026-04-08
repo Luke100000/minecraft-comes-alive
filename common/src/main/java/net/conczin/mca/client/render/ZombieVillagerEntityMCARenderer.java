@@ -6,7 +6,6 @@ import net.conczin.mca.client.render.layer.ClothingLayer;
 import net.conczin.mca.client.render.layer.FaceLayer;
 import net.conczin.mca.client.render.layer.HairLayer;
 import net.conczin.mca.client.render.layer.SkinLayer;
-import net.conczin.mca.client.render.VillagerRenderState;
 import net.conczin.mca.entity.ZombieVillagerEntityMCA;
 import net.minecraft.client.model.geom.builders.CubeDeformation;
 import net.minecraft.client.model.geom.builders.LayerDefinition;

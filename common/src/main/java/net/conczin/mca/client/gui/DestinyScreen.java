@@ -1,6 +1,5 @@
 package net.conczin.mca.client.gui;
 
-import org.joml.Matrix3x2fStack;
 import net.conczin.mca.Config;
 import net.conczin.mca.MCA;
 import net.conczin.mca.MCAClient;
@@ -13,6 +12,7 @@ import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.Identifier;
+import org.joml.Matrix3x2fStack;
 
 import java.util.LinkedList;
 import java.util.List;
