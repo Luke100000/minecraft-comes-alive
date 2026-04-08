@@ -2,8 +2,13 @@ package net.conczin.mca.util.recipes;
 
 import net.conczin.mca.entity.CribWoodType;
 import net.conczin.mca.registry.ItemsMCA;
+import net.minecraft.advancements.CriteriaTriggers;
+import net.minecraft.advancements.Criterion;
+import net.minecraft.advancements.criterion.InventoryChangeTrigger;
+import net.minecraft.advancements.criterion.ItemPredicate;
 import net.minecraft.core.HolderGetter;
 import net.minecraft.core.HolderLookup;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.data.recipes.RecipeCategory;
 import net.minecraft.data.recipes.RecipeOutput;
@@ -13,24 +18,39 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.level.ItemLike;
 import net.minecraft.world.level.block.Blocks;
 
+import java.util.List;
+import java.util.Optional;
+
 // TODO Forge, and code duplication
 public class CribRecipeProvider {
     public static void generate(RecipeOutput recipeOutput, HolderLookup.Provider registries) {
         HolderGetter<Item> items = registries.lookupOrThrow(Registries.ITEM);
         for (CribWoodType wood : CribWoodType.values()) {
             for (DyeColor color : DyeColor.values()) {
+                ItemLike planks = plankFromWoodType(wood);
                 ShapedRecipeBuilder.shaped(items, RecipeCategory.DECORATIONS, ItemsMCA.CRIBS.stream().filter(c -> {
                             return c.getColor() == color && c.getWood() == wood;
                         }).findFirst().get(), 1)
                         .define('F', fenceFromWoodType(wood))
-                        .define('P', plankFromWoodType(wood))
+                        .define('P', planks)
                         .define('C', carpetFromColor(color))
                         .pattern("F F")
                         .pattern("FCF")
                         .pattern("PPP")
+                        .unlockedBy("has_" + BuiltInRegistries.ITEM.getKey(planks.asItem()).getPath(), hasItem(items, planks))
                         .save(recipeOutput);
             }
         }
+    }
+
+    private static Criterion<InventoryChangeTrigger.TriggerInstance> hasItem(HolderGetter<Item> items, ItemLike item) {
+        return CriteriaTriggers.INVENTORY_CHANGED.createCriterion(
+                new InventoryChangeTrigger.TriggerInstance(
+                        Optional.empty(),
+                        InventoryChangeTrigger.TriggerInstance.Slots.ANY,
+                        List.of(ItemPredicate.Builder.item().of(items, item).build())
+                )
+        );
     }
 
     private static ItemLike plankFromWoodType(CribWoodType woodType) {

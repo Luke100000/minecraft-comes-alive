@@ -2,7 +2,6 @@
   "required": true,
   "minVersion": "0.7",
   "package": "net.conczin.mca.mixin",
-  "refmap": "${mod_id}.refmap.json",
   "compatibilityLevel": "JAVA_25",
   "mixins": [
     "MixinAbstractFurnaceBlockEntity",
@@ -23,7 +22,6 @@
     "MixinTranslatableContents",
     "MixinVillager",
     "MixinVillagerInvoker",
-    "client.MixinLivingEntityScale",
     "MixinZombie",
     "MixinZombieVillager"
   ],
@@ -34,6 +32,7 @@
     "client.MixinHumanoidArmorLayer",
     "client.MixinItemInHandLayer",
     "client.MixinLivingEntityRenderer",
+    "client.MixinLivingEntityScale",
     "client.MixinPlayerRenderer",
     "client.MixinSoundBufferLibrary",
     "client.MixinEntity"

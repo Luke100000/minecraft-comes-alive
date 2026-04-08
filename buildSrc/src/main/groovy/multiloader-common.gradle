@@ -1,5 +1,3 @@
-import org.gradle.api.file.FileCopyDetails
-
 plugins {
     id 'java-library'
     id 'maven-publish'
@@ -95,10 +93,32 @@ processResources {
             'java_version'                 : java_version
     ]
 
-    filesMatching(['pack.mcmeta', 'fabric.mod.json', 'META-INF/mods.toml', 'META-INF/neoforge.mods.toml', '*.mixins.json']) { FileCopyDetails details ->
-        details.expand(expandProps)
+    var jsonExpandProps = expandProps.collectEntries {
+        key, value -> [(key): value instanceof String ? value.replace("\n", "\\\\n") : value]
     }
+    def generatedTemplateResources = tasks.register('generateTemplateResources', Sync) {
+        inputs.properties(expandProps)
+        from(sourceSets.main.resources.srcDirs) {
+            include('META-INF/mods.toml', 'META-INF/neoforge.mods.toml')
+            expand(expandProps)
+        }
+        from(sourceSets.main.resources.srcDirs) {
+            include('pack.mcmeta', 'fabric.mod.json')
+            expand(jsonExpandProps)
+        }
+        into(layout.buildDirectory.dir('generated/templateResources/main'))
+    }
+
+    from(generatedTemplateResources)
     inputs.properties(expandProps)
+}
+
+sourceSets {
+    main {
+        resources {
+            exclude 'pack.mcmeta', 'fabric.mod.json', 'META-INF/mods.toml', 'META-INF/neoforge.mods.toml'
+        }
+    }
 }
 
 publishing {

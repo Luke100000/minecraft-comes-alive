@@ -37,3 +37,11 @@ loom {
         }
     }
 }
+
+fabricApi {
+    configureDataGeneration {
+        addToResources = false
+        client = true
+        outputDirectory = file("src/generated/resources")
+    }
+}

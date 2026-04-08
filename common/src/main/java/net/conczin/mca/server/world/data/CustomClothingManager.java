@@ -8,12 +8,12 @@ import net.conczin.mca.network.s2c.CustomSkinsChangedMessage;
 import net.conczin.mca.resources.data.skin.Clothing;
 import net.conczin.mca.resources.data.skin.Hair;
 import net.conczin.mca.resources.data.skin.SkinListEntry;
+import net.conczin.mca.util.WorldUtils;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.saveddata.SavedData;
-import net.minecraft.world.level.saveddata.SavedDataType;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -26,30 +26,24 @@ public class CustomClothingManager {
 
     public static Storage<Clothing> getClothing() {
         Optional<MinecraftServer> server = MCA.getServer();
-        return server.<Storage<Clothing>>map(minecraftServer -> minecraftServer.overworld().getDataStorage()
-                .computeIfAbsent(new SavedDataType<>(
-                        MCA.locate("immersive_library_clothing"),
-                        () -> new Storage<>(),
-                        CompoundTag.CODEC.xmap(
-                                nbt -> new Storage<>(nbt, Clothing::new),
-                                Storage::toTag
-                        ),
-                        null
-                ))).orElse(CLOTHING_DUMMY);
+        return server.<Storage<Clothing>>map(minecraftServer -> WorldUtils.loadData(
+                        minecraftServer.overworld(),
+                        (nbt, provider) -> new Storage<>(nbt, Clothing::new),
+                        ignored -> new Storage<>(),
+                        "immersive_library_clothing"
+                ))
+                .orElse(CLOTHING_DUMMY);
     }
 
     public static Storage<Hair> getHair() {
         Optional<MinecraftServer> server = MCA.getServer();
-        return server.<Storage<Hair>>map(minecraftServer -> minecraftServer.overworld().getDataStorage()
-                .computeIfAbsent(new SavedDataType<>(
-                        MCA.locate("immersive_library_hair"),
-                        () -> new Storage<>(),
-                        CompoundTag.CODEC.xmap(
-                                nbt -> new Storage<>(nbt, Hair::new),
-                                Storage::toTag
-                        ),
-                        null
-                ))).orElse(HAIR_DUMMY);
+        return server.<Storage<Hair>>map(minecraftServer -> WorldUtils.loadData(
+                        minecraftServer.overworld(),
+                        (nbt, provider) -> new Storage<>(nbt, Hair::new),
+                        ignored -> new Storage<>(),
+                        "immersive_library_hair"
+                ))
+                .orElse(HAIR_DUMMY);
     }
 
     public static class Storage<T extends SkinListEntry> extends SavedData {

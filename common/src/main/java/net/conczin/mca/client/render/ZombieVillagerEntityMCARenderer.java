@@ -28,6 +28,12 @@ public class ZombieVillagerEntityMCARenderer extends VillagerLikeEntityMCARender
     }
 
     @Override
+    public void extractRenderState(ZombieVillagerEntityMCA entity, VillagerRenderState state, float partialTicks) {
+        super.extractRenderState(entity, state, partialTicks);
+        state.isConverting = entity.isConverting() || entity.isUnderWaterConverting();
+    }
+
+    @Override
     protected boolean isShaking(VillagerRenderState state) {
         return state.isConverting;
     }

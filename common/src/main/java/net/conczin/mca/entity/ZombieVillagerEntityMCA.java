@@ -18,6 +18,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.util.ProblemReporter;
 import net.minecraft.world.DifficultyInstance;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
@@ -29,6 +30,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.ServerLevelAccessor;
+import net.minecraft.world.level.storage.TagValueInput;
 import net.minecraft.world.level.storage.ValueInput;
 import net.minecraft.world.level.storage.ValueOutput;
 import org.jetbrains.annotations.Nullable;
@@ -249,6 +251,11 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
         InventoryUtils.readFromNBT(this.registryAccess(), inventory, nbt);
 
         validateClothes();
+    }
+
+    @Override
+    public void readAdditionalSaveDataForEditor(CompoundTag nbt) {
+        readAdditionalSaveData(TagValueInput.create(ProblemReporter.DISCARDING, registryAccess(), nbt));
     }
 
     @Override

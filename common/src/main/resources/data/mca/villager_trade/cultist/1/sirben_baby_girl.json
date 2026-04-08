@@ -1,0 +1,12 @@
+{
+  "gives": {
+    "id": "mca:sirben_baby_girl"
+  },
+  "max_uses": 1.0,
+  "reputation_discount": 0.05,
+  "xp": 1.0,
+  "wants": {
+    "count": 5.0,
+    "id": "minecraft:emerald"
+  }
+}

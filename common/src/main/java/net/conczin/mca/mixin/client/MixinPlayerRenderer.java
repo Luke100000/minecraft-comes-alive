@@ -5,14 +5,12 @@ import net.conczin.mca.MCAClient;
 import net.conczin.mca.client.model.CommonVillagerModel;
 import net.conczin.mca.client.model.PlayerEntityExtendedModel;
 import net.conczin.mca.client.model.VillagerEntityModelMCA;
-import net.conczin.mca.client.render.VillagerStateHolder;
 import net.conczin.mca.client.render.VillagerVisualSnapshot;
 import net.conczin.mca.client.render.layer.ClothingLayer;
 import net.conczin.mca.client.render.layer.FaceLayer;
 import net.conczin.mca.client.render.layer.HairLayer;
 import net.conczin.mca.client.render.layer.SkinLayer;
 import net.conczin.mca.client.render.LivingEntityRenderContext;
-import net.conczin.mca.entity.ai.relationship.AgeState;
 import net.minecraft.client.model.geom.builders.CubeDeformation;
 import net.minecraft.client.model.geom.builders.LayerDefinition;
 import net.minecraft.client.model.player.PlayerModel;
@@ -29,7 +27,6 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.HumanoidArm;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.PlayerModelType;
-import net.minecraft.world.entity.player.PlayerModelPart;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
@@ -125,9 +122,7 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<LivingEnt
             return;
         }
 
-        AvatarRenderState state = mca$createArmState(player);
-        mca$renderCustomArm(poseStack, submitNodeCollector, lightCoords, state, true, hasSleeve, (PlayerEntityExtendedModel<?>) mca$skinLayer.model, mca$skinLayer);
-        mca$renderCustomArm(poseStack, submitNodeCollector, lightCoords, state, true, hasSleeve, (PlayerEntityExtendedModel<?>) mca$clothingLayer.model, mca$clothingLayer);
+        mca$renderCustomHand(player, poseStack, submitNodeCollector, lightCoords, true, hasSleeve);
         ci.cancel();
     }
 
@@ -145,9 +140,7 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<LivingEnt
             return;
         }
 
-        AvatarRenderState state = mca$createArmState(player);
-        mca$renderCustomArm(poseStack, submitNodeCollector, lightCoords, state, true, hasSleeve, (PlayerEntityExtendedModel<?>) mca$skinLayer.model, mca$skinLayer);
-        mca$renderCustomArm(poseStack, submitNodeCollector, lightCoords, state, true, hasSleeve, (PlayerEntityExtendedModel<?>) mca$clothingLayer.model, mca$clothingLayer);
+        mca$renderCustomHand(player, poseStack, submitNodeCollector, lightCoords, true, hasSleeve);
         ci.cancel();
     }
 
@@ -168,9 +161,7 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<LivingEnt
             return;
         }
 
-        AvatarRenderState state = mca$createArmState(player);
-        mca$renderCustomArm(poseStack, submitNodeCollector, lightCoords, state, false, hasSleeve, (PlayerEntityExtendedModel<?>) mca$skinLayer.model, mca$skinLayer);
-        mca$renderCustomArm(poseStack, submitNodeCollector, lightCoords, state, false, hasSleeve, (PlayerEntityExtendedModel<?>) mca$clothingLayer.model, mca$clothingLayer);
+        mca$renderCustomHand(player, poseStack, submitNodeCollector, lightCoords, false, hasSleeve);
         ci.cancel();
     }
 
@@ -188,66 +179,73 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<LivingEnt
             return;
         }
 
-        AvatarRenderState state = mca$createArmState(player);
-        mca$renderCustomArm(poseStack, submitNodeCollector, lightCoords, state, false, hasSleeve, (PlayerEntityExtendedModel<?>) mca$skinLayer.model, mca$skinLayer);
-        mca$renderCustomArm(poseStack, submitNodeCollector, lightCoords, state, false, hasSleeve, (PlayerEntityExtendedModel<?>) mca$clothingLayer.model, mca$clothingLayer);
+        mca$renderCustomHand(player, poseStack, submitNodeCollector, lightCoords, false, hasSleeve);
         ci.cancel();
     }
 
     @Unique
-    private AvatarRenderState mca$createArmState(AbstractClientPlayer player) {
-        AvatarRenderState state = new AvatarRenderState();
-        ((AvatarRenderer) (Object) this).extractRenderState(player, state, 0.0F);
-        if (state instanceof VillagerStateHolder holder) {
-            var villager = CommonVillagerModel.getVillager(player);
-            holder.mca$setVillager(villager);
-            holder.mca$setVisualSnapshot(VillagerVisualSnapshot.capture(villager));
-        }
-        state.attackTime = 0.0F;
-        state.isCrouching = false;
-        state.swimAmount = 0.0F;
-        state.isUsingItem = false;
-        state.isPassenger = false;
-        state.showHat = player.isModelPartShown(PlayerModelPart.HAT);
-        state.showJacket = player.isModelPartShown(PlayerModelPart.JACKET);
-        state.showLeftSleeve = player.isModelPartShown(PlayerModelPart.LEFT_SLEEVE);
-        state.showRightSleeve = player.isModelPartShown(PlayerModelPart.RIGHT_SLEEVE);
-        state.showLeftPants = player.isModelPartShown(PlayerModelPart.LEFT_PANTS_LEG);
-        state.showRightPants = player.isModelPartShown(PlayerModelPart.RIGHT_PANTS_LEG);
-        return state;
+    private void mca$renderCustomHand(
+            AbstractClientPlayer player,
+            PoseStack poseStack,
+            SubmitNodeCollector submitNodeCollector,
+            int lightCoords,
+            boolean rightArm,
+            boolean hasSleeve
+    ) {
+        var villager = CommonVillagerModel.getVillager(player);
+        var visuals = VillagerVisualSnapshot.capture(villager);
+
+        mca$renderSkinArm(
+                poseStack,
+                submitNodeCollector,
+                lightCoords,
+                visuals,
+                rightArm,
+                (PlayerEntityExtendedModel<?>) mca$skinLayer.model,
+                mca$skinLayer
+        );
+        mca$renderClothingArm(
+                poseStack,
+                submitNodeCollector,
+                lightCoords,
+                visuals,
+                rightArm,
+                hasSleeve,
+                (PlayerEntityExtendedModel<?>) mca$clothingLayer.model,
+                mca$clothingLayer
+        );
     }
 
     @Unique
     @SuppressWarnings("rawtypes")
-    private void mca$renderCustomArm(
+    private void mca$renderSkinArm(
             PoseStack poseStack,
             SubmitNodeCollector submitNodeCollector,
             int lightCoords,
-            AvatarRenderState state,
+            VillagerVisualSnapshot visuals,
             boolean rightArm,
-            boolean hasSleeve,
             PlayerEntityExtendedModel<?> model,
             SkinLayer layer
     ) {
         mca$prepareArm(model, rightArm ? HumanoidArm.RIGHT : HumanoidArm.LEFT, false);
 
-        Identifier texture = layer.getSkin(state);
+        Identifier texture = layer.getSkin(visuals);
         if (texture == null || !layer.canUse(texture)) {
             return;
         }
 
-        int color = layer.getColor(state, 0.0F);
+        int color = layer.getColor(visuals, 0.0F);
         var arm = rightArm ? model.rightArm : model.leftArm;
         submitNodeCollector.submitModelPart(arm, poseStack, RenderTypes.entityCutout(texture), lightCoords, OverlayTexture.NO_OVERLAY, null, color, null);
     }
 
     @Unique
     @SuppressWarnings("rawtypes")
-    private void mca$renderCustomArm(
+    private void mca$renderClothingArm(
             PoseStack poseStack,
             SubmitNodeCollector submitNodeCollector,
             int lightCoords,
-            AvatarRenderState state,
+            VillagerVisualSnapshot visuals,
             boolean rightArm,
             boolean hasSleeve,
             PlayerEntityExtendedModel<?> model,
@@ -255,15 +253,14 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<LivingEnt
     ) {
         mca$prepareArm(model, rightArm ? HumanoidArm.RIGHT : HumanoidArm.LEFT, hasSleeve);
 
-        Identifier texture = layer.getSkin(state);
+        Identifier texture = layer.getSkin(visuals);
         if (texture == null || !layer.canUse(texture)) {
             return;
         }
 
-        int color = layer.getColor(state, 0.0F);
-        var sleeve = rightArm ? model.rightSleeve : model.leftSleeve;
-        if (hasSleeve && sleeve.visible) {
-            submitNodeCollector.submitModelPart(sleeve, poseStack, RenderTypes.entityCutout(texture), lightCoords, OverlayTexture.NO_OVERLAY, null, color, null);
+        var arm = rightArm ? model.rightArm : model.leftArm;
+        if (arm.visible) {
+            submitNodeCollector.submitModelPart(arm, poseStack, RenderTypes.entityCutout(texture), lightCoords, OverlayTexture.NO_OVERLAY, null, 0xFFFFFFFF, null);
         }
     }
 

@@ -42,6 +42,7 @@ import net.minecraft.sounds.SoundEvents;
 import net.minecraft.stats.Stats;
 import net.minecraft.tags.DamageTypeTags;
 import net.minecraft.util.Mth;
+import net.minecraft.util.ProblemReporter;
 import net.minecraft.world.*;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.effect.MobEffectInstance;
@@ -68,6 +69,7 @@ import net.minecraft.world.entity.npc.villager.VillagerProfession;
 import net.minecraft.world.entity.npc.villager.VillagerType;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.level.storage.TagValueInput;
 import net.minecraft.world.entity.projectile.arrow.AbstractArrow;
 import net.minecraft.world.entity.projectile.ProjectileUtil;
 import net.minecraft.world.food.FoodProperties;
@@ -76,6 +78,9 @@ import net.minecraft.world.inventory.ChestMenu;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.ProjectileWeaponItem;
+import net.minecraft.world.item.component.Consumable;
+import net.minecraft.world.item.component.SuspiciousStewEffects;
+import net.minecraft.world.item.consume_effects.ApplyStatusEffectsConsumeEffect;
 import net.minecraft.world.item.trading.MerchantOffer;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.ServerLevelAccessor;
@@ -134,8 +139,39 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     }
 
     private static boolean canEat(ItemStack i) {
-        FoodProperties foodProperties = i.get(DataComponents.FOOD);
-        return foodProperties != null && foodProperties.nutrition() > 0;
+        return canEat(i, i.get(DataComponents.FOOD));
+    }
+
+    private static boolean canEat(ItemStack i, @Nullable FoodProperties foodProperties) {
+        return foodProperties != null
+                && foodProperties.nutrition() > 0
+                && !hasDangerousConsumeEffects(i)
+                && !hasDangerousStewEffects(i);
+    }
+
+    private static boolean hasDangerousConsumeEffects(ItemStack stack) {
+        Consumable consumable = stack.get(DataComponents.CONSUMABLE);
+        if (consumable == null) {
+            return false;
+        }
+
+        return consumable.onConsumeEffects().stream()
+                .filter(ApplyStatusEffectsConsumeEffect.class::isInstance)
+                .map(ApplyStatusEffectsConsumeEffect.class::cast)
+                .flatMap(effect -> effect.effects().stream())
+                .map(MobEffectInstance::getEffect)
+                .anyMatch(StatusEffectDangerSet.IS_DANGER::contains);
+    }
+
+    private static boolean hasDangerousStewEffects(ItemStack stack) {
+        SuspiciousStewEffects stewEffects = stack.get(DataComponents.SUSPICIOUS_STEW_EFFECTS);
+        if (stewEffects == null) {
+            return false;
+        }
+
+        return stewEffects.effects().stream()
+                .map(SuspiciousStewEffects.Entry::effect)
+                .anyMatch(StatusEffectDangerSet.IS_DANGER::contains);
     }
 
     public static AttributeSupplier.Builder createAttributes() {
@@ -638,7 +674,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
                 // if the villager has food they should try to eat.
                 ItemStack food = getMainHandItem();
                 FoodProperties foodProperties = food.get(DataComponents.FOOD);
-                if (foodProperties != null) {
+                if (canEat(food, foodProperties)) {
                     eat(food, foodProperties);
                 } else {
                     //noinspection ConstantConditions
@@ -780,7 +816,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
     private void eat(ItemStack stack, FoodProperties foodProperties) {
         heal(foodProperties.nutrition());
-        stack.consume(1, this);
+        setItemInHand(getDominantHand(), stack.finishUsingItem(level(), this));
     }
 
     @Override
@@ -1254,6 +1290,11 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         if (getVillagerBrain().getPersonality() == Personality.UNASSIGNED) {
             getVillagerBrain().randomize();
         }
+    }
+
+    @Override
+    public void readAdditionalSaveDataForEditor(CompoundTag nbt) {
+        readAdditionalSaveData(TagValueInput.create(ProblemReporter.DISCARDING, registryAccess(), nbt));
     }
 
     @Override

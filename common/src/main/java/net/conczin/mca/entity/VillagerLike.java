@@ -1,5 +1,6 @@
 package net.conczin.mca.entity;
 
+import com.mojang.serialization.JsonOps;
 import net.conczin.mca.Config;
 import net.conczin.mca.MCA;
 import net.conczin.mca.entity.ai.DialogueType;
@@ -21,11 +22,15 @@ import net.conczin.mca.server.world.data.PlayerSaveData;
 import net.conczin.mca.util.network.datasync.*;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.NbtOps;
+import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.ComponentSerialization;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.ARGB;
+import net.minecraft.util.GsonHelper;
 import net.minecraft.util.ProblemReporter;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.InteractionHand;
@@ -427,20 +432,12 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
         this.getTypeDataManager().load((E) asEntity(), input);
     }
 
+    void readAdditionalSaveDataForEditor(CompoundTag nbt);
+
     default void syncFromEditor(CompoundTag nbt) {
         Mob entity = asEntity();
-        entity.load(TagValueInput.create(ProblemReporter.DISCARDING, entity.registryAccess(), nbt));
-
-        if (nbt.contains("CustomName")) {
-            String s = nbt.getString("CustomName").orElse("");
-
-            try {
-                entity.setCustomName(Component.literal(s));
-            } catch (Exception exception) {
-                MCA.LOGGER.warn("Failed to parse entity custom name {}", s, exception);
-            }
-        }
-
+        readAdditionalSaveDataForEditor(nbt);
+        parseCustomName(entity.registryAccess(), nbt).ifPresent(entity::setCustomName);
     }
 
     default void copyVillagerAttributesFrom(VillagerLike<?> other) {
@@ -473,5 +470,35 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
         VANILLA;
 
         static final PlayerModel[] VALUES = values();
+    }
+
+    static Optional<Component> parseCustomName(net.minecraft.core.HolderLookup.Provider provider, CompoundTag nbt) {
+        Tag customName = nbt.get("CustomName");
+        if (customName == null) {
+            return Optional.empty();
+        }
+
+        Optional<Component> fromNbt = ComponentSerialization.CODEC
+                .parse(provider.createSerializationContext(NbtOps.INSTANCE), customName)
+                .result();
+        if (fromNbt.isPresent()) {
+            return fromNbt;
+        }
+
+        Optional<String> serialized = nbt.getString("CustomName");
+        if (serialized.isEmpty() || MCA.isBlankString(serialized.get())) {
+            return Optional.empty();
+        }
+
+        String name = serialized.get();
+        try {
+            return ComponentSerialization.CODEC
+                    .parse(provider.createSerializationContext(JsonOps.INSTANCE), GsonHelper.parse(name))
+                    .result()
+                    .or(() -> Optional.of(Component.literal(name)));
+        } catch (Exception exception) {
+            MCA.LOGGER.warn("Failed to parse entity custom name {}", name, exception);
+            return Optional.of(Component.literal(name));
+        }
     }
 }

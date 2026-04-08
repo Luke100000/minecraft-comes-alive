@@ -16,9 +16,9 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.Tag;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.ComponentSerialization;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
@@ -29,10 +29,8 @@ import net.minecraft.util.GsonHelper;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.npc.villager.VillagerProfession;
 import net.minecraft.world.entity.player.Player;
-import com.mojang.serialization.JsonOps;
 
 import java.util.List;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -173,20 +171,9 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
         FamilyTreeNode entry = tree.getOrCreate(entity);
         entry.setGender(getGender(data));
 
-        String s = villagerData.getString("CustomName").orElse("");
-        if (!s.isEmpty()) {
-            try {
-                entry.setName(
-                        ComponentSerialization.CODEC
-                                .parse(entity.registryAccess().createSerializationContext(JsonOps.INSTANCE), GsonHelper.parse(s))
-                                .result()
-                                .orElseGet(() -> Component.literal(s))
-                                .getString()
-                );
-            } catch (Exception e) {
-                MCA.LOGGER.error("Failed to parse custom name for villager: {}", s, e);
-            }
-        }
+        VillagerLike.parseCustomName(entity.registryAccess(), villagerData)
+                .map(Component::getString)
+                .ifPresent(entry::setName);
 
         if (villagerData.contains("FamilyTreeNewFatherName")) {
             String name = villagerData.getString("FamilyTreeNewFatherName").orElse("");

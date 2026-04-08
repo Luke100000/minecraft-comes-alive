@@ -1,0 +1,12 @@
+{
+  "gives": {
+    "id": "minecraft:leather_horse_armor"
+  },
+  "max_uses": 4.0,
+  "reputation_discount": 0.05,
+  "xp": 10.0,
+  "wants": {
+    "count": 3.0,
+    "id": "minecraft:emerald"
+  }
+}

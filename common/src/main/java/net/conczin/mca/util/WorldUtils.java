@@ -2,11 +2,15 @@ package net.conczin.mca.util;
 
 import com.mojang.datafixers.util.Pair;
 import com.mojang.serialization.Codec;
+import net.minecraft.SharedConstants;
 import net.conczin.mca.MCA;
 import net.minecraft.core.*;
+import net.minecraft.nbt.NbtOps;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.Tag;
 import net.minecraft.resources.Identifier;
+import net.minecraft.resources.RegistryOps;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.FullChunkStatus;
 import net.minecraft.server.level.ServerChunkCache;
@@ -21,10 +25,14 @@ import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.levelgen.structure.Structure;
 import net.minecraft.world.level.saveddata.SavedData;
 import net.minecraft.world.level.saveddata.SavedDataType;
+import net.minecraft.world.level.storage.SavedDataStorage;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
+import org.jetbrains.annotations.Nullable;
 
 import java.lang.reflect.Method;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.BiFunction;
@@ -46,16 +54,20 @@ public interface WorldUtils {
 
     @SuppressWarnings("DataFlowIssue")
     static <T extends SavedData> T loadData(ServerLevel world, BiFunction<CompoundTag, HolderLookup.Provider, T> loader, Function<ServerLevel, T> factory, String dataId) {
-        SavedDataType<T> type = new SavedDataType<>(
-                MCA.locate(dataId),
-                () -> factory.apply(world),
-                CompoundTag.CODEC.xmap(
-                        tag -> loader.apply(tag, world.registryAccess()),
-                        data -> serializeSavedData(data, world.registryAccess())
-                ),
-                null
-        );
-        return world.getDataStorage().computeIfAbsent(type);
+        SavedDataType<T> type = createSavedDataType(world, loader, factory, dataId);
+        T data = getSavedDataWithLegacyFallback(world, type, dataId);
+        if (data != null) {
+            return data;
+        }
+
+        T created = factory.apply(world);
+        world.getDataStorage().set(type, created);
+        return created;
+    }
+
+    static <T extends SavedData> Optional<T> loadDataIfPresent(ServerLevel world, BiFunction<CompoundTag, HolderLookup.Provider, T> loader, String dataId) {
+        SavedDataType<T> type = createSavedDataType(world, loader, ignored -> null, dataId);
+        return Optional.ofNullable(getSavedDataWithLegacyFallback(world, type, dataId));
     }
 
     static void spawnEntity(Level world, Mob entity, EntitySpawnReason reason) {
@@ -125,5 +137,66 @@ public interface WorldUtils {
             }
         }
         return true;
+    }
+
+    private static <T extends SavedData> SavedDataType<T> createSavedDataType(
+            ServerLevel world,
+            BiFunction<CompoundTag, HolderLookup.Provider, T> loader,
+            Function<ServerLevel, T> factory,
+            String dataId
+    ) {
+        return new SavedDataType<>(
+                MCA.locate(dataId),
+                () -> factory.apply(world),
+                CompoundTag.CODEC.xmap(
+                        tag -> loader.apply(tag, world.registryAccess()),
+                        data -> serializeSavedData(data, world.registryAccess())
+                ),
+                null
+        );
+    }
+
+    private static <T extends SavedData> @Nullable T getSavedDataWithLegacyFallback(ServerLevel world, SavedDataType<T> type, String legacyDataId) {
+        SavedDataStorage storage = world.getDataStorage();
+        T data = storage.get(type);
+        if (data != null) {
+            return data;
+        }
+
+        T legacyData = tryLoadLegacySavedData(world, storage, type, legacyDataId);
+        if (legacyData != null) {
+            // Cache the migrated data under the new type so later lookups stay coherent.
+            storage.set(type, legacyData);
+        }
+        return legacyData;
+    }
+
+    private static <T extends SavedData> @Nullable T tryLoadLegacySavedData(ServerLevel world, SavedDataStorage storage, SavedDataType<T> type, String legacyDataId) {
+        try {
+            Path dataFolder = getSavedDataFolder(storage);
+            Path legacyFile = dataFolder.resolve(legacyDataId + ".dat").normalize();
+            if (!legacyFile.startsWith(dataFolder) || !Files.exists(legacyFile)) {
+                return null;
+            }
+
+            CompoundTag tag = storage.readTagFromDisk(legacyFile, type.dataFixType(), SharedConstants.getCurrentVersion().dataVersion().version());
+            RegistryOps<Tag> ops = world.registryAccess().createSerializationContext(NbtOps.INSTANCE);
+            return type.codec()
+                    .parse(ops, tag.get("data"))
+                    .resultOrPartial(error -> MCA.LOGGER.error("Failed to parse legacy saved data '{}': {}", legacyDataId, error))
+                    .orElse(null);
+        } catch (ReflectiveOperationException reflectiveOperationException) {
+            MCA.LOGGER.error("Failed to resolve saved-data directory for '{}'", legacyDataId, reflectiveOperationException);
+        } catch (Exception exception) {
+            MCA.LOGGER.error("Error loading legacy saved data '{}'", legacyDataId, exception);
+        }
+
+        return null;
+    }
+
+    private static Path getSavedDataFolder(SavedDataStorage storage) throws ReflectiveOperationException {
+        var field = SavedDataStorage.class.getDeclaredField("dataFolder");
+        field.setAccessible(true);
+        return ((Path) field.get(storage)).toAbsolutePath().normalize();
     }
 }

@@ -38,7 +38,6 @@ import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.saveddata.SavedData;
-import net.minecraft.world.level.saveddata.SavedDataType;
 import net.minecraft.world.level.storage.TagValueOutput;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -86,10 +85,11 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
 
     @SuppressWarnings("DataFlowIssue")
     public static Optional<PlayerSaveData> getIfPresent(ServerLevel world, UUID uuid) {
-        return Optional.ofNullable(world.getPlayerByUUID(uuid))
-                .filter(ServerPlayer.class::isInstance)
-                .map(ServerPlayer.class::cast)
-                .map(PlayerSaveData::get);
+        return WorldUtils.loadDataIfPresent(
+                world.getServer().overworld(),
+                (nbt, provider) -> new PlayerSaveData(world, uuid, nbt),
+                "mca_player_" + uuid
+        );
     }
 
     public static void showMailNotification(ServerPlayer player) {
