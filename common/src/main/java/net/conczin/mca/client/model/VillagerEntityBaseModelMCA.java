@@ -3,7 +3,6 @@ package net.conczin.mca.client.model;
 import com.google.common.collect.ImmutableList;
 import net.conczin.mca.Config;
 import net.conczin.mca.client.render.VillagerRenderState;
-import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.entity.ai.relationship.AgeState;
 import net.conczin.mca.entity.ai.relationship.VillagerDimensions;
 import net.minecraft.client.model.HumanoidModel;
@@ -49,8 +48,8 @@ public class VillagerEntityBaseModelMCA extends HumanoidModel<VillagerRenderStat
     public void setupAnim(VillagerRenderState state) {
         super.setupAnim(state);
 
-        VillagerLike<?> villager = CommonVillagerModel.getVillager(state);
-        if (villager.getVillagerBrain().isPanicking()) {
+        var visuals = CommonVillagerModel.getVisuals(state);
+        if (visuals.panicking()) {
             float toRadians = (float) Math.PI / 180;
 
             float armRaise = (((float) Math.sin(state.ageInTicks / 5) * 30 - 180)
@@ -64,7 +63,7 @@ public class VillagerEntityBaseModelMCA extends HumanoidModel<VillagerRenderStat
             this.rightArm.zRot = waveSideways;
         }
 
-        applyVillagerDimensions(villager, state.isCrouching);
+        applyVillagerDimensions(visuals, state.isCrouching);
         CommonVillagerModel.applyRenderMask(this, renderMask);
     }
 

@@ -6,6 +6,7 @@ import net.conczin.mca.client.model.CommonVillagerModel;
 import net.conczin.mca.client.model.PlayerEntityExtendedModel;
 import net.conczin.mca.client.model.VillagerEntityModelMCA;
 import net.conczin.mca.client.render.VillagerStateHolder;
+import net.conczin.mca.client.render.VillagerVisualSnapshot;
 import net.conczin.mca.client.render.layer.ClothingLayer;
 import net.conczin.mca.client.render.layer.FaceLayer;
 import net.conczin.mca.client.render.layer.HairLayer;
@@ -96,11 +97,11 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<LivingEnt
             return;
         }
 
-        var villager = CommonVillagerModel.getVillager((net.conczin.mca.client.render.VillagerStateHolder) state);
-        float height = villager.getRawVerticalScaleFactor();
-        float width = villager.getRawHorizontalScaleFactor();
-        poseStack.scale(width, height, width);
-        if (villager.getAgeState() == AgeState.BABY && !state.isPassenger) {
+        var visuals = CommonVillagerModel.getVisuals((net.conczin.mca.client.render.VillagerStateHolder) state);
+        float verticalScale = Math.max(visuals.rawVerticalScaleFactor(), 1.0E-4F);
+        float horizontalRatio = visuals.rawHorizontalScaleFactor() / verticalScale;
+        poseStack.scale(horizontalRatio, 1.0F, horizontalRatio);
+        if (visuals.baby() && !state.isPassenger) {
             poseStack.translate(0.0F, 0.6F, 0.0F);
         }
 
@@ -198,7 +199,9 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<LivingEnt
         AvatarRenderState state = new AvatarRenderState();
         ((AvatarRenderer) (Object) this).extractRenderState(player, state, 0.0F);
         if (state instanceof VillagerStateHolder holder) {
-            holder.mca$setVillager(CommonVillagerModel.getVillager(player));
+            var villager = CommonVillagerModel.getVillager(player);
+            holder.mca$setVillager(villager);
+            holder.mca$setVisualSnapshot(VillagerVisualSnapshot.capture(villager));
         }
         state.attackTime = 0.0F;
         state.isCrouching = false;

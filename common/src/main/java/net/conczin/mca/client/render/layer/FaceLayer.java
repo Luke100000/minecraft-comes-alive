@@ -37,12 +37,11 @@ public class FaceLayer<S extends HumanoidRenderState & VillagerStateHolder, M ex
 
     @Override
     public Identifier getSkin(S state) {
-        int index = (int) Math.min(FACE_COUNT - 1, Math.max(0, CommonVillagerModel.getVillager(state).getGenetics().getGene(Genetics.FACE) * FACE_COUNT));
-        net.minecraft.world.entity.LivingEntity villager = (net.minecraft.world.entity.LivingEntity) CommonVillagerModel.getVillager(state);
-        int time = villager.tickCount / 2 + (int) (CommonVillagerModel.getVillager(state).getGenetics().getGene(Genetics.HEMOGLOBIN) * 65536);
-        boolean blink = time % 50 == 1 || time % 57 == 1 || villager.isSleeping() || villager.isDeadOrDying();
-        boolean hasHeterochromia = variant.equals("normal") && CommonVillagerModel.getVillager(state).getTraits().hasTrait(Traits.HETEROCHROMIA);
-        String gender = CommonVillagerModel.getVillager(state).getGenetics().getGender().getDataName();
+        var visuals = CommonVillagerModel.getVisuals(state);
+        int index = (int) Math.min(FACE_COUNT - 1, Math.max(0, visuals.faceGene() * FACE_COUNT));
+        boolean blink = visuals.isBlinking();
+        boolean hasHeterochromia = variant.equals("normal") && visuals.heterochromia();
+        String gender = visuals.genderDataName();
         String blinkTexture = blink ? "_blink" : (hasHeterochromia ? "_hetero" : "");
 
         return cached("skins/face/" + variant + "/" + gender + "/" + index + blinkTexture + ".png", MCA::locate);

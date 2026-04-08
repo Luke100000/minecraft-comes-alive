@@ -17,18 +17,6 @@ java {
 
 repositories {
     mavenCentral()
-    exclusiveContent {
-        forRepository {
-            maven {
-                name = 'LocalNeoForgedMetadata'
-                url = rootProject.uri('gradle-local-repo')
-                metadataSources {
-                    gradleMetadata()
-                }
-            }
-        }
-        filter { includeModule('net.neoforged', 'minecraft-dependencies') }
-    }
     // https://docs.gradle.org/current/userguide/declaring_repositories.html#declaring_content_exclusively_found_in_one_repository
     exclusiveContent {
         forRepository {

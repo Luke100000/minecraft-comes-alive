@@ -57,15 +57,16 @@ public class VillagerLikeEntityMCARenderer<T extends Mob & VillagerLike<T>>
     public void extractRenderState(T entity, VillagerRenderState state, float partialTicks) {
         super.extractRenderState(entity, state, partialTicks);
         state.mca$setVillager(entity);
+        state.mca$setVisualSnapshot(VillagerVisualSnapshot.capture(entity));
     }
 
     @Override
     protected void scale(VillagerRenderState state, PoseStack matrices) {
-        VillagerLike<?> villager = CommonVillagerModel.getVillager(state);
-        float height = villager.getRawVerticalScaleFactor();
-        float width = villager.getRawHorizontalScaleFactor();
+        VillagerVisualSnapshot visuals = CommonVillagerModel.getVisuals(state);
+        float height = visuals.rawVerticalScaleFactor();
+        float width = visuals.rawHorizontalScaleFactor();
         matrices.scale(width, height, width);
-        if (villager.getAgeState() == AgeState.BABY && state.mca$getVillager() instanceof Entity entity && !entity.isPassenger()) {
+        if (visuals.baby() && state.mca$getVillager() instanceof Entity entity && !entity.isPassenger()) {
             matrices.translate(0, 0.6F, 0);
         }
     }
@@ -96,6 +97,6 @@ public class VillagerLikeEntityMCARenderer<T extends Mob & VillagerLike<T>>
 
     @Override
     protected boolean isShaking(VillagerRenderState state) {
-        return CommonVillagerModel.getVillager(state).getInfectionProgress() > Infectable.FEVER_THRESHOLD;
+        return CommonVillagerModel.getVisuals(state).infectionProgress() > Infectable.FEVER_THRESHOLD;
     }
 }

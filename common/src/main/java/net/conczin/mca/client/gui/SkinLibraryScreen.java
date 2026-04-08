@@ -252,7 +252,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                         if (contents.size() > i) {
                             LiteContent c = contents.get(i);
 
-                            setDummyTexture(c);
+                            setDummyTexture(villagerVisualization, c);
 
                             int cx = width / 2 + (int) ((x - CLOTHES_H / 2.0 + 0.5 - 0.5 * (y % 2)) * 55);
                             int cy = height / 2 + (int) ((y - CLOTHES_V / 2.0 + 0.5) * 80);
@@ -404,7 +404,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
             }
             case DETAIL -> {
                 //dummy
-                setDummyTexture(focusedContent);
+                setDummyTexture(villagerVisualization, focusedContent);
 
                 int cx = width / 2;
                 int cy = height / 2;
@@ -429,13 +429,13 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         }
     }
 
-    private void setDummyTexture(LiteContent content) {
+    private void setDummyTexture(VillagerEntityMCA preview, LiteContent content) {
         if (content.hasTag("clothing")) {
-            villagerVisualization.setHair(EMPTY_IDENTIFIER);
-            villagerVisualization.setClothes(SkinCache.getTextureIdentifier(content));
+            preview.setHair(EMPTY_IDENTIFIER);
+            preview.setClothes(SkinCache.getTextureIdentifier(content));
         } else {
-            villagerVisualization.setHair(SkinCache.getTextureIdentifier(content));
-            villagerVisualization.setClothes(EMPTY_IDENTIFIER);
+            preview.setHair(SkinCache.getTextureIdentifier(content));
+            preview.setClothes(EMPTY_IDENTIFIER);
         }
     }
 

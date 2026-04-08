@@ -3,7 +3,6 @@ package net.conczin.mca.mixin.client;
 import net.conczin.mca.Config;
 import net.conczin.mca.MCAClient;
 import net.conczin.mca.client.model.CommonVillagerModel;
-import net.conczin.mca.entity.ai.relationship.AgeState;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import org.spongepowered.asm.mixin.Mixin;
@@ -22,12 +21,7 @@ public abstract class MixinEntity {
     @Inject(method = "getEyeHeight()F", at = @At("RETURN"), cancellable = true)
     private void onGetEyeHeight(CallbackInfoReturnable<Float> cir) {
         if ((Object) this instanceof Player player && Config.getInstance().scaleEyeHeightWithPlayerHeight && MCAClient.useGeneticsRenderer(getUUID())) {
-            var villager = CommonVillagerModel.getVillager(player);
-            float eyeHeight = cir.getReturnValueF() * villager.getRawVerticalScaleFactor();
-            if (villager.getAgeState() == AgeState.BABY && !player.isPassenger()) {
-                eyeHeight += 0.6F;
-            }
-            cir.setReturnValue(eyeHeight);
+            cir.setReturnValue(cir.getReturnValueF() * CommonVillagerModel.getVillager(player).getRawVerticalScaleFactor());
         }
     }
 }

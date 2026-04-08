@@ -7,4 +7,8 @@ public interface VillagerStateHolder {
     @Nullable VillagerLike<?> mca$getVillager();
 
     void mca$setVillager(@Nullable VillagerLike<?> villager);
+
+    @Nullable VillagerVisualSnapshot mca$getVisualSnapshot();
+
+    void mca$setVisualSnapshot(@Nullable VillagerVisualSnapshot snapshot);
 }

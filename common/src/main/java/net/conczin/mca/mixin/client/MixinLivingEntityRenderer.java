@@ -3,6 +3,7 @@ package net.conczin.mca.mixin.client;
 import net.conczin.mca.MCAClient;
 import net.conczin.mca.client.render.LivingEntityRenderContext;
 import net.conczin.mca.client.render.VillagerStateHolder;
+import net.conczin.mca.client.render.VillagerVisualSnapshot;
 import net.conczin.mca.client.model.CommonVillagerModel;
 import net.conczin.mca.entity.VillagerLike;
 import net.minecraft.client.renderer.entity.LivingEntityRenderer;
@@ -27,7 +28,15 @@ public class MixinLivingEntityRenderer<T extends LivingEntity> {
     private void mca$injectExtractRenderState(T entity, LivingEntityRenderState state, float partialTicks, CallbackInfo ci) {
         boolean geneticsRenderer = entity instanceof Player && MCAClient.useGeneticsRenderer(entity.getUUID());
         if (state instanceof VillagerStateHolder holder) {
-            holder.mca$setVillager(geneticsRenderer ? CommonVillagerModel.getVillager(entity) : null);
+            VillagerLike<?> villager = null;
+            if (entity instanceof VillagerLike<?> villagerLike) {
+                villager = villagerLike;
+            } else if (geneticsRenderer) {
+                villager = CommonVillagerModel.getVillager(entity);
+            }
+
+            holder.mca$setVillager(villager);
+            holder.mca$setVisualSnapshot(villager != null ? VillagerVisualSnapshot.capture(villager) : null);
         }
         LivingEntityRenderContext.setGeneticsRendererActive(geneticsRenderer);
         LivingEntityRenderContext.setVillagerRendererActive(geneticsRenderer && MCAClient.useVillagerRenderer(entity.getUUID()));
@@ -39,8 +48,8 @@ public class MixinLivingEntityRenderer<T extends LivingEntity> {
             return;
         }
 
-        var villager = CommonVillagerModel.peekVillager(holder);
-        if (villager == null) {
+        var visuals = CommonVillagerModel.peekVisuals(holder);
+        if (visuals == null) {
             return;
         }
 
@@ -50,8 +59,8 @@ public class MixinLivingEntityRenderer<T extends LivingEntity> {
 
         float horizontalBaseScale = entity instanceof VillagerLike<?> villagerEntity ? villagerEntity.getHorizontalScaleFactor() : 1.0F;
         float verticalBaseScale = entity instanceof VillagerLike<?> villagerEntity ? villagerEntity.getVerticalScaleFactor() : 1.0F;
-        float horizontalRatio = villager.getRawHorizontalScaleFactor() / Math.max(horizontalBaseScale, 1.0E-4F);
-        float verticalRatio = villager.getRawVerticalScaleFactor() / Math.max(verticalBaseScale, 1.0E-4F);
+        float horizontalRatio = visuals.rawHorizontalScaleFactor() / Math.max(horizontalBaseScale, 1.0E-4F);
+        float verticalRatio = visuals.rawVerticalScaleFactor() / Math.max(verticalBaseScale, 1.0E-4F);
 
         state.boundingBoxWidth = entity.getBbWidth() * horizontalRatio;
         state.boundingBoxHeight = entity.getBbHeight() * verticalRatio;

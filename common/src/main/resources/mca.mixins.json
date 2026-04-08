@@ -23,6 +23,7 @@
     "MixinTranslatableContents",
     "MixinVillager",
     "MixinVillagerInvoker",
+    "client.MixinLivingEntityScale",
     "MixinZombie",
     "MixinZombieVillager"
   ],
@@ -31,6 +32,7 @@
     "client.MixinClientLanguage",
     "client.MixinGameRenderer",
     "client.MixinHumanoidArmorLayer",
+    "client.MixinItemInHandLayer",
     "client.MixinLivingEntityRenderer",
     "client.MixinPlayerRenderer",
     "client.MixinSoundBufferLibrary",

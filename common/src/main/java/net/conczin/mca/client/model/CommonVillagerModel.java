@@ -4,8 +4,8 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.conczin.mca.MCAClient;
 import net.conczin.mca.client.render.VillagerStateHolder;
+import net.conczin.mca.client.render.VillagerVisualSnapshot;
 import net.conczin.mca.entity.VillagerLike;
-import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.entity.ai.relationship.VillagerDimensions;
 import net.conczin.mca.registry.EntitiesMCA;
 import net.minecraft.client.model.HumanoidModel;
@@ -43,6 +43,31 @@ public interface CommonVillagerModel<T> {
 
     static @Nullable VillagerLike<?> peekVillager(VillagerStateHolder state) {
         return state.mca$getVillager();
+    }
+
+    static @Nullable VillagerVisualSnapshot peekVisuals(VillagerStateHolder state) {
+        return state.mca$getVisualSnapshot();
+    }
+
+    static VillagerVisualSnapshot getVisuals(VillagerStateHolder state) {
+        VillagerVisualSnapshot snapshot = peekVisuals(state);
+        if (snapshot != null) {
+            return snapshot;
+        }
+
+        VillagerLike<?> villager = peekVillager(state);
+        if (villager != null) {
+            snapshot = VillagerVisualSnapshot.capture(villager);
+            state.mca$setVisualSnapshot(snapshot);
+            return snapshot;
+        }
+
+        VillagerLike<?> fallbackVillager = MCAClient.fallbackVillager;
+        if (fallbackVillager == null) {
+            throw new IllegalStateException("No villager visuals available for render state");
+        }
+
+        return VillagerVisualSnapshot.capture(fallbackVillager);
     }
 
     static VillagerLike<?> getVillager(VillagerStateHolder state) {
@@ -108,7 +133,26 @@ public interface CommonVillagerModel<T> {
     default void applyVillagerDimensions(VillagerLike<?> villager, boolean isSneaking) {
         getDimensions().set(villager.getVillagerDimensions());
         setBreastSize(villager.getGenetics().getBreastSize());
-        getBreastPart().visible = villager.getGenetics().getGender() == Gender.FEMALE;
+        getBreastPart().visible = villager.getGenetics().getGender() == net.conczin.mca.entity.ai.relationship.Gender.FEMALE;
+
+        for (ModelPart part : getBreastParts()) {
+            part.xRot = (float) Math.PI * 0.3f + getBodyPart().xRot;
+
+            float cy = 0.0f;
+            float cz = 0.0f;
+            if (isSneaking) {
+                cy = 3.0f;
+                cz = 1.5f;
+            }
+
+            part.setPos(0.25f, (float) (5.0f - Math.pow(getBreastSize(), 0.5) * 2.5f + cy), -1.5f + getBreastSize() * 0.25f + cz);
+        }
+    }
+
+    default void applyVillagerDimensions(VillagerVisualSnapshot snapshot, boolean isSneaking) {
+        getDimensions().set(snapshot.dimensions());
+        setBreastSize(snapshot.breastSize());
+        getBreastPart().visible = snapshot.female();
 
         for (ModelPart part : getBreastParts()) {
             part.xRot = (float) Math.PI * 0.3f + getBodyPart().xRot;
