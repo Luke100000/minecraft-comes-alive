@@ -28,14 +28,13 @@
   "client": [
     "client.MixinAvatarRenderState",
     "client.MixinClientLanguage",
+    "client.MixinEntity",
     "client.MixinGameRenderer",
     "client.MixinHumanoidArmorLayer",
     "client.MixinItemInHandLayer",
     "client.MixinLivingEntityRenderer",
-    "client.MixinLivingEntityScale",
     "client.MixinPlayerRenderer",
-    "client.MixinSoundBufferLibrary",
-    "client.MixinEntity"
+    "client.MixinSoundBufferLibrary"
   ],
   "injectors": {
     "defaultRequire": 1

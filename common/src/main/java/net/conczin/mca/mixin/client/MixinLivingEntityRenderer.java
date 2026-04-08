@@ -1,22 +1,21 @@
 package net.conczin.mca.mixin.client;
 
+import com.mojang.blaze3d.vertex.PoseStack;
 import net.conczin.mca.MCAClient;
+import net.conczin.mca.client.model.CommonVillagerModel;
 import net.conczin.mca.client.render.LivingEntityRenderContext;
 import net.conczin.mca.client.render.VillagerStateHolder;
 import net.conczin.mca.client.render.VillagerVisualSnapshot;
-import net.conczin.mca.client.model.CommonVillagerModel;
 import net.conczin.mca.entity.VillagerLike;
+import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.LivingEntityRenderer;
 import net.minecraft.client.renderer.entity.state.LivingEntityRenderState;
 import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
-import net.minecraft.client.renderer.SubmitNodeCollector;
-import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import org.jetbrains.annotations.Nullable;
 import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
@@ -26,6 +25,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 public class MixinLivingEntityRenderer<T extends LivingEntity> {
     @Inject(method = "extractRenderState(Lnet/minecraft/world/entity/LivingEntity;Lnet/minecraft/client/renderer/entity/state/LivingEntityRenderState;F)V", at = @At("HEAD"))
     private void mca$injectExtractRenderState(T entity, LivingEntityRenderState state, float partialTicks, CallbackInfo ci) {
+        LivingEntityRenderContext.clear();
         boolean geneticsRenderer = entity instanceof Player && MCAClient.useGeneticsRenderer(entity.getUUID());
         if (state instanceof VillagerStateHolder holder) {
             VillagerLike<?> villager = null;

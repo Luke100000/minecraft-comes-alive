@@ -90,7 +90,6 @@ public final class MCAFabric implements ModInitializer {
         registerHelper(BuiltInRegistries.DATA_COMPONENT_TYPE, DataComponentsMCA::registerProfessions);
         registerHelper(BuiltInRegistries.TRIGGER_TYPES, CriterionMCA::registerCriteria);
 
-        TradeOffersMCA.bootstrap();
         SchedulesMCA.bootstrap();
         TagsMCA.Blocks.bootstrap();
         TagsMCA.Items.bootstrap();

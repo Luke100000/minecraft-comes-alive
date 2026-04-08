@@ -35,7 +35,6 @@ import net.minecraft.util.ProblemReporter;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntitySpawnReason;
-import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.saveddata.SavedData;
 import net.minecraft.world.level.storage.TagValueOutput;
@@ -177,15 +176,15 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
         return lastSeenVillage;
     }
 
-    protected void onLeave(Player self, Village village) {
+    protected void onLeave(ServerPlayer self, Village village) {
         if (Config.getInstance().enterVillageNotification && village.isVillage()) {
-            self.sendSystemMessage(Component.translatable("gui.village.left", village.getName()).withStyle(ChatFormatting.GOLD));
+            self.sendSystemMessage(Component.translatable("gui.village.left", village.getName()).withStyle(ChatFormatting.GOLD), true);
         }
     }
 
-    protected void onEnter(Player self, Village village) {
+    protected void onEnter(ServerPlayer self, Village village) {
         if (Config.getInstance().enterVillageNotification && village.isVillage()) {
-            self.sendSystemMessage(Component.translatable("gui.village.welcome", village.getName()).withStyle(ChatFormatting.GOLD));
+            self.sendSystemMessage(Component.translatable("gui.village.welcome", village.getName()).withStyle(ChatFormatting.GOLD), true);
         }
         village.onEnter(world);
     }

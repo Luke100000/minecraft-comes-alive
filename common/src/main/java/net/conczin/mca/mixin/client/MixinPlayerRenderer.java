@@ -14,7 +14,6 @@ import net.conczin.mca.client.render.LivingEntityRenderContext;
 import net.minecraft.client.model.geom.builders.CubeDeformation;
 import net.minecraft.client.model.geom.builders.LayerDefinition;
 import net.minecraft.client.model.player.PlayerModel;
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
@@ -36,7 +35,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(AvatarRenderer.class)
 @SuppressWarnings({"rawtypes", "unchecked"})
 public abstract class MixinPlayerRenderer extends LivingEntityRenderer<LivingEntity, AvatarRenderState, PlayerModel> {
-
     @Unique
     private PlayerModel mca$wideVillagerModel;
     @Unique
@@ -95,9 +93,7 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<LivingEnt
         }
 
         var visuals = CommonVillagerModel.getVisuals((net.conczin.mca.client.render.VillagerStateHolder) state);
-        float verticalScale = Math.max(visuals.rawVerticalScaleFactor(), 1.0E-4F);
-        float horizontalRatio = visuals.rawHorizontalScaleFactor() / verticalScale;
-        poseStack.scale(horizontalRatio, 1.0F, horizontalRatio);
+        poseStack.scale(visuals.rawHorizontalScaleFactor(), visuals.rawVerticalScaleFactor(), visuals.rawHorizontalScaleFactor());
         if (visuals.baby() && !state.isPassenger) {
             poseStack.translate(0.0F, 0.6F, 0.0F);
         }
@@ -105,28 +101,15 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<LivingEnt
         model = state.skin.model() == PlayerModelType.SLIM ? mca$slimVillagerModel : mca$wideVillagerModel;
     }
 
-    @Inject(method = "renderRightHand(Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/SubmitNodeCollector;ILnet/minecraft/resources/Identifier;Z)V", at = @At("HEAD"), cancellable = true)
-    private void mca$injectRenderRightHand(
-            PoseStack poseStack,
-            SubmitNodeCollector submitNodeCollector,
-            int lightCoords,
-            Identifier skinTexture,
-            boolean hasSleeve,
-            CallbackInfo ci
-    ) {
-        AbstractClientPlayer player = Minecraft.getInstance().player;
-        if (player == null) {
-            return;
-        }
-        if (!MCAClient.renderArms(player.getUUID(), "right_arm") || mca$skinLayer == null || mca$clothingLayer == null) {
-            return;
-        }
-
-        mca$renderCustomHand(player, poseStack, submitNodeCollector, lightCoords, true, hasSleeve);
-        ci.cancel();
-    }
-
-    @Inject(method = "renderRightHand(Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/SubmitNodeCollector;ILnet/minecraft/resources/Identifier;ZLnet/minecraft/client/player/AbstractClientPlayer;)V", at = @At("HEAD"), cancellable = true, require = 0)
+    @Inject(
+            method = "renderRightHand(Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/SubmitNodeCollector;ILnet/minecraft/resources/Identifier;ZLnet/minecraft/client/player/AbstractClientPlayer;)V",
+            at = @At(
+                    value = "INVOKE",
+                    target = "Lnet/minecraft/client/renderer/entity/player/AvatarRenderer;renderHand(Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/SubmitNodeCollector;ILnet/minecraft/resources/Identifier;Lnet/minecraft/client/model/geom/ModelPart;Z)V"
+            ),
+            cancellable = true,
+            require = 0
+    )
     private void mca$injectRenderRightHandLive(
             PoseStack poseStack,
             SubmitNodeCollector submitNodeCollector,
@@ -144,28 +127,15 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<LivingEnt
         ci.cancel();
     }
 
-    @Inject(method = "renderLeftHand(Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/SubmitNodeCollector;ILnet/minecraft/resources/Identifier;Z)V", at = @At("HEAD"), cancellable = true)
-    private void mca$injectRenderLeftHand(
-            PoseStack poseStack,
-            SubmitNodeCollector submitNodeCollector,
-            int lightCoords,
-            Identifier skinTexture,
-            boolean hasSleeve,
-            CallbackInfo ci
-    ) {
-        AbstractClientPlayer player = Minecraft.getInstance().player;
-        if (player == null) {
-            return;
-        }
-        if (!MCAClient.renderArms(player.getUUID(), "left_arm") || mca$skinLayer == null || mca$clothingLayer == null) {
-            return;
-        }
-
-        mca$renderCustomHand(player, poseStack, submitNodeCollector, lightCoords, false, hasSleeve);
-        ci.cancel();
-    }
-
-    @Inject(method = "renderLeftHand(Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/SubmitNodeCollector;ILnet/minecraft/resources/Identifier;ZLnet/minecraft/client/player/AbstractClientPlayer;)V", at = @At("HEAD"), cancellable = true, require = 0)
+    @Inject(
+            method = "renderLeftHand(Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/SubmitNodeCollector;ILnet/minecraft/resources/Identifier;ZLnet/minecraft/client/player/AbstractClientPlayer;)V",
+            at = @At(
+                    value = "INVOKE",
+                    target = "Lnet/minecraft/client/renderer/entity/player/AvatarRenderer;renderHand(Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/SubmitNodeCollector;ILnet/minecraft/resources/Identifier;Lnet/minecraft/client/model/geom/ModelPart;Z)V"
+            ),
+            cancellable = true,
+            require = 0
+    )
     private void mca$injectRenderLeftHandLive(
             PoseStack poseStack,
             SubmitNodeCollector submitNodeCollector,

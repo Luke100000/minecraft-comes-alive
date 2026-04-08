@@ -125,8 +125,9 @@ public class BabyItem extends Item {
             if (!player.level().isClientSide()) {
                 int count = stack.getOrDefault(DataComponentsMCA.BABY_DROP_ATTEMPTS, 0) + 1;
                 stack.set(DataComponentsMCA.BABY_DROP_ATTEMPTS, count);
-                CriterionMCA.BABY_DROPPED.trigger((ServerPlayer) player, count);
-                player.sendSystemMessage(Component.translatable("item.mca.baby.no_drop"));
+                ServerPlayer serverPlayer = (ServerPlayer) player;
+                CriterionMCA.BABY_DROPPED.trigger(serverPlayer, count);
+                serverPlayer.sendSystemMessage(Component.translatable("item.mca.baby.no_drop"), true);
             }
             return false;
         }
@@ -181,7 +182,7 @@ public class BabyItem extends Item {
         // Not old enough
         if (!isReadyToGrowUp(stack)) {
             if (player instanceof ServerPlayer serverPlayer) {
-                serverPlayer.sendSystemMessage(Component.translatable("item.mca.baby.not_ready"));
+                serverPlayer.sendSystemMessage(Component.translatable("item.mca.baby.not_ready"), true);
             }
             return InteractionResult.SUCCESS_SERVER;
         }
@@ -204,7 +205,7 @@ public class BabyItem extends Item {
 
         CompoundTag savedBaby = stack.getOrDefault(DataComponentsMCA.BABY_NBT, CustomData.EMPTY).copyTag();
         if (!savedBaby.isEmpty()) {
-            child.load(TagValueInput.create(ProblemReporter.DISCARDING, child.registryAccess(), savedBaby));
+            child.readAdditionalSaveData(TagValueInput.create(ProblemReporter.DISCARDING, child.registryAccess(), savedBaby));
         }
 
         child.setCustomName(stack.getOrDefault(DataComponents.CUSTOM_NAME, Component.literal("Unnamed")));

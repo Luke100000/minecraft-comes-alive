@@ -22,9 +22,4 @@ public final class TradeOffersMCA {
     private static ResourceKey<TradeSet> createTradeSet(String path) {
         return ResourceKey.create(Registries.TRADE_SET, MCA.locate(path));
     }
-
-    public static void bootstrap() {
-        // 26.1 villager trades are data-driven. MCA trade data now lives under
-        // common/src/main/resources/data/mca/{trade_set,tags/villager_trade,villager_trade}.
-    }
 }
