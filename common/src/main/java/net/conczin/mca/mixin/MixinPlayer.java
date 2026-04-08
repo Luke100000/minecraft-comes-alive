@@ -18,9 +18,9 @@ abstract class MixinPlayer extends LivingEntity {
         super(entityType, level);
     }
 
-    @Inject(method = "drop(Lnet/minecraft/world/item/ItemStack;ZZ)Lnet/minecraft/world/entity/item/ItemEntity;", at = @At("HEAD"),
+    @Inject(method = "drop(Lnet/minecraft/world/item/ItemStack;Z)Lnet/minecraft/world/entity/item/ItemEntity;", at = @At("HEAD"),
             cancellable = true)
-    private void onDropItem(ItemStack stack, boolean throwRandomly, boolean retainOwnership, CallbackInfoReturnable<ItemEntity> info) {
+    private void onDropItem(ItemStack stack, boolean thrownFromHand, CallbackInfoReturnable<ItemEntity> info) {
         //noinspection ConstantValue
         if (stack.getItem() instanceof BabyItem baby && !baby.onDropped(stack, (Player) (Object) this)) {
             info.setReturnValue(null);

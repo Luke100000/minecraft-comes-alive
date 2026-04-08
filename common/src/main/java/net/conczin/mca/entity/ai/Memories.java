@@ -29,12 +29,13 @@ public class Memories {
             return null;
         }
 
-        Memories memories = new Memories(villager.getVillagerBrain(), villager.level().getDayTime(), tag.getUUID("playerUUID"));
+        UUID playerUuid = tag.getString("playerUUID").map(UUID::fromString).orElse(new UUID(0L, 0L));
+        Memories memories = new Memories(villager.getVillagerBrain(), villager.level().getOverworldClockTime(), playerUuid);
 
-        memories.hearts = tag.getInt("hearts");
-        memories.interactionFatigue = tag.getInt("interactionFatigue");
-        memories.dialogueType = DialogueType.byId(tag.getInt("dialogueType"));
-        memories.lastSeen = tag.getLong("lastSeen");
+        memories.hearts = tag.getInt("hearts").orElse(0);
+        memories.interactionFatigue = tag.getInt("interactionFatigue").orElse(0);
+        memories.dialogueType = DialogueType.byId(tag.getInt("dialogueType").orElse(0));
+        memories.lastSeen = tag.getLong("lastSeen").orElse(0L);
 
         return memories;
     }
@@ -91,7 +92,7 @@ public class Memories {
     public CompoundTag toCNBT() {
         CompoundTag nbt = new CompoundTag();
 
-        nbt.putUUID("playerUUID", playerUUID);
+        nbt.putString("playerUUID", playerUUID.toString());
         nbt.putInt("hearts", hearts);
         nbt.putInt("interactionFatigue", interactionFatigue);
         nbt.putInt("dialogueType", dialogueType.ordinal());

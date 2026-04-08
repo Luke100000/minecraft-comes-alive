@@ -1,24 +1,18 @@
 {
-  "type": "minecraft:crafting_shaped",
-  "category": "misc",
-  "key": {
-    "C": {
-      "item": "minecraft:gray_carpet"
-    },
-    "F": {
-      "item": "minecraft:mangrove_fence"
-    },
-    "P": {
-      "item": "minecraft:mangrove_planks"
-    }
-  },
-  "pattern": [
-    "F F",
-    "FCF",
-    "PPP"
-  ],
-  "result": {
-    "id": "mca:gray_mangrove_crib"
-  },
-  "show_notification": true
+    "type":  "minecraft:crafting_shaped",
+    "category":  "misc",
+    "key":  {
+                "C":  "minecraft:gray_carpet",
+                "F":  "minecraft:mangrove_fence",
+                "P":  "minecraft:mangrove_planks"
+            },
+    "pattern":  [
+                    "F F",
+                    "FCF",
+                    "PPP"
+                ],
+    "result":  {
+                   "id":  "mca:gray_mangrove_crib"
+               },
+    "show_notification":  true
 }

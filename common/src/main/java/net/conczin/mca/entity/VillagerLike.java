@@ -23,27 +23,27 @@ import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.util.FastColor;
+import net.minecraft.util.ARGB;
+import net.minecraft.util.ProblemReporter;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.Mob;
-import net.minecraft.world.entity.MobSpawnType;
+import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
-import net.minecraft.world.entity.animal.Sheep;
-import net.minecraft.world.entity.npc.VillagerDataHolder;
+import net.minecraft.world.entity.animal.sheep.Sheep;
+import net.minecraft.world.entity.npc.villager.VillagerDataHolder;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.DyeColor;
+import net.minecraft.world.level.storage.TagValueInput;
 
 import java.util.Optional;
 import java.util.Set;
-
-import static net.minecraft.world.entity.LivingEntity.getSlotForHand;
 
 public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrackedEntity<E>, VillagerDataHolder, Infectable, Messenger {
     CDataParameter<String> CLOTHES = CParameter.create("Clothes", "");
@@ -53,11 +53,11 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
     CDataParameter<Float> HAIR_COLOR_BLUE = CParameter.create("HairColorBlue", 0.0f);
     CEnumParameter<AgeState> AGE_STATE = CParameter.create("AgeState", AgeState.UNASSIGNED);
 
-    ResourceLocation SPEED_ID = MCA.locate("trait_speed");
-    ResourceLocation DAMAGE_ID = MCA.locate("trait_damage");
+    Identifier SPEED_ID = MCA.locate("trait_speed");
+    Identifier DAMAGE_ID = MCA.locate("trait_damage");
 
-    static <E extends Entity> CDataManager.Builder<E> createTrackedData(Class<E> type) {
-        return new CDataManager.Builder<>(type)
+    static <E extends Entity> CDataManager.Builder<E> createTrackedData(CDataManager.Builder<E> builder) {
+        return builder
                 .addAll(CLOTHES, HAIR, HAIR_COLOR_RED, HAIR_COLOR_GREEN, HAIR_COLOR_BLUE, AGE_STATE)
                 .add(Genetics::createTrackedData)
                 .add(Traits::createTrackedData)
@@ -66,10 +66,11 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
 
     static VillagerLike<?> toVillager(PlayerSaveData player) {
         CompoundTag villagerData = player.getEntityData();
-        VillagerEntityMCA villager = EntitiesMCA.MALE_VILLAGER.create(player.getWorld());
-        assert villager != null;
-        villager.readAdditionalSaveData(villagerData);
-        return villager;
+        return (VillagerLike<?>) EntitiesMCA.MALE_VILLAGER.create(
+                TagValueInput.create(ProblemReporter.DISCARDING, player.getWorld().registryAccess(), villagerData),
+                player.getWorld(),
+                EntitySpawnReason.LOAD
+        ).orElse(null);
     }
 
     static VillagerLike<?> toVillager(Entity entity) {
@@ -90,9 +91,9 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
 
     EntityCommandHandler<?> getInteractions();
 
-    default void initialize(MobSpawnType spawnReason) {
-        if (spawnReason != MobSpawnType.CONVERSION) {
-            if (spawnReason != MobSpawnType.BREEDING) {
+    default void initialize(EntitySpawnReason spawnReason) {
+        if (spawnReason != EntitySpawnReason.CONVERSION) {
+            if (spawnReason != EntitySpawnReason.BREEDING) {
                 getGenetics().randomize();
                 getTraits().randomize();
             }
@@ -125,7 +126,7 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
     }
 
     default void setName(String name) {
-        if (!asEntity().level().isClientSide) {
+        if (!asEntity().level().isClientSide()) {
             EntityRelationship.of(asEntity()).ifPresent(relationship -> relationship.getFamilyEntry().setName(name));
         }
     }
@@ -163,14 +164,14 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
     }
 
     default EquipmentSlot getDominantSlot() {
-        return getSlotForHand(getDominantHand());
+        return getDominantHand() == InteractionHand.MAIN_HAND ? EquipmentSlot.MAINHAND : EquipmentSlot.OFFHAND;
     }
 
     default EquipmentSlot getOpposingSlot() {
-        return getSlotForHand(getOpposingHand());
+        return getOpposingHand() == InteractionHand.MAIN_HAND ? EquipmentSlot.MAINHAND : EquipmentSlot.OFFHAND;
     }
 
-    default ResourceLocation getProfessionId() {
+    default Identifier getProfessionId() {
         return MCA.locate("none");
     }
 
@@ -204,7 +205,7 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
         return getTrackedValue(CLOTHES);
     }
 
-    default void setClothes(ResourceLocation clothes) {
+    default void setClothes(Identifier clothes) {
         setClothes(clothes.toString());
     }
 
@@ -216,7 +217,7 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
         return getTrackedValue(HAIR);
     }
 
-    default void setHair(ResourceLocation hair) {
+    default void setHair(Identifier hair) {
         setHair(hair.toString());
     }
 
@@ -235,24 +236,24 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
     }
 
     default int getHairDye() {
-        return FastColor.ARGB32.colorFromFloat(
+        return ARGB.colorFromFloat(
                 1.0f,
                 getTrackedValue(HAIR_COLOR_RED),
                 getTrackedValue(HAIR_COLOR_GREEN),
                 getTrackedValue(HAIR_COLOR_BLUE)
-        ); // TODO
+        );
     }
 
     default void setHairDye(DyeColor color) {
         int components = color.getTextureDiffuseColor();
         int dye = getHairDye();
         if (dye > 0) {
-            components = FastColor.ARGB32.lerp(0.5f, components, dye);
+            components = ARGB.srgbLerp(0.5f, components, dye);
         }
 
-        setTrackedValue(HAIR_COLOR_RED, FastColor.ARGB32.red(components) / 255.0f);
-        setTrackedValue(HAIR_COLOR_GREEN, FastColor.ARGB32.green(components) / 255.0f);
-        setTrackedValue(HAIR_COLOR_BLUE, FastColor.ARGB32.blue(components) / 255.0f); // TODO: verify ARGB32
+        setTrackedValue(HAIR_COLOR_RED, ARGB.red(components) / 255.0f);
+        setTrackedValue(HAIR_COLOR_GREEN, ARGB.green(components) / 255.0f);
+        setTrackedValue(HAIR_COLOR_BLUE, ARGB.blue(components) / 255.0f);
     }
 
     default AgeState getAgeState() {
@@ -343,12 +344,12 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
 
     @Override
     default DialogueType getDialogueType(Player receiver) {
-        if (!receiver.level().isClientSide) {
+        if (!receiver.level().isClientSide()) {
             // age specific
             DialogueType type = DialogueType.fromAge(getAgeState());
 
             // relationship specific
-            if (!receiver.level().isClientSide) {
+            if (!receiver.level().isClientSide()) {
                 Optional<EntityRelationship> r = EntityRelationship.of(asEntity());
                 if (r.isPresent()) {
                     FamilyTreeNode relationship = r.get().getFamilyEntry();
@@ -382,12 +383,12 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
                 int p = n % o;
                 int q = (n + 1) % o;
                 float r = entity.getRandom().nextFloat();
-                int fs = Sheep.getColor(DyeColor.byId(p));
-                int gs = Sheep.getColor(DyeColor.byId(q));
-                int color = FastColor.ARGB32.lerp(r, fs, gs);
-                setTrackedValue(HAIR_COLOR_RED, FastColor.ARGB32.red(color) / 255.0f);
-                setTrackedValue(HAIR_COLOR_GREEN, FastColor.ARGB32.green(color) / 255.0f);
-                setTrackedValue(HAIR_COLOR_BLUE, FastColor.ARGB32.blue(color) / 255.0f);
+                int fs = DyeColor.byId(p).getTextureDiffuseColor();
+                int gs = DyeColor.byId(q).getTextureDiffuseColor();
+                int color = ARGB.srgbLerp(r, fs, gs);
+                setTrackedValue(HAIR_COLOR_RED, ARGB.red(color) / 255.0f);
+                setTrackedValue(HAIR_COLOR_GREEN, ARGB.green(color) / 255.0f);
+                setTrackedValue(HAIR_COLOR_BLUE, ARGB.blue(color) / 255.0f);
             }
         }
     }
@@ -428,13 +429,13 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
 
     default void syncFromEditor(CompoundTag nbt) {
         Mob entity = asEntity();
-        entity.readAdditionalSaveData(nbt);
+        entity.load(TagValueInput.create(ProblemReporter.DISCARDING, entity.registryAccess(), nbt));
 
-        if (nbt.contains("CustomName", 8)) {
-            String s = nbt.getString("CustomName");
+        if (nbt.contains("CustomName")) {
+            String s = nbt.getString("CustomName").orElse("");
 
             try {
-                entity.setCustomName(Component.Serializer.fromJson(s, entity.registryAccess()));
+                entity.setCustomName(Component.literal(s));
             } catch (Exception exception) {
                 MCA.LOGGER.warn("Failed to parse entity custom name {}", s, exception);
             }

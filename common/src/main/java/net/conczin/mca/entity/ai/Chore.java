@@ -13,10 +13,10 @@ import java.util.stream.Stream;
 
 public enum Chore {
     NONE("none", null),
-    PROSPECT("prospecting", PickaxeItem.class),
+    PROSPECT("prospecting", Item.class),
     HARVEST("harvesting", HoeItem.class),
     CHOP("chopping", AxeItem.class),
-    HUNT("hunting", SwordItem.class),
+    HUNT("hunting", Item.class),
     FISH("fishing", FishingRodItem.class);
 
     private static final Chore[] VALUES = values();

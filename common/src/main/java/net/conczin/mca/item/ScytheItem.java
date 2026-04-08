@@ -12,22 +12,28 @@ import net.minecraft.sounds.SoundEvents;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
-import net.minecraft.world.InteractionResultHolder;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.item.*;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Rarity;
+import net.minecraft.world.item.TooltipFlag;
+import net.minecraft.world.item.ItemUseAnimation;
+import net.minecraft.world.item.component.TooltipDisplay;
 import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.List;
+import java.util.function.Consumer;
 
-public class ScytheItem extends SwordItem {
+public class ScytheItem extends Item {
     public ScytheItem(Properties settings) {
-        super(Tiers.GOLD, settings);
+        super(settings);
     }
 
     public static void setSoul(ItemStack stack, boolean soul) {
@@ -45,11 +51,11 @@ public class ScytheItem extends SwordItem {
 
         if (state.is(TagsMCA.Blocks.TOMBSTONES)) {
             return TombstoneBlock.Data.of(world.getBlockEntity(pos)).filter(TombstoneBlock.Data::hasEntity).map(data -> {
-                if (!context.getLevel().isClientSide) {
+                if (!context.getLevel().isClientSide()) {
                     CriterionMCA.GENERIC_EVENT.trigger((ServerPlayer) context.getPlayer(), cure ? "staffOfLife" : "scytheRevive");
                 }
 
-                if (!world.isClientSide && !data.isResurrecting()) {
+                if (!world.isClientSide() && !data.isResurrecting()) {
                     data.startResurrecting(cure);
                     return InteractionResult.SUCCESS;
                 }
@@ -61,13 +67,13 @@ public class ScytheItem extends SwordItem {
     }
 
     @Override
-    public void appendHoverText(ItemStack stack, TooltipContext context, List<Component> tooltip, TooltipFlag flag) {
-        tooltip.addAll(FlowingText.wrap(Component.translatable(getDescriptionId(stack) + ".tooltip").withStyle(ChatFormatting.GRAY), 160));
+    public void appendHoverText(ItemStack stack, TooltipContext context, TooltipDisplay tooltipDisplay, Consumer<Component> consumer, TooltipFlag flag) {
+        FlowingText.wrap(Component.translatable(getDescriptionId() + ".tooltip").withStyle(ChatFormatting.GRAY), 160).forEach(consumer);
     }
 
     @Override
-    public UseAnim getUseAnimation(ItemStack stack) {
-        return UseAnim.BLOCK;
+    public ItemUseAnimation getUseAnimation(ItemStack stack) {
+        return ItemUseAnimation.BLOCK;
     }
 
     @Override
@@ -76,20 +82,21 @@ public class ScytheItem extends SwordItem {
     }
 
     @Override
-    public void inventoryTick(ItemStack stack, Level world, Entity entity, int slot, boolean selected) {
+    public void inventoryTick(ItemStack stack, net.minecraft.server.level.ServerLevel world, Entity entity, EquipmentSlot slot) {
         if (!(entity instanceof LivingEntity living)) {
             return;
         }
 
+        boolean selected = slot == EquipmentSlot.MAINHAND;
         boolean active = stack.getOrDefault(DataComponentsMCA.SCYTHE_ACTIVE, false);
 
-        RandomSource r = entity.level().random;
+        RandomSource r = entity.getRandom();
 
         if (active != selected) {
             stack.set(DataComponentsMCA.SCYTHE_ACTIVE, selected);
 
             float baseVolume = selected ? 0.75F : 0.25F;
-            entity.level().playSound(null, entity.blockPosition(), SoundsMCA.REAPER_SCYTHE_OUT, entity.getSoundSource(),
+            world.playSound(null, entity.blockPosition(), SoundsMCA.REAPER_SCYTHE_OUT, entity.getSoundSource(),
                     baseVolume + r.nextFloat() / 2F,
                     0.65F + r.nextFloat() / 10F
             );
@@ -97,15 +104,15 @@ public class ScytheItem extends SwordItem {
 
         if (selected) {
             if (living.swingTime == -1) {
-                entity.level().playSound(null, entity.blockPosition(), SoundsMCA.REAPER_SCYTHE_SWING, entity.getSoundSource(), 0.25F, 1);
+                world.playSound(null, entity.blockPosition(), SoundsMCA.REAPER_SCYTHE_SWING, entity.getSoundSource(), 0.25F, 1);
             }
         }
     }
 
     @Override
-    public InteractionResultHolder<ItemStack> use(Level world, Player user, InteractionHand hand) {
+    public InteractionResult use(Level world, Player user, InteractionHand hand) {
         user.startUsingItem(hand);
-        return super.use(world, user, hand);
+        return InteractionResult.CONSUME;
     }
 
     @Override
@@ -129,8 +136,8 @@ public class ScytheItem extends SwordItem {
     }
 
     @Override
-    public boolean hurtEnemy(ItemStack stack, LivingEntity target, LivingEntity attacker) {
-        if (target.level().random.nextInt(50) > 40) {
+    public void hurtEnemy(ItemStack stack, LivingEntity target, LivingEntity attacker) {
+        if (target.level().getRandom().nextInt(50) > 40) {
             target.addEffect(new MobEffectInstance(MobEffects.WITHER, 1000, 1));
         }
 
@@ -145,17 +152,12 @@ public class ScytheItem extends SwordItem {
             }
         }
 
-        RandomSource r = attacker.level().random;
+        RandomSource r = attacker.level().getRandom();
         attacker.level().playSound(null, attacker.blockPosition(), sound, attacker.getSoundSource(),
                 0.75F + r.nextFloat() / 2F,
                 0.75F + r.nextFloat() / 2F
         );
 
-        return super.hurtEnemy(stack, target, attacker);
-    }
-
-    @Override
-    public boolean isValidRepairItem(ItemStack stack, ItemStack ingredient) {
-        return stack.getItem() == ingredient.getItem();
     }
 }
+

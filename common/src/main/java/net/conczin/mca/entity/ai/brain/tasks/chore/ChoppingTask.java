@@ -11,7 +11,7 @@ import net.conczin.mca.util.RegistryHelper;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.tags.TagKey;
@@ -167,12 +167,12 @@ public class ChoppingTask extends AbstractChoreTask {
     private boolean isValidTree(ServerLevel world, BlockPos pos) {
         // Similar logic to WanderOrTeleportToTargetTask#isAreaSafe
         final BlockState state = world.getBlockState(pos);
-        final ResourceLocation stateId = BuiltInRegistries.BLOCK.getKey(state.getBlock());
+        final Identifier stateId = BuiltInRegistries.BLOCK.getKey(state.getBlock());
         for (String blockId : Config.getInstance().validTreeSources) {
             if (blockId.equals(stateId.toString())) {
                 return true;
             } else if (blockId.charAt(0) == '#') {
-                ResourceLocation identifier = ResourceLocation.parse(blockId.substring(1));
+                Identifier identifier = Identifier.parse(blockId.substring(1));
                 TagKey<Block> tag = TagKey.create(Registries.BLOCK, identifier);
                 if (!RegistryHelper.isTagEmpty(tag)) {
                     if (state.is(tag)) {
@@ -189,12 +189,12 @@ public class ChoppingTask extends AbstractChoreTask {
     private int getTicksFor(BlockState state, int fallback) {
         // Similar logic to WanderOrTeleportToTargetTask#isAreaSafe
         final Map<String, Integer> sources = Config.getInstance().maxTreeTicks;
-        final ResourceLocation stateId = BuiltInRegistries.BLOCK.getKey(state.getBlock());
+        final Identifier stateId = BuiltInRegistries.BLOCK.getKey(state.getBlock());
         for (String blockId : sources.keySet()) {
             if (blockId.equals(stateId.toString())) {
                 return sources.get(blockId);
             } else if (blockId.charAt(0) == '#') {
-                ResourceLocation identifier = ResourceLocation.parse(blockId.substring(1));
+                Identifier identifier = Identifier.parse(blockId.substring(1));
                 TagKey<Block> tag = TagKey.create(Registries.BLOCK, identifier);
                 if (!RegistryHelper.isTagEmpty(tag)) {
                     if (state.is(tag)) {

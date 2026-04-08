@@ -1,15 +1,17 @@
 package net.conczin.mca.registry;
 
 import com.google.common.collect.ImmutableSet;
+import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
 import net.conczin.mca.MCA;
-import net.conczin.mca.mixin.MixinVillagerProfession;
 import net.minecraft.core.Holder;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.world.entity.ai.village.poi.PoiType;
-import net.minecraft.world.entity.npc.VillagerProfession;
+import net.minecraft.world.entity.npc.villager.VillagerProfession;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.level.block.Block;
 import org.jetbrains.annotations.Nullable;
@@ -21,11 +23,11 @@ import java.util.Set;
 import java.util.function.Predicate;
 
 public interface ProfessionsMCA {
-    Map<ResourceLocation, VillagerProfession> PROFESSIONS = new HashMap<>();
+    Map<Identifier, VillagerProfession> PROFESSIONS = new HashMap<>();
 
-    Set<VillagerProfession> CAN_NOT_TRADE = new HashSet<>();
-    Set<VillagerProfession> IS_IMPORTANT = new HashSet<>();
-    Set<VillagerProfession> NEEDS_NO_HOME = new HashSet<>();
+    Set<ResourceKey<VillagerProfession>> CAN_NOT_TRADE = new HashSet<>();
+    Set<ResourceKey<VillagerProfession>> IS_IMPORTANT = new HashSet<>();
+    Set<ResourceKey<VillagerProfession>> NEEDS_NO_HOME = new HashSet<>();
 
     VillagerProfession OUTLAW = register("outlaw", false, true, true, PoiType.NONE, VillagerProfession.ALL_ACQUIRABLE_JOBS, SoundEvents.VILLAGER_WORK_FARMER);
     VillagerProfession GUARD = register("guard", false, true, false, PoiType.NONE, VillagerProfession.ALL_ACQUIRABLE_JOBS, SoundEvents.VILLAGER_WORK_ARMORER);
@@ -47,25 +49,36 @@ public interface ProfessionsMCA {
     }
 
     static VillagerProfession register(String name, boolean canTradeWith, boolean important, boolean needsNoHome, Predicate<Holder<PoiType>> heldWorkstation, Predicate<Holder<PoiType>> acquirableWorkstation, ImmutableSet<Item> gatherableItems, ImmutableSet<Block> secondaryJobSites, @Nullable SoundEvent workSound) {
-        ResourceLocation id = MCA.locate(name);
-        VillagerProfession result = MixinVillagerProfession.init(
-                id.toString().replace(':', '.'), heldWorkstation, acquirableWorkstation, gatherableItems, secondaryJobSites, workSound
+        Identifier id = MCA.locate(name);
+        ResourceKey<VillagerProfession> professionKey = ResourceKey.create(BuiltInRegistries.VILLAGER_PROFESSION.key(), id);
+        VillagerProfession result = new VillagerProfession(
+                Component.translatable("entity." + id.getNamespace() + ".villager." + id.getPath()),
+                heldWorkstation,
+                acquirableWorkstation,
+                gatherableItems,
+                secondaryJobSites,
+                workSound,
+                Int2ObjectMap.ofEntries()
         );
         if (!canTradeWith) {
-            CAN_NOT_TRADE.add(result);
+            CAN_NOT_TRADE.add(professionKey);
         }
         if (important) {
-            IS_IMPORTANT.add(result);
+            IS_IMPORTANT.add(professionKey);
         }
         if (needsNoHome) {
-            ProfessionsMCA.NEEDS_NO_HOME.add(result);
+            ProfessionsMCA.NEEDS_NO_HOME.add(professionKey);
         }
         PROFESSIONS.put(id, result);
         return result;
     }
 
     static String getFavoredBuilding(VillagerProfession profession) {
-        if (VillagerProfession.CARTOGRAPHER == profession || VillagerProfession.LIBRARIAN == profession || VillagerProfession.CLERIC == profession) {
+        Identifier professionId = BuiltInRegistries.VILLAGER_PROFESSION.getKey(profession);
+        if (professionId != null && (
+                professionId.equals(VillagerProfession.CARTOGRAPHER.identifier())
+                        || professionId.equals(VillagerProfession.LIBRARIAN.identifier())
+                        || professionId.equals(VillagerProfession.CLERIC.identifier()))) {
             return "library";
         } else if (GUARD == profession || ARCHER == profession) {
             return "inn";

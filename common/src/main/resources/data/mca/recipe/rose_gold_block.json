@@ -1,14 +1,14 @@
 {
-  "type": "minecraft:crafting_shaped",
-  "pattern": [
-    "###",
-    "###",
-    "###"
-  ],
-  "key": {
-    "#": {"item": "mca:rose_gold_ingot"}
-  },
-  "result": {
-    "id": "mca:rose_gold_block"
-  }
+    "type":  "minecraft:crafting_shaped",
+    "pattern":  [
+                    "###",
+                    "###",
+                    "###"
+                ],
+    "key":  {
+                "#":  "mca:rose_gold_ingot"
+            },
+    "result":  {
+                   "id":  "mca:rose_gold_block"
+               }
 }

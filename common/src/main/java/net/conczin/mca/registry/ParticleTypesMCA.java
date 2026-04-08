@@ -4,13 +4,13 @@ import net.conczin.mca.MCA;
 import net.conczin.mca.mixin.MixinSimpleParticleType;
 import net.minecraft.core.particles.ParticleType;
 import net.minecraft.core.particles.SimpleParticleType;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 import java.util.HashMap;
 import java.util.Map;
 
 public interface ParticleTypesMCA {
-    Map<ResourceLocation, SimpleParticleType> PARTICLES = new HashMap<>();
+    Map<Identifier, SimpleParticleType> PARTICLES = new HashMap<>();
 
     SimpleParticleType POS_INTERACTION = register("pos_interaction", MixinSimpleParticleType.init(false));
     SimpleParticleType NEG_INTERACTION = register("neg_interaction", MixinSimpleParticleType.init(false));

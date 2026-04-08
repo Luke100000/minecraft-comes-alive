@@ -14,13 +14,13 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.IntArrayTag;
-import net.minecraft.nbt.NbtUtils;
+import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.world.entity.EntityType;
-import net.minecraft.world.entity.MobSpawnType;
+import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
@@ -51,7 +51,7 @@ public class ReaperSpawner {
 
     public ReaperSpawner(VillageManager manager, CompoundTag nbt) {
         this.manager = manager;
-        NbtHelper.toList(nbt.getList("summons", Tag.TAG_COMPOUND), n -> new ActiveSummon((CompoundTag) n)).forEach(summon ->
+        NbtHelper.toList(nbt.getList("summons").orElseGet(ListTag::new), n -> new ActiveSummon((CompoundTag) n)).forEach(summon ->
                 activeSummons.put(summon.position.spawnPosition.asLong(), summon)
         );
     }
@@ -59,7 +59,7 @@ public class ReaperSpawner {
     private void warn(Level world, BlockPos pos, String phrase) {
         world.players().stream()
                 .min(Comparator.comparingInt(a -> a.blockPosition().distManhattan(pos)))
-                .ifPresent(p -> p.displayClientMessage(Component.translatable(phrase).withStyle(ChatFormatting.RED), true));
+                .ifPresent(p -> p.sendSystemMessage(Component.translatable(phrase).withStyle(ChatFormatting.RED)));
     }
 
     public void trySpawnReaper(ServerLevel world, BlockPos pos) {
@@ -67,7 +67,7 @@ public class ReaperSpawner {
             return;
         }
 
-        ChunkPos chunkPos = new ChunkPos(pos);
+        ChunkPos chunkPos = ChunkPos.containing(pos);
 
         // Make sure the neighboring chunks are loaded
         if (!WorldUtils.isAreaLoaded(world, chunkPos, 1)) {
@@ -78,7 +78,7 @@ public class ReaperSpawner {
             return;
         }
 
-        MCA.LOGGER.info("Attempting to spawn reaper at {} in {}", pos, world.dimension().location());
+        MCA.LOGGER.info("Attempting to spawn reaper at {} in {}", pos, world.dimension().identifier());
 
         if (!isNightTime(world)) {
             warn(world, pos, "reaper.day");
@@ -96,7 +96,7 @@ public class ReaperSpawner {
 
         start(new SummonPosition(pos.above(), totems));
 
-        EntityType.LIGHTNING_BOLT.spawn(world, pos, MobSpawnType.TRIGGERED);
+        EntityType.LIGHTNING_BOLT.spawn(world, pos, EntitySpawnReason.TRIGGERED);
 
         world.setBlock(pos, Blocks.SOUL_SOIL.defaultBlockState(), Block.UPDATE_NEIGHBORS | Block.UPDATE_CLIENTS);
         world.setBlock(pos.above(), BlocksMCA.INFERNAL_FLAME.defaultBlockState(), Block.UPDATE_NEIGHBORS | Block.UPDATE_CLIENTS);
@@ -126,14 +126,14 @@ public class ReaperSpawner {
     }
 
     private boolean isNightTime(Level world) {
-        long time = world.getDayTime() % 24000;
+        long time = world.getOverworldClockTime() % 24000L;
         MCA.LOGGER.info("Current time is {}", time);
         return time >= 13000 && time <= 23000;
     }
 
     private Set<BlockPos> getTotemsFires(Level world, BlockPos pos) {
         int groundY = pos.getY() - 1;
-        int leftSkyHeight = world.getMaxBuildHeight() - groundY;
+        int leftSkyHeight = world.getMaxY() - groundY;
         int minPillarHeight = Math.min(Config.getInstance().minPillarHeight, leftSkyHeight);
         BlockPos.MutableBlockPos target = new BlockPos.MutableBlockPos();
         return Stream.of(HORIZONTALS).map(d -> target.set(pos).setY(groundY).move(d, 3)).filter(pillarPos -> {
@@ -165,9 +165,9 @@ public class ReaperSpawner {
         public final Set<BlockPos> totems;
 
         public SummonPosition(CompoundTag tag) {
-            spawnPosition = NbtUtils.readBlockPos(tag, "spawnPosition").orElse(BlockPos.ZERO);
-            fire = NbtUtils.readBlockPos(tag, "fire").orElse(BlockPos.ZERO);
-            totems = new HashSet<>(NbtHelper.toList(tag.getCompound("totems"), v -> readBlockPos(((IntArrayTag) v).getAsIntArray())));
+            spawnPosition = readBlockPos(tag.getIntArray("spawnPosition").orElse(new int[0]));
+            fire = readBlockPos(tag.getIntArray("fire").orElse(new int[0]));
+            totems = new HashSet<>(NbtHelper.toList(tag.getList("totems").orElseGet(ListTag::new), v -> readBlockPos(((IntArrayTag) v).getAsIntArray())));
         }
 
         public SummonPosition(BlockPos fire, Set<BlockPos> totems) {
@@ -190,9 +190,9 @@ public class ReaperSpawner {
 
         public CompoundTag toNbt() {
             CompoundTag tag = new CompoundTag();
-            tag.put("fire", NbtUtils.writeBlockPos(fire));
-            tag.put("totems", NbtHelper.fromList(totems, NbtUtils::writeBlockPos));
-            tag.put("spawnPosition", NbtUtils.writeBlockPos(spawnPosition));
+            tag.putIntArray("fire", new int[]{fire.getX(), fire.getY(), fire.getZ()});
+            tag.put("totems", NbtHelper.fromList(totems, pos -> new IntArrayTag(new int[]{pos.getX(), pos.getY(), pos.getZ()})));
+            tag.putIntArray("spawnPosition", new int[]{spawnPosition.getX(), spawnPosition.getY(), spawnPosition.getZ()});
             return tag;
         }
     }
@@ -206,8 +206,8 @@ public class ReaperSpawner {
         }
 
         ActiveSummon(CompoundTag nbt) {
-            ticks = nbt.getInt("ticks");
-            position = new SummonPosition(nbt.getCompound("position"));
+            ticks = nbt.getInt("ticks").orElse(0);
+            position = new SummonPosition(nbt.getCompound("position").orElseGet(CompoundTag::new));
         }
 
         public void start(SummonPosition pos) {
@@ -237,11 +237,11 @@ public class ReaperSpawner {
             }
 
             if (--ticks % 20 == 0) {
-                EntityType.LIGHTNING_BOLT.spawn(world, position.spawnPosition, MobSpawnType.TRIGGERED);
+                EntityType.LIGHTNING_BOLT.spawn(world, position.spawnPosition, EntitySpawnReason.TRIGGERED);
             }
 
             if (ticks == 0) {
-                GrimReaperEntity reaper = EntitiesMCA.GRIM_REAPER.spawn(world, position.spawnPosition, MobSpawnType.TRIGGERED);
+                GrimReaperEntity reaper = EntitiesMCA.GRIM_REAPER.spawn(world, position.spawnPosition, EntitySpawnReason.TRIGGERED);
                 if (reaper != null) {
                     reaper.playSound(SoundsMCA.REAPER_SUMMON, 1.0F, 1.0F);
                 }
@@ -260,3 +260,4 @@ public class ReaperSpawner {
         }
     }
 }
+

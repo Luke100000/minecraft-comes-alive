@@ -7,7 +7,7 @@ import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.player.Player;
 
 public record RemoveCustomClothingMessage(Type kind, String identifier) implements HandleablePayload {
@@ -18,7 +18,7 @@ public record RemoveCustomClothingMessage(Type kind, String identifier) implemen
             (i, id) -> new RemoveCustomClothingMessage(Type.values()[i], id)
     );
 
-    public RemoveCustomClothingMessage(Type kind, ResourceLocation identifier) {
+    public RemoveCustomClothingMessage(Type kind, Identifier identifier) {
         this(kind, String.valueOf(identifier));
     }
 

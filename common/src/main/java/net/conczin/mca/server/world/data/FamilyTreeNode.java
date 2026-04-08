@@ -6,17 +6,17 @@ import net.conczin.mca.entity.ai.relationship.EntityRelationship;
 import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.entity.ai.relationship.RelationshipState;
 import net.conczin.mca.util.NbtHelper;
-import net.minecraft.Util;
+import net.minecraft.util.Util;
+import net.minecraft.core.UUIDUtil;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.npc.VillagerProfession;
+import net.minecraft.world.entity.npc.villager.VillagerProfession;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.HashSet;
@@ -41,7 +41,7 @@ public final class FamilyTreeNode {
     private transient final FamilyTree rootNode;
     private Gender gender;
     private String name;
-    private String profession = BuiltInRegistries.VILLAGER_PROFESSION.getKey(VillagerProfession.NONE).toString();
+    private String profession = VillagerProfession.NONE.identifier().toString();
     private UUID father;
     private UUID mother;
     private UUID partner = Util.NIL_UUID;
@@ -61,20 +61,20 @@ public final class FamilyTreeNode {
     public FamilyTreeNode(FamilyTree rootNode, CompoundTag nbt) {
         this(
                 rootNode,
-                nbt.getUUID("id"),
-                nbt.getString("name"),
-                nbt.getBoolean("isPlayer"),
-                Gender.byId(nbt.getInt("gender")),
-                nbt.getUUID("father"),
-                nbt.getUUID("mother")
+                nbt.read("id", UUIDUtil.CODEC).orElseThrow(),
+                nbt.getString("name").orElse(""),
+                nbt.getBoolean("isPlayer").orElse(false),
+                Gender.byId(nbt.getInt("gender").orElse(0)),
+                nbt.read("father", UUIDUtil.CODEC).orElse(Util.NIL_UUID),
+                nbt.read("mother", UUIDUtil.CODEC).orElse(Util.NIL_UUID)
         );
-        children.addAll(NbtHelper.toList(nbt.getList("children", Tag.TAG_COMPOUND), c -> ((CompoundTag) c).getUUID("uuid")));
-        profession = nbt.getString("profession");
-        deceased = nbt.getBoolean("isDeceased");
-        if (nbt.hasUUID("spouse")) {
-            partner = nbt.getUUID("spouse");
-        }
-        relationshipState = RelationshipState.byId(nbt.getInt("marriageState"));
+        nbt.getList("children").ifPresent(listTag -> children.addAll(
+                NbtHelper.toList(listTag, c -> ((CompoundTag) c).read("uuid", UUIDUtil.CODEC).orElse(Util.NIL_UUID))
+        ));
+        profession = nbt.getString("profession").orElse(profession);
+        deceased = nbt.getBoolean("isDeceased").orElse(false);
+        partner = nbt.read("spouse", UUIDUtil.CODEC).orElse(Util.NIL_UUID);
+        relationshipState = RelationshipState.byId(nbt.getInt("marriageState").orElse(0));
     }
 
     public static boolean isValid(@Nullable UUID uuid) {
@@ -132,7 +132,7 @@ public final class FamilyTreeNode {
     }
 
     public VillagerProfession getProfession() {
-        return BuiltInRegistries.VILLAGER_PROFESSION.get(getProfessionId());
+        return BuiltInRegistries.VILLAGER_PROFESSION.getValue(getProfessionId());
     }
 
     public void setProfession(VillagerProfession profession) {
@@ -140,8 +140,8 @@ public final class FamilyTreeNode {
         markDirty();
     }
 
-    public ResourceLocation getProfessionId() {
-        return ResourceLocation.tryParse(profession);
+    public Identifier getProfessionId() {
+        return Identifier.tryParse(profession);
     }
 
     public String getProfessionName() {
@@ -411,17 +411,18 @@ public final class FamilyTreeNode {
     public CompoundTag save() {
         CompoundTag nbt = new CompoundTag();
         nbt.putString("name", name);
-        nbt.putUUID("id", id);
+        nbt.store("id", UUIDUtil.CODEC, id);
         nbt.putBoolean("isPlayer", isPlayer);
         nbt.putBoolean("isDeceased", deceased);
         nbt.putInt("gender", gender.getId());
-        nbt.putUUID("father", father);
-        nbt.putUUID("mother", mother);
-        nbt.putUUID("spouse", partner);
+        nbt.store("father", UUIDUtil.CODEC, father);
+        nbt.store("mother", UUIDUtil.CODEC, mother);
+        nbt.store("spouse", UUIDUtil.CODEC, partner);
         nbt.putInt("marriageState", relationshipState.ordinal());
+        nbt.putString("profession", profession);
         nbt.put("children", NbtHelper.fromList(children, child -> {
             CompoundTag n = new CompoundTag();
-            n.putUUID("uuid", child);
+            n.store("uuid", UUIDUtil.CODEC, child);
             return n;
         }));
         return nbt;

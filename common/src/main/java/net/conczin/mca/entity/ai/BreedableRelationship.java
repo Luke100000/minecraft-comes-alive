@@ -112,43 +112,41 @@ public class BreedableRelationship extends Relationship<VillagerEntityMCA> {
 
     //returns estimated values for common item types, which the villager could use
     private Optional<GiftType> handleDynamicGift(ItemStack stack) {
-        switch (stack.getItem()) {
-            case SwordItem ignored -> {
-                //swords
-                double satisfaction = InventoryUtils.approximateDamage(stack, entity);
-                satisfaction = (float) (Math.pow(satisfaction, 1.25) * 2);
-                return Optional.of(new GiftType(stack.getItem(), (int) satisfaction, MCA.locate("swords")));
-            }
-            case ProjectileWeaponItem ranged -> {
-                //ranged weapons
-                float satisfaction = ranged.getDefaultProjectileRange();
-                satisfaction = (float) (Math.pow(satisfaction, 1.25) * 2);
-                return Optional.of(new GiftType(stack.getItem(), (int) satisfaction, MCA.locate("archery")));
-            }
-            case TieredItem tool -> {
-                //tools
-                float satisfaction = tool.getTier().getSpeed();
-                satisfaction = (float) (Math.pow(satisfaction, 1.25) * 2);
-                return Optional.of(new GiftType(stack.getItem(), (int) satisfaction, MCA.locate(
-                        stack.getItem() instanceof AxeItem ? "swords" :
-                                stack.getItem() instanceof HoeItem ? "hoes" :
-                                        stack.getItem() instanceof ShovelItem ? "shovels" :
-                                                "pickaxes"
-                )));
-            }
-            case ArmorItem armor -> {
-                //armor
-                int satisfaction = (int) (Math.pow(armor.getDefense(), 1.25) * 1.5 + armor.getToughness() * 5);
-                return Optional.of(new GiftType(stack.getItem(), satisfaction, MCA.locate("armor")));
-            }
-            default -> {
-                //food
-                FoodProperties component = stack.get(DataComponents.FOOD);
-                if (component != null) {
-                    int satisfaction = (int) (component.nutrition() + component.saturation() * 3);
-                    return Optional.of(new GiftType(stack.getItem(), satisfaction, MCA.locate("food")));
-                }
-            }
+        Item item = stack.getItem();
+        if (stack.has(DataComponents.WEAPON)) {
+            double satisfaction = InventoryUtils.approximateDamage(stack, entity);
+            satisfaction = (float) (Math.pow(satisfaction, 1.25) * 2);
+            return Optional.of(new GiftType(item, (int) satisfaction, MCA.locate("swords")));
+        }
+
+        if (item instanceof ProjectileWeaponItem ranged) {
+            float satisfaction = ranged.getDefaultProjectileRange();
+            satisfaction = (float) (Math.pow(satisfaction, 1.25) * 2);
+            return Optional.of(new GiftType(item, (int) satisfaction, MCA.locate("archery")));
+        }
+
+        if (stack.has(DataComponents.TOOL)) {
+            var tool = stack.get(DataComponents.TOOL);
+            float satisfaction = tool != null ? tool.defaultMiningSpeed() : 0.0F;
+            satisfaction = (float) (Math.pow(satisfaction, 1.25) * 2);
+            return Optional.of(new GiftType(item, (int) satisfaction, MCA.locate(
+                    item instanceof AxeItem ? "swords" :
+                            item instanceof HoeItem ? "hoes" :
+                                    item instanceof ShovelItem ? "shovels" :
+                                            "pickaxes"
+            )));
+        }
+
+        if (stack.has(DataComponents.EQUIPPABLE)) {
+            var equippable = stack.get(DataComponents.EQUIPPABLE);
+            int satisfaction = equippable != null ? (int) (Math.max(1.0F, stack.getMaxDamage() / 10.0F) * 1.5F) : 0;
+            return Optional.of(new GiftType(item, satisfaction, MCA.locate("armor")));
+        }
+
+        FoodProperties component = stack.get(DataComponents.FOOD);
+        if (component != null) {
+            int satisfaction = (int) (component.nutrition() + component.saturation() * 3);
+            return Optional.of(new GiftType(item, satisfaction, MCA.locate("food")));
         }
         return Optional.empty();
     }
@@ -229,13 +227,16 @@ public class BreedableRelationship extends Relationship<VillagerEntityMCA> {
 
         if (item == Items.GOLDEN_APPLE && entity.isInfected()) {
             entity.setInfected(false);
-            entity.eat(entity.level(), stack);
+            entity.ate();
             stack.shrink(1);
             return true;
         }
 
         if (item instanceof DyeItem dye) {
-            entity.setHairDye(dye.getDyeColor());
+            DyeColor dyeColor = stack.get(DataComponents.DYE);
+            if (dyeColor != null) {
+                entity.setHairDye(dyeColor);
+            }
             stack.shrink(1);
             return true;
         }

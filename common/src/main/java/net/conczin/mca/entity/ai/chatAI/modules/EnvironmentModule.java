@@ -13,7 +13,8 @@ public class EnvironmentModule {
         if (player.level().isThundering()) {
             input.add("It is thundering. ");
         }
-        if (player.level().isNight()) {
+        long dayTime = player.level().getOverworldClockTime() % 24000L;
+        if (dayTime >= 13000L && dayTime < 23000L) {
             input.add("It is night. ");
         }
     }

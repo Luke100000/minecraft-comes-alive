@@ -20,7 +20,7 @@ public class VillageMarriageManager {
 
     // if the amount of couples is low, let them marry
     public void marry(ServerLevel world) {
-        if (world.random.nextFloat() >= Config.getInstance().marriageChancePerMinute) {
+        if (world.getRandom().nextFloat() >= Config.getInstance().marriageChancePerMinute) {
             return;
         }
 

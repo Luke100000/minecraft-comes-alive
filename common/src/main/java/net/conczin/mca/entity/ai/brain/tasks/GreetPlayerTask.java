@@ -36,7 +36,7 @@ public class GreetPlayerTask extends Behavior<VillagerEntityMCA> {
         if (id.isPresent() && village.isPresent() && id.get() == village.get().getId()) {
             Memories memories = villager.getVillagerBrain().getMemoriesForPlayer(player);
 
-            int day = (int) (villager.level().getDayTime() / 24000L);
+            int day = (int) (villager.level().getOverworldClockTime() / 24000L);
 
             // first check relationships, only family, friends and foes will greet you
             if (Relationship.IS_MARRIED.test(villager, player)
@@ -76,7 +76,7 @@ public class GreetPlayerTask extends Behavior<VillagerEntityMCA> {
         cooldown = MAX_COOLDOWN;
         getPlayer(villager).ifPresent(player -> {
             Memories memories = villager.getVillagerBrain().getMemoriesForPlayer(player);
-            int day = (int) (villager.level().getDayTime() / 24000L);
+            int day = (int) (villager.level().getOverworldClockTime() / 24000L);
             memories.setLastSeen(day);
 
             String phrase = memories.getHearts() < 0 ? "welcomeFoe" : "welcome";

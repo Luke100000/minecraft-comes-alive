@@ -27,7 +27,7 @@ public record GetFamilyTreeRequest(UUID uuid) implements HandleablePayload {
 
     @Override
     public void handleServer(ServerPlayer player) {
-        FamilyTree.get(player.serverLevel()).getOrEmpty(uuid).ifPresent(entry -> {
+        FamilyTree.get(player.level()).getOrEmpty(uuid).ifPresent(entry -> {
             Map<UUID, FamilyTreeNode> familyEntries = Stream.concat(
                             entry.lookup(Stream.of(entry.id(), entry.partner())),
                             entry.lookup(entry.getRelatives(2, 1))

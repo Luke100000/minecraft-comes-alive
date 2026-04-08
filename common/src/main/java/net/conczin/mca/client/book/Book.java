@@ -5,7 +5,7 @@ import net.conczin.mca.client.book.pages.Page;
 import net.conczin.mca.client.book.pages.TextPage;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.LinkedList;
@@ -15,7 +15,7 @@ public class Book {
     private final String bookName;
     private final Component bookAuthor;
     private final List<Page> pages = new LinkedList<>();
-    private ResourceLocation background = ResourceLocation.withDefaultNamespace("textures/gui/book.png");
+    private Identifier background = Identifier.withDefaultNamespace("textures/gui/book.png");
     private ChatFormatting textFormatting = ChatFormatting.BLACK;
     private boolean pageTurnSound = true;
     private boolean textShadow;
@@ -83,11 +83,11 @@ public class Book {
         return pages;
     }
 
-    public ResourceLocation getBackground() {
+    public Identifier getBackground() {
         return background;
     }
 
-    public Book setBackground(ResourceLocation background) {
+    public Book setBackground(Identifier background) {
         this.background = background;
         return this;
     }

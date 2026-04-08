@@ -21,14 +21,14 @@ public interface NbtHelper {
 
     @SuppressWarnings("unchecked")
     static <T extends Tag> T computeIfAbsent(CompoundTag nbt, String key, int type, Supplier<T> factory) {
-        if (!nbt.contains(key, type)) {
+        if (!nbt.contains(key)) {
             nbt.put(key, factory.get());
         }
         return (T) nbt.get(key);
     }
 
     static CompoundTag copyTo(CompoundTag from, CompoundTag to) {
-        from.getAllKeys().forEach(key -> to.put(key, from.get(key)));
+        from.keySet().forEach(key -> to.put(key, from.get(key)));
         return to;
     }
 
@@ -45,7 +45,7 @@ public interface NbtHelper {
     }
 
     static <K, V> Map<K, V> toMap(CompoundTag nbt, Function<String, K> keyMapper, BiFunction<K, Tag, V> valueMapper) {
-        return nbt.getAllKeys().stream()
+        return nbt.keySet().stream()
                 .map(e -> {
                     K k = keyMapper.apply(e);
                     if (k == null) return null;
@@ -54,8 +54,7 @@ public interface NbtHelper {
                     return k == null ? null : new Pair<>(k, v);
                 })
                 .filter(Objects::nonNull)
-                .collect(Collectors.toMap(Pair::getFirst, Pair::getSecond)
-                );
+                .collect(Collectors.toMap(Pair::getFirst, Pair::getSecond));
     }
 
     static <V> ListTag fromList(Iterable<V> list, Function<V, Tag> valueMapper) {
@@ -79,3 +78,4 @@ public interface NbtHelper {
         return GlobalPos.CODEC.parse(NbtOps.INSTANCE, element).resultOrPartial(MCA.LOGGER::error).orElse(null);
     }
 }
+

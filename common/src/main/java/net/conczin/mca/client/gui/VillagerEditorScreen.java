@@ -1,6 +1,6 @@
 package net.conczin.mca.client.gui;
 
-import com.mojang.blaze3d.vertex.PoseStack;
+import org.joml.Matrix3x2fStack;
 import net.conczin.mca.Config;
 import net.conczin.mca.MCA;
 import net.conczin.mca.MCAClient;
@@ -27,7 +27,8 @@ import net.conczin.mca.resources.data.skin.SkinListEntry;
 import net.conczin.mca.util.compat.ButtonWidget;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
@@ -35,8 +36,12 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
-import net.minecraft.util.FastColor;
-import net.minecraft.world.entity.npc.VillagerProfession;
+import net.minecraft.util.ProblemReporter;
+import net.minecraft.util.ARGB;
+import net.minecraft.world.entity.EntitySpawnReason;
+import net.minecraft.world.entity.npc.villager.VillagerProfession;
+import net.minecraft.world.level.storage.TagValueInput;
+import net.minecraft.world.level.storage.TagValueOutput;
 
 import java.util.*;
 import java.util.function.Consumer;
@@ -49,8 +54,8 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     private static boolean isSkinListOutdated = true;
     private static HashMap<String, Clothing> clothing = new HashMap<>();
     private static HashMap<String, Hair> hair = new HashMap<>();
-    protected final VillagerEntityMCA villager = Objects.requireNonNull(EntitiesMCA.MALE_VILLAGER.create(Objects.requireNonNull(Minecraft.getInstance().level)));
-    protected final VillagerEntityMCA villagerVisualization = Objects.requireNonNull(EntitiesMCA.MALE_VILLAGER.create(Objects.requireNonNull(Minecraft.getInstance().level)));
+    protected final VillagerEntityMCA villager = Objects.requireNonNull(EntitiesMCA.MALE_VILLAGER.create(Objects.requireNonNull(Minecraft.getInstance().level), EntitySpawnReason.LOAD));
+    protected final VillagerEntityMCA villagerVisualization = Objects.requireNonNull(EntitiesMCA.MALE_VILLAGER.create(Objects.requireNonNull(Minecraft.getInstance().level), EntitySpawnReason.LOAD));
     final UUID villagerUUID;
     final UUID playerUUID;
     final boolean allowPlayerModel;
@@ -81,6 +86,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     private ButtonWidget doneWidget;
     private ButtonWidget genderButtonFemale;
     private ButtonWidget genderButtonMale;
+    private boolean restoreHideGui;
 
     public VillagerEditorScreen(UUID villagerUUID, UUID playerUUID, boolean allowPlayerModel, boolean allowVillagerModel) {
         super(Component.translatable("gui.VillagerEditorScreen.title"));
@@ -126,6 +132,26 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     @Override
     public boolean isPauseScreen() {
         return false;
+    }
+
+    @Override
+    public void added() {
+        super.added();
+        Minecraft minecraft = Minecraft.getInstance();
+        restoreHideGui = minecraft.options.hideGui;
+        minecraft.options.hideGui = true;
+    }
+
+    @Override
+    public void removed() {
+        Minecraft minecraft = Minecraft.getInstance();
+        minecraft.options.hideGui = restoreHideGui;
+        super.removed();
+    }
+
+    @Override
+    public boolean showsActiveEffects() {
+        return true;
     }
 
     @Override
@@ -230,7 +256,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                     textFieldWidget = addRenderableWidget(new NamedTextFieldWidget(this.font, width / 2, y, DATA_WIDTH, 18,
                             Component.translatable("gui.villager_editor.relation." + who.toLowerCase(Locale.ROOT))));
                     textFieldWidget.setMaxLength(64);
-                    textFieldWidget.setValue(villagerData.getString("FamilyTree" + who + "Name"));
+                    textFieldWidget.setValue(villagerData.getStringOr("FamilyTree" + who + "Name", ""));
                     textFieldWidget.setResponder(name -> villagerData.putString("FamilyTreeNew" + who + "Name", name));
                     y += 20;
                 }
@@ -452,7 +478,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                 boolean right = false;
                 List<ButtonWidget> professionButtons = new LinkedList<>();
                 for (VillagerProfession p : new VillagerProfession[]{
-                        VillagerProfession.NONE,
+                        BuiltInRegistries.VILLAGER_PROFESSION.getValueOrThrow(VillagerProfession.NONE),
                         ProfessionsMCA.GUARD,
                         ProfessionsMCA.ARCHER,
                         ProfessionsMCA.OUTLAW,
@@ -709,7 +735,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                 villagerSkinWidget.active = false;
                 vanillaSkinWidget.active = true;
             }));
-            villagerSkinWidget.active = villagerData.getInt("PlayerModel") != VillagerLike.PlayerModel.VILLAGER.ordinal();
+            villagerSkinWidget.active = villagerData.getInt("PlayerModel").orElse(VillagerLike.PlayerModel.VILLAGER.ordinal()) != VillagerLike.PlayerModel.VILLAGER.ordinal();
 
             playerSkinWidget = addRenderableWidget(new TooltipButtonWidget(x + DATA_WIDTH / 3, y, DATA_WIDTH / 3, 20, "gui.villager_editor.player_skin", b -> {
                 villagerData.putInt("PlayerModel", VillagerLike.PlayerModel.PLAYER.ordinal());
@@ -718,7 +744,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                 villagerSkinWidget.active = true;
                 vanillaSkinWidget.active = true;
             }));
-            playerSkinWidget.active = villagerData.getInt("PlayerModel") != VillagerLike.PlayerModel.PLAYER.ordinal();
+            playerSkinWidget.active = villagerData.getInt("PlayerModel").orElse(VillagerLike.PlayerModel.VILLAGER.ordinal()) != VillagerLike.PlayerModel.PLAYER.ordinal();
 
             vanillaSkinWidget = addRenderableWidget(new TooltipButtonWidget(x + DATA_WIDTH / 3 * 2, y, DATA_WIDTH / 3, 20, "gui.villager_editor.vanilla_skin", b -> {
                 villagerData.putInt("PlayerModel", VillagerLike.PlayerModel.VANILLA.ordinal());
@@ -727,7 +753,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                 playerSkinWidget.active = true;
                 vanillaSkinWidget.active = false;
             }));
-            vanillaSkinWidget.active = villagerData.getInt("PlayerModel") != VillagerLike.PlayerModel.VANILLA.ordinal();
+            vanillaSkinWidget.active = villagerData.getInt("PlayerModel").orElse(VillagerLike.PlayerModel.VILLAGER.ordinal()) != VillagerLike.PlayerModel.VANILLA.ordinal();
         } else {
             addRenderableWidget(new TooltipButtonWidget(x, y, DATA_WIDTH, 20, "gui.villager_editor.model_blacklist_hint", b -> {
             })).active = false;
@@ -752,7 +778,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     }
 
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+    public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
         if (page.equals("clothing") && (hoveredClothingId >= 0 && filteredClothing.size() > hoveredClothingId)) {
             villager.setClothes(filteredClothing.get(hoveredClothingId));
             setPage("body");
@@ -769,7 +795,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
 
         }
 
-        return super.mouseClicked(mouseX, mouseY, button);
+        return super.mouseClicked(event, doubleClick);
     }
 
     protected void eventCallback(String event) {
@@ -785,8 +811,8 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     }
 
     @Override
-    public void render(GuiGraphics context, int mouseX, int mouseY, float delta) {
-        super.render(context, mouseX, mouseY, delta);
+    public void extractRenderState(GuiGraphicsExtractor context, int mouseX, int mouseY, float delta) {
+        super.extractRenderState(context, mouseX, mouseY, delta);
 
         if (villager == null) {
             return;
@@ -799,26 +825,25 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
             int y = height / 2;
             if (villagerUUID.equals(playerUUID) && shouldUsePlayerModel()) {
                 assert Minecraft.getInstance().player != null;
-                InventoryScreen.renderEntityInInventoryFollowsMouse(context, x, y - 75, x + DATA_WIDTH, y + 75, 60, 0, mouseX, mouseY, Minecraft.getInstance().player);
+                InventoryScreen.extractEntityInInventoryFollowsMouse(context, x, y - 75, x + DATA_WIDTH, y + 75, 60, 0, mouseX, mouseY, Minecraft.getInstance().player);
             } else {
-                InventoryScreen.renderEntityInInventoryFollowsMouse(context, x, y - 75, x + DATA_WIDTH, y + 75, 60, 0, mouseX, mouseY, villager);
+                InventoryScreen.extractEntityInInventoryFollowsMouse(context, x, y - 75, x + DATA_WIDTH, y + 75, 60, 0, mouseX, mouseY, villager);
             }
 
             // hint for confused people
-            if (shouldPrintPlayerHint() && villagerUUID.equals(playerUUID) && villagerData.getInt("PlayerModel") != VillagerLike.PlayerModel.VILLAGER.ordinal()) {
-                final PoseStack matrices = context.pose();
-                matrices.pushPose();
-                matrices.translate(x, y - 145, 0);
-                matrices.scale(0.5f, 0.5f, 0.5f);
-                context.drawCenteredString(font, Component.translatable("gui.villager_editor.model_hint"), 0, 0, 0xAAFFFFFF);
-                matrices.popPose();
+            if (shouldPrintPlayerHint() && villagerUUID.equals(playerUUID) && villagerData.getInt("PlayerModel").orElse(VillagerLike.PlayerModel.VILLAGER.ordinal()) != VillagerLike.PlayerModel.VILLAGER.ordinal()) {
+                final Matrix3x2fStack matrices = context.pose();
+                matrices.pushMatrix();
+                matrices.translate(x, y - 145);
+                matrices.scale(0.5f, 0.5f);
+                context.centeredText(font, Component.translatable("gui.villager_editor.model_hint"), 0, 0, 0xAAFFFFFF);
+                matrices.popMatrix();
             }
         }
 
         if (page.equals("clothing") || page.equals("hair")) {
-            CompoundTag nbt = new CompoundTag();
-            villager.save(nbt);
-            villagerVisualization.load(nbt);
+            CompoundTag nbt = saveEntityData(villager);
+            villagerVisualization.load(TagValueInput.create(ProblemReporter.DISCARDING, villagerVisualization.registryAccess(), nbt));
             villagerVisualization.setAge(villager.getAge());
             villagerVisualization.refreshDimensions();
 
@@ -841,7 +866,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                             hoveredClothingId = index;
                         }
 
-                        InventoryScreen.renderEntityInInventoryFollowsMouse(context, cx - 20, cy - 25, cx + 20, cy + 40,
+                        InventoryScreen.extractEntityInInventoryFollowsMouse(context, cx - 20, cy - 25, cx + 20, cy + 40,
                                 (hoveredClothingId == index) ? 35 : 30, 0, mouseX, mouseY, villagerVisualization);
                         i++;
                     } else {
@@ -868,17 +893,17 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     public void setVillagerData(CompoundTag villagerData) {
         if (villager != null) {
             this.villagerData = villagerData;
-            villager.load(villagerData);
+            villager.load(TagValueInput.create(ProblemReporter.DISCARDING, villager.registryAccess(), villagerData));
 
             int hairDye = villager.getHairDye();
             hsvColoredHair = hairDye != 0xFF000000;
             color.setRGB(
-                    FastColor.ABGR32.red(hairDye) / 255.0,
-                    FastColor.ABGR32.green(hairDye) / 255.0,
-                    FastColor.ABGR32.blue(hairDye) / 255.0
+                    ARGB.red(hairDye) / 255.0,
+                    ARGB.green(hairDye) / 255.0,
+                    ARGB.blue(hairDye) / 255.0
             );
 
-            villagerBreedingAge = villagerData.getInt("Age");
+            villagerBreedingAge = villagerData.getIntOr("Age", 0);
             villager.setAge(villagerBreedingAge);
             if (minecraft != null && minecraft.player != null) {
                 villager.setPosRaw(minecraft.player.getX(), minecraft.player.getY(), minecraft.player.getZ());
@@ -898,10 +923,16 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     }
 
     public void syncVillagerData() {
-        CompoundTag nbt = villagerData;
-        villager.save(nbt);
+        CompoundTag nbt = villagerData == null ? new CompoundTag() : villagerData.copy();
+        nbt.merge(saveEntityData(villager));
         nbt.putInt("Age", villagerBreedingAge);
         Network.sendToServer(new VillagerEditorSyncRequest("sync", villagerUUID, nbt));
+    }
+
+    private CompoundTag saveEntityData(VillagerEntityMCA entity) {
+        TagValueOutput output = TagValueOutput.createWithContext(ProblemReporter.DISCARDING, entity.registryAccess());
+        entity.save(output);
+        return output.buildResult();
     }
 
     @Override
@@ -913,3 +944,6 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         return villager;
     }
 }
+
+
+

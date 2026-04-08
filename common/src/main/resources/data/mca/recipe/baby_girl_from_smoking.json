@@ -1,11 +1,9 @@
 {
-  "type": "minecraft:smoking",
-  "ingredient": {
-    "item": "mca:baby_girl"
-  },
-  "result": {
-    "id": "minecraft:cooked_beef"
-  },
-  "experience": 0.35,
-  "cookingtime": 100
+    "type":  "minecraft:smoking",
+    "ingredient":  "mca:baby_girl",
+    "result":  {
+                   "id":  "minecraft:cooked_beef"
+               },
+    "experience":  0.35,
+    "cookingtime":  100
 }

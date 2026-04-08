@@ -1,0 +1,7 @@
+{
+  "model": {
+    "type": "minecraft:model",
+    "model": "mca:item/villager_editor"
+  },
+  "properties": {}
+}

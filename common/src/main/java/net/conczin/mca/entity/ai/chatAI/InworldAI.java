@@ -60,8 +60,9 @@ public class InworldAI implements ChatAIStrategy {
                 return Optional.of(answer);
             }
         } else {
-            player.displayClientMessage(Component.translatable("mca.ai_broken").withStyle(ChatFormatting.RED), false);
+            player.sendSystemMessage(Component.translatable("mca.ai_broken").withStyle(ChatFormatting.RED));
             return Optional.empty();
         }
     }
 }
+

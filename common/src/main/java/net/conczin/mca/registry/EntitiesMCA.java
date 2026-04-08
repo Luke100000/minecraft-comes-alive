@@ -6,7 +6,9 @@ import net.conczin.mca.entity.GrimReaperEntity;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ZombieVillagerEntityMCA;
 import net.conczin.mca.entity.ai.relationship.Gender;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
@@ -18,7 +20,7 @@ import java.util.Map;
 import java.util.function.Supplier;
 
 public interface EntitiesMCA {
-    Map<ResourceLocation, EntityType<?>> ENTITIES = new HashMap<>();
+    Map<Identifier, EntityType<?>> ENTITIES = new HashMap<>();
     Map<EntityType<? extends LivingEntity>, AttributeSupplier.Builder> ATTRIBUTES = new HashMap<>();
 
     EntityType<VillagerEntityMCA> MALE_VILLAGER = register("male_villager", EntityType.Builder
@@ -49,16 +51,16 @@ public interface EntitiesMCA {
     );
 
     static <T extends LivingEntity> EntityType<T> register(String name, EntityType.Builder<T> builder, Supplier<AttributeSupplier.Builder> attributes) {
-        ResourceLocation id = MCA.locate(name);
-        EntityType<T> entity = builder.build(id.toString());
+        Identifier id = MCA.locate(name);
+        EntityType<T> entity = builder.build(ResourceKey.create(Registries.ENTITY_TYPE, id));
         ATTRIBUTES.put(entity, attributes.get());
         ENTITIES.put(id, entity);
         return entity;
     }
 
     static <T extends Entity> EntityType<T> register(String name, EntityType.Builder<T> builder) {
-        ResourceLocation id = MCA.locate(name);
-        EntityType<T> entity = builder.build(id.toString());
+        Identifier id = MCA.locate(name);
+        EntityType<T> entity = builder.build(ResourceKey.create(Registries.ENTITY_TYPE, id));
         ENTITIES.put(id, entity);
         return entity;
     }

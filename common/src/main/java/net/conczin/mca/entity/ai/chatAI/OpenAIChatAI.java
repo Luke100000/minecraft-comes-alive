@@ -23,6 +23,7 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
+import java.net.URI;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
@@ -182,7 +183,7 @@ public class OpenAIChatAI implements ChatAIStrategy {
 
             // add control variables
             if (isInHouse || config.villagerChatAIIncludeSessionInformation) {
-                long seed = player.serverLevel().getSeed();
+                long seed = player.level().getSeed();
                 sb.append("[world_id:").append(seed).append("]");
 
                 sb.append("[player_id:").append(player.getUUID()).append("]");
@@ -290,22 +291,22 @@ public class OpenAIChatAI implements ChatAIStrategy {
 
                 return Optional.ofNullable(message.answer != null ? message.answer.message : null);
             } else if (message.error.equals("invalid_model")) {
-                player.displayClientMessage(Component.literal("Invalid model!").withStyle(ChatFormatting.RED), false);
+                player.sendSystemMessage(Component.literal("Invalid model!").withStyle(ChatFormatting.RED));
             } else if (message.error.equals("limit")) {
                 MutableComponent styled = (Component.translatable("mca.limit.patreon")).withStyle(s -> s
                         .withColor(ChatFormatting.GOLD)
-                        .withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, "https://github.com/Luke100000/minecraft-comes-alive/wiki/GPT3-based-conversations#increase-conversation-limit"))
-                        .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Component.translatable("mca.limit.patreon.hover"))));
+                        .withClickEvent(new ClickEvent.OpenUrl(URI.create("https://github.com/Luke100000/minecraft-comes-alive/wiki/GPT3-based-conversations#increase-conversation-limit")))
+                        .withHoverEvent(new HoverEvent.ShowText(Component.translatable("mca.limit.patreon.hover"))));
 
-                player.displayClientMessage(styled, false);
+                player.sendSystemMessage(styled);
             } else if (message.error.equals("limit_premium")) {
-                player.displayClientMessage(Component.translatable("mca.limit.premium").withStyle(ChatFormatting.RED), false);
+                player.sendSystemMessage(Component.translatable("mca.limit.premium").withStyle(ChatFormatting.RED));
             } else {
-                player.displayClientMessage(Component.literal(message.error).withStyle(ChatFormatting.RED), false);
+                player.sendSystemMessage(Component.literal(message.error).withStyle(ChatFormatting.RED));
             }
         } catch (Exception e) {
             MCA.LOGGER.error("Failed to parse LLM response!", e);
-            player.displayClientMessage(Component.translatable("mca.ai_broken").withStyle(ChatFormatting.RED), false);
+            player.sendSystemMessage(Component.translatable("mca.ai_broken").withStyle(ChatFormatting.RED));
         }
 
         return Optional.empty();
@@ -318,3 +319,4 @@ public class OpenAIChatAI implements ChatAIStrategy {
     public record Answer(StructuredResponse answer, String error) {
     }
 }
+

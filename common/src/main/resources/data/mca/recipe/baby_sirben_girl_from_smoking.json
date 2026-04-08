@@ -1,11 +1,9 @@
 {
-  "type": "minecraft:smoking",
-  "ingredient": {
-    "item": "mca:sirben_baby_girl"
-  },
-  "result": {
-    "id": "minecraft:charcoal"
-  },
-  "experience": 0.18,
-  "cookingtime": 100
+    "type":  "minecraft:smoking",
+    "ingredient":  "mca:sirben_baby_girl",
+    "result":  {
+                   "id":  "minecraft:charcoal"
+               },
+    "experience":  0.18,
+    "cookingtime":  100
 }

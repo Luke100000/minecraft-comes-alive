@@ -13,6 +13,7 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.saveddata.SavedData;
+import net.minecraft.world.level.saveddata.SavedDataType;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -26,13 +27,29 @@ public class CustomClothingManager {
     public static Storage<Clothing> getClothing() {
         Optional<MinecraftServer> server = MCA.getServer();
         return server.<Storage<Clothing>>map(minecraftServer -> minecraftServer.overworld().getDataStorage()
-                .computeIfAbsent(new SavedData.Factory<>(Storage::new, (nbt, provider) -> new Storage<>(nbt, Clothing::new), null), "immersive_library_clothing")).orElse(CLOTHING_DUMMY);
+                .computeIfAbsent(new SavedDataType<>(
+                        MCA.locate("immersive_library_clothing"),
+                        () -> new Storage<>(),
+                        CompoundTag.CODEC.xmap(
+                                nbt -> new Storage<>(nbt, Clothing::new),
+                                Storage::toTag
+                        ),
+                        null
+                ))).orElse(CLOTHING_DUMMY);
     }
 
     public static Storage<Hair> getHair() {
         Optional<MinecraftServer> server = MCA.getServer();
         return server.<Storage<Hair>>map(minecraftServer -> minecraftServer.overworld().getDataStorage()
-                .computeIfAbsent(new SavedData.Factory<>(Storage::new, (nbt, provider) -> new Storage<>(nbt, Hair::new), null), "immersive_library_hair")).orElse(HAIR_DUMMY);
+                .computeIfAbsent(new SavedDataType<>(
+                        MCA.locate("immersive_library_hair"),
+                        () -> new Storage<>(),
+                        CompoundTag.CODEC.xmap(
+                                nbt -> new Storage<>(nbt, Hair::new),
+                                Storage::toTag
+                        ),
+                        null
+                ))).orElse(HAIR_DUMMY);
     }
 
     public static class Storage<T extends SkinListEntry> extends SavedData {
@@ -43,13 +60,16 @@ public class CustomClothingManager {
 
         public Storage(CompoundTag nbt, BiFunction<String, JsonObject, T> entryFromNbt) {
             Gson gson = new Gson();
-            for (String identifier : nbt.getAllKeys()) {
-                entries.put(identifier, entryFromNbt.apply(identifier, gson.fromJson(nbt.getString(identifier), JsonObject.class)));
+            for (String identifier : nbt.keySet()) {
+                entries.put(identifier, entryFromNbt.apply(identifier, gson.fromJson(nbt.getString(identifier).orElse("{}"), JsonObject.class)));
             }
         }
 
-        @Override
         public CompoundTag save(CompoundTag nbt, HolderLookup.Provider provider) {
+            return toTag();
+        }
+
+        public CompoundTag toTag() {
             CompoundTag c = new CompoundTag();
             for (Map.Entry<String, T> entry : entries.entrySet()) {
                 c.putString(entry.getKey(), entry.getValue().toJson().toString());
@@ -83,3 +103,4 @@ public class CustomClothingManager {
         }
     }
 }
+

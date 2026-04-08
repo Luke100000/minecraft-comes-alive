@@ -43,3 +43,5 @@ forge*changelog.txt
 /common/src/main/resources/assets/mca_voices/
 /scripts/TTS/temp.pcm
 /immersiveLibraryToken
+/local-sources
+/gradle-local-repo

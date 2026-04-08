@@ -6,9 +6,10 @@ import net.minecraft.world.InteractionResult;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.TooltipFlag;
+import net.minecraft.world.item.component.TooltipDisplay;
 import net.minecraft.world.item.context.UseOnContext;
 
-import java.util.List;
+import java.util.function.Consumer;
 
 public class StaffOfLifeItem extends TooltippedItem {
     public StaffOfLifeItem(Item.Properties properties) {
@@ -20,7 +21,7 @@ public class StaffOfLifeItem extends TooltippedItem {
         InteractionResult result = ScytheItem.use(context, true);
         if (result == InteractionResult.SUCCESS) {
             if (context.getPlayer() instanceof ServerPlayer serverPlayer) {
-                context.getItemInHand().hurtAndBreak(1, serverPlayer.serverLevel(), serverPlayer, item -> {
+                context.getItemInHand().hurtAndBreak(1, serverPlayer.level(), serverPlayer, item -> {
                 });
             }
             return result;
@@ -29,10 +30,9 @@ public class StaffOfLifeItem extends TooltippedItem {
     }
 
     @Override
-    public void appendHoverText(ItemStack stack, TooltipContext context, List<Component> tooltip, TooltipFlag flag) {
-        tooltip.add(Component.translatable(getDescriptionId(stack) + ".uses", stack.getMaxDamage() - stack.getDamageValue()));
-
-        super.appendHoverText(stack, context, tooltip, flag);
+    public void appendHoverText(ItemStack stack, TooltipContext context, TooltipDisplay tooltipDisplay, Consumer<Component> consumer, TooltipFlag flag) {
+        consumer.accept(Component.translatable(getDescriptionId() + ".uses", stack.getMaxDamage() - stack.getDamageValue()));
+        super.appendHoverText(stack, context, tooltipDisplay, consumer, flag);
     }
 
     @Override
@@ -40,8 +40,4 @@ public class StaffOfLifeItem extends TooltippedItem {
         return true;
     }
 
-    @Override
-    public boolean isEnchantable(ItemStack stack) {
-        return false;
-    }
 }

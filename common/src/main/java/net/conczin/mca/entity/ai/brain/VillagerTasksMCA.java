@@ -21,8 +21,10 @@ import net.conczin.mca.registry.EntitiesMCA;
 import net.conczin.mca.registry.ProfessionsMCA;
 import net.conczin.mca.server.world.data.VillageManager;
 import net.conczin.mca.server.world.data.villageComponents.VillageGuardsManager;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.world.attribute.EnvironmentAttributes;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.MobCategory;
@@ -34,10 +36,9 @@ import net.minecraft.world.entity.ai.memory.MemoryStatus;
 import net.minecraft.world.entity.ai.sensing.Sensor;
 import net.minecraft.world.entity.ai.sensing.SensorType;
 import net.minecraft.world.entity.ai.village.poi.PoiTypes;
-import net.minecraft.world.entity.npc.Villager;
-import net.minecraft.world.entity.npc.VillagerProfession;
+import net.minecraft.world.entity.npc.villager.Villager;
+import net.minecraft.world.entity.npc.villager.VillagerProfession;
 import net.minecraft.world.entity.schedule.Activity;
-import net.minecraft.world.entity.schedule.Schedule;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 
@@ -101,84 +102,94 @@ public class VillagerTasksMCA {
     );
 
     public static Brain.Provider<VillagerEntityMCA> createProfile() {
-        return Brain.provider(MEMORY_TYPES, SENSOR_TYPES);
+        return Brain.provider(MEMORY_TYPES, SENSOR_TYPES, body -> java.util.List.of());
     }
 
     public static Brain<VillagerEntityMCA> initializeTasks(VillagerEntityMCA villager, Brain<VillagerEntityMCA> brain) {
-        VillagerProfession profession = villager.getVillagerData().getProfession();
+        VillagerProfession profession = villager.getVillagerData().profession().value();
         AgeState age = AgeState.byCurrentAge(villager.getAge());
 
         boolean noDefault = false;
 
         if (brain.getMemoryInternal(MemoryModuleTypeMCA.STAYING).isPresent()) {
-            brain.addActivity(Activity.CORE, VillagerTasksMCA.getStayingPackage());
-            brain.addActivity(Activity.CORE, VillagerTasksMCA.getImportantCorePackage(0.5f));
-            brain.addActivity(Activity.CORE, VillagerTasksMCA.getSelfDefencePackage());
-            brain.addActivity(Activity.PANIC, VillagerTasksMCA.getPanicPackage(0.5F));
+            brain.addActivity(Activity.CORE, VillagerTasksMCA.getStayingPackage(), ImmutableSet.of(), ImmutableSet.of());
+            brain.addActivity(Activity.CORE, VillagerTasksMCA.getImportantCorePackage(0.5f), ImmutableSet.of(), ImmutableSet.of());
+            brain.addActivity(Activity.CORE, VillagerTasksMCA.getSelfDefencePackage(), ImmutableSet.of(), ImmutableSet.of());
+            brain.addActivity(Activity.PANIC, VillagerTasksMCA.getPanicPackage(0.5F), ImmutableSet.of(), ImmutableSet.of());
             noDefault = true;
         } else if (brain.getMemoryInternal(MemoryModuleTypeMCA.PLAYER_FOLLOWING).isPresent()) {
-            brain.addActivity(Activity.CORE, VillagerTasksMCA.getFollowingPackage());
-            brain.addActivity(Activity.CORE, VillagerTasksMCA.getImportantCorePackage(0.5f));
-            brain.addActivity(Activity.CORE, VillagerTasksMCA.getSelfDefencePackage());
-            brain.addActivity(Activity.PANIC, VillagerTasksMCA.getPanicPackage(0.5F));
+            brain.addActivity(Activity.CORE, VillagerTasksMCA.getFollowingPackage(), ImmutableSet.of(), ImmutableSet.of());
+            brain.addActivity(Activity.CORE, VillagerTasksMCA.getImportantCorePackage(0.5f), ImmutableSet.of(), ImmutableSet.of());
+            brain.addActivity(Activity.CORE, VillagerTasksMCA.getSelfDefencePackage(), ImmutableSet.of(), ImmutableSet.of());
+            brain.addActivity(Activity.PANIC, VillagerTasksMCA.getPanicPackage(0.5F), ImmutableSet.of(), ImmutableSet.of());
             noDefault = true;
         } else if (profession == ProfessionsMCA.MERCENARY) {
             brain.setSchedule(SchedulesMCA.GUESTS);
-            brain.addActivity(Activity.CORE, VillagerTasksMCA.getImportantCorePackage(0.5F));
-            brain.addActivity(Activity.IDLE, VillagerTasksMCA.getMercenaryPackage(0.5f));
-            brain.addActivity(Activity.CORE, VillagerTasksMCA.getGuardCorePackage(villager));
-            brain.addActivity(Activity.PANIC, VillagerTasksMCA.getPanicPackage(0.5F));
-            brain.addActivity(Activity.REST, VillagerTasksMCA.getRestPackage(0.5F));
-            brain.addActivity(ActivitiesMCA.CHORE, VillagerTasksMCA.getChorePackage());
+            brain.addActivity(Activity.CORE, VillagerTasksMCA.getImportantCorePackage(0.5F), ImmutableSet.of(), ImmutableSet.of());
+            brain.addActivity(Activity.IDLE, VillagerTasksMCA.getMercenaryPackage(0.5f), ImmutableSet.of(), ImmutableSet.of());
+            brain.addActivity(Activity.CORE, VillagerTasksMCA.getGuardCorePackage(villager), ImmutableSet.of(), ImmutableSet.of());
+            brain.addActivity(Activity.PANIC, VillagerTasksMCA.getPanicPackage(0.5F), ImmutableSet.of(), ImmutableSet.of());
+            brain.addActivity(Activity.REST, VillagerTasksMCA.getRestPackage(0.5F), ImmutableSet.of(), ImmutableSet.of());
+            brain.addActivity(ActivitiesMCA.CHORE, VillagerTasksMCA.getChorePackage(), ImmutableSet.of(), ImmutableSet.of());
             noDefault = true;
         } else if (!villager.requiresHome()) {
             brain.setSchedule(SchedulesMCA.GUESTS);
-            brain.addActivity(Activity.CORE, VillagerTasksMCA.getImportantCorePackage(0.5F));
-            brain.addActivity(Activity.IDLE, VillagerTasksMCA.getAdventurerPackage(0.5f));
-            brain.addActivity(Activity.CORE, VillagerTasksMCA.getSelfDefencePackage());
-            brain.addActivity(Activity.PANIC, VillagerTasksMCA.getPanicPackage(0.5F));
-            brain.addActivity(Activity.REST, VillagerTasksMCA.getRestPackage(0.5F));
+            brain.addActivity(Activity.CORE, VillagerTasksMCA.getImportantCorePackage(0.5F), ImmutableSet.of(), ImmutableSet.of());
+            brain.addActivity(Activity.IDLE, VillagerTasksMCA.getAdventurerPackage(0.5f), ImmutableSet.of(), ImmutableSet.of());
+            brain.addActivity(Activity.CORE, VillagerTasksMCA.getSelfDefencePackage(), ImmutableSet.of(), ImmutableSet.of());
+            brain.addActivity(Activity.PANIC, VillagerTasksMCA.getPanicPackage(0.5F), ImmutableSet.of(), ImmutableSet.of());
+            brain.addActivity(Activity.REST, VillagerTasksMCA.getRestPackage(0.5F), ImmutableSet.of(), ImmutableSet.of());
             noDefault = true;
         } else if (age == AgeState.BABY) {
-            brain.setSchedule(Schedule.VILLAGER_BABY);
+            brain.setSchedule(EnvironmentAttributes.BABY_VILLAGER_ACTIVITY);
             //todo babies may get a little bit more AI
             return brain;
         } else if (age != AgeState.ADULT) {
-            brain.setSchedule(Schedule.VILLAGER_BABY);
-            brain.addActivity(Activity.PLAY, VillagerTasksMCA.getPlayPackage(1.0F));
-            brain.addActivity(Activity.CORE, VillagerTasksMCA.getSelfDefencePackage());
+            brain.setSchedule(EnvironmentAttributes.BABY_VILLAGER_ACTIVITY);
+            brain.addActivity(Activity.PLAY, VillagerTasksMCA.getPlayPackage(1.0F), ImmutableSet.of(), ImmutableSet.of());
+            brain.addActivity(Activity.CORE, VillagerTasksMCA.getSelfDefencePackage(), ImmutableSet.of(), ImmutableSet.of());
         } else if (villager.isGuard()) {
             brain.setSchedule(SchedulesMCA.getTypeSchedule(villager, SchedulesMCA.GUARD, SchedulesMCA.GUARD_NIGHT));
-            brain.addActivity(Activity.CORE, VillagerTasksMCA.getGuardCorePackage(villager));
-            brain.addActivity(Activity.WORK, VillagerTasksMCA.getGuardWorkPackage());
-            brain.addActivity(Activity.PANIC, VillagerTasksMCA.getGuardPanicPackage(0.5f));
-            brain.addActivity(Activity.RAID, VillagerTasksMCA.getGuardWorkPackage());
+            brain.addActivity(Activity.CORE, VillagerTasksMCA.getGuardCorePackage(villager), ImmutableSet.of(), ImmutableSet.of());
+            brain.addActivity(Activity.WORK, VillagerTasksMCA.getGuardWorkPackage(), ImmutableSet.of(), ImmutableSet.of());
+            brain.addActivity(Activity.PANIC, VillagerTasksMCA.getGuardPanicPackage(0.5f), ImmutableSet.of(), ImmutableSet.of());
+            brain.addActivity(Activity.RAID, VillagerTasksMCA.getGuardWorkPackage(), ImmutableSet.of(), ImmutableSet.of());
         } else {
             brain.setSchedule(SchedulesMCA.getTypeSchedule(villager));
-            brain.addActivity(Activity.CORE, VillagerTasksMCA.getWorkingCorePackage(profession, 0.5F));
-            brain.addActivityWithConditions(Activity.WORK, VillagerTasksMCA.getWorkPackage(profession, 0.5F), ImmutableSet.of(Pair.of(MemoryModuleType.JOB_SITE, MemoryStatus.VALUE_PRESENT)));
-            brain.addActivity(Activity.CORE, VillagerTasksMCA.getSelfDefencePackage());
-            brain.addActivity(Activity.RAID, VillagerTasksMCA.getRaidPackage(0.5F));
+            brain.addActivity(Activity.CORE, VillagerTasksMCA.getWorkingCorePackage(profession, 0.5F), ImmutableSet.of(), ImmutableSet.of());
+            brain.addActivity(
+                    Activity.WORK,
+                    VillagerTasksMCA.getWorkPackage(profession, 0.5F),
+                    ImmutableSet.of(Pair.of(MemoryModuleType.JOB_SITE, MemoryStatus.VALUE_PRESENT)),
+                    ImmutableSet.of()
+            );
+            brain.addActivity(Activity.CORE, VillagerTasksMCA.getSelfDefencePackage(), ImmutableSet.of(), ImmutableSet.of());
+            brain.addActivity(Activity.RAID, VillagerTasksMCA.getRaidPackage(0.5F), ImmutableSet.of(), ImmutableSet.of());
         }
 
-        brain.addActivity(ActivitiesMCA.GRIEVE, VillagerTasksMCA.getGrievingPackage());
+        brain.addActivity(ActivitiesMCA.GRIEVE, VillagerTasksMCA.getGrievingPackage(), ImmutableSet.of(), ImmutableSet.of());
 
         if (!noDefault) {
-            brain.addActivity(Activity.CORE, VillagerTasksMCA.getImportantCorePackage(0.5F));
-            brain.addActivity(Activity.CORE, VillagerTasksMCA.getCorePackage(0.5F));
-            brain.addActivityWithConditions(Activity.MEET, VillagerTasksMCA.getMeetPackage(0.5F), ImmutableSet.of(Pair.of(MemoryModuleType.MEETING_POINT, MemoryStatus.VALUE_PRESENT)));
-            brain.addActivity(Activity.REST, VillagerTasksMCA.getRestPackage(0.5F));
-            brain.addActivity(Activity.IDLE, VillagerTasksMCA.getIdlePackage(0.5F));
-            brain.addActivity(Activity.PANIC, VillagerTasksMCA.getPanicPackage(0.5F));
-            brain.addActivity(Activity.PRE_RAID, VillagerTasksMCA.getPreRaidPackage(0.5F));
-            brain.addActivity(Activity.HIDE, VillagerTasksMCA.getHidePackage(0.5F));
-            brain.addActivity(ActivitiesMCA.CHORE, VillagerTasksMCA.getChorePackage());
+            brain.addActivity(Activity.CORE, VillagerTasksMCA.getImportantCorePackage(0.5F), ImmutableSet.of(), ImmutableSet.of());
+            brain.addActivity(Activity.CORE, VillagerTasksMCA.getCorePackage(0.5F), ImmutableSet.of(), ImmutableSet.of());
+            brain.addActivity(
+                    Activity.MEET,
+                    VillagerTasksMCA.getMeetPackage(0.5F),
+                    ImmutableSet.of(Pair.of(MemoryModuleType.MEETING_POINT, MemoryStatus.VALUE_PRESENT)),
+                    ImmutableSet.of()
+            );
+            brain.addActivity(Activity.REST, VillagerTasksMCA.getRestPackage(0.5F), ImmutableSet.of(), ImmutableSet.of());
+            brain.addActivity(Activity.IDLE, VillagerTasksMCA.getIdlePackage(0.5F), ImmutableSet.of(), ImmutableSet.of());
+            brain.addActivity(Activity.PANIC, VillagerTasksMCA.getPanicPackage(0.5F), ImmutableSet.of(), ImmutableSet.of());
+            brain.addActivity(Activity.PRE_RAID, VillagerTasksMCA.getPreRaidPackage(0.5F), ImmutableSet.of(), ImmutableSet.of());
+            brain.addActivity(Activity.HIDE, VillagerTasksMCA.getHidePackage(0.5F), ImmutableSet.of(), ImmutableSet.of());
+            brain.addActivity(ActivitiesMCA.CHORE, VillagerTasksMCA.getChorePackage(), ImmutableSet.of(), ImmutableSet.of());
         }
 
         brain.setCoreActivities(ImmutableSet.of(Activity.CORE));
         brain.setDefaultActivity(Activity.IDLE);
         brain.setActiveActivityIfPossible(Activity.IDLE);
-        brain.updateActivityFromSchedule(villager.level().getDayTime(), villager.level().getGameTime());
+        brain.updateActivityFromSchedule(villager.level().environmentAttributes(), villager.level().getGameTime(), villager.position());
 
         return brain;
     }
@@ -296,8 +307,8 @@ public class VillagerTasksMCA {
                 )),
                 Pair.of(1, new EquipmentTask(VillagerTasksMCA::isOnDuty, v -> v.getResidency().getHomeVillage()
                         .map(vil -> vil.getVillageGuardsManager().getGuardEquipment(v.getProfession(), v.getDominantHand())).orElse(VillageGuardsManager.getEquipmentFor(v.getDominantHand(), EquipmentSet.GUARD_0, EquipmentSet.GUARD_0_LEFT)))),
-                Pair.of(2, StartAttacking.create(t -> true, VillagerTasksMCA::getPreferredTarget)),
-                Pair.of(3, StopAttackingIfTargetInvalid.create(livingEntity -> !VillagerTasksMCA.isPreferredTarget(villager, livingEntity))),
+                Pair.of(2, StartAttacking.create((level, body) -> true, (level, body) -> VillagerTasksMCA.getPreferredTarget(body))),
+                Pair.of(3, StopAttackingIfTargetInvalid.create((level, livingEntity) -> !VillagerTasksMCA.isPreferredTarget(villager, livingEntity))),
                 Pair.of(4, new BowTask<>(20, 12)),
                 Pair.of(5, BehaviorBuilder.triggerIf(v -> v.isHolding(Items.CROSSBOW),
                         BackUpIfTooClose.create(5, 0.75F)
@@ -358,7 +369,7 @@ public class VillagerTasksMCA {
     }
 
     private static Activity getActivity(VillagerEntityMCA villager) {
-        return villager.getBrain().getSchedule().getActivityAt((int) (villager.level().getDayTime() % 24000L));
+        return villager.getBrain().getActiveNonCoreActivity().orElse(Activity.IDLE);
     }
 
     public static ImmutableList<Pair<Integer, ? extends BehaviorControl<? super VillagerEntityMCA>>> getGrievingPackage() {
@@ -385,7 +396,7 @@ public class VillagerTasksMCA {
                                 new HoldItemTask(InteractionHand.MAIN_HAND, ItemStack.EMPTY),
                                 new LambdaTask<>((v) -> {
                                     v.getVillagerBrain().justGrieved();
-                                    v.getBrain().updateActivityFromSchedule(v.level().getDayTime(), v.level().getGameTime());
+                                    v.getBrain().updateActivityFromSchedule(v.level().environmentAttributes(), v.level().getGameTime(), v.position());
                                 })
 
                         )
@@ -394,8 +405,9 @@ public class VillagerTasksMCA {
     }
 
     public static ImmutableList<Pair<Integer, ? extends BehaviorControl<? super VillagerEntityMCA>>> getWorkPackage(VillagerProfession profession, float speedModifier) {
+        boolean isFarmer = profession.equals(BuiltInRegistries.VILLAGER_PROFESSION.getOrThrow(VillagerProfession.FARMER).value());
         WorkAtPoi villagerWorkTask;
-        if (profession == VillagerProfession.FARMER) {
+        if (isFarmer) {
             villagerWorkTask = new WorkAtComposter();
         } else {
             villagerWorkTask = new WorkAtPoi();
@@ -408,8 +420,8 @@ public class VillagerTasksMCA {
                                 Pair.of(StrollAroundPoi.create(MemoryModuleType.JOB_SITE, 0.4F, 4), 2),
                                 Pair.of(StrollToPoi.create(MemoryModuleType.JOB_SITE, 0.4F, 1, 10), 5),
                                 Pair.of(StrollToPoiList.create(MemoryModuleType.SECONDARY_JOB_SITE, speedModifier, 1, 6, MemoryModuleType.JOB_SITE), 5),
-                                Pair.of(new HarvestFarmland(), profession == VillagerProfession.FARMER ? 2 : 5),
-                                Pair.of(new UseBonemeal(), profession == VillagerProfession.FARMER ? 4 : 7))
+                                Pair.of(new HarvestFarmland(), isFarmer ? 2 : 5),
+                                Pair.of(new UseBonemeal(), isFarmer ? 4 : 7))
                 )),
                 Pair.of(10, new ShowTradesToPlayer(400, 1600)),
                 Pair.of(10, SetLookAndInteract.create(EntityType.PLAYER, 4)),

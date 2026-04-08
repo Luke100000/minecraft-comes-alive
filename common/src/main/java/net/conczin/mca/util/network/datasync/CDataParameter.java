@@ -5,7 +5,6 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializer;
 import net.minecraft.network.syncher.SynchedEntityData;
-import net.minecraft.world.entity.Entity;
 
 public class CDataParameter<T> implements CParameter<T, T> {
     private final String id;
@@ -57,8 +56,9 @@ public class CDataParameter<T> implements CParameter<T, T> {
     }
 
     @Override
-    public EntityDataAccessor<T> createParam(Class<? extends Entity> type) {
-        return SynchedEntityData.defineId(type, valueType);
+    @SuppressWarnings("unchecked")
+    public EntityDataAccessor<T> createParam(CDataManager.AccessorFactory<?> accessorFactory) {
+        return (EntityDataAccessor<T>) accessorFactory.create(valueType);
     }
 
     public interface Decoder<T> {

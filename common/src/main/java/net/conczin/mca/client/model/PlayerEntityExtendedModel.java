@@ -1,70 +1,79 @@
 package net.conczin.mca.client.model;
 
 import com.google.common.collect.ImmutableList;
-import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.conczin.mca.entity.ai.relationship.AgeState;
 import net.conczin.mca.entity.ai.relationship.VillagerDimensions;
+import net.conczin.mca.client.render.VillagerStateHolder;
+import net.conczin.mca.entity.VillagerLike;
 import net.minecraft.client.model.HumanoidModel;
-import net.minecraft.client.model.PlayerModel;
 import net.minecraft.client.model.geom.ModelPart;
+import net.minecraft.client.model.player.PlayerModel;
+import net.minecraft.client.renderer.entity.state.AvatarRenderState;
 import net.minecraft.world.entity.LivingEntity;
 
 import static net.conczin.mca.client.model.VillagerEntityBaseModelMCA.BREASTS;
 import static net.conczin.mca.client.model.VillagerEntityModelMCA.BREASTPLATE;
 
-public class PlayerEntityExtendedModel<T extends LivingEntity> extends PlayerModel<T> implements CommonVillagerModel<T> {
+public class PlayerEntityExtendedModel<T extends LivingEntity> extends PlayerModel implements CommonVillagerModel<T> {
     public final ModelPart breasts;
     public final ModelPart breastsWear;
 
     final VillagerDimensions.Mutable dimensions = new VillagerDimensions.Mutable(AgeState.ADULT);
     float breastSize;
+    private RenderMask renderMask = RenderMask.FULL;
+    private boolean wearsHidden;
 
     public PlayerEntityExtendedModel(ModelPart root) {
-        super(root, false);
+        this(root, false);
+    }
+
+    public PlayerEntityExtendedModel(ModelPart root, boolean slim) {
+        super(root, slim);
         this.breasts = root.getChild(BREASTS);
         this.breastsWear = root.getChild(BREASTPLATE);
     }
 
-    @Override
-    public void copyPropertiesTo(HumanoidModel<T> target) {
-        super.copyPropertiesTo(target);
-
-        if (target instanceof PlayerEntityExtendedModel<T> playerTarget) {
+    public void copyPropertiesTo(HumanoidModel<?> target) {
+        copyBaseHumanoidState(target);
+        if (target instanceof PlayerEntityExtendedModel<?> playerTarget) {
             copyAttributes(playerTarget);
         }
-        if (target instanceof PlayerArmorExtendedModel<T> armorTarget) {
+        if (target instanceof PlayerArmorExtendedModel<?> armorTarget) {
             copyAttributes(armorTarget);
         }
     }
 
-    private void copyAttributes(PlayerEntityExtendedModel<T> target) {
-        target.leftPants.copyFrom(leftPants);
-        target.rightPants.copyFrom(rightPants);
-        target.leftSleeve.copyFrom(leftSleeve);
-        target.rightSleeve.copyFrom(rightSleeve);
-        target.jacket.copyFrom(jacket);
-        target.breastsWear.copyFrom(breastsWear);
-
-        copyCommonAttributes(target);
-
-        target.breasts.visible = breasts.visible;
-        target.breasts.copyFrom(breasts);
+    private void copyBaseHumanoidState(HumanoidModel<?> target) {
+        CommonVillagerModel.copyPartState(target.head, head);
+        CommonVillagerModel.copyPartState(target.hat, hat);
+        CommonVillagerModel.copyPartState(target.body, body);
+        CommonVillagerModel.copyPartState(target.leftArm, leftArm);
+        CommonVillagerModel.copyPartState(target.rightArm, rightArm);
+        CommonVillagerModel.copyPartState(target.leftLeg, leftLeg);
+        CommonVillagerModel.copyPartState(target.rightLeg, rightLeg);
     }
 
-    private void copyAttributes(PlayerArmorExtendedModel<T> target) {
-        copyCommonAttributes(target);
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private void copyAttributes(PlayerEntityExtendedModel<?> target) {
+        CommonVillagerModel.copyPartState(target.leftPants, leftPants);
+        CommonVillagerModel.copyPartState(target.rightPants, rightPants);
+        CommonVillagerModel.copyPartState(target.leftSleeve, leftSleeve);
+        CommonVillagerModel.copyPartState(target.rightSleeve, rightSleeve);
+        CommonVillagerModel.copyPartState(target.jacket, jacket);
+        CommonVillagerModel.copyPartState(target.breastsWear, breastsWear);
+
+        copyCommonAttributes((CommonVillagerModel) target);
 
         target.breasts.visible = breasts.visible;
-        target.breasts.copyFrom(breasts);
+        CommonVillagerModel.copyPartState(target.breasts, breasts);
     }
 
-    @Override
-    public void renderToBuffer(PoseStack matrices, VertexConsumer vertices, int light, int overlay, int color) {
-        // Idk anymore
-        breastsWear.visible = jacket.visible;
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private void copyAttributes(PlayerArmorExtendedModel<?> target) {
+        copyCommonAttributes((CommonVillagerModel) target);
 
-        renderCommon(matrices, vertices, light, overlay, color);
+        target.breasts.visible = breasts.visible;
+        CommonVillagerModel.copyPartState(target.breasts, breasts);
     }
 
     @Override
@@ -79,12 +88,12 @@ public class PlayerEntityExtendedModel<T extends LivingEntity> extends PlayerMod
 
     @Override
     public Iterable<ModelPart> getCommonHeadParts() {
-        return headParts();
+        return ImmutableList.of(head);
     }
 
     @Override
     public Iterable<ModelPart> getCommonBodyParts() {
-        return bodyParts();
+        return ImmutableList.of(body, rightArm, leftArm, rightLeg, leftLeg);
     }
 
     @Override
@@ -108,6 +117,63 @@ public class PlayerEntityExtendedModel<T extends LivingEntity> extends PlayerMod
     }
 
     @Override
+    public RenderMask getRenderMask() {
+        return renderMask;
+    }
+
+    @Override
+    public void setRenderMask(RenderMask renderMask) {
+        this.renderMask = renderMask;
+    }
+
+    public PlayerEntityExtendedModel<T> hideWears() {
+        this.wearsHidden = true;
+        this.jacket.visible = false;
+        this.leftPants.visible = false;
+        this.rightPants.visible = false;
+        this.leftSleeve.visible = false;
+        this.rightSleeve.visible = false;
+        this.breastsWear.visible = false;
+        return this;
+    }
+
+    @Override
+    public void setupAnim(AvatarRenderState state) {
+        head.visible = !state.isSpectator;
+        hat.visible = state.showHat;
+        body.visible = !state.isSpectator;
+        jacket.visible = state.showJacket;
+        breasts.visible = !state.isSpectator;
+        breastsWear.visible = state.showJacket;
+        leftArm.visible = !state.isSpectator;
+        leftSleeve.visible = state.showLeftSleeve;
+        rightArm.visible = !state.isSpectator;
+        rightSleeve.visible = state.showRightSleeve;
+        leftLeg.visible = !state.isSpectator;
+        leftPants.visible = state.showLeftPants;
+        rightLeg.visible = !state.isSpectator;
+        rightPants.visible = state.showRightPants;
+        super.setupAnim(state);
+
+        if (state instanceof VillagerStateHolder holder) {
+            VillagerLike<?> villager = holder.mca$getVillager();
+            if (villager != null) {
+                applyVillagerDimensions(villager, state.isCrouching);
+            }
+        }
+
+        if (wearsHidden) {
+            jacket.visible = false;
+            leftPants.visible = false;
+            rightPants.visible = false;
+            leftSleeve.visible = false;
+            rightSleeve.visible = false;
+            breastsWear.visible = false;
+        }
+
+        CommonVillagerModel.applyRenderMask(this, renderMask);
+    }
+
     public void setupAnim(T villager, float limbAngle, float limbDistance, float animationProgress, float headYaw, float headPitch) {
         if (CommonVillagerModel.getVillager(villager).getAgeState() == AgeState.BABY && !villager.isPassenger()) {
             limbDistance = (float) Math.sin(villager.tickCount / 12F);
@@ -115,11 +181,11 @@ public class PlayerEntityExtendedModel<T extends LivingEntity> extends PlayerMod
             headYaw += (float) Math.sin(villager.tickCount / 2F);
         }
 
-        super.setupAnim(villager, limbAngle, limbDistance, animationProgress, headYaw, headPitch);
+        breastsWear.visible = jacket.visible;
         applyVillagerDimensions(CommonVillagerModel.getVillager(villager), villager.isCrouching());
     }
 
-    public <M extends HumanoidModel<T>> void copyVisibility(M model) {
+    public void copyVisibility(HumanoidModel<?> model) {
         head.visible = model.head.visible;
         hat.visible = model.head.visible;
         body.visible = model.body.visible;

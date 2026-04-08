@@ -1,8 +1,7 @@
 package net.conczin.mca.client.model;
 
-import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.conczin.mca.entity.CribEntity;
+import net.conczin.mca.client.render.CribEntityRenderState;
 import net.minecraft.client.model.EntityModel;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.client.model.geom.PartPose;
@@ -11,10 +10,11 @@ import net.minecraft.client.model.geom.builders.CubeListBuilder;
 import net.minecraft.client.model.geom.builders.MeshDefinition;
 import net.minecraft.client.model.geom.builders.PartDefinition;
 
-public class CribEntityModel<T extends CribEntity> extends EntityModel<T> {
+public class CribEntityModel extends EntityModel<CribEntityRenderState> {
     private final ModelPart CRIB;
 
     public CribEntityModel(ModelPart root) {
+        super(root);
         this.CRIB = root.getChild("Crib");
     }
 
@@ -51,12 +51,7 @@ public class CribEntityModel<T extends CribEntity> extends EntityModel<T> {
     }
 
     @Override
-    public void renderToBuffer(PoseStack stack, VertexConsumer consumer, int packedLight, int packedOverlay, int color) {
-        CRIB.render(stack, consumer, packedLight, packedOverlay, color);
-    }
-
-    @Override
-    public void setupAnim(T entity, float f, float g, float h, float i, float j) {
+    public void setupAnim(CribEntityRenderState state) {
 
     }
 }

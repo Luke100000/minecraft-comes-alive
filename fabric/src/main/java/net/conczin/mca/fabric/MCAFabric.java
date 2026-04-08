@@ -15,13 +15,16 @@ import net.conczin.mca.server.ServerInteractionManager;
 import net.conczin.mca.server.command.AdminCommand;
 import net.conczin.mca.server.command.Command;
 import net.conczin.mca.server.world.data.VillageManager;
+import net.conczin.mca.util.network.datasync.MCAEntityDataSerializers;
+import net.fabricmc.fabric.api.object.builder.v1.entity.FabricEntityDataRegistry;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
+import net.fabricmc.fabric.api.object.builder.v1.block.entity.FabricBlockEntityTypeBuilder;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
-import net.fabricmc.fabric.api.itemgroup.v1.FabricItemGroup;
-import net.fabricmc.fabric.api.itemgroup.v1.ItemGroupEvents;
+import net.fabricmc.fabric.api.creativetab.v1.CreativeModeTabEvents;
+import net.fabricmc.fabric.api.creativetab.v1.FabricCreativeModeTab;
 import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
@@ -55,10 +58,10 @@ public final class MCAFabric implements ModInitializer {
         @Override
         public <T extends HandleablePayload> void register(CustomPacketPayload.Type<T> type, StreamCodec<? super RegistryFriendlyByteBuf, T> codec, boolean isServer) {
             if (isServer) {
-                PayloadTypeRegistry.playC2S().register(type, codec);
+                PayloadTypeRegistry.serverboundPlay().register(type, codec);
                 ServerPlayNetworking.registerGlobalReceiver(type, (payload, ctx) -> ctx.server().execute(() -> payload.handle(ctx.player())));
             } else {
-                PayloadTypeRegistry.playS2C().register(type, codec);
+                PayloadTypeRegistry.clientboundPlay().register(type, codec);
                 if (FabricLoader.getInstance().getEnvironmentType() == EnvType.CLIENT) {
                     ClientProxy.register(type);
                 }
@@ -72,6 +75,9 @@ public final class MCAFabric implements ModInitializer {
 
     @Override
     public void onInitialize() {
+        FabricEntityDataRegistry.register(MCAEntityDataSerializers.COMPOUND_TAG_ID, MCAEntityDataSerializers.COMPOUND_TAG);
+        FabricEntityDataRegistry.register(MCAEntityDataSerializers.OPTIONAL_UUID_ID, MCAEntityDataSerializers.OPTIONAL_UUID);
+
         registerHelper(BuiltInRegistries.ITEM, ItemsMCA::registerItems);
         registerHelper(BuiltInRegistries.BLOCK, BlocksMCA::registerBlocks);
         registerHelper(BuiltInRegistries.SOUND_EVENT, SoundsMCA::registerSounds);
@@ -90,7 +96,7 @@ public final class MCAFabric implements ModInitializer {
         TagsMCA.Items.bootstrap();
 
         BlockEntityTypesMCA.registerBlockEntityTypes((name, factory, blocks) ->
-                Registry.register(BuiltInRegistries.BLOCK_ENTITY_TYPE, name, BlockEntityType.Builder.of(factory::create, blocks).build(null)));
+                Registry.register(BuiltInRegistries.BLOCK_ENTITY_TYPE, name, FabricBlockEntityTypeBuilder.create(factory::create, blocks).build()));
 
         EntitiesMCA.registerAttributes(FabricDefaultAttributeRegistry::register);
         MessagesMCA.register(fabricRegistrar);
@@ -109,19 +115,19 @@ public final class MCAFabric implements ModInitializer {
 
         // Create the creative mode tab
         ResourceKey<CreativeModeTab> mcaTab = ResourceKey.create(BuiltInRegistries.CREATIVE_MODE_TAB.key(), MCA.locate("mca_tab"));
-        CreativeModeTab build = FabricItemGroup.builder()
+        CreativeModeTab build = FabricCreativeModeTab.builder()
                 .title(Component.translatable("itemGroup.mca.mca_tab"))
                 .icon(() -> new ItemStack(ItemsMCA.ENGAGEMENT_RING))
                 .build();
         Registry.register(BuiltInRegistries.CREATIVE_MODE_TAB, mcaTab, build);
-        ItemGroupEvents.modifyEntriesEvent(mcaTab).register(itemGroup -> {
+        CreativeModeTabEvents.modifyOutputEvent(mcaTab).register(itemGroup -> {
             List<Item> reversed = new ArrayList<>(ItemsMCA.ITEMS.values());
             Collections.reverse(reversed);
             reversed.forEach(itemGroup::prepend);
         });
 
         // Register events
-        ServerTickEvents.END_WORLD_TICK.register(w -> VillageManager.get(w).tick());
+        ServerTickEvents.END_LEVEL_TICK.register(w -> VillageManager.get(w).tick());
         ServerTickEvents.END_SERVER_TICK.register(s -> ServerInteractionManager.getInstance().tick());
         ServerTickEvents.END_SERVER_TICK.register(MCA::setServer);
 

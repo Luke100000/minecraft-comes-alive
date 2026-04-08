@@ -9,17 +9,30 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
+import java.util.stream.Stream;
+
 @Mixin(EntityType.class)
 public class MixinEntityType {
     @SuppressWarnings("ConstantConditions")
-    @Inject(method = "is(Lnet/minecraft/tags/TagKey;)Z", at = @At("HEAD"), cancellable = true)
-    private void mca$injectIs(TagKey<EntityType<?>> tag, CallbackInfoReturnable<Boolean> cir) {
-        if (Config.getInstance().villagerTagsHacks) {
-            if ((Object) this == EntitiesMCA.MALE_VILLAGER || (Object) this == EntitiesMCA.FEMALE_VILLAGER) {
-                if (EntityType.VILLAGER.is(tag)) {
-                    cir.setReturnValue(true);
-                }
-            }
+    @Inject(method = "getTags()Ljava/util/stream/Stream;", at = @At("RETURN"), cancellable = true, require = 0)
+    private void mca$injectGetTags(CallbackInfoReturnable<Stream<TagKey<EntityType<?>>>> cir) {
+        if (mca$isCustomVillagerType()) {
+            cir.setReturnValue(Stream.concat(cir.getReturnValue(), EntityType.VILLAGER.builtInRegistryHolder().tags()).distinct());
         }
+    }
+
+    @SuppressWarnings("ConstantConditions")
+    @Inject(method = "is(Lnet/minecraft/tags/TagKey;)Z", at = @At("HEAD"), cancellable = true, require = 0)
+    private void mca$injectIs(TagKey<EntityType<?>> tag, CallbackInfoReturnable<Boolean> cir) {
+        if (mca$isCustomVillagerType() && EntityType.VILLAGER.builtInRegistryHolder().is(tag)) {
+            cir.setReturnValue(true);
+        }
+    }
+
+    private boolean mca$isCustomVillagerType() {
+        if (!Config.getInstance().villagerTagsHacks) {
+            return false;
+        }
+        return (Object) this == EntitiesMCA.MALE_VILLAGER || (Object) this == EntitiesMCA.FEMALE_VILLAGER;
     }
 }

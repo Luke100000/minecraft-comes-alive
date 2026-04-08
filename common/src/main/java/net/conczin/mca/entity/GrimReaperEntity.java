@@ -42,12 +42,17 @@ import net.minecraft.world.entity.projectile.Projectile;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 
+import java.util.UUID;
+
 public class GrimReaperEntity extends PathfinderMob implements CTrackedEntity<GrimReaperEntity> {
     public static final CEnumParameter<ReaperAttackState> ATTACK_STAGE = CParameter.create("AttackStage", ReaperAttackState.IDLE);
 
-    public static final CDataManager<GrimReaperEntity> DATA = new CDataManager.Builder<>(GrimReaperEntity.class).addAll(ATTACK_STAGE).build();
+    public static final CDataManager<GrimReaperEntity> DATA = new CDataManager.Builder<>(
+            GrimReaperEntity.class,
+            serializer -> SynchedEntityData.defineId(GrimReaperEntity.class, serializer)
+    ).addAll(ATTACK_STAGE).build();
 
-    private final ServerBossEvent bossInfo = (ServerBossEvent) new ServerBossEvent(getDisplayName(), BossEvent.BossBarColor.PURPLE, BossEvent.BossBarOverlay.PROGRESS).setDarkenScreen(true);
+    private final ServerBossEvent bossInfo = (ServerBossEvent) new ServerBossEvent(UUID.randomUUID(), getDisplayName(), BossEvent.BossBarColor.PURPLE, BossEvent.BossBarOverlay.PROGRESS).setDarkenScreen(true);
 
     public GrimReaperEntity(EntityType<? extends GrimReaperEntity> type, Level world) {
         super(type, world);
@@ -110,14 +115,9 @@ public class GrimReaperEntity extends PathfinderMob implements CTrackedEntity<Gr
 
     @Override
     public void checkDespawn() {
-        if (level().getDifficulty() == Difficulty.PEACEFUL && shouldDespawnInPeaceful()) {
+        if (level().getDifficulty() == Difficulty.PEACEFUL) {
             discard();
         }
-    }
-
-    @Override
-    protected boolean shouldDespawnInPeaceful() {
-        return true;
     }
 
     @Override
@@ -131,7 +131,7 @@ public class GrimReaperEntity extends PathfinderMob implements CTrackedEntity<Gr
         };
         navigator.setCanOpenDoors(false);
         navigator.setCanFloat(false);
-        navigator.setCanPassDoors(true);
+        navigator.getNodeEvaluator().setCanPassDoors(true);
         return navigator;
     }
 
@@ -139,7 +139,7 @@ public class GrimReaperEntity extends PathfinderMob implements CTrackedEntity<Gr
     protected void dropCustomDeathLoot(ServerLevel level, DamageSource damageSource, boolean recentlyHit) {
         super.dropCustomDeathLoot(level, damageSource, recentlyHit);
 
-        ItemEntity itemEntity = spawnAtLocation(ItemsMCA.SCYTHE);
+        ItemEntity itemEntity = spawnAtLocation(level, ItemsMCA.SCYTHE);
         if (itemEntity != null) {
             itemEntity.setExtendedLifetime();
         }
@@ -164,7 +164,7 @@ public class GrimReaperEntity extends PathfinderMob implements CTrackedEntity<Gr
     }
 
     @Override
-    public boolean hurt(DamageSource source, float damage) {
+    public boolean hurtServer(ServerLevel level, DamageSource source, float damage) {
         // Ignore wall damage, fire and explosion damage
         if (source.is(DamageTypes.IN_WALL) || source.is(DamageTypes.ON_FIRE) || source.is(DamageTypes.EXPLOSION) || source.is(DamageTypes.IN_FIRE)) {
             // Teleport out of any walls we may end up in
@@ -193,7 +193,7 @@ public class GrimReaperEntity extends PathfinderMob implements CTrackedEntity<Gr
         }
 
         // Randomly portal behind the player who just attacked.
-        if (!level().isClientSide && random.nextFloat() >= 0.30F && attacker != null) {
+        if (!level().isClientSide() && random.nextFloat() >= 0.30F && attacker != null) {
             double deltaX = this.getX() - attacker.getX();
             double deltaZ = this.getZ() - attacker.getZ();
             double distance = Math.sqrt(deltaX * deltaX + deltaZ * deltaZ);
@@ -207,7 +207,7 @@ public class GrimReaperEntity extends PathfinderMob implements CTrackedEntity<Gr
             damage *= 0.25f;
         }
 
-        return super.hurt(source, damage);
+        return super.hurtServer(level, source, damage);
     }
 
     @Override
@@ -275,3 +275,4 @@ public class GrimReaperEntity extends PathfinderMob implements CTrackedEntity<Gr
         bossInfo.removePlayer(player);
     }
 }
+

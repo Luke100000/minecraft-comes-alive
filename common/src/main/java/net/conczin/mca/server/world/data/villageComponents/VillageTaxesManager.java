@@ -9,7 +9,7 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Container;
 import net.minecraft.world.item.Item;
@@ -36,12 +36,12 @@ public class VillageTaxesManager {
     }
 
     public void taxes(ServerLevel world) {
-        double taxes = Config.getInstance().taxesFactor * village.getPopulation() * village.getTaxes() + world.random.nextDouble();
+        double taxes = Config.getInstance().taxesFactor * village.getPopulation() * village.getTaxes() + world.getRandom().nextDouble();
         int moodImpact = 0;
 
         //response
         Component msg;
-        float r = village.getTaxes() + (world.random.nextFloat() - 0.5f) * world.random.nextFloat();
+        float r = village.getTaxes() + (world.getRandom().nextFloat() - 0.5f) * world.getRandom().nextFloat();
         if (village.getTaxes() == 0.0f) {
             msg = Component.translatable("gui.village.taxes.no", village.getName()).withStyle(ChatFormatting.GREEN);
             moodImpact = 5;
@@ -68,7 +68,7 @@ public class VillageTaxesManager {
         //send all player with rank merchant a notification
         world.players().stream()
                 .filter(v -> Tasks.getRank(village, v).isAtLeast(Rank.MERCHANT))
-                .forEach(player -> player.displayClientMessage(msg, true));
+                .forEach(player -> player.sendSystemMessage(msg));
 
         //upgrades
         if (village.hasBuilding("library")) {
@@ -81,7 +81,7 @@ public class VillageTaxesManager {
 
             // create a weighted list of all available items
             List<String> valids = Config.getInstance().taxesMap.entrySet().stream()
-                    .filter(e -> e.getValue() * world.random.nextFloat() < finalTaxes)
+                    .filter(e -> e.getValue() * world.getRandom().nextFloat() < finalTaxes)
                     .map(Map.Entry::getKey)
                     .toList();
 
@@ -90,8 +90,8 @@ public class VillageTaxesManager {
             }
 
             // pick a random item
-            String itemName = valids.get(world.random.nextInt(valids.size()));
-            Item item = BuiltInRegistries.ITEM.get(ResourceLocation.parse(itemName));
+            String itemName = valids.get(world.getRandom().nextInt(valids.size()));
+            Item item = Optional.ofNullable(BuiltInRegistries.ITEM.getValue(Identifier.parse(itemName))).orElse(Items.AIR);
 
             if (item == Items.AIR) {
                 throw new RuntimeException("The taxes map contains an invalid item %s!".formatted(itemName));
@@ -175,3 +175,4 @@ public class VillageTaxesManager {
         }
     }
 }
+

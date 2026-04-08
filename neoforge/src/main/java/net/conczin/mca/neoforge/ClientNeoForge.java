@@ -9,18 +9,13 @@ import net.conczin.mca.client.gui.MCAScreens;
 import net.conczin.mca.client.particle.InteractionParticle;
 import net.conczin.mca.client.render.*;
 import net.conczin.mca.client.resources.ColorPaletteLoader;
-import net.conczin.mca.registry.BlocksMCA;
 import net.conczin.mca.registry.EntitiesMCA;
-import net.conczin.mca.registry.ModelPredicatesMCA;
 import net.conczin.mca.registry.ParticleTypesMCA;
 import net.conczin.mca.resources.ApiReloadListener;
 import net.conczin.mca.resources.Supporters;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.ItemBlockRenderTypes;
-import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.entity.VillagerRenderer;
 import net.minecraft.client.renderer.entity.ZombieVillagerRenderer;
-import net.minecraft.client.renderer.item.ItemProperties;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
@@ -57,13 +52,13 @@ public final class ClientNeoForge extends ClientProxyAbstractImpl {
     }
 
     @SubscribeEvent
-    public static void data(RegisterClientReloadListenersEvent event) {
+    public static void data(AddClientReloadListenersEvent event) {
         new ClientNeoForge();
 
-        event.registerReloadListener(new MCAScreens());
-        event.registerReloadListener(new ColorPaletteLoader());
-        event.registerReloadListener(new Supporters());
-        event.registerReloadListener(new ApiReloadListener());
+        event.addListener(MCA.locate("screens"), new MCAScreens());
+        event.addListener(MCA.locate("color_palettes"), new ColorPaletteLoader());
+        event.addListener(MCA.locate("supporters"), new Supporters());
+        event.addListener(MCA.locate("api"), new ApiReloadListener());
     }
 
     @SubscribeEvent
@@ -74,10 +69,6 @@ public final class ClientNeoForge extends ClientProxyAbstractImpl {
     @SubscribeEvent
     public static void onClientSetup(FMLClientSetupEvent event) {
         event.enqueueWork(() -> {
-            // Model predicates
-            ModelPredicatesMCA.setup(ItemProperties::register);
-            // Render layers
-            ItemBlockRenderTypes.setRenderLayer(BlocksMCA.INFERNAL_FLAME, RenderType.cutout());
         });
     }
 

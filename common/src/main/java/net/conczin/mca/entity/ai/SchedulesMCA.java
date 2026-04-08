@@ -2,68 +2,45 @@ package net.conczin.mca.entity.ai;
 
 import net.conczin.mca.Config;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.attribute.EnvironmentAttribute;
+import net.minecraft.world.attribute.EnvironmentAttributes;
 import net.minecraft.world.entity.schedule.Activity;
-import net.minecraft.world.entity.schedule.Schedule;
-import net.minecraft.world.entity.schedule.ScheduleBuilder;
 
 public interface SchedulesMCA {
-    //DEFAULT (500 ticks longer awaken)
-    Schedule DEFAULT = new ScheduleBuilder(new Schedule())
-            .changeActivityAt(10, Activity.IDLE)
-            .changeActivityAt(2000, Activity.WORK)
-            .changeActivityAt(9000, Activity.MEET)
-            .changeActivityAt(11000, Activity.IDLE)
-            .changeActivityAt(12500, Activity.REST)
-            .build();
-
-    // NIGHT DEFAULT (500 ticks longer awaken)
-    Schedule NIGHT_OWL_DEFAULT = new ScheduleBuilder(new Schedule())
-            .changeActivityAt(10, Activity.REST)
-            .changeActivityAt(12500, Activity.IDLE)
-            .changeActivityAt(15000, Activity.WORK)
-            .changeActivityAt(18000, Activity.MEET)
-            .changeActivityAt(19500, Activity.IDLE)
-            .build();
-
-    //DAY GUARD
-    Schedule GUARD = new ScheduleBuilder(new Schedule())
-            .changeActivityAt(10, Activity.WORK)
-            .changeActivityAt(9000, Activity.MEET)
-            .changeActivityAt(11000, Activity.WORK)
-            .changeActivityAt(14000, Activity.IDLE)
-            .changeActivityAt(15000, Activity.REST)
-            .build();
-
-    //NIGHT GUARD
-    Schedule GUARD_NIGHT = new ScheduleBuilder(new Schedule())
-            .changeActivityAt(10, Activity.REST)
-            .changeActivityAt(8000, Activity.IDLE)
-            .changeActivityAt(9000, Activity.MEET)
-            .changeActivityAt(14000, Activity.WORK)
-            .build();
-
-    //Schedule for inn guests
-    Schedule GUESTS = new ScheduleBuilder(new Schedule())
-            .changeActivityAt(10, Activity.IDLE)
-            .changeActivityAt(12500, Activity.REST)
-            .build();
+    // 26.1 moved villager scheduling onto environment attributes. Keep MCA's
+    // previous schedule split points as a compatibility shim for now by
+    // falling back to vanilla villager activity selection.
+    EnvironmentAttribute<Activity> DEFAULT = EnvironmentAttributes.VILLAGER_ACTIVITY;
+    EnvironmentAttribute<Activity> NIGHT_OWL_DEFAULT = EnvironmentAttributes.VILLAGER_ACTIVITY;
+    EnvironmentAttribute<Activity> GUARD = EnvironmentAttributes.VILLAGER_ACTIVITY;
+    EnvironmentAttribute<Activity> GUARD_NIGHT = EnvironmentAttributes.VILLAGER_ACTIVITY;
+    EnvironmentAttribute<Activity> GUESTS = EnvironmentAttributes.VILLAGER_ACTIVITY;
 
     static void bootstrap() {
     }
 
-    static Schedule getTypeSchedule(LivingEntity entity, boolean allowNightOwl, Schedule normalSchedule, Schedule nightSchedule) {
+    static EnvironmentAttribute<Activity> getTypeSchedule(
+            LivingEntity entity,
+            boolean allowNightOwl,
+            EnvironmentAttribute<Activity> normalSchedule,
+            EnvironmentAttribute<Activity> nightSchedule
+    ) {
         return (allowNightOwl && entity.getRandom().nextFloat() < Config.getInstance().nightOwlChance) ? nightSchedule : normalSchedule;
     }
 
-    static Schedule getTypeSchedule(LivingEntity entity, Schedule normalSchedule, Schedule nightSchedule) {
+    static EnvironmentAttribute<Activity> getTypeSchedule(
+            LivingEntity entity,
+            EnvironmentAttribute<Activity> normalSchedule,
+            EnvironmentAttribute<Activity> nightSchedule
+    ) {
         return getTypeSchedule(entity, Config.getInstance().allowAnyNightOwl, normalSchedule, nightSchedule);
     }
 
-    static Schedule getTypeSchedule(LivingEntity entity, boolean allowNightOwl) {
+    static EnvironmentAttribute<Activity> getTypeSchedule(LivingEntity entity, boolean allowNightOwl) {
         return getTypeSchedule(entity, allowNightOwl, SchedulesMCA.DEFAULT, SchedulesMCA.NIGHT_OWL_DEFAULT);
     }
 
-    static Schedule getTypeSchedule(LivingEntity entity) {
+    static EnvironmentAttribute<Activity> getTypeSchedule(LivingEntity entity) {
         return getTypeSchedule(entity, Config.getInstance().allowAnyNightOwl);
     }
 }

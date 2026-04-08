@@ -12,7 +12,6 @@ import net.minecraft.core.SectionPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.LongTag;
-import net.minecraft.nbt.NumericTag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
@@ -36,7 +35,7 @@ public class GraveyardManager extends SavedData {
         tombstones.putAll(NbtHelper.toMap(nbt, TombstoneState::valueOf, v -> {
             CompoundTag vv = (CompoundTag) v;
             Long2ObjectMap<ChunkBase> map = new Long2ObjectOpenHashMap<>();
-            vv.getAllKeys().forEach(key -> {
+            vv.keySet().forEach(key -> {
                 map.put(Long.parseLong(key), new Chunk((ListTag) vv.get(key)));
             });
             return map;
@@ -48,10 +47,9 @@ public class GraveyardManager extends SavedData {
     }
 
     private static long getChunkPos(BlockPos pos) {
-        return ChunkPos.asLong(SectionPos.blockToSectionCoord(pos.getX()), SectionPos.blockToSectionCoord(pos.getZ()));
+        return ChunkPos.pack(SectionPos.blockToSectionCoord(pos.getX()), SectionPos.blockToSectionCoord(pos.getZ()));
     }
 
-    @Override
     public CompoundTag save(CompoundTag nbt, HolderLookup.Provider provider) {
         synchronized (tombstones) {
             tombstones.forEach((state, chunks) -> {
@@ -98,12 +96,12 @@ public class GraveyardManager extends SavedData {
             int minZ = Mth.floor((box.minZ - 2) / 16D);
             int maxZ = Mth.ceil((box.maxZ + 2) / 16D);
 
-            BlockPos.MutableBlockPos mutable = new BlockPos.MutableBlockPos();
+                BlockPos.MutableBlockPos mutable = new BlockPos.MutableBlockPos();
 
-            synchronized (tombstones) {
-                for (int x = minX; x < maxX; x++) {
-                    for (int z = minZ; z < maxZ; z++) {
-                        long l = ChunkPos.asLong(x, z);
+                synchronized (tombstones) {
+                    for (int x = minX; x < maxX; x++) {
+                        for (int z = minZ; z < maxZ; z++) {
+                            long l = ChunkPos.pack(x, z);
 
                         if (includeEmpty) {
                             getChunk(TombstoneState.EMPTY, l, ChunkBase::empty).appendAll(box, mutable, positions);
@@ -127,13 +125,11 @@ public class GraveyardManager extends SavedData {
             return getChunk(state, getChunkPos(pos), ChunkBase::empty).findNearest(pos, mutable).or(() -> {
                 // then we iterate outwards checking surrounding chunks
                 BlockPos center = new BlockPos(SectionPos.blockToSectionCoord(pos.getX()), 0, SectionPos.blockToSectionCoord(pos.getZ()));
-                // luckily BlockPos has a useful utility for this already
                 return BlockPos.withinManhattanStream(center, maxChunkRange, 0, maxChunkRange)
-                        .map(p -> ChunkPos.asLong(p.getX(), p.getZ()))
-                        .map(l -> getChunk(state, l, ChunkBase::empty).findNearest(pos, mutable))
-                        .filter(Optional::isPresent)
-                        .map(Optional::get)
-                        .min(Comparator.comparing(a -> a.distSqr(pos)));
+                        .mapToLong(chunkPos -> ChunkPos.pack(chunkPos.getX(), chunkPos.getZ()))
+                        .mapToObj(chunk -> getChunk(state, chunk, ChunkBase::empty).findNearest(pos, mutable))
+                        .flatMap(Optional::stream)
+                        .min(Comparator.comparingDouble(candidate -> candidate.distSqr(pos)));
             });
         }
     }
@@ -208,7 +204,7 @@ public class GraveyardManager extends SavedData {
         }
 
         Chunk(ListTag list) {
-            list.forEach(l -> tombstones.add(((NumericTag) l).getAsLong()));
+            list.forEach(l -> tombstones.add(l.asLong().orElse(0L)));
         }
 
         @Override
@@ -264,3 +260,4 @@ public class GraveyardManager extends SavedData {
         }
     }
 }
+

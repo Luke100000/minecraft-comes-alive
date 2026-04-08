@@ -4,12 +4,13 @@ import net.conczin.mca.MCA;
 import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.resources.Names;
 import net.conczin.mca.util.WorldUtils;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.MobSpawnType;
-import net.minecraft.world.entity.npc.VillagerData;
-import net.minecraft.world.entity.npc.VillagerProfession;
-import net.minecraft.world.entity.npc.VillagerType;
+import net.minecraft.world.entity.EntitySpawnReason;
+import net.minecraft.world.entity.npc.villager.VillagerData;
+import net.minecraft.world.entity.npc.villager.VillagerProfession;
+import net.minecraft.world.entity.npc.villager.VillagerType;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 
@@ -75,28 +76,32 @@ public class ZombieVillagerFactory {
         return this;
     }
 
-    public ZombieVillagerEntityMCA spawn(MobSpawnType reason) {
+    public ZombieVillagerEntityMCA spawn(EntitySpawnReason reason) {
         if (position.isEmpty()) {
             MCA.LOGGER.info("Attempted to spawn villager without a position being set!");
         }
 
-        ZombieVillagerEntityMCA build = build();
+        ZombieVillagerEntityMCA build = build(reason);
         WorldUtils.spawnEntity(world, build, reason);
         return build;
     }
 
     public ZombieVillagerEntityMCA build() {
+        return build(EntitySpawnReason.COMMAND);
+    }
+
+    public ZombieVillagerEntityMCA build(EntitySpawnReason reason) {
         Gender gender = this.gender.orElseGet(Gender::getRandom);
-        ZombieVillagerEntityMCA zombie = gender.getZombieType().create(world);
+        ZombieVillagerEntityMCA zombie = gender.getZombieType().create(world, reason);
         assert zombie != null;
         zombie.getGenetics().setGender(gender);
         zombie.setCustomName(Component.literal(name.orElseGet(() -> Names.pickCitizenName(gender, zombie))));
-        position.ifPresent(pos -> zombie.absMoveTo(pos.x(), pos.y(), pos.z()));
+        position.ifPresent(pos -> zombie.snapTo(pos.x(), pos.y(), pos.z()));
         VillagerData data = zombie.getVillagerData();
         zombie.setVillagerData(new VillagerData(
-                        type.orElseGet(data::getType),
-                        profession.orElse(VillagerProfession.NONE),
-                        level.orElseGet(data::getLevel)
+                        type.map(BuiltInRegistries.VILLAGER_TYPE::wrapAsHolder).orElseGet(data::type),
+                        profession.map(BuiltInRegistries.VILLAGER_PROFESSION::wrapAsHolder).orElseGet(data::profession),
+                        level.orElseGet(data::level)
                 )
         );
         return zombie;

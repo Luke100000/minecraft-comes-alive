@@ -5,8 +5,9 @@ import net.conczin.mca.MCA;
 import net.conczin.mca.network.Network;
 import net.conczin.mca.network.c2s.FamilyTreeUUIDLookup;
 import net.conczin.mca.util.compat.ButtonWidget;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.network.chat.Component;
@@ -66,8 +67,8 @@ public class FamilyTreeSearchScreen extends Screen {
     }
 
     @Override
-    public void render(GuiGraphics context, int mouseX, int mouseY, float delta) {
-        super.render(context, mouseX, mouseY, delta);
+    public void extractRenderState(GuiGraphicsExtractor context, int mouseX, int mouseY, float delta) {
+        super.extractRenderState(context, mouseX, mouseY, delta);
 
         assert minecraft != null;
         this.mouseX = (int) (minecraft.mouseHandler.xpos() * width / minecraft.getWindow().getWidth());
@@ -77,10 +78,10 @@ public class FamilyTreeSearchScreen extends Screen {
 
         renderVillagers(context);
 
-        context.drawCenteredString(font, Component.translatable("gui.title.family_tree"), width / 2, height / 2 - 100, 16777215);
+        context.centeredText(font, Component.translatable("gui.title.family_tree"), width / 2, height / 2 - 100, 16777215);
     }
 
-    private void renderVillagers(GuiGraphics context) {
+    private void renderVillagers(GuiGraphicsExtractor context) {
         int maxPages = (int) Math.ceil(list.size() / 9.0);
         buttonPage.setMessage(Component.literal((pageNumber + 1) + "/" + maxPages));
 
@@ -103,7 +104,7 @@ public class FamilyTreeSearchScreen extends Screen {
                     text = Component.translatable("gui.family_tree.child_of_2", entry.father, entry.mother);
                 }
 
-                context.drawCenteredString(font, text, width / 2, y, hover ? 0xFFD7D784 : 0xFFFFFFFF);
+                context.centeredText(font, text, width / 2, y, hover ? 0xFFD7D784 : 0xFFFFFFFF);
                 if (hover) {
                     selectedVillager = entry.uuid;
                 }
@@ -129,12 +130,12 @@ public class FamilyTreeSearchScreen extends Screen {
     }
 
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+    public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
         if (selectedVillager != null) {
             selectVillager(currentVillagerName, selectedVillager);
         }
 
-        return super.mouseClicked(mouseX, mouseY, button);
+        return super.mouseClicked(event, doubleClick);
     }
 
     void selectVillager(String name, UUID villager) {

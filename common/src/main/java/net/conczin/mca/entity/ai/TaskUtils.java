@@ -21,8 +21,8 @@ public interface TaskUtils {
      * @return Integer representing the air block above the first non-air block given the provided ordered triples.
      */
     static int getSpawnSafeTopLevel(Level world, int x, int y, int z) {
-        BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos(x, Math.min(y, world.getMaxBuildHeight()), z);
-        while (world.isEmptyBlock(pos.move(Direction.DOWN)) && pos.getY() > world.getMinBuildHeight()) {
+        BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos(x, Math.min(y, world.getMaxY()), z);
+        while (world.isEmptyBlock(pos.move(Direction.DOWN)) && pos.getY() > world.getMinY()) {
         }
 
         return pos.getY() + 1;

@@ -1,6 +1,6 @@
 package net.conczin.mca;
 
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
@@ -24,8 +24,8 @@ public final class MCA {
     public static PlatformHelper platformHelper = new PlatformHelper();
     private static MinecraftServer server;
 
-    public static ResourceLocation locate(String id) {
-        return ResourceLocation.fromNamespaceAndPath(MOD_ID, id);
+    public static Identifier locate(String id) {
+        return Identifier.fromNamespaceAndPath(MOD_ID, id);
     }
 
     public static boolean isBlankString(String string) {
@@ -41,7 +41,7 @@ public final class MCA {
     }
 
     public interface RegisterHelper<T> {
-        void register(ResourceLocation name, T value);
+        void register(Identifier name, T value);
     }
 
     public interface AttributeRegisterHelper {

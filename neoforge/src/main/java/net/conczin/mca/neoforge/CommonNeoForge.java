@@ -15,9 +15,11 @@ import net.conczin.mca.server.ServerInteractionManager;
 import net.conczin.mca.server.command.AdminCommand;
 import net.conczin.mca.server.command.Command;
 import net.conczin.mca.server.world.data.VillageManager;
+import net.conczin.mca.util.network.datasync.MCAEntityDataSerializers;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
+import net.minecraft.network.syncher.EntityDataSerializer;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.codec.StreamCodec;
@@ -30,7 +32,8 @@ import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.fml.common.Mod;
-import net.neoforged.neoforge.event.AddReloadListenerEvent;
+import net.neoforged.neoforge.client.network.ClientPacketDistributor;
+import net.neoforged.neoforge.event.AddServerReloadListenersEvent;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
 import net.neoforged.neoforge.event.entity.EntityAttributeCreationEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
@@ -39,6 +42,7 @@ import net.neoforged.neoforge.event.tick.ServerTickEvent;
 import net.neoforged.neoforge.network.PacketDistributor;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 import net.neoforged.neoforge.network.registration.PayloadRegistrar;
+import net.neoforged.neoforge.registries.NeoForgeRegistries;
 import net.neoforged.neoforge.registries.RegisterEvent;
 
 import java.util.function.Consumer;
@@ -56,6 +60,13 @@ public final class CommonNeoForge {
 
     @SubscribeEvent
     public static void register(RegisterEvent event) {
+        if (event.getRegistryKey() == NeoForgeRegistries.Keys.ENTITY_DATA_SERIALIZERS) {
+            event.register(NeoForgeRegistries.Keys.ENTITY_DATA_SERIALIZERS, helper -> {
+                helper.register(MCAEntityDataSerializers.COMPOUND_TAG_ID, MCAEntityDataSerializers.COMPOUND_TAG);
+                helper.register(MCAEntityDataSerializers.OPTIONAL_UUID_ID, MCAEntityDataSerializers.OPTIONAL_UUID);
+            });
+        }
+
         registerHelper(event, BuiltInRegistries.ITEM, ItemsMCA::registerItems);
         registerHelper(event, BuiltInRegistries.BLOCK, BlocksMCA::registerBlocks);
         registerHelper(event, BuiltInRegistries.SOUND_EVENT, SoundsMCA::registerSounds);
@@ -72,7 +83,7 @@ public final class CommonNeoForge {
             event.register(Registries.BLOCK_ENTITY_TYPE, helper ->
                     BlockEntityTypesMCA.registerBlockEntityTypes((name, factory, block) -> {
                         //noinspection DataFlowIssue
-                        BlockEntityType<?> build = BlockEntityType.Builder.of(factory::create, block).build(null);
+                        BlockEntityType<?> build = new BlockEntityType<>(factory::create, block);
                         helper.register(name, build);
                         return build;
                     }));
@@ -93,15 +104,15 @@ public final class CommonNeoForge {
     }
 
     @SubscribeEvent
-    public static void onAddReloadListener(AddReloadListenerEvent event) {
-        event.addListener(new ApiReloadListener());
-        event.addListener(new ClothingList());
-        event.addListener(new HairList());
-        event.addListener(new GiftLoader());
-        event.addListener(new Dialogues());
-        event.addListener(new Tasks());
-        event.addListener(new Names());
-        event.addListener(new BuildingTypes());
+    public static void onAddReloadListener(AddServerReloadListenersEvent event) {
+        event.addListener(MCA.locate("api"), new ApiReloadListener());
+        event.addListener(MCA.locate("clothing"), new ClothingList());
+        event.addListener(MCA.locate("hair"), new HairList());
+        event.addListener(MCA.locate("gifts"), new GiftLoader());
+        event.addListener(MCA.locate("dialogues"), new Dialogues());
+        event.addListener(MCA.locate("tasks"), new Tasks());
+        event.addListener(MCA.locate("names"), new Names());
+        event.addListener(MCA.locate("building_types"), new BuildingTypes());
     }
 
     @SubscribeEvent
@@ -139,7 +150,7 @@ public final class CommonNeoForge {
     public static void registerNetwork(final RegisterPayloadHandlersEvent event) {
         MessagesMCA.register(new NeoForgeRegistrar(event.registrar("1")));
         Network.registerSender(PacketDistributor::sendToPlayer);
-        Network.registerClientSender(PacketDistributor::sendToServer);
+        Network.registerClientSender(ClientPacketDistributor::sendToServer);
     }
 
     static class NeoForgeRegistrar implements Network.Registrar {

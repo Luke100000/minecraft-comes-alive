@@ -63,33 +63,29 @@ public class Village implements Iterable<Building> {
     }
 
     public Village(CompoundTag v, ServerLevel world) {
-        id = v.getInt("id");
-        name = v.getString("name");
-        taxes = v.getFloat("taxesFloat");
-        beds = v.getInt("beds");
-        reputation = NbtHelper.toMap(v.getCompound("reputation"), UUID::fromString, i ->
-                NbtHelper.toMap((CompoundTag) i, UUID::fromString, i2 -> ((IntTag) i2).getAsInt())
+        id = v.getInt("id").orElse(0);
+        name = v.getString("name").orElse(name);
+        taxes = v.getFloat("taxesFloat").orElse(0.0f);
+        beds = v.getInt("beds").orElse(0);
+        reputation = NbtHelper.toMap(v.getCompound("reputation").orElseGet(CompoundTag::new), UUID::fromString, i ->
+                NbtHelper.toMap((CompoundTag) i, UUID::fromString, i2 -> i2.asInt().orElse(0))
         );
-        residentNames = NbtHelper.toMap(v.getCompound("residentNames"), UUID::fromString, Tag::getAsString);
-        residentHomes = NbtHelper.toMap(v.getCompound("residentHomes"), UUID::fromString, i -> ((LongTag) i).getAsLong());
+        residentNames = NbtHelper.toMap(v.getCompound("residentNames").orElseGet(CompoundTag::new), UUID::fromString, i -> i.asString().orElse(""));
+        residentHomes = NbtHelper.toMap(v.getCompound("residentHomes").orElseGet(CompoundTag::new), UUID::fromString, i -> i.asLong().orElse(0L));
 
         if (v.contains("populationThresholdFloat")) {
-            populationThreshold = v.getFloat("populationThresholdFloat");
+            populationThreshold = v.getFloat("populationThresholdFloat").orElse(populationThreshold);
         }
         if (v.contains("marriageThresholdFloat")) {
-            marriageThreshold = v.getFloat("marriageThresholdFloat");
+            marriageThreshold = v.getFloat("marriageThresholdFloat").orElse(marriageThreshold);
         }
         this.world = world;
 
-        if (v.contains("autoScan")) {
-            autoScan = v.getBoolean("autoScan");
-        } else {
-            autoScan = true;
-        }
+        autoScan = v.getBoolean("autoScan").orElse(true);
 
-        ListTag b = v.getList("buildings", Tag.TAG_COMPOUND);
+        ListTag b = v.getList("buildings").orElseGet(ListTag::new);
         for (int i = 0; i < b.size(); i++) {
-            Building building = new Building(b.getCompound(i));
+            Building building = new Building(b.getCompound(i).orElseGet(CompoundTag::new));
 
             if (world == null || BuildingTypes.getInstance().getBuildingTypes().containsKey(building.getType())) {
                 buildings.put(building.getId(), building);
@@ -311,12 +307,12 @@ public class Village implements Iterable<Building> {
         world.players().stream().filter(p -> PlayerSaveData.get(p).getLastSeenVillageId().orElse(-2) == getId()
                                              || suitor.getVillagerBrain().getMemoriesForPlayer(p).getHearts() > Config.getInstance().heartsToBeConsideredAsFriend
                                              || mate.getVillagerBrain().getMemoriesForPlayer(p).getHearts() > Config.getInstance().heartsToBeConsideredAsFriend)
-                .forEach(player -> player.displayClientMessage(Component.translatable(event, suitor.getName(), mate.getName()), !Config.getInstance().showNotificationsAsChat));
+                .forEach(player -> player.sendSystemMessage(Component.translatable(event, suitor.getName(), mate.getName())));
     }
 
     public void broadCastMessage(ServerLevel world, String event, String targetName) {
         world.players().stream().filter(p -> PlayerSaveData.get(p).getLastSeenVillageId().orElse(-2) == getId())
-                .forEach(player -> player.displayClientMessage(Component.translatable(event, targetName), !Config.getInstance().showNotificationsAsChat));
+                .forEach(player -> player.sendSystemMessage(Component.translatable(event, targetName)));
     }
 
     public void markDirty() {

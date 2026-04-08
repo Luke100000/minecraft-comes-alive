@@ -1,14 +1,14 @@
 package net.conczin.mca.registry;
 
 import net.conczin.mca.MCA;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.sounds.SoundEvent;
 
 import java.util.HashMap;
 import java.util.Map;
 
 public interface SoundsMCA {
-    Map<ResourceLocation, SoundEvent> SOUNDS = new HashMap<>();
+    Map<Identifier, SoundEvent> SOUNDS = new HashMap<>();
 
     SoundEvent REAPER_SCYTHE_OUT = register("reaper.scythe_out");
     SoundEvent REAPER_SCYTHE_SWING = register("reaper.scythe_swing");
@@ -60,7 +60,7 @@ public interface SoundsMCA {
     SoundEvent SILENT = register("silent");
 
     static SoundEvent register(String sound) {
-        ResourceLocation id = MCA.locate(sound);
+        Identifier id = MCA.locate(sound);
         SoundEvent event = SoundEvent.createVariableRangeEvent(id);
         SOUNDS.put(id, event);
         return event;

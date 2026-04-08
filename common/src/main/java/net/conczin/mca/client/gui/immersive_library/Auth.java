@@ -3,7 +3,7 @@ package net.conczin.mca.client.gui.immersive_library;
 import com.google.gson.JsonObject;
 import net.conczin.mca.Config;
 import net.conczin.mca.MCA;
-import net.minecraft.Util;
+import net.minecraft.util.Util;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;

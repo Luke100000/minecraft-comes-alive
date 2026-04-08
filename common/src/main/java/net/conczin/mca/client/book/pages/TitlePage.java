@@ -3,7 +3,7 @@ package net.conczin.mca.client.book.pages;
 import net.conczin.mca.client.gui.ExtendedBookScreen;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.FormattedCharSequence;
 
@@ -35,17 +35,17 @@ public class TitlePage extends Page {
         this.subtitle = subtitle;
     }
 
-    private static void drawCenteredText(ExtendedBookScreen screen, GuiGraphics context, Font textRenderer, Component text, int centerX, int y, int color) {
+    private static void drawCenteredText(ExtendedBookScreen screen, GuiGraphicsExtractor context, Font textRenderer, Component text, int centerX, int y, int color) {
         FormattedCharSequence orderedText = text.getVisualOrderText();
         drawCenteredText(screen, context, textRenderer, orderedText, centerX, y, color);
     }
 
-    private static void drawCenteredText(ExtendedBookScreen screen, GuiGraphics context, Font textRenderer, FormattedCharSequence text, int centerX, int y, int color) {
-        context.drawString(textRenderer, text, (centerX - textRenderer.width(text) / 2), y, color, screen.getBook().hasTextShadow());
+    private static void drawCenteredText(ExtendedBookScreen screen, GuiGraphicsExtractor context, Font textRenderer, FormattedCharSequence text, int centerX, int y, int color) {
+        context.text(textRenderer, text, (centerX - textRenderer.width(text) / 2), y, color, screen.getBook().hasTextShadow());
     }
 
     @Override
-    public void render(ExtendedBookScreen screen, GuiGraphics context, int mouseX, int mouseY, float delta) {
+    public void render(ExtendedBookScreen screen, GuiGraphicsExtractor context, int mouseX, int mouseY, float delta) {
         List<FormattedCharSequence> texts = screen.getTextRenderer().split(title, 114);
         int y = 80 - 5 * texts.size();
         for (FormattedCharSequence t : texts) {

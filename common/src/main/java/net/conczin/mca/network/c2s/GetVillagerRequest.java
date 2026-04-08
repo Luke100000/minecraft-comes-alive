@@ -14,8 +14,10 @@ import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.util.ProblemReporter;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.level.storage.TagValueOutput;
 
 import java.util.Optional;
 import java.util.UUID;
@@ -41,8 +43,9 @@ public record GetVillagerRequest(UUID id) implements HandleablePayload {
         if (e instanceof ServerPlayer serverPlayer) {
             data = PlayerSaveData.get(serverPlayer).getEntityData();
         } else if (e instanceof LivingEntity) {
-            data = new CompoundTag();
-            e.save(data);
+            TagValueOutput output = TagValueOutput.createWithContext(ProblemReporter.DISCARDING, e.registryAccess());
+            e.save(output);
+            data = output.buildResult();
         } else {
             return null;
         }
@@ -59,7 +62,7 @@ public record GetVillagerRequest(UUID id) implements HandleablePayload {
 
     @Override
     public void handleServer(ServerPlayer player) {
-        Entity e = player.serverLevel().getEntity(id);
+        Entity e = player.level().getEntity(id);
         CompoundTag villagerData = getVillagerData(e);
         if (villagerData != null) {
             Network.sendToPlayer(new GetVillagerResponse(villagerData), player);

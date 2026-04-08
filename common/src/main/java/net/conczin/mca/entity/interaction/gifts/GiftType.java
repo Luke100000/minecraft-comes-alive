@@ -8,7 +8,7 @@ import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.resources.data.Analysis;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.tags.TagKey;
 import net.minecraft.util.GsonHelper;
@@ -22,7 +22,7 @@ import java.util.stream.Stream;
 
 public class GiftType {
     static final List<GiftType> REGISTRY = new ArrayList<>();
-    private final ResourceLocation id;
+    private final Identifier id;
     private final List<GiftPredicate> conditions;
     private final Map<Item, Integer> items;
     private final Map<TagKey<Item>, Integer> tags;
@@ -32,7 +32,7 @@ public class GiftType {
     private int good;
     private int better;
 
-    public GiftType(Item item, int satisfaction, ResourceLocation extendFrom) {
+    public GiftType(Item item, int satisfaction, Identifier extendFrom) {
         this(item, satisfaction, getDefaultDialogues());
         Optional<GiftType> type = getGiftType(extendFrom);
         type.ifPresent(this::extendFrom);
@@ -48,7 +48,7 @@ public class GiftType {
                 responses
         );
     }
-    public GiftType(ResourceLocation id, int priority, List<GiftPredicate> conditions, Map<Item, Integer> items, Map<TagKey<Item>, Integer> tags, int fail, int good, int better, Map<Response, String> responses) {
+    public GiftType(Identifier id, int priority, List<GiftPredicate> conditions, Map<Item, Integer> items, Map<TagKey<Item>, Integer> tags, int fail, int good, int better, Map<Response, String> responses) {
         this.id = id;
         this.priority = priority;
         this.conditions = conditions;
@@ -60,7 +60,7 @@ public class GiftType {
         this.responses = responses;
     }
 
-    public static GiftType fromJson(ResourceLocation id, JsonObject json) {
+    public static GiftType fromJson(Identifier id, JsonObject json) {
         List<GiftPredicate> conditions = new ArrayList<>();
         GsonHelper.getAsJsonArray(json, "conditions", new JsonArray()).forEach(element -> {
             conditions.add(GiftPredicate.fromJson(GsonHelper.convertToJsonObject(element, "condition")));
@@ -72,11 +72,11 @@ public class GiftType {
             String string = element.getKey();
             Integer satisfaction = element.getValue().getAsInt();
             if (string.charAt(0) == '#') {
-                ResourceLocation identifier = ResourceLocation.parse(string.substring(1));
+                Identifier identifier = Identifier.parse(string.substring(1));
                 TagKey<Item> tag = TagKey.create(Registries.ITEM, identifier);
                 tags.put(tag, satisfaction);
             } else {
-                ResourceLocation identifier = ResourceLocation.parse(string);
+                Identifier identifier = Identifier.parse(string);
                 Optional<Item> item = BuiltInRegistries.ITEM.getOptional(identifier);
                 if (item.isPresent()) {
                     items.put(item.get(), satisfaction);
@@ -126,7 +126,7 @@ public class GiftType {
         }
     }
 
-    public static Optional<GiftType> getGiftType(ResourceLocation id) {
+    public static Optional<GiftType> getGiftType(Identifier id) {
         return REGISTRY.stream().filter(p -> p.id.equals(id)).findFirst();
     }
 
@@ -134,7 +134,7 @@ public class GiftType {
         return Arrays.stream(Response.values()).collect(Collectors.toMap(r -> r, Response::getDefaultDialogue));
     }
 
-    public ResourceLocation getId() {
+    public Identifier getId() {
         return id;
     }
 

@@ -2,12 +2,13 @@ package net.conczin.mca.client.gui;
 
 import net.conczin.mca.client.resources.Icon;
 import net.conczin.mca.entity.interaction.Constraint;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 import java.util.*;
 
@@ -40,8 +41,8 @@ public abstract class AbstractDynamicScreen extends Screen {
     }
 
     @Override
-    public void render(GuiGraphics context, int mouseX, int mouseY, float delta) {
-        super.render(context, mouseX, mouseY, delta);
+    public void extractRenderState(GuiGraphicsExtractor context, int mouseX, int mouseY, float delta) {
+        super.extractRenderState(context, mouseX, mouseY, delta);
         this.mouseX = mouseX;
         this.mouseY = mouseY;
     }
@@ -88,19 +89,19 @@ public abstract class AbstractDynamicScreen extends Screen {
         });
     }
 
-    protected void drawIcon(GuiGraphics context, ResourceLocation texture, String key) {
+    protected void drawIcon(GuiGraphicsExtractor context, Identifier texture, String key) {
         Icon icon = MCAScreens.getInstance().getIcon(key);
-        context.blit(texture, (int) (icon.x() / iconScale), (int) (icon.y() / iconScale), icon.u(), icon.v(), 16, 16);
+        context.blit(RenderPipelines.GUI_TEXTURED, texture, (int) (icon.x() / iconScale), (int) (icon.y() / iconScale), icon.u(), icon.v(), 16, 16, 256, 256);
     }
 
-    protected void drawHoveringIconText(GuiGraphics context, Component text, String key) {
+    protected void drawHoveringIconText(GuiGraphicsExtractor context, Component text, String key) {
         Icon icon = MCAScreens.getInstance().getIcon(key);
-        context.renderTooltip(font, text, icon.x() + 16, icon.y() + 20);
+        context.setTooltipForNextFrame(font, text, icon.x() + 16, icon.y() + 20);
     }
 
-    protected void drawHoveringIconText(GuiGraphics context, List<Component> text, String key) {
+    protected void drawHoveringIconText(GuiGraphicsExtractor context, List<Component> text, String key) {
         Icon icon = MCAScreens.getInstance().getIcon(key);
-        context.renderComponentTooltip(font, text, icon.x() + 16, icon.y() + 20);
+        context.setComponentTooltipForNextFrame(font, text, icon.x() + 16, icon.y() + 20);
     }
 
     //checks if the mouse hovers over a specified button
@@ -167,6 +168,12 @@ public abstract class AbstractDynamicScreen extends Screen {
 
         public MCAButton getApiButton() {
             return apiButton;
+        }
+
+        @Override
+        protected void extractContents(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float a) {
+            this.extractDefaultSprite(graphics);
+            this.extractDefaultLabel(graphics.textRendererForWidget(this, GuiGraphicsExtractor.HoveredTextEffects.NONE));
         }
     }
 }

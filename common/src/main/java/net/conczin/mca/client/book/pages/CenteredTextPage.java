@@ -2,7 +2,7 @@ package net.conczin.mca.client.book.pages;
 
 import net.conczin.mca.client.gui.ExtendedBookScreen;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.FormattedCharSequence;
 
@@ -16,7 +16,7 @@ public class CenteredTextPage extends TextPage {
     }
 
     @Override
-    public void render(ExtendedBookScreen screen, GuiGraphics context, int mouseX, int mouseY, float delta) {
+    public void render(ExtendedBookScreen screen, GuiGraphicsExtractor context, int mouseX, int mouseY, float delta) {
         //prepare page
         if (content != null) {
             Font textRenderer = screen.getTextRenderer();
@@ -27,7 +27,7 @@ public class CenteredTextPage extends TextPage {
             for (int m = 0; m < l; ++m) {
                 FormattedCharSequence orderedText = getCachedPage(screen).get(m);
                 int x = i + 36;
-                context.drawString(textRenderer, orderedText, x + 114 / 2 - textRenderer.width(orderedText) / 2, (32 + (m + 7 - (l / 2)) * 9), 0, screen.getBook().hasTextShadow());
+                context.text(textRenderer, orderedText, x + 114 / 2 - textRenderer.width(orderedText) / 2, (32 + (m + 7 - (l / 2)) * 9), 0, screen.getBook().hasTextShadow());
             }
         }
     }

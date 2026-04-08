@@ -28,7 +28,7 @@ public interface Messenger extends EntityWrapper {
     TargetingConditions CAN_RECEIVE = TargetingConditions.forNonCombat();
 
     static void sendEventMessage(Level world, Component message) {
-        world.players().forEach(player -> player.displayClientMessage(message, true));
+        world.players().forEach(player -> player.sendSystemMessage(message));
     }
 
     default boolean isSpeechImpaired() {
@@ -91,14 +91,14 @@ public interface Messenger extends EntityWrapper {
     }
 
     default void sendChatToAllAround(MutableComponent phrase) {
-        for (Player player : asEntity().level().getNearbyPlayers(CAN_RECEIVE, asEntity(), asEntity().getBoundingBox().inflate(20))) {
+        for (Player player : asEntity().level().getEntitiesOfClass(Player.class, asEntity().getBoundingBox().inflate(20))) {
             float dist = player.distanceTo(asEntity());
             sendChatMessage(phrase.withStyle(dist < 10 ? ChatFormatting.WHITE : ChatFormatting.GRAY), player);
         }
     }
 
     default void sendChatToAllAround(String phrase, Object... params) {
-        for (Player player : asEntity().level().getNearbyPlayers(CAN_RECEIVE, asEntity(), asEntity().getBoundingBox().inflate(20))) {
+        for (Player player : asEntity().level().getEntitiesOfClass(Player.class, asEntity().getBoundingBox().inflate(20))) {
             float dist = player.distanceTo(asEntity());
             sendChatMessage(getTranslatable(player, phrase, params).withStyle(dist < 10 ? ChatFormatting.WHITE : ChatFormatting.GRAY), player);
         }
@@ -138,7 +138,7 @@ public interface Messenger extends EntityWrapper {
     }
 
     default void sendEventMessage(Component message, Player receiver) {
-        receiver.displayClientMessage(message, true);
+        receiver.sendSystemMessage(message);
     }
 
     default void sendEventMessage(Component message) {

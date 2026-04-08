@@ -1,24 +1,18 @@
 {
-  "type": "minecraft:crafting_shaped",
-  "category": "misc",
-  "key": {
-    "C": {
-      "item": "minecraft:pink_carpet"
-    },
-    "F": {
-      "item": "minecraft:spruce_fence"
-    },
-    "P": {
-      "item": "minecraft:spruce_planks"
-    }
-  },
-  "pattern": [
-    "F F",
-    "FCF",
-    "PPP"
-  ],
-  "result": {
-    "id": "mca:pink_spruce_crib"
-  },
-  "show_notification": true
+    "type":  "minecraft:crafting_shaped",
+    "category":  "misc",
+    "key":  {
+                "C":  "minecraft:pink_carpet",
+                "F":  "minecraft:spruce_fence",
+                "P":  "minecraft:spruce_planks"
+            },
+    "pattern":  [
+                    "F F",
+                    "FCF",
+                    "PPP"
+                ],
+    "result":  {
+                   "id":  "mca:pink_spruce_crib"
+               },
+    "show_notification":  true
 }

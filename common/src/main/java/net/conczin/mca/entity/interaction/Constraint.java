@@ -14,7 +14,7 @@ import net.conczin.mca.server.world.data.Village;
 import net.conczin.mca.server.world.data.VillageManager;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.entity.npc.VillagerProfession;
+import net.minecraft.world.entity.npc.villager.VillagerProfession;
 
 import java.util.*;
 import java.util.function.BiPredicate;
@@ -53,17 +53,17 @@ public enum Constraint implements BiPredicate<VillagerLike<?>, ServerPlayer> {
     PARENT("parent", Relationship.IS_KID.asConstraint()),
     NOT_PARENT("!parent", Relationship.IS_KID.negate().asConstraint()),
 
-    CLERIC("cleric", (villager, player) -> villager.getVillagerData().getProfession() == VillagerProfession.CLERIC),
-    NOT_CLERIC("!cleric", (villager, player) -> villager.getVillagerData().getProfession() != VillagerProfession.CLERIC),
+    CLERIC("cleric", (villager, player) -> villager.getVillagerData().profession().is(VillagerProfession.CLERIC)),
+    NOT_CLERIC("!cleric", (villager, player) -> !villager.getVillagerData().profession().is(VillagerProfession.CLERIC)),
 
-    ADVENTURER("adventurer", (villager, player) -> villager.getVillagerData().getProfession() == ProfessionsMCA.ADVENTURER),
-    NOT_ADVENTURER("!adventurer", (villager, player) -> villager.getVillagerData().getProfession() != ProfessionsMCA.ADVENTURER),
+    ADVENTURER("adventurer", (villager, player) -> villager.getVillagerData().profession().value() == ProfessionsMCA.ADVENTURER),
+    NOT_ADVENTURER("!adventurer", (villager, player) -> villager.getVillagerData().profession().value() != ProfessionsMCA.ADVENTURER),
 
-    MERCENARY("mercenary", (villager, player) -> villager.getVillagerData().getProfession() == ProfessionsMCA.MERCENARY),
-    NOT_MERCENARY("!mercenary", (villager, player) -> villager.getVillagerData().getProfession() != ProfessionsMCA.MERCENARY),
+    MERCENARY("mercenary", (villager, player) -> villager.getVillagerData().profession().value() == ProfessionsMCA.MERCENARY),
+    NOT_MERCENARY("!mercenary", (villager, player) -> villager.getVillagerData().profession().value() != ProfessionsMCA.MERCENARY),
 
-    OUTLAWED("outlawed", (villager, player) -> villager.getVillagerData().getProfession() == ProfessionsMCA.OUTLAW),
-    NOT_OUTLAWED("!outlawed", (villager, player) -> villager.getVillagerData().getProfession() != ProfessionsMCA.OUTLAW),
+    OUTLAWED("outlawed", (villager, player) -> villager.getVillagerData().profession().value() == ProfessionsMCA.OUTLAW),
+    NOT_OUTLAWED("!outlawed", (villager, player) -> villager.getVillagerData().profession().value() != ProfessionsMCA.OUTLAW),
 
     TRADER("trader", (villager, player) -> villager.canTradeWithProfession()),
     NOT_TRADER("!trader", (villager, player) -> !villager.canTradeWithProfession()),

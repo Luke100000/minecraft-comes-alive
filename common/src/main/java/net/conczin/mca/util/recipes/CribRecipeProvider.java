@@ -2,19 +2,24 @@ package net.conczin.mca.util.recipes;
 
 import net.conczin.mca.entity.CribWoodType;
 import net.conczin.mca.registry.ItemsMCA;
+import net.minecraft.core.HolderGetter;
+import net.minecraft.core.HolderLookup;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.data.recipes.RecipeCategory;
 import net.minecraft.data.recipes.RecipeOutput;
 import net.minecraft.data.recipes.ShapedRecipeBuilder;
 import net.minecraft.world.item.DyeColor;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.level.ItemLike;
 import net.minecraft.world.level.block.Blocks;
 
 // TODO Forge, and code duplication
 public class CribRecipeProvider {
-    public static void generate(RecipeOutput recipeOutput) {
+    public static void generate(RecipeOutput recipeOutput, HolderLookup.Provider registries) {
+        HolderGetter<Item> items = registries.lookupOrThrow(Registries.ITEM);
         for (CribWoodType wood : CribWoodType.values()) {
             for (DyeColor color : DyeColor.values()) {
-                ShapedRecipeBuilder.shaped(RecipeCategory.DECORATIONS, ItemsMCA.CRIBS.stream().filter(c -> {
+                ShapedRecipeBuilder.shaped(items, RecipeCategory.DECORATIONS, ItemsMCA.CRIBS.stream().filter(c -> {
                             return c.getColor() == color && c.getWood() == wood;
                         }).findFirst().get(), 1)
                         .define('F', fenceFromWoodType(wood))

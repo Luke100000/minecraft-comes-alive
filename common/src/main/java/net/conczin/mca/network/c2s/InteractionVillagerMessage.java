@@ -23,7 +23,7 @@ public record InteractionVillagerMessage(String command, UUID villagerUUID) impl
 
     @Override
     public void handleServer(ServerPlayer player) {
-        Entity v = player.serverLevel().getEntity(villagerUUID);
+        Entity v = player.level().getEntity(villagerUUID);
         if (v instanceof VillagerLike<?> villager && villager.getInteractions().handle(player, command)) {
             villager.getInteractions().stopInteracting();
         }

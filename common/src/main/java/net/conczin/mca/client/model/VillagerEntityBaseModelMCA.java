@@ -1,9 +1,8 @@
 package net.conczin.mca.client.model;
 
 import com.google.common.collect.ImmutableList;
-import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.conczin.mca.Config;
+import net.conczin.mca.client.render.VillagerRenderState;
 import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.entity.ai.relationship.AgeState;
 import net.conczin.mca.entity.ai.relationship.VillagerDimensions;
@@ -14,15 +13,15 @@ import net.minecraft.client.model.geom.builders.CubeDeformation;
 import net.minecraft.client.model.geom.builders.CubeListBuilder;
 import net.minecraft.client.model.geom.builders.MeshDefinition;
 import net.minecraft.client.model.geom.builders.PartDefinition;
-import net.minecraft.world.entity.LivingEntity;
 
-public class VillagerEntityBaseModelMCA<T extends LivingEntity & VillagerLike<T>> extends HumanoidModel<T> implements CommonVillagerModel<T> {
+public class VillagerEntityBaseModelMCA extends HumanoidModel<VillagerRenderState> implements CommonVillagerModel<VillagerRenderState> {
     protected static final String BREASTS = "breasts";
 
     public final ModelPart breasts;
 
     final VillagerDimensions.Mutable dimensions = new VillagerDimensions.Mutable(AgeState.ADULT);
     float breastSize;
+    private RenderMask renderMask = RenderMask.FULL;
 
     public VillagerEntityBaseModelMCA(ModelPart root) {
         super(root);
@@ -47,46 +46,17 @@ public class VillagerEntityBaseModelMCA<T extends LivingEntity & VillagerLike<T>
     }
 
     @Override
-    protected Iterable<ModelPart> headParts() {
-        return ImmutableList.of(head, hat);
-    }
+    public void setupAnim(VillagerRenderState state) {
+        super.setupAnim(state);
 
-    @Override
-    protected Iterable<ModelPart> bodyParts() {
-        return ImmutableList.of(body, rightArm, leftArm, rightLeg, leftLeg);
-    }
-
-    @Override
-    public void prepareMobModel(T entity, float limbAngle, float limbDistance, float tickDelta) {
-        super.prepareMobModel(entity, limbDistance, limbAngle, tickDelta);
-        riding |= entity.getAgeState() == AgeState.BABY;
-    }
-
-    @Override
-    public void setupAnim(T villager, float limbAngle, float limbDistance, float animationProgress, float headYaw, float headPitch) {
-        if (villager.getAgeState() == AgeState.BABY && !villager.isPassenger()) {
-            limbDistance = (float) Math.sin(villager.tickCount / 12F);
-            limbAngle = (float) Math.cos(villager.tickCount / 9F) * 3;
-            headYaw += (float) Math.sin(villager.tickCount / 2F);
-        }
-
-        //remove the boost for babies
-        if (villager.isBaby()) {
-            limbAngle /= 3.0f;
-        }
-
-        //and add our own
-        limbAngle /= (0.2f + villager.getRawVerticalScaleFactor());
-
-        super.setupAnim(villager, limbAngle, limbDistance, animationProgress, headYaw, headPitch);
-
+        VillagerLike<?> villager = CommonVillagerModel.getVillager(state);
         if (villager.getVillagerBrain().isPanicking()) {
             float toRadians = (float) Math.PI / 180;
 
-            float armRaise = (((float) Math.sin(animationProgress / 5) * 30 - 180)
-                              + ((float) Math.sin(animationProgress / 3) * 3))
+            float armRaise = (((float) Math.sin(state.ageInTicks / 5) * 30 - 180)
+                              + ((float) Math.sin(state.ageInTicks / 3) * 3))
                              * toRadians;
-            float waveSideways = ((float) Math.sin(animationProgress / 2) * 12 - 17) * toRadians;
+            float waveSideways = ((float) Math.sin(state.ageInTicks / 2) * 12 - 17) * toRadians;
 
             this.leftArm.xRot = armRaise;
             this.leftArm.zRot = -waveSideways;
@@ -94,24 +64,24 @@ public class VillagerEntityBaseModelMCA<T extends LivingEntity & VillagerLike<T>
             this.rightArm.zRot = waveSideways;
         }
 
-        applyVillagerDimensions(villager, villager.isCrouching());
+        applyVillagerDimensions(villager, state.isCrouching);
+        CommonVillagerModel.applyRenderMask(this, renderMask);
     }
 
-    @Override
-    public void copyPropertiesTo(HumanoidModel<T> target) {
-        super.copyPropertiesTo(target);
-
-        if (target instanceof VillagerEntityBaseModelMCA<T> m) {
+    public void copyPropertiesTo(HumanoidModel<?> target) {
+        if (target instanceof VillagerEntityBaseModelMCA m) {
+            CommonVillagerModel.copyPartState(m.head, head);
+            CommonVillagerModel.copyPartState(m.hat, hat);
+            CommonVillagerModel.copyPartState(m.body, body);
+            CommonVillagerModel.copyPartState(m.leftArm, leftArm);
+            CommonVillagerModel.copyPartState(m.rightArm, rightArm);
+            CommonVillagerModel.copyPartState(m.leftLeg, leftLeg);
+            CommonVillagerModel.copyPartState(m.rightLeg, rightLeg);
             copyCommonAttributes(m);
 
             m.breasts.visible = breasts.visible;
-            m.breasts.copyFrom(breasts);
+            CommonVillagerModel.copyPartState(m.breasts, breasts);
         }
-    }
-
-    @Override
-    public void renderToBuffer(PoseStack matrices, VertexConsumer vertices, int light, int overlay, int color) {
-        renderCommon(matrices, vertices, light, overlay, color);
     }
 
     @Override
@@ -126,12 +96,12 @@ public class VillagerEntityBaseModelMCA<T extends LivingEntity & VillagerLike<T>
 
     @Override
     public Iterable<ModelPart> getCommonHeadParts() {
-        return headParts();
+        return ImmutableList.of(head);
     }
 
     @Override
     public Iterable<ModelPart> getCommonBodyParts() {
-        return bodyParts();
+        return ImmutableList.of(body, rightArm, leftArm, rightLeg, leftLeg);
     }
 
     @Override
@@ -152,5 +122,15 @@ public class VillagerEntityBaseModelMCA<T extends LivingEntity & VillagerLike<T>
     @Override
     public void setBreastSize(float breastSize) {
         this.breastSize = breastSize;
+    }
+
+    @Override
+    public RenderMask getRenderMask() {
+        return renderMask;
+    }
+
+    @Override
+    public void setRenderMask(RenderMask renderMask) {
+        this.renderMask = renderMask;
     }
 }

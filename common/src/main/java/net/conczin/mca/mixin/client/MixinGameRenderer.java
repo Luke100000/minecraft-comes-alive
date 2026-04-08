@@ -6,9 +6,9 @@ import net.conczin.mca.client.model.CommonVillagerModel;
 import net.conczin.mca.entity.VillagerLike;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.GameRenderer;
-import net.minecraft.client.renderer.PostChain;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.util.Tuple;
+import net.minecraft.world.entity.Entity;
 import org.jetbrains.annotations.Nullable;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
@@ -25,36 +25,38 @@ public abstract class MixinGameRenderer {
     Minecraft minecraft;
 
     @Shadow
-    @Nullable PostChain postEffect;
+    public abstract void clearPostEffect();
+
+    @Shadow
+    public abstract void setPostEffect(Identifier id);
+
+    @Shadow
+    public abstract @Nullable Identifier currentPostEffect();
+
     @Unique
-    private Tuple<String, ResourceLocation> mca$currentShader;
-
-    @Shadow
-    protected abstract void loadEffect(ResourceLocation resourceLocation);
-
-    @Shadow
-    public abstract void shutdownEffect();
+    private Tuple<String, Identifier> mca$currentShader;
 
     @Inject(method = "tick", at = @At("TAIL"))
     public void mca$injectTick(CallbackInfo ci) {
-        if (MCAClient.areShadersAllowed() && minecraft.cameraEntity != null) {
-            VillagerLike<?> villagerLike = CommonVillagerModel.getVillager(minecraft.cameraEntity);
+        Entity cameraEntity = minecraft.getCameraEntity();
+        if (MCAClient.areShadersAllowed() && cameraEntity != null) {
+            VillagerLike<?> villagerLike = CommonVillagerModel.getVillager(cameraEntity);
             if (villagerLike != null) {
-                if (postEffect == null) {
+                if (currentPostEffect() == null) {
                     if (mca$currentShader != null) {
-                        loadEffect(mca$currentShader.getB());
+                        setPostEffect(mca$currentShader.getB());
                     } else {
                         Config.getInstance().shaderLocationsMap.entrySet().stream()
                                 .filter(entry -> villagerLike.getTraits().hasTrait(entry.getKey()))
                                 .filter(entry -> MCAClient.areShadersAllowed(entry.getKey() + "_shader"))
                                 .findFirst().ifPresent(entry -> {
-                                    ResourceLocation shaderId = ResourceLocation.parse(entry.getValue());
+                                    Identifier shaderId = Identifier.parse(entry.getValue());
                                     mca$currentShader = new Tuple<>(entry.getKey(), shaderId);
-                                    loadEffect(shaderId);
+                                    setPostEffect(shaderId);
                                 });
                     }
                 } else if (mca$currentShader != null && !villagerLike.getTraits().hasTrait(mca$currentShader.getA())) {
-                    shutdownEffect();
+                    clearPostEffect();
                     this.mca$currentShader = null;
                 }
             }

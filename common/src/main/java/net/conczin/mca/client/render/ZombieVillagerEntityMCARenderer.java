@@ -6,6 +6,7 @@ import net.conczin.mca.client.render.layer.ClothingLayer;
 import net.conczin.mca.client.render.layer.FaceLayer;
 import net.conczin.mca.client.render.layer.HairLayer;
 import net.conczin.mca.client.render.layer.SkinLayer;
+import net.conczin.mca.client.render.VillagerRenderState;
 import net.conczin.mca.entity.ZombieVillagerEntityMCA;
 import net.minecraft.client.model.geom.builders.CubeDeformation;
 import net.minecraft.client.model.geom.builders.LayerDefinition;
@@ -22,12 +23,12 @@ public class ZombieVillagerEntityMCARenderer extends VillagerLikeEntityMCARender
         addLayer(new HairLayer<>(this, createModel(VillagerEntityModelMCA.hairData(new CubeDeformation(0.1F)))));
     }
 
-    private static VillagerEntityModelMCA<ZombieVillagerEntityMCA> createModel(MeshDefinition data) {
-        return new ZombieVillagerEntityModelMCA<>(LayerDefinition.create(data, 64, 64).bakeRoot());
+    private static VillagerEntityModelMCA createModel(MeshDefinition data) {
+        return new ZombieVillagerEntityModelMCA(LayerDefinition.create(data, 64, 64).bakeRoot());
     }
 
     @Override
-    protected boolean isShaking(ZombieVillagerEntityMCA entity) {
-        return entity.isConverting() || entity.isUnderWaterConverting();
+    protected boolean isShaking(VillagerRenderState state) {
+        return state.isConverting;
     }
 }

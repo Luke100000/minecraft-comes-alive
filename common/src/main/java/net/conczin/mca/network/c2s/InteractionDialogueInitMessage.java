@@ -25,7 +25,7 @@ public record InteractionDialogueInitMessage(UUID villagerUUID) implements Handl
 
     @Override
     public void handleServer(ServerPlayer player) {
-        Entity v = player.serverLevel().getEntity(villagerUUID);
+        Entity v = player.level().getEntity(villagerUUID);
         if (v instanceof VillagerEntityMCA villager) {
             Question question = Dialogues.getInstance().getQuestion("root");
             if (question.isAuto()) {
