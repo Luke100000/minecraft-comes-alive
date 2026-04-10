@@ -32,6 +32,7 @@
     "client.MixinHumanoidArmorLayer",
     "client.MixinAbstractContainerScreenAccessor",
     "client.MixinCreativeModeInventoryScreen",
+    "client.MixinCreativeModeInventoryScreenAccessor",
     "client.MixinInventoryScreen",
     "client.MixinItemInHandLayer",
     "client.MixinLivingEntityRenderer",

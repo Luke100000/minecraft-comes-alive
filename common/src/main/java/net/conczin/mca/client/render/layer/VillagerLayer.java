@@ -121,9 +121,7 @@ public abstract class VillagerLayer<M extends HumanoidModel<MCAHumanoidRenderSta
             if (texture != null && texture.getNamespace().equals("immersive_library")) {
                 return true;
             }
-            boolean result = texture != null && Minecraft.getInstance().getResourceManager().getResource(texture).isPresent();
-            System.out.println("MCA_DEBUG canUse: " + texture + " -> " + result);
-            return result;
+            return texture != null && Minecraft.getInstance().getResourceManager().getResource(texture).isPresent();
         });
     }
 
