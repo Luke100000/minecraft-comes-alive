@@ -2,7 +2,6 @@
   "required": true,
   "minVersion": "0.7",
   "package": "net.conczin.mca.mixin",
-  "refmap": "${mod_id}.refmap.json",
   "compatibilityLevel": "JAVA_17",
   "mixins": [
     "MixinAbstractFurnaceBlockEntity",
@@ -31,8 +30,12 @@
     "client.MixinClientLanguage",
     "client.MixinGameRenderer",
     "client.MixinHumanoidArmorLayer",
+    "client.MixinAbstractContainerScreenAccessor",
+    "client.MixinCreativeModeInventoryScreen",
+    "client.MixinInventoryScreen",
     "client.MixinItemInHandLayer",
     "client.MixinLivingEntityRenderer",
+    "client.MixinMultiPlayerGameMode",
     "client.MixinPlayerRenderer",
     "client.MixinSoundBufferLibrary",
     "client.MixinEntity"

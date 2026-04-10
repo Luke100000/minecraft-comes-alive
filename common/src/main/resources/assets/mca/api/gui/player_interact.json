@@ -1,0 +1,58 @@
+[
+  {
+    "identifier": "gui.button.backarrow",
+    "x": -113,
+    "y": 10,
+    "row": 0,
+    "width": 20,
+    "height": 20
+  },
+  {
+    "identifier": "gui.button.propose",
+    "x": -90,
+    "y": 10,
+    "row": 0,
+    "width": 80,
+    "height": 20
+  },
+  {
+    "identifier": "gui.button.engagement_ring",
+    "x": -90,
+    "y": 10,
+    "row": 1,
+    "width": 80,
+    "height": 20
+  },
+  {
+    "identifier": "gui.button.wedding_ring",
+    "x": -90,
+    "y": 10,
+    "row": 2,
+    "width": 80,
+    "height": 20
+  },
+  {
+    "identifier": "gui.button.procreate",
+    "x": -90,
+    "y": 10,
+    "row": 3,
+    "width": 80,
+    "height": 20
+  },
+  {
+    "identifier": "gui.button.hug",
+    "x": -90,
+    "y": 10,
+    "row": 4,
+    "width": 80,
+    "height": 20
+  },
+  {
+    "identifier": "gui.button.kiss",
+    "x": -90,
+    "y": 10,
+    "row": 5,
+    "width": 80,
+    "height": 20
+  }
+]

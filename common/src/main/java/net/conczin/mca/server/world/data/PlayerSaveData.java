@@ -5,11 +5,14 @@ import com.mojang.serialization.DynamicOps;
 import net.conczin.mca.Config;
 import net.conczin.mca.MCA;
 import net.conczin.mca.entity.VillagerEntityMCA;
+import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.entity.ai.relationship.EntityRelationship;
 import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.entity.ai.relationship.RelationshipState;
 import net.conczin.mca.entity.ai.relationship.RelationshipType;
+import net.conczin.mca.item.RelationshipItem;
 import net.conczin.mca.network.Network;
+import net.conczin.mca.network.s2c.PlayerDataMessage;
 import net.conczin.mca.network.s2c.ShowToastRequest;
 import net.conczin.mca.registry.CriterionMCA;
 import net.conczin.mca.registry.DataComponentsMCA;
@@ -45,12 +48,15 @@ import org.jetbrains.annotations.Nullable;
 import java.util.*;
 
 public class PlayerSaveData extends SavedData implements WorldUtils.NbtSavedData, EntityRelationship {
+    private static final String EQUIPPED_RING_KEY = "MCAEquippedRing";
+
     private final ServerLevel world;
     private final UUID uuid;
     private final List<Letter> inbox = new LinkedList<>();
     private Optional<Integer> lastSeenVillage = Optional.empty();
     private boolean entityDataSet;
     private CompoundTag entityData;
+    private ItemStack equippedRing = ItemStack.EMPTY;
 
     PlayerSaveData(ServerLevel world, UUID uuid) {
         this.world = world;
@@ -71,6 +77,10 @@ public class PlayerSaveData extends SavedData implements WorldUtils.NbtSavedData
         } else {
             resetEntityData();
         }
+
+        equippedRing = normalizeEquippedRing(readEquippedRing(nbt, world.registryAccess()));
+
+        ensureDefaultPlayerModel();
 
         ListTag inbox = nbt.getList("inbox").orElseGet(ListTag::new);
         this.inbox.addAll(NbtHelper.toList(inbox, e -> new Letter((CompoundTag) e, world.registryAccess())));
@@ -114,6 +124,17 @@ public class PlayerSaveData extends SavedData implements WorldUtils.NbtSavedData
         var output = WorldUtils.createValueOutput(world.registryAccess());
         villager.mca$addAdditionalSaveData(output);
         entityData = output.buildResult();
+        ensureDefaultPlayerModel();
+    }
+
+    private void ensureDefaultPlayerModel() {
+        if (entityData != null) {
+            int playerModel = entityData.getInt("PlayerModel").orElse(VillagerLike.PlayerModel.PLAYER.ordinal());
+            if (!entityData.contains("PlayerModel") || (!entityDataSet && playerModel == VillagerLike.PlayerModel.VANILLA.ordinal())) {
+                entityData.putInt("PlayerModel", VillagerLike.PlayerModel.PLAYER.ordinal());
+                setDirty();
+            }
+        }
     }
 
     public boolean isEntityDataSet() {
@@ -126,12 +147,41 @@ public class PlayerSaveData extends SavedData implements WorldUtils.NbtSavedData
     }
 
     public CompoundTag getEntityData() {
+        ensureDefaultPlayerModel();
         return entityData;
     }
 
     public void setEntityData(CompoundTag entityData) {
         this.entityData = entityData.copy();
+        ensureDefaultPlayerModel();
         setDirty();
+    }
+
+    public ItemStack getEquippedRing() {
+        return equippedRing.copy();
+    }
+
+    public void setEquippedRing(ItemStack stack) {
+        equippedRing = normalizeEquippedRing(stack);
+        setDirty();
+    }
+
+    public CompoundTag createNetworkData() {
+        CompoundTag nbt = getEntityData().copy();
+        storeEquippedRing(nbt, world.registryAccess(), equippedRing);
+        return nbt;
+    }
+
+    public static ItemStack readEquippedRing(CompoundTag nbt, HolderLookup.Provider provider) {
+        return WorldUtils.createValueInput(nbt, provider).read(EQUIPPED_RING_KEY, ItemStack.OPTIONAL_CODEC).orElse(ItemStack.EMPTY);
+    }
+
+    public static void sync(ServerPlayer player) {
+        PlayerSaveData data = get(player);
+        CompoundTag nbt = data.createNetworkData();
+        MCA.getServer().ifPresent(server ->
+                server.getPlayerList().getPlayers().forEach(target -> Network.sendToPlayer(new PlayerDataMessage(player.getUUID(), nbt), target))
+        );
     }
 
     @Override
@@ -184,13 +234,13 @@ public class PlayerSaveData extends SavedData implements WorldUtils.NbtSavedData
 
     protected void onLeave(Player self, Village village) {
         if (Config.getInstance().enterVillageNotification && village.isVillage()) {
-            self.displayClientMessage(Component.translatable("gui.village.left", village.getName()).withStyle(ChatFormatting.GOLD), true);
+            net.conczin.mca.util.PlayerMessageHelper.displayClientMessage(self, Component.translatable("gui.village.left", village.getName()).withStyle(ChatFormatting.GOLD), true);
         }
     }
 
     protected void onEnter(Player self, Village village) {
         if (Config.getInstance().enterVillageNotification && village.isVillage()) {
-            self.displayClientMessage(Component.translatable("gui.village.welcome", village.getName()).withStyle(ChatFormatting.GOLD), true);
+            net.conczin.mca.util.PlayerMessageHelper.displayClientMessage(self, Component.translatable("gui.village.welcome", village.getName()).withStyle(ChatFormatting.GOLD), true);
         }
         village.onEnter(world);
     }
@@ -198,6 +248,18 @@ public class PlayerSaveData extends SavedData implements WorldUtils.NbtSavedData
     @Override
     public void marry(Entity spouse) {
         EntityRelationship.super.marry(spouse);
+        setDirty();
+    }
+
+    @Override
+    public void engage(Entity spouse) {
+        EntityRelationship.super.engage(spouse);
+        setDirty();
+    }
+
+    @Override
+    public void promise(Entity spouse) {
+        EntityRelationship.super.promise(spouse);
         setDirty();
     }
 
@@ -241,6 +303,7 @@ public class PlayerSaveData extends SavedData implements WorldUtils.NbtSavedData
         nbt.put("entityData", entityData);
         nbt.putBoolean("entityDataSet", entityDataSet);
         nbt.put("inbox", NbtHelper.fromList(inbox, v -> v.toTag(provider)));
+        storeEquippedRing(nbt, provider, equippedRing);
         return nbt;
     }
 
@@ -273,6 +336,33 @@ public class PlayerSaveData extends SavedData implements WorldUtils.NbtSavedData
     public void sendLetter(Component... lines) {
         sendMail(new Letter("", Arrays.asList(lines)));
         Optional.ofNullable(world.getPlayerByUUID(uuid)).ifPresent(p -> showMailNotification((ServerPlayer) p));
+    }
+
+    private static ItemStack normalizeEquippedRing(ItemStack stack) {
+        if (stack.isEmpty() || !RelationshipItem.isRing(stack)) {
+            return ItemStack.EMPTY;
+        }
+
+        ItemStack copy = stack.copy();
+        copy.setCount(1);
+        return copy;
+    }
+
+    private static void storeEquippedRing(CompoundTag nbt, HolderLookup.Provider provider, ItemStack ring) {
+        if (ring.isEmpty()) {
+            return;
+        }
+
+        var output = WorldUtils.createValueOutput(provider);
+        output.store(EQUIPPED_RING_KEY, ItemStack.OPTIONAL_CODEC, ring);
+
+        CompoundTag stored = WorldUtils.getCompoundTag(output);
+        if (stored.contains(EQUIPPED_RING_KEY)) {
+            Tag tag = stored.get(EQUIPPED_RING_KEY);
+            if (tag != null) {
+                nbt.put(EQUIPPED_RING_KEY, tag);
+            }
+        }
     }
 
     public record Letter(String title, List<Component> pages) {

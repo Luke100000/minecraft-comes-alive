@@ -22,8 +22,11 @@ public interface MessagesMCA {
         c.register(InteractionCloseRequest.TYPE, InteractionCloseRequest.STREAM_CODEC, true);
         c.register(InteractionDialogueInitMessage.TYPE, InteractionDialogueInitMessage.STREAM_CODEC, true);
         c.register(InteractionDialogueMessage.TYPE, InteractionDialogueMessage.STREAM_CODEC, true);
+        c.register(InteractionPlayerMessage.TYPE, InteractionPlayerMessage.STREAM_CODEC, true);
         c.register(InteractionVillagerMessage.TYPE, InteractionVillagerMessage.STREAM_CODEC, true);
+        c.register(OpenPlayerInteractionRequest.TYPE, OpenPlayerInteractionRequest.STREAM_CODEC, true);
         c.register(PlayerDataRequest.TYPE, PlayerDataRequest.STREAM_CODEC, true);
+        c.register(PlayerRingSlotRequest.TYPE, PlayerRingSlotRequest.STREAM_CODEC, true);
         c.register(RemoveCustomClothingMessage.TYPE, RemoveCustomClothingMessage.STREAM_CODEC, true);
         c.register(RenameVillageMessage.TYPE, RenameVillageMessage.STREAM_CODEC, true);
         c.register(ReportBuildingMessage.TYPE, ReportBuildingMessage.STREAM_CODEC, true);
@@ -50,6 +53,7 @@ public interface MessagesMCA {
         c.register(OpenDestinyGuiRequest.TYPE, OpenDestinyGuiRequest.STREAM_CODEC, false);
         c.register(OpenGuiRequest.TYPE, OpenGuiRequest.STREAM_CODEC, false);
         c.register(PlayerDataMessage.TYPE, PlayerDataMessage.STREAM_CODEC, false);
+        c.register(PlayerInteractionAnimationMessage.TYPE, PlayerInteractionAnimationMessage.STREAM_CODEC, false);
         c.register(ShowToastRequest.TYPE, ShowToastRequest.STREAM_CODEC, false);
         c.register(SkinListResponse.TYPE, SkinListResponse.STREAM_CODEC, false);
         c.register(VillagerMessage.TYPE, VillagerMessage.STREAM_CODEC, false);

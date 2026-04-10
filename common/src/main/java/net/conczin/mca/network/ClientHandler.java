@@ -44,4 +44,6 @@ public interface ClientHandler {
     void handleCustomSkinsChangedMessage(CustomSkinsChangedMessage message);
 
     void handleCivilRegistryResponse(CivilRegistryResponse response);
+
+    void handlePlayerInteractionAnimation(PlayerInteractionAnimationMessage message);
 }

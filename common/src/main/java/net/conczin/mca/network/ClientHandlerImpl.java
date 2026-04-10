@@ -5,6 +5,7 @@ import net.conczin.mca.MCAClient;
 import net.conczin.mca.client.book.Book;
 import net.conczin.mca.client.book.CivilRegistryBook;
 import net.conczin.mca.client.gui.*;
+import net.conczin.mca.client.render.PlayerInteractionAnimationManager;
 import net.conczin.mca.client.tts.SpeechManager;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerLike;
@@ -14,6 +15,7 @@ import net.conczin.mca.network.s2c.*;
 import net.conczin.mca.registry.EntitiesMCA;
 import net.conczin.mca.resources.BuildingTypes;
 import net.conczin.mca.server.world.data.Village;
+import net.conczin.mca.server.world.data.PlayerSaveData;
 import net.conczin.mca.util.WorldUtils;
 import net.minecraft.IdentifierException;
 import net.minecraft.client.Minecraft;
@@ -25,6 +27,7 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntitySpawnReason;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 
 public class ClientHandlerImpl implements ClientHandler {
@@ -97,6 +100,12 @@ public class ClientHandlerImpl implements ClientHandler {
                         VillagerLike<?> villager = (VillagerLike<?>) client.level.getEntity(message.villager());
                         client.setScreen(new InteractScreen(villager));
                     }
+                }
+                break;
+            case PLAYER_INTERACT:
+                entity = client.level.getEntity(message.villager());
+                if (entity instanceof Player target) {
+                    client.setScreen(new PlayerInteractScreen(target));
                 }
                 break;
             case VILLAGER_EDITOR:
@@ -253,6 +262,7 @@ public class ClientHandlerImpl implements ClientHandler {
         VillagerEntityMCA villager = EntitiesMCA.MALE_VILLAGER.create(client.level, EntitySpawnReason.COMMAND);
         assert villager != null;
         villager.mca$readAdditionalSaveData(WorldUtils.createValueInput(response.nbt(), client.level.registryAccess()));
+        var equippedRing = PlayerSaveData.readEquippedRing(response.nbt(), client.level.registryAccess());
 
         String gender = villager.getGenetics().getGender().getDataName();
         String defaultClothes = "mca:skins/clothing/normal/" + gender + "/none/0.png";
@@ -263,7 +273,7 @@ public class ClientHandlerImpl implements ClientHandler {
         villager.setClothes(parseOrFallback(clothes, defaultClothes));
         villager.setHair(parseOrFallback(hair, defaultHair));
 
-        MCAClient.addPlayerData(response.uuid(), villager);
+        MCAClient.addPlayerData(response.uuid(), villager, equippedRing);
     }
 
     @Override
@@ -303,5 +313,10 @@ public class ClientHandlerImpl implements ClientHandler {
         if (screen instanceof ExtendedBookScreen extendedBookScreen && (extendedBookScreen.getBook() instanceof CivilRegistryBook civilRegistryBook)) {
             civilRegistryBook.receive(response.getIndex(), response.getLines());
         }
+    }
+
+    @Override
+    public void handlePlayerInteractionAnimation(PlayerInteractionAnimationMessage message) {
+        PlayerInteractionAnimationManager.start(message.source(), message.target(), message.action(), message.durationTicks(), message.strength());
     }
 }

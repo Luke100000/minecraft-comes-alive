@@ -5,10 +5,46 @@ import net.conczin.mca.entity.ai.Memories;
 import net.conczin.mca.entity.ai.Relationship;
 import net.conczin.mca.server.world.data.PlayerSaveData;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
 
 public abstract class RelationshipItem extends TooltippedItem implements SpecialCaseGift {
     public RelationshipItem(Properties properties) {
         super(properties);
+    }
+
+    public static boolean isRing(ItemStack stack) {
+        return stack.getItem() instanceof WeddingRingItem || stack.getItem() instanceof EngagementRingItem;
+    }
+
+    public static void moveEquippedRingToInventory(ServerPlayer player) {
+        ItemStack equippedRing = PlayerSaveData.get(player).getEquippedRing();
+        if (equippedRing.isEmpty()) {
+            return;
+        }
+
+        ItemStack displacedStack = equippedRing.copy();
+        if (!player.addItem(displacedStack)) {
+            player.drop(displacedStack, false);
+        }
+        PlayerSaveData.get(player).setEquippedRing(ItemStack.EMPTY);
+    }
+
+    public static void equipRing(ServerPlayer player, ItemStack stack) {
+        if (!isRing(stack)) {
+            return;
+        }
+
+        moveEquippedRingToInventory(player);
+
+        ItemStack equippedRing = stack.copy();
+        equippedRing.setCount(1);
+        if (!player.isCreative()) {
+            stack.shrink(1);
+        }
+
+        PlayerSaveData.get(player).setEquippedRing(equippedRing);
+        PlayerSaveData.sync(player);
     }
 
     abstract int getHeartsRequired();

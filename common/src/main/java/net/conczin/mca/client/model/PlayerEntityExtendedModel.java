@@ -1,13 +1,18 @@
 package net.conczin.mca.client.model;
 
 import com.google.common.collect.ImmutableList;
+import net.conczin.mca.MCAClient;
+import net.conczin.mca.client.render.PlayerInteractionAnimationManager;
 import net.conczin.mca.entity.ai.relationship.AgeState;
 import net.conczin.mca.entity.ai.relationship.VillagerDimensions;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.model.HumanoidModel;
 import net.minecraft.client.model.player.PlayerModel;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.client.renderer.entity.state.AvatarRenderState;
 import net.minecraft.client.renderer.entity.state.HumanoidRenderState;
+import net.minecraft.world.entity.Avatar;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 
 import static net.conczin.mca.client.model.VillagerEntityBaseModelMCA.BREASTS;
@@ -69,6 +74,15 @@ public class PlayerEntityExtendedModel extends PlayerModel implements CommonVill
     @Override
     public void setupAnim(AvatarRenderState renderState) {
         super.setupAnim(renderState);
+
+        if (Minecraft.getInstance().level != null) {
+            Entity entity = Minecraft.getInstance().level.getEntity(renderState.id);
+            if (entity instanceof Avatar avatar) {
+                MCAClient.getPlayerData(avatar.getUUID()).ifPresent(villager -> applyVillagerDimensions(villager, renderState.isCrouching));
+                PlayerInteractionAnimationManager.applyToHumanoidModel(avatar.getUUID(), this, renderState.ageInTicks);
+            }
+        }
+
         VillagerEntityBaseModelMCA.copyModelTransform(head, hat);
         breastsWear.visible = jacket.visible;
     }
