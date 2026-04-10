@@ -22,6 +22,7 @@ import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 
+import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
@@ -44,7 +45,7 @@ public class Command {
                 .then(register("mail", Command::mail))
                 .then(register("verify").then(Commands.argument("email", StringArgumentType.greedyString()).executes(Command::verify)))
                 .then(register("chatAI")
-                        .requires(p -> p.hasPermission(2) || p.getServer().isSingleplayer())
+                        .requires(p -> Commands.LEVEL_GAMEMASTERS.check(p.permissions()) || p.getServer().isSingleplayer())
                         .executes(Command::chatAIHelp)
                         .then(Commands.literal("disable")
                                 .executes(Command::disableChatAI))
@@ -53,7 +54,7 @@ public class Command {
                         .then(Commands.literal("player2")
                                 .executes(Command::setupPlayer2))
                         .then(register("inworldAI")
-                                .requires(p -> p.hasPermission(2) || p.getServer().isSingleplayer())
+                                .requires(p -> Commands.LEVEL_GAMEMASTERS.check(p.permissions()) || p.getServer().isSingleplayer())
                                 .then(register("keys")
                                         .then(Commands.argument("api_key", StringArgumentType.string())
                                                 .executes(c -> Command.inworldAIKey(c.getArgument("api_key", String.class)))))
@@ -111,7 +112,7 @@ public class Command {
 
         if (model.equals("default")) {
             sendMessage(ctx, Component.translatable("mca.ai_help").withStyle(s -> s
-                    .withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, "https://github.com/Luke100000/minecraft-comes-alive/wiki/GPT3-based-conversations"))
+                    .withClickEvent(new ClickEvent.OpenUrl(URI.create("https://github.com/Luke100000/minecraft-comes-alive/wiki/GPT3-based-conversations")))
             ));
         } else {
             sendMessage(ctx, "command.chat_ai.enabled");
@@ -141,7 +142,7 @@ public class Command {
         Config.getInstance().save();
 
         sendMessage(ctx, Component.translatable("command.chat_ai.player2").withStyle(s -> s
-                .withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, "https://player2.game/"))));
+                .withClickEvent(new ClickEvent.OpenUrl(URI.create("https://player2.game/")))));
         return 0;
     }
 
@@ -165,7 +166,7 @@ public class Command {
         if (player == null) {
             return 1;
         }
-        if (ctx.getSource().hasPermission(2) || Config.getInstance().allowFullPlayerEditor) {
+        if (Commands.LEVEL_GAMEMASTERS.check(ctx.getSource().permissions()) || Config.getInstance().allowFullPlayerEditor) {
             Network.sendToPlayer(new OpenGuiRequest(OpenGuiRequest.Type.VILLAGER_EDITOR, player), player);
             return 0;
         } else if (Config.getInstance().allowLimitedPlayerEditor) {
@@ -178,7 +179,7 @@ public class Command {
     }
 
     private static int destiny(CommandContext<CommandSourceStack> ctx) {
-        if (ctx.getSource().hasPermission(2) || Config.getInstance().allowDestinyCommandOnce) {
+        if (Commands.LEVEL_GAMEMASTERS.check(ctx.getSource().permissions()) || Config.getInstance().allowDestinyCommandOnce) {
             ServerPlayer player = ctx.getSource().getPlayer();
             if (player != null && !PlayerSaveData.get(player).isEntityDataSet() || Config.getInstance().allowDestinyCommandMoreThanOnce) {
                 ServerInteractionManager.launchDestiny(player);
@@ -274,11 +275,11 @@ public class Command {
 
 
     private static ArgumentBuilder<CommandSourceStack, ?> register(String name, com.mojang.brigadier.Command<CommandSourceStack> cmd) {
-        return Commands.literal(name).requires(cs -> cs.hasPermission(0)).executes(cmd);
+        return Commands.literal(name).requires(cs -> Commands.LEVEL_ALL.check(cs.permissions())).executes(cmd);
     }
 
     private static ArgumentBuilder<CommandSourceStack, ?> register(String name) {
-        return Commands.literal(name).requires(cs -> cs.hasPermission(0));
+        return Commands.literal(name).requires(cs -> Commands.LEVEL_ALL.check(cs.permissions()));
     }
 
     private static void sendMessage(CommandContext<CommandSourceStack> ctx, String message) {

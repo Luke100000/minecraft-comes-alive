@@ -2,6 +2,7 @@ package net.conczin.mca.client.gui.immersive_library;
 
 import com.mojang.blaze3d.platform.NativeImage;
 import net.conczin.mca.client.resources.SkinLocations;
+import net.minecraft.util.ARGB;
 import net.minecraft.util.Mth;
 
 public class Utils {
@@ -28,10 +29,11 @@ public class Utils {
         double brightness = 0;
         for (int x = 0; x < 64; x++) {
             for (int y = 0; y < 64; y++) {
-                int r = image.getRedOrLuminance(x, y) & 0xFF;
-                int g = image.getGreenOrLuminance(x, y) & 0xFF;
-                int b = image.getBlueOrLuminance(x, y) & 0xFF;
-                int a = image.getLuminanceOrAlpha(x, y) & 0xFF;
+                int pixel = image.getPixel(x, y);
+                int r = ARGB.red(pixel);
+                int g = ARGB.green(pixel);
+                int b = ARGB.blue(pixel);
+                int a = ARGB.alpha(pixel);
 
                 if (a > 0) {
                     int l = Mth.clamp((int) (0.2126 * r + 0.7152 * g + 0.0722 * b), 0, 255);

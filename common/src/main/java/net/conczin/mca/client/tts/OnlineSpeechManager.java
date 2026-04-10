@@ -7,13 +7,14 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.Entity;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
+import java.net.URI;
 import java.net.URL;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -30,7 +31,7 @@ public class OnlineSpeechManager {
         Minecraft.getInstance().gui.getChat().addMessage(
                 Component.translatable("command.tts_unsupported_language").withStyle(s -> s
                         .withColor(ChatFormatting.RED)
-                        .withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, "https://github.com/Luke100000/minecraft-comes-alive/wiki/TTS"))));
+                        .withClickEvent(new ClickEvent.OpenUrl(URI.create("https://github.com/Luke100000/minecraft-comes-alive/wiki/TTS")))));
     }
 
     @SuppressWarnings("SpellCheckingInspection")
@@ -79,7 +80,7 @@ public class OnlineSpeechManager {
                 if (AudioCache.cachedRetrieve(hash, output -> {
                     downloadAudio(output, language, voice, text);
                 })) {
-                    ResourceLocation soundLocation = MCA.locate("tts_cache/" + hash);
+                    Identifier soundLocation = MCA.locate("tts_cache/" + hash);
                     SpeechManager.INSTANCE.playSound(pitch, entity, soundLocation);
                 } else if (!warningIssued) {
                     // Server queued the request but the audio is not ready yet

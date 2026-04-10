@@ -6,8 +6,8 @@
     "## "
   ],
   "key": {
-    "#": {"item": "minecraft:oak_planks"},
-    "I": {"item": "minecraft:bone"}
+    "#": "minecraft:oak_planks",
+    "I": "minecraft:bone"
   },
   "result": {
     "id": "mca:wooden_slanted_headstone"

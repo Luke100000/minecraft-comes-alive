@@ -1,8 +1,6 @@
 {
   "type": "minecraft:smoking",
-  "ingredient": {
-    "item": "mca:sirben_baby_girl"
-  },
+  "ingredient": "mca:sirben_baby_girl",
   "result": {
     "id": "minecraft:charcoal"
   },

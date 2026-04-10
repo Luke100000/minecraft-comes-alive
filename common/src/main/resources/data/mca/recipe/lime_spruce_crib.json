@@ -2,15 +2,9 @@
   "type": "minecraft:crafting_shaped",
   "category": "misc",
   "key": {
-    "C": {
-      "item": "minecraft:lime_carpet"
-    },
-    "F": {
-      "item": "minecraft:spruce_fence"
-    },
-    "P": {
-      "item": "minecraft:spruce_planks"
-    }
+    "C": "minecraft:lime_carpet",
+    "F": "minecraft:spruce_fence",
+    "P": "minecraft:spruce_planks"
   },
   "pattern": [
     "F F",

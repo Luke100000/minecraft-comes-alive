@@ -5,11 +5,11 @@ import net.conczin.mca.entity.ai.relationship.AgeState;
 import net.conczin.mca.item.BabyItem;
 import net.conczin.mca.item.CribItem;
 import net.conczin.mca.registry.ItemsMCA;
+import net.conczin.mca.util.WorldUtils;
 import net.conczin.mca.util.network.datasync.*;
 import net.minecraft.core.particles.BlockParticleOption;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.nbt.Tag;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvents;
@@ -20,14 +20,17 @@ import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityDimensions;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.MoverType;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.entity.projectile.AbstractArrow;
+import net.minecraft.world.entity.projectile.arrow.AbstractArrow;
 import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.storage.ValueInput;
+import net.minecraft.world.level.storage.ValueOutput;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.Arrays;
@@ -73,7 +76,6 @@ public class CribEntity extends Entity implements CTrackedEntity<CribEntity> {
         return !getTrackedValue(BABY).equals(ItemStack.EMPTY) || infant != null;
     }
 
-    @Override
     public boolean canBeCollidedWith() {
         return true;
     }
@@ -94,30 +96,26 @@ public class CribEntity extends Entity implements CTrackedEntity<CribEntity> {
     }
 
     @Override
-    protected void readAdditionalSaveData(CompoundTag nbt) {
-        if (nbt.contains("Baby")) {
-            setTrackedValue(BABY, ItemStack.parseOptional(level().registryAccess(), nbt.getCompound("Baby")));
-            if (getTrackedValue(BABY).equals(ItemStack.EMPTY)) {
+    protected void readAdditionalSaveData(ValueInput input) {
+        input.read("Baby", ItemStack.OPTIONAL_CODEC).ifPresent(stack -> {
+            setTrackedValue(BABY, stack);
+            if (stack.isEmpty()) {
                 MCA.LOGGER.warn("Issue deserializing baby item from crib NBT!");
             }
-        }
-        if (nbt.contains("Wood")) {
-            setTrackedValue(WOOD, CribWoodType.values()[nbt.getInt("Wood")]);
-        }
-        if (nbt.contains("Color")) {
-            setTrackedValue(COLOR, DyeColor.values()[nbt.getInt("Color")]);
-        }
+        });
+
+        setTrackedValue(WOOD, CribWoodType.values()[input.getIntOr("Wood", 0)]);
+        setTrackedValue(COLOR, DyeColor.values()[input.getIntOr("Color", DyeColor.RED.ordinal())]);
     }
 
     @Override
-    protected void addAdditionalSaveData(CompoundTag nbt) {
+    protected void addAdditionalSaveData(ValueOutput output) {
         if (!getTrackedValue(BABY).equals(ItemStack.EMPTY)) {
-            Tag babyCompound = getTrackedValue(BABY).save(level().registryAccess(), new CompoundTag());
-            nbt.put("Baby", babyCompound);
+            output.store("Baby", ItemStack.OPTIONAL_CODEC, getTrackedValue(BABY));
         }
 
-        nbt.putInt("Wood", Arrays.asList(CribWoodType.values()).indexOf(getTrackedValue(WOOD)));
-        nbt.putInt("Color", Arrays.asList(DyeColor.values()).indexOf(getTrackedValue(COLOR)));
+        output.putInt("Wood", Arrays.asList(CribWoodType.values()).indexOf(getTrackedValue(WOOD)));
+        output.putInt("Color", Arrays.asList(DyeColor.values()).indexOf(getTrackedValue(COLOR)));
     }
 
     @Override
@@ -145,18 +143,18 @@ public class CribEntity extends Entity implements CTrackedEntity<CribEntity> {
 
         // Removing occupant is first priority over adding occupant, so that multiple occupants dont exist.
         if (infant != null && infant.getVehicle() == this) {
-            infant.startRiding(player, true);
+            infant.startRiding(player, true, true);
             unsetEntityOccupant();
         } else if (!getTrackedValue(BABY).equals(ItemStack.EMPTY)) {
             player.getInventory().add(getTrackedValue(BABY));
             setTrackedValue(BABY, ItemStack.EMPTY);
-        } else if (player.getInventory().getSelected() != ItemStack.EMPTY && player.getInventory().getSelected().getItem() instanceof BabyItem) {
-            setTrackedValue(BABY, player.getInventory().getSelected());
+        } else if (player.getInventory().getSelectedItem() != ItemStack.EMPTY && player.getInventory().getSelectedItem().getItem() instanceof BabyItem) {
+            setTrackedValue(BABY, player.getInventory().getSelectedItem());
             player.getInventory().removeItem(getTrackedValue(BABY));
         } else if (player.getFirstPassenger() != null && player.getFirstPassenger() instanceof VillagerEntityMCA rider) {
             if (rider.getAgeState() == AgeState.BABY) {
                 setEntityOccupant(rider);
-                infant.startRiding(this, true);
+                infant.startRiding(this, true, true);
             }
         } else return InteractionResult.PASS;
 
@@ -186,24 +184,24 @@ public class CribEntity extends Entity implements CTrackedEntity<CribEntity> {
         this.move(MoverType.SELF, this.getDeltaMovement());
 
         if (getTrackedValue(BABY) != ItemStack.EMPTY && getTrackedValue(BABY).getItem() instanceof BabyItem) {
-            getTrackedValue(BABY).getItem().inventoryTick(getTrackedValue(BABY), level(), this, 0, false);
+            getTrackedValue(BABY).inventoryTick(level(), this, EquipmentSlot.MAINHAND);
         }
     }
 
     @Override
-    public boolean hurt(DamageSource source, float amount) {
-        if (this.level().isClientSide || this.isRemoved()) {
+    public boolean hurtServer(ServerLevel world, DamageSource source, float amount) {
+        if (this.isRemoved()) {
             return false;
         }
 
         if (isOccupied()) return false;
 
-        if (this.isInvulnerableTo(source)) {
+        if (this.isInvulnerableToBase(source)) {
             return false;
         }
 
         if (source.is(DamageTypeTags.IS_EXPLOSION) || source.is(DamageTypeTags.IS_FIRE)) {
-            this.kill();
+            this.kill(world);
             return false;
         }
 
@@ -222,13 +220,13 @@ public class CribEntity extends Entity implements CTrackedEntity<CribEntity> {
         if (source.isCreativePlayer()) {
             this.playBreakSound();
             this.spawnBreakParticles();
-            this.kill();
+            this.kill(world);
             return bl2;
         } else {
             CribItem matchingType = ItemsMCA.CRIBS.stream().filter(c -> c.getColor() == getTrackedValue(COLOR) && c.getWood() == getTrackedValue(WOOD)).findFirst().get();
             Block.popResource(this.level(), this.blockPosition(), new ItemStack(matchingType));
             this.spawnBreakParticles();
-            this.kill();
+            this.kill(world);
         }
 
         return true;

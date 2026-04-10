@@ -3,6 +3,7 @@ package net.conczin.mca.util;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Container;
 import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.entity.Entity;
@@ -11,6 +12,7 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.item.*;
 import net.minecraft.world.item.component.ItemAttributeModifiers;
+import net.minecraft.world.item.equipment.Equippable;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Comparator;
@@ -73,14 +75,19 @@ public interface InventoryUtils {
 
     static Optional<ItemStack> getBestArmor(Container inv, EquipmentSlot slot) {
         return stream(inv)
-                .filter(s -> s.getItem() instanceof ArmorItem)
-                .filter(s -> ((ArmorItem) s.getItem()).getEquipmentSlot() == slot)
-                .max(Comparator.comparingDouble(s -> ((ArmorItem) s.getItem()).getDefense()));
+                .filter(s -> {
+                    Equippable equippable = s.get(DataComponents.EQUIPPABLE);
+                    return equippable != null && equippable.slot() == slot;
+                })
+                .max(Comparator.comparingDouble(s -> {
+                    ItemAttributeModifiers modifiers = s.get(DataComponents.ATTRIBUTE_MODIFIERS);
+                    return modifiers == null ? 0.0 : modifiers.compute(Attributes.ARMOR, 0.0, slot);
+                }));
     }
 
     static Optional<ItemStack> getBestSword(Container inv) {
         return stream(inv)
-                .filter(s -> s.getItem() instanceof SwordItem)
+                .filter(s -> s.get(DataComponents.WEAPON) != null)
                 .max(Comparator.comparingDouble(ItemStack::getMaxDamage));
     }
 
@@ -93,22 +100,26 @@ public interface InventoryUtils {
     static void dropAllItems(Entity entity, Container inv) {
         for (int i = 0; i < inv.getContainerSize(); i++) {
             ItemStack stack = inv.getItem(i);
-            entity.spawnAtLocation(stack, 1.0F);
+            if (entity.level() instanceof ServerLevel serverLevel) {
+                entity.spawnAtLocation(serverLevel, stack);
+            }
         }
         inv.clearContent();
     }
 
     static void saveToNBT(RegistryAccess registryAccess, SimpleContainer inv, CompoundTag nbt) {
-        nbt.put("Inventory", inv.createTag(registryAccess));
+        var output = WorldUtils.createValueOutput(registryAccess);
+        inv.storeAsItemList(output.list("Inventory", ItemStack.OPTIONAL_CODEC));
+        nbt.put("Inventory", WorldUtils.getCompoundTag(output).getListOrEmpty("Inventory"));
     }
 
     static void readFromNBT(RegistryAccess registryAccess, SimpleContainer inv, CompoundTag nbt) {
-        inv.fromTag(nbt.getList("Inventory", 10), registryAccess);
+        inv.fromItemList(WorldUtils.createValueInput(nbt, registryAccess).listOrEmpty("Inventory", ItemStack.OPTIONAL_CODEC));
     }
 
     static double approximateDamage(ItemStack stack, LivingEntity entity) {
         double base = entity.getAttributeBaseValue(Attributes.ATTACK_DAMAGE);
         ItemAttributeModifiers comp = stack.get(DataComponents.ATTRIBUTE_MODIFIERS);
-        return comp == null ? base : comp.compute(base, EquipmentSlot.MAINHAND);
+        return comp == null ? base : comp.compute(Attributes.ATTACK_DAMAGE, base, EquipmentSlot.MAINHAND);
     }
 }

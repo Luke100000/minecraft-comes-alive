@@ -1,8 +1,5 @@
 package net.conczin.mca.client.model;
 
-import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.blaze3d.vertex.VertexConsumer;
-import net.conczin.mca.entity.CribEntity;
 import net.minecraft.client.model.EntityModel;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.client.model.geom.PartPose;
@@ -10,11 +7,13 @@ import net.minecraft.client.model.geom.builders.CubeDeformation;
 import net.minecraft.client.model.geom.builders.CubeListBuilder;
 import net.minecraft.client.model.geom.builders.MeshDefinition;
 import net.minecraft.client.model.geom.builders.PartDefinition;
+import net.minecraft.client.renderer.entity.state.EntityRenderState;
 
-public class CribEntityModel<T extends CribEntity> extends EntityModel<T> {
+public class CribEntityModel extends EntityModel<EntityRenderState> {
     private final ModelPart CRIB;
 
     public CribEntityModel(ModelPart root) {
+        super(root);
         this.CRIB = root.getChild("Crib");
     }
 
@@ -23,7 +22,7 @@ public class CribEntityModel<T extends CribEntity> extends EntityModel<T> {
         MeshDefinition modelData = new MeshDefinition();
         PartDefinition data = modelData.getRoot();
 
-        PartDefinition crib = data.addOrReplaceChild("Crib", CubeListBuilder.create().texOffs(0, 0).addBox(-9.0F, -5.0F, -13.0F, 19.0F, 2.0F, 25.0F, dilation), PartPose.offset(-0.5F, 6.0F, 0.5F));
+        PartDefinition crib = data.addOrReplaceChild("Crib", CubeListBuilder.create().texOffs(0, 0).addBox(-9.0F, -5.0F, -13.0F, 19.0F, 2.0F, 25.0F, dilation), PartPose.offset(-0.5F, 0.0F, 0.5F));
 
         crib.addOrReplaceChild("Bars", CubeListBuilder.create()
                 .texOffs(0, 4).addBox(9.0F, -16.0F, -11.5F, 0.0F, 11.0F, 23.0F, dilation)
@@ -51,12 +50,6 @@ public class CribEntityModel<T extends CribEntity> extends EntityModel<T> {
     }
 
     @Override
-    public void renderToBuffer(PoseStack stack, VertexConsumer consumer, int packedLight, int packedOverlay, int color) {
-        CRIB.render(stack, consumer, packedLight, packedOverlay, color);
-    }
-
-    @Override
-    public void setupAnim(T entity, float f, float g, float h, float i, float j) {
-
+    public void setupAnim(EntityRenderState renderState) {
     }
 }

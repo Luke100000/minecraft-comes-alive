@@ -3,7 +3,6 @@ package net.conczin.mca.entity.ai.brain.tasks;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.core.Holder;
-import net.minecraft.network.protocol.game.DebugPackets;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.world.entity.LivingEntity;
@@ -36,7 +35,6 @@ public class ExtendedForgetCompletedPointOfInterestTask {
                             if (isBedOccupiedByOthers(serverWorld, blockPos, entity)) {
                                 poiPos.erase();
                                 world.getPoiManager().release(blockPos);
-                                DebugPackets.sendPoiTicketCountPacket(world, blockPos);
                             }
                         } else {
                             poiPos.erase();

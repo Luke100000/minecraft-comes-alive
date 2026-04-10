@@ -1,3 +1,12 @@
+# 7.7.6-soul.1 (1.21.11)
+
+* Restored a separate stable Minecraft 1.21.11 dual-loader line for Fabric and NeoForge
+* Updated the 1.21.11 Fabric build to the modern Loom/remap setup and restored `mca.refmap.json` generation for release jars
+* Fixed Fabric tracked-data serializer registration across the old and new Fabric API registry entry points
+* Added the missing MCA humanoid render-state bridge needed by the recovered 1.21.11 client line
+* Fixed config directory creation so the recovered 1.21.11 builds can initialize cleanly
+* Cleaned up book text issues and revalidated book assets, recipes, and resource JSON across the mod resources
+
 # 7.7.6
 
 * Fixed issues with config (Thanks pau101!)

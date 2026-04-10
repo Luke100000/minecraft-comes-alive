@@ -6,7 +6,7 @@
     "###"
   ],
   "key": {
-    "#": {"item": "mca:rose_gold_ingot"}
+    "#": "mca:rose_gold_ingot"
   },
   "result": {
     "id": "mca:rose_gold_block"

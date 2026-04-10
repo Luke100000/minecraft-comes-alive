@@ -1,35 +1,35 @@
 package net.conczin.mca.client.resources;
 
 import net.conczin.mca.MCA;
-import net.minecraft.resources.ResourceLocation;
-import net.minecraft.util.FastColor;
+import net.minecraft.resources.Identifier;
+import net.minecraft.util.ARGB;
 import net.minecraft.util.Mth;
 
 import java.util.HashMap;
 import java.util.Map;
 
 public class ColorPalette {
-    static final Data EMPTY = new Data(1, 1, new int[]{0xFFFFFF});
-    static final Map<ResourceLocation, ColorPalette> REGISTRY = new HashMap<>();
+    static final Data EMPTY = new Data(1, 1, new int[]{0xFFFFFFFF});
+    static final Map<Identifier, ColorPalette> REGISTRY = new HashMap<>();
 
     public static final ColorPalette SKIN = new ColorPalette(MCA.locate("textures/colormap/villager_skin.png"));
     public static final ColorPalette HAIR = new ColorPalette(MCA.locate("textures/colormap/villager_hair.png"));
 
-    private final ResourceLocation id;
+    private final Identifier id;
 
     Data data = EMPTY;
 
-    public ColorPalette(ResourceLocation id) {
+    public ColorPalette(Identifier id) {
         this.id = id;
         REGISTRY.put(id, this);
     }
 
     private static int applyGreenShift(int color, float greenShift) {
-        return FastColor.ARGB32.colorFromFloat(
+        return ARGB.colorFromFloat(
                 1.0f,
-                Mth.clamp(FastColor.ARGB32.red(color) / 255f * (1.0f - greenShift * 0.3f) - greenShift * 0.1f, 0, 1),
-                Mth.clamp(FastColor.ARGB32.green(color) / 255f * (1.0f + greenShift * 0.3f) + greenShift * 0.1f, 0, 1),
-                Mth.clamp(FastColor.ARGB32.blue(color) / 255f, 0, 1)
+                Mth.clamp(ARGB.red(color) / 255f * (1.0f - greenShift * 0.3f) - greenShift * 0.1f, 0, 1),
+                Mth.clamp(ARGB.green(color) / 255f * (1.0f + greenShift * 0.3f) + greenShift * 0.1f, 0, 1),
+                Mth.clamp(ARGB.blue(color) / 255f, 0, 1)
         );
     }
 
@@ -37,7 +37,7 @@ public class ColorPalette {
         return (int) Math.floor(Mth.clamp(v * max, 0, max));
     }
 
-    public ResourceLocation getId() {
+    public Identifier getId() {
         return id;
     }
 
@@ -45,7 +45,7 @@ public class ColorPalette {
         int x = clampFloor(v, data.width - 1); // horizontal
         int y = clampFloor(u, data.height - 1); // vertical
 
-        int color = data.colors[y * data.height + x];
+        int color = data.colors[y * data.width + x];
 
         return greenShift > 0 ? applyGreenShift(color, greenShift) : color;
     }

@@ -7,6 +7,7 @@ import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 
 public record RenameVillageMessage(int id, String name) implements HandleablePayload {
@@ -19,7 +20,7 @@ public record RenameVillageMessage(int id, String name) implements HandleablePay
 
     @Override
     public void handleServer(ServerPlayer player) {
-        VillageManager.get(player.serverLevel()).getOrEmpty(id).ifPresent(v -> v.setName(name));
+        VillageManager.get((ServerLevel) player.level()).getOrEmpty(id).ifPresent(v -> v.setName(name));
     }
 
     @Override

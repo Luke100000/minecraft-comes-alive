@@ -22,6 +22,7 @@ import net.minecraft.world.entity.ai.targeting.TargetingConditions;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
 
+import java.util.List;
 import java.util.Locale;
 
 public interface Messenger extends EntityWrapper {
@@ -91,17 +92,29 @@ public interface Messenger extends EntityWrapper {
     }
 
     default void sendChatToAllAround(MutableComponent phrase) {
-        for (Player player : asEntity().level().getNearbyPlayers(CAN_RECEIVE, asEntity(), asEntity().getBoundingBox().inflate(20))) {
+        for (Player player : getNearbyPlayers()) {
             float dist = player.distanceTo(asEntity());
             sendChatMessage(phrase.withStyle(dist < 10 ? ChatFormatting.WHITE : ChatFormatting.GRAY), player);
         }
     }
 
     default void sendChatToAllAround(String phrase, Object... params) {
-        for (Player player : asEntity().level().getNearbyPlayers(CAN_RECEIVE, asEntity(), asEntity().getBoundingBox().inflate(20))) {
+        for (Player player : getNearbyPlayers()) {
             float dist = player.distanceTo(asEntity());
             sendChatMessage(getTranslatable(player, phrase, params).withStyle(dist < 10 ? ChatFormatting.WHITE : ChatFormatting.GRAY), player);
         }
+    }
+
+    private List<? extends Player> getNearbyPlayers() {
+        if (asEntity().level() instanceof ServerLevel serverLevel) {
+            return serverLevel.getPlayers(player ->
+                    player.distanceToSqr(asEntity()) <= 400.0
+                            && CAN_RECEIVE.test(serverLevel, asEntity(), player));
+        }
+
+        return asEntity().level().players().stream()
+                .filter(player -> player.distanceToSqr(asEntity()) <= 400.0)
+                .toList();
     }
 
     default void sendChatMessage(Player target, String phraseId, Object... params) {

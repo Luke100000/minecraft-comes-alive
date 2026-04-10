@@ -13,7 +13,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
-import net.minecraft.world.InteractionResultHolder;
+import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
@@ -29,29 +29,30 @@ public class PotionOfMetamorphosisItem extends TooltippedItem {
     }
 
     @Override
-    public final InteractionResultHolder<ItemStack> use(Level world, Player player, InteractionHand hand) {
+    public final InteractionResult use(Level world, Player player, InteractionHand hand) {
         if (player instanceof ServerPlayer serverPlayer) {
             // set gender
             PlayerSaveData data = PlayerSaveData.get(serverPlayer);
             CompoundTag villagerData = data.getEntityData();
             villagerData.putInt("Gender", gender.ordinal());
             data.setEntityData(villagerData);
+            data.setEntityDataSet(true);
 
             common(serverPlayer);
 
             // also update players
-            serverPlayer.serverLevel().players().forEach(p -> Network.sendToPlayer(new PlayerDataMessage(player.getUUID(), villagerData), p));
+            ((ServerLevel) serverPlayer.level()).players().forEach(p -> Network.sendToPlayer(new PlayerDataMessage(player.getUUID(), villagerData), p));
 
             // remove item
             ItemStack stack = player.getItemInHand(hand);
             stack.shrink(1);
-            return InteractionResultHolder.success(stack);
+            return InteractionResult.SUCCESS.heldItemTransformedTo(stack);
         }
         return super.use(world, player, hand);
     }
 
     public InteractionResult interactLivingEntity(ItemStack stack, Player player, LivingEntity entity, InteractionHand hand) {
-        if (entity instanceof VillagerLike<?> villager && !entity.level().isClientSide) {
+        if (entity instanceof VillagerLike<?> villager && !entity.level().isClientSide()) {
             villager.getGenetics().setGender(gender);
 
             common(entity);

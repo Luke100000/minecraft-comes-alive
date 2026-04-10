@@ -10,6 +10,7 @@ import net.minecraft.core.UUIDUtil;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 
 import java.util.Map;
@@ -27,7 +28,7 @@ public record GetFamilyTreeRequest(UUID uuid) implements HandleablePayload {
 
     @Override
     public void handleServer(ServerPlayer player) {
-        FamilyTree.get(player.serverLevel()).getOrEmpty(uuid).ifPresent(entry -> {
+        FamilyTree.get((ServerLevel) player.level()).getOrEmpty(uuid).ifPresent(entry -> {
             Map<UUID, FamilyTreeNode> familyEntries = Stream.concat(
                             entry.lookup(Stream.of(entry.id(), entry.partner())),
                             entry.lookup(entry.getRelatives(2, 1))

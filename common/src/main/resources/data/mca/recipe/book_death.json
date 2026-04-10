@@ -1,8 +1,8 @@
 {
   "type": "minecraft:crafting_shapeless",
   "ingredients": [
-    {"item": "minecraft:book"},
-    {"item": "minecraft:bone"}
+    "minecraft:book",
+    "minecraft:bone"
   ],
   "result": {
     "id": "mca:book_death",

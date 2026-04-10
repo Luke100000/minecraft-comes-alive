@@ -6,7 +6,6 @@ import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.core.Holder;
-import net.minecraft.network.protocol.game.DebugPackets;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.PathfinderMob;
 import net.minecraft.world.entity.ai.behavior.AcquirePoi;
@@ -76,7 +75,6 @@ public class LazyFindPointOfInterestTask extends AcquirePoi {
                                     world.broadcastEntityEvent(entity, status);
                                 });
                                 long2ObjectMap.clear();
-                                DebugPackets.sendPoiTicketCountPacket(world, blockPos);
                             });
                         } else {
                             for (Pair<Holder<PoiType>, BlockPos> registryEntryBlockPosPair : set) {

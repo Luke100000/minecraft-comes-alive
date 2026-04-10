@@ -2,7 +2,7 @@ package net.conczin.mca.client.resources;
 
 import com.mojang.blaze3d.platform.NativeImage;
 import net.conczin.mca.MCA;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.server.packs.resources.SimplePreparableReloadListener;
 import net.minecraft.util.profiling.ProfilerFiller;
@@ -11,17 +11,19 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
-public class ColorPaletteLoader extends SimplePreparableReloadListener<Map<ResourceLocation, ColorPalette.Data>> {
-    protected static final ResourceLocation ID = MCA.locate("color_palettes");
+public class ColorPaletteLoader extends SimplePreparableReloadListener<Map<Identifier, ColorPalette.Data>> {
+    public static final Identifier ID = MCA.locate("color_palettes");
 
     @Override
-    protected Map<ResourceLocation, ColorPalette.Data> prepare(ResourceManager manager, ProfilerFiller profiler) {
-        return ColorPalette.REGISTRY.entrySet().stream().collect(Collectors.toMap(Map.Entry::getKey, entry -> {
-            return loadPalette(entry.getKey(), manager);
-        }));
+    protected Map<Identifier, ColorPalette.Data> prepare(ResourceManager manager, ProfilerFiller profiler) {
+        Map<Identifier, ColorPalette.Data> result = new java.util.HashMap<>();
+        for (Map.Entry<Identifier, ColorPalette> entry : ColorPalette.REGISTRY.entrySet()) {
+            result.put(entry.getKey(), loadPalette(entry.getKey(), manager));
+        }
+        return result;
     }
 
-    private ColorPalette.Data loadPalette(ResourceLocation id, ResourceManager manager) {
+    private ColorPalette.Data loadPalette(Identifier id, ResourceManager manager) {
         try (NativeImage img = NativeImage.read(manager.getResource(id).get().open())) {
             return new ColorPalette.Data(
                     img.getWidth(),
@@ -35,7 +37,7 @@ public class ColorPaletteLoader extends SimplePreparableReloadListener<Map<Resou
     }
 
     @Override
-    protected void apply(Map<ResourceLocation, ColorPalette.Data> palettes, ResourceManager manager, ProfilerFiller profiler) {
+    protected void apply(Map<Identifier, ColorPalette.Data> palettes, ResourceManager manager, ProfilerFiller profiler) {
         palettes.forEach((id, data) -> {
             if (ColorPalette.REGISTRY.containsKey(id)) {
                 ColorPalette.REGISTRY.get(id).data = Objects.requireNonNull(data);

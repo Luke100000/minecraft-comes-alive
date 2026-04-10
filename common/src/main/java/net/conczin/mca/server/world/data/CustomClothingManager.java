@@ -8,11 +8,14 @@ import net.conczin.mca.network.s2c.CustomSkinsChangedMessage;
 import net.conczin.mca.resources.data.skin.Clothing;
 import net.conczin.mca.resources.data.skin.Hair;
 import net.conczin.mca.resources.data.skin.SkinListEntry;
+import net.conczin.mca.util.WorldUtils;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.util.datafix.DataFixTypes;
 import net.minecraft.world.level.saveddata.SavedData;
+import net.minecraft.world.level.saveddata.SavedDataType;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -26,16 +29,26 @@ public class CustomClothingManager {
     public static Storage<Clothing> getClothing() {
         Optional<MinecraftServer> server = MCA.getServer();
         return server.<Storage<Clothing>>map(minecraftServer -> minecraftServer.overworld().getDataStorage()
-                .computeIfAbsent(new SavedData.Factory<>(Storage::new, (nbt, provider) -> new Storage<>(nbt, Clothing::new), null), "immersive_library_clothing")).orElse(CLOTHING_DUMMY);
+                .computeIfAbsent(new SavedDataType<>(
+                        "immersive_library_clothing",
+                        Storage::new,
+                        CompoundTag.CODEC.xmap(nbt -> new Storage<>(nbt, Clothing::new), data -> data.save(new CompoundTag(), minecraftServer.registryAccess())),
+                        DataFixTypes.LEVEL
+                ))).orElse(CLOTHING_DUMMY);
     }
 
     public static Storage<Hair> getHair() {
         Optional<MinecraftServer> server = MCA.getServer();
         return server.<Storage<Hair>>map(minecraftServer -> minecraftServer.overworld().getDataStorage()
-                .computeIfAbsent(new SavedData.Factory<>(Storage::new, (nbt, provider) -> new Storage<>(nbt, Hair::new), null), "immersive_library_hair")).orElse(HAIR_DUMMY);
+                .computeIfAbsent(new SavedDataType<>(
+                        "immersive_library_hair",
+                        Storage::new,
+                        CompoundTag.CODEC.xmap(nbt -> new Storage<>(nbt, Hair::new), data -> data.save(new CompoundTag(), minecraftServer.registryAccess())),
+                        DataFixTypes.LEVEL
+                ))).orElse(HAIR_DUMMY);
     }
 
-    public static class Storage<T extends SkinListEntry> extends SavedData {
+    public static class Storage<T extends SkinListEntry> extends SavedData implements WorldUtils.NbtSavedData {
         final Map<String, T> entries = new HashMap<>();
 
         public Storage() {
@@ -43,8 +56,8 @@ public class CustomClothingManager {
 
         public Storage(CompoundTag nbt, BiFunction<String, JsonObject, T> entryFromNbt) {
             Gson gson = new Gson();
-            for (String identifier : nbt.getAllKeys()) {
-                entries.put(identifier, entryFromNbt.apply(identifier, gson.fromJson(nbt.getString(identifier), JsonObject.class)));
+            for (String identifier : nbt.keySet()) {
+                entries.put(identifier, entryFromNbt.apply(identifier, gson.fromJson(nbt.getString(identifier).orElse("{}"), JsonObject.class)));
             }
         }
 

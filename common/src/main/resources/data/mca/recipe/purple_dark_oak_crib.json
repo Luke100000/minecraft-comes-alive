@@ -2,15 +2,9 @@
   "type": "minecraft:crafting_shaped",
   "category": "misc",
   "key": {
-    "C": {
-      "item": "minecraft:purple_carpet"
-    },
-    "F": {
-      "item": "minecraft:dark_oak_fence"
-    },
-    "P": {
-      "item": "minecraft:dark_oak_planks"
-    }
+    "C": "minecraft:purple_carpet",
+    "F": "minecraft:dark_oak_fence",
+    "P": "minecraft:dark_oak_planks"
   },
   "pattern": [
     "F F",

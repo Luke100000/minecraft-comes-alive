@@ -7,10 +7,10 @@
   ],
   "key": {
     "P": [
-      {"item": "minecraft:paper"}
+      "minecraft:paper"
     ],
     "B": [
-      {"item": "minecraft:blue_dye"}
+      "minecraft:blue_dye"
     ]
   },
   "result": {

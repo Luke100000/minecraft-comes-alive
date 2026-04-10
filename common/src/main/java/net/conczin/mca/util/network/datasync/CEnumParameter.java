@@ -2,7 +2,6 @@ package net.conczin.mca.util.network.datasync;
 
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.nbt.Tag;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
@@ -40,7 +39,7 @@ public class CEnumParameter<T extends Enum<T>> implements CParameter<T, Integer>
 
     @Override
     public T load(CompoundTag nbt, RegistryAccess registryAccess) {
-        return nbt.contains(id, Tag.TAG_ANY_NUMERIC) ? fromIndex(nbt.getInt(id)) : defaultValue;
+        return nbt.getInt(id).map(this::fromIndex).orElse(defaultValue);
     }
 
     @Override

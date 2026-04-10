@@ -63,33 +63,33 @@ public class Village implements Iterable<Building> {
     }
 
     public Village(CompoundTag v, ServerLevel world) {
-        id = v.getInt("id");
-        name = v.getString("name");
-        taxes = v.getFloat("taxesFloat");
-        beds = v.getInt("beds");
-        reputation = NbtHelper.toMap(v.getCompound("reputation"), UUID::fromString, i ->
-                NbtHelper.toMap((CompoundTag) i, UUID::fromString, i2 -> ((IntTag) i2).getAsInt())
+        id = v.getInt("id").orElse(0);
+        name = v.getString("name").orElse(API.getVillagePool().pickVillageName("village"));
+        taxes = v.getFloat("taxesFloat").orElse(0.0f);
+        beds = v.getInt("beds").orElse(0);
+        reputation = NbtHelper.toMap(v.getCompound("reputation").orElseGet(CompoundTag::new), UUID::fromString, i ->
+                NbtHelper.toMap((CompoundTag) i, UUID::fromString, i2 -> ((IntTag) i2).intValue())
         );
-        residentNames = NbtHelper.toMap(v.getCompound("residentNames"), UUID::fromString, Tag::getAsString);
-        residentHomes = NbtHelper.toMap(v.getCompound("residentHomes"), UUID::fromString, i -> ((LongTag) i).getAsLong());
+        residentNames = NbtHelper.toMap(v.getCompound("residentNames").orElseGet(CompoundTag::new), UUID::fromString, i -> ((StringTag) i).value());
+        residentHomes = NbtHelper.toMap(v.getCompound("residentHomes").orElseGet(CompoundTag::new), UUID::fromString, i -> ((LongTag) i).longValue());
 
         if (v.contains("populationThresholdFloat")) {
-            populationThreshold = v.getFloat("populationThresholdFloat");
+            populationThreshold = v.getFloat("populationThresholdFloat").orElse(0.75f);
         }
         if (v.contains("marriageThresholdFloat")) {
-            marriageThreshold = v.getFloat("marriageThresholdFloat");
+            marriageThreshold = v.getFloat("marriageThresholdFloat").orElse(0.5f);
         }
         this.world = world;
 
         if (v.contains("autoScan")) {
-            autoScan = v.getBoolean("autoScan");
+            autoScan = v.getBoolean("autoScan").orElse(Config.getInstance().enableAutoScanByDefault);
         } else {
             autoScan = true;
         }
 
-        ListTag b = v.getList("buildings", Tag.TAG_COMPOUND);
+        ListTag b = v.getList("buildings").orElseGet(ListTag::new);
         for (int i = 0; i < b.size(); i++) {
-            Building building = new Building(b.getCompound(i));
+            Building building = new Building(b.getCompoundOrEmpty(i));
 
             if (world == null || BuildingTypes.getInstance().getBuildingTypes().containsKey(building.getType())) {
                 buildings.put(building.getId(), building);

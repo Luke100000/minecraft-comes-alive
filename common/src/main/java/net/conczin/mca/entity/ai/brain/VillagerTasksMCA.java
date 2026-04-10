@@ -22,6 +22,7 @@ import net.conczin.mca.registry.ProfessionsMCA;
 import net.conczin.mca.server.world.data.VillageManager;
 import net.conczin.mca.server.world.data.villageComponents.VillageGuardsManager;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.attribute.EnvironmentAttributes;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
@@ -34,10 +35,9 @@ import net.minecraft.world.entity.ai.memory.MemoryStatus;
 import net.minecraft.world.entity.ai.sensing.Sensor;
 import net.minecraft.world.entity.ai.sensing.SensorType;
 import net.minecraft.world.entity.ai.village.poi.PoiTypes;
-import net.minecraft.world.entity.npc.Villager;
-import net.minecraft.world.entity.npc.VillagerProfession;
+import net.minecraft.world.entity.npc.villager.Villager;
+import net.minecraft.world.entity.npc.villager.VillagerProfession;
 import net.minecraft.world.entity.schedule.Activity;
-import net.minecraft.world.entity.schedule.Schedule;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 
@@ -105,7 +105,7 @@ public class VillagerTasksMCA {
     }
 
     public static Brain<VillagerEntityMCA> initializeTasks(VillagerEntityMCA villager, Brain<VillagerEntityMCA> brain) {
-        VillagerProfession profession = villager.getVillagerData().getProfession();
+        VillagerProfession profession = villager.getVillagerData().profession().value();
         AgeState age = AgeState.byCurrentAge(villager.getAge());
 
         boolean noDefault = false;
@@ -140,11 +140,11 @@ public class VillagerTasksMCA {
             brain.addActivity(Activity.REST, VillagerTasksMCA.getRestPackage(0.5F));
             noDefault = true;
         } else if (age == AgeState.BABY) {
-            brain.setSchedule(Schedule.VILLAGER_BABY);
+            brain.setSchedule(EnvironmentAttributes.BABY_VILLAGER_ACTIVITY);
             //todo babies may get a little bit more AI
             return brain;
         } else if (age != AgeState.ADULT) {
-            brain.setSchedule(Schedule.VILLAGER_BABY);
+            brain.setSchedule(EnvironmentAttributes.BABY_VILLAGER_ACTIVITY);
             brain.addActivity(Activity.PLAY, VillagerTasksMCA.getPlayPackage(1.0F));
             brain.addActivity(Activity.CORE, VillagerTasksMCA.getSelfDefencePackage());
         } else if (villager.isGuard()) {
@@ -178,7 +178,7 @@ public class VillagerTasksMCA {
         brain.setCoreActivities(ImmutableSet.of(Activity.CORE));
         brain.setDefaultActivity(Activity.IDLE);
         brain.setActiveActivityIfPossible(Activity.IDLE);
-        brain.updateActivityFromSchedule(villager.level().getDayTime(), villager.level().getGameTime());
+        brain.updateActivityFromSchedule(villager.level().environmentAttributes(), villager.level().getGameTime(), villager.position());
 
         return brain;
     }
@@ -296,8 +296,8 @@ public class VillagerTasksMCA {
                 )),
                 Pair.of(1, new EquipmentTask(VillagerTasksMCA::isOnDuty, v -> v.getResidency().getHomeVillage()
                         .map(vil -> vil.getVillageGuardsManager().getGuardEquipment(v.getProfession(), v.getDominantHand())).orElse(VillageGuardsManager.getEquipmentFor(v.getDominantHand(), EquipmentSet.GUARD_0, EquipmentSet.GUARD_0_LEFT)))),
-                Pair.of(2, StartAttacking.create(t -> true, VillagerTasksMCA::getPreferredTarget)),
-                Pair.of(3, StopAttackingIfTargetInvalid.create(livingEntity -> !VillagerTasksMCA.isPreferredTarget(villager, livingEntity))),
+                Pair.of(2, StartAttacking.create((level, t) -> true, (level, t) -> VillagerTasksMCA.getPreferredTarget(t))),
+                Pair.of(3, StopAttackingIfTargetInvalid.create((level, livingEntity) -> !VillagerTasksMCA.isPreferredTarget(villager, livingEntity))),
                 Pair.of(4, new BowTask<>(20, 12)),
                 Pair.of(5, BehaviorBuilder.triggerIf(v -> v.isHolding(Items.CROSSBOW),
                         BackUpIfTooClose.create(5, 0.75F)
@@ -358,7 +358,7 @@ public class VillagerTasksMCA {
     }
 
     private static Activity getActivity(VillagerEntityMCA villager) {
-        return villager.getBrain().getSchedule().getActivityAt((int) (villager.level().getDayTime() % 24000L));
+        return villager.getBrain().getActiveNonCoreActivity().orElse(Activity.IDLE);
     }
 
     public static ImmutableList<Pair<Integer, ? extends BehaviorControl<? super VillagerEntityMCA>>> getGrievingPackage() {
@@ -385,7 +385,7 @@ public class VillagerTasksMCA {
                                 new HoldItemTask(InteractionHand.MAIN_HAND, ItemStack.EMPTY),
                                 new LambdaTask<>((v) -> {
                                     v.getVillagerBrain().justGrieved();
-                                    v.getBrain().updateActivityFromSchedule(v.level().getDayTime(), v.level().getGameTime());
+                                    v.getBrain().updateActivityFromSchedule(v.level().environmentAttributes(), v.level().getGameTime(), v.position());
                                 })
 
                         )
@@ -395,7 +395,7 @@ public class VillagerTasksMCA {
 
     public static ImmutableList<Pair<Integer, ? extends BehaviorControl<? super VillagerEntityMCA>>> getWorkPackage(VillagerProfession profession, float speedModifier) {
         WorkAtPoi villagerWorkTask;
-        if (profession == VillagerProfession.FARMER) {
+        if (ProfessionsMCA.is(profession, VillagerProfession.FARMER)) {
             villagerWorkTask = new WorkAtComposter();
         } else {
             villagerWorkTask = new WorkAtPoi();
@@ -408,8 +408,8 @@ public class VillagerTasksMCA {
                                 Pair.of(StrollAroundPoi.create(MemoryModuleType.JOB_SITE, 0.4F, 4), 2),
                                 Pair.of(StrollToPoi.create(MemoryModuleType.JOB_SITE, 0.4F, 1, 10), 5),
                                 Pair.of(StrollToPoiList.create(MemoryModuleType.SECONDARY_JOB_SITE, speedModifier, 1, 6, MemoryModuleType.JOB_SITE), 5),
-                                Pair.of(new HarvestFarmland(), profession == VillagerProfession.FARMER ? 2 : 5),
-                                Pair.of(new UseBonemeal(), profession == VillagerProfession.FARMER ? 4 : 7))
+                                Pair.of(new HarvestFarmland(), ProfessionsMCA.is(profession, VillagerProfession.FARMER) ? 2 : 5),
+                                Pair.of(new UseBonemeal(), ProfessionsMCA.is(profession, VillagerProfession.FARMER) ? 4 : 7))
                 )),
                 Pair.of(10, new ShowTradesToPlayer(400, 1600)),
                 Pair.of(10, SetLookAndInteract.create(EntityType.PLAYER, 4)),

@@ -19,9 +19,13 @@ import net.minecraft.core.component.DataComponents;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.food.FoodProperties;
 import net.minecraft.world.item.*;
+import net.minecraft.world.item.component.ItemAttributeModifiers;
+import net.minecraft.world.item.component.Tool;
+import net.minecraft.world.item.equipment.Equippable;
 
 import java.util.Optional;
 
@@ -112,43 +116,45 @@ public class BreedableRelationship extends Relationship<VillagerEntityMCA> {
 
     //returns estimated values for common item types, which the villager could use
     private Optional<GiftType> handleDynamicGift(ItemStack stack) {
-        switch (stack.getItem()) {
-            case SwordItem ignored -> {
-                //swords
-                double satisfaction = InventoryUtils.approximateDamage(stack, entity);
-                satisfaction = (float) (Math.pow(satisfaction, 1.25) * 2);
-                return Optional.of(new GiftType(stack.getItem(), (int) satisfaction, MCA.locate("swords")));
-            }
-            case ProjectileWeaponItem ranged -> {
-                //ranged weapons
-                float satisfaction = ranged.getDefaultProjectileRange();
-                satisfaction = (float) (Math.pow(satisfaction, 1.25) * 2);
-                return Optional.of(new GiftType(stack.getItem(), (int) satisfaction, MCA.locate("archery")));
-            }
-            case TieredItem tool -> {
-                //tools
-                float satisfaction = tool.getTier().getSpeed();
-                satisfaction = (float) (Math.pow(satisfaction, 1.25) * 2);
-                return Optional.of(new GiftType(stack.getItem(), (int) satisfaction, MCA.locate(
-                        stack.getItem() instanceof AxeItem ? "swords" :
-                                stack.getItem() instanceof HoeItem ? "hoes" :
-                                        stack.getItem() instanceof ShovelItem ? "shovels" :
-                                                "pickaxes"
-                )));
-            }
-            case ArmorItem armor -> {
-                //armor
-                int satisfaction = (int) (Math.pow(armor.getDefense(), 1.25) * 1.5 + armor.getToughness() * 5);
-                return Optional.of(new GiftType(stack.getItem(), satisfaction, MCA.locate("armor")));
-            }
-            default -> {
-                //food
-                FoodProperties component = stack.get(DataComponents.FOOD);
-                if (component != null) {
-                    int satisfaction = (int) (component.nutrition() + component.saturation() * 3);
-                    return Optional.of(new GiftType(stack.getItem(), satisfaction, MCA.locate("food")));
-                }
-            }
+        Item item = stack.getItem();
+
+        if (item instanceof ProjectileWeaponItem ranged) {
+            float satisfaction = ranged.getDefaultProjectileRange();
+            satisfaction = (float) (Math.pow(satisfaction, 1.25) * 2);
+            return Optional.of(new GiftType(item, (int) satisfaction, MCA.locate("archery")));
+        }
+
+        if (stack.get(DataComponents.WEAPON) != null) {
+            double satisfaction = InventoryUtils.approximateDamage(stack, entity);
+            satisfaction = Math.pow(satisfaction, 1.25) * 2;
+            return Optional.of(new GiftType(item, (int) satisfaction, MCA.locate("swords")));
+        }
+
+        Tool tool = stack.get(DataComponents.TOOL);
+        if (tool != null) {
+            float satisfaction = tool.defaultMiningSpeed();
+            satisfaction = (float) (Math.pow(satisfaction, 1.25) * 2);
+            return Optional.of(new GiftType(item, (int) satisfaction, MCA.locate(
+                    item instanceof AxeItem ? "swords" :
+                            item instanceof HoeItem ? "hoes" :
+                                    item instanceof ShovelItem ? "shovels" :
+                                            "pickaxes"
+            )));
+        }
+
+        Equippable equippable = stack.get(DataComponents.EQUIPPABLE);
+        if (equippable != null && equippable.slot().isArmor()) {
+            ItemAttributeModifiers modifiers = stack.get(DataComponents.ATTRIBUTE_MODIFIERS);
+            double armor = modifiers == null ? 0.0 : modifiers.compute(Attributes.ARMOR, 0.0, equippable.slot());
+            double toughness = modifiers == null ? 0.0 : modifiers.compute(Attributes.ARMOR_TOUGHNESS, 0.0, equippable.slot());
+            int satisfaction = (int) (Math.pow(armor, 1.25) * 1.5 + toughness * 5);
+            return Optional.of(new GiftType(item, satisfaction, MCA.locate("armor")));
+        }
+
+        FoodProperties component = stack.get(DataComponents.FOOD);
+        if (component != null) {
+            int satisfaction = (int) (component.nutrition() + component.saturation() * 3);
+            return Optional.of(new GiftType(item, satisfaction, MCA.locate("food")));
         }
         return Optional.empty();
     }
@@ -229,8 +235,7 @@ public class BreedableRelationship extends Relationship<VillagerEntityMCA> {
 
         if (item == Items.GOLDEN_APPLE && entity.isInfected()) {
             entity.setInfected(false);
-            entity.eat(entity.level(), stack);
-            stack.shrink(1);
+            stack.finishUsingItem(entity.level(), entity);
             return true;
         }
 

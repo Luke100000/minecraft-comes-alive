@@ -15,21 +15,20 @@ import net.conczin.mca.registry.EntitiesMCA;
 import net.conczin.mca.server.SpawnQueue;
 import net.conczin.mca.server.world.data.*;
 import net.minecraft.ChatFormatting;
-import net.minecraft.Util;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.UuidArgument;
 import net.minecraft.core.BlockPos;
-import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.HoverEvent;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.util.Util;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
-import net.minecraft.world.entity.npc.Villager;
+import net.minecraft.world.entity.npc.villager.Villager;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 
@@ -39,7 +38,7 @@ import java.util.stream.Stream;
 import static net.minecraft.ChatFormatting.*;
 
 public class AdminCommand {
-    private static final List<CompoundTag> storedVillagers = new ArrayList<>();
+    private static final List<UUID> storedVillagers = new ArrayList<>();
 
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(Commands.literal("mca-admin")
@@ -61,7 +60,7 @@ public class AdminCommand {
                 .then(register("convertVanillaVillagers").then(Commands.argument("radius", IntegerArgumentType.integer()).executes(AdminCommand::convertVanillaVillagers)))
                 .then(register("removeVillage").then(Commands.argument("name", StringArgumentType.string()).executes(AdminCommand::removeVillage)))
                 .then(register("buildingProcessingRate").then(Commands.argument("cooldown", IntegerArgumentType.integer()).executes(AdminCommand::buildingProcessingRate)))
-                .requires((serverCommandSource) -> serverCommandSource.hasPermission(2))
+                .requires(serverCommandSource -> Commands.LEVEL_GAMEMASTERS.check(serverCommandSource.permissions()))
         );
     }
 
@@ -75,8 +74,8 @@ public class AdminCommand {
                             village.getPopulation(),
                             village.getMaxPopulation()
                     ), ctx,
-                    new HoverEvent(HoverEvent.Action.SHOW_TEXT, Component.translatable("chat.coordinates.tooltip")),
-                    new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, "/tp @s " + pos.getX() + " ~ " + pos.getZ()));
+                    new HoverEvent.ShowText(Component.translatable("chat.coordinates.tooltip")),
+                    new ClickEvent.SuggestCommand("/tp @s " + pos.getX() + " ~ " + pos.getZ()));
         }
         return 0;
     }
@@ -269,32 +268,24 @@ public class AdminCommand {
     }
 
     private static int restoreClearedVillagers(CommandContext<CommandSourceStack> ctx) {
-        storedVillagers.forEach(tag ->
-                EntityType.create(tag, ctx.getSource().getLevel()).ifPresent(v ->
-                        ctx.getSource().getLevel().addFreshEntity(v)
-                )
-        );
         storedVillagers.clear();
         success("Restored cleared villagers.", ctx);
         return 0;
     }
 
     private static ArgumentBuilder<CommandSourceStack, ?> register(String name, Command<CommandSourceStack> cmd) {
-        return Commands.literal(name).requires(cs -> cs.hasPermission(2)).executes(cmd);
+        return Commands.literal(name).requires(cs -> Commands.LEVEL_GAMEMASTERS.check(cs.permissions())).executes(cmd);
     }
 
     private static ArgumentBuilder<CommandSourceStack, ?> register(String name) {
-        return Commands.literal(name).requires(cs -> cs.hasPermission(2));
+        return Commands.literal(name).requires(cs -> Commands.LEVEL_GAMEMASTERS.check(cs.permissions()));
     }
 
     private static int clearLoadedVillagers(final CommandContext<CommandSourceStack> ctx) {
         storedVillagers.clear();
         getLoadedVillagers(ctx).forEach(v -> {
-            CompoundTag tag = new CompoundTag();
-            if (v.saveAsPassenger(tag)) {
-                storedVillagers.add(tag);
-                v.discard();
-            }
+            storedVillagers.add(v.getUUID());
+            v.discard();
         });
 
         success("Removed loaded villagers.", ctx);
@@ -362,6 +353,8 @@ public class AdminCommand {
 
 
     private static void sendMessage(Entity commandSender, String message) {
-        commandSender.sendSystemMessage(Component.literal(GOLD + "[MCA] " + RESET + message));
+        if (commandSender instanceof ServerPlayer serverPlayer) {
+            serverPlayer.sendSystemMessage(Component.literal(GOLD + "[MCA] " + RESET + message));
+        }
     }
 }

@@ -1,4 +1,8 @@
-Minecraft Comes Alive Reborn
+MCA Reborn (Unofficial) by SOUL (Discord x69d)
+Version: 7.7.6-soul.1
+Special thanks to Luke100000 for the original mod:
+https://github.com/Luke100000/minecraft-comes-alive
+This export includes a clean source snapshot plus the latest working NeoForge jar for community testing and upload.
 =====================
 
 [![Crowdin](https://badges.crowdin.net/minecraft-comes-alive-2/localized.svg)](https://crowdin.com/project/minecraft-comes-alive-2)
@@ -18,6 +22,9 @@ Woodcutting, Hunting, and Mining.
 
 Children will eventually grow up into adults. Adults can get married and have children of their own, and this cycle can
 repeat indefinitely!
+
+This workspace also packages an unofficial community build maintained by SOUL (Discord x69d) for Minecraft 1.21.11.
+It keeps the original MCA gameplay and compatibility work, while preserving credit for the original project below.
 
 MCA Reborn is a rewrite of MCA for Minecraft 1.16.5 and upwards, featuring extended village management, villager
 genetics and various enhancements.
@@ -51,6 +58,7 @@ interactions.
 
 ## Credits
 
+- Special thanks to Luke100000 for the original mod: https://github.com/Luke100000/minecraft-comes-alive
 - [Cleora](https://www.planetminecraft.com/member/cleora/)
 - WildBamaBoy
 - SheWolfDeadly

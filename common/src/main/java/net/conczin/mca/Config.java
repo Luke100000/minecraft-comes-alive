@@ -800,8 +800,8 @@ public final class Config extends CommonConfig {
      * Requires enablePlayerShaders to be true.
      */
     public Map<String, String> shaderLocationsMap = Map.of(
-            "color_blind", "mca:shaders/post/color_blind.json",
-            "sirben", "mca:shaders/post/sirben.json"
+            "color_blind", "mca:color_blind",
+            "sirben", "mca:sirben"
     );
 
     /**
@@ -838,6 +838,10 @@ public final class Config extends CommonConfig {
 
     public static Config loadOrCreate() {
         File file = getConfigFile();
+        File parent = file.getParentFile();
+        if (parent != null && !parent.exists()) {
+            parent.mkdirs();
+        }
         if (file.exists()) {
             try (FileReader reader = new FileReader(file)) {
                 Gson gson = new GsonBuilder().setPrettyPrinting().create();
@@ -880,12 +884,49 @@ public final class Config extends CommonConfig {
         for (Traits.Trait trait : Traits.Trait.values()) {
             enabledTraits.putIfAbsent(trait.id(), true);
         }
+
+        Map<String, String> normalizedShaderLocations = new HashMap<>();
+        for (Map.Entry<String, String> entry : shaderLocationsMap.entrySet()) {
+            normalizedShaderLocations.put(entry.getKey(), normalizeShaderLocation(entry.getValue()));
+        }
+        shaderLocationsMap = normalizedShaderLocations;
+    }
+
+    public static String normalizeShaderLocation(String shaderLocation) {
+        if (shaderLocation == null) {
+            return null;
+        }
+
+        String normalized = shaderLocation.trim();
+        int namespaceSeparator = normalized.indexOf(':');
+        if (namespaceSeparator < 0) {
+            return normalized;
+        }
+
+        String namespace = normalized.substring(0, namespaceSeparator + 1);
+        String path = normalized.substring(namespaceSeparator + 1);
+        if (path.endsWith(".json")) {
+            path = path.substring(0, path.length() - 5);
+        }
+
+        int lastSlash = path.lastIndexOf('/');
+        if (lastSlash >= 0) {
+            path = path.substring(lastSlash + 1);
+        }
+
+        return namespace + path;
     }
 
     public void save() {
         autocomplete();
 
-        try (FileWriter writer = new FileWriter(getConfigFile())) {
+        File file = getConfigFile();
+        File parent = file.getParentFile();
+        if (parent != null && !parent.exists()) {
+            parent.mkdirs();
+        }
+
+        try (FileWriter writer = new FileWriter(file)) {
             version = VERSION;
             Gson gson = new GsonBuilder().setPrettyPrinting().create();
             gson.toJson(this, writer);

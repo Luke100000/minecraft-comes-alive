@@ -5,6 +5,7 @@ import net.conczin.mca.registry.*;
 import net.conczin.mca.util.localization.FlowingText;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvent;
@@ -12,22 +13,23 @@ import net.minecraft.sounds.SoundEvents;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
-import net.minecraft.world.InteractionResultHolder;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.*;
+import net.minecraft.world.item.component.TooltipDisplay;
 import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
 
-import java.util.List;
+import java.util.function.Consumer;
 
-public class ScytheItem extends SwordItem {
+public class ScytheItem extends Item {
     public ScytheItem(Properties settings) {
-        super(Tiers.GOLD, settings);
+        super(settings.sword(ToolMaterial.GOLD, 3.0F, -2.4F));
     }
 
     public static void setSoul(ItemStack stack, boolean soul) {
@@ -45,11 +47,11 @@ public class ScytheItem extends SwordItem {
 
         if (state.is(TagsMCA.Blocks.TOMBSTONES)) {
             return TombstoneBlock.Data.of(world.getBlockEntity(pos)).filter(TombstoneBlock.Data::hasEntity).map(data -> {
-                if (!context.getLevel().isClientSide) {
+                if (!context.getLevel().isClientSide()) {
                     CriterionMCA.GENERIC_EVENT.trigger((ServerPlayer) context.getPlayer(), cure ? "staffOfLife" : "scytheRevive");
                 }
 
-                if (!world.isClientSide && !data.isResurrecting()) {
+                if (!world.isClientSide() && !data.isResurrecting()) {
                     data.startResurrecting(cure);
                     return InteractionResult.SUCCESS;
                 }
@@ -61,13 +63,13 @@ public class ScytheItem extends SwordItem {
     }
 
     @Override
-    public void appendHoverText(ItemStack stack, TooltipContext context, List<Component> tooltip, TooltipFlag flag) {
-        tooltip.addAll(FlowingText.wrap(Component.translatable(getDescriptionId(stack) + ".tooltip").withStyle(ChatFormatting.GRAY), 160));
+    public void appendHoverText(ItemStack stack, Item.TooltipContext context, TooltipDisplay tooltipDisplay, Consumer<Component> tooltip, TooltipFlag flag) {
+        FlowingText.wrap(Component.translatable(getDescriptionId() + ".tooltip").withStyle(ChatFormatting.GRAY), 160).forEach(tooltip);
     }
 
     @Override
-    public UseAnim getUseAnimation(ItemStack stack) {
-        return UseAnim.BLOCK;
+    public ItemUseAnimation getUseAnimation(ItemStack stack) {
+        return ItemUseAnimation.BLOCK;
     }
 
     @Override
@@ -76,10 +78,12 @@ public class ScytheItem extends SwordItem {
     }
 
     @Override
-    public void inventoryTick(ItemStack stack, Level world, Entity entity, int slot, boolean selected) {
+    public void inventoryTick(ItemStack stack, ServerLevel world, Entity entity, EquipmentSlot slot) {
         if (!(entity instanceof LivingEntity living)) {
             return;
         }
+
+        boolean selected = slot == EquipmentSlot.MAINHAND;
 
         boolean active = stack.getOrDefault(DataComponentsMCA.SCYTHE_ACTIVE, false);
 
@@ -103,7 +107,7 @@ public class ScytheItem extends SwordItem {
     }
 
     @Override
-    public InteractionResultHolder<ItemStack> use(Level world, Player user, InteractionHand hand) {
+    public InteractionResult use(Level world, Player user, InteractionHand hand) {
         user.startUsingItem(hand);
         return super.use(world, user, hand);
     }
@@ -129,7 +133,7 @@ public class ScytheItem extends SwordItem {
     }
 
     @Override
-    public boolean hurtEnemy(ItemStack stack, LivingEntity target, LivingEntity attacker) {
+    public void hurtEnemy(ItemStack stack, LivingEntity target, LivingEntity attacker) {
         if (target.level().random.nextInt(50) > 40) {
             target.addEffect(new MobEffectInstance(MobEffects.WITHER, 1000, 1));
         }
@@ -151,10 +155,9 @@ public class ScytheItem extends SwordItem {
                 0.75F + r.nextFloat() / 2F
         );
 
-        return super.hurtEnemy(stack, target, attacker);
+        super.hurtEnemy(stack, target, attacker);
     }
 
-    @Override
     public boolean isValidRepairItem(ItemStack stack, ItemStack ingredient) {
         return stack.getItem() == ingredient.getItem();
     }

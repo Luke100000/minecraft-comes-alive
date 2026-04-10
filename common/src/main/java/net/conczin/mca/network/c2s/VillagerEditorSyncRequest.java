@@ -1,5 +1,7 @@
 package net.conczin.mca.network.c2s;
 
+import com.google.gson.JsonParser;
+import com.mojang.serialization.JsonOps;
 import net.conczin.mca.MCA;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerLike;
@@ -7,6 +9,7 @@ import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.network.HandleablePayload;
 import net.conczin.mca.network.Network;
 import net.conczin.mca.network.s2c.PlayerDataMessage;
+import net.conczin.mca.registry.ProfessionsMCA;
 import net.conczin.mca.resources.ClothingList;
 import net.conczin.mca.resources.HairList;
 import net.conczin.mca.server.world.data.FamilyTree;
@@ -18,14 +21,15 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.ComponentSerialization;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.npc.VillagerProfession;
+import net.minecraft.world.entity.npc.villager.VillagerProfession;
 import net.minecraft.world.entity.player.Player;
 
 import java.util.List;
@@ -45,7 +49,7 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
 
     @Override
     public void handleServer(ServerPlayer player) {
-        Entity entity = player.serverLevel().getEntity(uuid);
+        Entity entity = ((ServerLevel) player.level()).getEntity(uuid);
         switch (command) {
             case "hair":
                 setHair(player, entity);
@@ -62,8 +66,9 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
                 break;
             case "profession":
                 if (entity instanceof VillagerEntityMCA villager) {
-                    VillagerProfession profession = BuiltInRegistries.VILLAGER_PROFESSION.get(ResourceLocation.parse(data.getString("profession")));
-                    villager.setProfession(profession);
+                    BuiltInRegistries.VILLAGER_PROFESSION
+                            .getOptional(Identifier.parse(data.getString("profession").orElse(VillagerProfession.NONE.identifier().toString())))
+                            .ifPresent(villager::setProfession);
                 }
                 break;
         }
@@ -75,7 +80,7 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
             // fetch hair
             String hair;
             if (data.contains("offset")) {
-                hair = HairList.getInstance().getPool(getGender(villagerData)).pickNext(villagerData.getString("Hair"), data.getInt("offset"));
+                hair = HairList.getInstance().getPool(getGender(villagerData)).pickNext(villagerData.getString("Hair").orElse(""), data.getInt("offset").orElse(0));
             } else {
                 hair = HairList.getInstance().getPool(getGender(villagerData)).pickOne();
             }
@@ -92,13 +97,13 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
             String clothes = "mca:missing";
             if (entity instanceof Player) {
                 if (data.contains("offset")) {
-                    clothes = ClothingList.getInstance().getPool(getGender(villagerData), VillagerProfession.NONE).pickNext(villagerData.getString("Clothes"), data.getInt("offset"));
+                    clothes = ClothingList.getInstance().getPool(getGender(villagerData), ProfessionsMCA.value(VillagerProfession.NONE)).pickNext(villagerData.getString("Clothes").orElse(""), data.getInt("offset").orElse(0));
                 } else {
-                    clothes = ClothingList.getInstance().getPool(getGender(villagerData), VillagerProfession.NONE).pickOne();
+                    clothes = ClothingList.getInstance().getPool(getGender(villagerData), ProfessionsMCA.value(VillagerProfession.NONE)).pickOne();
                 }
             } else if (entity instanceof VillagerLike<?> villager) {
                 if (data.contains("offset")) {
-                    clothes = ClothingList.getInstance().getPool(villager).pickNext(villager.getClothes(), data.getInt("offset"));
+                    clothes = ClothingList.getInstance().getPool(villager).pickNext(villager.getClothes(), data.getInt("offset").orElse(0));
                 } else {
                     clothes = ClothingList.getInstance().getPool(villager).pickOne();
                 }
@@ -116,7 +121,7 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
             syncFamilyTree(player, entity, villagerData);
 
             //also update players
-            serverPlayer.serverLevel().players().forEach(p -> Network.sendToPlayer(new PlayerDataMessage(player.getUUID(), villagerData), p));
+            ((ServerLevel) serverPlayer.level()).players().forEach(p -> Network.sendToPlayer(new PlayerDataMessage(player.getUUID(), villagerData), p));
         } else if (entity instanceof VillagerLike<?> villagerLike) {
             villagerLike.syncFromEditor(villagerData);
             entity.refreshDimensions();
@@ -129,7 +134,7 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
     }
 
     private Gender getGender(CompoundTag villagerData) {
-        return Gender.byId(villagerData.getInt("gender"));
+        return Gender.byId(villagerData.getInt("Gender").orElse(villagerData.getInt("gender").orElse(Gender.MALE.ordinal())));
     }
 
     private Optional<FamilyTreeNode> getFamilyNode(ServerPlayer player, FamilyTree tree, String name, Gender gender) {
@@ -169,17 +174,20 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
         FamilyTreeNode entry = tree.getOrCreate(entity);
         entry.setGender(getGender(data));
 
-        String s = villagerData.getString("CustomName");
+        String s = villagerData.getString("CustomName").orElse("");
         if (!s.isEmpty()) {
             try {
-                entry.setName(Objects.requireNonNull(Component.Serializer.fromJson(s, entity.registryAccess())).getString());
+                entry.setName(Objects.requireNonNull(ComponentSerialization.CODEC
+                        .parse(JsonOps.INSTANCE, JsonParser.parseString(s))
+                        .resultOrPartial(error -> MCA.LOGGER.error("Failed to parse custom name for villager: {}", error))
+                        .orElse(null)).getString());
             } catch (Exception e) {
                 MCA.LOGGER.error("Failed to parse custom name for villager: {}", s, e);
             }
         }
 
         if (villagerData.contains("FamilyTreeNewFatherName")) {
-            String name = villagerData.getString("FamilyTreeNewFatherName");
+            String name = villagerData.getString("FamilyTreeNewFatherName").orElse("");
             if (MCA.isBlankString(name)) {
                 entry.removeFather();
             } else {
@@ -188,7 +196,7 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
         }
 
         if (villagerData.contains("FamilyTreeNewMotherName")) {
-            String name = villagerData.getString("FamilyTreeNewMotherName");
+            String name = villagerData.getString("FamilyTreeNewMotherName").orElse("");
             if (MCA.isBlankString(name)) {
                 entry.removeMother();
             } else {
@@ -197,7 +205,7 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
         }
 
         if (villagerData.contains("FamilyTreeNewSpouseName")) {
-            String name = villagerData.getString("FamilyTreeNewSpouseName");
+            String name = villagerData.getString("FamilyTreeNewSpouseName").orElse("");
             if (MCA.isBlankString(name)) {
                 Optional.of(entry.partner()).flatMap(tree::getOrEmpty).ifPresent(node -> node.updatePartner(null, null));
                 entry.updatePartner(null, null);

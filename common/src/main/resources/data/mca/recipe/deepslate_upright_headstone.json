@@ -6,8 +6,8 @@
     "##"
   ],
   "key": {
-    "#": {"item": "minecraft:deepslate"},
-    "I": {"item": "minecraft:bone"}
+    "#": "minecraft:deepslate",
+    "I": "minecraft:bone"
   },
   "result": {
     "id": "mca:deepslate_upright_headstone"

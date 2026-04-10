@@ -7,18 +7,19 @@ import net.conczin.mca.entity.VillagerFactory;
 import net.conczin.mca.entity.ZombieVillagerEntityMCA;
 import net.conczin.mca.entity.ZombieVillagerFactory;
 import net.conczin.mca.entity.ai.relationship.Gender;
+import net.conczin.mca.registry.ProfessionsMCA;
 import net.conczin.mca.server.world.data.Nationality;
 import net.minecraft.core.Holder;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.MobSpawnType;
+import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.PathfinderMob;
-import net.minecraft.world.entity.monster.Zombie;
-import net.minecraft.world.entity.monster.ZombieVillager;
-import net.minecraft.world.entity.npc.Villager;
-import net.minecraft.world.entity.npc.VillagerProfession;
-import net.minecraft.world.entity.npc.VillagerType;
+import net.minecraft.world.entity.monster.zombie.Zombie;
+import net.minecraft.world.entity.monster.zombie.ZombieVillager;
+import net.minecraft.world.entity.npc.villager.Villager;
+import net.minecraft.world.entity.npc.villager.VillagerProfession;
+import net.minecraft.world.entity.npc.villager.VillagerType;
 
 import java.util.Locale;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -54,8 +55,8 @@ public class SpawnQueue {
                     .withGender(Gender.getRandom())
                     .withAge(ve.getAge())
                     .withPosition(ve)
-                    .withType(ve.getVillagerData().getType())
-                    .withProfession(ve.getVillagerData().getProfession(), ve.getVillagerData().getLevel(), ve.getOffers())
+                    .withType(ve.getVillagerData().type().value())
+                    .withProfession(ve.getVillagerData().profession().value(), ve.getVillagerData().level(), ve.getOffers())
                     .spawn(((IVillagerEntity) ve).mca$getSpawnReason());
 
             copyPastaIntensifies(villager, ve);
@@ -68,8 +69,8 @@ public class SpawnQueue {
                     .withName(zve.hasCustomName() ? zve.getName().getString() : null)
                     .withGender(Gender.getRandom())
                     .withPosition(zve)
-                    .withType(zve.getVillagerData().getType())
-                    .withProfession(zve.getVillagerData().getProfession(), zve.getVillagerData().getLevel())
+                    .withType(zve.getVillagerData().type().value())
+                    .withProfession(zve.getVillagerData().profession().value(), zve.getVillagerData().level())
                     .spawn(((IVillagerEntity) zve).mca$getSpawnReason());
 
             copyPastaIntensifies(villager, zve);
@@ -83,8 +84,8 @@ public class SpawnQueue {
                     .withGender(Gender.getRandom())
                     .withPosition(ze)
                     .withType(VillagerType.byBiome(ze.level().getBiome(ze.blockPosition())))
-                    .withProfession(BuiltInRegistries.VILLAGER_PROFESSION.getRandom(ze.getRandom()).map(Holder::value).orElse(VillagerProfession.NONE))
-                    .spawn(MobSpawnType.NATURAL);
+                    .withProfession(BuiltInRegistries.VILLAGER_PROFESSION.getRandom(ze.getRandom()).map(Holder::value).orElseGet(() -> ProfessionsMCA.value(VillagerProfession.NONE)))
+                    .spawn(EntitySpawnReason.NATURAL);
 
             copyPastaIntensifies(villager, ze);
         }
@@ -110,7 +111,7 @@ public class SpawnQueue {
         if (entity instanceof IVillagerEntity villagerEntity && !handlesSpawnReason(villagerEntity.mca$getSpawnReason())) {
             return false;
         }
-        if (Config.getInstance().villagerDimensionBlacklist.contains(entity.getCommandSenderWorld().dimension().location().toString())) {
+        if (Config.getInstance().villagerDimensionBlacklist.contains(entity.level().dimension().identifier().toString())) {
             return false;
         }
         if (Config.getInstance().overwriteOriginalVillagers
@@ -135,7 +136,7 @@ public class SpawnQueue {
         return false;
     }
 
-    private boolean handlesSpawnReason(MobSpawnType reason) {
+    private boolean handlesSpawnReason(EntitySpawnReason reason) {
         return Config.getInstance().allowedSpawnReasons.contains(reason.name().toLowerCase(Locale.ROOT));
     }
 

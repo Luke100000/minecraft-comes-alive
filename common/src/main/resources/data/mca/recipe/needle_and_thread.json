@@ -7,10 +7,10 @@
   ],
   "key": {
     "I": [
-      {"item": "minecraft:iron_ingot"}
+      "minecraft:iron_ingot"
     ],
     "S": [
-      {"item": "minecraft:string"}
+      "minecraft:string"
     ]
   },
   "result": {

@@ -1,8 +1,8 @@
 {
   "type": "minecraft:crafting_shapeless",
   "ingredients": [
-    {"item": "minecraft:book"},
-    {"item": "mca:blueprint"}
+    "minecraft:book",
+    "mca:blueprint"
   ],
   "result": {
     "id": "mca:book_blueprint",

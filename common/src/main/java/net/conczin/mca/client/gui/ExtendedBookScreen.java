@@ -9,6 +9,9 @@ import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.PageButton;
+import net.minecraft.client.input.KeyEvent;
+import net.minecraft.client.input.MouseButtonEvent;
+import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.CommonComponents;
 import net.minecraft.network.chat.Component;
@@ -87,18 +90,18 @@ public class ExtendedBookScreen extends Screen {
     }
 
     @Override
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (super.keyPressed(keyCode, scanCode, modifiers)) {
+    public boolean keyPressed(KeyEvent keyEvent) {
+        if (super.keyPressed(keyEvent)) {
             return true;
         }
 
-        return switch (keyCode) {
+        return switch (keyEvent.key()) {
             case 266 -> {
-                this.previousPageButton.onPress();
+                this.previousPageButton.onPress(keyEvent);
                 yield true;
             }
             case 267 -> {
-                this.nextPageButton.onPress();
+                this.nextPageButton.onPress(keyEvent);
                 yield true;
             }
             default -> false;
@@ -115,7 +118,7 @@ public class ExtendedBookScreen extends Screen {
 
         // background
         int i = (width - 192) / 2;
-        context.blit(book.getBackground(), i, 2, 0, 0, 192, 192);
+        context.blit(RenderPipelines.GUI_TEXTURED, book.getBackground(), i, 2, 0, 0, 192, 192, 256, 256);
 
         // page number
         if (book.showPageCount()) {
@@ -136,31 +139,26 @@ public class ExtendedBookScreen extends Screen {
     }
 
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        return super.mouseClicked(mouseX, mouseY, button);
+    public boolean mouseClicked(MouseButtonEvent mouseEvent, boolean doubleClick) {
+        return super.mouseClicked(mouseEvent, doubleClick);
     }
 
-    @Override
     public boolean handleComponentClicked(Style style) {
         ClickEvent clickEvent = style != null ? style.getClickEvent() : null;
         if (clickEvent == null) {
             return false;
         }
 
-        if (clickEvent.getAction() == ClickEvent.Action.CHANGE_PAGE) {
-            try {
-                return jumpToPage(Integer.parseInt(clickEvent.getValue()) - 1);
-            } catch (Exception var5) {
-                return false;
-            }
+        if (clickEvent instanceof ClickEvent.ChangePage pageChange) {
+            return jumpToPage(pageChange.page() - 1);
         }
 
-        boolean handled = super.handleComponentClicked(style);
-        if (handled && clickEvent.getAction() == ClickEvent.Action.RUN_COMMAND) {
+        defaultHandleClickEvent(clickEvent, minecraft, this);
+        if (clickEvent.action() == ClickEvent.Action.RUN_COMMAND) {
             minecraft.setScreen(null);
         }
 
-        return handled;
+        return true;
     }
 
     public Book getBook() {

@@ -14,9 +14,11 @@ import net.conczin.mca.entity.interaction.Constraint;
 import net.conczin.mca.resources.Rank;
 import net.conczin.mca.resources.Tasks;
 import net.minecraft.advancements.AdvancementHolder;
+import net.minecraft.core.Holder;
+import net.minecraft.core.HolderSet;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.tags.TagKey;
 import net.minecraft.util.GsonHelper;
@@ -29,13 +31,14 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
 import java.util.function.BiFunction;
+import java.util.stream.StreamSupport;
 
 public class GiftPredicate {
     public static final Map<String, Factory<JsonElement>> CONDITION_TYPES = new HashMap<>();
 
     static {
         register("profession", (json, name) ->
-                ResourceLocation.parse(GsonHelper.convertToString(json, name)), profession -> (villager, stack, player) -> BuiltInRegistries.VILLAGER_PROFESSION.getKey(villager.getProfession()).equals(profession) ? 1.0f : 0.0f);
+                Identifier.parse(GsonHelper.convertToString(json, name)), profession -> (villager, stack, player) -> BuiltInRegistries.VILLAGER_PROFESSION.getKey(villager.getProfession()).equals(profession) ? 1.0f : 0.0f);
         register("age_group", (json, name) ->
                 AgeState.valueOf(GsonHelper.convertToString(json, name).toUpperCase(Locale.ENGLISH)), group -> (villager, stack, player) -> villager.getAgeState() == group ? 1.0f : 0.0f);
         register("gender", (json, name) ->
@@ -89,18 +92,23 @@ public class GiftPredicate {
                         villager.getVillagerBrain().getCurrentJob() == chore ? 1.0f : 0.0f
         );
         register("item", (json, name) -> {
-            ResourceLocation id = ResourceLocation.parse(GsonHelper.convertToString(json, name));
+            Identifier id = Identifier.parse(GsonHelper.convertToString(json, name));
             Item item = BuiltInRegistries.ITEM.getOptional(id).orElseThrow(() -> new JsonSyntaxException("Unknown item '" + id + "'"));
-            return Ingredient.of(new ItemStack(item));
+            return Ingredient.of(item);
         }, (Ingredient ingredient) -> (villager, stack, player) -> ingredient.test(stack) ? 1.0f : 0.0f);
         register("tag", (json, name) -> {
-            ResourceLocation id = ResourceLocation.parse(GsonHelper.convertToString(json, name));
+            Identifier id = Identifier.parse(GsonHelper.convertToString(json, name));
             TagKey<Item> tag = TagKey.create(Registries.ITEM, id);
             if (tag == null) {
                 throw new JsonSyntaxException("Unknown item tag '" + id + "'");
             }
 
-            return Ingredient.of(tag);
+            List<Holder<Item>> holders = StreamSupport.stream(BuiltInRegistries.ITEM.getTagOrEmpty(tag).spliterator(), false).toList();
+            if (holders.isEmpty()) {
+                throw new JsonSyntaxException("Unknown item tag '" + id + "'");
+            }
+
+            return Ingredient.of(HolderSet.direct(holders));
         }, (Ingredient ingredient) -> (villager, stack, player) -> ingredient.test(stack) ? 1.0f : 0.0f);
         register("trait", (json, name) ->
                 Traits.Trait.valueOf(GsonHelper.convertToString(json, name).toUpperCase(Locale.ENGLISH)), trait ->
@@ -141,14 +149,14 @@ public class GiftPredicate {
         register("time_max", GsonHelper::convertToLong, time ->
                 (villager, stack, player) -> villager.level().getDayTime() % 24000L <= time ? 1.0f : 0.0f);
         register("biome", (json, name) ->
-                ResourceLocation.parse(GsonHelper.convertToString(json, name)), biome ->
+                Identifier.parse(GsonHelper.convertToString(json, name)), biome ->
                 (villager, stack, player) ->
                         villager.level().getBiome(villager.blockPosition())
-                                .unwrap().left().filter(b -> b.location().equals(biome)).isPresent() ? 1.0f : 0.0f
+                                .unwrap().left().filter(b -> b.identifier().equals(biome)).isPresent() ? 1.0f : 0.0f
         );
-        register("advancement", (json, name) -> ResourceLocation.parse(GsonHelper.convertToString(json, name)), id -> (villager, stack, player) -> {
+        register("advancement", (json, name) -> Identifier.parse(GsonHelper.convertToString(json, name)), id -> (villager, stack, player) -> {
             assert player != null;
-            AdvancementHolder advancement = Objects.requireNonNull(player.getServer()).getAdvancements().get(id);
+            AdvancementHolder advancement = Objects.requireNonNull(player.level().getServer()).getAdvancements().get(id);
             return (advancement != null && player.getAdvancements().getOrStartProgress(advancement).isDone()) ? 1.0f : 0.0f;
         });
         register("constraints", (json, name) -> Constraint.fromStringList(GsonHelper.convertToString(json, name)), constraints -> (villager, stack, player) -> {

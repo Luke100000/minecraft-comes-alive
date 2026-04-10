@@ -7,13 +7,13 @@
   ],
   "key": {
     "E": [
-      {"item": "minecraft:egg"}
+      "minecraft:egg"
     ],
     "B": [
-      {"item": "minecraft:glass_bottle"}
+      "minecraft:glass_bottle"
     ],
     "S": [
-      {"item": "minecraft:light_blue_dye"}
+      "minecraft:light_blue_dye"
     ]
   },
   "result": {

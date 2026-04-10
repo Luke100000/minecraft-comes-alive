@@ -23,6 +23,8 @@ public class MCAClient {
 
     public static void onLogin() {
         playerDataRequests.clear();
+        playerData.clear();
+        fallbackVillager = null;
         Network.sendToServer(new ConfigRequest());
     }
 

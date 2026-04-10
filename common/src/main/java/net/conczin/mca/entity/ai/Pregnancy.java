@@ -15,7 +15,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.MobSpawnType;
+import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 
@@ -77,7 +77,7 @@ public class Pregnancy {
             VillagerEntityMCA child = createChild(getGender(), father);
 
             child.setPos(mother.getX(), mother.getY(), mother.getZ());
-            WorldUtils.spawnEntity(mother.level(), child, MobSpawnType.BREEDING);
+            WorldUtils.spawnEntity(mother.level(), child, EntitySpawnReason.BREEDING);
         });
     }
 
@@ -100,7 +100,7 @@ public class Pregnancy {
     }
 
     public VillagerEntityMCA createChild(Gender gender, VillagerEntityMCA partner) {
-        VillagerEntityMCA child = Objects.requireNonNull(gender.getVillagerType().create(mother.level()));
+        VillagerEntityMCA child = Objects.requireNonNull(gender.getVillagerType().create(mother.level(), EntitySpawnReason.BREEDING));
 
         child.getGenetics().combine(partner.getGenetics(), mother.getGenetics());
         child.getTraits().inherit(partner.getTraits());

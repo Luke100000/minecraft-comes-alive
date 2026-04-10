@@ -71,6 +71,6 @@ class ColorSelector {
     }
 
     public int getColor() {
-        return 0xFF000000 | getBlue() << 16 | getGreen() << 8 | getRed();
+        return 0xFF000000 | getRed() << 16 | getGreen() << 8 | getBlue();
     }
 }

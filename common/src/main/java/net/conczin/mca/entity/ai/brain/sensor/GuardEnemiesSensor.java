@@ -5,7 +5,7 @@ import net.conczin.mca.Config;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.LivingEntity;
@@ -53,7 +53,7 @@ public class GuardEnemiesSensor extends Sensor<LivingEntity> {
             //priority is irrelevant if this entity is currently an active threat
             return 9;
         } else {
-            ResourceLocation id = BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType());
+            Identifier id = BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType());
             if (Config.getInstance().guardsTargetEntities.containsKey(id.toString())) {
                 return Config.getInstance().guardsTargetEntities.get(id.toString());
             } else if (Config.getInstance().guardsTargetMonsters && entity instanceof Enemy) {

@@ -18,12 +18,13 @@ import net.conczin.mca.util.WorldUtils;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.ClientboundSetPassengersPacket;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.entity.Saddleable;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.util.RandomPos;
-import net.minecraft.world.entity.npc.VillagerProfession;
+import net.minecraft.world.entity.npc.villager.VillagerProfession;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -77,7 +78,7 @@ public class VillagerCommandHandler extends EntityCommandHandler<VillagerEntityM
                 if (entity.isPassenger()) {
                     entity.stopRiding();
                 } else {
-                    entity.startRiding(player, true);
+                    entity.startRiding(player, true, false);
                 }
                 player.connection.send(new ClientboundSetPassengersPacket(player));
                 return false;
@@ -87,11 +88,11 @@ public class VillagerCommandHandler extends EntityCommandHandler<VillagerEntityM
                     entity.stopRiding();
                 } else {
                     entity.level().getEntities(player, player.getBoundingBox()
-                                    .inflate(10), e -> e instanceof Saddleable && ((Saddleable) e).isSaddled())
+                                    .inflate(10), e -> e instanceof LivingEntity livingEntity && livingEntity.hasItemInSlot(EquipmentSlot.SADDLE))
                             .stream()
                             .filter(horse -> !horse.isVehicle())
                             .min(Comparator.comparingDouble(a -> a.distanceToSqr(entity))).ifPresentOrElse(horse -> {
-                                entity.startRiding(horse, false);
+                                entity.startRiding(horse, false, false);
                                 entity.sendChatMessage(player, "interaction.ridehorse.success");
                             }, () -> entity.sendChatMessage(player, "interaction.ridehorse.fail.notnearby"));
                 }
@@ -167,11 +168,11 @@ public class VillagerCommandHandler extends EntityCommandHandler<VillagerEntityM
                 return true;
             }
             case "pardon" -> {
-                entity.setProfession(VillagerProfession.NONE);
+                entity.setProfession(ProfessionsMCA.value(VillagerProfession.NONE));
                 return true;
             }
             case "stay_in_village" -> {
-                entity.setProfession(VillagerProfession.NONE);
+                entity.setProfession(ProfessionsMCA.value(VillagerProfession.NONE));
                 entity.setDespawnDelay(0);
                 return true;
             }
@@ -207,7 +208,7 @@ public class VillagerCommandHandler extends EntityCommandHandler<VillagerEntityM
             case "profession" -> {
                 switch (arg) {
                     case "none" -> {
-                        entity.setProfession(VillagerProfession.NONE);
+                        entity.setProfession(ProfessionsMCA.value(VillagerProfession.NONE));
                         entity.sendChatMessage(player, "profession.set.none");
                     }
                     case "guard" -> {
@@ -241,7 +242,7 @@ public class VillagerCommandHandler extends EntityCommandHandler<VillagerEntityM
                     ServerLevel world = (ServerLevel) entity.level();
                     String finalArg = arg;
                     MCA.executorService.execute(() -> {
-                        ResourceLocation identifier = ResourceLocation.parse(finalArg);
+                        Identifier identifier = Identifier.parse(finalArg);
                         BlockPos pos = RandomPos.generateRandomDirection(entity.getRandom(), 1024, 0).offset(entity.blockPosition());
                         Optional<BlockPos> position = WorldUtils.getClosestStructurePosition(world, pos, identifier, 64);
                         if (position.isPresent()) {

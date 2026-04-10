@@ -6,8 +6,8 @@
     "##"
   ],
   "key": {
-    "#": {"item": "minecraft:stone"},
-    "I": {"item": "minecraft:bone"}
+    "#": "minecraft:stone",
+    "I": "minecraft:bone"
   },
   "result": {
     "id": "mca:upright_headstone"

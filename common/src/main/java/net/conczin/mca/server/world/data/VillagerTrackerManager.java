@@ -14,7 +14,7 @@ import net.minecraft.world.level.saveddata.SavedData;
 import java.util.Map;
 import java.util.UUID;
 
-public class VillagerTrackerManager extends SavedData {
+public class VillagerTrackerManager extends SavedData implements WorldUtils.NbtSavedData {
     private final static int MAP_SIZE = 1024 * 16;
 
     private final Map<UUID, GlobalPos> entries;

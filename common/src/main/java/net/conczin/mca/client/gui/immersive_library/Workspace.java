@@ -9,6 +9,7 @@ import net.conczin.mca.resources.data.skin.Clothing;
 import net.conczin.mca.resources.data.skin.Hair;
 import net.conczin.mca.resources.data.skin.SkinListEntry;
 import net.minecraft.client.renderer.texture.DynamicTexture;
+import net.minecraft.util.ARGB;
 import net.minecraft.util.Mth;
 
 import java.util.LinkedList;
@@ -33,7 +34,7 @@ public final class Workspace {
 
     public Workspace(NativeImage image) {
         this.currentImage = image;
-        this.backendTexture = new DynamicTexture(currentImage);
+        this.backendTexture = new DynamicTexture(() -> "mca/workspace", currentImage);
         this.dirty = true;
     }
 
@@ -62,7 +63,7 @@ public final class Workspace {
     private void fillDeleteFunc(FillTodo entry, Queue<FillTodo> todo, int x, int y) {
         if (x < 0 || y < 0 || x >= 64 || y >= 64) return;
 
-        FillTodo nextEntry = new FillTodo(x, y, currentImage.getRedOrLuminance(x, y), currentImage.getGreenOrLuminance(x, y), currentImage.getBlueOrLuminance(x, y), currentImage.getLuminanceOrAlpha(x, y));
+        FillTodo nextEntry = new FillTodo(x, y, redAt(x, y), greenAt(x, y), blueAt(x, y), alphaAt(x, y));
 
         if (Math.abs(nextEntry.red - entry.red) > fillToolThreshold) return;
         if (Math.abs(nextEntry.green - entry.green) > fillToolThreshold) return;
@@ -77,12 +78,12 @@ public final class Workspace {
 
         for (int x = 0; x < 64; x++) {
             for (int y = 0; y < 64; y++) {
-                int r = currentImage.getRedOrLuminance(x, y) & 0xFF;
-                int g = currentImage.getGreenOrLuminance(x, y) & 0xFF;
-                int b = currentImage.getBlueOrLuminance(x, y) & 0xFF;
-                int a = currentImage.getLuminanceOrAlpha(x, y) & 0xFF;
+                int r = redAt(x, y);
+                int g = greenAt(x, y);
+                int b = blueAt(x, y);
+                int a = alphaAt(x, y);
                 int l = Mth.clamp((int) (0.2126 * r + 0.7152 * g + 0.0722 * b), 0, 255);
-                currentImage.setPixelRGBA(x, y, a << 24 | l << 16 | l << 8 | l);
+                currentImage.setPixel(x, y, ARGB.color(a, l, l, l));
             }
         }
 
@@ -94,11 +95,11 @@ public final class Workspace {
 
         for (int x = 0; x < 64; x++) {
             for (int y = 0; y < 64; y++) {
-                int r = Mth.clamp((currentImage.getRedOrLuminance(x, y) & 0xFF) + i, 0, 255);
-                int g = Mth.clamp((currentImage.getGreenOrLuminance(x, y) & 0xFF) + i, 0, 255);
-                int b = Mth.clamp((currentImage.getBlueOrLuminance(x, y) & 0xFF) + i, 0, 255);
-                int a = currentImage.getLuminanceOrAlpha(x, y) & 0xFF;
-                currentImage.setPixelRGBA(x, y, a << 24 | r << 16 | g << 8 | b);
+                int r = Mth.clamp(redAt(x, y) + i, 0, 255);
+                int g = Mth.clamp(greenAt(x, y) + i, 0, 255);
+                int b = Mth.clamp(blueAt(x, y) + i, 0, 255);
+                int a = alphaAt(x, y);
+                currentImage.setPixel(x, y, ARGB.color(a, r, g, b));
             }
         }
 
@@ -112,11 +113,11 @@ public final class Workspace {
         int samples = 0;
         for (int x = 0; x < 64; x++) {
             for (int y = 0; y < 64; y++) {
-                int a = currentImage.getLuminanceOrAlpha(x, y) & 0xFF;
+                int a = alphaAt(x, y);
                 if (a > 0) {
-                    average += currentImage.getRedOrLuminance(x, y) & 0xFF;
-                    average += currentImage.getBlueOrLuminance(x, y) & 0xFF;
-                    average += currentImage.getGreenOrLuminance(x, y) & 0xFF;
+                    average += redAt(x, y);
+                    average += blueAt(x, y);
+                    average += greenAt(x, y);
                     samples += 3;
                 }
             }
@@ -125,11 +126,11 @@ public final class Workspace {
 
         for (int x = 0; x < 64; x++) {
             for (int y = 0; y < 64; y++) {
-                int r = Mth.clamp((int) (((currentImage.getRedOrLuminance(x, y) & 0xFF) - average) * (1.0f + c) + average), 0, 255);
-                int g = Mth.clamp((int) (((currentImage.getGreenOrLuminance(x, y) & 0xFF) - average) * (1.0f + c) + average), 0, 255);
-                int b = Mth.clamp((int) (((currentImage.getBlueOrLuminance(x, y) & 0xFF) - average) * (1.0f + c) + average), 0, 255);
-                int a = currentImage.getLuminanceOrAlpha(x, y) & 0xFF;
-                currentImage.setPixelRGBA(x, y, a << 24 | r << 16 | g << 8 | b);
+                int r = Mth.clamp((int) ((redAt(x, y) - average) * (1.0f + c) + average), 0, 255);
+                int g = Mth.clamp((int) ((greenAt(x, y) - average) * (1.0f + c) + average), 0, 255);
+                int b = Mth.clamp((int) ((blueAt(x, y) - average) * (1.0f + c) + average), 0, 255);
+                int a = alphaAt(x, y);
+                currentImage.setPixel(x, y, ARGB.color(a, r, g, b));
             }
         }
 
@@ -142,16 +143,16 @@ public final class Workspace {
         saveSnapshot(true);
 
         Queue<FillTodo> todo = new LinkedList<>();
-        todo.add(new FillTodo(x, y, currentImage.getRedOrLuminance(x, y), currentImage.getGreenOrLuminance(x, y), currentImage.getBlueOrLuminance(x, y), currentImage.getLuminanceOrAlpha(x, y)));
+        todo.add(new FillTodo(x, y, redAt(x, y), greenAt(x, y), blueAt(x, y), alphaAt(x, y)));
 
         while (!todo.isEmpty()) {
             FillTodo entry = todo.poll();
 
-            if (currentImage.getLuminanceOrAlpha(entry.x, entry.y) == 0) {
+            if (alphaAt(entry.x, entry.y) == 0) {
                 continue;
             }
 
-            currentImage.setPixelRGBA(entry.x, entry.y, 0);
+            currentImage.setPixel(entry.x, entry.y, 0);
             dirty = true;
 
             for (int ox = -1; ox <= 1; ox++) {
@@ -199,6 +200,22 @@ public final class Workspace {
         if (dirty) {
             dirtySinceSnapshot = true;
         }
+    }
+
+    private int redAt(int x, int y) {
+        return ARGB.red(currentImage.getPixel(x, y));
+    }
+
+    private int greenAt(int x, int y) {
+        return ARGB.green(currentImage.getPixel(x, y));
+    }
+
+    private int blueAt(int x, int y) {
+        return ARGB.blue(currentImage.getPixel(x, y));
+    }
+
+    private int alphaAt(int x, int y) {
+        return ARGB.alpha(currentImage.getPixel(x, y));
     }
 
     private record FillTodo(int x, int y, int red, int green, int blue, int alpha) {

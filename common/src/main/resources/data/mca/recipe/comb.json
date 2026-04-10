@@ -7,10 +7,10 @@
   ],
   "key": {
     "I": [
-      {"item": "minecraft:iron_ingot"}
+      "minecraft:iron_ingot"
     ],
     "B": [
-      {"item": "minecraft:iron_bars"}
+      "minecraft:iron_bars"
     ]
   },
   "result": {

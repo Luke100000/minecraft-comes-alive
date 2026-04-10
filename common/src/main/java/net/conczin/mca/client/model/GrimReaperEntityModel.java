@@ -2,7 +2,6 @@ package net.conczin.mca.client.model;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-import net.conczin.mca.entity.GrimReaperEntity;
 import net.conczin.mca.entity.ReaperAttackState;
 import net.minecraft.client.model.HumanoidModel;
 import net.minecraft.client.model.geom.ModelPart;
@@ -11,12 +10,13 @@ import net.minecraft.client.model.geom.builders.CubeDeformation;
 import net.minecraft.client.model.geom.builders.CubeListBuilder;
 import net.minecraft.client.model.geom.builders.MeshDefinition;
 import net.minecraft.client.model.geom.builders.PartDefinition;
+import net.minecraft.client.renderer.entity.state.HumanoidRenderState;
 
 import java.util.Map;
 
 import static net.minecraft.client.model.geom.PartNames.*;
 
-public class GrimReaperEntityModel<T extends GrimReaperEntity> extends HumanoidModel<T> {
+public class GrimReaperEntityModel extends HumanoidModel<HumanoidRenderState> {
     private static final Map<ReaperAttackState, ModelTransformSet> POSES = ImmutableMap.of(
             ReaperAttackState.PRE, new ModelTransformSet.Builder()
                     .rotate(HEAD, -15.6F, 40.4F, 0)
@@ -80,8 +80,8 @@ public class GrimReaperEntityModel<T extends GrimReaperEntity> extends HumanoidM
     }
 
     @Override
-    public void setupAnim(T entity, float f, float g, float h, float i, float j) {
-        super.setupAnim(entity, f, g, h, i, j);
+    public void setupAnim(HumanoidRenderState renderState) {
+        super.setupAnim(renderState);
 
         body.setPos(0, 0, 0);
         body.setRotation(0, 0, 0);
@@ -93,7 +93,7 @@ public class GrimReaperEntityModel<T extends GrimReaperEntity> extends HumanoidM
 
         scythe.loadPose(scytheTransform);
 
-        reaperState = entity.getAttackState();
+        reaperState = ReaperAttackState.IDLE;
         ModelTransformSet set = POSES.get(reaperState);
 
         if (set != null) {
@@ -106,16 +106,21 @@ public class GrimReaperEntityModel<T extends GrimReaperEntity> extends HumanoidM
             set.get("scythe_handle").applyTo(scythe);
         }
 
-        hat.copyFrom(head);
+        copyModelTransform(head, hat);
     }
 
-    @Override
     protected Iterable<ModelPart> headParts() {
         return ImmutableList.of(head, hat);
     }
 
-    @Override
     protected Iterable<ModelPart> bodyParts() {
         return ImmutableList.of(body, rightArm, leftArm, rightLeg, leftLeg);
+    }
+
+    private static void copyModelTransform(ModelPart source, ModelPart target) {
+        target.loadPose(source.storePose());
+        target.xScale = source.xScale;
+        target.yScale = source.yScale;
+        target.zScale = source.zScale;
     }
 }

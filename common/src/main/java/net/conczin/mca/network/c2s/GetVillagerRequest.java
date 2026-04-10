@@ -7,6 +7,7 @@ import net.conczin.mca.network.s2c.GetVillagerResponse;
 import net.conczin.mca.server.world.data.FamilyTree;
 import net.conczin.mca.server.world.data.FamilyTreeNode;
 import net.conczin.mca.server.world.data.PlayerSaveData;
+import net.conczin.mca.util.WorldUtils;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.FriendlyByteBuf;
@@ -41,8 +42,9 @@ public record GetVillagerRequest(UUID id) implements HandleablePayload {
         if (e instanceof ServerPlayer serverPlayer) {
             data = PlayerSaveData.get(serverPlayer).getEntityData();
         } else if (e instanceof LivingEntity) {
-            data = new CompoundTag();
-            e.save(data);
+            var output = WorldUtils.createValueOutput(e.level().registryAccess());
+            e.save(output);
+            data = WorldUtils.getCompoundTag(output);
         } else {
             return null;
         }
@@ -59,7 +61,7 @@ public record GetVillagerRequest(UUID id) implements HandleablePayload {
 
     @Override
     public void handleServer(ServerPlayer player) {
-        Entity e = player.serverLevel().getEntity(id);
+        Entity e = ((ServerLevel) player.level()).getEntity(id);
         CompoundTag villagerData = getVillagerData(e);
         if (villagerData != null) {
             Network.sendToPlayer(new GetVillagerResponse(villagerData), player);

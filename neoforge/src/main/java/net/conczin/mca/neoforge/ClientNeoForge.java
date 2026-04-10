@@ -17,13 +17,16 @@ import net.conczin.mca.resources.ApiReloadListener;
 import net.conczin.mca.resources.Supporters;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.ItemBlockRenderTypes;
-import net.minecraft.client.renderer.RenderType;
+import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.entity.VillagerRenderer;
 import net.minecraft.client.renderer.entity.ZombieVillagerRenderer;
-import net.minecraft.client.renderer.item.ItemProperties;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.neoforge.client.event.RegisterClientTooltipComponentFactoriesEvent;
+
+import net.neoforged.neoforge.client.event.AddClientReloadListenersEvent;
+
 import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 import net.neoforged.neoforge.client.event.*;
 
@@ -57,13 +60,18 @@ public final class ClientNeoForge extends ClientProxyAbstractImpl {
     }
 
     @SubscribeEvent
-    public static void data(RegisterClientReloadListenersEvent event) {
-        new ClientNeoForge();
+    public static void data(AddClientReloadListenersEvent event) {
+        event.addListener(MCAScreens.ID, new MCAScreens());
+        event.addDependency(net.neoforged.neoforge.client.resources.VanillaClientListeners.LAST, MCAScreens.ID);
 
-        event.registerReloadListener(new MCAScreens());
-        event.registerReloadListener(new ColorPaletteLoader());
-        event.registerReloadListener(new Supporters());
-        event.registerReloadListener(new ApiReloadListener());
+        event.addListener(ColorPaletteLoader.ID, new ColorPaletteLoader());
+        event.addDependency(net.neoforged.neoforge.client.resources.VanillaClientListeners.LAST, ColorPaletteLoader.ID);
+
+        event.addListener(Supporters.ID, new Supporters());
+        event.addDependency(net.neoforged.neoforge.client.resources.VanillaClientListeners.LAST, Supporters.ID);
+
+        event.addListener(ApiReloadListener.ID, new ApiReloadListener());
+        event.addDependency(net.neoforged.neoforge.client.resources.VanillaClientListeners.LAST, ApiReloadListener.ID);
     }
 
     @SubscribeEvent
@@ -73,11 +81,10 @@ public final class ClientNeoForge extends ClientProxyAbstractImpl {
 
     @SubscribeEvent
     public static void onClientSetup(FMLClientSetupEvent event) {
+        new ClientNeoForge();
         event.enqueueWork(() -> {
             // Model predicates
-            ModelPredicatesMCA.setup(ItemProperties::register);
-            // Render layers
-            ItemBlockRenderTypes.setRenderLayer(BlocksMCA.INFERNAL_FLAME, RenderType.cutout());
+            ModelPredicatesMCA.setup();
         });
     }
 

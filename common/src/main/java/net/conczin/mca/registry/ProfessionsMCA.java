@@ -4,12 +4,14 @@ import com.google.common.collect.ImmutableSet;
 import net.conczin.mca.MCA;
 import net.conczin.mca.mixin.MixinVillagerProfession;
 import net.minecraft.core.Holder;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.world.entity.ai.village.poi.PoiType;
-import net.minecraft.world.entity.npc.VillagerProfession;
+import net.minecraft.world.entity.npc.villager.VillagerProfession;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.level.block.Block;
 import org.jetbrains.annotations.Nullable;
@@ -21,7 +23,7 @@ import java.util.Set;
 import java.util.function.Predicate;
 
 public interface ProfessionsMCA {
-    Map<ResourceLocation, VillagerProfession> PROFESSIONS = new HashMap<>();
+    Map<Identifier, VillagerProfession> PROFESSIONS = new HashMap<>();
 
     Set<VillagerProfession> CAN_NOT_TRADE = new HashSet<>();
     Set<VillagerProfession> IS_IMPORTANT = new HashSet<>();
@@ -47,9 +49,9 @@ public interface ProfessionsMCA {
     }
 
     static VillagerProfession register(String name, boolean canTradeWith, boolean important, boolean needsNoHome, Predicate<Holder<PoiType>> heldWorkstation, Predicate<Holder<PoiType>> acquirableWorkstation, ImmutableSet<Item> gatherableItems, ImmutableSet<Block> secondaryJobSites, @Nullable SoundEvent workSound) {
-        ResourceLocation id = MCA.locate(name);
+        Identifier id = MCA.locate(name);
         VillagerProfession result = MixinVillagerProfession.init(
-                id.toString().replace(':', '.'), heldWorkstation, acquirableWorkstation, gatherableItems, secondaryJobSites, workSound
+                Component.translatable("entity.minecraft.villager." + id.toString().replace(':', '.')), heldWorkstation, acquirableWorkstation, gatherableItems, secondaryJobSites, workSound
         );
         if (!canTradeWith) {
             CAN_NOT_TRADE.add(result);
@@ -64,8 +66,16 @@ public interface ProfessionsMCA {
         return result;
     }
 
+    static boolean is(VillagerProfession profession, ResourceKey<VillagerProfession> key) {
+        return BuiltInRegistries.VILLAGER_PROFESSION.getResourceKey(profession).filter(key::equals).isPresent();
+    }
+
+    static VillagerProfession value(ResourceKey<VillagerProfession> key) {
+        return BuiltInRegistries.VILLAGER_PROFESSION.getValueOrThrow(key);
+    }
+
     static String getFavoredBuilding(VillagerProfession profession) {
-        if (VillagerProfession.CARTOGRAPHER == profession || VillagerProfession.LIBRARIAN == profession || VillagerProfession.CLERIC == profession) {
+        if (is(profession, VillagerProfession.CARTOGRAPHER) || is(profession, VillagerProfession.LIBRARIAN) || is(profession, VillagerProfession.CLERIC)) {
             return "library";
         } else if (GUARD == profession || ARCHER == profession) {
             return "inn";
@@ -76,7 +86,7 @@ public interface ProfessionsMCA {
     static void registerProfessions(MCA.RegisterHelper<VillagerProfession> helper) {
         PROFESSIONS.forEach(helper::register);
 
-        CAN_NOT_TRADE.add(VillagerProfession.NONE);
-        CAN_NOT_TRADE.add(VillagerProfession.NITWIT);
+        CAN_NOT_TRADE.add(value(VillagerProfession.NONE));
+        CAN_NOT_TRADE.add(value(VillagerProfession.NITWIT));
     }
 }

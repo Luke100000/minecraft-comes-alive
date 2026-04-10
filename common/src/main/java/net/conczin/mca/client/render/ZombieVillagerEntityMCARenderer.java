@@ -12,22 +12,33 @@ import net.minecraft.client.model.geom.builders.LayerDefinition;
 import net.minecraft.client.model.geom.builders.MeshDefinition;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 
-public class ZombieVillagerEntityMCARenderer extends VillagerLikeEntityMCARenderer<ZombieVillagerEntityMCA> {
+public class ZombieVillagerEntityMCARenderer
+        extends VillagerLikeEntityMCARenderer<ZombieVillagerEntityMCA> {
     public ZombieVillagerEntityMCARenderer(EntityRendererProvider.Context ctx) {
         super(ctx, createModel(VillagerEntityModelMCA.bodyData(CubeDeformation.NONE)).hideWears());
 
         addLayer(new SkinLayer<>(this, model));
-        addLayer(new FaceLayer<>(this, createModel(VillagerEntityModelMCA.bodyData(new CubeDeformation(0.01F))).hideWears(), "zombie"));
-        addLayer(new ClothingLayer<>(this, createModel(VillagerEntityModelMCA.bodyData(new CubeDeformation(0.075F))), "zombie"));
+        addLayer(new FaceLayer<>(this,
+                createModel(VillagerEntityModelMCA.bodyData(new CubeDeformation(0.01F))).hideWears(), "zombie"));
+        addLayer(new ClothingLayer<>(this, createModel(VillagerEntityModelMCA.bodyData(new CubeDeformation(0.075F))),
+                "zombie"));
         addLayer(new HairLayer<>(this, createModel(VillagerEntityModelMCA.hairData(new CubeDeformation(0.1F)))));
     }
 
-    private static VillagerEntityModelMCA<ZombieVillagerEntityMCA> createModel(MeshDefinition data) {
-        return new ZombieVillagerEntityModelMCA<>(LayerDefinition.create(data, 64, 64).bakeRoot());
+    private static VillagerEntityModelMCA createModel(MeshDefinition data) {
+        return new ZombieVillagerEntityModelMCA(LayerDefinition.create(data, 64, 64).bakeRoot());
     }
 
     @Override
-    protected boolean isShaking(ZombieVillagerEntityMCA entity) {
-        return entity.isConverting() || entity.isUnderWaterConverting();
+    public MCAHumanoidRenderState createRenderState() {
+        return new MCAHumanoidRenderState();
+    }
+
+    @Override
+    public void extractRenderState(ZombieVillagerEntityMCA e, MCAHumanoidRenderState state, float delta) {
+        super.extractRenderState(e, state, delta);
+        state.villager = e;
+        state.visible = !e.isInvisible();
+        state.glowing = net.minecraft.client.Minecraft.getInstance().shouldEntityAppearGlowing(e);
     }
 }

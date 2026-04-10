@@ -15,8 +15,8 @@ public class ItemButtonWidget extends TooltipButtonWidget {
     }
 
     @Override
-    public void renderWidget(GuiGraphics context, int mouseX, int mouseY, float delta) {
-        super.renderWidget(context, mouseX, mouseY, delta);
+    protected void renderContents(GuiGraphics context, int mouseX, int mouseY, float delta) {
+        super.renderContents(context, mouseX, mouseY, delta);
 
         int size = 16;
 

@@ -11,10 +11,10 @@ public class StatusEffectDangerSet {
     public static final Set<Holder<MobEffect>> IS_DANGER = new HashSet<>();
 
     static {
-        IS_DANGER.add(MobEffects.MOVEMENT_SLOWDOWN);
-        IS_DANGER.add(MobEffects.DIG_SLOWDOWN);
-        IS_DANGER.add(MobEffects.HARM);
-        IS_DANGER.add(MobEffects.CONFUSION);
+        IS_DANGER.add(MobEffects.SLOWNESS);
+        IS_DANGER.add(MobEffects.MINING_FATIGUE);
+        IS_DANGER.add(MobEffects.INSTANT_DAMAGE);
+        IS_DANGER.add(MobEffects.NAUSEA);
         IS_DANGER.add(MobEffects.BLINDNESS);
         IS_DANGER.add(MobEffects.HUNGER);
         IS_DANGER.add(MobEffects.WEAKNESS);
@@ -22,6 +22,6 @@ public class StatusEffectDangerSet {
         IS_DANGER.add(MobEffects.WITHER);
         IS_DANGER.add(MobEffects.LEVITATION);
         IS_DANGER.add(MobEffects.UNLUCK);
-        IS_DANGER.add(MobEffects.MOVEMENT_SPEED);
+        IS_DANGER.add(MobEffects.SPEED);
     }
 }

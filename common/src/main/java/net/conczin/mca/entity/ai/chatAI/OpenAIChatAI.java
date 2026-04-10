@@ -23,6 +23,7 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
+import java.net.URI;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
@@ -182,7 +183,7 @@ public class OpenAIChatAI implements ChatAIStrategy {
 
             // add control variables
             if (isInHouse || config.villagerChatAIIncludeSessionInformation) {
-                long seed = player.serverLevel().getSeed();
+                long seed = ((net.minecraft.server.level.ServerLevel) player.level()).getSeed();
                 sb.append("[world_id:").append(seed).append("]");
 
                 sb.append("[player_id:").append(player.getUUID()).append("]");
@@ -294,8 +295,8 @@ public class OpenAIChatAI implements ChatAIStrategy {
             } else if (message.error.equals("limit")) {
                 MutableComponent styled = (Component.translatable("mca.limit.patreon")).withStyle(s -> s
                         .withColor(ChatFormatting.GOLD)
-                        .withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, "https://github.com/Luke100000/minecraft-comes-alive/wiki/GPT3-based-conversations#increase-conversation-limit"))
-                        .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Component.translatable("mca.limit.patreon.hover"))));
+                        .withClickEvent(new ClickEvent.OpenUrl(URI.create("https://github.com/Luke100000/minecraft-comes-alive/wiki/GPT3-based-conversations#increase-conversation-limit")))
+                        .withHoverEvent(new HoverEvent.ShowText(Component.translatable("mca.limit.patreon.hover"))));
 
                 player.displayClientMessage(styled, false);
             } else if (message.error.equals("limit_premium")) {

@@ -36,6 +36,8 @@ forge*changelog.txt
 /scripts/translated/
 /todo.md
 *.kate-swp
+*.swp
+*.swo
 /scripts/TTS/.env
 /scripts/TTS/output/
 /scripts/TTS/working/

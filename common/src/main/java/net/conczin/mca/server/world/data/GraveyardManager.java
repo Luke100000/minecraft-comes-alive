@@ -26,7 +26,7 @@ import java.util.function.LongFunction;
 /**
  * Tracks the positions where a tombstone may be found and whether it is filled or empty.
  */
-public class GraveyardManager extends SavedData {
+public class GraveyardManager extends SavedData implements WorldUtils.NbtSavedData {
     private final Map<TombstoneState, Long2ObjectMap<ChunkBase>> tombstones = new EnumMap<>(TombstoneState.class);
 
     public GraveyardManager(ServerLevel world) {
@@ -36,7 +36,7 @@ public class GraveyardManager extends SavedData {
         tombstones.putAll(NbtHelper.toMap(nbt, TombstoneState::valueOf, v -> {
             CompoundTag vv = (CompoundTag) v;
             Long2ObjectMap<ChunkBase> map = new Long2ObjectOpenHashMap<>();
-            vv.getAllKeys().forEach(key -> {
+            vv.keySet().forEach(key -> {
                 map.put(Long.parseLong(key), new Chunk((ListTag) vv.get(key)));
             });
             return map;
@@ -208,7 +208,7 @@ public class GraveyardManager extends SavedData {
         }
 
         Chunk(ListTag list) {
-            list.forEach(l -> tombstones.add(((NumericTag) l).getAsLong()));
+            list.forEach(l -> tombstones.add(((NumericTag) l).longValue()));
         }
 
         @Override

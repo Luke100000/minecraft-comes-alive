@@ -5,14 +5,14 @@ import net.conczin.mca.util.NbtHelper;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.StringTag;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.item.ItemStack;
 
 import java.util.LinkedList;
 import java.util.List;
 
 public class GiftSaturation {
-    private List<ResourceLocation> values = new LinkedList<>();
+    private List<Identifier> values = new LinkedList<>();
 
     public void add(ItemStack stack) {
         if (stack.isEmpty()) {
@@ -20,7 +20,7 @@ public class GiftSaturation {
         }
 
         // add to queue
-        ResourceLocation id = BuiltInRegistries.ITEM.getKey(stack.getItem());
+        Identifier id = BuiltInRegistries.ITEM.getKey(stack.getItem());
         values.add(id);
 
         // clear old values if limit is reached
@@ -30,12 +30,12 @@ public class GiftSaturation {
     }
 
     public int get(ItemStack stack) {
-        ResourceLocation id = BuiltInRegistries.ITEM.getKey(stack.getItem());
+        Identifier id = BuiltInRegistries.ITEM.getKey(stack.getItem());
         return (int) values.stream().filter(v -> v.equals(id)).count();
     }
 
     public void readFromNbt(ListTag nbt) {
-        values = NbtHelper.toList(nbt, v -> ResourceLocation.parse(v.getAsString()));
+        values = NbtHelper.toList(nbt, v -> Identifier.parse(((StringTag) v).value()));
     }
 
     public ListTag toNbt() {

@@ -10,6 +10,7 @@ import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.util.Mth;
 import net.minecraft.world.InteractionResult;
+import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -57,14 +58,16 @@ public class CribItem extends Item {
         }
 
         if (world instanceof ServerLevel serverWorld) {
-            CribEntity crib = EntitiesMCA.CRIB.create(serverWorld);
+            CribEntity crib = EntitiesMCA.CRIB.create(serverWorld, EntitySpawnReason.COMMAND);
             if (crib == null) return InteractionResult.FAIL;
 
             crib.setWoodType(wood);
             crib.setColor(color);
 
             float f = (float) Mth.floor((Mth.wrapDegrees(context.getRotation() - 180.0f) + 22.5f) / 45.0f) * 45.0f;
-            crib.moveTo(blockPos.getX() + 0.5f, blockPos.getY(), blockPos.getZ() + 0.5f, f, 0.0f);
+            crib.setPos(blockPos.getX() + 0.5, blockPos.getY(), blockPos.getZ() + 0.5);
+            crib.setYRot(f);
+            crib.setXRot(0.0f);
             serverWorld.addFreshEntityWithPassengers(crib);
 
             world.playSound(null, crib.getX(), crib.getY(), crib.getZ(), SoundEvents.ARMOR_STAND_PLACE, SoundSource.BLOCKS, 0.75f, 0.8f);
@@ -72,6 +75,6 @@ public class CribItem extends Item {
         }
 
         itemStack.shrink(1);
-        return InteractionResult.sidedSuccess(world.isClientSide);
+        return world.isClientSide() ? InteractionResult.SUCCESS : InteractionResult.SUCCESS_SERVER;
     }
 }

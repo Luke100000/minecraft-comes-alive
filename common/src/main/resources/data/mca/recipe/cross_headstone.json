@@ -6,8 +6,8 @@
     " # "
   ],
   "key": {
-    "#": {"item": "minecraft:cobblestone"},
-    "I": {"item": "minecraft:bone"}
+    "#": "minecraft:cobblestone",
+    "I": "minecraft:bone"
   },
   "result": {
     "id": "mca:cross_headstone"

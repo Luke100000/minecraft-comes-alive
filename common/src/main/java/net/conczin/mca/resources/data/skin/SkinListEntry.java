@@ -2,7 +2,7 @@ package net.conczin.mca.resources.data.skin;
 
 import com.google.gson.JsonObject;
 import net.conczin.mca.entity.ai.relationship.Gender;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.util.GsonHelper;
 
 public abstract class SkinListEntry {
@@ -29,7 +29,7 @@ public abstract class SkinListEntry {
     }
 
     public String getPath() {
-        return (ResourceLocation.parse(this.identifier)).getPath();
+        return (Identifier.parse(this.identifier)).getPath();
     }
 
     public JsonObject toJson() {

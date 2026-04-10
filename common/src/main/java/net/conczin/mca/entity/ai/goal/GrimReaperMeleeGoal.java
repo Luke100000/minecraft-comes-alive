@@ -71,8 +71,8 @@ public class GrimReaperMeleeGoal extends Goal {
 
                 reaper.teleportTo(player.getX() - (dX * 2), player.getY() + 2, reaper.getZ() - (dZ * 2));
 
-                if (!reaper.level().isClientSide && reaper.getRandom().nextFloat() >= 0.20F) {
-                    int currentItem = player.getInventory().selected;
+                if (!reaper.level().isClientSide() && reaper.getRandom().nextFloat() >= 0.20F) {
+                    int currentItem = player.getInventory().getSelectedSlot();
                     int randomItem = reaper.getRandom().nextInt(9);
                     ItemStack currentItemStack = player.getInventory().getItem(currentItem);
                     ItemStack randomItemStack = player.getInventory().getItem(randomItem);

@@ -1,8 +1,8 @@
 {
   "type": "minecraft:crafting_shapeless",
   "ingredients": [
-    {"item": "minecraft:book"},
-    {"item": "minecraft:wheat_seeds"}
+    "minecraft:book",
+    "minecraft:wheat_seeds"
   ],
   "result": {
     "id": "mca:book_family",

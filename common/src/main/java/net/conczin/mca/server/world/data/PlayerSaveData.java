@@ -31,17 +31,20 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.ComponentSerialization;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.util.datafix.DataFixTypes;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.saveddata.SavedData;
+import net.minecraft.world.level.saveddata.SavedDataType;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
 
-public class PlayerSaveData extends SavedData implements EntityRelationship {
+public class PlayerSaveData extends SavedData implements WorldUtils.NbtSavedData, EntityRelationship {
     private final ServerLevel world;
     private final UUID uuid;
     private final List<Letter> inbox = new LinkedList<>();
@@ -60,17 +63,17 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
         this.world = world;
         this.uuid = uuid;
 
-        lastSeenVillage = nbt.contains("lastSeenVillage", Tag.TAG_INT) ? Optional.of(nbt.getInt("lastSeenVillage")) : Optional.empty();
-        entityDataSet = nbt.contains("entityDataSet") && nbt.getBoolean("entityDataSet");
+        lastSeenVillage = Optional.of(nbt.getInt("lastSeenVillage").orElse(-1)).filter(id -> id >= 0);
+        entityDataSet = nbt.getBoolean("entityDataSet").orElse(false);
 
         if (nbt.contains("entityData")) {
-            entityData = nbt.getCompound("entityData");
+            entityData = nbt.getCompound("entityData").orElseGet(CompoundTag::new);
         } else {
             resetEntityData();
         }
 
-        ListTag inbox = nbt.getList("inbox", Tag.TAG_COMPOUND);
-        NbtHelper.toList(inbox, e -> new Letter((CompoundTag) e, world.registryAccess()));
+        ListTag inbox = nbt.getList("inbox").orElseGet(ListTag::new);
+        this.inbox.addAll(NbtHelper.toList(inbox, e -> new Letter((CompoundTag) e, world.registryAccess())));
     }
 
     public static PlayerSaveData get(ServerPlayer player) {
@@ -83,11 +86,15 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
 
     @SuppressWarnings("DataFlowIssue")
     public static Optional<PlayerSaveData> getIfPresent(ServerLevel world, UUID uuid) {
-        return Optional.ofNullable(world.getDataStorage().get(new SavedData.Factory<>(
-                () -> null,
-                (nbt, provider) -> new PlayerSaveData(world, uuid, nbt),
-                null
-        ), "mca_player_" + uuid));
+        return Optional.ofNullable(world.getDataStorage().get(new SavedDataType<>(
+                "mca_player_" + uuid,
+                () -> new PlayerSaveData(world, uuid),
+                CompoundTag.CODEC.xmap(
+                        nbt -> new PlayerSaveData(world, uuid, nbt),
+                        data -> data.save(new CompoundTag(), world.registryAccess())
+                ),
+                DataFixTypes.LEVEL
+        )));
     }
 
     public static void showMailNotification(ServerPlayer player) {
@@ -98,15 +105,15 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
     }
 
     private void resetEntityData() {
-        entityData = new CompoundTag();
-
-        VillagerEntityMCA villager = EntitiesMCA.MALE_VILLAGER.create(world);
+        VillagerEntityMCA villager = EntitiesMCA.MALE_VILLAGER.create(world, EntitySpawnReason.COMMAND);
         assert villager != null;
         villager.initializeSkin(true);
         villager.getGenetics().randomize();
         villager.getTraits().randomize();
         villager.getVillagerBrain().randomize();
-        villager.addAdditionalSaveData(entityData);
+        var output = WorldUtils.createValueOutput(world.registryAccess());
+        villager.mca$addAdditionalSaveData(output);
+        entityData = output.buildResult();
     }
 
     public boolean isEntityDataSet() {
@@ -115,6 +122,7 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
 
     public void setEntityDataSet(boolean entityDataSet) {
         this.entityDataSet = entityDataSet;
+        setDirty();
     }
 
     public CompoundTag getEntityData() {
@@ -122,7 +130,8 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
     }
 
     public void setEntityData(CompoundTag entityData) {
-        this.entityData = entityData;
+        this.entityData = entityData.copy();
+        setDirty();
     }
 
     @Override
@@ -210,7 +219,7 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
 
     @Override
     public Gender getGender() {
-        return Gender.byId(getEntityData().getInt("gender"));
+        return Gender.byId(getEntityData().getInt("Gender").orElse(getEntityData().getInt("gender").orElse(0)));
     }
 
     @Override
@@ -267,14 +276,15 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
     }
 
     public record Letter(String title, List<Component> pages) {
-        private static final Codec<List<Component>> PAGES_CODEC = ComponentSerialization.FLAT_CODEC.listOf();
+        private static final Codec<List<Component>> PAGES_CODEC = ComponentSerialization.CODEC.listOf();
 
         public Letter(CompoundTag nbt, HolderLookup.Provider registries) {
             this(
-                    nbt.getString("title"),
-                    PAGES_CODEC
-                            .parse(registries.createSerializationContext(NbtOps.INSTANCE), nbt.getCompound("pages"))
-                            .resultOrPartial(MCA.LOGGER::error)
+                    nbt.getString("title").orElse(""),
+                    Optional.ofNullable(nbt.get("pages"))
+                            .flatMap(tag -> PAGES_CODEC
+                                    .parse(registries.createSerializationContext(NbtOps.INSTANCE), tag)
+                                    .resultOrPartial(MCA.LOGGER::error))
                             .orElse(List.of())
             );
         }
@@ -284,7 +294,7 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
             nbt.putString("title", title);
 
             DynamicOps<Tag> dynamicOps = registries.createSerializationContext(NbtOps.INSTANCE);
-            ComponentSerialization.FLAT_CODEC.listOf()
+            ComponentSerialization.CODEC.listOf()
                     .encodeStart(dynamicOps, pages).
                     resultOrPartial(MCA.LOGGER::error)
                     .ifPresent(tag -> nbt.put("pages", tag));

@@ -10,6 +10,7 @@ import java.util.List;
 public class KeyBindings {
     public static final List<KeyMapping> list = new LinkedList<>();
 
+    private static final KeyMapping.Category MCA_CATEGORY = KeyMapping.Category.MISC;
     public static final KeyMapping SKIN_LIBRARY = newKey("skin_library", GLFW.GLFW_KEY_U);
 
     private static KeyMapping newKey(String name, int code) {
@@ -17,7 +18,7 @@ public class KeyBindings {
                 "key.mca." + name,
                 InputConstants.Type.KEYSYM,
                 code,
-                "itemGroup.mca.mca_tab"
+                MCA_CATEGORY
         );
         list.add(key);
         return key;

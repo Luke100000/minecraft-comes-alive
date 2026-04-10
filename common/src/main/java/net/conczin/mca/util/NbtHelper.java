@@ -3,14 +3,18 @@ package net.conczin.mca.util;
 import com.mojang.datafixers.util.Pair;
 import net.conczin.mca.MCA;
 import net.minecraft.core.GlobalPos;
+import net.minecraft.core.UUIDUtil;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.NbtOps;
 import net.minecraft.nbt.Tag;
+import net.minecraft.util.Util;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.UUID;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -21,14 +25,15 @@ public interface NbtHelper {
 
     @SuppressWarnings("unchecked")
     static <T extends Tag> T computeIfAbsent(CompoundTag nbt, String key, int type, Supplier<T> factory) {
-        if (!nbt.contains(key, type)) {
+        Tag value = nbt.get(key);
+        if (value == null || value.getId() != type) {
             nbt.put(key, factory.get());
         }
         return (T) nbt.get(key);
     }
 
     static CompoundTag copyTo(CompoundTag from, CompoundTag to) {
-        from.getAllKeys().forEach(key -> to.put(key, from.get(key)));
+        from.keySet().forEach(key -> to.put(key, from.get(key)));
         return to;
     }
 
@@ -45,7 +50,7 @@ public interface NbtHelper {
     }
 
     static <K, V> Map<K, V> toMap(CompoundTag nbt, Function<String, K> keyMapper, BiFunction<K, Tag, V> valueMapper) {
-        return nbt.getAllKeys().stream()
+        return nbt.keySet().stream()
                 .map(e -> {
                     K k = keyMapper.apply(e);
                     if (k == null) return null;
@@ -77,5 +82,20 @@ public interface NbtHelper {
 
     static GlobalPos decodeGlobalPos(Tag element) {
         return GlobalPos.CODEC.parse(NbtOps.INSTANCE, element).resultOrPartial(MCA.LOGGER::error).orElse(null);
+    }
+
+    static boolean hasUUID(CompoundTag nbt, String key) {
+        return nbt.getIntArray(key)
+                .map(data -> data.length == UUIDUtil.UUID_BYTES / Integer.BYTES)
+                .orElse(false);
+    }
+
+    static UUID getUUID(CompoundTag nbt, String key) {
+        Optional<int[]> data = nbt.getIntArray(key);
+        return data.map(UUIDUtil::uuidFromIntArray).orElse(Util.NIL_UUID);
+    }
+
+    static void putUUID(CompoundTag nbt, String key, UUID value) {
+        nbt.putIntArray(key, UUIDUtil.uuidToIntArray(value));
     }
 }

@@ -15,7 +15,7 @@ import net.minecraft.locale.Language;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.ComponentContents;
 import net.minecraft.network.chat.contents.PlainTextContents;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.util.RandomSource;
@@ -47,13 +47,13 @@ public class SpeechManager {
         client = Minecraft.getInstance();
     }
 
-    public EntityBoundSoundInstance getSound(float pitch, Entity entity, ResourceLocation soundLocation) {
+    public EntityBoundSoundInstance getSound(float pitch, Entity entity, Identifier soundLocation) {
         Sound sound = new Sound(soundLocation, ConstantFloat.of(1.0f), ConstantFloat.of(1.0f), 1, Sound.Type.FILE, true, false, 16);
         SingleWeighedSoundEvents weightedSoundEvents = new SingleWeighedSoundEvents(sound, soundLocation, "");
         return new CustomEntityBoundSoundInstance(weightedSoundEvents, SoundEvent.createVariableRangeEvent(soundLocation), SoundSource.NEUTRAL, 1.0f, pitch, entity, threadSafeRandom.nextLong());
     }
 
-    public void playSound(float pitch, Entity entity, ResourceLocation soundLocation) {
+    public void playSound(float pitch, Entity entity, Identifier soundLocation) {
         client.execute(() -> client.getSoundManager().play(SpeechManager.INSTANCE.getSound(pitch, entity, soundLocation)));
     }
 
@@ -115,10 +115,10 @@ public class SpeechManager {
         } else if (translatable) {
             // Use the resourcepack, if available
             int tone = Math.min(9, (int) Math.floor(gene * 10.0f));
-            ResourceLocation sound = ResourceLocation.fromNamespaceAndPath("mca_voices", phrase.toLowerCase(Locale.ROOT) + "/" + gender + "_" + tone);
+            Identifier sound = Identifier.fromNamespaceAndPath("mca_voices", phrase.toLowerCase(Locale.ROOT) + "/" + gender + "_" + tone);
 
             if (client.level != null && client.player != null) {
-                Collection<ResourceLocation> keys = client.getSoundManager().getAvailableSounds();
+                Collection<Identifier> keys = client.getSoundManager().getAvailableSounds();
                 if (keys.contains(sound)) {
                     EntityBoundSoundInstance instance = new EntityBoundSoundInstance(SoundEvent.createVariableRangeEvent(sound), SoundSource.NEUTRAL, 1.0f, pitch, villager, threadSafeRandom.nextLong());
                     currentlyPlaying.put(sender, instance);

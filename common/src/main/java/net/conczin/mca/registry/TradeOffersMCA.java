@@ -2,9 +2,12 @@ package net.conczin.mca.registry;
 
 import com.google.common.collect.ImmutableMap;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.npc.VillagerTrades;
+import net.minecraft.world.entity.npc.villager.VillagerProfession;
+import net.minecraft.world.entity.npc.villager.VillagerTrades;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -14,7 +17,7 @@ import net.minecraft.world.level.ItemLike;
 
 public class TradeOffersMCA {
     public static void bootstrap() {
-        VillagerTrades.TRADES.put(ProfessionsMCA.ADVENTURER, new Int2ObjectOpenHashMap<>(
+        VillagerTrades.TRADES.put(professionKey(ProfessionsMCA.ADVENTURER), new Int2ObjectOpenHashMap<>(
                 ImmutableMap.of(1, new VillagerTrades.ItemListing[]{
                                 new SellItemFactory(Items.SLIME_BALL, 1, 1, 16, 1),
                                 new SellItemFactory(Items.LEATHER_HORSE_ARMOR, 3, 1, 4, 10),
@@ -33,7 +36,7 @@ public class TradeOffersMCA {
                         5, new VillagerTrades.ItemListing[]{}
                 )));
 
-        VillagerTrades.TRADES.put(ProfessionsMCA.CULTIST, new Int2ObjectOpenHashMap<>(
+        VillagerTrades.TRADES.put(professionKey(ProfessionsMCA.CULTIST), new Int2ObjectOpenHashMap<>(
                 ImmutableMap.of(1, new VillagerTrades.ItemListing[]{
                                 new SellItemFactory(ItemsMCA.SIRBEN_BABY_BOY, 5, 1, 1, 1),
                                 new SellItemFactory(ItemsMCA.SIRBEN_BABY_GIRL, 5, 1, 1, 1),
@@ -56,6 +59,10 @@ public class TradeOffersMCA {
                 )));
     }
 
+    private static net.minecraft.resources.ResourceKey<VillagerProfession> professionKey(VillagerProfession profession) {
+        return BuiltInRegistries.VILLAGER_PROFESSION.getResourceKey(profession).orElseThrow();
+    }
+
 
     static class BuyForOneEmeraldFactory implements VillagerTrades.ItemListing {
         private final Item buy;
@@ -73,7 +80,7 @@ public class TradeOffersMCA {
         }
 
         @Override
-        public MerchantOffer getOffer(Entity entity, RandomSource random) {
+        public MerchantOffer getOffer(ServerLevel level, Entity entity, RandomSource random) {
             ItemCost cost = new ItemCost(this.buy, this.price);
             return new MerchantOffer(cost, new ItemStack(Items.EMERALD), this.maxUses, this.experience, this.multiplier);
         }
@@ -105,7 +112,7 @@ public class TradeOffersMCA {
         }
 
         @Override
-        public MerchantOffer getOffer(Entity entity, RandomSource random) {
+        public MerchantOffer getOffer(ServerLevel level, Entity entity, RandomSource random) {
             return new MerchantOffer(new ItemCost(Items.EMERALD, this.price), new ItemStack(this.sell.getItem(), this.count), this.maxUses, this.experience, this.multiplier);
         }
     }

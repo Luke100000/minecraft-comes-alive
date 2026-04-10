@@ -14,17 +14,59 @@ import net.conczin.mca.network.s2c.*;
 import net.conczin.mca.registry.EntitiesMCA;
 import net.conczin.mca.resources.BuildingTypes;
 import net.conczin.mca.server.world.data.Village;
+import net.conczin.mca.util.WorldUtils;
+import net.minecraft.IdentifierException;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.toasts.SystemToast;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.item.ItemStack;
 
 public class ClientHandlerImpl implements ClientHandler {
     private final Minecraft client = Minecraft.getInstance();
+
+    private static boolean isMissingIdentifier(String identifier) {
+        return identifier == null
+                || identifier.isBlank()
+                || "mca:missing".equals(identifier)
+                || "minecraft:missing".equals(identifier)
+                || identifier.endsWith(":missing")
+                || identifier.endsWith("/missing")
+                || identifier.endsWith("/missing.png");
+    }
+
+    private static String normalizeClothesIdentifier(String gender, String identifier) {
+        if (isMissingIdentifier(identifier)) {
+            return "mca:skins/clothing/normal/" + gender + "/none/0.png";
+        }
+        return identifier;
+    }
+
+    private static String normalizeHairIdentifier(String gender, String identifier) {
+        if (isMissingIdentifier(identifier)) {
+            return "mca:skins/hair/" + gender + "/0.png";
+        }
+        if (identifier.contains("/skins/hair/normal/")) {
+            return identifier.replace("/skins/hair/normal/", "/skins/hair/");
+        }
+        if (identifier.contains("/hair/normal/")) {
+            return identifier.replace("/hair/normal/", "/hair/");
+        }
+        return identifier;
+    }
+
+    private static Identifier parseOrFallback(String identifier, String fallback) {
+        try {
+            return Identifier.parse(identifier);
+        } catch (IdentifierException ignored) {
+            return Identifier.parse(fallback);
+        }
+    }
 
     @Override
     public void handleGuiRequest(OpenGuiRequest message) {
@@ -194,7 +236,7 @@ public class ClientHandlerImpl implements ClientHandler {
 
     @Override
     public void handleToastMessage(ShowToastRequest message) {
-        SystemToast.add(client.getToasts(), SystemToast.SystemToastId.PERIODIC_NOTIFICATION, message.getTitle(), message.getMessage());
+        SystemToast.add(client.getToastManager(), SystemToast.SystemToastId.PERIODIC_NOTIFICATION, message.getTitle(), message.getMessage());
     }
 
     @Override
@@ -208,9 +250,19 @@ public class ClientHandlerImpl implements ClientHandler {
     @Override
     public void handlePlayerDataMessage(PlayerDataMessage response) {
         assert client.level != null;
-        VillagerEntityMCA villager = EntitiesMCA.MALE_VILLAGER.create(client.level);
+        VillagerEntityMCA villager = EntitiesMCA.MALE_VILLAGER.create(client.level, EntitySpawnReason.COMMAND);
         assert villager != null;
-        villager.readAdditionalSaveData(response.nbt());
+        villager.mca$readAdditionalSaveData(WorldUtils.createValueInput(response.nbt(), client.level.registryAccess()));
+
+        String gender = villager.getGenetics().getGender().getDataName();
+        String defaultClothes = "mca:skins/clothing/normal/" + gender + "/none/0.png";
+        String defaultHair = "mca:skins/hair/" + gender + "/0.png";
+        String clothes = normalizeClothesIdentifier(gender, villager.getClothes());
+        String hair = normalizeHairIdentifier(gender, villager.getHair());
+
+        villager.setClothes(parseOrFallback(clothes, defaultClothes));
+        villager.setHair(parseOrFallback(hair, defaultHair));
+
         MCAClient.addPlayerData(response.uuid(), villager);
     }
 

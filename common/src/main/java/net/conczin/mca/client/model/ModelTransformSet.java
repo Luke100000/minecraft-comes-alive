@@ -71,12 +71,12 @@ public interface ModelTransformSet {
         public Builder with(String key, float x, float y, float z, float pitch, float yaw, float roll, Op pivot, Op rotate) {
             PartPose transform = createTransform(x, y, z, pitch, yaw, roll);
             transforms.put(key, (part, op, delta) -> {
-                part.x = op.apply(delta, part.x, pivot.apply(delta, part.x, transform.x));
-                part.y = op.apply(delta, part.y, pivot.apply(delta, part.y, transform.y));
-                part.z = op.apply(delta, part.z, pivot.apply(delta, part.z, transform.z));
-                part.xRot = op.apply(delta, part.xRot, rotate.apply(delta, part.xRot, transform.xRot));
-                part.yRot = op.apply(delta, part.yRot, rotate.apply(delta, part.yRot, transform.yRot));
-                part.zRot = op.apply(delta, part.zRot, rotate.apply(delta, part.zRot, transform.zRot));
+                part.x = op.apply(delta, part.x, pivot.apply(delta, part.x, transform.x()));
+                part.y = op.apply(delta, part.y, pivot.apply(delta, part.y, transform.y()));
+                part.z = op.apply(delta, part.z, pivot.apply(delta, part.z, transform.z()));
+                part.xRot = op.apply(delta, part.xRot, rotate.apply(delta, part.xRot, transform.xRot()));
+                part.yRot = op.apply(delta, part.yRot, rotate.apply(delta, part.yRot, transform.yRot()));
+                part.zRot = op.apply(delta, part.zRot, rotate.apply(delta, part.zRot, transform.zRot()));
             });
             return this;
         }

@@ -10,7 +10,7 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.tags.TagKey;
 import net.minecraft.util.GsonHelper;
 import net.minecraft.world.level.block.Block;
@@ -74,8 +74,8 @@ public final class BuildingType {
     private final int iconV;
     private final boolean grouped;
     private final int mergeRange;
-    private transient Map<ResourceLocation, ResourceLocation> blockToGroup;
-    private transient Map<ResourceLocation, Integer> groups;
+    private transient Map<Identifier, Identifier> blockToGroup;
+    private transient Map<Identifier, Integer> groups;
 
     // Private constructor for deserialization
     private BuildingType(String name, int margin, String color, int priority, boolean visible, boolean noBeds,
@@ -141,7 +141,7 @@ public final class BuildingType {
             JsonObject blocks = GsonHelper.getAsJsonObject(value, "groups");
             for (Map.Entry<String, JsonElement> entry : blocks.entrySet()) {
                 this.groups.put(
-                        ResourceLocation.parse(entry.getKey()),
+                        Identifier.parse(entry.getKey()),
                         entry.getValue().getAsInt()
                 );
             }
@@ -171,14 +171,14 @@ public final class BuildingType {
     /**
      * @return a mapping between block identifiers and groups (tags or individual blocks)
      */
-    public Map<ResourceLocation, ResourceLocation> getBlockToGroup() {
+    public Map<Identifier, Identifier> getBlockToGroup() {
         if (blockToGroup == null) {
             blockToGroup = new HashMap<>();
             groups = new HashMap<>();
             for (Map.Entry<String, Integer> requirement : blocks.entrySet()) {
-                ResourceLocation identifier;
+                Identifier identifier;
                 if (requirement.getKey().startsWith("#")) {
-                    identifier = ResourceLocation.parse(requirement.getKey().substring(1));
+                    identifier = Identifier.parse(requirement.getKey().substring(1));
                     TagKey<Block> tag = TagKey.create(Registries.BLOCK, identifier);
                     if (RegistryHelper.isTagEmpty(tag)) {
                         MCA.LOGGER.error("Unknown building type tag {}", identifier);
@@ -191,7 +191,7 @@ public final class BuildingType {
                         });
                     }
                 } else {
-                    identifier = ResourceLocation.parse(requirement.getKey());
+                    identifier = Identifier.parse(requirement.getKey());
                     blockToGroup.put(identifier, identifier);
                 }
                 groups.put(identifier, requirement.getValue());
@@ -200,7 +200,7 @@ public final class BuildingType {
         return blockToGroup;
     }
 
-    public Map<ResourceLocation, Integer> getGroups() {
+    public Map<Identifier, Integer> getGroups() {
         getBlockToGroup();
         return groups;
     }
@@ -209,9 +209,9 @@ public final class BuildingType {
      * @param blocks the map of block positions per block type of building
      * @return a filtered and grouped map of block types relevant for this building type
      */
-    public Map<ResourceLocation, List<BlockPos>> getGroups(Map<ResourceLocation, List<BlockPos>> blocks) {
-        HashMap<ResourceLocation, List<BlockPos>> available = new HashMap<>();
-        for (Map.Entry<ResourceLocation, List<BlockPos>> entry : blocks.entrySet()) {
+    public Map<Identifier, List<BlockPos>> getGroups(Map<Identifier, List<BlockPos>> blocks) {
+        HashMap<Identifier, List<BlockPos>> available = new HashMap<>();
+        for (Map.Entry<Identifier, List<BlockPos>> entry : blocks.entrySet()) {
             Optional.ofNullable(getBlockToGroup().get(entry.getKey())).ifPresent(v ->
                     available.computeIfAbsent(v, k -> new LinkedList<>()).addAll(entry.getValue())
             );

@@ -6,10 +6,11 @@ import net.conczin.mca.registry.CriterionMCA;
 import net.conczin.mca.server.world.data.FamilyTree;
 import net.conczin.mca.server.world.data.FamilyTreeNode;
 import net.minecraft.advancements.Criterion;
-import net.minecraft.advancements.critereon.ContextAwarePredicate;
-import net.minecraft.advancements.critereon.EntityPredicate;
-import net.minecraft.advancements.critereon.MinMaxBounds;
-import net.minecraft.advancements.critereon.SimpleCriterionTrigger;
+import net.minecraft.advancements.criterion.ContextAwarePredicate;
+import net.minecraft.advancements.criterion.EntityPredicate;
+import net.minecraft.advancements.criterion.MinMaxBounds;
+import net.minecraft.advancements.criterion.SimpleCriterionTrigger;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 
 import java.util.Optional;
@@ -20,7 +21,7 @@ public class FamilyCriterion extends SimpleCriterionTrigger<FamilyCriterion.Trig
     }
 
     public void trigger(ServerPlayer player) {
-        FamilyTreeNode familyTree = FamilyTree.get(player.serverLevel()).getOrCreate(player);
+        FamilyTreeNode familyTree = FamilyTree.get((ServerLevel) player.level()).getOrCreate(player);
         long c = familyTree.getRelatives(0, 1).count();
         long gc = familyTree.getRelatives(0, 2).count() - c;
 

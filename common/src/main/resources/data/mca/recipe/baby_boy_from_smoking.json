@@ -1,8 +1,6 @@
 {
   "type": "minecraft:smoking",
-  "ingredient": {
-    "item": "mca:baby_boy"
-  },
+  "ingredient": "mca:baby_boy",
   "result": {
     "id": "minecraft:cooked_beef"
   },

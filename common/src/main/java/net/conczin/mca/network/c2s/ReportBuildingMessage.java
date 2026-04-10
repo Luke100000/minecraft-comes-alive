@@ -10,6 +10,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 
 import java.util.Locale;
@@ -29,7 +30,7 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
 
     @Override
     public void handleServer(ServerPlayer player) {
-        VillageManager villages = VillageManager.get(player.serverLevel());
+        VillageManager villages = VillageManager.get((ServerLevel) player.level());
         switch (action) {
             case ADD, ADD_ROOM -> {
                 Building.validationResult result = villages.processBuilding(player.blockPosition(), true, action == Action.ADD_ROOM);
