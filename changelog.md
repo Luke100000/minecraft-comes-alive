@@ -8,6 +8,7 @@
 * Added the missing MCA humanoid render-state bridge needed by the recovered 1.21.11 client line
 * Fixed config directory creation so the recovered 1.21.11 builds can initialize cleanly
 * Cleaned up book text issues and revalidated book assets, recipes, and resource JSON across the mod resources
+* Restored player interaction UI text, MCA language entries, and book text byte-for-byte from the last working SOUL jar
 
 # 7.7.6
 
