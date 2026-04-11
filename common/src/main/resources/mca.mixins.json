@@ -36,6 +36,7 @@
     "client.MixinInventoryScreen",
     "client.MixinItemInHandLayer",
     "client.MixinLivingEntityRenderer",
+    "client.MixinLivingEntityRendererRenderContext",
     "client.MixinMultiPlayerGameMode",
     "client.MixinPlayerRenderer",
     "client.MixinSoundBufferLibrary",

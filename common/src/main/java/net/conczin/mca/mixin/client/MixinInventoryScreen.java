@@ -42,11 +42,11 @@ public abstract class MixinInventoryScreen {
 
    @Unique
    private int mca$slotX() {
-      return ((MixinAbstractContainerScreenAccessor)this).mca$getLeftPos() + 77;
+      return ((MixinAbstractContainerScreenAccessor)this).mca$getLeftPos() + PlayerRingSlotOverlay.SLOT_X_OFFSET;
    }
 
    @Unique
    private int mca$slotY() {
-      return ((MixinAbstractContainerScreenAccessor)this).mca$getTopPos() + 44;
+      return ((MixinAbstractContainerScreenAccessor)this).mca$getTopPos() + PlayerRingSlotOverlay.SLOT_Y_OFFSET;
    }
 }

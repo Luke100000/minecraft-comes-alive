@@ -26,6 +26,14 @@ repeat indefinitely!
 This workspace also packages an unofficial community build maintained by SOUL (Discord x69d) for Minecraft 1.21.11.
 It keeps the original MCA gameplay and compatibility work, while preserving credit for the original project below.
 
+## 1.21.11 SOUL Additions
+
+- Added a separate stable 1.21.11 line for both Fabric and NeoForge. (didn't test fabric but it builds with no error please ping me with errors and log at discord)
+- Added back the player interaction screen, player ring slot, equipped-ring sync, and player interaction animations.
+- Added the SOUL player-model hooks for genetics-based body scaling, armor model overrides, and custom player poses.
+- Added the 1.21.11 hair/head hierarchy fix so hair stays attached to the head instead of drifting or double-scaling.
+- Added 3D skin-layer compatibility cleanup for the custom player renderer so MCA does not fight `skinlayers3d`.
+
 MCA Reborn is a rewrite of MCA for Minecraft 1.16.5 and upwards, featuring extended village management, villager
 genetics and various enhancements.
 

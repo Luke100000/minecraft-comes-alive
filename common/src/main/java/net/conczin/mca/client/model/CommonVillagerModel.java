@@ -84,11 +84,11 @@ public interface CommonVillagerModel<T extends LivingEntity> {
         getBreastPart().visible = villager.getGenetics().getGender() == Gender.FEMALE;
 
         float headSize = getDimensions().getHead();
-        for (ModelPart part : getCommonHeadParts()) {
+        getCommonHeadParts().forEach(part -> {
             part.xScale = headSize;
             part.yScale = headSize;
             part.zScale = headSize;
-        }
+        });
 
         float scaledBreastSize = getBreastSize() * getDimensions().getBreasts();
         boolean renderBreasts = getBreastPart().visible && getBodyPart().visible && scaledBreastSize > 0.0F;

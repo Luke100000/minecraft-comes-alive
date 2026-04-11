@@ -48,7 +48,7 @@ public class VillagerEntityBaseModelMCA extends HumanoidModel<MCAHumanoidRenderS
     }
 
     protected Iterable<ModelPart> headParts() {
-        return ImmutableList.of(head, hat);
+        return ImmutableList.of(head);
     }
 
     protected Iterable<ModelPart> bodyParts() {
@@ -105,7 +105,6 @@ public class VillagerEntityBaseModelMCA extends HumanoidModel<MCAHumanoidRenderS
             }
 
             applyVillagerDimensions(villagerLike, renderState.isCrouching);
-            copyModelTransform(head, hat);
         }
     }
 

@@ -106,11 +106,10 @@ public class GrimReaperEntityModel extends HumanoidModel<HumanoidRenderState> {
             set.get("scythe_handle").applyTo(scythe);
         }
 
-        copyModelTransform(head, hat);
     }
 
     protected Iterable<ModelPart> headParts() {
-        return ImmutableList.of(head, hat);
+        return ImmutableList.of(head);
     }
 
     protected Iterable<ModelPart> bodyParts() {

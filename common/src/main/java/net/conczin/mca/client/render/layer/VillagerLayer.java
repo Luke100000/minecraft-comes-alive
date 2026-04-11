@@ -46,6 +46,10 @@ public abstract class VillagerLayer<M extends HumanoidModel<MCAHumanoidRenderSta
    public void adjustVisibility(MCAHumanoidRenderState renderState) {
    }
 
+   protected boolean shouldApplyModelSetupAnim() {
+      return true;
+   }
+
    public int getColor(MCAHumanoidRenderState renderState, float tickDelta) {
       return -1;
    }
@@ -60,7 +64,6 @@ public abstract class VillagerLayer<M extends HumanoidModel<MCAHumanoidRenderSta
    private void syncPoseFromParent() {
       M parent = (M)this.getParentModel();
       copyPartPose(parent.head, this.model.head);
-      copyPartPose(parent.head, this.model.hat);
       copyPartPose(parent.body, this.model.body);
       copyPartPose(parent.rightArm, this.model.rightArm);
       copyPartPose(parent.leftArm, this.model.leftArm);
@@ -80,7 +83,9 @@ public abstract class VillagerLayer<M extends HumanoidModel<MCAHumanoidRenderSta
                   layerModel.copyVisibility((HumanoidModel<? extends HumanoidRenderState>)this.getParentModel());
                }
 
-               this.model.setupAnim(renderState);
+               if (this.shouldApplyModelSetupAnim()) {
+                  this.model.setupAnim(renderState);
+               }
                this.syncPoseFromParent();
                this.adjustVisibility(renderState);
                int tint = LivingEntityRenderer.getOverlayCoords(renderState, 0.0F);

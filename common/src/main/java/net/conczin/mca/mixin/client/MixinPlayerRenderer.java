@@ -4,6 +4,7 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import net.conczin.mca.MCAClient;
 import net.conczin.mca.client.model.PlayerEntityExtendedModel;
 import net.conczin.mca.client.model.VillagerEntityModelMCA;
+import net.conczin.mca.client.render.SkinLayers3dCompat;
 import net.conczin.mca.client.render.PlayerRenderContext;
 import net.conczin.mca.client.render.layer.PlayerRingLayer;
 import net.conczin.mca.entity.ai.relationship.AgeState;
@@ -59,6 +60,9 @@ public abstract class MixinPlayerRenderer {
       if (MCAClient.isPlayerRendererAllowed()) {
          this.mca$villagerModel = mca$createModel(VillagerEntityModelMCA.bodyData(new CubeDeformation(0.0F), slim));
          this.mca$vanillaModel = this.mca$getModel();
+         SkinLayers3dCompat.setIgnored(this.mca$villagerModel, true);
+         SkinLayers3dCompat.clearInjectedMeshes(this.mca$villagerModel);
+         SkinLayers3dCompat.clearInjectedMeshes(this.mca$vanillaModel);
       }
 
       ((MixinLivingEntityRenderer)this).mca$addLayer(new PlayerRingLayer((RenderLayerParent<AvatarRenderState, PlayerModel>)this));
@@ -85,8 +89,10 @@ public abstract class MixinPlayerRenderer {
             }
          });
          this.mca$setModel(this.mca$villagerModel);
+         SkinLayers3dCompat.clearInjectedMeshes(this.mca$villagerModel);
       } else if (this.mca$vanillaModel != null) {
          this.mca$setModel(this.mca$vanillaModel);
+         SkinLayers3dCompat.clearInjectedMeshes(this.mca$vanillaModel);
       }
    }
 }

@@ -13,6 +13,10 @@ public final class PlayerRenderContext {
         CURRENT_PLAYER_UUID.set(uuid);
     }
 
+    public static void clearCurrentPlayerUuid() {
+        CURRENT_PLAYER_UUID.remove();
+    }
+
     public static Optional<UUID> currentPlayerUuid() {
         return Optional.ofNullable(CURRENT_PLAYER_UUID.get());
     }

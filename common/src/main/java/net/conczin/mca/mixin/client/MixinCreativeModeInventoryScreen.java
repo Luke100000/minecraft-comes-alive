@@ -16,7 +16,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 @Mixin(CreativeModeInventoryScreen.class)
 public abstract class MixinCreativeModeInventoryScreen {
    @Unique
-   private static final int MCA_RING_SLOT_X = 143;
+   private static final int MCA_RING_SLOT_X = 35;
    @Unique
    private static final int MCA_RING_SLOT_Y = 20;
    @Unique

@@ -3,6 +3,7 @@ package net.conczin.mca.client.model;
 import com.google.common.collect.ImmutableList;
 import net.conczin.mca.MCAClient;
 import net.conczin.mca.client.render.PlayerInteractionAnimationManager;
+import net.conczin.mca.client.render.SkinLayers3dCompat;
 import net.conczin.mca.entity.ai.relationship.AgeState;
 import net.conczin.mca.entity.ai.relationship.VillagerDimensions;
 import net.minecraft.client.Minecraft;
@@ -29,6 +30,7 @@ public class PlayerEntityExtendedModel extends PlayerModel implements CommonVill
         super(root, false);
         this.breasts = root.getChild(BREASTS);
         this.breastsWear = root.getChild(BREASTPLATE);
+        SkinLayers3dCompat.setIgnored(this, true);
     }
 
     @Override
@@ -43,7 +45,7 @@ public class PlayerEntityExtendedModel extends PlayerModel implements CommonVill
 
     @Override
     public Iterable<ModelPart> getCommonHeadParts() {
-        return ImmutableList.of(head, hat);
+        return ImmutableList.of(head);
     }
 
     @Override
@@ -74,6 +76,8 @@ public class PlayerEntityExtendedModel extends PlayerModel implements CommonVill
     @Override
     public void setupAnim(AvatarRenderState renderState) {
         super.setupAnim(renderState);
+        breasts.visible = false;
+        breastsWear.visible = false;
 
         if (Minecraft.getInstance().level != null) {
             Entity entity = Minecraft.getInstance().level.getEntity(renderState.id);
@@ -83,8 +87,9 @@ public class PlayerEntityExtendedModel extends PlayerModel implements CommonVill
             }
         }
 
-        VillagerEntityBaseModelMCA.copyModelTransform(head, hat);
-        breastsWear.visible = jacket.visible;
+        SkinLayers3dCompat.clearInjectedMeshes(this);
+        breastsWear.visible = false;
+        breasts.visible = false;
     }
 
     public void copyVisibility(HumanoidModel<? extends HumanoidRenderState> model) {
@@ -93,7 +98,7 @@ public class PlayerEntityExtendedModel extends PlayerModel implements CommonVill
         body.visible = model.body.visible;
         jacket.visible = model.body.visible;
         breasts.visible = model.body.visible;
-        breastsWear.visible = model.body.visible;
+        breastsWear.visible = false;
         leftArm.visible = model.leftArm.visible;
         leftSleeve.visible = model.leftArm.visible;
         rightArm.visible = model.rightArm.visible;

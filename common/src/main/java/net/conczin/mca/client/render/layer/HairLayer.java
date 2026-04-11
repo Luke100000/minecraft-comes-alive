@@ -18,6 +18,11 @@ public class HairLayer<M extends HumanoidModel<MCAHumanoidRenderState>> extends 
       super(renderer, model);
    }
 
+   @Override
+   protected boolean shouldApplyModelSetupAnim() {
+      return false;
+   }
+
    private static boolean isMissingIdentifier(String identifier) {
       return identifier == null
          || identifier.isBlank()

@@ -10,15 +10,15 @@ import net.minecraft.world.item.ItemStack;
 public final class PlayerRingSlotOverlay {
    public static final int SLOT_SIZE = 18;
    public static final int SLOT_X_OFFSET = 77;
-   public static final int SLOT_Y_OFFSET = 44;
+   public static final int SLOT_Y_OFFSET = 38;
 
    private PlayerRingSlotOverlay() {
    }
 
    public static void render(GuiGraphics context, int mouseX, int mouseY, int slotX, int slotY) {
       boolean hovering = isHovering(mouseX, mouseY, slotX, slotY);
-      context.fill(slotX, slotY, slotX + 18, slotY + 18, hovering ? -788529153 : -1604296608);
-      context.fill(slotX + 1, slotY + 1, slotX + 18 - 1, slotY + 18 - 1, hovering ? 1882206256 : 1343756312);
+      context.fill(slotX, slotY, slotX + SLOT_SIZE, slotY + SLOT_SIZE, hovering ? -788529153 : -1604296608);
+      context.fill(slotX + 1, slotY + 1, slotX + SLOT_SIZE - 1, slotY + SLOT_SIZE - 1, hovering ? 1882206256 : 1343756312);
       Minecraft minecraft = Minecraft.getInstance();
       if (minecraft.player != null) {
          ItemStack ring = MCAClient.getEquippedRing(minecraft.player.getUUID()).orElse(ItemStack.EMPTY);
@@ -43,6 +43,6 @@ public final class PlayerRingSlotOverlay {
    }
 
    public static boolean isHovering(double mouseX, double mouseY, int slotX, int slotY) {
-      return mouseX >= slotX && mouseX < slotX + 18 && mouseY >= slotY && mouseY < slotY + 18;
+      return mouseX >= slotX && mouseX < slotX + SLOT_SIZE && mouseY >= slotY && mouseY < slotY + SLOT_SIZE;
    }
 }
