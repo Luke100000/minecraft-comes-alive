@@ -60,7 +60,7 @@ public abstract class VillagerLayer<M extends HumanoidModel<MCAHumanoidRenderSta
    private void syncPoseFromParent() {
       M parent = (M)this.getParentModel();
       copyPartPose(parent.head, this.model.head);
-      copyPartPose(parent.hat, this.model.hat);
+      copyPartPose(parent.head, this.model.hat);
       copyPartPose(parent.body, this.model.body);
       copyPartPose(parent.rightArm, this.model.rightArm);
       copyPartPose(parent.leftArm, this.model.leftArm);

@@ -47,6 +47,7 @@ public class HairLayer<M extends HumanoidModel<MCAHumanoidRenderState>> extends 
    public void adjustVisibility(MCAHumanoidRenderState renderState) {
       this.model.setAllVisible(false);
       this.model.head.visible = true;
+      this.model.hat.visible = true;
    }
 
    @Override
