@@ -2,6 +2,7 @@
   "required": true,
   "minVersion": "0.7",
   "package": "net.conczin.mca.mixin",
+  "refmap": "mca.refmap.json",
   "compatibilityLevel": "JAVA_17",
   "mixins": [
     "MixinAbstractFurnaceBlockEntity",
@@ -32,7 +33,6 @@
     "client.MixinHumanoidArmorLayer",
     "client.MixinAbstractContainerScreenAccessor",
     "client.MixinCreativeModeInventoryScreen",
-    "client.MixinCreativeModeInventoryScreenAccessor",
     "client.MixinInventoryScreen",
     "client.MixinItemInHandLayer",
     "client.MixinLivingEntityRenderer",

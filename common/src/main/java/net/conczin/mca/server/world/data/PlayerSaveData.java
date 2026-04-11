@@ -2,6 +2,11 @@ package net.conczin.mca.server.world.data;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.DynamicOps;
+import java.util.Arrays;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 import net.conczin.mca.Config;
 import net.conczin.mca.MCA;
 import net.conczin.mca.entity.VillagerEntityMCA;
@@ -25,7 +30,7 @@ import net.conczin.mca.util.NbtHelper;
 import net.conczin.mca.util.WorldUtils;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.HolderLookup;
+import net.minecraft.core.HolderLookup.Provider;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.NbtOps;
@@ -42,354 +47,336 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.saveddata.SavedData;
 import net.minecraft.world.level.saveddata.SavedDataType;
+import net.minecraft.world.level.storage.TagValueOutput;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.*;
-
 public class PlayerSaveData extends SavedData implements WorldUtils.NbtSavedData, EntityRelationship {
-    private static final String EQUIPPED_RING_KEY = "MCAEquippedRing";
+   private static final String EQUIPPED_RING_KEY = "MCAEquippedRing";
+   private final ServerLevel world;
+   private final UUID uuid;
+   private final List<PlayerSaveData.Letter> inbox = new LinkedList<>();
+   private Optional<Integer> lastSeenVillage = Optional.empty();
+   private boolean entityDataSet;
+   private CompoundTag entityData;
+   private ItemStack equippedRing = ItemStack.EMPTY;
 
-    private final ServerLevel world;
-    private final UUID uuid;
-    private final List<Letter> inbox = new LinkedList<>();
-    private Optional<Integer> lastSeenVillage = Optional.empty();
-    private boolean entityDataSet;
-    private CompoundTag entityData;
-    private ItemStack equippedRing = ItemStack.EMPTY;
+   PlayerSaveData(ServerLevel world, UUID uuid) {
+      this.world = world;
+      this.uuid = uuid;
+      this.resetEntityData();
+   }
 
-    PlayerSaveData(ServerLevel world, UUID uuid) {
-        this.world = world;
-        this.uuid = uuid;
+   PlayerSaveData(ServerLevel world, UUID uuid, CompoundTag nbt) {
+      this.world = world;
+      this.uuid = uuid;
+      this.lastSeenVillage = Optional.of(nbt.getInt("lastSeenVillage").orElse(-1)).filter(id -> id >= 0);
+      this.entityDataSet = nbt.getBoolean("entityDataSet").orElse(false);
+      if (nbt.contains("entityData")) {
+         this.entityData = (CompoundTag)nbt.getCompound("entityData").orElseGet(CompoundTag::new);
+      } else {
+         this.resetEntityData();
+      }
 
-        resetEntityData();
-    }
+      this.equippedRing = normalizeEquippedRing(readEquippedRing(nbt, world.registryAccess()));
+      this.ensureDefaultPlayerModel();
+      ListTag inbox = (ListTag)nbt.getList("inbox").orElseGet(ListTag::new);
+      this.inbox.addAll(NbtHelper.toList(inbox, e -> new PlayerSaveData.Letter((CompoundTag)e, world.registryAccess())));
+   }
 
-    PlayerSaveData(ServerLevel world, UUID uuid, CompoundTag nbt) {
-        this.world = world;
-        this.uuid = uuid;
+   public static PlayerSaveData get(ServerPlayer player) {
+      return get(player.level(), player.getUUID());
+   }
 
-        lastSeenVillage = Optional.of(nbt.getInt("lastSeenVillage").orElse(-1)).filter(id -> id >= 0);
-        entityDataSet = nbt.getBoolean("entityDataSet").orElse(false);
+   public static PlayerSaveData get(ServerLevel world, UUID uuid) {
+      return WorldUtils.loadData(
+         world.getServer().overworld(), (nbt, provider) -> new PlayerSaveData(world, uuid, nbt), w -> new PlayerSaveData(world, uuid), "mca_player_" + uuid
+      );
+   }
 
-        if (nbt.contains("entityData")) {
-            entityData = nbt.getCompound("entityData").orElseGet(CompoundTag::new);
-        } else {
-            resetEntityData();
-        }
+   public static Optional<PlayerSaveData> getIfPresent(ServerLevel world, UUID uuid) {
+      return Optional.ofNullable(
+         (PlayerSaveData)world.getDataStorage()
+            .get(
+               new SavedDataType(
+                  "mca_player_" + uuid,
+                  () -> new PlayerSaveData(world, uuid),
+                  CompoundTag.CODEC.xmap(nbt -> new PlayerSaveData(world, uuid, nbt), data -> data.save(new CompoundTag(), world.registryAccess())),
+                  DataFixTypes.LEVEL
+               )
+            )
+      );
+   }
 
-        equippedRing = normalizeEquippedRing(readEquippedRing(nbt, world.registryAccess()));
+   public static void showMailNotification(ServerPlayer player) {
+      Network.sendToPlayer(new ShowToastRequest("server.mail.title", "server.mail.description"), player);
+   }
 
-        ensureDefaultPlayerModel();
+   private void resetEntityData() {
+      VillagerEntityMCA villager = (VillagerEntityMCA)EntitiesMCA.MALE_VILLAGER.create(this.world, EntitySpawnReason.COMMAND);
 
-        ListTag inbox = nbt.getList("inbox").orElseGet(ListTag::new);
-        this.inbox.addAll(NbtHelper.toList(inbox, e -> new Letter((CompoundTag) e, world.registryAccess())));
-    }
+      assert villager != null;
 
-    public static PlayerSaveData get(ServerPlayer player) {
-        return get((ServerLevel) player.level(), player.getUUID());
-    }
+      villager.initializeSkin(true);
+      villager.getGenetics().randomize();
+      villager.getTraits().randomize();
+      villager.getVillagerBrain().randomize();
+      TagValueOutput output = WorldUtils.createValueOutput(this.world.registryAccess());
+      villager.mca$addAdditionalSaveData(output);
+      this.entityData = output.buildResult();
+      this.ensureDefaultPlayerModel();
+   }
 
-    public static PlayerSaveData get(ServerLevel world, UUID uuid) {
-        return WorldUtils.loadData(world.getServer().overworld(), (nbt, provider) -> new PlayerSaveData(world, uuid, nbt), w -> new PlayerSaveData(world, uuid), "mca_player_" + uuid);
-    }
+   private void ensureDefaultPlayerModel() {
+      if (this.entityData != null) {
+         int playerModel = this.entityData.getInt("PlayerModel").orElse(VillagerLike.PlayerModel.PLAYER.ordinal());
+         if (!this.entityData.contains("PlayerModel") || !this.entityDataSet && playerModel == VillagerLike.PlayerModel.VANILLA.ordinal()) {
+            this.entityData.putInt("PlayerModel", VillagerLike.PlayerModel.PLAYER.ordinal());
+            this.setDirty();
+         }
+      }
+   }
 
-    @SuppressWarnings("DataFlowIssue")
-    public static Optional<PlayerSaveData> getIfPresent(ServerLevel world, UUID uuid) {
-        return Optional.ofNullable(world.getDataStorage().get(new SavedDataType<>(
-                "mca_player_" + uuid,
-                () -> new PlayerSaveData(world, uuid),
-                CompoundTag.CODEC.xmap(
-                        nbt -> new PlayerSaveData(world, uuid, nbt),
-                        data -> data.save(new CompoundTag(), world.registryAccess())
-                ),
-                DataFixTypes.LEVEL
-        )));
-    }
+   public boolean isEntityDataSet() {
+      return this.entityDataSet;
+   }
 
-    public static void showMailNotification(ServerPlayer player) {
-        Network.sendToPlayer(new ShowToastRequest(
-                "server.mail.title",
-                "server.mail.description"
-        ), player);
-    }
+   public void setEntityDataSet(boolean entityDataSet) {
+      this.entityDataSet = entityDataSet;
+      this.setDirty();
+   }
 
-    private void resetEntityData() {
-        VillagerEntityMCA villager = EntitiesMCA.MALE_VILLAGER.create(world, EntitySpawnReason.COMMAND);
-        assert villager != null;
-        villager.initializeSkin(true);
-        villager.getGenetics().randomize();
-        villager.getTraits().randomize();
-        villager.getVillagerBrain().randomize();
-        var output = WorldUtils.createValueOutput(world.registryAccess());
-        villager.mca$addAdditionalSaveData(output);
-        entityData = output.buildResult();
-        ensureDefaultPlayerModel();
-    }
+   public CompoundTag getEntityData() {
+      this.ensureDefaultPlayerModel();
+      return this.entityData;
+   }
 
-    private void ensureDefaultPlayerModel() {
-        if (entityData != null) {
-            int playerModel = entityData.getInt("PlayerModel").orElse(VillagerLike.PlayerModel.PLAYER.ordinal());
-            if (!entityData.contains("PlayerModel") || (!entityDataSet && playerModel == VillagerLike.PlayerModel.VANILLA.ordinal())) {
-                entityData.putInt("PlayerModel", VillagerLike.PlayerModel.PLAYER.ordinal());
-                setDirty();
-            }
-        }
-    }
+   public void setEntityData(CompoundTag entityData) {
+      this.entityData = entityData.copy();
+      this.ensureDefaultPlayerModel();
+      this.setDirty();
+   }
 
-    public boolean isEntityDataSet() {
-        return entityDataSet;
-    }
+   public ItemStack getEquippedRing() {
+      return this.equippedRing.copy();
+   }
 
-    public void setEntityDataSet(boolean entityDataSet) {
-        this.entityDataSet = entityDataSet;
-        setDirty();
-    }
+   public void setEquippedRing(ItemStack stack) {
+      this.equippedRing = normalizeEquippedRing(stack);
+      this.setDirty();
+   }
 
-    public CompoundTag getEntityData() {
-        ensureDefaultPlayerModel();
-        return entityData;
-    }
+   public CompoundTag createNetworkData() {
+      CompoundTag nbt = this.getEntityData().copy();
+      storeEquippedRing(nbt, this.world.registryAccess(), this.equippedRing);
+      return nbt;
+   }
 
-    public void setEntityData(CompoundTag entityData) {
-        this.entityData = entityData.copy();
-        ensureDefaultPlayerModel();
-        setDirty();
-    }
+   public static ItemStack readEquippedRing(CompoundTag nbt, Provider provider) {
+      return WorldUtils.createValueInput(nbt, provider).read("MCAEquippedRing", ItemStack.OPTIONAL_CODEC).orElse(ItemStack.EMPTY);
+   }
 
-    public ItemStack getEquippedRing() {
-        return equippedRing.copy();
-    }
+   public static void sync(ServerPlayer player) {
+      PlayerSaveData data = get(player);
+      CompoundTag nbt = data.createNetworkData();
+      MCA.getServer()
+         .ifPresent(server -> server.getPlayerList().getPlayers().forEach(target -> Network.sendToPlayer(new PlayerDataMessage(player.getUUID(), nbt), target)));
+   }
 
-    public void setEquippedRing(ItemStack stack) {
-        equippedRing = normalizeEquippedRing(stack);
-        setDirty();
-    }
+   @Override
+   public void onTragedy(DamageSource cause, @Nullable BlockPos burialSite, RelationshipType type, Entity victim) {
+      EntityRelationship.super.onTragedy(cause, burialSite, type, victim);
+      if (victim instanceof VillagerEntityMCA victimVillager) {
+         this.sendLetterOfCondolence(
+            victimVillager.getName().getString(),
+            victimVillager.getResidency().getHomeVillage().map(Village::getName).orElse(API.getVillagePool().pickVillageName("village"))
+         );
+      }
+   }
 
-    public CompoundTag createNetworkData() {
-        CompoundTag nbt = getEntityData().copy();
-        storeEquippedRing(nbt, world.registryAccess(), equippedRing);
-        return nbt;
-    }
+   public void updateLastSeenVillage(VillageManager manager, ServerPlayer self) {
+      Optional<Village> prevVillage = this.getLastSeenVillage(manager);
+      Optional<Village> nextVillage = prevVillage.filter(v -> v.isWithinBorder(self)).or(() -> manager.findNearestVillage(self));
+      this.setLastSeenVillage(self, prevVillage.orElse(null), nextVillage.orElse(null));
+      if (nextVillage.isPresent()) {
+         Rank rank = Tasks.getRank(nextVillage.get(), self);
+         CriterionMCA.RANK.trigger(self, rank);
+      }
+   }
 
-    public static ItemStack readEquippedRing(CompoundTag nbt, HolderLookup.Provider provider) {
-        return WorldUtils.createValueInput(nbt, provider).read(EQUIPPED_RING_KEY, ItemStack.OPTIONAL_CODEC).orElse(ItemStack.EMPTY);
-    }
+   public void setLastSeenVillage(ServerPlayer self, Village oldVillage, @Nullable Village newVillage) {
+      this.lastSeenVillage = Optional.ofNullable(newVillage).map(Village::getId);
+      this.setDirty();
+      if (oldVillage != newVillage) {
+         if (oldVillage != null) {
+            this.onLeave(self, oldVillage);
+         }
 
-    public static void sync(ServerPlayer player) {
-        PlayerSaveData data = get(player);
-        CompoundTag nbt = data.createNetworkData();
-        MCA.getServer().ifPresent(server ->
-                server.getPlayerList().getPlayers().forEach(target -> Network.sendToPlayer(new PlayerDataMessage(player.getUUID(), nbt), target))
-        );
-    }
+         if (newVillage != null) {
+            this.onEnter(self, newVillage);
+         }
+      }
+   }
 
-    @Override
-    public void onTragedy(DamageSource cause, @Nullable BlockPos burialSite, RelationshipType type, Entity victim) {
-        EntityRelationship.super.onTragedy(cause, burialSite, type, victim);
+   public Optional<Village> getLastSeenVillage(VillageManager manager) {
+      return this.lastSeenVillage.flatMap(manager::getOrEmpty);
+   }
 
-        // send letter of condolence
-        if (victim instanceof VillagerEntityMCA victimVillager) {
-            sendLetterOfCondolence(victimVillager.getName().getString(),
-                    victimVillager.getResidency().getHomeVillage().map(Village::getName).orElse(API.getVillagePool().pickVillageName("village")));
-        }
-    }
+   public Optional<Integer> getLastSeenVillageId() {
+      return this.lastSeenVillage;
+   }
 
-    public void updateLastSeenVillage(VillageManager manager, ServerPlayer self) {
-        Optional<Village> prevVillage = getLastSeenVillage(manager);
-        Optional<Village> nextVillage = prevVillage
-                .filter(v -> v.isWithinBorder(self))
-                .or(() -> manager.findNearestVillage(self));
+   protected void onLeave(Player self, Village village) {
+      if (Config.getInstance().enterVillageNotification && village.isVillage()) {
+         self.displayClientMessage(Component.translatable("gui.village.left", new Object[]{village.getName()}).withStyle(ChatFormatting.GOLD), true);
+      }
+   }
 
-        setLastSeenVillage(self, prevVillage.orElse(null), nextVillage.orElse(null));
+   protected void onEnter(Player self, Village village) {
+      if (Config.getInstance().enterVillageNotification && village.isVillage()) {
+         self.displayClientMessage(Component.translatable("gui.village.welcome", new Object[]{village.getName()}).withStyle(ChatFormatting.GOLD), true);
+      }
 
-        // village rank advancement
-        if (nextVillage.isPresent()) {
-            Rank rank = Tasks.getRank(nextVillage.get(), self);
-            CriterionMCA.RANK.trigger(self, rank);
-        }
-    }
+      village.onEnter(this.world);
+   }
 
-    public void setLastSeenVillage(ServerPlayer self, Village oldVillage, @Nullable Village newVillage) {
-        lastSeenVillage = Optional.ofNullable(newVillage).map(Village::getId);
-        setDirty();
+   @Override
+   public void marry(Entity spouse) {
+      EntityRelationship.super.marry(spouse);
+      this.setDirty();
+   }
 
-        if (oldVillage != newVillage) {
-            if (oldVillage != null) {
-                onLeave(self, oldVillage);
-            }
-            if (newVillage != null) {
-                onEnter(self, newVillage);
-            }
-        }
-    }
+   @Override
+   public void engage(Entity spouse) {
+      EntityRelationship.super.engage(spouse);
+      this.setDirty();
+   }
 
-    public Optional<Village> getLastSeenVillage(VillageManager manager) {
-        return lastSeenVillage.flatMap(manager::getOrEmpty);
-    }
+   @Override
+   public void promise(Entity spouse) {
+      EntityRelationship.super.promise(spouse);
+      this.setDirty();
+   }
 
-    public Optional<Integer> getLastSeenVillageId() {
-        return lastSeenVillage;
-    }
+   @Override
+   public void endRelationShip(RelationshipState newState) {
+      EntityRelationship.super.endRelationShip(newState);
+      this.setDirty();
+   }
 
-    protected void onLeave(Player self, Village village) {
-        if (Config.getInstance().enterVillageNotification && village.isVillage()) {
-            net.conczin.mca.util.PlayerMessageHelper.displayClientMessage(self, Component.translatable("gui.village.left", village.getName()).withStyle(ChatFormatting.GOLD), true);
-        }
-    }
+   @Override
+   public ServerLevel getWorld() {
+      return this.world;
+   }
 
-    protected void onEnter(Player self, Village village) {
-        if (Config.getInstance().enterVillageNotification && village.isVillage()) {
-            net.conczin.mca.util.PlayerMessageHelper.displayClientMessage(self, Component.translatable("gui.village.welcome", village.getName()).withStyle(ChatFormatting.GOLD), true);
-        }
-        village.onEnter(world);
-    }
+   @Override
+   public UUID getUUID() {
+      return this.uuid;
+   }
 
-    @Override
-    public void marry(Entity spouse) {
-        EntityRelationship.super.marry(spouse);
-        setDirty();
-    }
+   @Override
+   public Gender getGender() {
+      return Gender.byId(this.getEntityData().getInt("Gender").orElse(this.getEntityData().getInt("gender").orElse(0)));
+   }
 
-    @Override
-    public void engage(Entity spouse) {
-        EntityRelationship.super.engage(spouse);
-        setDirty();
-    }
+   @NotNull
+   @Override
+   public FamilyTreeNode getFamilyEntry() {
+      return this.getFamilyTree().getOrEmpty(this.uuid).orElseGet(() -> {
+         String name = Optional.ofNullable(this.world.getPlayerByUUID(this.uuid)).map(p -> p.getName().getString()).orElse("Unnamed Adventurer");
+         return this.getFamilyTree().getOrCreate(this.uuid, name, this.getGender(), true);
+      });
+   }
 
-    @Override
-    public void promise(Entity spouse) {
-        EntityRelationship.super.promise(spouse);
-        setDirty();
-    }
+   public void reset() {
+      this.endRelationShip(RelationshipState.SINGLE);
+      this.setDirty();
+   }
 
-    @Override
-    public void endRelationShip(RelationshipState newState) {
-        EntityRelationship.super.endRelationShip(newState);
-        setDirty();
-    }
+   @Override
+   public CompoundTag save(CompoundTag nbt, Provider provider) {
+      this.lastSeenVillage.ifPresent(id -> nbt.putInt("lastSeenVillage", id));
+      nbt.put("entityData", this.entityData);
+      nbt.putBoolean("entityDataSet", this.entityDataSet);
+      nbt.put("inbox", NbtHelper.fromList(this.inbox, v -> v.toTag(provider)));
+      storeEquippedRing(nbt, provider, this.equippedRing);
+      return nbt;
+   }
 
-    @Override
-    public ServerLevel getWorld() {
-        return world;
-    }
+   public void sendMail(PlayerSaveData.Letter pages) {
+      if (Config.getInstance().enableVillagerMailingPlayers) {
+         this.inbox.add(pages);
+      }
 
-    @Override
-    public UUID getUUID() {
-        return uuid;
-    }
+      this.setDirty();
+   }
 
-    @Override
-    public Gender getGender() {
-        return Gender.byId(getEntityData().getInt("Gender").orElse(getEntityData().getInt("gender").orElse(0)));
-    }
+   public boolean hasMail() {
+      return !this.inbox.isEmpty();
+   }
 
-    @Override
-    public @NotNull FamilyTreeNode getFamilyEntry() {
-        return getFamilyTree().getOrEmpty(uuid).orElseGet(() -> {
-            String name = Optional.ofNullable(world.getPlayerByUUID(uuid)).map(p -> p.getName().getString()).orElse("Unnamed Adventurer");
-            return getFamilyTree().getOrCreate(uuid, name, getGender(), true);
-        });
-    }
+   public ItemStack getMail() {
+      if (this.hasMail()) {
+         PlayerSaveData.Letter letter = this.inbox.removeFirst();
+         ItemStack stack = new ItemStack(ItemsMCA.LETTER, 1);
+         stack.set(DataComponentsMCA.BOOK_PAGES, letter.pages());
+         return stack;
+      } else {
+         return null;
+      }
+   }
 
-    public void reset() {
-        endRelationShip(RelationshipState.SINGLE);
-        setDirty();
-    }
+   public void sendLetterOfCondolence(String name, String village) {
+      this.sendLetter(Component.translatable("mca.letter.condolence", new Object[]{this.getFamilyEntry().getName(), name, village}));
+   }
 
-    @Override
-    public CompoundTag save(CompoundTag nbt, HolderLookup.Provider provider) {
-        lastSeenVillage.ifPresent(id -> nbt.putInt("lastSeenVillage", id));
-        nbt.put("entityData", entityData);
-        nbt.putBoolean("entityDataSet", entityDataSet);
-        nbt.put("inbox", NbtHelper.fromList(inbox, v -> v.toTag(provider)));
-        storeEquippedRing(nbt, provider, equippedRing);
-        return nbt;
-    }
+   public void sendLetter(Component... lines) {
+      this.sendMail(new PlayerSaveData.Letter("", Arrays.asList(lines)));
+      Optional.ofNullable(this.world.getPlayerByUUID(this.uuid)).ifPresent(p -> showMailNotification((ServerPlayer)p));
+   }
 
-    public void sendMail(Letter pages) {
-        if (Config.getInstance().enableVillagerMailingPlayers) {
-            inbox.add(pages);
-        }
-        setDirty();
-    }
+   private static ItemStack normalizeEquippedRing(ItemStack stack) {
+      if (!stack.isEmpty() && RelationshipItem.isRing(stack)) {
+         ItemStack copy = stack.copy();
+         copy.setCount(1);
+         return copy;
+      } else {
+         return ItemStack.EMPTY;
+      }
+   }
 
-    public boolean hasMail() {
-        return !inbox.isEmpty();
-    }
-
-    public ItemStack getMail() {
-        if (hasMail()) {
-            Letter letter = inbox.removeFirst();
-            ItemStack stack = new ItemStack(ItemsMCA.LETTER, 1);
-            stack.set(DataComponentsMCA.BOOK_PAGES, letter.pages());
-            return stack;
-        } else {
-            return null;
-        }
-    }
-
-    public void sendLetterOfCondolence(String name, String village) {
-        sendLetter(Component.translatable("mca.letter.condolence", getFamilyEntry().getName(), name, village));
-    }
-
-    public void sendLetter(Component... lines) {
-        sendMail(new Letter("", Arrays.asList(lines)));
-        Optional.ofNullable(world.getPlayerByUUID(uuid)).ifPresent(p -> showMailNotification((ServerPlayer) p));
-    }
-
-    private static ItemStack normalizeEquippedRing(ItemStack stack) {
-        if (stack.isEmpty() || !RelationshipItem.isRing(stack)) {
-            return ItemStack.EMPTY;
-        }
-
-        ItemStack copy = stack.copy();
-        copy.setCount(1);
-        return copy;
-    }
-
-    private static void storeEquippedRing(CompoundTag nbt, HolderLookup.Provider provider, ItemStack ring) {
-        if (ring.isEmpty()) {
-            return;
-        }
-
-        var output = WorldUtils.createValueOutput(provider);
-        output.store(EQUIPPED_RING_KEY, ItemStack.OPTIONAL_CODEC, ring);
-
-        CompoundTag stored = WorldUtils.getCompoundTag(output);
-        if (stored.contains(EQUIPPED_RING_KEY)) {
-            Tag tag = stored.get(EQUIPPED_RING_KEY);
+   private static void storeEquippedRing(CompoundTag nbt, Provider provider, ItemStack ring) {
+      if (!ring.isEmpty()) {
+         TagValueOutput output = WorldUtils.createValueOutput(provider);
+         output.store("MCAEquippedRing", ItemStack.OPTIONAL_CODEC, ring);
+         CompoundTag stored = WorldUtils.getCompoundTag(output);
+         if (stored.contains("MCAEquippedRing")) {
+            Tag tag = stored.get("MCAEquippedRing");
             if (tag != null) {
-                nbt.put(EQUIPPED_RING_KEY, tag);
+               nbt.put("MCAEquippedRing", tag);
             }
-        }
-    }
+         }
+      }
+   }
 
-    public record Letter(String title, List<Component> pages) {
-        private static final Codec<List<Component>> PAGES_CODEC = ComponentSerialization.CODEC.listOf();
+   public record Letter(String title, List<Component> pages) {
+      private static final Codec<List<Component>> PAGES_CODEC = ComponentSerialization.CODEC.listOf();
 
-        public Letter(CompoundTag nbt, HolderLookup.Provider registries) {
-            this(
-                    nbt.getString("title").orElse(""),
-                    Optional.ofNullable(nbt.get("pages"))
-                            .flatMap(tag -> PAGES_CODEC
-                                    .parse(registries.createSerializationContext(NbtOps.INSTANCE), tag)
-                                    .resultOrPartial(MCA.LOGGER::error))
-                            .orElse(List.of())
-            );
-        }
+      public Letter(CompoundTag nbt, Provider registries) {
+         this(
+            nbt.getString("title").orElse(""),
+            Optional.ofNullable(nbt.get("pages"))
+               .flatMap(tag -> PAGES_CODEC.parse(registries.createSerializationContext(NbtOps.INSTANCE), tag).resultOrPartial(MCA.LOGGER::error))
+               .orElse(List.of())
+         );
+      }
 
-        CompoundTag toTag(HolderLookup.Provider registries) {
-            CompoundTag nbt = new CompoundTag();
-            nbt.putString("title", title);
-
-            DynamicOps<Tag> dynamicOps = registries.createSerializationContext(NbtOps.INSTANCE);
-            ComponentSerialization.CODEC.listOf()
-                    .encodeStart(dynamicOps, pages).
-                    resultOrPartial(MCA.LOGGER::error)
-                    .ifPresent(tag -> nbt.put("pages", tag));
-
-            return nbt;
-        }
-    }
+      CompoundTag toTag(Provider registries) {
+         CompoundTag nbt = new CompoundTag();
+         nbt.putString("title", this.title);
+         DynamicOps<Tag> dynamicOps = registries.createSerializationContext(NbtOps.INSTANCE);
+         ComponentSerialization.CODEC.listOf().encodeStart(dynamicOps, this.pages).resultOrPartial(MCA.LOGGER::error).ifPresent(tag -> nbt.put("pages", tag));
+         return nbt;
+      }
+   }
 }

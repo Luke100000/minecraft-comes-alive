@@ -52,7 +52,7 @@ public abstract class MixinCreativeModeInventoryScreen {
 
    @Unique
    private boolean mca$showRingSlot() {
-      return ((MixinCreativeModeInventoryScreenAccessor)this).mca$invokeIsInventoryOpen();
+      return ((CreativeModeInventoryScreen)(Object)this).isInventoryOpen();
    }
 
    @Unique
