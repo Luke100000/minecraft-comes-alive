@@ -2,6 +2,7 @@ package net.conczin.mca.client.model;
 
 import com.google.common.collect.ImmutableList;
 import net.conczin.mca.MCAClient;
+import net.conczin.mca.client.render.PlayerBodyOverlayPhysics;
 import net.conczin.mca.client.render.PlayerInteractionAnimationManager;
 import net.conczin.mca.client.render.SkinLayers3dCompat;
 import net.conczin.mca.entity.ai.relationship.AgeState;
@@ -55,7 +56,7 @@ public class PlayerEntityExtendedModel extends PlayerModel implements CommonVill
 
     @Override
     public Iterable<ModelPart> getBreastParts() {
-        return ImmutableList.of(breasts, breastsWear);
+        return ImmutableList.of(breasts);
     }
 
     @Override
@@ -82,14 +83,20 @@ public class PlayerEntityExtendedModel extends PlayerModel implements CommonVill
         if (Minecraft.getInstance().level != null) {
             Entity entity = Minecraft.getInstance().level.getEntity(renderState.id);
             if (entity instanceof Avatar avatar) {
-                MCAClient.getPlayerData(avatar.getUUID()).ifPresent(villager -> applyVillagerDimensions(villager, renderState.isCrouching));
+                MCAClient.getPlayerData(avatar.getUUID()).ifPresent(villager -> {
+                    applyVillagerDimensions(villager, renderState.isCrouching);
+                    PlayerBodyOverlayPhysics.applyTo(this, avatar.getUUID(), renderState.isCrouching, partialTick(renderState));
+                });
                 PlayerInteractionAnimationManager.applyToHumanoidModel(avatar.getUUID(), this, renderState.ageInTicks);
             }
         }
 
         SkinLayers3dCompat.clearInjectedMeshes(this);
         breastsWear.visible = false;
-        breasts.visible = false;
+    }
+
+    private static float partialTick(AvatarRenderState renderState) {
+        return renderState.ageInTicks - (float) Math.floor(renderState.ageInTicks);
     }
 
     public void copyVisibility(HumanoidModel<? extends HumanoidRenderState> model) {

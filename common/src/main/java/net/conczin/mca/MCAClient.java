@@ -1,6 +1,7 @@
 package net.conczin.mca;
 
 import net.conczin.mca.client.gui.SkinLibraryScreen;
+import net.conczin.mca.client.render.PlayerBodyOverlayPhysics;
 import net.conczin.mca.client.tts.SpeechManager;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerLike;
@@ -26,6 +27,7 @@ public class MCAClient {
         playerDataRequests.clear();
         playerData.clear();
         equippedRings.clear();
+        PlayerBodyOverlayPhysics.clear();
         fallbackVillager = null;
         Network.sendToServer(new ConfigRequest());
     }
@@ -75,6 +77,7 @@ public class MCAClient {
 
     public static void tickClient(Minecraft client) {
         destinyManager.tick(client);
+        PlayerBodyOverlayPhysics.tick(client);
 
         if (KeyBindings.SKIN_LIBRARY.consumeClick()) {
             Minecraft.getInstance().setScreen(new SkinLibraryScreen());
