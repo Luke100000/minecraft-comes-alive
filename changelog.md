@@ -1,3 +1,7 @@
+# 7.6.16
+
+* Updated TTS server URL
+
 # 7.6.14/15
 
 * Fixed issues with config (Thanks pau101!)
