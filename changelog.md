@@ -1,3 +1,8 @@
+# 7.7.7
+
+* Synced translations
+* Updated TTS server URL in config
+
 # 7.7.6
 
 * Fixed issues with config (Thanks pau101!)
