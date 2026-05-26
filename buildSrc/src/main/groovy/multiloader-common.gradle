@@ -124,13 +124,13 @@ sourceSets {
 publishing {
     publications {
         register('mavenJava', MavenPublication) {
-            artifactId base.archivesName.get()
+            artifactId = base.archivesName.get()
             from components.java
         }
     }
     repositories {
         maven {
-            url System.getenv('local_maven_url')
+            url = System.getenv('local_maven_url')
         }
     }
 }
