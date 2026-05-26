@@ -2,6 +2,7 @@ package net.conczin.mca.client.gui;
 
 import com.mojang.blaze3d.platform.Window;
 import net.conczin.mca.MCA;
+import net.conczin.mca.client.gui.widget.WidgetUtils;
 import net.conczin.mca.client.resources.Icon;
 import net.conczin.mca.entity.ai.relationship.RelationshipState;
 import net.conczin.mca.network.Network;
@@ -319,7 +320,7 @@ public class FamilyTreeScreen extends Screen {
                 if (isFocused && mouseX <= bounds.left + 20) {
                     matrices.pushMatrix();
                     matrices.translate(0, 0);
-                    context.setTooltipForNextFrame(font, Component.translatable("gui.family_tree.label.deceased"), mouseX, mouseY);
+                    WidgetUtils.drawTooltip(context, font, Component.translatable("gui.family_tree.label.deceased"), mouseX, mouseY);
                     matrices.popMatrix();
                 }
             }

@@ -5,6 +5,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
+      GRADLE_OPTS: --enable-native-access=ALL-UNNAMED
       MODRINTH_ID: "1W98a849"
       CURSEFORGE_ID: "535291"
       MODRINTH_TOKEN: ${{ secrets.MR_API_TOKEN }}

@@ -9,8 +9,6 @@ import net.conczin.mca.client.model.VillagerEntityModelMCA;
 import net.conczin.mca.entity.Infectable;
 import net.conczin.mca.entity.VillagerLike;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.model.geom.builders.CubeDeformation;
-import net.minecraft.client.model.geom.builders.LayerDefinition;
 import net.minecraft.client.renderer.entity.ArmorModelSet;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.HumanoidMobRenderer;
@@ -18,9 +16,15 @@ import net.minecraft.client.renderer.entity.layers.HumanoidArmorLayer;
 import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.client.model.geom.builders.CubeDeformation;
+import net.minecraft.client.model.geom.builders.LayerDefinition;
+import net.minecraft.client.model.geom.builders.MeshDefinition;
 import org.jetbrains.annotations.Nullable;
+
+import java.util.Set;
 
 @SuppressWarnings({"rawtypes", "unchecked"})
 public class VillagerLikeEntityMCARenderer<T extends Mob & VillagerLike<T>>
@@ -29,22 +33,36 @@ public class VillagerLikeEntityMCARenderer<T extends Mob & VillagerLike<T>>
 
     public VillagerLikeEntityMCARenderer(EntityRendererProvider.Context ctx, VillagerEntityModelMCA model) {
         super(ctx, model, 0.5F);
-        addLayer(new HumanoidArmorLayer<>(this, createArmorModelSet(0.3F), createArmorModelSet(0.55F), ctx.getEquipmentRenderer()));
+        addLayer(new HumanoidArmorLayer<>(this, createArmorModelSet(), ctx.getEquipmentRenderer()));
     }
 
-    private ArmorModelSet<VillagerEntityBaseModelMCA> createArmorModelSet(float modelSize) {
+    private ArmorModelSet<VillagerEntityBaseModelMCA> createArmorModelSet() {
         return new ArmorModelSet<>(
-            createArmorModel(modelSize),
-            createArmorModel(modelSize),
-            createArmorModel(modelSize),
-            createArmorModel(modelSize)
+            createArmorModel(0.55F, EquipmentSlot.HEAD),
+            createArmorModel(0.55F, EquipmentSlot.CHEST),
+            createArmorModel(0.3F, EquipmentSlot.LEGS),
+            createArmorModel(0.55F, EquipmentSlot.FEET)
         );
     }
 
-    private VillagerEntityBaseModelMCA createArmorModel(float modelSize) {
-        return new VillagerEntityBaseModelMCA(
-            LayerDefinition.create(VillagerEntityBaseModelMCA.getModelData(new CubeDeformation(modelSize)), 64, 32).bakeRoot()
-        );
+    private VillagerEntityBaseModelMCA createArmorModel(float dilation, EquipmentSlot slot) {
+        MeshDefinition mesh = VillagerEntityBaseModelMCA.getModelData(new CubeDeformation(dilation));
+        if (slot == EquipmentSlot.HEAD) {
+            mesh.getRoot().retainPartsAndChildren(armorParts(slot));
+        } else {
+            mesh.getRoot().retainExactParts(armorParts(slot));
+        }
+        return new VillagerEntityBaseModelMCA(LayerDefinition.create(mesh, 64, 32).bakeRoot());
+    }
+
+    private Set<String> armorParts(EquipmentSlot slot) {
+        return switch (slot) {
+            case HEAD -> Set.of("head");
+            case CHEST -> Set.of("body", "left_arm", "right_arm", "breasts");
+            case LEGS -> Set.of("left_leg", "right_leg", "body");
+            case FEET -> Set.of("left_leg", "right_leg");
+            default -> throw new IllegalStateException("No armor model parts for slot: " + slot);
+        };
     }
 
     @Override

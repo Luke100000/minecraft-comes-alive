@@ -122,13 +122,13 @@ public class ExtendedBookScreen extends Screen {
 
         // background
         int i = (width - 192) / 2;
-        context.blit(RenderPipelines.GUI_TEXTURED, book.getBackground(), i, 2, 0, 0, 192, 192, 192, 192);
+        context.blit(RenderPipelines.GUI_TEXTURED, book.getBackground(), i, 2, 0, 0, 192, 192, 256, 256);
 
         // page number
         if (book.showPageCount()) {
             Component pageIndexText = Component.translatable("book.pageIndicator", this.pageIndex + 1, Math.max(book.getPageCount(), 1)).withStyle(book.getTextFormatting());
             int k = font.width(pageIndexText);
-            context.text(font, pageIndexText, i - k + 192 - 44, 18, 0, getBook().hasTextShadow());
+            context.text(font, pageIndexText, i - k + 192 - 44, 18, 0xFF000000, getBook().hasTextShadow());
         }
     }
 

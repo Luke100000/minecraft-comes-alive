@@ -49,10 +49,10 @@ public class TitlePage extends Page {
         List<FormattedCharSequence> texts = screen.getTextRenderer().split(title, 114);
         int y = 80 - 5 * texts.size();
         for (FormattedCharSequence t : texts) {
-            drawCenteredText(screen, context, screen.getTextRenderer(), t, screen.width / 2 - 2, y, 0xFFFFFF);
+            drawCenteredText(screen, context, screen.getTextRenderer(), t, screen.width / 2 - 2, y, 0xFFFFFFFF);
             y += 10;
         }
         y = 82 + 5 * texts.size();
-        drawCenteredText(screen, context, screen.getTextRenderer(), subtitle, screen.width / 2 - 2, y, 0xFFFFFF);
+        drawCenteredText(screen, context, screen.getTextRenderer(), subtitle, screen.width / 2 - 2, y, 0xFFFFFFFF);
     }
 }

@@ -67,14 +67,17 @@ public class FamilyTreeSearchScreen extends Screen {
     }
 
     @Override
+    public void extractBackground(GuiGraphicsExtractor context, int mouseX, int mouseY, float partialTick) {
+        super.extractBackground(context, mouseX, mouseY, partialTick);
+        context.fill(width / 2 - DATA_WIDTH / 2 - 10, height / 2 - 110, width / 2 + DATA_WIDTH / 2 + 10, height / 2 + 110, 0x66000000);
+    }
+
+    @Override
     public void extractRenderState(GuiGraphicsExtractor context, int mouseX, int mouseY, float delta) {
         super.extractRenderState(context, mouseX, mouseY, delta);
 
-        assert minecraft != null;
-        this.mouseX = (int) (minecraft.mouseHandler.xpos() * width / minecraft.getWindow().getWidth());
-        this.mouseY = (int) (minecraft.mouseHandler.ypos() * height / minecraft.getWindow().getHeight());
-
-        context.fill(width / 2 - DATA_WIDTH / 2 - 10, height / 2 - 110, width / 2 + DATA_WIDTH / 2 + 10, height / 2 + 110, 0x66000000);
+        this.mouseX = mouseX;
+        this.mouseY = mouseY;
 
         renderVillagers(context);
 
@@ -82,7 +85,8 @@ public class FamilyTreeSearchScreen extends Screen {
     }
 
     private void renderVillagers(GuiGraphicsExtractor context) {
-        int maxPages = (int) Math.ceil(list.size() / 9.0);
+        int maxPages = Math.max(1, (int) Math.ceil(list.size() / 9.0));
+        pageNumber = Math.min(pageNumber, maxPages - 1);
         buttonPage.setMessage(Component.literal((pageNumber + 1) + "/" + maxPages));
 
         selectedVillager = null;

@@ -11,6 +11,7 @@ import net.conczin.mca.registry.EntitiesMCA;
 import net.minecraft.client.model.HumanoidModel;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.client.renderer.SubmitNodeCollector;
+import net.minecraft.client.renderer.entity.state.HumanoidRenderState;
 import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntitySpawnReason;
@@ -231,31 +232,23 @@ public interface CommonVillagerModel<T> {
         }
     }
 
-    default void submitCommon(PoseStack matrices, SubmitNodeCollector submitNodeCollector, RenderType renderType, int light, int overlay, int color) {
-        float headSize = getDimensions().getHead();
-
-        matrices.pushPose();
-        matrices.scale(headSize, headSize, headSize);
-        getCommonHeadParts().forEach(part -> submitNodeCollector.submitModelPart(part, matrices, renderType, light, overlay, null, color, null));
-        matrices.popPose();
-
-        getCommonBodyParts().forEach(part -> submitNodeCollector.submitModelPart(part, matrices, renderType, light, overlay, null, color, null));
-
-        if (getBreastPart().visible && getBodyPart().visible) {
-            float breastSize = getBreastSize() * getDimensions().getBreasts();
-
-            if (breastSize > 0) {
-                matrices.pushPose();
-                matrices.scale(breastSize * 0.2f + 1.05f, breastSize * 0.75f + 0.75f, breastSize * 0.75f + 0.75f);
-                for (ModelPart part : getBreastParts()) {
-                    submitNodeCollector.submitModelPart(part, matrices, renderType, light, overlay, null, color, null);
-                }
-                matrices.popPose();
-            }
-        }
+    default void submitCommon(PoseStack matrices, SubmitNodeCollector submitNodeCollector, RenderType renderType, int light, int overlay, int color, HumanoidRenderState state) {
+        submitNodeCollector.submitCustomGeometry(matrices, renderType, (pose, buffer) -> {
+            setupCommonAnimation(state);
+            PoseStack renderStack = new PoseStack();
+            renderStack.last().set(pose);
+            renderCommon(renderStack, buffer, light, overlay, color);
+        });
     }
 
     static void copyPartState(ModelPart target, ModelPart source) {
         target.loadPose(source.storePose());
+    }
+
+    @SuppressWarnings("unchecked")
+    private void setupCommonAnimation(HumanoidRenderState state) {
+        if (this instanceof HumanoidModel<?> humanoidModel) {
+            ((HumanoidModel<HumanoidRenderState>) humanoidModel).setupAnim(state);
+        }
     }
 }

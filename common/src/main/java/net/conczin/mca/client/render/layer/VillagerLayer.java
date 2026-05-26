@@ -178,9 +178,8 @@ public abstract class VillagerLayer<S extends HumanoidRenderState & VillagerStat
             return;
         }
 
-        if (model instanceof CommonVillagerModel<?> commonVillagerModel) {
-            model.setupAnim(state);
-            commonVillagerModel.submitCommon(poseStack, submitNodeCollector, layer, lightCoords, overlay, color);
+        if (model instanceof CommonVillagerModel commonVillagerModel) {
+            commonVillagerModel.submitCommon(poseStack, submitNodeCollector, layer, lightCoords, overlay, color, state);
             return;
         }
 

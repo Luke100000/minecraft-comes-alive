@@ -20,6 +20,7 @@ neoForge {
         }
         client {
             client()
+            jvmArgument '--illegal-native-access=allow'
         }
         data {
             clientData()

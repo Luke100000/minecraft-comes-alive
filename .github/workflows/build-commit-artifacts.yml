@@ -8,15 +8,17 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      GRADLE_OPTS: --enable-native-access=ALL-UNNAMED
 
     steps:
-      - name: Extract current branch name
-        id: ref
-        shell: bash
-        run: ref="${GITHUB_REF#refs/heads/}" && echo "branch=${ref////-}" >> "$GITHUB_OUTPUT"
-
       - name: Checkout sources
         uses: actions/checkout@v6
+
+      - name: Extract Minecraft version
+        id: versions
+        shell: bash
+        run: echo "minecraft_version=$(grep '^minecraft_version=' gradle.properties | cut -d= -f2)" >> "$GITHUB_OUTPUT"
 
       - name: Setup Java 25
         uses: actions/setup-java@v5
@@ -35,13 +37,13 @@ jobs:
       - name: Upload Fabric jars
         uses: actions/upload-artifact@v7
         with:
-          name: mca-fabric-${{ steps.ref.outputs.branch }}-${{ github.sha }}
+          name: mca-fabric-${{ steps.versions.outputs.minecraft_version }}
           path: fabric/build/libs/*.jar
           if-no-files-found: error
 
       - name: Upload NeoForge jars
         uses: actions/upload-artifact@v7
         with:
-          name: mca-neoforge-${{ steps.ref.outputs.branch }}-${{ github.sha }}
+          name: mca-neoforge-${{ steps.versions.outputs.minecraft_version }}
           path: neoforge/build/libs/*.jar
           if-no-files-found: error

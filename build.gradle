@@ -3,11 +3,21 @@ plugins {
     id 'net.neoforged.moddev' version "${moddev_version}" apply false
 }
 
+def nativeAccessJvmArgs = ['--enable-native-access=ALL-UNNAMED', '--illegal-native-access=allow']
+
 allprojects {
     gradle.projectsEvaluated {
         tasks.withType(JavaCompile).tap {
             configureEach {
                 options.compilerArgs << "-Xmaxerrs" << "1000"
+            }
+        }
+
+        tasks.withType(JavaForkOptions).configureEach {
+            nativeAccessJvmArgs.each { nativeAccessJvmArg ->
+                if (!jvmArgs.contains(nativeAccessJvmArg)) {
+                    jvmArgs(nativeAccessJvmArg)
+                }
             }
         }
     }
