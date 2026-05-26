@@ -5,16 +5,22 @@ import net.conczin.mca.client.book.pages.Page;
 import net.conczin.mca.client.gui.widget.ExtendedPageTurnWidget;
 import net.conczin.mca.util.compat.ButtonWidget;
 import net.minecraft.client.GameNarrator;
+import net.minecraft.client.gui.ActiveTextCollector;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.PageButton;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.renderer.RenderPipelines;
+import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.CommonComponents;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.Style;
 import net.minecraft.util.Mth;
+
+import java.util.Objects;
 
 public class ExtendedBookScreen extends Screen {
     private final Book book;
@@ -138,7 +144,41 @@ public class ExtendedBookScreen extends Screen {
 
     @Override
     public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
+        if (event.button() == 0) {
+            Page page = book.getPage(pageIndex);
+            if (page != null) {
+                ActiveTextCollector.ClickableStyleFinder finder = new ActiveTextCollector.ClickableStyleFinder(font, (int) event.x(), (int) event.y());
+                page.visitText(this, finder);
+                Style clickedStyle = finder.result();
+                if (clickedStyle != null && handleClickEvent(clickedStyle.getClickEvent())) {
+                    return true;
+                }
+            }
+        }
+
         return super.mouseClicked(event, doubleClick);
+    }
+
+    private boolean handleClickEvent(ClickEvent clickEvent) {
+        if (clickEvent == null) {
+            return false;
+        }
+
+        switch (clickEvent) {
+            case ClickEvent.ChangePage(int page) -> {
+                return jumpToPage(page - 1);
+            }
+            case ClickEvent.RunCommand(String command) -> {
+                LocalPlayer player = Objects.requireNonNull(minecraft.player, "Player not available");
+                minecraft.setScreen(null);
+                clickCommandAction(player, command, null);
+                return true;
+            }
+            default -> {
+                defaultHandleGameClickEvent(clickEvent, minecraft, this);
+                return true;
+            }
+        }
     }
 
     public Book getBook() {

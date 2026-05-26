@@ -176,27 +176,27 @@ public class InteractScreen extends AbstractDynamicScreen {
         //name or state tip (gifting, ...)
         int h = 17;
         if (inGiftMode) {
-            context.setTooltipForNextFrame(font, Component.translatable("gui.interact.label.giveGift"), 10, 28);
+            drawTooltip(context, Component.translatable("gui.interact.label.giveGift"), 10, 28);
         } else {
-            context.setTooltipForNextFrame(font, villager.asEntity().getName(), 10, 28);
+            drawTooltip(context, villager.asEntity().getName(), 10, 28);
         }
 
         //age or profession
-        context.setTooltipForNextFrame(font, villager.asEntity().isBaby() ? villager.getAgeState().getName() : villager.getProfessionText(), 10, 30 + h);
+        drawTooltip(context, villager.asEntity().isBaby() ? villager.getAgeState().getName() : villager.getProfessionText(), 10, 30 + h);
 
         VillagerBrain<?> brain = villager.getVillagerBrain();
 
         //mood
-        context.setTooltipForNextFrame(font,
+        drawTooltip(context,
                 Component.translatable("gui.interact.label.mood", brain.getMood().getText())
                         .withStyle(brain.getMood().getColor()), 10, 30 + h * 2);
 
         //personality
         if (hoveringOverText(10, 30 + h * 3, 128)) {
-            context.setTooltipForNextFrame(font, brain.getPersonality().getDescription(), 10, 30 + h * 3);
+            drawTooltip(context, brain.getPersonality().getDescription(), 10, 30 + h * 3);
         } else {
             //White as we don't know if a personality is negative
-            context.setTooltipForNextFrame(font, Component.translatable("gui.interact.label.personality", brain.getPersonality().getName()).withStyle(ChatFormatting.WHITE), 10, 30 + h * 3);
+            drawTooltip(context, Component.translatable("gui.interact.label.personality", brain.getPersonality().getName()).withStyle(ChatFormatting.WHITE), 10, 30 + h * 3);
         }
 
         //traits
@@ -206,7 +206,7 @@ public class InteractScreen extends AbstractDynamicScreen {
                 //details
                 List<Component> traitText = traits.stream().map(Traits.Trait::getDescription).collect(Collectors.toList());
                 traitText.addFirst(Component.translatable("traits.title"));
-                context.setComponentTooltipForNextFrame(font, traitText, 10, 30 + h * 4);
+                drawTooltip(context, traitText, 10, 30 + h * 4);
             } else {
                 //list
                 MutableComponent traitText = Component.translatable("traits.title");
@@ -216,7 +216,7 @@ public class InteractScreen extends AbstractDynamicScreen {
                     }
                     traitText.append(t);
                 });
-                context.setTooltipForNextFrame(font, traitText, 10, 30 + h * 4);
+                drawTooltip(context, traitText, 10, 30 + h * 4);
             }
         }
 

@@ -2,6 +2,7 @@ package net.conczin.mca.client.gui;
 
 import net.conczin.mca.client.resources.Icon;
 import net.conczin.mca.entity.interaction.Constraint;
+import net.conczin.mca.client.gui.widget.WidgetUtils;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
@@ -96,12 +97,20 @@ public abstract class AbstractDynamicScreen extends Screen {
 
     protected void drawHoveringIconText(GuiGraphicsExtractor context, Component text, String key) {
         Icon icon = MCAScreens.getInstance().getIcon(key);
-        context.setTooltipForNextFrame(font, text, icon.x() + 16, icon.y() + 20);
+        drawTooltip(context, text, icon.x() + 16, icon.y() + 20);
     }
 
     protected void drawHoveringIconText(GuiGraphicsExtractor context, List<Component> text, String key) {
         Icon icon = MCAScreens.getInstance().getIcon(key);
-        context.setComponentTooltipForNextFrame(font, text, icon.x() + 16, icon.y() + 20);
+        drawTooltip(context, text, icon.x() + 16, icon.y() + 20);
+    }
+
+    protected void drawTooltip(GuiGraphicsExtractor context, Component text, int x, int y) {
+        drawTooltip(context, List.of(text), x, y);
+    }
+
+    protected void drawTooltip(GuiGraphicsExtractor context, List<Component> text, int x, int y) {
+        WidgetUtils.drawTooltip(context, font, text, x, y);
     }
 
     //checks if the mouse hovers over a specified button

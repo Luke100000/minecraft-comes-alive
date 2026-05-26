@@ -352,7 +352,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                     if (part != null) {
                         Component text = part.getTranslation();
                         int textWidth = font.width(text);
-                        context.setTooltipForNextFrame(font, text, width / 2 - textWidth / 2 - 12, height / 2 - 68);
+                        WidgetUtils.drawTooltip(context, font, text, width / 2 - textWidth / 2 - 12, height / 2 - 68);
                     }
                 }
             }
@@ -412,7 +412,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                 InventoryScreen.extractEntityInInventoryFollowsMouse(context, cx - 30, cy - 60, cx + 30, cy + 60, 60, 0, mouseX, mouseY, villagerVisualization);
 
                 //metadata
-                context.setComponentTooltipForNextFrame(font, getMetaDataText(focusedContent), width / 2 + 200, height / 2 - 50);
+                WidgetUtils.drawTooltip(context, font, getMetaDataText(focusedContent), width / 2 + 200, height / 2 - 50);
             }
             case LOADING -> {
                 context.text(font, Component.translatable("gui.loading"), width / 2, height / 2, 0xFFFFFFFF);
@@ -420,7 +420,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         }
 
         if (tooltip != null) {
-            context.setComponentTooltipForNextFrame(font, tooltip, mouseX, mouseY);
+            WidgetUtils.drawTooltip(context, font, tooltip, mouseX, mouseY);
         }
 
         if (error != null) {

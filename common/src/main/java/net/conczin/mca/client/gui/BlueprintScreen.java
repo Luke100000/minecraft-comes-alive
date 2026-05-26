@@ -454,7 +454,7 @@ public class BlueprintScreen extends ExtendedScreen {
         //render
         int py = mouseY - h / 2 + 12;
         for (List<Component> b : tooltips) {
-            context.setComponentTooltipForNextFrame(font, b, mouseX, py);
+            WidgetUtils.drawTooltip(context, font, b, mouseX, py);
             py += getTooltipHeight(b) + 9;
         }
     }
