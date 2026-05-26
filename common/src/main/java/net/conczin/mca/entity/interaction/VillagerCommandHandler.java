@@ -43,6 +43,7 @@ public class VillagerCommandHandler extends EntityCommandHandler<VillagerEntityM
      * Called on the server to respond to button events.
      */
     @Override
+    @SuppressWarnings("deprecation")
     public boolean handle(ServerPlayer player, String command) {
         Memories memory = entity.getVillagerBrain().getMemoriesForPlayer(player);
 

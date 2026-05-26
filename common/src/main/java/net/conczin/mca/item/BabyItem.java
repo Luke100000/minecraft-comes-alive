@@ -248,6 +248,7 @@ public class BabyItem extends Item {
     }
 
     @Override
+    @SuppressWarnings("deprecation")
     public void appendHoverText(ItemStack stack, TooltipContext context, TooltipDisplay tooltipDisplay, Consumer<Component> consumer, TooltipFlag flag) {
         Player player = ClientProxy.getClientPlayer();
         int age = stack.getOrDefault(DataComponentsMCA.BABY_AGE, 0);

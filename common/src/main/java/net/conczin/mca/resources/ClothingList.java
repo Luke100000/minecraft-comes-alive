@@ -25,7 +25,7 @@ import java.util.Map;
 import java.util.stream.Stream;
 
 public class ClothingList extends SimpleJsonResourceReloadListener<JsonElement> {
-    protected static final Identifier ID = MCA.locate("skins/clothing");
+    public static final Identifier ID = MCA.locate("skins/clothing");
     private static ClothingList INSTANCE;
     public final HashMap<String, Clothing> clothing = new HashMap<>();
 

@@ -19,7 +19,7 @@ import java.util.Map;
 import java.util.Optional;
 
 public class MCAScreens extends SimpleJsonResourceReloadListener<JsonElement> {
-    protected static final Identifier ID = MCA.locate("screens");
+    public static final Identifier ID = MCA.locate("screens");
     private static final Type ICONS_TYPE = new TypeToken<Map<String, Icon>>() {
     }.getType();
 

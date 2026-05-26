@@ -17,7 +17,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 public class Tasks extends SimpleJsonResourceReloadListener<JsonElement> {
-    protected static final Identifier ID = MCA.locate("tasks");
+    public static final Identifier ID = MCA.locate("tasks");
 
     private static Tasks INSTANCE;
     public final Map<Rank, List<Task>> tasks = new HashMap<>();

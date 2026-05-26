@@ -15,7 +15,7 @@ import java.util.Iterator;
 import java.util.Map;
 
 public class BuildingTypes extends SimpleJsonResourceReloadListener<JsonElement> implements Iterable<BuildingType> {
-    protected static final Identifier ID = MCA.locate("building_types");
+    public static final Identifier ID = MCA.locate("building_types");
     private static BuildingTypes INSTANCE = new BuildingTypes();
     private final Map<String, BuildingType> buildingTypes = new HashMap<>();
     private final Map<String, BuildingType> buildingTypesClient = new HashMap<>();

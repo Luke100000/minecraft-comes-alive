@@ -36,10 +36,10 @@ public class LazyFindPointOfInterestTask extends AcquirePoi {
         OneShot<PathfinderMob> singleTickTask = BehaviorBuilder.create(taskContext -> taskContext.map(queryResult -> (Trigger<PathfinderMob>) (world, entity, time) -> {
             if (onlyRunIfChild && entity.isBaby()) {
                 return false;
-            } else if (cooldown.getValue() == 0L) {
+            } else if (cooldown.longValue() == 0L) {
                 cooldown.setValue(world.getGameTime() + (long) world.getRandom().nextInt(MIN_DELAY));
                 return false;
-            } else if (world.getGameTime() < cooldown.getValue()) {
+            } else if (world.getGameTime() < cooldown.longValue()) {
                 return false;
             } else {
                 cooldown.setValue(time + MIN_DELAY + (long) world.getRandom().nextInt(MIN_DELAY));

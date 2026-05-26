@@ -54,7 +54,6 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
-import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
@@ -1521,37 +1520,40 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
     }
 
     private void loadImage(String path) {
-        InputStream stream = null;
+        try (InputStream stream = openImageStream(path)) {
+            if (stream == null) {
+                return;
+            }
+
+            NativeImage image = NativeImage.read(stream);
+
+            if (image.getWidth() == 64 && image.getHeight() == 64) {
+                if (SkinPorter.isSlimFormat(image)) {
+                    SkinPorter.convertSlimToDefault(image);
+                }
+                workspace = new Workspace(image);
+                setPage(Page.EDITOR_TYPE);
+            } else if (image.getWidth() == 64 && image.getHeight() == 32) {
+                // port legacy skins
+                workspace = new Workspace(SkinPorter.portLegacySkin(image));
+                setPage(Page.EDITOR_TYPE);
+            } else {
+                setError(Component.translatable("gui.skin_library.not_64"));
+            }
+        } catch (IOException e) {
+            MCA.LOGGER.error(e);
+        }
+    }
+
+    private InputStream openImageStream(String path) {
         try {
-            stream = new URL(path).openStream();
+            return URI.create(path).toURL().openStream();
         } catch (Exception exception) {
             try {
-                stream = new FileInputStream(path);
+                return new FileInputStream(path);
             } catch (Exception e) {
                 MCA.LOGGER.error(e);
-            }
-        }
-
-        if (stream != null) {
-            try {
-                NativeImage image = NativeImage.read(stream);
-                stream.close();
-
-                if (image.getWidth() == 64 && image.getHeight() == 64) {
-                    if (SkinPorter.isSlimFormat(image)) {
-                        SkinPorter.convertSlimToDefault(image);
-                    }
-                    workspace = new Workspace(image);
-                    setPage(Page.EDITOR_TYPE);
-                } else if (image.getWidth() == 64 && image.getHeight() == 32) {
-                    // port legacy skins
-                    workspace = new Workspace(SkinPorter.portLegacySkin(image));
-                    setPage(Page.EDITOR_TYPE);
-                } else {
-                    setError(Component.translatable("gui.skin_library.not_64"));
-                }
-            } catch (IOException e) {
-                MCA.LOGGER.error(e);
+                return null;
             }
         }
     }

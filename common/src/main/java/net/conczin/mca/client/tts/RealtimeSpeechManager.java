@@ -13,7 +13,7 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
-import java.net.URL;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.List;
@@ -35,7 +35,7 @@ public class RealtimeSpeechManager {
 
     public static void download(OutputStream output, String url, String payload, String key) {
         try {
-            HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
+            HttpURLConnection connection = (HttpURLConnection) URI.create(url).toURL().openConnection();
             connection.setRequestMethod("POST");
             connection.setDoOutput(true);
             connection.setRequestProperty("Accept", "application/json");
@@ -106,7 +106,7 @@ public class RealtimeSpeechManager {
 
     public Map<String, VoiceInfo> fetchVoices(String url) {
         try {
-            HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
+            HttpURLConnection connection = (HttpURLConnection) URI.create(url).toURL().openConnection();
             connection.setRequestMethod("GET");
             connection.setRequestProperty("Content-Type", "application/json");
             connection.setRequestProperty("Accept-Encoding", "gzip");

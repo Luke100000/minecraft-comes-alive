@@ -147,6 +147,7 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
 
     @Nullable
     @Override
+    @SuppressWarnings("deprecation")
     public SpawnGroupData finalizeSpawn(ServerLevelAccessor world, DifficultyInstance difficulty, EntitySpawnReason spawnReason, @Nullable SpawnGroupData entityData) {
         SpawnGroupData data = super.finalizeSpawn(world, difficulty, spawnReason, entityData);
 
@@ -169,6 +170,7 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
     }
 
     @Override
+    @SuppressWarnings("deprecation")
     protected void onOffspringSpawnedFromEgg(Player player, Mob child) {
         ServerLevelAccessor serverLevel = (ServerLevelAccessor) level();
         child.finalizeSpawn(serverLevel, serverLevel.getCurrentDifficultyAt(child.blockPosition()), EntitySpawnReason.SPAWN_ITEM_USE, null);
@@ -239,6 +241,7 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
     }
 
     @Override
+    @SuppressWarnings("deprecation")
     public void readAdditionalSaveData(ValueInput input) {
         CompoundTag nbt = input.read(MapCodec.assumeMapUnsafe(CompoundTag.CODEC)).orElseGet(CompoundTag::new);
         super.readAdditionalSaveData(input);
@@ -259,6 +262,7 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
     }
 
     @Override
+    @SuppressWarnings("deprecation")
     public final void addAdditionalSaveData(ValueOutput output) {
         CompoundTag nbt = new CompoundTag();
         super.addAdditionalSaveData(output);

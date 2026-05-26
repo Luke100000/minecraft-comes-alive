@@ -58,6 +58,7 @@ public class HuntingTask extends AbstractChoreTask {
     }
 
     @Override
+    @SuppressWarnings("deprecation")
     protected void tick(ServerLevel world, VillagerEntityMCA villager, long time) {
         super.tick(world, villager, time);
 

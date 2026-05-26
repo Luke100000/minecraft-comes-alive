@@ -16,6 +16,7 @@ public class CivilRegistry extends ExtendedWrittenBookItem {
     }
 
     @Override
+    @SuppressWarnings("deprecation")
     public void appendHoverText(ItemStack stack, TooltipContext context, TooltipDisplay tooltipDisplay, Consumer<Component> consumer, TooltipFlag tooltipFlag) {
         super.appendHoverText(stack, context, tooltipDisplay, consumer, tooltipFlag);
         FlowingText.wrap(Component.translatable(getDescriptionId() + ".tooltip").withStyle(ChatFormatting.GRAY), 160).forEach(consumer);

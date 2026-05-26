@@ -6,11 +6,12 @@ import net.conczin.mca.entity.ai.ActivitiesMCA;
 import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
 import net.conczin.mca.entity.ai.SchedulesMCA;
 import net.conczin.mca.entity.ai.SensorsMCA;
-import net.conczin.mca.fabric.resources.*;
+import net.conczin.mca.entity.interaction.gifts.GiftLoader;
 import net.conczin.mca.network.HandleablePayload;
 import net.conczin.mca.network.MessagesMCA;
 import net.conczin.mca.network.Network;
 import net.conczin.mca.registry.*;
+import net.conczin.mca.resources.*;
 import net.conczin.mca.server.ServerInteractionManager;
 import net.conczin.mca.server.command.AdminCommand;
 import net.conczin.mca.server.command.Command;
@@ -29,7 +30,7 @@ import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.fabricmc.fabric.api.object.builder.v1.entity.FabricDefaultAttributeRegistry;
-import net.fabricmc.fabric.api.resource.ResourceManagerHelper;
+import net.fabricmc.fabric.api.resource.v1.ResourceLoader;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -38,6 +39,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceKey;
+import net.minecraft.server.packs.resources.PreparableReloadListener;
 import net.minecraft.server.packs.PackType;
 import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.world.item.Item;
@@ -73,6 +75,10 @@ public final class MCAFabric implements ModInitializer {
         consumer.accept((name, value) -> Registry.register(register, name, value));
     }
 
+    private static void registerReloadListener(ResourceLoader loader, net.minecraft.resources.Identifier id, PreparableReloadListener listener) {
+        loader.registerReloadListener(id, listener);
+    }
+
     @Override
     public void onInitialize() {
         FabricEntityDataRegistry.register(MCAEntityDataSerializers.COMPOUND_TAG_ID, MCAEntityDataSerializers.COMPOUND_TAG);
@@ -102,15 +108,15 @@ public final class MCAFabric implements ModInitializer {
         Network.registerSender(ServerPlayNetworking::send);
 
         // Register resource reload listeners
-        ResourceManagerHelper managerHelper = ResourceManagerHelper.get(PackType.SERVER_DATA);
-        managerHelper.registerReloadListener(new ApiIdentifiableReloadListener());
-        managerHelper.registerReloadListener(new FabricClothingList());
-        managerHelper.registerReloadListener(new FabricHairList());
-        managerHelper.registerReloadListener(new FabricGiftLoader());
-        managerHelper.registerReloadListener(new FabricDialogues());
-        managerHelper.registerReloadListener(new FabricTasks());
-        managerHelper.registerReloadListener(new FabricNames());
-        managerHelper.registerReloadListener(new FabricBuildingTypes());
+        ResourceLoader resourceLoader = ResourceLoader.get(PackType.SERVER_DATA);
+        registerReloadListener(resourceLoader, ApiReloadListener.ID, new ApiReloadListener());
+        registerReloadListener(resourceLoader, ClothingList.ID, new ClothingList());
+        registerReloadListener(resourceLoader, HairList.ID, new HairList());
+        registerReloadListener(resourceLoader, GiftLoader.ID, new GiftLoader());
+        registerReloadListener(resourceLoader, Dialogues.ID, new Dialogues());
+        registerReloadListener(resourceLoader, Tasks.ID, new Tasks());
+        registerReloadListener(resourceLoader, Names.ID, new Names());
+        registerReloadListener(resourceLoader, BuildingTypes.ID, new BuildingTypes());
 
         // Create the creative mode tab
         ResourceKey<CreativeModeTab> mcaTab = ResourceKey.create(BuiltInRegistries.CREATIVE_MODE_TAB.key(), MCA.locate("mca_tab"));

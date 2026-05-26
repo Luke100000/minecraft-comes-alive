@@ -204,7 +204,7 @@ public class GraveyardManager extends SavedData {
         }
 
         Chunk(ListTag list) {
-            list.forEach(l -> tombstones.add(l.asLong().orElse(0L)));
+            list.forEach(l -> tombstones.add(l.asLong().orElse(0L).longValue()));
         }
 
         @Override

@@ -12,7 +12,7 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 
 public class ColorPaletteLoader extends SimplePreparableReloadListener<Map<Identifier, ColorPalette.Data>> {
-    protected static final Identifier ID = MCA.locate("color_palettes");
+    public static final Identifier ID = MCA.locate("color_palettes");
 
     @Override
     protected Map<Identifier, ColorPalette.Data> prepare(ResourceManager manager, ProfilerFiller profiler) {
@@ -26,7 +26,7 @@ public class ColorPaletteLoader extends SimplePreparableReloadListener<Map<Ident
             return new ColorPalette.Data(
                     img.getWidth(),
                     img.getHeight(),
-                    img.makePixelArray()
+                    img.getPixels()
             );
         } catch (Exception e) {
             MCA.LOGGER.error("Failed to load color palette from `{}`", id, e);

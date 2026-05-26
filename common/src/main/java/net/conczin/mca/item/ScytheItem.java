@@ -65,6 +65,7 @@ public class ScytheItem extends Item {
     }
 
     @Override
+    @SuppressWarnings("deprecation")
     public void appendHoverText(ItemStack stack, TooltipContext context, TooltipDisplay tooltipDisplay, Consumer<Component> consumer, TooltipFlag flag) {
         FlowingText.wrap(Component.translatable(getDescriptionId() + ".tooltip").withStyle(ChatFormatting.GRAY), 160).forEach(consumer);
     }

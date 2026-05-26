@@ -69,6 +69,7 @@ public interface WorldUtils {
         return Optional.ofNullable(getSavedDataWithLegacyFallback(world, type, dataId));
     }
 
+    @SuppressWarnings("deprecation")
     static void spawnEntity(Level world, Mob entity, EntitySpawnReason reason) {
         if (world instanceof ServerLevel serverLevel) {
             entity.finalizeSpawn(serverLevel, serverLevel.getCurrentDifficultyAt(entity.blockPosition()), reason, null);
@@ -170,6 +171,7 @@ public interface WorldUtils {
         return legacyData;
     }
 
+    @SuppressWarnings("deprecation")
     private static <T extends SavedData> @Nullable T tryLoadLegacySavedData(ServerLevel world, SavedDataStorage storage, SavedDataType<T> type, String legacyDataId) {
         try {
             Path dataFolder = getSavedDataFolder(storage);

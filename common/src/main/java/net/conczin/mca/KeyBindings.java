@@ -9,6 +9,7 @@ import java.util.List;
 
 public class KeyBindings {
     public static final List<KeyMapping> list = new LinkedList<>();
+    @SuppressWarnings("deprecation")
     private static final KeyMapping.Category MCA_CATEGORY = KeyMapping.Category.register(MCA.locate("mca_tab"));
 
     public static final KeyMapping SKIN_LIBRARY = newKey("skin_library", GLFW.GLFW_KEY_U);

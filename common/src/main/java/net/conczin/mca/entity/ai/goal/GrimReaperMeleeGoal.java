@@ -87,6 +87,7 @@ public class GrimReaperMeleeGoal extends Goal {
     }
 
     @Override
+    @SuppressWarnings("deprecation")
     public void tick() {
         //shouldn't be required, yet melee is triggered while resting
         if (reaper.getAttackState() == ReaperAttackState.REST) {

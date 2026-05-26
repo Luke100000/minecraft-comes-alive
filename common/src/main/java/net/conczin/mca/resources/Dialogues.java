@@ -23,7 +23,7 @@ import org.jetbrains.annotations.NotNull;
 import java.util.*;
 
 public class Dialogues extends SimpleJsonResourceReloadListener<JsonElement> {
-    protected static final Identifier ID = MCA.locate("dialogues");
+    public static final Identifier ID = MCA.locate("dialogues");
 
     private static Dialogues INSTANCE;
     private final Map<String, Question> questions = new HashMap<>();

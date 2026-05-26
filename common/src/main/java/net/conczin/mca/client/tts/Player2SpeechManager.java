@@ -5,7 +5,7 @@ import net.conczin.mca.client.tts.resources.Player2LanguageMap;
 
 import java.io.IOException;
 import java.net.HttpURLConnection;
-import java.net.URL;
+import java.net.URI;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -56,7 +56,7 @@ public class Player2SpeechManager extends RealtimeSpeechManager {
 
     public boolean checkHealth() {
         try {
-            HttpURLConnection connection = (HttpURLConnection) new URL(url + "v1/health").openConnection();
+            HttpURLConnection connection = (HttpURLConnection) URI.create(url + "v1/health").toURL().openConnection();
             connection.setRequestMethod("GET");
             connection.setRequestProperty("Accept", "application/json");
             connection.setRequestProperty("player2-game-key", "minecraft-comes-alive-reborn");

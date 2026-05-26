@@ -241,6 +241,7 @@ public class TombstoneBlock extends BaseEntityBlock implements SimpleWaterlogged
     }
 
     @Override
+    @SuppressWarnings("deprecation")
     public BlockState mirror(BlockState state, Mirror mirror) {
         return state.rotate(mirror.getRotation(state.getValue(BlockStateProperties.HORIZONTAL_FACING)));
     }

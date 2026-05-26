@@ -21,7 +21,7 @@ import java.util.*;
 public class Names extends SimpleJsonResourceReloadListener<JsonElement> {
     public static final Map<String, Map<Gender, WeightedPool<String>>> NAMES_MAP = new HashMap<>();
     public static final List<String> REGION_NAMES = new LinkedList<>();
-    protected static final Identifier ID = MCA.locate("mca_names");
+    public static final Identifier ID = MCA.locate("mca_names");
     static final RandomSource random = RandomSource.create();
 
     public Names() {

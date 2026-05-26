@@ -30,6 +30,7 @@ public class StaffOfLifeItem extends TooltippedItem {
     }
 
     @Override
+    @SuppressWarnings("deprecation")
     public void appendHoverText(ItemStack stack, TooltipContext context, TooltipDisplay tooltipDisplay, Consumer<Component> consumer, TooltipFlag flag) {
         consumer.accept(Component.translatable(getDescriptionId() + ".uses", stack.getMaxDamage() - stack.getDamageValue()));
         super.appendHoverText(stack, context, tooltipDisplay, consumer, flag);

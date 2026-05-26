@@ -101,6 +101,7 @@ public class VillagerTasksMCA {
             SensorsMCA.GUARD_ENEMIES
     );
 
+    @SuppressWarnings("deprecation")
     public static Brain.Provider<VillagerEntityMCA> createProfile() {
         return Brain.provider(MEMORY_TYPES, SENSOR_TYPES, body -> java.util.List.of());
     }
@@ -208,6 +209,7 @@ public class VillagerTasksMCA {
         );
     }
 
+    @SuppressWarnings("unchecked")
     public static ImmutableList<Pair<Integer, ? extends BehaviorControl<? super VillagerEntityMCA>>> getImportantCorePackage(float speedModifier) {
         return ImmutableList.of(
                 Pair.of(0, new Swim(0.8F)),

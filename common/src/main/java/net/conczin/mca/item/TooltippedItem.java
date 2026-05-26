@@ -18,6 +18,7 @@ public class TooltippedItem extends Item {
     }
 
     @Override
+    @SuppressWarnings("deprecation")
     public void appendHoverText(ItemStack stack, TooltipContext context, TooltipDisplay tooltipDisplay, Consumer<Component> consumer, TooltipFlag tooltipFlag) {
         super.appendHoverText(stack, context, tooltipDisplay, consumer, tooltipFlag);
 

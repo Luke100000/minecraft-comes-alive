@@ -18,7 +18,7 @@ import java.util.Locale;
 import java.util.Map;
 
 public class HairList extends SimpleJsonResourceReloadListener<JsonElement> {
-    protected static final Identifier ID = MCA.locate("skins/hair");
+    public static final Identifier ID = MCA.locate("skins/hair");
     private static HairList INSTANCE;
     public final HashMap<String, Hair> hair = new HashMap<>();
 

@@ -14,7 +14,7 @@ import net.minecraft.util.profiling.ProfilerFiller;
 import java.util.Map;
 
 public class GiftLoader extends SimpleJsonResourceReloadListener<JsonElement> {
-    protected static final Identifier ID = MCA.locate("gifts");
+    public static final Identifier ID = MCA.locate("gifts");
 
     public GiftLoader() {
         super(ExtraCodecs.JSON, FileToIdConverter.json("gifts"));

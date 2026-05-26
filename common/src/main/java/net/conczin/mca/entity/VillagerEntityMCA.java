@@ -214,11 +214,13 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     }
 
     @Override
+    @SuppressWarnings("unchecked")
     protected Brain<Villager> makeBrain(Brain.Packed packedBrain) {
         return (Brain<Villager>) (Brain<?>) VillagerTasksMCA.initializeTasks(this, VillagerTasksMCA.createProfile().makeBrain(this, packedBrain));
     }
 
     @Override
+    @SuppressWarnings("unchecked")
     public void refreshBrain(ServerLevel world) {
         Brain<VillagerEntityMCA> brain = getMCABrain();
         brain.stopAll(world, this);
@@ -1258,6 +1260,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     }
 
     @Override
+    @SuppressWarnings("deprecation")
     public void readAdditionalSaveData(ValueInput input) {
         CompoundTag nbt = input.read(MapCodec.assumeMapUnsafe(CompoundTag.CODEC)).orElseGet(CompoundTag::new);
         super.readAdditionalSaveData(input);
@@ -1296,6 +1299,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     }
 
     @Override
+    @SuppressWarnings("deprecation")
     public final void addAdditionalSaveData(ValueOutput output) {
         CompoundTag nbt = new CompoundTag();
         super.addAdditionalSaveData(output);
@@ -1346,6 +1350,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     }
 
     @Override
+    @SuppressWarnings("deprecation")
     public void performRangedAttack(LivingEntity target, float pullProgress) {
         setTarget(target);
         attackedEntity(target);
@@ -1367,6 +1372,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     }
 
     @Override
+    @SuppressWarnings("deprecation")
     public ItemStack getProjectile(ItemStack stack) {
         if (stack.getItem() instanceof ProjectileWeaponItem weapon) {
             Predicate<ItemStack> predicate = weapon.getSupportedHeldProjectiles();

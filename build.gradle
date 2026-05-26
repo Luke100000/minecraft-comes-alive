@@ -9,7 +9,8 @@ allprojects {
     gradle.projectsEvaluated {
         tasks.withType(JavaCompile).tap {
             configureEach {
-                options.compilerArgs << "-Xmaxerrs" << "1000"
+                options.deprecation = true
+                options.compilerArgs << "-Xmaxerrs" << "1000" << "-Xlint:deprecation" << "-Xlint:unchecked"
             }
         }
 

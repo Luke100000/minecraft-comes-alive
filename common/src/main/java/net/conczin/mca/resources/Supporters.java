@@ -13,7 +13,7 @@ import net.minecraft.util.profiling.ProfilerFiller;
 import java.util.*;
 
 public class Supporters extends SimpleJsonResourceReloadListener<JsonElement> {
-    protected static final Identifier ID = MCA.locate("api/supporters");
+    public static final Identifier ID = MCA.locate("api/supporters");
     static final RandomSource rng = RandomSource.create();
     private static Supporters INSTANCE;
     private final List<String> supporters = new ArrayList<>();

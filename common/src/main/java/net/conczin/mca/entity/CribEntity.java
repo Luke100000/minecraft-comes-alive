@@ -78,6 +78,7 @@ public class CribEntity extends Entity implements CTrackedEntity<CribEntity> {
     }
 
     @Override
+    @SuppressWarnings("deprecation")
     public boolean isPushedByFluid() {
         return false;
     }

@@ -63,6 +63,7 @@ public class VillagerTrackerItem extends Item {
     }
 
     @Override
+    @SuppressWarnings("deprecation")
     public void appendHoverText(ItemStack stack, TooltipContext context, TooltipDisplay tooltipDisplay, Consumer<Component> consumer, TooltipFlag flag) {
         if (stack.has(DataComponentsMCA.TRACKER_NAME)) {
             //noinspection ConstantConditions
