@@ -2,7 +2,6 @@ package net.conczin.mca.client.model;
 
 import com.google.common.collect.ImmutableList;
 import net.conczin.mca.client.render.VillagerStateHolder;
-import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.entity.ai.relationship.AgeState;
 import net.conczin.mca.entity.ai.relationship.VillagerDimensions;
 import net.minecraft.client.model.HumanoidModel;
@@ -108,22 +107,12 @@ public class PlayerArmorExtendedModel<T extends LivingEntity> extends HumanoidMo
         super.setupAnim(state);
 
         if (state instanceof VillagerStateHolder holder) {
-            VillagerLike<?> villager = holder.mca$getVillager();
-            if (villager != null) {
-                applyVillagerDimensions(villager, state.isCrouching);
+            var visuals = CommonVillagerModel.peekVisuals(holder);
+            if (visuals != null) {
+                applyVillagerDimensions(visuals, state.isCrouching);
             }
         }
 
         CommonVillagerModel.applyRenderMask(this, renderMask);
-    }
-
-    public void setupAnim(T villager, float limbAngle, float limbDistance, float animationProgress, float headYaw, float headPitch) {
-        if (CommonVillagerModel.getVillager(villager).getAgeState() == AgeState.BABY && !villager.isPassenger()) {
-            limbDistance = (float) Math.sin(villager.tickCount / 12F);
-            limbAngle = (float) Math.cos(villager.tickCount / 9F) * 3;
-            headYaw += (float) Math.sin(villager.tickCount / 2F);
-        }
-
-        applyVillagerDimensions(CommonVillagerModel.getVillager(villager), villager.isCrouching());
     }
 }

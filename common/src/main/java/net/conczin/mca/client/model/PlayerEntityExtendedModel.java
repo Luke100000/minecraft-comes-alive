@@ -139,20 +139,10 @@ public class PlayerEntityExtendedModel<T extends LivingEntity> extends PlayerMod
     @Override
     public void setupAnim(AvatarRenderState state) {
         head.visible = !state.isSpectator;
-        hat.visible = state.showHat;
-        body.visible = !state.isSpectator;
-        jacket.visible = state.showJacket;
+        super.setupAnim(state);
+
         breasts.visible = !state.isSpectator;
         breastsWear.visible = state.showJacket;
-        leftArm.visible = !state.isSpectator;
-        leftSleeve.visible = state.showLeftSleeve;
-        rightArm.visible = !state.isSpectator;
-        rightSleeve.visible = state.showRightSleeve;
-        leftLeg.visible = !state.isSpectator;
-        leftPants.visible = state.showLeftPants;
-        rightLeg.visible = !state.isSpectator;
-        rightPants.visible = state.showRightPants;
-        super.setupAnim(state);
 
         if (state instanceof VillagerStateHolder holder) {
             var visuals = CommonVillagerModel.peekVisuals(holder);
@@ -171,17 +161,6 @@ public class PlayerEntityExtendedModel<T extends LivingEntity> extends PlayerMod
         }
 
         CommonVillagerModel.applyRenderMask(this, renderMask);
-    }
-
-    public void setupAnim(T villager, float limbAngle, float limbDistance, float animationProgress, float headYaw, float headPitch) {
-        if (CommonVillagerModel.getVillager(villager).getAgeState() == AgeState.BABY && !villager.isPassenger()) {
-            limbDistance = (float) Math.sin(villager.tickCount / 12F);
-            limbAngle = (float) Math.cos(villager.tickCount / 9F) * 3;
-            headYaw += (float) Math.sin(villager.tickCount / 2F);
-        }
-
-        breastsWear.visible = jacket.visible;
-        applyVillagerDimensions(CommonVillagerModel.getVillager(villager), villager.isCrouching());
     }
 
     public void copyVisibility(HumanoidModel<?> model) {
