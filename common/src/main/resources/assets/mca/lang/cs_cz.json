@@ -305,7 +305,7 @@
   "gui.skin_library.not_64": "Obrázek nemá velikost 64 × 64 pixelů.",
   "gui.skin_library.authenticating": "Ověřování",
   "gui.skin_library.authenticating_browser": "Dokončete ověření ve vašem prohlížeči!",
-  "gui.skin_library.delete_confirm": "Do you really want to delete this content?",
+  "gui.skin_library.delete_confirm": "Opravdu chcete odstranit tento obsah?",
   "gui.skin_library.report_confirm": "Why do you want to report this content?",
   "gui.skin_library.report_invalid": "Invalid Texture",
   "gui.skin_library.report_invalid_tooltip": "This is not pure hair/clothing and thus does not work correctly. It should get labeled as 'invalid'.",
