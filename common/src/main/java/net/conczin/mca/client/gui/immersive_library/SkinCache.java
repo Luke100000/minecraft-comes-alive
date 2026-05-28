@@ -16,10 +16,9 @@ import net.minecraft.resources.Identifier;
 import org.apache.commons.io.FileUtils;
 
 import java.io.*;
-import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.Base64;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -30,9 +29,9 @@ import static net.conczin.mca.client.gui.immersive_library.Api.request;
 public class SkinCache {
     static final Map<Integer, Boolean> requested = new ConcurrentHashMap<>();
     static final Map<Integer, Integer> cachedVersions = new ConcurrentHashMap<>();
-    static final Map<Integer, Identifier> textureIdentifiers = new HashMap<>();
-    static final Map<Integer, NativeImage> images = new HashMap<>();
-    static final Map<Integer, SkinMeta> metas = new HashMap<>();
+    static final Map<Integer, Identifier> textureIdentifiers = new ConcurrentHashMap<>();
+    static final Map<Integer, NativeImage> images = new ConcurrentHashMap<>();
+    static final Map<Integer, SkinMeta> metas = new ConcurrentHashMap<>();
     private static final Identifier DEFAULT_SKIN = MCA.locate("skins/empty.png");
     private static final Gson gson = new Gson();
 
@@ -45,9 +44,9 @@ public class SkinCache {
 
     private static void write(String file, String content) {
         try {
-            FileUtils.writeStringToFile(getFile(file), content, Charset.defaultCharset(), false);
+            FileUtils.writeStringToFile(getFile(file), content, StandardCharsets.UTF_8, false);
         } catch (IOException e) {
-            e.printStackTrace();
+            MCA.LOGGER.warn("Unable to write immersive library cache file {}", file, e);
         }
     }
 
@@ -55,12 +54,12 @@ public class SkinCache {
         try (OutputStream out = new BufferedOutputStream(new FileOutputStream(getFile(file)))) {
             out.write(content);
         } catch (IOException e) {
-            e.printStackTrace();
+            MCA.LOGGER.warn("Unable to write immersive library cache file {}", file, e);
         }
     }
 
     private static String read(String file) throws IOException {
-        return FileUtils.readFileToString(getFile(file), Charset.defaultCharset());
+        return FileUtils.readFileToString(getFile(file), StandardCharsets.UTF_8);
     }
 
     /**
@@ -91,10 +90,10 @@ public class SkinCache {
             File file = getFile(contentid + ".version");
             if (file.exists()) {
                 try {
-                    String s = FileUtils.readFileToString(file, Charset.defaultCharset());
+                    String s = FileUtils.readFileToString(file, StandardCharsets.UTF_8);
                     return Integer.parseInt(s);
                 } catch (Exception e) {
-                    MCA.LOGGER.warn(e);
+                    MCA.LOGGER.warn("Unable to read immersive library cache version for {}", contentid, e);
                 }
             }
             return -1;
@@ -112,20 +111,24 @@ public class SkinCache {
             }
 
             // Download assets when versions mismatch
-            if (!requested.containsKey(contentid) && (currentVersion > version || !textureIdentifiers.containsKey(contentid))) {
-                requested.put(contentid, true);
+            if ((currentVersion > version || !textureIdentifiers.containsKey(contentid)) && requested.putIfAbsent(contentid, true) == null) {
                 CompletableFuture.runAsync(() -> {
-                    logger("Requested asset " + contentid + " with version " + version + " and current version " + currentVersion);
-                    Response response = request(Api.HttpMethod.GET, ContentResponse.class, "content/mca/" + contentid, Map.of("version", String.valueOf(version)));
-                    if (response instanceof ContentResponse(Content content)) {
-                        int newVersion = content.version();
-                        write(contentid + ".png", Base64.getDecoder().decode(content.data()));
-                        write(contentid + ".json", content.meta());
-                        write(contentid + ".version", Integer.toString(newVersion));
-                        cachedVersions.put(contentid, newVersion);
+                    try {
+                        logger("Requested asset " + contentid + " with version " + version + " and current version " + currentVersion);
+                        Response response = request(Api.HttpMethod.GET, ContentResponse.class, "content/mca/" + contentid, Map.of("version", String.valueOf(version)));
+                        if (response instanceof ContentResponse(Content content)) {
+                            int newVersion = content.version();
+                            write(contentid + ".png", Base64.getDecoder().decode(content.data()));
+                            write(contentid + ".json", content.meta());
+                            write(contentid + ".version", Integer.toString(newVersion));
+                            cachedVersions.put(contentid, newVersion);
+                            textureIdentifiers.remove(contentid);
+                            logger("Received " + contentid);
+                        }
+                    } catch (RuntimeException e) {
+                        MCA.LOGGER.warn("Unable to sync immersive library asset {}", contentid, e);
+                    } finally {
                         requested.remove(contentid);
-                        textureIdentifiers.remove(contentid);
-                        logger("Received " + contentid);
                     }
                 });
             }
@@ -145,7 +148,7 @@ public class SkinCache {
             SkinMeta meta = gson.fromJson(json, SkinMeta.class);
             metas.put(contentid, meta);
         } catch (JsonSyntaxException | IOException e) {
-            e.printStackTrace();
+            MCA.LOGGER.warn("Unable to load immersive library metadata for {}", contentid, e);
             enforceSync(contentid);
             return;
         }
@@ -162,7 +165,7 @@ public class SkinCache {
             textureIdentifiers.put(contentid, identifier);
             images.put(contentid, image);
         } catch (IOException e) {
-            e.printStackTrace();
+            MCA.LOGGER.warn("Unable to load immersive library texture for {}", contentid, e);
             enforceSync(contentid);
         }
     }
