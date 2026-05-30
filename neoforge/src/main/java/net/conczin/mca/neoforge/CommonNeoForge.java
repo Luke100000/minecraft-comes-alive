@@ -4,6 +4,7 @@ import net.conczin.mca.MCA;
 import net.conczin.mca.block.BlockEntityTypesMCA;
 import net.conczin.mca.entity.ai.ActivitiesMCA;
 import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
+import net.conczin.mca.entity.ai.SchedulesMCA;
 import net.conczin.mca.entity.ai.SensorsMCA;
 import net.conczin.mca.entity.interaction.gifts.GiftLoader;
 import net.conczin.mca.network.HandleablePayload;
@@ -75,6 +76,7 @@ public final class CommonNeoForge {
         registerHelper(event, BuiltInRegistries.SENSOR_TYPE, SensorsMCA::registerSensors);
         registerHelper(event, BuiltInRegistries.ACTIVITY, ActivitiesMCA::registerActivities);
         registerHelper(event, BuiltInRegistries.MEMORY_MODULE_TYPE, MemoryModuleTypeMCA::registerTypes);
+        registerHelper(event, BuiltInRegistries.ENVIRONMENT_ATTRIBUTE, SchedulesMCA::registerSchedules);
         registerHelper(event, BuiltInRegistries.VILLAGER_PROFESSION, ProfessionsMCA::registerProfessions);
         registerHelper(event, BuiltInRegistries.DATA_COMPONENT_TYPE, DataComponentsMCA::registerProfessions);
         registerHelper(event, BuiltInRegistries.TRIGGER_TYPES, CriterionMCA::registerCriteria);

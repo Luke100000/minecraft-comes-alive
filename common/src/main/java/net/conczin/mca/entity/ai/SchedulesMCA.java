@@ -1,22 +1,38 @@
 package net.conczin.mca.entity.ai;
 
 import net.conczin.mca.Config;
+import net.conczin.mca.MCA;
+import net.minecraft.resources.Identifier;
+import net.minecraft.world.attribute.AttributeTypes;
 import net.minecraft.world.attribute.EnvironmentAttribute;
-import net.minecraft.world.attribute.EnvironmentAttributes;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.schedule.Activity;
 
+import java.util.HashMap;
+import java.util.Map;
+
 public interface SchedulesMCA {
-    // 26.1 moved villager scheduling onto environment attributes. Keep MCA's
-    // previous schedule split points as a compatibility shim for now by
-    // falling back to vanilla villager activity selection.
-    EnvironmentAttribute<Activity> DEFAULT = EnvironmentAttributes.VILLAGER_ACTIVITY;
-    EnvironmentAttribute<Activity> NIGHT_OWL_DEFAULT = EnvironmentAttributes.VILLAGER_ACTIVITY;
-    EnvironmentAttribute<Activity> GUARD = EnvironmentAttributes.VILLAGER_ACTIVITY;
-    EnvironmentAttribute<Activity> GUARD_NIGHT = EnvironmentAttributes.VILLAGER_ACTIVITY;
-    EnvironmentAttribute<Activity> GUESTS = EnvironmentAttributes.VILLAGER_ACTIVITY;
+    Map<Identifier, EnvironmentAttribute<Activity>> SCHEDULES = new HashMap<>();
+
+    EnvironmentAttribute<Activity> DEFAULT = schedule("gameplay/default_villager_activity", Activity.IDLE);
+    EnvironmentAttribute<Activity> NIGHT_OWL_DEFAULT = schedule("gameplay/night_owl_villager_activity", Activity.REST);
+    EnvironmentAttribute<Activity> GUARD = schedule("gameplay/guard_villager_activity", Activity.WORK);
+    EnvironmentAttribute<Activity> GUARD_NIGHT = schedule("gameplay/night_guard_villager_activity", Activity.REST);
+    EnvironmentAttribute<Activity> GUESTS = schedule("gameplay/guest_villager_activity", Activity.IDLE);
+
+    static EnvironmentAttribute<Activity> schedule(String name, Activity defaultActivity) {
+        EnvironmentAttribute<Activity> schedule = EnvironmentAttribute.builder(AttributeTypes.ACTIVITY)
+                .defaultValue(defaultActivity)
+                .build();
+        SCHEDULES.put(MCA.locate(name), schedule);
+        return schedule;
+    }
 
     static void bootstrap() {
+    }
+
+    static void registerSchedules(MCA.RegisterHelper<EnvironmentAttribute<?>> helper) {
+        SCHEDULES.forEach((id, schedule) -> helper.register(id, schedule));
     }
 
     static EnvironmentAttribute<Activity> getTypeSchedule(

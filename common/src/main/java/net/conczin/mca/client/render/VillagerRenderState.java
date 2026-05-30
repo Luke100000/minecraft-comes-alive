@@ -7,6 +7,8 @@ import org.jspecify.annotations.Nullable;
 public class VillagerRenderState extends UndeadRenderState implements VillagerStateHolder {
     private @Nullable VillagerLike<?> villager;
     private @Nullable VillagerVisualSnapshot visualSnapshot;
+    private boolean geneticsRendererActive;
+    private boolean villagerRendererActive;
     public boolean isConverting;
 
     @Override
@@ -27,5 +29,25 @@ public class VillagerRenderState extends UndeadRenderState implements VillagerSt
     @Override
     public void mca$setVisualSnapshot(@Nullable VillagerVisualSnapshot snapshot) {
         this.visualSnapshot = snapshot;
+    }
+
+    @Override
+    public boolean mca$isGeneticsRendererActive() {
+        return geneticsRendererActive;
+    }
+
+    @Override
+    public void mca$setGeneticsRendererActive(boolean active) {
+        this.geneticsRendererActive = active;
+    }
+
+    @Override
+    public boolean mca$isVillagerRendererActive() {
+        return villagerRendererActive;
+    }
+
+    @Override
+    public void mca$setVillagerRendererActive(boolean active) {
+        this.villagerRendererActive = active;
     }
 }

@@ -6,11 +6,11 @@ import net.conczin.mca.client.model.CommonVillagerModel;
 import net.conczin.mca.client.model.PlayerEntityExtendedModel;
 import net.conczin.mca.client.model.VillagerEntityModelMCA;
 import net.conczin.mca.client.render.VillagerVisualSnapshot;
+import net.conczin.mca.client.render.VillagerStateHolder;
 import net.conczin.mca.client.render.layer.ClothingLayer;
 import net.conczin.mca.client.render.layer.FaceLayer;
 import net.conczin.mca.client.render.layer.HairLayer;
 import net.conczin.mca.client.render.layer.SkinLayer;
-import net.conczin.mca.client.render.LivingEntityRenderContext;
 import net.minecraft.client.model.geom.builders.CubeDeformation;
 import net.minecraft.client.model.geom.builders.LayerDefinition;
 import net.minecraft.client.model.player.PlayerModel;
@@ -85,14 +85,14 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<LivingEnt
 
     @Inject(method = "scale(Lnet/minecraft/client/renderer/entity/state/AvatarRenderState;Lcom/mojang/blaze3d/vertex/PoseStack;)V", at = @At("TAIL"))
     private void mca$injectScale(AvatarRenderState state, PoseStack poseStack, CallbackInfo ci) {
-        if (!LivingEntityRenderContext.isGeneticsRendererActive()) {
+        if (!(state instanceof VillagerStateHolder holder) || !holder.mca$isGeneticsRendererActive()) {
             if (MCAClient.isPlayerRendererAllowed()) {
                 model = mca$vanillaModel;
             }
             return;
         }
 
-        var visuals = CommonVillagerModel.getVisuals((net.conczin.mca.client.render.VillagerStateHolder) state);
+        var visuals = CommonVillagerModel.getVisuals(holder);
         poseStack.scale(visuals.rawHorizontalScaleFactor(), visuals.rawVerticalScaleFactor(), visuals.rawHorizontalScaleFactor());
         if (visuals.baby() && !state.isPassenger) {
             poseStack.translate(0.0F, 0.6F, 0.0F);
@@ -231,6 +231,10 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<LivingEnt
         var arm = rightArm ? model.rightArm : model.leftArm;
         if (arm.visible) {
             submitNodeCollector.submitModelPart(arm, poseStack, RenderTypes.entityCutout(texture), lightCoords, OverlayTexture.NO_OVERLAY, null, 0xFFFFFFFF, null);
+        }
+        var sleeve = rightArm ? model.rightSleeve : model.leftSleeve;
+        if (sleeve.visible) {
+            submitNodeCollector.submitModelPart(sleeve, poseStack, RenderTypes.entityCutout(texture), lightCoords, OverlayTexture.NO_OVERLAY, null, 0xFFFFFFFF, null);
         }
     }
 

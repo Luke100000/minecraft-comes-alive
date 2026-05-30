@@ -307,12 +307,12 @@ public class Village implements Iterable<Building> {
         world.players().stream().filter(p -> PlayerSaveData.get(p).getLastSeenVillageId().orElse(-2) == getId()
                                              || suitor.getVillagerBrain().getMemoriesForPlayer(p).getHearts() > Config.getInstance().heartsToBeConsideredAsFriend
                                              || mate.getVillagerBrain().getMemoriesForPlayer(p).getHearts() > Config.getInstance().heartsToBeConsideredAsFriend)
-                .forEach(player -> player.sendSystemMessage(Component.translatable(event, suitor.getName(), mate.getName())));
+                .forEach(player -> player.sendSystemMessage(Component.translatable(event, suitor.getName(), mate.getName()), !Config.getInstance().showNotificationsAsChat));
     }
 
     public void broadCastMessage(ServerLevel world, String event, String targetName) {
         world.players().stream().filter(p -> PlayerSaveData.get(p).getLastSeenVillageId().orElse(-2) == getId())
-                .forEach(player -> player.sendSystemMessage(Component.translatable(event, targetName)));
+                .forEach(player -> player.sendSystemMessage(Component.translatable(event, targetName), !Config.getInstance().showNotificationsAsChat));
     }
 
     public void markDirty() {

@@ -2,7 +2,6 @@ package net.conczin.mca.entity.ai;
 
 import com.mojang.serialization.Codec;
 import net.conczin.mca.MCA;
-import net.conczin.mca.mixin.MixinMemoryModuleType;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
@@ -27,7 +26,7 @@ public interface MemoryModuleTypeMCA {
 
     static <U> MemoryModuleType<U> register(String name, Optional<Codec<U>> codec) {
         Identifier id = MCA.locate(name);
-        MemoryModuleType<U> memory = MixinMemoryModuleType.init(codec);
+        MemoryModuleType<U> memory = new MemoryModuleType<>(codec);
         MEMORY_MODULES.put(id, memory);
         return memory;
     }

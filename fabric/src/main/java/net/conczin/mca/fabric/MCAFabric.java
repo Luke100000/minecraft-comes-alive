@@ -92,6 +92,7 @@ public final class MCAFabric implements ModInitializer {
         registerHelper(BuiltInRegistries.SENSOR_TYPE, SensorsMCA::registerSensors);
         registerHelper(BuiltInRegistries.ACTIVITY, ActivitiesMCA::registerActivities);
         registerHelper(BuiltInRegistries.MEMORY_MODULE_TYPE, MemoryModuleTypeMCA::registerTypes);
+        registerHelper(BuiltInRegistries.ENVIRONMENT_ATTRIBUTE, SchedulesMCA::registerSchedules);
         registerHelper(BuiltInRegistries.VILLAGER_PROFESSION, ProfessionsMCA::registerProfessions);
         registerHelper(BuiltInRegistries.DATA_COMPONENT_TYPE, DataComponentsMCA::registerProfessions);
         registerHelper(BuiltInRegistries.TRIGGER_TYPES, CriterionMCA::registerCriteria);

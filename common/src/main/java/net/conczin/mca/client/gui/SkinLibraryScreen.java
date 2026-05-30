@@ -314,7 +314,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                 float uvy1 = (vy1 - y0) / (y1 - y0);
 
                 //draw template
-                WidgetUtils.drawTexturedQuad(context, TEMPLATE_IDENTIFIER, vx0 * 64, vx1 * 64, vy0 * 64, vy1 * 64, uvx0, uvx1, uvy0, uvy1);
+                WidgetUtils.drawTexturedQuad(context, TEMPLATE_IDENTIFIER, vx0 * 64, vx1 * 64, vy0 * 64, vy1 * 64, uvx0, uvx1, uvy0, uvy1, ARGB.white(0.25f));
 
                 //draw canvas
                 WidgetUtils.drawTexturedQuad(context, CANVAS_IDENTIFIER, vx0 * 64, vx1 * 64, vy0 * 64, vy1 * 64, uvx0, uvx1, uvy0, uvy1);

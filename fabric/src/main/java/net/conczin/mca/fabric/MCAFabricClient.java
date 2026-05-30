@@ -10,7 +10,6 @@ import net.conczin.mca.client.gui.MCAScreens;
 import net.conczin.mca.client.resources.ColorPaletteLoader;
 import net.conczin.mca.client.render.*;
 import net.conczin.mca.network.Network;
-import net.conczin.mca.registry.BlocksMCA;
 import net.conczin.mca.registry.EntitiesMCA;
 import net.conczin.mca.registry.ParticleTypesMCA;
 import net.conczin.mca.resources.ApiReloadListener;

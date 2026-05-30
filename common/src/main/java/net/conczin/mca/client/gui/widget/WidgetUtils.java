@@ -5,6 +5,7 @@ import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 import net.minecraft.client.gui.screens.inventory.tooltip.ClientTooltipComponent;
 import net.minecraft.client.gui.screens.inventory.tooltip.DefaultTooltipPositioner;
+import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.util.FormattedCharSequence;
@@ -23,6 +24,12 @@ public class WidgetUtils {
 
     public static void drawTexturedQuad(GuiGraphicsExtractor context, Identifier texture, float x0, float x1, float y0, float y1, float u0, float u1, float v0, float v1) {
         context.blit(texture, Math.round(x0), Math.round(y0), Math.round(x1), Math.round(y1), u0, u1, v0, v1);
+    }
+
+    public static void drawTexturedQuad(GuiGraphicsExtractor context, Identifier texture, float x0, float x1, float y0, float y1, float u0, float u1, float v0, float v1, int color) {
+        int width = Math.round(x1 - x0);
+        int height = Math.round(y1 - y0);
+        context.blit(RenderPipelines.GUI_TEXTURED, texture, Math.round(x0), Math.round(y0), u0 * 64.0f, v0 * 64.0f, width, height, Math.round((u1 - u0) * 64.0f), Math.round((v1 - v0) * 64.0f), 64, 64, color);
     }
 
     public static void drawTooltip(GuiGraphicsExtractor context, Font font, Component text, int x, int y) {

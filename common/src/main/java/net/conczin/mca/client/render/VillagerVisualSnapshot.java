@@ -39,14 +39,25 @@ public record VillagerVisualSnapshot(
     public static VillagerVisualSnapshot capture(VillagerLike<?> villager) {
         Genetics genetics = villager.getGenetics();
         Traits traits = villager.getTraits();
-        VillagerDimensions dimensions = villager.getVillagerDimensions();
         LivingEntity entity = villager.asEntity();
         Gender gender = genetics.getGender();
+        AgeState ageState = villager.getAgeState();
+        VillagerDimensions dimensions = ageState == AgeState.UNASSIGNED && entity.isBaby()
+                ? AgeState.BABY
+                : villager.getVillagerDimensions();
+        float rawHorizontalScaleFactor = genetics.getHorizontalScaleFactor()
+                * traits.getHorizontalScaleFactor()
+                * dimensions.getWidth()
+                * gender.getHorizontalScaleFactor();
+        float rawVerticalScaleFactor = genetics.getVerticalScaleFactor()
+                * traits.getVerticalScaleFactor()
+                * dimensions.getHeight()
+                * gender.getScaleFactor();
 
         return new VillagerVisualSnapshot(
                 gender.getDataName(),
                 gender == Gender.FEMALE,
-                villager.getAgeState() == AgeState.BABY,
+                ageState == AgeState.BABY || (ageState == AgeState.UNASSIGNED && entity.isBaby()),
                 genetics.getBreastSize(),
                 new Dimensions(
                         dimensions.getWidth(),
@@ -54,8 +65,8 @@ public record VillagerVisualSnapshot(
                         dimensions.getBreasts(),
                         dimensions.getHead()
                 ),
-                villager.getRawHorizontalScaleFactor(),
-                villager.getRawVerticalScaleFactor(),
+                rawHorizontalScaleFactor,
+                rawVerticalScaleFactor,
                 villager.getVillagerBrain().isPanicking(),
                 villager.isBurned(),
                 traits.hasTrait(Traits.ALBINISM),

@@ -58,7 +58,10 @@ public class ReaperSpawner {
     private void warn(Level world, BlockPos pos, String phrase) {
         world.players().stream()
                 .min(Comparator.comparingInt(a -> a.blockPosition().distManhattan(pos)))
-                .ifPresent(p -> p.sendSystemMessage(Component.translatable(phrase).withStyle(ChatFormatting.RED)));
+                .ifPresent(player -> {
+                    Component message = Component.translatable(phrase).withStyle(ChatFormatting.RED);
+                    player.sendOverlayMessage(message);
+                });
     }
 
     public void trySpawnReaper(ServerLevel world, BlockPos pos) {
@@ -164,9 +167,9 @@ public class ReaperSpawner {
         public final Set<BlockPos> totems;
 
         public SummonPosition(CompoundTag tag) {
-            spawnPosition = readBlockPos(tag.getIntArray("spawnPosition").orElse(new int[0]));
-            fire = readBlockPos(tag.getIntArray("fire").orElse(new int[0]));
-            totems = new HashSet<>(NbtHelper.toList(tag.getList("totems").orElseGet(ListTag::new), v -> readBlockPos(((IntArrayTag) v).getAsIntArray())));
+            spawnPosition = readBlockPos(tag, "spawnPosition");
+            fire = readBlockPos(tag, "fire");
+            totems = new HashSet<>(NbtHelper.toList(tag.getList("totems").orElseGet(ListTag::new), SummonPosition::readBlockPos));
         }
 
         public SummonPosition(BlockPos fire, Set<BlockPos> totems) {
@@ -175,8 +178,28 @@ public class ReaperSpawner {
             this.totems = totems;
         }
 
-        public static BlockPos readBlockPos(int[] aint) {
+        private static BlockPos readBlockPos(CompoundTag tag, String key) {
+            return readBlockPos(tag.get(key));
+        }
+
+        private static BlockPos readBlockPos(net.minecraft.nbt.Tag tag) {
+            return switch (tag) {
+                case IntArrayTag intArray -> readBlockPos(intArray.getAsIntArray());
+                case CompoundTag compound -> readLegacyBlockPos(compound);
+                default -> BlockPos.ZERO;
+            };
+        }
+
+        private static BlockPos readBlockPos(int[] aint) {
             return aint.length == 3 ? new BlockPos(aint[0], aint[1], aint[2]) : BlockPos.ZERO;
+        }
+
+        private static BlockPos readLegacyBlockPos(CompoundTag tag) {
+            return new BlockPos(
+                    tag.getInt("X").orElse(0),
+                    tag.getInt("Y").orElse(0),
+                    tag.getInt("Z").orElse(0)
+            );
         }
 
         public boolean isCancelled(Level world) {

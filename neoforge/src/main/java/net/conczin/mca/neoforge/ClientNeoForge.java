@@ -1,5 +1,6 @@
 package net.conczin.mca.neoforge;
 
+import com.google.common.reflect.TypeToken;
 import net.conczin.mca.ClientProxyAbstractImpl;
 import net.conczin.mca.Config;
 import net.conczin.mca.MCA;
@@ -14,13 +15,17 @@ import net.conczin.mca.registry.ParticleTypesMCA;
 import net.conczin.mca.resources.ApiReloadListener;
 import net.conczin.mca.resources.Supporters;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.entity.LivingEntityRenderer;
+import net.minecraft.client.renderer.entity.state.LivingEntityRenderState;
 import net.minecraft.client.renderer.entity.VillagerRenderer;
 import net.minecraft.client.renderer.entity.ZombieVillagerRenderer;
+import net.minecraft.world.entity.LivingEntity;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 import net.neoforged.neoforge.client.event.*;
+import net.neoforged.neoforge.client.renderstate.RegisterRenderStateModifiersEvent;
 
 @EventBusSubscriber(modid = MCA.MOD_ID, value = Dist.CLIENT)
 public final class ClientNeoForge extends ClientProxyAbstractImpl {
@@ -64,6 +69,17 @@ public final class ClientNeoForge extends ClientProxyAbstractImpl {
     @SubscribeEvent
     public static void onRegisterKeys(RegisterKeyMappingsEvent event) {
         net.conczin.mca.KeyBindings.list.forEach(event::register);
+    }
+
+    @SubscribeEvent
+    public static void onRegisterRenderStateModifiers(RegisterRenderStateModifiersEvent event) {
+        event.registerEntityModifier(
+                new TypeToken<LivingEntityRenderer<LivingEntity, LivingEntityRenderState, ?>>() {
+                },
+                (entity, state) -> {
+                    VillagerRenderStateHooks.extract(entity, state);
+                    VillagerRenderStateHooks.extractScaledBounds(entity, state);
+                });
     }
 
     @SubscribeEvent

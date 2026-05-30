@@ -4,7 +4,6 @@ import net.conczin.mca.MCA;
 import net.conczin.mca.entity.ai.brain.sensor.ExplodingCreeperSensor;
 import net.conczin.mca.entity.ai.brain.sensor.GuardEnemiesSensor;
 import net.conczin.mca.entity.ai.brain.sensor.VillagerMCABabiesSensor;
-import net.conczin.mca.mixin.MixinSensorType;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.ai.sensing.Sensor;
 import net.minecraft.world.entity.ai.sensing.SensorType;
@@ -21,7 +20,7 @@ public interface SensorsMCA {
     SensorType<VillagerMCABabiesSensor> VILLAGER_BABIES = sensor("villager_babies_mca", VillagerMCABabiesSensor::new);
 
     static <T extends Sensor<?>> SensorType<T> sensor(String name, Supplier<T> factory) {
-        SensorType<T> sensor = MixinSensorType.init(factory);
+        SensorType<T> sensor = new SensorType<>(factory);
         SENSORS.put(MCA.locate(name), sensor);
         return sensor;
     }

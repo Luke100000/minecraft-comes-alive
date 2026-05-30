@@ -1,0 +1,110 @@
+{
+  "clock": "minecraft:overworld",
+  "period_ticks": 24000,
+  "tracks": {
+    "mca:gameplay/default_villager_activity": {
+      "keyframes": [
+        {
+          "ticks": 10,
+          "value": "minecraft:idle"
+        },
+        {
+          "ticks": 2000,
+          "value": "minecraft:work"
+        },
+        {
+          "ticks": 9000,
+          "value": "minecraft:meet"
+        },
+        {
+          "ticks": 11000,
+          "value": "minecraft:idle"
+        },
+        {
+          "ticks": 12500,
+          "value": "minecraft:rest"
+        }
+      ]
+    },
+    "mca:gameplay/guest_villager_activity": {
+      "keyframes": [
+        {
+          "ticks": 10,
+          "value": "minecraft:idle"
+        },
+        {
+          "ticks": 12500,
+          "value": "minecraft:rest"
+        }
+      ]
+    },
+    "mca:gameplay/guard_villager_activity": {
+      "keyframes": [
+        {
+          "ticks": 10,
+          "value": "minecraft:work"
+        },
+        {
+          "ticks": 9000,
+          "value": "minecraft:meet"
+        },
+        {
+          "ticks": 11000,
+          "value": "minecraft:work"
+        },
+        {
+          "ticks": 14000,
+          "value": "minecraft:idle"
+        },
+        {
+          "ticks": 15000,
+          "value": "minecraft:rest"
+        }
+      ]
+    },
+    "mca:gameplay/night_guard_villager_activity": {
+      "keyframes": [
+        {
+          "ticks": 10,
+          "value": "minecraft:rest"
+        },
+        {
+          "ticks": 8000,
+          "value": "minecraft:idle"
+        },
+        {
+          "ticks": 9000,
+          "value": "minecraft:meet"
+        },
+        {
+          "ticks": 14000,
+          "value": "minecraft:work"
+        }
+      ]
+    },
+    "mca:gameplay/night_owl_villager_activity": {
+      "keyframes": [
+        {
+          "ticks": 10,
+          "value": "minecraft:rest"
+        },
+        {
+          "ticks": 12500,
+          "value": "minecraft:idle"
+        },
+        {
+          "ticks": 15000,
+          "value": "minecraft:work"
+        },
+        {
+          "ticks": 18000,
+          "value": "minecraft:meet"
+        },
+        {
+          "ticks": 19500,
+          "value": "minecraft:idle"
+        }
+      ]
+    }
+  }
+}

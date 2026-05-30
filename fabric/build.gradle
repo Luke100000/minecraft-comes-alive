@@ -16,6 +16,11 @@ dependencies {
 }
 
 loom {
+    def aw = project(':common').file("src/main/resources/${mod_id}.classtweaker")
+    if (aw.exists()) {
+        accessWidenerPath.set(aw)
+    }
+
     mods {
         "${mod_id}" {
             sourceSet sourceSets.main
