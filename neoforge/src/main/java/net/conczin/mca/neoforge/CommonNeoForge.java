@@ -27,6 +27,7 @@ import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.CreativeModeTab;
+import net.minecraft.world.item.CreativeModeTabs;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.entity.BlockEntityType;
@@ -95,6 +96,7 @@ public final class CommonNeoForge {
             CreativeModeTab tab = CreativeModeTab.builder()
                     .title(Component.translatable("itemGroup.mca.mca_tab"))
                     .icon(() -> new ItemStack(ItemsMCA.ENGAGEMENT_RING))
+                    .withTabsBefore(CreativeModeTabs.SPAWN_EGGS)
                     .displayItems((params, output) -> {
                         for (Item item : ItemsMCA.ITEMS.values()) {
                             output.accept(new ItemStack(item));

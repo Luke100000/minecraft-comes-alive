@@ -15,6 +15,8 @@ dependencies {
     localRuntime "maven.modrinth:packet-fixer:${packetfixer_fabric_version}"
 }
 
+def devUsername = providers.gradleProperty('mca_dev_username').orElse('Dev').get()
+
 loom {
     def aw = project(':common').file("src/main/resources/${mod_id}.classtweaker")
     if (aw.exists()) {
@@ -33,6 +35,7 @@ loom {
             setConfigName("Fabric Client")
             ideConfigGenerated(true)
             runDir("run")
+            programArgs("--username", devUsername)
         }
         server {
             server()

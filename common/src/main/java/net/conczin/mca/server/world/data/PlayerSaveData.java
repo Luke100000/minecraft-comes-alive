@@ -47,7 +47,7 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
     private final ServerLevel world;
     private final UUID uuid;
     private final List<Letter> inbox = new LinkedList<>();
-    private Optional<Integer> lastSeenVillage = Optional.empty();
+    private @Nullable Integer lastSeenVillageId;
     private boolean entityDataSet;
     private CompoundTag entityData;
 
@@ -62,7 +62,7 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
         this.world = world;
         this.uuid = uuid;
 
-        lastSeenVillage = nbt.getInt("lastSeenVillage");
+        lastSeenVillageId = nbt.getInt("lastSeenVillage").orElse(null);
         entityDataSet = nbt.contains("entityDataSet") && nbt.getBoolean("entityDataSet").orElse(false);
 
         entityData = nbt.getCompound("entityData").orElseGet(() -> {
@@ -75,14 +75,13 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
     }
 
     public static PlayerSaveData get(ServerPlayer player) {
-        return get((ServerLevel) player.level(), player.getUUID());
+        return get(player.level(), player.getUUID());
     }
 
     public static PlayerSaveData get(ServerLevel world, UUID uuid) {
         return WorldUtils.loadData(world.getServer().overworld(), (nbt, provider) -> new PlayerSaveData(world, uuid, nbt), w -> new PlayerSaveData(world, uuid), "mca_player_" + uuid);
     }
 
-    @SuppressWarnings("DataFlowIssue")
     public static Optional<PlayerSaveData> getIfPresent(ServerLevel world, UUID uuid) {
         return WorldUtils.loadDataIfPresent(
                 world.getServer().overworld(),
@@ -155,7 +154,7 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
     }
 
     public void setLastSeenVillage(ServerPlayer self, Village oldVillage, @Nullable Village newVillage) {
-        lastSeenVillage = Optional.ofNullable(newVillage).map(Village::getId);
+        lastSeenVillageId = newVillage != null ? newVillage.getId() : null;
         setDirty();
 
         if (oldVillage != newVillage) {
@@ -169,11 +168,11 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
     }
 
     public Optional<Village> getLastSeenVillage(VillageManager manager) {
-        return lastSeenVillage.flatMap(manager::getOrEmpty);
+        return Optional.ofNullable(lastSeenVillageId).flatMap(manager::getOrEmpty);
     }
 
     public Optional<Integer> getLastSeenVillageId() {
-        return lastSeenVillage;
+        return Optional.ofNullable(lastSeenVillageId);
     }
 
     protected void onLeave(ServerPlayer self, Village village) {
@@ -230,7 +229,9 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
     }
 
     public CompoundTag save(CompoundTag nbt, HolderLookup.Provider provider) {
-        lastSeenVillage.ifPresent(id -> nbt.putInt("lastSeenVillage", id));
+        if (lastSeenVillageId != null) {
+            nbt.putInt("lastSeenVillage", lastSeenVillageId);
+        }
         nbt.put("entityData", entityData);
         nbt.putBoolean("entityDataSet", entityDataSet);
         nbt.put("inbox", NbtHelper.fromList(inbox, v -> v.toTag(provider)));

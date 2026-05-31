@@ -24,7 +24,6 @@ import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.object.builder.v1.block.entity.FabricBlockEntityTypeBuilder;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
-import net.fabricmc.fabric.api.creativetab.v1.CreativeModeTabEvents;
 import net.fabricmc.fabric.api.creativetab.v1.FabricCreativeModeTab;
 import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
@@ -46,9 +45,6 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
 import java.util.function.Consumer;
 
 public final class MCAFabric implements ModInitializer {
@@ -124,13 +120,13 @@ public final class MCAFabric implements ModInitializer {
         CreativeModeTab build = FabricCreativeModeTab.builder()
                 .title(Component.translatable("itemGroup.mca.mca_tab"))
                 .icon(() -> new ItemStack(ItemsMCA.ENGAGEMENT_RING))
+                .displayItems((params, output) -> {
+                    for (Item item : ItemsMCA.ITEMS.values()) {
+                        output.accept(new ItemStack(item));
+                    }
+                })
                 .build();
         Registry.register(BuiltInRegistries.CREATIVE_MODE_TAB, mcaTab, build);
-        CreativeModeTabEvents.modifyOutputEvent(mcaTab).register(itemGroup -> {
-            List<Item> reversed = new ArrayList<>(ItemsMCA.ITEMS.values());
-            Collections.reverse(reversed);
-            reversed.forEach(itemGroup::prepend);
-        });
 
         // Register events
         ServerTickEvents.END_LEVEL_TICK.register(w -> VillageManager.get(w).tick());

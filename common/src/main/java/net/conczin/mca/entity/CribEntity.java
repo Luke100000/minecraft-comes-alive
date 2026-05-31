@@ -174,7 +174,7 @@ public class CribEntity extends Entity implements CTrackedEntity<CribEntity> {
 
         if (getTrackedValue(BABY) != ItemStack.EMPTY && getTrackedValue(BABY).getItem() instanceof BabyItem) {
             if (level() instanceof ServerLevel serverLevel) {
-                getTrackedValue(BABY).getItem().inventoryTick(getTrackedValue(BABY), serverLevel, this, EquipmentSlot.MAINHAND);
+                getTrackedValue(BABY).getItem().inventoryTick(getTrackedValue(BABY), serverLevel, this, null);
             }
         }
     }

@@ -100,6 +100,7 @@ import java.util.function.Predicate;
 public class VillagerEntityMCA extends Villager implements VillagerLike<VillagerEntityMCA>, MenuProvider, CompassionateEntity<BreedableRelationship>, CrossbowAttackMob {
     private static final CDataParameter<Float> INFECTION_PROGRESS = CParameter.create("InfectionProgress", 0.0f);
     private static final CDataParameter<Integer> GROWTH_AMOUNT = CParameter.create("GrowthAmount", -AgeState.getMaxAge());
+    private static final int SPAWN_EGG_BABY_AGE = AgeState.TODDLER.toAge() + 1;
     private static final CDataManager<VillagerEntityMCA> DATA = createTrackedData(new CDataManager.Builder<>(
             VillagerEntityMCA.class,
             serializer -> SynchedEntityData.defineId(VillagerEntityMCA.class, serializer)
@@ -340,7 +341,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
     @Override
     public void setBaby(boolean isBaby) {
-        setAge(isBaby ? -AgeState.getMaxAge() : 0);
+        setAge(isBaby ? SPAWN_EGG_BABY_AGE : 0);
     }
 
     @Override
@@ -1175,7 +1176,10 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
     @Override
     public void onSyncedDataUpdated(EntityDataAccessor<?> par) {
-        if (getTypeDataManager().isParam(AGE_STATE, par) || getTypeDataManager().isParam(Genetics.SIZE.getParam(), par) || getTypeDataManager().isParam(Genetics.WIDTH.getParam(), par)) {
+        if (getTypeDataManager().isParam(AGE_STATE, par)
+                || getTypeDataManager().isParam(GROWTH_AMOUNT, par)
+                || getTypeDataManager().isParam(Genetics.SIZE.getParam(), par)
+                || getTypeDataManager().isParam(Genetics.WIDTH.getParam(), par)) {
             refreshDimensions();
         }
 

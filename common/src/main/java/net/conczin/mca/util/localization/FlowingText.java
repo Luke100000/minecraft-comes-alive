@@ -1,5 +1,6 @@
 package net.conczin.mca.util.localization;
 
+import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.network.chat.Component;
@@ -13,6 +14,10 @@ import java.util.stream.Collectors;
 
 public record FlowingText(List<FormattedCharSequence> lines, float scale) {
     public static List<Component> wrap(Component text, int maxWidth) {
+        if (!RenderSystem.isOnRenderThread()) {
+            return List.of(text);
+        }
+
         return Minecraft.getInstance().font.getSplitter().splitLines(text, maxWidth, Style.EMPTY).stream().map(line -> {
             MutableComponent compiled = Component.literal("");
             line.visit((s, t) -> {

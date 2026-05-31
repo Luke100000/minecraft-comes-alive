@@ -43,7 +43,7 @@ public record VillagerVisualSnapshot(
         Gender gender = genetics.getGender();
         AgeState ageState = villager.getAgeState();
         VillagerDimensions dimensions = ageState == AgeState.UNASSIGNED && entity.isBaby()
-                ? AgeState.BABY
+                ? AgeState.TODDLER
                 : villager.getVillagerDimensions();
         float rawHorizontalScaleFactor = genetics.getHorizontalScaleFactor()
                 * traits.getHorizontalScaleFactor()
@@ -53,11 +53,10 @@ public record VillagerVisualSnapshot(
                 * traits.getVerticalScaleFactor()
                 * dimensions.getHeight()
                 * gender.getScaleFactor();
-
         return new VillagerVisualSnapshot(
                 gender.getDataName(),
                 gender == Gender.FEMALE,
-                ageState == AgeState.BABY || (ageState == AgeState.UNASSIGNED && entity.isBaby()),
+                ageState == AgeState.BABY,
                 genetics.getBreastSize(),
                 new Dimensions(
                         dimensions.getWidth(),
