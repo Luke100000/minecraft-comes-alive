@@ -14,10 +14,12 @@ allprojects {
             }
         }
 
-        tasks.withType(JavaForkOptions).configureEach {
-            nativeAccessJvmArgs.each { nativeAccessJvmArg ->
-                if (!jvmArgs.contains(nativeAccessJvmArg)) {
-                    jvmArgs(nativeAccessJvmArg)
+        tasks.configureEach { task ->
+            if (task instanceof JavaForkOptions) {
+                nativeAccessJvmArgs.each { nativeAccessJvmArg ->
+                    if (!task.jvmArgs.contains(nativeAccessJvmArg)) {
+                        task.jvmArgs(nativeAccessJvmArg)
+                    }
                 }
             }
         }

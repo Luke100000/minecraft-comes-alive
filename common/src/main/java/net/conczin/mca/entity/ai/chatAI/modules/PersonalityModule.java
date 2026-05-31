@@ -23,9 +23,7 @@ public class PersonalityModule {
         }
         if (villager.getAgeState() == AgeState.TEEN) {
             input.add("$villager is a teen. ");
-        } else if (BuiltInRegistries.VILLAGER_PROFESSION.getResourceKey(villager.getProfession())
-                .map(key -> !key.equals(VillagerProfession.NONE))
-                .orElse(false)) {
+        } else if (!villager.getVillagerData().profession().is(VillagerProfession.NONE)) {
             input.add("$villager is a " + translate(villager.getProfession().name().getString()) + ". ");
         }
     }
