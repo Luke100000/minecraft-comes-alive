@@ -1,6 +1,6 @@
 {
   "parent": "minecraft:item/generated",
   "textures": {
-    "layer0": "mca:item/egg_female"
+    "layer0": "mca:item/egg_female_zombie"
   }
 }
