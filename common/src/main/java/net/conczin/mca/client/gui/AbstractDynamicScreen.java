@@ -1,8 +1,8 @@
 package net.conczin.mca.client.gui;
 
+import net.conczin.mca.client.gui.widget.WidgetUtils;
 import net.conczin.mca.client.resources.Icon;
 import net.conczin.mca.entity.interaction.Constraint;
-import net.conczin.mca.client.gui.widget.WidgetUtils;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
