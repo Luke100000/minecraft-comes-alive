@@ -1,7 +1,8 @@
 package net.conczin.mca.mixin;
 
 import net.conczin.mca.Config;
-import net.conczin.mca.registry.EntitiesMCA;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.Identifier;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.entity.EntityType;
 import org.spongepowered.asm.mixin.Mixin;
@@ -24,7 +25,11 @@ public class MixinEntityType {
     @SuppressWarnings({"ConstantConditions", "deprecation"})
     @Inject(method = "is(Lnet/minecraft/tags/TagKey;)Z", at = @At("HEAD"), cancellable = true, require = 0)
     private void mca$injectIs(TagKey<EntityType<?>> tag, CallbackInfoReturnable<Boolean> cir) {
-        if (mca$isCustomVillagerType() && EntityType.VILLAGER.builtInRegistryHolder().is(tag)) {
+        if (!EntityType.VILLAGER.builtInRegistryHolder().is(tag)) {
+            return;
+        }
+
+        if (mca$isCustomVillagerType()) {
             cir.setReturnValue(true);
         }
     }
@@ -33,6 +38,10 @@ public class MixinEntityType {
         if (!Config.getInstance().villagerTagsHacks) {
             return false;
         }
-        return (Object) this == EntitiesMCA.MALE_VILLAGER || (Object) this == EntitiesMCA.FEMALE_VILLAGER;
+
+        Identifier id = BuiltInRegistries.ENTITY_TYPE.getKey((EntityType<?>) (Object) this);
+        return id != null
+                && "mca".equals(id.getNamespace())
+                && ("male_villager".equals(id.getPath()) || "female_villager".equals(id.getPath()));
     }
 }
