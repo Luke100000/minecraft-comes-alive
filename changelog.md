@@ -1,3 +1,7 @@
+# 7.7.8
+
+* Villagers joined via inn now have random region names
+
 # 7.7.7
 
 * Synced translations

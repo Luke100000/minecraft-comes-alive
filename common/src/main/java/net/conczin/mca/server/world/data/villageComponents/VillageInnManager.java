@@ -4,8 +4,10 @@ import net.conczin.mca.Config;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.registry.ProfessionsMCA;
+import net.conczin.mca.resources.Names;
 import net.conczin.mca.server.world.data.Village;
 import net.minecraft.core.BlockPos;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.MobSpawnType;
@@ -62,14 +64,14 @@ public class VillageInnManager {
                     trader.setDespawnDelay(Config.getInstance().adventurerStayTime);
                 }
             } else if (i == 1 && Config.getInstance().innSpawnsCultists) {
-                VillagerEntityMCA adventurer = Gender.getRandom().getVillagerType().spawn(world, blockPos, MobSpawnType.EVENT);
+                VillagerEntityMCA adventurer = spawnInnVillager(world, blockPos, Gender.getRandom());
                 if (adventurer != null) {
                     name = adventurer.getName().getString();
                     adventurer.setProfession(ProfessionsMCA.CULTIST);
                     adventurer.setDespawnDelay(Config.getInstance().adventurerStayTime);
                 }
             } else if (Config.getInstance().innSpawnsAdventurers) {
-                VillagerEntityMCA adventurer = Gender.getRandom().getVillagerType().spawn(world, blockPos, MobSpawnType.EVENT);
+                VillagerEntityMCA adventurer = spawnInnVillager(world, blockPos, Gender.getRandom());
                 if (adventurer != null) {
                     name = adventurer.getName().getString();
                     adventurer.setProfession(ProfessionsMCA.ADVENTURER);
@@ -85,5 +87,13 @@ public class VillageInnManager {
             }
         }
         return false;
+    }
+
+    private VillagerEntityMCA spawnInnVillager(ServerLevel world, BlockPos blockPos, Gender gender) {
+        VillagerEntityMCA adventurer = gender.getVillagerType().spawn(world, blockPos, MobSpawnType.EVENT);
+        if (adventurer != null) {
+            adventurer.setCustomName(Component.literal(Names.pickCitizenName(gender)));
+        }
+        return adventurer;
     }
 }
