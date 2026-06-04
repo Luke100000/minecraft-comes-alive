@@ -1,0 +1,18 @@
+{
+  "replace": false,
+  "values": [
+    "#minecraft:anvil",
+    {
+      "id": "easyanvils:minecraft/anvil",
+      "required": false
+    },
+    {
+      "id": "easyanvils:minecraft/chipped_anvil",
+      "required": false
+    },
+    {
+      "id": "easyanvils:minecraft/damaged_anvil",
+      "required": false
+    }
+  ]
+}
