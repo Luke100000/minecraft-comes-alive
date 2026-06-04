@@ -23,7 +23,7 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
-import java.net.URL;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 
@@ -39,7 +39,7 @@ public class OpenAIChatAI implements ChatAIStrategy {
     }
 
     private static HttpURLConnection getHttpURLConnection(String url, String token) throws IOException {
-        HttpURLConnection con = (HttpURLConnection) (new URL(url)).openConnection();
+        HttpURLConnection con = (HttpURLConnection) (URI.create(url)).toURL().openConnection();
         con.setRequestMethod("POST");
         con.setRequestProperty("Accept-Charset", StandardCharsets.UTF_8.toString());
         con.setRequestProperty("Content-Type", "application/json");
@@ -103,7 +103,7 @@ public class OpenAIChatAI implements ChatAIStrategy {
     public static String verify(String encodedURL) {
         try {
             // receive
-            HttpURLConnection con = (HttpURLConnection) (new URL(encodedURL)).openConnection();
+            HttpURLConnection con = (HttpURLConnection) (URI.create(encodedURL)).toURL().openConnection();
             con.setRequestProperty("Accept-Charset", StandardCharsets.UTF_8.toString());
             InputStream response = con.getInputStream();
             String body = IOUtils.toString(response, StandardCharsets.UTF_8);
