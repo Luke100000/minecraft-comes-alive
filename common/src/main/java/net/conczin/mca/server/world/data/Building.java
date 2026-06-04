@@ -294,12 +294,6 @@ public class Building {
         } else if (!hasDoor) {
             return validationResult.NO_DOOR;
         } else {
-            //fetch all interesting block types
-            Set<ResourceLocation> blockTypes = new HashSet<>();
-            for (BuildingType bt : BuildingTypes.getInstance()) {
-                blockTypes.addAll(bt.getBlockToGroup().keySet());
-            }
-
             //dimensions
             int sx = center.getX();
             int sy = center.getY();
@@ -319,7 +313,7 @@ public class Building {
                 //count blocks types
                 BlockState blockState = world.getBlockState(p);
                 Block block = blockState.getBlock();
-                if (blockTypes.contains(BuiltInRegistries.BLOCK.getKey(block))) {
+                if (isBuildingBlock(BuiltInRegistries.BLOCK.getKey(block))) {
                     if (block instanceof BedBlock) {
                         // TODO: look for better solution for 7.4.0
                         if (blockState.getValue(BedBlock.PART) == BedPart.HEAD) {
@@ -345,6 +339,15 @@ public class Building {
             //determine type
             return isTypeForced() || determineType() ? validationResult.SUCCESS : validationResult.INVALID_TYPE;
         }
+    }
+
+    private boolean isBuildingBlock(ResourceLocation blockId) {
+        for (BuildingType bt : BuildingTypes.getInstance()) {
+            if (bt.matchesBlock(blockId)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public boolean determineType() {
