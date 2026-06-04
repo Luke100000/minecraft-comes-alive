@@ -29,11 +29,36 @@ tasks.named('compileJava', JavaCompile) {
 processResources {
     dependsOn(configurations.commonResources)
     from(configurations.commonResources)
+
+    doLast {
+        def outputDir = destinationDir
+        def modelDir = new File(outputDir, "assets/${mod_id}/models/item")
+        if (!modelDir.isDirectory()) {
+            return
+        }
+
+        def itemDir = new File(outputDir, "assets/${mod_id}/items")
+        modelDir.eachFileMatch(~/.*\.json/) { modelFile ->
+            def itemDefinition = new File(itemDir, modelFile.name)
+            if (!itemDefinition.isFile()) {
+                itemDir.mkdirs()
+                def modelName = modelFile.name.substring(0, modelFile.name.length() - '.json'.length())
+                itemDefinition.setText("""{
+  "model": {
+    "type": "minecraft:model",
+    "model": "${mod_id}:item/${modelName}"
+  }
+}
+""", 'UTF-8')
+            }
+        }
+    }
 }
 
 tasks.named('javadoc', Javadoc).configure {
     dependsOn(configurations.commonJava)
     source(configurations.commonJava)
+    exclude '**/*.java.disabled'
 }
 
 tasks.named('sourcesJar', Jar) {
@@ -41,4 +66,5 @@ tasks.named('sourcesJar', Jar) {
     from(configurations.commonJava)
     dependsOn(configurations.commonResources)
     from(configurations.commonResources)
+    exclude '**/*.java.disabled'
 }

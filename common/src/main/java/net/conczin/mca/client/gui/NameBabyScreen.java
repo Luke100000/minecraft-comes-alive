@@ -28,7 +28,7 @@ public class NameBabyScreen extends Screen {
     @Override
     public void init() {
         addRenderableWidget(new ButtonWidget(width / 2 - 40, height / 2 + 20, 80, 20, Component.translatable("gui.button.done"), (b) -> {
-            Network.sendToServer(new BabyNamingVillagerMessage(player.getInventory().selected, babyNameTextField.getValue().trim()));
+            Network.sendToServer(new BabyNamingVillagerMessage(player.getInventory().getSelectedSlot(), babyNameTextField.getValue().trim()));
             Objects.requireNonNull(this.minecraft).setScreen(null);
         }));
         addRenderableWidget(new ButtonWidget(width / 2 + 105, height / 2 - 20, 60, 20, Component.translatable("gui.button.random"), (b) -> {

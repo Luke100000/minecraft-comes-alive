@@ -2,6 +2,7 @@ package net.conczin.mca.entity.ai;
 
 import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.entity.ai.brain.VillagerBrain;
+import net.conczin.mca.util.NbtHelper;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.entity.Mob;
 import org.jetbrains.annotations.Nullable;
@@ -29,12 +30,12 @@ public class Memories {
             return null;
         }
 
-        Memories memories = new Memories(villager.getVillagerBrain(), villager.level().getDayTime(), tag.getUUID("playerUUID"));
+        Memories memories = new Memories(villager.getVillagerBrain(), villager.level().getDayTime(), NbtHelper.getUUID(tag, "playerUUID"));
 
-        memories.hearts = tag.getInt("hearts");
-        memories.interactionFatigue = tag.getInt("interactionFatigue");
-        memories.dialogueType = DialogueType.byId(tag.getInt("dialogueType"));
-        memories.lastSeen = tag.getLong("lastSeen");
+        memories.hearts = tag.getInt("hearts").orElse(0);
+        memories.interactionFatigue = tag.getInt("interactionFatigue").orElse(0);
+        memories.dialogueType = DialogueType.byId(tag.getInt("dialogueType").orElse(DialogueType.UNASSIGNED.ordinal()));
+        memories.lastSeen = tag.getLong("lastSeen").orElse(0L);
 
         return memories;
     }
@@ -91,7 +92,7 @@ public class Memories {
     public CompoundTag toCNBT() {
         CompoundTag nbt = new CompoundTag();
 
-        nbt.putUUID("playerUUID", playerUUID);
+        NbtHelper.putUUID(nbt, "playerUUID", playerUUID);
         nbt.putInt("hearts", hearts);
         nbt.putInt("interactionFatigue", interactionFatigue);
         nbt.putInt("dialogueType", dialogueType.ordinal());

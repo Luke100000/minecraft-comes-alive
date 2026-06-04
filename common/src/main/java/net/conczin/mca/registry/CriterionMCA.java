@@ -3,13 +3,13 @@ package net.conczin.mca.registry;
 import net.conczin.mca.MCA;
 import net.conczin.mca.advancement.criterion.*;
 import net.minecraft.advancements.CriterionTrigger;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 import java.util.HashMap;
 import java.util.Map;
 
 public interface CriterionMCA {
-    Map<ResourceLocation, CriterionTrigger<?>> TRIGGERS = new HashMap<>();
+    Map<Identifier, CriterionTrigger<?>> TRIGGERS = new HashMap<>();
 
     BabyCriterion BABY = register("baby", new BabyCriterion());
     BabyDroppedCriterion BABY_DROPPED = register("baby_dropped", new BabyDroppedCriterion());

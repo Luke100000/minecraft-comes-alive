@@ -18,7 +18,7 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.village.poi.PoiManager;
 import net.minecraft.world.entity.ai.village.poi.PoiTypes;
-import net.minecraft.world.entity.npc.VillagerProfession;
+import net.minecraft.world.entity.npc.villager.VillagerProfession;
 import net.minecraft.world.entity.player.Player;
 
 import java.util.Optional;
@@ -48,9 +48,9 @@ public class Residency {
 
     public void setWorkplace(ServerPlayer player) {
         PoiManager pointOfInterestStorage = ((ServerLevel) player.level()).getPoiManager();
-        pointOfInterestStorage.findClosest(VillagerProfession.NONE.acquirableJobSite(), a -> true, entity.blockPosition(), 8, PoiManager.Occupancy.HAS_SPACE).ifPresentOrElse(blockPos -> {
+        pointOfInterestStorage.findClosest(VillagerProfession.ALL_ACQUIRABLE_JOBS, a -> true, entity.blockPosition(), 8, PoiManager.Occupancy.HAS_SPACE).ifPresentOrElse(blockPos -> {
                     pointOfInterestStorage.getType(blockPos).ifPresent(pointOfInterestType -> {
-                        pointOfInterestStorage.take(VillagerProfession.NONE.acquirableJobSite(), (registryEntry, blockPos2) -> {
+                        pointOfInterestStorage.take(VillagerProfession.ALL_ACQUIRABLE_JOBS, (registryEntry, blockPos2) -> {
                             return blockPos2.equals(blockPos);
                         }, blockPos, 1);
 
@@ -72,8 +72,8 @@ public class Residency {
                                 return profession.heldJobSite().test(registryEntry);
                             }).findFirst();
                         }).ifPresent(profession -> {
-                            int level = entity.getVillagerData().getLevel();
-                            entity.setVillagerData(entity.getVillagerData().setProfession(profession).setLevel(1));
+                            int level = entity.getVillagerData().level();
+                            entity.setVillagerData(entity.getVillagerData().withProfession(BuiltInRegistries.VILLAGER_PROFESSION.wrapAsHolder(profession)).withLevel(1));
                             entity.setOffers(null);
                             entity.getOffers();
                             for (int l = 1; l < level; l++) {

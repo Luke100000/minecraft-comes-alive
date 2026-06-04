@@ -6,15 +6,17 @@ import net.conczin.mca.Config;
 import net.conczin.mca.MCA;
 import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.entity.ai.relationship.Gender;
+import net.conczin.mca.registry.ProfessionsMCA;
 import net.conczin.mca.resources.data.skin.Clothing;
 import net.conczin.mca.server.world.data.CustomClothingManager;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.FileToIdConverter;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.server.packs.resources.SimpleJsonResourceReloadListener;
 import net.minecraft.util.GsonHelper;
 import net.minecraft.util.profiling.ProfilerFiller;
-import net.minecraft.world.entity.npc.VillagerProfession;
+import net.minecraft.world.entity.npc.villager.VillagerProfession;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.HashMap;
@@ -22,13 +24,13 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Stream;
 
-public class ClothingList extends SimpleJsonResourceReloadListener {
-    protected static final ResourceLocation ID = MCA.locate("skins/clothing");
+public class ClothingList extends SimpleJsonResourceReloadListener<JsonElement> {
+    protected static final Identifier ID = MCA.locate("skins/clothing");
     private static ClothingList INSTANCE;
     public final HashMap<String, Clothing> clothing = new HashMap<>();
 
     public ClothingList() {
-        super(Resources.GSON, "skins/clothing");
+        super(Resources.JSON_ELEMENT_CODEC, FileToIdConverter.json("skins/clothing"));
         INSTANCE = this;
     }
 
@@ -37,7 +39,7 @@ public class ClothingList extends SimpleJsonResourceReloadListener {
     }
 
     @Override
-    protected void apply(Map<ResourceLocation, JsonElement> data, ResourceManager manager, ProfilerFiller profiler) {
+    protected void apply(Map<Identifier, JsonElement> data, ResourceManager manager, ProfilerFiller profiler) {
         clothing.clear();
 
         data.forEach((id, file) -> {
@@ -76,9 +78,9 @@ public class ClothingList extends SimpleJsonResourceReloadListener {
             case TODDLER -> getPool(gender, MCA.locate("toddler").toString());
             case CHILD, TEEN -> getPool(gender, MCA.locate("child").toString());
             default -> {
-                WeightedPool<String> pool = getPool(gender, villager.getVillagerData().getProfession());
+                WeightedPool<String> pool = getPool(gender, villager.getVillagerData().profession().value());
                 if (pool.entries.isEmpty()) {
-                    pool = getPool(gender, VillagerProfession.NONE);
+                    pool = getPool(gender, ProfessionsMCA.value(VillagerProfession.NONE));
                 }
                 yield pool;
             }

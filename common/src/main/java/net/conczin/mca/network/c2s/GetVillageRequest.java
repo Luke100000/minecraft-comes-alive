@@ -12,6 +12,7 @@ import net.conczin.mca.server.world.data.Village;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 
 import java.util.Optional;
@@ -25,7 +26,7 @@ public record GetVillageRequest() implements HandleablePayload {
     public void handleServer(ServerPlayer player) {
         Optional<Village> village = Village.findNearest(player);
         if (village.isPresent()) {
-            GraveyardManager.get(player.serverLevel()).reportToVillageManager(player);
+            GraveyardManager.get((ServerLevel) player.level()).reportToVillageManager(player);
             village.get().updateMaxPopulation();
             int reputation = village.get().getReputation(player);
             boolean isVillage = village.get().isVillage();

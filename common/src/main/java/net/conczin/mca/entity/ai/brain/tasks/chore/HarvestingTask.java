@@ -270,7 +270,10 @@ public class HarvestingTask extends AbstractChoreTask {
                     .withParameter(LootContextParams.BLOCK_STATE, state)
                     .withLuck(0);
 
-            List<ItemStack> drops = world.getServer().reloadableRegistries().getLootTable(state.getBlock().getLootTable()).getRandomItems(builder.create(LootContextParamSets.BLOCK));
+            List<ItemStack> drops = state.getBlock().getLootTable()
+                    .map(world.getServer().reloadableRegistries()::getLootTable)
+                    .map(table -> new ArrayList<>(table.getRandomItems(builder.create(LootContextParamSets.BLOCK))))
+                    .orElseGet(ArrayList::new);
             for (ItemStack stack : drops) {
                 villager.getInventory().addItem(stack);
             }

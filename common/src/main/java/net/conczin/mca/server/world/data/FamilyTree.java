@@ -4,7 +4,7 @@ import net.conczin.mca.entity.ai.relationship.EntityRelationship;
 import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.util.NbtHelper;
 import net.conczin.mca.util.WorldUtils;
-import net.minecraft.Util;
+import net.minecraft.util.Util;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
@@ -17,7 +17,7 @@ import org.jetbrains.annotations.Nullable;
 import java.util.*;
 import java.util.stream.Stream;
 
-public class FamilyTree extends SavedData {
+public class FamilyTree extends SavedData implements WorldUtils.NbtSavedData {
     private static final String DATA_ID = "MCA-FamilyTree";
 
     private final Map<UUID, FamilyTreeNode> entries;

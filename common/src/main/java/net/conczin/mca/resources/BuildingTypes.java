@@ -3,7 +3,8 @@ package net.conczin.mca.resources;
 import com.google.gson.JsonElement;
 import net.conczin.mca.MCA;
 import net.conczin.mca.resources.data.BuildingType;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.FileToIdConverter;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.server.packs.resources.SimpleJsonResourceReloadListener;
 import net.minecraft.util.profiling.ProfilerFiller;
@@ -12,14 +13,14 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
 
-public class BuildingTypes extends SimpleJsonResourceReloadListener implements Iterable<BuildingType> {
-    protected static final ResourceLocation ID = MCA.locate("building_types");
+public class BuildingTypes extends SimpleJsonResourceReloadListener<JsonElement> implements Iterable<BuildingType> {
+    protected static final Identifier ID = MCA.locate("building_types");
     private static BuildingTypes INSTANCE = new BuildingTypes();
     private final Map<String, BuildingType> buildingTypes = new HashMap<>();
     private final Map<String, BuildingType> buildingTypesClient = new HashMap<>();
 
     public BuildingTypes() {
-        super(Resources.GSON, ID.getPath());
+        super(Resources.JSON_ELEMENT_CODEC, FileToIdConverter.json(ID.getPath()));
         INSTANCE = this;
     }
 
@@ -28,8 +29,8 @@ public class BuildingTypes extends SimpleJsonResourceReloadListener implements I
     }
 
     @Override
-    protected void apply(Map<ResourceLocation, JsonElement> prepared, ResourceManager manager, ProfilerFiller profiler) {
-        for (Map.Entry<ResourceLocation, JsonElement> pair : prepared.entrySet()) {
+    protected void apply(Map<Identifier, JsonElement> prepared, ResourceManager manager, ProfilerFiller profiler) {
+        for (Map.Entry<Identifier, JsonElement> pair : prepared.entrySet()) {
             String name = pair.getKey().getPath();
             buildingTypes.put(name, new BuildingType(name, pair.getValue().getAsJsonObject()));
         }

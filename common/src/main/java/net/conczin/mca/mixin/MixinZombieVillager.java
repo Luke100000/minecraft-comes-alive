@@ -1,12 +1,13 @@
 package net.conczin.mca.mixin;
 
 import net.conczin.mca.ducks.IVillagerEntity;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.DifficultyInstance;
-import net.minecraft.world.entity.MobSpawnType;
+import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.SpawnGroupData;
-import net.minecraft.world.entity.monster.ZombieVillager;
-import net.minecraft.world.entity.npc.VillagerData;
-import net.minecraft.world.entity.npc.VillagerProfession;
+import net.minecraft.world.entity.monster.zombie.ZombieVillager;
+import net.minecraft.world.entity.npc.villager.VillagerData;
+import net.minecraft.world.entity.npc.villager.VillagerProfession;
 import net.minecraft.world.level.ServerLevelAccessor;
 import org.jetbrains.annotations.Nullable;
 import org.spongepowered.asm.mixin.Mixin;
@@ -20,25 +21,25 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 abstract class MixinZombieVillager implements IVillagerEntity {
     @Unique
     @Nullable
-    private transient MobSpawnType mca$reason;
+    private transient EntitySpawnReason mca$reason;
 
     @Override
-    public MobSpawnType mca$getSpawnReason() {
-        return mca$reason == null ? MobSpawnType.NATURAL : mca$reason;
+    public EntitySpawnReason mca$getSpawnReason() {
+        return mca$reason == null ? EntitySpawnReason.NATURAL : mca$reason;
     }
 
     @Inject(method = "finalizeSpawn", at = @At("HEAD"))
     private void mca$injectFinalizeSpawn(
-            ServerLevelAccessor level, DifficultyInstance difficulty, MobSpawnType spawnType, SpawnGroupData spawnGroupData, CallbackInfoReturnable<SpawnGroupData> cir
+            ServerLevelAccessor level, DifficultyInstance difficulty, EntitySpawnReason spawnType, SpawnGroupData spawnGroupData, CallbackInfoReturnable<SpawnGroupData> cir
     ) {
         mca$reason = spawnType;
     }
 
     @ModifyVariable(method = "setVillagerData", at = @At("HEAD"), ordinal = 0, argsOnly = true)
     private VillagerData setVillagerData(VillagerData villagerData) {
-        VillagerProfession profession = villagerData.getProfession();
+        VillagerProfession profession = villagerData.profession().value();
         if (profession.toString().startsWith("mca.")) {
-            villagerData = villagerData.setProfession(VillagerProfession.NONE);
+            villagerData = villagerData.withProfession(BuiltInRegistries.VILLAGER_PROFESSION.getOrThrow(VillagerProfession.NONE));
         }
         return villagerData;
     }

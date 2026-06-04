@@ -1,0 +1,53 @@
+{
+  "targets": {
+    "swap": {}
+  },
+  "passes": [
+    {
+      "vertex_shader": "minecraft:core/screenquad",
+      "fragment_shader": "minecraft:post/color_convolve",
+      "inputs": [
+        {
+          "sampler_name": "In",
+          "target": "minecraft:main"
+        }
+      ],
+      "output": "swap",
+      "uniforms": {
+        "ColorConfig": [
+          {
+            "type": "vec3",
+            "value": [0.3777778, 0.5244444, 0.09777778]
+          },
+          {
+            "type": "vec3",
+            "value": [0.26666668, 0.63555557, 0.09777778]
+          },
+          {
+            "type": "vec3",
+            "value": [0.26666668, 0.5244444, 0.20888889]
+          }
+        ]
+      }
+    },
+    {
+      "vertex_shader": "minecraft:core/screenquad",
+      "fragment_shader": "minecraft:post/blit",
+      "inputs": [
+        {
+          "sampler_name": "In",
+          "target": "swap"
+        }
+      ],
+      "output": "minecraft:main",
+      "uniforms": {
+        "BlitConfig": [
+          {
+            "type": "vec4",
+            "value": [1.0, 1.0, 1.0, 1.0]
+          }
+        ]
+      }
+    }
+  ]
+}

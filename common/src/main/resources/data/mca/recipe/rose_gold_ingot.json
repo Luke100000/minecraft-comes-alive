@@ -1,7 +1,7 @@
 {
   "type": "minecraft:crafting_shapeless",
   "ingredients": [
-    {"item": "mca:rose_gold_block"}
+    "mca:rose_gold_block"
   ],
   "result": {
     "id": "mca:rose_gold_ingot",

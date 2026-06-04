@@ -7,19 +7,13 @@
   ],
   "key": {
     "W": [
-      {
-        "item": "minecraft:writable_book"
-      }
+      "minecraft:writable_book"
     ],
     "E": [
-      {
-        "item": "minecraft:emerald"
-      }
+      "minecraft:emerald"
     ],
     "R": [
-      {
-        "item": "mca:rose_gold_ingot"
-      }
+      "mca:rose_gold_ingot"
     ]
   },
   "result": {

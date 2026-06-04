@@ -7,6 +7,7 @@ import net.conczin.mca.network.c2s.FamilyTreeUUIDLookup;
 import net.conczin.mca.util.compat.ButtonWidget;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.network.chat.Component;
@@ -129,12 +130,12 @@ public class FamilyTreeSearchScreen extends Screen {
     }
 
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+    public boolean mouseClicked(MouseButtonEvent mouseButtonEvent, boolean doubleClicked) {
         if (selectedVillager != null) {
             selectVillager(currentVillagerName, selectedVillager);
         }
 
-        return super.mouseClicked(mouseX, mouseY, button);
+        return super.mouseClicked(mouseButtonEvent, doubleClicked);
     }
 
     void selectVillager(String name, UUID villager) {

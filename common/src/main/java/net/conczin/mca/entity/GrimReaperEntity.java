@@ -115,7 +115,6 @@ public class GrimReaperEntity extends PathfinderMob implements CTrackedEntity<Gr
         }
     }
 
-    @Override
     protected boolean shouldDespawnInPeaceful() {
         return true;
     }
@@ -131,7 +130,6 @@ public class GrimReaperEntity extends PathfinderMob implements CTrackedEntity<Gr
         };
         navigator.setCanOpenDoors(false);
         navigator.setCanFloat(false);
-        navigator.setCanPassDoors(true);
         return navigator;
     }
 
@@ -139,7 +137,7 @@ public class GrimReaperEntity extends PathfinderMob implements CTrackedEntity<Gr
     protected void dropCustomDeathLoot(ServerLevel level, DamageSource damageSource, boolean recentlyHit) {
         super.dropCustomDeathLoot(level, damageSource, recentlyHit);
 
-        ItemEntity itemEntity = spawnAtLocation(ItemsMCA.SCYTHE);
+        ItemEntity itemEntity = spawnAtLocation(level, ItemsMCA.SCYTHE);
         if (itemEntity != null) {
             itemEntity.setExtendedLifetime();
         }
@@ -164,7 +162,7 @@ public class GrimReaperEntity extends PathfinderMob implements CTrackedEntity<Gr
     }
 
     @Override
-    public boolean hurt(DamageSource source, float damage) {
+    public boolean hurtServer(ServerLevel level, DamageSource source, float damage) {
         // Ignore wall damage, fire and explosion damage
         if (source.is(DamageTypes.IN_WALL) || source.is(DamageTypes.ON_FIRE) || source.is(DamageTypes.EXPLOSION) || source.is(DamageTypes.IN_FIRE)) {
             // Teleport out of any walls we may end up in
@@ -193,7 +191,7 @@ public class GrimReaperEntity extends PathfinderMob implements CTrackedEntity<Gr
         }
 
         // Randomly portal behind the player who just attacked.
-        if (!level().isClientSide && random.nextFloat() >= 0.30F && attacker != null) {
+        if (random.nextFloat() >= 0.30F && attacker != null) {
             double deltaX = this.getX() - attacker.getX();
             double deltaZ = this.getZ() - attacker.getZ();
             double distance = Math.sqrt(deltaX * deltaX + deltaZ * deltaZ);
@@ -207,7 +205,7 @@ public class GrimReaperEntity extends PathfinderMob implements CTrackedEntity<Gr
             damage *= 0.25f;
         }
 
-        return super.hurt(source, damage);
+        return super.hurtServer(level, source, damage);
     }
 
     @Override

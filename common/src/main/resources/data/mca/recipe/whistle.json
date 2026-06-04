@@ -6,10 +6,10 @@
   ],
   "key": {
     "I": [
-      {"item": "minecraft:iron_ingot"}
+      "minecraft:iron_ingot"
     ],
     "B": [
-      {"item": "minecraft:gold_block"}
+      "minecraft:gold_block"
     ]
   },
   "result": {

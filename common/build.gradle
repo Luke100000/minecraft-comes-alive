@@ -30,3 +30,20 @@ artifacts {
     commonJava sourceSets.main.java.sourceDirectories.singleFile
     commonResources sourceSets.main.resources.sourceDirectories.singleFile
 }
+
+tasks.register('dumpMinecraftAPI') {
+    dependsOn configurations.compileClasspath
+    doLast {
+        def cp = configurations.compileClasspath.files
+        def cl = new java.net.URLClassLoader(cp.collect { it.toURI().toURL() } as java.net.URL[], null)
+        try {
+            def snc = cl.loadClass("net.minecraft.client.renderer.SubmitNodeCollector")
+            snc.getMethods().each { println "SNC: " + it }
+        } catch(Exception e) { println "SNC Error: " + e}
+        try {
+            def rt = cl.loadClass("net.minecraft.client.renderer.rendertype.RenderType")
+            rt.getMethods().each { println "RT: " + it }
+            rt.getDeclaredFields().each { println "RTF: " + it }
+        } catch(Exception e) { println "RT Error: " + e}
+    }
+}

@@ -1,8 +1,8 @@
 {
   "type": "minecraft:crafting_shapeless",
   "ingredients": [
-    {"item": "minecraft:book"},
-    {"item": "minecraft:oak_sapling"}
+    "minecraft:book",
+    "minecraft:oak_sapling"
   ],
   "result": {
     "id": "mca:family_tree",

@@ -1,6 +1,5 @@
 package net.conczin.mca.client.gui;
 
-import com.mojang.blaze3d.vertex.PoseStack;
 import net.conczin.mca.MCA;
 import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.entity.ai.Genetics;
@@ -16,9 +15,11 @@ import net.conczin.mca.resources.data.dialogue.Question;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.input.KeyEvent;
+import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.world.entity.player.Player;
 import org.lwjgl.glfw.GLFW;
@@ -27,7 +28,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 public class InteractScreen extends AbstractDynamicScreen {
-    public static final ResourceLocation ICON_TEXTURES = MCA.locate("textures/gui.png");
+    public static final Identifier ICON_TEXTURES = MCA.locate("textures/gui.png");
     private static Analysis analysis;
     private final VillagerLike<?> villager;
     private final Player player = Objects.requireNonNull(Minecraft.getInstance().player);
@@ -97,27 +98,28 @@ public class InteractScreen extends AbstractDynamicScreen {
 
     @Override
     public boolean mouseScrolled(double x, double y, double dx, double dy) {
+        int selectedSlot = player.getInventory().getSelectedSlot();
         if (dy < 0) {
-            player.getInventory().selected = player.getInventory().selected == 8 ? 0 : player.getInventory().selected + 1;
+            player.getInventory().setSelectedSlot(selectedSlot == 8 ? 0 : selectedSlot + 1);
         } else if (dy > 0) {
-            player.getInventory().selected = player.getInventory().selected == 0 ? 8 : player.getInventory().selected - 1;
+            player.getInventory().setSelectedSlot(selectedSlot == 0 ? 8 : selectedSlot - 1);
         }
 
         return super.mouseScrolled(x, y, dx, dy);
     }
 
     @Override
-    public boolean mouseClicked(double posX, double posY, int button) {
-        super.mouseClicked(posX, posY, button);
+    public boolean mouseClicked(MouseButtonEvent mouseButtonEvent, boolean doubleClick) {
+        super.mouseClicked(mouseButtonEvent, doubleClick);
 
         // Dialog
-        if (button == 0 && dialogAnswerHover != null && dialogQuestionText != null) {
+        if (mouseButtonEvent.button() == 0 && dialogAnswerHover != null && dialogQuestionText != null) {
             //todo double click (Likely fixable via using a different event -- 7.4.0)
             Network.sendToServer(new InteractionDialogueMessage(villager.asEntity().getUUID(), dialogQuestionId, dialogAnswerHover));
         }
 
         // Right mouse button
-        if (inGiftMode && button == 1) {
+        if (inGiftMode && mouseButtonEvent.button() == 1) {
             Network.sendToServer(new InteractionVillagerMessage("gift", villager.asEntity().getUUID()));
             return true;
         } else {
@@ -126,9 +128,9 @@ public class InteractScreen extends AbstractDynamicScreen {
     }
 
     @Override
-    public boolean keyPressed(int keyChar, int keyCode, int unknown) {
+    public boolean keyPressed(KeyEvent keyEvent) {
         // Hotkey to leave gift mode
-        if (keyChar == GLFW.GLFW_KEY_ESCAPE) {
+        if (keyEvent.key() == GLFW.GLFW_KEY_ESCAPE) {
             if (inGiftMode) {
                 inGiftMode = false;
                 setLayout("interact");
@@ -141,11 +143,11 @@ public class InteractScreen extends AbstractDynamicScreen {
     }
 
     private void drawIcons(GuiGraphics context) {
-        final PoseStack matrices = context.pose();
+        var matrices = context.pose();
         Memories memory = villager.getVillagerBrain().getMemoriesForPlayer(player);
 
-        matrices.pushPose();
-        matrices.scale(iconScale, iconScale, iconScale);
+        matrices.pushMatrix();
+        matrices.scale(iconScale, iconScale);
 
         if (marriageState != null) {
             drawIcon(context, ICON_TEXTURES, marriageState.getIcon());
@@ -166,34 +168,34 @@ public class InteractScreen extends AbstractDynamicScreen {
             drawIcon(context, ICON_TEXTURES, "analysis");
         }
 
-        matrices.popPose();
+        matrices.popMatrix();
     }
 
     private void drawTextPopups(GuiGraphics context) {
         //name or state tip (gifting, ...)
         int h = 17;
         if (inGiftMode) {
-            context.renderTooltip(font, Component.translatable("gui.interact.label.giveGift"), 10, 28);
+            context.setTooltipForNextFrame(font, Component.translatable("gui.interact.label.giveGift"), 10, 28);
         } else {
-            context.renderTooltip(font, villager.asEntity().getName(), 10, 28);
+            context.setTooltipForNextFrame(font, villager.asEntity().getName(), 10, 28);
         }
 
         //age or profession
-        context.renderTooltip(font, villager.asEntity().isBaby() ? villager.getAgeState().getName() : villager.getProfessionText(), 10, 30 + h);
+        context.setTooltipForNextFrame(font, villager.asEntity().isBaby() ? villager.getAgeState().getName() : villager.getProfessionText(), 10, 30 + h);
 
         VillagerBrain<?> brain = villager.getVillagerBrain();
 
         //mood
-        context.renderTooltip(font,
+        context.setTooltipForNextFrame(font,
                 Component.translatable("gui.interact.label.mood", brain.getMood().getText())
                         .withStyle(brain.getMood().getColor()), 10, 30 + h * 2);
 
         //personality
         if (hoveringOverText(10, 30 + h * 3, 128)) {
-            context.renderTooltip(font, brain.getPersonality().getDescription(), 10, 30 + h * 3);
+            context.setTooltipForNextFrame(font, brain.getPersonality().getDescription(), 10, 30 + h * 3);
         } else {
             //White as we don't know if a personality is negative
-            context.renderTooltip(font, Component.translatable("gui.interact.label.personality", brain.getPersonality().getName()).withStyle(ChatFormatting.WHITE), 10, 30 + h * 3);
+            context.setTooltipForNextFrame(font, Component.translatable("gui.interact.label.personality", brain.getPersonality().getName()).withStyle(ChatFormatting.WHITE), 10, 30 + h * 3);
         }
 
         //traits
@@ -203,7 +205,7 @@ public class InteractScreen extends AbstractDynamicScreen {
                 //details
                 List<Component> traitText = traits.stream().map(Traits.Trait::getDescription).collect(Collectors.toList());
                 traitText.addFirst(Component.translatable("traits.title"));
-                context.renderComponentTooltip(font, traitText, 10, 30 + h * 4);
+                context.setComponentTooltipForNextFrame(font, traitText, 10, 30 + h * 4);
             } else {
                 //list
                 MutableComponent traitText = Component.translatable("traits.title");
@@ -213,7 +215,7 @@ public class InteractScreen extends AbstractDynamicScreen {
                     }
                     traitText.append(t);
                 });
-                context.renderTooltip(font, traitText, 10, 30 + h * 4);
+                context.setTooltipForNextFrame(font, traitText, 10, 30 + h * 4);
             }
         }
 

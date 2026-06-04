@@ -1,5 +1,6 @@
 package net.conczin.mca.server.world.data.villageComponents;
 
+import net.minecraft.core.Holder;
 import net.conczin.mca.Config;
 import net.conczin.mca.resources.Rank;
 import net.conczin.mca.resources.Tasks;
@@ -9,7 +10,7 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Container;
 import net.minecraft.world.item.Item;
@@ -91,7 +92,7 @@ public class VillageTaxesManager {
 
             // pick a random item
             String itemName = valids.get(world.random.nextInt(valids.size()));
-            Item item = BuiltInRegistries.ITEM.get(ResourceLocation.parse(itemName));
+            Item item = BuiltInRegistries.ITEM.get(Identifier.parse(itemName)).map(Holder::value).orElse(Items.AIR);
 
             if (item == Items.AIR) {
                 throw new RuntimeException("The taxes map contains an invalid item %s!".formatted(itemName));

@@ -19,6 +19,7 @@ import net.conczin.mca.util.WorldUtils;
 import net.conczin.mca.util.network.datasync.CDataManager;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.damagesource.DamageSource;
@@ -185,7 +186,7 @@ public class Relationship<T extends Mob & VillagerLike<T>> implements EntityRela
     }
 
     public void readFromNbt(CompoundTag nbt) {
-        giftSaturation.readFromNbt(nbt.getList("GiftSaturationQueue", 8));
+        giftSaturation.readFromNbt(nbt.getList("GiftSaturationQueue").orElseGet(ListTag::new));
     }
 
     public void writeToNbt(CompoundTag nbt) {

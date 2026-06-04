@@ -2,140 +2,161 @@ package net.conczin.mca.client.render.layer;
 
 import com.google.common.collect.Maps;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.blaze3d.vertex.VertexConsumer;
+import java.util.Map;
+import java.util.function.Function;
 import net.conczin.mca.MCA;
 import net.conczin.mca.MCAClient;
-import net.conczin.mca.client.model.PlayerEntityExtendedModel;
 import net.conczin.mca.client.model.VillagerEntityModelMCA;
-import net.minecraft.ResourceLocationException;
+import net.conczin.mca.client.render.MCAHumanoidRenderState;
+import net.minecraft.IdentifierException;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.model.HumanoidModel;
-import net.minecraft.client.renderer.MultiBufferSource;
-import net.minecraft.client.renderer.RenderType;
+import net.minecraft.client.model.geom.ModelPart;
+import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.LivingEntityRenderer;
 import net.minecraft.client.renderer.entity.RenderLayerParent;
 import net.minecraft.client.renderer.entity.layers.RenderLayer;
-import net.minecraft.resources.ResourceLocation;
-import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.client.renderer.entity.state.HumanoidRenderState;
+import net.minecraft.client.renderer.rendertype.RenderType;
+import net.minecraft.client.renderer.rendertype.RenderTypes;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.player.Player;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.Map;
-import java.util.Objects;
-import java.util.function.Function;
+public abstract class VillagerLayer<M extends HumanoidModel<MCAHumanoidRenderState>> extends RenderLayer<MCAHumanoidRenderState, M> {
+   private static final Map<String, Identifier> TEXTURE_CACHE = Maps.newHashMap();
+   private static final Map<Identifier, Boolean> TEXTURE_EXIST_CACHE = Maps.newHashMap();
+   public final M model;
 
-public abstract class VillagerLayer<T extends LivingEntity, M extends HumanoidModel<T>> extends RenderLayer<T, M> {
-    private static final Map<String, ResourceLocation> TEXTURE_CACHE = Maps.newHashMap();
-    private static final Map<ResourceLocation, Boolean> TEXTURE_EXIST_CACHE = Maps.newHashMap();
+   public VillagerLayer(RenderLayerParent<MCAHumanoidRenderState, M> renderer, M model) {
+      super(renderer);
+      this.model = model;
+   }
 
-    static {
-        // the temp image is used for temporary canvases and definitely exists
-        TEXTURE_EXIST_CACHE.put(MCA.locate("temp"), true);
-    }
+   @Nullable
+   public Identifier getSkin(MCAHumanoidRenderState renderState) {
+      return null;
+   }
 
-    public final M model;
+   @Nullable
+   protected Identifier getOverlay(MCAHumanoidRenderState renderState) {
+      return null;
+   }
 
-    public VillagerLayer(RenderLayerParent<T, M> renderer, M model) {
-        super(renderer);
-        this.model = model;
-    }
+   public void adjustVisibility(MCAHumanoidRenderState renderState) {
+   }
 
-    @Nullable
-    public ResourceLocation getSkin(T villager) {
-        return null;
-    }
+   protected boolean shouldApplyModelSetupAnim() {
+      return true;
+   }
 
-    @Nullable
-    protected ResourceLocation getOverlay(T villager) {
-        return null;
-    }
+   public int getColor(MCAHumanoidRenderState renderState, float tickDelta) {
+      return -1;
+   }
 
-    public int getColor(T villager, float tickDelta) {
-        return 0xFFFFFFFF;
-    }
+   private static void copyPartPose(ModelPart source, ModelPart target) {
+      target.loadPose(source.storePose());
+      target.xScale = source.xScale;
+      target.yScale = source.yScale;
+      target.zScale = source.zScale;
+   }
 
-    protected boolean isTranslucent() {
-        return false;
-    }
+   private void syncPoseFromParent() {
+      M parent = (M)this.getParentModel();
+      copyPartPose(parent.head, this.model.head);
+      copyPartPose(parent.body, this.model.body);
+      copyPartPose(parent.rightArm, this.model.rightArm);
+      copyPartPose(parent.leftArm, this.model.leftArm);
+      copyPartPose(parent.rightLeg, this.model.rightLeg);
+      copyPartPose(parent.leftLeg, this.model.leftLeg);
+   }
 
-    @Override
-    public void render(PoseStack transform, MultiBufferSource provider, int light, T villager, float limbAngle, float limbDistance, float tickDelta, float animationProgress, float headYaw, float headPitch) {
-        Minecraft client = Minecraft.getInstance();
-        boolean visible = !villager.isInvisible();
-        boolean glowing = client.shouldEntityAppearGlowing(villager);
+   protected boolean isTranslucent() {
+      return false;
+   }
 
-        if (villager instanceof Player && !MCAClient.useVillagerRenderer(villager.getUUID())) {
-            return;
-        }
+   public void submit(PoseStack poseStack, SubmitNodeCollector submitNodeCollector, int light, MCAHumanoidRenderState renderState, float yRot, float xRot) {
+      if (renderState.visible || renderState.glowing) {
+         if (renderState.villager != null && !renderState.villager.isInvisible()) {
+            if (!(renderState.villager instanceof Player player && !MCAClient.useVillagerRenderer(player.getUUID()))) {
+               if (this.model instanceof VillagerEntityModelMCA layerModel) {
+                  layerModel.copyVisibility((HumanoidModel<? extends HumanoidRenderState>)this.getParentModel());
+               }
 
-        //primarily restores compatibility with Armourers Workshop
-        //noinspection rawtypes
-        if (model instanceof VillagerEntityModelMCA layer) {
-            //noinspection unchecked
-            layer.copyVisibility(getParentModel());
-        }
-        //noinspection rawtypes
-        if (model instanceof PlayerEntityExtendedModel layer) {
-            //noinspection unchecked
-            layer.copyVisibility(getParentModel());
-        }
+               if (this.shouldApplyModelSetupAnim()) {
+                  this.model.setupAnim(renderState);
+               }
+               this.syncPoseFromParent();
+               this.adjustVisibility(renderState);
+               int tint = LivingEntityRenderer.getOverlayCoords(renderState, 0.0F);
+               Identifier skin = this.getSkin(renderState);
+               if (this.canUse(skin)) {
+                  int color = this.getColor(renderState, 0.0F);
+                  this.renderModel(poseStack, submitNodeCollector, light, this.model, renderState, color, skin, tint, renderState.visible, renderState.glowing);
+               }
 
-        //copy the animation to this layers model
-        getParentModel().copyPropertiesTo(model);
-
-        renderFinal(transform, provider, light, villager, tickDelta, visible, glowing);
-    }
-
-    public void renderFinal(PoseStack transform, MultiBufferSource provider, int light, T villager, float tickDelta, boolean visible, boolean glowing) {
-        int tint = LivingEntityRenderer.getOverlayCoords(villager, 0);
-
-        ResourceLocation skin = getSkin(villager);
-        if (canUse(skin)) {
-            int color = getColor(villager, tickDelta);
-            renderModel(transform, provider, light, model, color, skin, tint, visible, glowing);
-        }
-
-        ResourceLocation overlay = getOverlay(villager);
-        if (!Objects.equals(skin, overlay) && canUse(overlay)) {
-            renderModel(transform, provider, light, model, 0xFFFFFF, overlay, tint, visible, glowing);
-        }
-    }
-
-    @Nullable
-    protected RenderType getRenderLayer(ResourceLocation texture, boolean showBody, boolean translucent, boolean showOutline) {
-        if (translucent) {
-            return RenderType.itemEntityTranslucentCull(texture);
-        } else if (showBody) {
-            return this.model.renderType(texture);
-        } else {
-            return showOutline ? RenderType.outline(texture) : null;
-        }
-    }
-
-    private void renderModel(PoseStack transform, MultiBufferSource provider, int light, M model, int color, ResourceLocation texture, int overlay, boolean visible, boolean glowing) {
-        RenderType layer = getRenderLayer(texture, visible, isTranslucent(), glowing);
-        if (layer == null) return;
-        VertexConsumer buffer = provider.getBuffer(layer);
-        model.renderToBuffer(transform, buffer, light, overlay, color);
-    }
-
-    public final boolean canUse(ResourceLocation texture) {
-        return TEXTURE_EXIST_CACHE.computeIfAbsent(texture, s -> {
-            if (texture != null && texture.getNamespace().equals("immersive_library")) {
-                return true;
+               Identifier overlay = this.getOverlay(renderState);
+               if (overlay != null && !overlay.equals(skin) && this.canUse(overlay)) {
+                  this.renderModel(poseStack, submitNodeCollector, light, this.model, renderState, -1, overlay, tint, renderState.visible, renderState.glowing);
+               }
             }
-            return texture != null && Minecraft.getInstance().getResourceManager().getResource(texture).isPresent();
-        });
-    }
+         }
+      }
+   }
 
-    @Nullable
-    protected final ResourceLocation cached(String name, Function<String, ResourceLocation> supplier) {
-        return TEXTURE_CACHE.computeIfAbsent(name, s -> {
-            try {
-                return supplier.apply(s);
-            } catch (ResourceLocationException ignored) {
-                return null;
-            }
-        });
-    }
+   @Nullable
+   protected RenderType getRenderLayer(Identifier texture, boolean showBody, boolean translucent, boolean showOutline) {
+      if (translucent) {
+         return RenderTypes.itemEntityTranslucentCull(texture);
+      } else if (showBody) {
+         return RenderTypes.entityCutoutNoCull(texture);
+      } else {
+         return showOutline ? RenderTypes.outline(texture) : null;
+      }
+   }
+
+   private void renderModel(
+      PoseStack transform,
+      SubmitNodeCollector provider,
+      int light,
+      M model,
+      MCAHumanoidRenderState renderState,
+      int color,
+      Identifier texture,
+      int overlay,
+      boolean visible,
+      boolean glowing
+   ) {
+      RenderType layer = this.getRenderLayer(texture, visible, this.isTranslucent(), glowing);
+      if (layer != null) {
+         provider.submitModel(model, renderState, transform, layer, light, overlay, color, null, 0, null);
+      }
+   }
+
+   public final boolean canUse(Identifier texture) {
+      return TEXTURE_EXIST_CACHE.computeIfAbsent(texture, s -> {
+         if (texture != null && texture.getNamespace().equals("immersive_library")) {
+            return true;
+         } else {
+            boolean result = texture != null && Minecraft.getInstance().getResourceManager().getResource(texture).isPresent();
+            System.out.println("MCA_DEBUG canUse: " + texture + " -> " + result);
+            return result;
+         }
+      });
+   }
+
+   @Nullable
+   protected final Identifier cached(String name, Function<String, Identifier> supplier) {
+      return TEXTURE_CACHE.computeIfAbsent(name, s -> {
+         try {
+            return supplier.apply(s);
+         } catch (IdentifierException var3) {
+            return null;
+         }
+      });
+   }
+
+   static {
+      TEXTURE_EXIST_CACHE.put(MCA.locate("temp"), true);
+   }
 }

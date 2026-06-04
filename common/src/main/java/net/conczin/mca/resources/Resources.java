@@ -2,7 +2,11 @@ package net.conczin.mca.resources;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonParseException;
+import com.mojang.serialization.Codec;
+import com.mojang.serialization.Dynamic;
+import com.mojang.serialization.JsonOps;
 import net.conczin.mca.MCA;
 import net.conczin.mca.entity.interaction.InteractionPredicate;
 import org.apache.commons.io.IOUtils;
@@ -17,6 +21,11 @@ public interface Resources {
     Gson GSON = new GsonBuilder()
             .registerTypeAdapter(InteractionPredicate.class, InteractionPredicateTypeAdapter.INSTANCE)
             .create();
+
+    Codec<JsonElement> JSON_ELEMENT_CODEC = Codec.PASSTHROUGH.xmap(
+            dynamic -> dynamic.convert(JsonOps.INSTANCE).getValue(),
+            json -> new Dynamic<>(JsonOps.INSTANCE, json)
+    );
 
     static String read(String path) throws IOException {
         return IOUtils.toString(new InputStreamReader(MCA.class.getClassLoader().getResourceAsStream(RESOURCE_PREFIX + path)));

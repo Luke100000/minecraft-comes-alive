@@ -1,6 +1,7 @@
 package net.conczin.mca;
 
 import net.conczin.mca.client.gui.SkinLibraryScreen;
+import net.conczin.mca.client.render.PlayerBodyOverlayPhysics;
 import net.conczin.mca.client.tts.SpeechManager;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerLike;
@@ -13,6 +14,7 @@ import java.util.*;
 
 public class MCAClient {
     public static final Map<UUID, VillagerLike<?>> playerData = new HashMap<>();
+    public static final Map<UUID, net.minecraft.world.item.ItemStack> equippedRings = new HashMap<>();
     public static final Set<UUID> playerDataRequests = new HashSet<>();
     private static final DestinyManager destinyManager = new DestinyManager();
     public static VillagerEntityMCA fallbackVillager;
@@ -23,20 +25,32 @@ public class MCAClient {
 
     public static void onLogin() {
         playerDataRequests.clear();
+        playerData.clear();
+        equippedRings.clear();
+        PlayerBodyOverlayPhysics.clear();
+        fallbackVillager = null;
         Network.sendToServer(new ConfigRequest());
     }
 
     public static Optional<VillagerLike<?>> getPlayerData(UUID uuid) {
         if (isPlayerRendererAllowed()) {
-            if (!MCAClient.playerDataRequests.contains(uuid) && Minecraft.getInstance().getConnection() != null) {
-                MCAClient.playerDataRequests.add(uuid);
-                Network.sendToServer(new PlayerDataRequest(uuid));
-            }
+            requestPlayerData(uuid);
             if (MCAClient.playerData.containsKey(uuid)) {
                 return Optional.of(MCAClient.playerData.get(uuid));
             }
         }
         return Optional.empty();
+    }
+
+    public static Optional<net.minecraft.world.item.ItemStack> getEquippedRing(UUID uuid) {
+        requestPlayerData(uuid);
+
+        net.minecraft.world.item.ItemStack ring = equippedRings.get(uuid);
+        if (ring == null || ring.isEmpty()) {
+            return Optional.empty();
+        }
+
+        return Optional.of(ring.copy());
     }
 
     public static boolean useExpandedPersonalityTranslations() {
@@ -63,6 +77,7 @@ public class MCAClient {
 
     public static void tickClient(Minecraft client) {
         destinyManager.tick(client);
+        PlayerBodyOverlayPhysics.tick(client);
 
         if (KeyBindings.SKIN_LIBRARY.consumeClick()) {
             Minecraft.getInstance().setScreen(new SkinLibraryScreen());
@@ -71,13 +86,30 @@ public class MCAClient {
         SpeechManager.INSTANCE.tick(client);
     }
 
-    public static void addPlayerData(UUID uuid, VillagerEntityMCA villager) {
+    public static void addPlayerData(UUID uuid, VillagerEntityMCA villager, net.minecraft.world.item.ItemStack equippedRing) {
         playerData.put(uuid, villager);
+        setEquippedRing(uuid, equippedRing);
 
         // Refresh eye height
         Minecraft client = Minecraft.getInstance();
         if (client.player != null) {
             client.player.refreshDimensions();
+        }
+    }
+
+    public static void setEquippedRing(UUID uuid, net.minecraft.world.item.ItemStack ring) {
+        if (ring == null || ring.isEmpty()) {
+            equippedRings.remove(uuid);
+            return;
+        }
+
+        equippedRings.put(uuid, ring.copy());
+    }
+
+    private static void requestPlayerData(UUID uuid) {
+        if (!MCAClient.playerDataRequests.contains(uuid) && Minecraft.getInstance().getConnection() != null) {
+            MCAClient.playerDataRequests.add(uuid);
+            Network.sendToServer(new PlayerDataRequest(uuid));
         }
     }
 

@@ -43,10 +43,10 @@ public class LongTermMemory {
     }
 
     public void readFromNbt(CompoundTag nbt) {
-        CompoundTag memory = nbt.getCompound("longTermMemory");
+        CompoundTag memory = nbt.getCompound("longTermMemory").orElseGet(CompoundTag::new);
         memories.clear();
-        for (String key : memory.getAllKeys()) {
-            memories.put(key, memory.getLong(key));
+        for (String key : memory.keySet()) {
+            memories.put(key, memory.getLong(key).orElse(0L));
         }
     }
 

@@ -23,9 +23,9 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.Difficulty;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
-import net.minecraft.world.entity.MobSpawnType;
+import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.SpawnPlacements;
-import net.minecraft.world.entity.monster.AbstractIllager;
+import net.minecraft.world.entity.monster.illager.AbstractIllager;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.saveddata.SavedData;
@@ -36,7 +36,7 @@ import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-public class VillageManager extends SavedData implements Iterable<Village> {
+public class VillageManager extends SavedData implements WorldUtils.NbtSavedData, Iterable<Village> {
     public final Set<BlockPos> cache = ConcurrentHashMap.newKeySet();
     private final Map<Integer, Village> villages = new HashMap<>();
     private final List<BlockPos> buildingQueue = new LinkedList<>();
@@ -53,13 +53,13 @@ public class VillageManager extends SavedData implements Iterable<Village> {
 
     VillageManager(ServerLevel world, CompoundTag nbt) {
         this.world = world;
-        lastBuildingId = nbt.getInt("lastBuildingId");
-        lastVillageId = nbt.getInt("lastVillageId");
-        reapers = nbt.contains("reapers", Tag.TAG_COMPOUND) ? new ReaperSpawner(this, nbt.getCompound("reapers")) : new ReaperSpawner(this);
+        lastBuildingId = nbt.getInt("lastBuildingId").orElse(0);
+        lastVillageId = nbt.getInt("lastVillageId").orElse(0);
+        reapers = nbt.contains("reapers") ? new ReaperSpawner(this, nbt.getCompound("reapers").orElseGet(CompoundTag::new)) : new ReaperSpawner(this);
 
-        ListTag villageList = nbt.getList("villages", Tag.TAG_COMPOUND);
+        ListTag villageList = nbt.getList("villages").orElseGet(ListTag::new);
         for (int i = 0; i < villageList.size(); i++) {
-            Village village = new Village(villageList.getCompound(i), world);
+            Village village = new Village(villageList.getCompoundOrEmpty(i), world);
             if (village.getBuildings().isEmpty()) {
                 MCA.LOGGER.warn("Empty village detected ({}), removing...", village.getName());
                 setDirty();
@@ -193,7 +193,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
     }
 
     private <T extends AbstractIllager> void spawnBountyHunter(EntityType<T> t, ServerPlayer player) {
-        AbstractIllager pillager = t.create(world);
+        AbstractIllager pillager = t.create(world, EntitySpawnReason.EVENT);
         if (pillager != null) {
             for (int attempt = 0; attempt < 32; attempt++) {
                 float f = this.world.random.nextFloat() * 6.2831855F;
@@ -204,7 +204,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
                 if (SpawnPlacements.isSpawnPositionOk(t, world, pos)) {
                     pillager.setPos(x, y, z);
                     pillager.setTarget(player);
-                    WorldUtils.spawnEntity(world, pillager, MobSpawnType.EVENT);
+                    WorldUtils.spawnEntity(world, pillager, EntitySpawnReason.EVENT);
                     break;
                 }
             }

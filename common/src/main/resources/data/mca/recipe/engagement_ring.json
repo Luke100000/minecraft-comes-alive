@@ -7,10 +7,10 @@
   ],
   "key": {
     "G": [
-      {"item": "minecraft:gold_ingot"}
+      "minecraft:gold_ingot"
     ],
     "D": [
-      {"item": "minecraft:diamond"}
+      "minecraft:diamond"
     ]
   },
   "result": {

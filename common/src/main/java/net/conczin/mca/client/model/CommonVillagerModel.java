@@ -9,6 +9,7 @@ import net.conczin.mca.entity.ai.relationship.VillagerDimensions;
 import net.conczin.mca.registry.EntitiesMCA;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.level.Level;
 
@@ -17,7 +18,12 @@ import java.util.UUID;
 public interface CommonVillagerModel<T extends LivingEntity> {
     static VillagerLike<?> getVillager(Level world, UUID uuid) {
         if (MCAClient.fallbackVillager == null) {
-            MCAClient.fallbackVillager = EntitiesMCA.MALE_VILLAGER.create(world);
+            MCAClient.fallbackVillager = EntitiesMCA.MALE_VILLAGER.create(world, EntitySpawnReason.COMMAND);
+            if (MCAClient.fallbackVillager != null) {
+                MCAClient.fallbackVillager.getGenetics().setGender(Gender.MALE);
+                MCAClient.fallbackVillager.setHair("mca:skins/hair/male/0.png");
+                MCAClient.fallbackVillager.setClothes("mca:skins/clothing/normal/male/none/0.png");
+            }
         }
         return MCAClient.playerData.getOrDefault(uuid, MCAClient.fallbackVillager);
     }
@@ -77,7 +83,24 @@ public interface CommonVillagerModel<T extends LivingEntity> {
         setBreastSize(villager.getGenetics().getBreastSize());
         getBreastPart().visible = villager.getGenetics().getGender() == Gender.FEMALE;
 
+        float headSize = getDimensions().getHead();
+        getCommonHeadParts().forEach(part -> {
+            part.xScale = headSize;
+            part.yScale = headSize;
+            part.zScale = headSize;
+        });
+
+        float scaledBreastSize = getBreastSize() * getDimensions().getBreasts();
+        boolean renderBreasts = getBreastPart().visible && getBodyPart().visible && scaledBreastSize > 0.0F;
+        float breastScaleX = scaledBreastSize * 0.2F + 1.05F;
+        float breastScaleY = scaledBreastSize * 0.75F + 0.75F;
+        float breastScaleZ = scaledBreastSize * 0.75F + 0.75F;
+
         for (ModelPart part : getBreastParts()) {
+            part.visible = renderBreasts;
+            part.xScale = renderBreasts ? breastScaleX : 1.0F;
+            part.yScale = renderBreasts ? breastScaleY : 1.0F;
+            part.zScale = renderBreasts ? breastScaleZ : 1.0F;
             part.xRot = (float) Math.PI * 0.3f + getBodyPart().xRot;
 
             float cy = 0.0f;

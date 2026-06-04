@@ -8,7 +8,6 @@ import net.conczin.mca.entity.VillagerEntityMCA;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.core.Holder;
-import net.minecraft.network.protocol.game.DebugPackets;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.util.RandomSource;
@@ -109,8 +108,6 @@ public class ExtendedFindPointOfInterestTask extends Behavior<VillagerEntityMCA>
                 villager.getBrain().setMemory(this.targetMemoryModuleType, GlobalPos.of(serverWorld.dimension(), blockPos2));
                 this.entityStatus.ifPresent(statusByte -> serverWorld.broadcastEntityEvent(villager, statusByte));
                 this.foundPositionsToExpiry.clear();
-                DebugPackets.sendPoiTicketCountPacket(serverWorld, blockPos2);
-
                 // on finish callback
                 onFinish.accept(villager);
             });

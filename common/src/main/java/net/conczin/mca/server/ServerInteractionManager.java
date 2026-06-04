@@ -1,312 +1,441 @@
 package net.conczin.mca.server;
 
 import it.unimi.dsi.fastutil.objects.Object2LongArrayMap;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import net.conczin.mca.Config;
-import net.conczin.mca.entity.ai.relationship.EntityRelationship;
+import net.conczin.mca.MCA;
 import net.conczin.mca.entity.ai.relationship.RelationshipState;
 import net.conczin.mca.item.BabyItem;
+import net.conczin.mca.item.EngagementRingItem;
+import net.conczin.mca.item.RelationshipItem;
+import net.conczin.mca.item.WeddingRingItem;
 import net.conczin.mca.network.Network;
 import net.conczin.mca.network.s2c.OpenDestinyGuiRequest;
+import net.conczin.mca.network.s2c.PlayerInteractionAnimationMessage;
 import net.conczin.mca.network.s2c.ShowToastRequest;
 import net.conczin.mca.server.world.data.PlayerSaveData;
 import net.minecraft.ChatFormatting;
+import net.minecraft.core.component.DataComponents;
+import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.util.Mth;
+import net.minecraft.world.InteractionHand;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.player.Player;
-
-import java.util.*;
+import net.minecraft.world.food.FoodProperties;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
 
 public class ServerInteractionManager {
+   private static final long SOCIAL_INTERACTION_COOLDOWN_MS = 2000L;
+   private static final int KISS_BASE_DURATION_TICKS = 14;
+   private static final int KISS_BASE_REGEN_TICKS = 60;
+   private static final int KISS_BASE_XP = 2;
+   private static final ServerInteractionManager INSTANCE = new ServerInteractionManager();
+   private final Map<UUID, List<UUID>> proposals = new HashMap<>();
+   private final Object2LongArrayMap<UUID> procreateMap = new Object2LongArrayMap();
+   private final Object2LongArrayMap<UUID> socialCooldowns = new Object2LongArrayMap();
 
-    private static final ServerInteractionManager INSTANCE = new ServerInteractionManager();
+   private ServerInteractionManager() {
+   }
 
-    /**
-     * Maps a player's UUID to a list of UUIDs that have proposed to them with /mca propose
-     */
-    private final Map<UUID, List<UUID>> proposals = new HashMap<>();
+   public static ServerInteractionManager getInstance() {
+      return INSTANCE;
+   }
 
-    /**
-     * List of UUIDs that initiated procreation mapped to the time the request expires.
-     */
-    private final Object2LongArrayMap<UUID> procreateMap = new Object2LongArrayMap<>();
+   public static void launchDestiny(ServerPlayer player) {
+      Network.sendToPlayer(new OpenDestinyGuiRequest(player), player);
+   }
 
+   public void tick() {
+      this.pruneExpired(this.procreateMap);
+      this.pruneExpired(this.socialCooldowns);
+      MCA.getServer().ifPresent(server -> server.getPlayerList().getPlayers().forEach(this::applyNearbySpouseBenefits));
+   }
 
-    private ServerInteractionManager() {
-    }
+   public void onPlayerJoin(ServerPlayer player) {
+      PlayerSaveData playerData = PlayerSaveData.get(player);
+      if (!playerData.isEntityDataSet()) {
+         if (Config.getInstance().launchIntoDestiny) {
+            launchDestiny(player);
+            player.addEffect(new MobEffectInstance(MobEffects.INVISIBILITY, 3600));
+            player.addEffect(new MobEffectInstance(MobEffects.HEALTH_BOOST, 3600));
+         } else if (Config.getInstance().allowDestinyCommandOnce) {
+            Network.sendToPlayer(new ShowToastRequest("server.destinyNotSet.title", "server.destinyNotSet.description"), player);
+         } else if (Config.getInstance().allowFullPlayerEditor) {
+            Network.sendToPlayer(new ShowToastRequest("server.playerNotCustomized.title", "server.playerNotCustomized.description"), player);
+         }
+      }
 
-    public static ServerInteractionManager getInstance() {
-        return INSTANCE;
-    }
+      if (playerData.hasMail()) {
+         PlayerSaveData.showMailNotification(player);
+      }
+   }
 
-    public static void launchDestiny(ServerPlayer player) {
-        Network.sendToPlayer(new OpenDestinyGuiRequest(player), player);
-    }
+   private boolean hasProposalFrom(ServerPlayer sender, ServerPlayer receiver) {
+      return this.getProposalsFor(receiver).contains(sender.getUUID());
+   }
 
-    public void tick() {
-        List<UUID> removals = new ArrayList<>();
-        procreateMap.keySet().stream()
-                .filter((k) -> procreateMap.getLong(k) < System.currentTimeMillis())
-                .forEach(removals::add);
-        removals.forEach(procreateMap::removeLong);
-    }
+   private List<UUID> getProposalsFor(ServerPlayer player) {
+      return this.proposals.getOrDefault(player.getUUID(), new ArrayList<>());
+   }
 
-    public void onPlayerJoin(ServerPlayer player) {
-        PlayerSaveData playerData = PlayerSaveData.get(player);
-        if (!playerData.isEntityDataSet()) {
-            if (Config.getInstance().launchIntoDestiny) {
-                launchDestiny(player);
+   private void removeProposalFor(ServerPlayer target, ServerPlayer proposer) {
+      List<UUID> list = this.getProposalsFor(target);
+      list.remove(proposer.getUUID());
+      this.proposals.put(target.getUUID(), list);
+   }
 
-                player.addEffect(new MobEffectInstance(MobEffects.INVISIBILITY, 3600));
-                player.addEffect(new MobEffectInstance(MobEffects.HEALTH_BOOST, 3600));
-            } else if (Config.getInstance().allowDestinyCommandOnce) {
-                Network.sendToPlayer(new ShowToastRequest(
-                        "server.destinyNotSet.title",
-                        "server.destinyNotSet.description"
-                ), player);
-            } else if (Config.getInstance().allowFullPlayerEditor) {
-                Network.sendToPlayer(new ShowToastRequest(
-                        "server.playerNotCustomized.title",
-                        "server.playerNotCustomized.description"
-                ), player);
+   private void pruneExpired(Object2LongArrayMap<UUID> timedMap) {
+      List<UUID> removals = new ArrayList<>();
+      timedMap.keySet().stream().filter(uuid -> timedMap.getLong(uuid) < System.currentTimeMillis()).forEach(removals::add);
+      removals.forEach(timedMap::removeLong);
+   }
+
+   private void applyNearbySpouseBenefits(ServerPlayer player) {
+      if (player.isAlive()) {
+         PlayerSaveData data = PlayerSaveData.get(player);
+         if (data.getRelationshipState() == RelationshipState.MARRIED_TO_PLAYER) {
+            Player spousePlayer = data.getPartnerUUID().<Player>map(player.level()::getPlayerByUUID).orElse(null);
+            ServerPlayer spouse = spousePlayer instanceof ServerPlayer serverPlayer ? serverPlayer : null;
+            if (spouse != null && spouse.level() == player.level() && !(player.distanceToSqr(spouse) > 36.0)) {
+               player.addEffect(new MobEffectInstance(MobEffects.REGENERATION, 40, 0, true, false, true));
             }
-        }
+         }
+      }
+   }
 
-        if (playerData.hasMail()) {
-            PlayerSaveData.showMailNotification(player);
-        }
-    }
+   private boolean hasUsableRing(ServerPlayer player, Class<? extends Item> ringType) {
+      if (ringType.isInstance(player.getMainHandItem().getItem())) {
+         return true;
+      } else {
+         ItemStack equippedRing = PlayerSaveData.get(player).getEquippedRing();
+         return !equippedRing.isEmpty() && ringType.isInstance(equippedRing.getItem());
+      }
+   }
 
-    /**
-     * Returns true if receiver has a proposal from sender.
-     *
-     * @param sender   Command sender
-     * @param receiver Player whose name was entered by the sender
-     * @return boolean
-     */
-    private boolean hasProposalFrom(ServerPlayer sender, ServerPlayer receiver) {
-        return getProposalsFor(receiver).contains(sender.getUUID());
-    }
+   private void autoEquipHeldRing(ServerPlayer player, Class<? extends Item> ringType) {
+      ItemStack held = player.getMainHandItem();
+      if (ringType.isInstance(held.getItem())) {
+         RelationshipItem.equipRing(player, held);
+      } else {
+         PlayerSaveData.sync(player);
+      }
+   }
 
-    /**
-     * Returns all proposals for the provided player
-     *
-     * @param player Player whose proposals should be returned.
-     * @return List<UUID>
-     */
-    private List<UUID> getProposalsFor(ServerPlayer player) {
-        return proposals.getOrDefault(player.getUUID(), new ArrayList<>());
-    }
+   private boolean isOnSocialCooldown(ServerPlayer player) {
+      return this.socialCooldowns.getLong(player.getUUID()) > System.currentTimeMillis();
+   }
 
-    /**
-     * Removes the provided proposer from the target's list of proposals.
-     *
-     * @param target   Target player whose proposal list will be modified.
-     * @param proposer The proposer to the target player.
-     */
-    private void removeProposalFor(ServerPlayer target, ServerPlayer proposer) {
-        List<UUID> list = getProposalsFor(target);
-        list.remove(proposer.getUUID());
-        proposals.put(target.getUUID(), list);
-    }
+   private void playAffectionAnimation(ServerPlayer sender, ServerPlayer receiver, String action, int durationTicks) {
+      this.playAffectionAnimation(sender, receiver, action, durationTicks, 1.0F);
+   }
 
-    /**
-     * Lists all proposals for the given player.
-     *
-     * @param sender Player whose active proposals will be listed.
-     */
-    public void listProposals(ServerPlayer sender) {
-        List<UUID> proposals = getProposalsFor(sender);
+   private void playAffectionAnimation(ServerPlayer sender, ServerPlayer receiver, String action, int durationTicks, float strength) {
+      long expiresAt = System.currentTimeMillis() + 2000L;
+      this.socialCooldowns.put(sender.getUUID(), expiresAt);
+      this.socialCooldowns.put(receiver.getUUID(), expiresAt);
+      sender.swing(InteractionHand.MAIN_HAND);
+      receiver.swing(InteractionHand.MAIN_HAND);
+      ServerLevel serverLevel = sender.level();
+      if (serverLevel instanceof ServerLevel) {
+         PlayerInteractionAnimationMessage messagex = new PlayerInteractionAnimationMessage(
+            sender.getUUID(), receiver.getUUID(), action, durationTicks, strength
+         );
+         serverLevel.players().forEach(player -> Network.sendToPlayer(messagex, player));
+         double x = (sender.getX() + receiver.getX()) * 0.5;
+         double y = (sender.getY(0.75) + receiver.getY(0.75)) * 0.5;
+         double z = (sender.getZ() + receiver.getZ()) * 0.5;
+         if ("kiss".equals(action)) {
+            int hearts = 6 + Mth.ceil(Math.max(0.0F, strength - 1.0F) * 4.0F);
+            serverLevel.sendParticles(ParticleTypes.HEART, x, y, z, hearts, 0.2 + strength * 0.05, 0.15 + strength * 0.03, 0.2 + strength * 0.05, 0.01);
+         } else {
+            serverLevel.sendParticles(ParticleTypes.HAPPY_VILLAGER, x, y, z, 8, 0.3, 0.15, 0.3, 0.02);
+         }
+      }
+   }
 
-        if (proposals.isEmpty()) {
-            infoMessage(sender, Component.translatable("server.noProposals"));
-        } else {
-            infoMessage(sender, Component.translatable("server.proposals"));
-        }
+   private ServerInteractionManager.FoodShare shareHeldFoodForKiss(ServerPlayer sender, ServerPlayer receiver) {
+      for (InteractionHand hand : InteractionHand.values()) {
+         ItemStack stack = sender.getItemInHand(hand);
+         if (!stack.isEmpty()) {
+            FoodProperties food = (FoodProperties)stack.get(DataComponents.FOOD);
+            if (food != null && food.nutrition() > 0) {
+               receiver.getFoodData().eat(food);
+               if (!sender.getAbilities().instabuild) {
+                  stack.shrink(1);
+                  sender.setItemInHand(hand, stack);
+                  sender.containerMenu.broadcastChanges();
+               }
 
-        // Send the name of all online players to the command sender.
-        proposals.forEach((uuid -> {
-            Player player = sender.level().getPlayerByUUID(uuid);
-            if (player != null) {
-                infoMessage(sender, Component.literal("- ").append(Component.literal(player.getScoreboardName())));
+               return new ServerInteractionManager.FoodShare(food.nutrition(), food.saturation());
             }
-        }));
-    }
+         }
+      }
 
-    /**
-     * Sends a proposal from the sender to the receiver.
-     *
-     * @param sender   The player sending the proposal.
-     * @param receiver The player being proposed to.
-     */
-    public void sendProposal(ServerPlayer sender, ServerPlayer receiver) {
-        // Checks if the admin allows this
-        if (!Config.getInstance().allowPlayerMarriage) {
-            failMessage(sender, Component.translatable("notify.playerMarriage.disabled"));
-            return;
-        }
+      return ServerInteractionManager.FoodShare.NONE;
+   }
 
-        // Ensure the sender isn't already married.
-        if (PlayerSaveData.get(sender).isMarried()) {
-            failMessage(sender, Component.translatable("server.alreadyMarried"));
-            return;
-        }
+   public void listProposals(ServerPlayer sender) {
+      List<UUID> proposals = this.getProposalsFor(sender);
+      if (proposals.isEmpty()) {
+         this.infoMessage(sender, Component.translatable("server.noProposals"));
+      } else {
+         this.infoMessage(sender, Component.translatable("server.proposals"));
+      }
 
-        // Ensure the sender isn't himself.
-        if (sender == receiver) {
-            failMessage(sender, Component.translatable("server.proposedToYourself"));
-            return;
-        }
+      proposals.forEach(uuid -> {
+         Player player = sender.level().getPlayerByUUID(uuid);
+         if (player != null) {
+            this.infoMessage(sender, Component.literal("- ").append(Component.literal(player.getScoreboardName())));
+         }
+      });
+   }
 
-        // Ensure the receiver hasn't already been proposed to by this player.
-        if (hasProposalFrom(sender, receiver)) {
-            failMessage(sender, Component.translatable("server.sentProposal", receiver.getScoreboardName()));
-        } else {
-            // Send the proposal messages.
-            successMessage(sender, Component.translatable("server.proposalSent", receiver.getScoreboardName()));
-            infoMessage(receiver, Component.translatable("server.proposedMarriage", sender.getScoreboardName()));
-
-            // Add the proposal to the receiver's proposal list.
-            List<UUID> list = getProposalsFor(receiver);
+   public void sendProposal(ServerPlayer sender, ServerPlayer receiver) {
+      if (!Config.getInstance().allowPlayerMarriage) {
+         this.failMessage(sender, Component.translatable("notify.playerMarriage.disabled"));
+      } else {
+         PlayerSaveData senderData = PlayerSaveData.get(sender);
+         PlayerSaveData receiverData = PlayerSaveData.get(receiver);
+         if (senderData.isMarried()) {
+            this.failMessage(sender, Component.translatable("server.alreadyMarried"));
+         } else if (senderData.isEngaged()) {
+            this.failMessage(sender, Component.translatable("server.alreadyEngaged"));
+         } else if (receiverData.isMarried()) {
+            this.failMessage(sender, Component.translatable("server.targetAlreadyMarried", new Object[]{receiver.getScoreboardName()}));
+         } else if (receiverData.isEngaged()) {
+            this.failMessage(sender, Component.translatable("server.targetAlreadyEngaged", new Object[]{receiver.getScoreboardName()}));
+         } else if (sender == receiver) {
+            this.failMessage(sender, Component.translatable("server.proposedToYourself"));
+         } else if (this.hasProposalFrom(sender, receiver)) {
+            this.failMessage(sender, Component.translatable("server.sentProposal", new Object[]{receiver.getScoreboardName()}));
+         } else {
+            this.successMessage(sender, Component.translatable("server.proposalSent", new Object[]{receiver.getScoreboardName()}));
+            this.infoMessage(receiver, Component.translatable("server.proposedMarriage", new Object[]{sender.getScoreboardName()}));
+            List<UUID> list = this.getProposalsFor(receiver);
             list.add(sender.getUUID());
-            proposals.put(receiver.getUUID(), list);
-        }
-    }
+            this.proposals.put(receiver.getUUID(), list);
+         }
+      }
+   }
 
-    /**
-     * Rejects and removes a proposal from the receiver to the sender.
-     *
-     * @param sender   The person rejecting the proposal.
-     * @param receiver The initial proposer.
-     */
-    public void rejectProposal(ServerPlayer sender, ServerPlayer receiver) {
-        // Ensure a proposal existed.
-        if (!hasProposalFrom(receiver, sender)) {
-            failMessage(sender, Component.translatable("server.noProposal", receiver.getDisplayName()));
-        } else {
-            // Notify of the proposal failure and remove it.
-            successMessage(sender, Component.translatable("server.proposalRejectionSent"));
-            failMessage(receiver, Component.translatable("server.proposalRejected", sender.getScoreboardName()));
-            removeProposalFor(sender, receiver);
-        }
-    }
+   public void engage(ServerPlayer sender, ServerPlayer receiver) {
+      if (!Config.getInstance().allowPlayerMarriage) {
+         this.failMessage(sender, Component.translatable("notify.playerMarriage.disabled"));
+      } else if (sender == receiver) {
+         this.failMessage(sender, Component.translatable("server.cannotTargetYourself"));
+      } else {
+         PlayerSaveData senderData = PlayerSaveData.get(sender);
+         PlayerSaveData receiverData = PlayerSaveData.get(receiver);
+         if (senderData.isMarried()) {
+            this.failMessage(sender, Component.translatable("server.alreadyMarried"));
+         } else if (receiverData.isMarried()) {
+            this.failMessage(sender, Component.translatable("server.targetAlreadyMarried", new Object[]{receiver.getScoreboardName()}));
+         } else if (senderData.isEngaged()) {
+            this.failMessage(sender, Component.translatable("server.alreadyEngaged"));
+         } else if (receiverData.isEngaged()) {
+            this.failMessage(sender, Component.translatable("server.targetAlreadyEngaged", new Object[]{receiver.getScoreboardName()}));
+         } else if (!this.hasUsableRing(sender, EngagementRingItem.class)) {
+            this.failMessage(sender, Component.translatable("server.needEngagementRing"));
+         } else {
+            senderData.engage(receiver);
+            receiverData.engage(sender);
+            this.removeProposalFor(receiver, sender);
+            this.removeProposalFor(sender, receiver);
+            this.autoEquipHeldRing(sender, EngagementRingItem.class);
+            this.successMessage(sender, Component.translatable("server.engaged", new Object[]{receiver.getDisplayName()}));
+            this.successMessage(receiver, Component.translatable("server.engaged", new Object[]{sender.getDisplayName()}));
+         }
+      }
+   }
 
-    /**
-     * Accepts and removes a proposal from the receiver to the sender.
-     *
-     * @param sender   The person accepting the proposal.
-     * @param receiver The initial proposer.
-     */
-    public void acceptProposal(ServerPlayer sender, ServerPlayer receiver) {
-        // Ensure a proposal is active.
-        if (!hasProposalFrom(receiver, sender)) {
-            failMessage(sender, Component.translatable("server.noProposal", receiver.getDisplayName()));
-        } else {
-            // Notify of acceptance.
-            successMessage(receiver, Component.translatable("server.proposalAccepted", sender.getDisplayName()));
+   public void marry(ServerPlayer sender, ServerPlayer receiver) {
+      if (!Config.getInstance().allowPlayerMarriage) {
+         this.failMessage(sender, Component.translatable("notify.playerMarriage.disabled"));
+      } else if (sender == receiver) {
+         this.failMessage(sender, Component.translatable("server.cannotTargetYourself"));
+      } else {
+         PlayerSaveData senderData = PlayerSaveData.get(sender);
+         PlayerSaveData receiverData = PlayerSaveData.get(receiver);
+         if (senderData.isMarried()) {
+            this.failMessage(sender, Component.translatable("server.alreadyMarried"));
+         } else if (receiverData.isMarried()) {
+            this.failMessage(sender, Component.translatable("server.targetAlreadyMarried", new Object[]{receiver.getScoreboardName()}));
+         } else if (!senderData.isEngagedWith(receiver.getUUID()) || !receiverData.isEngagedWith(sender.getUUID())) {
+            this.failMessage(sender, Component.translatable("server.notEngaged"));
+         } else if (!this.hasUsableRing(sender, WeddingRingItem.class)) {
+            this.failMessage(sender, Component.translatable("server.needWeddingRing"));
+         } else {
+            senderData.marry(receiver);
+            receiverData.marry(sender);
+            this.removeProposalFor(receiver, sender);
+            this.removeProposalFor(sender, receiver);
+            this.autoEquipHeldRing(sender, WeddingRingItem.class);
+            this.successMessage(sender, Component.translatable("server.married", new Object[]{receiver.getDisplayName()}));
+            this.successMessage(receiver, Component.translatable("server.married", new Object[]{sender.getDisplayName()}));
+         }
+      }
+   }
 
-            // Set both player data as married.
-            PlayerSaveData.get(sender).marry(receiver);
-            PlayerSaveData.get(receiver).marry(sender);
+   public void hug(ServerPlayer sender, ServerPlayer receiver) {
+      if (sender == receiver) {
+         this.failMessage(sender, Component.translatable("server.cannotTargetYourself"));
+      } else if (this.isOnSocialCooldown(sender)) {
+         this.failMessage(sender, Component.translatable("server.socialInteractionCooldown"));
+      } else {
+         PlayerSaveData senderData = PlayerSaveData.get(sender);
+         PlayerSaveData receiverData = PlayerSaveData.get(receiver);
+         boolean engaged = senderData.isEngagedWith(receiver.getUUID()) && receiverData.isEngagedWith(sender.getUUID());
+         boolean married = senderData.isMarriedTo(receiver.getUUID()) && receiverData.isMarriedTo(sender.getUUID());
+         if (!engaged && !married) {
+            this.failMessage(sender, Component.translatable("server.hug.requiresPartner"));
+         } else {
+            sender.addEffect(new MobEffectInstance(MobEffects.REGENERATION, 100, 0, true, false, true));
+            receiver.addEffect(new MobEffectInstance(MobEffects.REGENERATION, 100, 0, true, false, true));
+            sender.giveExperiencePoints(2);
+            receiver.giveExperiencePoints(2);
+            this.playAffectionAnimation(sender, receiver, "hug", 18);
+            this.successMessage(sender, Component.translatable("server.hug.success", new Object[]{receiver.getDisplayName()}));
+            this.successMessage(receiver, Component.translatable("server.hug.received", new Object[]{sender.getDisplayName()}));
+         }
+      }
+   }
 
-            // Send success messages.
-            successMessage(sender, Component.translatable("server.married", receiver.getDisplayName()));
-            successMessage(receiver, Component.translatable("server.married", sender.getDisplayName()));
+   public void kiss(ServerPlayer sender, ServerPlayer receiver) {
+      if (sender == receiver) {
+         this.failMessage(sender, Component.translatable("server.cannotTargetYourself"));
+      } else if (this.isOnSocialCooldown(sender)) {
+         this.failMessage(sender, Component.translatable("server.socialInteractionCooldown"));
+      } else {
+         PlayerSaveData senderData = PlayerSaveData.get(sender);
+         PlayerSaveData receiverData = PlayerSaveData.get(receiver);
+         if (senderData.isMarriedTo(receiver.getUUID()) && receiverData.isMarriedTo(sender.getUUID())) {
+            ServerInteractionManager.FoodShare sharedFood = this.shareHeldFoodForKiss(sender, receiver);
+            int strengthBonus = sharedFood.strengthBonus();
+            int regenTicks = 60 + strengthBonus * 20;
+            int sharedXp = 2 + strengthBonus;
+            int durationTicks = 14 + strengthBonus * 2;
+            float animationStrength = 1.0F + strengthBonus * 0.18F;
+            sender.addEffect(new MobEffectInstance(MobEffects.REGENERATION, regenTicks, 0, true, false, true));
+            receiver.addEffect(new MobEffectInstance(MobEffects.REGENERATION, regenTicks, 0, true, false, true));
+            sender.giveExperiencePoints(sharedXp);
+            receiver.giveExperiencePoints(sharedXp);
+            this.playAffectionAnimation(sender, receiver, "kiss", durationTicks, animationStrength);
+            this.successMessage(sender, Component.translatable("server.kiss.success", new Object[]{receiver.getDisplayName()}));
+            this.successMessage(receiver, Component.translatable("server.kiss.received", new Object[]{sender.getDisplayName()}));
+         } else {
+            this.failMessage(sender, Component.translatable("server.kiss.requiresSpouse"));
+         }
+      }
+   }
 
-            // Remove the proposal.
-            removeProposalFor(sender, receiver);
-        }
-    }
+   public void rejectProposal(ServerPlayer sender, ServerPlayer receiver) {
+      if (!this.hasProposalFrom(receiver, sender)) {
+         this.failMessage(sender, Component.translatable("server.noProposal", new Object[]{receiver.getDisplayName()}));
+      } else {
+         this.successMessage(sender, Component.translatable("server.proposalRejectionSent"));
+         this.failMessage(receiver, Component.translatable("server.proposalRejected", new Object[]{sender.getScoreboardName()}));
+         this.removeProposalFor(sender, receiver);
+      }
+   }
 
-    /**
-     * Ends the sender's marriage and notifies their spouse if the spouse is online.
-     *
-     * @param sender The person ending their marriage.
-     */
-    public void endMarriage(ServerPlayer sender) {
-        // Retrieve all data instances and an instance of the ex-spouse if they are present.
-        EntityRelationship.of(sender).ifPresent(senderData -> {
-            // Ensure the sender is married
-            if (!senderData.isMarried()) {
-                failMessage(sender, Component.translatable("server.endMarriageNotMarried"));
-                return;
+   public void acceptProposal(ServerPlayer sender, ServerPlayer receiver) {
+      if (!this.hasProposalFrom(receiver, sender)) {
+         this.failMessage(sender, Component.translatable("server.noProposal", new Object[]{receiver.getDisplayName()}));
+      } else {
+         this.successMessage(receiver, Component.translatable("server.proposalAccepted", new Object[]{sender.getDisplayName()}));
+         PlayerSaveData.get(sender).marry(receiver);
+         PlayerSaveData.get(receiver).marry(sender);
+         this.successMessage(sender, Component.translatable("server.married", new Object[]{receiver.getDisplayName()}));
+         this.successMessage(receiver, Component.translatable("server.married", new Object[]{sender.getDisplayName()}));
+         this.removeProposalFor(sender, receiver);
+      }
+   }
+
+   public void endMarriage(ServerPlayer sender) {
+      PlayerSaveData senderData = PlayerSaveData.get(sender);
+      if (!senderData.isMarried()) {
+         this.failMessage(sender, Component.translatable("server.endMarriageNotMarried"));
+      } else if (senderData.getRelationshipState() != RelationshipState.MARRIED_TO_PLAYER) {
+         this.failMessage(sender, Component.translatable("server.marriedToVillager"));
+      } else {
+         UUID partnerId = senderData.getPartnerUUID().orElse(null);
+         senderData.getPartnerName()
+            .ifPresent(name -> this.successMessage(sender, Component.translatable("server.endMarriage", new Object[]{name.getString()})));
+         ServerPlayer spouse = (partnerId == null ? null : sender.level().getPlayerByUUID(partnerId)) instanceof ServerPlayer serverPlayer
+            ? serverPlayer
+            : null;
+         if (spouse != null) {
+            this.failMessage(spouse, Component.translatable("server.marriageEnded", new Object[]{sender.getScoreboardName()}));
+            PlayerSaveData.get(spouse).endRelationShip(RelationshipState.SINGLE);
+            PlayerSaveData.sync(spouse);
+         } else if (partnerId != null) {
+            ServerLevel var7 = sender.level();
+            if (var7 instanceof ServerLevel) {
+               PlayerSaveData.getIfPresent(var7, partnerId).ifPresent(partnerData -> partnerData.endRelationShip(RelationshipState.SINGLE));
             }
+         }
 
-            // Lookup the spouse, if it's a villager, we can't continue
-            if (senderData.getRelationshipState() != RelationshipState.MARRIED_TO_PLAYER) {
-                failMessage(sender, Component.translatable("server.marriedToVillager"));
-                return;
-            }
+         senderData.endRelationShip(RelationshipState.SINGLE);
+         PlayerSaveData.sync(sender);
+      }
+   }
 
-            // Notify the sender of the success and end both marriages.
-            senderData.getPartnerName().ifPresent(name ->
-                    successMessage(sender, Component.translatable("server.endMarriage", name.getString()))
-            );
-            senderData.getPartner().ifPresent(spouse -> {
-                if (spouse instanceof Player player) {
-                    // Notify the ex if they are online.
-                    failMessage(player, Component.translatable("server.marriageEnded", sender.getScoreboardName()));
-                }
-            });
-            senderData.endRelationShip(RelationshipState.SINGLE);
-            senderData.getPartnerUUID().map(id -> PlayerSaveData.get(sender)).ifPresent(r -> r.endRelationShip(RelationshipState.SINGLE));
-        });
-    }
-
-    /**
-     * Initiates procreation with a married player.
-     *
-     * @param sender The person requesting procreation.
-     */
-    public void procreate(ServerPlayer sender) {
-        // Ensure the sender is married.
-        PlayerSaveData senderData = PlayerSaveData.get(sender);
-        if (!senderData.isMarried()) {
-            failMessage(sender, Component.translatable("server.notMarried"));
-            return;
-        }
-
-        // Ensure the spouse is a player
-        if (senderData.getRelationshipState() != RelationshipState.MARRIED_TO_PLAYER) {
-            failMessage(sender, Component.translatable("server.marriedToVillager"));
-            return;
-        }
-
-        // Ensure we don't already have a baby
-        // todo add cooldown
-        if (false) {
-            failMessage(sender, Component.translatable("server.babyPresent"));
-            return;
-        }
-
-        // Ensure the spouse is online.
-        senderData.getPartner().filter(e -> e instanceof Player).map(Player.class::cast).ifPresentOrElse(spouse -> {
-            // If the spouse is online and has previously sent a procreation request that hasn't expired, we can continue.
-            // Otherwise, we notify the spouse that they must also enter the command.
-            if (!procreateMap.containsKey(spouse.getUUID())) {
-                procreateMap.put(sender.getUUID(), System.currentTimeMillis() + 10000);
-                infoMessage(spouse, Component.translatable("server.procreationRequest", sender.getScoreboardName()));
+   public void procreate(ServerPlayer sender) {
+      PlayerSaveData senderData = PlayerSaveData.get(sender);
+      if (!senderData.isMarried()) {
+         this.failMessage(sender, Component.translatable("server.notMarried"));
+      } else if (senderData.getRelationshipState() != RelationshipState.MARRIED_TO_PLAYER) {
+         this.failMessage(sender, Component.translatable("server.marriedToVillager"));
+      } else {
+         senderData.getPartner().filter(e -> e instanceof Player).map(Player.class::cast).ifPresentOrElse(spouse -> {
+            if (!this.procreateMap.containsKey(spouse.getUUID())) {
+               this.procreateMap.put(sender.getUUID(), System.currentTimeMillis() + 10000L);
+               this.infoMessage(spouse, Component.translatable("server.procreationRequest", new Object[]{sender.getScoreboardName()}));
             } else {
-                // On success, add a randomly generated baby to the original requester.
-                successMessage(sender, Component.translatable("server.procreationSuccessful"));
-                successMessage(spouse, Component.translatable("server.procreationSuccessful"));
-
-                spouse.addItem(BabyItem.createItem(spouse, sender, spouse.getRandom().nextLong()));
+               this.successMessage(sender, Component.translatable("server.procreationSuccessful"));
+               this.successMessage(spouse, Component.translatable("server.procreationSuccessful"));
+               spouse.addItem(BabyItem.createItem(spouse, sender, spouse.getRandom().nextLong()));
             }
-        }, () -> failMessage(sender, Component.translatable("server.spouseNotPresent")));
-    }
+         }, () -> this.failMessage(sender, Component.translatable("server.spouseNotPresent")));
+      }
+   }
 
-    private void successMessage(Player player, MutableComponent message) {
-        player.sendSystemMessage(message.withStyle(ChatFormatting.GREEN));
-    }
+   public void procreate(ServerPlayer sender, ServerPlayer receiver) {
+      PlayerSaveData senderData = PlayerSaveData.get(sender);
+      if (senderData.getPartnerUUID().filter(receiver.getUUID()::equals).isEmpty()) {
+         this.failMessage(sender, Component.translatable("server.spouseNotPresent"));
+      } else {
+         this.procreate(sender);
+      }
+   }
 
-    private void failMessage(Player player, MutableComponent message) {
-        player.sendSystemMessage(message.withStyle(ChatFormatting.RED));
-    }
+   private void successMessage(Player player, MutableComponent message) {
+      player.displayClientMessage(message.withStyle(ChatFormatting.GREEN), false);
+   }
 
-    private void infoMessage(Player player, MutableComponent message) {
-        player.sendSystemMessage(message.withStyle(ChatFormatting.YELLOW));
-    }
+   private void failMessage(Player player, MutableComponent message) {
+      player.displayClientMessage(message.withStyle(ChatFormatting.RED), false);
+   }
+
+   private void infoMessage(Player player, MutableComponent message) {
+      player.displayClientMessage(message.withStyle(ChatFormatting.YELLOW), false);
+   }
+
+   private record FoodShare(int nutrition, float saturationModifier) {
+      private static final ServerInteractionManager.FoodShare NONE = new ServerInteractionManager.FoodShare(0, 0.0F);
+
+      private int strengthBonus() {
+         return this.nutrition <= 0 ? 0 : Math.min(6, Math.max(1, this.nutrition / 2 + Mth.ceil(this.saturationModifier * 2.0F)));
+      }
+   }
 }

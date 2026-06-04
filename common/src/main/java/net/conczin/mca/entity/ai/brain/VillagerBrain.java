@@ -85,8 +85,8 @@ public class VillagerBrain<E extends Mob & VillagerLike<E>> {
         if (entity.tickCount % Math.max(1, Config.getInstance().interactionFatigueCooldown) == 0) {
             CompoundTag nbt = entity.getTrackedValue(MEMORIES);
             if (nbt != null) {
-                for (String uuid : nbt.getAllKeys()) {
-                    Memories memories = Memories.fromCNBT(entity, nbt.getCompound(uuid));
+                for (String uuid : nbt.keySet()) {
+                    Memories memories = Memories.fromCNBT(entity, nbt.getCompound(uuid).orElseGet(CompoundTag::new));
                     int fatigue = memories.getInteractionFatigue();
                     if (fatigue > 0) {
                         memories.setInteractionFatigue(fatigue - 1);
@@ -144,8 +144,8 @@ public class VillagerBrain<E extends Mob & VillagerLike<E>> {
     public Map<UUID, Memories> getMemories() {
         CompoundTag nbt = entity.getTrackedValue(MEMORIES);
         Map<UUID, Memories> memories = new HashMap<>();
-        for (String uuid : nbt.getAllKeys()) {
-            memories.put(UUID.fromString(uuid), Memories.fromCNBT(entity, nbt.getCompound(uuid)));
+        for (String uuid : nbt.keySet()) {
+            memories.put(UUID.fromString(uuid), Memories.fromCNBT(entity, nbt.getCompound(uuid).orElseGet(CompoundTag::new)));
         }
         return memories;
     }
@@ -153,7 +153,7 @@ public class VillagerBrain<E extends Mob & VillagerLike<E>> {
     public Memories getMemoriesForPlayer(Player player) {
         CompoundTag nbt = entity.getTrackedValue(MEMORIES);
         nbt = nbt == null ? new CompoundTag() : nbt;
-        CompoundTag compoundTag = nbt.getCompound(player.getUUID().toString());
+        CompoundTag compoundTag = nbt.getCompound(player.getUUID().toString()).orElseGet(CompoundTag::new);
         Memories returnMemories = Memories.fromCNBT(entity, compoundTag);
         if (returnMemories == null) {
             returnMemories = new Memories(this, player.level().getDayTime(), player.getUUID());

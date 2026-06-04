@@ -11,6 +11,7 @@ import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 
 import java.util.List;
@@ -25,7 +26,7 @@ public record FamilyTreeUUIDLookup(String search) implements HandleablePayload {
 
     @Override
     public void handleServer(ServerPlayer player) {
-        FamilyTree tree = FamilyTree.get(player.serverLevel());
+        FamilyTree tree = FamilyTree.get((ServerLevel) player.level());
         List<FamilyTreeSearchScreen.Entry> list = tree.getAllWithName(search)
                 .map(entry -> new FamilyTreeSearchScreen.Entry(
                         entry.id(),

@@ -62,7 +62,7 @@ public class Traits {
     }
 
     public Set<Trait> getTraits() {
-        return entity.getTrackedValue(TRAITS).getAllKeys().stream().map(Trait::valueOf).collect(Collectors.toSet());
+        return entity.getTrackedValue(TRAITS).keySet().stream().map(Trait::valueOf).collect(Collectors.toSet());
     }
 
     public Set<Trait> getInheritedTraits() {

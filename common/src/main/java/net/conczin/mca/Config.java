@@ -13,6 +13,7 @@ import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.UUID;
 
 public final class Config extends CommonConfig {
@@ -880,12 +881,49 @@ public final class Config extends CommonConfig {
         for (Traits.Trait trait : Traits.Trait.values()) {
             enabledTraits.putIfAbsent(trait.id(), true);
         }
+
+        Map<String, String> normalizedShaderLocations = new HashMap<>();
+        for (Entry<String, String> entry : shaderLocationsMap.entrySet()) {
+            normalizedShaderLocations.put(entry.getKey(), normalizeShaderLocation(entry.getValue()));
+        }
+        shaderLocationsMap = normalizedShaderLocations;
+    }
+
+    public static String normalizeShaderLocation(String shaderLocation) {
+        if (shaderLocation == null) {
+            return null;
+        }
+
+        String normalized = shaderLocation.trim();
+        int namespaceSeparator = normalized.indexOf(':');
+        if (namespaceSeparator < 0) {
+            return normalized;
+        }
+
+        String namespace = normalized.substring(0, namespaceSeparator + 1);
+        String path = normalized.substring(namespaceSeparator + 1);
+        if (path.endsWith(".json")) {
+            path = path.substring(0, path.length() - 5);
+        }
+
+        int lastSlash = path.lastIndexOf('/');
+        if (lastSlash >= 0) {
+            path = path.substring(lastSlash + 1);
+        }
+
+        return namespace + path;
     }
 
     public void save() {
         autocomplete();
 
-        try (FileWriter writer = new FileWriter(getConfigFile())) {
+        File file = getConfigFile();
+        File parent = file.getParentFile();
+        if (parent != null) {
+            parent.mkdirs();
+        }
+
+        try (FileWriter writer = new FileWriter(file)) {
             version = VERSION;
             Gson gson = new GsonBuilder().setPrettyPrinting().create();
             gson.toJson(this, writer);

@@ -4,29 +4,82 @@ import com.mojang.datafixers.util.Pair;
 import net.minecraft.core.*;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.FullChunkStatus;
 import net.minecraft.server.level.ServerChunkCache;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.TagKey;
+import net.minecraft.util.ProblemReporter;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Mob;
-import net.minecraft.world.entity.MobSpawnType;
+import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.ServerLevelAccessor;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.levelgen.structure.Structure;
+import net.minecraft.world.level.storage.TagValueInput;
+import net.minecraft.world.level.storage.TagValueOutput;
+import net.minecraft.world.level.storage.ValueInput;
+import net.minecraft.world.level.storage.ValueOutput;
 import net.minecraft.world.level.saveddata.SavedData;
+import net.minecraft.world.level.saveddata.SavedDataType;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.util.datafix.DataFixTypes;
 
+import java.lang.reflect.Field;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.BiFunction;
 import java.util.function.Function;
+import java.util.stream.StreamSupport;
 
 public interface WorldUtils {
+    Field TAG_VALUE_INPUT_FIELD = findTagValueInputField();
+
+    interface NbtSavedData {
+        CompoundTag save(CompoundTag nbt, HolderLookup.Provider provider);
+    }
+
+    static Field findTagValueInputField() {
+        try {
+            Field field = TagValueInput.class.getDeclaredField("input");
+            field.setAccessible(true);
+            return field;
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("Unable to access TagValueInput backing tag", e);
+        }
+    }
+
+    static CompoundTag getCompoundTag(ValueInput input) {
+        if (input instanceof TagValueInput tagValueInput) {
+            try {
+                return ((CompoundTag) TAG_VALUE_INPUT_FIELD.get(tagValueInput)).copy();
+            } catch (IllegalAccessException e) {
+                throw new IllegalStateException("Unable to read TagValueInput backing tag", e);
+            }
+        }
+
+        return new CompoundTag();
+    }
+
+    static CompoundTag getCompoundTag(ValueOutput output) {
+        if (output instanceof TagValueOutput tagValueOutput) {
+            return tagValueOutput.buildResult();
+        }
+
+        return new CompoundTag();
+    }
+
+    static ValueInput createValueInput(CompoundTag nbt, HolderLookup.Provider provider) {
+        return TagValueInput.create(ProblemReporter.DISCARDING, provider, nbt);
+    }
+
+    static TagValueOutput createValueOutput(HolderLookup.Provider provider) {
+        return TagValueOutput.createWithContext(ProblemReporter.DISCARDING, provider);
+    }
+
     static List<Entity> getCloseEntities(Level world, Entity e, double range) {
         Vec3 pos = e.position();
         return world.getEntities(e, new AABB(pos, pos).inflate(range));
@@ -41,26 +94,30 @@ public interface WorldUtils {
     }
 
     @SuppressWarnings("DataFlowIssue")
-    static <T extends SavedData> T loadData(ServerLevel world, BiFunction<CompoundTag, HolderLookup.Provider, T> loader, Function<ServerLevel, T> factory, String dataId) {
+    static <T extends SavedData & NbtSavedData> T loadData(ServerLevel world, BiFunction<CompoundTag, HolderLookup.Provider, T> loader, Function<ServerLevel, T> factory, String dataId) {
         return world.getDataStorage().computeIfAbsent(
-                new SavedData.Factory<>(
+                new SavedDataType<>(
+                        dataId,
                         () -> factory.apply(world),
-                        loader,
-                        null
-                ),
-                dataId);
+                        CompoundTag.CODEC.xmap(
+                                nbt -> loader.apply(nbt, world.registryAccess()),
+                                data -> data.save(new CompoundTag(), world.registryAccess())
+                        ),
+                        DataFixTypes.LEVEL
+                )
+        );
     }
 
-    static void spawnEntity(Level world, Mob entity, MobSpawnType reason) {
-        entity.finalizeSpawn((ServerLevelAccessor) world, world.getCurrentDifficultyAt(entity.blockPosition()), reason, null);
+    static void spawnEntity(Level world, Mob entity, EntitySpawnReason reason) {
+        ServerLevelAccessor levelAccessor = (ServerLevelAccessor) world;
+        entity.finalizeSpawn(levelAccessor, levelAccessor.getCurrentDifficultyAt(entity.blockPosition()), reason, null);
         world.addFreshEntity(entity);
     }
 
     //a wrapper for the unnecessary complex query provided by minecraft
-    static Optional<BlockPos> getClosestStructurePosition(ServerLevel world, BlockPos center, ResourceLocation structure, int radius) {
-        Registry<Structure> registry = world.registryAccess().registryOrThrow(Registries.STRUCTURE);
-        Structure feature = registry.get(structure);
-        Optional<Holder.Reference<Structure>> entry = registry.getHolder(registry.getId(feature));
+    static Optional<BlockPos> getClosestStructurePosition(ServerLevel world, BlockPos center, Identifier structure, int radius) {
+        Registry<Structure> registry = world.registryAccess().lookupOrThrow(Registries.STRUCTURE);
+        Optional<Holder.Reference<Structure>> entry = registry.get(structure);
         if (entry.isPresent()) {
             HolderSet.Direct<Structure> of = HolderSet.direct(entry.get());
             Pair<BlockPos, Holder<Structure>> pair = world.getChunkSource().getGenerator().findNearestMapStructure(world, of, center, radius, false);
@@ -71,11 +128,11 @@ public interface WorldUtils {
     }
 
     static Optional<BlockPos> getClosestStructurePosition(ServerLevel world, BlockPos center, TagKey<Structure> tag, int radius) {
-        Registry<Structure> registry = world.registryAccess().registryOrThrow(Registries.STRUCTURE);
-        var entryList = registry.getTag(tag);
-        if (entryList.isPresent()) {
+        Registry<Structure> registry = world.registryAccess().lookupOrThrow(Registries.STRUCTURE);
+        List<Holder<Structure>> entryList = StreamSupport.stream(registry.getTagOrEmpty(tag).spliterator(), false).toList();
+        if (!entryList.isEmpty()) {
             var chunkGenerator = world.getChunkSource().getGenerator();
-            Pair<BlockPos, Holder<Structure>> pair = chunkGenerator.findNearestMapStructure(world, entryList.get(), center, radius, false);
+            Pair<BlockPos, Holder<Structure>> pair = chunkGenerator.findNearestMapStructure(world, HolderSet.direct(entryList), center, radius, false);
             return pair == null ? Optional.empty() : Optional.ofNullable(pair.getFirst());
         } else {
             return Optional.empty();

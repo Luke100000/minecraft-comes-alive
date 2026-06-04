@@ -8,6 +8,7 @@ import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 
@@ -23,7 +24,7 @@ public record InteractionVillagerMessage(String command, UUID villagerUUID) impl
 
     @Override
     public void handleServer(ServerPlayer player) {
-        Entity v = player.serverLevel().getEntity(villagerUUID);
+        Entity v = ((ServerLevel) player.level()).getEntity(villagerUUID);
         if (v instanceof VillagerLike<?> villager && villager.getInteractions().handle(player, command)) {
             villager.getInteractions().stopInteracting();
         }

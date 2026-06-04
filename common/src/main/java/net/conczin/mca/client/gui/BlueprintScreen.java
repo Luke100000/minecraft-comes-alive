@@ -1,6 +1,5 @@
 package net.conczin.mca.client.gui;
 
-import com.mojang.blaze3d.vertex.PoseStack;
 import net.conczin.mca.MCA;
 import net.conczin.mca.client.gui.widget.LegacyImageButton;
 import net.conczin.mca.client.gui.widget.TooltipButtonWidget;
@@ -21,13 +20,15 @@ import net.conczin.mca.util.localization.FlowingText;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Vec3i;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 import java.util.*;
 import java.util.function.Consumer;
@@ -37,7 +38,7 @@ public class BlueprintScreen extends ExtendedScreen {
     private static final int POSITION_TAXES = -60;
     private static final int POSITION_BIRTH = -10;
     private static final int POSITION_MARRIAGE = 40;
-    private static final ResourceLocation ICON_TEXTURES = MCA.locate("textures/buildings.png");
+    private static final Identifier ICON_TEXTURES = MCA.locate("textures/buildings.png");
     // 1.19.3: This needs to be the MC type, DO NOT TOUCH !!!
     private final List<net.minecraft.client.gui.components.Button> catalogButtons = new LinkedList<>();
     private Village village;
@@ -100,13 +101,13 @@ public class BlueprintScreen extends ExtendedScreen {
         return buttons;
     }
 
-    protected void drawBuildingIcon(GuiGraphics context, ResourceLocation texture, int x, int y, int u, int v) {
-        final PoseStack matrices = context.pose();
-        matrices.pushPose();
-        matrices.translate(x - 6.6, y - 6.6, 0);
-        matrices.scale(0.66f, 0.66f, 0.66f);
-        context.blit(texture, 0, 0, u, v, 20, 20);
-        matrices.popPose();
+    protected void drawBuildingIcon(GuiGraphics context, Identifier texture, int x, int y, int u, int v) {
+        var matrices = context.pose();
+        matrices.pushMatrix();
+        matrices.translate((float) (x - 6.6), (float) (y - 6.6));
+        matrices.scale(0.66f, 0.66f);
+        context.blit(RenderPipelines.GUI_TEXTURED, texture, 0, 0, u, v, 20, 20, 256, 256);
+        matrices.popMatrix();
     }
 
     @Override
@@ -344,16 +345,16 @@ public class BlueprintScreen extends ExtendedScreen {
     }
 
     private void renderName(GuiGraphics context) {
-        final PoseStack matrices = context.pose();
+        var matrices = context.pose();
         //name
-        matrices.pushPose();
-        matrices.scale(2.0f, 2.0f, 2.0f);
+        matrices.pushMatrix();
+        matrices.scale(2.0f, 2.0f);
         if (isVillage) {
             context.drawCenteredString(font, village.getName(), width / 4, height / 4 - 48, 0xffffffff);
         } else {
             context.drawCenteredString(font, Component.translatable("gui.blueprint.settlement"), width / 4, height / 4 - 48, 0xffffffff);
         }
-        matrices.popPose();
+        matrices.popMatrix();
     }
 
     private void renderStats(GuiGraphics context) {
@@ -371,7 +372,7 @@ public class BlueprintScreen extends ExtendedScreen {
     }
 
     private void renderMap(GuiGraphics context) {
-        final PoseStack matrices = context.pose();
+        var matrices = context.pose();
         int mapSize = 75;
         int y = height / 2 + 8;
         WidgetUtils.drawRectangle(context, width / 2 - mapSize, y - mapSize, width / 2 + mapSize, y + mapSize, 0xffffff88);
@@ -381,15 +382,15 @@ public class BlueprintScreen extends ExtendedScreen {
             context.drawCenteredString(font, Component.translatable("gui.blueprint.autoScanDisabled"), width / 2, height / 2 + 90, 0xaaffffff);
         }
 
-        matrices.pushPose();
+        matrices.pushMatrix();
 
         //center and scale the map
         float sc = Math.min((float) mapSize / (village.getBox().getMaxBlockCount() + 3) * 2, 2.0f);
         int mouseLocalX = (int) ((mouseX - width / 2.0) / sc + village.getCenter().getX());
         int mouseLocalY = (int) ((mouseY - y) / sc + village.getCenter().getZ());
-        matrices.translate(width / 2.0, y, 0);
-        matrices.scale(sc, sc, 0.0f);
-        matrices.translate(-village.getCenter().getX(), -village.getCenter().getZ(), 0);
+        matrices.translate(width / 2.0f, y);
+        matrices.scale(sc, sc);
+        matrices.translate(-village.getCenter().getX(), -village.getCenter().getZ());
 
         //show the players location
         assert minecraft != null;
@@ -432,7 +433,7 @@ public class BlueprintScreen extends ExtendedScreen {
             }
         }
 
-        matrices.popPose();
+        matrices.popMatrix();
 
         //sort vertically
         hoverBuildings.sort((a, b) -> b.getCenter().getY() - a.getCenter().getY());
@@ -452,7 +453,7 @@ public class BlueprintScreen extends ExtendedScreen {
         //render
         int py = mouseY - h / 2 + 12;
         for (List<Component> b : tooltips) {
-            context.renderComponentTooltip(font, b, mouseX, py);
+            context.setComponentTooltipForNextFrame(font, b, mouseX, py);
             py += getTooltipHeight(b) + 9;
         }
     }
@@ -470,7 +471,7 @@ public class BlueprintScreen extends ExtendedScreen {
         }
 
         //present blocks
-        for (Map.Entry<ResourceLocation, List<BlockPos>> block : hoverBuilding.getBlocks().entrySet()) {
+        for (Map.Entry<Identifier, List<BlockPos>> block : hoverBuilding.getBlocks().entrySet()) {
             lines.add(Component.literal(block.getValue().size() + " x ").append(getBlockName(block.getKey())).withStyle(ChatFormatting.GRAY));
         }
 
@@ -495,12 +496,12 @@ public class BlueprintScreen extends ExtendedScreen {
     }
 
     private void renderCatalog(GuiGraphics context) {
-        final PoseStack matrices = context.pose();
+        var matrices = context.pose();
         //title
-        matrices.pushPose();
-        matrices.scale(2.0f, 2.0f, 2.0f);
+        matrices.pushMatrix();
+        matrices.scale(2.0f, 2.0f);
         context.drawCenteredString(font, Component.translatable("gui.blueprint.catalogFull"), width / 4, height / 4 - 52, 0xffffffff);
-        matrices.popPose();
+        matrices.popMatrix();
 
         //explanation
         context.drawCenteredString(font, Component.translatable("gui.blueprint.catalogHint").withStyle(ChatFormatting.GRAY), width / 2, height / 2 - 82, 0xffffffff);
@@ -522,7 +523,7 @@ public class BlueprintScreen extends ExtendedScreen {
             y += 24;
 
             //required blocks
-            for (Map.Entry<ResourceLocation, Integer> b : selectedBuilding.getGroups().entrySet()) {
+            for (Map.Entry<Identifier, Integer> b : selectedBuilding.getGroups().entrySet()) {
                 context.drawString(font, Component.literal(b.getValue() + " x ").append(getBlockName(b.getKey())), x, y, 0xffffffff);
                 y += 10;
             }
@@ -592,12 +593,10 @@ public class BlueprintScreen extends ExtendedScreen {
         }
     }
 
-    private Component getBlockName(ResourceLocation id) {
-        if (BuiltInRegistries.BLOCK.containsKey(id)) {
-            return Component.translatable(BuiltInRegistries.BLOCK.get(id).getDescriptionId());
-        } else {
-            return Component.translatable("tag.block." + id.getNamespace() + "." + id.getPath());
-        }
+    private Component getBlockName(Identifier id) {
+        return BuiltInRegistries.BLOCK.get(id)
+                .map(block -> Component.translatable(block.value().getDescriptionId()))
+                .orElseGet(() -> Component.translatable("tag.block." + id.getNamespace() + "." + id.getPath()));
     }
 
     private void toggleButtons(ButtonWidget[] buttons, boolean active) {
@@ -608,13 +607,13 @@ public class BlueprintScreen extends ExtendedScreen {
     }
 
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+    public boolean mouseClicked(MouseButtonEvent mouseButtonEvent, boolean doubleClicked) {
         if (page.equals("villagers") && selectedVillager != null) {
             assert minecraft != null;
             minecraft.setScreen(new FamilyTreeScreen(selectedVillager));
         }
 
-        return super.mouseClicked(mouseX, mouseY, button);
+        return super.mouseClicked(mouseButtonEvent, doubleClicked);
     }
 
     protected boolean isMouseWithin(int x, int y, int w, int h) {

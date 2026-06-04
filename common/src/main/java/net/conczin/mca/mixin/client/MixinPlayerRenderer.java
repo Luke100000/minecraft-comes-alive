@@ -1,131 +1,98 @@
 package net.conczin.mca.mixin.client;
 
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.conczin.mca.MCAClient;
-import net.conczin.mca.client.model.CommonVillagerModel;
 import net.conczin.mca.client.model.PlayerEntityExtendedModel;
 import net.conczin.mca.client.model.VillagerEntityModelMCA;
-import net.conczin.mca.client.render.layer.*;
+import net.conczin.mca.client.render.SkinLayers3dCompat;
+import net.conczin.mca.client.render.PlayerRenderContext;
+import net.conczin.mca.client.render.layer.PlayerRingLayer;
 import net.conczin.mca.entity.ai.relationship.AgeState;
-import net.minecraft.client.model.PlayerModel;
-import net.minecraft.client.model.geom.ModelPart;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.model.geom.builders.CubeDeformation;
 import net.minecraft.client.model.geom.builders.LayerDefinition;
 import net.minecraft.client.model.geom.builders.MeshDefinition;
-import net.minecraft.client.player.AbstractClientPlayer;
-import net.minecraft.client.renderer.MultiBufferSource;
-import net.minecraft.client.renderer.RenderType;
-import net.minecraft.client.renderer.entity.EntityRendererProvider;
-import net.minecraft.client.renderer.entity.LivingEntityRenderer;
-import net.minecraft.client.renderer.entity.player.PlayerRenderer;
-import net.minecraft.client.renderer.texture.OverlayTexture;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.client.model.player.PlayerModel;
+import net.minecraft.client.renderer.entity.RenderLayerParent;
+import net.minecraft.client.renderer.entity.EntityRendererProvider.Context;
+import net.minecraft.client.renderer.entity.player.AvatarRenderer;
+import net.minecraft.client.renderer.entity.state.AvatarRenderState;
+import net.minecraft.world.entity.Avatar;
 import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-@Mixin(PlayerRenderer.class)
-public abstract class MixinPlayerRenderer extends LivingEntityRenderer<AbstractClientPlayer, PlayerModel<AbstractClientPlayer>> {
-    @Unique
-    SkinLayer<AbstractClientPlayer, PlayerModel<AbstractClientPlayer>> mca$skinLayer;
-    @Unique
-    ClothingLayer<AbstractClientPlayer, PlayerModel<AbstractClientPlayer>> mca$clothingLayer;
-    @Unique
-    private PlayerModel<AbstractClientPlayer> mca$villagerModel;
-    @Unique
-    private PlayerModel<AbstractClientPlayer> mca$vanillaModel;
+@Mixin(AvatarRenderer.class)
+public abstract class MixinPlayerRenderer {
+   @Unique
+   private PlayerModel mca$villagerModel;
+   @Unique
+   private PlayerModel mca$vanillaModel;
 
-    public MixinPlayerRenderer(EntityRendererProvider.Context ctx, PlayerModel<AbstractClientPlayer> model, float shadowRadius) {
-        super(ctx, model, shadowRadius);
-    }
+   @Unique
+   private PlayerModel mca$getModel() {
+      return (PlayerModel)((MixinLivingEntityRenderer)this).mca$getModel();
+   }
 
-    @Unique
-    private static PlayerEntityExtendedModel<AbstractClientPlayer> mca$createModel(MeshDefinition data) {
-        return new PlayerEntityExtendedModel<>(LayerDefinition.create(data, 64, 64).bakeRoot());
-    }
+   @Unique
+   private void mca$setModel(PlayerModel model) {
+      ((MixinLivingEntityRenderer)this).mca$setModel(model);
+   }
 
-    @Shadow
-    protected abstract void setModelProperties(AbstractClientPlayer abstractClientPlayer);
+   @Unique
+   private static Avatar mca$getAvatar(AvatarRenderState renderState) {
+      if (Minecraft.getInstance().level == null) {
+         return null;
+      } else {
+         return Minecraft.getInstance().level.getEntity(renderState.id) instanceof Avatar avatar ? avatar : null;
+      }
+   }
 
-    @Inject(method = "<init>(Lnet/minecraft/client/renderer/entity/EntityRendererProvider$Context;Z)V", at = @At("TAIL"))
-    private void mca$injectInit(EntityRendererProvider.Context ctx, boolean slim, CallbackInfo ci) {
-        if (MCAClient.isPlayerRendererAllowed()) {
-            mca$villagerModel = mca$createModel(VillagerEntityModelMCA.bodyData(new CubeDeformation(0.0F), slim));
-            mca$vanillaModel = model;
+   @Unique
+   private static PlayerEntityExtendedModel mca$createModel(MeshDefinition data) {
+      return new PlayerEntityExtendedModel(LayerDefinition.create(data, 64, 64).bakeRoot());
+   }
 
-            mca$skinLayer = new SkinLayer<>(this, mca$createModel(VillagerEntityModelMCA.bodyData(new CubeDeformation(0.0F))));
-            addLayer(mca$skinLayer);
-            addLayer(new FaceLayer<>(this, mca$createModel(VillagerEntityModelMCA.bodyData(new CubeDeformation(0.01F))), "normal"));
+   @Inject(method = "<init>(Lnet/minecraft/client/renderer/entity/EntityRendererProvider$Context;Z)V", at = @At("TAIL"))
+   private void mca$injectInit(Context ctx, boolean slim, CallbackInfo ci) {
+      if (MCAClient.isPlayerRendererAllowed()) {
+         this.mca$villagerModel = mca$createModel(VillagerEntityModelMCA.bodyData(new CubeDeformation(0.0F), slim));
+         this.mca$vanillaModel = this.mca$getModel();
+         SkinLayers3dCompat.setIgnored(this.mca$villagerModel, true);
+         SkinLayers3dCompat.clearInjectedMeshes(this.mca$villagerModel);
+         SkinLayers3dCompat.clearInjectedMeshes(this.mca$vanillaModel);
+      }
 
-            mca$clothingLayer = new ClothingLayer<>(this, mca$createModel(VillagerEntityModelMCA.bodyData(new CubeDeformation(0.0625F))), "normal");
-            addLayer(mca$clothingLayer);
-            addLayer(new HairLayer<>(this, mca$createModel(VillagerEntityModelMCA.hairData(new CubeDeformation(0.125F)))));
-        }
-    }
+      ((MixinLivingEntityRenderer)this).mca$addLayer(new PlayerRingLayer((RenderLayerParent<AvatarRenderState, PlayerModel>)this));
+   }
 
-    @Inject(method = "scale(Lnet/minecraft/client/player/AbstractClientPlayer;Lcom/mojang/blaze3d/vertex/PoseStack;F)V", at = @At("TAIL"), cancellable = true)
-    private void mca$injectScale(AbstractClientPlayer player, PoseStack matrices, float f, CallbackInfo ci) {
-        if (MCAClient.useGeneticsRenderer(player.getUUID())) {
-            float height = CommonVillagerModel.getVillager(player).getRawVerticalScaleFactor();
-            float width = CommonVillagerModel.getVillager(player).getRawHorizontalScaleFactor();
+   @Inject(
+      method = "extractRenderState(Lnet/minecraft/world/entity/Avatar;Lnet/minecraft/client/renderer/entity/state/AvatarRenderState;F)V",
+      at = @At("TAIL")
+   )
+   private void mca$injectExtractRenderState(Avatar avatar, AvatarRenderState renderState, float tickDelta, CallbackInfo ci) {
+      PlayerRenderContext.setCurrentPlayerUuid(avatar.getUUID());
+   }
+
+   @Inject(method = "scale(Lnet/minecraft/client/renderer/entity/state/AvatarRenderState;Lcom/mojang/blaze3d/vertex/PoseStack;)V", at = @At("TAIL"))
+   private void mca$injectScale(AvatarRenderState renderState, PoseStack matrices, CallbackInfo ci) {
+      Avatar avatar = mca$getAvatar(renderState);
+      if (avatar != null && this.mca$villagerModel != null && MCAClient.useGeneticsRenderer(avatar.getUUID())) {
+         MCAClient.getPlayerData(avatar.getUUID()).ifPresent(villager -> {
+            float height = villager.getRawVerticalScaleFactor();
+            float width = villager.getRawHorizontalScaleFactor();
             matrices.scale(width, height, width);
-            if (CommonVillagerModel.getVillager(player).getAgeState() == AgeState.BABY && !player.isPassenger()) {
-                matrices.translate(0, 0.6F, 0);
+            if (villager.getAgeState() == AgeState.BABY && !renderState.isPassenger) {
+               matrices.translate(0.0F, 0.6F, 0.0F);
             }
-            ci.cancel();
-
-            // switch to mca model
-            model = mca$villagerModel;
-        } else if (MCAClient.isPlayerRendererAllowed()) {
-            // switch to vanilla model
-            model = mca$vanillaModel;
-        }
-    }
-
-    @Inject(method = "renderRightHand(Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;ILnet/minecraft/client/player/AbstractClientPlayer;)V", at = @At("HEAD"), cancellable = true)
-    public void mca$injectRenderRightArm(PoseStack matrices, MultiBufferSource vertexConsumers, int light, AbstractClientPlayer player, CallbackInfo ci) {
-        if (MCAClient.renderArms(player.getUUID(), "right_arm")) {
-            mca$renderCustomArm(matrices, vertexConsumers, light, player, mca$skinLayer.model.rightArm, mca$skinLayer.model.rightSleeve, mca$skinLayer);
-            mca$renderCustomArm(matrices, vertexConsumers, light, player, mca$clothingLayer.model.rightArm, mca$clothingLayer.model.rightSleeve, mca$clothingLayer);
-            ci.cancel();
-        }
-    }
-
-    @Inject(method = "renderLeftHand(Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;ILnet/minecraft/client/player/AbstractClientPlayer;)V", at = @At("HEAD"), cancellable = true)
-    public void mca$injectRenderLeftArm(PoseStack matrices, MultiBufferSource vertexConsumers, int light, AbstractClientPlayer player, CallbackInfo ci) {
-        if (MCAClient.renderArms(player.getUUID(), "left_arm")) {
-            mca$renderCustomArm(matrices, vertexConsumers, light, player, mca$skinLayer.model.leftArm, mca$skinLayer.model.leftSleeve, mca$skinLayer);
-            mca$renderCustomArm(matrices, vertexConsumers, light, player, mca$clothingLayer.model.leftArm, mca$clothingLayer.model.leftSleeve, mca$clothingLayer);
-            ci.cancel();
-        }
-    }
-
-    @Unique
-    private void mca$renderCustomArm(PoseStack matrices, MultiBufferSource vertexConsumers, int light, AbstractClientPlayer player, ModelPart arm, ModelPart sleeve, VillagerLayer<AbstractClientPlayer, PlayerModel<AbstractClientPlayer>> layer) {
-        PlayerEntityExtendedModel<AbstractClientPlayer> model = (PlayerEntityExtendedModel<AbstractClientPlayer>) layer.model;
-        setModelProperties(player);
-
-        model.attackTime = 0.0f;
-        model.crouching = false;
-        model.swimAmount = 0.0f;
-        model.setupAnim(player, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
-
-        model.applyVillagerDimensions(CommonVillagerModel.getVillager(player), player.isCrouching());
-
-        ResourceLocation skin = layer.getSkin(player);
-        if (skin != null && layer.canUse(skin)) {
-            VertexConsumer buffer = vertexConsumers.getBuffer(RenderType.entityCutoutNoCull(skin));
-
-            int color = layer.getColor(player, 0.0f);
-
-            arm.xRot = 0.0F;
-            arm.render(matrices, buffer, light, OverlayTexture.NO_OVERLAY, color);
-            sleeve.xRot = 0.0F;
-            sleeve.render(matrices, buffer, light, OverlayTexture.NO_OVERLAY, color);
-        }
-    }
+         });
+         this.mca$setModel(this.mca$villagerModel);
+         SkinLayers3dCompat.clearInjectedMeshes(this.mca$villagerModel);
+      } else if (this.mca$vanillaModel != null) {
+         this.mca$setModel(this.mca$vanillaModel);
+         SkinLayers3dCompat.clearInjectedMeshes(this.mca$vanillaModel);
+      }
+   }
 }

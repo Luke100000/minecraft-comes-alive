@@ -7,19 +7,13 @@
   ],
   "key": {
     "C": [
-      {
-        "item": "minecraft:compass"
-      }
+      "minecraft:compass"
     ],
     "E": [
-      {
-        "item": "minecraft:ender_eye"
-      }
+      "minecraft:ender_eye"
     ],
     "R": [
-      {
-        "item": "mca:rose_gold_ingot"
-      }
+      "mca:rose_gold_ingot"
     ]
   },
   "result": {

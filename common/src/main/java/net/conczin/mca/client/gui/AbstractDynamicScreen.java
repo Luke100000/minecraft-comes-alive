@@ -6,8 +6,9 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 import java.util.*;
 
@@ -88,19 +89,19 @@ public abstract class AbstractDynamicScreen extends Screen {
         });
     }
 
-    protected void drawIcon(GuiGraphics context, ResourceLocation texture, String key) {
+    protected void drawIcon(GuiGraphics context, Identifier texture, String key) {
         Icon icon = MCAScreens.getInstance().getIcon(key);
-        context.blit(texture, (int) (icon.x() / iconScale), (int) (icon.y() / iconScale), icon.u(), icon.v(), 16, 16);
+        context.blit(RenderPipelines.GUI_TEXTURED, texture, (int) (icon.x() / iconScale), (int) (icon.y() / iconScale), icon.u(), icon.v(), 16, 16, 256, 256);
     }
 
     protected void drawHoveringIconText(GuiGraphics context, Component text, String key) {
         Icon icon = MCAScreens.getInstance().getIcon(key);
-        context.renderTooltip(font, text, icon.x() + 16, icon.y() + 20);
+        context.setTooltipForNextFrame(font, text, icon.x() + 16, icon.y() + 20);
     }
 
     protected void drawHoveringIconText(GuiGraphics context, List<Component> text, String key) {
         Icon icon = MCAScreens.getInstance().getIcon(key);
-        context.renderComponentTooltip(font, text, icon.x() + 16, icon.y() + 20);
+        context.setComponentTooltipForNextFrame(font, text, icon.x() + 16, icon.y() + 20);
     }
 
     //checks if the mouse hovers over a specified button
@@ -167,6 +168,12 @@ public abstract class AbstractDynamicScreen extends Screen {
 
         public MCAButton getApiButton() {
             return apiButton;
+        }
+
+        @Override
+        protected void renderContents(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
+            this.renderDefaultSprite(guiGraphics);
+            this.renderDefaultLabel(guiGraphics.textRendererForWidget(this, GuiGraphics.HoveredTextEffects.NONE));
         }
     }
 }

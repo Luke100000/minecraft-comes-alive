@@ -7,10 +7,10 @@
   ],
   "key": {
     "G": [
-      {"item": "mca:rose_gold_ingot"}
+      "mca:rose_gold_ingot"
     ],
     "D": [
-      {"item": "minecraft:diamond"}
+      "minecraft:diamond"
     ]
   },
   "result": {

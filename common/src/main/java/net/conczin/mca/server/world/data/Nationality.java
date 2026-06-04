@@ -13,7 +13,7 @@ import net.minecraft.world.level.saveddata.SavedData;
 import java.util.HashMap;
 import java.util.Map;
 
-public class Nationality extends SavedData {
+public class Nationality extends SavedData implements WorldUtils.NbtSavedData {
     private static final int CHUNK_SIZE = 128;
     private static final int[][] neighbours = {
             {0, 0},
@@ -34,7 +34,7 @@ public class Nationality extends SavedData {
     }
 
     Nationality(CompoundTag nbt, HolderLookup.Provider provider) {
-        map = NbtHelper.toMap(nbt, Long::valueOf, e -> ((IntTag) e).getAsInt());
+        map = NbtHelper.toMap(nbt, Long::valueOf, e -> ((IntTag) e).intValue());
     }
 
     public static Nationality get(ServerLevel world) {

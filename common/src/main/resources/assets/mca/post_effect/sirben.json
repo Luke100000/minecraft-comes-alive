@@ -1,0 +1,73 @@
+{
+  "targets": {
+    "swap": {},
+    "blur": {}
+  },
+  "passes": [
+    {
+      "vertex_shader": "minecraft:core/screenquad",
+      "fragment_shader": "minecraft:post/box_blur",
+      "inputs": [
+        {
+          "sampler_name": "In",
+          "target": "minecraft:main"
+        }
+      ],
+      "output": "swap",
+      "uniforms": {
+        "BlurConfig": [
+          {
+            "type": "vec2",
+            "value": [1.0, 0.0]
+          },
+          {
+            "type": "float",
+            "value": 100.0
+          }
+        ]
+      }
+    },
+    {
+      "vertex_shader": "minecraft:core/screenquad",
+      "fragment_shader": "minecraft:post/box_blur",
+      "inputs": [
+        {
+          "sampler_name": "In",
+          "target": "swap"
+        }
+      ],
+      "output": "blur",
+      "uniforms": {
+        "BlurConfig": [
+          {
+            "type": "vec2",
+            "value": [0.0, 1.0]
+          },
+          {
+            "type": "float",
+            "value": 100.0
+          }
+        ]
+      }
+    },
+    {
+      "vertex_shader": "minecraft:core/screenquad",
+      "fragment_shader": "minecraft:post/blit",
+      "inputs": [
+        {
+          "sampler_name": "In",
+          "target": "blur"
+        }
+      ],
+      "output": "minecraft:main",
+      "uniforms": {
+        "BlitConfig": [
+          {
+            "type": "vec4",
+            "value": [1.0, 0.5, 0.5, 1.0]
+          }
+        ]
+      }
+    }
+  ]
+}

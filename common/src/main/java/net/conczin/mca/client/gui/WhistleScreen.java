@@ -5,6 +5,7 @@ import net.conczin.mca.network.Network;
 import net.conczin.mca.network.c2s.CallToPlayerMessage;
 import net.conczin.mca.network.c2s.GetFamilyRequest;
 import net.conczin.mca.registry.EntitiesMCA;
+import net.conczin.mca.util.WorldUtils;
 import net.conczin.mca.util.compat.ButtonWidget;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -12,6 +13,7 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.entity.EntitySpawnReason;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
@@ -113,7 +115,7 @@ public class WhistleScreen extends Screen {
 
     public void setVillagerData(@NotNull CompoundTag data) {
         villagerData = data;
-        keys = new ArrayList<>(data.getAllKeys());
+        keys = new ArrayList<>(data.keySet());
         loadingAnimationTicks = -1;
         selectedIndex = 0;
 
@@ -122,12 +124,14 @@ public class WhistleScreen extends Screen {
 
     private void setVillagerData(int index) {
         if (!keys.isEmpty()) {
-            CompoundTag firstData = villagerData.getCompound(keys.get(index));
+            CompoundTag firstData = villagerData.getCompound(keys.get(index)).orElseGet(CompoundTag::new);
 
-            dummy = EntitiesMCA.MALE_VILLAGER.create(Minecraft.getInstance().level);
-            dummy.readAdditionalSaveData(firstData);
+            dummy = EntitiesMCA.MALE_VILLAGER.create(Objects.requireNonNull(Minecraft.getInstance().level), EntitySpawnReason.COMMAND);
+            if (dummy != null) {
+                dummy.mca$readAdditionalSaveData(WorldUtils.createValueInput(firstData, Objects.requireNonNull(Minecraft.getInstance().level).registryAccess()));
+            }
 
-            villagerNameButton.setMessage(dummy.getDisplayName());
+            villagerNameButton.setMessage(dummy == null ? Component.literal("?") : dummy.getDisplayName());
 
             toggleButtons(true);
         } else {

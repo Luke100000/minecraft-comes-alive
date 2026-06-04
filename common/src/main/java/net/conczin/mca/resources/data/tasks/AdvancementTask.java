@@ -3,7 +3,7 @@ package net.conczin.mca.resources.data.tasks;
 import com.google.gson.JsonObject;
 import net.conczin.mca.server.world.data.Village;
 import net.minecraft.advancements.AdvancementHolder;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.GsonHelper;
 
@@ -33,7 +33,7 @@ public class AdvancementTask extends Task {
 
     @Override
     public boolean isCompleted(Village village, ServerPlayer player) {
-        AdvancementHolder advancement = Objects.requireNonNull(player.getServer()).getAdvancements().get(ResourceLocation.parse(identifier));
+        AdvancementHolder advancement = Objects.requireNonNull(player.level().getServer()).getAdvancements().get(Identifier.parse(identifier));
         return advancement != null && player.getAdvancements().getOrStartProgress(advancement).isDone();
     }
 }

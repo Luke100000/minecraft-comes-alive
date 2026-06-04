@@ -2,7 +2,7 @@ package net.conczin.mca.mixin;
 
 import net.conczin.mca.Config;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.entity.EntityType;
 import org.spongepowered.asm.mixin.Mixin;
@@ -29,7 +29,7 @@ public class MixinEntityType {
             return false;
         }
 
-        ResourceLocation id = BuiltInRegistries.ENTITY_TYPE.getKey((EntityType<?>) (Object) this);
+        Identifier id = BuiltInRegistries.ENTITY_TYPE.getKey((EntityType<?>) (Object) this);
         return id != null
                 && "mca".equals(id.getNamespace())
                 && ("male_villager".equals(id.getPath()) || "female_villager".equals(id.getPath()));

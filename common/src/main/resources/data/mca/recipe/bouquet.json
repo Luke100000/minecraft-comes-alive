@@ -6,11 +6,7 @@
     "   "
   ],
   "key": {
-    "F": [
-      {
-        "tag": "minecraft:small_flowers"
-      }
-    ]
+    "F": "#minecraft:small_flowers"
   },
   "result": {
     "id": "mca:bouquet"

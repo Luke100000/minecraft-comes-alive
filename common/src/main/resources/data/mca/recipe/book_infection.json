@@ -1,8 +1,8 @@
 {
   "type": "minecraft:crafting_shapeless",
   "ingredients": [
-    {"item": "minecraft:book"},
-    {"item": "minecraft:rotten_flesh"}
+    "minecraft:book",
+    "minecraft:rotten_flesh"
   ],
   "result": {
     "id": "mca:book_infection",

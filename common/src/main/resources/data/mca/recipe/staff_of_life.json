@@ -6,9 +6,9 @@
     "  o"
   ],
   "key": {
-    "*": {"item": "minecraft:nether_star"},
-    "I": {"item": "minecraft:end_rod"},
-    "o": {"item": "mca:scythe"}
+    "*": "minecraft:nether_star",
+    "I": "minecraft:end_rod",
+    "o": "mca:scythe"
   },
   "result": {
     "id": "mca:staff_of_life"

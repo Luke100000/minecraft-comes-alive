@@ -1,8 +1,6 @@
 package net.conczin.mca.client.model;
 
 import com.google.common.collect.ImmutableList;
-import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.conczin.mca.Config;
 import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.entity.ai.relationship.AgeState;
@@ -16,7 +14,10 @@ import net.minecraft.client.model.geom.builders.MeshDefinition;
 import net.minecraft.client.model.geom.builders.PartDefinition;
 import net.minecraft.world.entity.LivingEntity;
 
-public class VillagerEntityBaseModelMCA<T extends LivingEntity & VillagerLike<T>> extends HumanoidModel<T> implements CommonVillagerModel<T> {
+import net.conczin.mca.client.render.MCAHumanoidRenderState;
+
+public class VillagerEntityBaseModelMCA extends HumanoidModel<MCAHumanoidRenderState>
+        implements CommonVillagerModel<LivingEntity> {
     protected static final String BREASTS = "breasts";
 
     public final ModelPart breasts;
@@ -46,72 +47,65 @@ public class VillagerEntityBaseModelMCA<T extends LivingEntity & VillagerLike<T>
         return builder;
     }
 
-    @Override
     protected Iterable<ModelPart> headParts() {
-        return ImmutableList.of(head, hat);
+        return ImmutableList.of(head);
     }
 
-    @Override
     protected Iterable<ModelPart> bodyParts() {
         return ImmutableList.of(body, rightArm, leftArm, rightLeg, leftLeg);
     }
 
-    @Override
-    public void prepareMobModel(T entity, float limbAngle, float limbDistance, float tickDelta) {
-        super.prepareMobModel(entity, limbDistance, limbAngle, tickDelta);
-        riding |= entity.getAgeState() == AgeState.BABY;
+    protected static void copyModelTransform(ModelPart source, ModelPart target) {
+        target.loadPose(source.storePose());
+        target.xScale = source.xScale;
+        target.yScale = source.yScale;
+        target.zScale = source.zScale;
     }
 
     @Override
-    public void setupAnim(T villager, float limbAngle, float limbDistance, float animationProgress, float headYaw, float headPitch) {
-        if (villager.getAgeState() == AgeState.BABY && !villager.isPassenger()) {
-            limbDistance = (float) Math.sin(villager.tickCount / 12F);
-            limbAngle = (float) Math.cos(villager.tickCount / 9F) * 3;
-            headYaw += (float) Math.sin(villager.tickCount / 2F);
+    public void setupAnim(MCAHumanoidRenderState renderState) {
+        float originalWalkAnimationPos = renderState.walkAnimationPos;
+        float originalWalkAnimationSpeed = renderState.walkAnimationSpeed;
+        float originalYRot = renderState.yRot;
+
+        VillagerLike<?> villagerLike = renderState.villager instanceof VillagerLike<?> v ? v : null;
+        if (villagerLike != null) {
+            if (villagerLike.getAgeState() == AgeState.BABY && (!renderState.isPassenger || renderState.cribPassenger) && renderState.villager != null) {
+                renderState.walkAnimationSpeed = (float) Math.sin(renderState.villager.tickCount / 12.0F);
+                renderState.walkAnimationPos = (float) Math.cos(renderState.villager.tickCount / 9.0F) * 3.0F;
+                renderState.yRot = originalYRot + (float) Math.sin(renderState.villager.tickCount / 2.0F);
+            }
+
+            if (renderState.isBaby) {
+                renderState.walkAnimationPos /= 3.0F;
+            }
+
+            renderState.walkAnimationPos /= (0.2F + villagerLike.getRawVerticalScaleFactor());
         }
 
-        //remove the boost for babies
-        if (villager.isBaby()) {
-            limbAngle /= 3.0f;
+        super.setupAnim(renderState);
+
+        renderState.walkAnimationPos = originalWalkAnimationPos;
+        renderState.walkAnimationSpeed = originalWalkAnimationSpeed;
+        renderState.yRot = originalYRot;
+
+        if (villagerLike != null) {
+            if (villagerLike.getVillagerBrain().isPanicking()) {
+                float toRadians = (float) Math.PI / 180.0F;
+                float animationProgress = renderState.ageInTicks;
+
+                float armRaise = (((float) Math.sin(animationProgress / 5.0F) * 30.0F - 180.0F)
+                        + ((float) Math.sin(animationProgress / 3.0F) * 3.0F)) * toRadians;
+                float waveSideways = ((float) Math.sin(animationProgress / 2.0F) * 12.0F - 17.0F) * toRadians;
+
+                this.leftArm.xRot = armRaise;
+                this.leftArm.zRot = -waveSideways;
+                this.rightArm.xRot = -armRaise;
+                this.rightArm.zRot = waveSideways;
+            }
+
+            applyVillagerDimensions(villagerLike, renderState.isCrouching);
         }
-
-        //and add our own
-        limbAngle /= (0.2f + villager.getRawVerticalScaleFactor());
-
-        super.setupAnim(villager, limbAngle, limbDistance, animationProgress, headYaw, headPitch);
-
-        if (villager.getVillagerBrain().isPanicking()) {
-            float toRadians = (float) Math.PI / 180;
-
-            float armRaise = (((float) Math.sin(animationProgress / 5) * 30 - 180)
-                              + ((float) Math.sin(animationProgress / 3) * 3))
-                             * toRadians;
-            float waveSideways = ((float) Math.sin(animationProgress / 2) * 12 - 17) * toRadians;
-
-            this.leftArm.xRot = armRaise;
-            this.leftArm.zRot = -waveSideways;
-            this.rightArm.xRot = -armRaise;
-            this.rightArm.zRot = waveSideways;
-        }
-
-        applyVillagerDimensions(villager, villager.isCrouching());
-    }
-
-    @Override
-    public void copyPropertiesTo(HumanoidModel<T> target) {
-        super.copyPropertiesTo(target);
-
-        if (target instanceof VillagerEntityBaseModelMCA<T> m) {
-            copyCommonAttributes(m);
-
-            m.breasts.visible = breasts.visible;
-            m.breasts.copyFrom(breasts);
-        }
-    }
-
-    @Override
-    public void renderToBuffer(PoseStack matrices, VertexConsumer vertices, int light, int overlay, int color) {
-        renderCommon(matrices, vertices, light, overlay, color);
     }
 
     @Override

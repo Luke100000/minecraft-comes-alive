@@ -32,14 +32,14 @@ public class SkinPorter {
         // copy upper part
         for (int x = 0; x < 64; x++) {
             for (int y = 0; y < 32; y++) {
-                ported.setPixelRGBA(x, y, image.getPixelRGBA(x, y));
+                ported.setPixel(x, y, image.getPixel(x, y));
             }
         }
 
         // clear lower part
         for (int x = 0; x < 64; x++) {
             for (int y = 32; y < 64; y++) {
-                ported.setPixelRGBA(x, y, 0);
+                ported.setPixel(x, y, 0);
             }
         }
 
@@ -47,7 +47,7 @@ public class SkinPorter {
         for (UVMapping mapping : mappings) {
             for (int x = mapping.x0; x < mapping.x1; x++) {
                 for (int y = mapping.y0; y < mapping.y1; y++) {
-                    ported.setPixelRGBA(x + mapping.offsetX, y + mapping.offsetY, image.getPixelRGBA(mapping.flip ? (mapping.x1 - (x - mapping.x0) - 1) : x, y));
+                    ported.setPixel(x + mapping.offsetX, y + mapping.offsetY, image.getPixel(mapping.flip ? (mapping.x1 - (x - mapping.x0) - 1) : x, y));
                 }
             }
         }
@@ -78,7 +78,7 @@ public class SkinPorter {
         int original = offsetX + 14 - 1;
         for (int p = 0; p < 12; p++) {
             for (int y = 0; y < 12; y++) {
-                image.setPixelRGBA(target, offsetY + y, image.getPixelRGBA(original, offsetY + y));
+                image.setPixel(target, offsetY + y, image.getPixel(original, offsetY + y));
             }
             target--;
             if (p != 6 && p != 9) {
@@ -91,7 +91,7 @@ public class SkinPorter {
         original = offsetX + 14 - 1 - 4;
         for (int p = 0; p < 8; p++) {
             for (int y = 0; y < 4; y++) {
-                image.setPixelRGBA(target, offsetY + y, image.getPixelRGBA(original, offsetY + y));
+                image.setPixel(target, offsetY + y, image.getPixel(original, offsetY + y));
             }
             target--;
             if (p != 1 && p != 5) {

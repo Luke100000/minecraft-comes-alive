@@ -4,7 +4,8 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonParseException;
 import net.conczin.mca.MCA;
 import net.conczin.mca.resources.Resources;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.FileToIdConverter;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.server.packs.resources.SimpleJsonResourceReloadListener;
 import net.minecraft.util.GsonHelper;
@@ -12,15 +13,15 @@ import net.minecraft.util.profiling.ProfilerFiller;
 
 import java.util.Map;
 
-public class GiftLoader extends SimpleJsonResourceReloadListener {
-    protected static final ResourceLocation ID = MCA.locate("gifts");
+public class GiftLoader extends SimpleJsonResourceReloadListener<JsonElement> {
+    protected static final Identifier ID = MCA.locate("gifts");
 
     public GiftLoader() {
-        super(Resources.GSON, "gifts");
+        super(Resources.JSON_ELEMENT_CODEC, FileToIdConverter.json("gifts"));
     }
 
     @Override
-    protected void apply(Map<ResourceLocation, JsonElement> data, ResourceManager manager, ProfilerFiller profiler) {
+    protected void apply(Map<Identifier, JsonElement> data, ResourceManager manager, ProfilerFiller profiler) {
         GiftType.REGISTRY.clear();
         data.forEach((id, json) -> {
             try {

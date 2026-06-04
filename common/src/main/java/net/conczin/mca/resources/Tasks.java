@@ -5,7 +5,8 @@ import net.conczin.mca.MCA;
 import net.conczin.mca.resources.data.tasks.Task;
 import net.conczin.mca.resources.data.tasks.TaskRegistry;
 import net.conczin.mca.server.world.data.Village;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.FileToIdConverter;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.server.packs.resources.SimpleJsonResourceReloadListener;
@@ -14,14 +15,14 @@ import net.minecraft.util.profiling.ProfilerFiller;
 import java.util.*;
 import java.util.stream.Collectors;
 
-public class Tasks extends SimpleJsonResourceReloadListener {
-    protected static final ResourceLocation ID = MCA.locate("tasks");
+public class Tasks extends SimpleJsonResourceReloadListener<JsonElement> {
+    protected static final Identifier ID = MCA.locate("tasks");
 
     private static Tasks INSTANCE;
     public final Map<Rank, List<Task>> tasks = new HashMap<>();
 
     public Tasks() {
-        super(Resources.GSON, ID.getPath());
+        super(Resources.JSON_ELEMENT_CODEC, FileToIdConverter.json(ID.getPath()));
         INSTANCE = this;
     }
 
@@ -45,7 +46,7 @@ public class Tasks extends SimpleJsonResourceReloadListener {
     }
 
     @Override
-    protected void apply(Map<ResourceLocation, JsonElement> data, ResourceManager manager, ProfilerFiller profiler) {
+    protected void apply(Map<Identifier, JsonElement> data, ResourceManager manager, ProfilerFiller profiler) {
         tasks.clear();
         for (Rank r : Rank.values()) {
             tasks.put(r, new LinkedList<>());

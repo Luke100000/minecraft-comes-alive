@@ -5,7 +5,8 @@ import net.conczin.mca.Config;
 import net.conczin.mca.MCA;
 import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.server.world.data.Nationality;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.FileToIdConverter;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.server.packs.resources.SimpleJsonResourceReloadListener;
@@ -16,14 +17,14 @@ import org.jetbrains.annotations.NotNull;
 
 import java.util.*;
 
-public class Names extends SimpleJsonResourceReloadListener {
+public class Names extends SimpleJsonResourceReloadListener<JsonElement> {
     public static final Map<String, Map<Gender, WeightedPool<String>>> NAMES_MAP = new HashMap<>();
     public static final List<String> REGION_NAMES = new LinkedList<>();
-    protected static final ResourceLocation ID = MCA.locate("mca_names");
+    protected static final Identifier ID = MCA.locate("mca_names");
     static final RandomSource random = RandomSource.create();
 
     public Names() {
-        super(Resources.GSON, ID.getPath());
+        super(Resources.JSON_ELEMENT_CODEC, FileToIdConverter.json(ID.getPath()));
     }
 
     public static String getCitizenNation(Entity entity) {
@@ -44,9 +45,9 @@ public class Names extends SimpleJsonResourceReloadListener {
     }
 
     @Override
-    protected void apply(Map<ResourceLocation, JsonElement> prepared, ResourceManager manager, ProfilerFiller profiler) {
+    protected void apply(Map<Identifier, JsonElement> prepared, ResourceManager manager, ProfilerFiller profiler) {
         NAMES_MAP.clear();
-        for (Map.Entry<ResourceLocation, JsonElement> entry : prepared.entrySet()) {
+        for (Map.Entry<Identifier, JsonElement> entry : prepared.entrySet()) {
             String[] split = entry.getKey().getPath().split("/");
             Gender gender = Gender.byName(split[1]);
 

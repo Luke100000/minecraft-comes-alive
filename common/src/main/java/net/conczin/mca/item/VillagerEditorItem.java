@@ -16,7 +16,7 @@ public class VillagerEditorItem extends TooltippedItem {
     }
 
     public InteractionResult interactLivingEntity(ItemStack stack, Player player, LivingEntity entity, InteractionHand hand) {
-        if (entity instanceof VillagerLike<?> villager && !entity.level().isClientSide && player instanceof ServerPlayer serverPlayer) {
+        if (entity instanceof VillagerLike<?> villager && !entity.level().isClientSide() && player instanceof ServerPlayer serverPlayer) {
             if (player.isShiftKeyDown()) {
                 villager.getInteractions().handle(serverPlayer, "inventory");
             } else {

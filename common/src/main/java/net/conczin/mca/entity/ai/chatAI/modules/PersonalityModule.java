@@ -2,8 +2,9 @@ package net.conczin.mca.entity.ai.chatAI.modules;
 
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.relationship.AgeState;
+import net.conczin.mca.registry.ProfessionsMCA;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.entity.npc.VillagerProfession;
+import net.minecraft.world.entity.npc.villager.VillagerProfession;
 
 import java.util.List;
 
@@ -22,8 +23,8 @@ public class PersonalityModule {
         }
         if (villager.getAgeState() == AgeState.TEEN) {
             input.add("$villager is a teen. ");
-        } else if (villager.getProfession() != VillagerProfession.NONE) {
-            input.add("$villager is a " + translate(villager.getProfession().name()) + ". ");
+        } else if (!ProfessionsMCA.is(villager.getProfession(), VillagerProfession.NONE)) {
+            input.add("$villager is a " + translate(villager.getProfession().name().getString()) + ". ");
         }
     }
 }

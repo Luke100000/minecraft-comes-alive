@@ -6,7 +6,7 @@ import net.conczin.mca.util.RegistryHelper;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.entity.Mob;
@@ -98,12 +98,12 @@ public class WanderOrTeleportToTargetTask extends MoveToTargetSink {
         // The following conditions define whether it is logically
         // safe for the entity to teleport to the specified pos within world
         final BlockState aboveState = world.getBlockState(pos);
-        final ResourceLocation aboveId = BuiltInRegistries.BLOCK.getKey(aboveState.getBlock());
+        final Identifier aboveId = BuiltInRegistries.BLOCK.getKey(aboveState.getBlock());
         for (String blockId : Config.getInstance().villagerPathfindingBlacklist) {
             if (blockId.equals(aboveId.toString())) {
                 return false;
             } else if (blockId.charAt(0) == '#') {
-                ResourceLocation identifier = ResourceLocation.parse(blockId.substring(1));
+                Identifier identifier = Identifier.parse(blockId.substring(1));
                 TagKey<Block> tag = TagKey.create(Registries.BLOCK, identifier);
                 if (!RegistryHelper.isTagEmpty(tag)) {
                     if (aboveState.is(tag)) {

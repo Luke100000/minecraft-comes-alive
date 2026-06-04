@@ -5,7 +5,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import net.conczin.mca.MCA;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.Entity;
 
 import java.io.IOException;
@@ -85,7 +85,7 @@ public class RealtimeSpeechManager {
             if (AudioCache.get(hash, output -> {
                 downloadAudio(output, voice, text);
             }, cacheable)) {
-                ResourceLocation soundLocation = MCA.locate("tts_cache/" + hash);
+                Identifier soundLocation = MCA.locate("tts_cache/" + hash);
                 SpeechManager.INSTANCE.playSound(pitch, entity, soundLocation);
             }
         });

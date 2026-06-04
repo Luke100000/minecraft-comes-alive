@@ -1,5 +1,7 @@
 package net.conczin.mca.entity.ai.goal;
 
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.PathfinderMob;
 import net.minecraft.world.entity.ai.goal.Goal;
 import net.minecraft.world.entity.ai.targeting.TargetingConditions;
@@ -24,12 +26,13 @@ public class GrimReaperTargetGoal extends Goal {
             this.nextScanTick--;
         } else {
             this.nextScanTick = 20;
-            List<Player> list = mob.level().getNearbyPlayers(this.attackTargeting, mob, mob.getBoundingBox().inflate(48.0D, 64.0D, 48.0D));
+            ServerLevel level = (ServerLevel) mob.level();
+            List<ServerPlayer> list = level.getPlayers(player -> player.getBoundingBox().intersects(mob.getBoundingBox().inflate(48.0D, 64.0D, 48.0D)) && this.attackTargeting.test(level, mob, player));
             if (!list.isEmpty()) {
                 list.sort((a, b) -> Double.compare(b.getY(), a.getY()));
 
                 for (Player player : list) {
-                    if (mob.canAttack(player, TargetingConditions.DEFAULT)) {
+                    if (mob.canAttack(player)) {
                         mob.setTarget(player);
                         return true;
                     }

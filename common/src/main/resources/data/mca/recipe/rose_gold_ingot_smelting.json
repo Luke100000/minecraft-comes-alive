@@ -1,8 +1,6 @@
 {
   "type": "minecraft:smelting",
-  "ingredient": {
-    "item": "mca:rose_gold_dust"
-  },
+  "ingredient": "mca:rose_gold_dust",
   "result": {
     "id": "mca:rose_gold_ingot"
   },

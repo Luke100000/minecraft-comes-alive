@@ -2,11 +2,13 @@ package net.conczin.mca.client.particle;
 
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.particle.*;
+import net.minecraft.client.renderer.texture.TextureAtlasSprite;
 import net.minecraft.core.particles.SimpleParticleType;
+import net.minecraft.util.RandomSource;
 
-public class InteractionParticle extends TextureSheetParticle {
-    protected InteractionParticle(ClientLevel world, double x, double y, double z) {
-        super(world, x, y, z);
+public class InteractionParticle extends SingleQuadParticle {
+    protected InteractionParticle(ClientLevel world, double x, double y, double z, TextureAtlasSprite sprite) {
+        super(world, x, y, z, sprite);
         this.xd *= 0.01F;
         this.yd *= 0.01F;
         this.zd *= 0.01F;
@@ -17,8 +19,8 @@ public class InteractionParticle extends TextureSheetParticle {
     }
 
     @Override
-    public ParticleRenderType getRenderType() {
-        return ParticleRenderType.PARTICLE_SHEET_OPAQUE;
+    protected Layer getLayer() {
+        return Layer.OPAQUE;
     }
 
     public float getQuadSize(float tickDelta) {
@@ -57,10 +59,14 @@ public class InteractionParticle extends TextureSheetParticle {
         }
 
         public Particle createParticle(SimpleParticleType particleType, ClientLevel world, double x, double y, double z, double velocityX, double velocityY, double velocityZ) {
-            InteractionParticle heartparticle = new InteractionParticle(world, x, y + 0.5D, z);
-            heartparticle.pickSprite(this.sprite);
+            InteractionParticle heartparticle = new InteractionParticle(world, x, y + 0.5D, z, this.sprite.first());
             heartparticle.setColor(1.0F, 1.0F, 1.0F);
             return heartparticle;
+        }
+
+        @Override
+        public Particle createParticle(SimpleParticleType particleType, ClientLevel world, double x, double y, double z, double velocityX, double velocityY, double velocityZ, RandomSource random) {
+            return createParticle(particleType, world, x, y, z, velocityX, velocityY, velocityZ);
         }
     }
 }
