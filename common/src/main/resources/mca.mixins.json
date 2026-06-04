@@ -5,7 +5,6 @@
   "compatibilityLevel": "JAVA_25",
   "mixins": [
     "MixinAbstractFurnaceBlockEntity",
-    "MixinEntityType",
     "MixinFlintAndSteelItem",
     "MixinGoat",
     "MixinHorseBase",
@@ -16,6 +15,7 @@
     "MixinServerGamePacketListenerImpl",
     "MixinServerWorld",
     "MixinTranslatableContents",
+    "MixinTypedInstance",
     "MixinVillager",
     "MixinZombie",
     "MixinZombieVillager"
