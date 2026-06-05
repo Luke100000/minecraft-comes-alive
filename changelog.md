@@ -3,18 +3,6 @@
 * Villagers joined via inn now have random region names
 * Added Easy Anvil compat
 
-# 7.7.6-soul.1 (1.21.11)
-
-* Restored a separate stable Minecraft 1.21.11 dual-loader line for Fabric and NeoForge
-* Recovered the real SOUL player feature line from the last working NeoForge jar, restoring the player interaction screen, player ring slot, equipped-ring sync, player save data, and player interaction animations
-* Restored the SOUL player-model hooks for genetics-based body scaling, armor model overrides, ring rendering, and custom player interaction poses
-* Updated the 1.21.11 Fabric build to the modern Loom/remap setup and restored `mca.refmap.json` generation for release jars
-* Fixed Fabric tracked-data serializer registration across the old and new Fabric API registry entry points
-* Added the missing MCA humanoid render-state bridge needed by the recovered 1.21.11 client line
-* Fixed config directory creation so the recovered 1.21.11 builds can initialize cleanly
-* Cleaned up book text issues and revalidated book assets, recipes, and resource JSON across the mod resources
-* Restored player interaction UI text, MCA language entries, and book text byte-for-byte from the last working SOUL jar
-
 # 7.7.7
 
 * Synced translations
