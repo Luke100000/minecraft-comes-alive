@@ -1,9 +1,15 @@
-name: Java CI with Gradle
+name: Java Release with Gradle
 
-on: [ push ]
+on:
+  push:
+    tags:
+      - '*'
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     env:
       GRADLE_OPTS: --enable-native-access=ALL-UNNAMED
       MODRINTH_ID: "1W98a849"
@@ -12,32 +18,33 @@ jobs:
       CURSEFORGE_TOKEN: ${{ secrets.CF_API_TOKEN }}
       MAVEN_USERNAME: ${{ secrets.MAVEN_USERNAME }}
       MAVEN_TOKEN: ${{ secrets.MAVEN_TOKEN }}
-    if: startsWith(github.ref, 'refs/tags/')
     steps:
       - name: Checkout Commit
-        uses: actions/checkout@v2
-      - name: Fetch Tags
-        run: git fetch --unshallow --tags
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          fetch-tags: true
       - name: Set up JDK 25
-        uses: actions/setup-java@v1
+        uses: actions/setup-java@v5
         with:
+          distribution: temurin
           java-version: 25
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
-      - name: Build with Gradle
-        run: ./gradlew build
-      - name: Get tag
-        if: ${{ success() && startsWith(github.ref, 'refs/tags/') }}
-        id: tag
-        uses: dawidd6/action-get-tag@v1
-      - uses: jungwinter/split@v2
-        id: split
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
         with:
-          separator: "+"
-          msg: ${{steps.tag.outputs.tag}}
+          cache-read-only: false
+      - name: Build with Gradle
+        run: ./gradlew build --console=plain
+      - name: Get tag
+        id: tag
+        shell: bash
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "version=${tag%%+*}" >> "$GITHUB_OUTPUT"
+          echo "minecraft_version=${tag#*+}" >> "$GITHUB_OUTPUT"
       - name: "Upload Fabric"
         uses: Kir-Antipov/mc-publish@v3.3.0
-        if: ${{ success() && startsWith(github.ref, 'refs/tags/') }}
         with:
           modrinth-id: ${{ env.MODRINTH_ID }}
           modrinth-token: ${{ env.MODRINTH_TOKEN }}
@@ -45,21 +52,20 @@ jobs:
           curseforge-token: ${{ env.CURSEFORGE_TOKEN }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-          name: "[Fabric ${{steps.split.outputs._1}}] MCAR - ${{steps.split.outputs._0}}"
+          name: "[Fabric ${{steps.tag.outputs.minecraft_version}}] MCAR - ${{steps.tag.outputs.version}}"
           changelog-file: changelog.md
           version-type: release
           files: "fabric/build/libs/mca-fabric-${{steps.tag.outputs.tag}}.jar"
           loaders: |
             fabric
           game-versions: |
-            ${{steps.split.outputs._1}}
+            ${{steps.tag.outputs.minecraft_version}}
           java: |
             Java 25
 
           fail-mode: skip
       - name: "Upload NeoForge"
         uses: Kir-Antipov/mc-publish@v3.3.0
-        if: ${{ success() && startsWith(github.ref, 'refs/tags/') }}
         with:
           modrinth-id: ${{ env.MODRINTH_ID }}
           modrinth-token: ${{ env.MODRINTH_TOKEN }}
@@ -67,14 +73,14 @@ jobs:
           curseforge-token: ${{ env.CURSEFORGE_TOKEN }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-          name: "[NeoForge ${{steps.split.outputs._1}}] MCAR - ${{steps.split.outputs._0}}"
+          name: "[NeoForge ${{steps.tag.outputs.minecraft_version}}] MCAR - ${{steps.tag.outputs.version}}"
           changelog-file: changelog.md
           version-type: release
           files: "neoforge/build/libs/mca-neoforge-${{steps.tag.outputs.tag}}.jar"
           loaders: |
             neoforge
           game-versions: |
-            ${{steps.split.outputs._1}}
+            ${{steps.tag.outputs.minecraft_version}}
           java: |
             Java 25
 
