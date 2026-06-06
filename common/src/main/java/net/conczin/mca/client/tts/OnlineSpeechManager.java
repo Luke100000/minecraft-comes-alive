@@ -15,7 +15,6 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URI;
-import java.net.URL;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
@@ -108,7 +107,7 @@ public class OnlineSpeechManager {
                 .map(key -> key + "=" + URLEncoder.encode(params.get(key), StandardCharsets.UTF_8))
                 .collect(Collectors.joining("&", Config.getInstance().onlineTTSServer + "v1/tts/xtts-v2?", ""));
         try {
-            HttpURLConnection connection = (HttpURLConnection) (new URL(url)).openConnection();
+            HttpURLConnection connection = (HttpURLConnection) (URI.create(url)).toURL().openConnection();
             connection.setRequestMethod("POST");
             connection.setDoOutput(true);
 
@@ -121,7 +120,7 @@ public class OnlineSpeechManager {
             }
 
             connection.disconnect();
-        } catch (IOException e) {
+        } catch (IOException | IllegalArgumentException e) {
             MCA.LOGGER.warn("Failed to download {}: {}", url, e.getMessage());
         }
     }

@@ -9,7 +9,6 @@ import net.minecraft.util.profiling.ProfilerFiller;
 
 import java.util.Map;
 import java.util.Objects;
-import java.util.stream.Collectors;
 
 public class ColorPaletteLoader extends SimplePreparableReloadListener<Map<Identifier, ColorPalette.Data>> {
     public static final Identifier ID = MCA.locate("color_palettes");
@@ -44,4 +43,5 @@ public class ColorPaletteLoader extends SimplePreparableReloadListener<Map<Ident
             }
         });
     }
+
 }

@@ -13,6 +13,8 @@ dependencies {
     modImplementation "net.fabricmc.fabric-api:fabric-api:${fabric_version}"
 }
 
+def devUsername = providers.gradleProperty('mca_dev_username').orElse('Dev').get()
+
 loom {
     mixin {
         useLegacyMixinAp = true
@@ -24,6 +26,7 @@ loom {
             setConfigName("Fabric Client")
             ideConfigGenerated(true)
             runDir("run")
+            programArgs("--username", devUsername)
         }
         server {
             server()

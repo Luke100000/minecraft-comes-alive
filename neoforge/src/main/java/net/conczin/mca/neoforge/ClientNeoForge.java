@@ -80,6 +80,7 @@ public final class ClientNeoForge extends ClientProxyAbstractImpl {
     }
 
     @SubscribeEvent
+    @SuppressWarnings("deprecation")
     public static void onClientSetup(FMLClientSetupEvent event) {
         new ClientNeoForge();
         event.enqueueWork(() -> {

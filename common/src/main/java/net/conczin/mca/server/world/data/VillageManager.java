@@ -17,6 +17,7 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.Mth;
@@ -226,8 +227,9 @@ public class VillageManager extends SavedData implements WorldUtils.NbtSavedData
     //checks weather the given block contains a grouped building block, e.g., a town bell or gravestone
     private BuildingType getGroupedBuildingType(BlockPos pos) {
         Block block = world.getBlockState(pos).getBlock();
+        Identifier blockId = BuiltInRegistries.BLOCK.getKey(block);
         for (BuildingType bt : BuildingTypes.getInstance()) {
-            if (bt.grouped() && bt.getBlockToGroup().containsKey(BuiltInRegistries.BLOCK.getKey(block))) {
+            if (bt.grouped() && bt.matchesBlock(blockId)) {
                 return bt;
             }
         }

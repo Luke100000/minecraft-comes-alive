@@ -11,7 +11,7 @@ import org.apache.commons.io.IOUtils;
 
 import java.io.IOException;
 import java.net.HttpURLConnection;
-import java.net.URL;
+import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
@@ -42,7 +42,7 @@ public class Api {
                         .collect(Collectors.joining("&", fullUrl + "?", ""));
             }
 
-            HttpURLConnection con = (HttpURLConnection) (new URL(fullUrl)).openConnection();
+            HttpURLConnection con = (HttpURLConnection) (URI.create(fullUrl)).toURL().openConnection();
 
             // Set request method
             con.setRequestMethod(httpMethod.name());

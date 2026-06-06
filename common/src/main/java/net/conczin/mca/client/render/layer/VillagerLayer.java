@@ -82,7 +82,6 @@ public abstract class VillagerLayer<M extends HumanoidModel<MCAHumanoidRenderSta
                if (this.model instanceof VillagerEntityModelMCA layerModel) {
                   layerModel.copyVisibility((HumanoidModel<? extends HumanoidRenderState>)this.getParentModel());
                }
-
                if (this.shouldApplyModelSetupAnim()) {
                   this.model.setupAnim(renderState);
                }

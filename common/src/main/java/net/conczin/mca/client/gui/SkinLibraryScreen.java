@@ -52,7 +52,6 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
-import java.net.URL;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
@@ -1598,7 +1597,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
     private void loadImage(String path) {
         InputStream stream = null;
         try {
-            stream = new URL(path).openStream();
+            stream = URI.create(path).toURL().openStream();
         } catch (Exception exception) {
             try {
                 stream = new FileInputStream(path);
