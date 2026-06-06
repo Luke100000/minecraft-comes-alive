@@ -60,7 +60,7 @@ public class Requests {
 
 
             return Optional.of(responseString);
-        } catch (IOException e) {
+        } catch (IOException | IllegalArgumentException e) {
             // Log request
             MCA.LOGGER.error("InworldAI: Sending %s to %s".formatted(body, urlString));
             MCA.LOGGER.error("InworldAI: Received %s".formatted(responseString));

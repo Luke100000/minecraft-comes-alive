@@ -66,7 +66,7 @@ public class Player2SpeechManager extends RealtimeSpeechManager {
             } else {
                 MCA.LOGGER.warn("Failed to check player2 health: {} - {}", connection.getResponseCode(), connection.getResponseMessage());
             }
-        } catch (IOException e) {
+        } catch (IOException | IllegalArgumentException e) {
             MCA.LOGGER.debug("Failed to check player2 health: {}", e.getMessage());
         }
         return false;

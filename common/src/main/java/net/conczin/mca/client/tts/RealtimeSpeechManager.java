@@ -59,7 +59,7 @@ public class RealtimeSpeechManager {
             } else {
                 MCA.LOGGER.warn("Failed to get audio: {} - {}", connection.getResponseCode(), connection.getResponseMessage());
             }
-        } catch (IOException e) {
+        } catch (IOException | IllegalArgumentException e) {
             MCA.LOGGER.warn("Failed to download audio: {}", e.getMessage());
         }
     }
@@ -130,7 +130,7 @@ public class RealtimeSpeechManager {
                 }
                 return result;
             }
-        } catch (IOException e) {
+        } catch (IOException | IllegalArgumentException e) {
             MCA.LOGGER.warn("Failed to fetch voices: {}", e.getMessage());
             return null;
         }
