@@ -4,7 +4,6 @@ import com.mojang.serialization.MapCodec;
 import net.conczin.mca.Config;
 import net.conczin.mca.MCA;
 import net.conczin.mca.MCAClient;
-import net.conczin.mca.client.model.CommonVillagerModel;
 import net.conczin.mca.entity.ai.*;
 import net.conczin.mca.entity.ai.brain.VillagerBrain;
 import net.conczin.mca.entity.ai.brain.VillagerTasksMCA;
@@ -100,6 +99,7 @@ import java.util.function.Predicate;
 public class VillagerEntityMCA extends Villager implements VillagerLike<VillagerEntityMCA>, MenuProvider, CompassionateEntity<BreedableRelationship>, CrossbowAttackMob {
     private static final CDataParameter<Float> INFECTION_PROGRESS = CParameter.create("InfectionProgress", 0.0f);
     private static final CDataParameter<Integer> GROWTH_AMOUNT = CParameter.create("GrowthAmount", -AgeState.getMaxAge());
+    public static final String MCA_DATA_KEY = "MCAData";
     private static final int SPAWN_EGG_BABY_AGE = AgeState.TODDLER.toAge() + 1;
     private static final CDataManager<VillagerEntityMCA> DATA = createTrackedData(new CDataManager.Builder<>(
             VillagerEntityMCA.class,
@@ -124,6 +124,17 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     private long lastHit = 0;
     private int prevGrowthAmount;
     private boolean interactedWith;
+
+    @SuppressWarnings("deprecation")
+    public static CompoundTag readMcaSaveData(ValueInput input) {
+        return input.read(MCA_DATA_KEY, CompoundTag.CODEC)
+                .or(() -> input.read(MapCodec.assumeMapUnsafe(CompoundTag.CODEC)))
+                .orElseGet(CompoundTag::new);
+    }
+
+    public static void storeMcaSaveData(ValueOutput output, CompoundTag nbt) {
+        output.store(MCA_DATA_KEY, CompoundTag.CODEC, nbt);
+    }
 
     public VillagerEntityMCA(EntityType<VillagerEntityMCA> type, Level w, Gender gender) {
         super(type, w);
@@ -841,10 +852,13 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
             Vec3 offset = head ? new Vec3(0, 0.55f, 0) : new Vec3(left ? 0.4F : -0.4F, 0.05f, 0).yRot(yaw);
 
             // todo currently only client side
-            if (isClientSide() && MCAClient.useGeneticsRenderer(vehicle.getUUID())) {
-                float height = CommonVillagerModel.getVillager(vehicle).getRawVerticalScaleFactor();
-                offset = offset.multiply(1.0f, height, 1.0f);
-                offset = offset.add(0, (height - 1) * 1.5 - 0.7, 0);
+            if (isClientSide()) {
+                VillagerLike<?> playerData = MCAClient.getGeneticsRendererData(vehicle.getUUID()).orElse(null);
+                if (playerData != null) {
+                    float height = playerData.getRawVerticalScaleFactor();
+                    offset = offset.multiply(1.0f, height, 1.0f);
+                    offset = offset.add(0, (height - 1) * 1.5 - 0.7, 0);
+                }
             }
 
             Vec3 pos = this.position();
@@ -1264,16 +1278,15 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     }
 
     @Override
-    @SuppressWarnings("deprecation")
     public void readAdditionalSaveData(ValueInput input) {
-        CompoundTag nbt = input.read(MapCodec.assumeMapUnsafe(CompoundTag.CODEC)).orElseGet(CompoundTag::new);
+        CompoundTag nbt = readMcaSaveData(input);
         super.readAdditionalSaveData(input);
 
         getTypeDataManager().load(this, nbt);
         relations.readFromNbt(nbt);
         longTermMemory.readFromNbt(nbt);
 
-        playerModel = PlayerModel.VALUES[Math.max(0, Math.min(PlayerModel.VALUES.length - 1, nbt.getIntOr("PlayerModel", 0)))];
+        playerModel = PlayerModel.byId(nbt.getIntOr("PlayerModel", 0));
 
         updateAttributes();
 
@@ -1303,7 +1316,6 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     }
 
     @Override
-    @SuppressWarnings("deprecation")
     public final void addAdditionalSaveData(ValueOutput output) {
         CompoundTag nbt = new CompoundTag();
         super.addAdditionalSaveData(output);
@@ -1321,7 +1333,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
             VillagerTrackerManager.update(this);
         }
 
-        output.store(MapCodec.assumeMapUnsafe(CompoundTag.CODEC), nbt);
+        storeMcaSaveData(output, nbt);
     }
 
     @Override

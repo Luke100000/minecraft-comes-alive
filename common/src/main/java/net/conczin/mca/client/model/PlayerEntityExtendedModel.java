@@ -19,7 +19,6 @@ public class PlayerEntityExtendedModel<T extends LivingEntity> extends PlayerMod
 
     final VillagerDimensions.Mutable dimensions = new VillagerDimensions.Mutable(AgeState.ADULT);
     float breastSize;
-    private RenderMask renderMask = RenderMask.FULL;
     private boolean wearsHidden;
 
     public PlayerEntityExtendedModel(ModelPart root) {
@@ -115,15 +114,6 @@ public class PlayerEntityExtendedModel<T extends LivingEntity> extends PlayerMod
         this.breastSize = breastSize;
     }
 
-    @Override
-    public RenderMask getRenderMask() {
-        return renderMask;
-    }
-
-    @Override
-    public void setRenderMask(RenderMask renderMask) {
-        this.renderMask = renderMask;
-    }
 
     public PlayerEntityExtendedModel<T> hideWears() {
         this.wearsHidden = true;
@@ -145,7 +135,7 @@ public class PlayerEntityExtendedModel<T extends LivingEntity> extends PlayerMod
         breastsWear.visible = state.showJacket;
 
         if (state instanceof VillagerStateHolder holder) {
-            var visuals = CommonVillagerModel.peekVisuals(holder);
+            var visuals = holder.mca$getVisualSnapshot();
             if (visuals != null) {
                 applyVillagerDimensions(visuals, state.isCrouching);
             }
@@ -159,8 +149,6 @@ public class PlayerEntityExtendedModel<T extends LivingEntity> extends PlayerMod
             rightSleeve.visible = false;
             breastsWear.visible = false;
         }
-
-        CommonVillagerModel.applyRenderMask(this, renderMask);
     }
 
     public void copyVisibility(HumanoidModel<?> model) {

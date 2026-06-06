@@ -3,7 +3,6 @@ package net.conczin.mca.server.world.data;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.DynamicOps;
 import net.conczin.mca.Config;
-import net.conczin.mca.MCA;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.relationship.EntityRelationship;
 import net.conczin.mca.entity.ai.relationship.Gender;
@@ -71,7 +70,7 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
         });
 
         ListTag inbox = nbt.getList("inbox").orElseGet(ListTag::new);
-        NbtHelper.toList(inbox, e -> new Letter((CompoundTag) e, world.registryAccess()));
+        this.inbox.addAll(NbtHelper.toList(inbox, e -> new Letter((CompoundTag) e, world.registryAccess())));
     }
 
     public static PlayerSaveData get(ServerPlayer player) {
@@ -275,9 +274,7 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
         public Letter(CompoundTag nbt, HolderLookup.Provider registries) {
             this(
                     nbt.getString("title").orElse(""),
-                    PAGES_CODEC
-                            .parse(registries.createSerializationContext(NbtOps.INSTANCE), nbt.getCompound("pages").orElseGet(CompoundTag::new))
-                            .resultOrPartial(MCA.LOGGER::error)
+                    nbt.read("pages", PAGES_CODEC, registries.createSerializationContext(NbtOps.INSTANCE))
                             .orElse(List.of())
             );
         }
@@ -287,10 +284,7 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
             nbt.putString("title", title);
 
             DynamicOps<Tag> dynamicOps = registries.createSerializationContext(NbtOps.INSTANCE);
-            ComponentSerialization.CODEC.listOf()
-                    .encodeStart(dynamicOps, pages).
-                    resultOrPartial(MCA.LOGGER::error)
-                    .ifPresent(tag -> nbt.put("pages", tag));
+            nbt.store("pages", PAGES_CODEC, dynamicOps, pages);
 
             return nbt;
         }

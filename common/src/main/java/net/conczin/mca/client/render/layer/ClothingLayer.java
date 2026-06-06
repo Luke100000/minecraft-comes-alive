@@ -1,5 +1,6 @@
 package net.conczin.mca.client.render.layer;
 
+import net.conczin.mca.MCA;
 import net.conczin.mca.client.gui.immersive_library.SkinCache;
 import net.conczin.mca.client.render.VillagerStateHolder;
 import net.conczin.mca.client.render.VillagerVisualSnapshot;
@@ -18,12 +19,15 @@ public class ClothingLayer<S extends HumanoidRenderState & VillagerStateHolder, 
 
     @Override
     public Identifier getSkin(S state) {
-        return getSkin(net.conczin.mca.client.model.CommonVillagerModel.getVisuals(state));
+        return getSkin(VillagerVisualSnapshot.require(state));
     }
 
     public Identifier getSkin(VillagerVisualSnapshot visuals) {
-        String v = visuals.burned() ? "burnt" : variant;
         String identifier = visuals.clothes();
+        if (MCA.isBlankString(identifier)) {
+            return null;
+        }
+        String v = visuals.burned() ? "burnt" : variant;
         if (identifier.startsWith("immersive_library:")) {
             return SkinCache.getTextureIdentifier(Integer.parseInt(identifier.substring(18)));
         }

@@ -1,6 +1,5 @@
 package net.conczin.mca.entity;
 
-import com.mojang.serialization.MapCodec;
 import net.conczin.mca.Config;
 import net.conczin.mca.entity.ai.Genetics;
 import net.conczin.mca.entity.ai.Relationship;
@@ -241,9 +240,8 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
     }
 
     @Override
-    @SuppressWarnings("deprecation")
     public void readAdditionalSaveData(ValueInput input) {
-        CompoundTag nbt = input.read(MapCodec.assumeMapUnsafe(CompoundTag.CODEC)).orElseGet(CompoundTag::new);
+        CompoundTag nbt = VillagerEntityMCA.readMcaSaveData(input);
         super.readAdditionalSaveData(input);
         getTypeDataManager().load(this, nbt);
         relations.readFromNbt(nbt);
@@ -262,14 +260,13 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
     }
 
     @Override
-    @SuppressWarnings("deprecation")
     public final void addAdditionalSaveData(ValueOutput output) {
         CompoundTag nbt = new CompoundTag();
         super.addAdditionalSaveData(output);
         getTypeDataManager().save(this, nbt);
         relations.writeToNbt(nbt);
         InventoryUtils.saveToNBT(this.registryAccess(), inventory, nbt);
-        output.store(MapCodec.assumeMapUnsafe(CompoundTag.CODEC), nbt);
+        VillagerEntityMCA.storeMcaSaveData(output, nbt);
     }
 
     @Override

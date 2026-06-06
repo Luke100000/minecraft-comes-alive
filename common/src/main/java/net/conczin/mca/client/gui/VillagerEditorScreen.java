@@ -23,6 +23,7 @@ import net.conczin.mca.registry.ProfessionsMCA;
 import net.conczin.mca.resources.data.skin.Clothing;
 import net.conczin.mca.resources.data.skin.Hair;
 import net.conczin.mca.resources.data.skin.SkinListEntry;
+import net.conczin.mca.util.NbtHelper;
 import net.conczin.mca.util.compat.ButtonWidget;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
@@ -728,32 +729,33 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
 
     void addModelSelectionWidgets(int x, int y) {
         if (allowPlayerModel && allowVillagerModel) {
+            VillagerLike.PlayerModel selectedModel = getSelectedPlayerModel();
             villagerSkinWidget = addRenderableWidget(new TooltipButtonWidget(x, y, DATA_WIDTH / 3, 20, "gui.villager_editor.villager_skin", b -> {
-                villagerData.putInt("PlayerModel", VillagerLike.PlayerModel.VILLAGER.ordinal());
+                getOrCreateMcaData(villagerData).putInt("PlayerModel", VillagerLike.PlayerModel.VILLAGER.ordinal());
                 syncVillagerData();
                 playerSkinWidget.active = true;
                 villagerSkinWidget.active = false;
                 vanillaSkinWidget.active = true;
             }));
-            villagerSkinWidget.active = villagerData.getInt("PlayerModel").orElse(VillagerLike.PlayerModel.VILLAGER.ordinal()) != VillagerLike.PlayerModel.VILLAGER.ordinal();
+            villagerSkinWidget.active = selectedModel != VillagerLike.PlayerModel.VILLAGER;
 
             playerSkinWidget = addRenderableWidget(new TooltipButtonWidget(x + DATA_WIDTH / 3, y, DATA_WIDTH / 3, 20, "gui.villager_editor.player_skin", b -> {
-                villagerData.putInt("PlayerModel", VillagerLike.PlayerModel.PLAYER.ordinal());
+                getOrCreateMcaData(villagerData).putInt("PlayerModel", VillagerLike.PlayerModel.PLAYER.ordinal());
                 syncVillagerData();
                 playerSkinWidget.active = false;
                 villagerSkinWidget.active = true;
                 vanillaSkinWidget.active = true;
             }));
-            playerSkinWidget.active = villagerData.getInt("PlayerModel").orElse(VillagerLike.PlayerModel.VILLAGER.ordinal()) != VillagerLike.PlayerModel.PLAYER.ordinal();
+            playerSkinWidget.active = selectedModel != VillagerLike.PlayerModel.PLAYER;
 
             vanillaSkinWidget = addRenderableWidget(new TooltipButtonWidget(x + DATA_WIDTH / 3 * 2, y, DATA_WIDTH / 3, 20, "gui.villager_editor.vanilla_skin", b -> {
-                villagerData.putInt("PlayerModel", VillagerLike.PlayerModel.VANILLA.ordinal());
+                getOrCreateMcaData(villagerData).putInt("PlayerModel", VillagerLike.PlayerModel.VANILLA.ordinal());
                 syncVillagerData();
                 villagerSkinWidget.active = true;
                 playerSkinWidget.active = true;
                 vanillaSkinWidget.active = false;
             }));
-            vanillaSkinWidget.active = villagerData.getInt("PlayerModel").orElse(VillagerLike.PlayerModel.VILLAGER.ordinal()) != VillagerLike.PlayerModel.VANILLA.ordinal();
+            vanillaSkinWidget.active = selectedModel != VillagerLike.PlayerModel.VANILLA;
         } else {
             addRenderableWidget(new TooltipButtonWidget(x, y, DATA_WIDTH, 20, "gui.villager_editor.model_blacklist_hint", b -> {
             })).active = false;
@@ -803,11 +805,22 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     }
 
     protected boolean shouldUsePlayerModel() {
-        return false;
+        return getSelectedPlayerModel() != VillagerLike.PlayerModel.VILLAGER;
     }
 
     protected boolean shouldPrintPlayerHint() {
         return true;
+    }
+
+    public boolean isEditingPlayer(UUID uuid) {
+        return villagerUUID.equals(playerUUID) && playerUUID.equals(uuid);
+    }
+
+    public VillagerLike.PlayerModel getSelectedPlayerModel() {
+        int id = villagerData == null
+                ? VillagerLike.PlayerModel.VILLAGER.ordinal()
+                : getMcaData(villagerData).getInt("PlayerModel").orElse(VillagerLike.PlayerModel.VILLAGER.ordinal());
+        return VillagerLike.PlayerModel.byId(id);
     }
 
     @Override
@@ -831,7 +844,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
             }
 
             // hint for confused people
-            if (shouldPrintPlayerHint() && villagerUUID.equals(playerUUID) && villagerData.getInt("PlayerModel").orElse(VillagerLike.PlayerModel.VILLAGER.ordinal()) != VillagerLike.PlayerModel.VILLAGER.ordinal()) {
+            if (shouldPrintPlayerHint() && villagerUUID.equals(playerUUID) && getSelectedPlayerModel() != VillagerLike.PlayerModel.VILLAGER) {
                 final Matrix3x2fStack matrices = context.pose();
                 matrices.pushMatrix();
                 matrices.translate(x, y - 145);
@@ -866,8 +879,10 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                             hoveredClothingId = index;
                         }
 
-                        InventoryScreen.extractEntityInInventoryFollowsMouse(context, cx - 20, cy - 25, cx + 20, cy + 40,
-                                (hoveredClothingId == index) ? 35 : 30, 0, mouseX, mouseY, villagerVisualization);
+                        boolean hovered = hoveredClothingId == index;
+                        int previewPadding = hovered ? 5 : 0;
+                        InventoryScreen.extractEntityInInventoryFollowsMouse(context, cx - 20 - previewPadding, cy - 25 - previewPadding, cx + 20 + previewPadding, cy + 40 + previewPadding,
+                                hovered ? 35 : 30, 0, mouseX, mouseY, villagerVisualization);
                         i++;
                     } else {
                         break;
@@ -923,10 +938,47 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     }
 
     public void syncVillagerData() {
-        CompoundTag nbt = villagerData == null ? new CompoundTag() : villagerData.copy();
-        nbt.merge(saveEntityData(villager));
+        CompoundTag nbt = saveEntityData(villager);
+        copyEditorFields(nbt,
+                "FamilyTreeNewFatherName",
+                "FamilyTreeNewMotherName",
+                "FamilyTreeNewSpouseName",
+                "VillagerDataFinalized"
+        );
+        copyEditorMcaFields(nbt, "PlayerModel");
         nbt.putInt("Age", villagerBreedingAge);
         Network.sendToServer(new VillagerEditorSyncRequest("sync", villagerUUID, nbt));
+    }
+
+    private void copyEditorFields(CompoundTag target, String... keys) {
+        if (villagerData == null) {
+            return;
+        }
+        for (String key : keys) {
+            if (villagerData.contains(key)) {
+                target.put(key, Objects.requireNonNull(villagerData.get(key)).copy());
+            }
+        }
+    }
+
+    private void copyEditorMcaFields(CompoundTag target, String... keys) {
+        if (villagerData == null) {
+            return;
+        }
+        CompoundTag source = getMcaData(villagerData);
+        for (String key : keys) {
+            if (source.contains(key)) {
+                getOrCreateMcaData(target).put(key, Objects.requireNonNull(source.get(key)).copy());
+            }
+        }
+    }
+
+    private CompoundTag getMcaData(CompoundTag data) {
+        return NbtHelper.getCompoundOrSelf(data, VillagerEntityMCA.MCA_DATA_KEY);
+    }
+
+    private CompoundTag getOrCreateMcaData(CompoundTag data) {
+        return NbtHelper.getOrCreateCompound(data, VillagerEntityMCA.MCA_DATA_KEY);
     }
 
     private CompoundTag saveEntityData(VillagerEntityMCA entity) {

@@ -16,7 +16,6 @@ public class PlayerArmorExtendedModel<T extends LivingEntity> extends HumanoidMo
 
     final VillagerDimensions.Mutable dimensions = new VillagerDimensions.Mutable(AgeState.ADULT);
     float breastSize;
-    private RenderMask renderMask = RenderMask.FULL;
 
     public PlayerArmorExtendedModel(ModelPart root) {
         super(root);
@@ -84,15 +83,6 @@ public class PlayerArmorExtendedModel<T extends LivingEntity> extends HumanoidMo
         this.breastSize = breastSize;
     }
 
-    @Override
-    public RenderMask getRenderMask() {
-        return renderMask;
-    }
-
-    @Override
-    public void setRenderMask(RenderMask renderMask) {
-        this.renderMask = renderMask;
-    }
 
     @Override
     public void setupAnim(AvatarRenderState state) {
@@ -107,12 +97,10 @@ public class PlayerArmorExtendedModel<T extends LivingEntity> extends HumanoidMo
         super.setupAnim(state);
 
         if (state instanceof VillagerStateHolder holder) {
-            var visuals = CommonVillagerModel.peekVisuals(holder);
+            var visuals = holder.mca$getVisualSnapshot();
             if (visuals != null) {
                 applyVillagerDimensions(visuals, state.isCrouching);
             }
         }
-
-        CommonVillagerModel.applyRenderMask(this, renderMask);
     }
 }

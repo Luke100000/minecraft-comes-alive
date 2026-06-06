@@ -1,7 +1,6 @@
 package net.conczin.mca.client.render.layer;
 
 import net.conczin.mca.MCA;
-import net.conczin.mca.client.model.CommonVillagerModel;
 import net.conczin.mca.client.render.VillagerStateHolder;
 import net.conczin.mca.client.render.VillagerVisualSnapshot;
 import net.conczin.mca.client.resources.ColorPalette;
@@ -17,7 +16,7 @@ public class SkinLayer<S extends HumanoidRenderState & VillagerStateHolder, M ex
 
     @Override
     public Identifier getSkin(S state) {
-        return getSkin(CommonVillagerModel.getVisuals(state));
+        return getSkin(VillagerVisualSnapshot.require(state));
     }
 
     public Identifier getSkin(VillagerVisualSnapshot visuals) {
@@ -27,7 +26,7 @@ public class SkinLayer<S extends HumanoidRenderState & VillagerStateHolder, M ex
 
     @Override
     public int getColor(S state, float tickDelta) {
-        return getColor(CommonVillagerModel.getVisuals(state), tickDelta);
+        return getColor(VillagerVisualSnapshot.require(state), tickDelta);
     }
 
     public int getColor(VillagerVisualSnapshot visuals, float tickDelta) {

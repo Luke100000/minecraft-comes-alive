@@ -2,7 +2,6 @@ package net.conczin.mca.mixin.client;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.conczin.mca.MCAClient;
-import net.conczin.mca.client.model.CommonVillagerModel;
 import net.conczin.mca.client.model.PlayerEntityExtendedModel;
 import net.conczin.mca.client.model.VillagerEntityModelMCA;
 import net.conczin.mca.client.render.VillagerStateHolder;
@@ -92,7 +91,7 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<LivingEnt
             return;
         }
 
-        var visuals = CommonVillagerModel.getVisuals(holder);
+        var visuals = VillagerVisualSnapshot.require(holder);
         poseStack.scale(visuals.rawHorizontalScaleFactor(), visuals.rawVerticalScaleFactor(), visuals.rawHorizontalScaleFactor());
         if (visuals.baby() && !state.isPassenger) {
             poseStack.translate(0.0F, 0.6F, 0.0F);
@@ -162,8 +161,12 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<LivingEnt
             boolean rightArm,
             boolean hasSleeve
     ) {
-        var villager = CommonVillagerModel.getVillager(player);
-        var visuals = VillagerVisualSnapshot.capture(villager);
+        var visuals = MCAClient.getPlayerData(player.getUUID())
+                .map(VillagerVisualSnapshot::capture)
+                .orElse(null);
+        if (visuals == null) {
+            return;
+        }
 
         mca$renderSkinArm(
                 poseStack,

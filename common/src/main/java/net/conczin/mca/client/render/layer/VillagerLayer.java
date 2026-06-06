@@ -3,11 +3,11 @@ package net.conczin.mca.client.render.layer;
 import com.google.common.collect.Maps;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.conczin.mca.MCA;
-import net.conczin.mca.MCAClient;
 import net.conczin.mca.client.model.CommonVillagerModel;
 import net.conczin.mca.client.model.PlayerArmorExtendedModel;
 import net.conczin.mca.client.model.PlayerEntityExtendedModel;
 import net.conczin.mca.client.model.VillagerEntityModelMCA;
+import net.conczin.mca.client.render.VillagerRenderState;
 import net.conczin.mca.client.render.VillagerStateHolder;
 import net.minecraft.IdentifierException;
 import net.minecraft.client.Minecraft;
@@ -20,8 +20,6 @@ import net.minecraft.client.renderer.entity.state.HumanoidRenderState;
 import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.rendertype.RenderTypes;
 import net.minecraft.resources.Identifier;
-import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.player.Player;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Map;
@@ -65,18 +63,16 @@ public abstract class VillagerLayer<S extends HumanoidRenderState & VillagerStat
 
     @Override
     public void submit(PoseStack poseStack, SubmitNodeCollector submitNodeCollector, int lightCoords, S state, float yRot, float xRot) {
-        Minecraft client = Minecraft.getInstance();
-        Entity villager = CommonVillagerModel.peekVillager(state) instanceof Entity entity ? entity : null;
+        if (state.mca$getVisualSnapshot() == null) {
+            return;
+        }
+
+        if (!(state instanceof VillagerRenderState) && !state.mca$isVillagerRendererActive()) {
+            return;
+        }
+
         boolean visible = !state.isInvisible;
-        boolean glowing = villager != null && client.shouldEntityAppearGlowing(villager);
-
-        if (villager == null) {
-            return;
-        }
-
-        if (villager instanceof Player player && !MCAClient.useVillagerRenderer(player.getUUID())) {
-            return;
-        }
+        boolean glowing = state.appearsGlowing();
 
         copyParentModelState();
         prepareModel(state);
@@ -144,6 +140,21 @@ public abstract class VillagerLayer<S extends HumanoidRenderState & VillagerStat
         }
     }
 
+    protected static void hideLegs(HumanoidModel model) {
+        model.rightLeg.visible = false;
+        model.leftLeg.visible = false;
+
+        if (model instanceof VillagerEntityModelMCA villagerModel) {
+            villagerModel.leftLegwear.visible = false;
+            villagerModel.rightLegwear.visible = false;
+        }
+
+        if (model instanceof PlayerEntityExtendedModel<?> playerModel) {
+            playerModel.leftPants.visible = false;
+            playerModel.rightPants.visible = false;
+        }
+    }
+
     public void renderFinal(PoseStack poseStack, SubmitNodeCollector submitNodeCollector, int lightCoords, S state, float tickDelta, boolean visible, boolean glowing) {
         int tint = LivingEntityRenderer.getOverlayCoords(state, 0.0F);
 
@@ -187,11 +198,14 @@ public abstract class VillagerLayer<S extends HumanoidRenderState & VillagerStat
     }
 
     public final boolean canUse(Identifier texture) {
+        if (texture == null || MCA.isBlankString(texture.getPath())) {
+            return false;
+        }
         return TEXTURE_EXIST_CACHE.computeIfAbsent(texture, s -> {
-            if (texture != null && texture.getNamespace().equals("immersive_library")) {
+            if (texture.getNamespace().equals("immersive_library")) {
                 return true;
             }
-            return texture != null && Minecraft.getInstance().getResourceManager().getResource(texture).isPresent();
+            return Minecraft.getInstance().getResourceManager().getResource(texture).isPresent();
         });
     }
 

@@ -36,6 +36,14 @@ public record VillagerVisualSnapshot(
         boolean sleeping,
         boolean deadOrDying
 ) {
+    public static VillagerVisualSnapshot require(VillagerStateHolder state) {
+        VillagerVisualSnapshot snapshot = state.mca$getVisualSnapshot();
+        if (snapshot == null) {
+            throw new IllegalStateException("No villager visuals available for render state");
+        }
+        return snapshot;
+    }
+
     public static VillagerVisualSnapshot capture(VillagerLike<?> villager) {
         Genetics genetics = villager.getGenetics();
         Traits traits = villager.getTraits();

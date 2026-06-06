@@ -1,6 +1,5 @@
 package net.conczin.mca.client.gui;
 
-import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.util.localization.FlowingText;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.network.chat.Component;
@@ -16,11 +15,6 @@ public class LimitedVillagerEditorScreen extends VillagerEditorScreen {
     @Override
     protected boolean shouldShowPageSelection() {
         return false;
-    }
-
-    @Override
-    protected boolean shouldUsePlayerModel() {
-        return villagerData.getInt("PlayerModel").orElse(VillagerLike.PlayerModel.VILLAGER.ordinal()) != VillagerLike.PlayerModel.VILLAGER.ordinal();
     }
 
     @Override

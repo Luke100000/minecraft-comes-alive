@@ -1,8 +1,9 @@
 package net.conczin.mca.client.render.layer;
 
+import net.conczin.mca.MCA;
 import net.conczin.mca.client.gui.immersive_library.SkinCache;
-import net.conczin.mca.client.model.CommonVillagerModel;
 import net.conczin.mca.client.render.VillagerStateHolder;
+import net.conczin.mca.client.render.VillagerVisualSnapshot;
 import net.conczin.mca.client.resources.ColorPalette;
 import net.minecraft.client.model.HumanoidModel;
 import net.minecraft.client.renderer.entity.RenderLayerParent;
@@ -14,22 +15,21 @@ import net.minecraft.world.item.DyeColor;
 public class HairLayer<S extends HumanoidRenderState & VillagerStateHolder, M extends HumanoidModel<S>> extends VillagerLayer<S, M> {
     public HairLayer(RenderLayerParent<S, M> renderer, M model) {
         super(renderer, model);
-        if (model instanceof CommonVillagerModel<?> commonVillagerModel) {
-            commonVillagerModel.setRenderMask(CommonVillagerModel.RenderMask.NO_LEGS);
-        }
     }
 
     @Override
     protected void prepareModel(S state) {
         setAllVisible(this.model, true);
-        this.model.leftLeg.visible = false;
-        this.model.rightLeg.visible = false;
+        hideLegs(this.model);
     }
 
     @Override
     public Identifier getSkin(S state) {
-        var visuals = CommonVillagerModel.getVisuals(state);
+        var visuals = VillagerVisualSnapshot.require(state);
         String identifier = visuals.hair();
+        if (MCA.isBlankString(identifier)) {
+            return null;
+        }
         if (identifier.startsWith("immersive_library:")) {
             return SkinCache.getTextureIdentifier(Integer.parseInt(identifier.substring(18)));
         }
@@ -38,7 +38,11 @@ public class HairLayer<S extends HumanoidRenderState & VillagerStateHolder, M ex
 
     @Override
     protected Identifier getOverlay(S state) {
-        return cached(CommonVillagerModel.getVisuals(state).hair().replace(".png", "_overlay.png"), Identifier::parse);
+        String hair = VillagerVisualSnapshot.require(state).hair();
+        if (MCA.isBlankString(hair)) {
+            return null;
+        }
+        return cached(hair.replace(".png", "_overlay.png"), Identifier::parse);
     }
 
     private int getRainbow(int tickCount, int entityId, float tickDelta) {
@@ -52,7 +56,7 @@ public class HairLayer<S extends HumanoidRenderState & VillagerStateHolder, M ex
 
     @Override
     public int getColor(S state, float tickDelta) {
-        var visuals = CommonVillagerModel.getVisuals(state);
+        var visuals = VillagerVisualSnapshot.require(state);
         if (visuals.rainbow()) {
             return getRainbow(visuals.tickCount(), visuals.entityId(), tickDelta);
         }

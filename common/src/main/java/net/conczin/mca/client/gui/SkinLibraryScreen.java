@@ -3,12 +3,12 @@ package net.conczin.mca.client.gui;
 import com.mojang.blaze3d.platform.NativeImage;
 import net.conczin.mca.Config;
 import net.conczin.mca.MCA;
+import net.conczin.mca.MCAClient;
 import net.conczin.mca.client.gui.immersive_library.*;
 import net.conczin.mca.client.gui.immersive_library.responses.*;
 import net.conczin.mca.client.gui.immersive_library.types.LiteContent;
 import net.conczin.mca.client.gui.immersive_library.types.User;
 import net.conczin.mca.client.gui.widget.*;
-import net.conczin.mca.client.model.CommonVillagerModel;
 import net.conczin.mca.client.resources.*;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerLike;
@@ -132,7 +132,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
             this.villagerVisualization.load(TagValueInput.create(ProblemReporter.DISCARDING, this.villagerVisualization.registryAccess(), saveEntityData(villagerVisualization)));
         } else {
             assert Minecraft.getInstance().player != null;
-            VillagerLike<?> villagerLike = CommonVillagerModel.getVillager(Minecraft.getInstance().level, Minecraft.getInstance().player.getUUID());
+            VillagerLike<?> villagerLike = MCAClient.getPlayerData(Minecraft.getInstance().player.getUUID()).orElse(null);
             if (villagerLike instanceof VillagerEntityMCA villager) {
                 this.villagerVisualization.load(TagValueInput.create(ProblemReporter.DISCARDING, this.villagerVisualization.registryAccess(), saveEntityData(villager)));
             }

@@ -12,6 +12,7 @@ import net.conczin.mca.resources.HairList;
 import net.conczin.mca.server.world.data.FamilyTree;
 import net.conczin.mca.server.world.data.FamilyTreeNode;
 import net.conczin.mca.server.world.data.PlayerSaveData;
+import net.conczin.mca.util.NbtHelper;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -71,16 +72,18 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
     private void setHair(ServerPlayer player, Entity entity) {
         CompoundTag villagerData = GetVillagerRequest.getVillagerData(entity);
         if (villagerData != null) {
+            CompoundTag mcaData = getOrCreateMcaData(villagerData);
+
             // fetch hair
             String hair;
             if (data.contains("offset")) {
-                hair = HairList.getInstance().getPool(getGender(villagerData)).pickNext(villagerData.getString("Hair").orElse(""), data.getInt("offset").orElse(0));
+                hair = HairList.getInstance().getPool(getGender(villagerData)).pickNext(mcaData.getString("Hair").orElse(""), data.getInt("offset").orElse(0));
             } else {
                 hair = HairList.getInstance().getPool(getGender(villagerData)).pickOne();
             }
 
             // set
-            villagerData.putString("Hair", hair);
+            mcaData.putString("Hair", hair);
             saveEntity(player, entity, villagerData);
         }
     }
@@ -88,11 +91,12 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
     private void setClothing(ServerPlayer player, Entity entity) {
         CompoundTag villagerData = GetVillagerRequest.getVillagerData(entity);
         if (villagerData != null) {
+            CompoundTag mcaData = getOrCreateMcaData(villagerData);
             String clothes = "mca:missing";
             if (entity instanceof Player) {
                 VillagerProfession noneProfession = BuiltInRegistries.VILLAGER_PROFESSION.getValueOrThrow(VillagerProfession.NONE);
                 if (data.contains("offset")) {
-                    clothes = ClothingList.getInstance().getPool(getGender(villagerData), noneProfession).pickNext(villagerData.getString("Clothes").orElse(""), data.getInt("offset").orElse(0));
+                    clothes = ClothingList.getInstance().getPool(getGender(villagerData), noneProfession).pickNext(mcaData.getString("Clothes").orElse(""), data.getInt("offset").orElse(0));
                 } else {
                     clothes = ClothingList.getInstance().getPool(getGender(villagerData), noneProfession).pickOne();
                 }
@@ -103,7 +107,7 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
                     clothes = ClothingList.getInstance().getPool(villager).pickOne();
                 }
             }
-            villagerData.putString("Clothes", clothes);
+            mcaData.putString("Clothes", clothes);
             saveEntity(player, entity, villagerData);
         }
     }
@@ -129,7 +133,15 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
     }
 
     private Gender getGender(CompoundTag villagerData) {
-        return Gender.byId(villagerData.getInt("gender").orElse(0));
+        return Gender.byId(getMcaData(villagerData).getInt("Gender").orElse(0));
+    }
+
+    private CompoundTag getMcaData(CompoundTag villagerData) {
+        return NbtHelper.getCompoundOrSelf(villagerData, VillagerEntityMCA.MCA_DATA_KEY);
+    }
+
+    private CompoundTag getOrCreateMcaData(CompoundTag villagerData) {
+        return NbtHelper.getOrCreateCompound(villagerData, VillagerEntityMCA.MCA_DATA_KEY);
     }
 
     private Optional<FamilyTreeNode> getFamilyNode(ServerPlayer player, FamilyTree tree, String name, Gender gender) {
@@ -167,7 +179,7 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
     private void syncFamilyTree(ServerPlayer player, Entity entity, CompoundTag villagerData) {
         FamilyTree tree = FamilyTree.get((ServerLevel) entity.level());
         FamilyTreeNode entry = tree.getOrCreate(entity);
-        entry.setGender(getGender(data));
+        entry.setGender(getGender(villagerData));
 
         VillagerLike.parseCustomName(entity.registryAccess(), villagerData)
                 .map(Component::getString)

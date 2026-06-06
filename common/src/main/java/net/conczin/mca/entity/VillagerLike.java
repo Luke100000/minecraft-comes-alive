@@ -441,6 +441,7 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
 
     default void copyVillagerAttributesFrom(VillagerLike<?> other) {
         readNbtForConversion(other.toNbtForConversion());
+        this.setVillagerData(other.getVillagerData());
     }
 
     default boolean isHostile() {
@@ -468,7 +469,11 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
         PLAYER,
         VANILLA;
 
-        static final PlayerModel[] VALUES = values();
+        private static final PlayerModel[] VALUES = values();
+
+        public static PlayerModel byId(int id) {
+            return VALUES[Math.max(0, Math.min(VALUES.length - 1, id))];
+        }
     }
 
     static Optional<Component> parseCustomName(net.minecraft.core.HolderLookup.Provider provider, CompoundTag nbt) {

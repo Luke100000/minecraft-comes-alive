@@ -3,6 +3,7 @@ package net.conczin.mca.client.model;
 import com.google.common.collect.ImmutableList;
 import net.conczin.mca.Config;
 import net.conczin.mca.client.render.VillagerRenderState;
+import net.conczin.mca.client.render.VillagerVisualSnapshot;
 import net.conczin.mca.entity.ai.relationship.AgeState;
 import net.conczin.mca.entity.ai.relationship.VillagerDimensions;
 import net.minecraft.client.model.HumanoidModel;
@@ -20,7 +21,6 @@ public class VillagerEntityBaseModelMCA extends HumanoidModel<VillagerRenderStat
 
     final VillagerDimensions.Mutable dimensions = new VillagerDimensions.Mutable(AgeState.ADULT);
     float breastSize;
-    private RenderMask renderMask = RenderMask.FULL;
 
     public VillagerEntityBaseModelMCA(ModelPart root) {
         super(root);
@@ -46,9 +46,28 @@ public class VillagerEntityBaseModelMCA extends HumanoidModel<VillagerRenderStat
 
     @Override
     public void setupAnim(VillagerRenderState state) {
+        float originalWalkAnimationPos = state.walkAnimationPos;
+        float originalWalkAnimationSpeed = state.walkAnimationSpeed;
+        float originalYRot = state.yRot;
+        VillagerVisualSnapshot visuals = VillagerVisualSnapshot.require(state);
+
+        if (visuals.baby() && (!state.isPassenger || state.cribPassenger)) {
+            state.walkAnimationSpeed = (float) Math.sin(visuals.tickCount() / 12.0F);
+            state.walkAnimationPos = (float) Math.cos(visuals.tickCount() / 9.0F) * 3.0F;
+            state.yRot = originalYRot + (float) Math.sin(visuals.tickCount() / 2.0F);
+        }
+
+        if (state.isBaby) {
+            state.walkAnimationPos /= 3.0F;
+        }
+
+        state.walkAnimationPos /= 0.2F + visuals.rawVerticalScaleFactor();
         super.setupAnim(state);
 
-        var visuals = CommonVillagerModel.getVisuals(state);
+        state.walkAnimationPos = originalWalkAnimationPos;
+        state.walkAnimationSpeed = originalWalkAnimationSpeed;
+        state.yRot = originalYRot;
+
         if (visuals.panicking()) {
             float toRadians = (float) Math.PI / 180;
 
@@ -64,7 +83,6 @@ public class VillagerEntityBaseModelMCA extends HumanoidModel<VillagerRenderStat
         }
 
         applyVillagerDimensions(visuals, state.isCrouching);
-        CommonVillagerModel.applyRenderMask(this, renderMask);
     }
 
     public void copyPropertiesTo(HumanoidModel<?> target) {
@@ -123,13 +141,4 @@ public class VillagerEntityBaseModelMCA extends HumanoidModel<VillagerRenderStat
         this.breastSize = breastSize;
     }
 
-    @Override
-    public RenderMask getRenderMask() {
-        return renderMask;
-    }
-
-    @Override
-    public void setRenderMask(RenderMask renderMask) {
-        this.renderMask = renderMask;
-    }
 }

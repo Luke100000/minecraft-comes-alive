@@ -800,8 +800,8 @@ public final class Config extends CommonConfig {
      * Requires enablePlayerShaders to be true.
      */
     public Map<String, String> shaderLocationsMap = Map.of(
-            "color_blind", "mca:shaders/post/color_blind.json",
-            "sirben", "mca:shaders/post/sirben.json"
+            "color_blind", "mca:color_blind",
+            "sirben", "mca:sirben"
     );
 
     /**

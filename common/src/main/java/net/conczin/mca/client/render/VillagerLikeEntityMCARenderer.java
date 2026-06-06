@@ -3,9 +3,9 @@ package net.conczin.mca.client.render;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.conczin.mca.Config;
 import net.conczin.mca.client.gui.VillagerEditorScreen;
-import net.conczin.mca.client.model.CommonVillagerModel;
 import net.conczin.mca.client.model.VillagerEntityBaseModelMCA;
 import net.conczin.mca.client.model.VillagerEntityModelMCA;
+import net.conczin.mca.entity.CribEntity;
 import net.conczin.mca.entity.Infectable;
 import net.conczin.mca.entity.VillagerLike;
 import net.minecraft.client.Minecraft;
@@ -18,7 +18,6 @@ import net.minecraft.client.renderer.entity.HumanoidMobRenderer;
 import net.minecraft.client.renderer.entity.layers.HumanoidArmorLayer;
 import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.resources.Identifier;
-import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.player.Player;
@@ -73,17 +72,18 @@ public class VillagerLikeEntityMCARenderer<T extends Mob & VillagerLike<T>>
     @Override
     public void extractRenderState(T entity, VillagerRenderState state, float partialTicks) {
         super.extractRenderState(entity, state, partialTicks);
-        state.mca$setVillager(entity);
         state.mca$setVisualSnapshot(VillagerVisualSnapshot.capture(entity));
+        state.cribPassenger = entity.getVehicle() instanceof CribEntity;
+        VillagerRenderStateHooks.extractScaledBounds(entity, state);
     }
 
     @Override
     protected void scale(VillagerRenderState state, PoseStack matrices) {
-        VillagerVisualSnapshot visuals = CommonVillagerModel.getVisuals(state);
+        VillagerVisualSnapshot visuals = VillagerVisualSnapshot.require(state);
         float height = visuals.rawVerticalScaleFactor();
         float width = visuals.rawHorizontalScaleFactor();
         matrices.scale(width, height, width);
-        if (visuals.baby() && state.mca$getVillager() instanceof Entity entity && !entity.isPassenger()) {
+        if (visuals.baby() && (!state.isPassenger || state.cribPassenger) && !visuals.sleeping()) {
             matrices.translate(0, 0.6F, 0);
         }
     }
@@ -114,6 +114,6 @@ public class VillagerLikeEntityMCARenderer<T extends Mob & VillagerLike<T>>
 
     @Override
     protected boolean isShaking(VillagerRenderState state) {
-        return CommonVillagerModel.getVisuals(state).infectionProgress() > Infectable.FEVER_THRESHOLD;
+        return VillagerVisualSnapshot.require(state).infectionProgress() > Infectable.FEVER_THRESHOLD;
     }
 }
