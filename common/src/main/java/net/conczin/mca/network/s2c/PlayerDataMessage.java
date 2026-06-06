@@ -21,6 +21,14 @@ public record PlayerDataMessage(UUID uuid, CompoundTag nbt) implements Handleabl
             PlayerDataMessage::new
     );
 
+    public PlayerDataMessage {
+        nbt = nbt.copy();
+    }
+
+    public CompoundTag nbt() {
+        return nbt.copy();
+    }
+
     @Override
     public void handle(Player player) {
         ClientProxy.getNetworkHandler().handlePlayerDataMessage(this);

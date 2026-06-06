@@ -17,8 +17,16 @@ public record GetVillagerResponse(CompoundTag data) implements HandleablePayload
             GetVillagerResponse::new
     );
 
+    public GetVillagerResponse {
+        data = data.copy();
+    }
+
+    public CompoundTag data() {
+        return data.copy();
+    }
+
     public CompoundTag getData() {
-        return data;
+        return data();
     }
 
     @Override

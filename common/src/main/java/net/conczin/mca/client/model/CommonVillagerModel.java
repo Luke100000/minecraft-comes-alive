@@ -94,7 +94,7 @@ public interface CommonVillagerModel<T> {
             float unscaledY = (float) (5.0f - Math.pow(geneticBreastSize, 0.5) * 2.5f + cy);
             float unscaledZ = -1.5f + geneticBreastSize * 0.25f + cz;
 
-            part.setPos(unscaledX * scaleX, unscaledY * scaleY, unscaledZ * scaleZ);
+            part.setPos(unscaledX, unscaledY, unscaledZ);
         }
     }
 

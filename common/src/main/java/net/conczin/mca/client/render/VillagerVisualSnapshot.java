@@ -74,7 +74,7 @@ public record VillagerVisualSnapshot(
                 ),
                 rawHorizontalScaleFactor,
                 rawVerticalScaleFactor,
-                villager.getVillagerBrain().isPanicking(),
+                villager.getVillagerBrain().isPanicAnimationActive(),
                 villager.isBurned(),
                 traits.hasTrait(Traits.ALBINISM),
                 traits.hasTrait(Traits.RAINBOW),

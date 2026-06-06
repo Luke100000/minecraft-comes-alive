@@ -17,8 +17,16 @@ public record GetFamilyResponse(CompoundTag nbt) implements HandleablePayload {
             GetFamilyResponse::new
     );
 
+    public GetFamilyResponse {
+        nbt = nbt.copy();
+    }
+
+    public CompoundTag nbt() {
+        return nbt.copy();
+    }
+
     public CompoundTag getData() {
-        return nbt;
+        return nbt();
     }
 
     @Override

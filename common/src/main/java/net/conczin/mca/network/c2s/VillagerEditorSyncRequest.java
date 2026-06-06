@@ -43,6 +43,14 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
             VillagerEditorSyncRequest::new
     );
 
+    public VillagerEditorSyncRequest {
+        data = data.copy();
+    }
+
+    public CompoundTag data() {
+        return data.copy();
+    }
+
     @Override
     public void handleServer(ServerPlayer player) {
         Entity entity = player.level().getEntity(uuid);
@@ -120,7 +128,7 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
             syncFamilyTree(player, entity, villagerData);
 
             //also update players
-            serverPlayer.level().players().forEach(p -> Network.sendToPlayer(new PlayerDataMessage(player.getUUID(), villagerData), p));
+            serverPlayer.level().players().forEach(p -> Network.sendToPlayer(new PlayerDataMessage(serverPlayer.getUUID(), villagerData), p));
         } else if (entity instanceof VillagerLike<?> villagerLike) {
             villagerLike.syncFromEditor(villagerData);
             entity.refreshDimensions();

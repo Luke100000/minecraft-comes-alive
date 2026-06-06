@@ -2,7 +2,6 @@ package net.conczin.mca.entity.ai.chatAI.modules;
 
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.relationship.AgeState;
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.npc.villager.VillagerProfession;
 

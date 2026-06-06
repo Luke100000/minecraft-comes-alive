@@ -115,15 +115,24 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
     }
 
     public void setEntityDataSet(boolean entityDataSet) {
+        if (this.entityDataSet == entityDataSet) {
+            return;
+        }
         this.entityDataSet = entityDataSet;
+        setDirty();
     }
 
     public CompoundTag getEntityData() {
-        return entityData;
+        return entityData.copy();
     }
 
     public void setEntityData(CompoundTag entityData) {
-        this.entityData = entityData;
+        CompoundTag copy = entityData.copy();
+        if (copy.equals(this.entityData)) {
+            return;
+        }
+        this.entityData = copy;
+        setDirty();
     }
 
     @Override
@@ -211,7 +220,7 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
 
     @Override
     public Gender getGender() {
-        return Gender.byId(getEntityData().getInt("gender").orElse(0));
+        return Gender.byId(NbtHelper.getCompoundOrSelf(entityData, VillagerEntityMCA.MCA_DATA_KEY).getInt("Gender").orElse(0));
     }
 
     @Override
@@ -231,7 +240,7 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
         if (lastSeenVillageId != null) {
             nbt.putInt("lastSeenVillage", lastSeenVillageId);
         }
-        nbt.put("entityData", entityData);
+        nbt.put("entityData", entityData.copy());
         nbt.putBoolean("entityDataSet", entityDataSet);
         nbt.put("inbox", NbtHelper.fromList(inbox, v -> v.toTag(provider)));
         return nbt;

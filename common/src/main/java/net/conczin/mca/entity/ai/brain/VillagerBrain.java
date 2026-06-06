@@ -16,6 +16,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.schedule.Activity;
 import org.jetbrains.annotations.Nullable;
@@ -35,11 +36,14 @@ public class VillagerBrain<E extends Mob & VillagerLike<E>> {
     private static final CEnumParameter<Chore> ACTIVE_CHORE = CParameter.create("ActiveChore", Chore.NONE);
     private static final CDataParameter<Optional<UUID>> CHORE_ASSIGNING_PLAYER = CParameter.create("ChoreAssigningPlayer", Optional.empty());
     private static final CDataParameter<Boolean> PANICKING = CParameter.create("IsPanicking", false);
+    private static final CDataParameter<Boolean> PANIC_ANIMATING = CParameter.create("PanicAnimating", false);
     private static final CDataParameter<Boolean> WEAR_ARMOR = CParameter.create("WearArmor", false);
 
+    private static final int PANIC_ANIMATION_GRACE_TICKS = 20;
     private static final long GRIEVE_COOLDOWN = 24000 * 7;
     private final Random random = new Random();
     private final E entity;
+    private int panicAnimationTicks;
 
     public VillagerBrain(E entity) {
         this.entity = entity;
@@ -54,6 +58,7 @@ public class VillagerBrain<E extends Mob & VillagerLike<E>> {
                 ACTIVE_CHORE,
                 CHORE_ASSIGNING_PLAYER,
                 PANICKING,
+                PANIC_ANIMATING,
                 WEAR_ARMOR
         );
     }
@@ -75,6 +80,16 @@ public class VillagerBrain<E extends Mob & VillagerLike<E>> {
         boolean panicking = entity.getBrain().isActive(Activity.PANIC);
         if (panicking != entity.getTrackedValue(PANICKING)) {
             entity.setTrackedValue(PANICKING, panicking);
+        }
+        boolean panicStimulus = panicking || hasPanicStimulus();
+        if (panicStimulus) {
+            panicAnimationTicks = PANIC_ANIMATION_GRACE_TICKS;
+        } else if (panicAnimationTicks > 0) {
+            panicAnimationTicks--;
+        }
+        boolean panicAnimating = panicStimulus || panicAnimationTicks > 0;
+        if (panicAnimating != entity.getTrackedValue(PANIC_ANIMATING)) {
+            entity.setTrackedValue(PANIC_ANIMATING, panicAnimating);
         }
 
         if (entity.tickCount % 20 != 0) {
@@ -177,6 +192,16 @@ public class VillagerBrain<E extends Mob & VillagerLike<E>> {
 
     public boolean isPanicking() {
         return entity.getTrackedValue(PANICKING);
+    }
+
+    public boolean isPanicAnimationActive() {
+        return entity.getTrackedValue(PANIC_ANIMATING);
+    }
+
+    private boolean hasPanicStimulus() {
+        return entity.getBrain().hasMemoryValue(MemoryModuleType.HURT_BY)
+               || entity.getBrain().hasMemoryValue(MemoryModuleType.HURT_BY_ENTITY)
+               || entity.getBrain().hasMemoryValue(MemoryModuleType.NEAREST_HOSTILE);
     }
 
     public void modifyMoodValue(int mood) {

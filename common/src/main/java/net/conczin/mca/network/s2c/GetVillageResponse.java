@@ -64,12 +64,29 @@ public record GetVillageResponse(
             ));
 
 
+    public GetVillageResponse {
+        data = data.copy();
+        ids = Set.copyOf(ids);
+        tasks = copyTasks(tasks);
+        buildingTypes = Map.copyOf(buildingTypes);
+    }
+
     public GetVillageResponse(Village data, Rank rank, int reputation, boolean isVillage, Set<String> ids) {
         this(data.save(), rank, reputation, isVillage, ids, Tasks.getInstance().tasks, BuildingTypes.getInstance().getServerBuildingTypes());
     }
 
+    public CompoundTag data() {
+        return data.copy();
+    }
+
     public CompoundTag getData() {
-        return data;
+        return data();
+    }
+
+    private static Map<Rank, List<Task>> copyTasks(Map<Rank, List<Task>> tasks) {
+        Map<Rank, List<Task>> copy = new EnumMap<>(Rank.class);
+        tasks.forEach((rank, rankTasks) -> copy.put(rank, List.copyOf(rankTasks)));
+        return Map.copyOf(copy);
     }
 
     @Override
