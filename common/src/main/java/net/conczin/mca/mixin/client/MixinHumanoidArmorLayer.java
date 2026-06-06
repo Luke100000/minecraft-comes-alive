@@ -33,8 +33,8 @@ public abstract class MixinHumanoidArmorLayer<T extends LivingEntity, A extends 
     protected abstract boolean usesInnerModel(EquipmentSlot slot);
 
     @Unique
+    @SuppressWarnings("unchecked")
     private A mca$createModel(float dilation) {
-        //noinspection unchecked
         return (A) new PlayerArmorExtendedModel<T>(LayerDefinition.create(VillagerEntityModelMCA.armorData(new CubeDeformation(dilation)), 64, 32).bakeRoot());
     }
 

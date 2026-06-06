@@ -129,7 +129,7 @@ public class VillagerEntityModelMCA<T extends LivingEntity & VillagerLike<T>> ex
         target.breastsWear.copyFrom(breastsWear);
     }
 
-    public <M extends HumanoidModel<T>> void copyVisibility(M model) {
+    public void copyVisibility(HumanoidModel<?> model) {
         head.visible = model.head.visible;
         hat.visible = model.head.visible;
         body.visible = model.body.visible;

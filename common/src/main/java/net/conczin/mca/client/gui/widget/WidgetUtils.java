@@ -35,6 +35,7 @@ public class WidgetUtils {
     /**
      * The same as the Inventory function but with negative Z
      */
+    @SuppressWarnings("deprecation")
     public static void drawBackgroundEntity(int x, int y, int size, float mouseX, float mouseY, LivingEntity entity) {
         float f = (float) Math.atan(mouseX / 40.0F);
         float g = (float) Math.atan(mouseY / 40.0F);
@@ -66,9 +67,7 @@ public class WidgetUtils {
         entityRenderDispatcher.overrideCameraOrientation(quaternionf2);
         entityRenderDispatcher.setRenderShadow(false);
         MultiBufferSource.BufferSource immediate = Minecraft.getInstance().renderBuffers().bufferSource();
-        RenderSystem.runAsFancy(() -> {
-            entityRenderDispatcher.render(entity, 0.0, 0.0, 0.0, 0.0F, 1.0F, matrixStack2, immediate, 15728880);
-        });
+        RenderSystem.runAsFancy(() -> entityRenderDispatcher.render(entity, 0.0, 0.0, 0.0, 0.0F, 1.0F, matrixStack2, immediate, 15728880));
         immediate.endBatch();
         entityRenderDispatcher.setRenderShadow(true);
         entity.yBodyRot = h;

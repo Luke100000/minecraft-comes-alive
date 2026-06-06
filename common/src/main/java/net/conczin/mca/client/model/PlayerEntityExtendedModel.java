@@ -119,7 +119,7 @@ public class PlayerEntityExtendedModel<T extends LivingEntity> extends PlayerMod
         applyVillagerDimensions(CommonVillagerModel.getVillager(villager), villager.isCrouching());
     }
 
-    public <M extends HumanoidModel<T>> void copyVisibility(M model) {
+    public void copyVisibility(HumanoidModel<?> model) {
         head.visible = model.head.visible;
         hat.visible = model.head.visible;
         body.visible = model.body.visible;

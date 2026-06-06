@@ -3,6 +3,8 @@ plugins {
     id 'maven-publish'
 }
 
+def modName = mod_name
+
 base {
     archivesName = "${mod_id}-${project.name}"
 }
@@ -63,18 +65,18 @@ repositories {
 
 sourcesJar {
     from(rootProject.file('LICENSE')) {
-        rename { "${it}_${mod_name}" }
+        rename { "${it}_${modName}" }
     }
 }
 
 jar {
     from(rootProject.file('LICENSE')) {
-        rename { "${it}_${mod_name}" }
+        rename { "${it}_${modName}" }
     }
 
     manifest {
         attributes([
-                'Specification-Title'   : mod_name,
+                'Specification-Title'   : modName,
                 'Specification-Vendor'  : mod_author,
                 'Specification-Version' : project.jar.archiveVersion,
                 'Implementation-Title'  : project.name,
@@ -116,13 +118,13 @@ processResources {
 publishing {
     publications {
         register('mavenJava', MavenPublication) {
-            artifactId base.archivesName.get()
+            artifactId = base.archivesName.get()
             from components.java
         }
     }
     repositories {
         maven {
-            url System.getenv('local_maven_url')
+            url = System.getenv('local_maven_url')
         }
     }
 }

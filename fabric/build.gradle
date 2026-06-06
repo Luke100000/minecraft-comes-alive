@@ -19,16 +19,16 @@ dependencies {
     modLocalRuntime "maven.modrinth:packet-fixer:${packetfixer_version}"
 }
 
+def devUsername = providers.gradleProperty('mca_dev_username').orElse('Dev').get()
+
 loom {
-    mixin {
-        defaultRefmapName.set("${mod_id}.refmap.json")
-    }
     runs {
         client {
             client()
             setConfigName("Fabric Client")
             ideConfigGenerated(true)
             runDir("run")
+            programArgs("--username", devUsername)
         }
         server {
             server()

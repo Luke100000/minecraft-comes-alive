@@ -7,6 +7,7 @@ import javax.net.ssl.HttpsURLConnection;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URI;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.Optional;
@@ -34,7 +35,7 @@ public class Requests {
     public static Optional<String> makeRequest(String urlString, String body, String sessionIDAuth) {
         String responseString = "No response";
         try {
-            URL url = new URL(urlString);
+            URL url = URI.create(urlString).toURL();
 
             // Create connection
             HttpsURLConnection con = (HttpsURLConnection) url.openConnection();
@@ -59,7 +60,7 @@ public class Requests {
 
 
             return Optional.of(responseString);
-        } catch (IOException e) {
+        } catch (IOException | IllegalArgumentException e) {
             // Log request
             MCA.LOGGER.error("InworldAI: Sending %s to %s".formatted(body, urlString));
             MCA.LOGGER.error("InworldAI: Received %s".formatted(responseString));

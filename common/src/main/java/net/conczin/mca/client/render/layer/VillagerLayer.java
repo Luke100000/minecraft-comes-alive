@@ -68,15 +68,11 @@ public abstract class VillagerLayer<T extends LivingEntity, M extends HumanoidMo
             return;
         }
 
-        //primarily restores compatibility with Armourers Workshop
-        //noinspection rawtypes
-        if (model instanceof VillagerEntityModelMCA layer) {
-            //noinspection unchecked
+        // Primarily restores compatibility with Armourers Workshop.
+        if (model instanceof VillagerEntityModelMCA<?> layer) {
             layer.copyVisibility(getParentModel());
         }
-        //noinspection rawtypes
-        if (model instanceof PlayerEntityExtendedModel layer) {
-            //noinspection unchecked
+        if (model instanceof PlayerEntityExtendedModel<?> layer) {
             layer.copyVisibility(getParentModel());
         }
 
