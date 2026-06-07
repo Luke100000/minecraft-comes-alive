@@ -14,9 +14,9 @@ import net.conczin.mca.util.network.datasync.CParameter;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Mob;
-import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.schedule.Activity;
 import org.jetbrains.annotations.Nullable;
@@ -36,14 +36,16 @@ public class VillagerBrain<E extends Mob & VillagerLike<E>> {
     private static final CEnumParameter<Chore> ACTIVE_CHORE = CParameter.create("ActiveChore", Chore.NONE);
     private static final CDataParameter<Optional<UUID>> CHORE_ASSIGNING_PLAYER = CParameter.create("ChoreAssigningPlayer", Optional.empty());
     private static final CDataParameter<Boolean> PANICKING = CParameter.create("IsPanicking", false);
-    private static final CDataParameter<Boolean> PANIC_ANIMATING = CParameter.create("PanicAnimating", false);
     private static final CDataParameter<Boolean> WEAR_ARMOR = CParameter.create("WearArmor", false);
 
-    private static final int PANIC_ANIMATION_GRACE_TICKS = 20;
+    private static final int PANIC_ANIMATION_HOLD_TICKS = 30;
+    private static final float PANIC_ANIMATION_STEP = 0.25F;
     private static final long GRIEVE_COOLDOWN = 24000 * 7;
     private final Random random = new Random();
     private final E entity;
-    private int panicAnimationTicks;
+    private int panicAnimationHoldTicks;
+    private float panicAnimationProgress;
+    private float panicAnimationProgressO;
 
     public VillagerBrain(E entity) {
         this.entity = entity;
@@ -58,7 +60,6 @@ public class VillagerBrain<E extends Mob & VillagerLike<E>> {
                 ACTIVE_CHORE,
                 CHORE_ASSIGNING_PLAYER,
                 PANICKING,
-                PANIC_ANIMATING,
                 WEAR_ARMOR
         );
     }
@@ -80,16 +81,6 @@ public class VillagerBrain<E extends Mob & VillagerLike<E>> {
         boolean panicking = entity.getBrain().isActive(Activity.PANIC);
         if (panicking != entity.getTrackedValue(PANICKING)) {
             entity.setTrackedValue(PANICKING, panicking);
-        }
-        boolean panicStimulus = panicking || hasPanicStimulus();
-        if (panicStimulus) {
-            panicAnimationTicks = PANIC_ANIMATION_GRACE_TICKS;
-        } else if (panicAnimationTicks > 0) {
-            panicAnimationTicks--;
-        }
-        boolean panicAnimating = panicStimulus || panicAnimationTicks > 0;
-        if (panicAnimating != entity.getTrackedValue(PANIC_ANIMATING)) {
-            entity.setTrackedValue(PANIC_ANIMATING, panicAnimating);
         }
 
         if (entity.tickCount % 20 != 0) {
@@ -194,14 +185,22 @@ public class VillagerBrain<E extends Mob & VillagerLike<E>> {
         return entity.getTrackedValue(PANICKING);
     }
 
-    public boolean isPanicAnimationActive() {
-        return entity.getTrackedValue(PANIC_ANIMATING);
+    public void tickPanicAnimation() {
+        panicAnimationProgressO = panicAnimationProgress;
+
+        if (isPanicking()) {
+            panicAnimationHoldTicks = PANIC_ANIMATION_HOLD_TICKS;
+        } else if (panicAnimationHoldTicks > 0) {
+            panicAnimationHoldTicks--;
+        }
+
+        float target = panicAnimationHoldTicks > 0 ? 1.0F : 0.0F;
+        float delta = Mth.clamp(target - panicAnimationProgress, -PANIC_ANIMATION_STEP, PANIC_ANIMATION_STEP);
+        panicAnimationProgress = Mth.clamp(panicAnimationProgress + delta, 0.0F, 1.0F);
     }
 
-    private boolean hasPanicStimulus() {
-        return entity.getBrain().hasMemoryValue(MemoryModuleType.HURT_BY)
-               || entity.getBrain().hasMemoryValue(MemoryModuleType.HURT_BY_ENTITY)
-               || entity.getBrain().hasMemoryValue(MemoryModuleType.NEAREST_HOSTILE);
+    public float getPanicAnimationProgress(float partialTick) {
+        return Mth.clamp(Mth.lerp(partialTick, panicAnimationProgressO, panicAnimationProgress), 0.0F, 1.0F);
     }
 
     public void modifyMoodValue(int mood) {

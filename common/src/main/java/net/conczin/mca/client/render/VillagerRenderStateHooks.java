@@ -23,7 +23,7 @@ public final class VillagerRenderStateHooks {
                 ? visualsSource.getPlayerModel()
                 : VillagerLike.PlayerModel.VANILLA;
 
-        if (Minecraft.getInstance().screen instanceof VillagerEditorScreen editor && editor.isEditingPlayer(entity.getUUID())) {
+        if (Minecraft.getInstance().screen instanceof VillagerEditorScreen editor && editor.hasVillagerData() && editor.isEditingPlayer(entity.getUUID())) {
             visualsSource = editor.getVillager();
             playerModel = editor.getSelectedPlayerModel();
         }

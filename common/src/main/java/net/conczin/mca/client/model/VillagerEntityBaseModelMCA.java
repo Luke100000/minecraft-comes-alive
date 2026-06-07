@@ -13,6 +13,7 @@ import net.minecraft.client.model.geom.builders.CubeDeformation;
 import net.minecraft.client.model.geom.builders.CubeListBuilder;
 import net.minecraft.client.model.geom.builders.MeshDefinition;
 import net.minecraft.client.model.geom.builders.PartDefinition;
+import net.minecraft.util.Mth;
 
 public class VillagerEntityBaseModelMCA extends HumanoidModel<VillagerRenderState> implements CommonVillagerModel<VillagerRenderState> {
     protected static final String BREASTS = "breasts";
@@ -68,18 +69,19 @@ public class VillagerEntityBaseModelMCA extends HumanoidModel<VillagerRenderStat
         state.walkAnimationSpeed = originalWalkAnimationSpeed;
         state.yRot = originalYRot;
 
-        if (visuals.panicking()) {
+        float panicAnimationProgress = visuals.panicAnimationProgress();
+        if (panicAnimationProgress > 0.0F) {
             float toRadians = (float) Math.PI / 180;
 
             float armRaise = (((float) Math.sin(state.ageInTicks / 5) * 30 - 180)
                               + ((float) Math.sin(state.ageInTicks / 3) * 3))
-                             * toRadians;
+                              * toRadians;
             float waveSideways = ((float) Math.sin(state.ageInTicks / 2) * 12 - 17) * toRadians;
 
-            this.leftArm.xRot = armRaise;
-            this.leftArm.zRot = -waveSideways;
-            this.rightArm.xRot = -armRaise;
-            this.rightArm.zRot = waveSideways;
+            this.leftArm.xRot = Mth.lerp(panicAnimationProgress, this.leftArm.xRot, armRaise);
+            this.leftArm.zRot = Mth.lerp(panicAnimationProgress, this.leftArm.zRot, -waveSideways);
+            this.rightArm.xRot = Mth.lerp(panicAnimationProgress, this.rightArm.xRot, -armRaise);
+            this.rightArm.zRot = Mth.lerp(panicAnimationProgress, this.rightArm.zRot, waveSideways);
         }
 
         applyVillagerDimensions(visuals, state.isCrouching);

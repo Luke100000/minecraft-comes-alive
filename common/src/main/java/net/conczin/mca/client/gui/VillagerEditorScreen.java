@@ -708,16 +708,14 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
 
     void drawGender(int x, int y) {
         genderButtonFemale = new ButtonWidget(x, y, DATA_WIDTH / 2, 20, Component.translatable("gui.villager_editor.feminine"), sender -> {
-            villager.getGenetics().setGender(Gender.FEMALE);
-            sendCommand("gender");
+            updateGender(Gender.FEMALE);
             genderButtonFemale.active = false;
             genderButtonMale.active = true;
         });
         addRenderableWidget(genderButtonFemale);
 
         genderButtonMale = new ButtonWidget(x + DATA_WIDTH / 2, y, DATA_WIDTH / 2, 20, Component.translatable("gui.villager_editor.masculine"), sender -> {
-            villager.getGenetics().setGender(Gender.MALE);
-            sendCommand("gender");
+            updateGender(Gender.MALE);
             genderButtonFemale.active = true;
             genderButtonMale.active = false;
         });
@@ -725,6 +723,11 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
 
         genderButtonFemale.active = villager.getGenetics().getGender() != Gender.FEMALE;
         genderButtonMale.active = villager.getGenetics().getGender() != Gender.MALE;
+    }
+
+    private void updateGender(Gender gender) {
+        villager.getGenetics().setGender(gender);
+        sendCommand("gender");
     }
 
     void addModelSelectionWidgets(int x, int y) {
@@ -814,6 +817,10 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
 
     public boolean isEditingPlayer(UUID uuid) {
         return villagerUUID.equals(playerUUID) && playerUUID.equals(uuid);
+    }
+
+    public boolean hasVillagerData() {
+        return villagerData != null;
     }
 
     public VillagerLike.PlayerModel getSelectedPlayerModel() {

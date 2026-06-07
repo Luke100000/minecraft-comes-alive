@@ -742,6 +742,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     @Override
     public void tick() {
         super.tick();
+        mcaBrain.tickPanicAnimation();
 
         // update visual age
         int age = getTrackedValue(GROWTH_AMOUNT);

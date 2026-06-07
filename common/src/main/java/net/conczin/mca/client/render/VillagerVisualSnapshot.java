@@ -16,7 +16,7 @@ public record VillagerVisualSnapshot(
         Dimensions dimensions,
         float rawHorizontalScaleFactor,
         float rawVerticalScaleFactor,
-        boolean panicking,
+        float panicAnimationProgress,
         boolean burned,
         boolean albinism,
         boolean rainbow,
@@ -45,6 +45,10 @@ public record VillagerVisualSnapshot(
     }
 
     public static VillagerVisualSnapshot capture(VillagerLike<?> villager) {
+        return capture(villager, 1.0F);
+    }
+
+    public static VillagerVisualSnapshot capture(VillagerLike<?> villager, float partialTick) {
         Genetics genetics = villager.getGenetics();
         Traits traits = villager.getTraits();
         LivingEntity entity = villager.asEntity();
@@ -74,7 +78,7 @@ public record VillagerVisualSnapshot(
                 ),
                 rawHorizontalScaleFactor,
                 rawVerticalScaleFactor,
-                villager.getVillagerBrain().isPanicAnimationActive(),
+                villager.getVillagerBrain().getPanicAnimationProgress(partialTick),
                 villager.isBurned(),
                 traits.hasTrait(Traits.ALBINISM),
                 traits.hasTrait(Traits.RAINBOW),

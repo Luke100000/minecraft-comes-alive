@@ -230,4 +230,3 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
         return TYPE;
     }
 }
-

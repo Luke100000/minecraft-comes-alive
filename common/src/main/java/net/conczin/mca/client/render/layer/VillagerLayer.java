@@ -3,7 +3,6 @@ package net.conczin.mca.client.render.layer;
 import com.google.common.collect.Maps;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.conczin.mca.MCA;
-import net.conczin.mca.client.model.CommonVillagerModel;
 import net.conczin.mca.client.model.PlayerArmorExtendedModel;
 import net.conczin.mca.client.model.PlayerEntityExtendedModel;
 import net.conczin.mca.client.model.VillagerEntityModelMCA;
@@ -186,11 +185,6 @@ public abstract class VillagerLayer<S extends HumanoidRenderState & VillagerStat
     ) {
         RenderType layer = getRenderLayer(texture, visible, isTranslucent(), glowing);
         if (layer == null) {
-            return;
-        }
-
-        if (model instanceof CommonVillagerModel commonVillagerModel) {
-            commonVillagerModel.submitCommon(poseStack, submitNodeCollector, layer, lightCoords, overlay, color, state);
             return;
         }
 
