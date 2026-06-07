@@ -33,6 +33,7 @@ jobs:
         uses: gradle/actions/setup-gradle@v6
         with:
           cache-read-only: false
+          cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
       - name: Build with Gradle
         run: ./gradlew build --console=plain
       - name: Get tag

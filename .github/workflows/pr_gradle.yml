@@ -20,5 +20,6 @@ jobs:
         uses: gradle/actions/setup-gradle@v6
         with:
           cache-read-only: true
+          cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
       - name: Build with Gradle
         run: ./gradlew build --console=plain
