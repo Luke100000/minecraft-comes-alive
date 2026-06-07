@@ -12,6 +12,7 @@ import net.minecraft.core.UUIDUtil;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
+import net.minecraft.util.FormattedCharSequence;
 
 import java.util.LinkedList;
 import java.util.List;
@@ -19,6 +20,9 @@ import java.util.UUID;
 
 public class FamilyTreeSearchScreen extends Screen {
     static final int DATA_WIDTH = 120;
+    private static final int RESULT_ROW_HEIGHT = 20;
+    private static final int RESULT_ROW_GAP = 1;
+    private static final int RESULTS_PER_PAGE = 5;
 
     private List<Entry> list = new LinkedList<>();
     private ButtonWidget buttonPage;
@@ -57,11 +61,11 @@ public class FamilyTreeSearchScreen extends Screen {
             }
         }));
         addRenderableWidget(new ButtonWidget(width / 2 + 24, height / 2 + 60, 20, 20, Component.literal(">"), (b) -> {
-            if (pageNumber < Math.ceil(list.size() / 9.0) - 1) {
+            if (pageNumber < pageCount() - 1) {
                 pageNumber++;
             }
         }));
-        buttonPage = addRenderableWidget(new ButtonWidget(width / 2 - 24, height / 2 + 60, 48, 20, Component.literal("0/0)"), (b) -> {
+        buttonPage = addRenderableWidget(new ButtonWidget(width / 2 - 24, height / 2 + 60, 48, 20, Component.literal("1/1"), (b) -> {
         }));
     }
 
@@ -81,31 +85,26 @@ public class FamilyTreeSearchScreen extends Screen {
     }
 
     private void renderVillagers(GuiGraphics context) {
-        int maxPages = (int) Math.ceil(list.size() / 9.0);
+        int maxPages = pageCount();
+        pageNumber = Math.min(pageNumber, maxPages - 1);
         buttonPage.setMessage(Component.literal((pageNumber + 1) + "/" + maxPages));
 
         selectedVillager = null;
-        for (int i = 0; i < 9; i++) {
-            int index = i + pageNumber * 9;
+        for (int i = 0; i < RESULTS_PER_PAGE; i++) {
+            int index = i + pageNumber * RESULTS_PER_PAGE;
             if (index < list.size()) {
-                int y = height / 2 - 52 + i * 12;
-                boolean hover = isMouseWithin(width / 2 - 50, y - 1, 100, 12);
+                int y = height / 2 - 52 + i * (RESULT_ROW_HEIGHT + RESULT_ROW_GAP);
+                boolean hover = isMouseWithin(width / 2 - DATA_WIDTH / 2, y - 1, DATA_WIDTH, RESULT_ROW_HEIGHT);
                 Entry entry = list.get(index);
 
-                Component text;
-                if (MCA.isBlankString(entry.mother) && MCA.isBlankString(entry.father)) {
-                    text = Component.translatable("gui.family_tree.child_of_0");
-                } else if (MCA.isBlankString(entry.mother)) {
-                    text = Component.translatable("gui.family_tree.child_of_1", entry.father);
-                } else if (MCA.isBlankString(entry.father)) {
-                    text = Component.translatable("gui.family_tree.child_of_1", entry.mother);
-                } else {
-                    text = Component.translatable("gui.family_tree.child_of_2", entry.father, entry.mother);
-                }
-
-                context.drawCenteredString(font, text, width / 2, y, hover ? 0xFFD7D784 : 0xFFFFFFFF);
                 if (hover) {
                     selectedVillager = entry.uuid;
+                }
+
+                List<FormattedCharSequence> lines = font.split(entry.relationshipLabel(), DATA_WIDTH);
+                int textY = y + Math.max(1, (RESULT_ROW_HEIGHT - Math.min(2, lines.size()) * font.lineHeight) / 2);
+                for (int lineIndex = 0; lineIndex < Math.min(2, lines.size()); lineIndex++) {
+                    context.drawCenteredString(font, lines.get(lineIndex), width / 2, textY + lineIndex * font.lineHeight, hover ? 0xFFD7D784 : 0xFFFFFFFF);
                 }
             } else {
                 break;
@@ -122,6 +121,7 @@ public class FamilyTreeSearchScreen extends Screen {
 
     public void setList(List<Entry> list) {
         this.list = list;
+        pageNumber = Math.min(pageNumber, pageCount() - 1);
     }
 
     protected boolean isMouseWithin(int x, int y, int w, int h) {
@@ -142,12 +142,33 @@ public class FamilyTreeSearchScreen extends Screen {
         minecraft.setScreen(new FamilyTreeScreen(villager));
     }
 
-    public record Entry(UUID uuid, String father, String mother) {
+    private int pageCount() {
+        return Math.max(1, (int) Math.ceil(list.size() / (double) RESULTS_PER_PAGE));
+    }
+
+    public record Entry(UUID uuid, String name, String father, String mother) {
         public static final StreamCodec<ByteBuf, Entry> STREAM_CODEC = StreamCodec.composite(
                 UUIDUtil.STREAM_CODEC, Entry::uuid,
+                ByteBufCodecs.STRING_UTF8, Entry::name,
                 ByteBufCodecs.STRING_UTF8, Entry::father,
                 ByteBufCodecs.STRING_UTF8, Entry::mother,
                 Entry::new
         );
+
+        private Component relationshipLabel() {
+            return Component.literal(name).append(" - ").append(childOfLabel());
+        }
+
+        private Component childOfLabel() {
+            if (MCA.isBlankString(mother) && MCA.isBlankString(father)) {
+                return Component.translatable("gui.family_tree.child_of_0");
+            } else if (MCA.isBlankString(mother)) {
+                return Component.translatable("gui.family_tree.child_of_1", father);
+            } else if (MCA.isBlankString(father)) {
+                return Component.translatable("gui.family_tree.child_of_1", mother);
+            } else {
+                return Component.translatable("gui.family_tree.child_of_2", father, mother);
+            }
+        }
     }
 }
