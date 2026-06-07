@@ -70,7 +70,7 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
         }
 
         ListTag inbox = nbt.getList("inbox", Tag.TAG_COMPOUND);
-        NbtHelper.toList(inbox, e -> new Letter((CompoundTag) e, world.registryAccess()));
+        this.inbox.addAll(NbtHelper.toList(inbox, e -> new Letter((CompoundTag) e, world.registryAccess())));
     }
 
     public static PlayerSaveData get(ServerPlayer player) {
