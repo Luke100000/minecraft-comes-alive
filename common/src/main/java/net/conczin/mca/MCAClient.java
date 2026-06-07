@@ -8,13 +8,11 @@ import net.conczin.mca.network.Network;
 import net.conczin.mca.network.c2s.ConfigRequest;
 import net.conczin.mca.network.c2s.PlayerDataRequest;
 import net.minecraft.client.Minecraft;
-import net.minecraft.world.item.ItemStack;
 
 import java.util.*;
 
 public class MCAClient {
     public static final Map<UUID, VillagerLike<?>> playerData = new HashMap<>();
-    public static final Map<UUID, ItemStack> equippedRings = new HashMap<>();
     public static final Set<UUID> playerDataRequests = new HashSet<>();
     private static final DestinyManager destinyManager = new DestinyManager();
 
@@ -24,7 +22,6 @@ public class MCAClient {
 
     public static void onLogin() {
         playerDataRequests.clear();
-        equippedRings.clear();
         Network.sendToServer(new ConfigRequest());
     }
 
@@ -39,29 +36,6 @@ public class MCAClient {
             }
         }
         return Optional.empty();
-    }
-
-    public static Optional<ItemStack> getEquippedRing(UUID uuid) {
-        if (!MCAClient.playerDataRequests.contains(uuid) && Minecraft.getInstance().getConnection() != null) {
-            MCAClient.playerDataRequests.add(uuid);
-            Network.sendToServer(new PlayerDataRequest(uuid));
-        }
-
-        ItemStack ring = equippedRings.get(uuid);
-        if (ring == null || ring.isEmpty()) {
-            return Optional.empty();
-        }
-
-        return Optional.of(ring.copy());
-    }
-
-    public static void setEquippedRing(UUID uuid, ItemStack ring) {
-        if (ring == null || ring.isEmpty()) {
-            equippedRings.remove(uuid);
-            return;
-        }
-
-        equippedRings.put(uuid, ring.copy());
     }
 
     public static boolean useExpandedPersonalityTranslations() {
@@ -104,9 +78,8 @@ public class MCAClient {
         SpeechManager.INSTANCE.tick(client);
     }
 
-    public static void addPlayerData(UUID uuid, VillagerEntityMCA villager, ItemStack equippedRing) {
+    public static void addPlayerData(UUID uuid, VillagerEntityMCA villager) {
         playerData.put(uuid, villager);
-        setEquippedRing(uuid, equippedRing);
 
         // Refresh eye height
         Minecraft client = Minecraft.getInstance();

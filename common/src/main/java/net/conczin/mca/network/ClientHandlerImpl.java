@@ -214,8 +214,7 @@ public class ClientHandlerImpl implements ClientHandler {
         VillagerEntityMCA villager = EntitiesMCA.MALE_VILLAGER.create(client.level, EntitySpawnReason.LOAD);
         assert villager != null;
         villager.load(TagValueInput.create(ProblemReporter.DISCARDING, villager.registryAccess(), response.nbt()));
-        var equippedRing = net.conczin.mca.server.world.data.PlayerSaveData.readEquippedRing(response.nbt(), client.level.registryAccess());
-        MCAClient.addPlayerData(response.uuid(), villager, equippedRing);
+        MCAClient.addPlayerData(response.uuid(), villager);
     }
 
     @Override

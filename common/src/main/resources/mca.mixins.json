@@ -21,9 +21,6 @@
     "MixinZombieVillager"
   ],
   "client": [
-    "client.MixinAbstractContainerScreenAccessor",
-    "client.MixinCreativeModeInventoryScreen",
-    "client.MixinInventoryScreen",
     "client.MixinAvatarRenderState",
     "client.MixinClientLanguage",
     "client.MixinEntity",
