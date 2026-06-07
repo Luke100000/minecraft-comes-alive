@@ -24,6 +24,7 @@ public interface MessagesMCA {
         c.register(InteractionDialogueMessage.TYPE, InteractionDialogueMessage.STREAM_CODEC, true);
         c.register(InteractionVillagerMessage.TYPE, InteractionVillagerMessage.STREAM_CODEC, true);
         c.register(PlayerDataRequest.TYPE, PlayerDataRequest.STREAM_CODEC, true);
+        c.register(PlayerRingSlotRequest.TYPE, PlayerRingSlotRequest.STREAM_CODEC, true);
         c.register(RemoveCustomClothingMessage.TYPE, RemoveCustomClothingMessage.STREAM_CODEC, true);
         c.register(RenameVillageMessage.TYPE, RenameVillageMessage.STREAM_CODEC, true);
         c.register(ReportBuildingMessage.TYPE, ReportBuildingMessage.STREAM_CODEC, true);

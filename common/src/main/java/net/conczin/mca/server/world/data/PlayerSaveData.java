@@ -36,6 +36,7 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.saveddata.SavedData;
+import net.minecraft.world.level.storage.TagValueInput;
 import net.minecraft.world.level.storage.TagValueOutput;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -49,10 +50,12 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
     private @Nullable Integer lastSeenVillageId;
     private boolean entityDataSet;
     private CompoundTag entityData;
+    private ItemStack equippedRing = ItemStack.EMPTY;
 
     PlayerSaveData(ServerLevel world, UUID uuid) {
         this.world = world;
         this.uuid = uuid;
+        this.equippedRing = ItemStack.EMPTY;
 
         resetEntityData();
     }
@@ -68,6 +71,8 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
             resetEntityData();
             return entityData;
         });
+
+        this.equippedRing = normalizeEquippedRing(readEquippedRing(nbt, world.registryAccess()));
 
         ListTag inbox = nbt.getList("inbox").orElseGet(ListTag::new);
         this.inbox.addAll(NbtHelper.toList(inbox, e -> new Letter((CompoundTag) e, world.registryAccess())));
@@ -243,7 +248,63 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
         nbt.put("entityData", entityData.copy());
         nbt.putBoolean("entityDataSet", entityDataSet);
         nbt.put("inbox", NbtHelper.fromList(inbox, v -> v.toTag(provider)));
+        storeEquippedRing(nbt, provider, this.equippedRing);
         return nbt;
+    }
+
+    public ItemStack getEquippedRing() {
+        return this.equippedRing.copy();
+    }
+
+    public void setEquippedRing(ItemStack stack) {
+        this.equippedRing = normalizeEquippedRing(stack);
+        setDirty();
+    }
+
+    public CompoundTag createNetworkData() {
+        CompoundTag nbt = this.getEntityData().copy();
+        storeEquippedRing(nbt, this.world.registryAccess(), this.equippedRing);
+        return nbt;
+    }
+
+    public static ItemStack readEquippedRing(CompoundTag nbt, HolderLookup.Provider provider) {
+        return TagValueInput.create(ProblemReporter.DISCARDING, provider, nbt)
+                .read("MCAEquippedRing", ItemStack.OPTIONAL_CODEC)
+                .orElse(ItemStack.EMPTY);
+    }
+
+    public static void sync(ServerPlayer player) {
+        PlayerSaveData data = get(player);
+        CompoundTag nbt = data.createNetworkData();
+        net.conczin.mca.MCA.getServer().ifPresent(server ->
+                server.getPlayerList().getPlayers().forEach(target ->
+                        Network.sendToPlayer(new net.conczin.mca.network.s2c.PlayerDataMessage(player.getUUID(), nbt), target)
+                )
+        );
+    }
+
+    private static ItemStack normalizeEquippedRing(ItemStack stack) {
+        if (!stack.isEmpty() && net.conczin.mca.item.RelationshipItem.isRing(stack)) {
+            ItemStack copy = stack.copy();
+            copy.setCount(1);
+            return copy;
+        } else {
+            return ItemStack.EMPTY;
+        }
+    }
+
+    private static void storeEquippedRing(CompoundTag nbt, HolderLookup.Provider provider, ItemStack ring) {
+        if (!ring.isEmpty()) {
+            TagValueOutput output = TagValueOutput.createWithContext(ProblemReporter.DISCARDING, provider);
+            output.store("MCAEquippedRing", ItemStack.OPTIONAL_CODEC, ring);
+            CompoundTag stored = output.buildResult();
+            if (stored.contains("MCAEquippedRing")) {
+                Tag tag = stored.get("MCAEquippedRing");
+                if (tag != null) {
+                    nbt.put("MCAEquippedRing", tag);
+                }
+            }
+        }
     }
 
     public void sendMail(Letter pages) {

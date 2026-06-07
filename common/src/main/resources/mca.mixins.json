@@ -21,6 +21,9 @@
     "MixinZombieVillager"
   ],
   "client": [
+    "client.MixinAbstractContainerScreenAccessor",
+    "client.MixinCreativeModeInventoryScreen",
+    "client.MixinInventoryScreen",
     "client.MixinAvatarRenderState",
     "client.MixinClientLanguage",
     "client.MixinEntity",
@@ -28,6 +31,7 @@
     "client.MixinHumanoidArmorLayer",
     "client.MixinItemInHandLayer",
     "client.MixinLivingEntityRenderer",
+    "client.MixinModel",
     "client.MixinPlayerRenderer",
     "client.MixinSoundBufferLibrary"
   ],
