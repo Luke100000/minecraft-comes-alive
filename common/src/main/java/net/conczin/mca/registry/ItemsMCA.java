@@ -162,21 +162,21 @@ public interface ItemsMCA {
     Item ROSE_GOLD_DUST = register("rose_gold_dust", new Item(baseProps("rose_gold_dust")));
     Item ROSE_GOLD_INGOT = register("rose_gold_ingot", new Item(baseProps("rose_gold_ingot")));
 
-    Item ROSE_GOLD_BLOCK = register("rose_gold_block", new BlockItem(BlocksMCA.ROSE_GOLD_BLOCK, baseProps("rose_gold_block")));
+    Item ROSE_GOLD_BLOCK = register("rose_gold_block", new BlockItem(BlocksMCA.ROSE_GOLD_BLOCK, blockProps("rose_gold_block")));
 
-    Item GRAVELLING_HEADSTONE = register("gravelling_headstone", new BlockItem(BlocksMCA.GRAVELLING_HEADSTONE, baseProps("gravelling_headstone")));
-    Item UPRIGHT_HEADSTONE = register("upright_headstone", new BlockItem(BlocksMCA.UPRIGHT_HEADSTONE, baseProps("upright_headstone")));
-    Item SLANTED_HEADSTONE = register("slanted_headstone", new BlockItem(BlocksMCA.SLANTED_HEADSTONE, baseProps("slanted_headstone")));
-    Item CROSS_HEADSTONE = register("cross_headstone", new BlockItem(BlocksMCA.CROSS_HEADSTONE, baseProps("cross_headstone")));
-    Item WALL_HEADSTONE = register("wall_headstone", new BlockItem(BlocksMCA.WALL_HEADSTONE, baseProps("wall_headstone")));
-    Item COBBLESTONE_UPRIGHT_HEADSTONE = register("cobblestone_upright_headstone", new BlockItem(BlocksMCA.COBBLESTONE_UPRIGHT_HEADSTONE, baseProps("cobblestone_upright_headstone")));
-    Item COBBLESTONE_SLANTED_HEADSTONE = register("cobblestone_slanted_headstone", new BlockItem(BlocksMCA.COBBLESTONE_SLANTED_HEADSTONE, baseProps("cobblestone_slanted_headstone")));
-    Item WOODEN_UPRIGHT_HEADSTONE = register("wooden_upright_headstone", new BlockItem(BlocksMCA.WOODEN_UPRIGHT_HEADSTONE, baseProps("wooden_upright_headstone")));
-    Item WOODEN_SLANTED_HEADSTONE = register("wooden_slanted_headstone", new BlockItem(BlocksMCA.WOODEN_SLANTED_HEADSTONE, baseProps("wooden_slanted_headstone")));
-    Item GOLDEN_UPRIGHT_HEADSTONE = register("golden_upright_headstone", new BlockItem(BlocksMCA.GOLDEN_UPRIGHT_HEADSTONE, baseProps("golden_upright_headstone")));
-    Item GOLDEN_SLANTED_HEADSTONE = register("golden_slanted_headstone", new BlockItem(BlocksMCA.GOLDEN_SLANTED_HEADSTONE, baseProps("golden_slanted_headstone")));
-    Item DEEPSLATE_UPRIGHT_HEADSTONE = register("deepslate_upright_headstone", new BlockItem(BlocksMCA.DEEPSLATE_UPRIGHT_HEADSTONE, baseProps("deepslate_upright_headstone")));
-    Item DEEPSLATE_SLANTED_HEADSTONE = register("deepslate_slanted_headstone", new BlockItem(BlocksMCA.DEEPSLATE_SLANTED_HEADSTONE, baseProps("deepslate_slanted_headstone")));
+    Item GRAVELLING_HEADSTONE = register("gravelling_headstone", new BlockItem(BlocksMCA.GRAVELLING_HEADSTONE, blockProps("gravelling_headstone")));
+    Item UPRIGHT_HEADSTONE = register("upright_headstone", new BlockItem(BlocksMCA.UPRIGHT_HEADSTONE, blockProps("upright_headstone")));
+    Item SLANTED_HEADSTONE = register("slanted_headstone", new BlockItem(BlocksMCA.SLANTED_HEADSTONE, blockProps("slanted_headstone")));
+    Item CROSS_HEADSTONE = register("cross_headstone", new BlockItem(BlocksMCA.CROSS_HEADSTONE, blockProps("cross_headstone")));
+    Item WALL_HEADSTONE = register("wall_headstone", new BlockItem(BlocksMCA.WALL_HEADSTONE, blockProps("wall_headstone")));
+    Item COBBLESTONE_UPRIGHT_HEADSTONE = register("cobblestone_upright_headstone", new BlockItem(BlocksMCA.COBBLESTONE_UPRIGHT_HEADSTONE, blockProps("cobblestone_upright_headstone")));
+    Item COBBLESTONE_SLANTED_HEADSTONE = register("cobblestone_slanted_headstone", new BlockItem(BlocksMCA.COBBLESTONE_SLANTED_HEADSTONE, blockProps("cobblestone_slanted_headstone")));
+    Item WOODEN_UPRIGHT_HEADSTONE = register("wooden_upright_headstone", new BlockItem(BlocksMCA.WOODEN_UPRIGHT_HEADSTONE, blockProps("wooden_upright_headstone")));
+    Item WOODEN_SLANTED_HEADSTONE = register("wooden_slanted_headstone", new BlockItem(BlocksMCA.WOODEN_SLANTED_HEADSTONE, blockProps("wooden_slanted_headstone")));
+    Item GOLDEN_UPRIGHT_HEADSTONE = register("golden_upright_headstone", new BlockItem(BlocksMCA.GOLDEN_UPRIGHT_HEADSTONE, blockProps("golden_upright_headstone")));
+    Item GOLDEN_SLANTED_HEADSTONE = register("golden_slanted_headstone", new BlockItem(BlocksMCA.GOLDEN_SLANTED_HEADSTONE, blockProps("golden_slanted_headstone")));
+    Item DEEPSLATE_UPRIGHT_HEADSTONE = register("deepslate_upright_headstone", new BlockItem(BlocksMCA.DEEPSLATE_UPRIGHT_HEADSTONE, blockProps("deepslate_upright_headstone")));
+    Item DEEPSLATE_SLANTED_HEADSTONE = register("deepslate_slanted_headstone", new BlockItem(BlocksMCA.DEEPSLATE_SLANTED_HEADSTONE, blockProps("deepslate_slanted_headstone")));
 
     List<CribItem> CRIBS = registerAllCribTypes();
 
@@ -204,6 +204,10 @@ public interface ItemsMCA {
 
     static Item.Properties baseProps(String name) {
         return new Item.Properties().setId(itemKey(name));
+    }
+
+    static Item.Properties blockProps(String name) {
+        return baseProps(name).useBlockDescriptionPrefix();
     }
 
     static Item.Properties unstackableProps(String name) {

@@ -72,7 +72,10 @@ public class VillagerLikeEntityMCARenderer<T extends Mob & VillagerLike<T>>
     @Override
     public void extractRenderState(T entity, VillagerRenderState state, float partialTicks) {
         super.extractRenderState(entity, state, partialTicks);
-        state.mca$setVisualSnapshot(VillagerVisualSnapshot.capture(entity, partialTicks));
+        VillagerStateHolder holder = VillagerStateHolder.require(state);
+        holder.mca$setPlayerModel(VillagerLike.PlayerModel.VILLAGER);
+        holder.mca$setVisualSnapshot(VillagerVisualSnapshot.capture(entity));
+        state.panicAnimationProgress = entity.getVillagerBrain().getPanicAnimationProgress(partialTicks);
         state.cribPassenger = entity.getVehicle() instanceof CribEntity;
         VillagerRenderStateHooks.extractScaledBounds(entity, state);
     }

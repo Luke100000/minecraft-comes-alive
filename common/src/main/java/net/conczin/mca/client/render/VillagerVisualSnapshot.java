@@ -16,7 +16,6 @@ public record VillagerVisualSnapshot(
         Dimensions dimensions,
         float rawHorizontalScaleFactor,
         float rawVerticalScaleFactor,
-        float panicAnimationProgress,
         boolean burned,
         boolean albinism,
         boolean rainbow,
@@ -36,8 +35,8 @@ public record VillagerVisualSnapshot(
         boolean sleeping,
         boolean deadOrDying
 ) {
-    public static VillagerVisualSnapshot require(VillagerStateHolder state) {
-        VillagerVisualSnapshot snapshot = state.mca$getVisualSnapshot();
+    public static VillagerVisualSnapshot require(Object state) {
+        VillagerVisualSnapshot snapshot = VillagerStateHolder.require(state).mca$getVisualSnapshot();
         if (snapshot == null) {
             throw new IllegalStateException("No villager visuals available for render state");
         }
@@ -45,10 +44,6 @@ public record VillagerVisualSnapshot(
     }
 
     public static VillagerVisualSnapshot capture(VillagerLike<?> villager) {
-        return capture(villager, 1.0F);
-    }
-
-    public static VillagerVisualSnapshot capture(VillagerLike<?> villager, float partialTick) {
         Genetics genetics = villager.getGenetics();
         Traits traits = villager.getTraits();
         LivingEntity entity = villager.asEntity();
@@ -78,7 +73,6 @@ public record VillagerVisualSnapshot(
                 ),
                 rawHorizontalScaleFactor,
                 rawVerticalScaleFactor,
-                villager.getVillagerBrain().getPanicAnimationProgress(partialTick),
                 villager.isBurned(),
                 traits.hasTrait(Traits.ALBINISM),
                 traits.hasTrait(Traits.RAINBOW),

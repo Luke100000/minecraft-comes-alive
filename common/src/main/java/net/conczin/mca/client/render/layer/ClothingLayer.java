@@ -2,14 +2,13 @@ package net.conczin.mca.client.render.layer;
 
 import net.conczin.mca.MCA;
 import net.conczin.mca.client.gui.immersive_library.SkinCache;
-import net.conczin.mca.client.render.VillagerStateHolder;
 import net.conczin.mca.client.render.VillagerVisualSnapshot;
 import net.minecraft.client.model.HumanoidModel;
 import net.minecraft.client.renderer.entity.RenderLayerParent;
 import net.minecraft.client.renderer.entity.state.HumanoidRenderState;
 import net.minecraft.resources.Identifier;
 
-public class ClothingLayer<S extends HumanoidRenderState & VillagerStateHolder, M extends HumanoidModel<S>> extends VillagerLayer<S, M> {
+public class ClothingLayer<S extends HumanoidRenderState, M extends HumanoidModel<S>> extends VillagerLayer<S, M> {
     private final String variant;
 
     public ClothingLayer(RenderLayerParent<S, M> renderer, M model, String variant) {

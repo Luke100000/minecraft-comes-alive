@@ -21,13 +21,13 @@
     "MixinZombieVillager"
   ],
   "client": [
-    "client.MixinAvatarRenderState",
     "client.MixinClientLanguage",
     "client.MixinEntity",
     "client.MixinGameRenderer",
     "client.MixinHumanoidArmorLayer",
     "client.MixinItemInHandLayer",
     "client.MixinLivingEntityRenderer",
+    "client.MixinLivingEntityRenderState",
     "client.MixinModel",
     "client.MixinPlayerRenderer",
     "client.MixinSoundBufferLibrary"

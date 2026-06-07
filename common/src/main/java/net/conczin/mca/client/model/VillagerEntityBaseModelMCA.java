@@ -69,7 +69,7 @@ public class VillagerEntityBaseModelMCA extends HumanoidModel<VillagerRenderStat
         state.walkAnimationSpeed = originalWalkAnimationSpeed;
         state.yRot = originalYRot;
 
-        float panicAnimationProgress = visuals.panicAnimationProgress();
+        float panicAnimationProgress = state.panicAnimationProgress;
         if (panicAnimationProgress > 0.0F) {
             float toRadians = (float) Math.PI / 180;
 

@@ -26,9 +26,10 @@ public record FamilyTreeUUIDLookup(String search) implements HandleablePayload {
     @Override
     public void handleServer(ServerPlayer player) {
         FamilyTree tree = FamilyTree.get(player.level());
-        List<FamilyTreeSearchScreen.Entry> list = tree.getAllWithName(search)
+        List<FamilyTreeSearchScreen.Entry> list = tree.getAllWithNameContaining(search)
                 .map(entry -> new FamilyTreeSearchScreen.Entry(
                         entry.id(),
+                        entry.getName(),
                         tree.getOrEmpty(entry.father()).map(FamilyTreeNode::getName).orElse(""),
                         tree.getOrEmpty(entry.mother()).map(FamilyTreeNode::getName).orElse("")))
                 .limit(16)

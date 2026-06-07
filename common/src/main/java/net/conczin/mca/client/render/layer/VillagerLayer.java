@@ -6,7 +6,6 @@ import net.conczin.mca.MCA;
 import net.conczin.mca.client.model.PlayerArmorExtendedModel;
 import net.conczin.mca.client.model.PlayerEntityExtendedModel;
 import net.conczin.mca.client.model.VillagerEntityModelMCA;
-import net.conczin.mca.client.render.VillagerRenderState;
 import net.conczin.mca.client.render.VillagerStateHolder;
 import net.minecraft.IdentifierException;
 import net.minecraft.client.Minecraft;
@@ -26,7 +25,7 @@ import java.util.Objects;
 import java.util.function.Function;
 
 @SuppressWarnings({"rawtypes", "unchecked"})
-public abstract class VillagerLayer<S extends HumanoidRenderState & VillagerStateHolder, M extends HumanoidModel<S>> extends RenderLayer<S, M> {
+public abstract class VillagerLayer<S extends HumanoidRenderState, M extends HumanoidModel<S>> extends RenderLayer<S, M> {
     private static final Map<String, Identifier> TEXTURE_CACHE = Maps.newHashMap();
     private static final Map<Identifier, Boolean> TEXTURE_EXIST_CACHE = Maps.newHashMap();
 
@@ -62,11 +61,11 @@ public abstract class VillagerLayer<S extends HumanoidRenderState & VillagerStat
 
     @Override
     public void submit(PoseStack poseStack, SubmitNodeCollector submitNodeCollector, int lightCoords, S state, float yRot, float xRot) {
-        if (state.mca$getVisualSnapshot() == null) {
+        if (!(state instanceof VillagerStateHolder holder) || holder.mca$getVisualSnapshot() == null) {
             return;
         }
 
-        if (!(state instanceof VillagerRenderState) && !state.mca$isVillagerRendererActive()) {
+        if (!holder.mca$isVillagerRendererActive()) {
             return;
         }
 
@@ -85,17 +84,17 @@ public abstract class VillagerLayer<S extends HumanoidRenderState & VillagerStat
         M parentModel = this.getParentModel();
         copyVisibility(parentModel, this.model);
 
-        if (parentModel instanceof VillagerEntityModelMCA parentVillager && (Object) this.model instanceof VillagerEntityModelMCA villagerModel) {
+        if ((Object) parentModel instanceof VillagerEntityModelMCA parentVillager && (Object) this.model instanceof VillagerEntityModelMCA villagerModel) {
             parentVillager.copyPropertiesTo((HumanoidModel) villagerModel);
             villagerModel.copyVisibility(parentVillager);
         }
 
-        if (parentModel instanceof PlayerEntityExtendedModel parentPlayer && (Object) this.model instanceof PlayerEntityExtendedModel playerModel) {
+        if ((Object) parentModel instanceof PlayerEntityExtendedModel parentPlayer && (Object) this.model instanceof PlayerEntityExtendedModel playerModel) {
             parentPlayer.copyPropertiesTo((HumanoidModel) playerModel);
             playerModel.copyVisibility(parentPlayer);
         }
 
-        if (parentModel instanceof PlayerEntityExtendedModel parentPlayer && (Object) this.model instanceof PlayerArmorExtendedModel armorModel) {
+        if ((Object) parentModel instanceof PlayerEntityExtendedModel parentPlayer && (Object) this.model instanceof PlayerArmorExtendedModel armorModel) {
             parentPlayer.copyPropertiesTo((HumanoidModel) armorModel);
         }
     }

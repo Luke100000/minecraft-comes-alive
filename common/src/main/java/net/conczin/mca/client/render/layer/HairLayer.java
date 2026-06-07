@@ -2,7 +2,6 @@ package net.conczin.mca.client.render.layer;
 
 import net.conczin.mca.MCA;
 import net.conczin.mca.client.gui.immersive_library.SkinCache;
-import net.conczin.mca.client.render.VillagerStateHolder;
 import net.conczin.mca.client.render.VillagerVisualSnapshot;
 import net.conczin.mca.client.resources.ColorPalette;
 import net.minecraft.client.model.HumanoidModel;
@@ -12,7 +11,7 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.util.ARGB;
 import net.minecraft.world.item.DyeColor;
 
-public class HairLayer<S extends HumanoidRenderState & VillagerStateHolder, M extends HumanoidModel<S>> extends VillagerLayer<S, M> {
+public class HairLayer<S extends HumanoidRenderState, M extends HumanoidModel<S>> extends VillagerLayer<S, M> {
     public HairLayer(RenderLayerParent<S, M> renderer, M model) {
         super(renderer, model);
     }

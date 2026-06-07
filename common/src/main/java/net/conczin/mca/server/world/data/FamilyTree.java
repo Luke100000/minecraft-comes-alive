@@ -20,6 +20,7 @@ import java.util.stream.Stream;
 public class FamilyTree extends SavedData {
     private static final String DATA_ID = "family_tree";
 
+
     private final Map<UUID, FamilyTreeNode> entries;
 
     FamilyTree(ServerLevel world) {
@@ -44,6 +45,29 @@ public class FamilyTree extends SavedData {
 
     public Stream<FamilyTreeNode> getAllWithName(String name) {
         return entries.values().stream().filter(n -> n.getName().toLowerCase(Locale.ROOT).equals(name.toLowerCase(Locale.ROOT)));
+    }
+
+    public Stream<FamilyTreeNode> getAllWithNameContaining(String name) {
+        String query = normalizeNameSearch(name.trim());
+        if (query.isEmpty()) {
+            return Stream.empty();
+        }
+
+        return entries.values().stream()
+                .map(n -> new NameSearchResult(n, normalizeNameSearch(n.getName())))
+                .filter(result -> result.normalizedName().contains(query))
+                .sorted(Comparator
+                        .comparingInt((NameSearchResult result) -> result.normalizedName().startsWith(query) ? 0 : 1)
+                        .thenComparing(NameSearchResult::normalizedName)
+                        .thenComparing(result -> result.node().id()))
+                .map(NameSearchResult::node);
+    }
+
+    private static String normalizeNameSearch(String name) {
+        return net.conczin.mca.MCA.normalizeString(name);
+    }
+
+    private record NameSearchResult(FamilyTreeNode node, String normalizedName) {
     }
 
     @NotNull

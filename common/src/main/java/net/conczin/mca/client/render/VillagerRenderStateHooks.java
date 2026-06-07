@@ -28,14 +28,11 @@ public final class VillagerRenderStateHooks {
             playerModel = editor.getSelectedPlayerModel();
         }
 
-        boolean geneticsRenderer = playerModel != VillagerLike.PlayerModel.VANILLA;
-        boolean villagerRenderer = playerModel == VillagerLike.PlayerModel.VILLAGER;
-        VillagerVisualSnapshot visualSnapshot = geneticsRenderer && visualsSource != null
+        VillagerVisualSnapshot visualSnapshot = playerModel != VillagerLike.PlayerModel.VANILLA && visualsSource != null
                 ? VillagerVisualSnapshot.capture(visualsSource)
                 : null;
 
-        holder.mca$setGeneticsRendererActive(geneticsRenderer);
-        holder.mca$setVillagerRendererActive(villagerRenderer);
+        holder.mca$setPlayerModel(visualSnapshot != null ? playerModel : VillagerLike.PlayerModel.VANILLA);
         holder.mca$setVisualSnapshot(visualSnapshot);
     }
 

@@ -1,7 +1,6 @@
 package net.conczin.mca.client.render.layer;
 
 import net.conczin.mca.MCA;
-import net.conczin.mca.client.render.VillagerStateHolder;
 import net.conczin.mca.client.render.VillagerVisualSnapshot;
 import net.conczin.mca.client.resources.ColorPalette;
 import net.minecraft.client.model.HumanoidModel;
@@ -9,7 +8,7 @@ import net.minecraft.client.renderer.entity.RenderLayerParent;
 import net.minecraft.client.renderer.entity.state.HumanoidRenderState;
 import net.minecraft.resources.Identifier;
 
-public class SkinLayer<S extends HumanoidRenderState & VillagerStateHolder, M extends HumanoidModel<S>> extends VillagerLayer<S, M> {
+public class SkinLayer<S extends HumanoidRenderState, M extends HumanoidModel<S>> extends VillagerLayer<S, M> {
     public SkinLayer(RenderLayerParent<S, M> renderer, M model) {
         super(renderer, model);
     }

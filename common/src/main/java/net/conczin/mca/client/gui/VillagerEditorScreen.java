@@ -541,7 +541,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                     updateClothingPageWidget();
                 }));
                 addRenderableWidget(new ButtonWidget(width / 2 + 32, y, 28, 20, Component.literal(">>"), b -> {
-                    clothingPage = Math.max(0, Math.min(clothingPageCount - 1, clothingPage + 1));
+                    clothingPage = Math.min(clothingPageCount - 1, clothingPage + 1);
                     updateClothingPageWidget();
                 }));
                 addRenderableWidget(new ButtonWidget(width / 2 + 32 + 32, y, 64, 20, Component.translatable("gui.button.done"), b -> {
@@ -621,7 +621,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                 .map(Map.Entry::getKey)
                 .toList();
 
-        clothingPageCount = (int) Math.ceil(filtered.size() / ((float) CLOTHES_PER_PAGE));
+        clothingPageCount = Math.max(1, (int) Math.ceil(filtered.size() / ((float) CLOTHES_PER_PAGE)));
         clothingPage = Math.max(0, Math.min(clothingPage, clothingPageCount - 1));
 
         updateClothingPageWidget();

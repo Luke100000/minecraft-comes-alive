@@ -32,6 +32,16 @@ public final class MCA {
         return string == null || string.trim().isEmpty();
     }
 
+    private static final java.util.regex.Pattern COMBINING_MARKS = java.util.regex.Pattern.compile("\\p{M}");
+
+    public static String normalizeString(String string) {
+        if (string == null) {
+            return "";
+        }
+        String normalized = java.text.Normalizer.normalize(string, java.text.Normalizer.Form.NFD);
+        return COMBINING_MARKS.matcher(normalized).replaceAll("").toLowerCase(java.util.Locale.ROOT);
+    }
+
     public static Optional<MinecraftServer> getServer() {
         return Optional.ofNullable(server);
     }

@@ -17,6 +17,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.schedule.Activity;
 import org.jetbrains.annotations.Nullable;
@@ -38,7 +39,7 @@ public class VillagerBrain<E extends Mob & VillagerLike<E>> {
     private static final CDataParameter<Boolean> PANICKING = CParameter.create("IsPanicking", false);
     private static final CDataParameter<Boolean> WEAR_ARMOR = CParameter.create("WearArmor", false);
 
-    private static final int PANIC_ANIMATION_HOLD_TICKS = 30;
+    private static final int PANIC_ANIMATION_HOLD_TICKS = 20;
     private static final float PANIC_ANIMATION_STEP = 0.25F;
     private static final long GRIEVE_COOLDOWN = 24000 * 7;
     private final Random random = new Random();
@@ -188,7 +189,7 @@ public class VillagerBrain<E extends Mob & VillagerLike<E>> {
     public void tickPanicAnimation() {
         panicAnimationProgressO = panicAnimationProgress;
 
-        if (isPanicking()) {
+        if (isPanicking() || hasPanicStimulus()) {
             panicAnimationHoldTicks = PANIC_ANIMATION_HOLD_TICKS;
         } else if (panicAnimationHoldTicks > 0) {
             panicAnimationHoldTicks--;
@@ -201,6 +202,12 @@ public class VillagerBrain<E extends Mob & VillagerLike<E>> {
 
     public float getPanicAnimationProgress(float partialTick) {
         return Mth.clamp(Mth.lerp(partialTick, panicAnimationProgressO, panicAnimationProgress), 0.0F, 1.0F);
+    }
+
+    private boolean hasPanicStimulus() {
+        return entity.getBrain().hasMemoryValue(MemoryModuleType.HURT_BY)
+               || entity.getBrain().hasMemoryValue(MemoryModuleType.HURT_BY_ENTITY)
+               || entity.getBrain().hasMemoryValue(MemoryModuleType.NEAREST_HOSTILE);
     }
 
     public void modifyMoodValue(int mood) {
