@@ -16,6 +16,7 @@ dependencies {
 }
 
 def devUsername = providers.gradleProperty('mca_dev_username').orElse('Dev').get()
+def devJvmArgs = ['--enable-native-access=ALL-UNNAMED', '--sun-misc-unsafe-memory-access=allow']
 
 loom {
     def aw = project(':common').file("src/main/resources/${mod_id}.classtweaker")
@@ -30,6 +31,9 @@ loom {
     }
 
     runs {
+        configureEach {
+            vmArgs(devJvmArgs)
+        }
         client {
             client()
             setConfigName("Fabric Client")
