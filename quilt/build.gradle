@@ -3,16 +3,12 @@ plugins {
 }
 
 repositories {
-    maven { url "https://maven.quiltmc.org/repository/release/" }
+    maven { url = "https://maven.quiltmc.org/repository/release/" }
 }
 
 architectury {
     platformSetupLoomIde()
     loader("quilt")
-}
-
-loom {
-    mixin.defaultRefmapName = 'mca.mixin.refmap.json'
 }
 
 configurations {
@@ -38,7 +34,7 @@ dependencies {
         exclude group: 'net.fabricmc.fabric-api'
     }
 
-    common(project(path: ':common', configuration: 'namedElements')) { transitive false }
+    common(project(path: ':common', configuration: 'namedElements')) { transitive = false }
     shadowCommon project(path: ':common', configuration: 'transformProductionQuilt')
 }
 

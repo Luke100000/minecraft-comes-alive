@@ -1,6 +1,7 @@
 package net.mca.mixin;
 
 import net.mca.Config;
+import net.mca.util.RegistryHelper;
 import net.minecraft.entity.EntityType;
 import net.minecraft.registry.Registries;
 import net.minecraft.registry.tag.TagKey;
@@ -15,7 +16,7 @@ public class MixinEntityType {
 	@SuppressWarnings({"ConstantConditions", "deprecation"})
 	@Inject(method = "isIn", at = @At("HEAD"), cancellable = true)
 	private void mca$injectIsIn(TagKey<EntityType<?>> tag, CallbackInfoReturnable<Boolean> cir) {
-		if (!Config.getInstance().villagerTagsHacks || !EntityType.VILLAGER.isIn(tag)) {
+		if (!Config.getInstance().villagerTagsHacks || !RegistryHelper.isObjectInTag(Registries.ENTITY_TYPE, tag, EntityType.VILLAGER)) {
 			return;
 		}
 

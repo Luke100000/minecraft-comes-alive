@@ -25,6 +25,7 @@ import org.jetbrains.annotations.Nullable;
 import java.util.List;
 
 // TODO: Re-implement or remove (7.4.0)
+@SuppressWarnings("deprecation")
 public class JewelerWorkbench extends Block/* implements BlockEntityProvider*/ {
     public static final DirectionProperty FACING = HorizontalFacingBlock.FACING;
     protected static final VoxelShape SHAPE = Block.createCuboidShape(1.0D, 0.1D, 1.0D, 15.0D, 24.0D, 15.0D);

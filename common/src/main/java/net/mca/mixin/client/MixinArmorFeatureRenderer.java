@@ -28,8 +28,8 @@ public abstract class MixinArmorFeatureRenderer<T extends LivingEntity, A extend
     protected final A mca$leggingsModel = createModel(0.5F);
     protected final A mca$bodyModel = createModel(1.0F);
 
+    @SuppressWarnings("unchecked")
     private A createModel(float dilation) {
-        //noinspection unchecked
         return (A)new PlayerArmorExtendedModel<T>(TexturedModelData.of(VillagerEntityModelMCA.armorData(new Dilation(dilation)), 64, 32).createModel());
     }
 

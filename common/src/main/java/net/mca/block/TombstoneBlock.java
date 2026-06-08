@@ -59,6 +59,7 @@ import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+@SuppressWarnings("deprecation")
 public class TombstoneBlock extends BlockWithEntity implements Waterloggable {
     public static final VoxelShape GRAVELLING_SHAPE = Block.createCuboidShape(1, 0, 1, 15, 1, 15);
     public static final VoxelShape UPRIGHT_SHAPE = VoxelShapes.union(

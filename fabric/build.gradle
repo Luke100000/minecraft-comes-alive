@@ -8,8 +8,6 @@ architectury {
 }
 
 loom {
-    mixin.defaultRefmapName = 'mca.mixin.refmap.json'
-
     runs {
         datagen {
             inherit server
@@ -53,7 +51,7 @@ dependencies {
     modImplementation "net.fabricmc.fabric-api:fabric-api:$rootProject.fabric_version"
     modImplementation "dev.architectury:architectury-fabric:$rootProject.architectury_version"
 
-    common(project(path: ':common', configuration: 'namedElements')) { transitive false }
+    common(project(path: ':common', configuration: 'namedElements')) { transitive = false }
     shadowCommon project(path: ':common', configuration: 'transformProductionFabric')
 
 }

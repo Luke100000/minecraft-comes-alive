@@ -51,6 +51,7 @@ public final class MCAQuilt implements ModInitializer {
 
         ServerWorldTickEvents.END.register((s, w) -> VillageManager.get(w).tick());
         ServerTickEvents.END.register(s -> ServerInteractionManager.getInstance().tick());
+        ServerTickEvents.END.register(MCA::setServer);
 
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) ->
                 ServerInteractionManager.getInstance().onPlayerJoin(handler.player)
@@ -61,7 +62,6 @@ public final class MCAQuilt implements ModInitializer {
             Command.register(dispatcher);
         });
 
-        net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents.END_SERVER_TICK.register(MCA::setServer);
     }
 }
 

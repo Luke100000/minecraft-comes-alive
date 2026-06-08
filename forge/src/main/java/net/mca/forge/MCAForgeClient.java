@@ -43,6 +43,7 @@ public final class MCAForgeClient {
     }
 
     @SubscribeEvent
+    @SuppressWarnings("removal")
     public static void setup(FMLClientSetupEvent event) {
         if (Config.getInstance().useSquidwardModels) {
             EntityRenderers.register(EntitiesMCA.MALE_VILLAGER.get(), VillagerEntityRenderer::new);
@@ -65,9 +66,6 @@ public final class MCAForgeClient {
 
         ModelPredicatesMCA.setup(ModelPredicateProviderRegistry::register);
 
-        // TODO: Forge has made this deprecated in 1.19 and we're meant to use `render_type` in the model json
-        // - remove and replace at a later date instead, since Fabric still uses the older method afaik.
-        //noinspection removal
         RenderLayers.setRenderLayer(BlocksMCA.INFERNAL_FLAME.get(), RenderLayer.getCutout());
     }
 
