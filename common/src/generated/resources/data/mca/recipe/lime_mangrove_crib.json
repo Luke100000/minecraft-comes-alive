@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "C": "minecraft:lime_carpet",
+    "F": "minecraft:mangrove_fence",
+    "P": "minecraft:mangrove_planks"
+  },
+  "pattern": [
+    "F F",
+    "FCF",
+    "PPP"
+  ],
+  "result": {
+    "id": "mca:lime_mangrove_crib"
+  }
+}

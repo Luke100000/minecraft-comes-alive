@@ -1,0 +1,32 @@
+{
+  "parent": "minecraft:recipes/root",
+  "criteria": {
+    "has_mangrove_planks": {
+      "conditions": {
+        "items": [
+          {
+            "items": "minecraft:mangrove_planks"
+          }
+        ]
+      },
+      "trigger": "minecraft:inventory_changed"
+    },
+    "has_the_recipe": {
+      "conditions": {
+        "recipe": "mca:black_mangrove_crib"
+      },
+      "trigger": "minecraft:recipe_unlocked"
+    }
+  },
+  "requirements": [
+    [
+      "has_the_recipe",
+      "has_mangrove_planks"
+    ]
+  ],
+  "rewards": {
+    "recipes": [
+      "mca:black_mangrove_crib"
+    ]
+  }
+}

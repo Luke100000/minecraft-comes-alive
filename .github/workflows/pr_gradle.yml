@@ -22,4 +22,4 @@ jobs:
           cache-read-only: true
           cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
       - name: Build with Gradle
-        run: ./gradlew build --console=plain
+        run: ./gradlew build --configuration-cache --console=plain

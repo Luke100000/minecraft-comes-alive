@@ -50,7 +50,11 @@ fabricApi {
     configureDataGeneration {
         addToResources = false
         client = true
-        outputDirectory = file("src/generated/resources")
+        createRunConfiguration = true
+        createSourceSet = true
+        modId = "${mod_id}-datagen"
+        outputDirectory = rootProject.project(':common').file('src/generated/resources')
+        strictValidation = true
     }
 }
 
