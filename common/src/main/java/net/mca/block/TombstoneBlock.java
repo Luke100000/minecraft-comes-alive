@@ -458,7 +458,6 @@ public class TombstoneBlock extends BlockWithEntity implements Waterloggable {
         private NbtCompound withoutActiveEffects(NbtCompound nbt) {
             NbtCompound copy = nbt.copy();
             copy.remove("ActiveEffects");
-            copy.remove("active_effects");
             return copy;
         }
 
