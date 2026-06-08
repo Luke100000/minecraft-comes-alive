@@ -7,8 +7,14 @@ architectury {
     fabric()
 }
 
+def devUsername = providers.gradleProperty('mca_dev_username').orElse('Dev').get()
+
 loom {
     runs {
+        client {
+            programArgs "--username", devUsername
+        }
+
         datagen {
             inherit server
             name "Data Generation"
