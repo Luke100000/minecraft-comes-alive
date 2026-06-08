@@ -54,6 +54,18 @@ allprojects {
 
     tasks.withType(JavaCompile).configureEach {
         it.options.release = 17
+        it.options.deprecation = true
+        it.options.compilerArgs << "-Xmaxerrs" << "1000" << "-Xlint:deprecation" << "-Xlint:unchecked"
+    }
+
+    tasks.configureEach { task ->
+        if (task instanceof JavaForkOptions) {
+            ['--enable-native-access=ALL-UNNAMED'].each { nativeAccessJvmArg ->
+                if (!task.jvmArgs.contains(nativeAccessJvmArg)) {
+                    task.jvmArgs(nativeAccessJvmArg)
+                }
+            }
+        }
     }
 
     publishing {

@@ -23,6 +23,7 @@ import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
+import net.minecraft.util.Identifier;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.MathHelper;
 import net.minecraft.world.Difficulty;
@@ -232,8 +233,9 @@ public class VillageManager extends PersistentState implements Iterable<Village>
     //checks weather the given block contains a grouped building block, e.g., a town bell or gravestone
     private BuildingType getGroupedBuildingType(BlockPos pos) {
         Block block = world.getBlockState(pos).getBlock();
+        Identifier blockId = Registries.BLOCK.getId(block);
         for (BuildingType bt : BuildingTypes.getInstance()) {
-            if (bt.grouped() && bt.getBlockToGroup().containsKey(Registries.BLOCK.getId(block))) {
+            if (bt.grouped() && bt.matchesBlock(blockId)) {
                 return bt;
             }
         }
