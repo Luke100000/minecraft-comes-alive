@@ -119,7 +119,7 @@ public final class Config extends CommonConfig {
     // TTS
     public boolean enableOnlineTTS = false;
     public String onlineTTSModel = "default";
-    public String onlineTTSServer = "https://api.rk.conczin.net/";
+    public String onlineTTSServer = "https://api-rk.conczin.net/";
     public String player2Url = "http://127.0.0.1:4315/";
     public String elevenlabsPrivateAPIkey = "";
     public String elevenlabsModel = "eleven_turbo_v2_5";
