@@ -346,14 +346,13 @@ public class TombstoneBlock extends BlockWithEntity implements Waterloggable {
                 if (resurrectionProgress > 500) {
                     resurrectionProgress = 0;
 
-                    createEntity(world, true).ifPresent(entity -> {
+                    createEntityWithoutActiveEffects(world, true).ifPresent(entity -> {
                         generateLightning();
                         entity.extinguish();
                         entity.resetPortalCooldown();
                         entity.setPosition(pos.getX() + 0.5F, pos.getY() + 0.5F, pos.getZ() + 0.5F);
                         if (entity instanceof LivingEntity l) {
                             l.setHealth(l.getMaxHealth());
-                            l.clearStatusEffects();
                             l.fallDistance = 0.0f;
                             l.deathTime = 0;
                         }
@@ -439,13 +438,28 @@ public class TombstoneBlock extends BlockWithEntity implements Waterloggable {
         }
 
         public Optional<Entity> createEntity(World world, boolean remove) {
+            return createEntity(world, remove, Function.identity());
+        }
+
+        private Optional<Entity> createEntityWithoutActiveEffects(World world, boolean remove) {
+            return createEntity(world, remove, this::withoutActiveEffects);
+        }
+
+        private Optional<Entity> createEntity(World world, boolean remove, Function<NbtCompound, NbtCompound> nbtTransform) {
             try {
-                return entityData.flatMap(data -> EntityType.getEntityFromNbt(data.nbt, world));
+                return entityData.flatMap(data -> EntityType.getEntityFromNbt(nbtTransform.apply(data.nbt), world));
             } finally {
                 if (remove) {
                     setEntity(null);
                 }
             }
+        }
+
+        private NbtCompound withoutActiveEffects(NbtCompound nbt) {
+            NbtCompound copy = nbt.copy();
+            copy.remove("ActiveEffects");
+            copy.remove("active_effects");
+            return copy;
         }
 
         private NbtCompound writeEntityToNbt(Entity entity) {
