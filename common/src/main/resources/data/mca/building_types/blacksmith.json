@@ -5,7 +5,7 @@
   "blocks": {
     "minecraft:grindstone": 1,
     "minecraft:blast_furnace": 2,
-    "#minecraft:anvil": 1
+    "#mca:anvils": 1
   },
   "iconU": 0,
   "iconV": 1
