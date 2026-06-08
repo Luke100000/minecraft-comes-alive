@@ -2,6 +2,7 @@ package net.conczin.mca.util.network.datasync;
 
 import java.util.Optional;
 import java.util.UUID;
+import net.conczin.mca.MCA;
 import net.conczin.mca.util.NbtHelper;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.RegistryAccess;
@@ -19,7 +20,7 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.item.ItemStack;
 
 public interface CParameter<T, TrackedType> {
-   EntityDataSerializer<CompoundTag> COMPOUND_TAG_SERIALIZER = registerSerializer(new EntityDataSerializer<CompoundTag>() {
+   EntityDataSerializer<CompoundTag> COMPOUND_TAG_SERIALIZER = registerSerializer("compound_tag", new EntityDataSerializer<CompoundTag>() {
       public StreamCodec<? super RegistryFriendlyByteBuf, CompoundTag> codec() {
          return ByteBufCodecs.COMPOUND_TAG;
       }
@@ -28,7 +29,7 @@ public interface CParameter<T, TrackedType> {
          return value.copy();
       }
    });
-   EntityDataSerializer<Optional<UUID>> OPTIONAL_UUID_SERIALIZER = registerSerializer(new EntityDataSerializer<Optional<UUID>>() {
+   EntityDataSerializer<Optional<UUID>> OPTIONAL_UUID_SERIALIZER = registerSerializer("optional_uuid", new EntityDataSerializer<Optional<UUID>>() {
       public StreamCodec<? super RegistryFriendlyByteBuf, Optional<UUID>> codec() {
          return ByteBufCodecs.optional(UUIDUtil.STREAM_CODEC);
       }
@@ -147,17 +148,23 @@ public interface CParameter<T, TrackedType> {
 
    EntityDataAccessor<TrackedType> createParam(Class<? extends Entity> var1);
 
-   static <T> EntityDataSerializer<T> registerSerializer(EntityDataSerializer<T> serializer) {
+   static <T> EntityDataSerializer<T> registerSerializer(String id, EntityDataSerializer<T> serializer) {
       if (isNeoForgeEnvironment()) {
          return serializer;
-      } else {
-         try {
-            EntityDataSerializers.registerSerializer(serializer);
-         } catch (UnsupportedOperationException var2) {
-         }
-
-         return serializer;
       }
+
+      try {
+         Class<?> fabricRegistry = Class.forName("net.fabricmc.fabric.api.object.builder.v1.entity.FabricTrackedDataRegistry");
+         fabricRegistry
+            .getMethod("register", net.minecraft.resources.Identifier.class, EntityDataSerializer.class)
+            .invoke(null, MCA.locate(id), serializer);
+      } catch (ClassNotFoundException e) {
+         EntityDataSerializers.registerSerializer(serializer);
+      } catch (ReflectiveOperationException e) {
+         throw new IllegalStateException("Failed to register Fabric tracked data serializer " + id, e);
+      }
+
+      return serializer;
    }
 
    private static boolean isNeoForgeEnvironment() {
