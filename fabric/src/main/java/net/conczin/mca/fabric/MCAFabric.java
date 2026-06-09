@@ -15,6 +15,7 @@ import net.conczin.mca.server.ServerInteractionManager;
 import net.conczin.mca.server.command.AdminCommand;
 import net.conczin.mca.server.command.Command;
 import net.conczin.mca.server.world.data.VillageManager;
+import net.conczin.mca.util.network.datasync.MCAEntityDataSerializers;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
@@ -28,6 +29,7 @@ import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.fabricmc.fabric.api.object.builder.v1.block.entity.FabricBlockEntityTypeBuilder;
 import net.fabricmc.fabric.api.object.builder.v1.entity.FabricDefaultAttributeRegistry;
+import net.fabricmc.fabric.api.object.builder.v1.entity.FabricTrackedDataRegistry;
 import net.fabricmc.fabric.api.resource.ResourceManagerHelper;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.core.Registry;
@@ -91,6 +93,9 @@ public final class MCAFabric implements ModInitializer {
 
     @Override
     public void onInitialize() {
+        FabricTrackedDataRegistry.register(MCAEntityDataSerializers.COMPOUND_TAG_ID, MCAEntityDataSerializers.COMPOUND_TAG);
+        FabricTrackedDataRegistry.register(MCAEntityDataSerializers.OPTIONAL_UUID_ID, MCAEntityDataSerializers.OPTIONAL_UUID);
+
         registerHelper(BuiltInRegistries.ITEM, helper -> ItemsMCA.registerItems(helper));
         registerHelper(BuiltInRegistries.BLOCK, helper -> BlocksMCA.registerBlocks(helper));
         registerHelper(BuiltInRegistries.SOUND_EVENT, helper -> SoundsMCA.registerSounds(helper));

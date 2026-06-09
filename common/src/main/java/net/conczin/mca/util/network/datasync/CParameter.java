@@ -2,43 +2,18 @@ package net.conczin.mca.util.network.datasync;
 
 import java.util.Optional;
 import java.util.UUID;
-import net.conczin.mca.MCA;
 import net.conczin.mca.util.NbtHelper;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.RegistryAccess;
-import net.minecraft.core.UUIDUtil;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtOps;
-import net.minecraft.network.RegistryFriendlyByteBuf;
-import net.minecraft.network.codec.ByteBufCodecs;
-import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.syncher.EntityDataAccessor;
-import net.minecraft.network.syncher.EntityDataSerializer;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.item.ItemStack;
 
 public interface CParameter<T, TrackedType> {
-   EntityDataSerializer<CompoundTag> COMPOUND_TAG_SERIALIZER = registerSerializer("compound_tag", new EntityDataSerializer<CompoundTag>() {
-      public StreamCodec<? super RegistryFriendlyByteBuf, CompoundTag> codec() {
-         return ByteBufCodecs.COMPOUND_TAG;
-      }
-
-      public CompoundTag copy(CompoundTag value) {
-         return value.copy();
-      }
-   });
-   EntityDataSerializer<Optional<UUID>> OPTIONAL_UUID_SERIALIZER = registerSerializer("optional_uuid", new EntityDataSerializer<Optional<UUID>>() {
-      public StreamCodec<? super RegistryFriendlyByteBuf, Optional<UUID>> codec() {
-         return ByteBufCodecs.optional(UUIDUtil.STREAM_CODEC);
-      }
-
-      public Optional<UUID> copy(Optional<UUID> value) {
-         return value;
-      }
-   });
-
    static CDataParameter<Integer> create(String id, int def) {
       return new CDataParameter<>(
          id,
@@ -82,7 +57,7 @@ public interface CParameter<T, TrackedType> {
    static CDataParameter<CompoundTag> create(String id, CompoundTag def) {
       return new CDataParameter<>(
          id,
-         COMPOUND_TAG_SERIALIZER,
+         MCAEntityDataSerializers.COMPOUND_TAG,
          def,
          (nbt, key, provider) -> NbtCompoundDefaultGetters.getCompound(nbt, key, def),
          (nbt, key, value, provider) -> nbt.put(key, value)
@@ -121,7 +96,7 @@ public interface CParameter<T, TrackedType> {
    static CDataParameter<Optional<UUID>> create(String id, Optional<UUID> def) {
       return new CDataParameter<>(
          id,
-         OPTIONAL_UUID_SERIALIZER,
+         MCAEntityDataSerializers.OPTIONAL_UUID,
          def,
          (tag, key, provider) -> NbtHelper.hasUUID(tag, key) ? Optional.of(NbtHelper.getUUID(tag, key)) : Optional.empty(),
          (tag, key, v, provider) -> v.ifPresent(uuid -> NbtHelper.putUUID(tag, key, uuid))
@@ -147,37 +122,4 @@ public interface CParameter<T, TrackedType> {
    void save(CompoundTag var1, T var2, RegistryAccess var3);
 
    EntityDataAccessor<TrackedType> createParam(Class<? extends Entity> var1);
-
-   static <T> EntityDataSerializer<T> registerSerializer(String id, EntityDataSerializer<T> serializer) {
-      if (isNeoForgeEnvironment()) {
-         return serializer;
-      }
-
-      try {
-         Class<?> fabricRegistry = Class.forName("net.fabricmc.fabric.api.object.builder.v1.entity.FabricTrackedDataRegistry");
-         fabricRegistry
-            .getMethod("register", net.minecraft.resources.Identifier.class, EntityDataSerializer.class)
-            .invoke(null, MCA.locate(id), serializer);
-      } catch (ClassNotFoundException e) {
-         EntityDataSerializers.registerSerializer(serializer);
-      } catch (ReflectiveOperationException e) {
-         throw new IllegalStateException("Failed to register Fabric tracked data serializer " + id, e);
-      }
-
-      return serializer;
-   }
-
-   private static boolean isNeoForgeEnvironment() {
-      try {
-         Class.forName("net.neoforged.fml.ModList");
-         return true;
-      } catch (ClassNotFoundException var2) {
-         try {
-            Class.forName("net.neoforged.neoforge.registries.NeoForgeRegistries");
-            return true;
-         } catch (ClassNotFoundException var1) {
-            return false;
-         }
-      }
-   }
 }
