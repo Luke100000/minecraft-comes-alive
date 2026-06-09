@@ -1,3 +1,8 @@
+# 7.7.10
+
+* Improves family tree search
+* Fixes mail inbox loading
+
 # 7.7.9
 
 * Fixed crashes
