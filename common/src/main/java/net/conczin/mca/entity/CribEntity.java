@@ -13,6 +13,7 @@ import net.conczin.mca.util.network.datasync.CParameter;
 import net.conczin.mca.util.network.datasync.CTrackedEntity;
 import net.minecraft.core.particles.BlockParticleOption;
 import net.minecraft.core.particles.ParticleTypes;
+import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.network.syncher.SynchedEntityData.Builder;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvents;
@@ -48,7 +49,10 @@ public class CribEntity extends Entity implements CTrackedEntity<CribEntity> {
    }
 
    static CDataManager.Builder<CribEntity> createTrackedData() {
-      return new CDataManager.Builder<>(CribEntity.class).addAll(BABY, WOOD, COLOR);
+      return new CDataManager.Builder<CribEntity>()
+         .add(BABY, SynchedEntityData.defineId(CribEntity.class, BABY.serializer()))
+         .add(WOOD, SynchedEntityData.defineId(CribEntity.class, WOOD.serializer()))
+         .add(COLOR, SynchedEntityData.defineId(CribEntity.class, COLOR.serializer()));
    }
 
    public CribWoodType getWoodType() {

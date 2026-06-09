@@ -57,8 +57,8 @@ public class CDataParameter<T> implements CParameter<T, T> {
     }
 
     @Override
-    public EntityDataAccessor<T> createParam(Class<? extends Entity> type) {
-        return SynchedEntityData.defineId(type, valueType);
+    public EntityDataSerializer<T> serializer() {
+        return valueType;
     }
 
     public interface Decoder<T> {

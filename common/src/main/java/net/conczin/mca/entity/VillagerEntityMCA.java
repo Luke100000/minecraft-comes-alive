@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Consumer;
 import java.util.function.Predicate;
 import net.conczin.mca.Config;
 import net.conczin.mca.MCA;
@@ -58,6 +59,8 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.syncher.EntityDataAccessor;
+import net.minecraft.network.syncher.EntityDataSerializer;
+import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
@@ -168,10 +171,22 @@ public class VillagerEntityMCA
    }
 
    public static <E extends Entity> CDataManager.Builder<E> createTrackedData(Class<E> type) {
-      return VillagerLike.createTrackedData(type)
-         .addAll(INFECTION_PROGRESS, GROWTH_AMOUNT)
-         .add(Residency::createTrackedData)
-         .add(BreedableRelationship::createTrackedData);
+      CDataManager.Builder<E> builder = new CDataManager.Builder<>();
+      forEachTrackedParameter(parameter -> addTracked(builder, type, parameter));
+      return builder;
+   }
+
+   static void forEachTrackedParameter(Consumer<CParameter<?, ?>> consumer) {
+      VillagerLike.forEachTrackedParameter(consumer);
+      consumer.accept(INFECTION_PROGRESS);
+      consumer.accept(GROWTH_AMOUNT);
+      Residency.forEachTrackedParameter(consumer);
+      BreedableRelationship.forEachTrackedParameter(consumer);
+   }
+
+   @SuppressWarnings({"rawtypes", "unchecked"})
+   private static <E extends Entity> void addTracked(CDataManager.Builder<E> builder, Class<E> type, CParameter<?, ?> parameter) {
+      builder.add((CParameter)parameter, SynchedEntityData.defineId(type, (EntityDataSerializer)parameter.serializer()));
    }
 
    private static boolean canEat(ItemStack i) {

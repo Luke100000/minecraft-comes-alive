@@ -21,6 +21,7 @@ import net.minecraft.world.entity.schedule.Activity;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
+import java.util.function.Consumer;
 
 import static net.conczin.mca.entity.ai.MemoryModuleTypeMCA.LAST_GRIEVE;
 
@@ -45,17 +46,15 @@ public class VillagerBrain<E extends Mob & VillagerLike<E>> {
         this.entity = entity;
     }
 
-    public static <E2 extends Entity> CDataManager.Builder<E2> createTrackedData(CDataManager.Builder<E2> builder) {
-        return builder.addAll(
-                MEMORIES,
-                PERSONALITY,
-                MOOD,
-                MOVE_STATE,
-                ACTIVE_CHORE,
-                CHORE_ASSIGNING_PLAYER,
-                PANICKING,
-                WEAR_ARMOR
-        );
+    public static void forEachTrackedParameter(Consumer<CParameter<?, ?>> consumer) {
+        consumer.accept(MEMORIES);
+        consumer.accept(PERSONALITY);
+        consumer.accept(MOOD);
+        consumer.accept(MOVE_STATE);
+        consumer.accept(ACTIVE_CHORE);
+        consumer.accept(CHORE_ASSIGNING_PLAYER);
+        consumer.accept(PANICKING);
+        consumer.accept(WEAR_ARMOR);
     }
 
     public void think() {

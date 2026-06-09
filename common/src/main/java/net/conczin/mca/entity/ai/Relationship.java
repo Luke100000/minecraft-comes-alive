@@ -16,7 +16,6 @@ import net.conczin.mca.server.world.data.FamilyTree;
 import net.conczin.mca.server.world.data.FamilyTreeNode;
 import net.conczin.mca.server.world.data.GraveyardManager;
 import net.conczin.mca.util.WorldUtils;
-import net.conczin.mca.util.network.datasync.CDataManager;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -54,10 +53,6 @@ public class Relationship<T extends Mob & VillagerLike<T>> implements EntityRela
 
     public Relationship(T entity) {
         this.entity = entity;
-    }
-
-    public static <E extends Entity> CDataManager.Builder<E> createTrackedData(CDataManager.Builder<E> builder) {
-        return builder.addAll();
     }
 
     @Override

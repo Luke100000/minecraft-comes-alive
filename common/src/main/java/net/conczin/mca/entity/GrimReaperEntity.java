@@ -45,7 +45,10 @@ import net.minecraft.world.phys.Vec3;
 public class GrimReaperEntity extends PathfinderMob implements CTrackedEntity<GrimReaperEntity> {
     public static final CEnumParameter<ReaperAttackState> ATTACK_STAGE = CParameter.create("AttackStage", ReaperAttackState.IDLE);
 
-    public static final CDataManager<GrimReaperEntity> DATA = new CDataManager.Builder<>(GrimReaperEntity.class).addAll(ATTACK_STAGE).build();
+    public static final CDataManager<GrimReaperEntity> DATA =
+            new CDataManager.Builder<GrimReaperEntity>()
+                    .add(ATTACK_STAGE, SynchedEntityData.defineId(GrimReaperEntity.class, ATTACK_STAGE.serializer()))
+                    .build();
 
     private final ServerBossEvent bossInfo = (ServerBossEvent) new ServerBossEvent(getDisplayName(), BossEvent.BossBarColor.PURPLE, BossEvent.BossBarOverlay.PROGRESS).setDarkenScreen(true);
 

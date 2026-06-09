@@ -21,6 +21,7 @@ import net.minecraft.world.item.ItemStack;
 
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Consumer;
 
 /**
  * The progenator. Preg-genator? Preg-genator.
@@ -35,8 +36,10 @@ public class Pregnancy {
         this.mother = entity;
     }
 
-    public static <E extends Entity> CDataManager.Builder<E> createTrackedData(CDataManager.Builder<E> builder) {
-        return builder.addAll(HAS_BABY, IS_BABY_MALE, BABY_AGE);
+    public static void forEachTrackedParameter(Consumer<CParameter<?, ?>> consumer) {
+        consumer.accept(HAS_BABY);
+        consumer.accept(IS_BABY_MALE);
+        consumer.accept(BABY_AGE);
     }
 
     public boolean isPregnant() {

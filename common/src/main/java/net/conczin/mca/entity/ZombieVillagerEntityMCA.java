@@ -13,6 +13,7 @@ import net.conczin.mca.registry.TagsMCA;
 import net.conczin.mca.util.InventoryUtils;
 import net.conczin.mca.util.WorldUtils;
 import net.conczin.mca.util.network.datasync.CDataManager;
+import net.conczin.mca.util.network.datasync.CParameter;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.syncher.EntityDataAccessor;
@@ -38,7 +39,7 @@ import org.jetbrains.annotations.Nullable;
 
 public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerLike<ZombieVillagerEntityMCA>, CompassionateEntity<Relationship<ZombieVillagerEntityMCA>> {
 
-    private static final CDataManager<ZombieVillagerEntityMCA> DATA = VillagerEntityMCA.createTrackedData(ZombieVillagerEntityMCA.class).build();
+    private static final CDataManager<ZombieVillagerEntityMCA> DATA = createTrackedData().build();
 
     private final VillagerBrain<ZombieVillagerEntityMCA> mcaBrain = new VillagerBrain<>(this);
 
@@ -55,6 +56,17 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
     public ZombieVillagerEntityMCA(EntityType<? extends ZombieVillager> type, Level world, Gender gender) {
         super(type, world);
         genetics.setGender(gender);
+    }
+
+    private static CDataManager.Builder<ZombieVillagerEntityMCA> createTrackedData() {
+        CDataManager.Builder<ZombieVillagerEntityMCA> builder = new CDataManager.Builder<>();
+        VillagerEntityMCA.forEachTrackedParameter(parameter -> addTracked(builder, parameter));
+        return builder;
+    }
+
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private static void addTracked(CDataManager.Builder<ZombieVillagerEntityMCA> builder, CParameter<?, ?> parameter) {
+        builder.add((CParameter) parameter, SynchedEntityData.defineId(ZombieVillagerEntityMCA.class, parameter.serializer()));
     }
 
     @Override

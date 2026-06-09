@@ -28,6 +28,7 @@ import net.minecraft.world.item.component.Tool;
 import net.minecraft.world.item.equipment.Equippable;
 
 import java.util.Optional;
+import java.util.function.Consumer;
 
 /**
  * I know you, you know me, we're all a big happy family.
@@ -44,10 +45,10 @@ public class BreedableRelationship extends Relationship<VillagerEntityMCA> {
         pregnancy = new Pregnancy(entity);
     }
 
-    public static <E extends Entity> CDataManager.Builder<E> createTrackedData(CDataManager.Builder<E> builder) {
-        return Relationship.createTrackedData(builder)
-                .addAll(IS_PROCREATING, LAST_PROCREATION)
-                .add(Pregnancy::createTrackedData);
+    public static void forEachTrackedParameter(Consumer<CParameter<?, ?>> consumer) {
+        consumer.accept(IS_PROCREATING);
+        consumer.accept(LAST_PROCREATION);
+        Pregnancy.forEachTrackedParameter(consumer);
     }
 
     public Pregnancy getPregnancy() {

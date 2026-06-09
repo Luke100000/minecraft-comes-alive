@@ -8,6 +8,7 @@ import net.minecraft.core.RegistryAccess;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtOps;
 import net.minecraft.network.syncher.EntityDataAccessor;
+import net.minecraft.network.syncher.EntityDataSerializer;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.world.entity.Entity;
@@ -121,5 +122,5 @@ public interface CParameter<T, TrackedType> {
 
    void save(CompoundTag var1, T var2, RegistryAccess var3);
 
-   EntityDataAccessor<TrackedType> createParam(Class<? extends Entity> var1);
+   EntityDataSerializer<TrackedType> serializer();
 }
