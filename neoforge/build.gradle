@@ -8,6 +8,7 @@ plugins {
 
 dependencies {
     runtimeOnly "maven.modrinth:sodium:${sodium_neoforge_version}"
+    runtimeOnly "maven.modrinth:jei:${jei_neoforge_version}"
     runtimeOnly "maven.modrinth:iris:${iris_neoforge_version}"
     runtimeOnly "maven.modrinth:ferrite-core:${ferritecore_neoforge_version}"
     runtimeOnly "maven.modrinth:immediatelyfast:${immediatelyfast_neoforge_version}"
