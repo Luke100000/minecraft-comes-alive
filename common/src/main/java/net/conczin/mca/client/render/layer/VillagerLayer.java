@@ -4,7 +4,6 @@ import com.google.common.collect.Maps;
 import com.mojang.blaze3d.vertex.PoseStack;
 import java.util.Map;
 import java.util.function.Function;
-import net.conczin.mca.MCA;
 import net.conczin.mca.MCAClient;
 import net.conczin.mca.client.model.VillagerEntityModelMCA;
 import net.conczin.mca.client.render.MCAHumanoidRenderState;
@@ -133,14 +132,14 @@ public abstract class VillagerLayer<M extends HumanoidModel<MCAHumanoidRenderSta
    }
 
    public final boolean canUse(Identifier texture) {
+      if (texture == null) {
+         return false;
+      }
       return TEXTURE_EXIST_CACHE.computeIfAbsent(texture, s -> {
-         if (texture != null && texture.getNamespace().equals("immersive_library")) {
+         if (texture.getNamespace().equals("immersive_library")) {
             return true;
-         } else {
-            boolean result = texture != null && Minecraft.getInstance().getResourceManager().getResource(texture).isPresent();
-            System.out.println("MCA_DEBUG canUse: " + texture + " -> " + result);
-            return result;
          }
+         return Minecraft.getInstance().getResourceManager().getResource(texture).isPresent();
       });
    }
 
@@ -155,7 +154,5 @@ public abstract class VillagerLayer<M extends HumanoidModel<MCAHumanoidRenderSta
       });
    }
 
-   static {
-      TEXTURE_EXIST_CACHE.put(MCA.locate("temp"), true);
-   }
+
 }

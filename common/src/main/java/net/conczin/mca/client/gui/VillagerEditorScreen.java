@@ -999,6 +999,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         villager.save(output);
         CompoundTag nbt = WorldUtils.getCompoundTag(output);
         nbt.putInt("Age", villagerBreedingAge);
+        villagerData.getInt("PlayerModel").ifPresent(value -> nbt.putInt("PlayerModel", value));
         Network.sendToServer(new VillagerEditorSyncRequest("sync", villagerUUID, nbt));
     }
 

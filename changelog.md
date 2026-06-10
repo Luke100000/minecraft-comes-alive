@@ -1,3 +1,14 @@
+# 7.8.0
+
+Thanks SOUL!
+
+* Ported to 1.21.11
+* Added player-to-player hug/kiss interactions
+* Added ring slot and overlay
+* Added spouse proximity regeneration buff
+* Added SkinLayers3D compatibility
+* Added social interaction cooldowns
+
 # 7.7.9
 
 * Fixed crashes

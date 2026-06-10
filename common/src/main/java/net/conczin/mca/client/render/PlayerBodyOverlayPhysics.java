@@ -77,7 +77,7 @@ public final class PlayerBodyOverlayPhysics {
         float breastScaleZ = animatedBreastSize * 0.75F + 0.75F;
         float crouchY = crouching ? 3.0F : 0.0F;
         float crouchZ = crouching ? 1.5F : 0.0F;
-        float y = (float) (5.0F - Math.pow(model.getBreastSize(), 0.5D) * 2.5D + crouchY + offset.y * Y_OFFSET_SCALE);
+        float y = 5.0F - (float) Math.sqrt(model.getBreastSize()) * 2.5F + crouchY + offset.y * Y_OFFSET_SCALE;
         float z = -1.5F + model.getBreastSize() * 0.25F + crouchZ + offset.x * Z_OFFSET_SCALE;
 
         for (ModelPart part : model.getBreastParts()) {
