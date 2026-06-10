@@ -74,12 +74,12 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<LivingEnt
         mca$wideVillagerModel = mca$createModel(new CubeDeformation(0.0F), false);
         mca$slimVillagerModel = mca$createModel(new CubeDeformation(0.0F), true);
 
-        mca$skinLayer = new SkinLayer((AvatarRenderer) (Object) this, mca$createWearlessModel(new CubeDeformation(0.0F), slim));
+        mca$skinLayer = new SkinLayer((AvatarRenderer) (Object) this, mca$createWearlessModel(new CubeDeformation(0.0F), false));
         this.addLayer(mca$skinLayer);
-        this.addLayer(new FaceLayer((AvatarRenderer) (Object) this, mca$createWearlessModel(new CubeDeformation(0.01F), slim), "normal"));
-        mca$clothingLayer = new ClothingLayer((AvatarRenderer) (Object) this, mca$createModel(new CubeDeformation(0.0625F), slim), "normal");
+        this.addLayer(new FaceLayer((AvatarRenderer) (Object) this, mca$createWearlessModel(new CubeDeformation(0.01F), false), "normal"));
+        mca$clothingLayer = new ClothingLayer((AvatarRenderer) (Object) this, mca$createModel(new CubeDeformation(0.0625F), false), "normal");
         this.addLayer(mca$clothingLayer);
-        this.addLayer(new HairLayer((AvatarRenderer) (Object) this, mca$createHairModel(new CubeDeformation(0.125F), slim)));
+        this.addLayer(new HairLayer((AvatarRenderer) (Object) this, mca$createHairModel(new CubeDeformation(0.125F), false)));
     }
 
     @Inject(method = "scale(Lnet/minecraft/client/renderer/entity/state/AvatarRenderState;Lcom/mojang/blaze3d/vertex/PoseStack;)V", at = @At("TAIL"))
