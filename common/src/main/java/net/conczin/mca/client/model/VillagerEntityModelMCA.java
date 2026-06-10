@@ -43,22 +43,14 @@ public class VillagerEntityModelMCA extends VillagerEntityBaseModelMCA {
     //    hood - 3 (clothing.hat 0.075 + 0.5 = 0.575)
 
     public static MeshDefinition hairData(CubeDeformation dilation) {
-        return hairData(dilation, false);
-    }
-
-    public static MeshDefinition hairData(CubeDeformation dilation, boolean slim) {
-        MeshDefinition modelData = bodyData(dilation, slim);
+        MeshDefinition modelData = bodyData(dilation);
         PartDefinition root = modelData.getRoot();
         root.addOrReplaceChild(PartNames.HAT, CubeListBuilder.create().texOffs(32, 0).addBox(-4, -8, -4, 8, 8, 8, dilation.extend(0.3F)), PartPose.ZERO);
         return modelData;
     }
 
     public static MeshDefinition bodyData(CubeDeformation dilation) {
-        return bodyData(dilation, false);
-    }
-
-    public static MeshDefinition bodyData(CubeDeformation dilation, boolean slim) {
-        MeshDefinition modelData = PlayerModel.createMesh(dilation, slim);
+        MeshDefinition modelData = PlayerModel.createMesh(dilation, false);
         PartDefinition root = modelData.getRoot();
         root.addOrReplaceChild(BREASTS, newBreasts(dilation, 0), PartPose.ZERO);
         root.addOrReplaceChild(BREASTPLATE, newBreasts(dilation.extend(0.1F), 16), PartPose.ZERO);
@@ -66,11 +58,7 @@ public class VillagerEntityModelMCA extends VillagerEntityBaseModelMCA {
     }
 
     public static MeshDefinition armorData(CubeDeformation dilation) {
-        return armorData(dilation, false);
-    }
-
-    public static MeshDefinition armorData(CubeDeformation dilation, boolean slim) {
-        MeshDefinition modelData = PlayerModel.createMesh(dilation, slim);
+        MeshDefinition modelData = PlayerModel.createMesh(dilation, false);
         PartDefinition root = modelData.getRoot();
         root.addOrReplaceChild(BREASTS, newBreasts(dilation, 0), PartPose.ZERO);
         return modelData;

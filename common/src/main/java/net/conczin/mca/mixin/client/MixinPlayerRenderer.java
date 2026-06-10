@@ -24,7 +24,6 @@ import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.HumanoidArm;
 import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.entity.player.PlayerModelType;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
@@ -37,8 +36,6 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<LivingEnt
     @Unique
     private PlayerModel mca$wideVillagerModel;
     @Unique
-    private PlayerModel mca$slimVillagerModel;
-    @Unique
     private PlayerModel mca$vanillaModel;
     @Unique
     private SkinLayer mca$skinLayer;
@@ -50,18 +47,18 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<LivingEnt
     }
 
     @Unique
-    private static PlayerEntityExtendedModel<?> mca$createModel(CubeDeformation dilation, boolean slim) {
-        return new PlayerEntityExtendedModel<>(LayerDefinition.create(VillagerEntityModelMCA.bodyData(dilation, slim), 64, 64).bakeRoot(), slim);
+    private static PlayerEntityExtendedModel<?> mca$createModel(CubeDeformation dilation) {
+        return new PlayerEntityExtendedModel<>(LayerDefinition.create(VillagerEntityModelMCA.bodyData(dilation), 64, 64).bakeRoot());
     }
 
     @Unique
-    private static PlayerEntityExtendedModel<?> mca$createWearlessModel(CubeDeformation dilation, boolean slim) {
-        return mca$createModel(dilation, slim).hideWears();
+    private static PlayerEntityExtendedModel<?> mca$createWearlessModel(CubeDeformation dilation) {
+        return mca$createModel(dilation).hideWears();
     }
 
     @Unique
-    private static PlayerEntityExtendedModel<?> mca$createHairModel(CubeDeformation dilation, boolean slim) {
-        return new PlayerEntityExtendedModel<>(LayerDefinition.create(VillagerEntityModelMCA.hairData(dilation, slim), 64, 64).bakeRoot(), slim);
+    private static PlayerEntityExtendedModel<?> mca$createHairModel(CubeDeformation dilation) {
+        return new PlayerEntityExtendedModel<>(LayerDefinition.create(VillagerEntityModelMCA.hairData(dilation), 64, 64).bakeRoot());
     }
 
     @Inject(method = "<init>(Lnet/minecraft/client/renderer/entity/EntityRendererProvider$Context;Z)V", at = @At("TAIL"))
@@ -71,15 +68,14 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<LivingEnt
         }
 
         mca$vanillaModel = model;
-        mca$wideVillagerModel = mca$createModel(new CubeDeformation(0.0F), false);
-        mca$slimVillagerModel = mca$createModel(new CubeDeformation(0.0F), true);
+        mca$wideVillagerModel = mca$createModel(new CubeDeformation(0.0F));
 
-        mca$skinLayer = new SkinLayer((AvatarRenderer) (Object) this, mca$createWearlessModel(new CubeDeformation(0.0F), false));
+        mca$skinLayer = new SkinLayer((AvatarRenderer) (Object) this, mca$createWearlessModel(new CubeDeformation(0.0F)));
         this.addLayer(mca$skinLayer);
-        this.addLayer(new FaceLayer((AvatarRenderer) (Object) this, mca$createWearlessModel(new CubeDeformation(0.01F), false), "normal"));
-        mca$clothingLayer = new ClothingLayer((AvatarRenderer) (Object) this, mca$createModel(new CubeDeformation(0.0625F), false), "normal");
+        this.addLayer(new FaceLayer((AvatarRenderer) (Object) this, mca$createWearlessModel(new CubeDeformation(0.01F)), "normal"));
+        mca$clothingLayer = new ClothingLayer((AvatarRenderer) (Object) this, mca$createModel(new CubeDeformation(0.0625F)), "normal");
         this.addLayer(mca$clothingLayer);
-        this.addLayer(new HairLayer((AvatarRenderer) (Object) this, mca$createHairModel(new CubeDeformation(0.125F), false)));
+        this.addLayer(new HairLayer((AvatarRenderer) (Object) this, mca$createHairModel(new CubeDeformation(0.125F))));
     }
 
     @Inject(method = "scale(Lnet/minecraft/client/renderer/entity/state/AvatarRenderState;Lcom/mojang/blaze3d/vertex/PoseStack;)V", at = @At("TAIL"))
@@ -97,7 +93,7 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<LivingEnt
             poseStack.translate(0.0F, 0.6F, 0.0F);
         }
 
-        model = state.skin.model() == PlayerModelType.SLIM ? mca$slimVillagerModel : mca$wideVillagerModel;
+        model = mca$wideVillagerModel;
     }
 
     @Inject(
