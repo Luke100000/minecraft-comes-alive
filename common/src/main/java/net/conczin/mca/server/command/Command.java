@@ -21,7 +21,9 @@ import net.minecraft.commands.arguments.EntityArgument;
 import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.permissions.Permissions;
 
+import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
@@ -44,7 +46,7 @@ public class Command {
                 .then(register("mail", Command::mail))
                 .then(register("verify").then(Commands.argument("email", StringArgumentType.greedyString()).executes(Command::verify)))
                 .then(register("chatAI")
-                        .requires(p -> p.hasPermission(2) || p.getServer().isSingleplayer())
+                        .requires(Command::canAccessLocalAiCommands)
                         .executes(Command::chatAIHelp)
                         .then(Commands.literal("disable")
                                 .executes(Command::disableChatAI))
@@ -53,7 +55,7 @@ public class Command {
                         .then(Commands.literal("player2")
                                 .executes(Command::setupPlayer2))
                         .then(register("inworldAI")
-                                .requires(p -> p.hasPermission(2) || p.getServer().isSingleplayer())
+                                .requires(Command::canAccessLocalAiCommands)
                                 .then(register("keys")
                                         .then(Commands.argument("api_key", StringArgumentType.string())
                                                 .executes(c -> Command.inworldAIKey(c.getArgument("api_key", String.class)))))
@@ -72,13 +74,21 @@ public class Command {
                                         .then(Commands.argument("token", StringArgumentType.string())
                                                 .executes(c -> Command.enableChatAI(c, c.getArgument("model", String.class), c.getArgument("endpoint", String.class), c.getArgument("token", String.class)))))))
                 .then(register("tts")
-                        .requires(p -> p.getServer().isSingleplayer())
+                        .requires(Command::isSingleplayer)
                         .then(Commands.literal("default").executes(ctx -> ttsEnable(ctx, "default")))
                         .then(Commands.literal("elevenlabs").executes(ctx -> ttsEnable(ctx, "elevenlabs")))
                         .then(Commands.literal("realtime").executes(ctx -> ttsEnable(ctx, "realtime")))
                         .then(Commands.literal("disable").executes(Command::ttsDisable))
                 )
         );
+    }
+
+    private static boolean canAccessLocalAiCommands(CommandSourceStack source) {
+        return source.permissions().hasPermission(Permissions.COMMANDS_GAMEMASTER) || isSingleplayer(source);
+    }
+
+    private static boolean isSingleplayer(CommandSourceStack source) {
+        return source.getServer() != null && source.getServer().isSingleplayer();
     }
 
     private static int chatAIHelp(CommandContext<CommandSourceStack> ctx) {
@@ -111,7 +121,7 @@ public class Command {
 
         if (model.equals("default")) {
             sendMessage(ctx, Component.translatable("mca.ai_help").withStyle(s -> s
-                    .withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, "https://github.com/Luke100000/minecraft-comes-alive/wiki/GPT3-based-conversations"))
+                    .withClickEvent(new ClickEvent.OpenUrl(URI.create("https://github.com/Luke100000/minecraft-comes-alive/wiki/GPT3-based-conversations")))
             ));
         } else {
             sendMessage(ctx, "command.chat_ai.enabled");
@@ -141,7 +151,7 @@ public class Command {
         Config.getInstance().save();
 
         sendMessage(ctx, Component.translatable("command.chat_ai.player2").withStyle(s -> s
-                .withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, "https://player2.game/"))));
+                .withClickEvent(new ClickEvent.OpenUrl(URI.create("https://player2.game/")))));
         return 0;
     }
 
@@ -165,7 +175,7 @@ public class Command {
         if (player == null) {
             return 1;
         }
-        if (ctx.getSource().hasPermission(2) || Config.getInstance().allowFullPlayerEditor) {
+        if (ctx.getSource().permissions().hasPermission(Permissions.COMMANDS_GAMEMASTER) || Config.getInstance().allowFullPlayerEditor) {
             Network.sendToPlayer(new OpenGuiRequest(OpenGuiRequest.Type.VILLAGER_EDITOR, player), player);
             return 0;
         } else if (Config.getInstance().allowLimitedPlayerEditor) {
@@ -178,7 +188,7 @@ public class Command {
     }
 
     private static int destiny(CommandContext<CommandSourceStack> ctx) {
-        if (ctx.getSource().hasPermission(2) || Config.getInstance().allowDestinyCommandOnce) {
+        if (ctx.getSource().permissions().hasPermission(Permissions.COMMANDS_GAMEMASTER) || Config.getInstance().allowDestinyCommandOnce) {
             ServerPlayer player = ctx.getSource().getPlayer();
             if (player != null && !PlayerSaveData.get(player).isEntityDataSet() || Config.getInstance().allowDestinyCommandMoreThanOnce) {
                 ServerInteractionManager.launchDestiny(player);
@@ -274,11 +284,11 @@ public class Command {
 
 
     private static ArgumentBuilder<CommandSourceStack, ?> register(String name, com.mojang.brigadier.Command<CommandSourceStack> cmd) {
-        return Commands.literal(name).requires(cs -> cs.hasPermission(0)).executes(cmd);
+        return Commands.literal(name).requires(Commands.hasPermission(Commands.LEVEL_ALL)).executes(cmd);
     }
 
     private static ArgumentBuilder<CommandSourceStack, ?> register(String name) {
-        return Commands.literal(name).requires(cs -> cs.hasPermission(0));
+        return Commands.literal(name).requires(Commands.hasPermission(Commands.LEVEL_ALL));
     }
 
     private static void sendMessage(CommandContext<CommandSourceStack> ctx, String message) {

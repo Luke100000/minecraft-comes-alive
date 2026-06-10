@@ -1,28 +1,40 @@
 plugins {
     id 'multiloader-loader'
-    id 'fabric-loom'
+    id 'net.fabricmc.fabric-loom'
 }
 
 dependencies {
     minecraft "com.mojang:minecraft:${minecraft_version}"
-    mappings loom.layered {
-        officialMojangMappings()
-        parchment("org.parchmentmc.data:parchment-${parchment_minecraft}:${parchment_version}@zip")
-    }
-    modImplementation "net.fabricmc:fabric-loader:${fabric_loader_version}"
-    modImplementation "net.fabricmc.fabric-api:fabric-api:${fabric_version}"
+    implementation "net.fabricmc:fabric-loader:${loader_version}"
+    implementation "net.fabricmc.fabric-api:fabric-api:${fabric_api_version}"
 
-    modLocalRuntime "maven.modrinth:sodium:${sodium_version}"
-    modLocalRuntime "maven.modrinth:iris:${iris_version}"
-    modLocalRuntime "maven.modrinth:indium:${indium_version}"
-    modLocalRuntime "maven.modrinth:ferrite-core:${ferritecore_version}"
-    modLocalRuntime "maven.modrinth:packet-fixer:${packetfixer_version}"
+    localRuntime "maven.modrinth:sodium:${sodium_fabric_version}"
+    localRuntime "maven.modrinth:jei:${jei_fabric_version}"
+    localRuntime "maven.modrinth:iris:${iris_fabric_version}"
+    localRuntime "maven.modrinth:ferrite-core:${ferritecore_fabric_version}"
+    localRuntime "maven.modrinth:immediatelyfast:${immediatelyfast_fabric_version}"
+    localRuntime "maven.modrinth:packet-fixer:${packetfixer_fabric_version}"
 }
 
 def devUsername = providers.gradleProperty('mca_dev_username').orElse('Dev').get()
+def devJvmArgs = ['--enable-native-access=ALL-UNNAMED', '--sun-misc-unsafe-memory-access=allow']
 
 loom {
+    def aw = project(':common').file("src/main/resources/${mod_id}.classtweaker")
+    if (aw.exists()) {
+        accessWidenerPath.set(aw)
+    }
+
+    mods {
+        "${mod_id}" {
+            sourceSet sourceSets.main
+        }
+    }
+
     runs {
+        configureEach {
+            vmArgs(devJvmArgs)
+        }
         client {
             client()
             setConfigName("Fabric Client")
@@ -35,6 +47,37 @@ loom {
             setConfigName("Fabric Server")
             ideConfigGenerated(true)
             runDir("run")
+        }
+    }
+}
+
+fabricApi {
+    configureDataGeneration {
+        addToResources = false
+        client = true
+        createRunConfiguration = true
+        createSourceSet = true
+        modId = "${mod_id}-datagen"
+        outputDirectory = rootProject.project(':common').file('src/generated/resources')
+        strictValidation = true
+    }
+}
+
+// Implement mcgradleconventions loader attribute.
+def loaderAttribute = Attribute.of('io.github.mcgradleconventions.loader', String)
+['apiElements', 'runtimeElements', 'sourcesElements', 'javadocElements', 'includeInternal', 'modCompileClasspath'].each { variant ->
+    configurations.named("$variant") {
+        attributes {
+            attribute(loaderAttribute, 'fabric')
+        }
+    }
+}
+sourceSets.configureEach {
+    [it.compileClasspathConfigurationName, it.runtimeClasspathConfigurationName].each { variant ->
+        configurations.named("$variant") {
+            attributes {
+                attribute(loaderAttribute, 'fabric')
+            }
         }
     }
 }

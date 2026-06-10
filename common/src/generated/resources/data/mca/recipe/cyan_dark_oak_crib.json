@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "C": "minecraft:cyan_carpet",
+    "F": "minecraft:dark_oak_fence",
+    "P": "minecraft:dark_oak_planks"
+  },
+  "pattern": [
+    "F F",
+    "FCF",
+    "PPP"
+  ],
+  "result": {
+    "id": "mca:cyan_dark_oak_crib"
+  }
+}

@@ -25,7 +25,7 @@ public record GetVillageRequest() implements HandleablePayload {
     public void handleServer(ServerPlayer player) {
         Optional<Village> village = Village.findNearest(player);
         if (village.isPresent()) {
-            GraveyardManager.get(player.serverLevel()).reportToVillageManager(player);
+            GraveyardManager.get(player.level()).reportToVillageManager(player);
             village.get().updateMaxPopulation();
             int reputation = village.get().getReputation(player);
             boolean isVillage = village.get().isVillage();

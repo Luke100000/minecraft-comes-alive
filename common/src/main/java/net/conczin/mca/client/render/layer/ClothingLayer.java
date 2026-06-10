@@ -1,32 +1,39 @@
 package net.conczin.mca.client.render.layer;
 
+import net.conczin.mca.MCA;
 import net.conczin.mca.client.gui.immersive_library.SkinCache;
+import net.conczin.mca.client.render.VillagerVisualSnapshot;
 import net.minecraft.client.model.HumanoidModel;
 import net.minecraft.client.renderer.entity.RenderLayerParent;
-import net.minecraft.resources.ResourceLocation;
-import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.client.renderer.entity.state.HumanoidRenderState;
+import net.minecraft.resources.Identifier;
 
-import static net.conczin.mca.client.model.CommonVillagerModel.getVillager;
-
-public class ClothingLayer<T extends LivingEntity, M extends HumanoidModel<T>> extends VillagerLayer<T, M> {
+public class ClothingLayer<S extends HumanoidRenderState, M extends HumanoidModel<S>> extends VillagerLayer<S, M> {
     private final String variant;
 
-    public ClothingLayer(RenderLayerParent<T, M> renderer, M model, String variant) {
+    public ClothingLayer(RenderLayerParent<S, M> renderer, M model, String variant) {
         super(renderer, model);
         this.variant = variant;
     }
 
     @Override
-    public ResourceLocation getSkin(T villager) {
-        String v = getVillager(villager).isBurned() ? "burnt" : variant;
-        String identifier = getVillager(villager).getClothes();
+    public Identifier getSkin(S state) {
+        return getSkin(VillagerVisualSnapshot.require(state));
+    }
+
+    public Identifier getSkin(VillagerVisualSnapshot visuals) {
+        String identifier = visuals.clothes();
+        if (MCA.isBlankString(identifier)) {
+            return null;
+        }
+        String v = visuals.burned() ? "burnt" : variant;
         if (identifier.startsWith("immersive_library:")) {
             return SkinCache.getTextureIdentifier(Integer.parseInt(identifier.substring(18)));
         }
         return cached(identifier + v, clothes -> {
-            ResourceLocation id = ResourceLocation.parse(getVillager(villager).getClothes());
+            Identifier id = Identifier.parse(visuals.clothes());
 
-            ResourceLocation idNew = ResourceLocation.fromNamespaceAndPath(id.getNamespace(), id.getPath().replace("normal", v));
+            Identifier idNew = Identifier.fromNamespaceAndPath(id.getNamespace(), id.getPath().replace("normal", v));
             if (canUse(idNew)) {
                 return idNew;
             }

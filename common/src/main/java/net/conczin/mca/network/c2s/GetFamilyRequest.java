@@ -11,7 +11,8 @@ import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.entity.Mob;
+import net.minecraft.util.ProblemReporter;
+import net.minecraft.world.level.storage.TagValueOutput;
 
 import java.util.stream.Stream;
 
@@ -27,12 +28,13 @@ public record GetFamilyRequest() implements HandleablePayload {
                         playerData.getFamilyEntry().getAllRelatives(4),
                         playerData.getPartnerUUID().stream()
                 ).distinct()
-                .map(uuid -> player.serverLevel().getEntity(uuid))
+                .map(uuid -> player.level().getEntity(uuid))
                 .filter(e -> e instanceof VillagerLike<?>)
                 .limit(100)
                 .forEach(e -> {
-                    CompoundTag nbt = new CompoundTag();
-                    ((Mob) e).addAdditionalSaveData(nbt);
+                    TagValueOutput output = TagValueOutput.createWithContext(ProblemReporter.DISCARDING, player.registryAccess());
+                    e.saveWithoutId(output);
+                    CompoundTag nbt = output.buildResult();
                     nbt.remove("Brain");
                     nbt.remove("Memories");
                     nbt.remove("Inventory");

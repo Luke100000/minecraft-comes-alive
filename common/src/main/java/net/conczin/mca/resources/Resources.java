@@ -7,9 +7,11 @@ import net.conczin.mca.MCA;
 import net.conczin.mca.entity.interaction.InteractionPredicate;
 import org.apache.commons.io.IOUtils;
 
+import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.io.InputStreamReader;
+import java.io.InputStream;
 import java.lang.reflect.Type;
+import java.nio.charset.StandardCharsets;
 
 public interface Resources {
     String RESOURCE_PREFIX = "assets/mca/";
@@ -19,7 +21,13 @@ public interface Resources {
             .create();
 
     static String read(String path) throws IOException {
-        return IOUtils.toString(new InputStreamReader(MCA.class.getClassLoader().getResourceAsStream(RESOURCE_PREFIX + path)));
+        String resourcePath = RESOURCE_PREFIX + path;
+        try (InputStream stream = MCA.class.getClassLoader().getResourceAsStream(resourcePath)) {
+            if (stream == null) {
+                throw new FileNotFoundException(resourcePath);
+            }
+            return IOUtils.toString(stream, StandardCharsets.UTF_8);
+        }
     }
 
     static <T> T read(String path, Type type) throws BrokenResourceException {

@@ -5,11 +5,10 @@ import net.conczin.mca.MCA;
 import net.conczin.mca.network.Network;
 import net.conczin.mca.network.c2s.FamilyTreeUUIDLookup;
 import net.conczin.mca.util.compat.ButtonWidget;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.EditBox;
-import net.minecraft.client.gui.components.Renderable;
-import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.codec.ByteBufCodecs;
@@ -72,27 +71,24 @@ public class FamilyTreeSearchScreen extends Screen {
     }
 
     @Override
-    public void render(GuiGraphics context, int mouseX, int mouseY, float delta) {
-        renderBackground(context, mouseX, mouseY, delta);
-
-        assert minecraft != null;
-        this.mouseX = (int) (minecraft.mouseHandler.xpos() * width / minecraft.getWindow().getWidth());
-        this.mouseY = (int) (minecraft.mouseHandler.ypos() * height / minecraft.getWindow().getHeight());
-
+    public void extractBackground(GuiGraphicsExtractor context, int mouseX, int mouseY, float partialTick) {
+        super.extractBackground(context, mouseX, mouseY, partialTick);
         context.fill(width / 2 - DATA_WIDTH / 2 - 10, height / 2 - 110, width / 2 + DATA_WIDTH / 2 + 10, height / 2 + 110, 0x66000000);
+    }
+
+    @Override
+    public void extractRenderState(GuiGraphicsExtractor context, int mouseX, int mouseY, float delta) {
+        super.extractRenderState(context, mouseX, mouseY, delta);
+
+        this.mouseX = mouseX;
+        this.mouseY = mouseY;
 
         renderVillagers(context);
 
-        context.drawCenteredString(font, Component.translatable("gui.title.family_tree"), width / 2, height / 2 - 100, 16777215);
-
-        for (GuiEventListener child : children()) {
-            if (child instanceof Renderable renderable) {
-                renderable.render(context, mouseX, mouseY, delta);
-            }
-        }
+        context.centeredText(font, Component.translatable("gui.title.family_tree"), width / 2, height / 2 - 100, 16777215);
     }
 
-    private void renderVillagers(GuiGraphics context) {
+    private void renderVillagers(GuiGraphicsExtractor context) {
         int maxPages = pageCount();
         pageNumber = Math.min(pageNumber, maxPages - 1);
         buttonPage.setMessage(Component.literal((pageNumber + 1) + "/" + maxPages));
@@ -112,7 +108,7 @@ public class FamilyTreeSearchScreen extends Screen {
                 List<FormattedCharSequence> lines = font.split(entry.relationshipLabel(), DATA_WIDTH);
                 int textY = y + Math.max(1, (RESULT_ROW_HEIGHT - Math.min(2, lines.size()) * font.lineHeight) / 2);
                 for (int lineIndex = 0; lineIndex < Math.min(2, lines.size()); lineIndex++) {
-                    context.drawCenteredString(font, lines.get(lineIndex), width / 2, textY + lineIndex * font.lineHeight, hover ? 0xFFD7D784 : 0xFFFFFFFF);
+                    context.centeredText(font, lines.get(lineIndex), width / 2, textY + lineIndex * font.lineHeight, hover ? 0xFFD7D784 : 0xFFFFFFFF);
                 }
             } else {
                 break;
@@ -137,12 +133,12 @@ public class FamilyTreeSearchScreen extends Screen {
     }
 
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+    public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
         if (selectedVillager != null) {
             selectVillager(currentVillagerName, selectedVillager);
         }
 
-        return super.mouseClicked(mouseX, mouseY, button);
+        return super.mouseClicked(event, doubleClick);
     }
 
     void selectVillager(String name, UUID villager) {

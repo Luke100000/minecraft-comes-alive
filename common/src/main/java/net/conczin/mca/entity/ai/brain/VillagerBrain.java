@@ -14,8 +14,10 @@ import net.conczin.mca.util.network.datasync.CParameter;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.schedule.Activity;
 import org.jetbrains.annotations.Nullable;
@@ -37,9 +39,14 @@ public class VillagerBrain<E extends Mob & VillagerLike<E>> {
     private static final CDataParameter<Boolean> PANICKING = CParameter.create("IsPanicking", false);
     private static final CDataParameter<Boolean> WEAR_ARMOR = CParameter.create("WearArmor", false);
 
+    private static final int PANIC_ANIMATION_HOLD_TICKS = 20;
+    private static final float PANIC_ANIMATION_STEP = 0.25F;
     private static final long GRIEVE_COOLDOWN = 24000 * 7;
     private final Random random = new Random();
     private final E entity;
+    private int panicAnimationHoldTicks;
+    private float panicAnimationProgress;
+    private float panicAnimationProgressO;
 
     public VillagerBrain(E entity) {
         this.entity = entity;
@@ -85,8 +92,8 @@ public class VillagerBrain<E extends Mob & VillagerLike<E>> {
         if (entity.tickCount % Math.max(1, Config.getInstance().interactionFatigueCooldown) == 0) {
             CompoundTag nbt = entity.getTrackedValue(MEMORIES);
             if (nbt != null) {
-                for (String uuid : nbt.getAllKeys()) {
-                    Memories memories = Memories.fromCNBT(entity, nbt.getCompound(uuid));
+                for (String uuid : nbt.keySet()) {
+                    Memories memories = Memories.fromCNBT(entity, nbt.getCompound(uuid).orElseGet(CompoundTag::new));
                     int fatigue = memories.getInteractionFatigue();
                     if (fatigue > 0) {
                         memories.setInteractionFatigue(fatigue - 1);
@@ -130,7 +137,7 @@ public class VillagerBrain<E extends Mob & VillagerLike<E>> {
 
     public void randomize() {
         entity.setTrackedValue(PERSONALITY, Personality.getRandom());
-        entity.setTrackedValue(MOOD, entity.level().random.nextInt(MoodGroup.MAX_LEVEL - MoodGroup.NORMAL_MIN_LEVEL + 1) + MoodGroup.NORMAL_MIN_LEVEL);
+        entity.setTrackedValue(MOOD, entity.getRandom().nextInt(MoodGroup.MAX_LEVEL - MoodGroup.NORMAL_MIN_LEVEL + 1) + MoodGroup.NORMAL_MIN_LEVEL);
     }
 
     public void updateMemories(Memories memories) {
@@ -144,8 +151,8 @@ public class VillagerBrain<E extends Mob & VillagerLike<E>> {
     public Map<UUID, Memories> getMemories() {
         CompoundTag nbt = entity.getTrackedValue(MEMORIES);
         Map<UUID, Memories> memories = new HashMap<>();
-        for (String uuid : nbt.getAllKeys()) {
-            memories.put(UUID.fromString(uuid), Memories.fromCNBT(entity, nbt.getCompound(uuid)));
+        for (String uuid : nbt.keySet()) {
+            memories.put(UUID.fromString(uuid), Memories.fromCNBT(entity, nbt.getCompound(uuid).orElseGet(CompoundTag::new)));
         }
         return memories;
     }
@@ -153,10 +160,10 @@ public class VillagerBrain<E extends Mob & VillagerLike<E>> {
     public Memories getMemoriesForPlayer(Player player) {
         CompoundTag nbt = entity.getTrackedValue(MEMORIES);
         nbt = nbt == null ? new CompoundTag() : nbt;
-        CompoundTag compoundTag = nbt.getCompound(player.getUUID().toString());
+        CompoundTag compoundTag = nbt.getCompound(player.getUUID().toString()).orElseGet(CompoundTag::new);
         Memories returnMemories = Memories.fromCNBT(entity, compoundTag);
         if (returnMemories == null) {
-            returnMemories = new Memories(this, player.level().getDayTime(), player.getUUID());
+            returnMemories = new Memories(this, player.level().getGameTime(), player.getUUID());
             nbt.put(player.getUUID().toString(), returnMemories.toCNBT());
             entity.setTrackedValue(MEMORIES, nbt);
         }
@@ -177,6 +184,30 @@ public class VillagerBrain<E extends Mob & VillagerLike<E>> {
 
     public boolean isPanicking() {
         return entity.getTrackedValue(PANICKING);
+    }
+
+    public void tickPanicAnimation() {
+        panicAnimationProgressO = panicAnimationProgress;
+
+        if (isPanicking() || hasPanicStimulus()) {
+            panicAnimationHoldTicks = PANIC_ANIMATION_HOLD_TICKS;
+        } else if (panicAnimationHoldTicks > 0) {
+            panicAnimationHoldTicks--;
+        }
+
+        float target = panicAnimationHoldTicks > 0 ? 1.0F : 0.0F;
+        float delta = Mth.clamp(target - panicAnimationProgress, -PANIC_ANIMATION_STEP, PANIC_ANIMATION_STEP);
+        panicAnimationProgress = Mth.clamp(panicAnimationProgress + delta, 0.0F, 1.0F);
+    }
+
+    public float getPanicAnimationProgress(float partialTick) {
+        return Mth.clamp(Mth.lerp(partialTick, panicAnimationProgressO, panicAnimationProgress), 0.0F, 1.0F);
+    }
+
+    private boolean hasPanicStimulus() {
+        return entity.getBrain().hasMemoryValue(MemoryModuleType.HURT_BY)
+               || entity.getBrain().hasMemoryValue(MemoryModuleType.HURT_BY_ENTITY)
+               || entity.getBrain().hasMemoryValue(MemoryModuleType.NEAREST_HOSTILE);
     }
 
     public void modifyMoodValue(int mood) {

@@ -21,19 +21,18 @@
     ],
     "client": [
       "net.conczin.mca.fabric.MCAFabricClient"
-    ],
-    "fabric-datagen": [
-      "net.conczin.mca.fabric.datagen.CribDatagen"
     ]
   },
   "mixins": [
-    "${mod_id}.mixins.json"
+    "${mod_id}.mixins.json",
+    "${mod_id}.fabric.mixins.json"
   ],
+  "accessWidener": "${mod_id}.classtweaker",
   "depends": {
-    "fabricloader": ">=0.14",
-    "fabric": "*",
+    "fabricloader": ">=${loader_version}",
+    "fabric-api": "*",
     "minecraft": "${minecraft_version}",
-    "java": ">=17"
+    "java": ">=${java_version}"
   },
   "suggests": {
   }

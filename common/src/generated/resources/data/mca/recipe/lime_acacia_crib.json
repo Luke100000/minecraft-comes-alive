@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "C": "minecraft:lime_carpet",
+    "F": "minecraft:acacia_fence",
+    "P": "minecraft:acacia_planks"
+  },
+  "pattern": [
+    "F F",
+    "FCF",
+    "PPP"
+  ],
+  "result": {
+    "id": "mca:lime_acacia_crib"
+  }
+}

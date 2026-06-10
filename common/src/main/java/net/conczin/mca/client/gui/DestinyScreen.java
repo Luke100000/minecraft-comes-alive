@@ -1,7 +1,5 @@
 package net.conczin.mca.client.gui;
 
-import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.vertex.PoseStack;
 import net.conczin.mca.Config;
 import net.conczin.mca.MCA;
 import net.conczin.mca.MCAClient;
@@ -9,10 +7,12 @@ import net.conczin.mca.network.Network;
 import net.conczin.mca.network.c2s.DestinyMessage;
 import net.conczin.mca.util.compat.ButtonWidget;
 import net.conczin.mca.util.localization.FlowingText;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
+import org.joml.Matrix3x2fStack;
 
 import java.util.LinkedList;
 import java.util.List;
@@ -20,7 +20,7 @@ import java.util.Map;
 import java.util.UUID;
 
 public class DestinyScreen extends VillagerEditorScreen {
-    private static final ResourceLocation LOGO_TEXTURE = MCA.locate("textures/banner.png");
+    private static final Identifier LOGO_TEXTURE = MCA.locate("textures/banner.png");
     private final LinkedList<Component> story = new LinkedList<>();
     private final boolean allowTeleportation;
     private String location;
@@ -35,6 +35,11 @@ public class DestinyScreen extends VillagerEditorScreen {
 
     @Override
     public boolean isPauseScreen() {
+        return true;
+    }
+
+    @Override
+    public boolean showsActiveEffects() {
         return true;
     }
 
@@ -59,37 +64,34 @@ public class DestinyScreen extends VillagerEditorScreen {
         return pages.toArray(new String[]{});
     }
 
-    private void drawScaledText(GuiGraphics context, Component text, int x, int y, float scale) {
-        final PoseStack matrices = context.pose();
-        matrices.pushPose();
-        matrices.scale(scale, scale, scale);
-        context.drawCenteredString(font, text, (int) (x / scale), (int) (y / scale), 0xffffffff);
-        matrices.popPose();
+    private void drawScaledText(GuiGraphicsExtractor context, Component text, int x, int y, float scale) {
+        final Matrix3x2fStack matrices = context.pose();
+        matrices.pushMatrix();
+        matrices.scale(scale, scale);
+        context.centeredText(font, text, (int) (x / scale), (int) (y / scale), 0xffffffff);
+        matrices.popMatrix();
     }
 
     @Override
-    public void renderBackground(GuiGraphics context, int mouseX, int mouseY, float partialTick) {
-        this.renderPanorama(context, partialTick);
-        this.renderBlurredBackground(partialTick);
-        this.renderMenuBackground(context);
+    public void extractBackground(GuiGraphicsExtractor context, int mouseX, int mouseY, float partialTick) {
+        this.extractPanorama(context, partialTick);
+        this.extractBlurredBackground(context);
+        this.extractMenuBackground(context);
     }
 
     @Override
-    public void render(GuiGraphics context, int mouseX, int mouseY, float delta) {
-        super.render(context, mouseX, mouseY, delta);
+    public void extractRenderState(GuiGraphicsExtractor context, int mouseX, int mouseY, float delta) {
+        super.extractRenderState(context, mouseX, mouseY, delta);
 
-        final PoseStack matrices = context.pose();
+        final Matrix3x2fStack matrices = context.pose();
 
         switch (page) {
             case "general" -> {
                 drawScaledText(context, Component.translatable("gui.destiny.whoareyou"), width / 2, height / 2 - 24, 1.5f);
-                matrices.pushPose();
-                matrices.scale(0.25f, 0.25f, 0.25f);
-                RenderSystem.enableBlend();
-                RenderSystem.defaultBlendFunc();
-                RenderSystem.setShaderColor(1, 1, 1, 1);
-                context.blit(LOGO_TEXTURE, width * 2 - 512, -40, 0, 0, 1024, 512, 1024, 512);
-                matrices.popPose();
+                matrices.pushMatrix();
+                matrices.scale(0.25f, 0.25f);
+                context.blit(RenderPipelines.GUI_TEXTURED, LOGO_TEXTURE, width * 2 - 512, -40, 0, 0, 1024, 512, 1024, 512);
+                matrices.popMatrix();
             }
             case "destiny" ->
                     drawScaledText(context, Component.translatable("gui.destiny.journey"), width / 2, height / 2 - 48, 1.5f);
@@ -200,3 +202,6 @@ public class DestinyScreen extends VillagerEditorScreen {
         setPage("story");
     }
 }
+
+
+

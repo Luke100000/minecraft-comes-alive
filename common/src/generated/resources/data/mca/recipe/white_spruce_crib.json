@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "C": "minecraft:white_carpet",
+    "F": "minecraft:spruce_fence",
+    "P": "minecraft:spruce_planks"
+  },
+  "pattern": [
+    "F F",
+    "FCF",
+    "PPP"
+  ],
+  "result": {
+    "id": "mca:white_spruce_crib"
+  }
+}

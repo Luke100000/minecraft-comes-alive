@@ -1,82 +1,62 @@
 package net.conczin.mca.client.gui.widget;
 
-import com.mojang.blaze3d.platform.Lighting;
-import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.vertex.*;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.renderer.GameRenderer;
-import net.minecraft.client.renderer.MultiBufferSource;
-import net.minecraft.client.renderer.entity.EntityRenderDispatcher;
+import net.minecraft.client.gui.Font;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.screens.inventory.InventoryScreen;
+import net.minecraft.client.gui.screens.inventory.tooltip.ClientTooltipComponent;
+import net.minecraft.client.gui.screens.inventory.tooltip.DefaultTooltipPositioner;
+import net.minecraft.client.renderer.RenderPipelines;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
+import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.world.entity.LivingEntity;
-import org.joml.Matrix4f;
-import org.joml.Matrix4fStack;
-import org.joml.Quaternionf;
+
+import java.util.List;
 
 // FIXME: 1.20 loses the DrawableHelper attachment, determine if DrawContext can replace this
 public class WidgetUtils {
-    public static void drawRectangle(GuiGraphics context, int x0, int y0, int x1, int y1, int color) {
+    public static void drawRectangle(GuiGraphicsExtractor context, int x0, int y0, int x1, int y1, int color) {
         context.fill(x0 + 1, y0, x1, y0 + 1, color);
         context.fill(x1 - 1, y0 + 1, x1, y1, color);
         context.fill(x0, y1 - 1, x1 - 1, y1, color);
         context.fill(x0, y0, x0 + 1, y1 - 1, color);
     }
 
-    public static void drawTexturedQuad(Matrix4f matrix, float x0, float x1, float y0, float y1, float z, float u0, float u1, float v0, float v1) {
-        RenderSystem.setShader(GameRenderer::getPositionTexShader);
-        BufferBuilder bufferBuilder = Tesselator.getInstance().begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_TEX);
-        bufferBuilder.addVertex(matrix, x0, y1, z).setUv(u0, v1);
-        bufferBuilder.addVertex(matrix, x1, y1, z).setUv(u1, v1);
-        bufferBuilder.addVertex(matrix, x1, y0, z).setUv(u1, v0);
-        bufferBuilder.addVertex(matrix, x0, y0, z).setUv(u0, v0);
-        BufferUploader.drawWithShader(bufferBuilder.buildOrThrow());
+    public static void drawTexturedQuad(GuiGraphicsExtractor context, Identifier texture, float x0, float x1, float y0, float y1, float u0, float u1, float v0, float v1) {
+        context.blit(texture, Math.round(x0), Math.round(y0), Math.round(x1), Math.round(y1), u0, u1, v0, v1);
+    }
+
+    public static void drawTexturedQuad(GuiGraphicsExtractor context, Identifier texture, float x0, float x1, float y0, float y1, float u0, float u1, float v0, float v1, int color) {
+        int width = Math.round(x1 - x0);
+        int height = Math.round(y1 - y0);
+        context.blit(RenderPipelines.GUI_TEXTURED, texture, Math.round(x0), Math.round(y0), u0 * 64.0f, v0 * 64.0f, width, height, Math.round((u1 - u0) * 64.0f), Math.round((v1 - v0) * 64.0f), 64, 64, color);
+    }
+
+    public static void drawTooltip(GuiGraphicsExtractor context, Font font, Component text, int x, int y) {
+        drawTooltip(context, font, List.of(text), x, y);
+    }
+
+    public static void drawTooltip(GuiGraphicsExtractor context, Font font, List<Component> text, int x, int y) {
+        List<FormattedCharSequence> lines = text.stream().map(Component::getVisualOrderText).toList();
+        List<ClientTooltipComponent> components = lines.stream().map(ClientTooltipComponent::create).toList();
+        context.tooltip(font, components, x, y, DefaultTooltipPositioner.INSTANCE, null);
     }
 
     /**
      * The same as the Inventory function but with negative Z
      */
-    @SuppressWarnings("deprecation")
-    public static void drawBackgroundEntity(int x, int y, int size, float mouseX, float mouseY, LivingEntity entity) {
-        float f = (float) Math.atan(mouseX / 40.0F);
-        float g = (float) Math.atan(mouseY / 40.0F);
-        Matrix4fStack matrixStack = RenderSystem.getModelViewStack();
-        matrixStack.pushMatrix();
-        matrixStack.translate((float) x, (float) y, 50);
-        matrixStack.scale(1.0F, 1.0F, -1.0F);
-        RenderSystem.applyModelViewMatrix();
-        PoseStack matrixStack2 = new PoseStack();
-        matrixStack2.translate(0.0F, 0.0F, 1000.0F);
-        matrixStack2.scale((float) size, (float) size, (float) size);
-        Quaternionf quaternionf = (new Quaternionf()).rotateZ(3.1415927F);
-        Quaternionf quaternionf2 = (new Quaternionf()).rotateX(g * 20.0F * 0.017453292F);
-        quaternionf.mul(quaternionf2);
-        matrixStack2.mulPose(quaternionf);
-        float h = entity.yBodyRot;
-        float i = entity.getYRot();
-        float j = entity.getXRot();
-        float k = entity.yHeadRotO;
-        float l = entity.yHeadRot;
-        entity.yBodyRot = 180.0F + f * 20.0F;
-        entity.setYRot(180.0F + f * 40.0F);
-        entity.setXRot(-g * 20.0F);
-        entity.yHeadRot = entity.getYRot();
-        entity.yHeadRotO = entity.getYRot();
-        Lighting.setupForEntityInInventory();
-        EntityRenderDispatcher entityRenderDispatcher = Minecraft.getInstance().getEntityRenderDispatcher();
-        quaternionf2.conjugate();
-        entityRenderDispatcher.overrideCameraOrientation(quaternionf2);
-        entityRenderDispatcher.setRenderShadow(false);
-        MultiBufferSource.BufferSource immediate = Minecraft.getInstance().renderBuffers().bufferSource();
-        RenderSystem.runAsFancy(() -> entityRenderDispatcher.render(entity, 0.0, 0.0, 0.0, 0.0F, 1.0F, matrixStack2, immediate, 15728880));
-        immediate.endBatch();
-        entityRenderDispatcher.setRenderShadow(true);
-        entity.yBodyRot = h;
-        entity.setYRot(i);
-        entity.setXRot(j);
-        entity.yHeadRotO = k;
-        entity.yHeadRot = l;
-        matrixStack.popMatrix();
-        RenderSystem.applyModelViewMatrix();
-        Lighting.setupFor3DItems();
+    public static void drawBackgroundEntity(GuiGraphicsExtractor context, int x, int y, int size, float mouseX, float mouseY, LivingEntity entity) {
+        InventoryScreen.extractEntityInInventoryFollowsMouse(
+                context,
+                x - size,
+                y - size,
+                x + size,
+                y + size,
+                size,
+                0.0f,
+                mouseX,
+                mouseY,
+                entity
+        );
     }
 }

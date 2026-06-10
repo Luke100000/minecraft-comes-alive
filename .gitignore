@@ -22,6 +22,7 @@ build
 eclipse
 run
 backup
+.worktrees/
 
 # Files from Forge MDK
 forge*changelog.txt

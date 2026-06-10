@@ -3,7 +3,9 @@ package net.conczin.mca.entity.ai.brain.tasks;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.behavior.OneShot;
+import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 
+import java.util.Set;
 import java.util.function.Predicate;
 
 public class ConditionalSingleTickTask<E extends LivingEntity> extends OneShot<E> {
@@ -20,5 +22,10 @@ public class ConditionalSingleTickTask<E extends LivingEntity> extends OneShot<E
     @Override
     public boolean trigger(ServerLevel world, E entity, long time) {
         return predicate.test(entity) && task.trigger(world, entity, time);
+    }
+
+    @Override
+    public Set<MemoryModuleType<?>> getRequiredMemories() {
+        return task.getRequiredMemories();
     }
 }

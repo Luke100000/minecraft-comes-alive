@@ -3,7 +3,7 @@ package net.conczin.mca.block;
 import net.conczin.mca.MCA;
 import net.conczin.mca.registry.BlocksMCA;
 import net.minecraft.core.BlockPos;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.BlockEntityType;
@@ -37,7 +37,7 @@ public class BlockEntityTypesMCA {
 
     public interface TriFunction<E extends BlockEntity> {
         @SuppressWarnings("rawtypes")
-        BlockEntityType<E> apply(ResourceLocation name, BlockEntitySupplier constructor, Block[] block);
+        BlockEntityType<E> apply(Identifier name, BlockEntitySupplier constructor, Block[] block);
     }
 
     public interface BlockEntitySupplier<T extends BlockEntity> {

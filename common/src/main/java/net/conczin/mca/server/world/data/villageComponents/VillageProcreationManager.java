@@ -17,7 +17,7 @@ public class VillageProcreationManager {
 
     // if the population is low, find a couple and let them have a child
     public void procreate(ServerLevel world) {
-        if (world.random.nextFloat() >= Config.getInstance().villagerProcreationChancePerMinute) {
+        if (world.getRandom().nextFloat() >= Config.getInstance().villagerProcreationChancePerMinute) {
             return;
         }
 
@@ -28,9 +28,9 @@ public class VillageProcreationManager {
         }
 
         // look for married women without baby
-        PoolUtil.pick(village.getResidents(world), world.random)
+        PoolUtil.pick(village.getResidents(world), world.getRandom())
                 .filter(villager -> villager.getGenetics().getGender() == Gender.FEMALE)
-                .filter(villager -> world.random.nextFloat() < 1.0 / (FamilyTree.get(world).getOrCreate(villager).getChildren().count() + 0.1))
+                .filter(villager -> world.getRandom().nextFloat() < 1.0 / (FamilyTree.get(world).getOrCreate(villager).getChildren().count() + 0.1))
                 .filter(villager -> villager.getRelationships().getPregnancy().tryStartGestation())
                 .ifPresent(villager ->
                         villager.getRelationships().getPartner().ifPresent(spouse -> {

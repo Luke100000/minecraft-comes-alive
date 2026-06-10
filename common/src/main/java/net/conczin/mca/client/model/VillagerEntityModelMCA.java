@@ -1,9 +1,8 @@
 package net.conczin.mca.client.model;
 
 import com.google.common.collect.ImmutableList;
-import net.conczin.mca.entity.VillagerLike;
+import net.conczin.mca.client.render.VillagerRenderState;
 import net.minecraft.client.model.HumanoidModel;
-import net.minecraft.client.model.PlayerModel;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.client.model.geom.PartNames;
 import net.minecraft.client.model.geom.PartPose;
@@ -11,9 +10,9 @@ import net.minecraft.client.model.geom.builders.CubeDeformation;
 import net.minecraft.client.model.geom.builders.CubeListBuilder;
 import net.minecraft.client.model.geom.builders.MeshDefinition;
 import net.minecraft.client.model.geom.builders.PartDefinition;
-import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.client.model.player.PlayerModel;
 
-public class VillagerEntityModelMCA<T extends LivingEntity & VillagerLike<T>> extends VillagerEntityBaseModelMCA<T> {
+public class VillagerEntityModelMCA extends VillagerEntityBaseModelMCA {
     protected static final String BREASTPLATE = "breastplate";
 
     public final ModelPart breastsWear;
@@ -27,11 +26,11 @@ public class VillagerEntityModelMCA<T extends LivingEntity & VillagerLike<T>> ex
 
     public VillagerEntityModelMCA(ModelPart tree) {
         super(tree);
-        bodyWear = tree.getChild(PartNames.JACKET);
-        leftArmwear = tree.getChild("left_sleeve");
-        rightArmwear = tree.getChild("right_sleeve");
-        leftLegwear = tree.getChild("left_pants");
-        rightLegwear = tree.getChild("right_pants");
+        bodyWear = body.getChild(PartNames.JACKET);
+        leftArmwear = leftArm.getChild("left_sleeve");
+        rightArmwear = rightArm.getChild("right_sleeve");
+        leftLegwear = leftLeg.getChild("left_pants");
+        rightLegwear = rightLeg.getChild("right_pants");
 
         breastsWear = tree.getChild(BREASTPLATE);
     }
@@ -44,7 +43,11 @@ public class VillagerEntityModelMCA<T extends LivingEntity & VillagerLike<T>> ex
     //    hood - 3 (clothing.hat 0.075 + 0.5 = 0.575)
 
     public static MeshDefinition hairData(CubeDeformation dilation) {
-        MeshDefinition modelData = bodyData(dilation);
+        return hairData(dilation, false);
+    }
+
+    public static MeshDefinition hairData(CubeDeformation dilation, boolean slim) {
+        MeshDefinition modelData = bodyData(dilation, slim);
         PartDefinition root = modelData.getRoot();
         root.addOrReplaceChild(PartNames.HAT, CubeListBuilder.create().texOffs(32, 0).addBox(-4, -8, -4, 8, 8, 8, dilation.extend(0.3F)), PartPose.ZERO);
         return modelData;
@@ -63,15 +66,18 @@ public class VillagerEntityModelMCA<T extends LivingEntity & VillagerLike<T>> ex
     }
 
     public static MeshDefinition armorData(CubeDeformation dilation) {
-        MeshDefinition modelData = HumanoidModel.createMesh(dilation, 0.0f);
+        return armorData(dilation, false);
+    }
+
+    public static MeshDefinition armorData(CubeDeformation dilation, boolean slim) {
+        MeshDefinition modelData = PlayerModel.createMesh(dilation, slim);
         PartDefinition root = modelData.getRoot();
         root.addOrReplaceChild(BREASTS, newBreasts(dilation, 0), PartPose.ZERO);
         return modelData;
     }
 
-    @Override
-    protected Iterable<ModelPart> bodyParts() {
-        return ImmutableList.of(body, rightArm, leftArm, rightLeg, leftLeg, bodyWear, leftLegwear, rightLegwear, leftArmwear, rightArmwear);
+    public Iterable<ModelPart> getCommonBodyParts() {
+        return ImmutableList.of(body, rightArm, leftArm, rightLeg, leftLeg);
     }
 
     @Override
@@ -79,21 +85,22 @@ public class VillagerEntityModelMCA<T extends LivingEntity & VillagerLike<T>> ex
         return ImmutableList.of(breasts, breastsWear);
     }
 
-    @Override
-    public void setupAnim(T villager, float limbAngle, float limbDistance, float animationProgress, float headYaw, float headPitch) {
-        super.setupAnim(villager, limbAngle, limbDistance, animationProgress, headYaw, headPitch);
-        leftLegwear.copyFrom(leftLeg);
-        rightLegwear.copyFrom(rightLeg);
-        leftArmwear.copyFrom(leftArm);
-        rightArmwear.copyFrom(rightArm);
-        bodyWear.copyFrom(body);
-        breastsWear.copyFrom(breasts);
+    public void setupAnim(VillagerRenderState state) {
+        super.setupAnim(state);
+        // These parts are already parented to their limbs/body in the baked model,
+        // so copying the parent transform onto them applies that transform twice.
+        CommonVillagerModel.copyPartState(breastsWear, breasts);
     }
 
-    @Override
     public void setAllVisible(boolean visible) {
-        super.setAllVisible(visible);
-
+        head.visible = visible;
+        hat.visible = visible;
+        body.visible = visible;
+        leftArm.visible = visible;
+        rightArm.visible = visible;
+        leftLeg.visible = visible;
+        rightLeg.visible = visible;
+        breasts.visible = visible;
         leftArmwear.visible = !wearsHidden && visible;
         rightArmwear.visible = !wearsHidden && visible;
         leftLegwear.visible = !wearsHidden && visible;
@@ -101,7 +108,7 @@ public class VillagerEntityModelMCA<T extends LivingEntity & VillagerLike<T>> ex
         bodyWear.visible = !wearsHidden && visible;
     }
 
-    public VillagerEntityModelMCA<T> hideWears() {
+    public VillagerEntityModelMCA hideWears() {
         wearsHidden = true;
         breastsWear.visible = false;
         leftArmwear.visible = false;
@@ -112,21 +119,20 @@ public class VillagerEntityModelMCA<T extends LivingEntity & VillagerLike<T>> ex
         return this;
     }
 
-    @Override
-    public void copyPropertiesTo(HumanoidModel<T> target) {
-        super.copyPropertiesTo(target);
-        if (target instanceof VillagerEntityModelMCA) {
-            copyAttributes((VillagerEntityModelMCA<T>) target);
+    public void copyPropertiesTo(HumanoidModel<?> target) {
+        if (target instanceof VillagerEntityModelMCA m) {
+            super.copyPropertiesTo(m);
+            copyAttributes(m);
         }
     }
 
-    private void copyAttributes(VillagerEntityModelMCA<T> target) {
-        target.leftLegwear.copyFrom(leftLegwear);
-        target.rightLegwear.copyFrom(rightLegwear);
-        target.leftArmwear.copyFrom(leftArmwear);
-        target.rightArmwear.copyFrom(rightArmwear);
-        target.bodyWear.copyFrom(bodyWear);
-        target.breastsWear.copyFrom(breastsWear);
+    private void copyAttributes(VillagerEntityModelMCA target) {
+        CommonVillagerModel.copyPartState(target.leftLegwear, leftLegwear);
+        CommonVillagerModel.copyPartState(target.rightLegwear, rightLegwear);
+        CommonVillagerModel.copyPartState(target.leftArmwear, leftArmwear);
+        CommonVillagerModel.copyPartState(target.rightArmwear, rightArmwear);
+        CommonVillagerModel.copyPartState(target.bodyWear, bodyWear);
+        CommonVillagerModel.copyPartState(target.breastsWear, breastsWear);
     }
 
     public void copyVisibility(HumanoidModel<?> model) {

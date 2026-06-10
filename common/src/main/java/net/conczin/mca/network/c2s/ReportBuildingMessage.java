@@ -29,11 +29,11 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
 
     @Override
     public void handleServer(ServerPlayer player) {
-        VillageManager villages = VillageManager.get(player.serverLevel());
+        VillageManager villages = VillageManager.get(player.level());
         switch (action) {
             case ADD, ADD_ROOM -> {
                 Building.validationResult result = villages.processBuilding(player.blockPosition(), true, action == Action.ADD_ROOM);
-                player.displayClientMessage(Component.translatable("blueprint.scan." + result.name().toLowerCase(Locale.ENGLISH)), true);
+                player.sendSystemMessage(Component.translatable("blueprint.scan." + result.name().toLowerCase(Locale.ENGLISH)));
             }
             case AUTO_SCAN -> villages.findNearestVillage(player).ifPresent(Village::toggleAutoScan);
             case FULL_SCAN -> villages.findNearestVillage(player).ifPresent(buildings ->
@@ -61,7 +61,7 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
                         village.get().removeBuilding(b.getId());
                     }
                 }, () -> {
-                    player.displayClientMessage(Component.translatable("blueprint.noBuilding"), true);
+                    player.sendSystemMessage(Component.translatable("blueprint.noBuilding"));
                 });
             }
         }
@@ -81,3 +81,4 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
         FULL_SCAN
     }
 }
+

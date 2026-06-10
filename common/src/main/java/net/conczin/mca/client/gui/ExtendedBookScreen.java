@@ -5,15 +5,22 @@ import net.conczin.mca.client.book.pages.Page;
 import net.conczin.mca.client.gui.widget.ExtendedPageTurnWidget;
 import net.conczin.mca.util.compat.ButtonWidget;
 import net.minecraft.client.GameNarrator;
+import net.minecraft.client.gui.ActiveTextCollector;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.PageButton;
+import net.minecraft.client.input.KeyEvent;
+import net.minecraft.client.input.MouseButtonEvent;
+import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.CommonComponents;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.Style;
 import net.minecraft.util.Mth;
+
+import java.util.Objects;
 
 public class ExtendedBookScreen extends Screen {
     private final Book book;
@@ -87,18 +94,18 @@ public class ExtendedBookScreen extends Screen {
     }
 
     @Override
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (super.keyPressed(keyCode, scanCode, modifiers)) {
+    public boolean keyPressed(KeyEvent event) {
+        if (super.keyPressed(event)) {
             return true;
         }
 
-        return switch (keyCode) {
+        return switch (event.key()) {
             case 266 -> {
-                this.previousPageButton.onPress();
+                this.previousPageButton.onPress(event);
                 yield true;
             }
             case 267 -> {
-                this.nextPageButton.onPress();
+                this.nextPageButton.onPress(event);
                 yield true;
             }
             default -> false;
@@ -110,24 +117,24 @@ public class ExtendedBookScreen extends Screen {
     }
 
     @Override
-    public void renderBackground(GuiGraphics context, int mouseX, int mouseY, float partialTick) {
-        super.renderBackground(context, mouseX, mouseY, partialTick);
+    public void extractBackground(GuiGraphicsExtractor context, int mouseX, int mouseY, float partialTick) {
+        super.extractBackground(context, mouseX, mouseY, partialTick);
 
         // background
         int i = (width - 192) / 2;
-        context.blit(book.getBackground(), i, 2, 0, 0, 192, 192);
+        context.blit(RenderPipelines.GUI_TEXTURED, book.getBackground(), i, 2, 0, 0, 192, 192, 256, 256);
 
         // page number
         if (book.showPageCount()) {
             Component pageIndexText = Component.translatable("book.pageIndicator", this.pageIndex + 1, Math.max(book.getPageCount(), 1)).withStyle(book.getTextFormatting());
             int k = font.width(pageIndexText);
-            context.drawString(font, pageIndexText, i - k + 192 - 44, 18, 0, getBook().hasTextShadow());
+            context.text(font, pageIndexText, i - k + 192 - 44, 18, 0xFF000000, getBook().hasTextShadow());
         }
     }
 
     @Override
-    public void render(GuiGraphics context, int mouseX, int mouseY, float delta) {
-        super.render(context, mouseX, mouseY, delta);
+    public void extractRenderState(GuiGraphicsExtractor context, int mouseX, int mouseY, float delta) {
+        super.extractRenderState(context, mouseX, mouseY, delta);
 
         Page page = book.getPage(pageIndex);
         if (page != null) {
@@ -136,31 +143,42 @@ public class ExtendedBookScreen extends Screen {
     }
 
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        return super.mouseClicked(mouseX, mouseY, button);
+    public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
+        if (event.button() == 0) {
+            Page page = book.getPage(pageIndex);
+            if (page != null) {
+                ActiveTextCollector.ClickableStyleFinder finder = new ActiveTextCollector.ClickableStyleFinder(font, (int) event.x(), (int) event.y());
+                page.visitText(this, finder);
+                Style clickedStyle = finder.result();
+                if (clickedStyle != null && handleClickEvent(clickedStyle.getClickEvent())) {
+                    return true;
+                }
+            }
+        }
+
+        return super.mouseClicked(event, doubleClick);
     }
 
-    @Override
-    public boolean handleComponentClicked(Style style) {
-        ClickEvent clickEvent = style != null ? style.getClickEvent() : null;
+    private boolean handleClickEvent(ClickEvent clickEvent) {
         if (clickEvent == null) {
             return false;
         }
 
-        if (clickEvent.getAction() == ClickEvent.Action.CHANGE_PAGE) {
-            try {
-                return jumpToPage(Integer.parseInt(clickEvent.getValue()) - 1);
-            } catch (Exception var5) {
-                return false;
+        switch (clickEvent) {
+            case ClickEvent.ChangePage(int page) -> {
+                return jumpToPage(page - 1);
+            }
+            case ClickEvent.RunCommand(String command) -> {
+                LocalPlayer player = Objects.requireNonNull(minecraft.player, "Player not available");
+                minecraft.setScreen(null);
+                clickCommandAction(player, command, null);
+                return true;
+            }
+            default -> {
+                defaultHandleGameClickEvent(clickEvent, minecraft, this);
+                return true;
             }
         }
-
-        boolean handled = super.handleComponentClicked(style);
-        if (handled && clickEvent.getAction() == ClickEvent.Action.RUN_COMMAND) {
-            minecraft.setScreen(null);
-        }
-
-        return handled;
     }
 
     public Book getBook() {

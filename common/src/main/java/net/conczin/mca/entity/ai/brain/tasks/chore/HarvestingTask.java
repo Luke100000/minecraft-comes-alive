@@ -129,7 +129,7 @@ public class HarvestingTask extends AbstractChoreTask {
 
     private boolean isValidFarmland(BlockPos pos) {
         BlockState state = villager.level().getBlockState(pos);
-        return state.getBlock() instanceof FarmBlock
+        return state.getBlock() instanceof FarmlandBlock
                && state.canSurvive(villager.level(), pos)
                && villager.level().getBlockState(pos.above()).isAir();
     }
@@ -254,6 +254,7 @@ public class HarvestingTask extends AbstractChoreTask {
         });
     }
 
+    @SuppressWarnings("deprecation")
     private void bonemealCrop(ServerLevel world, VillagerEntityMCA villager, BlockPos pos) {
         if (swapItem(stack -> stack.getItem() instanceof BoneMealItem) == ITEM_READY && BoneMealItem.growCrop(villager.getItemBySlot(villager.getDominantSlot()), world, pos)) {
             villager.swing(villager.getDominantHand());
@@ -270,10 +271,12 @@ public class HarvestingTask extends AbstractChoreTask {
                     .withParameter(LootContextParams.BLOCK_STATE, state)
                     .withLuck(0);
 
-            List<ItemStack> drops = world.getServer().reloadableRegistries().getLootTable(state.getBlock().getLootTable()).getRandomItems(builder.create(LootContextParamSets.BLOCK));
-            for (ItemStack stack : drops) {
-                villager.getInventory().addItem(stack);
-            }
+            state.getBlock().getLootTable().ifPresent(lootTable -> {
+                List<ItemStack> drops = world.getServer().reloadableRegistries().getLootTable(lootTable).getRandomItems(builder.create(LootContextParamSets.BLOCK));
+                for (ItemStack stack : drops) {
+                    villager.getInventory().addItem(stack);
+                }
+            });
         }
     }
 }

@@ -3,7 +3,7 @@ package net.conczin.mca.client.book.pages;
 import net.conczin.mca.client.gui.ExtendedBookScreen;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.FormattedCharSequence;
 
@@ -23,9 +23,9 @@ public class CenteredListPage extends ListPage {
         this(Component.translatable(title).withStyle(ChatFormatting.BLACK).withStyle(ChatFormatting.BOLD), text);
     }
 
-    private static void drawCenteredText(ExtendedBookScreen screen, GuiGraphics context, Font textRenderer, Component text, int centerX, int y, int color) {
+    private static void drawCenteredText(ExtendedBookScreen screen, GuiGraphicsExtractor context, Font textRenderer, Component text, int centerX, int y, int color) {
         FormattedCharSequence orderedText = text.getVisualOrderText();
-        context.drawString(textRenderer, orderedText, (centerX - textRenderer.width(orderedText) / 2), y, color, screen.getBook().hasTextShadow());
+        context.text(textRenderer, orderedText, (centerX - textRenderer.width(orderedText) / 2), y, color, screen.getBook().hasTextShadow());
     }
 
     @Override
@@ -34,7 +34,7 @@ public class CenteredListPage extends ListPage {
     }
 
     @Override
-    public void render(ExtendedBookScreen screen, GuiGraphics context, int mouseX, int mouseY, float delta) {
+    public void render(ExtendedBookScreen screen, GuiGraphicsExtractor context, int mouseX, int mouseY, float delta) {
         drawCenteredText(screen, context, screen.getTextRenderer(), title, screen.width / 2, 35, 0xFFFFFFFF);
 
         int y = 48;

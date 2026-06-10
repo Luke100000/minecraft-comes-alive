@@ -42,7 +42,7 @@ public class Api {
                         .collect(Collectors.joining("&", fullUrl + "?", ""));
             }
 
-            HttpURLConnection con = (HttpURLConnection) (URI.create(fullUrl)).toURL().openConnection();
+            HttpURLConnection con = (HttpURLConnection) URI.create(fullUrl).toURL().openConnection();
 
             // Set request method
             con.setRequestMethod(httpMethod.name());

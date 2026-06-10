@@ -1,8 +1,7 @@
 package net.conczin.mca.client.gui;
 
-import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.util.localization.FlowingText;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.network.chat.Component;
 
 import java.util.List;
@@ -16,11 +15,6 @@ public class LimitedVillagerEditorScreen extends VillagerEditorScreen {
     @Override
     protected boolean shouldShowPageSelection() {
         return false;
-    }
-
-    @Override
-    protected boolean shouldUsePlayerModel() {
-        return villagerData.getInt("PlayerModel") != VillagerLike.PlayerModel.VILLAGER.ordinal();
     }
 
     @Override
@@ -47,13 +41,13 @@ public class LimitedVillagerEditorScreen extends VillagerEditorScreen {
     }
 
     @Override
-    public void render(GuiGraphics context, int mouseX, int mouseY, float delta) {
-        super.render(context, mouseX, mouseY, delta);
+    public void extractRenderState(GuiGraphicsExtractor context, int mouseX, int mouseY, float delta) {
+        super.extractRenderState(context, mouseX, mouseY, delta);
 
         int y = height / 2 + 20;
         List<Component> wrap = FlowingText.wrap(Component.translatable("gui.villager_editor.customization_hint"), DATA_WIDTH);
         for (Component text : wrap) {
-            context.drawCenteredString(font, text, width / 2 + DATA_WIDTH / 2, y, 0xFFFFFFFF);
+            context.centeredText(font, text, width / 2 + DATA_WIDTH / 2, y, 0xFFFFFFFF);
             y += 10;
         }
     }

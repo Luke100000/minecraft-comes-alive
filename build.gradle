@@ -1,9 +1,9 @@
 plugins {
-    id 'fabric-loom' version "${loom_version}" apply false
+    id 'net.fabricmc.fabric-loom' version "${loom_version}" apply false
     id 'net.neoforged.moddev' version "${moddev_version}" apply false
 }
 
-def nativeAccessJvmArgs = ['--enable-native-access=ALL-UNNAMED']
+def nativeAccessJvmArgs = ['--enable-native-access=ALL-UNNAMED', '--illegal-native-access=allow']
 
 allprojects {
     gradle.projectsEvaluated {
@@ -28,9 +28,10 @@ allprojects {
 
 def getAppVersion = { ->
     try {
-        def tag = providers.exec {
+        def result = providers.exec {
             commandLine 'git', 'tag', '--points-at', 'HEAD'
         }.standardOutput.asText.get().trim()
+        def tag = result
         if (tag.isEmpty()) {
             return rootProject.minecraft_version + "-SNAPSHOT"
         }

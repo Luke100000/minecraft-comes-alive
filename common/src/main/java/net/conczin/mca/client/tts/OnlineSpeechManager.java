@@ -7,7 +7,7 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.Entity;
 
 import java.io.IOException;
@@ -27,10 +27,10 @@ public class OnlineSpeechManager {
     private boolean warningIssued = false;
 
     public static void languageNotSupported() {
-        Minecraft.getInstance().gui.getChat().addMessage(
+        Minecraft.getInstance().gui.getChat().addClientSystemMessage(
                 Component.translatable("command.tts_unsupported_language").withStyle(s -> s
                         .withColor(ChatFormatting.RED)
-                        .withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, "https://github.com/Luke100000/minecraft-comes-alive/wiki/TTS"))));
+                        .withClickEvent(new ClickEvent.OpenUrl(URI.create("https://github.com/Luke100000/minecraft-comes-alive/wiki/TTS")))));
     }
 
     @SuppressWarnings("SpellCheckingInspection")
@@ -79,7 +79,7 @@ public class OnlineSpeechManager {
                 if (AudioCache.cachedRetrieve(hash, output -> {
                     downloadAudio(output, language, voice, text);
                 })) {
-                    ResourceLocation soundLocation = MCA.locate("tts_cache/" + hash);
+                    Identifier soundLocation = MCA.locate("tts_cache/" + hash);
                     SpeechManager.INSTANCE.playSound(pitch, entity, soundLocation);
                 } else if (!warningIssued) {
                     // Server queued the request but the audio is not ready yet
@@ -107,7 +107,7 @@ public class OnlineSpeechManager {
                 .map(key -> key + "=" + URLEncoder.encode(params.get(key), StandardCharsets.UTF_8))
                 .collect(Collectors.joining("&", Config.getInstance().onlineTTSServer + "v1/tts/xtts-v2?", ""));
         try {
-            HttpURLConnection connection = (HttpURLConnection) (URI.create(url)).toURL().openConnection();
+            HttpURLConnection connection = (HttpURLConnection) URI.create(url).toURL().openConnection();
             connection.setRequestMethod("POST");
             connection.setDoOutput(true);
 
@@ -120,7 +120,7 @@ public class OnlineSpeechManager {
             }
 
             connection.disconnect();
-        } catch (IOException | IllegalArgumentException e) {
+        } catch (IOException e) {
             MCA.LOGGER.warn("Failed to download {}: {}", url, e.getMessage());
         }
     }

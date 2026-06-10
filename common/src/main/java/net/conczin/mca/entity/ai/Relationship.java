@@ -185,7 +185,7 @@ public class Relationship<T extends Mob & VillagerLike<T>> implements EntityRela
     }
 
     public void readFromNbt(CompoundTag nbt) {
-        giftSaturation.readFromNbt(nbt.getList("GiftSaturationQueue", 8));
+        giftSaturation.readFromNbt(nbt.getList("GiftSaturationQueue").orElseGet(net.minecraft.nbt.ListTag::new));
     }
 
     public void writeToNbt(CompoundTag nbt) {

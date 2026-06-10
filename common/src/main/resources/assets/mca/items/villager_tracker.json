@@ -1,0 +1,241 @@
+{
+  "model": {
+    "type": "minecraft:range_dispatch",
+    "property": "minecraft:compass",
+    "target": "lodestone",
+    "scale": 32.0,
+    "entries": [
+      {
+        "threshold": 0.0,
+        "model": {
+          "type": "minecraft:model",
+          "model": "mca:item/villager_tracker"
+        }
+      },
+      {
+        "threshold": 0.5,
+        "model": {
+          "type": "minecraft:model",
+          "model": "mca:item/villager_tracker_17"
+        }
+      },
+      {
+        "threshold": 1.5,
+        "model": {
+          "type": "minecraft:model",
+          "model": "mca:item/villager_tracker_18"
+        }
+      },
+      {
+        "threshold": 2.5,
+        "model": {
+          "type": "minecraft:model",
+          "model": "mca:item/villager_tracker_19"
+        }
+      },
+      {
+        "threshold": 3.5,
+        "model": {
+          "type": "minecraft:model",
+          "model": "mca:item/villager_tracker_20"
+        }
+      },
+      {
+        "threshold": 4.5,
+        "model": {
+          "type": "minecraft:model",
+          "model": "mca:item/villager_tracker_21"
+        }
+      },
+      {
+        "threshold": 5.5,
+        "model": {
+          "type": "minecraft:model",
+          "model": "mca:item/villager_tracker_22"
+        }
+      },
+      {
+        "threshold": 6.5,
+        "model": {
+          "type": "minecraft:model",
+          "model": "mca:item/villager_tracker_23"
+        }
+      },
+      {
+        "threshold": 7.5,
+        "model": {
+          "type": "minecraft:model",
+          "model": "mca:item/villager_tracker_24"
+        }
+      },
+      {
+        "threshold": 8.5,
+        "model": {
+          "type": "minecraft:model",
+          "model": "mca:item/villager_tracker_25"
+        }
+      },
+      {
+        "threshold": 9.5,
+        "model": {
+          "type": "minecraft:model",
+          "model": "mca:item/villager_tracker_26"
+        }
+      },
+      {
+        "threshold": 10.5,
+        "model": {
+          "type": "minecraft:model",
+          "model": "mca:item/villager_tracker_27"
+        }
+      },
+      {
+        "threshold": 11.5,
+        "model": {
+          "type": "minecraft:model",
+          "model": "mca:item/villager_tracker_28"
+        }
+      },
+      {
+        "threshold": 12.5,
+        "model": {
+          "type": "minecraft:model",
+          "model": "mca:item/villager_tracker_29"
+        }
+      },
+      {
+        "threshold": 13.5,
+        "model": {
+          "type": "minecraft:model",
+          "model": "mca:item/villager_tracker_30"
+        }
+      },
+      {
+        "threshold": 14.5,
+        "model": {
+          "type": "minecraft:model",
+          "model": "mca:item/villager_tracker_31"
+        }
+      },
+      {
+        "threshold": 15.5,
+        "model": {
+          "type": "minecraft:model",
+          "model": "mca:item/villager_tracker_00"
+        }
+      },
+      {
+        "threshold": 16.5,
+        "model": {
+          "type": "minecraft:model",
+          "model": "mca:item/villager_tracker_01"
+        }
+      },
+      {
+        "threshold": 17.5,
+        "model": {
+          "type": "minecraft:model",
+          "model": "mca:item/villager_tracker_02"
+        }
+      },
+      {
+        "threshold": 18.5,
+        "model": {
+          "type": "minecraft:model",
+          "model": "mca:item/villager_tracker_03"
+        }
+      },
+      {
+        "threshold": 19.5,
+        "model": {
+          "type": "minecraft:model",
+          "model": "mca:item/villager_tracker_04"
+        }
+      },
+      {
+        "threshold": 20.5,
+        "model": {
+          "type": "minecraft:model",
+          "model": "mca:item/villager_tracker_05"
+        }
+      },
+      {
+        "threshold": 21.5,
+        "model": {
+          "type": "minecraft:model",
+          "model": "mca:item/villager_tracker_06"
+        }
+      },
+      {
+        "threshold": 22.5,
+        "model": {
+          "type": "minecraft:model",
+          "model": "mca:item/villager_tracker_07"
+        }
+      },
+      {
+        "threshold": 23.5,
+        "model": {
+          "type": "minecraft:model",
+          "model": "mca:item/villager_tracker_08"
+        }
+      },
+      {
+        "threshold": 24.5,
+        "model": {
+          "type": "minecraft:model",
+          "model": "mca:item/villager_tracker_09"
+        }
+      },
+      {
+        "threshold": 25.5,
+        "model": {
+          "type": "minecraft:model",
+          "model": "mca:item/villager_tracker_10"
+        }
+      },
+      {
+        "threshold": 26.5,
+        "model": {
+          "type": "minecraft:model",
+          "model": "mca:item/villager_tracker_11"
+        }
+      },
+      {
+        "threshold": 27.5,
+        "model": {
+          "type": "minecraft:model",
+          "model": "mca:item/villager_tracker_12"
+        }
+      },
+      {
+        "threshold": 28.5,
+        "model": {
+          "type": "minecraft:model",
+          "model": "mca:item/villager_tracker_13"
+        }
+      },
+      {
+        "threshold": 29.5,
+        "model": {
+          "type": "minecraft:model",
+          "model": "mca:item/villager_tracker_14"
+        }
+      },
+      {
+        "threshold": 30.5,
+        "model": {
+          "type": "minecraft:model",
+          "model": "mca:item/villager_tracker_15"
+        }
+      },
+      {
+        "threshold": 31.5,
+        "model": {
+          "type": "minecraft:model",
+          "model": "mca:item/villager_tracker_16"
+        }
+      }
+    ]
+  }
+}

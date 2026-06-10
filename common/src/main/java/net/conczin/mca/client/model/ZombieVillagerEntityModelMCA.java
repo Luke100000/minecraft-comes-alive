@@ -1,20 +1,19 @@
 package net.conczin.mca.client.model;
 
-import net.conczin.mca.entity.VillagerLike;
+import net.conczin.mca.client.render.VillagerRenderState;
 import net.minecraft.client.model.AnimationUtils;
 import net.minecraft.client.model.geom.ModelPart;
-import net.minecraft.world.entity.LivingEntity;
 
-public class ZombieVillagerEntityModelMCA<T extends LivingEntity & VillagerLike<T>> extends VillagerEntityModelMCA<T> {
+public class ZombieVillagerEntityModelMCA extends VillagerEntityModelMCA {
     public ZombieVillagerEntityModelMCA(ModelPart tree) {
         super(tree);
     }
 
     @Override
-    public void setupAnim(T villager, float limbAngle, float limbDistance, float animationProgress, float headYaw, float headPitch) {
-        super.setupAnim(villager, limbAngle, limbDistance, animationProgress, headYaw, headPitch);
-        AnimationUtils.animateZombieArms(leftArm, rightArm, false, attackTime, animationProgress);
-        leftArmwear.copyFrom(leftArm);
-        rightArmwear.copyFrom(rightArm);
+    public void setupAnim(VillagerRenderState state) {
+        super.setupAnim(state);
+        AnimationUtils.animateZombieArms(leftArm, rightArm, false, state);
+        CommonVillagerModel.copyPartState(leftArmwear, leftArm);
+        CommonVillagerModel.copyPartState(rightArmwear, rightArm);
     }
 }

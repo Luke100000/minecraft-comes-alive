@@ -31,7 +31,7 @@ public record SaveVillageMessage(
 
     @Override
     public void handleServer(ServerPlayer player) {
-        VillageManager.get(player.serverLevel()).getOrEmpty(id).ifPresent(village -> {
+        VillageManager.get(player.level()).getOrEmpty(id).ifPresent(village -> {
             village.setTaxes(taxes);
             village.setPopulationThreshold(populationThreshold);
             village.setMarriageThreshold(marriageThreshold);

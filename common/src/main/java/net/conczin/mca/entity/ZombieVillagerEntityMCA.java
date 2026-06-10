@@ -17,24 +17,29 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.util.ProblemReporter;
 import net.minecraft.world.DifficultyInstance;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.*;
-import net.minecraft.world.entity.monster.ZombieVillager;
+import net.minecraft.world.entity.monster.zombie.ZombieVillager;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.ServerLevelAccessor;
-import net.minecraft.world.phys.Vec3;
-import org.jetbrains.annotations.NotNull;
+import net.minecraft.world.level.storage.TagValueInput;
+import net.minecraft.world.level.storage.ValueInput;
+import net.minecraft.world.level.storage.ValueOutput;
 import org.jetbrains.annotations.Nullable;
 
 public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerLike<ZombieVillagerEntityMCA>, CompassionateEntity<Relationship<ZombieVillagerEntityMCA>> {
 
-    private static final CDataManager<ZombieVillagerEntityMCA> DATA = VillagerEntityMCA.createTrackedData(ZombieVillagerEntityMCA.class).build();
+    private static final CDataManager<ZombieVillagerEntityMCA> DATA = VillagerEntityMCA.createTrackedData(new CDataManager.Builder<>(
+            ZombieVillagerEntityMCA.class,
+            serializer -> SynchedEntityData.defineId(ZombieVillagerEntityMCA.class, serializer)
+    )).build();
 
     private final VillagerBrain<ZombieVillagerEntityMCA> mcaBrain = new VillagerBrain<>(this);
 
@@ -128,7 +133,7 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
     }
 
     @Override
-    public final InteractionResult interactAt(Player player, Vec3 pos, @NotNull InteractionHand hand) {
+    public final InteractionResult mobInteract(Player player, InteractionHand hand) {
         ItemStack stack = player.getItemInHand(hand);
         if (hand.equals(InteractionHand.MAIN_HAND) && !stack.is(TagsMCA.Items.ZOMBIE_EGGS) && stack.getItem() != Items.GOLDEN_APPLE) {
             if (player instanceof ServerPlayer) {
@@ -136,12 +141,13 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
                 sendChatMessage(Component.literal(t), player);
             }
         }
-        return super.interactAt(player, pos, hand);
+        return super.mobInteract(player, hand);
     }
 
     @Nullable
     @Override
-    public SpawnGroupData finalizeSpawn(ServerLevelAccessor world, DifficultyInstance difficulty, MobSpawnType spawnReason, @Nullable SpawnGroupData entityData) {
+    @SuppressWarnings("deprecation")
+    public SpawnGroupData finalizeSpawn(ServerLevelAccessor world, DifficultyInstance difficulty, EntitySpawnReason spawnReason, @Nullable SpawnGroupData entityData) {
         SpawnGroupData data = super.finalizeSpawn(world, difficulty, spawnReason, entityData);
 
         if (getAgeState() == AgeState.UNASSIGNED) {
@@ -163,8 +169,10 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
     }
 
     @Override
+    @SuppressWarnings("deprecation")
     protected void onOffspringSpawnedFromEgg(Player player, Mob child) {
-        child.finalizeSpawn((ServerLevelAccessor) level(), level().getCurrentDifficultyAt(child.blockPosition()), MobSpawnType.SPAWN_EGG, null);
+        ServerLevelAccessor serverLevel = (ServerLevelAccessor) level();
+        child.finalizeSpawn(serverLevel, serverLevel.getCurrentDifficultyAt(child.blockPosition()), EntitySpawnReason.SPAWN_ITEM_USE, null);
     }
 
     @Override
@@ -195,7 +203,7 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
     public void die(DamageSource cause) {
         super.die(cause);
 
-        if (level().isClientSide) {
+        if (level().isClientSide()) {
             return;
         }
 
@@ -210,34 +218,31 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
         InventoryUtils.readFromNBT(this.registryAccess(), this.inventory, nbt);
     }
 
-    @SuppressWarnings({"unchecked", "RedundantSuppression"})
+    @SuppressWarnings({"unchecked", "rawtypes", "RedundantSuppression"})
     @Override
     @Nullable
-    public <T extends Mob> T convertTo(EntityType<T> type, boolean keepInventory) {
-        T mob;
-        if (!isRemoved() && type == EntityType.VILLAGER) {
-            mob = (T) super.convertTo(getGenetics().getGender().getVillagerType(), keepInventory);
-        } else {
-            mob = super.convertTo(type, keepInventory);
-        }
+    public <T extends Mob> T convertTo(EntityType<T> type, ConversionParams params, ConversionParams.AfterConversion<T> afterConversion) {
+        EntityType<? extends Mob> convertedType = !isRemoved() && type == EntityType.VILLAGER ? getGenetics().getGender().getVillagerType() : type;
+        return (T) super.convertTo((EntityType) convertedType, params, mob -> {
+            ((ConversionParams.AfterConversion) afterConversion).finalizeConversion(mob);
 
-        if (mob instanceof VillagerLike<?> villager) {
-            villager.copyVillagerAttributesFrom(this);
-            villager.setInfected(false);
-        }
+            if (mob instanceof VillagerLike<?> villager) {
+                villager.copyVillagerAttributesFrom(this);
+                villager.setInfected(false);
+            }
 
-        if (mob instanceof VillagerEntityMCA villager) {
-            villager.setUUID(getUUID());
-            villager.setInventory(inventory);
-            villager.setAge(getAgeState().toAge());
-        }
-
-        return mob;
+            if (mob instanceof VillagerEntityMCA villager) {
+                villager.setUUID(getUUID());
+                villager.setInventory(inventory);
+                villager.setAge(getAgeState().toAge());
+            }
+        });
     }
 
     @Override
-    public void readAdditionalSaveData(CompoundTag nbt) {
-        super.readAdditionalSaveData(nbt);
+    public void readAdditionalSaveData(ValueInput input) {
+        CompoundTag nbt = VillagerEntityMCA.readMcaSaveData(input);
+        super.readAdditionalSaveData(input);
         getTypeDataManager().load(this, nbt);
         relations.readFromNbt(nbt);
 
@@ -250,11 +255,18 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
     }
 
     @Override
-    public final void addAdditionalSaveData(CompoundTag nbt) {
-        super.addAdditionalSaveData(nbt);
+    public void readAdditionalSaveDataForEditor(CompoundTag nbt) {
+        readAdditionalSaveData(TagValueInput.create(ProblemReporter.DISCARDING, registryAccess(), nbt));
+    }
+
+    @Override
+    public final void addAdditionalSaveData(ValueOutput output) {
+        CompoundTag nbt = new CompoundTag();
+        super.addAdditionalSaveData(output);
         getTypeDataManager().save(this, nbt);
         relations.writeToNbt(nbt);
         InventoryUtils.saveToNBT(this.registryAccess(), inventory, nbt);
+        VillagerEntityMCA.storeMcaSaveData(output, nbt);
     }
 
     @Override
@@ -266,8 +278,8 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
         super.onSyncedDataUpdated(par);
     }
 
-    @Override
     protected boolean shouldDespawnInPeaceful() {
         return !isPersistenceRequired();
     }
 }
+

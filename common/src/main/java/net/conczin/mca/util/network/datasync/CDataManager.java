@@ -13,6 +13,11 @@ import java.util.function.Function;
 import java.util.stream.Stream;
 
 public class CDataManager<E extends Entity> {
+    @FunctionalInterface
+    public interface AccessorFactory<E extends Entity> {
+        EntityDataAccessor<?> create(net.minecraft.network.syncher.EntityDataSerializer<?> serializer);
+    }
+
     private final List<Entry<E, ?, ?>> params;
 
     private final Map<CParameter<?, ?>, Entry<E, ?, ?>> forwardLookup = new HashMap<>();
@@ -57,15 +62,15 @@ public class CDataManager<E extends Entity> {
     }
 
     public static class Builder<E extends Entity> {
-        private final Class<E> type;
+        private final AccessorFactory<E> accessorFactory;
         private final List<Entry<E, ?, ?>> params = new ArrayList<>();
 
-        public Builder(Class<E> type) {
-            this.type = type;
+        public Builder(Class<E> type, AccessorFactory<E> accessorFactory) {
+            this.accessorFactory = accessorFactory;
         }
 
         public Builder<E> addAll(CParameter<?, ?>... params) {
-            Stream.of(params).map(p -> new Entry<>(type, p)).forEach(this.params::add);
+            Stream.of(params).map(p -> new Entry<>(accessorFactory, p)).forEach(this.params::add);
             return this;
         }
 
@@ -82,9 +87,9 @@ public class CDataManager<E extends Entity> {
         CParameter<T, TrackedType> parameter;
         EntityDataAccessor<TrackedType> data;
 
-        public Entry(Class<E> type, CParameter<T, TrackedType> parameter) {
+        public Entry(AccessorFactory<E> accessorFactory, CParameter<T, TrackedType> parameter) {
             this.parameter = parameter;
-            this.data = parameter.createParam(type);
+            this.data = parameter.createParam(accessorFactory);
         }
 
         public void save(E entity, CompoundTag nbt) {

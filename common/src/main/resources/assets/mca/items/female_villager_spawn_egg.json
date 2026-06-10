@@ -1,0 +1,7 @@
+{
+  "model": {
+    "type": "minecraft:model",
+    "model": "mca:item/female_villager_spawn_egg"
+  },
+  "properties": {}
+}

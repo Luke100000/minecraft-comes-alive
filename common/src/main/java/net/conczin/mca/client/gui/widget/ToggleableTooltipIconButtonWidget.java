@@ -1,8 +1,7 @@
 package net.conczin.mca.client.gui.widget;
 
-import com.mojang.blaze3d.systems.RenderSystem;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.renderer.GameRenderer;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 
@@ -20,18 +19,12 @@ public class ToggleableTooltipIconButtonWidget extends ToggleableTooltipButtonWi
     }
 
     @Override
-    public void renderWidget(GuiGraphics context, int mouseX, int mouseY, float delta) {
+    protected void extractContents(GuiGraphicsExtractor context, int mouseX, int mouseY, float delta) {
         drawIcon(context);
     }
 
-    private void drawIcon(GuiGraphics context) {
-        RenderSystem.setShader(GameRenderer::getPositionTexShader);
-        RenderSystem.setShaderColor(1.0f, 1.0f, 1.0f, this.alpha);
-        RenderSystem.enableBlend();
-        RenderSystem.defaultBlendFunc();
-        RenderSystem.enableDepthTest();
-
+    private void drawIcon(GuiGraphicsExtractor context) {
         int offset = this.toggle ? 0 : 16;
-        context.blit(ICON_TEXTURES, this.getX(), this.getY(), u, v + offset, this.width, this.height);
+        context.blit(RenderPipelines.GUI_TEXTURED, ICON_TEXTURES, this.getX(), this.getY(), u, v + offset, this.width, this.height, 256, 256);
     }
 }

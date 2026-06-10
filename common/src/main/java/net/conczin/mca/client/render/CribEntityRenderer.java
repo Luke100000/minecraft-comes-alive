@@ -1,8 +1,6 @@
 package net.conczin.mca.client.render;
 
-import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.math.Axis;
 import net.conczin.mca.MCA;
 import net.conczin.mca.client.model.CribEntityModel;
@@ -11,13 +9,15 @@ import net.conczin.mca.entity.CribWoodType;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.model.geom.builders.CubeDeformation;
 import net.minecraft.client.model.geom.builders.LayerDefinition;
-import net.minecraft.client.renderer.MultiBufferSource;
+import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
-import net.minecraft.client.renderer.entity.ItemRenderer;
+import net.minecraft.client.renderer.item.ItemModelResolver;
+import net.minecraft.client.renderer.state.level.CameraRenderState;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.client.renderer.texture.OverlayTexture;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
+import net.minecraft.util.Mth;
 import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.item.ItemDisplayContext;
 import net.minecraft.world.item.ItemStack;
@@ -32,26 +32,25 @@ import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 
-public class CribEntityRenderer extends EntityRenderer<CribEntity> {
-    private final int TEXTURE_WIDTH = 88;
-    private final int TEXTURE_HEIGHT = 60;
+public class CribEntityRenderer extends EntityRenderer<CribEntity, CribEntityRenderState> {
+    private static final int TEXTURE_WIDTH = 88;
+    private static final int TEXTURE_HEIGHT = 60;
 
-    private final Map<String, ResourceLocation> REGISTERED_TEXTURES = new HashMap<>();
-    private final ItemRenderer itemRenderer;
-    protected CribEntityModel<CribEntity> model;
+    private final Map<String, Identifier> registeredTextures = new HashMap<>();
+    private final ItemModelResolver itemModelResolver;
+    protected final CribEntityModel model;
 
     public CribEntityRenderer(EntityRendererProvider.Context ctx) {
         super(ctx);
 
-        this.itemRenderer = ctx.getItemRenderer();
-
-        this.model = new CribEntityModel<>(LayerDefinition.create(CribEntityModel.getModelData(CubeDeformation.NONE), TEXTURE_WIDTH, TEXTURE_HEIGHT).bakeRoot());
+        this.itemModelResolver = ctx.getItemModelResolver();
+        this.model = new CribEntityModel(LayerDefinition.create(CribEntityModel.getModelData(CubeDeformation.NONE), TEXTURE_WIDTH, TEXTURE_HEIGHT).bakeRoot());
         this.shadowRadius = 0.75F;
 
         for (CribWoodType woodType : CribWoodType.values()) {
             for (DyeColor color : DyeColor.values()) {
                 try {
-                    REGISTERED_TEXTURES.put(getTextureID(woodType, color), generateMultiTexture(woodType, color));
+                    registeredTextures.put(getTextureID(woodType, color), generateMultiTexture(woodType, color));
                 } catch (IOException e) {
                     MCA.LOGGER.warn("And error occurred while loading dynamic crib texture! Skipping...\n{}", e.getMessage());
                 }
@@ -60,31 +59,47 @@ public class CribEntityRenderer extends EntityRenderer<CribEntity> {
     }
 
     @Override
-    public void render(CribEntity cribEntity, float f, float g, PoseStack matrixStack, MultiBufferSource vertexConsumerProvider, int i) {
-        ResourceLocation texture = REGISTERED_TEXTURES.get(getTextureID(cribEntity));
+    public CribEntityRenderState createRenderState() {
+        return new CribEntityRenderState();
+    }
 
-        matrixStack.pushPose();
-        matrixStack.translate(0.0, 0.375, 0.0);
-        matrixStack.mulPose(Axis.YP.rotationDegrees(180.0f - f));
+    @Override
+    public void extractRenderState(CribEntity cribEntity, CribEntityRenderState state, float partialTicks) {
+        super.extractRenderState(cribEntity, state, partialTicks);
+        state.crib = cribEntity;
+        state.yRot = Mth.rotLerp(partialTicks, cribEntity.yRotO, cribEntity.getYRot());
+        this.itemModelResolver.updateForNonLiving(state.babyItem, cribEntity.getBabyItem(), ItemDisplayContext.FIXED, cribEntity);
+    }
 
-        matrixStack.scale(-1.0f, -1.0f, 1.0f);
-        matrixStack.mulPose(Axis.YP.rotationDegrees(90.0f));
-        this.model.setupAnim(cribEntity, g, 0.0f, -0.1f, 0.0f, 0.0f);
-        VertexConsumer vertexConsumer = vertexConsumerProvider.getBuffer(this.model.renderType(texture));
-        this.model.renderToBuffer(matrixStack, vertexConsumer, i, OverlayTexture.NO_OVERLAY, 0xFFFFFFFF);
-
-        ItemStack babyItem = cribEntity.getBabyItem();
-        if (!babyItem.equals(ItemStack.EMPTY)) {
-            matrixStack.translate(0.0f, 0.05f, 0f);
-            matrixStack.mulPose(Axis.XP.rotationDegrees(-90.0f));
-            matrixStack.mulPose(Axis.ZP.rotationDegrees(180.0f));
-            matrixStack.scale(0.75f, 0.75f, 0.75f);
-
-            this.itemRenderer.renderStatic(babyItem, ItemDisplayContext.FIXED, i, OverlayTexture.NO_OVERLAY, matrixStack, vertexConsumerProvider, cribEntity.level(), cribEntity.getId());
+    @Override
+    public void submit(CribEntityRenderState state, PoseStack poseStack, SubmitNodeCollector submitNodeCollector, CameraRenderState camera) {
+        CribEntity crib = state.crib;
+        if (crib == null) {
+            return;
         }
 
-        matrixStack.popPose();
-        super.render(cribEntity, f, g, matrixStack, vertexConsumerProvider, i);
+        Identifier texture = getTextureLocation(state);
+
+        poseStack.pushPose();
+        poseStack.translate(0.0, 0.375, 0.0);
+        poseStack.mulPose(Axis.YP.rotationDegrees(180.0F - state.yRot));
+        poseStack.scale(-1.0F, -1.0F, 1.0F);
+        poseStack.mulPose(Axis.YP.rotationDegrees(90.0F));
+
+        this.model.setupAnim(state);
+        submitNodeCollector.submitModel(this.model, state, poseStack, texture, state.lightCoords, OverlayTexture.NO_OVERLAY, state.outlineColor, null);
+
+        ItemStack babyItem = crib.getBabyItem();
+        if (!babyItem.equals(ItemStack.EMPTY) && !state.babyItem.isEmpty()) {
+            poseStack.translate(0.0F, 0.05F, 0.0F);
+            poseStack.mulPose(Axis.XP.rotationDegrees(-90.0F));
+            poseStack.mulPose(Axis.ZP.rotationDegrees(180.0F));
+            poseStack.scale(0.75F, 0.75F, 0.75F);
+            state.babyItem.submit(poseStack, submitNodeCollector, state.lightCoords, OverlayTexture.NO_OVERLAY, state.outlineColor);
+        }
+
+        poseStack.popPose();
+        super.submit(state, poseStack, submitNodeCollector, camera);
     }
 
     private String getTextureID(CribEntity cribEntity) {
@@ -95,8 +110,7 @@ public class CribEntityRenderer extends EntityRenderer<CribEntity> {
         return wood.toString().toLowerCase(Locale.ROOT) + "-" + color.getName();
     }
 
-    // Create the crib texture from multiple layers depending on crib wood material and wool color
-    private ResourceLocation generateMultiTexture(CribWoodType wood, DyeColor color) throws IOException {
+    private Identifier generateMultiTexture(CribWoodType wood, DyeColor color) throws IOException {
         ClassLoader loader = MCA.class.getClassLoader();
         InputStream frameStream = loader.getResourceAsStream("assets/mca/textures/entity/crib/frames/" + wood.toString().toLowerCase(Locale.ROOT) + ".png");
         if (frameStream == null) {
@@ -122,13 +136,13 @@ public class CribEntityRenderer extends EntityRenderer<CribEntity> {
         ImageIO.write(combined, "png", baos);
         byte[] bytes = baos.toByteArray();
 
-        DynamicTexture dynTex = new DynamicTexture(NativeImage.read(bytes));
-
-        return Minecraft.getInstance().getTextureManager().register(MCA.MOD_ID, dynTex);
+        Identifier textureId = Identifier.fromNamespaceAndPath(MCA.MOD_ID, "dynamic/crib/" + getTextureID(wood, color));
+        DynamicTexture dynTex = new DynamicTexture(textureId::toString, com.mojang.blaze3d.platform.NativeImage.read(bytes));
+        Minecraft.getInstance().getTextureManager().register(textureId, dynTex);
+        return textureId;
     }
 
-    @Override
-    public ResourceLocation getTextureLocation(CribEntity crib) {
-        return REGISTERED_TEXTURES.get(getTextureID(crib));
+    public Identifier getTextureLocation(CribEntityRenderState state) {
+        return state.crib == null ? registeredTextures.values().stream().findFirst().orElseThrow() : registeredTextures.get(getTextureID(state.crib));
     }
 }

@@ -1,28 +1,16 @@
 {
-  "type": "minecraft:crafting_shaped",
-  "pattern": [
-    "RER",
-    "RCR",
-    "RRR"
-  ],
-  "key": {
-    "C": [
-      {
-        "item": "minecraft:compass"
-      }
-    ],
-    "E": [
-      {
-        "item": "minecraft:ender_eye"
-      }
-    ],
-    "R": [
-      {
-        "item": "mca:rose_gold_ingot"
-      }
-    ]
-  },
-  "result": {
-    "id": "mca:villager_tracker"
-  }
+    "type":  "minecraft:crafting_shaped",
+    "pattern":  [
+                    "RER",
+                    "RCR",
+                    "RRR"
+                ],
+    "key":  {
+                "C":  "minecraft:compass",
+                "E":  "minecraft:ender_eye",
+                "R":  "mca:rose_gold_ingot"
+            },
+    "result":  {
+                   "id":  "mca:villager_tracker"
+               }
 }

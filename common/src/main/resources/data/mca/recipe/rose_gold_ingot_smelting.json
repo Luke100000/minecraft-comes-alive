@@ -1,11 +1,9 @@
 {
-  "type": "minecraft:smelting",
-  "ingredient": {
-    "item": "mca:rose_gold_dust"
-  },
-  "result": {
-    "id": "mca:rose_gold_ingot"
-  },
-  "experience": 0.7,
-  "cookingtime": 200
+    "type":  "minecraft:smelting",
+    "ingredient":  "mca:rose_gold_dust",
+    "result":  {
+                   "id":  "mca:rose_gold_ingot"
+               },
+    "experience":  0.7,
+    "cookingtime":  200
 }

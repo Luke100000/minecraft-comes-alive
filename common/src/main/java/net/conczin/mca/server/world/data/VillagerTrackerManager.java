@@ -38,7 +38,6 @@ public class VillagerTrackerManager extends SavedData {
         }
     }
 
-    @Override
     public CompoundTag save(CompoundTag nbt, HolderLookup.Provider provider) {
         return NbtHelper.fromMap(nbt, entries, UUID::toString, NbtHelper::encodeGlobalPosition);
     }

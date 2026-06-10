@@ -15,7 +15,6 @@ public class MCAClient {
     public static final Map<UUID, VillagerLike<?>> playerData = new HashMap<>();
     public static final Set<UUID> playerDataRequests = new HashSet<>();
     private static final DestinyManager destinyManager = new DestinyManager();
-    public static VillagerEntityMCA fallbackVillager;
 
     public static DestinyManager getDestinyManager() {
         return destinyManager;
@@ -47,11 +46,19 @@ public class MCAClient {
     }
 
     public static boolean useGeneticsRenderer(UUID uuid) {
-        return getPlayerData(uuid).filter(f -> f.getPlayerModel() != VillagerLike.PlayerModel.VANILLA).isPresent();
+        return getGeneticsRendererData(uuid).isPresent();
     }
 
     public static boolean useVillagerRenderer(UUID uuid) {
-        return useGeneticsRenderer(uuid) && MCAClient.playerData.get(uuid).getPlayerModel() == VillagerLike.PlayerModel.VILLAGER;
+        return getVillagerRendererData(uuid).isPresent();
+    }
+
+    public static Optional<VillagerLike<?>> getGeneticsRendererData(UUID uuid) {
+        return getPlayerData(uuid).filter(data -> data.getPlayerModel() != VillagerLike.PlayerModel.VANILLA);
+    }
+
+    public static Optional<VillagerLike<?>> getVillagerRendererData(UUID uuid) {
+        return getPlayerData(uuid).filter(data -> data.getPlayerModel() == VillagerLike.PlayerModel.VILLAGER);
     }
 
     public static boolean renderArms(UUID uuid, String key) {

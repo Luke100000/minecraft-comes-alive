@@ -9,7 +9,7 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.tags.TagKey;
 import net.minecraft.util.GsonHelper;
 import net.minecraft.world.level.block.Block;
@@ -73,9 +73,9 @@ public final class BuildingType {
     private final int iconV;
     private final boolean grouped;
     private final int mergeRange;
-    private transient Map<ResourceLocation, ResourceLocation> blockToGroup;
-    private transient Map<TagKey<Block>, ResourceLocation> tagToGroup;
-    private transient Map<ResourceLocation, Integer> groups;
+    private transient Map<Identifier, Identifier> blockToGroup;
+    private transient Map<TagKey<Block>, Identifier> tagToGroup;
+    private transient Map<Identifier, Integer> groups;
 
     // Private constructor for deserialization
     private BuildingType(String name, int margin, String color, int priority, boolean visible, boolean noBeds,
@@ -141,7 +141,7 @@ public final class BuildingType {
             JsonObject blocks = GsonHelper.getAsJsonObject(value, "groups");
             for (Map.Entry<String, JsonElement> entry : blocks.entrySet()) {
                 this.groups.put(
-                        ResourceLocation.parse(entry.getKey()),
+                        Identifier.parse(entry.getKey()),
                         entry.getValue().getAsInt()
                 );
             }
@@ -171,22 +171,22 @@ public final class BuildingType {
     /**
      * @return a mapping between block identifiers and groups (tags or individual blocks)
      */
-    public Map<ResourceLocation, ResourceLocation> getBlockToGroup() {
+    public Map<Identifier, Identifier> getBlockToGroup() {
         if (blockToGroup == null) {
             blockToGroup = new HashMap<>();
             tagToGroup = new HashMap<>();
             groups = new HashMap<>();
             for (Map.Entry<String, Integer> requirement : blocks.entrySet()) {
-                ResourceLocation identifier;
+                Identifier identifier;
                 if (requirement.getKey().startsWith("#")) {
-                    identifier = ResourceLocation.parse(requirement.getKey().substring(1));
+                    identifier = Identifier.parse(requirement.getKey().substring(1));
                     TagKey<Block> tag = TagKey.create(Registries.BLOCK, identifier);
                     if (RegistryHelper.isTagEmpty(tag)) {
                         MCA.LOGGER.error("Unknown building type tag {}", identifier);
                     }
                     tagToGroup.put(tag, identifier);
                 } else {
-                    identifier = ResourceLocation.parse(requirement.getKey());
+                    identifier = Identifier.parse(requirement.getKey());
                     blockToGroup.put(identifier, identifier);
                 }
                 groups.put(identifier, requirement.getValue());
@@ -195,20 +195,20 @@ public final class BuildingType {
         return blockToGroup;
     }
 
-    private Optional<ResourceLocation> getGroupForBlock(ResourceLocation blockId) {
+    private Optional<Identifier> getGroupForBlock(Identifier blockId) {
         getBlockToGroup();
 
-        ResourceLocation directGroup = blockToGroup.get(blockId);
+        Identifier directGroup = blockToGroup.get(blockId);
         if (directGroup != null) {
             return Optional.of(directGroup);
         }
 
-        var holder = BuiltInRegistries.BLOCK.getHolder(blockId);
+        var holder = BuiltInRegistries.BLOCK.get(blockId);
         if (holder.isEmpty()) {
             return Optional.empty();
         }
 
-        for (Map.Entry<TagKey<Block>, ResourceLocation> entry : tagToGroup.entrySet()) {
+        for (Map.Entry<TagKey<Block>, Identifier> entry : tagToGroup.entrySet()) {
             if (holder.get().is(entry.getKey())) {
                 return Optional.of(entry.getValue());
             }
@@ -217,11 +217,11 @@ public final class BuildingType {
         return Optional.empty();
     }
 
-    public boolean matchesBlock(ResourceLocation blockId) {
+    public boolean matchesBlock(Identifier blockId) {
         return getGroupForBlock(blockId).isPresent();
     }
 
-    public Map<ResourceLocation, Integer> getGroups() {
+    public Map<Identifier, Integer> getGroups() {
         getBlockToGroup();
         return groups;
     }
@@ -230,9 +230,9 @@ public final class BuildingType {
      * @param blocks the map of block positions per block type of building
      * @return a filtered and grouped map of block types relevant for this building type
      */
-    public Map<ResourceLocation, List<BlockPos>> getGroups(Map<ResourceLocation, List<BlockPos>> blocks) {
-        HashMap<ResourceLocation, List<BlockPos>> available = new HashMap<>();
-        for (Map.Entry<ResourceLocation, List<BlockPos>> entry : blocks.entrySet()) {
+    public Map<Identifier, List<BlockPos>> getGroups(Map<Identifier, List<BlockPos>> blocks) {
+        HashMap<Identifier, List<BlockPos>> available = new HashMap<>();
+        for (Map.Entry<Identifier, List<BlockPos>> entry : blocks.entrySet()) {
             getGroupForBlock(entry.getKey()).ifPresent(group ->
                     available.computeIfAbsent(group, k -> new LinkedList<>()).addAll(entry.getValue())
             );

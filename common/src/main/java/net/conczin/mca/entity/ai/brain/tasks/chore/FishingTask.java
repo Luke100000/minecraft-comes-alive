@@ -94,8 +94,8 @@ public class FishingTask extends AbstractChoreTask {
 
             ticks++;
 
-            if (ticks >= villager.level().random.nextInt(200) + 200) {
-                if (villager.level().random.nextFloat() >= 0.35F) {
+            if (ticks >= villager.getRandom().nextInt(200) + 200) {
+                if (villager.getRandom().nextFloat() >= 0.35F) {
                     ItemStack stack = list.get(villager.getRandom().nextInt(list.size())).copy();
 
                     villager.swing(villager.getDominantHand());

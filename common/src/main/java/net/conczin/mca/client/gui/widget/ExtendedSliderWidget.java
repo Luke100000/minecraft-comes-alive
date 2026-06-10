@@ -2,7 +2,7 @@ package net.conczin.mca.client.gui.widget;
 
 import net.conczin.mca.util.localization.FlowingText;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.AbstractSliderButton;
 import net.minecraft.network.chat.Component;
 
@@ -27,14 +27,14 @@ public abstract class ExtendedSliderWidget<T> extends AbstractSliderButton {
     abstract T getValue();
 
     @Override
-    public void renderWidget(GuiGraphics context, int mouseX, int mouseY, float delta) {
+    public void extractWidgetRenderState(GuiGraphicsExtractor context, int mouseX, int mouseY, float delta) {
         int i = (this.isHovered() ? 2 : 1) * 20;
 
         // TODO
         //context.blit(WIDGETS_LOCATION, this.getX() + (int) (getOpticalValue() * (double) (this.width - 8)), this.getY(), 0, 46 + i, 4, 20);
         //context.blit(WIDGETS_LOCATION, this.getX() + (int) (getOpticalValue() * (double) (this.width - 8)) + 4, this.getY(), 196, 46 + i, 4, 20);
 
-        super.renderWidget(context, mouseX, mouseY, delta);
+        super.extractWidgetRenderState(context, mouseX, mouseY, delta);
 
         if (this.isHovered()) {
             this.renderTooltip(context, mouseX, mouseY);
@@ -50,7 +50,7 @@ public abstract class ExtendedSliderWidget<T> extends AbstractSliderButton {
         }
     }
 
-    public void renderTooltip(GuiGraphics context, int mouseX, int mouseY) {
-        context.renderComponentTooltip(Minecraft.getInstance().font, FlowingText.wrap(tooltipSupplier.get(), 160), mouseX, mouseY);
+    public void renderTooltip(GuiGraphicsExtractor context, int mouseX, int mouseY) {
+        WidgetUtils.drawTooltip(context, Minecraft.getInstance().font, FlowingText.wrap(tooltipSupplier.get(), 160), mouseX, mouseY);
     }
 }

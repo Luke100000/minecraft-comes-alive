@@ -1,19 +1,15 @@
 {
-  "type": "minecraft:crafting_shaped",
-  "pattern": [
-    "I  ",
-    "SI ",
-    "S I"
-  ],
-  "key": {
-    "I": [
-      {"item": "minecraft:iron_ingot"}
-    ],
-    "S": [
-      {"item": "minecraft:string"}
-    ]
-  },
-  "result": {
-    "id": "mca:needle_and_thread"
-  }
+    "type":  "minecraft:crafting_shaped",
+    "pattern":  [
+                    "I  ",
+                    "SI ",
+                    "S I"
+                ],
+    "key":  {
+                "I":  "minecraft:iron_ingot",
+                "S":  "minecraft:string"
+            },
+    "result":  {
+                   "id":  "mca:needle_and_thread"
+               }
 }

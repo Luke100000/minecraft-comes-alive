@@ -3,7 +3,6 @@ package net.conczin.mca.server.world.data;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.DynamicOps;
 import net.conczin.mca.Config;
-import net.conczin.mca.MCA;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.relationship.EntityRelationship;
 import net.conczin.mca.entity.ai.relationship.Gender;
@@ -31,11 +30,13 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.ComponentSerialization;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.util.ProblemReporter;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.saveddata.SavedData;
+import net.minecraft.world.level.storage.TagValueOutput;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -45,7 +46,7 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
     private final ServerLevel world;
     private final UUID uuid;
     private final List<Letter> inbox = new LinkedList<>();
-    private Optional<Integer> lastSeenVillage = Optional.empty();
+    private @Nullable Integer lastSeenVillageId;
     private boolean entityDataSet;
     private CompoundTag entityData;
 
@@ -60,34 +61,32 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
         this.world = world;
         this.uuid = uuid;
 
-        lastSeenVillage = nbt.contains("lastSeenVillage", Tag.TAG_INT) ? Optional.of(nbt.getInt("lastSeenVillage")) : Optional.empty();
-        entityDataSet = nbt.contains("entityDataSet") && nbt.getBoolean("entityDataSet");
+        lastSeenVillageId = nbt.getInt("lastSeenVillage").orElse(null);
+        entityDataSet = nbt.contains("entityDataSet") && nbt.getBoolean("entityDataSet").orElse(false);
 
-        if (nbt.contains("entityData")) {
-            entityData = nbt.getCompound("entityData");
-        } else {
+        entityData = nbt.getCompound("entityData").orElseGet(() -> {
             resetEntityData();
-        }
+            return entityData;
+        });
 
-        ListTag inbox = nbt.getList("inbox", Tag.TAG_COMPOUND);
+        ListTag inbox = nbt.getList("inbox").orElseGet(ListTag::new);
         this.inbox.addAll(NbtHelper.toList(inbox, e -> new Letter((CompoundTag) e, world.registryAccess())));
     }
 
     public static PlayerSaveData get(ServerPlayer player) {
-        return get((ServerLevel) player.level(), player.getUUID());
+        return get(player.level(), player.getUUID());
     }
 
     public static PlayerSaveData get(ServerLevel world, UUID uuid) {
         return WorldUtils.loadData(world.getServer().overworld(), (nbt, provider) -> new PlayerSaveData(world, uuid, nbt), w -> new PlayerSaveData(world, uuid), "mca_player_" + uuid);
     }
 
-    @SuppressWarnings("DataFlowIssue")
     public static Optional<PlayerSaveData> getIfPresent(ServerLevel world, UUID uuid) {
-        return Optional.ofNullable(world.getDataStorage().get(new SavedData.Factory<>(
-                () -> null,
+        return WorldUtils.loadDataIfPresent(
+                world.getServer().overworld(),
                 (nbt, provider) -> new PlayerSaveData(world, uuid, nbt),
-                null
-        ), "mca_player_" + uuid));
+                "mca_player_" + uuid
+        );
     }
 
     public static void showMailNotification(ServerPlayer player) {
@@ -100,13 +99,15 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
     private void resetEntityData() {
         entityData = new CompoundTag();
 
-        VillagerEntityMCA villager = EntitiesMCA.MALE_VILLAGER.create(world);
+        VillagerEntityMCA villager = EntitiesMCA.MALE_VILLAGER.create(world, EntitySpawnReason.LOAD);
         assert villager != null;
         villager.initializeSkin(true);
         villager.getGenetics().randomize();
         villager.getTraits().randomize();
         villager.getVillagerBrain().randomize();
-        villager.addAdditionalSaveData(entityData);
+        TagValueOutput output = TagValueOutput.createWithContext(ProblemReporter.DISCARDING, world.registryAccess());
+        villager.saveWithoutId(output);
+        entityData = output.buildResult();
     }
 
     public boolean isEntityDataSet() {
@@ -114,15 +115,24 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
     }
 
     public void setEntityDataSet(boolean entityDataSet) {
+        if (this.entityDataSet == entityDataSet) {
+            return;
+        }
         this.entityDataSet = entityDataSet;
+        setDirty();
     }
 
     public CompoundTag getEntityData() {
-        return entityData;
+        return entityData.copy();
     }
 
     public void setEntityData(CompoundTag entityData) {
-        this.entityData = entityData;
+        CompoundTag copy = entityData.copy();
+        if (copy.equals(this.entityData)) {
+            return;
+        }
+        this.entityData = copy;
+        setDirty();
     }
 
     @Override
@@ -152,7 +162,7 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
     }
 
     public void setLastSeenVillage(ServerPlayer self, Village oldVillage, @Nullable Village newVillage) {
-        lastSeenVillage = Optional.ofNullable(newVillage).map(Village::getId);
+        lastSeenVillageId = newVillage != null ? newVillage.getId() : null;
         setDirty();
 
         if (oldVillage != newVillage) {
@@ -166,22 +176,22 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
     }
 
     public Optional<Village> getLastSeenVillage(VillageManager manager) {
-        return lastSeenVillage.flatMap(manager::getOrEmpty);
+        return Optional.ofNullable(lastSeenVillageId).flatMap(manager::getOrEmpty);
     }
 
     public Optional<Integer> getLastSeenVillageId() {
-        return lastSeenVillage;
+        return Optional.ofNullable(lastSeenVillageId);
     }
 
-    protected void onLeave(Player self, Village village) {
+    protected void onLeave(ServerPlayer self, Village village) {
         if (Config.getInstance().enterVillageNotification && village.isVillage()) {
-            self.displayClientMessage(Component.translatable("gui.village.left", village.getName()).withStyle(ChatFormatting.GOLD), true);
+            self.sendSystemMessage(Component.translatable("gui.village.left", village.getName()).withStyle(ChatFormatting.GOLD), true);
         }
     }
 
-    protected void onEnter(Player self, Village village) {
+    protected void onEnter(ServerPlayer self, Village village) {
         if (Config.getInstance().enterVillageNotification && village.isVillage()) {
-            self.displayClientMessage(Component.translatable("gui.village.welcome", village.getName()).withStyle(ChatFormatting.GOLD), true);
+            self.sendSystemMessage(Component.translatable("gui.village.welcome", village.getName()).withStyle(ChatFormatting.GOLD), true);
         }
         village.onEnter(world);
     }
@@ -210,7 +220,7 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
 
     @Override
     public Gender getGender() {
-        return Gender.byId(getEntityData().getInt("gender"));
+        return Gender.byId(NbtHelper.getCompoundOrSelf(entityData, VillagerEntityMCA.MCA_DATA_KEY).getInt("Gender").orElse(0));
     }
 
     @Override
@@ -226,10 +236,11 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
         setDirty();
     }
 
-    @Override
     public CompoundTag save(CompoundTag nbt, HolderLookup.Provider provider) {
-        lastSeenVillage.ifPresent(id -> nbt.putInt("lastSeenVillage", id));
-        nbt.put("entityData", entityData);
+        if (lastSeenVillageId != null) {
+            nbt.putInt("lastSeenVillage", lastSeenVillageId);
+        }
+        nbt.put("entityData", entityData.copy());
         nbt.putBoolean("entityDataSet", entityDataSet);
         nbt.put("inbox", NbtHelper.fromList(inbox, v -> v.toTag(provider)));
         return nbt;
@@ -267,14 +278,12 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
     }
 
     public record Letter(String title, List<Component> pages) {
-        private static final Codec<List<Component>> PAGES_CODEC = ComponentSerialization.FLAT_CODEC.listOf();
+        private static final Codec<List<Component>> PAGES_CODEC = ComponentSerialization.CODEC.listOf();
 
         public Letter(CompoundTag nbt, HolderLookup.Provider registries) {
             this(
-                    nbt.getString("title"),
-                    PAGES_CODEC
-                            .parse(registries.createSerializationContext(NbtOps.INSTANCE), nbt.getCompound("pages"))
-                            .resultOrPartial(MCA.LOGGER::error)
+                    nbt.getString("title").orElse(""),
+                    nbt.read("pages", PAGES_CODEC, registries.createSerializationContext(NbtOps.INSTANCE))
                             .orElse(List.of())
             );
         }
@@ -284,12 +293,10 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
             nbt.putString("title", title);
 
             DynamicOps<Tag> dynamicOps = registries.createSerializationContext(NbtOps.INSTANCE);
-            ComponentSerialization.FLAT_CODEC.listOf()
-                    .encodeStart(dynamicOps, pages).
-                    resultOrPartial(MCA.LOGGER::error)
-                    .ifPresent(tag -> nbt.put("pages", tag));
+            nbt.store("pages", PAGES_CODEC, dynamicOps, pages);
 
             return nbt;
         }
     }
 }
+

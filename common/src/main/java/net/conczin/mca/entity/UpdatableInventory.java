@@ -11,7 +11,7 @@ public class UpdatableInventory extends SimpleContainer {
     public void update(Entity entity) {
         for (int slot = 0; slot < getContainerSize(); slot++) {
             if (!getItem(slot).isEmpty()) {
-                getItem(slot).inventoryTick(entity.level(), entity, slot, false);
+                getItem(slot).inventoryTick(entity.level(), entity, null);
             }
         }
     }

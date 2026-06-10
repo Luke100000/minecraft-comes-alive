@@ -1,7 +1,10 @@
 package net.conczin.mca.entity.ai;
 
 import net.minecraft.network.chat.Component;
-import net.minecraft.world.item.*;
+import net.minecraft.world.item.AxeItem;
+import net.minecraft.world.item.FishingRodItem;
+import net.minecraft.world.item.HoeItem;
+import net.minecraft.world.item.Item;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Locale;
@@ -13,10 +16,10 @@ import java.util.stream.Stream;
 
 public enum Chore {
     NONE("none", null),
-    PROSPECT("prospecting", PickaxeItem.class),
+    PROSPECT("prospecting", Item.class),
     HARVEST("harvesting", HoeItem.class),
     CHOP("chopping", AxeItem.class),
-    HUNT("hunting", SwordItem.class),
+    HUNT("hunting", Item.class),
     FISH("fishing", FishingRodItem.class);
 
     private static final Chore[] VALUES = values();

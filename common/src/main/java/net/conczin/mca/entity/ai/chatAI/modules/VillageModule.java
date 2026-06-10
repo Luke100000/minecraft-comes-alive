@@ -26,7 +26,7 @@ public class VillageModule {
         Optional<Village> village = villager.getResidency().getHomeVillage();
 
         // Probably completely over-detailed fact
-        String biome = villager.level().getBiome(villager.blockPosition()).unwrapKey().map(v -> v.location().getPath()).orElse("plains");
+        String biome = villager.level().getBiome(villager.blockPosition()).unwrapKey().map(v -> v.identifier().getPath()).orElse("plains");
 
         String size = "small";
         if (village.isPresent()) {

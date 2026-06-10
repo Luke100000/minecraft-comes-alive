@@ -1,9 +1,9 @@
 package net.conczin.mca.client.gui.widget;
 
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 public class HorizontalColorPickerWidget extends ColorPickerWidget {
-    public HorizontalColorPickerWidget(int x, int y, int width, int height, double valueX, ResourceLocation texture, DualConsumer<Double, Double> consumer) {
+    public HorizontalColorPickerWidget(int x, int y, int width, int height, double valueX, Identifier texture, DualConsumer<Double, Double> consumer) {
         super(x, y, width, height, valueX, 0.5, texture, consumer);
     }
 

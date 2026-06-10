@@ -34,7 +34,7 @@ public class Nationality extends SavedData {
     }
 
     Nationality(CompoundTag nbt, HolderLookup.Provider provider) {
-        map = NbtHelper.toMap(nbt, Long::valueOf, e -> ((IntTag) e).getAsInt());
+        map = NbtHelper.toMap(nbt, Long::valueOf, e -> e.asInt().orElse(0));
     }
 
     public static Nationality get(ServerLevel world) {
@@ -45,7 +45,6 @@ public class Nationality extends SavedData {
         return x / CHUNK_SIZE * (long) Integer.MAX_VALUE + z / CHUNK_SIZE;
     }
 
-    @Override
     public CompoundTag save(CompoundTag nbt, HolderLookup.Provider provider) {
         NbtHelper.fromMap(nbt, map, String::valueOf, IntTag::valueOf);
         return nbt;

@@ -9,6 +9,7 @@ import net.conczin.mca.resources.data.skin.Clothing;
 import net.conczin.mca.resources.data.skin.Hair;
 import net.conczin.mca.resources.data.skin.SkinListEntry;
 import net.minecraft.client.renderer.texture.DynamicTexture;
+import net.minecraft.util.ARGB;
 import net.minecraft.util.Mth;
 
 import java.util.LinkedList;
@@ -33,7 +34,7 @@ public final class Workspace {
 
     public Workspace(NativeImage image) {
         this.currentImage = image;
-        this.backendTexture = new DynamicTexture(currentImage);
+        this.backendTexture = new DynamicTexture(() -> "immersive_library/workspace", currentImage);
         this.dirty = true;
     }
 
@@ -62,7 +63,8 @@ public final class Workspace {
     private void fillDeleteFunc(FillTodo entry, Queue<FillTodo> todo, int x, int y) {
         if (x < 0 || y < 0 || x >= 64 || y >= 64) return;
 
-        FillTodo nextEntry = new FillTodo(x, y, currentImage.getRedOrLuminance(x, y), currentImage.getGreenOrLuminance(x, y), currentImage.getBlueOrLuminance(x, y), currentImage.getLuminanceOrAlpha(x, y));
+        int pixel = currentImage.getPixel(x, y);
+        FillTodo nextEntry = new FillTodo(x, y, ARGB.red(pixel), ARGB.green(pixel), ARGB.blue(pixel), ARGB.alpha(pixel));
 
         if (Math.abs(nextEntry.red - entry.red) > fillToolThreshold) return;
         if (Math.abs(nextEntry.green - entry.green) > fillToolThreshold) return;
@@ -77,12 +79,13 @@ public final class Workspace {
 
         for (int x = 0; x < 64; x++) {
             for (int y = 0; y < 64; y++) {
-                int r = currentImage.getRedOrLuminance(x, y) & 0xFF;
-                int g = currentImage.getGreenOrLuminance(x, y) & 0xFF;
-                int b = currentImage.getBlueOrLuminance(x, y) & 0xFF;
-                int a = currentImage.getLuminanceOrAlpha(x, y) & 0xFF;
+                int pixel = currentImage.getPixel(x, y);
+                int r = ARGB.red(pixel);
+                int g = ARGB.green(pixel);
+                int b = ARGB.blue(pixel);
+                int a = ARGB.alpha(pixel);
                 int l = Mth.clamp((int) (0.2126 * r + 0.7152 * g + 0.0722 * b), 0, 255);
-                currentImage.setPixelRGBA(x, y, a << 24 | l << 16 | l << 8 | l);
+                currentImage.setPixel(x, y, ARGB.color(a, l, l, l));
             }
         }
 
@@ -94,11 +97,12 @@ public final class Workspace {
 
         for (int x = 0; x < 64; x++) {
             for (int y = 0; y < 64; y++) {
-                int r = Mth.clamp((currentImage.getRedOrLuminance(x, y) & 0xFF) + i, 0, 255);
-                int g = Mth.clamp((currentImage.getGreenOrLuminance(x, y) & 0xFF) + i, 0, 255);
-                int b = Mth.clamp((currentImage.getBlueOrLuminance(x, y) & 0xFF) + i, 0, 255);
-                int a = currentImage.getLuminanceOrAlpha(x, y) & 0xFF;
-                currentImage.setPixelRGBA(x, y, a << 24 | r << 16 | g << 8 | b);
+                int pixel = currentImage.getPixel(x, y);
+                int r = Mth.clamp(ARGB.red(pixel) + i, 0, 255);
+                int g = Mth.clamp(ARGB.green(pixel) + i, 0, 255);
+                int b = Mth.clamp(ARGB.blue(pixel) + i, 0, 255);
+                int a = ARGB.alpha(pixel);
+                currentImage.setPixel(x, y, ARGB.color(a, r, g, b));
             }
         }
 
@@ -112,11 +116,12 @@ public final class Workspace {
         int samples = 0;
         for (int x = 0; x < 64; x++) {
             for (int y = 0; y < 64; y++) {
-                int a = currentImage.getLuminanceOrAlpha(x, y) & 0xFF;
+                int pixel = currentImage.getPixel(x, y);
+                int a = ARGB.alpha(pixel);
                 if (a > 0) {
-                    average += currentImage.getRedOrLuminance(x, y) & 0xFF;
-                    average += currentImage.getBlueOrLuminance(x, y) & 0xFF;
-                    average += currentImage.getGreenOrLuminance(x, y) & 0xFF;
+                    average += ARGB.red(pixel);
+                    average += ARGB.blue(pixel);
+                    average += ARGB.green(pixel);
                     samples += 3;
                 }
             }
@@ -125,11 +130,12 @@ public final class Workspace {
 
         for (int x = 0; x < 64; x++) {
             for (int y = 0; y < 64; y++) {
-                int r = Mth.clamp((int) (((currentImage.getRedOrLuminance(x, y) & 0xFF) - average) * (1.0f + c) + average), 0, 255);
-                int g = Mth.clamp((int) (((currentImage.getGreenOrLuminance(x, y) & 0xFF) - average) * (1.0f + c) + average), 0, 255);
-                int b = Mth.clamp((int) (((currentImage.getBlueOrLuminance(x, y) & 0xFF) - average) * (1.0f + c) + average), 0, 255);
-                int a = currentImage.getLuminanceOrAlpha(x, y) & 0xFF;
-                currentImage.setPixelRGBA(x, y, a << 24 | r << 16 | g << 8 | b);
+                int pixel = currentImage.getPixel(x, y);
+                int r = Mth.clamp((int) ((ARGB.red(pixel) - average) * (1.0f + c) + average), 0, 255);
+                int g = Mth.clamp((int) ((ARGB.green(pixel) - average) * (1.0f + c) + average), 0, 255);
+                int b = Mth.clamp((int) ((ARGB.blue(pixel) - average) * (1.0f + c) + average), 0, 255);
+                int a = ARGB.alpha(pixel);
+                currentImage.setPixel(x, y, ARGB.color(a, r, g, b));
             }
         }
 
@@ -142,16 +148,17 @@ public final class Workspace {
         saveSnapshot(true);
 
         Queue<FillTodo> todo = new LinkedList<>();
-        todo.add(new FillTodo(x, y, currentImage.getRedOrLuminance(x, y), currentImage.getGreenOrLuminance(x, y), currentImage.getBlueOrLuminance(x, y), currentImage.getLuminanceOrAlpha(x, y)));
+        int pixel = currentImage.getPixel(x, y);
+        todo.add(new FillTodo(x, y, ARGB.red(pixel), ARGB.green(pixel), ARGB.blue(pixel), ARGB.alpha(pixel)));
 
         while (!todo.isEmpty()) {
             FillTodo entry = todo.poll();
 
-            if (currentImage.getLuminanceOrAlpha(entry.x, entry.y) == 0) {
+            if (ARGB.alpha(currentImage.getPixel(entry.x, entry.y)) == 0) {
                 continue;
             }
 
-            currentImage.setPixelRGBA(entry.x, entry.y, 0);
+            currentImage.setPixel(entry.x, entry.y, 0);
             dirty = true;
 
             for (int ox = -1; ox <= 1; ox++) {

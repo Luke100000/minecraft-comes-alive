@@ -19,9 +19,12 @@ import net.minecraft.client.gui.components.toasts.SystemToast;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.util.ProblemReporter;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.storage.TagValueInput;
 
 public class ClientHandlerImpl implements ClientHandler {
     private final Minecraft client = Minecraft.getInstance();
@@ -194,7 +197,7 @@ public class ClientHandlerImpl implements ClientHandler {
 
     @Override
     public void handleToastMessage(ShowToastRequest message) {
-        SystemToast.add(client.getToasts(), SystemToast.SystemToastId.PERIODIC_NOTIFICATION, message.getTitle(), message.getMessage());
+        SystemToast.add(client.getToastManager(), SystemToast.SystemToastId.PERIODIC_NOTIFICATION, message.getTitle(), message.getMessage());
     }
 
     @Override
@@ -208,9 +211,9 @@ public class ClientHandlerImpl implements ClientHandler {
     @Override
     public void handlePlayerDataMessage(PlayerDataMessage response) {
         assert client.level != null;
-        VillagerEntityMCA villager = EntitiesMCA.MALE_VILLAGER.create(client.level);
+        VillagerEntityMCA villager = EntitiesMCA.MALE_VILLAGER.create(client.level, EntitySpawnReason.LOAD);
         assert villager != null;
-        villager.readAdditionalSaveData(response.nbt());
+        villager.load(TagValueInput.create(ProblemReporter.DISCARDING, villager.registryAccess(), response.nbt()));
         MCAClient.addPlayerData(response.uuid(), villager);
     }
 

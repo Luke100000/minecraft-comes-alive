@@ -15,18 +15,17 @@ import net.minecraft.core.HolderLookup;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
-import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.Mth;
 import net.minecraft.world.Difficulty;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.EntityType;
-import net.minecraft.world.entity.MobSpawnType;
 import net.minecraft.world.entity.SpawnPlacements;
-import net.minecraft.world.entity.monster.AbstractIllager;
+import net.minecraft.world.entity.monster.illager.AbstractIllager;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.saveddata.SavedData;
@@ -54,13 +53,13 @@ public class VillageManager extends SavedData implements Iterable<Village> {
 
     VillageManager(ServerLevel world, CompoundTag nbt) {
         this.world = world;
-        lastBuildingId = nbt.getInt("lastBuildingId");
-        lastVillageId = nbt.getInt("lastVillageId");
-        reapers = nbt.contains("reapers", Tag.TAG_COMPOUND) ? new ReaperSpawner(this, nbt.getCompound("reapers")) : new ReaperSpawner(this);
+        lastBuildingId = nbt.getInt("lastBuildingId").orElse(0);
+        lastVillageId = nbt.getInt("lastVillageId").orElse(0);
+        reapers = nbt.getCompound("reapers").map(reapers -> new ReaperSpawner(this, reapers)).orElseGet(() -> new ReaperSpawner(this));
 
-        ListTag villageList = nbt.getList("villages", Tag.TAG_COMPOUND);
+        ListTag villageList = nbt.getList("villages").orElseGet(ListTag::new);
         for (int i = 0; i < villageList.size(); i++) {
-            Village village = new Village(villageList.getCompound(i), world);
+            Village village = new Village(villageList.getCompound(i).orElseGet(CompoundTag::new), world);
             if (village.getBuildings().isEmpty()) {
                 MCA.LOGGER.warn("Empty village detected ({}), removing...", village.getName());
                 setDirty();
@@ -112,7 +111,6 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         return villages.values().stream().anyMatch(v -> v.getBox().expand(0, 1000, 0).isInside(p));
     }
 
-    @Override
     public CompoundTag save(CompoundTag nbt, HolderLookup.Provider provider) {
         nbt.putInt("lastBuildingId", lastBuildingId);
         nbt.putInt("lastVillageId", lastVillageId);
@@ -126,16 +124,16 @@ public class VillageManager extends SavedData implements Iterable<Village> {
      */
     public void tick() {
         //keep track of where player are currently
-        if (world.getDayTime() % 100 == 0) {
+        if (world.getOverworldClockTime() % 100 == 0) {
             world.players().forEach(player ->
                     PlayerSaveData.get(player).updateLastSeenVillage(this, player)
             );
         }
 
         //send bounty hunters
-        if (world.getDayTime() % (Config.getInstance().bountyHunterInterval / 10) == 0 && world.getDifficulty() != Difficulty.PEACEFUL) {
+        if (world.getOverworldClockTime() % (Config.getInstance().bountyHunterInterval / 10) == 0 && world.getDifficulty() != Difficulty.PEACEFUL) {
             world.players().forEach(player -> {
-                if (world.random.nextInt(10) == 0 && !isWithinHorizontalBoundaries(player.blockPosition()) && !player.isCreative()) {
+                if (world.getRandom().nextInt(10) == 0 && !isWithinHorizontalBoundaries(player.blockPosition()) && !player.isCreative()) {
                     villages.values().stream()
                             .filter(v -> v.getPopulation() >= 3)
                             .filter(v -> v.getReputation(player) < Config.getInstance().bountyHunterHearts)
@@ -179,7 +177,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
 
         //spawn the bois
         for (int c = 0; c < count; c++) {
-            if (world.random.nextBoolean()) {
+            if (world.getRandom().nextBoolean()) {
                 spawnBountyHunter(EntityType.PILLAGER, player);
             } else {
                 spawnBountyHunter(EntityType.VINDICATOR, player);
@@ -187,17 +185,17 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         }
 
         //warn the player
-        player.displayClientMessage(Component.translatable(sender.getPopulation() == 0 ? "events.bountyHuntersFinal" : "events.bountyHunters", sender.getName()).withStyle(ChatFormatting.RED), false);
+        player.sendSystemMessage(Component.translatable(sender.getPopulation() == 0 ? "events.bountyHuntersFinal" : "events.bountyHunters", sender.getName()).withStyle(ChatFormatting.RED));
 
         //civil entry
         sender.getCivilRegistry().ifPresent(r -> r.addText(Component.translatable("civil_registry.bounty_hunters", player.getName())));
     }
 
     private <T extends AbstractIllager> void spawnBountyHunter(EntityType<T> t, ServerPlayer player) {
-        AbstractIllager pillager = t.create(world);
+        AbstractIllager pillager = t.create(world, EntitySpawnReason.EVENT);
         if (pillager != null) {
             for (int attempt = 0; attempt < 32; attempt++) {
-                float f = this.world.random.nextFloat() * 6.2831855F;
+                float f = this.world.getRandom().nextFloat() * 6.2831855F;
                 int x = (int) (player.getX() + Mth.cos(f) * 32.0f);
                 int z = (int) (player.getZ() + Mth.sin(f) * 32.0f);
                 int y = world.getHeight(Heightmap.Types.WORLD_SURFACE, x, z);
@@ -205,7 +203,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
                 if (SpawnPlacements.isSpawnPositionOk(t, world, pos)) {
                     pillager.setPos(x, y, z);
                     pillager.setTarget(player);
-                    WorldUtils.spawnEntity(world, pillager, MobSpawnType.EVENT);
+                    WorldUtils.spawnEntity(world, pillager, EntitySpawnReason.EVENT);
                     break;
                 }
             }
@@ -227,7 +225,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
     //checks weather the given block contains a grouped building block, e.g., a town bell or gravestone
     private BuildingType getGroupedBuildingType(BlockPos pos) {
         Block block = world.getBlockState(pos).getBlock();
-        ResourceLocation blockId = BuiltInRegistries.BLOCK.getKey(block);
+        Identifier blockId = BuiltInRegistries.BLOCK.getKey(block);
         for (BuildingType bt : BuildingTypes.getInstance()) {
             if (bt.grouped() && bt.matchesBlock(blockId)) {
                 return bt;
@@ -366,3 +364,4 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         into.merge(from);
     }
 }
+

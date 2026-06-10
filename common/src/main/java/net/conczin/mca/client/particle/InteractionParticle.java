@@ -1,12 +1,16 @@
 package net.conczin.mca.client.particle;
 
 import net.minecraft.client.multiplayer.ClientLevel;
-import net.minecraft.client.particle.*;
+import net.minecraft.client.particle.Particle;
+import net.minecraft.client.particle.ParticleProvider;
+import net.minecraft.client.particle.SingleQuadParticle;
+import net.minecraft.client.particle.SpriteSet;
 import net.minecraft.core.particles.SimpleParticleType;
+import net.minecraft.util.RandomSource;
 
-public class InteractionParticle extends TextureSheetParticle {
-    protected InteractionParticle(ClientLevel world, double x, double y, double z) {
-        super(world, x, y, z);
+public class InteractionParticle extends SingleQuadParticle {
+    protected InteractionParticle(ClientLevel world, double x, double y, double z, SpriteSet sprite, RandomSource random) {
+        super(world, x, y, z, sprite.get(random));
         this.xd *= 0.01F;
         this.yd *= 0.01F;
         this.zd *= 0.01F;
@@ -17,14 +21,16 @@ public class InteractionParticle extends TextureSheetParticle {
     }
 
     @Override
-    public ParticleRenderType getRenderType() {
-        return ParticleRenderType.PARTICLE_SHEET_OPAQUE;
+    public Layer getLayer() {
+        return Layer.OPAQUE;
     }
 
+    @Override
     public float getQuadSize(float tickDelta) {
         return 0.3F;
     }
 
+    @Override
     public void tick() {
         this.xo = this.x;
         this.yo = this.y;
@@ -56,9 +62,19 @@ public class InteractionParticle extends TextureSheetParticle {
             this.sprite = sprite;
         }
 
-        public Particle createParticle(SimpleParticleType particleType, ClientLevel world, double x, double y, double z, double velocityX, double velocityY, double velocityZ) {
-            InteractionParticle heartparticle = new InteractionParticle(world, x, y + 0.5D, z);
-            heartparticle.pickSprite(this.sprite);
+        @Override
+        public Particle createParticle(
+                SimpleParticleType particleType,
+                ClientLevel world,
+                double x,
+                double y,
+                double z,
+                double velocityX,
+                double velocityY,
+                double velocityZ,
+                RandomSource random
+        ) {
+            InteractionParticle heartparticle = new InteractionParticle(world, x, y + 0.5D, z, this.sprite, random);
             heartparticle.setColor(1.0F, 1.0F, 1.0F);
             return heartparticle;
         }

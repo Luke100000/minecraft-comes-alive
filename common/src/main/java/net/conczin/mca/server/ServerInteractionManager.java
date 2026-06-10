@@ -12,6 +12,7 @@ import net.conczin.mca.server.world.data.PlayerSaveData;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
@@ -97,7 +98,7 @@ public class ServerInteractionManager {
      * @return List<UUID>
      */
     private List<UUID> getProposalsFor(ServerPlayer player) {
-        return proposals.getOrDefault(player.getUUID(), new ArrayList<>());
+        return proposals.computeIfAbsent(player.getUUID(), id -> new ArrayList<>());
     }
 
     /**
@@ -228,6 +229,8 @@ public class ServerInteractionManager {
     public void endMarriage(ServerPlayer sender) {
         // Retrieve all data instances and an instance of the ex-spouse if they are present.
         EntityRelationship.of(sender).ifPresent(senderData -> {
+            Optional<UUID> partnerUUID = senderData.getPartnerUUID();
+
             // Ensure the sender is married
             if (!senderData.isMarried()) {
                 failMessage(sender, Component.translatable("server.endMarriageNotMarried"));
@@ -251,7 +254,8 @@ public class ServerInteractionManager {
                 }
             });
             senderData.endRelationShip(RelationshipState.SINGLE);
-            senderData.getPartnerUUID().map(id -> PlayerSaveData.get(sender)).ifPresent(r -> r.endRelationShip(RelationshipState.SINGLE));
+            partnerUUID.map(id -> PlayerSaveData.get((ServerLevel) sender.level(), id))
+                    .ifPresent(r -> r.endRelationShip(RelationshipState.SINGLE));
         });
     }
 

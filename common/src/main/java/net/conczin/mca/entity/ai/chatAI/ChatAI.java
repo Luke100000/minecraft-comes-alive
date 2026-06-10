@@ -5,7 +5,6 @@ import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.util.WorldUtils;
 import net.minecraft.server.level.ServerPlayer;
 
-import java.text.Normalizer;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
@@ -168,7 +167,7 @@ public class ChatAI {
      * @see <a href="https://unicode.org/reports/tr15/#Examples">Unicode Normalization Forms</a>
      */
     private static String normalizeString(String string) {
-        return Normalizer.normalize(string, Normalizer.Form.NFD).replaceAll("\\p{M}", "").toLowerCase(Locale.ROOT);
+        return net.conczin.mca.MCA.normalizeString(string);
     }
 
     /**

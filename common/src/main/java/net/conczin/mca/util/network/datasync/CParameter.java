@@ -2,11 +2,12 @@ package net.conczin.mca.util.network.datasync;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.RegistryAccess;
+import net.minecraft.core.UUIDUtil;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.NbtOps;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
-import net.minecraft.world.entity.Entity;
 import net.minecraft.world.item.ItemStack;
 
 import java.util.Optional;
@@ -31,7 +32,7 @@ public interface CParameter<T, TrackedType> {
         return new CDataParameter<>(id, EntityDataSerializers.BOOLEAN, def,
                 (nbt, key, provider) -> {
                     if (nbt.contains(key)) {
-                        return nbt.getInt(key) != 0;
+                        return nbt.getInt(key).orElse(0) != 0;
                     } else {
                         return def;
                     }
@@ -48,7 +49,7 @@ public interface CParameter<T, TrackedType> {
     }
 
     static CDataParameter<CompoundTag> create(String id, CompoundTag def) {
-        return new CDataParameter<>(id, EntityDataSerializers.COMPOUND_TAG, def,
+        return new CDataParameter<>(id, MCAEntityDataSerializers.COMPOUND_TAG, def,
                 (nbt, key, provider) -> NbtCompoundDefaultGetters.getCompound(nbt, key, def),
                 (nbt, key, value, provider) -> nbt.put(key, value)
         );
@@ -57,19 +58,20 @@ public interface CParameter<T, TrackedType> {
     static CDataParameter<ItemStack> create(String id, ItemStack def) {
         return new CDataParameter<>(id, EntityDataSerializers.ITEM_STACK, def,
                 (nbt, key, provider) -> NbtCompoundDefaultGetters.getItemStack(nbt, key, ItemStack.EMPTY, provider),
-                (nbt, key, stack, provider) -> {
-                    CompoundTag itemNbt = new CompoundTag();
-                    stack.save(provider, itemNbt);
-                    nbt.put(key, itemNbt);
-                });
+                (nbt, key, stack, provider) -> nbt.storeNullable(
+                        key,
+                        ItemStack.OPTIONAL_CODEC,
+                        provider.createSerializationContext(NbtOps.INSTANCE),
+                        stack.isEmpty() ? null : stack
+                ));
     }
 
     static CDataParameter<BlockPos> create(String id, BlockPos def) {
         return new CDataParameter<>(id, EntityDataSerializers.BLOCK_POS, def,
                 (tag, key, provider) -> new BlockPos(
-                        tag.getInt(key + "X"),
-                        tag.getInt(key + "Y"),
-                        tag.getInt(key + "Z")
+                        tag.getInt(key + "X").orElse(def.getX()),
+                        tag.getInt(key + "Y").orElse(def.getY()),
+                        tag.getInt(key + "Z").orElse(def.getZ())
                 ),
                 (tag, key, pos, provider) -> {
                     tag.putInt(key + "X", pos.getX());
@@ -79,9 +81,14 @@ public interface CParameter<T, TrackedType> {
     }
 
     static CDataParameter<Optional<UUID>> create(String id, Optional<UUID> def) {
-        return new CDataParameter<>(id, EntityDataSerializers.OPTIONAL_UUID, def,
-                (tag, key, provider) -> tag.hasUUID(key) ? Optional.of(tag.getUUID(key)) : Optional.empty(),
-                (tag, key, v, provider) -> v.ifPresent(uuid -> tag.putUUID(key, uuid))
+        return new CDataParameter<>(id, MCAEntityDataSerializers.OPTIONAL_UUID, def,
+                (tag, key, provider) -> tag.read(key, UUIDUtil.CODEC, provider.createSerializationContext(NbtOps.INSTANCE)).map(Optional::of).orElse(def),
+                (tag, key, v, provider) -> tag.storeNullable(
+                        key,
+                        UUIDUtil.CODEC,
+                        provider.createSerializationContext(NbtOps.INSTANCE),
+                        v.orElse(null)
+                )
         );
     }
 
@@ -104,5 +111,5 @@ public interface CParameter<T, TrackedType> {
 
     void save(CompoundTag nbt, T value, RegistryAccess registries);
 
-    EntityDataAccessor<TrackedType> createParam(Class<? extends Entity> type);
+    EntityDataAccessor<TrackedType> createParam(CDataManager.AccessorFactory<?> accessorFactory);
 }

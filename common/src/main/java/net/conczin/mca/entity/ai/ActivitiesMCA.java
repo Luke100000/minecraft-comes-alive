@@ -1,22 +1,21 @@
 package net.conczin.mca.entity.ai;
 
 import net.conczin.mca.MCA;
-import net.conczin.mca.mixin.MixinActivity;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.schedule.Activity;
 
 import java.util.HashMap;
 import java.util.Map;
 
 public interface ActivitiesMCA {
-    Map<ResourceLocation, Activity> ACTIVITIES = new HashMap<>();
+    Map<Identifier, Activity> ACTIVITIES = new HashMap<>();
 
     Activity CHORE = activity("chore");
     Activity GRIEVE = activity("grieve");
 
     static Activity activity(String name) {
-        ResourceLocation id = MCA.locate(name);
-        Activity init = MixinActivity.init(id.toString());
+        Identifier id = MCA.locate(name);
+        Activity init = new Activity(id.toString());
         ACTIVITIES.put(id, init);
         return init;
     }

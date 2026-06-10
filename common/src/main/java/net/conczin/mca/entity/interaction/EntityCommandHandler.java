@@ -28,7 +28,7 @@ public abstract class EntityCommandHandler<T extends Entity & VillagerLike<?>> {
     }
 
     public void stopInteracting() {
-        if (!entity.level().isClientSide) {
+        if (!entity.level().isClientSide()) {
             if (interactingPlayer instanceof ServerPlayer serverPlayer) {
                 serverPlayer.closeContainer();
             }
@@ -51,3 +51,4 @@ public abstract class EntityCommandHandler<T extends Entity & VillagerLike<?>> {
         return false;
     }
 }
+

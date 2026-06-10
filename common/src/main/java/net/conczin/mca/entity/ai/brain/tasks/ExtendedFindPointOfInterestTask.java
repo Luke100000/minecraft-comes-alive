@@ -8,7 +8,6 @@ import net.conczin.mca.entity.VillagerEntityMCA;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.core.Holder;
-import net.minecraft.network.protocol.game.DebugPackets;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.util.RandomSource;
@@ -72,7 +71,7 @@ public class ExtendedFindPointOfInterestTask extends Behavior<VillagerEntityMCA>
             return false;
         }
         if (this.positionExpireTimeLimit == 0L) {
-            this.positionExpireTimeLimit = pathAwareEntity.level().getGameTime() + (long) serverWorld.random.nextInt(POSITION_EXPIRE_INTERVAL);
+            this.positionExpireTimeLimit = pathAwareEntity.level().getGameTime() + (long) serverWorld.getRandom().nextInt(POSITION_EXPIRE_INTERVAL);
             return false;
         }
         return serverWorld.getGameTime() >= this.positionExpireTimeLimit;
@@ -109,14 +108,12 @@ public class ExtendedFindPointOfInterestTask extends Behavior<VillagerEntityMCA>
                 villager.getBrain().setMemory(this.targetMemoryModuleType, GlobalPos.of(serverWorld.dimension(), blockPos2));
                 this.entityStatus.ifPresent(statusByte -> serverWorld.broadcastEntityEvent(villager, statusByte));
                 this.foundPositionsToExpiry.clear();
-                DebugPackets.sendPoiTicketCountPacket(serverWorld, blockPos2);
-
                 // on finish callback
                 onFinish.accept(villager);
             });
         } else {
             for (Pair<Holder<PoiType>, BlockPos> blockPos2 : set) {
-                this.foundPositionsToExpiry.computeIfAbsent(blockPos2.getSecond().asLong(), m -> new RetryMarker(villager.level().random, l));
+                this.foundPositionsToExpiry.computeIfAbsent(blockPos2.getSecond().asLong(), m -> new RetryMarker(villager.level().getRandom(), l));
             }
         }
     }

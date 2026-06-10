@@ -4,24 +4,22 @@ import net.conczin.mca.entity.ai.relationship.EntityRelationship;
 import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.util.NbtHelper;
 import net.conczin.mca.util.WorldUtils;
-import net.minecraft.Util;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.util.Util;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.saveddata.SavedData;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.text.Normalizer;
 import java.util.*;
-import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 public class FamilyTree extends SavedData {
-    private static final String DATA_ID = "MCA-FamilyTree";
-    private static final Pattern COMBINING_MARKS = Pattern.compile("\\p{M}");
+    private static final String DATA_ID = "family_tree";
+
 
     private final Map<UUID, FamilyTreeNode> entries;
 
@@ -37,7 +35,6 @@ public class FamilyTree extends SavedData {
         return WorldUtils.loadData(world.getServer().overworld(), FamilyTree::new, FamilyTree::new, DATA_ID);
     }
 
-    @Override
     public CompoundTag save(CompoundTag nbt, HolderLookup.Provider provider) {
         return NbtHelper.fromMap(nbt, entries, UUID::toString, FamilyTreeNode::save);
     }
@@ -67,9 +64,7 @@ public class FamilyTree extends SavedData {
     }
 
     private static String normalizeNameSearch(String name) {
-        String normalized = Normalizer.normalize(name, Normalizer.Form.NFD);
-        return COMBINING_MARKS.matcher(normalized).replaceAll("")
-                .toLowerCase(Locale.ROOT);
+        return net.conczin.mca.MCA.normalizeString(name);
     }
 
     private record NameSearchResult(FamilyTreeNode node, String normalizedName) {

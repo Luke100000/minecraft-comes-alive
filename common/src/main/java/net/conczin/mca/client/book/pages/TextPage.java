@@ -1,7 +1,8 @@
 package net.conczin.mca.client.book.pages;
 
 import net.conczin.mca.client.gui.ExtendedBookScreen;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.ActiveTextCollector;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.Style;
 import net.minecraft.util.FormattedCharSequence;
@@ -28,7 +29,7 @@ public class TextPage extends Page {
         return cachedPage;
     }
 
-    public void render(ExtendedBookScreen screen, GuiGraphics context, int mouseX, int mouseY, float delta) {
+    public void render(ExtendedBookScreen screen, GuiGraphicsExtractor context, int mouseX, int mouseY, float delta) {
         //prepare page
         if (content != null) {
             // text
@@ -37,7 +38,18 @@ public class TextPage extends Page {
             for (int m = 0; m < l; ++m) {
                 FormattedCharSequence orderedText = getCachedPage(screen).get(m);
                 int x = i + 36;
-                context.drawString(screen.getTextRenderer(), orderedText, x, (32 + m * 9), 0, screen.getBook().hasTextShadow());
+                context.text(screen.getTextRenderer(), orderedText, x, (32 + m * 9), 0xFF000000, screen.getBook().hasTextShadow());
+            }
+        }
+    }
+
+    @Override
+    public void visitText(ExtendedBookScreen screen, ActiveTextCollector collector) {
+        if (content != null) {
+            int l = Math.min(128 / 9, getCachedPage(screen).size());
+            int i = (screen.width - 192) / 2;
+            for (int m = 0; m < l; ++m) {
+                collector.accept(i + 36, 32 + m * 9, getCachedPage(screen).get(m));
             }
         }
     }

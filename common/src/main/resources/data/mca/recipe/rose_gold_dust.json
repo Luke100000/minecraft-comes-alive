@@ -1,13 +1,15 @@
 {
-  "type": "minecraft:crafting_shapeless",
-  "ingredients": [
-    {"item": "minecraft:raw_gold"},
-    {"item": "minecraft:raw_gold"},
-    {"item": "minecraft:raw_gold"},
-    {"item": "minecraft:raw_copper"}
-  ],
-  "result": {
-    "id": "mca:rose_gold_dust",
-    "count": 4
-  }
+    "type":  "minecraft:crafting_shapeless",
+    "ingredients":  [
+                        [
+                            "minecraft:raw_gold",
+                            "minecraft:raw_gold",
+                            "minecraft:raw_gold",
+                            "minecraft:raw_copper"
+                        ]
+                    ],
+    "result":  {
+                   "id":  "mca:rose_gold_dust",
+                   "count":  4
+               }
 }

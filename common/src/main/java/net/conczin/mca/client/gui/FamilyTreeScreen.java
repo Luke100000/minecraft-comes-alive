@@ -1,9 +1,8 @@
 package net.conczin.mca.client.gui;
 
 import com.mojang.blaze3d.platform.Window;
-import com.mojang.blaze3d.vertex.ByteBufferBuilder;
-import com.mojang.blaze3d.vertex.PoseStack;
 import net.conczin.mca.MCA;
+import net.conczin.mca.client.gui.widget.WidgetUtils;
 import net.conczin.mca.client.resources.Icon;
 import net.conczin.mca.entity.ai.relationship.RelationshipState;
 import net.conczin.mca.network.Network;
@@ -12,16 +11,16 @@ import net.conczin.mca.server.world.data.FamilyTreeNode;
 import net.conczin.mca.util.compat.ButtonWidget;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.client.renderer.MultiBufferSource;
+import net.minecraft.client.input.MouseButtonEvent;
+import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.client.resources.sounds.SimpleSoundInstance;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.sounds.SoundEvents;
 import org.jetbrains.annotations.Nullable;
-import org.joml.Matrix4f;
+import org.joml.Matrix3x2fStack;
 import org.lwjgl.opengl.GL11;
 
 import java.util.*;
@@ -82,30 +81,30 @@ public class FamilyTreeScreen extends Screen {
     }
 
     @Override
-    public boolean mouseDragged(double mouseX, double mouseY, int button, double deltaX, double deltaY) {
-        if (button == 0) {
+    public boolean mouseDragged(MouseButtonEvent event, double deltaX, double deltaY) {
+        if (event.button() == 0) {
             scrollX += deltaX;
             scrollY += deltaY;
             return true;
         }
-        return super.mouseDragged(mouseX, mouseY, button, deltaX, deltaY);
+        return super.mouseDragged(event, deltaX, deltaY);
     }
 
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (button == 0 && focused != null) {
+    public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
+        if (event.button() == 0 && focused != null) {
             Minecraft.getInstance().getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.UI_BUTTON_CLICK, 1));
             if (focusEntity(focused.id)) {
                 rebuildTree();
             }
             return true;
         }
-        return super.mouseClicked(mouseX, mouseY, button);
+        return super.mouseClicked(event, doubleClick);
     }
 
     @Override
-    public void render(GuiGraphics context, int mouseX, int mouseY, float delta) {
-        super.render(context, mouseX, mouseY, delta);
+    public void extractRenderState(GuiGraphicsExtractor context, int mouseX, int mouseY, float delta) {
+        super.extractRenderState(context, mouseX, mouseY, delta);
 
         context.fill(0, 30, width, height - 30, 0x66000000);
 
@@ -123,14 +122,14 @@ public class FamilyTreeScreen extends Screen {
         GL11.glScissor(x, windowHeight - h - y, w, h);
         GL11.glEnable(GL11.GL_SCISSOR_TEST);
 
-        final PoseStack matrices = context.pose();
-        matrices.pushPose();
+        final Matrix3x2fStack matrices = context.pose();
+        matrices.pushMatrix();
 
         int xx = (int) (scrollX + width / 2.0);
         int yy = (int) (scrollY + height / 2.0);
-        matrices.translate(xx, yy, 0);
+        matrices.translate(xx, yy);
         tree.render(context, mouseX - xx, mouseY - yy);
-        matrices.popPose();
+        matrices.popMatrix();
 
         GL11.glDisable(GL11.GL_SCISSOR_TEST);
 
@@ -138,7 +137,7 @@ public class FamilyTreeScreen extends Screen {
 
         Component label = selected == null ? title : Component.literal(selected.getName()).append("'s ").append(title);
 
-        context.drawCenteredString(font, label, width / 2, 10, 16777215);
+        context.centeredText(font, label, width / 2, 10, 16777215);
     }
 
     private void rebuildTree() {
@@ -248,8 +247,8 @@ public class FamilyTreeScreen extends Screen {
             }
         }
 
-        public void render(GuiGraphics context, int mouseX, int mouseY) {
-            final PoseStack matrices = context.pose();
+        public void render(GuiGraphicsExtractor context, int mouseX, int mouseY) {
+            final Matrix3x2fStack matrices = context.pose();
             Bounds bounds = getBounds();
 
             boolean isFocused = id != null && bounds.contains(mouseX, mouseY);
@@ -268,16 +267,16 @@ public class FamilyTreeScreen extends Screen {
 
                 drawHook(context, x, y);
 
-                matrices.pushPose();
-                matrices.translate(x, y, 0);
+                matrices.pushMatrix();
+                matrices.translate(x, y);
                 node.render(context, mouseX - x, mouseY - y);
-                matrices.popPose();
+                matrices.popMatrix();
 
                 childrenStartX += (node.getWidth() + HORIZONTAL_SPACING) / 2;
             }
 
-            matrices.pushPose();
-            matrices.translate(0, 0, 400);
+            matrices.pushMatrix();
+            matrices.translate(0, 0);
 
             int fillColor = isFocused ? 0xF0100040 : 0xF0100010;
             int borderColor = isFocused ? 0xFF28007F : 1347420415;
@@ -292,8 +291,6 @@ public class FamilyTreeScreen extends Screen {
             context.fill(bounds.left + 2, bounds.top + 1, bounds.right - 2, bounds.top + 2, borderColor);
             context.fill(bounds.left + 2, bounds.bottom - 2, bounds.right - 2, bounds.bottom - 1, borderColor);
 
-            MultiBufferSource.BufferSource immediate = MultiBufferSource.immediate(new ByteBufferBuilder(1536));
-
             int l = bounds.top + 5;
             int k = bounds.left + 6;
 
@@ -301,14 +298,10 @@ public class FamilyTreeScreen extends Screen {
                 k += 20;
             }
 
-            Matrix4f matrix4f = matrices.last().pose();
-
-            Font r = Minecraft.getInstance().font;
-
             for (int s = 0; s < label.size(); ++s) {
                 Component line = label.get(s);
                 if (line != null) {
-                    r.drawInBatch(line, k, l, -1, true, matrix4f, immediate, Font.DisplayMode.NORMAL, 0, 15728880);
+                    context.text(font, line, k, l, -1, true);
                 }
 
                 if (s == 0) {
@@ -318,18 +311,17 @@ public class FamilyTreeScreen extends Screen {
                 l += 10;
             }
 
-            immediate.endBatch();
-            matrices.popPose();
+            matrices.popMatrix();
 
             if (deceased) {
                 Icon icon = MCAScreens.getInstance().getIcon("deceased");
-                context.blit(InteractScreen.ICON_TEXTURES, bounds.left + 6, bounds.top + 6, 0, icon.u(), icon.v(), 16, 16, 256, 256);
+                context.blit(RenderPipelines.GUI_TEXTURED, InteractScreen.ICON_TEXTURES, bounds.left + 6, bounds.top + 6, icon.u(), icon.v(), 16, 16, 256, 256);
 
                 if (isFocused && mouseX <= bounds.left + 20) {
-                    matrices.pushPose();
-                    matrices.translate(0, 0, 20);
-                    context.renderTooltip(font, Component.translatable("gui.family_tree.label.deceased"), mouseX, mouseY);
-                    matrices.popPose();
+                    matrices.pushMatrix();
+                    matrices.translate(0, 0);
+                    WidgetUtils.drawTooltip(context, font, Component.translatable("gui.family_tree.label.deceased"), mouseX, mouseY);
+                    matrices.popMatrix();
                 }
             }
 
@@ -337,7 +329,7 @@ public class FamilyTreeScreen extends Screen {
                 int x = bounds.left - SPOUSE_HORIZONTAL_SPACING;
                 int y = bounds.top + bounds.bottom / 2;
 
-                context.hLine(x, bounds.left - 1, y, 0xffffffff);
+                context.horizontalLine(x, bounds.left - 1, y, 0xffffffff);
 
                 if (relationship == RelationshipState.MARRIED_TO_PLAYER ||
                     relationship == RelationshipState.MARRIED_TO_VILLAGER ||
@@ -345,26 +337,26 @@ public class FamilyTreeScreen extends Screen {
                     relationship == RelationshipState.PROMISED ||
                     relationship == RelationshipState.WIDOW) {
                     Icon icon = MCAScreens.getInstance().getIcon(relationship.getIcon());
-                    context.blit(InteractScreen.ICON_TEXTURES, bounds.left - SPOUSE_HORIZONTAL_SPACING / 2 - 8, y - 8, 0, icon.u(), icon.v(), 16, 16, 256, 256);
+                    context.blit(RenderPipelines.GUI_TEXTURED, InteractScreen.ICON_TEXTURES, bounds.left - SPOUSE_HORIZONTAL_SPACING / 2 - 8, y - 8, icon.u(), icon.v(), 16, 16, 256, 256);
                 }
 
                 y -= spouse.label.size() * font.lineHeight / 2;
                 x -= spouse.getWidth() / 2 - 6;
 
-                matrices.pushPose();
-                matrices.translate(x, y, 0);
+                matrices.pushMatrix();
+                matrices.translate(x, y);
 
                 spouse.render(context, mouseX - x, mouseY - y);
-                matrices.popPose();
+                matrices.popMatrix();
             }
         }
 
-        private void drawHook(GuiGraphics context, int endX, int endY) {
+        private void drawHook(GuiGraphicsExtractor context, int endX, int endY) {
             int midY = endY / 2;
 
-            context.vLine(0, 0, midY, 0xffffffff);
-            context.hLine(0, endX, midY, 0xffffffff);
-            context.vLine(endX, midY, endY, 0xffffffff);
+            context.verticalLine(0, 0, midY, 0xffffffff);
+            context.horizontalLine(0, endX, midY, 0xffffffff);
+            context.verticalLine(endX, midY, endY, 0xffffffff);
         }
 
         public int getWidth() {
@@ -398,3 +390,6 @@ public class FamilyTreeScreen extends Screen {
         }
     }
 }
+
+
+

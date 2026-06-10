@@ -29,7 +29,7 @@ public record InteractionDialogueMessage(
 
     @Override
     public void handleServer(ServerPlayer player) {
-        Entity v = player.serverLevel().getEntity(villagerUUID);
+        Entity v = player.level().getEntity(villagerUUID);
         if (v instanceof VillagerEntityMCA villager) {
             Dialogues.getInstance().selectAnswer(villager, player, question, answer);
         }

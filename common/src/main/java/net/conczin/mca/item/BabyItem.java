@@ -22,23 +22,27 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.util.ProblemReporter;
 import net.minecraft.util.StringUtil;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
-import net.minecraft.world.InteractionResultHolder;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.MobSpawnType;
+import net.minecraft.world.entity.EntitySpawnReason;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.TooltipFlag;
 import net.minecraft.world.item.component.CustomData;
+import net.minecraft.world.item.component.TooltipDisplay;
 import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.storage.TagValueInput;
+import net.minecraft.world.level.storage.TagValueOutput;
 
-import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Consumer;
 import java.util.stream.Stream;
 
 public class BabyItem extends Item {
@@ -75,8 +79,9 @@ public class BabyItem extends Item {
         child.getTraits().inherit(fatherVillager.getTraits(), seed);
 
         // Save child for later
-        CompoundTag compound = new CompoundTag();
-        child.save(compound);
+        TagValueOutput childData = TagValueOutput.createWithContext(ProblemReporter.DISCARDING, mother.level().registryAccess());
+        child.save(childData);
+        CompoundTag compound = childData.buildResult();
         stack.set(DataComponentsMCA.BABY_NBT, CustomData.of(compound));
         stack.set(DataComponentsMCA.BABY_AGE, 0);
         stack.set(DataComponentsMCA.BABY_PARENTS, new BabyParentsComponent(
@@ -117,11 +122,12 @@ public class BabyItem extends Item {
 
     public boolean onDropped(ItemStack stack, Player player) {
         if (!hasBeenInvalidated(stack)) {
-            if (!player.level().isClientSide) {
+            if (!player.level().isClientSide()) {
                 int count = stack.getOrDefault(DataComponentsMCA.BABY_DROP_ATTEMPTS, 0) + 1;
                 stack.set(DataComponentsMCA.BABY_DROP_ATTEMPTS, count);
-                CriterionMCA.BABY_DROPPED.trigger((ServerPlayer) player, count);
-                player.displayClientMessage(Component.translatable("item.mca.baby.no_drop"), true);
+                ServerPlayer serverPlayer = (ServerPlayer) player;
+                CriterionMCA.BABY_DROPPED.trigger(serverPlayer, count);
+                serverPlayer.sendSystemMessage(Component.translatable("item.mca.baby.no_drop"), true);
             }
             return false;
         }
@@ -130,8 +136,8 @@ public class BabyItem extends Item {
     }
 
     @Override
-    public void inventoryTick(ItemStack stack, Level world, Entity entity, int slot, boolean selected) {
-        if (world.isClientSide) {
+    public void inventoryTick(ItemStack stack, net.minecraft.server.level.ServerLevel world, Entity entity, EquipmentSlot slot) {
+        if (world.isClientSide()) {
             return;
         }
 
@@ -150,20 +156,19 @@ public class BabyItem extends Item {
         }
     }
 
-    @Override
-    public String getDescriptionId(ItemStack stack) {
+    private String getDescriptionId(ItemStack stack) {
         if (hasBeenInvalidated(stack)) {
-            return super.getDescriptionId(stack) + ".blanket";
+            return getDescriptionId() + ".blanket";
         }
-        return super.getDescriptionId(stack);
+        return getDescriptionId();
     }
 
     @Override
-    public final InteractionResultHolder<ItemStack> use(Level world, Player player, InteractionHand hand) {
+    public final InteractionResult use(Level world, Player player, InteractionHand hand) {
         ItemStack stack = player.getItemInHand(hand);
 
-        if (world.isClientSide) {
-            return InteractionResultHolder.pass(stack);
+        if (world.isClientSide()) {
+            return InteractionResult.SUCCESS;
         }
 
         // Right-clicking an unnamed baby allows you to name it
@@ -171,15 +176,15 @@ public class BabyItem extends Item {
             if (player instanceof ServerPlayer serverPlayer) {
                 Network.sendToPlayer(new OpenGuiRequest(OpenGuiRequest.Type.BABY_NAME), serverPlayer);
             }
-            return InteractionResultHolder.pass(stack);
+            return InteractionResult.SUCCESS_SERVER;
         }
 
         // Not old enough
         if (!isReadyToGrowUp(stack)) {
             if (player instanceof ServerPlayer serverPlayer) {
-                serverPlayer.displayClientMessage(Component.translatable("item.mca.baby.not_ready"), true);
+                serverPlayer.sendSystemMessage(Component.translatable("item.mca.baby.not_ready"), true);
             }
-            return InteractionResultHolder.pass(stack);
+            return InteractionResult.SUCCESS_SERVER;
         }
 
         // Name is good and we're ready to grow
@@ -188,7 +193,7 @@ public class BabyItem extends Item {
         }
         stack.shrink(1);
 
-        return InteractionResultHolder.success(stack);
+        return InteractionResult.SUCCESS_SERVER.heldItemTransformedTo(stack);
     }
 
     protected VillagerEntityMCA birthChild(ItemStack stack, ServerLevel world, ServerPlayer player) {
@@ -200,12 +205,12 @@ public class BabyItem extends Item {
 
         CompoundTag savedBaby = stack.getOrDefault(DataComponentsMCA.BABY_NBT, CustomData.EMPTY).copyTag();
         if (!savedBaby.isEmpty()) {
-            child.readAdditionalSaveData(savedBaby);
+            child.readAdditionalSaveData(TagValueInput.create(ProblemReporter.DISCARDING, child.registryAccess(), savedBaby));
         }
 
         child.setCustomName(stack.getOrDefault(DataComponents.CUSTOM_NAME, Component.literal("Unnamed")));
 
-        WorldUtils.spawnEntity(world, child, MobSpawnType.BREEDING);
+        WorldUtils.spawnEntity(world, child, EntitySpawnReason.BREEDING);
 
         FamilyTree tree = FamilyTree.get(world);
 
@@ -243,32 +248,33 @@ public class BabyItem extends Item {
     }
 
     @Override
-    public void appendHoverText(ItemStack stack, TooltipContext context, List<Component> tooltip, TooltipFlag flag) {
+    @SuppressWarnings("deprecation")
+    public void appendHoverText(ItemStack stack, TooltipContext context, TooltipDisplay tooltipDisplay, Consumer<Component> consumer, TooltipFlag flag) {
         Player player = ClientProxy.getClientPlayer();
         int age = stack.getOrDefault(DataComponentsMCA.BABY_AGE, 0);
 
         // Name
         Component name = stack.get(DataComponents.CUSTOM_NAME);
         if (name != null) {
-            tooltip.add(Component.translatable("item.mca.baby.name", name.copy().withColor(gender.getColor())).withStyle(ChatFormatting.GRAY));
+            consumer.accept(Component.translatable("item.mca.baby.name", name.copy().withColor(gender.getColor())).withStyle(ChatFormatting.GRAY));
 
             if (age > 0) {
-                tooltip.add(Component.translatable("item.mca.baby.age", StringUtil.formatTickDuration(age, 20)).withStyle(ChatFormatting.GRAY));
+                consumer.accept(Component.translatable("item.mca.baby.age", StringUtil.formatTickDuration(age, 20)).withStyle(ChatFormatting.GRAY));
             }
         } else {
-            tooltip.add(Component.translatable("item.mca.baby.give_name").withStyle(ChatFormatting.YELLOW));
+            consumer.accept(Component.translatable("item.mca.baby.give_name").withStyle(ChatFormatting.YELLOW));
         }
 
         // Parents
         BabyParentsComponent parents = stack.get(DataComponentsMCA.BABY_PARENTS);
         if (parents != null) {
-            tooltip.add(Component.translatable("item.mca.baby.mother",
+            consumer.accept(Component.translatable("item.mca.baby.mother",
                     player != null && parents.mother().equals(player.getUUID())
                             ? Component.translatable("item.mca.baby.owner.you")
                             : parents.motherName()
             ).withStyle(ChatFormatting.GRAY));
 
-            tooltip.add(Component.translatable("item.mca.baby.father",
+            consumer.accept(Component.translatable("item.mca.baby.father",
                     player != null && parents.father().equals(player.getUUID())
                             ? Component.translatable("item.mca.baby.owner.you")
                             : parents.fatherName()
@@ -277,7 +283,9 @@ public class BabyItem extends Item {
 
         // Ready to yeet
         if (stack.has(DataComponents.CUSTOM_NAME) && canGrow(age)) {
-            tooltip.add(Component.translatable("item.mca.baby.state.ready").withStyle(ChatFormatting.DARK_GREEN));
+            consumer.accept(Component.translatable("item.mca.baby.state.ready").withStyle(ChatFormatting.DARK_GREEN));
         }
     }
 }
+
+

@@ -1,5 +1,6 @@
 package net.conczin.mca.item;
 
+import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.network.Network;
@@ -7,13 +8,13 @@ import net.conczin.mca.network.s2c.PlayerDataMessage;
 import net.conczin.mca.server.world.data.FamilyTree;
 import net.conczin.mca.server.world.data.FamilyTreeNode;
 import net.conczin.mca.server.world.data.PlayerSaveData;
+import net.conczin.mca.util.NbtHelper;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
-import net.minecraft.world.InteractionResultHolder;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
@@ -29,29 +30,29 @@ public class PotionOfMetamorphosisItem extends TooltippedItem {
     }
 
     @Override
-    public final InteractionResultHolder<ItemStack> use(Level world, Player player, InteractionHand hand) {
+    public final InteractionResult use(Level world, Player player, InteractionHand hand) {
         if (player instanceof ServerPlayer serverPlayer) {
             // set gender
             PlayerSaveData data = PlayerSaveData.get(serverPlayer);
             CompoundTag villagerData = data.getEntityData();
-            villagerData.putInt("Gender", gender.ordinal());
+            NbtHelper.getOrCreateCompound(villagerData, VillagerEntityMCA.MCA_DATA_KEY).putInt("Gender", gender.ordinal());
             data.setEntityData(villagerData);
 
             common(serverPlayer);
 
             // also update players
-            serverPlayer.serverLevel().players().forEach(p -> Network.sendToPlayer(new PlayerDataMessage(player.getUUID(), villagerData), p));
+            serverPlayer.level().players().forEach(p -> Network.sendToPlayer(new PlayerDataMessage(player.getUUID(), villagerData), p));
 
             // remove item
             ItemStack stack = player.getItemInHand(hand);
             stack.shrink(1);
-            return InteractionResultHolder.success(stack);
+            return InteractionResult.SUCCESS_SERVER.heldItemTransformedTo(stack);
         }
         return super.use(world, player, hand);
     }
 
     public InteractionResult interactLivingEntity(ItemStack stack, Player player, LivingEntity entity, InteractionHand hand) {
-        if (entity instanceof VillagerLike<?> villager && !entity.level().isClientSide) {
+        if (entity instanceof VillagerLike<?> villager && !entity.level().isClientSide()) {
             villager.getGenetics().setGender(gender);
 
             common(entity);
@@ -73,3 +74,4 @@ public class PotionOfMetamorphosisItem extends TooltippedItem {
         entry.setGender(gender);
     }
 }
+

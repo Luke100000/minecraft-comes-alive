@@ -9,7 +9,7 @@ import net.minecraft.core.Direction;
 import net.minecraft.core.Vec3i;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.BedBlock;
@@ -27,7 +27,7 @@ public class Building {
             Direction.UP, Direction.DOWN, Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST
     };
 
-    private final Map<ResourceLocation, List<BlockPos>> blocks = new HashMap<>();
+    private final Map<Identifier, List<BlockPos>> blocks = new HashMap<>();
 
     private String type = "building";
     private boolean isTypeForced = false;
@@ -66,18 +66,18 @@ public class Building {
     }
 
     public Building(CompoundTag v) {
-        id = v.getInt("id");
-        size = v.getInt("size");
-        pos0X = v.getInt("pos0X");
-        pos0Y = v.getInt("pos0Y");
-        pos0Z = v.getInt("pos0Z");
-        pos1X = v.getInt("pos1X");
-        pos1Y = v.getInt("pos1Y");
-        pos1Z = v.getInt("pos1Z");
+        id = v.getInt("id").orElse(0);
+        size = v.getInt("size").orElse(0);
+        pos0X = v.getInt("pos0X").orElse(0);
+        pos0Y = v.getInt("pos0Y").orElse(0);
+        pos0Z = v.getInt("pos0Z").orElse(0);
+        pos1X = v.getInt("pos1X").orElse(0);
+        pos1Y = v.getInt("pos1Y").orElse(0);
+        pos1Z = v.getInt("pos1Z").orElse(0);
         if (v.contains("posX")) {
-            posX = v.getInt("posX");
-            posY = v.getInt("posY");
-            posZ = v.getInt("posZ");
+            posX = v.getInt("posX").orElse(0);
+            posY = v.getInt("posY").orElse(0);
+            posZ = v.getInt("posZ").orElse(0);
         } else {
             BlockPos center = getCenter();
             posX = center.getX();
@@ -85,16 +85,16 @@ public class Building {
             posZ = center.getZ();
         }
 
-        isTypeForced = v.getBoolean("isTypeForced");
-        type = v.getString("type");
+        isTypeForced = v.getBoolean("isTypeForced").orElse(false);
+        type = v.getString("type").orElse(type);
 
-        strictScan = v.getBoolean("strictScan");
+        strictScan = v.getBoolean("strictScan").orElse(false);
 
-        blocks.putAll(NbtHelper.toMap(v.getCompound("blocks2"),
-                ResourceLocation::parse,
+        blocks.putAll(NbtHelper.toMap(v.getCompound("blocks2").orElseGet(CompoundTag::new),
+                Identifier::parse,
                 l -> NbtHelper.toList(l, e -> {
                     CompoundTag c = (CompoundTag) e;
-                    return new BlockPos(c.getInt("x"), c.getInt("y"), c.getInt("z"));
+                    return new BlockPos(c.getInt("x").orElse(0), c.getInt("y").orElse(0), c.getInt("z").orElse(0));
                 })));
     }
 
@@ -119,7 +119,7 @@ public class Building {
         NbtHelper.fromMap(
                 b,
                 blocks,
-                ResourceLocation::toString,
+                Identifier::toString,
                 e -> NbtHelper.fromList(e, p -> {
                     CompoundTag entry = new CompoundTag();
                     entry.putInt("x", p.getX());
@@ -159,7 +159,7 @@ public class Building {
         setLastScan(world.getGameTime());
 
         //remove all invalid blocks
-        for (Map.Entry<ResourceLocation, List<BlockPos>> positions : blocks.entrySet()) {
+        for (Map.Entry<Identifier, List<BlockPos>> positions : blocks.entrySet()) {
             List<BlockPos> mask = positions.getValue().stream()
                     .filter(p -> !BuiltInRegistries.BLOCK.getKey(world.getBlockState(p).getBlock()).equals(positions.getKey()))
                     .toList();
@@ -341,7 +341,7 @@ public class Building {
         }
     }
 
-    private boolean isBuildingBlock(ResourceLocation blockId) {
+    private boolean isBuildingBlock(Identifier blockId) {
         for (BuildingType bt : BuildingTypes.getInstance()) {
             if (bt.matchesBlock(blockId)) {
                 return true;
@@ -357,7 +357,7 @@ public class Building {
         for (BuildingType bt : BuildingTypes.getInstance()) {
             if (bt.priority() > bestPriority) {
                 //get an overview of the satisfied blocks
-                Map<ResourceLocation, List<BlockPos>> available = bt.getGroups(blocks);
+                Map<Identifier, List<BlockPos>> available = bt.getGroups(blocks);
                 boolean valid = bt.getGroups().entrySet().stream().noneMatch(e -> !available.containsKey(e.getKey()) || available.get(e.getKey()).size() < e.getValue());
                 if (valid) {
                     bestPriority = bt.priority();
@@ -389,18 +389,18 @@ public class Building {
         return BuildingTypes.getInstance().getBuildingType(type);
     }
 
-    public Map<ResourceLocation, List<BlockPos>> getBlocks() {
+    public Map<Identifier, List<BlockPos>> getBlocks() {
         return blocks;
     }
 
     public void addBlock(Block block, BlockPos p) {
-        ResourceLocation key = BuiltInRegistries.BLOCK.getKey(block);
+        Identifier key = BuiltInRegistries.BLOCK.getKey(block);
         blocks.computeIfAbsent(key, k -> new ArrayList<>());
         blocks.get(key).add(p);
     }
 
     public void removeBlock(Block block, BlockPos p) {
-        ResourceLocation key = BuiltInRegistries.BLOCK.getKey(block);
+        Identifier key = BuiltInRegistries.BLOCK.getKey(block);
         if (blocks.containsKey(key)) {
             blocks.get(key).remove(p);
         }

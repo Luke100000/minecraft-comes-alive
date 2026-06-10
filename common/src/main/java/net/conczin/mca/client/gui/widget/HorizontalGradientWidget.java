@@ -1,10 +1,8 @@
 package net.conczin.mca.client.gui.widget;
 
-import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.vertex.*;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.renderer.GameRenderer;
-import org.joml.Matrix4f;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.renderer.RenderPipelines;
+import net.minecraft.util.ARGB;
 
 import java.util.function.Supplier;
 
@@ -20,30 +18,24 @@ public class HorizontalGradientWidget extends HorizontalColorPickerWidget {
     }
 
     @Override
-    public void renderWidget(GuiGraphics context, int mouseX, int mouseY, float delta) {
-        RenderSystem.enableBlend();
-        RenderSystem.defaultBlendFunc();
-        RenderSystem.setShader(GameRenderer::getPositionColorShader);
-        Tesselator tesselator = Tesselator.getInstance();
-        BufferBuilder builder = tesselator.begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_COLOR);
-
+    public void extractWidgetRenderState(GuiGraphicsExtractor context, int mouseX, int mouseY, float delta) {
         float[] startColor = startColorSupplier.get();
         float[] endColor = endColorSupplier.get();
-
-        float z = 0.0f;
-        final PoseStack matrices = context.pose();
-        Matrix4f matrix = matrices.last().pose();
-        builder.addVertex(matrix, (float) getX() + width, (float) getY(), z).setColor(endColor[0], endColor[1], endColor[2], endColor[3]);
-        builder.addVertex(matrix, (float) getX(), (float) getY(), z).setColor(startColor[0], startColor[1], startColor[2], startColor[3]);
-        builder.addVertex(matrix, (float) getX(), (float) getY() + height, z).setColor(startColor[0], startColor[1], startColor[2], startColor[3]);
-        builder.addVertex(matrix, (float) getX() + width, (float) getY() + height, z).setColor(endColor[0], endColor[1], endColor[2], endColor[3]);
-
-        BufferUploader.drawWithShader(builder.buildOrThrow());
-
-        RenderSystem.disableBlend();
+        int segments = Math.max(width, 1);
+        for (int x = 0; x < segments; x++) {
+            float t = segments == 1 ? 0.0f : x / (float) (segments - 1);
+            int color = ARGB.colorFromFloat(
+                    startColor[3] + (endColor[3] - startColor[3]) * t,
+                    startColor[0] + (endColor[0] - startColor[0]) * t,
+                    startColor[1] + (endColor[1] - startColor[1]) * t,
+                    startColor[2] + (endColor[2] - startColor[2]) * t
+            );
+            context.fill(getX() + x, getY(), getX() + x + 1, getY() + height, color);
+        }
 
         WidgetUtils.drawRectangle(context, getX(), getY(), getX() + width, getY() + height, 0xaaffffff);
 
-        context.blit(MCA_GUI_ICONS_TEXTURE, (int) (getX() + valueX * width) - 8, (int) (getY() + valueY * height) - 8, 240, 0, 16, 16, 256, 256);
+        context.blit(RenderPipelines.GUI_TEXTURED, MCA_GUI_ICONS_TEXTURE, (int) (getX() + valueX * width) - 8, (int) (getY() + valueY * height) - 8, 240, 0, 16, 16, 256, 256);
     }
 }
+

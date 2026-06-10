@@ -21,7 +21,7 @@ public class VillagerEntityMCARenderer extends VillagerLikeEntityMCARenderer<Vil
         addLayer(new HairLayer<>(this, createModel(VillagerEntityModelMCA.hairData(new CubeDeformation(0.125F)))));
     }
 
-    private static VillagerEntityModelMCA<VillagerEntityMCA> createModel(MeshDefinition data) {
-        return new VillagerEntityModelMCA<>(LayerDefinition.create(data, 64, 64).bakeRoot());
+    private static VillagerEntityModelMCA createModel(MeshDefinition data) {
+        return new VillagerEntityModelMCA(LayerDefinition.create(data, 64, 64).bakeRoot());
     }
 }

@@ -7,11 +7,14 @@ import net.conczin.mca.network.c2s.GetFamilyRequest;
 import net.conczin.mca.registry.EntitiesMCA;
 import net.conczin.mca.util.compat.ButtonWidget;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
+import net.minecraft.util.ProblemReporter;
+import net.minecraft.world.entity.EntitySpawnReason;
+import net.minecraft.world.level.storage.TagValueInput;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
@@ -88,32 +91,32 @@ public class WhistleScreen extends Screen {
     }
 
     @Override
-    public void render(GuiGraphics context, int mouseX, int mouseY, float offset) {
-        super.render(context, mouseX, mouseY, offset);
+    public void extractRenderState(GuiGraphicsExtractor context, int mouseX, int mouseY, float offset) {
+        super.extractRenderState(context, mouseX, mouseY, offset);
 
-        context.drawCenteredString(font, Component.translatable("gui.whistle.title"), width / 2, height / 2 - 100, 0xffffff);
+        context.centeredText(font, Component.translatable("gui.whistle.title"), width / 2, height / 2 - 100, 0xffffff);
 
         if (loadingAnimationTicks != -1) {
             String loadingMsg = new String(new char[(loadingAnimationTicks / 5) % 4]).replace("\0", ".");
-            context.drawString(font, Component.translatable("gui.loading").append(Component.literal(loadingMsg)), width / 2 - 20, height / 2 - 10, 0xffffff);
+            context.text(font, Component.translatable("gui.loading").append(Component.literal(loadingMsg)), width / 2 - 20, height / 2 - 10, 0xffffff);
         } else {
             if (keys.isEmpty()) {
-                context.drawCenteredString(font, Component.translatable("gui.whistle.noFamily"), width / 2, height / 2 + 50, 0xffffff);
+                context.centeredText(font, Component.translatable("gui.whistle.noFamily"), width / 2, height / 2 + 50, 0xffffff);
             } else {
-                context.drawCenteredString(font, (selectedIndex + 1) + " / " + keys.size(), width / 2, height / 2 + 50, 0xffffff);
+                context.centeredText(font, (selectedIndex + 1) + " / " + keys.size(), width / 2, height / 2 + 50, 0xffffff);
             }
         }
 
         if (dummy != null) {
             int posX = width / 2;
             int posY = height / 2;
-            InventoryScreen.renderEntityInInventoryFollowsMouse(context, posX - 30, posY - 70, posX + 30, posY + 45, 60, 0, mouseX, mouseY, dummy);
+            InventoryScreen.extractEntityInInventoryFollowsMouse(context, posX - 30, posY - 70, posX + 30, posY + 45, 60, 0, mouseX, mouseY, dummy);
         }
     }
 
     public void setVillagerData(@NotNull CompoundTag data) {
         villagerData = data;
-        keys = new ArrayList<>(data.getAllKeys());
+        keys = new ArrayList<>(data.keySet());
         loadingAnimationTicks = -1;
         selectedIndex = 0;
 
@@ -122,10 +125,10 @@ public class WhistleScreen extends Screen {
 
     private void setVillagerData(int index) {
         if (!keys.isEmpty()) {
-            CompoundTag firstData = villagerData.getCompound(keys.get(index));
+            CompoundTag firstData = villagerData.getCompound(keys.get(index)).orElseGet(CompoundTag::new);
 
-            dummy = EntitiesMCA.MALE_VILLAGER.create(Minecraft.getInstance().level);
-            dummy.readAdditionalSaveData(firstData);
+            dummy = EntitiesMCA.MALE_VILLAGER.create(Minecraft.getInstance().level, EntitySpawnReason.LOAD);
+            dummy.load(TagValueInput.create(ProblemReporter.DISCARDING, dummy.registryAccess(), firstData));
 
             villagerNameButton.setMessage(dummy.getDisplayName());
 
