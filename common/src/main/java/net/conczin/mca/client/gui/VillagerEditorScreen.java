@@ -808,7 +808,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     }
 
     protected boolean shouldUsePlayerModel() {
-        return getSelectedPlayerModel() != VillagerLike.PlayerModel.VILLAGER;
+        return getSelectedPlayerModel() != VillagerLike.PlayerModel.VILLAGER && page.equals("general");
     }
 
     protected boolean shouldPrintPlayerHint() {
@@ -854,7 +854,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
             if (shouldPrintPlayerHint() && villagerUUID.equals(playerUUID) && getSelectedPlayerModel() != VillagerLike.PlayerModel.VILLAGER) {
                 final Matrix3x2fStack matrices = context.pose();
                 matrices.pushMatrix();
-                matrices.translate(x, y - 145);
+                matrices.translate(x + DATA_WIDTH / 2.0F, y + 75);
                 matrices.scale(0.5f, 0.5f);
                 context.centeredText(font, Component.translatable("gui.villager_editor.model_hint"), 0, 0, 0xAAFFFFFF);
                 matrices.popMatrix();

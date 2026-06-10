@@ -655,10 +655,10 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
 
     private void returnToPreviousScreen() {
         previousScreen.syncVillagerData();
-        if (previousScreen instanceof DestinyScreen) {
-            onClose();
-        } else {
+        if (previousScreen instanceof NeedleScreen || previousScreen instanceof CombScreen) {
             previousScreen.onClose();
+        } else {
+            onClose();
         }
     }
 

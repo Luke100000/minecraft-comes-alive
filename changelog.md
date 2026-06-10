@@ -1,3 +1,8 @@
+# 7.8.0
+
+* Ported to Minecraft 26.1.2 (Thanks Mikulasz12!)
+* Fixed crashes and a few issues
+
 # 7.7.10
 
 * Improves family tree search
