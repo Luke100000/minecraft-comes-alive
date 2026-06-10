@@ -1,6 +1,7 @@
 package net.conczin.mca.util;
 
 import com.mojang.datafixers.util.Pair;
+import net.conczin.mca.mixin.MixinTagValueInput;
 import net.minecraft.core.*;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
@@ -28,7 +29,6 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.util.datafix.DataFixTypes;
 
-import java.lang.reflect.Field;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.BiFunction;
@@ -36,29 +36,13 @@ import java.util.function.Function;
 import java.util.stream.StreamSupport;
 
 public interface WorldUtils {
-    Field TAG_VALUE_INPUT_FIELD = findTagValueInputField();
-
     interface NbtSavedData {
         CompoundTag save(CompoundTag nbt, HolderLookup.Provider provider);
     }
 
-    static Field findTagValueInputField() {
-        try {
-            Field field = TagValueInput.class.getDeclaredField("input");
-            field.setAccessible(true);
-            return field;
-        } catch (ReflectiveOperationException e) {
-            throw new IllegalStateException("Unable to access TagValueInput backing tag", e);
-        }
-    }
-
     static CompoundTag getCompoundTag(ValueInput input) {
         if (input instanceof TagValueInput tagValueInput) {
-            try {
-                return ((CompoundTag) TAG_VALUE_INPUT_FIELD.get(tagValueInput)).copy();
-            } catch (IllegalAccessException e) {
-                throw new IllegalStateException("Unable to read TagValueInput backing tag", e);
-            }
+            return ((MixinTagValueInput) tagValueInput).mca$getInput().copy();
         }
 
         return new CompoundTag();

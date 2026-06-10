@@ -12,6 +12,7 @@ import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.Entity;
 
 import java.util.*;
+import java.util.function.Consumer;
 
 /**
  * Villagerized Genetic Diversity.
@@ -41,9 +42,9 @@ public class Genetics implements Iterable<Genetics.Gene> {
         this.entity = entity;
     }
 
-    public static <E extends Entity> CDataManager.Builder<E> createTrackedData(CDataManager.Builder<E> builder) {
-        GENOMES.forEach(g -> builder.addAll(g.getParam()));
-        return builder.addAll(GENDER);
+    public static void forEachTrackedParameter(Consumer<CParameter<?, ?>> consumer) {
+        GENOMES.stream().sorted().map(GeneType::getParam).forEach(consumer);
+        consumer.accept(GENDER);
     }
 
     public float getVerticalScaleFactor() {

@@ -22,6 +22,7 @@ import net.minecraft.world.entity.npc.villager.VillagerProfession;
 import net.minecraft.world.entity.player.Player;
 
 import java.util.Optional;
+import java.util.function.Consumer;
 import java.util.stream.Stream;
 
 /**
@@ -35,8 +36,8 @@ public class Residency {
         this.entity = entity;
     }
 
-    public static <E extends Entity> CDataManager.Builder<E> createTrackedData(CDataManager.Builder<E> builder) {
-        return builder.addAll(VILLAGE);
+    public static void forEachTrackedParameter(Consumer<CParameter<?, ?>> consumer) {
+        consumer.accept(VILLAGE);
     }
 
     public BlockPos getWorkplace() {

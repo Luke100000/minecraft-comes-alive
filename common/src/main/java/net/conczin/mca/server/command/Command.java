@@ -20,6 +20,7 @@ import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.EntityArgument;
 import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 
 import java.net.URI;
@@ -45,7 +46,7 @@ public class Command {
                 .then(register("mail", Command::mail))
                 .then(register("verify").then(Commands.argument("email", StringArgumentType.greedyString()).executes(Command::verify)))
                 .then(register("chatAI")
-                        .requires(p -> Commands.LEVEL_GAMEMASTERS.check(p.permissions()) || p.getServer().isSingleplayer())
+                        .requires(p -> Commands.LEVEL_GAMEMASTERS.check(p.permissions()) || isSingleplayer(p))
                         .executes(Command::chatAIHelp)
                         .then(Commands.literal("disable")
                                 .executes(Command::disableChatAI))
@@ -54,7 +55,7 @@ public class Command {
                         .then(Commands.literal("player2")
                                 .executes(Command::setupPlayer2))
                         .then(register("inworldAI")
-                                .requires(p -> Commands.LEVEL_GAMEMASTERS.check(p.permissions()) || p.getServer().isSingleplayer())
+                                .requires(p -> Commands.LEVEL_GAMEMASTERS.check(p.permissions()) || isSingleplayer(p))
                                 .then(register("keys")
                                         .then(Commands.argument("api_key", StringArgumentType.string())
                                                 .executes(c -> Command.inworldAIKey(c.getArgument("api_key", String.class)))))
@@ -73,13 +74,18 @@ public class Command {
                                         .then(Commands.argument("token", StringArgumentType.string())
                                                 .executes(c -> Command.enableChatAI(c, c.getArgument("model", String.class), c.getArgument("endpoint", String.class), c.getArgument("token", String.class)))))))
                 .then(register("tts")
-                        .requires(p -> p.getServer().isSingleplayer())
+                        .requires(Command::isSingleplayer)
                         .then(Commands.literal("default").executes(ctx -> ttsEnable(ctx, "default")))
                         .then(Commands.literal("elevenlabs").executes(ctx -> ttsEnable(ctx, "elevenlabs")))
                         .then(Commands.literal("realtime").executes(ctx -> ttsEnable(ctx, "realtime")))
                         .then(Commands.literal("disable").executes(Command::ttsDisable))
                 )
         );
+    }
+
+    private static boolean isSingleplayer(CommandSourceStack source) {
+        MinecraftServer server = source.getServer();
+        return server != null && server.isSingleplayer();
     }
 
     private static int chatAIHelp(CommandContext<CommandSourceStack> ctx) {

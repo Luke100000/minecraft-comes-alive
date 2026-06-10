@@ -14,6 +14,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 public class Traits {
@@ -57,8 +58,8 @@ public class Traits {
         return registerTrait(id, chance, inherit, true);
     }
 
-    public static <E extends Entity> CDataManager.Builder<E> createTrackedData(CDataManager.Builder<E> builder) {
-        return builder.addAll(TRAITS);
+    public static void forEachTrackedParameter(Consumer<CParameter<?, ?>> consumer) {
+        consumer.accept(TRAITS);
     }
 
     public Set<Trait> getTraits() {

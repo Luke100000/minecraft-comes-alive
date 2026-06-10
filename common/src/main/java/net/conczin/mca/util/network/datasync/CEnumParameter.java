@@ -3,9 +3,9 @@ package net.conczin.mca.util.network.datasync;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.syncher.EntityDataAccessor;
+import net.minecraft.network.syncher.EntityDataSerializer;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
-import net.minecraft.world.entity.Entity;
 import org.jetbrains.annotations.Nullable;
 
 public class CEnumParameter<T extends Enum<T>> implements CParameter<T, Integer> {
@@ -54,7 +54,7 @@ public class CEnumParameter<T extends Enum<T>> implements CParameter<T, Integer>
     }
 
     @Override
-    public EntityDataAccessor<Integer> createParam(Class<? extends Entity> type) {
-        return SynchedEntityData.defineId(type, EntityDataSerializers.INT);
+    public EntityDataSerializer<Integer> serializer() {
+        return EntityDataSerializers.INT;
     }
 }

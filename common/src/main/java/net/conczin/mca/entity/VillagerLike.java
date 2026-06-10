@@ -48,6 +48,7 @@ import net.minecraft.world.level.storage.ValueOutput;
 
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Consumer;
 
 public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrackedEntity<E>, VillagerDataHolder, Infectable, Messenger {
     CDataParameter<String> CLOTHES = CParameter.create("Clothes", "");
@@ -60,12 +61,16 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
     Identifier SPEED_ID = MCA.locate("trait_speed");
     Identifier DAMAGE_ID = MCA.locate("trait_damage");
 
-    static <E extends Entity> CDataManager.Builder<E> createTrackedData(Class<E> type) {
-        return new CDataManager.Builder<>(type)
-                .addAll(CLOTHES, HAIR, HAIR_COLOR_RED, HAIR_COLOR_GREEN, HAIR_COLOR_BLUE, AGE_STATE)
-                .add(Genetics::createTrackedData)
-                .add(Traits::createTrackedData)
-                .add(VillagerBrain::createTrackedData);
+    static void forEachTrackedParameter(Consumer<CParameter<?, ?>> consumer) {
+        consumer.accept(CLOTHES);
+        consumer.accept(HAIR);
+        consumer.accept(HAIR_COLOR_RED);
+        consumer.accept(HAIR_COLOR_GREEN);
+        consumer.accept(HAIR_COLOR_BLUE);
+        consumer.accept(AGE_STATE);
+        Genetics.forEachTrackedParameter(consumer);
+        Traits.forEachTrackedParameter(consumer);
+        VillagerBrain.forEachTrackedParameter(consumer);
     }
 
     static VillagerLike<?> toVillager(PlayerSaveData player) {

@@ -10,7 +10,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
-import java.util.stream.Stream;
 
 public class CDataManager<E extends Entity> {
     private final List<Entry<E, ?, ?>> params;
@@ -57,15 +56,10 @@ public class CDataManager<E extends Entity> {
     }
 
     public static class Builder<E extends Entity> {
-        private final Class<E> type;
         private final List<Entry<E, ?, ?>> params = new ArrayList<>();
 
-        public Builder(Class<E> type) {
-            this.type = type;
-        }
-
-        public Builder<E> addAll(CParameter<?, ?>... params) {
-            Stream.of(params).map(p -> new Entry<>(type, p)).forEach(this.params::add);
+        public <T, TrackedType> Builder<E> add(CParameter<T, TrackedType> parameter, EntityDataAccessor<TrackedType> data) {
+            params.add(new Entry<>(parameter, data));
             return this;
         }
 
@@ -82,9 +76,9 @@ public class CDataManager<E extends Entity> {
         CParameter<T, TrackedType> parameter;
         EntityDataAccessor<TrackedType> data;
 
-        public Entry(Class<E> type, CParameter<T, TrackedType> parameter) {
+        public Entry(CParameter<T, TrackedType> parameter, EntityDataAccessor<TrackedType> data) {
             this.parameter = parameter;
-            this.data = parameter.createParam(type);
+            this.data = data;
         }
 
         public void save(E entity, CompoundTag nbt) {

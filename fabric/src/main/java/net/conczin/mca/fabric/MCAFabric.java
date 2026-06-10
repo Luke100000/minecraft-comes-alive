@@ -15,6 +15,7 @@ import net.conczin.mca.server.ServerInteractionManager;
 import net.conczin.mca.server.command.AdminCommand;
 import net.conczin.mca.server.command.Command;
 import net.conczin.mca.server.world.data.VillageManager;
+import net.conczin.mca.util.network.datasync.MCAEntityDataSerializers;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
@@ -26,10 +27,11 @@ import net.fabricmc.fabric.api.itemgroup.v1.ItemGroupEvents;
 import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
+import net.fabricmc.fabric.api.object.builder.v1.block.entity.FabricBlockEntityTypeBuilder;
 import net.fabricmc.fabric.api.object.builder.v1.entity.FabricDefaultAttributeRegistry;
+import net.fabricmc.fabric.api.object.builder.v1.entity.FabricTrackedDataRegistry;
 import net.fabricmc.fabric.api.resource.ResourceManagerHelper;
 import net.fabricmc.loader.api.FabricLoader;
-import net.minecraft.core.BlockPos;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.RegistryFriendlyByteBuf;
@@ -44,16 +46,10 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntityType;
-import net.minecraft.world.level.block.state.BlockState;
 
-import java.lang.reflect.Constructor;
-import java.lang.reflect.Proxy;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.function.Consumer;
 
 public final class MCAFabric implements ModInitializer {
@@ -97,6 +93,9 @@ public final class MCAFabric implements ModInitializer {
 
     @Override
     public void onInitialize() {
+        FabricTrackedDataRegistry.register(MCAEntityDataSerializers.COMPOUND_TAG_ID, MCAEntityDataSerializers.COMPOUND_TAG);
+        FabricTrackedDataRegistry.register(MCAEntityDataSerializers.OPTIONAL_UUID_ID, MCAEntityDataSerializers.OPTIONAL_UUID);
+
         registerHelper(BuiltInRegistries.ITEM, helper -> ItemsMCA.registerItems(helper));
         registerHelper(BuiltInRegistries.BLOCK, helper -> BlocksMCA.registerBlocks(helper));
         registerHelper(BuiltInRegistries.SOUND_EVENT, helper -> SoundsMCA.registerSounds(helper));
@@ -198,36 +197,7 @@ public final class MCAFabric implements ModInitializer {
 
     @SuppressWarnings({"unchecked", "rawtypes"})
     private static BlockEntityType createBlockEntityType(BlockEntityTypesMCA.BlockEntitySupplier factory, Block[] blocks) {
-        try {
-            Class<?> supplierType = Class.forName("net.minecraft.world.level.block.entity.BlockEntityType$BlockEntitySupplier");
-            Object supplier = Proxy.newProxyInstance(
-                    BlockEntityType.class.getClassLoader(),
-                    new Class<?>[]{supplierType},
-                    new java.lang.reflect.InvocationHandler() {
-                        @Override
-                        public Object invoke(Object proxy, java.lang.reflect.Method method, Object[] args) {
-                            if ("create".equals(method.getName())) {
-                                return factory.create((BlockPos) args[0], (BlockState) args[1]);
-                            }
-                            if ("toString".equals(method.getName())) {
-                                return "MCABlockEntitySupplier";
-                            }
-                            if ("hashCode".equals(method.getName())) {
-                                return System.identityHashCode(proxy);
-                            }
-                            if ("equals".equals(method.getName())) {
-                                return proxy == args[0];
-                            }
-                            return null;
-                        }
-                    }
-            );
-            Constructor<BlockEntityType> constructor = BlockEntityType.class.getDeclaredConstructor(supplierType, Set.class);
-            constructor.setAccessible(true);
-            return constructor.newInstance(supplier, new HashSet<>(Arrays.asList(blocks)));
-        } catch (ReflectiveOperationException e) {
-            throw new IllegalStateException("Failed to create MCA block entity type", e);
-        }
+        return FabricBlockEntityTypeBuilder.create(factory::create, blocks).build();
     }
 
     private static final class ClientProxy {
