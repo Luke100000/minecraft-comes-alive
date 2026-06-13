@@ -1,3 +1,7 @@
+# 7.6.17
+
+* Fixed crashes and issues
+
 # 7.6.16
 
 * Updated TTS server URL
