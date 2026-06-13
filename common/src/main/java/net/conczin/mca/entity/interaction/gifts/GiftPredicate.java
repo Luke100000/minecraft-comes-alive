@@ -91,7 +91,7 @@ public class GiftPredicate {
         register("item", (json, name) -> {
             ResourceLocation id = ResourceLocation.parse(GsonHelper.convertToString(json, name));
             Item item = BuiltInRegistries.ITEM.getOptional(id).orElseThrow(() -> new JsonSyntaxException("Unknown item '" + id + "'"));
-            return Ingredient.of(new ItemStack(item));
+            return Ingredient.of(item);
         }, (Ingredient ingredient) -> (villager, stack, player) -> ingredient.test(stack) ? 1.0f : 0.0f);
         register("tag", (json, name) -> {
             ResourceLocation id = ResourceLocation.parse(GsonHelper.convertToString(json, name));
@@ -100,7 +100,11 @@ public class GiftPredicate {
                 throw new JsonSyntaxException("Unknown item tag '" + id + "'");
             }
 
-            return Ingredient.of(tag);
+            return BuiltInRegistries.ITEM.getTags()
+                    .filter(named -> named.key().equals(tag))
+                    .findFirst()
+                    .map(Ingredient::of)
+                    .orElseThrow(() -> new JsonSyntaxException("Unknown item tag '" + id + "'"));
         }, (Ingredient ingredient) -> (villager, stack, player) -> ingredient.test(stack) ? 1.0f : 0.0f);
         register("trait", (json, name) ->
                 Traits.Trait.valueOf(GsonHelper.convertToString(json, name).toUpperCase(Locale.ENGLISH)), trait ->

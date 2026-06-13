@@ -7,6 +7,7 @@ import net.conczin.mca.util.compat.ButtonWidget;
 import net.minecraft.client.GameNarrator;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.PageButton;
 import net.minecraft.network.chat.ClickEvent;
@@ -115,13 +116,13 @@ public class ExtendedBookScreen extends Screen {
 
         // background
         int i = (width - 192) / 2;
-        context.blit(book.getBackground(), i, 2, 0, 0, 192, 192);
+        context.blit(RenderType::guiTextured, book.getBackground(), i, 2, 0, 0, 192, 192, 256, 256);
 
         // page number
         if (book.showPageCount()) {
             Component pageIndexText = Component.translatable("book.pageIndicator", this.pageIndex + 1, Math.max(book.getPageCount(), 1)).withStyle(book.getTextFormatting());
             int k = font.width(pageIndexText);
-            context.drawString(font, pageIndexText, i - k + 192 - 44, 18, 0, getBook().hasTextShadow());
+            context.drawString(font, pageIndexText, i - k + 192 - 44, 18, 0xFF000000, getBook().hasTextShadow());
         }
     }
 

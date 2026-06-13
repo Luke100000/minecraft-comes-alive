@@ -33,6 +33,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.saveddata.SavedData;
@@ -100,7 +101,7 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
     private void resetEntityData() {
         entityData = new CompoundTag();
 
-        VillagerEntityMCA villager = EntitiesMCA.MALE_VILLAGER.create(world);
+        VillagerEntityMCA villager = EntitiesMCA.MALE_VILLAGER.create(world, EntitySpawnReason.LOAD);
         assert villager != null;
         villager.initializeSkin(true);
         villager.getGenetics().randomize();

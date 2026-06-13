@@ -91,7 +91,7 @@ public class VillageTaxesManager {
 
             // pick a random item
             String itemName = valids.get(world.random.nextInt(valids.size()));
-            Item item = BuiltInRegistries.ITEM.get(ResourceLocation.parse(itemName));
+            Item item = BuiltInRegistries.ITEM.getValue(ResourceLocation.parse(itemName));
 
             if (item == Items.AIR) {
                 throw new RuntimeException("The taxes map contains an invalid item %s!".formatted(itemName));

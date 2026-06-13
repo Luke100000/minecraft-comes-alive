@@ -1,3 +1,11 @@
+# 7.8.0
+
+* Ported to 1.21.4
+* Fixed spawn egg item models
+* Fixed villager and player model rendering issues
+* Fixed shader loading on 1.21.4
+* Moved generated crib resources to generated resources
+
 # 7.7.6
 
 * Fixed issues with config (Thanks pau101!)

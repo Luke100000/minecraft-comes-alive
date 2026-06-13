@@ -1,6 +1,7 @@
 package net.conczin.mca.entity.ai.brain.tasks.chore;
 
 import com.google.common.collect.ImmutableMap;
+import it.unimi.dsi.fastutil.objects.ObjectArrayList;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.Chore;
 import net.conczin.mca.entity.ai.TaskUtils;
@@ -270,7 +271,9 @@ public class HarvestingTask extends AbstractChoreTask {
                     .withParameter(LootContextParams.BLOCK_STATE, state)
                     .withLuck(0);
 
-            List<ItemStack> drops = world.getServer().reloadableRegistries().getLootTable(state.getBlock().getLootTable()).getRandomItems(builder.create(LootContextParamSets.BLOCK));
+            List<ItemStack> drops = state.getBlock().getLootTable()
+                    .map(lootTable -> world.getServer().reloadableRegistries().getLootTable(lootTable).getRandomItems(builder.create(LootContextParamSets.BLOCK)))
+                    .orElseGet(ObjectArrayList::new);
             for (ItemStack stack : drops) {
                 villager.getInventory().addItem(stack);
             }

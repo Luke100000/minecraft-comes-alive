@@ -10,6 +10,7 @@ import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.util.Mth;
 import net.minecraft.world.InteractionResult;
+import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -57,7 +58,7 @@ public class CribItem extends Item {
         }
 
         if (world instanceof ServerLevel serverWorld) {
-            CribEntity crib = EntitiesMCA.CRIB.create(serverWorld);
+            CribEntity crib = EntitiesMCA.CRIB.create(serverWorld, EntitySpawnReason.SPAWN_ITEM_USE);
             if (crib == null) return InteractionResult.FAIL;
 
             crib.setWoodType(wood);
@@ -72,6 +73,6 @@ public class CribItem extends Item {
         }
 
         itemStack.shrink(1);
-        return InteractionResult.sidedSuccess(world.isClientSide);
+        return InteractionResult.SUCCESS;
     }
 }

@@ -6,6 +6,8 @@ import net.conczin.mca.entity.GrimReaperEntity;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ZombieVillagerEntityMCA;
 import net.conczin.mca.entity.ai.relationship.Gender;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
@@ -50,7 +52,7 @@ public interface EntitiesMCA {
 
     static <T extends LivingEntity> EntityType<T> register(String name, EntityType.Builder<T> builder, Supplier<AttributeSupplier.Builder> attributes) {
         ResourceLocation id = MCA.locate(name);
-        EntityType<T> entity = builder.build(id.toString());
+        EntityType<T> entity = builder.build(ResourceKey.create(Registries.ENTITY_TYPE, id));
         ATTRIBUTES.put(entity, attributes.get());
         ENTITIES.put(id, entity);
         return entity;
@@ -58,7 +60,7 @@ public interface EntitiesMCA {
 
     static <T extends Entity> EntityType<T> register(String name, EntityType.Builder<T> builder) {
         ResourceLocation id = MCA.locate(name);
-        EntityType<T> entity = builder.build(id.toString());
+        EntityType<T> entity = builder.build(ResourceKey.create(Registries.ENTITY_TYPE, id));
         ENTITIES.put(id, entity);
         return entity;
     }

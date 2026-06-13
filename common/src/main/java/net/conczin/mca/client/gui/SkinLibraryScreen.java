@@ -33,13 +33,15 @@ import net.minecraft.client.gui.components.CycleButton;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
-import net.minecraft.client.renderer.GameRenderer;
+import net.minecraft.client.renderer.CoreShaders;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.ARGB;
 import net.minecraft.util.Mth;
+import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.npc.VillagerProfession;
 import net.minecraft.world.item.Items;
 import org.lwjgl.glfw.GLFW;
@@ -48,7 +50,7 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
-import java.net.URL;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
@@ -64,7 +66,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
     private static final ResourceLocation EMPTY_IDENTIFIER = MCA.locate("skins/empty.png");
     private static final ResourceLocation CANVAS_IDENTIFIER = MCA.locate("temp");
     private static final float CANVAS_SCALE = 2.35f;
-    protected final VillagerEntityMCA villagerVisualization = Objects.requireNonNull(EntitiesMCA.MALE_VILLAGER.create(Objects.requireNonNull(Minecraft.getInstance().level)));
+    protected final VillagerEntityMCA villagerVisualization = Objects.requireNonNull(EntitiesMCA.MALE_VILLAGER.create(Objects.requireNonNull(Minecraft.getInstance().level), EntitySpawnReason.COMMAND));
     private final List<LiteContent> serverContent = new ArrayList<>();
     private final ColorSelector color = new ColorSelector();
     private final VillagerEditorScreen previousScreen;
@@ -128,7 +130,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
             this.villagerVisualization.readAdditionalSaveData(nbt);
         } else {
             assert Minecraft.getInstance().player != null;
-            VillagerLike<?> villagerLike = CommonVillagerModel.getVillager(Minecraft.getInstance().level, Minecraft.getInstance().player.getUUID());
+            VillagerLike<?> villagerLike = CommonVillagerModel.getVillager(Minecraft.getInstance().player);
             if (villagerLike instanceof VillagerEntityMCA villager) {
                 CompoundTag nbt = new CompoundTag();
                 villager.addAdditionalSaveData(nbt);
@@ -290,7 +292,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                 //painting area
                 int tw = 64;
                 int th = 64;
-                RenderSystem.setShader(GameRenderer::getPositionTexShader);
+                RenderSystem.setShader(CoreShaders.POSITION_TEX);
                 RenderSystem.enableBlend();
                 RenderSystem.defaultBlendFunc();
                 RenderSystem.enableDepthTest();
@@ -337,7 +339,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                 int cy = height / 2 - 10;
 
                 villagerVisualization.getGenetics().setGender(workspace.gender.binary());
-                WidgetUtils.drawBackgroundEntity(cx, cy, 50, -(mouseX - cx) / 2.0f, -(mouseY - cy + 32) / 2.0f, villagerVisualization);
+                WidgetUtils.drawBackgroundEntity(context, cx, cy, 50, -(mouseX - cx) / 2.0f, -(mouseY - cy + 32) / 2.0f, villagerVisualization);
 
                 if (workspace.skinType == SkinType.HAIR) {
                     context.drawCenteredString(font, Component.translatable("gui.skin_library.hair_color"), width / 2 - 150, height / 2 - 40, 0xAAFFFFFF);
@@ -688,10 +690,10 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
     private void paint(int x, int y) {
         if (page == SkinLibraryScreen.Page.EDITOR && workspace.validPixel(x, y)) {
             if (activeMouseButton == 0) {
-                workspace.currentImage.setPixelRGBA(x, y, color.getColor());
+                workspace.currentImage.setPixel(x, y, color.getColor());
                 workspace.setDirty(true);
             } else if (activeMouseButton == 1) {
-                workspace.currentImage.setPixelRGBA(x, y, 0);
+                workspace.currentImage.setPixel(x, y, 0);
                 workspace.setDirty(true);
             }
         }
@@ -702,9 +704,9 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         int y = (int) getPixelY();
         if (workspace.validPixel(x, y)) {
             color.setRGB(
-                    (workspace.currentImage.getRedOrLuminance(x, y) & 0xFF) / 255.0,
-                    (workspace.currentImage.getGreenOrLuminance(x, y) & 0xFF) / 255.0,
-                    (workspace.currentImage.getBlueOrLuminance(x, y) & 0xFF) / 255.0
+                    ARGB.red(workspace.currentImage.getPixel(x, y)) / 255.0,
+                    ARGB.green(workspace.currentImage.getPixel(x, y)) / 255.0,
+                    ARGB.blue(workspace.currentImage.getPixel(x, y)) / 255.0
             );
             if (workspace.skinType == SkinType.HAIR) color.setHSV(0, 0, color.brightness);
         }
@@ -1510,7 +1512,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
     private void loadImage(String path) {
         InputStream stream = null;
         try {
-            stream = new URL(path).openStream();
+            stream = URI.create(path).toURL().openStream();
         } catch (Exception exception) {
             try {
                 stream = new FileInputStream(path);
@@ -1572,7 +1574,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                         ), Map.of(
                                 "title", workspace.title,
                                 "meta", workspace.toListEntry().toJson().toString(),
-                                "data", new String(Base64.getEncoder().encode(workspace.currentImage.asByteArray()))
+                                "data", encodeImage(workspace.currentImage)
                         ));
                     } catch (IOException e) {
                         MCA.LOGGER.error(e);
@@ -1779,6 +1781,16 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
 
         public static Component getText(SubscriptionFilter t) {
             return Component.translatable("gui.skin_library.subscription_filter." + t.name().toLowerCase(Locale.ROOT));
+        }
+    }
+
+    private static String encodeImage(NativeImage image) throws IOException {
+        Path temp = Files.createTempFile("mca-skin-", ".png");
+        try {
+            image.writeToFile(temp);
+            return Base64.getEncoder().encodeToString(Files.readAllBytes(temp));
+        } finally {
+            Files.deleteIfExists(temp);
         }
     }
 }

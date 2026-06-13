@@ -1,0 +1,18 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "C": "minecraft:lime_carpet",
+    "F": "minecraft:dark_oak_fence",
+    "P": "minecraft:dark_oak_planks"
+  },
+  "pattern": [
+    "F F",
+    "FCF",
+    "PPP"
+  ],
+  "result": {
+    "count": 1,
+    "id": "mca:lime_dark_oak_crib"
+  }
+}

@@ -1,16 +1,16 @@
 {
-  "type": "minecraft:crafting_shaped",
-  "pattern": [
-    "*  ",
-    " I ",
-    "  o"
-  ],
-  "key": {
-    "*": {"item": "minecraft:nether_star"},
-    "I": {"item": "minecraft:end_rod"},
-    "o": {"item": "mca:scythe"}
-  },
-  "result": {
-    "id": "mca:staff_of_life"
-  }
+    "type":  "minecraft:crafting_shaped",
+    "pattern":  [
+                    "*  ",
+                    " I ",
+                    "  o"
+                ],
+    "key":  {
+                "*":  "minecraft:nether_star",
+                "I":  "minecraft:end_rod",
+                "o":  "mca:scythe"
+            },
+    "result":  {
+                   "id":  "mca:staff_of_life"
+               }
 }

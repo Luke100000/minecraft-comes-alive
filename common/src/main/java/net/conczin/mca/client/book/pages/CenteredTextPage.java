@@ -27,7 +27,7 @@ public class CenteredTextPage extends TextPage {
             for (int m = 0; m < l; ++m) {
                 FormattedCharSequence orderedText = getCachedPage(screen).get(m);
                 int x = i + 36;
-                context.drawString(textRenderer, orderedText, x + 114 / 2 - textRenderer.width(orderedText) / 2, (32 + (m + 7 - (l / 2)) * 9), 0, screen.getBook().hasTextShadow());
+                context.drawString(textRenderer, orderedText, x + 114 / 2 - textRenderer.width(orderedText) / 2, (32 + (m + 7 - (l / 2)) * 9), 0xFF000000, screen.getBook().hasTextShadow());
             }
         }
     }

@@ -3,7 +3,8 @@ package net.conczin.mca.client.gui.widget;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.*;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.renderer.GameRenderer;
+import net.minecraft.client.renderer.RenderType;
+import net.minecraft.client.renderer.CoreShaders;
 import org.joml.Matrix4f;
 
 import java.util.function.Supplier;
@@ -23,7 +24,7 @@ public class HorizontalGradientWidget extends HorizontalColorPickerWidget {
     public void renderWidget(GuiGraphics context, int mouseX, int mouseY, float delta) {
         RenderSystem.enableBlend();
         RenderSystem.defaultBlendFunc();
-        RenderSystem.setShader(GameRenderer::getPositionColorShader);
+        RenderSystem.setShader(CoreShaders.POSITION_COLOR);
         Tesselator tesselator = Tesselator.getInstance();
         BufferBuilder builder = tesselator.begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_COLOR);
 
@@ -44,6 +45,6 @@ public class HorizontalGradientWidget extends HorizontalColorPickerWidget {
 
         WidgetUtils.drawRectangle(context, getX(), getY(), getX() + width, getY() + height, 0xaaffffff);
 
-        context.blit(MCA_GUI_ICONS_TEXTURE, (int) (getX() + valueX * width) - 8, (int) (getY() + valueY * height) - 8, 240, 0, 16, 16, 256, 256);
+        context.blit(RenderType::guiTextured, MCA_GUI_ICONS_TEXTURE, (int) (getX() + valueX * width) - 8, (int) (getY() + valueY * height) - 8, 240, 0, 16, 16, 256, 256);
     }
 }

@@ -1,0 +1,66 @@
+{
+  "targets": {
+    "swap": {},
+    "blur": {}
+  },
+  "passes": [
+    {
+      "program": "mca:post/blur_centered",
+      "inputs": [
+        {
+          "sampler_name": "DiffuseSampler",
+          "target": "minecraft:main",
+          "bilinear": true
+        }
+      ],
+      "output": "swap",
+      "uniforms": [
+        {
+          "name": "BlurDir",
+          "values": [1.0, 0.0]
+        },
+        {
+          "name": "Radius",
+          "values": [100.0]
+        }
+      ]
+    },
+    {
+      "program": "mca:post/blur_centered",
+      "inputs": [
+        {
+          "sampler_name": "DiffuseSampler",
+          "target": "swap",
+          "bilinear": true
+        }
+      ],
+      "output": "blur",
+      "uniforms": [
+        {
+          "name": "BlurDir",
+          "values": [0.0, 1.0]
+        },
+        {
+          "name": "Radius",
+          "values": [100.0]
+        }
+      ]
+    },
+    {
+      "program": "minecraft:post/blit",
+      "inputs": [
+        {
+          "sampler_name": "DiffuseSampler",
+          "target": "blur"
+        }
+      ],
+      "output": "minecraft:main",
+      "uniforms": [
+        {
+          "name": "ColorModulate",
+          "values": [1.0, 0.5, 0.5, 1.0]
+        }
+      ]
+    }
+  ]
+}

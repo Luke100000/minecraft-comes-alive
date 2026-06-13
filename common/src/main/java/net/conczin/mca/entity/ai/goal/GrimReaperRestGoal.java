@@ -5,7 +5,11 @@ import net.conczin.mca.entity.ReaperAttackState;
 import net.conczin.mca.entity.ai.TaskUtils;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.entity.*;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntitySpawnReason;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.goal.Goal;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -70,12 +74,12 @@ public class GrimReaperRestGoal extends Goal {
             int dZ = reaper.getRandom().nextInt(16) - 8;
             int y = TaskUtils.getSpawnSafeTopLevel(reaper.level(), (int) reaper.getX() + dX, 256, (int) reaper.getZ() + dZ);
 
-            EntityType.LIGHTNING_BOLT.spawn((ServerLevel) reaper.level(), BlockPos.containing(reaper.getX() + dX, y, reaper.getZ() + dZ), MobSpawnType.TRIGGERED);
+            EntityType.LIGHTNING_BOLT.spawn((ServerLevel) reaper.level(), BlockPos.containing(reaper.getX() + dX, y, reaper.getZ() + dZ), EntitySpawnReason.TRIGGERED);
 
             if (!reaper.level().isClientSide && healingTime % 100 == 0) {
                 // Also spawn a random enemy
                 EntityType<?> m = reaper.getRandom().nextFloat() < 0.5f ? EntityType.ZOMBIE : EntityType.SKELETON;
-                Entity e = m.spawn((ServerLevel) reaper.level(), BlockPos.containing(reaper.getX() + dX, y, reaper.getZ() + dZ), MobSpawnType.TRIGGERED);
+                Entity e = m.spawn((ServerLevel) reaper.level(), BlockPos.containing(reaper.getX() + dX, y, reaper.getZ() + dZ), EntitySpawnReason.TRIGGERED);
 
                 // Equip them
                 if (e instanceof Mob mob) {

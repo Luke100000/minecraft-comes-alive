@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "id": "mca-datagen",
+  "version": "1.0.0",
+  "entrypoints": {
+    "fabric-datagen": [
+      "net.conczin.mca.fabric.datagen.CribDatagen"
+    ]
+  }
+}

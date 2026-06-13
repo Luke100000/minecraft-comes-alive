@@ -2,7 +2,7 @@ package net.conczin.mca.client.resources;
 
 import net.conczin.mca.MCA;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.util.FastColor;
+import net.minecraft.util.ARGB;
 import net.minecraft.util.Mth;
 
 import java.util.HashMap;
@@ -25,11 +25,10 @@ public class ColorPalette {
     }
 
     private static int applyGreenShift(int color, float greenShift) {
-        return FastColor.ARGB32.colorFromFloat(
-                1.0f,
-                Mth.clamp(FastColor.ARGB32.red(color) / 255f * (1.0f - greenShift * 0.3f) - greenShift * 0.1f, 0, 1),
-                Mth.clamp(FastColor.ARGB32.green(color) / 255f * (1.0f + greenShift * 0.3f) + greenShift * 0.1f, 0, 1),
-                Mth.clamp(FastColor.ARGB32.blue(color) / 255f, 0, 1)
+        return ARGB.colorFromFloat(
+                1.0f, Mth.clamp(ARGB.red(color) / 255f * (1.0f - greenShift * 0.3f) - greenShift * 0.1f, 0, 1),
+                Mth.clamp(ARGB.green(color) / 255f * (1.0f + greenShift * 0.3f) + greenShift * 0.1f, 0, 1),
+                Mth.clamp(ARGB.blue(color) / 255f, 0, 1)
         );
     }
 

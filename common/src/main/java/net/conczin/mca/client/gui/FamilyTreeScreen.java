@@ -14,6 +14,7 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.resources.sounds.SimpleSoundInstance;
@@ -323,7 +324,7 @@ public class FamilyTreeScreen extends Screen {
 
             if (deceased) {
                 Icon icon = MCAScreens.getInstance().getIcon("deceased");
-                context.blit(InteractScreen.ICON_TEXTURES, bounds.left + 6, bounds.top + 6, 0, icon.u(), icon.v(), 16, 16, 256, 256);
+                context.blit(RenderType::guiTextured, InteractScreen.ICON_TEXTURES, bounds.left + 6, bounds.top + 6, 0, icon.u(), icon.v(), 16, 16, 256, 256);
 
                 if (isFocused && mouseX <= bounds.left + 20) {
                     matrices.pushPose();
@@ -345,7 +346,7 @@ public class FamilyTreeScreen extends Screen {
                     relationship == RelationshipState.PROMISED ||
                     relationship == RelationshipState.WIDOW) {
                     Icon icon = MCAScreens.getInstance().getIcon(relationship.getIcon());
-                    context.blit(InteractScreen.ICON_TEXTURES, bounds.left - SPOUSE_HORIZONTAL_SPACING / 2 - 8, y - 8, 0, icon.u(), icon.v(), 16, 16, 256, 256);
+                    context.blit(RenderType::guiTextured, InteractScreen.ICON_TEXTURES, bounds.left - SPOUSE_HORIZONTAL_SPACING / 2 - 8, y - 8, 0, icon.u(), icon.v(), 16, 16, 256, 256);
                 }
 
                 y -= spouse.label.size() * font.lineHeight / 2;

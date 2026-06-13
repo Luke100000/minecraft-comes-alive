@@ -13,16 +13,11 @@ import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.server.level.TicketType;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.effect.MobEffects;
-import net.minecraft.world.entity.RelativeMovement;
 import net.minecraft.world.entity.ai.util.RandomPos;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.levelgen.Heightmap;
-
-import java.util.EnumSet;
 
 public record DestinyMessage(String location, boolean isClosing) implements HandleablePayload {
     public static final CustomPacketPayload.Type<DestinyMessage> TYPE = new CustomPacketPayload.Type<>(MCA.locate("destiny_message"));
@@ -60,9 +55,7 @@ public record DestinyMessage(String location, boolean isClosing) implements Hand
         }
         pos = RandomPos.moveUpOutOfSolid(pos, player.level().getHeight(), p -> player.level().getBlockState(p).isSuffocating(player.level(), p));
         pos = ExtendedFuzzyPositions.downWhile(pos, 1, p -> !player.level().getBlockState(p.below()).isCollisionShapeFullBlock(player.level(), p));
-        ChunkPos chunkPos = new ChunkPos(pos);
-        player.serverLevel().getChunkSource().addRegionTicket(TicketType.POST_TELEPORT, chunkPos, 1, player.getId());
-        player.connection.teleport(pos.getX(), pos.getY(), pos.getZ(), player.getYRot(), player.getXRot(), EnumSet.noneOf(RelativeMovement.class));
+        player.connection.teleport(pos.getX(), pos.getY(), pos.getZ(), player.getYRot(), player.getXRot());
         player.setRespawnPosition(player.level().dimension(), pos, 0.0f, true, false);
         //noinspection DataFlowIssue
         if (player.level().getServer().isSingleplayerOwner(player.getGameProfile())) {

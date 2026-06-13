@@ -13,7 +13,6 @@
     "MixinHorseBase",
     "MixinInventory",
     "MixinMemoryModuleType",
-    "MixinMilkBucketItem",
     "MixinPlayer",
     "MixinProtoChunk",
     "MixinSensorType",
@@ -33,6 +32,7 @@
     "client.MixinHumanoidArmorLayer",
     "client.MixinItemInHandLayer",
     "client.MixinLivingEntityRenderer",
+    "client.MixinLivingEntityRenderState",
     "client.MixinPlayerRenderer",
     "client.MixinSoundBufferLibrary",
     "client.MixinEntity"

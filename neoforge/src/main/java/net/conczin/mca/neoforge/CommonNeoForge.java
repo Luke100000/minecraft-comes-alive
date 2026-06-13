@@ -30,7 +30,7 @@ import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.fml.common.Mod;
-import net.neoforged.neoforge.event.AddReloadListenerEvent;
+import net.neoforged.neoforge.event.AddServerReloadListenersEvent;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
 import net.neoforged.neoforge.event.entity.EntityAttributeCreationEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
@@ -72,7 +72,7 @@ public final class CommonNeoForge {
             event.register(Registries.BLOCK_ENTITY_TYPE, helper ->
                     BlockEntityTypesMCA.registerBlockEntityTypes((name, factory, block) -> {
                         //noinspection DataFlowIssue
-                        BlockEntityType<?> build = BlockEntityType.Builder.of(factory::create, block).build(null);
+                        BlockEntityType<?> build = new BlockEntityType<>(factory::create, block);
                         helper.register(name, build);
                         return build;
                     }));
@@ -93,15 +93,15 @@ public final class CommonNeoForge {
     }
 
     @SubscribeEvent
-    public static void onAddReloadListener(AddReloadListenerEvent event) {
-        event.addListener(new ApiReloadListener());
-        event.addListener(new ClothingList());
-        event.addListener(new HairList());
-        event.addListener(new GiftLoader());
-        event.addListener(new Dialogues());
-        event.addListener(new Tasks());
-        event.addListener(new Names());
-        event.addListener(new BuildingTypes());
+    public static void onAddReloadListener(AddServerReloadListenersEvent event) {
+        event.addListener(MCA.locate("api"), new ApiReloadListener());
+        event.addListener(MCA.locate("clothing"), new ClothingList());
+        event.addListener(MCA.locate("hair"), new HairList());
+        event.addListener(MCA.locate("gifts"), new GiftLoader());
+        event.addListener(MCA.locate("dialogues"), new Dialogues());
+        event.addListener(MCA.locate("tasks"), new Tasks());
+        event.addListener(MCA.locate("names"), new Names());
+        event.addListener(MCA.locate("building_types"), new BuildingTypes());
     }
 
     @SubscribeEvent

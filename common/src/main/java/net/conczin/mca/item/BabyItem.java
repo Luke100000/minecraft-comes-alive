@@ -25,9 +25,8 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.StringUtil;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
-import net.minecraft.world.InteractionResultHolder;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.MobSpawnType;
+import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -144,26 +143,25 @@ public class BabyItem extends Item {
     @Override
     public Component getName(ItemStack stack) {
         if (stack.has(DataComponents.CUSTOM_NAME)) {
-            return Component.translatable(getDescriptionId(stack) + ".named", stack.get(DataComponents.CUSTOM_NAME));
+            return Component.translatable(getDescriptionId() + ".named", stack.get(DataComponents.CUSTOM_NAME));
         } else {
             return super.getName(stack);
         }
     }
 
-    @Override
     public String getDescriptionId(ItemStack stack) {
         if (hasBeenInvalidated(stack)) {
-            return super.getDescriptionId(stack) + ".blanket";
+            return super.getDescriptionId() + ".blanket";
         }
-        return super.getDescriptionId(stack);
+        return super.getDescriptionId();
     }
 
     @Override
-    public final InteractionResultHolder<ItemStack> use(Level world, Player player, InteractionHand hand) {
+    public final InteractionResult use(Level world, Player player, InteractionHand hand) {
         ItemStack stack = player.getItemInHand(hand);
 
         if (world.isClientSide) {
-            return InteractionResultHolder.pass(stack);
+            return InteractionResult.PASS;
         }
 
         // Right-clicking an unnamed baby allows you to name it
@@ -171,7 +169,7 @@ public class BabyItem extends Item {
             if (player instanceof ServerPlayer serverPlayer) {
                 Network.sendToPlayer(new OpenGuiRequest(OpenGuiRequest.Type.BABY_NAME), serverPlayer);
             }
-            return InteractionResultHolder.pass(stack);
+            return InteractionResult.PASS;
         }
 
         // Not old enough
@@ -179,7 +177,7 @@ public class BabyItem extends Item {
             if (player instanceof ServerPlayer serverPlayer) {
                 serverPlayer.displayClientMessage(Component.translatable("item.mca.baby.not_ready"), true);
             }
-            return InteractionResultHolder.pass(stack);
+            return InteractionResult.PASS;
         }
 
         // Name is good and we're ready to grow
@@ -188,7 +186,7 @@ public class BabyItem extends Item {
         }
         stack.shrink(1);
 
-        return InteractionResultHolder.success(stack);
+        return InteractionResult.SUCCESS;
     }
 
     protected VillagerEntityMCA birthChild(ItemStack stack, ServerLevel world, ServerPlayer player) {
@@ -205,7 +203,7 @@ public class BabyItem extends Item {
 
         child.setCustomName(stack.getOrDefault(DataComponents.CUSTOM_NAME, Component.literal("Unnamed")));
 
-        WorldUtils.spawnEntity(world, child, MobSpawnType.BREEDING);
+        WorldUtils.spawnEntity(world, child, EntitySpawnReason.BREEDING);
 
         FamilyTree tree = FamilyTree.get(world);
 

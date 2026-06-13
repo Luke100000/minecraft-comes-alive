@@ -5,10 +5,12 @@ import net.conczin.mca.Config;
 import net.conczin.mca.MCA;
 import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.server.world.data.Nationality;
+import net.minecraft.resources.FileToIdConverter;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.server.packs.resources.SimpleJsonResourceReloadListener;
+import net.minecraft.util.ExtraCodecs;
 import net.minecraft.util.RandomSource;
 import net.minecraft.util.profiling.ProfilerFiller;
 import net.minecraft.world.entity.Entity;
@@ -16,14 +18,14 @@ import org.jetbrains.annotations.NotNull;
 
 import java.util.*;
 
-public class Names extends SimpleJsonResourceReloadListener {
+public class Names extends SimpleJsonResourceReloadListener<JsonElement> {
     public static final Map<String, Map<Gender, WeightedPool<String>>> NAMES_MAP = new HashMap<>();
     public static final List<String> REGION_NAMES = new LinkedList<>();
     protected static final ResourceLocation ID = MCA.locate("mca_names");
     static final RandomSource random = RandomSource.create();
 
     public Names() {
-        super(Resources.GSON, ID.getPath());
+        super(ExtraCodecs.JSON, FileToIdConverter.json(ID.getPath()));
     }
 
     public static String getCitizenNation(Entity entity) {

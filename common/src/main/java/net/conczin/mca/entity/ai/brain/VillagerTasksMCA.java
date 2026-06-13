@@ -296,8 +296,8 @@ public class VillagerTasksMCA {
                 )),
                 Pair.of(1, new EquipmentTask(VillagerTasksMCA::isOnDuty, v -> v.getResidency().getHomeVillage()
                         .map(vil -> vil.getVillageGuardsManager().getGuardEquipment(v.getProfession(), v.getDominantHand())).orElse(VillageGuardsManager.getEquipmentFor(v.getDominantHand(), EquipmentSet.GUARD_0, EquipmentSet.GUARD_0_LEFT)))),
-                Pair.of(2, StartAttacking.create(t -> true, VillagerTasksMCA::getPreferredTarget)),
-                Pair.of(3, StopAttackingIfTargetInvalid.create(livingEntity -> !VillagerTasksMCA.isPreferredTarget(villager, livingEntity))),
+                Pair.of(2, StartAttacking.create((level, body) -> true, (level, body) -> VillagerTasksMCA.getPreferredTarget(body))),
+                Pair.of(3, StopAttackingIfTargetInvalid.create((level, livingEntity) -> !VillagerTasksMCA.isPreferredTarget(villager, livingEntity))),
                 Pair.of(4, new BowTask<>(20, 12)),
                 Pair.of(5, BehaviorBuilder.triggerIf(v -> v.isHolding(Items.CROSSBOW),
                         BackUpIfTooClose.create(5, 0.75F)

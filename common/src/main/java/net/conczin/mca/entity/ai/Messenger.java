@@ -91,14 +91,20 @@ public interface Messenger extends EntityWrapper {
     }
 
     default void sendChatToAllAround(MutableComponent phrase) {
-        for (Player player : asEntity().level().getNearbyPlayers(CAN_RECEIVE, asEntity(), asEntity().getBoundingBox().inflate(20))) {
+        if (!(asEntity().level() instanceof ServerLevel serverLevel)) {
+            return;
+        }
+        for (Player player : serverLevel.getPlayers(player -> CAN_RECEIVE.test(serverLevel, asEntity(), player) && player.getBoundingBox().intersects(asEntity().getBoundingBox().inflate(20)))) {
             float dist = player.distanceTo(asEntity());
             sendChatMessage(phrase.withStyle(dist < 10 ? ChatFormatting.WHITE : ChatFormatting.GRAY), player);
         }
     }
 
     default void sendChatToAllAround(String phrase, Object... params) {
-        for (Player player : asEntity().level().getNearbyPlayers(CAN_RECEIVE, asEntity(), asEntity().getBoundingBox().inflate(20))) {
+        if (!(asEntity().level() instanceof ServerLevel serverLevel)) {
+            return;
+        }
+        for (Player player : serverLevel.getPlayers(player -> CAN_RECEIVE.test(serverLevel, asEntity(), player) && player.getBoundingBox().intersects(asEntity().getBoundingBox().inflate(20)))) {
             float dist = player.distanceTo(asEntity());
             sendChatMessage(getTranslatable(player, phrase, params).withStyle(dist < 10 ? ChatFormatting.WHITE : ChatFormatting.GRAY), player);
         }

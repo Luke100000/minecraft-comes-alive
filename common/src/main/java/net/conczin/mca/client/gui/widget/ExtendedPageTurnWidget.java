@@ -1,6 +1,7 @@
 package net.conczin.mca.client.gui.widget;
 
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.gui.screens.inventory.PageButton;
 import net.minecraft.resources.ResourceLocation;
 
@@ -27,6 +28,6 @@ public class ExtendedPageTurnWidget extends PageButton {
             j += 13;
         }
 
-        context.blit(texture, getX(), getY(), i, j, 23, 13);
+        context.blit(RenderType::guiTextured, texture, getX(), getY(), i, j, 23, 13, 256, 256);
     }
 }

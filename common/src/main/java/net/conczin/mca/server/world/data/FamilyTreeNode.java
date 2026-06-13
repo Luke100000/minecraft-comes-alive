@@ -132,7 +132,7 @@ public final class FamilyTreeNode {
     }
 
     public VillagerProfession getProfession() {
-        return BuiltInRegistries.VILLAGER_PROFESSION.get(getProfessionId());
+        return BuiltInRegistries.VILLAGER_PROFESSION.getValue(getProfessionId());
     }
 
     public void setProfession(VillagerProfession profession) {

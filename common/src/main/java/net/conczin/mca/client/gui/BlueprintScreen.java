@@ -20,6 +20,7 @@ import net.conczin.mca.util.compat.ButtonWidget;
 import net.conczin.mca.util.localization.FlowingText;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.BlockPos;
@@ -105,7 +106,7 @@ public class BlueprintScreen extends ExtendedScreen {
         matrices.pushPose();
         matrices.translate(x - 6.6, y - 6.6, 0);
         matrices.scale(0.66f, 0.66f, 0.66f);
-        context.blit(texture, 0, 0, u, v, 20, 20);
+        context.blit(RenderType::guiTextured, texture, 0, 0, u, v, 20, 20, 256, 256);
         matrices.popPose();
     }
 
@@ -594,7 +595,7 @@ public class BlueprintScreen extends ExtendedScreen {
 
     private Component getBlockName(ResourceLocation id) {
         if (BuiltInRegistries.BLOCK.containsKey(id)) {
-            return Component.translatable(BuiltInRegistries.BLOCK.get(id).getDescriptionId());
+            return Component.translatable(BuiltInRegistries.BLOCK.getValue(id).getDescriptionId());
         } else {
             return Component.translatable("tag.block." + id.getNamespace() + "." + id.getPath());
         }

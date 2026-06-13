@@ -5,9 +5,11 @@ import com.google.gson.JsonObject;
 import net.conczin.mca.MCA;
 import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.resources.data.skin.Hair;
+import net.minecraft.resources.FileToIdConverter;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.server.packs.resources.SimpleJsonResourceReloadListener;
+import net.minecraft.util.ExtraCodecs;
 import net.minecraft.util.GsonHelper;
 import net.minecraft.util.profiling.ProfilerFiller;
 
@@ -15,13 +17,13 @@ import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 
-public class HairList extends SimpleJsonResourceReloadListener {
+public class HairList extends SimpleJsonResourceReloadListener<JsonElement> {
     protected static final ResourceLocation ID = MCA.locate("skins/hair");
     private static HairList INSTANCE;
     public final HashMap<String, Hair> hair = new HashMap<>();
 
     public HairList() {
-        super(Resources.GSON, "skins/hair");
+        super(ExtraCodecs.JSON, FileToIdConverter.json("skins/hair"));
         INSTANCE = this;
     }
 

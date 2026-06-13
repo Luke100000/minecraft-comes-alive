@@ -34,6 +34,7 @@ import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LevelAccessor;
 import net.minecraft.world.level.LevelReader;
+import net.minecraft.world.level.ScheduledTickAccess;
 import net.minecraft.world.level.block.*;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.BlockEntityTicker;
@@ -198,16 +199,16 @@ public class TombstoneBlock extends BaseEntityBlock implements SimpleWaterlogged
 
     @Deprecated
     @Override
-    public BlockState updateShape(BlockState state, Direction direction, BlockState neighborState, LevelAccessor world, BlockPos pos, BlockPos neighborPos) {
+    public BlockState updateShape(BlockState state, LevelReader world, ScheduledTickAccess scheduledTickAccess, BlockPos pos, Direction direction, BlockPos neighborPos, BlockState neighborState, RandomSource random) {
         if (state.getValue(BlockStateProperties.WATERLOGGED)) {
-            world.scheduleTick(pos, Fluids.WATER, Fluids.WATER.getTickDelay(world));
+            scheduledTickAccess.scheduleTick(pos, Fluids.WATER, Fluids.WATER.getTickDelay(world));
         }
 
         if (direction == Direction.DOWN && !canSurvive(state, world, pos)) {
             return Blocks.AIR.defaultBlockState();
         }
 
-        return super.updateShape(state, direction, neighborState, world, pos, neighborPos);
+        return super.updateShape(state, world, scheduledTickAccess, pos, direction, neighborPos, neighborState, random);
     }
 
     @Override
@@ -370,7 +371,8 @@ public class TombstoneBlock extends BaseEntityBlock implements SimpleWaterlogged
                         boolean alreadySpawned = false;
                         if (cure && (entity instanceof ZombieVillager zombie)) {
                             // spawnEntity is called here, so don't call it twice
-                            entity = zombie.convertTo(EntityType.VILLAGER, true);
+                            entity = zombie.convertTo(EntityType.VILLAGER, ConversionParams.single(zombie, true, true), converted -> {
+                            });
                             alreadySpawned = true;
                         }
 
@@ -393,7 +395,7 @@ public class TombstoneBlock extends BaseEntityBlock implements SimpleWaterlogged
 
         private void generateLightning() {
             level.setSkyFlashTime(10);
-            LightningBolt bolt = EntityType.LIGHTNING_BOLT.create(level);
+            LightningBolt bolt = EntityType.LIGHTNING_BOLT.create(level, EntitySpawnReason.TRIGGERED);
             bolt.setVisualOnly(true);
             bolt.absMoveTo(worldPosition.getX() + 0.5F, worldPosition.getY(), worldPosition.getZ() + 0.5F);
             level.addFreshEntity(bolt);
@@ -444,7 +446,7 @@ public class TombstoneBlock extends BaseEntityBlock implements SimpleWaterlogged
 
         public Optional<Entity> createEntity(Level world, boolean remove) {
             try {
-                return entityData.flatMap(data -> EntityType.create(data.nbt, world));
+                return entityData.flatMap(data -> EntityType.create(data.nbt, world, EntitySpawnReason.LOAD));
             } finally {
                 if (remove) {
                     setEntity(null);

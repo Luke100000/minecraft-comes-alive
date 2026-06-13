@@ -22,12 +22,18 @@ public class ZombieVillagerEntityMCARenderer extends VillagerLikeEntityMCARender
         addLayer(new HairLayer<>(this, createModel(VillagerEntityModelMCA.hairData(new CubeDeformation(0.1F)))));
     }
 
-    private static VillagerEntityModelMCA<ZombieVillagerEntityMCA> createModel(MeshDefinition data) {
-        return new ZombieVillagerEntityModelMCA<>(LayerDefinition.create(data, 64, 64).bakeRoot());
+    private static VillagerEntityModelMCA createModel(MeshDefinition data) {
+        return new ZombieVillagerEntityModelMCA(LayerDefinition.create(data, 64, 64).bakeRoot());
     }
 
     @Override
-    protected boolean isShaking(ZombieVillagerEntityMCA entity) {
-        return entity.isConverting() || entity.isUnderWaterConverting();
+    public void extractRenderState(ZombieVillagerEntityMCA entity, VillagerRenderState state, float partialTicks) {
+        super.extractRenderState(entity, state, partialTicks);
+        state.isConverting = entity.isConverting() || entity.isUnderWaterConverting();
+    }
+
+    @Override
+    protected boolean isShaking(VillagerRenderState state) {
+        return state.isConverting;
     }
 }

@@ -2,6 +2,7 @@ package net.conczin.mca.client.gui.widget;
 
 import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.gui.components.ImageButton;
 import net.minecraft.client.gui.components.WidgetSprites;
 import net.minecraft.network.chat.Component;
@@ -38,7 +39,7 @@ public class LegacyImageButton extends ImageButton {
             i += textureDifference;
         }
         RenderSystem.enableDepthTest();
-        guiGraphics.blit(texture, x, y, uOffset, i, width, height, textureWidth, textureHeight);
+        guiGraphics.blit(RenderType::guiTextured, texture, x, y, uOffset, i, width, height, textureWidth, textureHeight);
     }
 
     @Override

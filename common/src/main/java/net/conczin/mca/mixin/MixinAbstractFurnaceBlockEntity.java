@@ -1,10 +1,12 @@
 package net.conczin.mca.mixin;
 
-import it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap;
+import it.unimi.dsi.fastutil.objects.Reference2IntOpenHashMap;
 import net.conczin.mca.MCA;
 import net.conczin.mca.registry.CriterionMCA;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.item.crafting.Recipe;
 import net.minecraft.world.level.block.entity.AbstractFurnaceBlockEntity;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
@@ -17,11 +19,12 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public class MixinAbstractFurnaceBlockEntity {
     @Final
     @Shadow
-    private Object2IntOpenHashMap<ResourceLocation> recipesUsed;
+    private Reference2IntOpenHashMap<ResourceKey<Recipe<?>>> recipesUsed;
 
     @Inject(method = "awardUsedRecipesAndPopExperience", at = @At("HEAD"))
     public void mca$injectAwardUsedRecipesAndPopExperience(ServerPlayer player, CallbackInfo ci) {
-        recipesUsed.forEach((identifier, count) -> {
+        recipesUsed.forEach((recipeKey, count) -> {
+            ResourceLocation identifier = recipeKey.location();
             if (identifier.getNamespace().equals(MCA.MOD_ID)) {
                 boolean isBaby = identifier.equals(MCA.locate("baby_boy_from_smelting"));
                 boolean isSirbenBaby = identifier.equals(MCA.locate("baby_sirben_boy_from_smelting"));

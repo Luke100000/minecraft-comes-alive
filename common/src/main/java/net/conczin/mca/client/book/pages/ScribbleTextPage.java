@@ -3,6 +3,7 @@ package net.conczin.mca.client.book.pages;
 import com.mojang.blaze3d.systems.RenderSystem;
 import net.conczin.mca.client.gui.ExtendedBookScreen;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.renderer.RenderType;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 
@@ -23,7 +24,7 @@ public class ScribbleTextPage extends TextPage {
         // scribble
         int i = (screen.width - 192) / 2;
         RenderSystem.enableBlend();
-        context.blit(scribble, i + 28, 32, 0, 0, 128, 128, 128, 128);
+        context.blit(RenderType::guiTextured, scribble, i + 28, 32, 0, 0, 128, 128, 128, 128);
         RenderSystem.disableBlend();
 
         super.render(screen, context, mouseX, mouseY, delta);

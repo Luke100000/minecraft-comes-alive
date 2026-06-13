@@ -30,7 +30,7 @@ public class StaffOfLifeItem extends TooltippedItem {
 
     @Override
     public void appendHoverText(ItemStack stack, TooltipContext context, List<Component> tooltip, TooltipFlag flag) {
-        tooltip.add(Component.translatable(getDescriptionId(stack) + ".uses", stack.getMaxDamage() - stack.getDamageValue()));
+        tooltip.add(Component.translatable(getDescriptionId() + ".uses", stack.getMaxDamage() - stack.getDamageValue()));
 
         super.appendHoverText(stack, context, tooltip, flag);
     }
@@ -40,8 +40,4 @@ public class StaffOfLifeItem extends TooltippedItem {
         return true;
     }
 
-    @Override
-    public boolean isEnchantable(ItemStack stack) {
-        return false;
-    }
 }

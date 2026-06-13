@@ -9,9 +9,11 @@ import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.resources.data.skin.Clothing;
 import net.conczin.mca.server.world.data.CustomClothingManager;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.FileToIdConverter;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.server.packs.resources.SimpleJsonResourceReloadListener;
+import net.minecraft.util.ExtraCodecs;
 import net.minecraft.util.GsonHelper;
 import net.minecraft.util.profiling.ProfilerFiller;
 import net.minecraft.world.entity.npc.VillagerProfession;
@@ -22,13 +24,13 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Stream;
 
-public class ClothingList extends SimpleJsonResourceReloadListener {
+public class ClothingList extends SimpleJsonResourceReloadListener<JsonElement> {
     protected static final ResourceLocation ID = MCA.locate("skins/clothing");
     private static ClothingList INSTANCE;
     public final HashMap<String, Clothing> clothing = new HashMap<>();
 
     public ClothingList() {
-        super(Resources.GSON, "skins/clothing");
+        super(ExtraCodecs.JSON, FileToIdConverter.json("skins/clothing"));
         INSTANCE = this;
     }
 

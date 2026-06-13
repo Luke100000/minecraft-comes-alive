@@ -191,19 +191,19 @@ public class CribEntity extends Entity implements CTrackedEntity<CribEntity> {
     }
 
     @Override
-    public boolean hurt(DamageSource source, float amount) {
+    public boolean hurtServer(ServerLevel level, DamageSource source, float amount) {
         if (this.level().isClientSide || this.isRemoved()) {
             return false;
         }
 
         if (isOccupied()) return false;
 
-        if (this.isInvulnerableTo(source)) {
+        if (this.isInvulnerableToBase(source)) {
             return false;
         }
 
         if (source.is(DamageTypeTags.IS_EXPLOSION) || source.is(DamageTypeTags.IS_FIRE)) {
-            this.kill();
+            this.kill(level);
             return false;
         }
 
@@ -222,13 +222,13 @@ public class CribEntity extends Entity implements CTrackedEntity<CribEntity> {
         if (source.isCreativePlayer()) {
             this.playBreakSound();
             this.spawnBreakParticles();
-            this.kill();
+            this.kill(level);
             return bl2;
         } else {
             CribItem matchingType = ItemsMCA.CRIBS.stream().filter(c -> c.getColor() == getTrackedValue(COLOR) && c.getWood() == getTrackedValue(WOOD)).findFirst().get();
             Block.popResource(this.level(), this.blockPosition(), new ItemStack(matchingType));
             this.spawnBreakParticles();
-            this.kill();
+            this.kill(level);
         }
 
         return true;

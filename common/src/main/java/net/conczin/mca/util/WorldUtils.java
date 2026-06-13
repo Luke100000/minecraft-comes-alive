@@ -4,14 +4,15 @@ import com.mojang.datafixers.util.Pair;
 import net.minecraft.core.*;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.FullChunkStatus;
 import net.minecraft.server.level.ServerChunkCache;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.Mob;
-import net.minecraft.world.entity.MobSpawnType;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.ServerLevelAccessor;
@@ -51,16 +52,15 @@ public interface WorldUtils {
                 dataId);
     }
 
-    static void spawnEntity(Level world, Mob entity, MobSpawnType reason) {
+    static void spawnEntity(Level world, Mob entity, EntitySpawnReason reason) {
         entity.finalizeSpawn((ServerLevelAccessor) world, world.getCurrentDifficultyAt(entity.blockPosition()), reason, null);
         world.addFreshEntity(entity);
     }
 
     //a wrapper for the unnecessary complex query provided by minecraft
     static Optional<BlockPos> getClosestStructurePosition(ServerLevel world, BlockPos center, ResourceLocation structure, int radius) {
-        Registry<Structure> registry = world.registryAccess().registryOrThrow(Registries.STRUCTURE);
-        Structure feature = registry.get(structure);
-        Optional<Holder.Reference<Structure>> entry = registry.getHolder(registry.getId(feature));
+        HolderLookup.RegistryLookup<Structure> registry = world.registryAccess().lookupOrThrow(Registries.STRUCTURE);
+        Optional<Holder.Reference<Structure>> entry = registry.get(ResourceKey.create(Registries.STRUCTURE, structure));
         if (entry.isPresent()) {
             HolderSet.Direct<Structure> of = HolderSet.direct(entry.get());
             Pair<BlockPos, Holder<Structure>> pair = world.getChunkSource().getGenerator().findNearestMapStructure(world, of, center, radius, false);
@@ -71,8 +71,8 @@ public interface WorldUtils {
     }
 
     static Optional<BlockPos> getClosestStructurePosition(ServerLevel world, BlockPos center, TagKey<Structure> tag, int radius) {
-        Registry<Structure> registry = world.registryAccess().registryOrThrow(Registries.STRUCTURE);
-        var entryList = registry.getTag(tag);
+        HolderLookup.RegistryLookup<Structure> registry = world.registryAccess().lookupOrThrow(Registries.STRUCTURE);
+        var entryList = registry.get(tag);
         if (entryList.isPresent()) {
             var chunkGenerator = world.getChunkSource().getGenerator();
             Pair<BlockPos, Holder<Structure>> pair = chunkGenerator.findNearestMapStructure(world, entryList.get(), center, radius, false);

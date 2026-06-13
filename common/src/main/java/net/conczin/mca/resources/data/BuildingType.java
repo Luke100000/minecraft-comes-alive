@@ -5,7 +5,6 @@ import com.google.gson.JsonObject;
 import net.conczin.mca.MCA;
 import net.conczin.mca.util.RegistryHelper;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Holder;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.FriendlyByteBuf;
@@ -75,6 +74,7 @@ public final class BuildingType {
     private final boolean grouped;
     private final int mergeRange;
     private transient Map<ResourceLocation, ResourceLocation> blockToGroup;
+    private transient Map<TagKey<Block>, ResourceLocation> tagToGroup;
     private transient Map<ResourceLocation, Integer> groups;
 
     // Private constructor for deserialization
@@ -174,6 +174,7 @@ public final class BuildingType {
     public Map<ResourceLocation, ResourceLocation> getBlockToGroup() {
         if (blockToGroup == null) {
             blockToGroup = new HashMap<>();
+            tagToGroup = new HashMap<>();
             groups = new HashMap<>();
             for (Map.Entry<String, Integer> requirement : blocks.entrySet()) {
                 ResourceLocation identifier;
@@ -182,14 +183,8 @@ public final class BuildingType {
                     TagKey<Block> tag = TagKey.create(Registries.BLOCK, identifier);
                     if (RegistryHelper.isTagEmpty(tag)) {
                         MCA.LOGGER.error("Unknown building type tag {}", identifier);
-                    } else {
-                        var entries = RegistryHelper.getEntries(tag);
-                        entries.ifPresent(registryEntries -> {
-                            for (Block b : registryEntries.stream().map(Holder::value).toList()) {
-                                blockToGroup.putIfAbsent(BuiltInRegistries.BLOCK.getKey(b), identifier);
-                            }
-                        });
                     }
+                    tagToGroup.put(tag, identifier);
                 } else {
                     identifier = ResourceLocation.parse(requirement.getKey());
                     blockToGroup.put(identifier, identifier);
@@ -198,6 +193,32 @@ public final class BuildingType {
             }
         }
         return blockToGroup;
+    }
+
+    private Optional<ResourceLocation> getGroupForBlock(ResourceLocation blockId) {
+        getBlockToGroup();
+
+        ResourceLocation directGroup = blockToGroup.get(blockId);
+        if (directGroup != null) {
+            return Optional.of(directGroup);
+        }
+
+        var holder = BuiltInRegistries.BLOCK.get(blockId);
+        if (holder.isEmpty()) {
+            return Optional.empty();
+        }
+
+        for (Map.Entry<TagKey<Block>, ResourceLocation> entry : tagToGroup.entrySet()) {
+            if (holder.get().is(entry.getKey())) {
+                return Optional.of(entry.getValue());
+            }
+        }
+
+        return Optional.empty();
+    }
+
+    public boolean matchesBlock(ResourceLocation blockId) {
+        return getGroupForBlock(blockId).isPresent();
     }
 
     public Map<ResourceLocation, Integer> getGroups() {
@@ -212,8 +233,8 @@ public final class BuildingType {
     public Map<ResourceLocation, List<BlockPos>> getGroups(Map<ResourceLocation, List<BlockPos>> blocks) {
         HashMap<ResourceLocation, List<BlockPos>> available = new HashMap<>();
         for (Map.Entry<ResourceLocation, List<BlockPos>> entry : blocks.entrySet()) {
-            Optional.ofNullable(getBlockToGroup().get(entry.getKey())).ifPresent(v ->
-                    available.computeIfAbsent(v, k -> new LinkedList<>()).addAll(entry.getValue())
+            getGroupForBlock(entry.getKey()).ifPresent(group ->
+                    available.computeIfAbsent(group, k -> new LinkedList<>()).addAll(entry.getValue())
             );
         }
         return available;

@@ -12,6 +12,7 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.entity.EntitySpawnReason;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
@@ -124,7 +125,7 @@ public class WhistleScreen extends Screen {
         if (!keys.isEmpty()) {
             CompoundTag firstData = villagerData.getCompound(keys.get(index));
 
-            dummy = EntitiesMCA.MALE_VILLAGER.create(Minecraft.getInstance().level);
+            dummy = EntitiesMCA.MALE_VILLAGER.create(Minecraft.getInstance().level, EntitySpawnReason.COMMAND);
             dummy.readAdditionalSaveData(firstData);
 
             villagerNameButton.setMessage(dummy.getDisplayName());

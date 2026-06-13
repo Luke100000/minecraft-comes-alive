@@ -12,7 +12,7 @@ import net.minecraft.core.Holder;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.MobSpawnType;
+import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.PathfinderMob;
 import net.minecraft.world.entity.monster.Zombie;
 import net.minecraft.world.entity.monster.ZombieVillager;
@@ -84,7 +84,7 @@ public class SpawnQueue {
                     .withPosition(ze)
                     .withType(VillagerType.byBiome(ze.level().getBiome(ze.blockPosition())))
                     .withProfession(BuiltInRegistries.VILLAGER_PROFESSION.getRandom(ze.getRandom()).map(Holder::value).orElse(VillagerProfession.NONE))
-                    .spawn(MobSpawnType.NATURAL);
+                    .spawn(EntitySpawnReason.NATURAL);
 
             copyPastaIntensifies(villager, ze);
         }
@@ -135,7 +135,7 @@ public class SpawnQueue {
         return false;
     }
 
-    private boolean handlesSpawnReason(MobSpawnType reason) {
+    private boolean handlesSpawnReason(EntitySpawnReason reason) {
         return Config.getInstance().allowedSpawnReasons.contains(reason.name().toLowerCase(Locale.ROOT));
     }
 

@@ -10,6 +10,7 @@ import net.conczin.mca.network.c2s.DestinyMessage;
 import net.conczin.mca.util.compat.ButtonWidget;
 import net.conczin.mca.util.localization.FlowingText;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.renderer.RenderType;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.ResourceLocation;
@@ -70,7 +71,7 @@ public class DestinyScreen extends VillagerEditorScreen {
     @Override
     public void renderBackground(GuiGraphics context, int mouseX, int mouseY, float partialTick) {
         this.renderPanorama(context, partialTick);
-        this.renderBlurredBackground(partialTick);
+        this.renderBlurredBackground();
         this.renderMenuBackground(context);
     }
 
@@ -88,7 +89,7 @@ public class DestinyScreen extends VillagerEditorScreen {
                 RenderSystem.enableBlend();
                 RenderSystem.defaultBlendFunc();
                 RenderSystem.setShaderColor(1, 1, 1, 1);
-                context.blit(LOGO_TEXTURE, width * 2 - 512, -40, 0, 0, 1024, 512, 1024, 512);
+                context.blit(RenderType::guiTextured, LOGO_TEXTURE, width * 2 - 512, -40, 0, 0, 1024, 512, 1024, 512);
                 matrices.popPose();
             }
             case "destiny" ->

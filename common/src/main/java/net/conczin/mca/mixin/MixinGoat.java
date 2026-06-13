@@ -7,7 +7,11 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvent;
-import net.minecraft.world.entity.*;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EntitySpawnReason;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.LightningBolt;
+import net.minecraft.world.entity.SpawnPlacements;
 import net.minecraft.world.entity.animal.Animal;
 import net.minecraft.world.entity.animal.goat.Goat;
 import net.minecraft.world.entity.monster.WitherSkeleton;
@@ -30,12 +34,12 @@ public abstract class MixinGoat extends Animal {
         if (!this.level().isClientSide && this.level().isRaining()) {
             long time = this.level().getDayTime() % 24000;
             BlockPos pos = blockPosition();
-            if (time > 16000 && time < 20000 && this.level().getBiome(pos).value().coldEnoughToSnow(pos) && SpawnPlacements.isSpawnPositionOk(EntityType.WITHER_SKELETON, level(), pos)) {
-                WitherSkeleton ancientCultist = EntityType.WITHER_SKELETON.create(level());
+            if (time > 16000 && time < 20000 && this.level().getBiome(pos).value().coldEnoughToSnow(pos, 0) && SpawnPlacements.isSpawnPositionOk(EntityType.WITHER_SKELETON, level(), pos)) {
+                WitherSkeleton ancientCultist = EntityType.WITHER_SKELETON.create(level(), EntitySpawnReason.EVENT);
                 if (ancientCultist != null) {
                     //place the ancient boi
                     ancientCultist.setPos(pos.getX(), pos.getY(), pos.getZ());
-                    WorldUtils.spawnEntity(level(), ancientCultist, MobSpawnType.EVENT);
+                    WorldUtils.spawnEntity(level(), ancientCultist, EntitySpawnReason.EVENT);
 
                     //drip
                     ancientCultist.setItemSlot(EquipmentSlot.HEAD, new ItemStack(Items.GOLDEN_HELMET));
@@ -54,11 +58,11 @@ public abstract class MixinGoat extends Animal {
                     });
 
                     //remove the goat
-                    kill();
+                    kill((ServerLevel) this.level());
 
                     //extra spiciness
                     level().setSkyFlashTime(10);
-                    LightningBolt bolt = EntityType.LIGHTNING_BOLT.create(level());
+                    LightningBolt bolt = EntityType.LIGHTNING_BOLT.create(level(), EntitySpawnReason.TRIGGERED);
                     if (bolt != null) {
                         bolt.setVisualOnly(true);
                         bolt.absMoveTo(pos.getX() + 0.5F, pos.getY(), pos.getZ() + 0.5F);

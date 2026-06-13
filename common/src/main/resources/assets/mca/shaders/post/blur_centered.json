@@ -1,0 +1,35 @@
+{
+  "vertex": "minecraft:post/sobel",
+  "fragment": "mca:post/blur_centered",
+  "samplers": [
+    {
+      "name": "DiffuseSampler"
+    }
+  ],
+  "uniforms": [
+    {
+      "name": "InSize",
+      "type": "float",
+      "count": 2,
+      "values": [1.0, 1.0]
+    },
+    {
+      "name": "OutSize",
+      "type": "float",
+      "count": 2,
+      "values": [1.0, 1.0]
+    },
+    {
+      "name": "BlurDir",
+      "type": "float",
+      "count": 2,
+      "values": [1.0, 1.0]
+    },
+    {
+      "name": "Radius",
+      "type": "float",
+      "count": 1,
+      "values": [5.0]
+    }
+  ]
+}

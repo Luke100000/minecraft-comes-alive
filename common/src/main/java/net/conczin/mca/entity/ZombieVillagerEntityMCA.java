@@ -141,7 +141,7 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
 
     @Nullable
     @Override
-    public SpawnGroupData finalizeSpawn(ServerLevelAccessor world, DifficultyInstance difficulty, MobSpawnType spawnReason, @Nullable SpawnGroupData entityData) {
+    public SpawnGroupData finalizeSpawn(ServerLevelAccessor world, DifficultyInstance difficulty, EntitySpawnReason spawnReason, @Nullable SpawnGroupData entityData) {
         SpawnGroupData data = super.finalizeSpawn(world, difficulty, spawnReason, entityData);
 
         if (getAgeState() == AgeState.UNASSIGNED) {
@@ -164,7 +164,7 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
 
     @Override
     protected void onOffspringSpawnedFromEgg(Player player, Mob child) {
-        child.finalizeSpawn((ServerLevelAccessor) level(), level().getCurrentDifficultyAt(child.blockPosition()), MobSpawnType.SPAWN_EGG, null);
+        child.finalizeSpawn((ServerLevelAccessor) level(), level().getCurrentDifficultyAt(child.blockPosition()), EntitySpawnReason.SPAWN_ITEM_USE, null);
     }
 
     @Override
@@ -211,14 +211,15 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
     }
 
     @SuppressWarnings({"unchecked", "RedundantSuppression"})
-    @Override
     @Nullable
     public <T extends Mob> T convertTo(EntityType<T> type, boolean keepInventory) {
         T mob;
         if (!isRemoved() && type == EntityType.VILLAGER) {
-            mob = (T) super.convertTo(getGenetics().getGender().getVillagerType(), keepInventory);
+            mob = (T) super.convertTo(getGenetics().getGender().getVillagerType(), ConversionParams.single(this, keepInventory, true), converted -> {
+            });
         } else {
-            mob = super.convertTo(type, keepInventory);
+            mob = super.convertTo(type, ConversionParams.single(this, keepInventory, true), converted -> {
+            });
         }
 
         if (mob instanceof VillagerLike<?> villager) {

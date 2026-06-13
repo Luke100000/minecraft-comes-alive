@@ -13,15 +13,15 @@ import java.util.Optional;
 public class RegistryHelper {
 
     public static <T> Optional<TagKey<T>> tryGetTagKey(Registry<T> registry, ResourceLocation id) {
-        return registry.getTagNames().filter(tagKey -> tagKey.location().equals(id)).findFirst();
+        return registry.getTags().map(HolderSet.Named::key).filter(tagKey -> tagKey.location().equals(id)).findFirst();
     }
 
-    public static <T> Optional<? extends HolderSet<T>> getEntries(TagKey<T> tagKey) {
-        return getRegistryOf(tagKey).getTag(tagKey);
+    public static <T> Optional<HolderSet.Named<T>> getEntries(TagKey<T> tagKey) {
+        return getRegistryOf(tagKey).get(tagKey);
     }
 
     public static <T> Optional<Holder<T>> tryGetEntry(Registry<T> registry, T object) {
-        return registry.getResourceKey(object).map(registry::getHolderOrThrow);
+        return registry.getResourceKey(object).map(registry::getOrThrow);
     }
 
     public static <T> boolean isObjectInTag(Registry<T> registry, ResourceLocation tagId, T object) {
@@ -39,6 +39,6 @@ public class RegistryHelper {
 
     @SuppressWarnings("unchecked")
     public static <T> Registry<T> getRegistryOf(@NotNull TagKey<T> key) {
-        return (Registry<T>) BuiltInRegistries.REGISTRY.get(key.registry().location());
+        return (Registry<T>) BuiltInRegistries.REGISTRY.getValue(key.registry().location());
     }
 }

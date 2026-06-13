@@ -22,8 +22,8 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.Mth;
 import net.minecraft.world.Difficulty;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.EntityType;
-import net.minecraft.world.entity.MobSpawnType;
 import net.minecraft.world.entity.SpawnPlacements;
 import net.minecraft.world.entity.monster.AbstractIllager;
 import net.minecraft.world.level.block.Block;
@@ -193,7 +193,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
     }
 
     private <T extends AbstractIllager> void spawnBountyHunter(EntityType<T> t, ServerPlayer player) {
-        AbstractIllager pillager = t.create(world);
+        AbstractIllager pillager = t.create(world, EntitySpawnReason.EVENT);
         if (pillager != null) {
             for (int attempt = 0; attempt < 32; attempt++) {
                 float f = this.world.random.nextFloat() * 6.2831855F;
@@ -204,7 +204,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
                 if (SpawnPlacements.isSpawnPositionOk(t, world, pos)) {
                     pillager.setPos(x, y, z);
                     pillager.setTarget(player);
-                    WorldUtils.spawnEntity(world, pillager, MobSpawnType.EVENT);
+                    WorldUtils.spawnEntity(world, pillager, EntitySpawnReason.EVENT);
                     break;
                 }
             }

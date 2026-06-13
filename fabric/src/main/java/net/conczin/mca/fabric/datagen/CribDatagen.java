@@ -9,7 +9,6 @@ public class CribDatagen implements DataGeneratorEntrypoint {
         FabricDataGenerator.Pack pack = generator.createPack();
 
         pack.addProvider(FabricCribRecipeProvider::new);
-        pack.addProvider(CribLanguageProvider::new);
         pack.addProvider(CribItemModelProvider::new);
     }
 }

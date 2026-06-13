@@ -3,6 +3,7 @@ package net.conczin.mca.client.gui.widget;
 import com.mojang.blaze3d.systems.RenderSystem;
 import net.conczin.mca.MCA;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.network.chat.Component;
@@ -29,11 +30,11 @@ public class ColorPickerWidget extends AbstractWidget {
         RenderSystem.enableBlend();
         RenderSystem.defaultBlendFunc();
         RenderSystem.enableDepthTest();
-        context.blit(texture, getX(), getY(), 0, 0, width, height, width, height);
+        context.blit(RenderType::guiTextured, texture, getX(), getY(), 0, 0, width, height, width, height);
 
         WidgetUtils.drawRectangle(context, getX(), getY(), getX() + width, getY() + height, 0xaaffffff);
 
-        context.blit(MCA_GUI_ICONS_TEXTURE, (int) (getX() + valueX * width) - 8, (int) (getY() + valueY * height) - 8, 240, 0, 16, 16, 256, 256);
+        context.blit(RenderType::guiTextured, MCA_GUI_ICONS_TEXTURE, (int) (getX() + valueX * width) - 8, (int) (getY() + valueY * height) - 8, 240, 0, 16, 16, 256, 256);
 
         WidgetUtils.drawRectangle(context, getX(), getY(), getX() + width, getY() + height, 0xaaffffff);
     }

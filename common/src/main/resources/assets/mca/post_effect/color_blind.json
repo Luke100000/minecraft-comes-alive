@@ -1,0 +1,33 @@
+{
+  "targets": {
+    "swap": {}
+  },
+  "passes": [
+    {
+      "program": "minecraft:post/color_convolve",
+      "inputs": [
+        {
+          "sampler_name": "DiffuseSampler",
+          "target": "minecraft:main"
+        }
+      ],
+      "output": "swap",
+      "uniforms": [
+        {
+          "name": "Saturation",
+          "values": [0.2]
+        }
+      ]
+    },
+    {
+      "program": "minecraft:post/blit",
+      "inputs": [
+        {
+          "sampler_name": "DiffuseSampler",
+          "target": "swap"
+        }
+      ],
+      "output": "minecraft:main"
+    }
+  ]
+}

@@ -11,23 +11,25 @@ import net.conczin.mca.resources.data.dialogue.Actions;
 import net.conczin.mca.resources.data.dialogue.Answer;
 import net.conczin.mca.resources.data.dialogue.Question;
 import net.conczin.mca.resources.data.dialogue.Result;
+import net.minecraft.resources.FileToIdConverter;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.server.packs.resources.SimpleJsonResourceReloadListener;
+import net.minecraft.util.ExtraCodecs;
 import net.minecraft.util.profiling.ProfilerFiller;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.*;
 
-public class Dialogues extends SimpleJsonResourceReloadListener {
+public class Dialogues extends SimpleJsonResourceReloadListener<JsonElement> {
     protected static final ResourceLocation ID = MCA.locate("dialogues");
 
     private static Dialogues INSTANCE;
     private final Map<String, Question> questions = new HashMap<>();
 
     public Dialogues() {
-        super(Resources.GSON, "dialogues");
+        super(ExtraCodecs.JSON, FileToIdConverter.json("dialogues"));
         INSTANCE = this;
     }
 

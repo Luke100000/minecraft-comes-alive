@@ -28,6 +28,7 @@ import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.entity.player.Player;
@@ -270,7 +271,7 @@ public class AdminCommand {
 
     private static int restoreClearedVillagers(CommandContext<CommandSourceStack> ctx) {
         storedVillagers.forEach(tag ->
-                EntityType.create(tag, ctx.getSource().getLevel()).ifPresent(v ->
+                EntityType.create(tag, ctx.getSource().getLevel(), EntitySpawnReason.COMMAND).ifPresent(v ->
                         ctx.getSource().getLevel().addFreshEntity(v)
                 )
         );
@@ -362,6 +363,8 @@ public class AdminCommand {
 
 
     private static void sendMessage(Entity commandSender, String message) {
-        commandSender.sendSystemMessage(Component.literal(GOLD + "[MCA] " + RESET + message));
+        if (commandSender instanceof Player player) {
+            player.displayClientMessage(Component.literal(GOLD + "[MCA] " + RESET + message), false);
+        }
     }
 }

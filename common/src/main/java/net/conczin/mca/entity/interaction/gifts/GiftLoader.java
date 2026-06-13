@@ -4,19 +4,21 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonParseException;
 import net.conczin.mca.MCA;
 import net.conczin.mca.resources.Resources;
+import net.minecraft.resources.FileToIdConverter;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.server.packs.resources.SimpleJsonResourceReloadListener;
+import net.minecraft.util.ExtraCodecs;
 import net.minecraft.util.GsonHelper;
 import net.minecraft.util.profiling.ProfilerFiller;
 
 import java.util.Map;
 
-public class GiftLoader extends SimpleJsonResourceReloadListener {
+public class GiftLoader extends SimpleJsonResourceReloadListener<JsonElement> {
     protected static final ResourceLocation ID = MCA.locate("gifts");
 
     public GiftLoader() {
-        super(Resources.GSON, "gifts");
+        super(ExtraCodecs.JSON, FileToIdConverter.json("gifts"));
     }
 
     @Override

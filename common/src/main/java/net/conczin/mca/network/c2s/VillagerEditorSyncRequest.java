@@ -62,7 +62,7 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
                 break;
             case "profession":
                 if (entity instanceof VillagerEntityMCA villager) {
-                    VillagerProfession profession = BuiltInRegistries.VILLAGER_PROFESSION.get(ResourceLocation.parse(data.getString("profession")));
+                    VillagerProfession profession = BuiltInRegistries.VILLAGER_PROFESSION.getValue(ResourceLocation.parse(data.getString("profession")));
                     villager.setProfession(profession);
                 }
                 break;

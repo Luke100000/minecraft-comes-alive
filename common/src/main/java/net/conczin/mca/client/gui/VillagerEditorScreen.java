@@ -35,7 +35,8 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
-import net.minecraft.util.FastColor;
+import net.minecraft.util.ARGB;
+import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.npc.VillagerProfession;
 
 import java.util.*;
@@ -49,8 +50,8 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     private static boolean isSkinListOutdated = true;
     private static HashMap<String, Clothing> clothing = new HashMap<>();
     private static HashMap<String, Hair> hair = new HashMap<>();
-    protected final VillagerEntityMCA villager = Objects.requireNonNull(EntitiesMCA.MALE_VILLAGER.create(Objects.requireNonNull(Minecraft.getInstance().level)));
-    protected final VillagerEntityMCA villagerVisualization = Objects.requireNonNull(EntitiesMCA.MALE_VILLAGER.create(Objects.requireNonNull(Minecraft.getInstance().level)));
+    protected final VillagerEntityMCA villager = Objects.requireNonNull(EntitiesMCA.MALE_VILLAGER.create(Objects.requireNonNull(Minecraft.getInstance().level), EntitySpawnReason.COMMAND));
+    protected final VillagerEntityMCA villagerVisualization = Objects.requireNonNull(EntitiesMCA.MALE_VILLAGER.create(Objects.requireNonNull(Minecraft.getInstance().level), EntitySpawnReason.COMMAND));
     final UUID villagerUUID;
     final UUID playerUUID;
     final boolean allowPlayerModel;
@@ -873,9 +874,9 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
             int hairDye = villager.getHairDye();
             hsvColoredHair = hairDye != 0xFF000000;
             color.setRGB(
-                    FastColor.ABGR32.red(hairDye) / 255.0,
-                    FastColor.ABGR32.green(hairDye) / 255.0,
-                    FastColor.ABGR32.blue(hairDye) / 255.0
+                    ARGB.red(hairDye) / 255.0,
+                    ARGB.green(hairDye) / 255.0,
+                    ARGB.blue(hairDye) / 255.0
             );
 
             villagerBreedingAge = villagerData.getInt("Age");

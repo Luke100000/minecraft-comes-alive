@@ -37,7 +37,7 @@ public class TextPage extends Page {
             for (int m = 0; m < l; ++m) {
                 FormattedCharSequence orderedText = getCachedPage(screen).get(m);
                 int x = i + 36;
-                context.drawString(screen.getTextRenderer(), orderedText, x, (32 + m * 9), 0, screen.getBook().hasTextShadow());
+                context.drawString(screen.getTextRenderer(), orderedText, x, (32 + m * 9), 0xFF000000, screen.getBook().hasTextShadow());
             }
         }
     }

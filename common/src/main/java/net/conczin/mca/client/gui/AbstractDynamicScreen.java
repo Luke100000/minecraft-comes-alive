@@ -3,6 +3,7 @@ package net.conczin.mca.client.gui;
 import net.conczin.mca.client.resources.Icon;
 import net.conczin.mca.entity.interaction.Constraint;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
@@ -90,7 +91,7 @@ public abstract class AbstractDynamicScreen extends Screen {
 
     protected void drawIcon(GuiGraphics context, ResourceLocation texture, String key) {
         Icon icon = MCAScreens.getInstance().getIcon(key);
-        context.blit(texture, (int) (icon.x() / iconScale), (int) (icon.y() / iconScale), icon.u(), icon.v(), 16, 16);
+        context.blit(RenderType::guiTextured, texture, (int) (icon.x() / iconScale), (int) (icon.y() / iconScale), icon.u(), icon.v(), 16, 16, 256, 256);
     }
 
     protected void drawHoveringIconText(GuiGraphics context, Component text, String key) {

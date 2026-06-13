@@ -6,7 +6,7 @@ import net.conczin.mca.resources.Names;
 import net.conczin.mca.util.WorldUtils;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.MobSpawnType;
+import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.npc.VillagerData;
 import net.minecraft.world.entity.npc.VillagerProfession;
 import net.minecraft.world.entity.npc.VillagerType;
@@ -75,7 +75,7 @@ public class ZombieVillagerFactory {
         return this;
     }
 
-    public ZombieVillagerEntityMCA spawn(MobSpawnType reason) {
+    public ZombieVillagerEntityMCA spawn(EntitySpawnReason reason) {
         if (position.isEmpty()) {
             MCA.LOGGER.info("Attempted to spawn villager without a position being set!");
         }
@@ -87,7 +87,7 @@ public class ZombieVillagerFactory {
 
     public ZombieVillagerEntityMCA build() {
         Gender gender = this.gender.orElseGet(Gender::getRandom);
-        ZombieVillagerEntityMCA zombie = gender.getZombieType().create(world);
+        ZombieVillagerEntityMCA zombie = gender.getZombieType().create(world, EntitySpawnReason.COMMAND);
         assert zombie != null;
         zombie.getGenetics().setGender(gender);
         zombie.setCustomName(Component.literal(name.orElseGet(() -> Names.pickCitizenName(gender, zombie))));

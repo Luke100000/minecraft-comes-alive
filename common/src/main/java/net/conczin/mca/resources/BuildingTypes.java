@@ -3,23 +3,25 @@ package net.conczin.mca.resources;
 import com.google.gson.JsonElement;
 import net.conczin.mca.MCA;
 import net.conczin.mca.resources.data.BuildingType;
+import net.minecraft.resources.FileToIdConverter;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.server.packs.resources.SimpleJsonResourceReloadListener;
+import net.minecraft.util.ExtraCodecs;
 import net.minecraft.util.profiling.ProfilerFiller;
 
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
 
-public class BuildingTypes extends SimpleJsonResourceReloadListener implements Iterable<BuildingType> {
+public class BuildingTypes extends SimpleJsonResourceReloadListener<JsonElement> implements Iterable<BuildingType> {
     protected static final ResourceLocation ID = MCA.locate("building_types");
     private static BuildingTypes INSTANCE = new BuildingTypes();
     private final Map<String, BuildingType> buildingTypes = new HashMap<>();
     private final Map<String, BuildingType> buildingTypesClient = new HashMap<>();
 
     public BuildingTypes() {
-        super(Resources.GSON, ID.getPath());
+        super(ExtraCodecs.JSON, FileToIdConverter.json(ID.getPath()));
         INSTANCE = this;
     }
 

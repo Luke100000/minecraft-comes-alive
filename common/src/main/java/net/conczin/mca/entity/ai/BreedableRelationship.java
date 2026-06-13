@@ -19,9 +19,12 @@ import net.minecraft.core.component.DataComponents;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.food.FoodProperties;
 import net.minecraft.world.item.*;
+import net.minecraft.world.item.component.Tool;
+import net.minecraft.world.item.equipment.Equippable;
 
 import java.util.Optional;
 
@@ -125,9 +128,10 @@ public class BreedableRelationship extends Relationship<VillagerEntityMCA> {
                 satisfaction = (float) (Math.pow(satisfaction, 1.25) * 2);
                 return Optional.of(new GiftType(stack.getItem(), (int) satisfaction, MCA.locate("archery")));
             }
-            case TieredItem tool -> {
+            case DiggerItem ignored -> {
                 //tools
-                float satisfaction = tool.getTier().getSpeed();
+                Tool tool = stack.get(DataComponents.TOOL);
+                float satisfaction = tool == null ? 1.0F : tool.defaultMiningSpeed();
                 satisfaction = (float) (Math.pow(satisfaction, 1.25) * 2);
                 return Optional.of(new GiftType(stack.getItem(), (int) satisfaction, MCA.locate(
                         stack.getItem() instanceof AxeItem ? "swords" :
@@ -138,7 +142,9 @@ public class BreedableRelationship extends Relationship<VillagerEntityMCA> {
             }
             case ArmorItem armor -> {
                 //armor
-                int satisfaction = (int) (Math.pow(armor.getDefense(), 1.25) * 1.5 + armor.getToughness() * 5);
+                Equippable equippable = stack.get(DataComponents.EQUIPPABLE);
+                EquipmentSlot slot = equippable == null ? EquipmentSlot.CHEST : equippable.slot();
+                int satisfaction = (int) (Math.pow(InventoryUtils.approximateArmor(stack, slot), 1.25) * 2);
                 return Optional.of(new GiftType(stack.getItem(), satisfaction, MCA.locate("armor")));
             }
             default -> {
@@ -229,7 +235,10 @@ public class BreedableRelationship extends Relationship<VillagerEntityMCA> {
 
         if (item == Items.GOLDEN_APPLE && entity.isInfected()) {
             entity.setInfected(false);
-            entity.eat(entity.level(), stack);
+            FoodProperties food = stack.get(DataComponents.FOOD);
+            if (food != null) {
+                entity.eat(entity.level(), stack, food);
+            }
             stack.shrink(1);
             return true;
         }

@@ -25,6 +25,7 @@ import net.fabricmc.fabric.api.itemgroup.v1.ItemGroupEvents;
 import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
+import net.fabricmc.fabric.api.object.builder.v1.block.entity.FabricBlockEntityTypeBuilder;
 import net.fabricmc.fabric.api.object.builder.v1.entity.FabricDefaultAttributeRegistry;
 import net.fabricmc.fabric.api.resource.ResourceManagerHelper;
 import net.fabricmc.loader.api.FabricLoader;
@@ -90,7 +91,7 @@ public final class MCAFabric implements ModInitializer {
         TagsMCA.Items.bootstrap();
 
         BlockEntityTypesMCA.registerBlockEntityTypes((name, factory, blocks) ->
-                Registry.register(BuiltInRegistries.BLOCK_ENTITY_TYPE, name, BlockEntityType.Builder.of(factory::create, blocks).build(null)));
+                Registry.register(BuiltInRegistries.BLOCK_ENTITY_TYPE, name, FabricBlockEntityTypeBuilder.create(factory::create, blocks).build(null)));
 
         EntitiesMCA.registerAttributes(FabricDefaultAttributeRegistry::register);
         MessagesMCA.register(fabricRegistrar);

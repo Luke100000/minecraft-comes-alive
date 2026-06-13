@@ -25,13 +25,13 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.util.FastColor;
+import net.minecraft.util.ARGB;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.Mob;
-import net.minecraft.world.entity.MobSpawnType;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
@@ -66,7 +66,7 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
 
     static VillagerLike<?> toVillager(PlayerSaveData player) {
         CompoundTag villagerData = player.getEntityData();
-        VillagerEntityMCA villager = EntitiesMCA.MALE_VILLAGER.create(player.getWorld());
+        VillagerEntityMCA villager = EntitiesMCA.MALE_VILLAGER.create(player.getWorld(), EntitySpawnReason.COMMAND);
         assert villager != null;
         villager.readAdditionalSaveData(villagerData);
         return villager;
@@ -90,9 +90,9 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
 
     EntityCommandHandler<?> getInteractions();
 
-    default void initialize(MobSpawnType spawnReason) {
-        if (spawnReason != MobSpawnType.CONVERSION) {
-            if (spawnReason != MobSpawnType.BREEDING) {
+    default void initialize(EntitySpawnReason spawnReason) {
+        if (spawnReason != EntitySpawnReason.CONVERSION) {
+            if (spawnReason != EntitySpawnReason.BREEDING) {
                 getGenetics().randomize();
                 getTraits().randomize();
             }
@@ -235,11 +235,8 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
     }
 
     default int getHairDye() {
-        return FastColor.ARGB32.colorFromFloat(
-                1.0f,
-                getTrackedValue(HAIR_COLOR_RED),
-                getTrackedValue(HAIR_COLOR_GREEN),
-                getTrackedValue(HAIR_COLOR_BLUE)
+        return ARGB.colorFromFloat(
+                1.0f, getTrackedValue(HAIR_COLOR_RED), getTrackedValue(HAIR_COLOR_GREEN), getTrackedValue(HAIR_COLOR_BLUE)
         ); // TODO
     }
 
@@ -247,12 +244,12 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
         int components = color.getTextureDiffuseColor();
         int dye = getHairDye();
         if (dye > 0) {
-            components = FastColor.ARGB32.lerp(0.5f, components, dye);
+            components = ARGB.lerp(0.5f, components, dye);
         }
 
-        setTrackedValue(HAIR_COLOR_RED, FastColor.ARGB32.red(components) / 255.0f);
-        setTrackedValue(HAIR_COLOR_GREEN, FastColor.ARGB32.green(components) / 255.0f);
-        setTrackedValue(HAIR_COLOR_BLUE, FastColor.ARGB32.blue(components) / 255.0f); // TODO: verify ARGB32
+        setTrackedValue(HAIR_COLOR_RED, ARGB.red(components) / 255.0f);
+        setTrackedValue(HAIR_COLOR_GREEN, ARGB.green(components) / 255.0f);
+        setTrackedValue(HAIR_COLOR_BLUE, ARGB.blue(components) / 255.0f); // TODO: verify ARGB32
     }
 
     default AgeState getAgeState() {
@@ -384,10 +381,10 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
                 float r = entity.getRandom().nextFloat();
                 int fs = Sheep.getColor(DyeColor.byId(p));
                 int gs = Sheep.getColor(DyeColor.byId(q));
-                int color = FastColor.ARGB32.lerp(r, fs, gs);
-                setTrackedValue(HAIR_COLOR_RED, FastColor.ARGB32.red(color) / 255.0f);
-                setTrackedValue(HAIR_COLOR_GREEN, FastColor.ARGB32.green(color) / 255.0f);
-                setTrackedValue(HAIR_COLOR_BLUE, FastColor.ARGB32.blue(color) / 255.0f);
+                int color = ARGB.lerp(r, fs, gs);
+                setTrackedValue(HAIR_COLOR_RED, ARGB.red(color) / 255.0f);
+                setTrackedValue(HAIR_COLOR_GREEN, ARGB.green(color) / 255.0f);
+                setTrackedValue(HAIR_COLOR_BLUE, ARGB.blue(color) / 255.0f);
             }
         }
     }

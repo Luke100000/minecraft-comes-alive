@@ -299,14 +299,14 @@ public class ServerInteractionManager {
     }
 
     private void successMessage(Player player, MutableComponent message) {
-        player.sendSystemMessage(message.withStyle(ChatFormatting.GREEN));
+        player.displayClientMessage(message.withStyle(ChatFormatting.GREEN), false);
     }
 
     private void failMessage(Player player, MutableComponent message) {
-        player.sendSystemMessage(message.withStyle(ChatFormatting.RED));
+        player.displayClientMessage(message.withStyle(ChatFormatting.RED), false);
     }
 
     private void infoMessage(Player player, MutableComponent message) {
-        player.sendSystemMessage(message.withStyle(ChatFormatting.YELLOW));
+        player.displayClientMessage(message.withStyle(ChatFormatting.YELLOW), false);
     }
 }
