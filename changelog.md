@@ -1,3 +1,8 @@
+# 7.8.1
+
+* Fixed crashes
+* Fixed loot tables
+
 # 7.8.0
 
 * Ported to Minecraft 26.1.2 (Thanks Mikulasz12!)
