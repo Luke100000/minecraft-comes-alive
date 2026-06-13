@@ -3,7 +3,7 @@ package net.conczin.mca.client.model;
 import com.google.common.collect.ImmutableList;
 import net.conczin.mca.Config;
 import net.conczin.mca.client.render.VillagerRenderState;
-import net.conczin.mca.client.render.VillagerVisualSnapshot;
+import net.conczin.mca.client.render.VillagerVisuals;
 import net.conczin.mca.entity.ai.relationship.AgeState;
 import net.conczin.mca.entity.ai.relationship.VillagerDimensions;
 import net.minecraft.client.model.HumanoidModel;
@@ -50,7 +50,7 @@ public class VillagerEntityBaseModelMCA extends HumanoidModel<VillagerRenderStat
         float originalWalkAnimationPos = state.walkAnimationPos;
         float originalWalkAnimationSpeed = state.walkAnimationSpeed;
         float originalYRot = state.yRot;
-        VillagerVisualSnapshot visuals = VillagerVisualSnapshot.require(state);
+        VillagerVisuals visuals = VillagerVisuals.require(state);
 
         if (visuals.baby() && (!state.isPassenger || state.cribPassenger)) {
             state.walkAnimationSpeed = (float) Math.sin(visuals.tickCount() / 12.0F);

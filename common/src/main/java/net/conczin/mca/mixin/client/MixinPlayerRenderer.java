@@ -5,7 +5,7 @@ import net.conczin.mca.MCAClient;
 import net.conczin.mca.client.model.PlayerEntityExtendedModel;
 import net.conczin.mca.client.model.VillagerEntityModelMCA;
 import net.conczin.mca.client.render.VillagerStateHolder;
-import net.conczin.mca.client.render.VillagerVisualSnapshot;
+import net.conczin.mca.client.render.VillagerVisuals;
 import net.conczin.mca.client.render.layer.ClothingLayer;
 import net.conczin.mca.client.render.layer.FaceLayer;
 import net.conczin.mca.client.render.layer.HairLayer;
@@ -87,7 +87,7 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<LivingEnt
             return;
         }
 
-        var visuals = VillagerVisualSnapshot.require(holder);
+        var visuals = VillagerVisuals.require(holder);
         poseStack.scale(visuals.rawHorizontalScaleFactor(), visuals.rawVerticalScaleFactor(), visuals.rawHorizontalScaleFactor());
         if (visuals.baby() && !state.isPassenger) {
             poseStack.translate(0.0F, 0.6F, 0.0F);
@@ -158,7 +158,7 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<LivingEnt
             boolean hasSleeve
     ) {
         var visuals = MCAClient.getPlayerData(player.getUUID())
-                .map(VillagerVisualSnapshot::capture)
+                .map(VillagerVisuals::capture)
                 .orElse(null);
         if (visuals == null) {
             return;
@@ -191,7 +191,7 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<LivingEnt
             PoseStack poseStack,
             SubmitNodeCollector submitNodeCollector,
             int lightCoords,
-            VillagerVisualSnapshot visuals,
+            VillagerVisuals visuals,
             boolean rightArm,
             PlayerEntityExtendedModel<?> model,
             SkinLayer layer
@@ -214,7 +214,7 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<LivingEnt
             PoseStack poseStack,
             SubmitNodeCollector submitNodeCollector,
             int lightCoords,
-            VillagerVisualSnapshot visuals,
+            VillagerVisuals visuals,
             boolean rightArm,
             boolean hasSleeve,
             PlayerEntityExtendedModel<?> model,

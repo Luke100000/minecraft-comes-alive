@@ -2,7 +2,7 @@ package net.conczin.mca.client.render.layer;
 
 import net.conczin.mca.MCA;
 import net.conczin.mca.client.gui.immersive_library.SkinCache;
-import net.conczin.mca.client.render.VillagerVisualSnapshot;
+import net.conczin.mca.client.render.VillagerVisuals;
 import net.conczin.mca.client.resources.ColorPalette;
 import net.minecraft.client.model.HumanoidModel;
 import net.minecraft.client.renderer.entity.RenderLayerParent;
@@ -24,7 +24,7 @@ public class HairLayer<S extends HumanoidRenderState, M extends HumanoidModel<S>
 
     @Override
     public Identifier getSkin(S state) {
-        var visuals = VillagerVisualSnapshot.require(state);
+        var visuals = VillagerVisuals.require(state);
         String identifier = visuals.hair();
         if (MCA.isBlankString(identifier)) {
             return null;
@@ -37,7 +37,7 @@ public class HairLayer<S extends HumanoidRenderState, M extends HumanoidModel<S>
 
     @Override
     protected Identifier getOverlay(S state) {
-        String hair = VillagerVisualSnapshot.require(state).hair();
+        String hair = VillagerVisuals.require(state).hair();
         if (MCA.isBlankString(hair)) {
             return null;
         }
@@ -55,7 +55,7 @@ public class HairLayer<S extends HumanoidRenderState, M extends HumanoidModel<S>
 
     @Override
     public int getColor(S state, float tickDelta) {
-        var visuals = VillagerVisualSnapshot.require(state);
+        var visuals = VillagerVisuals.require(state);
         if (visuals.rainbow()) {
             return getRainbow(visuals.tickCount(), visuals.entityId(), tickDelta);
         }

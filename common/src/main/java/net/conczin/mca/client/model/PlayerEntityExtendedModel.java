@@ -131,7 +131,7 @@ public class PlayerEntityExtendedModel<T extends LivingEntity> extends PlayerMod
         breastsWear.visible = state.showJacket;
 
         if (state instanceof VillagerStateHolder holder) {
-            var visuals = holder.mca$getVisualSnapshot();
+            var visuals = holder.mca$getVisuals();
             if (visuals != null) {
                 applyVillagerDimensions(visuals, state.isCrouching);
             }

@@ -7,6 +7,7 @@ import net.minecraft.client.model.HumanoidModel;
 import net.minecraft.client.model.geom.builders.CubeDeformation;
 import net.minecraft.client.model.geom.builders.LayerDefinition;
 import net.minecraft.client.renderer.entity.layers.HumanoidArmorLayer;
+import net.minecraft.client.renderer.entity.state.AvatarRenderState;
 import net.minecraft.client.renderer.entity.state.HumanoidRenderState;
 import net.minecraft.world.entity.EquipmentSlot;
 import org.spongepowered.asm.mixin.Mixin;
@@ -34,11 +35,13 @@ public abstract class MixinHumanoidArmorLayer {
 
     @Inject(method = "getArmorModel(Lnet/minecraft/client/renderer/entity/state/HumanoidRenderState;Lnet/minecraft/world/entity/EquipmentSlot;)Lnet/minecraft/client/model/HumanoidModel;", at = @At("HEAD"), cancellable = true)
     private void mca$injectGetArmorModel(HumanoidRenderState state, EquipmentSlot slot, CallbackInfoReturnable<HumanoidModel> cir) {
-        if (state instanceof VillagerStateHolder holder && holder.mca$isGeneticsRendererActive()) {
-            HumanoidModel<?> model = this.usesInnerModel(slot)
-                ? mca$leggingsModel
-                : mca$bodyModel;
-            cir.setReturnValue((HumanoidModel) model);
+        if (!(state instanceof AvatarRenderState) || !(state instanceof VillagerStateHolder holder) || !holder.mca$isGeneticsRendererActive()) {
+            return;
         }
+
+        HumanoidModel<?> model = this.usesInnerModel(slot)
+            ? mca$leggingsModel
+            : mca$bodyModel;
+        cir.setReturnValue((HumanoidModel) model);
     }
 }

@@ -41,7 +41,7 @@ public abstract class MixinItemInHandLayer<S extends ArmedEntityRenderState, M e
             float xRot,
             CallbackInfo ci
     ) {
-        if (!(state instanceof VillagerStateHolder holder) || holder.mca$getVisualSnapshot() == null) {
+        if (!(state instanceof VillagerStateHolder holder) || holder.mca$getVillagerRenderData() == null) {
             return;
         }
 
