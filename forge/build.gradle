@@ -57,7 +57,7 @@ sourcesJar {
 }
 
 components.java {
-    withVariantsFromConfiguration(project.configurations.shadowRuntimeElements) {
+    addVariantsFromConfiguration(project.configurations.shadowRuntimeElements) {
         skip()
     }
 }
