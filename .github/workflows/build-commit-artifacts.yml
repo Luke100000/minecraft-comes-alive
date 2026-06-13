@@ -33,18 +33,24 @@ jobs:
           cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
 
       - name: Build Fabric and NeoForge jars
-        run: ./gradlew :fabric:build :neoforge:build --configuration-cache --console=plain
+        run: ./gradlew :fabric:jar :neoforge:jar --configuration-cache --console=plain
 
       - name: Upload Fabric jars
         uses: actions/upload-artifact@v7
         with:
           name: mca-fabric-${{ steps.versions.outputs.minecraft_version }}
-          path: fabric/build/libs/*.jar
+          path: |
+            fabric/build/libs/*.jar
+            !fabric/build/libs/*-sources.jar
+            !fabric/build/libs/*-javadoc.jar
           if-no-files-found: error
 
       - name: Upload NeoForge jars
         uses: actions/upload-artifact@v7
         with:
           name: mca-neoforge-${{ steps.versions.outputs.minecraft_version }}
-          path: neoforge/build/libs/*.jar
+          path: |
+            neoforge/build/libs/*.jar
+            !neoforge/build/libs/*-sources.jar
+            !neoforge/build/libs/*-javadoc.jar
           if-no-files-found: error
