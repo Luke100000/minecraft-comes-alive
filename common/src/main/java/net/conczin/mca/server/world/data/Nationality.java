@@ -24,7 +24,7 @@ public class Nationality extends SavedData {
             {-1, 1},
             {1, 1},
             {-1, -1},
-            {-1, 1},
+            {1, -1},
     };
     final RandomSource random = RandomSource.create();
     private Map<Long, Integer> map = new HashMap<>();

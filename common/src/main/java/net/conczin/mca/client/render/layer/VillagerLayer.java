@@ -68,6 +68,14 @@ public abstract class VillagerLayer<S extends HumanoidRenderState, M extends Hum
             return;
         }
 
+        // Primarily restores compatibility with Armourers Workshop.
+        if (model instanceof VillagerEntityModelMCA layer) {
+            layer.copyVisibility(getParentModel());
+        }
+        if (model instanceof PlayerEntityExtendedModel<?> layer) {
+            layer.copyVisibility(getParentModel());
+        }
+
         boolean visible = !state.isInvisible;
         boolean glowing = state.appearsGlowing;
 

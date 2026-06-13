@@ -6,6 +6,25 @@
 * Fixed shader loading on 1.21.4
 * Moved generated crib resources to generated resources
 
+# 7.7.10
+
+* Improves family tree search
+* Fixes mail inbox loading
+
+# 7.7.9
+
+* Fixed crashes
+
+# 7.7.8
+
+* Villagers joined via inn now have random region names
+* Added Easy Anvil compat
+
+# 7.7.7
+
+* Synced translations
+* Updated TTS server URL in config
+
 # 7.7.6
 
 * Fixed issues with config (Thanks pau101!)

@@ -21,6 +21,7 @@ public class ColorPaletteLoader extends SimplePreparableReloadListener<Map<Resou
         }));
     }
 
+    @SuppressWarnings("deprecation")
     private ColorPalette.Data loadPalette(ResourceLocation id, ResourceManager manager) {
         try (NativeImage img = NativeImage.read(manager.getResource(id).get().open())) {
             return new ColorPalette.Data(
@@ -42,4 +43,5 @@ public class ColorPaletteLoader extends SimplePreparableReloadListener<Map<Resou
             }
         });
     }
+
 }

@@ -12,7 +12,7 @@ neoForge {
 }
 
 dependencies {
-    compileOnly group: 'org.spongepowered', name: 'mixin', version: '0.8.5'
+    compileOnly 'org.spongepowered:mixin:0.8.5'
 }
 
 sourceSets.main.resources {

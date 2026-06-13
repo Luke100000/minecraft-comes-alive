@@ -169,6 +169,7 @@
   "tag.block.minecraft.cauldrons": "Cauldrons",
 
   "tag.block.mca.chests": "Chests",
+  "tag.block.mca.anvils": "Anvils",
   "tag.block.mca.iron_bars": "Iron Bars",
   "tag.block.mca.iron_doors": "Iron Doors",
   "tag.block.mca.tombstones": "Tombstones",
@@ -891,6 +892,7 @@
   "subtitle.mca.villager.greeting": "Greeting",
   "subtitle.mca.villager.yes": "Agreeing",
   "subtitle.mca.villager.no": "Disagreeing",
+  "subtitle.mca.villager.cough": "Coughing",
   "subtitle.mca.villager.snoring": "Snoring",
   "subtitle.mca.villager.hurt": "Villager Hurt",
   "subtitle.mca.villager.angry": "Villager Angry",

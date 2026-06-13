@@ -443,7 +443,7 @@ public final class Config extends CommonConfig {
     /**
      * URL of the online TTS server.
      */
-    public String onlineTTSServer = "https://api.rk.conczin.net/";
+    public String onlineTTSServer = "https://api-rk.conczin.net/";
 
     /**
      * Player2 API url.
