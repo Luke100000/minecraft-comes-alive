@@ -28,6 +28,14 @@
     "${mod_id}.fabric.mixins.json"
   ],
   "accessWidener": "${mod_id}.classtweaker",
+  "custom": {
+    "modmenu": {
+      "links": {
+        "modmenu.discord": "https://discord.gg/EjYwZUJbpf",
+        "modmenu.wiki": "https://github.com/Luke100000/minecraft-comes-alive/wiki"
+      }
+    }
+  },
   "depends": {
     "fabricloader": ">=${loader_version}",
     "fabric-api": "*",
