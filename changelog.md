@@ -1,3 +1,7 @@
+# 7.8.2
+
+* Even more fixes
+
 # 7.8.1
 
 * Fixed crashes
