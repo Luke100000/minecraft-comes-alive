@@ -6,11 +6,11 @@ pluginManagement {
         }
         maven {
             name = 'Architectury'
-            url "https://maven.architectury.dev/"
+            url = "https://maven.architectury.dev/"
         }
         maven {
             name = 'Forge'
-            url "https://files.minecraftforge.net/maven/"
+            url = "https://files.minecraftforge.net/maven/"
         }
         gradlePluginPortal()
     }

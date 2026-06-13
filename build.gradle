@@ -1,7 +1,7 @@
 plugins {
     id 'java-library'
     id 'architectury-plugin' version '3.4-SNAPSHOT'
-    id 'dev.architectury.loom' version '1.7-SNAPSHOT' apply false
+    id 'dev.architectury.loom' version '1.14.476' apply false
     id "io.github.pacifistmc.forgix" version "1.2.9"
 }
 
@@ -11,12 +11,10 @@ architectury {
 
 def getAppVersion = { ->
     try {
-        def stdout = new ByteArrayOutputStream()
-        exec {
+        def version = providers.exec {
             commandLine 'git', 'describe', '--tags', '--abbrev=0'
-            standardOutput = stdout
-        }
-        return stdout.toString().trim()
+        }.standardOutput.asText.get().trim()
+        return version
     } catch (Exception e) {
         println "Warning: ${e.message}, is git installed?"
         return "dev"
@@ -39,7 +37,7 @@ allprojects {
 
     group = rootProject.groupId
     description = rootProject.displayname
-    archivesBaseName = rootProject.name
+    base.archivesName = rootProject.name
     version = getAppVersion()
 
     build.finalizedBy(mergeJars)
@@ -54,6 +52,18 @@ allprojects {
 
     tasks.withType(JavaCompile).configureEach {
         it.options.release = 17
+        it.options.deprecation = true
+        it.options.compilerArgs << "-Xmaxerrs" << "1000" << "-Xlint:deprecation" << "-Xlint:unchecked"
+    }
+
+    tasks.configureEach { task ->
+        if (task instanceof JavaForkOptions) {
+            ['--enable-native-access=ALL-UNNAMED'].each { nativeAccessJvmArg ->
+                if (!task.jvmArgs.contains(nativeAccessJvmArg)) {
+                    task.jvmArgs(nativeAccessJvmArg)
+                }
+            }
+        }
     }
 
     publishing {

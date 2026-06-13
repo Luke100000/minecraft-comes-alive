@@ -29,6 +29,7 @@ public final class BuildingType implements Serializable {
     private final boolean noBeds;
     private final Map<String, Integer> blocks;
     private transient Map<Identifier, Identifier> blockToGroup;
+    private transient Map<TagKey<Block>, Identifier> tagToGroup;
     private transient Map<Identifier, Integer> groups;
     private final boolean icon;
     private final int iconU;
@@ -116,6 +117,7 @@ public final class BuildingType implements Serializable {
     public Map<Identifier, Identifier> getBlockToGroup() {
         if (blockToGroup == null) {
             blockToGroup = new HashMap<>();
+            tagToGroup = new HashMap<>();
             groups = new HashMap<>();
             for (Map.Entry<String, Integer> requirement : blocks.entrySet()) {
                 Identifier identifier;
@@ -124,14 +126,8 @@ public final class BuildingType implements Serializable {
                     TagKey<Block> tag = TagKey.of(RegistryKeys.BLOCK, identifier);
                     if (tag == null || RegistryHelper.isTagEmpty(tag)) {
                         MCA.LOGGER.error("Unknown building type tag " + identifier);
-                    } else {
-                        var entries = RegistryHelper.getEntries(tag);
-                        entries.ifPresent(registryEntries -> {
-                            for (Block b : registryEntries.stream().map(RegistryEntry::value).toList()) {
-                                blockToGroup.putIfAbsent(Registries.BLOCK.getId(b), identifier);
-                            }
-                        });
                     }
+                    tagToGroup.put(tag, identifier);
                 } else {
                     identifier = new Identifier(requirement.getKey());
                     blockToGroup.put(identifier, identifier);
@@ -140,6 +136,32 @@ public final class BuildingType implements Serializable {
             }
         }
         return blockToGroup;
+    }
+
+    private Optional<Identifier> getGroupForBlock(Identifier blockId) {
+        getBlockToGroup();
+
+        Identifier directGroup = blockToGroup.get(blockId);
+        if (directGroup != null) {
+            return Optional.of(directGroup);
+        }
+
+        var entry = Registries.BLOCK.getEntry(net.minecraft.registry.RegistryKey.of(RegistryKeys.BLOCK, blockId));
+        if (entry.isEmpty()) {
+            return Optional.empty();
+        }
+
+        for (Map.Entry<TagKey<Block>, Identifier> tagEntry : tagToGroup.entrySet()) {
+            if (entry.get().isIn(tagEntry.getKey())) {
+                return Optional.of(tagEntry.getValue());
+            }
+        }
+
+        return Optional.empty();
+    }
+
+    public boolean matchesBlock(Identifier blockId) {
+        return getGroupForBlock(blockId).isPresent();
     }
 
     public Map<Identifier, Integer> getGroups() {
@@ -155,8 +177,8 @@ public final class BuildingType implements Serializable {
     public Map<Identifier, List<BlockPos>> getGroups(Map<Identifier, List<BlockPos>> blocks) {
         HashMap<Identifier, List<BlockPos>> available = new HashMap<>();
         for (Map.Entry<Identifier, List<BlockPos>> entry : blocks.entrySet()) {
-            Optional.ofNullable(getBlockToGroup().get(entry.getKey())).ifPresent(v ->
-                    available.computeIfAbsent(v, k -> new LinkedList<>()).addAll(entry.getValue())
+            getGroupForBlock(entry.getKey()).ifPresent(group ->
+                    available.computeIfAbsent(group, k -> new LinkedList<>()).addAll(entry.getValue())
             );
         }
         return available;

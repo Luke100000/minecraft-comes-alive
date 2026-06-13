@@ -5,7 +5,7 @@
   ],
   "passes": [
     {
-      "name": "mca:blur_centered",
+      "name": "blur_centered",
       "intarget": "minecraft:main",
       "outtarget": "swap",
       "uniforms": [
@@ -20,7 +20,7 @@
       ]
     },
     {
-      "name": "mca:blur_centered",
+      "name": "blur_centered",
       "intarget": "swap",
       "outtarget": "blur",
       "uniforms": [

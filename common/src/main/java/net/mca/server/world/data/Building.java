@@ -309,12 +309,6 @@ public class Building implements Serializable {
         } else if (!hasDoor) {
             return validationResult.NO_DOOR;
         } else {
-            //fetch all interesting block types
-            Set<Identifier> blockTypes = new HashSet<>();
-            for (BuildingType bt : BuildingTypes.getInstance()) {
-                blockTypes.addAll(bt.getBlockToGroup().keySet());
-            }
-
             //dimensions
             int sx = center.getX();
             int sy = center.getY();
@@ -334,7 +328,7 @@ public class Building implements Serializable {
                 //count blocks types
                 BlockState blockState = world.getBlockState(p);
                 Block block = blockState.getBlock();
-                if (blockTypes.contains(Registries.BLOCK.getId(block))) {
+                if (isBuildingBlock(Registries.BLOCK.getId(block))) {
                     if (block instanceof BedBlock) {
                         // TODO: look for better solution for 7.4.0
                         if (blockState.get(BedBlock.PART) == BedPart.HEAD) {
@@ -360,6 +354,15 @@ public class Building implements Serializable {
             //determine type
             return isTypeForced() || determineType() ? validationResult.SUCCESS : validationResult.INVALID_TYPE;
         }
+    }
+
+    private boolean isBuildingBlock(Identifier blockId) {
+        for (BuildingType bt : BuildingTypes.getInstance()) {
+            if (bt.matchesBlock(blockId)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public boolean determineType() {

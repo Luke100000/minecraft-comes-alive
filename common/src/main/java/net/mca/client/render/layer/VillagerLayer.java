@@ -63,6 +63,7 @@ public abstract class VillagerLayer<T extends LivingEntity, M extends BipedEntit
     }
 
     @Override
+    @SuppressWarnings({"rawtypes", "unchecked"})
     public void render(MatrixStack transform, VertexConsumerProvider provider, int light, T villager, float limbAngle, float limbDistance, float tickDelta, float animationProgress, float headYaw, float headPitch) {
         MinecraftClient client = MinecraftClient.getInstance();
         boolean visible = !villager.isInvisible();
@@ -77,14 +78,10 @@ public abstract class VillagerLayer<T extends LivingEntity, M extends BipedEntit
         }
 
         //primarily restores compatibility with Armourers Workshop
-        //noinspection rawtypes
         if (model instanceof VillagerEntityModelMCA layer) {
-            //noinspection unchecked
             layer.copyVisibility(getContextModel());
         }
-        //noinspection rawtypes
         if (model instanceof PlayerEntityExtendedModel layer) {
-            //noinspection unchecked
             layer.copyVisibility(getContextModel());
         }
 

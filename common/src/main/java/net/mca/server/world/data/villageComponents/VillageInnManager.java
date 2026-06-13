@@ -2,6 +2,8 @@ package net.mca.server.world.data.villageComponents;
 
 import net.mca.Config;
 import net.mca.ProfessionsMCA;
+import net.mca.resources.Names;
+import net.minecraft.text.Text;
 import net.mca.entity.VillagerEntityMCA;
 import net.mca.entity.ai.relationship.Gender;
 import net.mca.server.world.data.Village;
@@ -62,14 +64,14 @@ public class VillageInnManager {
                     trader.setDespawnDelay(Config.getInstance().adventurerStayTime);
                 }
             } else if (i == 1 && Config.getInstance().innSpawnsCultists) {
-                VillagerEntityMCA adventurer = Gender.getRandom().getVillagerType().spawn(world, blockPos, SpawnReason.EVENT);
+                VillagerEntityMCA adventurer = spawnInnVillager(world, blockPos, Gender.getRandom());
                 if (adventurer != null) {
                     name = adventurer.getName().getString();
                     adventurer.setProfession(ProfessionsMCA.CULTIST.get());
                     adventurer.setDespawnDelay(Config.getInstance().adventurerStayTime);
                 }
             } else if (Config.getInstance().innSpawnsAdventurers) {
-                VillagerEntityMCA adventurer = Gender.getRandom().getVillagerType().spawn(world, blockPos, SpawnReason.EVENT);
+                VillagerEntityMCA adventurer = spawnInnVillager(world, blockPos, Gender.getRandom());
                 if (adventurer != null) {
                     name = adventurer.getName().getString();
                     adventurer.setProfession(ProfessionsMCA.ADVENTURER.get());
@@ -85,5 +87,13 @@ public class VillageInnManager {
             }
         }
         return false;
+    }
+
+    private VillagerEntityMCA spawnInnVillager(ServerWorld world, BlockPos blockPos, Gender gender) {
+        VillagerEntityMCA adventurer = gender.getVillagerType().spawn(world, blockPos, SpawnReason.EVENT);
+        if (adventurer != null) {
+            adventurer.setCustomName(Text.literal(Names.pickCitizenName(gender)));
+        }
+        return adventurer;
     }
 }

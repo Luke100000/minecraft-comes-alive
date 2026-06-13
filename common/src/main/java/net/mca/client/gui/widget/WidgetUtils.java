@@ -33,6 +33,7 @@ public class WidgetUtils {
     /**
      * The same as the Inventory function but with negative Z
      */
+    @SuppressWarnings("deprecation")
     public static void drawBackgroundEntity(int x, int y, int size, float mouseX, float mouseY, LivingEntity entity) {
         float f = (float)Math.atan(mouseX / 40.0F);
         float g = (float)Math.atan(mouseY / 40.0F);

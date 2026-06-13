@@ -44,7 +44,7 @@ public class Nationality extends PersistentState {
             {-1, 1},
             {1, 1},
             {-1, -1},
-            {-1, 1},
+            {1, -1},
     };
 
     private static long toId(long x, long z) {
