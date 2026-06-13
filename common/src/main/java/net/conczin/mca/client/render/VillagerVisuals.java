@@ -8,7 +8,7 @@ import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.entity.ai.relationship.VillagerDimensions;
 import net.minecraft.world.entity.LivingEntity;
 
-public record VillagerVisualSnapshot(
+public record VillagerVisuals(
         String genderDataName,
         boolean female,
         boolean baby,
@@ -35,15 +35,15 @@ public record VillagerVisualSnapshot(
         boolean sleeping,
         boolean deadOrDying
 ) {
-    public static VillagerVisualSnapshot require(Object state) {
-        VillagerVisualSnapshot snapshot = VillagerStateHolder.require(state).mca$getVisualSnapshot();
-        if (snapshot == null) {
+    public static VillagerVisuals require(Object state) {
+        VillagerVisuals visuals = VillagerStateHolder.require(state).mca$getVisuals();
+        if (visuals == null) {
             throw new IllegalStateException("No villager visuals available for render state");
         }
-        return snapshot;
+        return visuals;
     }
 
-    public static VillagerVisualSnapshot capture(VillagerLike<?> villager) {
+    public static VillagerVisuals capture(VillagerLike<?> villager) {
         Genetics genetics = villager.getGenetics();
         Traits traits = villager.getTraits();
         LivingEntity entity = villager.asEntity();
@@ -60,7 +60,7 @@ public record VillagerVisualSnapshot(
                 * traits.getVerticalScaleFactor()
                 * dimensions.getHeight()
                 * gender.getScaleFactor();
-        return new VillagerVisualSnapshot(
+        return new VillagerVisuals(
                 gender.getDataName(),
                 gender == Gender.FEMALE,
                 ageState == AgeState.BABY,

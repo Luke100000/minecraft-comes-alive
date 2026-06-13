@@ -97,7 +97,7 @@ public class PlayerArmorExtendedModel<T extends LivingEntity> extends HumanoidMo
         super.setupAnim(state);
 
         if (state instanceof VillagerStateHolder holder) {
-            var visuals = holder.mca$getVisualSnapshot();
+            var visuals = holder.mca$getVisuals();
             if (visuals != null) {
                 applyVillagerDimensions(visuals, state.isCrouching);
             }

@@ -1,6 +1,5 @@
 package net.conczin.mca.client.render;
 
-import net.conczin.mca.entity.VillagerLike;
 import org.jspecify.annotations.Nullable;
 
 public interface VillagerStateHolder {
@@ -11,19 +10,22 @@ public interface VillagerStateHolder {
         return holder;
     }
 
-    @Nullable VillagerVisualSnapshot mca$getVisualSnapshot();
+    @Nullable VillagerRenderData mca$getVillagerRenderData();
 
-    void mca$setVisualSnapshot(@Nullable VillagerVisualSnapshot snapshot);
-
-    VillagerLike.PlayerModel mca$getPlayerModel();
-
-    void mca$setPlayerModel(VillagerLike.PlayerModel playerModel);
+    void mca$setVillagerRenderData(@Nullable VillagerRenderData renderData);
 
     default boolean mca$isGeneticsRendererActive() {
-        return mca$getVisualSnapshot() != null && mca$getPlayerModel() != VillagerLike.PlayerModel.VANILLA;
+        VillagerRenderData renderData = mca$getVillagerRenderData();
+        return renderData != null && renderData.usesGeneticsRenderer();
     }
 
     default boolean mca$isVillagerRendererActive() {
-        return mca$getVisualSnapshot() != null && mca$getPlayerModel() == VillagerLike.PlayerModel.VILLAGER;
+        VillagerRenderData renderData = mca$getVillagerRenderData();
+        return renderData != null && renderData.usesVillagerRenderer();
+    }
+
+    default @Nullable VillagerVisuals mca$getVisuals() {
+        VillagerRenderData renderData = mca$getVillagerRenderData();
+        return renderData != null ? renderData.visuals() : null;
     }
 }

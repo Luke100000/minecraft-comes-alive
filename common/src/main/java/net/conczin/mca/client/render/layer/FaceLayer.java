@@ -1,7 +1,7 @@
 package net.conczin.mca.client.render.layer;
 
 import net.conczin.mca.MCA;
-import net.conczin.mca.client.render.VillagerVisualSnapshot;
+import net.conczin.mca.client.render.VillagerVisuals;
 import net.minecraft.client.model.HumanoidModel;
 import net.minecraft.client.renderer.entity.RenderLayerParent;
 import net.minecraft.client.renderer.entity.state.HumanoidRenderState;
@@ -30,7 +30,7 @@ public class FaceLayer<S extends HumanoidRenderState, M extends HumanoidModel<S>
 
     @Override
     public Identifier getSkin(S state) {
-        var visuals = VillagerVisualSnapshot.require(state);
+        var visuals = VillagerVisuals.require(state);
         int index = (int) Math.min(FACE_COUNT - 1, Math.max(0, visuals.faceGene() * FACE_COUNT));
         boolean blink = visuals.isBlinking();
         boolean hasHeterochromia = variant.equals("normal") && visuals.heterochromia();

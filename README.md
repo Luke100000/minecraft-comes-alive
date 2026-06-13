@@ -20,7 +20,7 @@ Children will eventually grow up into adults. Adults can get married and have ch
 repeat indefinitely!
 
 MCA Reborn is a rewrite of MCA for Minecraft 1.16.5 and upwards, featuring extended village management, villager
-genetics and various enhancements.
+genetics, and various enhancements.
 
 ## Compatibilities
 
@@ -40,13 +40,14 @@ Following mods have the required resource packs included and are therefore fully
 
 ## Contributing
 
-Any contributions to are welcome. Simply clone into your workspace, set it up, make your changes, and submit a pull
-request for review.
+Any contributions to are welcome, but please
+check https://github.com/Luke100000/minecraft-comes-alive/wiki/Porting#for-developers.
+Clone into your workspace, set it up, make your changes, and submit a pull request for review.
 
 Alternatively you can help translating MCA into your language
 on [Crowdin](https://crowdin.com/project/minecraft-comes-alive-2)!
 
-Or you can Join the [Discord Community](https://discord.com/invite/EjYwZUJbpf) for questions, suggestions or social
+Or you can Join the [Discord Community](https://discord.com/invite/EjYwZUJbpf) for questions, suggestions, or social
 interactions.
 
 ## Credits

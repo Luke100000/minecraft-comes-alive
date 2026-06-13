@@ -61,11 +61,7 @@ public abstract class VillagerLayer<S extends HumanoidRenderState, M extends Hum
 
     @Override
     public void submit(PoseStack poseStack, SubmitNodeCollector submitNodeCollector, int lightCoords, S state, float yRot, float xRot) {
-        if (!(state instanceof VillagerStateHolder holder) || holder.mca$getVisualSnapshot() == null) {
-            return;
-        }
-
-        if (!holder.mca$isVillagerRendererActive()) {
+        if (!(state instanceof VillagerStateHolder holder) || !holder.mca$isVillagerRendererActive()) {
             return;
         }
 

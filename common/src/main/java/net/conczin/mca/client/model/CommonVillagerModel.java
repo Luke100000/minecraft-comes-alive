@@ -2,7 +2,7 @@ package net.conczin.mca.client.model;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
-import net.conczin.mca.client.render.VillagerVisualSnapshot;
+import net.conczin.mca.client.render.VillagerVisuals;
 import net.conczin.mca.entity.ai.relationship.VillagerDimensions;
 import net.minecraft.client.model.geom.ModelPart;
 
@@ -53,11 +53,11 @@ public interface CommonVillagerModel<T> {
         }
     }
 
-    default void applyVillagerDimensions(VillagerVisualSnapshot snapshot, boolean isSneaking) {
-        getDimensions().set(snapshot.dimensions());
-        setBreastSize(snapshot.breastSize());
+    default void applyVillagerDimensions(VillagerVisuals visuals, boolean isSneaking) {
+        getDimensions().set(visuals.dimensions());
+        setBreastSize(visuals.breastSize());
         
-        boolean female = snapshot.female();
+        boolean female = visuals.female();
         float breastSize = getBreastSize();
         boolean hasBreasts = female && breastSize * getDimensions().getBreasts() > 0;
         

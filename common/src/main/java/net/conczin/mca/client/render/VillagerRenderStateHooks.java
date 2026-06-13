@@ -28,12 +28,7 @@ public final class VillagerRenderStateHooks {
             playerModel = editor.getSelectedPlayerModel();
         }
 
-        VillagerVisualSnapshot visualSnapshot = playerModel != VillagerLike.PlayerModel.VANILLA && visualsSource != null
-                ? VillagerVisualSnapshot.capture(visualsSource)
-                : null;
-
-        holder.mca$setPlayerModel(visualSnapshot != null ? playerModel : VillagerLike.PlayerModel.VANILLA);
-        holder.mca$setVisualSnapshot(visualSnapshot);
+        holder.mca$setVillagerRenderData(VillagerRenderData.create(playerModel, visualsSource));
     }
 
     public static void extractScaledBounds(LivingEntity entity, LivingEntityRenderState state) {
@@ -41,7 +36,7 @@ public final class VillagerRenderStateHooks {
             return;
         }
 
-        var visuals = holder.mca$getVisualSnapshot();
+        var visuals = holder.mca$getVisuals();
         if (visuals == null) {
             return;
         }

@@ -73,8 +73,7 @@ public class VillagerLikeEntityMCARenderer<T extends Mob & VillagerLike<T>>
     public void extractRenderState(T entity, VillagerRenderState state, float partialTicks) {
         super.extractRenderState(entity, state, partialTicks);
         VillagerStateHolder holder = VillagerStateHolder.require(state);
-        holder.mca$setPlayerModel(VillagerLike.PlayerModel.VILLAGER);
-        holder.mca$setVisualSnapshot(VillagerVisualSnapshot.capture(entity));
+        holder.mca$setVillagerRenderData(VillagerRenderData.create(VillagerLike.PlayerModel.VILLAGER, entity));
         state.panicAnimationProgress = entity.getVillagerBrain().getPanicAnimationProgress(partialTicks);
         state.cribPassenger = entity.getVehicle() instanceof CribEntity;
         VillagerRenderStateHooks.extractScaledBounds(entity, state);
@@ -82,7 +81,7 @@ public class VillagerLikeEntityMCARenderer<T extends Mob & VillagerLike<T>>
 
     @Override
     protected void scale(VillagerRenderState state, PoseStack matrices) {
-        VillagerVisualSnapshot visuals = VillagerVisualSnapshot.require(state);
+        VillagerVisuals visuals = VillagerVisuals.require(state);
         float height = visuals.rawVerticalScaleFactor();
         float width = visuals.rawHorizontalScaleFactor();
         matrices.scale(width, height, width);
@@ -117,6 +116,6 @@ public class VillagerLikeEntityMCARenderer<T extends Mob & VillagerLike<T>>
 
     @Override
     protected boolean isShaking(VillagerRenderState state) {
-        return VillagerVisualSnapshot.require(state).infectionProgress() > Infectable.FEVER_THRESHOLD;
+        return VillagerVisuals.require(state).infectionProgress() > Infectable.FEVER_THRESHOLD;
     }
 }
