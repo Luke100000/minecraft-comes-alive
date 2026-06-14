@@ -647,8 +647,11 @@
 
   "gui.villager_editor.selectClothing": "Select Clothes",
   "gui.villager_editor.randClothing": "Random Clothes",
+  "gui.villager_editor.randSkin": "Random Skin",
+  "gui.villager_editor.selectSkin": "Select Skin",
   "gui.villager_editor.randHair": "Random Hair",
   "gui.villager_editor.selectHair": "Select Hair",
+  "gui.villager_editor.randLayeredHair": "Random Layered Hair",
   "gui.villager_editor.prev": "Previous",
   "gui.villager_editor.next": "Next",
   "gui.villager_editor.title": "Villager Editor",
@@ -690,6 +693,11 @@
   "gui.villager_editor.hair_hsv": "HSV Hair",
   "gui.villager_editor.hair_mode.tooltip": "Toggles HSV dyed hair. Only the underlying genetic hair color is inherited.",
   "gui.villager_editor.clear_hair": "Clear HSV color",
+  "gui.villager_editor.hair_layer.base": "Base",
+  "gui.villager_editor.hair_layer.bangs": "Bangs",
+  "gui.villager_editor.hair_layer.back": "Back",
+  "gui.villager_editor.hair_layer.front": "Front",
+  "gui.villager_editor.hair_layer.extra": "Extra",
 
   "command.verify.success": "Verified! Limit increased.",
   "command.verify.failed": "Whoops, the given email is wrong.",

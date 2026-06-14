@@ -1,10 +1,14 @@
 package net.conczin.mca.client.render.layer;
 
+import com.mojang.blaze3d.vertex.PoseStack;
 import net.conczin.mca.MCA;
 import net.conczin.mca.client.gui.immersive_library.SkinCache;
 import net.conczin.mca.client.render.VillagerVisuals;
 import net.conczin.mca.client.resources.ColorPalette;
+import net.conczin.mca.resources.data.skin.LayeredHair;
 import net.minecraft.client.model.HumanoidModel;
+import net.minecraft.client.renderer.SubmitNodeCollector;
+import net.minecraft.client.renderer.entity.LivingEntityRenderer;
 import net.minecraft.client.renderer.entity.RenderLayerParent;
 import net.minecraft.client.renderer.entity.state.HumanoidRenderState;
 import net.minecraft.resources.Identifier;
@@ -20,6 +24,35 @@ public class HairLayer<S extends HumanoidRenderState, M extends HumanoidModel<S>
     protected void prepareModel(S state) {
         setAllVisible(this.model, true);
         hideLegs(this.model);
+    }
+
+    @Override
+    public void renderFinal(PoseStack poseStack, SubmitNodeCollector submitNodeCollector, int lightCoords, S state, float tickDelta, boolean visible, boolean glowing) {
+        VillagerVisuals visuals = VillagerVisuals.require(state);
+        if (!visuals.hasLayeredHair()) {
+            super.renderFinal(poseStack, submitNodeCollector, lightCoords, state, tickDelta, visible, glowing);
+            return;
+        }
+
+        int overlay = LivingEntityRenderer.getOverlayCoords(state, 0.0F);
+        int color = getColor(state, tickDelta);
+        for (LayeredHair.Category category : new LayeredHair.Category[]{
+                LayeredHair.Category.BACK,
+                LayeredHair.Category.BASE,
+                LayeredHair.Category.BANGS,
+                LayeredHair.Category.FRONT,
+                LayeredHair.Category.EXTRA
+        }) {
+            String identifier = visuals.layeredHair(category);
+            if (MCA.isBlankString(identifier)) {
+                continue;
+            }
+
+            Identifier texture = cached(identifier, Identifier::parse);
+            if (canUse(texture)) {
+                renderModel(poseStack, submitNodeCollector, lightCoords, this.model, color, texture, overlay, visible, glowing, state);
+            }
+        }
     }
 
     @Override

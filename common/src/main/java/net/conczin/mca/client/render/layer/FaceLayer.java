@@ -2,14 +2,14 @@ package net.conczin.mca.client.render.layer;
 
 import net.conczin.mca.MCA;
 import net.conczin.mca.client.render.VillagerVisuals;
+import net.conczin.mca.entity.ai.relationship.Gender;
+import net.conczin.mca.resources.FaceList;
 import net.minecraft.client.model.HumanoidModel;
 import net.minecraft.client.renderer.entity.RenderLayerParent;
 import net.minecraft.client.renderer.entity.state.HumanoidRenderState;
 import net.minecraft.resources.Identifier;
 
 public class FaceLayer<S extends HumanoidRenderState, M extends HumanoidModel<S>> extends VillagerLayer<S, M> {
-    private static final int FACE_COUNT = 22;
-
     private final String variant;
 
     public FaceLayer(RenderLayerParent<S, M> renderer, M model, String variant) {
@@ -31,12 +31,16 @@ public class FaceLayer<S extends HumanoidRenderState, M extends HumanoidModel<S>
     @Override
     public Identifier getSkin(S state) {
         var visuals = VillagerVisuals.require(state);
-        int index = (int) Math.min(FACE_COUNT - 1, Math.max(0, visuals.faceGene() * FACE_COUNT));
         boolean blink = visuals.isBlinking();
         boolean hasHeterochromia = variant.equals("normal") && visuals.heterochromia();
-        String gender = visuals.genderDataName();
         String blinkTexture = blink ? "_blink" : (hasHeterochromia ? "_hetero" : "");
+        Gender gender = Gender.byName(visuals.genderDataName());
 
-        return cached("skins/face/" + variant + "/" + gender + "/" + index + blinkTexture + ".png", MCA::locate);
+        FaceList list = FaceList.getInstance();
+        if (list == null) {
+            int index = (int) Math.min(21, Math.max(0, visuals.faceGene() * 22));
+            return cached("skins/face/" + variant + "/" + visuals.genderDataName() + "/" + index + blinkTexture + ".png", MCA::locate);
+        }
+        return list.pick(variant, gender, visuals.faceGene(), blinkTexture);
     }
 }

@@ -1,11 +1,25 @@
 package net.conczin.mca.resources.data.skin;
 
 import com.google.gson.JsonObject;
+import com.mojang.serialization.Codec;
+import com.mojang.serialization.DataResult;
+import io.netty.buffer.ByteBuf;
 import net.conczin.mca.entity.ai.relationship.Gender;
+import net.minecraft.network.codec.ByteBufCodecs;
+import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.resources.Identifier;
 import net.minecraft.util.GsonHelper;
 
 public abstract class SkinListEntry {
+    public static final Codec<Gender> GENDER_CODEC = Codec.STRING.comapFlatMap(name -> {
+        Gender gender = Gender.byName(name);
+        if (gender == Gender.UNASSIGNED) {
+            return DataResult.error(() -> "Invalid gender: " + name);
+        }
+        return DataResult.success(gender);
+    }, Gender::getDataName);
+    public static final StreamCodec<ByteBuf, Gender> GENDER_STREAM_CODEC = ByteBufCodecs.STRING_UTF8.map(Gender::byName, Gender::getDataName);
+
     protected final String identifier;
     protected final Gender gender;
     protected final float chance;
@@ -53,5 +67,16 @@ public abstract class SkinListEntry {
             return 1.0f;
         }
         return chance;
+    }
+
+    protected static Gender resolveGender(Gender gender, Gender fallback) {
+        if (gender == null || gender == Gender.UNASSIGNED || gender == Gender.NEUTRAL) {
+            return fallback == Gender.UNASSIGNED ? Gender.NEUTRAL : fallback;
+        }
+        return gender;
+    }
+
+    protected Identifier getIdentifierValue() {
+        return Identifier.parse(identifier);
     }
 }

@@ -1,0 +1,7 @@
+{
+  "mca:skins/skin/female/%d.png": {
+    "gender": "female",
+    "count": 5,
+    "tint": true
+  }
+}
