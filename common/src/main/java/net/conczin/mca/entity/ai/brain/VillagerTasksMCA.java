@@ -464,7 +464,7 @@ public class VillagerTasksMCA {
                     return !forced;
                 }, v -> {
                     v.getResidency().seekHome();
-                })),
+                }, ExtendedWalkTowardsTask::findBedStandPosition)),
                 //verify the bed, occupancies state and similar
                 Pair.of(3, new ConditionalSingleTickTask<>(ExtendedForgetCompletedPointOfInterestTask.create(
                         registryEntry -> registryEntry.is(PoiTypes.HOME), MemoryModuleType.HOME, (entity) -> {
