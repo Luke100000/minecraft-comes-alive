@@ -9,5 +9,6 @@ public class VillagerTrackerSearchScreen extends FamilyTreeSearchScreen {
     @Override
     void selectVillager(String name, UUID villager) {
         Network.sendToServer(new SetTargetMessage(name, villager));
+        onClose();
     }
 }
