@@ -1,3 +1,7 @@
+# 7.7.11
+
+* Fixed villager tracker search
+
 # 7.7.10
 
 * Improves family tree search
