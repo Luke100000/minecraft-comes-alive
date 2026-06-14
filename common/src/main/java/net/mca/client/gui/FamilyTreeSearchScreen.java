@@ -22,11 +22,10 @@ public class FamilyTreeSearchScreen extends Screen {
     private ButtonWidget buttonPage;
     private int pageNumber;
 
-    private UUID selectedVillager;
+    private Entry selectedVillager;
 
     private int mouseX;
     private int mouseY;
-    private String currentVillagerName = "";
 
     public FamilyTreeSearchScreen() {
         super(Text.translatable("gui.family_tree.title"));
@@ -105,7 +104,7 @@ public class FamilyTreeSearchScreen extends Screen {
 
                 context.drawCenteredTextWithShadow(textRenderer, text, width / 2, y, hover ? 0xFFD7D784 : 0xFFFFFFFF);
                 if (hover) {
-                    selectedVillager = entry.uuid;
+                    selectedVillager = entry;
                 }
             } else {
                 break;
@@ -117,7 +116,6 @@ public class FamilyTreeSearchScreen extends Screen {
         if (!MCA.isBlankString(v)) {
             NetworkHandler.sendToServer(new FamilyTreeUUIDLookup(v));
         }
-        currentVillagerName = v;
     }
 
     public void setList(List<Entry> list) {
@@ -131,7 +129,7 @@ public class FamilyTreeSearchScreen extends Screen {
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         if (selectedVillager != null) {
-            selectVillager(currentVillagerName, selectedVillager);
+            selectVillager(selectedVillager.name, selectedVillager.uuid);
         }
 
         return super.mouseClicked(mouseX, mouseY, button);
@@ -142,7 +140,7 @@ public class FamilyTreeSearchScreen extends Screen {
         client.setScreen(new FamilyTreeScreen(villager));
     }
 
-    public record Entry(UUID uuid, String father, String mother) implements Serializable {
+    public record Entry(UUID uuid, String name, String father, String mother) implements Serializable {
 
     }
 }
