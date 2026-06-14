@@ -17,8 +17,10 @@ import net.conczin.mca.registry.EntitiesMCA;
 import net.conczin.mca.resources.BodySkinList;
 import net.conczin.mca.resources.ClothingList;
 import net.conczin.mca.resources.HairList;
+import net.conczin.mca.resources.HairStyleList;
 import net.conczin.mca.resources.LayeredHairList;
 import net.conczin.mca.resources.Names;
+import net.conczin.mca.resources.data.skin.HairStyle;
 import net.conczin.mca.resources.data.skin.LayeredHair;
 import net.conczin.mca.server.world.data.FamilyTreeNode;
 import net.conczin.mca.server.world.data.PlayerSaveData;
@@ -292,6 +294,19 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
         }
     }
 
+    default void setHairStyle(HairStyle style) {
+        if (style.legacy()) {
+            setHair(style.base());
+            clearLayeredHair();
+            return;
+        }
+
+        setHair("");
+        for (LayeredHair.Category category : LayeredHair.Category.values()) {
+            setLayeredHair(category, style.layer(category));
+        }
+    }
+
     default void setHairDye(float r, float g, float b) {
         setTrackedValue(HAIR_COLOR_RED, r);
         setTrackedValue(HAIR_COLOR_GREEN, g);
@@ -476,10 +491,20 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
     }
 
     default void randomizeHair() {
-        LayeredHairList layeredHair = LayeredHairList.getInstance();
+        HairStyleList styles = HairStyleList.getInstance();
         Gender gender = getGenetics().getGender();
+
+        if (styles != null) {
+            HairStyle style = styles.get(styles.getPool(gender).pickOne());
+            if (style != null) {
+                setHairStyle(style);
+                return;
+            }
+        }
+
+        LayeredHairList layeredHair = LayeredHairList.getInstance();
         if (layeredHair != null && layeredHair.hasRequiredHair(gender)) {
-            setHair("");
+            clearLayeredHair();
             layeredHair.pickAll(gender).forEach(this::setLayeredHair);
             return;
         }

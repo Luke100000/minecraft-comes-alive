@@ -113,6 +113,7 @@ public final class CommonNeoForge {
         event.addListener(MCA.locate("clothing"), new ClothingList());
         event.addListener(MCA.locate("faces"), new FaceList());
         event.addListener(MCA.locate("hair"), new HairList());
+        event.addListener(MCA.locate("hair_styles"), new HairStyleList());
         event.addListener(MCA.locate("layered_hair"), new LayeredHairList());
         event.addListener(MCA.locate("gifts"), new GiftLoader());
         event.addListener(MCA.locate("dialogues"), new Dialogues());

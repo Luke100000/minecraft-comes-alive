@@ -7,10 +7,12 @@ import net.conczin.mca.network.s2c.SkinListResponse;
 import net.conczin.mca.resources.BodySkinList;
 import net.conczin.mca.resources.ClothingList;
 import net.conczin.mca.resources.HairList;
+import net.conczin.mca.resources.HairStyleList;
 import net.conczin.mca.resources.LayeredHairList;
 import net.conczin.mca.resources.data.skin.BodySkin;
 import net.conczin.mca.resources.data.skin.Clothing;
 import net.conczin.mca.resources.data.skin.Hair;
+import net.conczin.mca.resources.data.skin.HairStyle;
 import net.conczin.mca.resources.data.skin.LayeredHair;
 import net.conczin.mca.server.world.data.CustomClothingManager;
 import net.minecraft.network.FriendlyByteBuf;
@@ -40,7 +42,8 @@ public record SkinListRequest() implements HandleablePayload {
         HashMap<String, Hair> allHair = merge(HairList.getInstance().hair, hair);
         HashMap<String, BodySkin> bodySkins = BodySkinList.getInstance() == null ? new HashMap<>() : new HashMap<>(BodySkinList.getInstance().skins);
         HashMap<String, LayeredHair> layeredHair = LayeredHairList.getInstance() == null ? new HashMap<>() : new HashMap<>(LayeredHairList.getInstance().hair);
-        Network.sendToPlayer(new SkinListResponse(allClothing, allHair, bodySkins, layeredHair), player);
+        HashMap<String, HairStyle> hairStyles = HairStyleList.getInstance() == null ? new HashMap<>() : HairStyleList.getInstance().getAllStyles(allHair);
+        Network.sendToPlayer(new SkinListResponse(allClothing, allHair, bodySkins, layeredHair, hairStyles), player);
     }
 
     @Override

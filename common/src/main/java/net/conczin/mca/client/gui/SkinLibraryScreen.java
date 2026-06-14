@@ -643,7 +643,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                         previousScreen.getVillager().setClothes("immersive_library:" + hoveredContent.contentid());
                         returnToPreviousScreen();
                     } else if (hoveredContent.hasTag("hair")) {
-                        previousScreen.getVillager().setHair("immersive_library:" + hoveredContent.contentid());
+                        previousScreen.applyLibraryHair("immersive_library:" + hoveredContent.contentid());
                         returnToPreviousScreen();
                     }
                 }

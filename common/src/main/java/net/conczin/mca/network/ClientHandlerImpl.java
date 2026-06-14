@@ -220,7 +220,7 @@ public class ClientHandlerImpl implements ClientHandler {
     @Override
     public void handleSkinListResponse(SkinListResponse message) {
         Screen screen = client.screen;
-        VillagerEditorScreen.setSkinList(message.clothing(), message.hair(), message.bodySkins(), message.layeredHair());
+        VillagerEditorScreen.setSkinList(message.clothing(), message.hair(), message.bodySkins(), message.layeredHair(), message.hairStyles());
         if (screen instanceof SkinListUpdateListener gui) {
             gui.skinListUpdatedCallback();
         }
