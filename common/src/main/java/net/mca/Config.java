@@ -201,8 +201,6 @@ public final class Config extends CommonConfig {
     public boolean forceVillagerPlayerModel = false;
     public boolean allowLimitedPlayerEditor = true;
     public boolean allowFullPlayerEditor = false;
-    @Deprecated
-    public boolean adjustPlayerEyesToHeight = true;
     public boolean scaleEyeHeightWithPlayerHeight = true;
 
     public boolean useModernUSANamesOnly = false;

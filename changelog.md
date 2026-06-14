@@ -1,3 +1,8 @@
+# 7.6.18
+
+* Fixed eye position
+* Fixed villager tracker search
+
 # 7.6.17
 
 * Fixed crashes and issues
