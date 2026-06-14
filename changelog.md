@@ -1,3 +1,8 @@
+# 7.8.3
+
+* Surprise, more fixes!
+* Relaxed fabric loader version
+
 # 7.8.2
 
 * Even more fixes
