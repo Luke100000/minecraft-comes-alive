@@ -1,7 +1,7 @@
 package net.conczin.mca.mixin.client;
 
-import net.conczin.mca.client.render.VillagerStateHolder;
 import net.conczin.mca.client.render.VillagerRenderData;
+import net.conczin.mca.client.render.VillagerStateHolder;
 import net.minecraft.client.renderer.entity.state.LivingEntityRenderState;
 import org.jspecify.annotations.Nullable;
 import org.spongepowered.asm.mixin.Mixin;

@@ -11,6 +11,7 @@ import net.minecraft.client.model.geom.builders.CubeListBuilder;
 import net.minecraft.client.model.geom.builders.MeshDefinition;
 import net.minecraft.client.model.geom.builders.PartDefinition;
 import net.minecraft.client.model.player.PlayerModel;
+import net.minecraft.client.renderer.entity.ArmorModelSet;
 
 public class VillagerEntityModelMCA extends VillagerEntityBaseModelMCA {
     protected static final String BREASTPLATE = "breastplate";
@@ -57,11 +58,17 @@ public class VillagerEntityModelMCA extends VillagerEntityBaseModelMCA {
         return modelData;
     }
 
-    public static MeshDefinition armorData(CubeDeformation dilation) {
-        MeshDefinition modelData = PlayerModel.createMesh(dilation, false);
-        PartDefinition root = modelData.getRoot();
-        root.addOrReplaceChild(BREASTS, newBreasts(dilation, 0), PartPose.ZERO);
-        return modelData;
+    public static ArmorModelSet<MeshDefinition> armorData() {
+        ArmorModelSet<MeshDefinition> armor = HumanoidModel.createArmorMeshSet(new CubeDeformation(0.5F), new CubeDeformation(1.0F));
+        addEmptyBreasts(armor.head());
+        armor.chest().getRoot().addOrReplaceChild(BREASTS, newBreasts(new CubeDeformation(1.0F), 0), PartPose.ZERO);
+        addEmptyBreasts(armor.legs());
+        addEmptyBreasts(armor.feet());
+        return armor;
+    }
+
+    private static void addEmptyBreasts(MeshDefinition mesh) {
+        mesh.getRoot().addOrReplaceChild(BREASTS, CubeListBuilder.create(), PartPose.ZERO);
     }
 
     public Iterable<ModelPart> getCommonBodyParts() {
