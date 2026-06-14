@@ -7,11 +7,12 @@ import net.conczin.mca.entity.ai.relationship.VillagerDimensions;
 import net.minecraft.client.model.HumanoidModel;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.client.renderer.entity.state.AvatarRenderState;
+import net.minecraft.client.renderer.entity.state.HumanoidRenderState;
 import net.minecraft.world.entity.LivingEntity;
 
 import static net.conczin.mca.client.model.VillagerEntityBaseModelMCA.BREASTS;
 
-public class PlayerArmorExtendedModel<T extends LivingEntity> extends HumanoidModel<AvatarRenderState> implements CommonVillagerModel<T> {
+public class PlayerArmorExtendedModel<T extends LivingEntity> extends HumanoidModel<HumanoidRenderState> implements CommonVillagerModel<T> {
     public final ModelPart breasts;
 
     final VillagerDimensions.Mutable dimensions = new VillagerDimensions.Mutable(AgeState.ADULT);
@@ -85,15 +86,22 @@ public class PlayerArmorExtendedModel<T extends LivingEntity> extends HumanoidMo
 
 
     @Override
-    public void setupAnim(AvatarRenderState state) {
-        head.visible = !state.isSpectator;
-        hat.visible = state.showHat;
-        body.visible = !state.isSpectator;
-        breasts.visible = !state.isSpectator;
-        leftArm.visible = !state.isSpectator;
-        rightArm.visible = !state.isSpectator;
-        leftLeg.visible = !state.isSpectator;
-        rightLeg.visible = !state.isSpectator;
+    public void setupAnim(HumanoidRenderState state) {
+        boolean showBody = true;
+        boolean showHat = true;
+        if (state instanceof AvatarRenderState avatarState) {
+            showBody = !avatarState.isSpectator;
+            showHat = avatarState.showHat;
+        }
+
+        head.visible = showBody;
+        hat.visible = showHat;
+        body.visible = showBody;
+        breasts.visible = showBody;
+        leftArm.visible = showBody;
+        rightArm.visible = showBody;
+        leftLeg.visible = showBody;
+        rightLeg.visible = showBody;
         super.setupAnim(state);
 
         if (state instanceof VillagerStateHolder holder) {
