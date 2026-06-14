@@ -45,8 +45,8 @@ public class VillagerEntityModelMCA extends VillagerEntityBaseModelMCA {
 
     public static MeshDefinition hairData(CubeDeformation dilation) {
         MeshDefinition modelData = bodyData(dilation);
-        PartDefinition root = modelData.getRoot();
-        root.addOrReplaceChild(PartNames.HAT, CubeListBuilder.create().texOffs(32, 0).addBox(-4, -8, -4, 8, 8, 8, dilation.extend(0.3F)), PartPose.ZERO);
+        PartDefinition head = modelData.getRoot().getChild(PartNames.HEAD);
+        head.addOrReplaceChild(PartNames.HAT, CubeListBuilder.create().texOffs(32, 0).addBox(-4, -8, -4, 8, 8, 8, dilation.extend(0.3F)), PartPose.ZERO);
         return modelData;
     }
 

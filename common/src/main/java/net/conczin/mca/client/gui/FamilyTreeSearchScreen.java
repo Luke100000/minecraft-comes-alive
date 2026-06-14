@@ -14,6 +14,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.util.FormattedCharSequence;
+import org.jspecify.annotations.NonNull;
 
 import java.util.LinkedList;
 import java.util.List;
@@ -29,11 +30,10 @@ public class FamilyTreeSearchScreen extends Screen {
     private ButtonWidget buttonPage;
     private int pageNumber;
 
-    private UUID selectedVillager;
+    private Entry selectedVillager;
 
     private int mouseX;
     private int mouseY;
-    private String currentVillagerName = "";
 
     public FamilyTreeSearchScreen() {
         super(Component.translatable("gui.family_tree.title"));
@@ -102,7 +102,7 @@ public class FamilyTreeSearchScreen extends Screen {
                 Entry entry = list.get(index);
 
                 if (hover) {
-                    selectedVillager = entry.uuid;
+                    selectedVillager = entry;
                 }
 
                 List<FormattedCharSequence> lines = font.split(entry.relationshipLabel(), DATA_WIDTH);
@@ -120,7 +120,6 @@ public class FamilyTreeSearchScreen extends Screen {
         if (!MCA.isBlankString(v)) {
             Network.sendToServer(new FamilyTreeUUIDLookup(v));
         }
-        currentVillagerName = v;
     }
 
     public void setList(List<Entry> list) {
@@ -133,16 +132,15 @@ public class FamilyTreeSearchScreen extends Screen {
     }
 
     @Override
-    public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
+    public boolean mouseClicked(@NonNull MouseButtonEvent event, boolean doubleClick) {
         if (selectedVillager != null) {
-            selectVillager(currentVillagerName, selectedVillager);
+            selectVillager(selectedVillager.name, selectedVillager.uuid);
         }
 
         return super.mouseClicked(event, doubleClick);
     }
 
     void selectVillager(String name, UUID villager) {
-        assert minecraft != null;
         minecraft.setScreen(new FamilyTreeScreen(villager));
     }
 
