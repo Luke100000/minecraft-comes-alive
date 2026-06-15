@@ -43,29 +43,22 @@ public class SmarterOpenDoorsTask extends Behavior<LivingEntity> {
     }
 
     public static boolean setOpen(@Nullable Entity entity, Level world, BlockState state, BlockPos pos, boolean open) {
-        if (!state.hasProperty(BlockStateProperties.OPEN) || state.getValue(BlockStateProperties.OPEN) == open) {
+        if (state.hasProperty(BlockStateProperties.OPEN) && state.getValue(BlockStateProperties.OPEN) != open) {
+            world.setBlock(pos, state.setValue(BlockStateProperties.OPEN, open), Block.UPDATE_CLIENTS | Block.UPDATE_IMMEDIATE);
+            world.gameEvent(entity, open ? GameEvent.BLOCK_OPEN : GameEvent.BLOCK_CLOSE, pos);
+            playOpenCloseSound(entity, world, pos, open);
+            return true;
+        } else {
             return false;
         }
+    }
 
-        Block block = state.getBlock();
-        if (block instanceof DoorBlock door && state.is(BlockTags.MOB_INTERACTABLE_DOORS)) {
-            door.setOpen(entity, world, state, pos, open);
-            return true;
-        }
-
-        if (block instanceof FenceGateBlock && state.is(BlockTags.FENCE_GATES)) {
-            world.setBlock(pos, state.setValue(BlockStateProperties.OPEN, open), Block.UPDATE_CLIENTS | Block.UPDATE_IMMEDIATE);
-            world.playSound(entity, pos, open ? SoundEvents.FENCE_GATE_OPEN : SoundEvents.FENCE_GATE_CLOSE, SoundSource.BLOCKS, 1.0F, world.getRandom().nextFloat() * 0.1F + 0.9F);
-            world.gameEvent(entity, open ? GameEvent.BLOCK_OPEN : GameEvent.BLOCK_CLOSE, pos);
-            return true;
-        }
-
-        return false;
+    private static void playOpenCloseSound(@Nullable Entity entity, Level world, BlockPos pos, boolean open) {
+        world.playSound(entity, pos, open ? SoundEvents.WOODEN_DOOR_OPEN : SoundEvents.WOODEN_DOOR_CLOSE, SoundSource.BLOCKS, 0.75F, world.getRandom().nextFloat() * 0.1F + 0.9F);
     }
 
     private static boolean isDoor(BlockState blockState) {
-        return blockState.is(BlockTags.MOB_INTERACTABLE_DOORS, state -> state.getBlock() instanceof DoorBlock)
-               || blockState.is(BlockTags.FENCE_GATES, state -> state.getBlock() instanceof FenceGateBlock);
+        return blockState.is(BlockTags.WOODEN_DOORS, state -> state.getBlock() instanceof DoorBlock) || blockState.is(BlockTags.FENCE_GATES, state -> state.getBlock() instanceof FenceGateBlock);
     }
 
     public static void closeDoors(ServerLevel world, LivingEntity entity, @Nullable Node lastNode, @Nullable Node currentNode) {
