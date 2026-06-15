@@ -193,6 +193,11 @@ public final class Config extends CommonConfig {
     public double villagerMinTeleportationDistance = 128;
 
     /**
+     * Maximum distance villagers can path toward remembered points of interest such as beds.
+     */
+    public int villagerPathfindingDistance = 256;
+
+    /**
      * Number of hearts a child starts with towards their parent.
      */
     public int childInitialHearts = 100;
@@ -870,6 +875,10 @@ public final class Config extends CommonConfig {
         } else {
             return serverConfig;
         }
+    }
+
+    public int getVillagerPathfindingDistance() {
+        return Math.max(16, villagerPathfindingDistance);
     }
 
     public static void setServerConfig(CommonConfig config) {
