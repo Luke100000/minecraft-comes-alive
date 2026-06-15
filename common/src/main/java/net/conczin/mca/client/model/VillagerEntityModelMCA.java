@@ -51,7 +51,11 @@ public class VillagerEntityModelMCA extends VillagerEntityBaseModelMCA {
     }
 
     public static MeshDefinition bodyData(CubeDeformation dilation) {
-        MeshDefinition modelData = PlayerModel.createMesh(dilation, false);
+        return bodyData(dilation, false);
+    }
+
+    public static MeshDefinition bodyData(CubeDeformation dilation, boolean slim) {
+        MeshDefinition modelData = PlayerModel.createMesh(dilation, slim);
         PartDefinition root = modelData.getRoot();
         root.addOrReplaceChild(BREASTS, newBreasts(dilation, 0), PartPose.ZERO);
         root.addOrReplaceChild(BREASTPLATE, newBreasts(dilation.extend(0.1F), 16), PartPose.ZERO);
