@@ -795,7 +795,7 @@
   "gene.pheomelanin": "Pheomelanin",
   "gene.skin": "Skin",
   "gene.face": "Eyes",
-  "gene.voice": "Voice",
+  "gene.voice": "Pitch",
   "gene.voicetone": "Voice Tone",
   "gene.tooltip": "%s: %d%%",
 
