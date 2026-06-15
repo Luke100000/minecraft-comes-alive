@@ -1506,8 +1506,8 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                 int previewPadding = hovered ? 5 : 0;
                 float rotationOffset = layeredHairSelection && getLayeredHairCategory() == LayeredHair.Category.BACK ? 180.0F : 0.0F;
                 if (layeredHairSelection) {
-                    extractEntityPreview(context, cx - 28 - previewPadding, cy - 40 - previewPadding, cx + 28 + previewPadding, cy + 40 + previewPadding,
-                            hovered ? 46 : 40, -0.2F, mouseX, mouseY, delta, villagerVisualization, rotationOffset);
+                    extractEntityPreview(context, cx - 28 - previewPadding, cy - 50 - previewPadding, cx + 28 + previewPadding, cy + 50 + previewPadding,
+                            hovered ? 38 : 32, -0.1F, mouseX, mouseY, delta, villagerVisualization, rotationOffset);
                 } else {
                     extractEntityPreview(context, cx - 20 - previewPadding, cy - 25 - previewPadding, cx + 20 + previewPadding, cy + 40 + previewPadding,
                             hovered ? 35 : 30, 0, mouseX, mouseY, delta, villagerVisualization, rotationOffset);
