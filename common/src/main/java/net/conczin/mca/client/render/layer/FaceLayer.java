@@ -49,7 +49,8 @@ public class FaceLayer<S extends HumanoidRenderState, M extends HumanoidModel<S>
             Identifier rightSkin = cached(skin.toString().replace(".png", "_right.png"), Identifier::parse);
 
             if (canUse(leftSkin) && canUse(rightSkin)) {
-                renderModel(poseStack, submitNodeCollector, lightCoords, this.model, visuals.eyeLeftDye(), leftSkin, tint, visible, glowing, state);
+                int leftColor = visuals.heterochromia() ? visuals.eyeLeftDye() : visuals.eyeDye();
+                renderModel(poseStack, submitNodeCollector, lightCoords, this.model, leftColor, leftSkin, tint, visible, glowing, state);
                 renderModel(poseStack, submitNodeCollector, lightCoords, this.model, visuals.eyeDye(), rightSkin, tint, visible, glowing, state);
             } else {
                 renderModel(poseStack, submitNodeCollector, lightCoords, this.model, visuals.eyeDye(), skin, tint, visible, glowing, state);

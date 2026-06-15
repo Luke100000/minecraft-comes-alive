@@ -556,9 +556,11 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                     default -> hsvColoredHair ? "gui.villager_editor.hair_hsv" : "gui.villager_editor.hair_genetic";
                 };
 
+                String modeTooltipKey = eyeColorTarget > 0 ? "gui.villager_editor.eye_mode.tooltip" : "gui.villager_editor.hair_mode.tooltip";
+
                 addRenderableWidget(new TooltipButtonWidget(width / 2 + DATA_WIDTH / 2, y, DATA_WIDTH / 2, 20,
                         Component.translatable(modeLabelKey),
-                        Component.translatable("gui.villager_editor.hair_mode.tooltip"),
+                        Component.translatable(modeTooltipKey),
                         b -> {
                             switch (eyeColorTarget) {
                                 case 0 -> {
@@ -585,6 +587,8 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                             }
                             init();
                         }));
+
+                y += 22;
 
                 //genes
                 y = geneChanger(y, Genetics.FACE, 7);
@@ -1039,7 +1043,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
 
         addRenderableWidget(new ButtonWidget(width / 2, y, bw, 20, Component.literal("<"), b -> {
             int prevIndex = (currentIndex - 1 + maxCount) % maxCount;
-            genetics.setGene(gene, (float) prevIndex / (float) maxCount);
+            genetics.setGene(gene, (prevIndex + 0.5f) / (float) maxCount);
             init();
         }));
 
@@ -1047,13 +1051,13 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                 Component.literal(Component.translatable(gene.getTranslationKey()).getString() + ": " + (currentIndex + 1)),
                 b -> {
                     int nextIndex = (currentIndex + 1) % maxCount;
-                    genetics.setGene(gene, (float) nextIndex / (float) maxCount);
+                    genetics.setGene(gene, (nextIndex + 0.5f) / (float) maxCount);
                     init();
                 }));
 
         addRenderableWidget(new ButtonWidget(width / 2 + DATA_WIDTH - bw, y, bw, 20, Component.literal(">"), b -> {
             int nextIndex = (currentIndex + 1) % maxCount;
-            genetics.setGene(gene, (float) nextIndex / (float) maxCount);
+            genetics.setGene(gene, (nextIndex + 0.5f) / (float) maxCount);
             init();
         }));
 
