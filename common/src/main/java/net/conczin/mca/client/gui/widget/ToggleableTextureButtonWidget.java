@@ -2,7 +2,6 @@ package net.conczin.mca.client.gui.widget;
 
 import net.conczin.mca.util.compat.ButtonWidget;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
-import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 
@@ -19,8 +18,28 @@ public class ToggleableTextureButtonWidget extends ButtonWidget {
     @Override
     protected void extractContents(GuiGraphicsExtractor context, int mouseX, int mouseY, float delta) {
         this.extractDefaultSprite(context);
-        int iconX = this.getX() + (this.width - 16) / 2;
-        int iconY = this.getY() + (this.height - 16) / 2;
-        context.blit(RenderPipelines.GUI_TEXTURED, texture, iconX, iconY, 0, toggle ? 0 : 16, 16, 16, 16, 32);
+
+        // Sprite sheet is 28w x 20h (each half is one toggle state), so aspect ratio = 28/20 = 1.4
+        float spriteAspect = 28.0f / 20.0f;
+        float availW = this.width - 4;
+        float availH = this.height - 4;
+        float destWidth, destHeight;
+        if (availW / availH > spriteAspect) {
+            destHeight = availH;
+            destWidth = availH * spriteAspect;
+        } else {
+            destWidth = availW;
+            destHeight = availW / spriteAspect;
+        }
+
+        float x0 = this.getX() + (this.width - destWidth) / 2.0f;
+        float x1 = x0 + destWidth;
+        float y0 = this.getY() + (this.height - destHeight) / 2.0f;
+        float y1 = y0 + destHeight;
+
+        float v0 = toggle ? 0.0f : 0.5f;
+        float v1 = v0 + 0.5f;
+
+        WidgetUtils.drawTexturedQuad(context, texture, x0, x1, y0, y1, 0.0f, 1.0f, v0, v1);
     }
 }

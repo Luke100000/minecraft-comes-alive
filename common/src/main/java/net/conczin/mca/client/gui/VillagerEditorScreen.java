@@ -433,8 +433,6 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
 
                 //hair color
                 if (hsvColoredHair) {
-                    y = Math.min(y + 8, height - 88);
-
                     //hue
                     color.hueWidget = addRenderableWidget(new HorizontalColorPickerWidget(width / 2 + 20, y, DATA_WIDTH - 40, 15,
                             color.hue / 360.0,
@@ -497,15 +495,13 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                                 refreshHairColor();
                             }));
 
-                    y += 60;
+                    y += 65;
 
                     // Clear hair
                     addRenderableWidget(new ButtonWidget(width / 2, y, DATA_WIDTH, 20,
                             Component.translatable("gui.villager_editor.clear_hair"),
                             b -> {
                                 villager.clearHairDye();
-                                hsvColoredHair = false;
-                                color.setHSV(0.0, 0.5, 0.5);
                                 init();
                             }));
                 } else {
@@ -654,7 +650,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                     searchString = v;
                     filter();
                 });
-                y = height / 2 + 85;
+                y = height / 2 + 78;
                 pageButtonWidget = addRenderableWidget(new ButtonWidget(width / 2 - 30, y, 60, 20, Component.literal(""), b -> {
                 }));
                 addRenderableWidget(new ButtonWidget(width / 2 - 32 - 28, y, 28, 20, Component.literal("<<"), b -> {
@@ -712,18 +708,36 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     }
 
     private void addPreviewRotationWidgets() {
-        int centerX = width / 2 - DATA_WIDTH / 2;
+        boolean isSelection = isSelectionPage();
+        int centerX = isSelection ? width / 2 : width / 2 - DATA_WIDTH / 2;
         int y = height / 2 + 62;
-        addRenderableWidget(new ButtonWidget(centerX - 42, y, 28, 20, Component.literal("<"), b -> rotatePreview(22.5F)));
-        addRenderableWidget(new ToggleableTextureButtonWidget(centerX - 12, y, 28, 20,
-                PREVIEW_MOUSE_FOLLOW_TEXTURE,
-                previewFollowsMouse,
-                Component.translatable("gui.villager_editor.preview_mouse_follow.tooltip"),
-                b -> {
-                    previewFollowsMouse = !previewFollowsMouse;
-                    setPage(page);
-                }));
-        addRenderableWidget(new ButtonWidget(centerX + 18, y, 28, 20, Component.literal(">"), b -> rotatePreview(-22.5F)));
+
+        if (isSelection) {
+            // 3x22px buttons = 66px total, start at centerX-33 to center perfectly at width/2
+            int selY = height / 2 - 76;
+            addRenderableWidget(new ButtonWidget(centerX - 33, selY, 22, 14, Component.literal("<"), b -> rotatePreview(22.5F)));
+            addRenderableWidget(new ToggleableTextureButtonWidget(centerX - 11, selY, 22, 14,
+                    PREVIEW_MOUSE_FOLLOW_TEXTURE,
+                    previewFollowsMouse,
+                    Component.translatable("gui.villager_editor.preview_mouse_follow.tooltip"),
+                    b -> {
+                        previewFollowsMouse = !previewFollowsMouse;
+                        setPage(page);
+                    }));
+            addRenderableWidget(new ButtonWidget(centerX + 11, selY, 22, 14, Component.literal(">"), b -> rotatePreview(-22.5F)));
+        } else {
+            // Standard 28x20 buttons, perfectly centered in the left column
+            addRenderableWidget(new ButtonWidget(centerX - 44, y, 28, 20, Component.literal("<"), b -> rotatePreview(22.5F)));
+            addRenderableWidget(new ToggleableTextureButtonWidget(centerX - 14, y, 28, 20,
+                    PREVIEW_MOUSE_FOLLOW_TEXTURE,
+                    previewFollowsMouse,
+                    Component.translatable("gui.villager_editor.preview_mouse_follow.tooltip"),
+                    b -> {
+                        previewFollowsMouse = !previewFollowsMouse;
+                        setPage(page);
+                    }));
+            addRenderableWidget(new ButtonWidget(centerX + 16, y, 28, 20, Component.literal(">"), b -> rotatePreview(-22.5F)));
+        }
     }
 
     private int addSkinSelectionWidgets(int y) {
@@ -1165,40 +1179,40 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
             villagerVisualization.setAge(villager.getAge());
             villagerVisualization.refreshDimensions();
 
-            int i = 0;
             hoveredClothingId = -1;
-            for (int y = 0; y < CLOTHES_V; y++) {
-                for (int x = 0; x < CLOTHES_H + y; x++) {
-                    int index = clothingPage * CLOTHES_PER_PAGE + i;
-                    List<String> selection = getFilteredSelection();
-                    if (selection.size() > index) {
-                        if (page.equals("clothing")) {
-                            villagerVisualization.setClothes(selection.get(index));
-                        } else if (page.equals("hair")) {
-                            applyHairStyle(villagerVisualization, selection.get(index));
-                        } else if (page.equals("skin")) {
-                            villagerVisualization.setSkin(selection.get(index));
-                        } else {
-                            villagerVisualization.setHair("");
-                            villagerVisualization.setLayeredHair(getLayeredHairCategory(), selection.get(index));
-                        }
+            List<String> selection = getFilteredSelection();
+            int totalOnPage = Math.min(CLOTHES_PER_PAGE, selection.size() - clothingPage * CLOTHES_PER_PAGE);
+            int row0Count = Math.min(totalOnPage, CLOTHES_H);
+            int row1Count = Math.max(0, totalOnPage - row0Count);
 
-                        int cx = width / 2 + (int) ((x - CLOTHES_H / 2.0 + 0.5 - 0.5 * (y % 2)) * 40);
-                        int cy = height / 2 + (int) ((y - CLOTHES_V / 2.0 + 0.5) * 65);
+            for (int i = 0; i < totalOnPage; i++) {
+                int index = clothingPage * CLOTHES_PER_PAGE + i;
+                int y = i < row0Count ? 0 : 1;
+                int x = y == 0 ? i : i - row0Count;
+                int numInRow = y == 0 ? row0Count : row1Count;
 
-                        if (Math.abs(cx - mouseX) <= 20 && Math.abs(cy - mouseY + 5) <= 30) {
-                            hoveredClothingId = index;
-                        }
-
-                        boolean hovered = hoveredClothingId == index;
-                        int previewPadding = hovered ? 5 : 0;
-                        extractEntityPreview(context, cx - 20 - previewPadding, cy - 25 - previewPadding, cx + 20 + previewPadding, cy + 40 + previewPadding,
-                                hovered ? 35 : 30, 0, mouseX, mouseY, delta, villagerVisualization);
-                        i++;
-                    } else {
-                        break;
-                    }
+                if (page.equals("clothing")) {
+                    villagerVisualization.setClothes(selection.get(index));
+                } else if (page.equals("hair")) {
+                    applyHairStyle(villagerVisualization, selection.get(index));
+                } else if (page.equals("skin")) {
+                    villagerVisualization.setSkin(selection.get(index));
+                } else {
+                    villagerVisualization.setHair("");
+                    villagerVisualization.setLayeredHair(getLayeredHairCategory(), selection.get(index));
                 }
+
+                int cx = width / 2 + (int) ((x - numInRow / 2.0 + 0.5 - 0.5 * (y % 2)) * 40);
+                int cy = height / 2 + (int) ((y - CLOTHES_V / 2.0 + 0.5) * 65);
+
+                if (Math.abs(cx - mouseX) <= 20 && Math.abs(cy - mouseY + 5) <= 30) {
+                    hoveredClothingId = index;
+                }
+
+                boolean hovered = hoveredClothingId == index;
+                int previewPadding = hovered ? 5 : 0;
+                extractEntityPreview(context, cx - 20 - previewPadding, cy - 25 - previewPadding, cx + 20 + previewPadding, cy + 40 + previewPadding,
+                        hovered ? 35 : 30, 0, mouseX, mouseY, delta, villagerVisualization);
             }
         }
     }
