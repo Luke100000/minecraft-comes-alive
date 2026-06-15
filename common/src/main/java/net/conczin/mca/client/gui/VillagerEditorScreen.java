@@ -448,21 +448,23 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                     y += 28;
                 }
 
-                //relations
-                for (String who : new String[]{"Father", "Mother", "Spouse"}) {
-                    textFieldWidget = addRenderableWidget(new NamedTextFieldWidget(this.font, width / 2, y, DATA_WIDTH, 18,
-                            Component.translatable("gui.villager_editor.relation." + who.toLowerCase(Locale.ROOT))));
-                    textFieldWidget.setMaxLength(64);
-                    textFieldWidget.setValue(villagerData.getStringOr("FamilyTree" + who + "Name", ""));
-                    textFieldWidget.setResponder(name -> villagerData.putString("FamilyTreeNew" + who + "Name", name));
-                    y += 20;
-                }
+                if (!(this instanceof DestinyScreen)) {
+                    //relations
+                    for (String who : new String[]{"Father", "Mother", "Spouse"}) {
+                        textFieldWidget = addRenderableWidget(new NamedTextFieldWidget(this.font, width / 2, y, DATA_WIDTH, 18,
+                                Component.translatable("gui.villager_editor.relation." + who.toLowerCase(Locale.ROOT))));
+                        textFieldWidget.setMaxLength(64);
+                        textFieldWidget.setValue(villagerData.getStringOr("FamilyTree" + who + "Name", ""));
+                        textFieldWidget.setResponder(name -> villagerData.putString("FamilyTreeNew" + who + "Name", name));
+                        y += 20;
+                    }
 
-                //UUID
-                y += 4;
-                textFieldWidget = addRenderableWidget(new EditBox(this.font, width / 2, y, DATA_WIDTH, 18, Component.literal("UUID")));
-                textFieldWidget.setMaxLength(64);
-                textFieldWidget.setValue(villagerUUID.toString());
+                    //UUID
+                    y += 4;
+                    textFieldWidget = addRenderableWidget(new EditBox(this.font, width / 2, y, DATA_WIDTH, 18, Component.literal("UUID")));
+                    textFieldWidget.setMaxLength(64);
+                    textFieldWidget.setValue(villagerUUID.toString());
+                }
             }
             case "body" -> {
                 //genes
@@ -982,7 +984,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                 .filter(skin -> skin.getGender() == Gender.NEUTRAL || gender == Gender.NEUTRAL || skin.getGender() == gender)
                 .map(SkinListEntry::getIdentifier)
                 .distinct()
-                .sorted()
+                .sorted(VillagerEditorScreen::mca$compareNumerically)
                 .toList();
     }
 
@@ -993,7 +995,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                 .filter(hair -> hair.getGender() == Gender.NEUTRAL || gender == Gender.NEUTRAL || hair.getGender() == gender)
                 .map(SkinListEntry::getIdentifier)
                 .distinct()
-                .sorted()
+                .sorted(VillagerEditorScreen::mca$compareNumerically)
                 .toList();
         if (category.isRequired()) {
             return layers;
@@ -1003,6 +1005,16 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         optionalLayers.add("");
         optionalLayers.addAll(layers);
         return optionalLayers;
+    }
+
+    private static int mca$compareNumerically(String a, String b) {
+        int idxA = a.lastIndexOf('/');
+        int idxB = b.lastIndexOf('/');
+        String strA = idxA >= 0 ? a.substring(idxA) : a;
+        String strB = idxB >= 0 ? b.substring(idxB) : b;
+        String numA = strA.replaceAll("\\D+", "");
+        String numB = strB.replaceAll("\\D+", "");
+        return (!numA.isEmpty() && !numB.isEmpty()) ? Integer.compare(Integer.parseInt(numA), Integer.parseInt(numB)) : a.compareTo(b);
     }
 
     private void cycleLayeredHair(LayeredHair.Category category, int offset) {
@@ -1082,6 +1094,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                 .filter(v -> MCA.isBlankString(searchString) || v.getKey().contains(searchString))
                 .map(v -> v.getValue().getIdentifier())
                 .distinct()
+                .sorted(VillagerEditorScreen::mca$compareNumerically)
                 .toList();
 
         clothingPageCount = Math.max(1, (int) Math.ceil(filtered.size() / ((float) getSelectionItemsPerPage())));
@@ -1388,7 +1401,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
 
         int x = width / 2 - DATA_WIDTH;
         int y = height / 2 - 8;
-        return mouseX >= x && mouseX <= x + DATA_WIDTH && mouseY >= y - 65 && mouseY <= y + 80;
+        return mouseX >= x && mouseX <= x + DATA_WIDTH && mouseY >= y - 57 && mouseY <= y + 88;
     }
 
     protected void eventCallback(String event) {
@@ -1446,36 +1459,36 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
             int y = height / 2 - 8;
             if (page.equals("presets") && hasVisualChange) {
                 // Left: Original (centered under Presets button)
-                extractEntityPreview(context, x + 8, y - 65, x + 88, y + 80, 40, 0, mouseX, mouseY, delta, villager);
+                extractEntityPreview(context, x + 8, y - 57, x + 88, y + 88, 40, 0, mouseX, mouseY, delta, villager);
                 // Right: Preset (centered under Export Skin button)
-                extractEntityPreview(context, x + 88, y - 65, x + 168, y + 80, 40, 0, mouseX, mouseY, delta, villagerVisualization);
+                extractEntityPreview(context, x + 88, y - 57, x + 168, y + 88, 40, 0, mouseX, mouseY, delta, villagerVisualization);
 
                 // Draw labels above the preview models
                 final Matrix3x2fStack matrices = context.pose();
                 matrices.pushMatrix();
-                matrices.translate(x + 47.5F, y - 45);
+                matrices.translate(x + 47.5F, y - 37);
                 matrices.scale(0.75f, 0.75f);
                 context.centeredText(font, Component.translatable("gui.mca.presets.original"), 0, 0, 0xAAFFFFFF);
                 matrices.popMatrix();
 
                 matrices.pushMatrix();
-                matrices.translate(x + 127.5F, y - 45);
+                matrices.translate(x + 127.5F, y - 37);
                 matrices.scale(0.75f, 0.75f);
                 context.centeredText(font, Component.translatable("gui.mca.presets.preview"), 0, 0, 0xAAFFFFFF);
                 matrices.popMatrix();
             } else {
                 if (villagerUUID.equals(playerUUID) && shouldUsePlayerModel()) {
                     assert Minecraft.getInstance().player != null;
-                    extractEntityPreview(context, x, y - 65, x + DATA_WIDTH, y + 80, 50, 0, mouseX, mouseY, delta, Minecraft.getInstance().player);
+                    extractEntityPreview(context, x, y - 57, x + DATA_WIDTH, y + 88, 50, 0, mouseX, mouseY, delta, Minecraft.getInstance().player);
                 } else {
-                    extractEntityPreview(context, x, y - 65, x + DATA_WIDTH, y + 80, 50, 0, mouseX, mouseY, delta, villager);
+                    extractEntityPreview(context, x, y - 57, x + DATA_WIDTH, y + 88, 50, 0, mouseX, mouseY, delta, villager);
                 }
 
                 // hint for confused people
                 if (shouldPrintPlayerHint() && villagerUUID.equals(playerUUID) && getSelectedPlayerModel() != VillagerLike.PlayerModel.VILLAGER) {
                     final Matrix3x2fStack matrices = context.pose();
                     matrices.pushMatrix();
-                    matrices.translate(x + DATA_WIDTH / 2.0F, y - 44);
+                    matrices.translate(x + DATA_WIDTH / 2.0F, y - 36);
                     matrices.scale(0.5f, 0.5f);
                     context.centeredText(font, Component.translatable("gui.villager_editor.model_hint"), 0, 0, 0xAAFFFFFF);
                     matrices.popMatrix();
@@ -1694,6 +1707,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         EntityRenderState renderState = renderer.createRenderState(entity, delta);
         renderState.shadowPieces.clear();
         renderState.outlineColor = 0;
+        renderState.isInvisible = false;
         return renderState;
     }
 

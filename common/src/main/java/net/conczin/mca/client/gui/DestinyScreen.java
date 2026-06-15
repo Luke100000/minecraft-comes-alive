@@ -19,6 +19,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import net.minecraft.client.input.KeyEvent;
+import org.lwjgl.glfw.GLFW;
+
 public class DestinyScreen extends VillagerEditorScreen {
     private static final Identifier LOGO_TEXTURE = MCA.locate("textures/banner.png");
     private final LinkedList<Component> story = new LinkedList<>();
@@ -44,8 +47,32 @@ public class DestinyScreen extends VillagerEditorScreen {
     }
 
     @Override
+    public boolean keyPressed(KeyEvent event) {
+        if (event.key() == GLFW.GLFW_KEY_ESCAPE) {
+            if (page.equals("presets") || page.equals("skin")) {
+                setPage("general");
+                return true;
+            } else if (page.equals("clothing")) {
+                setPage("body");
+                return true;
+            } else if (page.equals("hair")) {
+                setPage("head");
+                return true;
+            } else if (isLayeredHairPage()) {
+                setPage("hair_advanced");
+                return true;
+            } else if (page.equals("hair_advanced")) {
+                setPage("head");
+                return true;
+            }
+            return true;
+        }
+        return super.keyPressed(event);
+    }
+
+    @Override
     public void onClose() {
-        if (!page.equals("general") && !page.equals("story")) {
+        if (!page.equals("intro") && !page.equals("story")) {
             setPage("destiny");
         }
     }
@@ -86,7 +113,7 @@ public class DestinyScreen extends VillagerEditorScreen {
         final Matrix3x2fStack matrices = context.pose();
 
         switch (page) {
-            case "general" -> {
+            case "intro" -> {
                 drawScaledText(context, Component.translatable("gui.destiny.whoareyou"), width / 2, height / 2 - 24, 1.5f);
                 matrices.pushMatrix();
                 matrices.scale(0.25f, 0.25f);
@@ -108,7 +135,7 @@ public class DestinyScreen extends VillagerEditorScreen {
 
     @Override
     protected boolean shouldDrawEntity() {
-        return !page.equals("general") && !page.equals("destiny") && !page.equals("story") && super.shouldDrawEntity();
+        return !page.equals("intro") && !page.equals("destiny") && !page.equals("story") && super.shouldDrawEntity();
     }
 
     protected String getPath(String location) {
@@ -118,6 +145,10 @@ public class DestinyScreen extends VillagerEditorScreen {
 
     @Override
     protected void setPage(String page) {
+        if (page.equals("general") && (this.page == null || this.page.equals("loading"))) {
+            page = "intro";
+        }
+
         if (page.equals("destiny") && !allowTeleportation) {
             Network.sendToServer(new DestinyMessage("", true));
             MCAClient.getDestinyManager().allowClosing();
@@ -134,7 +165,7 @@ public class DestinyScreen extends VillagerEditorScreen {
         this.page = page;
         clearWidgets();
         switch (page) {
-            case "general" -> {
+            case "intro" -> {
                 drawName(width / 2 - DATA_WIDTH / 2, height / 2, name -> {
                     this.updateName(name);
                     if (acceptWidget != null) {

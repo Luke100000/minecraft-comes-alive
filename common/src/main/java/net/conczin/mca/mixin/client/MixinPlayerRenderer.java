@@ -245,18 +245,12 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<LivingEnt
             return false;
         }
 
-        boolean rendered = false;
         var arm = rightArm ? model.rightArm : model.leftArm;
         if (arm.visible) {
             submitNodeCollector.submitModelPart(arm, poseStack, RenderTypes.entityCutout(texture), lightCoords, OverlayTexture.NO_OVERLAY, null, 0xFFFFFFFF, null);
-            rendered = true;
+            return true;
         }
-        var sleeve = rightArm ? model.rightSleeve : model.leftSleeve;
-        if (sleeve.visible) {
-            submitNodeCollector.submitModelPart(sleeve, poseStack, RenderTypes.entityCutout(texture), lightCoords, OverlayTexture.NO_OVERLAY, null, 0xFFFFFFFF, null);
-            rendered = true;
-        }
-        return rendered;
+        return false;
     }
 
     @Unique
