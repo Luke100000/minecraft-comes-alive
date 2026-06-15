@@ -451,11 +451,11 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
             case "body" -> {
                 //genes
                 if (!Config.getServerConfig().allowPlayerSizeAdjustment && villagerUUID.equals(playerUUID)) {
-                    y = doubleGeneSliders(y, Genetics.BREAST, Genetics.SKIN);
+                    y = doubleGeneSliders(y, Genetics.BREAST/*, Genetics.SKIN*/);
                     genetics.setGene(Genetics.SIZE, 0.80f);
                     genetics.setGene(Genetics.WIDTH, 0.80f);
                 } else {
-                    y = doubleGeneSliders(y, Genetics.SIZE, Genetics.WIDTH, Genetics.BREAST, Genetics.SKIN);
+                    y = doubleGeneSliders(y, Genetics.SIZE, Genetics.WIDTH, Genetics.BREAST/*, Genetics.SKIN*/);
                 }
 
                 //clothes
@@ -1504,13 +1504,13 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
 
                 boolean hovered = hoveredClothingId == index;
                 int previewPadding = hovered ? 5 : 0;
+                float rotationOffset = layeredHairSelection && getLayeredHairCategory() == LayeredHair.Category.BACK ? 180.0F : 0.0F;
                 if (layeredHairSelection) {
-                    float rotationOffset = getLayeredHairCategory() == LayeredHair.Category.BACK ? 180.0F : 0.0F;
-                    extractEntityPreview(context, cx - 32 - previewPadding, cy - 44 - previewPadding, cx + 32 + previewPadding, cy + 26 + previewPadding,
-                            hovered ? 58 : 52, 0.65F, mouseX, mouseY, delta, villagerVisualization, rotationOffset);
+                    extractEntityPreview(context, cx - 28 - previewPadding, cy - 40 - previewPadding, cx + 28 + previewPadding, cy + 40 + previewPadding,
+                            hovered ? 46 : 40, -0.2F, mouseX, mouseY, delta, villagerVisualization, rotationOffset);
                 } else {
                     extractEntityPreview(context, cx - 20 - previewPadding, cy - 25 - previewPadding, cx + 20 + previewPadding, cy + 40 + previewPadding,
-                            hovered ? 35 : 30, 0, mouseX, mouseY, delta, villagerVisualization);
+                            hovered ? 35 : 30, 0, mouseX, mouseY, delta, villagerVisualization, rotationOffset);
                 }
             }
         }
