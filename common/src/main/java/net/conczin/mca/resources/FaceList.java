@@ -45,10 +45,11 @@ public class FaceList extends SimpleJsonResourceReloadListener<JsonElement> {
 
         data.forEach((id, file) -> FILE_CODEC.parse(JsonOps.INSTANCE, file)
                 .resultOrPartial(error -> MCA.LOGGER.warn("Invalid face list {}: {}", id, error))
-                .ifPresent(entries -> addEntries(entries)));
+                .ifPresent(entries -> addEntries(id, entries)));
     }
 
-    private void addEntries(Map<String, Definition> entries) {
+    private void addEntries(Identifier id, Map<String, Definition> entries) {
+        Gender fileGender = BodySkinList.getGenderFromPath(id);
         entries.forEach((key, definition) -> {
             for (int i = 0; i < Math.max(1, definition.count()); i++) {
                 String identifier = BodySkinList.formatIdentifier(key, i);
@@ -60,25 +61,25 @@ public class FaceList extends SimpleJsonResourceReloadListener<JsonElement> {
                     continue;
                 }
                 String[] parts = parsed.getPath().split("/");
-                if (parts.length < 4) {
+                if (parts.length < 3) {
                     MCA.LOGGER.warn("Invalid face texture path {}", identifier);
                     continue;
                 }
-                String mapKey = key(parts[2], Gender.byName(parts[3]));
+                String mapKey = key(parts[2], fileGender);
                 faces.computeIfAbsent(mapKey, ignored -> new ArrayList<>()).add(identifier);
             }
         });
     }
 
-    public Identifier pick(String variant, Gender gender, float faceGene, String suffix) {
+    public Identifier pick(String variant, Gender gender, float faceGene, boolean blink) {
         List<String> pool = faces.get(key(variant, gender));
         if (pool == null || pool.isEmpty()) {
-            int index = (int) Math.min(FALLBACK_FACE_COUNT - 1, Math.max(0, faceGene * FALLBACK_FACE_COUNT));
-            return MCA.locate("skins/face/" + variant + "/" + gender.getDataName() + "/" + index + suffix + ".png");
+            int index = blink ? 2 : (int) Math.min(6, Math.max(0, faceGene * 7));
+            return MCA.locate("skins/face/" + variant + "/" + index + ".png");
         }
 
-        int index = (int) Math.min(pool.size() - 1, Math.max(0, faceGene * pool.size()));
-        return Identifier.parse(pool.get(index).replace(".png", suffix + ".png"));
+        int index = blink ? 2 : (int) Math.min(pool.size() - 1, Math.max(0, faceGene * pool.size()));
+        return Identifier.parse(pool.get(index));
     }
 
     private static String key(String variant, Gender gender) {

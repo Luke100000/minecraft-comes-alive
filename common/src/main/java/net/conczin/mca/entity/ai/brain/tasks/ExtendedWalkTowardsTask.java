@@ -46,12 +46,13 @@ public class ExtendedWalkTowardsTask {
                             GlobalPos globalPos = context.get(destinationResult);
                             Optional<Long> optional = context.tryGet(cantReachWalkTargetSince);
                             if (globalPos.dimension() == world.dimension() && (optional.isEmpty() || world.getGameTime() - optional.get() <= (long) maxRunTime)) {
-                                if (globalPos.pos().distManhattan(entity.blockPosition()) > maxDistance) {
+                                BlockPos targetPos = walkTargetResolver.resolve(world, entity, globalPos).orElse(globalPos.pos());
+                                if (targetPos.distManhattan(entity.blockPosition()) > maxDistance) {
                                     Vec3 vec3d = null;
                                     int l = 0;
 
                                     while (vec3d == null || (BlockPos.containing(vec3d)).distManhattan(entity.blockPosition()) > maxDistance) {
-                                        vec3d = DefaultRandomPos.getPosTowards(entity, 15, 7, Vec3.atBottomCenterOf(globalPos.pos()), 1.5707963705062866);
+                                        vec3d = DefaultRandomPos.getPosTowards(entity, 15, 7, Vec3.atBottomCenterOf(targetPos), 1.5707963705062866);
                                         ++l;
                                         if (l == 1000) {
                                             entity.releasePoi(destination);
@@ -62,13 +63,8 @@ public class ExtendedWalkTowardsTask {
                                     }
 
                                     walkTarget.set(new WalkTarget(vec3d, speed, completionRange));
-                                } else if (globalPos.pos().distManhattan(entity.blockPosition()) > completionRange) {
-                                    Optional<BlockPos> resolvedTarget = walkTargetResolver.resolve(world, entity, globalPos);
-                                    if (resolvedTarget.isPresent()) {
-                                        walkTarget.set(new WalkTarget(resolvedTarget.get(), speed, 0));
-                                    } else {
-                                        walkTarget.set(new WalkTarget(globalPos.pos(), speed, completionRange));
-                                    }
+                                } else if (targetPos.distManhattan(entity.blockPosition()) > completionRange) {
+                                    walkTarget.set(new WalkTarget(targetPos, speed, completionRange));
                                 }
                             } else {
                                 if (canGiveUp.test(entity)) {

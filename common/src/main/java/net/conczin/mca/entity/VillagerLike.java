@@ -66,6 +66,12 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
     CDataParameter<Float> HAIR_COLOR_RED = CParameter.create("HairColorRed", 0.0f);
     CDataParameter<Float> HAIR_COLOR_GREEN = CParameter.create("HairColorGreen", 0.0f);
     CDataParameter<Float> HAIR_COLOR_BLUE = CParameter.create("HairColorBlue", 0.0f);
+    CDataParameter<Float> EYE_COLOR_RED = CParameter.create("EyeColorRed", 1.0f);
+    CDataParameter<Float> EYE_COLOR_GREEN = CParameter.create("EyeColorGreen", 1.0f);
+    CDataParameter<Float> EYE_COLOR_BLUE = CParameter.create("EyeColorBlue", 1.0f);
+    CDataParameter<Float> EYE_COLOR_LEFT_RED = CParameter.create("EyeColorLeftRed", 1.0f);
+    CDataParameter<Float> EYE_COLOR_LEFT_GREEN = CParameter.create("EyeColorLeftGreen", 1.0f);
+    CDataParameter<Float> EYE_COLOR_LEFT_BLUE = CParameter.create("EyeColorLeftBlue", 1.0f);
     CEnumParameter<AgeState> AGE_STATE = CParameter.create("AgeState", AgeState.UNASSIGNED);
 
     Identifier SPEED_ID = MCA.locate("trait_speed");
@@ -73,7 +79,11 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
 
     static <E extends Entity> CDataManager.Builder<E> createTrackedData(CDataManager.Builder<E> builder) {
         return builder
-                .addAll(CLOTHES, SKIN, HAIR, HAIR_BASE, HAIR_BANGS, HAIR_BACK, HAIR_FRONT, HAIR_EXTRA, HAIR_COLOR_RED, HAIR_COLOR_GREEN, HAIR_COLOR_BLUE, AGE_STATE)
+                .addAll(CLOTHES, SKIN, HAIR, HAIR_BASE, HAIR_BANGS, HAIR_BACK, HAIR_FRONT, HAIR_EXTRA,
+                        HAIR_COLOR_RED, HAIR_COLOR_GREEN, HAIR_COLOR_BLUE,
+                        EYE_COLOR_RED, EYE_COLOR_GREEN, EYE_COLOR_BLUE,
+                        EYE_COLOR_LEFT_RED, EYE_COLOR_LEFT_GREEN, EYE_COLOR_LEFT_BLUE,
+                        AGE_STATE)
                 .add(Genetics::createTrackedData)
                 .add(Traits::createTrackedData)
                 .add(VillagerBrain::createTrackedData);
@@ -317,6 +327,44 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
                 getTrackedValue(HAIR_COLOR_RED),
                 getTrackedValue(HAIR_COLOR_GREEN),
                 getTrackedValue(HAIR_COLOR_BLUE)
+        );
+    }
+
+    default void setEyeDye(float r, float g, float b) {
+        setTrackedValue(EYE_COLOR_RED, r);
+        setTrackedValue(EYE_COLOR_GREEN, g);
+        setTrackedValue(EYE_COLOR_BLUE, b);
+    }
+
+    default void clearEyeDye() {
+        setEyeDye(1.0f, 1.0f, 1.0f);
+    }
+
+    default int getEyeDye() {
+        return ARGB.colorFromFloat(
+                1.0f,
+                getTrackedValue(EYE_COLOR_RED),
+                getTrackedValue(EYE_COLOR_GREEN),
+                getTrackedValue(EYE_COLOR_BLUE)
+        );
+    }
+
+    default void setEyeLeftDye(float r, float g, float b) {
+        setTrackedValue(EYE_COLOR_LEFT_RED, r);
+        setTrackedValue(EYE_COLOR_LEFT_GREEN, g);
+        setTrackedValue(EYE_COLOR_LEFT_BLUE, b);
+    }
+
+    default void clearEyeLeftDye() {
+        setEyeLeftDye(1.0f, 1.0f, 1.0f);
+    }
+
+    default int getEyeLeftDye() {
+        return ARGB.colorFromFloat(
+                1.0f,
+                getTrackedValue(EYE_COLOR_LEFT_RED),
+                getTrackedValue(EYE_COLOR_LEFT_GREEN),
+                getTrackedValue(EYE_COLOR_LEFT_BLUE)
         );
     }
 
