@@ -5,6 +5,7 @@ import net.conczin.mca.MCA;
 import net.conczin.mca.MCAClient;
 import net.conczin.mca.client.gui.widget.*;
 import net.conczin.mca.client.resources.ClientUtils;
+import net.conczin.mca.client.tts.SpeechManager;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.entity.ai.Genetics;
@@ -71,7 +72,11 @@ import java.util.function.Supplier;
 public class VillagerEditorScreen extends Screen implements SkinListUpdateListener {
     protected static final int DATA_WIDTH = 175;
     private static final Identifier PREVIEW_MOUSE_FOLLOW_TEXTURE = MCA.locate("textures/gui/preview_mouse_follow.png");
+    private static final int VOICE_PREVIEW_BUTTON_WIDTH = 22;
     private static final int TRAITS_PER_PAGE = 8;
+    private static final int LAYERED_HAIR_PER_PAGE = 6;
+    private static final float MIN_PREVIEW_ZOOM = 0.7F;
+    private static final float MAX_PREVIEW_ZOOM = 1.4F;
     private static boolean isSkinListOutdated = true;
     private static HashMap<String, Clothing> clothing = new HashMap<>();
     private static HashMap<String, Hair> hair = new HashMap<>();
@@ -115,6 +120,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     private ButtonWidget genderButtonMale;
     private boolean restoreHideGui;
     private float previewRotation;
+    private float previewZoom = 1.0F;
     private long lastFrameTime = -1L;
     private boolean rotatePreviewLeft;
     private boolean rotatePreviewRight;
@@ -245,13 +251,33 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         boolean right = false;
         Genetics genetics = villager.getGenetics();
         for (Genetics.GeneType g : genes) {
-            addRenderableWidget(new GeneSliderWidget(width / 2 + (right ? DATA_WIDTH / 2 : 0), y, DATA_WIDTH / 2, 20, Component.translatable(g.getTranslationKey()), genetics.getGene(g), b -> genetics.setGene(g, b.floatValue())));
+            int x = width / 2 + (right ? DATA_WIDTH / 2 : 0);
+            int widgetWidth = DATA_WIDTH / 2;
+            if (g == Genetics.VOICE_TONE) {
+                addVoicePreviewButton(x, y);
+                x += VOICE_PREVIEW_BUTTON_WIDTH;
+                widgetWidth -= VOICE_PREVIEW_BUTTON_WIDTH;
+            }
+            addRenderableWidget(new GeneSliderWidget(x, y, widgetWidth, 20, Component.translatable(g.getTranslationKey()), genetics.getGene(g), b -> genetics.setGene(g, b.floatValue())));
             if (right) {
                 y += 20;
             }
             right = !right;
         }
         return y + 4 + (right ? 20 : 0);
+    }
+
+    private void addVoicePreviewButton(int x, int y) {
+        ButtonWidget previewButton = addRenderableWidget(new ButtonWidget(
+                x,
+                y,
+                VOICE_PREVIEW_BUTTON_WIDTH,
+                20,
+                Component.literal(">"),
+                b -> SpeechManager.INSTANCE.playPreview(villager),
+                Component.translatable("gui.villager_editor.preview_voice.tooltip")
+        ));
+        previewButton.active = SpeechManager.INSTANCE.canPreviewVoiceTone();
     }
 
     private int integerChanger(int y, IntConsumer onClick, Supplier<Component> content) {
@@ -620,17 +646,9 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                 }));
                 y += 24;
 
-                LayeredHair.Category[] categories = LayeredHair.Category.values();
-                for (int i = 0; i < categories.length; i++) {
-                    LayeredHair.Category category = categories[i];
-                    int buttonWidth = i == categories.length - 1 ? DATA_WIDTH : DATA_WIDTH / 2;
-                    int x = width / 2 + (i % 2) * (DATA_WIDTH / 2);
-                    addRenderableWidget(new ButtonWidget(x, y, buttonWidth, 20,
-                            Component.translatable("gui.villager_editor.hair_layer." + category.getId()),
-                            b -> setPage("hair_" + category.getId())));
-                    if (i % 2 == 1 || i == categories.length - 1) {
-                        y += 22;
-                    }
+                for (LayeredHair.Category category : LayeredHair.Category.values()) {
+                    addLayeredHairCyclerRow(y, category);
+                    y += 22;
                 }
 
                 y += 4;
@@ -713,8 +731,9 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         int y = height / 2 + 62;
 
         if (isSelection) {
-            // 3x22px buttons = 66px total, start at centerX-33 to center perfectly at width/2
+            // 5x22px buttons = 110px total, centered above the selection previews.
             int selY = height / 2 - 76;
+            addRenderableWidget(new ButtonWidget(centerX - 55, selY, 22, 14, Component.literal("-"), b -> zoomPreview(-0.1F)));
             addRenderableWidget(new ButtonWidget(centerX - 33, selY, 22, 14, Component.literal("<"), b -> rotatePreview(22.5F)));
             addRenderableWidget(new ToggleableTextureButtonWidget(centerX - 11, selY, 22, 14,
                     PREVIEW_MOUSE_FOLLOW_TEXTURE,
@@ -725,8 +744,10 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                         setPage(page);
                     }));
             addRenderableWidget(new ButtonWidget(centerX + 11, selY, 22, 14, Component.literal(">"), b -> rotatePreview(-22.5F)));
+            addRenderableWidget(new ButtonWidget(centerX + 33, selY, 22, 14, Component.literal("+"), b -> zoomPreview(0.1F)));
         } else {
-            // Standard 28x20 buttons, perfectly centered in the left column
+            // Standard 28x20 buttons, centered in the left preview column.
+            addRenderableWidget(new ButtonWidget(centerX - 74, y, 28, 20, Component.literal("-"), b -> zoomPreview(-0.1F)));
             addRenderableWidget(new ButtonWidget(centerX - 44, y, 28, 20, Component.literal("<"), b -> rotatePreview(22.5F)));
             addRenderableWidget(new ToggleableTextureButtonWidget(centerX - 14, y, 28, 20,
                     PREVIEW_MOUSE_FOLLOW_TEXTURE,
@@ -737,7 +758,21 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                         setPage(page);
                     }));
             addRenderableWidget(new ButtonWidget(centerX + 16, y, 28, 20, Component.literal(">"), b -> rotatePreview(-22.5F)));
+            addRenderableWidget(new ButtonWidget(centerX + 46, y, 28, 20, Component.literal("+"), b -> zoomPreview(0.1F)));
         }
+    }
+
+    private void addLayeredHairCyclerRow(int y, LayeredHair.Category category) {
+        int arrowWidth = 20;
+        int selectWidth = 45;
+        int labelWidth = DATA_WIDTH - arrowWidth * 2 - selectWidth;
+        addRenderableWidget(new ButtonWidget(width / 2, y, arrowWidth, 20, Component.literal("<"), b -> cycleLayeredHair(category, -1)));
+        addRenderableWidget(new ButtonWidget(width / 2 + arrowWidth, y, labelWidth, 20, getLayeredHairText(category), b -> {
+        }));
+        addRenderableWidget(new ButtonWidget(width / 2 + arrowWidth + labelWidth, y, arrowWidth, 20, Component.literal(">"), b -> cycleLayeredHair(category, 1)));
+        addRenderableWidget(new ButtonWidget(width / 2 + arrowWidth * 2 + labelWidth, y, selectWidth, 20, Component.translatable("gui.villager_editor.select"), b -> {
+            setPage("hair_" + category.getId());
+        }));
     }
 
     private int addSkinSelectionWidgets(int y) {
@@ -790,6 +825,59 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                 .toList();
     }
 
+    private List<String> getLayeredHairIdsForCurrentGender(LayeredHair.Category category) {
+        Gender gender = villager.getGenetics().getGender();
+        List<String> layers = getLayeredHair().values().stream()
+                .filter(hair -> hair.getCategory() == category)
+                .filter(hair -> hair.getGender() == Gender.NEUTRAL || gender == Gender.NEUTRAL || hair.getGender() == gender)
+                .map(SkinListEntry::getIdentifier)
+                .distinct()
+                .sorted()
+                .toList();
+        if (category.isRequired()) {
+            return layers;
+        }
+
+        List<String> optionalLayers = new ArrayList<>(layers.size() + 1);
+        optionalLayers.add("");
+        optionalLayers.addAll(layers);
+        return optionalLayers;
+    }
+
+    private void cycleLayeredHair(LayeredHair.Category category, int offset) {
+        List<String> layers = getLayeredHairIdsForCurrentGender(category);
+        if (layers.isEmpty()) {
+            return;
+        }
+
+        int index = layers.indexOf(villager.getLayeredHair(category));
+        int next = index < 0 ? (offset < 0 ? layers.size() - 1 : 0) : Math.floorMod(index + offset, layers.size());
+        villager.setHair("");
+        villager.setLayeredHair(category, layers.get(next));
+        eventCallback("hair_" + category.getId());
+        setPage(page);
+    }
+
+    private Component getLayeredHairText(LayeredHair.Category category) {
+        String selected = villager.getLayeredHair(category);
+        Component layerName = getLayerDisplayName(category);
+        if (MCA.isBlankString(selected)) {
+            return Component.translatable("gui.villager_editor.hair_layer_value", layerName, Component.translatable("gui.villager_editor.none"));
+        }
+        List<String> layers = getLayeredHairIdsForCurrentGender(category);
+        int index = layers.indexOf(selected);
+        int displayIndex = index < 0 ? 1 : index + 1;
+        return Component.translatable("gui.villager_editor.hair_layer_index", layerName, displayIndex, Math.max(1, layers.size()));
+    }
+
+    private Component getLayerName(LayeredHair.Category category) {
+        return Component.translatable("gui.villager_editor.hair_layer." + category.getId());
+    }
+
+    private Component getLayerDisplayName(LayeredHair.Category category) {
+        return Component.translatable("gui.villager_editor.hair_layer_display." + category.getId());
+    }
+
     private Traits.Trait[] getValidTraits() {
         return (Traits.Trait.values().stream()).filter(e -> {
             if (villagerUUID.equals(playerUUID)) {
@@ -835,12 +923,16 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                 .distinct()
                 .toList();
 
-        clothingPageCount = Math.max(1, (int) Math.ceil(filtered.size() / ((float) CLOTHES_PER_PAGE)));
+        clothingPageCount = Math.max(1, (int) Math.ceil(filtered.size() / ((float) getSelectionItemsPerPage())));
         clothingPage = Math.max(0, Math.min(clothingPage, clothingPageCount - 1));
 
         updateClothingPageWidget();
 
         return filtered;
+    }
+
+    private int getSelectionItemsPerPage() {
+        return isLayeredHairPage() ? LAYERED_HAIR_PER_PAGE : CLOTHES_PER_PAGE;
     }
 
     protected String[] getPages() {
@@ -1102,6 +1194,29 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         previewRotation = (previewRotation + degrees) % 360.0F;
     }
 
+    private void zoomPreview(float amount) {
+        previewZoom = Mth.clamp(previewZoom + amount, MIN_PREVIEW_ZOOM, MAX_PREVIEW_ZOOM);
+    }
+
+    @Override
+    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+        if (isMouseOverPreview(mouseX, mouseY)) {
+            zoomPreview((float) scrollY * 0.1F);
+            return true;
+        }
+        return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
+    }
+
+    private boolean isMouseOverPreview(double mouseX, double mouseY) {
+        if (isSelectionPage()) {
+            return mouseY >= height / 2.0 - 90 && mouseY <= height / 2.0 + 75;
+        }
+
+        int x = width / 2 - DATA_WIDTH;
+        int y = height / 2 - 8;
+        return mouseX >= x && mouseX <= x + DATA_WIDTH && mouseY >= y - 75 && mouseY <= y + 75;
+    }
+
     protected void eventCallback(String event) {
         // nop
     }
@@ -1154,7 +1269,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
 
         if (shouldDrawEntity()) {
             int x = width / 2 - DATA_WIDTH;
-            int y = height / 2;
+            int y = height / 2 - 8;
             if (villagerUUID.equals(playerUUID) && shouldUsePlayerModel()) {
                 assert Minecraft.getInstance().player != null;
                 extractEntityPreview(context, x, y - 75, x + DATA_WIDTH, y + 75, 60, 0, mouseX, mouseY, delta, Minecraft.getInstance().player);
@@ -1166,7 +1281,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
             if (shouldPrintPlayerHint() && villagerUUID.equals(playerUUID) && getSelectedPlayerModel() != VillagerLike.PlayerModel.VILLAGER) {
                 final Matrix3x2fStack matrices = context.pose();
                 matrices.pushMatrix();
-                matrices.translate(x + DATA_WIDTH / 2.0F, y + 75);
+                matrices.translate(x + DATA_WIDTH / 2.0F, y - 64);
                 matrices.scale(0.5f, 0.5f);
                 context.centeredText(font, Component.translatable("gui.villager_editor.model_hint"), 0, 0, 0xAAFFFFFF);
                 matrices.popMatrix();
@@ -1181,12 +1296,13 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
 
             hoveredClothingId = -1;
             List<String> selection = getFilteredSelection();
-            int totalOnPage = Math.min(CLOTHES_PER_PAGE, selection.size() - clothingPage * CLOTHES_PER_PAGE);
-            int row0Count = Math.min(totalOnPage, CLOTHES_H);
+            int itemsPerPage = getSelectionItemsPerPage();
+            int totalOnPage = Math.min(itemsPerPage, selection.size() - clothingPage * itemsPerPage);
+            int row0Count = Math.min(totalOnPage, isLayeredHairPage() ? LAYERED_HAIR_PER_PAGE : CLOTHES_H);
             int row1Count = Math.max(0, totalOnPage - row0Count);
 
             for (int i = 0; i < totalOnPage; i++) {
-                int index = clothingPage * CLOTHES_PER_PAGE + i;
+                int index = clothingPage * itemsPerPage + i;
                 int y = i < row0Count ? 0 : 1;
                 int x = y == 0 ? i : i - row0Count;
                 int numInRow = y == 0 ? row0Count : row1Count;
@@ -1202,17 +1318,27 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                     villagerVisualization.setLayeredHair(getLayeredHairCategory(), selection.get(index));
                 }
 
-                int cx = width / 2 + (int) ((x - numInRow / 2.0 + 0.5 - 0.5 * (y % 2)) * 40);
-                int cy = height / 2 + (int) ((y - CLOTHES_V / 2.0 + 0.5) * 65);
+                boolean layeredHairSelection = isLayeredHairPage();
+                int spacing = layeredHairSelection ? 56 : 40;
+                int cx = width / 2 + (int) ((x - numInRow / 2.0 + 0.5 - 0.5 * (y % 2)) * spacing);
+                int cy = layeredHairSelection ? height / 2 - 6 : height / 2 + (int) ((y - CLOTHES_V / 2.0 + 0.5) * 65);
+                int hoverWidth = layeredHairSelection ? 30 : 20;
+                int hoverHeight = layeredHairSelection ? 38 : 30;
 
-                if (Math.abs(cx - mouseX) <= 20 && Math.abs(cy - mouseY + 5) <= 30) {
+                if (Math.abs(cx - mouseX) <= hoverWidth && Math.abs(cy - mouseY + 5) <= hoverHeight) {
                     hoveredClothingId = index;
                 }
 
                 boolean hovered = hoveredClothingId == index;
                 int previewPadding = hovered ? 5 : 0;
-                extractEntityPreview(context, cx - 20 - previewPadding, cy - 25 - previewPadding, cx + 20 + previewPadding, cy + 40 + previewPadding,
-                        hovered ? 35 : 30, 0, mouseX, mouseY, delta, villagerVisualization);
+                if (layeredHairSelection) {
+                    float rotationOffset = getLayeredHairCategory() == LayeredHair.Category.BACK ? 180.0F : 0.0F;
+                    extractEntityPreview(context, cx - 32 - previewPadding, cy - 44 - previewPadding, cx + 32 + previewPadding, cy + 26 + previewPadding,
+                            hovered ? 58 : 52, 0.65F, mouseX, mouseY, delta, villagerVisualization, rotationOffset);
+                } else {
+                    extractEntityPreview(context, cx - 20 - previewPadding, cy - 25 - previewPadding, cx + 20 + previewPadding, cy + 40 + previewPadding,
+                            hovered ? 35 : 30, 0, mouseX, mouseY, delta, villagerVisualization);
+                }
             }
         }
     }
@@ -1324,6 +1450,10 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     }
 
     private void extractEntityPreview(GuiGraphicsExtractor context, int x0, int y0, int x1, int y1, int size, float offsetY, float mouseX, float mouseY, float delta, LivingEntity entity) {
+        extractEntityPreview(context, x0, y0, x1, y1, size, offsetY, mouseX, mouseY, delta, entity, 0.0F);
+    }
+
+    private void extractEntityPreview(GuiGraphicsExtractor context, int x0, int y0, int x1, int y1, int size, float offsetY, float mouseX, float mouseY, float delta, LivingEntity entity, float rotationOffset) {
         float centerX = (x0 + x1) / 2.0F;
         float centerY = (y0 + y1) / 2.0F;
         float xAngle = previewFollowsMouse ? (float) Math.atan((centerX - mouseX) / 40.0F) : 0.0F;
@@ -1334,8 +1464,9 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         rotation.mul(xRotation);
         EntityRenderState renderState = createInventoryRenderState(entity, delta);
         if (renderState instanceof LivingEntityRenderState livingRenderState) {
-            float cos = (float) Math.cos(Math.toRadians(previewRotation));
-            livingRenderState.bodyRot = 180.0F + previewRotation + xAngle * 20.0F * cos;
+            float displayRotation = previewRotation + rotationOffset;
+            float cos = (float) Math.cos(Math.toRadians(displayRotation));
+            livingRenderState.bodyRot = 180.0F + displayRotation + xAngle * 20.0F * cos;
             livingRenderState.yRot = xAngle * 20.0F * cos;
             livingRenderState.xRot = livingRenderState.pose == Pose.FALL_FLYING ? 0.0F : -yAngle * 20.0F;
             livingRenderState.boundingBoxWidth = livingRenderState.boundingBoxWidth / livingRenderState.scale;
@@ -1344,7 +1475,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         }
 
         Vector3f translation = new Vector3f(0.0F, renderState.boundingBoxHeight / 2.0F + offsetY, 0.0F);
-        context.entity(renderState, size, translation, rotation, xRotation, x0, y0, x1, y1);
+        context.entity(renderState, Math.round(size * previewZoom), translation, rotation, xRotation, x0, y0, x1, y1);
     }
 
     private EntityRenderState createInventoryRenderState(LivingEntity entity, float delta) {
