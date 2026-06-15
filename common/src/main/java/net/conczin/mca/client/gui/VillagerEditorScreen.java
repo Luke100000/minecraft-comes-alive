@@ -1494,19 +1494,29 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                 boolean layeredHairSelection = isLayeredHairPage();
                 int spacing = layeredHairSelection ? 56 : 40;
                 int cx = width / 2 + (int) ((x - numInRow / 2.0 + 0.5 - 0.5 * (y % 2)) * spacing);
-                int cy = layeredHairSelection ? height / 2 + 15 : height / 2 + (int) ((y - CLOTHES_V / 2.0 + 0.5) * 65);
-                int hoverWidth = 20;
-                int hoverHeight = 30;
+                int cy = layeredHairSelection ? height / 2 + 8 : height / 2 + (int) ((y - CLOTHES_V / 2.0 + 0.5) * 65);
 
-                if (Math.abs(cx - mouseX) <= hoverWidth && Math.abs(cy - mouseY + 5) <= hoverHeight) {
+                int rx = layeredHairSelection ? 25 : 20;
+                int ry0 = layeredHairSelection ? 60 : 25;
+                int ry1 = layeredHairSelection ? 60 : 40;
+
+                int x0 = cx - rx;
+                int y0 = cy - ry0;
+                int x1 = cx + rx;
+                int y1 = cy + ry1;
+
+                int hoverYMax = layeredHairSelection ? y1 : y1 - 5;
+                if (mouseX >= x0 && mouseX <= x1 && mouseY >= y0 && mouseY <= hoverYMax) {
                     hoveredClothingId = index;
                 }
 
                 boolean hovered = hoveredClothingId == index;
                 int previewPadding = hovered ? 5 : 0;
                 float rotationOffset = layeredHairSelection && getLayeredHairCategory() == LayeredHair.Category.BACK ? 180.0F : 0.0F;
-                extractEntityPreview(context, cx - 20 - previewPadding, cy - 25 - previewPadding, cx + 20 + previewPadding, cy + 40 + previewPadding,
-                        hovered ? 35 : 30, 0, mouseX, mouseY, delta, villagerVisualization, rotationOffset);
+
+                int size = layeredHairSelection ? (hovered ? 45 : 40) : (hovered ? 35 : 30);
+
+                extractEntityPreview(context, x0 - previewPadding, y0 - previewPadding, x1 + previewPadding, y1 + previewPadding, size, 0, mouseX, mouseY, delta, villagerVisualization, rotationOffset);
             }
         }
 
