@@ -455,7 +455,7 @@ public class VillagerTasksMCA {
     public static ImmutableList<Pair<Integer, ? extends BehaviorControl<? super VillagerEntityMCA>>> getRestPackage(float speed) {
         return ImmutableList.of(
                 // try to reach the bed, and if not a set home, forget if out of range
-                Pair.of(2, ExtendedWalkTowardsTask.create(MemoryModuleType.HOME, speed, 1, 192, 1200, (v) -> {
+                Pair.of(2, ExtendedWalkTowardsTask.create(MemoryModuleType.HOME, speed, 1, Config.getInstance().getVillagerPathfindingDistance(), 1200, (v) -> {
                     Optional<Boolean> memory = v.getBrain().getMemoryInternal(MemoryModuleTypeMCA.FORCED_HOME);
                     boolean forced = memory != null && memory.isPresent();
                     if (forced) {
