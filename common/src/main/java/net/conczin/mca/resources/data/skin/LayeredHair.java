@@ -11,6 +11,7 @@ import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.resources.Identifier;
 import net.minecraft.util.GsonHelper;
 
+import java.util.List;
 import java.util.Locale;
 
 public class LayeredHair extends SkinListEntry {
@@ -66,18 +67,22 @@ public class LayeredHair extends SkinListEntry {
     }
 
     public enum Category {
-        BASE("base", true),
-        BANGS("bangs", true),
-        BACK("back", false),
-        FRONT("front", false),
-        EXTRA("extra", false);
+        BASE("base", true, "HairBase"),
+        BANGS("bangs", true, "HairBangs"),
+        BACK("back", false, "HairBack"),
+        FRONT("front", false, "HairFront"),
+        EXTRA("extra", false, "HairExtra");
+
+        public static final List<Category> RENDER_ORDER = List.of(BACK, BASE, BANGS, FRONT, EXTRA);
 
         private final String id;
         private final boolean required;
+        private final String dataKey;
 
-        Category(String id, boolean required) {
+        Category(String id, boolean required, String dataKey) {
             this.id = id;
             this.required = required;
+            this.dataKey = dataKey;
         }
 
         public String getId() {
@@ -86,6 +91,10 @@ public class LayeredHair extends SkinListEntry {
 
         public boolean isRequired() {
             return required;
+        }
+
+        public String getDataKey() {
+            return dataKey;
         }
 
         public static Category byName(String name) {

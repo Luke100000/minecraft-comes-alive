@@ -1112,5 +1112,8 @@
   "chat.mca.skin_export_success": "Successfully exported skin to %s",
   "chat.mca.skin_export_failure": "[MCA] Failed to export skin: %s",
   "chat.mca.open_image": "[Open Image]",
-  "chat.mca.open_folder": "[Open Folder]"
+  "chat.mca.open_folder": "[Open Folder]",
+  "gui.mca.trait_shaders": "Trait Shaders: %s",
+  "gui.mca.trait_shaders.on": "ON",
+  "gui.mca.trait_shaders.off": "OFF"
 }

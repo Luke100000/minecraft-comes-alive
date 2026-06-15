@@ -6,6 +6,7 @@ import net.conczin.mca.entity.ai.Traits;
 import net.conczin.mca.entity.ai.relationship.AgeState;
 import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.entity.ai.relationship.VillagerDimensions;
+import net.conczin.mca.resources.data.skin.LayeredHair;
 import net.minecraft.world.entity.LivingEntity;
 
 public record VillagerVisuals(
@@ -115,7 +116,7 @@ public record VillagerVisuals(
         return !isBlank(hairBase) || !isBlank(hairBangs) || !isBlank(hairBack) || !isBlank(hairFront) || !isBlank(hairExtra);
     }
 
-    public String layeredHair(net.conczin.mca.resources.data.skin.LayeredHair.Category category) {
+    public String layeredHair(LayeredHair.Category category) {
         return switch (category) {
             case BASE -> hairBase;
             case BANGS -> hairBangs;

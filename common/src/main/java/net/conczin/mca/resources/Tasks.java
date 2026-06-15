@@ -1,10 +1,10 @@
 package net.conczin.mca.resources;
 
 import com.google.gson.JsonElement;
-import net.conczin.mca.Config;
 import net.conczin.mca.MCA;
 import net.conczin.mca.resources.data.tasks.Task;
 import net.conczin.mca.resources.data.tasks.TaskRegistry;
+import net.conczin.mca.server.world.data.PlayerSaveData;
 import net.conczin.mca.server.world.data.Village;
 import net.minecraft.resources.FileToIdConverter;
 import net.minecraft.resources.Identifier;
@@ -14,9 +14,12 @@ import net.minecraft.server.packs.resources.SimpleJsonResourceReloadListener;
 import net.minecraft.util.ExtraCodecs;
 import net.minecraft.util.profiling.ProfilerFiller;
 
-import net.conczin.mca.server.world.data.PlayerSaveData;
-
-import java.util.*;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 public class Tasks extends SimpleJsonResourceReloadListener<JsonElement> {

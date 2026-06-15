@@ -126,14 +126,13 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     private ButtonWidget genderButtonFemale;
     private ButtonWidget genderButtonMale;
     private boolean restoreHideGui;
-    float previewRotation;
-    float previewZoom = 1.0F;
-    long lastFrameTime = -1L;
-    boolean rotatePreviewLeft;
-    boolean rotatePreviewRight;
-    boolean previewFollowsMouse = true;
-    
-    // Presets management state
+    private float previewRotation;
+    private float previewZoom = 1.0F;
+    private long lastFrameTime = -1L;
+    private boolean rotatePreviewLeft;
+    private boolean rotatePreviewRight;
+    private boolean previewFollowsMouse = true;
+
     private static final int PRESETS_PER_PAGE = 4;
     private final File presetsDir = new File(Minecraft.getInstance().gameDirectory, "config/mca/presets");
     private final List<String> presetNames = new ArrayList<>();
@@ -325,7 +324,6 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
 
     protected void setPage(String page) {
         String prevPage = this.page;
-        // Backup / restore logic for presets page
         if (this.page != null && this.page.equals("presets") && presetsBackupNbt != null && !page.equals("presets")) {
             if (villagerData != null) {
                 villager.load(TagValueInput.create(ProblemReporter.DISCARDING, villager.registryAccess(), villagerData));
@@ -371,7 +369,8 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
             }));
 
             boolean isPresetsPage = page.equals("presets");
-            int presetsX = isPresetsPage ? (width / 2 - DATA_WIDTH + 10) : (width / 2 - DATA_WIDTH + 50);
+            boolean isTraitsPage = page.equals("traits");
+            int presetsX = (isPresetsPage || isTraitsPage) ? (width / 2 - DATA_WIDTH + 10) : (width / 2 - DATA_WIDTH + 50);
 
             presetsButton = addRenderableWidget(new ButtonWidget(
                     presetsX,
@@ -388,15 +387,26 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                     height / 2 - 80,
                     75,
                     20,
-                    Component.translatable("gui.mca.export_skin"),
+                    isTraitsPage
+                            ? Component.translatable("gui.mca.trait_shaders",
+                                    Component.translatable(Config.getInstance().enablePlayerShaders
+                                            ? "gui.mca.trait_shaders.on" : "gui.mca.trait_shaders.off")
+                                            .withStyle(Config.getInstance().enablePlayerShaders ? ChatFormatting.GREEN : ChatFormatting.GRAY))
+                            : Component.translatable("gui.mca.export_skin"),
                     b -> {
-                        if (selectedPreset != null) {
+                        if (page.equals("traits")) {
+                            Config.getInstance().enablePlayerShaders = !Config.getInstance().enablePlayerShaders;
+                            b.setMessage(Component.translatable("gui.mca.trait_shaders",
+                                    Component.translatable(Config.getInstance().enablePlayerShaders
+                                            ? "gui.mca.trait_shaders.on" : "gui.mca.trait_shaders.off")
+                                            .withStyle(Config.getInstance().enablePlayerShaders ? ChatFormatting.GREEN : ChatFormatting.GRAY)));
+                        } else if (selectedPreset != null) {
                             SkinExporter.export(villagerVisualization, selectedPreset);
                         }
                     }
             ));
-            exportSkinButton.visible = isPresetsPage;
-            exportSkinButton.active = isPresetsPage && selectedPreset != null;
+            exportSkinButton.visible = isPresetsPage || isTraitsPage;
+            exportSkinButton.active = isTraitsPage || (isPresetsPage && selectedPreset != null);
         }
 
         int y = height / 2 - 80;
@@ -723,7 +733,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
 
                 y += 4;
                 addRenderableWidget(new ButtonWidget(width / 2, y, DATA_WIDTH, 20, Component.translatable("gui.button.back"), b -> {
-                    setPage("head");
+                    setPage(this instanceof CombScreen ? "hair" : "head");
                 }));
             }
             case "clothing", "hair", "skin", "hair_base", "hair_bangs", "hair_back", "hair_front", "hair_extra" -> {
@@ -738,6 +748,11 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                     searchString = v;
                     filter();
                 });
+                if (page.equals("hair") && this instanceof CombScreen) {
+                    addRenderableWidget(new ButtonWidget(width / 2 + DATA_WIDTH / 2 + 5, height / 2 - 100, 80, 20, Component.translatable("gui.villager_editor.advancedHair"), b -> {
+                        setPage("hair_advanced");
+                    }));
+                }
                 y = height / 2 + 78;
                 pageButtonWidget = addRenderableWidget(new ButtonWidget(width / 2 - 30, y, 60, 20, Component.literal(""), b -> {
                 }));
@@ -783,7 +798,6 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                 int startY = height / 2 - 100;
                 int yVal = startY + 20;
 
-                // Preset buttons on current page
                 for (int i = 0; i < count; i++) {
                     String name = presetNames.get(startIdx + i);
                     Component btnText = Component.literal(name).withStyle(name.equals(selectedPreset) ? ChatFormatting.GREEN : ChatFormatting.GRAY);
@@ -791,8 +805,12 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                     yVal += 20;
                 }
 
-                // Pagination buttons
                 yVal += 2;
+                // Align the shared header buttons with the pagination row when the list is empty
+                if (presetNames.isEmpty()) {
+                    presetsButton.setY(yVal);
+                    exportSkinButton.setY(yVal);
+                }
                 addRenderableWidget(new ButtonWidget(width / 2, yVal, 28, 20, Component.literal("<<"), b -> {
                     currentPage = Math.max(0, currentPage - 1);
                     setPage("presets");
@@ -803,7 +821,6 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                 }));
                 yVal += 25;
 
-                // Name input field + Save / Rename button row
                 nameField = addRenderableWidget(new EditBox(this.font, width / 2, yVal + 1, DATA_WIDTH - 82, 18, Component.translatable("gui.mca.presets.name_field")));
                 nameField.setMaxLength(32);
                 if (selectedPreset != null) {
@@ -813,7 +830,6 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                 ButtonWidget saveButton = addRenderableWidget(new ButtonWidget(width / 2 + DATA_WIDTH - 80, yVal, 38, 20, Component.translatable("gui.mca.presets.save"), b -> savePreset()));
                 renameButton = addRenderableWidget(new ButtonWidget(width / 2 + DATA_WIDTH - 40, yVal, 40, 20, Component.translatable("gui.mca.presets.rename"), b -> renamePreset()));
 
-                // Set initial states
                 String initialVal = nameField.getValue().trim();
                 saveButton.active = !initialVal.isEmpty();
                 renameButton.active = selectedPreset != null 
@@ -1086,7 +1102,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         return page.equals("clothing") || page.equals("hair") || page.equals("skin") || isLayeredHairPage();
     }
 
-    private boolean isLayeredHairPage() {
+    protected boolean isLayeredHairPage() {
         return page.startsWith("hair_") && LayeredHair.Category.byNameOrNull(page.substring("hair_".length())) != null;
     }
 

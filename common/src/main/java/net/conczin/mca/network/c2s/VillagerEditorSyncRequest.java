@@ -147,7 +147,7 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
         if (villagerData != null && list != null) {
             CompoundTag mcaData = getOrCreateMcaData(villagerData);
             mcaData.putString("Hair", "");
-            list.pickAll(getGender(villagerData)).forEach((category, hair) -> mcaData.putString(getHairKey(category), hair));
+            list.pickAll(getGender(villagerData)).forEach((category, hair) -> mcaData.putString(category.getDataKey(), hair));
             saveEntity(player, entity, villagerData);
         }
     }
@@ -157,7 +157,7 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
         LayeredHairList list = LayeredHairList.getInstance();
         if (villagerData != null && list != null) {
             CompoundTag mcaData = getOrCreateMcaData(villagerData);
-            String key = getHairKey(category);
+            String key = category.getDataKey();
             String hair;
             if (data.contains("offset")) {
                 hair = list.getPool(category, getGender(villagerData)).pickNext(mcaData.getString(key).orElse(""), data.getInt("offset").orElse(0));
@@ -244,25 +244,15 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
         if (style.legacy()) {
             mcaData.putString("Hair", style.base());
             for (LayeredHair.Category category : LayeredHair.Category.values()) {
-                mcaData.putString(getHairKey(category), "");
+                mcaData.putString(category.getDataKey(), "");
             }
             return;
         }
 
         mcaData.putString("Hair", "");
         for (LayeredHair.Category category : LayeredHair.Category.values()) {
-            mcaData.putString(getHairKey(category), style.layer(category));
+            mcaData.putString(category.getDataKey(), style.layer(category));
         }
-    }
-
-    private String getHairKey(LayeredHair.Category category) {
-        return switch (category) {
-            case BASE -> "HairBase";
-            case BANGS -> "HairBangs";
-            case BACK -> "HairBack";
-            case FRONT -> "HairFront";
-            case EXTRA -> "HairExtra";
-        };
     }
 
     private Optional<FamilyTreeNode> getFamilyNode(ServerPlayer player, FamilyTree tree, String name, Gender gender) {

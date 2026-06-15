@@ -22,6 +22,8 @@ import java.io.FileInputStream;
 import java.io.InputStream;
 
 public class SkinExporter {
+    private static final String IMMERSIVE_LIBRARY_PREFIX = "immersive_library:";
+
     public static void export(VillagerEntityMCA villager) {
         export(villager, null);
     }
@@ -31,36 +33,25 @@ public class SkinExporter {
             VillagerVisuals visuals = VillagerVisuals.capture(villager);
             
             try (NativeImage base = new NativeImage(64, 64, false)) {
-                // Clear base canvas to transparent black
                 for (int x = 0; x < 64; x++) {
                     for (int y = 0; y < 64; y++) {
                         base.setPixel(x, y, 0);
                     }
                 }
 
-                // 1. Base skin
                 Identifier skinId = getSkin(visuals);
                 int skinColor = getSkinColor(visuals);
                 composite(base, skinId, skinColor);
                 
-                // 2. Face
                 Identifier faceId = getFace(visuals);
                 composite(base, faceId, 0xFFFFFFFF);
                 
-                // 3. Clothing
                 Identifier clothesId = getClothes(visuals);
                 composite(base, clothesId, 0xFFFFFFFF);
                 
-                // 4. Hair
                 if (visuals.hasLayeredHair()) {
                     int hairColor = getHairColor(visuals);
-                    for (LayeredHair.Category category : new LayeredHair.Category[]{
-                            LayeredHair.Category.BACK,
-                            LayeredHair.Category.BASE,
-                            LayeredHair.Category.BANGS,
-                            LayeredHair.Category.FRONT,
-                            LayeredHair.Category.EXTRA
-                    }) {
+                    for (LayeredHair.Category category : LayeredHair.Category.RENDER_ORDER) {
                         String identifier = visuals.layeredHair(category);
                         if (!MCA.isBlankString(identifier)) {
                             composite(base, Identifier.parse(identifier), hairColor);
@@ -69,21 +60,17 @@ public class SkinExporter {
                 } else {
                     String hair = visuals.hair();
                     if (!MCA.isBlankString(hair)) {
-                        Identifier texture = hair.startsWith("immersive_library:") 
-                            ? SkinCache.getTextureIdentifier(Integer.parseInt(hair.substring(18)))
-                            : Identifier.parse(hair);
+                        Identifier texture = getLibraryOrResourceIdentifier(hair);
                         int hairColor = getHairColor(visuals);
                         composite(base, texture, hairColor);
                         
-                        if (!hair.startsWith("immersive_library:")) {
-                            // Overlay
+                        if (!isLibraryIdentifier(hair)) {
                             Identifier overlay = Identifier.parse(hair.replace(".png", "_overlay.png"));
                             composite(base, overlay, 0xFFFFFFFF);
                         }
                     }
                 }
                 
-                // 5. Save the image
                 File exportDir = new File(Minecraft.getInstance().gameDirectory, "mca/exported_skins");
                 if (!exportDir.exists()) {
                     exportDir.mkdirs();
@@ -96,12 +83,10 @@ public class SkinExporter {
                 if (MCA.isBlankString(villagerName)) {
                     villagerName = "villager";
                 }
-                // Sanitize name
                 villagerName = villagerName.replaceAll("[^a-zA-Z0-9_\\-]", "_");
                 File destFile = new File(exportDir, villagerName + "_skin.png");
                 base.writeToFile(destFile.toPath());
                 
-                // 6. Notify player with chat message
                 var player = Minecraft.getInstance().player;
                 if (player != null) {
                     var message = Component.translatable("chat.mca.skin_export_success", "mca/exported_skins/" + destFile.getName())
@@ -119,7 +104,6 @@ public class SkinExporter {
                     
                     player.sendSystemMessage(message);
                     
-                    // Close the MCA editor screen
                     Minecraft.getInstance().setScreen(null);
                 }
             }
@@ -171,10 +155,7 @@ public class SkinExporter {
         if (MCA.isBlankString(identifier)) {
             return null;
         }
-        if (identifier.startsWith("immersive_library:")) {
-            return SkinCache.getTextureIdentifier(Integer.parseInt(identifier.substring(18)));
-        }
-        return Identifier.parse(identifier);
+        return getLibraryOrResourceIdentifier(identifier);
     }
 
     private static int getHairColor(VillagerVisuals visuals) {
@@ -217,10 +198,25 @@ public class SkinExporter {
         return null;
     }
 
+    private static Identifier getLibraryOrResourceIdentifier(String identifier) {
+        if (isLibraryIdentifier(identifier)) {
+            return SkinCache.getTextureIdentifier(Integer.parseInt(identifier.substring(IMMERSIVE_LIBRARY_PREFIX.length())));
+        }
+        return Identifier.parse(identifier);
+    }
+
+    private static boolean isLibraryIdentifier(String identifier) {
+        return identifier.startsWith(IMMERSIVE_LIBRARY_PREFIX);
+    }
+
     private static void composite(NativeImage base, Identifier layerId, int tintColor) {
-        if (layerId == null) return;
+        if (layerId == null) {
+            return;
+        }
         NativeImage overlay = loadTexture(layerId);
-        if (overlay == null) return;
+        if (overlay == null) {
+            return;
+        }
         
         try {
             int tr = ARGB.red(tintColor);

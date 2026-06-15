@@ -6,6 +6,8 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 
 public class ToggleableTextureButtonWidget extends ButtonWidget {
+    private static final float SPRITE_ASPECT = 28.0F / 20.0F;
+
     private final Identifier texture;
     private final boolean toggle;
 
@@ -19,17 +21,15 @@ public class ToggleableTextureButtonWidget extends ButtonWidget {
     protected void extractContents(GuiGraphicsExtractor context, int mouseX, int mouseY, float delta) {
         this.extractDefaultSprite(context);
 
-        // Sprite sheet is 28w x 20h (each half is one toggle state), so aspect ratio = 28/20 = 1.4
-        float spriteAspect = 28.0f / 20.0f;
         float availW = this.width - 4;
         float availH = this.height - 4;
         float destWidth, destHeight;
-        if (availW / availH > spriteAspect) {
+        if (availW / availH > SPRITE_ASPECT) {
             destHeight = availH;
-            destWidth = availH * spriteAspect;
+            destWidth = availH * SPRITE_ASPECT;
         } else {
             destWidth = availW;
-            destHeight = availW / spriteAspect;
+            destHeight = availW / SPRITE_ASPECT;
         }
 
         float x0 = this.getX() + (this.width - destWidth) / 2.0f;

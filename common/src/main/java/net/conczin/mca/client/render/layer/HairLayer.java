@@ -16,6 +16,8 @@ import net.minecraft.util.ARGB;
 import net.minecraft.world.item.DyeColor;
 
 public class HairLayer<S extends HumanoidRenderState, M extends HumanoidModel<S>> extends VillagerLayer<S, M> {
+    private static final String IMMERSIVE_LIBRARY_PREFIX = "immersive_library:";
+
     public HairLayer(RenderLayerParent<S, M> renderer, M model) {
         super(renderer, model);
     }
@@ -36,13 +38,7 @@ public class HairLayer<S extends HumanoidRenderState, M extends HumanoidModel<S>
 
         int overlay = LivingEntityRenderer.getOverlayCoords(state, 0.0F);
         int color = getColor(state, tickDelta);
-        for (LayeredHair.Category category : new LayeredHair.Category[]{
-                LayeredHair.Category.BACK,
-                LayeredHair.Category.BASE,
-                LayeredHair.Category.BANGS,
-                LayeredHair.Category.FRONT,
-                LayeredHair.Category.EXTRA
-        }) {
+        for (LayeredHair.Category category : LayeredHair.Category.RENDER_ORDER) {
             String identifier = visuals.layeredHair(category);
             if (MCA.isBlankString(identifier)) {
                 continue;
@@ -62,8 +58,8 @@ public class HairLayer<S extends HumanoidRenderState, M extends HumanoidModel<S>
         if (MCA.isBlankString(identifier)) {
             return null;
         }
-        if (identifier.startsWith("immersive_library:")) {
-            return SkinCache.getTextureIdentifier(Integer.parseInt(identifier.substring(18)));
+        if (identifier.startsWith(IMMERSIVE_LIBRARY_PREFIX)) {
+            return SkinCache.getTextureIdentifier(Integer.parseInt(identifier.substring(IMMERSIVE_LIBRARY_PREFIX.length())));
         }
         return cached(identifier, Identifier::parse);
     }

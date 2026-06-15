@@ -6,6 +6,7 @@ import com.mojang.serialization.JsonOps;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.conczin.mca.MCA;
 import net.conczin.mca.entity.ai.relationship.Gender;
+import net.minecraft.IdentifierException;
 import net.minecraft.resources.FileToIdConverter;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.resources.ResourceManager;
@@ -51,7 +52,13 @@ public class FaceList extends SimpleJsonResourceReloadListener<JsonElement> {
         entries.forEach((key, definition) -> {
             for (int i = 0; i < Math.max(1, definition.count()); i++) {
                 String identifier = BodySkinList.formatIdentifier(key, i);
-                Identifier parsed = Identifier.parse(identifier);
+                Identifier parsed;
+                try {
+                    parsed = Identifier.parse(identifier);
+                } catch (IdentifierException exception) {
+                    MCA.LOGGER.warn("Invalid face texture identifier {}", identifier, exception);
+                    continue;
+                }
                 String[] parts = parsed.getPath().split("/");
                 if (parts.length < 4) {
                     MCA.LOGGER.warn("Invalid face texture path {}", identifier);
