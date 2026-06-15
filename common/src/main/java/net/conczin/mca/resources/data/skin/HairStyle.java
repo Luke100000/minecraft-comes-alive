@@ -26,7 +26,6 @@ public class HairStyle extends SkinListEntry {
             ByteBufCodecs.STRING_UTF8, HairStyle::back,
             ByteBufCodecs.STRING_UTF8, HairStyle::front,
             ByteBufCodecs.STRING_UTF8, HairStyle::extra,
-            ByteBufCodecs.BOOL, HairStyle::legacy,
             HairStyle::new
     );
 
@@ -35,20 +34,22 @@ public class HairStyle extends SkinListEntry {
     private final String back;
     private final String front;
     private final String extra;
-    private final boolean legacy;
 
-    public HairStyle(String identifier, Gender gender, float chance, String base, String bangs, String back, String front, String extra, boolean legacy) {
+    public HairStyle(String identifier, Gender gender, float chance, String base, String bangs, String back, String front, String extra) {
         super(identifier, gender, chance);
         this.base = base;
         this.bangs = bangs;
         this.back = back;
         this.front = front;
         this.extra = extra;
-        this.legacy = legacy;
     }
 
-    public static HairStyle legacy(Hair hair) {
-        return new HairStyle(hair.getIdentifier(), hair.getGender(), hair.getChance(), hair.getIdentifier(), "", "", "", "", true);
+    public static HairStyle singleLayer(String identifier, Gender gender, float chance) {
+        return new HairStyle(identifier, gender, chance, identifier, "", "", "", "");
+    }
+
+    public static HairStyle fromHair(Hair hair) {
+        return singleLayer(hair.getIdentifier(), hair.getGender(), hair.getChance());
     }
 
     public String layer(LayeredHair.Category category) {
@@ -81,13 +82,9 @@ public class HairStyle extends SkinListEntry {
         return extra;
     }
 
-    public boolean legacy() {
-        return legacy;
-    }
-
     public record Definition(Gender gender, float chance, String base, String bangs, String back, String front, String extra) {
         public HairStyle create(String identifier, Gender fallbackGender) {
-            return new HairStyle(identifier, resolveGender(gender, fallbackGender), chance, base, bangs, back, front, extra, false);
+            return new HairStyle(identifier, resolveGender(gender, fallbackGender), chance, base, bangs, back, front, extra);
         }
     }
 }

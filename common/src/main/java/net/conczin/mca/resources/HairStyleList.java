@@ -48,7 +48,7 @@ public class HairStyleList extends SimpleJsonResourceReloadListener<JsonElement>
 
     public HashMap<String, HairStyle> getAllStyles(Map<String, Hair> legacyHair) {
         HashMap<String, HairStyle> allStyles = new HashMap<>(styles);
-        legacyHair.values().forEach(hair -> allStyles.putIfAbsent(hair.getIdentifier(), HairStyle.legacy(hair)));
+        legacyHair.values().forEach(hair -> allStyles.putIfAbsent(hair.getIdentifier(), HairStyle.fromHair(hair)));
         return allStyles;
     }
 
@@ -60,7 +60,7 @@ public class HairStyleList extends SimpleJsonResourceReloadListener<JsonElement>
 
         HairList hairList = HairList.getInstance();
         Hair legacy = hairList == null ? null : hairList.hair.get(identifier);
-        return legacy == null ? null : HairStyle.legacy(legacy);
+        return legacy == null ? null : HairStyle.fromHair(legacy);
     }
 
     public WeightedPool<String> getPool(Gender gender) {

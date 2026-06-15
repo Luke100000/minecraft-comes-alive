@@ -295,12 +295,6 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
     }
 
     default void setHairStyle(HairStyle style) {
-        if (style.legacy()) {
-            setHair(style.base());
-            clearLayeredHair();
-            return;
-        }
-
         setHair("");
         for (LayeredHair.Category category : LayeredHair.Category.values()) {
             setLayeredHair(category, style.layer(category));
@@ -502,15 +496,14 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
             }
         }
 
-        LayeredHairList layeredHair = LayeredHairList.getInstance();
-        if (layeredHair != null && layeredHair.hasRequiredHair(gender)) {
-            clearLayeredHair();
-            layeredHair.pickAll(gender).forEach(this::setLayeredHair);
+        HairList hairList = HairList.getInstance();
+        if (hairList != null) {
+            setHairStyle(HairStyle.singleLayer(hairList.getPool(gender).pickOne(), gender, 1.0F));
             return;
         }
 
         clearLayeredHair();
-        setHair(HairList.getInstance().getPool(gender).pickOne());
+        setHair("");
     }
 
     default void validateClothes() {
@@ -535,7 +528,7 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
             if (layeredHairList != null) {
                 for (LayeredHair.Category category : LayeredHair.Category.values()) {
                     String hair = getLayeredHair(category);
-                    if (!MCA.isBlankString(hair) && !layeredHairList.containsIdentifier(hair)) {
+                    if (!MCA.isBlankString(hair) && !isValidHairTexture(hair, layeredHairList)) {
                         MCA.LOGGER.info("Villagers layered hair {} does not exist!", hair);
                         randomizeHair();
                         break;
@@ -543,6 +536,14 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
                 }
             }
         }
+    }
+
+    private boolean isValidHairTexture(String hair, LayeredHairList layeredHairList) {
+        if (hair.startsWith("immersive_library")) {
+            return true;
+        }
+        HairList hairList = HairList.getInstance();
+        return layeredHairList.containsIdentifier(hair) || hairList != null && hairList.hair.containsKey(hair);
     }
 
     @SuppressWarnings({"unchecked", "RedundantSuppression"})

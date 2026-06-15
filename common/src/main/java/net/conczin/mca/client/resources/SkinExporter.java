@@ -49,25 +49,11 @@ public class SkinExporter {
                 Identifier clothesId = getClothes(visuals);
                 composite(base, clothesId, 0xFFFFFFFF);
                 
-                if (visuals.hasLayeredHair()) {
-                    int hairColor = getHairColor(visuals);
-                    for (LayeredHair.Category category : LayeredHair.Category.RENDER_ORDER) {
-                        String identifier = visuals.layeredHair(category);
-                        if (!MCA.isBlankString(identifier)) {
-                            composite(base, Identifier.parse(identifier), hairColor);
-                        }
-                    }
-                } else {
-                    String hair = visuals.hair();
-                    if (!MCA.isBlankString(hair)) {
-                        Identifier texture = getLibraryOrResourceIdentifier(hair);
-                        int hairColor = getHairColor(visuals);
-                        composite(base, texture, hairColor);
-                        
-                        if (!isLibraryIdentifier(hair)) {
-                            Identifier overlay = Identifier.parse(hair.replace(".png", "_overlay.png"));
-                            composite(base, overlay, 0xFFFFFFFF);
-                        }
+                int hairColor = getHairColor(visuals);
+                for (LayeredHair.Category category : LayeredHair.Category.RENDER_ORDER) {
+                    String identifier = visuals.layeredHair(category);
+                    if (!MCA.isBlankString(identifier)) {
+                        composite(base, getLibraryOrResourceIdentifier(identifier), hairColor);
                     }
                 }
                 

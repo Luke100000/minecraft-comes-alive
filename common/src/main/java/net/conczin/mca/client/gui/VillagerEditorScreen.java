@@ -205,7 +205,13 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
 
     private static HashMap<String, HairStyle> getClientHairStyles(Map<String, Hair> legacyHair) {
         HairStyleList hairStyleList = HairStyleList.getInstance();
-        return hairStyleList == null ? new HashMap<>() : hairStyleList.getAllStyles(legacyHair);
+        if (hairStyleList != null) {
+            return hairStyleList.getAllStyles(legacyHair);
+        }
+
+        HashMap<String, HairStyle> styles = new HashMap<>();
+        legacyHair.values().forEach(hair -> styles.putIfAbsent(hair.getIdentifier(), HairStyle.fromHair(hair)));
+        return styles;
     }
 
     public static HashMap<String, Clothing> getClothing() {
@@ -1692,8 +1698,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     }
 
     void applyLibraryHair(String hairId) {
-        villager.setHair(hairId);
-        villager.clearLayeredHair();
+        villager.setHairStyle(HairStyle.singleLayer(hairId, villager.getGenetics().getGender(), 1.0F));
         if (isLayeredHairPage()) {
             setPage("hair_advanced");
         }

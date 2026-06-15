@@ -147,6 +147,7 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
         if (villagerData != null && list != null) {
             CompoundTag mcaData = getOrCreateMcaData(villagerData);
             mcaData.putString("Hair", "");
+            mcaData.putString("HairStyle", "");
             list.pickAll(getGender(villagerData)).forEach((category, hair) -> mcaData.putString(category.getDataKey(), hair));
             saveEntity(player, entity, villagerData);
         }
@@ -166,6 +167,7 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
             }
 
             mcaData.putString("Hair", "");
+            mcaData.putString("HairStyle", "");
             mcaData.putString(key, hair);
             saveEntity(player, entity, villagerData);
         }
@@ -241,14 +243,6 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
         }
 
         mcaData.putString("HairStyle", style.getIdentifier());
-        if (style.legacy()) {
-            mcaData.putString("Hair", style.base());
-            for (LayeredHair.Category category : LayeredHair.Category.values()) {
-                mcaData.putString(category.getDataKey(), "");
-            }
-            return;
-        }
-
         mcaData.putString("Hair", "");
         for (LayeredHair.Category category : LayeredHair.Category.values()) {
             mcaData.putString(category.getDataKey(), style.layer(category));

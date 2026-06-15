@@ -43,6 +43,7 @@ public record SkinListRequest() implements HandleablePayload {
         HashMap<String, BodySkin> bodySkins = BodySkinList.getInstance() == null ? new HashMap<>() : new HashMap<>(BodySkinList.getInstance().skins);
         HashMap<String, LayeredHair> layeredHair = LayeredHairList.getInstance() == null ? new HashMap<>() : new HashMap<>(LayeredHairList.getInstance().hair);
         HashMap<String, HairStyle> hairStyles = HairStyleList.getInstance() == null ? new HashMap<>() : HairStyleList.getInstance().getAllStyles(allHair);
+        allHair.values().forEach(entry -> hairStyles.putIfAbsent(entry.getIdentifier(), HairStyle.fromHair(entry)));
         Network.sendToPlayer(new SkinListResponse(allClothing, allHair, bodySkins, layeredHair, hairStyles), player);
     }
 

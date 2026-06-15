@@ -67,6 +67,11 @@ public record VillagerVisuals(
                 * traits.getVerticalScaleFactor()
                 * dimensions.getHeight()
                 * gender.getScaleFactor();
+        String legacyHair = villager.getHair();
+        String hairBase = villager.getHairBase();
+        if (isBlank(hairBase) && !isBlank(legacyHair)) {
+            hairBase = legacyHair;
+        }
         return new VillagerVisuals(
                 gender.getDataName(),
                 gender == Gender.FEMALE,
@@ -91,8 +96,8 @@ public record VillagerVisuals(
                 genetics.getGene(Genetics.EUMELANIN),
                 genetics.getGene(Genetics.PHEOMELANIN),
                 villager.getSkin(),
-                villager.getHair(),
-                villager.getHairBase(),
+                legacyHair,
+                hairBase,
                 villager.getHairBangs(),
                 villager.getHairBack(),
                 villager.getHairFront(),
@@ -110,10 +115,6 @@ public record VillagerVisuals(
     public boolean isBlinking() {
         int time = tickCount / 2 + (int) (hemoglobinGene * 65536);
         return time % 50 == 1 || time % 57 == 1 || sleeping || deadOrDying;
-    }
-
-    public boolean hasLayeredHair() {
-        return !isBlank(hairBase) || !isBlank(hairBangs) || !isBlank(hairBack) || !isBlank(hairFront) || !isBlank(hairExtra);
     }
 
     public String layeredHair(LayeredHair.Category category) {

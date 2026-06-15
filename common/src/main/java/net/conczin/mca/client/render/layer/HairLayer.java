@@ -31,10 +31,6 @@ public class HairLayer<S extends HumanoidRenderState, M extends HumanoidModel<S>
     @Override
     public void renderFinal(PoseStack poseStack, SubmitNodeCollector submitNodeCollector, int lightCoords, S state, float tickDelta, boolean visible, boolean glowing) {
         VillagerVisuals visuals = VillagerVisuals.require(state);
-        if (!visuals.hasLayeredHair()) {
-            super.renderFinal(poseStack, submitNodeCollector, lightCoords, state, tickDelta, visible, glowing);
-            return;
-        }
 
         int overlay = LivingEntityRenderer.getOverlayCoords(state, 0.0F);
         int color = getColor(state, tickDelta);
@@ -44,33 +40,18 @@ public class HairLayer<S extends HumanoidRenderState, M extends HumanoidModel<S>
                 continue;
             }
 
-            Identifier texture = cached(identifier, Identifier::parse);
+            Identifier texture = getTexture(identifier);
             if (canUse(texture)) {
                 renderModel(poseStack, submitNodeCollector, lightCoords, this.model, color, texture, overlay, visible, glowing, state);
             }
         }
     }
 
-    @Override
-    public Identifier getSkin(S state) {
-        var visuals = VillagerVisuals.require(state);
-        String identifier = visuals.hair();
-        if (MCA.isBlankString(identifier)) {
-            return null;
-        }
+    private Identifier getTexture(String identifier) {
         if (identifier.startsWith(IMMERSIVE_LIBRARY_PREFIX)) {
             return SkinCache.getTextureIdentifier(Integer.parseInt(identifier.substring(IMMERSIVE_LIBRARY_PREFIX.length())));
         }
         return cached(identifier, Identifier::parse);
-    }
-
-    @Override
-    protected Identifier getOverlay(S state) {
-        String hair = VillagerVisuals.require(state).hair();
-        if (MCA.isBlankString(hair)) {
-            return null;
-        }
-        return cached(hair.replace(".png", "_overlay.png"), Identifier::parse);
     }
 
     private int getRainbow(int tickCount, int entityId, float tickDelta) {
