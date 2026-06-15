@@ -1096,5 +1096,21 @@
   "item.mca.yellow_mangrove_crib": "Yellow Mangrove Crib",
   "item.mca.yellow_oak_crib": "Yellow Oak Crib",
   "item.mca.yellow_spruce_crib": "Yellow Spruce Crib",
-  "item.mca.yellow_warped_crib": "Yellow Warped Crib"
+  "item.mca.yellow_warped_crib": "Yellow Warped Crib",
+  "gui.mca.presets": "Presets",
+  "gui.mca.export_skin": "Export Skin",
+  "gui.mca.presets.title": "Preset Manager",
+  "gui.mca.presets.select_header": "Presets",
+  "gui.mca.presets.name_field": "Preset Name",
+  "gui.mca.presets.save": "Save",
+  "gui.mca.presets.overwrite": "Overwrite",
+  "gui.mca.presets.use": "Use",
+  "gui.mca.presets.delete": "Delete",
+  "gui.mca.presets.rename": "Rename",
+  "gui.mca.presets.original": "Original",
+  "gui.mca.presets.preview": "Preset",
+  "chat.mca.skin_export_success": "Successfully exported skin to %s",
+  "chat.mca.skin_export_failure": "[MCA] Failed to export skin: %s",
+  "chat.mca.open_image": "[Open Image]",
+  "chat.mca.open_folder": "[Open Folder]"
 }
