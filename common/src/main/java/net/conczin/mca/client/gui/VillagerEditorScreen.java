@@ -894,11 +894,12 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         int y = height / 2 + 75;
 
         if (isSelection) {
-            // 5x22px buttons = 110px total, centered above the selection previews.
+            // 6x22px buttons = 132px total, centered above the selection previews.
             int selY = height / 2 - 76;
-            addRenderableWidget(new ButtonWidget(centerX - 55, selY, 22, 14, Component.literal("-"), b -> zoomPreview(-0.1F)));
-            addRenderableWidget(new ButtonWidget(centerX - 33, selY, 22, 14, Component.literal("<"), b -> rotatePreview(22.5F)));
-            addRenderableWidget(new ToggleableTextureButtonWidget(centerX - 11, selY, 22, 14,
+            addRenderableWidget(new TooltipButtonWidget(centerX - 66, selY, 22, 14, Component.literal("R"), Component.translatable("gui.villager_editor.reset_zoom.tooltip"), b -> { previewZoom = 1.0F; }));
+            addRenderableWidget(new ButtonWidget(centerX - 44, selY, 22, 14, Component.literal("-"), b -> zoomPreview(-0.1F)));
+            addRenderableWidget(new ButtonWidget(centerX - 22, selY, 22, 14, Component.literal("<"), b -> rotatePreview(22.5F)));
+            addRenderableWidget(new ToggleableTextureButtonWidget(centerX, selY, 22, 14,
                     PREVIEW_MOUSE_FOLLOW_TEXTURE,
                     previewFollowsMouse,
                     Component.translatable("gui.villager_editor.preview_mouse_follow.tooltip"),
@@ -906,13 +907,14 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                         previewFollowsMouse = !previewFollowsMouse;
                         setPage(page);
                     }));
-            addRenderableWidget(new ButtonWidget(centerX + 11, selY, 22, 14, Component.literal(">"), b -> rotatePreview(-22.5F)));
-            addRenderableWidget(new ButtonWidget(centerX + 33, selY, 22, 14, Component.literal("+"), b -> zoomPreview(0.1F)));
+            addRenderableWidget(new ButtonWidget(centerX + 22, selY, 22, 14, Component.literal(">"), b -> rotatePreview(-22.5F)));
+            addRenderableWidget(new ButtonWidget(centerX + 44, selY, 22, 14, Component.literal("+"), b -> zoomPreview(0.1F)));
         } else {
-            // Standard 28x20 buttons, centered in the left preview column.
-            addRenderableWidget(new ButtonWidget(centerX - 74, y, 28, 20, Component.literal("-"), b -> zoomPreview(-0.1F)));
-            addRenderableWidget(new ButtonWidget(centerX - 44, y, 28, 20, Component.literal("<"), b -> rotatePreview(22.5F)));
-            addRenderableWidget(new ToggleableTextureButtonWidget(centerX - 14, y, 28, 20,
+            // Standard 28x20 buttons, centered in the left preview column (total width: 178px).
+            addRenderableWidget(new TooltipButtonWidget(centerX - 89, y, 28, 20, Component.literal("R"), Component.translatable("gui.villager_editor.reset_zoom.tooltip"), b -> { previewZoom = 1.0F; }));
+            addRenderableWidget(new ButtonWidget(centerX - 59, y, 28, 20, Component.literal("-"), b -> zoomPreview(-0.1F)));
+            addRenderableWidget(new ButtonWidget(centerX - 29, y, 28, 20, Component.literal("<"), b -> rotatePreview(22.5F)));
+            addRenderableWidget(new ToggleableTextureButtonWidget(centerX + 1, y, 28, 20,
                     PREVIEW_MOUSE_FOLLOW_TEXTURE,
                     previewFollowsMouse,
                     Component.translatable("gui.villager_editor.preview_mouse_follow.tooltip"),
@@ -920,8 +922,8 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                         previewFollowsMouse = !previewFollowsMouse;
                         setPage(page);
                     }));
-            addRenderableWidget(new ButtonWidget(centerX + 16, y, 28, 20, Component.literal(">"), b -> rotatePreview(-22.5F)));
-            addRenderableWidget(new ButtonWidget(centerX + 46, y, 28, 20, Component.literal("+"), b -> zoomPreview(0.1F)));
+            addRenderableWidget(new ButtonWidget(centerX + 31, y, 28, 20, Component.literal(">"), b -> rotatePreview(-22.5F)));
+            addRenderableWidget(new ButtonWidget(centerX + 61, y, 28, 20, Component.literal("+"), b -> zoomPreview(0.1F)));
         }
     }
 
@@ -1488,7 +1490,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                 if (shouldPrintPlayerHint() && villagerUUID.equals(playerUUID) && getSelectedPlayerModel() != VillagerLike.PlayerModel.VILLAGER) {
                     final Matrix3x2fStack matrices = context.pose();
                     matrices.pushMatrix();
-                    matrices.translate(x + DATA_WIDTH / 2.0F, y - 36);
+                    matrices.translate(width / 2.0F, height / 2 - 117);
                     matrices.scale(0.5f, 0.5f);
                     context.centeredText(font, Component.translatable("gui.villager_editor.model_hint"), 0, 0, 0xAAFFFFFF);
                     matrices.popMatrix();
