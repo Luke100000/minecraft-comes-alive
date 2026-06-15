@@ -53,9 +53,9 @@ public class VillagerEntityBaseModelMCA extends HumanoidModel<VillagerRenderStat
         VillagerVisuals visuals = VillagerVisuals.require(state);
 
         if (visuals.baby() && (!state.isPassenger || state.cribPassenger)) {
-            state.walkAnimationSpeed = (float) Math.sin(visuals.tickCount() / 12.0F);
-            state.walkAnimationPos = (float) Math.cos(visuals.tickCount() / 9.0F) * 3.0F;
-            state.yRot = originalYRot + (float) Math.sin(visuals.tickCount() / 2.0F);
+            state.walkAnimationSpeed = (float) Math.sin(state.ageInTicks / 12.0F);
+            state.walkAnimationPos = (float) Math.cos(state.ageInTicks / 9.0F) * 3.0F;
+            state.yRot = originalYRot + (float) Math.sin(state.ageInTicks / 2.0F);
         }
 
         if (state.isBaby) {
