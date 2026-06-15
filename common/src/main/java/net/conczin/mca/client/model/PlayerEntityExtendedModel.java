@@ -22,7 +22,11 @@ public class PlayerEntityExtendedModel<T extends LivingEntity> extends PlayerMod
     private boolean wearsHidden;
 
     public PlayerEntityExtendedModel(ModelPart root) {
-        super(root, false);
+        this(root, false);
+    }
+
+    public PlayerEntityExtendedModel(ModelPart root, boolean slim) {
+        super(root, slim);
         this.breasts = root.getChild(BREASTS);
         this.breastsWear = root.getChild(BREASTPLATE);
     }
