@@ -122,6 +122,23 @@ public class PlayerEntityExtendedModel<T extends LivingEntity> extends PlayerMod
         return this;
     }
 
+    public void setAllVisible(boolean visible) {
+        head.visible = visible;
+        hat.visible = visible;
+        body.visible = visible;
+        leftArm.visible = visible;
+        rightArm.visible = visible;
+        leftLeg.visible = visible;
+        rightLeg.visible = visible;
+        breasts.visible = visible;
+        jacket.visible = !wearsHidden && visible;
+        leftPants.visible = !wearsHidden && visible;
+        rightPants.visible = !wearsHidden && visible;
+        leftSleeve.visible = !wearsHidden && visible;
+        rightSleeve.visible = !wearsHidden && visible;
+        breastsWear.visible = !wearsHidden && visible;
+    }
+
     @Override
     public void setupAnim(AvatarRenderState state) {
         head.visible = !state.isSpectator;
@@ -151,16 +168,16 @@ public class PlayerEntityExtendedModel<T extends LivingEntity> extends PlayerMod
         head.visible = model.head.visible;
         hat.visible = model.head.visible;
         body.visible = model.body.visible;
-        jacket.visible = model.body.visible;
+        jacket.visible = !wearsHidden && model.body.visible;
         breasts.visible = model.body.visible;
-        breastsWear.visible = model.body.visible;
+        breastsWear.visible = !wearsHidden && model.body.visible;
         leftArm.visible = model.leftArm.visible;
-        leftSleeve.visible = model.leftArm.visible;
+        leftSleeve.visible = !wearsHidden && model.leftArm.visible;
         rightArm.visible = model.rightArm.visible;
-        rightSleeve.visible = model.rightArm.visible;
+        rightSleeve.visible = !wearsHidden && model.rightArm.visible;
         leftLeg.visible = model.leftLeg.visible;
-        leftPants.visible = model.leftLeg.visible;
+        leftPants.visible = !wearsHidden && model.leftLeg.visible;
         rightLeg.visible = model.rightLeg.visible;
-        rightPants.visible = model.rightLeg.visible;
+        rightPants.visible = !wearsHidden && model.rightLeg.visible;
     }
 }

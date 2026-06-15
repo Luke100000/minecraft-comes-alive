@@ -4,12 +4,14 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import net.conczin.mca.MCAClient;
 import net.conczin.mca.client.model.PlayerEntityExtendedModel;
 import net.conczin.mca.client.model.VillagerEntityModelMCA;
+import net.conczin.mca.client.render.MCAPlayerArmRenderer;
 import net.conczin.mca.client.render.VillagerStateHolder;
 import net.conczin.mca.client.render.VillagerVisuals;
 import net.conczin.mca.client.render.layer.ClothingLayer;
 import net.conczin.mca.client.render.layer.FaceLayer;
 import net.conczin.mca.client.render.layer.HairLayer;
 import net.conczin.mca.client.render.layer.SkinLayer;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.model.geom.builders.CubeDeformation;
 import net.minecraft.client.model.geom.builders.LayerDefinition;
 import net.minecraft.client.model.player.PlayerModel;
@@ -32,7 +34,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(AvatarRenderer.class)
 @SuppressWarnings({"rawtypes", "unchecked"})
-public abstract class MixinPlayerRenderer extends LivingEntityRenderer<LivingEntity, AvatarRenderState, PlayerModel> {
+public abstract class MixinPlayerRenderer extends LivingEntityRenderer<LivingEntity, AvatarRenderState, PlayerModel> implements MCAPlayerArmRenderer {
     @Unique
     private PlayerModel mca$wideVillagerModel;
     @Unique
@@ -97,59 +99,64 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<LivingEnt
     }
 
     @Inject(
-            method = "renderRightHand(Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/SubmitNodeCollector;ILnet/minecraft/resources/Identifier;ZLnet/minecraft/client/player/AbstractClientPlayer;)V",
-            at = @At(
-                    value = "INVOKE",
-                    target = "Lnet/minecraft/client/renderer/entity/player/AvatarRenderer;renderHand(Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/SubmitNodeCollector;ILnet/minecraft/resources/Identifier;Lnet/minecraft/client/model/geom/ModelPart;Z)V"
-            ),
-            cancellable = true,
-            require = 0
+            method = "renderRightHand(Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/SubmitNodeCollector;ILnet/minecraft/resources/Identifier;Z)V",
+            at = @At("HEAD"),
+            cancellable = true
     )
-    private void mca$injectRenderRightHandLive(
+    private void mca$injectRenderRightHand(
             PoseStack poseStack,
             SubmitNodeCollector submitNodeCollector,
             int lightCoords,
             Identifier skinTexture,
             boolean hasSleeve,
-            AbstractClientPlayer player,
             CallbackInfo ci
     ) {
-        if (!MCAClient.renderArms(player.getUUID(), "right_arm") || mca$skinLayer == null || mca$clothingLayer == null) {
-            return;
+        if (mca$renderHand(Minecraft.getInstance().player, poseStack, submitNodeCollector, lightCoords, true, hasSleeve)) {
+            ci.cancel();
         }
-
-        mca$renderCustomHand(player, poseStack, submitNodeCollector, lightCoords, true, hasSleeve);
-        ci.cancel();
     }
 
     @Inject(
-            method = "renderLeftHand(Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/SubmitNodeCollector;ILnet/minecraft/resources/Identifier;ZLnet/minecraft/client/player/AbstractClientPlayer;)V",
-            at = @At(
-                    value = "INVOKE",
-                    target = "Lnet/minecraft/client/renderer/entity/player/AvatarRenderer;renderHand(Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/SubmitNodeCollector;ILnet/minecraft/resources/Identifier;Lnet/minecraft/client/model/geom/ModelPart;Z)V"
-            ),
-            cancellable = true,
-            require = 0
+            method = "renderLeftHand(Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/SubmitNodeCollector;ILnet/minecraft/resources/Identifier;Z)V",
+            at = @At("HEAD"),
+            cancellable = true
     )
-    private void mca$injectRenderLeftHandLive(
+    private void mca$injectRenderLeftHand(
             PoseStack poseStack,
             SubmitNodeCollector submitNodeCollector,
             int lightCoords,
             Identifier skinTexture,
             boolean hasSleeve,
-            AbstractClientPlayer player,
             CallbackInfo ci
     ) {
-        if (!MCAClient.renderArms(player.getUUID(), "left_arm") || mca$skinLayer == null || mca$clothingLayer == null) {
-            return;
+        if (mca$renderHand(Minecraft.getInstance().player, poseStack, submitNodeCollector, lightCoords, false, hasSleeve)) {
+            ci.cancel();
+        }
+    }
+
+    @Override
+    public boolean mca$renderHand(
+            AbstractClientPlayer player,
+            PoseStack poseStack,
+            SubmitNodeCollector submitNodeCollector,
+            int lightCoords,
+            boolean rightArm,
+            boolean hasSleeve
+    ) {
+        if (player == null || mca$skinLayer == null || mca$clothingLayer == null) {
+            return false;
         }
 
-        mca$renderCustomHand(player, poseStack, submitNodeCollector, lightCoords, false, hasSleeve);
-        ci.cancel();
+        String key = rightArm ? "right_arm" : "left_arm";
+        if (!MCAClient.renderArms(player.getUUID(), key)) {
+            return false;
+        }
+
+        return mca$renderCustomHand(player, poseStack, submitNodeCollector, lightCoords, rightArm, hasSleeve);
     }
 
     @Unique
-    private void mca$renderCustomHand(
+    private boolean mca$renderCustomHand(
             AbstractClientPlayer player,
             PoseStack poseStack,
             SubmitNodeCollector submitNodeCollector,
@@ -161,33 +168,39 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<LivingEnt
                 .map(VillagerVisuals::capture)
                 .orElse(null);
         if (visuals == null) {
-            return;
+            return false;
         }
 
-        mca$renderSkinArm(
+        PlayerEntityExtendedModel<?> skinModel = (PlayerEntityExtendedModel<?>) mca$skinLayer.model;
+        PlayerEntityExtendedModel<?> clothingModel = (PlayerEntityExtendedModel<?>) mca$clothingLayer.model;
+        skinModel.applyVillagerDimensions(visuals, player.isCrouching());
+        clothingModel.applyVillagerDimensions(visuals, player.isCrouching());
+
+        boolean renderedSkin = mca$renderSkinArm(
                 poseStack,
                 submitNodeCollector,
                 lightCoords,
                 visuals,
                 rightArm,
-                (PlayerEntityExtendedModel<?>) mca$skinLayer.model,
+                skinModel,
                 mca$skinLayer
         );
-        mca$renderClothingArm(
+        boolean renderedClothing = mca$renderClothingArm(
                 poseStack,
                 submitNodeCollector,
                 lightCoords,
                 visuals,
                 rightArm,
                 hasSleeve,
-                (PlayerEntityExtendedModel<?>) mca$clothingLayer.model,
+                clothingModel,
                 mca$clothingLayer
         );
+        return renderedSkin || renderedClothing;
     }
 
     @Unique
     @SuppressWarnings("rawtypes")
-    private void mca$renderSkinArm(
+    private boolean mca$renderSkinArm(
             PoseStack poseStack,
             SubmitNodeCollector submitNodeCollector,
             int lightCoords,
@@ -200,17 +213,18 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<LivingEnt
 
         Identifier texture = layer.getSkin(visuals);
         if (texture == null || !layer.canUse(texture)) {
-            return;
+            return false;
         }
 
         int color = layer.getColor(visuals, 0.0F);
         var arm = rightArm ? model.rightArm : model.leftArm;
         submitNodeCollector.submitModelPart(arm, poseStack, RenderTypes.entityCutout(texture), lightCoords, OverlayTexture.NO_OVERLAY, null, color, null);
+        return true;
     }
 
     @Unique
     @SuppressWarnings("rawtypes")
-    private void mca$renderClothingArm(
+    private boolean mca$renderClothingArm(
             PoseStack poseStack,
             SubmitNodeCollector submitNodeCollector,
             int lightCoords,
@@ -224,17 +238,21 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<LivingEnt
 
         Identifier texture = layer.getSkin(visuals);
         if (texture == null || !layer.canUse(texture)) {
-            return;
+            return false;
         }
 
+        boolean rendered = false;
         var arm = rightArm ? model.rightArm : model.leftArm;
         if (arm.visible) {
             submitNodeCollector.submitModelPart(arm, poseStack, RenderTypes.entityCutout(texture), lightCoords, OverlayTexture.NO_OVERLAY, null, 0xFFFFFFFF, null);
+            rendered = true;
         }
         var sleeve = rightArm ? model.rightSleeve : model.leftSleeve;
         if (sleeve.visible) {
             submitNodeCollector.submitModelPart(sleeve, poseStack, RenderTypes.entityCutout(texture), lightCoords, OverlayTexture.NO_OVERLAY, null, 0xFFFFFFFF, null);
+            rendered = true;
         }
+        return rendered;
     }
 
     @Unique
@@ -242,12 +260,11 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<LivingEnt
         var armPart = arm == HumanoidArm.RIGHT ? model.rightArm : model.leftArm;
         var sleevePart = arm == HumanoidArm.RIGHT ? model.rightSleeve : model.leftSleeve;
 
+        model.setAllVisible(false);
         armPart.resetPose();
         sleevePart.resetPose();
         armPart.visible = true;
         sleevePart.visible = hasSleeve;
-        model.leftSleeve.visible = arm == HumanoidArm.LEFT && hasSleeve;
-        model.rightSleeve.visible = arm == HumanoidArm.RIGHT && hasSleeve;
         model.leftArm.zRot = -0.1F;
         model.rightArm.zRot = 0.1F;
     }
