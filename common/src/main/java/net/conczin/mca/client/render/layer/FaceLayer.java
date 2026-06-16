@@ -13,6 +13,8 @@ import net.minecraft.client.renderer.entity.state.HumanoidRenderState;
 import net.minecraft.resources.Identifier;
 
 import java.util.Objects;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class FaceLayer<S extends HumanoidRenderState, M extends HumanoidModel<S>> extends VillagerLayer<S, M> {
     private final String variant;
@@ -50,10 +52,23 @@ public class FaceLayer<S extends HumanoidRenderState, M extends HumanoidModel<S>
 
             if (canUse(leftSkin) && canUse(rightSkin)) {
                 int leftColor = visuals.heterochromia() ? visuals.eyeLeftDye() : visuals.eyeDye();
-                renderModel(poseStack, submitNodeCollector, lightCoords, this.model, leftColor, leftSkin, tint, visible, glowing, state);
-                renderModel(poseStack, submitNodeCollector, lightCoords, this.model, visuals.eyeDye(), rightSkin, tint, visible, glowing, state);
+                
+                Identifier leftIris = getOrGenerateEyeLayer(leftSkin, false);
+                Identifier leftSclera = getOrGenerateEyeLayer(leftSkin, true);
+                Identifier rightIris = getOrGenerateEyeLayer(rightSkin, false);
+                Identifier rightSclera = getOrGenerateEyeLayer(rightSkin, true);
+                
+                renderModel(poseStack, submitNodeCollector, lightCoords, this.model, 0xFFFFFF, leftSclera, tint, visible, glowing, state);
+                renderModel(poseStack, submitNodeCollector, lightCoords, this.model, 0xFFFFFF, rightSclera, tint, visible, glowing, state);
+                
+                renderModel(poseStack, submitNodeCollector, lightCoords, this.model, leftColor, leftIris, tint, visible, glowing, state);
+                renderModel(poseStack, submitNodeCollector, lightCoords, this.model, visuals.eyeDye(), rightIris, tint, visible, glowing, state);
             } else {
-                renderModel(poseStack, submitNodeCollector, lightCoords, this.model, visuals.eyeDye(), skin, tint, visible, glowing, state);
+                Identifier faceIris = getOrGenerateEyeLayer(skin, false);
+                Identifier faceSclera = getOrGenerateEyeLayer(skin, true);
+                
+                renderModel(poseStack, submitNodeCollector, lightCoords, this.model, 0xFFFFFF, faceSclera, tint, visible, glowing, state);
+                renderModel(poseStack, submitNodeCollector, lightCoords, this.model, visuals.eyeDye(), faceIris, tint, visible, glowing, state);
             }
         }
 
@@ -75,5 +90,55 @@ public class FaceLayer<S extends HumanoidRenderState, M extends HumanoidModel<S>
             return cached("skins/face/" + variant + "/" + index + ".png", MCA::locate);
         }
         return list.pick(variant, gender, visuals.faceGene(), blink);
+    }
+
+    private static final Map<Identifier, Identifier> IRIS_TEXTURE_CACHE = new ConcurrentHashMap<>();
+    private static final Map<Identifier, Identifier> SCLERA_TEXTURE_CACHE = new ConcurrentHashMap<>();
+
+    private Identifier getOrGenerateEyeLayer(Identifier original, boolean isSclera) {
+        Map<Identifier, Identifier> cache = isSclera ? SCLERA_TEXTURE_CACHE : IRIS_TEXTURE_CACHE;
+        return cache.computeIfAbsent(original, id -> {
+            try {
+                var resource = net.minecraft.client.Minecraft.getInstance().getResourceManager().getResource(id);
+                if (resource.isEmpty()) return id;
+                
+                com.mojang.blaze3d.platform.NativeImage originalImage;
+                try (java.io.InputStream stream = resource.get().open()) {
+                    originalImage = com.mojang.blaze3d.platform.NativeImage.read(stream);
+                }
+                
+                int w = originalImage.getWidth();
+                int h = originalImage.getHeight();
+                com.mojang.blaze3d.platform.NativeImage newImage = new com.mojang.blaze3d.platform.NativeImage(w, h, true);
+                
+                for (int x = 0; x < w; x++) {
+                    for (int y = 0; y < h; y++) {
+                        int pixel = originalImage.getPixel(x, y);
+                        int a = net.minecraft.util.ARGB.alpha(pixel);
+                        if (a == 0) continue;
+                        
+                        int r = net.minecraft.util.ARGB.red(pixel);
+                        int g = net.minecraft.util.ARGB.green(pixel);
+                        int b = net.minecraft.util.ARGB.blue(pixel);
+                        
+                        // Check if pixel is white/sclera (alpha == 1 OR opaque and very bright white)
+                        boolean isPixelSclera = (a == 1) || (a == 255 && r >= 220 && g >= 220 && b >= 220);
+                        
+                        if (isSclera == isPixelSclera) {
+                            newImage.setPixel(x, y, pixel);
+                        }
+                    }
+                }
+                
+                originalImage.close();
+                
+                // Register new dynamic texture
+                Identifier newId = Identifier.fromNamespaceAndPath("mca", "dynamic/eye/" + (isSclera ? "sclera" : "iris") + "/" + id.getPath().replace("/", "_"));
+                net.minecraft.client.Minecraft.getInstance().getTextureManager().register(newId, new net.minecraft.client.renderer.texture.DynamicTexture(newId::toString, newImage));
+                return newId;
+            } catch (Exception e) {
+                return id;
+            }
+        });
     }
 }

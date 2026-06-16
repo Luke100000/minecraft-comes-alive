@@ -1076,10 +1076,10 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         if (isSelection) {
             // 6x22px buttons = 132px total, centered above the selection previews.
             int selY = height / 2 - 76;
-            addRenderableWidget(new TooltipButtonWidget(centerX - 66, selY, 22, 14, Component.literal("R"), Component.translatable("gui.villager_editor.reset_zoom.tooltip"), b -> { previewZoom = 1.0F; }));
-            addRenderableWidget(new ButtonWidget(centerX - 44, selY, 22, 14, Component.literal("-"), b -> zoomPreview(-0.1F)));
-            addRenderableWidget(new ButtonWidget(centerX - 22, selY, 22, 14, Component.literal("<"), b -> rotatePreview(22.5F)));
-            addRenderableWidget(new ToggleableTextureButtonWidget(centerX, selY, 22, 14,
+            addRenderableWidget(new TooltipButtonWidget(centerX - 77, selY, 22, 14, Component.literal("R"), Component.translatable("gui.villager_editor.reset_zoom.tooltip"), b -> { previewZoom = 1.0F; }));
+            addRenderableWidget(new ButtonWidget(centerX - 55, selY, 22, 14, Component.literal("-"), b -> zoomPreview(-0.1F)));
+            addRenderableWidget(new ButtonWidget(centerX - 33, selY, 22, 14, Component.literal("<"), b -> rotatePreview(22.5F)));
+            addRenderableWidget(new ToggleableTextureButtonWidget(centerX - 11, selY, 22, 14,
                     PREVIEW_MOUSE_FOLLOW_TEXTURE,
                     previewFollowsMouse,
                     Component.translatable("gui.villager_editor.preview_mouse_follow.tooltip"),
@@ -1087,14 +1087,14 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                         previewFollowsMouse = !previewFollowsMouse;
                         setPage(page);
                     }));
-            addRenderableWidget(new ButtonWidget(centerX + 22, selY, 22, 14, Component.literal(">"), b -> rotatePreview(-22.5F)));
-            addRenderableWidget(new ButtonWidget(centerX + 44, selY, 22, 14, Component.literal("+"), b -> zoomPreview(0.1F)));
+            addRenderableWidget(new ButtonWidget(centerX + 11, selY, 22, 14, Component.literal(">"), b -> rotatePreview(-22.5F)));
+            addRenderableWidget(new ButtonWidget(centerX + 33, selY, 22, 14, Component.literal("+"), b -> zoomPreview(0.1F)));
         } else {
-            // Standard 22x20 buttons, centered in the left preview column (total width: 132px).
-            addRenderableWidget(new TooltipButtonWidget(centerX - 66, y, 22, 20, Component.literal("R"), Component.translatable("gui.villager_editor.reset_zoom.tooltip"), b -> { previewZoom = 1.0F; }));
-            addRenderableWidget(new ButtonWidget(centerX - 44, y, 22, 20, Component.literal("-"), b -> zoomPreview(-0.1F)));
-            addRenderableWidget(new ButtonWidget(centerX - 22, y, 22, 20, Component.literal("<"), b -> rotatePreview(22.5F)));
-            addRenderableWidget(new ToggleableTextureButtonWidget(centerX, y, 22, 20,
+            // Standard 22x20 buttons, centered above Done button (total width: 132px).
+            addRenderableWidget(new TooltipButtonWidget(centerX - 77, y, 22, 20, Component.literal("R"), Component.translatable("gui.villager_editor.reset_zoom.tooltip"), b -> { previewZoom = 1.0F; }));
+            addRenderableWidget(new ButtonWidget(centerX - 55, y, 22, 20, Component.literal("-"), b -> zoomPreview(-0.1F)));
+            addRenderableWidget(new ButtonWidget(centerX - 33, y, 22, 20, Component.literal("<"), b -> rotatePreview(22.5F)));
+            addRenderableWidget(new ToggleableTextureButtonWidget(centerX - 11, y, 22, 20,
                     PREVIEW_MOUSE_FOLLOW_TEXTURE,
                     previewFollowsMouse,
                     Component.translatable("gui.villager_editor.preview_mouse_follow.tooltip"),
@@ -1102,8 +1102,8 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                         previewFollowsMouse = !previewFollowsMouse;
                         setPage(page);
                     }));
-            addRenderableWidget(new ButtonWidget(centerX + 22, y, 22, 20, Component.literal(">"), b -> rotatePreview(-22.5F)));
-            addRenderableWidget(new ButtonWidget(centerX + 44, y, 22, 20, Component.literal("+"), b -> zoomPreview(0.1F)));
+            addRenderableWidget(new ButtonWidget(centerX + 11, y, 22, 20, Component.literal(">"), b -> rotatePreview(-22.5F)));
+            addRenderableWidget(new ButtonWidget(centerX + 33, y, 22, 20, Component.literal("+"), b -> zoomPreview(0.1F)));
         }
     }
 
@@ -1532,6 +1532,14 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                 rotatePreviewRight = true;
                 return true;
             }
+            if (event.key() == GLFW.GLFW_KEY_R) {
+                double mouseX = minecraft.mouseHandler.xpos() * width / minecraft.getWindow().getWidth();
+                double mouseY = minecraft.mouseHandler.ypos() * height / minecraft.getWindow().getHeight();
+                if (isMouseOverPreview(mouseX, mouseY)) {
+                    previewZoom = 1.0F;
+                    return true;
+                }
+            }
         }
         return super.keyPressed(event);
     }
@@ -1771,13 +1779,13 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
             villager.load(TagValueInput.create(ProblemReporter.DISCARDING, villager.registryAccess(), villagerData));
 
             int hairDye = villager.getHairDye();
-            hsvColoredHair = hairDye != 0xFF000000;
             int eyeDye = villager.getEyeDye();
-            hsvColoredEyes = eyeDye != 0xFFFFFFFF;
             int eyeLeftDye = villager.getEyeLeftDye();
-            hsvColoredEyesLeft = eyeLeftDye != 0xFFFFFFFF;
 
             if (page.equals("loading")) {
+                hsvColoredHair = hairDye != 0xFF000000;
+                hsvColoredEyes = eyeDye != 0xFFFFFFFF;
+                hsvColoredEyesLeft = eyeLeftDye != 0xFFFFFFFF;
                 eyeColorTarget = 0;
             }
 
@@ -1787,11 +1795,14 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                 default -> hairDye;
             };
 
-            color.setRGB(
-                    ARGB.red(initialDye) / 255.0,
-                    ARGB.green(initialDye) / 255.0,
-                    ARGB.blue(initialDye) / 255.0
-            );
+            int currentPick = ARGB.colorFromFloat(1.0f, (float) color.red, (float) color.green, (float) color.blue);
+            if (initialDye != currentPick) {
+                color.setRGB(
+                        ARGB.red(initialDye) / 255.0,
+                        ARGB.green(initialDye) / 255.0,
+                        ARGB.blue(initialDye) / 255.0
+                );
+            }
 
             villagerBreedingAge = villagerData.getIntOr("Age", 0);
             villager.setAge(villagerBreedingAge);
