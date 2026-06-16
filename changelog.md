@@ -1,3 +1,7 @@
+# 7.6.19
+
+* Fixed Sinytra Connector crash on Forge
+
 # 7.6.18
 
 * Fixed eye position
