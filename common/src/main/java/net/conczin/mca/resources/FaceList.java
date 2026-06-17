@@ -74,7 +74,7 @@ public class FaceList extends SimpleJsonResourceReloadListener<JsonElement> {
     public Identifier pick(String variant, Gender gender, float faceGene, boolean blink) {
         List<String> pool = faces.get(key(variant, gender));
         if (pool == null || pool.isEmpty()) {
-            int index = blink ? 2 : (int) Math.min(6, Math.max(0, faceGene * 7));
+            int index = blink ? 2 : (int) Math.min(11, Math.max(0, faceGene * 12));
             return MCA.locate("skins/face/" + variant + "/" + index + ".png");
         }
 

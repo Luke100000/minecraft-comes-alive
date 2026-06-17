@@ -86,7 +86,7 @@ public class FaceLayer<S extends HumanoidRenderState, M extends HumanoidModel<S>
 
         FaceList list = FaceList.getInstance();
         if (list == null) {
-            int index = blink ? 2 : (int) Math.min(6, Math.max(0, visuals.faceGene() * 7));
+            int index = blink ? 2 : (int) Math.min(11, Math.max(0, visuals.faceGene() * 12));
             return cached("skins/face/" + variant + "/" + index + ".png", MCA::locate);
         }
         return list.pick(variant, gender, visuals.faceGene(), blink);
@@ -121,8 +121,8 @@ public class FaceLayer<S extends HumanoidRenderState, M extends HumanoidModel<S>
                         int g = net.minecraft.util.ARGB.green(pixel);
                         int b = net.minecraft.util.ARGB.blue(pixel);
                         
-                        // Check if pixel is white/sclera (alpha == 1 OR opaque and very bright white)
-                        boolean isPixelSclera = (a == 1) || (a == 255 && r >= 220 && g >= 220 && b >= 220);
+                        // Check if pixel is white/sclera (alpha == 1 OR opaque and bright enough to be sclera)
+                        boolean isPixelSclera = (a == 1) || (a == 255 && r >= 180 && g >= 180 && b >= 180);
                         
                         if (isSclera == isPixelSclera) {
                             newImage.setPixel(x, y, pixel);

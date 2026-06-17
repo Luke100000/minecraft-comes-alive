@@ -130,7 +130,7 @@ public class SkinExporter {
         Gender gender = Gender.byName(visuals.genderDataName());
         FaceList list = FaceList.getInstance();
         if (list == null) {
-            int index = (int) Math.min(6, Math.max(0, visuals.faceGene() * 7));
+            int index = (int) Math.min(11, Math.max(0, visuals.faceGene() * 12));
             return Identifier.fromNamespaceAndPath("mca", "skins/face/normal/" + index + ".png");
         }
         return list.pick("normal", gender, visuals.faceGene(), false);
