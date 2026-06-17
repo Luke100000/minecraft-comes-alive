@@ -51,7 +51,11 @@ public class VillagerEntityModelMCA extends VillagerEntityBaseModelMCA {
     }
 
     public static MeshDefinition bodyData(CubeDeformation dilation) {
-        MeshDefinition modelData = PlayerModel.createMesh(dilation, false);
+        return bodyData(dilation, false);
+    }
+
+    public static MeshDefinition bodyData(CubeDeformation dilation, boolean slim) {
+        MeshDefinition modelData = PlayerModel.createMesh(dilation, slim);
         PartDefinition root = modelData.getRoot();
         root.addOrReplaceChild(BREASTS, newBreasts(dilation, 0), PartPose.ZERO);
         root.addOrReplaceChild(BREASTPLATE, newBreasts(dilation.extend(0.1F), 16), PartPose.ZERO);
@@ -101,6 +105,7 @@ public class VillagerEntityModelMCA extends VillagerEntityBaseModelMCA {
         leftLegwear.visible = !wearsHidden && visible;
         rightLegwear.visible = !wearsHidden && visible;
         bodyWear.visible = !wearsHidden && visible;
+        breastsWear.visible = !wearsHidden && visible;
     }
 
     public VillagerEntityModelMCA hideWears() {
@@ -134,16 +139,16 @@ public class VillagerEntityModelMCA extends VillagerEntityBaseModelMCA {
         head.visible = model.head.visible;
         hat.visible = model.head.visible;
         body.visible = model.body.visible;
-        bodyWear.visible = model.body.visible;
+        bodyWear.visible = !wearsHidden && model.body.visible;
         breasts.visible = model.body.visible;
-        breastsWear.visible = model.body.visible;
+        breastsWear.visible = !wearsHidden && model.body.visible;
         leftArm.visible = model.leftArm.visible;
-        leftArmwear.visible = model.leftArm.visible;
+        leftArmwear.visible = !wearsHidden && model.leftArm.visible;
         rightArm.visible = model.rightArm.visible;
-        rightArmwear.visible = model.rightArm.visible;
+        rightArmwear.visible = !wearsHidden && model.rightArm.visible;
         leftLeg.visible = model.leftLeg.visible;
-        leftLegwear.visible = model.leftLeg.visible;
+        leftLegwear.visible = !wearsHidden && model.leftLeg.visible;
         rightLeg.visible = model.rightLeg.visible;
-        rightLegwear.visible = model.rightLeg.visible;
+        rightLegwear.visible = !wearsHidden && model.rightLeg.visible;
     }
 }

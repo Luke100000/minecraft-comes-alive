@@ -1,3 +1,16 @@
+# 7.8.4
+
+* General fixes and pathfinding improvements
+* Generic Villager Archer AI Class improvements
+  * Bows now animate when shooting like players do.
+  * Archers now keep skeleton-style distance and respond to threats while outside a home village.
+* Arrows now shoot from the correct position when your player model is sized differently.
+* Fixed bugs with debug screen
+* Fixed Villager Conversion
+* Fixed a bug with villagers being stuck when trying to pathfind to their beds.
+  * This will be backported eventually to earlier versions. 
+* New config option villagerPathfindingDistance, default is 60.
+
 # 7.8.3
 
 * Surprise, more fixes!

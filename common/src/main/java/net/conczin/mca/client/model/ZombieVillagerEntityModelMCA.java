@@ -13,7 +13,5 @@ public class ZombieVillagerEntityModelMCA extends VillagerEntityModelMCA {
     public void setupAnim(VillagerRenderState state) {
         super.setupAnim(state);
         AnimationUtils.animateZombieArms(leftArm, rightArm, false, state);
-        CommonVillagerModel.copyPartState(leftArmwear, leftArm);
-        CommonVillagerModel.copyPartState(rightArmwear, rightArm);
     }
 }

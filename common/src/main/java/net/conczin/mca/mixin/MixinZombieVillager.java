@@ -42,4 +42,5 @@ abstract class MixinZombieVillager implements IVillagerEntity {
         }
         return villagerData;
     }
+
 }

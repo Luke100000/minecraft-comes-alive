@@ -486,7 +486,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                         ProfessionsMCA.ADVENTURER,
                         ProfessionsMCA.CULTIST,
                 }) {
-                    MutableComponent text = Component.translatable("entity.minecraft.villager." + p);
+                    Component text = p.name();
                     ButtonWidget widget = addRenderableWidget(new ButtonWidget(width / 2 + (right ? DATA_WIDTH / 2 : 0), y, DATA_WIDTH / 2, 20, text, b -> {
                         CompoundTag compound = new CompoundTag();
                         compound.putString("profession", BuiltInRegistries.VILLAGER_PROFESSION.getKey(p).toString());
