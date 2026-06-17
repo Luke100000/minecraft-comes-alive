@@ -25,6 +25,7 @@ import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
 @Mod.EventBusSubscriber(modid = MCA.MOD_ID, bus = Bus.MOD)
 public final class MCAForge {
     public MCAForge() {
+        //noinspection removal
         EventBuses.registerModEventBus(MCA.MOD_ID, FMLJavaModLoadingContext.get().getModEventBus());
         new NetworkHandlerImpl();
         MinecraftForge.EVENT_BUS.addListener(this::onAddReloadListener);

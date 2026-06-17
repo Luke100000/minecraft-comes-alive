@@ -1,3 +1,7 @@
+# 7.6.20
+
+* Fixed anvils not counting toward armory and blacksmith buildings.
+
 # 7.6.19
 
 * Fixed Sinytra Connector crash on Forge
