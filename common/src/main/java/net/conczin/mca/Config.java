@@ -748,6 +748,7 @@ public final class Config extends CommonConfig {
             .put("minecraft:zombie_villager", 3)
             .put("minecraft:spider", 0)
             .put("minecraft:skeleton", 0)
+            .put("minecraft:stray", 0)
             .put("minecraft:slime", 0)
             .put(MCA.MOD_ID + ":female_zombie_villager", 3)
             .put(MCA.MOD_ID + ":male_zombie_villager", 3)
