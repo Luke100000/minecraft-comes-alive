@@ -50,12 +50,18 @@ public class VillagerEntityBaseModelMCA extends HumanoidModel<VillagerRenderStat
         float originalWalkAnimationPos = state.walkAnimationPos;
         float originalWalkAnimationSpeed = state.walkAnimationSpeed;
         float originalYRot = state.yRot;
+        boolean originalIsPassenger = state.isPassenger;
         VillagerVisuals visuals = VillagerVisuals.require(state);
+        boolean baby = visuals.baby();
 
-        if (visuals.baby() && (!state.isPassenger || state.cribPassenger)) {
-            state.walkAnimationSpeed = (float) Math.sin(state.ageInTicks / 12.0F);
-            state.walkAnimationPos = (float) Math.cos(state.ageInTicks / 9.0F) * 3.0F;
-            state.yRot = originalYRot + (float) Math.sin(state.ageInTicks / 2.0F);
+        if (baby) {
+            state.isPassenger = true;
+        }
+
+        if (baby && !originalIsPassenger) {
+            state.walkAnimationSpeed = (float) Math.sin(visuals.tickCount() / 12.0F);
+            state.walkAnimationPos = (float) Math.cos(visuals.tickCount() / 9.0F) * 3.0F;
+            state.yRot = originalYRot + (float) Math.sin(visuals.tickCount() / 2.0F);
         }
 
         if (state.isBaby) {
@@ -68,6 +74,7 @@ public class VillagerEntityBaseModelMCA extends HumanoidModel<VillagerRenderStat
         state.walkAnimationPos = originalWalkAnimationPos;
         state.walkAnimationSpeed = originalWalkAnimationSpeed;
         state.yRot = originalYRot;
+        state.isPassenger = originalIsPassenger;
 
         float panicAnimationProgress = state.panicAnimationProgress;
         if (panicAnimationProgress > 0.0F) {
