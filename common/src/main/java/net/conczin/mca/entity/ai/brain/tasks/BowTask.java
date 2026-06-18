@@ -5,14 +5,18 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.behavior.Behavior;
-import net.minecraft.world.entity.ai.behavior.BehaviorUtils;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.MemoryStatus;
 import net.minecraft.world.entity.monster.CrossbowAttackMob;
-import net.minecraft.world.InteractionHand;
+import net.minecraft.world.entity.projectile.ProjectileUtil;
 import net.minecraft.world.item.BowItem;
+import net.minecraft.world.item.Item;
+
+import java.util.function.Predicate;
 
 public class BowTask<E extends Mob & CrossbowAttackMob> extends Behavior<E> {
+    private static final Predicate<Item> BOW_ITEM = item -> item instanceof BowItem;
+
     private final int fireInterval;
     private final int squaredRange;
     private int attackTime = -1;
@@ -33,21 +37,13 @@ public class BowTask<E extends Mob & CrossbowAttackMob> extends Behavior<E> {
     }
 
     private static boolean isHoldingBow(Mob entity) {
-        return entity.isHolding(stack -> stack.getItem() instanceof BowItem);
-    }
-
-    private static InteractionHand getBowHoldingHand(Mob entity) {
-        return entity.getMainHandItem().getItem() instanceof BowItem ? InteractionHand.MAIN_HAND : InteractionHand.OFF_HAND;
+        return entity.isHolding(stack -> BOW_ITEM.test(stack.getItem()));
     }
 
     @Override
     protected boolean checkExtraStartConditions(ServerLevel serverWorld, E entity) {
         LivingEntity livingEntity = getAttackTarget(entity);
-        if (livingEntity == null || !isHoldingBow(entity)) {
-            return false;
-        }
-        double d = entity.distanceToSqr(livingEntity);
-        return d <= this.squaredRange * 1.5F && BehaviorUtils.canSee(entity, livingEntity);
+        return livingEntity != null && isHoldingBow(entity);
     }
 
     @Override
@@ -55,6 +51,10 @@ public class BowTask<E extends Mob & CrossbowAttackMob> extends Behavior<E> {
         super.tick(world, entity, time);
 
         LivingEntity target = getAttackTarget(entity);
+        if (target == null) {
+            return;
+        }
+
         double d = entity.distanceToSqr(target.getX(), target.getY(), target.getZ());
 
         boolean hasLineOfSight = entity.getSensing().hasLineOfSight(target);
@@ -113,17 +113,14 @@ public class BowTask<E extends Mob & CrossbowAttackMob> extends Behavior<E> {
                 }
             }
         } else if (--this.attackTime <= 0 && this.seeTime >= -60) {
-            entity.startUsingItem(getBowHoldingHand(entity));
+            entity.startUsingItem(ProjectileUtil.getWeaponHoldingHand(entity, BOW_ITEM));
         }
     }
 
     @Override
     protected boolean canStillUse(ServerLevel world, E entity, long time) {
         LivingEntity livingEntity = getAttackTarget(entity);
-        if (livingEntity == null || !isHoldingBow(entity) || !livingEntity.isAlive()) {
-            return false;
-        }
-        return BehaviorUtils.canSee(entity, livingEntity) || !entity.getNavigation().isDone() || this.seeTime > -60;
+        return (livingEntity != null && livingEntity.isAlive() || !entity.getNavigation().isDone()) && isHoldingBow(entity);
     }
 
     @Override

@@ -96,9 +96,6 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<LivingEnt
 
         var visuals = VillagerVisuals.require(holder);
         poseStack.scale(visuals.rawHorizontalScaleFactor(), visuals.rawVerticalScaleFactor(), visuals.rawHorizontalScaleFactor());
-        if (visuals.baby() && !state.isPassenger) {
-            poseStack.translate(0.0F, 0.6F, 0.0F);
-        }
 
         model = mca$geneticsModel;
     }
