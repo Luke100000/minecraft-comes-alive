@@ -11,12 +11,17 @@ import net.minecraft.client.renderer.entity.LivingEntityRenderer;
 import net.minecraft.client.renderer.entity.RenderLayerParent;
 import net.minecraft.client.renderer.entity.state.HumanoidRenderState;
 import net.minecraft.resources.Identifier;
+import net.minecraft.util.ARGB;
 
 import java.util.Objects;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class FaceLayer<S extends HumanoidRenderState, M extends HumanoidModel<S>> extends VillagerLayer<S, M> {
+    private static final int OPAQUE_WHITE = 0xFFFFFFFF;
+    private static final int SCLERA_MIN_CHANNEL = 160;
+    private static final int SCLERA_MAX_CHANNEL_SPREAD = 32;
+
     private final String variant;
 
     public FaceLayer(RenderLayerParent<S, M> renderer, M model, String variant) {
@@ -58,8 +63,8 @@ public class FaceLayer<S extends HumanoidRenderState, M extends HumanoidModel<S>
                 Identifier rightIris = getOrGenerateEyeLayer(rightSkin, false);
                 Identifier rightSclera = getOrGenerateEyeLayer(rightSkin, true);
                 
-                renderModel(poseStack, submitNodeCollector, lightCoords, this.model, 0xFFFFFF, leftSclera, tint, visible, glowing, state);
-                renderModel(poseStack, submitNodeCollector, lightCoords, this.model, 0xFFFFFF, rightSclera, tint, visible, glowing, state);
+                renderModel(poseStack, submitNodeCollector, lightCoords, this.model, OPAQUE_WHITE, leftSclera, tint, visible, glowing, state);
+                renderModel(poseStack, submitNodeCollector, lightCoords, this.model, OPAQUE_WHITE, rightSclera, tint, visible, glowing, state);
                 
                 renderModel(poseStack, submitNodeCollector, lightCoords, this.model, leftColor, leftIris, tint, visible, glowing, state);
                 renderModel(poseStack, submitNodeCollector, lightCoords, this.model, visuals.eyeDye(), rightIris, tint, visible, glowing, state);
@@ -67,14 +72,14 @@ public class FaceLayer<S extends HumanoidRenderState, M extends HumanoidModel<S>
                 Identifier faceIris = getOrGenerateEyeLayer(skin, false);
                 Identifier faceSclera = getOrGenerateEyeLayer(skin, true);
                 
-                renderModel(poseStack, submitNodeCollector, lightCoords, this.model, 0xFFFFFF, faceSclera, tint, visible, glowing, state);
+                renderModel(poseStack, submitNodeCollector, lightCoords, this.model, OPAQUE_WHITE, faceSclera, tint, visible, glowing, state);
                 renderModel(poseStack, submitNodeCollector, lightCoords, this.model, visuals.eyeDye(), faceIris, tint, visible, glowing, state);
             }
         }
 
         Identifier overlay = getOverlay(state);
         if (!Objects.equals(skin, overlay) && canUse(overlay)) {
-            renderModel(poseStack, submitNodeCollector, lightCoords, this.model, 0xFFFFFF, overlay, tint, visible, glowing, state);
+            renderModel(poseStack, submitNodeCollector, lightCoords, this.model, OPAQUE_WHITE, overlay, tint, visible, glowing, state);
         }
     }
 
@@ -114,15 +119,10 @@ public class FaceLayer<S extends HumanoidRenderState, M extends HumanoidModel<S>
                 for (int x = 0; x < w; x++) {
                     for (int y = 0; y < h; y++) {
                         int pixel = originalImage.getPixel(x, y);
-                        int a = net.minecraft.util.ARGB.alpha(pixel);
+                        int a = ARGB.alpha(pixel);
                         if (a == 0) continue;
-                        
-                        int r = net.minecraft.util.ARGB.red(pixel);
-                        int g = net.minecraft.util.ARGB.green(pixel);
-                        int b = net.minecraft.util.ARGB.blue(pixel);
-                        
-                        // Check if pixel is white/sclera (alpha == 1 OR opaque and bright enough to be sclera)
-                        boolean isPixelSclera = (a == 1) || (a == 255 && r >= 180 && g >= 180 && b >= 180);
+
+                        boolean isPixelSclera = isScleraPixel(a, ARGB.red(pixel), ARGB.green(pixel), ARGB.blue(pixel));
                         
                         if (isSclera == isPixelSclera) {
                             newImage.setPixel(x, y, pixel);
@@ -140,5 +140,18 @@ public class FaceLayer<S extends HumanoidRenderState, M extends HumanoidModel<S>
                 return id;
             }
         });
+    }
+
+    private static boolean isScleraPixel(int alpha, int red, int green, int blue) {
+        if (alpha == 1) {
+            return true;
+        }
+        if (alpha != 255) {
+            return false;
+        }
+
+        int min = Math.min(red, Math.min(green, blue));
+        int max = Math.max(red, Math.max(green, blue));
+        return min >= SCLERA_MIN_CHANNEL && max - min <= SCLERA_MAX_CHANNEL_SPREAD;
     }
 }

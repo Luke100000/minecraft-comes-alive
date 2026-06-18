@@ -1074,37 +1074,30 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         int y = height / 2 + 75;
 
         if (isSelection) {
-            // 6x22px buttons = 132px total, centered above the selection previews.
-            int selY = height / 2 - 76;
-            addRenderableWidget(new TooltipButtonWidget(centerX - 77, selY, 22, 14, Component.literal("R"), Component.translatable("gui.villager_editor.reset_zoom.tooltip"), b -> { previewZoom = 1.0F; }));
-            addRenderableWidget(new ButtonWidget(centerX - 55, selY, 22, 14, Component.literal("-"), b -> zoomPreview(-0.1F)));
-            addRenderableWidget(new ButtonWidget(centerX - 33, selY, 22, 14, Component.literal("<"), b -> rotatePreview(22.5F)));
-            addRenderableWidget(new ToggleableTextureButtonWidget(centerX - 11, selY, 22, 14,
-                    PREVIEW_MOUSE_FOLLOW_TEXTURE,
-                    previewFollowsMouse,
-                    Component.translatable("gui.villager_editor.preview_mouse_follow.tooltip"),
-                    b -> {
-                        previewFollowsMouse = !previewFollowsMouse;
-                        setPage(page);
-                    }));
-            addRenderableWidget(new ButtonWidget(centerX + 11, selY, 22, 14, Component.literal(">"), b -> rotatePreview(-22.5F)));
-            addRenderableWidget(new ButtonWidget(centerX + 33, selY, 22, 14, Component.literal("+"), b -> zoomPreview(0.1F)));
+            addPreviewControlRow(centerX, height / 2 - 76, 22, 14, 0);
         } else {
-            // Standard 22x20 buttons, centered above Done button (total width: 132px).
-            addRenderableWidget(new TooltipButtonWidget(centerX - 77, y, 22, 20, Component.literal("R"), Component.translatable("gui.villager_editor.reset_zoom.tooltip"), b -> { previewZoom = 1.0F; }));
-            addRenderableWidget(new ButtonWidget(centerX - 55, y, 22, 20, Component.literal("-"), b -> zoomPreview(-0.1F)));
-            addRenderableWidget(new ButtonWidget(centerX - 33, y, 22, 20, Component.literal("<"), b -> rotatePreview(22.5F)));
-            addRenderableWidget(new ToggleableTextureButtonWidget(centerX - 11, y, 22, 20,
-                    PREVIEW_MOUSE_FOLLOW_TEXTURE,
-                    previewFollowsMouse,
-                    Component.translatable("gui.villager_editor.preview_mouse_follow.tooltip"),
-                    b -> {
-                        previewFollowsMouse = !previewFollowsMouse;
-                        setPage(page);
-                    }));
-            addRenderableWidget(new ButtonWidget(centerX + 11, y, 22, 20, Component.literal(">"), b -> rotatePreview(-22.5F)));
-            addRenderableWidget(new ButtonWidget(centerX + 33, y, 22, 20, Component.literal("+"), b -> zoomPreview(0.1F)));
+            addPreviewControlRow(centerX, y, 28, 20, 2);
         }
+    }
+
+    private void addPreviewControlRow(int centerX, int y, int buttonWidth, int buttonHeight, int gap) {
+        int step = buttonWidth + gap;
+        int mouseFollowIndex = 3;
+        int x = centerX - mouseFollowIndex * step - buttonWidth / 2;
+
+        addRenderableWidget(new TooltipButtonWidget(x, y, buttonWidth, buttonHeight, Component.literal("R"), Component.translatable("gui.villager_editor.reset_zoom.tooltip"), b -> previewZoom = 1.0F));
+        addRenderableWidget(new ButtonWidget(x + step, y, buttonWidth, buttonHeight, Component.literal("-"), b -> zoomPreview(-0.1F)));
+        addRenderableWidget(new ButtonWidget(x + step * 2, y, buttonWidth, buttonHeight, Component.literal("<"), b -> rotatePreview(22.5F)));
+        addRenderableWidget(new ToggleableTextureButtonWidget(x + step * 3, y, buttonWidth, buttonHeight,
+                PREVIEW_MOUSE_FOLLOW_TEXTURE,
+                previewFollowsMouse,
+                Component.translatable("gui.villager_editor.preview_mouse_follow.tooltip"),
+                b -> {
+                    previewFollowsMouse = !previewFollowsMouse;
+                    setPage(page);
+                }));
+        addRenderableWidget(new ButtonWidget(x + step * 4, y, buttonWidth, buttonHeight, Component.literal(">"), b -> rotatePreview(-22.5F)));
+        addRenderableWidget(new ButtonWidget(x + step * 5, y, buttonWidth, buttonHeight, Component.literal("+"), b -> zoomPreview(0.1F)));
     }
 
     private void addLayeredHairCyclerRow(int y, LayeredHair.Category category) {
