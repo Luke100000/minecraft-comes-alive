@@ -2,6 +2,7 @@ package net.conczin.mca.entity.ai.brain.tasks;
 
 import com.google.common.collect.ImmutableMap;
 import net.conczin.mca.MCA;
+import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.Mth;
@@ -31,6 +32,7 @@ public class BowTask<E extends Mob & CrossbowAttackMob> extends Behavior<E> {
     private static final double PATH_SPEED_MODIFIER = 0.5;
     private static final int FLEE_HORIZONTAL_RANGE = 16;
     private static final int FLEE_VERTICAL_RANGE = 7;
+    private static final int ROUTE_AWAY_TICKS = 20;
 
     private final int fireInterval;
     private final int squaredRange;
@@ -39,6 +41,7 @@ public class BowTask<E extends Mob & CrossbowAttackMob> extends Behavior<E> {
     private boolean strafingClockwise;
     private boolean strafingBackwards;
     private int strafingTime = -1;
+    private int routeAwayTicks;
     private long lastDebugLogTime = Long.MIN_VALUE;
     private String lastDebugState = "";
 
@@ -88,9 +91,7 @@ public class BowTask<E extends Mob & CrossbowAttackMob> extends Behavior<E> {
             return;
         }
 
-        LivingEntity nearestThreat = getNearestThreat(entity, target);
         double d = entity.distanceToSqr(target.getX(), target.getY(), target.getZ());
-        double threatDistanceSquared = entity.distanceToSqr(nearestThreat.getX(), nearestThreat.getY(), nearestThreat.getZ());
 
         boolean hasLineOfSight = entity.getSensing().hasLineOfSight(target);
         boolean hadLineOfSight = this.seeTime > 0;
@@ -103,34 +104,56 @@ public class BowTask<E extends Mob & CrossbowAttackMob> extends Behavior<E> {
             this.seeTime--;
         }
 
+        LivingEntity closeThreat = getVisibleCloseThreat(entity, target, hasLineOfSight, this.strafingBackwards);
+        double threatDistanceSquared = closeThreat == null ? Double.NaN : entity.distanceToSqr(closeThreat);
         float forward = 0.0F;
         float sideways = 0.0F;
         boolean pathingAway = false;
         boolean strafeWalkable = true;
-        boolean wantsBackAway = threatDistanceSquared < MIN_DISTANCE_SQUARED
-                || this.strafingBackwards && threatDistanceSquared < MIN_DISTANCE_EXIT_SQUARED;
+        String mode;
+        boolean wantsBackAway = closeThreat != null;
+        LivingEntity lookTarget = wantsBackAway ? closeThreat : target;
+        boolean continueRouteAway = this.routeAwayTicks > 0;
+        if (continueRouteAway) {
+            this.routeAwayTicks--;
+        }
 
         if (wantsBackAway) {
-            if (!entity.horizontalCollision && isStrafeWalkable(entity, -STRAFE_SPEED, getSidewaysStrafe(this.strafingClockwise))) {
+            float backAwayYaw = getYRotTo(entity, lookTarget);
+            strafeWalkable = !entity.horizontalCollision
+                    && !entity.minorHorizontalCollision
+                    && isStrafeWalkable(entity, -STRAFE_SPEED, 0.0F, backAwayYaw);
+            if (!continueRouteAway && strafeWalkable) {
+                faceThreatForBackAway(entity, backAwayYaw);
                 entity.getNavigation().stop();
                 this.strafingTime = Math.max(this.strafingTime, 0) + 1;
+                mode = "back_strafe";
             } else {
-                pathingAway = tryPathAwayFromTarget(entity, nearestThreat);
-                this.strafingTime = pathingAway ? -1 : this.strafingTime + 1;
+                boolean wasNavigationDone = entity.getNavigation().isDone();
+                pathingAway = tryPathAwayFromTarget(entity, closeThreat, continueRouteAway);
+                if (pathingAway && (!continueRouteAway || wasNavigationDone) && this.routeAwayTicks <= 0) {
+                    this.routeAwayTicks = ROUTE_AWAY_TICKS;
+                }
+                this.strafingTime = -1;
+                mode = pathingAway ? "route_away" : "blocked";
             }
         } else if (d <= this.squaredRange && hasLineOfSight) {
+            this.routeAwayTicks = 0;
             entity.getNavigation().stop();
             if (this.seeTime >= 20) {
                 this.strafingTime++;
             } else {
                 this.strafingTime = -1;
             }
+            mode = this.strafingTime > -1 ? "hold_strafe" : "hold";
         } else {
+            this.routeAwayTicks = 0;
             entity.getNavigation().moveTo(target, PATH_SPEED_MODIFIER);
             this.strafingTime = -1;
+            mode = "approach";
         }
 
-        entity.getBrain().setMemory(MemoryModuleType.LOOK_TARGET, new EntityTracker(target, true));
+        entity.getBrain().setMemory(MemoryModuleType.LOOK_TARGET, new EntityTracker(lookTarget, true));
         if (this.strafingTime >= 20) {
             if (entity.getRandom().nextFloat() < 0.3F) {
                 this.strafingClockwise = !this.strafingClockwise;
@@ -142,28 +165,29 @@ public class BowTask<E extends Mob & CrossbowAttackMob> extends Behavior<E> {
             if (wantsBackAway) {
                 this.strafingBackwards = true;
                 forward = -STRAFE_SPEED;
+                sideways = 0.0F;
             } else {
                 this.strafingBackwards = false;
                 forward = 0.0F;
+                sideways = getSidewaysStrafe(this.strafingClockwise);
             }
-            sideways = getSidewaysStrafe(this.strafingClockwise);
             strafeWalkable = isStrafeWalkable(entity, forward, sideways);
             if (strafeWalkable) {
                 entity.getMoveControl().strafe(forward, sideways);
             }
             if (entity.getControlledVehicle() instanceof Mob vehicle) {
-                vehicle.lookAt(target, LOOK_SPEED, LOOK_SPEED);
+                vehicle.lookAt(lookTarget, LOOK_SPEED, LOOK_SPEED);
             }
-            entity.lookAt(target, LOOK_SPEED, LOOK_SPEED);
+            entity.lookAt(lookTarget, LOOK_SPEED, LOOK_SPEED);
         } else {
             if (pathingAway) {
-                entity.lookAt(target, LOOK_SPEED, LOOK_SPEED);
+                entity.lookAt(lookTarget, LOOK_SPEED, LOOK_SPEED);
             }
-            entity.getLookControl().setLookAt(target, LOOK_SPEED, LOOK_SPEED);
+            entity.getLookControl().setLookAt(lookTarget, LOOK_SPEED, LOOK_SPEED);
         }
 
         if (MCA.platformHelper.isDevelopmentEnvironment()) {
-            logDebugState(world, entity, target, nearestThreat, d, threatDistanceSquared, hasLineOfSight, forward, sideways, pathingAway, strafeWalkable);
+            logDebugState(world, entity, target, closeThreat, mode, d, threatDistanceSquared, hasLineOfSight, forward, sideways, pathingAway, strafeWalkable);
         }
 
         if (entity.isUsingItem()) {
@@ -201,6 +225,7 @@ public class BowTask<E extends Mob & CrossbowAttackMob> extends Behavior<E> {
         this.attackTime = -1;
         this.strafingTime = -1;
         this.strafingBackwards = false;
+        this.routeAwayTicks = 0;
         this.lastDebugState = "";
         stopMovement(entity);
         if (entity.isUsingItem()) {
@@ -208,9 +233,8 @@ public class BowTask<E extends Mob & CrossbowAttackMob> extends Behavior<E> {
         }
     }
 
-    private void logDebugState(ServerLevel world, E entity, LivingEntity target, LivingEntity nearestThreat, double distanceSquared, double threatDistanceSquared, boolean hasLineOfSight, float forward, float sideways, boolean pathingAway, boolean strafeWalkable) {
-        String mode = this.strafingTime > -1 ? "strafe" : "path";
-        String state = mode + ':' + hasLineOfSight + ':' + this.strafingBackwards + ':' + this.strafingClockwise + ':' + forward + ':' + sideways + ':' + pathingAway + ':' + strafeWalkable + ':' + entity.horizontalCollision + ':' + entity.onGround() + ':' + entity.getNavigation().isDone();
+    private void logDebugState(ServerLevel world, E entity, LivingEntity target, LivingEntity closeThreat, String mode, double distanceSquared, double threatDistanceSquared, boolean hasLineOfSight, float forward, float sideways, boolean pathingAway, boolean strafeWalkable) {
+        String state = mode + ':' + hasLineOfSight + ':' + this.strafingBackwards + ':' + this.strafingClockwise + ':' + forward + ':' + sideways + ':' + pathingAway + ':' + strafeWalkable + ':' + this.routeAwayTicks + ':' + entity.horizontalCollision + ':' + entity.minorHorizontalCollision + ':' + entity.onGround() + ':' + entity.getNavigation().isDone();
         long gameTime = world.getGameTime();
         if (state.equals(this.lastDebugState) && gameTime - this.lastDebugLogTime < 20) {
             return;
@@ -224,19 +248,23 @@ public class BowTask<E extends Mob & CrossbowAttackMob> extends Behavior<E> {
         this.lastDebugState = state;
         this.lastDebugLogTime = gameTime;
         MCA.LOGGER.info(
-                "[MCA Archer BowTask] entity={} target={} nearestThreat={} mode={} distSqr={} threatDistSqr={} rangeSqr={} minDistSqr={} los={} seeTime={} navDone={} strafingTime={} backwards={} clockwise={} forward={} sideways={} strafeWalkable={} pathingAway={} horizontalCollision={} minorHorizontalCollision={} onGround={} yRot={} yHeadRot={} yBodyRot={} movementSpeed={} movementTowardTarget={} pos={} targetPos={} threatPos={} mainHand={} offHand={} usingItem={} attackTime={}",
+                "[MCA Archer BowTask] entity={} entityName=\"{}\" target={} targetName=\"{}\" closeThreat={} closeThreatName=\"{}\" mode={} distSqr={} threatDistSqr={} rangeSqr={} minDistSqr={} los={} seeTime={} navDone={} strafingTime={} routeAwayTicks={} backwards={} clockwise={} forward={} sideways={} strafeWalkable={} pathingAway={} horizontalCollision={} minorHorizontalCollision={} onGround={} yRot={} yHeadRot={} yBodyRot={} movementSpeed={} movementTowardTarget={} pos={} targetPos={} threatPos={} mainHand={} offHand={} usingItem={} attackTime={}",
                 entity.getStringUUID(),
+                getDebugName(entity),
                 target.getStringUUID(),
-                nearestThreat.getStringUUID(),
+                getDebugName(target),
+                closeThreat == null ? "none" : closeThreat.getStringUUID(),
+                closeThreat == null ? "none" : getDebugName(closeThreat),
                 mode,
                 String.format("%.2f", distanceSquared),
-                String.format("%.2f", threatDistanceSquared),
+                closeThreat == null ? "none" : String.format("%.2f", threatDistanceSquared),
                 this.squaredRange,
                 String.format("%.2f", MIN_DISTANCE_SQUARED),
                 hasLineOfSight,
                 this.seeTime,
                 entity.getNavigation().isDone(),
                 this.strafingTime,
+                this.routeAwayTicks,
                 this.strafingBackwards,
                 this.strafingClockwise,
                 forward,
@@ -253,7 +281,7 @@ public class BowTask<E extends Mob & CrossbowAttackMob> extends Behavior<E> {
                 String.format("%.4f", movementTowardTarget),
                 entity.blockPosition(),
                 target.blockPosition(),
-                nearestThreat.blockPosition(),
+                closeThreat == null ? "none" : closeThreat.blockPosition(),
                 entity.getMainHandItem(),
                 entity.getOffhandItem(),
                 entity.isUsingItem(),
@@ -261,25 +289,52 @@ public class BowTask<E extends Mob & CrossbowAttackMob> extends Behavior<E> {
         );
     }
 
-    private static LivingEntity getNearestThreat(Mob entity, LivingEntity target) {
-        LivingEntity nearestHostile = entity.getBrain().getMemoryInternal(MemoryModuleType.NEAREST_HOSTILE)
-                .filter(BowTask::hasValidTarget)
-                .orElse(null);
-        if (nearestHostile != null && entity.distanceToSqr(nearestHostile) < entity.distanceToSqr(target)) {
-            return nearestHostile;
-        }
-        return target;
+    private static String getDebugName(LivingEntity entity) {
+        return entity.getName().getString();
     }
 
-    private static boolean tryPathAwayFromTarget(Mob entity, LivingEntity target) {
+    private static LivingEntity getVisibleCloseThreat(Mob entity, LivingEntity target, boolean canSeeTarget, boolean continuingBackAway) {
+        double maxDistanceSquared = continuingBackAway ? MIN_DISTANCE_EXIT_SQUARED : MIN_DISTANCE_SQUARED;
+        LivingEntity closeThreat = isCloseVisibleThreat(entity, target, canSeeTarget, maxDistanceSquared) ? target : null;
+        LivingEntity nearestGuardEnemy = entity.getBrain().getMemoryInternal(MemoryModuleTypeMCA.NEAREST_GUARD_ENEMY)
+                .filter(BowTask::hasValidTarget)
+                .filter(threat -> isCloseVisibleThreat(entity, threat, entity.getSensing().hasLineOfSight(threat), maxDistanceSquared))
+                .orElse(null);
+        if (nearestGuardEnemy != null && (closeThreat == null || entity.distanceToSqr(nearestGuardEnemy) < entity.distanceToSqr(closeThreat))) {
+            closeThreat = nearestGuardEnemy;
+        }
+
+        return closeThreat;
+    }
+
+    private static boolean isCloseVisibleThreat(Mob entity, LivingEntity threat, boolean canSeeThreat, double maxDistanceSquared) {
+        return canSeeThreat && entity.distanceToSqr(threat) < maxDistanceSquared;
+    }
+
+    private static float getYRotTo(Mob entity, LivingEntity threat) {
+        double dx = threat.getX() - entity.getX();
+        double dz = threat.getZ() - entity.getZ();
+        return Math.abs(dx) <= 1.0E-5 && Math.abs(dz) <= 1.0E-5
+                ? entity.getYRot()
+                : (float)(Mth.atan2(dz, dx) * 180.0F / (float)Math.PI) - 90.0F;
+    }
+
+    private static void faceThreatForBackAway(Mob entity, float yRot) {
+        entity.setYRot(yRot);
+        entity.yBodyRot = yRot;
+        entity.yHeadRot = yRot;
+    }
+
+    private static boolean tryPathAwayFromTarget(Mob entity, LivingEntity target, boolean keepCurrentRoute) {
         if (!(entity instanceof PathfinderMob pathfinder)) {
             return false;
         }
 
-        if (!entity.getNavigation().isDone()) {
+        if (keepCurrentRoute && !entity.getNavigation().isDone()) {
             return true;
         }
 
+        entity.getNavigation().stop();
         Vec3 awayPos = LandRandomPos.getPosAway(pathfinder, FLEE_HORIZONTAL_RANGE, FLEE_VERTICAL_RANGE, target.position());
         return awayPos != null && entity.getNavigation().moveTo(awayPos.x, awayPos.y, awayPos.z, PATH_SPEED_MODIFIER);
     }
@@ -289,6 +344,10 @@ public class BowTask<E extends Mob & CrossbowAttackMob> extends Behavior<E> {
     }
 
     private static boolean isStrafeWalkable(Mob entity, float forward, float sideways) {
+        return isStrafeWalkable(entity, forward, sideways, entity.getYRot());
+    }
+
+    private static boolean isStrafeWalkable(Mob entity, float forward, float sideways, float yRot) {
         if (forward == 0.0F && sideways == 0.0F) {
             return true;
         }
@@ -305,10 +364,13 @@ public class BowTask<E extends Mob & CrossbowAttackMob> extends Behavior<E> {
         distance = speedModified / distance;
         strafeForward *= distance;
         strafeSideways *= distance;
-        float sin = Mth.sin(entity.getYRot() * Mth.DEG_TO_RAD);
-        float cos = Mth.cos(entity.getYRot() * Mth.DEG_TO_RAD);
+        float sin = Mth.sin(yRot * Mth.DEG_TO_RAD);
+        float cos = Mth.cos(yRot * Mth.DEG_TO_RAD);
         float dx = strafeForward * cos - strafeSideways * sin;
         float dz = strafeSideways * cos + strafeForward * sin;
+        if (!entity.level().noCollision(entity, entity.getBoundingBox().move(dx, 0.0, dz))) {
+            return false;
+        }
 
         PathNavigation pathNavigation = entity.getNavigation();
         NodeEvaluator nodeEvaluator = pathNavigation == null ? null : pathNavigation.getNodeEvaluator();
