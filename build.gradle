@@ -1,7 +1,7 @@
 plugins {
     id 'java-library'
     id 'architectury-plugin' version '3.5-SNAPSHOT'
-    id 'dev.architectury.loom' version '1.17.477' apply false
+    id 'dev.architectury.loom' version '1.17.483' apply false
     id "io.github.pacifistmc.forgix" version "1.2.9"
 }
 
@@ -58,6 +58,9 @@ allprojects {
 
     tasks.configureEach { task ->
         if (task instanceof JavaForkOptions) {
+            if (task.maxHeapSize == null) {
+                task.maxHeapSize = '4G'
+            }
             ['--enable-native-access=ALL-UNNAMED'].each { nativeAccessJvmArg ->
                 if (!task.jvmArgs.contains(nativeAccessJvmArg)) {
                     task.jvmArgs(nativeAccessJvmArg)
