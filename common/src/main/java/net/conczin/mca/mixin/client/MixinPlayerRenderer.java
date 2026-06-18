@@ -10,6 +10,7 @@ import net.conczin.mca.client.render.layer.ClothingLayer;
 import net.conczin.mca.client.render.layer.FaceLayer;
 import net.conczin.mca.client.render.layer.HairLayer;
 import net.conczin.mca.client.render.layer.SkinLayer;
+import net.conczin.mca.ducks.client.PlayerRendererMCA;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.model.geom.builders.CubeDeformation;
 import net.minecraft.client.model.geom.builders.LayerDefinition;
@@ -33,7 +34,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(AvatarRenderer.class)
 @SuppressWarnings({"rawtypes", "unchecked"})
-public abstract class MixinPlayerRenderer extends LivingEntityRenderer<LivingEntity, AvatarRenderState, PlayerModel> {
+public abstract class MixinPlayerRenderer extends LivingEntityRenderer<LivingEntity, AvatarRenderState, PlayerModel> implements PlayerRendererMCA {
     @Unique
     private PlayerModel mca$geneticsModel;
     @Unique
@@ -139,7 +140,7 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<LivingEnt
     }
 
     @Unique
-    private boolean mca$renderHand(
+    public boolean mca$renderHand(
             AbstractClientPlayer player,
             PoseStack poseStack,
             SubmitNodeCollector submitNodeCollector,

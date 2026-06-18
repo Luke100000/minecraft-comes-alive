@@ -8,4 +8,9 @@ public class FabricPlatformHelper extends PlatformHelper {
     protected boolean isModLoadedUncached(String namespace) {
         return FabricLoader.getInstance().isModLoaded(namespace);
     }
+
+    @Override
+    public boolean isDevelopmentEnvironment() {
+        return FabricLoader.getInstance().isDevelopmentEnvironment();
+    }
 }

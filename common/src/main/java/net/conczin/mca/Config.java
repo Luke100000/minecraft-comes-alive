@@ -195,7 +195,7 @@ public final class Config extends CommonConfig {
     /**
      * Maximum distance villagers can path toward remembered points of interest such as beds.
      */
-    public int villagerPathfindingDistance = 256;
+    public int villagerPathfindingDistance = 192;
 
     /**
      * Number of hearts a child starts with towards their parent.
@@ -748,6 +748,7 @@ public final class Config extends CommonConfig {
             .put("minecraft:zombie_villager", 3)
             .put("minecraft:spider", 0)
             .put("minecraft:skeleton", 0)
+            .put("minecraft:stray", 0)
             .put("minecraft:slime", 0)
             .put(MCA.MOD_ID + ":female_zombie_villager", 3)
             .put(MCA.MOD_ID + ":male_zombie_villager", 3)
@@ -878,7 +879,7 @@ public final class Config extends CommonConfig {
     }
 
     public int getVillagerPathfindingDistance() {
-        return Math.max(16, villagerPathfindingDistance);
+        return Math.clamp(villagerPathfindingDistance, 16, 400);
     }
 
     public static void setServerConfig(CommonConfig config) {

@@ -130,7 +130,7 @@ public class VillagerTasksMCA {
             brain.addActivity(Activity.IDLE, VillagerTasksMCA.getMercenaryPackage(0.5f), ImmutableSet.of(), ImmutableSet.of());
             brain.addActivity(Activity.CORE, VillagerTasksMCA.getGuardCorePackage(villager), ImmutableSet.of(), ImmutableSet.of());
             brain.addActivity(Activity.PANIC, VillagerTasksMCA.getPanicPackage(0.5F), ImmutableSet.of(), ImmutableSet.of());
-            brain.addActivity(Activity.REST, VillagerTasksMCA.getRestPackage(0.5F), ImmutableSet.of(), ImmutableSet.of());
+            brain.addActivity(Activity.REST, VillagerTasksMCA.getRestPackage(0.5F), ImmutableSet.of(Pair.of(MemoryModuleType.ATTACK_TARGET, MemoryStatus.VALUE_ABSENT)), ImmutableSet.of());
             brain.addActivity(ActivitiesMCA.CHORE, VillagerTasksMCA.getChorePackage(), ImmutableSet.of(), ImmutableSet.of());
             noDefault = true;
         } else if (!villager.requiresHome()) {
@@ -139,7 +139,7 @@ public class VillagerTasksMCA {
             brain.addActivity(Activity.IDLE, VillagerTasksMCA.getAdventurerPackage(0.5f), ImmutableSet.of(), ImmutableSet.of());
             brain.addActivity(Activity.CORE, VillagerTasksMCA.getSelfDefencePackage(), ImmutableSet.of(), ImmutableSet.of());
             brain.addActivity(Activity.PANIC, VillagerTasksMCA.getPanicPackage(0.5F), ImmutableSet.of(), ImmutableSet.of());
-            brain.addActivity(Activity.REST, VillagerTasksMCA.getRestPackage(0.5F), ImmutableSet.of(), ImmutableSet.of());
+            brain.addActivity(Activity.REST, VillagerTasksMCA.getRestPackage(0.5F), ImmutableSet.of(Pair.of(MemoryModuleType.ATTACK_TARGET, MemoryStatus.VALUE_ABSENT)), ImmutableSet.of());
             noDefault = true;
         } else if (age == AgeState.BABY) {
             brain.setSchedule(EnvironmentAttributes.BABY_VILLAGER_ACTIVITY);
@@ -179,7 +179,7 @@ public class VillagerTasksMCA {
                     ImmutableSet.of(Pair.of(MemoryModuleType.MEETING_POINT, MemoryStatus.VALUE_PRESENT)),
                     ImmutableSet.of()
             );
-            brain.addActivity(Activity.REST, VillagerTasksMCA.getRestPackage(0.5F), ImmutableSet.of(), ImmutableSet.of());
+            brain.addActivity(Activity.REST, VillagerTasksMCA.getRestPackage(0.5F), ImmutableSet.of(Pair.of(MemoryModuleType.ATTACK_TARGET, MemoryStatus.VALUE_ABSENT)), ImmutableSet.of());
             brain.addActivity(Activity.IDLE, VillagerTasksMCA.getIdlePackage(0.5F), ImmutableSet.of(), ImmutableSet.of());
             brain.addActivity(Activity.PANIC, VillagerTasksMCA.getPanicPackage(0.5F), ImmutableSet.of(), ImmutableSet.of());
             brain.addActivity(Activity.PRE_RAID, VillagerTasksMCA.getPreRaidPackage(0.5F), ImmutableSet.of(), ImmutableSet.of());
@@ -308,15 +308,24 @@ public class VillagerTasksMCA {
                         VillagerTasksMCA::guardTooHurt
                 )),
                 Pair.of(1, new EquipmentTask(VillagerTasksMCA::isOnDuty, v -> v.getResidency().getHomeVillage()
-                        .map(vil -> vil.getVillageGuardsManager().getGuardEquipment(v.getProfession(), v.getDominantHand())).orElse(VillageGuardsManager.getEquipmentFor(v.getDominantHand(), EquipmentSet.GUARD_0, EquipmentSet.GUARD_0_LEFT)))),
+                        .map(village -> village.getVillageGuardsManager().getGuardEquipment(v.getProfession(), v.getDominantHand()))
+                        .orElse(VillageGuardsManager.getEquipmentFor(v.getDominantHand(),
+                                v.getProfession() == ProfessionsMCA.ARCHER ? EquipmentSet.ARCHER_0 : EquipmentSet.GUARD_0,
+                                v.getProfession() == ProfessionsMCA.ARCHER ? EquipmentSet.ARCHER_0_LEFT : EquipmentSet.GUARD_0_LEFT)))),
                 Pair.of(2, StartAttacking.create((level, body) -> true, (level, body) -> VillagerTasksMCA.getPreferredTarget(body))),
                 Pair.of(3, StopAttackingIfTargetInvalid.create((level, livingEntity) -> !VillagerTasksMCA.isPreferredTarget(villager, livingEntity))),
-                Pair.of(4, new BowTask<>(20, 12)),
+                Pair.of(4, new BowTask<>(20, 15)),
                 Pair.of(5, BehaviorBuilder.triggerIf(v -> v.isHolding(Items.CROSSBOW),
                         BackUpIfTooClose.create(5, 0.75F)
                 )),
-                Pair.of(6, SetWalkTargetFromAttackTargetIfTargetOutOfReach.create(0.75F)),
-                Pair.of(7, new ExtendedMeleeAttackTask(20, 2.0F)),
+                Pair.of(6, new ConditionalTask<>(
+                        SetWalkTargetFromAttackTargetIfTargetOutOfReach.create(0.75F),
+                        (VillagerEntityMCA v) -> !VillagerTasksMCA.isHoldingRangedWeapon(v)
+                )),
+                Pair.of(7, new ConditionalTask<>(
+                        new ExtendedMeleeAttackTask(20, 2.0F),
+                        (VillagerEntityMCA v) -> !VillagerTasksMCA.isHoldingRangedWeapon(v)
+                )),
                 Pair.of(8, new CrossbowAttack<VillagerEntityMCA, VillagerEntityMCA>())
         );
     }
@@ -348,12 +357,18 @@ public class VillagerTasksMCA {
             return Optional.empty();
         } else {
             Optional<LivingEntity> primary = villager.getBrain().getMemoryInternal(MemoryModuleTypeMCA.NEAREST_GUARD_ENEMY);
-            if (primary.isPresent() && (getActivity(villager) != Activity.REST || primary.get().distanceTo(villager) < 8.0)) {
+            if (primary.isPresent() && shouldRespondToGuardEnemy(villager, primary.get())) {
                 return primary;
             } else {
                 return villager.getBrain().getMemoryInternal(MemoryModuleType.ATTACK_TARGET);
             }
         }
+    }
+
+    private static boolean shouldRespondToGuardEnemy(VillagerEntityMCA villager, LivingEntity target) {
+        return getActivity(villager) != Activity.REST
+               || target.distanceTo(villager) < 8.0
+               || villager.getResidency().getHomeVillage().filter(village -> village.isWithinBorder(villager)).isEmpty();
     }
 
     private static boolean isPreferredTarget(VillagerEntityMCA villager, LivingEntity entity) {
@@ -363,6 +378,10 @@ public class VillagerTasksMCA {
 
     public static boolean isOnDuty(VillagerEntityMCA villager) {
         return getActivity(villager) == Activity.WORK || villager.getBrain().getMemoryInternal(MemoryModuleType.ATTACK_TARGET).isPresent();
+    }
+
+    private static boolean isHoldingRangedWeapon(VillagerEntityMCA villager) {
+        return villager.isHolding(Items.BOW) || villager.isHolding(Items.CROSSBOW);
     }
 
     public static boolean isInDanger(VillagerEntityMCA villager) {

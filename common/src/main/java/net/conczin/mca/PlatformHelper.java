@@ -13,4 +13,8 @@ public class PlatformHelper {
     protected boolean isModLoadedUncached(String namespace) {
         return false;
     }
+
+    public boolean isDevelopmentEnvironment() {
+        return false;
+    }
 }

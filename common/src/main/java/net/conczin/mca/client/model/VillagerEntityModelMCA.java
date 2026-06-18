@@ -105,6 +105,7 @@ public class VillagerEntityModelMCA extends VillagerEntityBaseModelMCA {
         leftLegwear.visible = !wearsHidden && visible;
         rightLegwear.visible = !wearsHidden && visible;
         bodyWear.visible = !wearsHidden && visible;
+        breastsWear.visible = !wearsHidden && visible;
     }
 
     public VillagerEntityModelMCA hideWears() {

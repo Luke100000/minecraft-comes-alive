@@ -9,6 +9,7 @@ import net.conczin.mca.entity.CribEntity;
 import net.conczin.mca.entity.Infectable;
 import net.conczin.mca.entity.VillagerLike;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.model.HumanoidModel;
 import net.minecraft.client.model.geom.builders.CubeDeformation;
 import net.minecraft.client.model.geom.builders.LayerDefinition;
 import net.minecraft.client.model.geom.builders.MeshDefinition;
@@ -18,9 +19,13 @@ import net.minecraft.client.renderer.entity.HumanoidMobRenderer;
 import net.minecraft.client.renderer.entity.layers.HumanoidArmorLayer;
 import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.resources.Identifier;
+import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.HumanoidArm;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.ItemUseAnimation;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Set;
@@ -65,6 +70,21 @@ public class VillagerLikeEntityMCARenderer<T extends Mob & VillagerLike<T>>
     }
 
     @Override
+    protected HumanoidModel.ArmPose getArmPose(T mob, HumanoidArm arm) {
+        ItemStack itemStack = mob.getItemHeldByArm(arm);
+        if (mob.isUsingItem() && mob.getUsedItemHand() == (arm == HumanoidArm.LEFT ? InteractionHand.OFF_HAND : InteractionHand.MAIN_HAND)) {
+            ItemUseAnimation anim = itemStack.getUseAnimation();
+            if (anim == ItemUseAnimation.BOW) {
+                return HumanoidModel.ArmPose.BOW_AND_ARROW;
+            }
+            if (anim == ItemUseAnimation.CROSSBOW) {
+                return HumanoidModel.ArmPose.CROSSBOW_CHARGE;
+            }
+        }
+        return super.getArmPose(mob, arm);
+    }
+
+    @Override
     public VillagerRenderState createRenderState() {
         return new VillagerRenderState();
     }
@@ -85,9 +105,6 @@ public class VillagerLikeEntityMCARenderer<T extends Mob & VillagerLike<T>>
         float height = visuals.rawVerticalScaleFactor();
         float width = visuals.rawHorizontalScaleFactor();
         matrices.scale(width, height, width);
-        if (visuals.baby() && (!state.isPassenger || state.cribPassenger) && !visuals.sleeping()) {
-            matrices.translate(0, 0.6F, 0);
-        }
     }
 
     @Nullable

@@ -1,3 +1,33 @@
+# 7.8.4
+
+* General fixes and pathfinding improvements
+* Fixed Debug Screen
+* Guards now target strays, regenerate your mca config to update.
+* Generic Villager Archer AI Class improvements
+  * Bows now animate when shooting like players do.
+  * Archers now keep skeleton-style distance and respond to threats while outside a home village.
+* Arrows now shoot from the correct position when your player model is sized differently.
+* Fixed Villager Zombie Conversion, now they shouldn't disappear.
+* Fixed a bug with villagers being stuck when trying to path to their beds.
+  * This will be backported eventually to earlier versions. 
+* New config option villagerPathfindingDistance.
+* Fixed Vanilla Hand Skin rendering in first person when having the villager model
+* Fixed babies being stuck in the ground.
+
+# 7.8.3
+
+* Surprise, more fixes!
+* Relaxed fabric loader version
+
+# 7.8.2
+
+* Even more fixes
+
+# 7.8.1
+
+* Fixed crashes
+* Fixed loot tables
+
 # 7.8.0
 
 * Ported to Minecraft 26.1.2 (Thanks Mikulasz12!)

@@ -139,6 +139,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     public VillagerEntityMCA(EntityType<VillagerEntityMCA> type, Level w, Gender gender) {
         super(type, w);
         genetics.setGender(gender);
+        this.getNavigation().setRequiredPathLength(Config.getInstance().getVillagerPathfindingDistance());
     }
 
     public static <E extends Entity> CDataManager.Builder<E> createTrackedData(CDataManager.Builder<E> builder) {
@@ -777,7 +778,6 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
                 if (infection > 1.0f) {
                     convertTo(EntityType.ZOMBIE_VILLAGER, ConversionParams.single(this, false, false), mob -> {
                     });
-                    discard();
                 }
             }
 
@@ -1253,6 +1253,9 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         residency.leaveHome();
 
         EntityType<? extends Mob> convertedType = !isRemoved() && type == EntityType.ZOMBIE_VILLAGER ? getGenetics().getGender().getZombieType() : type;
+
+        UUID oldUuid = getUUID();
+
         return (T) super.convertTo((EntityType) convertedType, params, mob -> {
             ((ConversionParams.AfterConversion) afterConversion).finalizeConversion(mob);
 
@@ -1267,7 +1270,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
                 zombie.setGossips(getGossips().copy());
                 zombie.setTradeOffers(getOffers().copy());
                 zombie.setVillagerXp(getVillagerXp());
-                zombie.setUUID(getUUID());
+                zombie.setUUID(oldUuid);
                 zombie.setPersistenceRequired();
 
                 level().levelEvent(null, 1026, this.blockPosition(), 0);
@@ -1276,6 +1279,8 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
             if (mob instanceof ZombieVillagerEntityMCA zombie) {
                 zombie.setInventory(inventory);
             }
+
+            this.discard();
         });
     }
 

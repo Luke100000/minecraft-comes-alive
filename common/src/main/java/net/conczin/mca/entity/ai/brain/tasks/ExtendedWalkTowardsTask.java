@@ -46,7 +46,9 @@ public class ExtendedWalkTowardsTask {
                             GlobalPos globalPos = context.get(destinationResult);
                             Optional<Long> optional = context.tryGet(cantReachWalkTargetSince);
                             if (globalPos.dimension() == world.dimension() && (optional.isEmpty() || world.getGameTime() - optional.get() <= (long) maxRunTime)) {
-                                BlockPos targetPos = walkTargetResolver.resolve(world, entity, globalPos).orElse(globalPos.pos());
+                                Optional<BlockPos> resolvedTarget = walkTargetResolver.resolve(world, entity, globalPos);
+                                BlockPos targetPos = resolvedTarget.orElse(globalPos.pos());
+                                int targetCompletionRange = resolvedTarget.isPresent() ? 0 : completionRange;
                                 if (targetPos.distManhattan(entity.blockPosition()) > maxDistance) {
                                     Vec3 vec3d = null;
                                     int l = 0;
@@ -63,8 +65,8 @@ public class ExtendedWalkTowardsTask {
                                     }
 
                                     walkTarget.set(new WalkTarget(vec3d, speed, completionRange));
-                                } else if (targetPos.distManhattan(entity.blockPosition()) > completionRange) {
-                                    walkTarget.set(new WalkTarget(targetPos, speed, completionRange));
+                                } else if (targetPos.distManhattan(entity.blockPosition()) > targetCompletionRange) {
+                                    walkTarget.set(new WalkTarget(targetPos, speed, targetCompletionRange));
                                 }
                             } else {
                                 if (canGiveUp.test(entity)) {
@@ -90,9 +92,16 @@ public class ExtendedWalkTowardsTask {
             return Optional.empty();
         }
 
-        Direction facing = bedState.getValue(BedBlock.FACING);
-        BlockPos footPos = bedState.getValue(BedBlock.PART) == BedPart.FOOT ? bedPos : bedPos.relative(facing.getOpposite());
-        BlockPos headPos = bedState.getValue(BedBlock.PART) == BedPart.HEAD ? bedPos : bedPos.relative(facing);
+        Direction facing = bedState.hasProperty(BedBlock.FACING) ? bedState.getValue(BedBlock.FACING) : Direction.NORTH;
+        BlockPos footPos;
+        BlockPos headPos;
+        if (bedState.hasProperty(BedBlock.PART)) {
+            footPos = bedState.getValue(BedBlock.PART) == BedPart.FOOT ? bedPos : bedPos.relative(facing.getOpposite());
+            headPos = bedState.getValue(BedBlock.PART) == BedPart.HEAD ? bedPos : bedPos.relative(facing);
+        } else {
+            footPos = bedPos;
+            headPos = bedPos;
+        }
 
         return Stream.of(
                         footPos.relative(facing.getClockWise()),

@@ -30,7 +30,9 @@ public class GuardEnemiesSensor extends Sensor<LivingEntity> {
     }
 
     private Optional<LivingEntity> getNearestHostile(LivingEntity entity) {
-        return getVisibleMobs(entity).flatMap((list) -> list.find(this::isHostile).min((a, b) -> this.compareEntities(entity, a, b)));
+        return getVisibleMobs(entity).flatMap((list) -> list.find(this::isHostile)
+                .filter(e -> e.distanceToSqr(entity) <= 48.0 * 48.0)
+                .min((a, b) -> this.compareEntities(entity, a, b)));
     }
 
     private Optional<NearestVisibleLivingEntities> getVisibleMobs(LivingEntity entity) {
