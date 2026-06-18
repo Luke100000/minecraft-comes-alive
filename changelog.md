@@ -6,13 +6,12 @@
 * Generic Villager Archer AI Class improvements
   * Bows now animate when shooting like players do.
   * Archers now keep skeleton-style distance and respond to threats while outside a home village.
-* Arrows now shoot from the correct position when your player model is sized differently.
 * Fixed Villager Zombie Conversion, now they shouldn't disappear.
 * Fixed a bug with villagers being stuck when trying to path to their beds.
-  * This will be backported eventually to earlier versions. 
-* New config option villagerPathfindingDistance.
-* Fixed Vanilla Hand Skin rendering in first person when having the villager model
-* Fixed babies being stuck in the ground.
+  * This will be backported eventually to earlier versions.
+* New config option villagerPathfindingDistance for long villager routes to remembered points of interest such as beds.
+* Fixed first-person MCA hand skin rendering when using the villager model.
+* Fixed MCA babies.
 
 # 7.8.3
 

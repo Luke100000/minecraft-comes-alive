@@ -5,7 +5,6 @@ import net.conczin.mca.Config;
 import net.conczin.mca.client.gui.VillagerEditorScreen;
 import net.conczin.mca.client.model.VillagerEntityBaseModelMCA;
 import net.conczin.mca.client.model.VillagerEntityModelMCA;
-import net.conczin.mca.entity.CribEntity;
 import net.conczin.mca.entity.Infectable;
 import net.conczin.mca.entity.VillagerLike;
 import net.minecraft.client.Minecraft;
@@ -72,7 +71,8 @@ public class VillagerLikeEntityMCARenderer<T extends Mob & VillagerLike<T>>
     @Override
     protected HumanoidModel.ArmPose getArmPose(T mob, HumanoidArm arm) {
         ItemStack itemStack = mob.getItemHeldByArm(arm);
-        if (mob.isUsingItem() && mob.getUsedItemHand() == (arm == HumanoidArm.LEFT ? InteractionHand.OFF_HAND : InteractionHand.MAIN_HAND)) {
+        InteractionHand hand = arm == mob.getMainArm() ? InteractionHand.MAIN_HAND : InteractionHand.OFF_HAND;
+        if (mob.isUsingItem() && mob.getUsedItemHand() == hand) {
             ItemUseAnimation anim = itemStack.getUseAnimation();
             if (anim == ItemUseAnimation.BOW) {
                 return HumanoidModel.ArmPose.BOW_AND_ARROW;
@@ -95,7 +95,6 @@ public class VillagerLikeEntityMCARenderer<T extends Mob & VillagerLike<T>>
         VillagerStateHolder holder = VillagerStateHolder.require(state);
         holder.mca$setVillagerRenderData(VillagerRenderData.create(VillagerLike.PlayerModel.VILLAGER, entity));
         state.panicAnimationProgress = entity.getVillagerBrain().getPanicAnimationProgress(partialTicks);
-        state.cribPassenger = entity.getVehicle() instanceof CribEntity;
         VillagerRenderStateHooks.extractScaledBounds(entity, state);
     }
 
@@ -105,6 +104,9 @@ public class VillagerLikeEntityMCARenderer<T extends Mob & VillagerLike<T>>
         float height = visuals.rawVerticalScaleFactor();
         float width = visuals.rawHorizontalScaleFactor();
         matrices.scale(width, height, width);
+        if (visuals.baby() && !state.isPassenger) {
+            matrices.translate(0.0F, 0.6F, 0.0F);
+        }
     }
 
     @Nullable
