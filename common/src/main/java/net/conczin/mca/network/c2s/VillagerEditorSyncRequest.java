@@ -89,7 +89,6 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
                 break;
             case "gender":
                 setSkin(player, entity);
-                setHair(player, entity);
                 setClothing(player, entity);
                 break;
             case "sync":

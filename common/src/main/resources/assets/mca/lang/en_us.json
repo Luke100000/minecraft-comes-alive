@@ -702,6 +702,7 @@
   "gui.villager_editor.eye_hsv": "Mode: RGB",
   "gui.villager_editor.clear_eyes": "Clear Eye Dye",
   "gui.villager_editor.clear_eyes_left": "Clear Left Eye Dye",
+  "gui.villager_editor.clear_eyes_right": "Clear Right Eye Dye",
   "gui.villager_editor.hair_mode.tooltip": "Toggles HSV dyed hair. Only the underlying genetic hair color is inherited.",
   "gui.villager_editor.eye_mode.tooltip": "Toggles HSV dyed eyes. Natural base eyes will be tinted to the custom color.",
   "gui.villager_editor.preview_mouse_follow.tooltip": "Toggle whether the preview turns to follow the mouse cursor.",

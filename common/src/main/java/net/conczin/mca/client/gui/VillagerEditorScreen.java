@@ -107,7 +107,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     private int traitPage = 0;
     private EditBox villagerNameField;
     private boolean hsvColoredHair;
-    private int eyeColorTarget = 0; // 0 = Hair, 1 = Right/Both Eye, 2 = Left Eye
+    private int eyeColorTarget = 0; // 0 = Hair, 1 = Left/Both Eye, 2 = Right Eye
     private boolean hsvColoredEyes = false;
     private boolean hsvColoredEyesLeft = false;
     private int clothingPage;
@@ -516,8 +516,8 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                 // Determine target label key
                 String targetLabelKey = switch (eyeColorTarget) {
                     case 0 -> "gui.villager_editor.customize_hair";
-                    case 1 -> hasHetero ? "gui.villager_editor.customize_eyes_right" : "gui.villager_editor.customize_eyes";
-                    case 2 -> "gui.villager_editor.customize_eyes_left";
+                    case 1 -> hasHetero ? "gui.villager_editor.customize_eyes_left" : "gui.villager_editor.customize_eyes";
+                    case 2 -> "gui.villager_editor.customize_eyes_right";
                     default -> "gui.villager_editor.customize_hair";
                 };
 
@@ -679,7 +679,11 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                         y += 65;
 
                         // Clear eye dye
-                        String clearLabelKey = eyeColorTarget == 2 ? "gui.villager_editor.clear_eyes_left" : "gui.villager_editor.clear_eyes";
+                        String clearLabelKey = switch (eyeColorTarget) {
+                            case 1 -> "gui.villager_editor.clear_eyes_left";
+                            case 2 -> "gui.villager_editor.clear_eyes_right";
+                            default -> "gui.villager_editor.clear_eyes";
+                        };
                         addRenderableWidget(new ButtonWidget(width / 2, y, DATA_WIDTH, 20,
                                 Component.translatable(clearLabelKey),
                                 b -> {
