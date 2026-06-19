@@ -490,6 +490,14 @@ public final class Config extends CommonConfig {
     public float guardSpawnFraction = 0.175f;
 
     /**
+     * Base equipment tier guards and archers spawn with (0–3).
+     * 0 = iron/leather starter gear (vanilla behavior), 3 = netherite.
+     * Buildings raise the tier on top of this: an armory adds +1, and a blacksmith (with an armory) adds another +1.
+     * The final tier is clamped to 3.
+     */
+    public int guardBaseEquipmentLevel = 0;
+
+    /**
      * Multiplier of taxes paid by villages.
      */
     public float taxesFactor = 0.5f;
