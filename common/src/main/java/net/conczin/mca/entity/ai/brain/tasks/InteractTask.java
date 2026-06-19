@@ -24,6 +24,7 @@ public class InteractTask extends Behavior<VillagerEntityMCA> {
 
     public static boolean shouldRun(VillagerEntityMCA villager) {
         return villager.isAlive()
+               && villager.getBrain().getMemoryInternal(MemoryModuleType.ATTACK_TARGET).isEmpty()
                && villager.getInteractions().getInteractingPlayer().filter(player -> villager.distanceToSqr(player) <= 25).isPresent()
                && !villager.isInWater()
                && !villager.hurtMarked

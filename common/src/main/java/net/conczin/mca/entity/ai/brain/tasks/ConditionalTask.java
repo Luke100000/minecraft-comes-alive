@@ -36,7 +36,7 @@ public class ConditionalTask<E extends LivingEntity> extends Behavior<E> {
 
     @Override
     protected boolean canStillUse(ServerLevel world, E entity, long time) {
-        return task.getStatus() == Status.RUNNING;
+        return predicate.test(entity) && task.getStatus() == Status.RUNNING;
     }
 
     @Override

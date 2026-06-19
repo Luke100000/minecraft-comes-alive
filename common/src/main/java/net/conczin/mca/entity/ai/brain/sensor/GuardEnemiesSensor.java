@@ -5,9 +5,12 @@ import net.conczin.mca.Config;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.tags.TagKey;
 import net.minecraft.util.Mth;
+import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
@@ -15,6 +18,7 @@ import net.minecraft.world.entity.ai.memory.NearestVisibleLivingEntities;
 import net.minecraft.world.entity.ai.sensing.Sensor;
 import net.minecraft.world.entity.monster.Enemy;
 
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -58,12 +62,32 @@ public class GuardEnemiesSensor extends Sensor<LivingEntity> {
             Identifier id = BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType());
             if (Config.getInstance().guardsTargetEntities.containsKey(id.toString())) {
                 return Config.getInstance().guardsTargetEntities.get(id.toString());
-            } else if (Config.getInstance().guardsTargetMonsters && entity instanceof Enemy) {
+            } else {
+                Optional<Integer> tagPriority = getTagPriority(entity.getType());
+                if (tagPriority.isPresent()) {
+                    return tagPriority.get();
+                }
+            }
+
+            if (Config.getInstance().guardsTargetMonsters && entity instanceof Enemy) {
                 return 3;
             } else {
                 return -1;
             }
         }
+    }
+
+    private Optional<Integer> getTagPriority(EntityType<?> type) {
+        for (Map.Entry<String, Integer> entry : Config.getInstance().guardsTargetEntities.entrySet()) {
+            String key = entry.getKey();
+            if (key.startsWith("#")) {
+                Identifier id = Identifier.tryParse(key.substring(1));
+                if (id != null && BuiltInRegistries.ENTITY_TYPE.wrapAsHolder(type).is(TagKey.create(Registries.ENTITY_TYPE, id))) {
+                    return Optional.of(entry.getValue());
+                }
+            }
+        }
+        return Optional.empty();
     }
 
     private boolean isHostile(LivingEntity entity) {

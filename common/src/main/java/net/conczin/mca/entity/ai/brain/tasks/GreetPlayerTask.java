@@ -11,6 +11,7 @@ import net.conczin.mca.server.world.data.Village;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.ai.behavior.Behavior;
+import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.player.Player;
 
 import java.util.Optional;
@@ -68,7 +69,7 @@ public class GreetPlayerTask extends Behavior<VillagerEntityMCA> {
     @Override
     protected boolean checkExtraStartConditions(ServerLevel world, VillagerEntityMCA entity) {
         cooldown--;
-        return cooldown < 0;
+        return cooldown < 0 && entity.getBrain().getMemoryInternal(MemoryModuleType.ATTACK_TARGET).isEmpty();
     }
 
     @Override

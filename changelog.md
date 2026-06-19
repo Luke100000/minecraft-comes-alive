@@ -2,7 +2,9 @@
 
 * General fixes and pathfinding improvements
 * Fixed Debug Screen
-* Guards now target strays, regenerate your mca config to update.
+* Guard target priorities now support entity type tags such as `#minecraft:undead`.
+  * Refresh your MCA Config to propogate the changes. 
+* Iron golems no longer are able to target villagers.
 * Generic Villager Archer AI Class improvements
   * Bows now animate when shooting like players do.
   * Archers now keep skeleton-style distance and respond to threats while outside a home village.
