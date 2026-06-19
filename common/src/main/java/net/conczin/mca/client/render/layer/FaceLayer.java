@@ -91,6 +91,16 @@ public class FaceLayer<S extends HumanoidRenderState, M extends HumanoidModel<S>
 
     private static final Map<EyeLayerKey, Identifier> EYE_TEXTURE_CACHE = new ConcurrentHashMap<>();
 
+    public static void clearGeneratedEyeTextureCache() {
+        var textureManager = net.minecraft.client.Minecraft.getInstance().getTextureManager();
+        EYE_TEXTURE_CACHE.values().forEach(id -> {
+            if (id.getNamespace().equals(MCA.MOD_ID) && id.getPath().startsWith("dynamic/eye/")) {
+                textureManager.release(id);
+            }
+        });
+        EYE_TEXTURE_CACHE.clear();
+    }
+
     private enum EyeSide {
         FULL,
         LEFT,
@@ -146,7 +156,7 @@ public class FaceLayer<S extends HumanoidRenderState, M extends HumanoidModel<S>
                 
                 originalImage.close();
                 
-                Identifier newId = Identifier.fromNamespaceAndPath("mca", "dynamic/eye/" + key.side().name().toLowerCase(java.util.Locale.ROOT) + "/" + (key.sclera() ? "sclera" : "iris") + "/" + id.getPath().replace("/", "_"));
+                Identifier newId = Identifier.fromNamespaceAndPath("mca", "dynamic/eye/" + key.side().name().toLowerCase(java.util.Locale.ROOT) + "/" + (key.sclera() ? "sclera" : "iris") + "/" + id.getNamespace() + "_" + id.getPath().replace("/", "_"));
                 net.minecraft.client.Minecraft.getInstance().getTextureManager().register(newId, new net.minecraft.client.renderer.texture.DynamicTexture(newId::toString, newImage));
                 return newId;
             } catch (Exception e) {

@@ -12,7 +12,10 @@ final class CountedSkinIds {
         if (!pattern.contains("%")) {
             return List.of(pattern);
         }
-        if (!pattern.contains("%d") || pattern.indexOf("%d") != pattern.lastIndexOf("%d")) {
+        int placeholder = pattern.indexOf("%d");
+        boolean hasOnePlaceholder = placeholder >= 0 && placeholder == pattern.lastIndexOf("%d");
+        boolean hasNoOtherFormats = placeholder == pattern.indexOf('%') && pattern.indexOf('%', placeholder + 2) < 0;
+        if (!hasOnePlaceholder || !hasNoOtherFormats) {
             throw new IllegalArgumentException("Skin id pattern must contain exactly one %d placeholder: " + pattern);
         }
         if (count < 0) {

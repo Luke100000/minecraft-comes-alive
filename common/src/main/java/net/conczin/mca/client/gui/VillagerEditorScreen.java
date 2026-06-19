@@ -39,6 +39,7 @@ import net.conczin.mca.client.resources.SkinExporter;
 import net.conczin.mca.client.resources.PresetCodec;
 import org.apache.commons.io.FileUtils;
 import java.io.File;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
@@ -531,9 +532,21 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                         b -> {
                             // Save current slider state to current target
                             switch (eyeColorTarget) {
-                                case 0 -> refreshHairColor();
-                                case 1 -> refreshEyeColor();
-                                case 2 -> refreshEyeLeftColor();
+                                case 0 -> {
+                                    if (hsvColoredHair) {
+                                        refreshHairColor();
+                                    }
+                                }
+                                case 1 -> {
+                                    if (hsvColoredEyes) {
+                                        refreshEyeColor();
+                                    }
+                                }
+                                case 2 -> {
+                                    if (hsvColoredEyesLeft) {
+                                        refreshEyeLeftColor();
+                                    }
+                                }
                             }
                             // Advance target
                             eyeColorTarget = (eyeColorTarget + 1) % maxTarget;
@@ -975,18 +988,18 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                 renameButton = addRenderableWidget(new ButtonWidget(width / 2 + DATA_WIDTH - 40, yVal, 40, 20, Component.translatable("gui.mca.presets.rename"), b -> renamePreset()));
 
                 String initialVal = nameField.getValue().trim();
-                saveButton.active = !initialVal.isEmpty();
+                saveButton.active = isValidPresetName(initialVal);
                 renameButton.active = selectedPreset != null 
-                    && !initialVal.isEmpty() 
+                    && isValidPresetName(initialVal)
                     && !initialVal.equals(selectedPreset) 
                     && !presetNames.contains(initialVal);
 
                 // Set responder for reactive updates
                 nameField.setResponder(val -> {
                     String newName = val.trim();
-                    saveButton.active = !newName.isEmpty();
+                    saveButton.active = isValidPresetName(newName);
                     renameButton.active = selectedPreset != null 
-                        && !newName.isEmpty() 
+                        && isValidPresetName(newName)
                         && !newName.equals(selectedPreset) 
                         && !presetNames.contains(newName);
                 });
@@ -1204,7 +1217,25 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         String strB = idxB >= 0 ? b.substring(idxB) : b;
         String numA = strA.replaceAll("\\D+", "");
         String numB = strB.replaceAll("\\D+", "");
-        return (!numA.isEmpty() && !numB.isEmpty()) ? Integer.compare(Integer.parseInt(numA), Integer.parseInt(numB)) : a.compareTo(b);
+        if (numA.isEmpty() || numB.isEmpty()) {
+            return a.compareTo(b);
+        }
+        String normalizedA = mca$stripLeadingZeroes(numA);
+        String normalizedB = mca$stripLeadingZeroes(numB);
+        int lengthCompare = Integer.compare(normalizedA.length(), normalizedB.length());
+        if (lengthCompare != 0) {
+            return lengthCompare;
+        }
+        int numberCompare = normalizedA.compareTo(normalizedB);
+        return numberCompare != 0 ? numberCompare : a.compareTo(b);
+    }
+
+    private static String mca$stripLeadingZeroes(String value) {
+        int index = 0;
+        while (index < value.length() - 1 && value.charAt(index) == '0') {
+            index++;
+        }
+        return value.substring(index);
     }
 
     private void cycleLayeredHair(LayeredHair.Category category, int offset) {
@@ -1958,13 +1989,17 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     }
 
     private void selectPreset(String name) {
+        if (name != null && !isValidPresetName(name)) {
+            MCA.LOGGER.warn("Ignoring invalid preset name: {}", name);
+            return;
+        }
         this.selectedPreset = name;
         if (name != null) {
             if (nameField != null) {
                 nameField.setValue(name);
             }
             try {
-                File presetFile = new File(presetsDir, name + ".json");
+                File presetFile = getPresetFile(name);
                 if (presetFile.exists()) {
                     String json = FileUtils.readFileToString(presetFile, StandardCharsets.UTF_8);
                     CompoundTag tag = PresetCodec.fromJsonString(json);
@@ -2004,7 +2039,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     private void savePreset() {
         if (nameField == null) return;
         String name = nameField.getValue().trim();
-        if (name.isEmpty()) return;
+        if (!isValidPresetName(name)) return;
         
         try {
             CompoundTag tag = villager.toNbtForConversion();
@@ -2017,7 +2052,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                 }
             }
 
-            File file = new File(presetsDir, name + ".json");
+            File file = getPresetFile(name);
             String json = PresetCodec.toJsonString(tag);
             FileUtils.writeStringToFile(file, json, StandardCharsets.UTF_8);
             
@@ -2035,11 +2070,11 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     private void renamePreset() {
         if (selectedPreset == null || nameField == null) return;
         String newName = nameField.getValue().trim();
-        if (newName.isEmpty() || newName.equals(selectedPreset)) return;
+        if (!isValidPresetName(selectedPreset) || !isValidPresetName(newName) || newName.equals(selectedPreset)) return;
 
         try {
-            File oldFile = new File(presetsDir, selectedPreset + ".json");
-            File newFile = new File(presetsDir, newName + ".json");
+            File oldFile = getPresetFile(selectedPreset);
+            File newFile = getPresetFile(newName);
             if (oldFile.exists() && !newFile.exists()) {
                 if (oldFile.renameTo(newFile)) {
                     selectedPreset = newName;
@@ -2060,7 +2095,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     private void deletePreset() {
         if (selectedPreset == null) return;
         try {
-            File file = new File(presetsDir, selectedPreset + ".json");
+            File file = getPresetFile(selectedPreset);
             if (file.exists()) {
                 file.delete();
             }
@@ -2076,7 +2111,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     private void usePreset() {
         if (selectedPreset == null) return;
         try {
-            File presetFile = new File(presetsDir, selectedPreset + ".json");
+            File presetFile = getPresetFile(selectedPreset);
             if (presetFile.exists()) {
                 String json = FileUtils.readFileToString(presetFile, StandardCharsets.UTF_8);
                 CompoundTag tag = PresetCodec.fromJsonString(json);
@@ -2100,6 +2135,24 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         } catch (Exception e) {
             MCA.LOGGER.error("Failed to apply preset", e);
         }
+    }
+
+    private boolean isValidPresetName(String name) {
+        return name != null
+                && !name.isBlank()
+                && name.indexOf('/') < 0
+                && name.indexOf('\\') < 0
+                && !name.equals(".")
+                && !name.equals("..");
+    }
+
+    private File getPresetFile(String name) throws IOException {
+        File directory = presetsDir.getCanonicalFile();
+        File file = new File(directory, name + ".json").getCanonicalFile();
+        if (!directory.equals(file.getParentFile())) {
+            throw new IOException("Preset path escapes preset directory: " + name);
+        }
+        return file;
     }
 
     public VillagerEntityMCA getVillager() {

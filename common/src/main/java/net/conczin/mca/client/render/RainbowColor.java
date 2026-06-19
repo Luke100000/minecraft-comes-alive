@@ -6,7 +6,8 @@ import net.minecraft.world.item.DyeColor;
 
 public final class RainbowColor {
     private static final int COLOR_DURATION = 25;
-    public static final int CYCLE_DURATION = COLOR_DURATION * DyeColor.values().length;
+    private static final DyeColor[] COLORS = DyeColor.values();
+    public static final int CYCLE_DURATION = COLOR_DURATION * COLORS.length;
     private static final float SHEEP_BRIGHTNESS = 0.75F;
     private static final int SHEEP_WHITE = -1644826;
 
@@ -16,9 +17,8 @@ public final class RainbowColor {
     public static int sheep(float tick) {
         int tickCount = Mth.floor(tick);
         int step = tickCount / COLOR_DURATION;
-        DyeColor[] colors = DyeColor.values();
-        DyeColor from = colors[step % colors.length];
-        DyeColor to = colors[(step + 1) % colors.length];
+        DyeColor from = COLORS[step % COLORS.length];
+        DyeColor to = COLORS[(step + 1) % COLORS.length];
         float delta = (tickCount % COLOR_DURATION + Mth.frac(tick)) / COLOR_DURATION;
         return ARGB.srgbLerp(delta, sheepColor(from), sheepColor(to));
     }

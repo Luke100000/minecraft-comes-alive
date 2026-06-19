@@ -37,6 +37,7 @@ public class FaceList extends SimpleJsonResourceReloadListener<JsonElement> {
         faces.clear();
 
         data.forEach(this::addEntries);
+        sortPools();
     }
 
     private void addEntries(Identifier id, JsonElement file) {
@@ -78,6 +79,10 @@ public class FaceList extends SimpleJsonResourceReloadListener<JsonElement> {
             throw new IllegalStateException("No face textures loaded for " + key(variant, gender));
         }
         return pool.size();
+    }
+
+    private void sortPools() {
+        faces.values().forEach(pool -> pool.sort(String::compareTo));
     }
 
     private static String key(String variant, Gender gender) {
