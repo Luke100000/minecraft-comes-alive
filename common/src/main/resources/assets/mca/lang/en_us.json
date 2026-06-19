@@ -477,6 +477,7 @@
   "destiny.story.village_plains/1": "In the middle of a plains biome, a few villagers built themselves a settlement. The climate is moderate, the people friendly, perhaps they have place for another settler?",
   "destiny.story.village_savanna/1": "Finally you find a village between dry trees and grass. Let's see if they are friendly!",
   "destiny.story.ancient_city/1": "But an unfortunate misstep sends you tumbling into a deep, dark cave. When you regain consciousness, you find yourself surrounded by the ancient ruins of a city forgotten by the world for eons.",
+  "destiny.teleport.failed": "You search the horizon, but the place you set out for is nowhere to be found. Your journey begins right where you stand.",
 
   "gui.blueprint.taxes": "Taxes",
   "gui.blueprint.birth": "Birth limit",

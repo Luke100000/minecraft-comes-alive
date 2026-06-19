@@ -5,10 +5,12 @@ import net.conczin.mca.MCA;
 import net.conczin.mca.network.HandleablePayload;
 import net.conczin.mca.util.WorldUtils;
 import net.conczin.mca.util.compat.ExtendedFuzzyPositions;
+import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
+import net.minecraft.network.chat.Component;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.Identifier;
@@ -43,12 +45,20 @@ public record DestinyMessage(String location, boolean isClosing) implements Hand
             MCA.executorService.execute(() -> {
                 if (location.charAt(0) == '#') {
                     String tagId = location.substring(1);
-                    WorldUtils.getClosestStructurePosition(sp.level(), sp.blockPosition(), TagKey.create(Registries.STRUCTURE, Identifier.parse(tagId)), 128).ifPresent(pos -> handleBlockPos(sp, pos));
+                    WorldUtils.getClosestStructurePosition(sp.level(), sp.blockPosition(), TagKey.create(Registries.STRUCTURE, Identifier.parse(tagId)), 128).ifPresentOrElse(pos -> handleBlockPos(sp, pos), () -> notifyDestinationNotFound(sp));
                 } else {
-                    WorldUtils.getClosestStructurePosition(sp.level(), sp.blockPosition(), Identifier.parse(location), 128).ifPresent(pos -> handleBlockPos(sp, pos));
+                    WorldUtils.getClosestStructurePosition(sp.level(), sp.blockPosition(), Identifier.parse(location), 128).ifPresentOrElse(pos -> handleBlockPos(sp, pos), () -> notifyDestinationNotFound(sp));
                 }
             });
         }
+    }
+
+    private void notifyDestinationNotFound(ServerPlayer player) {
+        // The teleport target couldn't be located (e.g. no matching structure nearby, possibly due to a
+        // world-generation mod conflict). Let the player know in an immersive, narrative tone instead of
+        // silently leaving them stranded where they spawned.
+        ((ServerLevel) player.level()).getServer().execute(() -> player.sendSystemMessage(
+                Component.translatable("destiny.teleport.failed").withStyle(ChatFormatting.GRAY, ChatFormatting.ITALIC)));
     }
 
     private void handleBlockPos(ServerPlayer player, BlockPos pos) {
