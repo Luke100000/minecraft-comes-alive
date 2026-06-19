@@ -3,6 +3,7 @@ package net.conczin.mca.entity.ai.brain.tasks;
 import com.google.common.collect.ImmutableMap;
 import net.conczin.mca.MCA;
 import net.conczin.mca.entity.ai.ArcherMoveControl;
+import net.conczin.mca.entity.ai.brain.sensor.GuardEnemiesSensor;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
@@ -12,7 +13,11 @@ import net.minecraft.world.entity.ai.behavior.Behavior;
 import net.minecraft.world.entity.ai.behavior.EntityTracker;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.MemoryStatus;
+import net.minecraft.world.entity.ai.memory.NearestVisibleLivingEntities;
 import net.minecraft.world.item.BowItem;
+
+import java.util.Comparator;
+import java.util.Optional;
 
 public class ArcherMovementTask<E extends PathfinderMob> extends Behavior<E> {
     private static final double SPEED_MODIFIER = 0.5;
@@ -22,20 +27,20 @@ public class ArcherMovementTask<E extends PathfinderMob> extends Behavior<E> {
     private static final int LOST_SIGHT_BEFORE_APPROACH = 10;
 
     private final double maximumRangeSquared;
-    private final double retreatEnterSquared;
-    private final double retreatExitSquared;
+    private final double retreatDistanceSquared;
     private Mode mode;
+    private LivingEntity lastTarget;
+    private LivingEntity retreatTarget;
     private String movementMode = "idle";
     private int seeTime;
     private int repathCooldown;
     private long lastDebugLogTime = Long.MIN_VALUE;
     private String lastDebugState = "";
 
-    public ArcherMovementTask(int maximumRange, int retreatEnterDistance, int retreatExitDistance) {
+    public ArcherMovementTask(int maximumRange, int retreatDistance) {
         super(ImmutableMap.of(MemoryModuleType.ATTACK_TARGET, MemoryStatus.VALUE_PRESENT), 1200);
         this.maximumRangeSquared = maximumRange * maximumRange;
-        this.retreatEnterSquared = retreatEnterDistance * retreatEnterDistance;
-        this.retreatExitSquared = retreatExitDistance * retreatExitDistance;
+        this.retreatDistanceSquared = retreatDistance * retreatDistance;
     }
 
     @Override
@@ -51,6 +56,8 @@ public class ArcherMovementTask<E extends PathfinderMob> extends Behavior<E> {
     @Override
     protected void start(ServerLevel level, E entity, long gameTime) {
         this.mode = null;
+        this.lastTarget = null;
+        this.retreatTarget = null;
         this.movementMode = "idle";
         this.seeTime = 0;
         this.repathCooldown = 0;
@@ -66,19 +73,30 @@ public class ArcherMovementTask<E extends PathfinderMob> extends Behavior<E> {
             return;
         }
 
+        if (target != this.lastTarget) {
+            this.lastTarget = target;
+            this.mode = null;
+            this.seeTime = 0;
+            this.repathCooldown = 0;
+            entity.getNavigation().stop();
+        }
+
         boolean visible = entity.getSensing().hasLineOfSight(target);
         updateSeeTime(visible);
 
         double distanceSquared = entity.distanceToSqr(target);
-        Mode nextMode = selectMode(entity, distanceSquared, visible);
+        LivingEntity nextRetreatTarget = findRetreatTarget(entity);
+        Mode nextMode = selectMode(entity, distanceSquared, nextRetreatTarget);
         if (nextMode != this.mode) {
             entity.getNavigation().stop();
             this.repathCooldown = 0;
             this.mode = nextMode;
         }
+        this.retreatTarget = nextMode == Mode.RETREAT ? nextRetreatTarget : null;
 
         entity.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
-        entity.getBrain().setMemory(MemoryModuleType.LOOK_TARGET, new EntityTracker(target, true));
+        LivingEntity lookTarget = this.retreatTarget == null ? target : this.retreatTarget;
+        entity.getBrain().setMemory(MemoryModuleType.LOOK_TARGET, new EntityTracker(lookTarget, true));
 
         switch (this.mode) {
             case APPROACH -> {
@@ -86,17 +104,19 @@ public class ArcherMovementTask<E extends PathfinderMob> extends Behavior<E> {
                 approach(entity, target);
             }
             case HOLD -> hold(entity, target);
-            case RETREAT -> retreat(entity, target);
+            case RETREAT -> retreat(entity, this.retreatTarget == null ? target : this.retreatTarget);
         }
 
         if (MCA.platformHelper.isDevelopmentEnvironment()) {
-            logDebugState(level, entity, target, visible, distanceSquared);
+            logDebugState(level, entity, target, this.retreatTarget, visible, distanceSquared);
         }
     }
 
     @Override
     protected void stop(ServerLevel level, E entity, long gameTime) {
         this.mode = null;
+        this.lastTarget = null;
+        this.retreatTarget = null;
         this.movementMode = "idle";
         this.seeTime = 0;
         this.repathCooldown = 0;
@@ -104,10 +124,8 @@ public class ArcherMovementTask<E extends PathfinderMob> extends Behavior<E> {
         entity.getNavigation().stop();
     }
 
-    private Mode selectMode(E entity, double distanceSquared, boolean visible) {
-        boolean continueRetreating = this.mode == Mode.RETREAT
-                && (distanceSquared < this.retreatExitSquared || !entity.onGround());
-        if (continueRetreating || visible && distanceSquared < this.retreatEnterSquared) {
+    private Mode selectMode(E entity, double distanceSquared, LivingEntity closeThreat) {
+        if (closeThreat != null || this.mode == Mode.RETREAT && !entity.onGround()) {
             return Mode.RETREAT;
         }
 
@@ -143,6 +161,22 @@ public class ArcherMovementTask<E extends PathfinderMob> extends Behavior<E> {
         this.repathCooldown = 0;
     }
 
+    private LivingEntity findRetreatTarget(E entity) {
+        Optional<NearestVisibleLivingEntities> visibleEntities = entity.getBrain().getMemoryInternal(MemoryModuleType.NEAREST_VISIBLE_LIVING_ENTITIES);
+        return visibleEntities.flatMap(entities -> entities.find(candidate -> isCloseThreat(entity, candidate, this.retreatDistanceSquared))
+                        .min(Comparator.comparingDouble(entity::distanceToSqr)))
+                .orElse(null);
+    }
+
+    private static boolean isCloseThreat(Mob entity, LivingEntity candidate, double maximumDistanceSquared) {
+        return candidate != entity
+                && hasValidTarget(candidate)
+                && candidate.level() == entity.level()
+                && entity.canAttack(candidate)
+                && candidate.distanceToSqr(entity) <= maximumDistanceSquared
+                && GuardEnemiesSensor.isGuardEnemy(candidate, entity);
+    }
+
     private static ArcherMoveControl getArcherMoveControl(Mob entity) {
         if (entity.getMoveControl() instanceof ArcherMoveControl archerMoveControl) {
             return archerMoveControl;
@@ -159,8 +193,8 @@ public class ArcherMovementTask<E extends PathfinderMob> extends Behavior<E> {
         }
     }
 
-    private void logDebugState(ServerLevel level, E entity, LivingEntity target, boolean visible, double distanceSquared) {
-        String state = this.mode + ":" + this.movementMode + ":" + visible + ":" + this.seeTime + ":" + this.repathCooldown + ":" + entity.getNavigation().isDone() + ":" + entity.horizontalCollision + ":" + entity.onGround();
+    private void logDebugState(ServerLevel level, E entity, LivingEntity target, LivingEntity closeThreat, boolean visible, double distanceSquared) {
+        String state = this.mode + ":" + this.movementMode + ":" + visible + ":" + this.seeTime + ":" + this.repathCooldown + ":" + entity.getNavigation().isDone() + ":" + entity.horizontalCollision + ":" + entity.onGround() + ":" + getDebugName(closeThreat);
         long gameTime = level.getGameTime();
         if (state.equals(this.lastDebugState) && gameTime - this.lastDebugLogTime < 20) {
             return;
@@ -169,14 +203,17 @@ public class ArcherMovementTask<E extends PathfinderMob> extends Behavior<E> {
         this.lastDebugState = state;
         this.lastDebugLogTime = gameTime;
         MCA.LOGGER.info(
-                "[MCA Archer Movement] entity={} entityName=\"{}\" target={} targetName=\"{}\" mode={} movement={} distSqr={} los={} seeTime={} navDone={} repathCooldown={} horizontalCollision={} minorHorizontalCollision={} onGround={} yRot={} targetYRot={} yHeadRot={} yBodyRot={} movementSpeed={} deltaMovement={} pos={} targetPos={}",
+                "[MCA Archer Movement] entity={} entityName=\"{}\" target={} targetName=\"{}\" closeThreat={} closeThreatName=\"{}\" mode={} movement={} distSqr={} closeThreatDistSqr={} los={} seeTime={} navDone={} repathCooldown={} horizontalCollision={} minorHorizontalCollision={} onGround={} yRot={} targetYRot={} closeThreatYRot={} yHeadRot={} yBodyRot={} movementSpeed={} deltaMovement={} pos={} targetPos={} closeThreatPos={}",
                 entity.getStringUUID(),
                 entity.getName().getString(),
                 target.getStringUUID(),
                 target.getName().getString(),
+                closeThreat == null ? "none" : closeThreat.getStringUUID(),
+                getDebugName(closeThreat),
                 this.mode,
                 this.movementMode,
                 String.format("%.2f", distanceSquared),
+                closeThreat == null ? "none" : String.format("%.2f", entity.distanceToSqr(closeThreat)),
                 visible,
                 this.seeTime,
                 entity.getNavigation().isDone(),
@@ -186,13 +223,19 @@ public class ArcherMovementTask<E extends PathfinderMob> extends Behavior<E> {
                 entity.onGround(),
                 String.format("%.2f", entity.getYRot()),
                 String.format("%.2f", getTargetYRot(entity, target)),
+                closeThreat == null ? "none" : String.format("%.2f", getTargetYRot(entity, closeThreat)),
                 String.format("%.2f", entity.yHeadRot),
                 String.format("%.2f", entity.yBodyRot),
                 String.format("%.4f", entity.getAttributeValue(Attributes.MOVEMENT_SPEED)),
                 entity.getDeltaMovement(),
                 entity.blockPosition(),
-                target.blockPosition()
+                target.blockPosition(),
+                closeThreat == null ? "none" : closeThreat.blockPosition()
         );
+    }
+
+    private static String getDebugName(LivingEntity entity) {
+        return entity == null ? "none" : entity.getName().getString();
     }
 
     private static float getTargetYRot(Mob entity, LivingEntity target) {

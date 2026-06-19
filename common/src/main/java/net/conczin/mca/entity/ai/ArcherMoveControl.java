@@ -37,6 +37,10 @@ public class ArcherMoveControl extends MoveControl {
         this.faceTarget = target;
     }
 
+    public boolean isRetreatingFrom(LivingEntity target) {
+        return this.retreatTarget != null && this.retreatTarget != target && this.retreatTarget.isAlive() && !this.retreatTarget.isRemoved();
+    }
+
     @Override
     public void tick() {
         LivingEntity target = this.retreatTarget;

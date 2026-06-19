@@ -2,6 +2,7 @@ package net.conczin.mca.entity.ai.brain.tasks;
 
 import com.google.common.collect.ImmutableMap;
 import net.conczin.mca.MCA;
+import net.conczin.mca.entity.ai.ArcherMoveControl;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.LivingEntity;
@@ -21,6 +22,7 @@ public class BowTask<E extends Mob & CrossbowAttackMob> extends Behavior<E> {
 
     private final int fireInterval;
     private final double rangeSquared;
+    private LivingEntity lastTarget;
     private int attackCooldown;
     private int lostSightTicks;
 
@@ -46,6 +48,7 @@ public class BowTask<E extends Mob & CrossbowAttackMob> extends Behavior<E> {
     @Override
     protected void start(ServerLevel level, E entity, long gameTime) {
         entity.setAggressive(true);
+        this.lastTarget = null;
         this.attackCooldown = 0;
         this.lostSightTicks = 0;
     }
@@ -61,11 +64,23 @@ public class BowTask<E extends Mob & CrossbowAttackMob> extends Behavior<E> {
             return;
         }
 
+        if (target != this.lastTarget) {
+            if (entity.isUsingItem()) {
+                logAction(entity, target, false, entity.distanceToSqr(target), "stop_using", "target_changed");
+                entity.stopUsingItem();
+            }
+            this.lastTarget = target;
+            this.attackCooldown = 0;
+            this.lostSightTicks = 0;
+        }
+
         boolean visible = entity.getSensing().hasLineOfSight(target);
         double distanceSquared = entity.distanceToSqr(target);
 
-        entity.getBrain().setMemory(MemoryModuleType.LOOK_TARGET, new EntityTracker(target, true));
-        entity.getLookControl().setLookAt(target, LOOK_SPEED, LOOK_SPEED);
+        if (!isRetreatingFromDifferentTarget(entity, target)) {
+            entity.getBrain().setMemory(MemoryModuleType.LOOK_TARGET, new EntityTracker(target, true));
+            entity.getLookControl().setLookAt(target, LOOK_SPEED, LOOK_SPEED);
+        }
 
         if (visible) {
             this.lostSightTicks = 0;
@@ -101,6 +116,7 @@ public class BowTask<E extends Mob & CrossbowAttackMob> extends Behavior<E> {
     protected void stop(ServerLevel level, E entity, long gameTime) {
         super.stop(level, entity, gameTime);
         entity.setAggressive(false);
+        this.lastTarget = null;
         this.attackCooldown = 0;
         this.lostSightTicks = 0;
         if (entity.isUsingItem()) {
@@ -153,6 +169,10 @@ public class BowTask<E extends Mob & CrossbowAttackMob> extends Behavior<E> {
 
     private static InteractionHand getBowHoldingHand(Mob entity) {
         return isBowItem(entity.getMainHandItem().getItem()) ? InteractionHand.MAIN_HAND : InteractionHand.OFF_HAND;
+    }
+
+    private static boolean isRetreatingFromDifferentTarget(Mob entity, LivingEntity target) {
+        return entity.getMoveControl() instanceof ArcherMoveControl archerMoveControl && archerMoveControl.isRetreatingFrom(target);
     }
 
     private static String getBowHoldingHandName(Mob entity) {

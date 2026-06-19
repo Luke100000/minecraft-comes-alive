@@ -314,7 +314,7 @@ public class VillagerTasksMCA {
                                 v.getProfession() == ProfessionsMCA.ARCHER ? EquipmentSet.ARCHER_0_LEFT : EquipmentSet.GUARD_0_LEFT)))),
                 Pair.of(2, StartAttacking.create((level, body) -> true, (level, body) -> VillagerTasksMCA.getPreferredTarget(body))),
                 Pair.of(3, StopAttackingIfTargetInvalid.create((level, livingEntity) -> !VillagerTasksMCA.isPreferredTarget(villager, livingEntity))),
-                Pair.of(4, new ArcherMovementTask<>(15, 8, 10)),
+                Pair.of(4, new ArcherMovementTask<>(15, 8)),
                 Pair.of(5, new BowTask<>(20, 15)),
                 Pair.of(6, BehaviorBuilder.triggerIf(v -> v.isHolding(Items.CROSSBOW),
                         BackUpIfTooClose.create(5, 0.75F)
@@ -357,13 +357,26 @@ public class VillagerTasksMCA {
         if (guardTooHurt(villager)) {
             return Optional.empty();
         } else {
+            Optional<LivingEntity> current = villager.getBrain().getMemoryInternal(MemoryModuleType.ATTACK_TARGET);
+            if (current.isPresent() && shouldKeepAttackTarget(villager, current.get())) {
+                return current;
+            }
+
             Optional<LivingEntity> primary = villager.getBrain().getMemoryInternal(MemoryModuleTypeMCA.NEAREST_GUARD_ENEMY);
             if (primary.isPresent() && shouldRespondToGuardEnemy(villager, primary.get())) {
                 return primary;
             } else {
-                return villager.getBrain().getMemoryInternal(MemoryModuleType.ATTACK_TARGET);
+                return Optional.empty();
             }
         }
+    }
+
+    private static boolean shouldKeepAttackTarget(VillagerEntityMCA villager, LivingEntity target) {
+        return target.isAlive()
+               && !target.isRemoved()
+               && target.level() == villager.level()
+               && villager.canAttack(target)
+               && shouldRespondToGuardEnemy(villager, target);
     }
 
     private static boolean shouldRespondToGuardEnemy(VillagerEntityMCA villager, LivingEntity target) {

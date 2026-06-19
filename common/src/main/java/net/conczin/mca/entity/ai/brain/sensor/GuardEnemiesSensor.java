@@ -34,7 +34,7 @@ public class GuardEnemiesSensor extends Sensor<LivingEntity> {
     }
 
     private Optional<LivingEntity> getNearestHostile(LivingEntity entity) {
-        return getVisibleMobs(entity).flatMap((list) -> list.find(this::isHostile)
+        return getVisibleMobs(entity).flatMap((list) -> list.find(e -> isGuardEnemy(e, entity))
                 .filter(e -> e.distanceToSqr(entity) <= 48.0 * 48.0)
                 .min((a, b) -> this.compareEntities(entity, a, b)));
     }
@@ -52,7 +52,11 @@ public class GuardEnemiesSensor extends Sensor<LivingEntity> {
         return Mth.floor(hostile1.distanceToSqr(entity) - hostile2.distanceToSqr(entity));
     }
 
-    private int getPriority(LivingEntity entity, LivingEntity guard) {
+    public static boolean isGuardEnemy(LivingEntity entity, LivingEntity guard) {
+        return getPriority(entity, guard) >= 0;
+    }
+
+    private static int getPriority(LivingEntity entity, LivingEntity guard) {
         if (entity instanceof VillagerEntityMCA villager) {
             return villager.isHostile() ? 10 : -1;
         } else if (guard != null && entity instanceof Mob mob && mob.getTarget() == guard) {
@@ -77,7 +81,7 @@ public class GuardEnemiesSensor extends Sensor<LivingEntity> {
         }
     }
 
-    private Optional<Integer> getTagPriority(EntityType<?> type) {
+    private static Optional<Integer> getTagPriority(EntityType<?> type) {
         for (Map.Entry<String, Integer> entry : Config.getInstance().guardsTargetEntities.entrySet()) {
             String key = entry.getKey();
             if (key.startsWith("#")) {
@@ -88,9 +92,5 @@ public class GuardEnemiesSensor extends Sensor<LivingEntity> {
             }
         }
         return Optional.empty();
-    }
-
-    private boolean isHostile(LivingEntity entity) {
-        return getPriority(entity, null) >= 0;
     }
 }
