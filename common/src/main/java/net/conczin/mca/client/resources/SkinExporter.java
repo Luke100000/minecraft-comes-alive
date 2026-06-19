@@ -131,9 +131,9 @@ public class SkinExporter {
         FaceList list = FaceList.getInstance();
         if (list == null) {
             int index = (int) Math.min(11, Math.max(0, visuals.faceGene() * 12));
-            return Identifier.fromNamespaceAndPath("mca", "skins/face/normal/" + index + ".png");
+            return Identifier.fromNamespaceAndPath("mca", "skins/face/normal/" + (index == 11 ? "blink" : index) + ".png");
         }
-        return list.pick("normal", gender, visuals.faceGene(), false);
+        return list.pick("normal", gender, visuals.faceGene());
     }
 
     private static Identifier getClothes(VillagerVisuals visuals) {

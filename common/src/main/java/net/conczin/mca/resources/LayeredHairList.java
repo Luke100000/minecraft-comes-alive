@@ -45,9 +45,7 @@ public class LayeredHairList extends SimpleJsonResourceReloadListener<JsonElemen
         Gender fileGender = BodySkinList.getGenderFromPath(id);
         LayeredHair.Category fileCategory = getCategoryFromPath(id);
         entries.forEach((key, definition) -> {
-            int count = Math.max(1, definition.count());
-            for (int i = 0; i < count; i++) {
-                String identifier = BodySkinList.formatIdentifier(key, i);
+            for (String identifier : CountedSkinIds.expand(key, definition.count())) {
                 LayeredHair entry = definition.create(identifier, fileGender, fileCategory);
                 hair.put(entry.getIdentifier() + "|" + entry.getGender().getDataName() + "|" + entry.getCategory().getId(), entry);
             }

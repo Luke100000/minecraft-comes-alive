@@ -15,7 +15,6 @@ import net.minecraft.util.profiling.ProfilerFiller;
 
 import java.util.HashMap;
 import java.util.Comparator;
-import java.util.Locale;
 import java.util.Map;
 
 public class BodySkinList extends SimpleJsonResourceReloadListener<JsonElement> {
@@ -45,13 +44,9 @@ public class BodySkinList extends SimpleJsonResourceReloadListener<JsonElement> 
     private void addEntries(Identifier id, Map<String, BodySkin.Definition> entries) {
         Gender fileGender = getGenderFromPath(id);
         entries.forEach((key, definition) -> {
-            int count = Math.max(1, definition.count());
-            for (int i = 0; i < count; i++) {
-                String identifier = formatIdentifier(key, i);
+            for (String identifier : CountedSkinIds.expand(key, definition.count())) {
                 BodySkin skin = definition.create(identifier, fileGender);
-                if (!skins.containsKey(identifier) || count == 1) {
-                    skins.put(identifier, skin);
-                }
+                skins.put(identifier, skin);
             }
         });
     }
@@ -67,10 +62,6 @@ public class BodySkinList extends SimpleJsonResourceReloadListener<JsonElement> 
                 .collect(() -> new WeightedPool.Mutable<>(""),
                         (list, entry) -> list.add(entry.getIdentifier(), entry.getChance()),
                         (a, b) -> a.entries.addAll(b.entries));
-    }
-
-    static String formatIdentifier(String key, int index) {
-        return key.contains("%") ? String.format(Locale.ROOT, key, index) : key;
     }
 
     static Gender getGenderFromPath(Identifier id) {

@@ -19,7 +19,8 @@ public record VillagerVisuals(
         float rawVerticalScaleFactor,
         boolean burned,
         boolean albinism,
-        boolean rainbow,
+        boolean rainbowHair,
+        boolean rainbowEyes,
         boolean heterochromia,
         float skinGene,
         float melaninGene,
@@ -44,6 +45,12 @@ public record VillagerVisuals(
         boolean sleeping,
         boolean deadOrDying
 ) {
+    private static final int MIN_BLINK_INTERVAL_A = 50;
+    private static final int MIN_BLINK_INTERVAL_B = 57;
+    private static final int BLINK_INTERVAL_VARIANCE = 80;
+    private static final int MIN_BLINK_DURATION = 1;
+    private static final int BLINK_DURATION_VARIANCE = 4;
+
     public static VillagerVisuals require(Object state) {
         VillagerVisuals visuals = VillagerStateHolder.require(state).mca$getVisuals();
         if (visuals == null) {
@@ -90,6 +97,7 @@ public record VillagerVisuals(
                 villager.isBurned(),
                 traits.hasTrait(Traits.ALBINISM),
                 traits.hasTrait(Traits.RAINBOW),
+                traits.hasTrait(Traits.RAINBOW_EYES),
                 traits.hasTrait(Traits.HETEROCHROMIA),
                 genetics.getGene(Genetics.SKIN),
                 genetics.getGene(Genetics.MELANIN),
@@ -117,8 +125,31 @@ public record VillagerVisuals(
     }
 
     public boolean isBlinking() {
+        if (sleeping || deadOrDying) {
+            return true;
+        }
+
         int time = tickCount / 2 + (int) (hemoglobinGene * 65536);
-        return time % 50 == 1 || time % 57 == 1 || sleeping || deadOrDying;
+        return isInBlinkWindow(time, MIN_BLINK_INTERVAL_A, 0x1EAF)
+                || isInBlinkWindow(time, MIN_BLINK_INTERVAL_B, 0x57B1);
+    }
+
+    private boolean isInBlinkWindow(int time, int minInterval, int salt) {
+        int interval = minInterval + randomBlinkValue(salt, BLINK_INTERVAL_VARIANCE + 1);
+        int phase = randomBlinkValue(salt ^ 0x3459, interval);
+        int phasedTime = time + phase;
+        int cycle = Math.floorDiv(phasedTime, interval);
+        int duration = MIN_BLINK_DURATION + randomBlinkValue(salt ^ cycle, BLINK_DURATION_VARIANCE + 1);
+        return Math.floorMod(phasedTime, interval) < duration;
+    }
+
+    private int randomBlinkValue(int salt, int bound) {
+        int seed = entityId * 0x45D9F3B + salt;
+        seed ^= (int) (hemoglobinGene * 0x10000);
+        seed ^= seed >>> 16;
+        seed *= 0x45D9F3B;
+        seed ^= seed >>> 16;
+        return Math.floorMod(seed, bound);
     }
 
     public String layeredHair(LayeredHair.Category category) {

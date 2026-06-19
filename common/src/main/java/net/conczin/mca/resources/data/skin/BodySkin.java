@@ -13,7 +13,7 @@ import net.minecraft.util.GsonHelper;
 public class BodySkin extends SkinListEntry {
     public static final Codec<Definition> DEFINITION_CODEC = RecordCodecBuilder.create(instance -> instance.group(
             GENDER_CODEC.optionalFieldOf("gender", Gender.NEUTRAL).forGetter(Definition::gender),
-            Codec.INT.optionalFieldOf("count", 1).forGetter(Definition::count),
+            Codec.INT.optionalFieldOf("count", -1).forGetter(Definition::count),
             Codec.FLOAT.optionalFieldOf("chance", 1.0f).forGetter(Definition::chance),
             Codec.BOOL.optionalFieldOf("tint", false).forGetter(Definition::tint)
     ).apply(instance, Definition::new));

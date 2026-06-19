@@ -3,6 +3,7 @@ package net.conczin.mca.client.render.layer;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.conczin.mca.MCA;
 import net.conczin.mca.client.gui.immersive_library.SkinCache;
+import net.conczin.mca.client.render.RainbowColor;
 import net.conczin.mca.client.render.VillagerVisuals;
 import net.conczin.mca.client.resources.ColorPalette;
 import net.conczin.mca.resources.data.skin.LayeredHair;
@@ -12,8 +13,6 @@ import net.minecraft.client.renderer.entity.LivingEntityRenderer;
 import net.minecraft.client.renderer.entity.RenderLayerParent;
 import net.minecraft.client.renderer.entity.state.HumanoidRenderState;
 import net.minecraft.resources.Identifier;
-import net.minecraft.util.ARGB;
-import net.minecraft.world.item.DyeColor;
 
 public class HairLayer<S extends HumanoidRenderState, M extends HumanoidModel<S>> extends VillagerLayer<S, M> {
     private static final String IMMERSIVE_LIBRARY_PREFIX = "immersive_library:";
@@ -54,20 +53,11 @@ public class HairLayer<S extends HumanoidRenderState, M extends HumanoidModel<S>
         return cached(identifier, Identifier::parse);
     }
 
-    private int getRainbow(int tickCount, int entityId, float tickDelta) {
-        int n = Math.abs(tickCount) / 25 + entityId;
-        int o = DyeColor.values().length;
-        int p = n % o;
-        int q = (n + 1) % o;
-        float r = ((float) (Math.abs(tickCount) % 25) + tickDelta) / 25.0f;
-        return ARGB.srgbLerp(r, DyeColor.byId(p).getTextureDiffuseColor(), DyeColor.byId(q).getTextureDiffuseColor());
-    }
-
     @Override
     public int getColor(S state, float tickDelta) {
         var visuals = VillagerVisuals.require(state);
-        if (visuals.rainbow()) {
-            return getRainbow(visuals.tickCount(), visuals.entityId(), tickDelta);
+        if (visuals.rainbowHair()) {
+            return RainbowColor.sheep(visuals.tickCount() + tickDelta);
         }
 
         int hairDye = visuals.hairDye();

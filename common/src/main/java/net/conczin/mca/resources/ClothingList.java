@@ -20,7 +20,6 @@ import net.minecraft.world.entity.npc.villager.VillagerProfession;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.HashMap;
-import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Stream;
 
@@ -52,17 +51,11 @@ public class ClothingList extends SimpleJsonResourceReloadListener<JsonElement> 
 
             for (String key : file.getAsJsonObject().keySet()) {
                 JsonObject object = file.getAsJsonObject().get(key).getAsJsonObject();
+                object.addProperty("gender", gender.getId());
 
-                for (int i = 0; i < GsonHelper.getAsInt(object, "count", 1); i++) {
-                    String identifier = String.format(Locale.ROOT, key, i);
-
-                    object.addProperty("gender", gender.getId());
-
+                for (String identifier : CountedSkinIds.expand(key, GsonHelper.getAsInt(object, "count", -1))) {
                     Clothing c = new Clothing(identifier, object);
-
-                    if (!clothing.containsKey(identifier) || !object.has("count")) {
-                        clothing.put(identifier, c);
-                    }
+                    clothing.put(identifier, c);
                 }
             }
         });

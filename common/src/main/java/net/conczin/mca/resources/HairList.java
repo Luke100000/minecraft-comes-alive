@@ -14,7 +14,6 @@ import net.minecraft.util.GsonHelper;
 import net.minecraft.util.profiling.ProfilerFiller;
 
 import java.util.HashMap;
-import java.util.Locale;
 import java.util.Map;
 
 public class HairList extends SimpleJsonResourceReloadListener<JsonElement> {
@@ -46,14 +45,9 @@ public class HairList extends SimpleJsonResourceReloadListener<JsonElement> {
             for (String key : file.getAsJsonObject().keySet()) {
                 JsonObject object = file.getAsJsonObject().get(key).getAsJsonObject();
 
-                for (int i = 0; i < GsonHelper.getAsInt(object, "count", 1); i++) {
-                    String identifier = String.format(Locale.ROOT, key, i);
-
+                for (String identifier : CountedSkinIds.expand(key, GsonHelper.getAsInt(object, "count", -1))) {
                     Hair c = new Hair(identifier, gender, GsonHelper.getAsFloat(object, "chance", 1.0f));
-
-                    if (!hair.containsKey(identifier) || !object.has("count")) {
-                        hair.put(identifier, c);
-                    }
+                    hair.put(identifier, c);
                 }
             }
         });

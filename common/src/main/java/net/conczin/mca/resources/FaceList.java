@@ -1,9 +1,6 @@
 package net.conczin.mca.resources;
 
 import com.google.gson.JsonElement;
-import com.mojang.serialization.Codec;
-import com.mojang.serialization.JsonOps;
-import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.conczin.mca.MCA;
 import net.conczin.mca.entity.ai.relationship.Gender;
 import net.minecraft.IdentifierException;
@@ -12,6 +9,7 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.server.packs.resources.SimpleJsonResourceReloadListener;
 import net.minecraft.util.ExtraCodecs;
+import net.minecraft.util.GsonHelper;
 import net.minecraft.util.profiling.ProfilerFiller;
 
 import java.util.ArrayList;
@@ -21,11 +19,6 @@ import java.util.Locale;
 import java.util.Map;
 
 public class FaceList extends SimpleJsonResourceReloadListener<JsonElement> {
-    private static final Codec<Definition> DEFINITION_CODEC = RecordCodecBuilder.create(instance -> instance.group(
-            Codec.INT.optionalFieldOf("count", 1).forGetter(Definition::count)
-    ).apply(instance, Definition::new));
-    private static final Codec<Map<String, Definition>> FILE_CODEC = Codec.unboundedMap(Codec.STRING, DEFINITION_CODEC);
-    private static final int FALLBACK_FACE_COUNT = 22;
     public static final Identifier ID = MCA.locate("skins/face");
     private static FaceList INSTANCE;
     private final HashMap<String, List<String>> faces = new HashMap<>();
@@ -43,16 +36,14 @@ public class FaceList extends SimpleJsonResourceReloadListener<JsonElement> {
     protected void apply(Map<Identifier, JsonElement> data, ResourceManager manager, ProfilerFiller profiler) {
         faces.clear();
 
-        data.forEach((id, file) -> FILE_CODEC.parse(JsonOps.INSTANCE, file)
-                .resultOrPartial(error -> MCA.LOGGER.warn("Invalid face list {}: {}", id, error))
-                .ifPresent(entries -> addEntries(id, entries)));
+        data.forEach(this::addEntries);
     }
 
-    private void addEntries(Identifier id, Map<String, Definition> entries) {
+    private void addEntries(Identifier id, JsonElement file) {
         Gender fileGender = BodySkinList.getGenderFromPath(id);
-        entries.forEach((key, definition) -> {
-            for (int i = 0; i < Math.max(1, definition.count()); i++) {
-                String identifier = BodySkinList.formatIdentifier(key, i);
+        file.getAsJsonObject().keySet().forEach(key -> {
+            int count = GsonHelper.getAsInt(file.getAsJsonObject().get(key).getAsJsonObject(), "count", -1);
+            for (String identifier : CountedSkinIds.expand(key, count)) {
                 Identifier parsed;
                 try {
                     parsed = Identifier.parse(identifier);
@@ -71,21 +62,25 @@ public class FaceList extends SimpleJsonResourceReloadListener<JsonElement> {
         });
     }
 
-    public Identifier pick(String variant, Gender gender, float faceGene, boolean blink) {
+    public Identifier pick(String variant, Gender gender, float faceGene) {
         List<String> pool = faces.get(key(variant, gender));
         if (pool == null || pool.isEmpty()) {
-            int index = blink ? 2 : (int) Math.min(11, Math.max(0, faceGene * 12));
-            return MCA.locate("skins/face/" + variant + "/" + index + ".png");
+            throw new IllegalStateException("No face textures loaded for " + key(variant, gender));
         }
 
-        int index = blink ? 2 : (int) Math.min(pool.size() - 1, Math.max(0, faceGene * pool.size()));
+        int index = (int) Math.min(pool.size() - 1, Math.max(0, faceGene * pool.size()));
         return Identifier.parse(pool.get(index));
+    }
+
+    public int count(String variant, Gender gender) {
+        List<String> pool = faces.get(key(variant, gender));
+        if (pool == null || pool.isEmpty()) {
+            throw new IllegalStateException("No face textures loaded for " + key(variant, gender));
+        }
+        return pool.size();
     }
 
     private static String key(String variant, Gender gender) {
         return variant.toLowerCase(Locale.ROOT) + "/" + gender.getDataName();
-    }
-
-    private record Definition(int count) {
     }
 }

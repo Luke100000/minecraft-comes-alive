@@ -23,6 +23,7 @@ import net.conczin.mca.registry.EntitiesMCA;
 import net.conczin.mca.registry.ProfessionsMCA;
 import net.conczin.mca.resources.BodySkinList;
 import net.conczin.mca.resources.ClothingList;
+import net.conczin.mca.resources.FaceList;
 import net.conczin.mca.resources.HairList;
 import net.conczin.mca.resources.HairStyleList;
 import net.conczin.mca.resources.LayeredHairList;
@@ -512,6 +513,9 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
             case "head" -> {
                 boolean hasHetero = villager.getTraits().hasTrait(Traits.HETEROCHROMIA);
                 int maxTarget = hasHetero ? 3 : 2;
+                if (eyeColorTarget >= maxTarget) {
+                    eyeColorTarget = 1;
+                }
 
                 // Determine target label key
                 String targetLabelKey = switch (eyeColorTarget) {
@@ -591,7 +595,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                 y += 22;
 
                 //genes
-                y = geneChanger(y, Genetics.FACE, 7);
+                y = geneChanger(y, Genetics.FACE, getFaceCount());
                 y = doubleGeneSliders(y, Genetics.VOICE_TONE, Genetics.VOICE);
 
                 //hair
@@ -678,9 +682,9 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
 
                         y += 65;
 
-                        // Clear eye dye
+                        // Clear eye colour
                         String clearLabelKey = switch (eyeColorTarget) {
-                            case 1 -> "gui.villager_editor.clear_eyes_left";
+                            case 1 -> hasHetero ? "gui.villager_editor.clear_eyes_left" : "gui.villager_editor.clear_eyes";
                             case 2 -> "gui.villager_editor.clear_eyes_right";
                             default -> "gui.villager_editor.clear_eyes";
                         };
@@ -1065,6 +1069,14 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         }));
 
         return y + 22;
+    }
+
+    private int getFaceCount() {
+        FaceList faceList = FaceList.getInstance();
+        if (faceList == null) {
+            throw new IllegalStateException("Face textures are not loaded yet");
+        }
+        return faceList.count("normal", villager.getGenetics().getGender());
     }
 
     private int fitHairPickerSize(int y, int preferredSize) {
