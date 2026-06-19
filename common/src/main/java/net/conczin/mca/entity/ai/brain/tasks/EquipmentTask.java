@@ -8,9 +8,11 @@ import net.conczin.mca.util.InventoryUtils;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.ai.behavior.Behavior;
+import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.MemoryStatus;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.item.ProjectileWeaponItem;
 
 import java.util.function.Function;
@@ -31,6 +33,11 @@ public class EquipmentTask extends Behavior<VillagerEntityMCA> {
 
     @Override
     protected boolean checkExtraStartConditions(ServerLevel world, VillagerEntityMCA villager) {
+        EquipmentSet set = equipmentSet.apply(villager);
+        if (isNakedCombatSet(set, villager)) {
+            return false;
+        }
+
         //armor visibility settings have been changed
         if (lastArmorWearState != villager.getVillagerBrain().getArmorWear()) {
             return true;
@@ -40,7 +47,7 @@ public class EquipmentTask extends Behavior<VillagerEntityMCA> {
         boolean present = villager.getBrain().getMemoryInternal(MemoryModuleTypeMCA.WEARS_ARMOR).isPresent();
         if (condition.test(villager)) {
             lastEquipTime = villager.tickCount;
-            return !present || equipmentSet.apply(villager).getMainHand() != null && villager.getMainHandItem().isEmpty();
+            return !present || isMissingRequestedHandItem(villager, set);
         } else if (villager.tickCount - lastEquipTime > COOLDOWN) {
             return present;
         } else {
@@ -69,6 +76,10 @@ public class EquipmentTask extends Behavior<VillagerEntityMCA> {
 
         lastArmorWearState = villager.getVillagerBrain().getArmorWear();
         EquipmentSet set = equipmentSet.apply(villager);
+        if (isNakedCombatSet(set, villager)) {
+            return;
+        }
+
         boolean wear = condition.test(villager);
 
         //remember last state
@@ -80,10 +91,12 @@ public class EquipmentTask extends Behavior<VillagerEntityMCA> {
 
         //weapon
         if (wear) {
-            if (set.getMainHand() instanceof ProjectileWeaponItem) {
+            if (isRequestedItem(set.getMainHand()) && set.getMainHand() instanceof ProjectileWeaponItem) {
                 equipBestRanged(villager, set.getMainHand());
-            } else {
+            } else if (isRequestedItem(set.getMainHand())) {
                 equipBestWeapon(villager, set.getMainHand());
+            } else {
+                villager.setItemSlot(villager.getDominantSlot(), ItemStack.EMPTY);
             }
             villager.setItemSlot(villager.getOpposingSlot(), new ItemStack(set.getGetOffHand()));
         } else {
@@ -103,5 +116,19 @@ public class EquipmentTask extends Behavior<VillagerEntityMCA> {
             villager.setItemSlot(EquipmentSlot.LEGS, ItemStack.EMPTY);
             villager.setItemSlot(EquipmentSlot.FEET, ItemStack.EMPTY);
         }
+    }
+
+    private static boolean isNakedCombatSet(EquipmentSet set, VillagerEntityMCA villager) {
+        return set == EquipmentSet.NAKED
+                && villager.getBrain().getMemoryInternal(MemoryModuleType.ATTACK_TARGET).isPresent();
+    }
+
+    private static boolean isMissingRequestedHandItem(VillagerEntityMCA villager, EquipmentSet set) {
+        return isRequestedItem(set.getMainHand()) && villager.getItemBySlot(villager.getDominantSlot()).isEmpty()
+                || isRequestedItem(set.getGetOffHand()) && villager.getItemBySlot(villager.getOpposingSlot()).isEmpty();
+    }
+
+    private static boolean isRequestedItem(Item item) {
+        return item != null && item != Items.AIR;
     }
 }

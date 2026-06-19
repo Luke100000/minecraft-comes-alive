@@ -214,7 +214,7 @@ public class VillagerTasksMCA {
         return ImmutableList.of(
                 Pair.of(0, new Swim(0.8F)),
                 Config.getInstance().useSmarterDoorAI ? Pair.of(0, new SmarterOpenDoorsTask()) : Pair.of(0, InteractWithDoor.create()),
-                Pair.of(0, new LookAtTargetSink(45, 90)),
+                Pair.of(0, new ConditionalTask<>(new LookAtTargetSink(45, 90), villager -> !isInDanger(villager))),
                 Pair.of(0, WakeUp.create()),
                 Pair.of(0, new DeliverMessageTask()),
                 Pair.of(1, new WanderOrTeleportToTargetTask()),
@@ -314,19 +314,20 @@ public class VillagerTasksMCA {
                                 v.getProfession() == ProfessionsMCA.ARCHER ? EquipmentSet.ARCHER_0_LEFT : EquipmentSet.GUARD_0_LEFT)))),
                 Pair.of(2, StartAttacking.create((level, body) -> true, (level, body) -> VillagerTasksMCA.getPreferredTarget(body))),
                 Pair.of(3, StopAttackingIfTargetInvalid.create((level, livingEntity) -> !VillagerTasksMCA.isPreferredTarget(villager, livingEntity))),
-                Pair.of(4, new BowTask<>(20, 15)),
-                Pair.of(5, BehaviorBuilder.triggerIf(v -> v.isHolding(Items.CROSSBOW),
+                Pair.of(4, new ArcherMovementTask<>(15, 8)),
+                Pair.of(5, new BowTask<>(20, 15)),
+                Pair.of(6, BehaviorBuilder.triggerIf(v -> v.isHolding(Items.CROSSBOW),
                         BackUpIfTooClose.create(5, 0.75F)
                 )),
-                Pair.of(6, new ConditionalTask<>(
+                Pair.of(7, new ConditionalTask<>(
                         SetWalkTargetFromAttackTargetIfTargetOutOfReach.create(0.75F),
                         (VillagerEntityMCA v) -> !VillagerTasksMCA.isHoldingRangedWeapon(v)
                 )),
-                Pair.of(7, new ConditionalTask<>(
+                Pair.of(8, new ConditionalTask<>(
                         new ExtendedMeleeAttackTask(20, 2.0F),
                         (VillagerEntityMCA v) -> !VillagerTasksMCA.isHoldingRangedWeapon(v)
                 )),
-                Pair.of(8, new CrossbowAttack<VillagerEntityMCA, VillagerEntityMCA>())
+                Pair.of(9, new CrossbowAttack<VillagerEntityMCA, VillagerEntityMCA>())
         );
     }
 
@@ -356,13 +357,26 @@ public class VillagerTasksMCA {
         if (guardTooHurt(villager)) {
             return Optional.empty();
         } else {
+            Optional<LivingEntity> current = villager.getBrain().getMemoryInternal(MemoryModuleType.ATTACK_TARGET);
+            if (current.isPresent() && shouldKeepAttackTarget(villager, current.get())) {
+                return current;
+            }
+
             Optional<LivingEntity> primary = villager.getBrain().getMemoryInternal(MemoryModuleTypeMCA.NEAREST_GUARD_ENEMY);
             if (primary.isPresent() && shouldRespondToGuardEnemy(villager, primary.get())) {
                 return primary;
             } else {
-                return villager.getBrain().getMemoryInternal(MemoryModuleType.ATTACK_TARGET);
+                return Optional.empty();
             }
         }
+    }
+
+    private static boolean shouldKeepAttackTarget(VillagerEntityMCA villager, LivingEntity target) {
+        return target.isAlive()
+               && !target.isRemoved()
+               && target.level() == villager.level()
+               && villager.canAttack(target)
+               && shouldRespondToGuardEnemy(villager, target);
     }
 
     private static boolean shouldRespondToGuardEnemy(VillagerEntityMCA villager, LivingEntity target) {

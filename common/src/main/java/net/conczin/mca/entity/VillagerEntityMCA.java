@@ -137,6 +137,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
     public VillagerEntityMCA(EntityType<VillagerEntityMCA> type, Level w, Gender gender) {
         super(type, w);
+        this.moveControl = new ArcherMoveControl(this);
         genetics.setGender(gender);
         this.getNavigation().setRequiredPathLength(Config.getInstance().getVillagerPathfindingDistance());
     }
