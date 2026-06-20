@@ -1,9 +1,7 @@
 {
     "type":  "minecraft:crafting_shapeless",
     "ingredients":  [
-                        [
-                            "mca:rose_gold_ingot"
-                        ]
+                        "mca:rose_gold_ingot"
                     ],
     "result":  {
                    "id":  "mca:rose_gold_dust"
