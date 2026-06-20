@@ -8,6 +8,7 @@
 * Archers now use bows even when not on duty
 * Fixed sleeping offset when using villager model
 * Added textures for adventurer and cultist in Squidward mode
+* Fixed various crashes
 
 # 7.6.20
 

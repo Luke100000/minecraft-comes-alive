@@ -1,6 +1,7 @@
 package net.mca;
 
 import com.google.common.collect.ImmutableMap;
+import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 import net.mca.item.ItemsMCA;
 import net.minecraft.block.Block;
@@ -12,49 +13,58 @@ import net.minecraft.item.Items;
 import net.minecraft.util.math.random.Random;
 import net.minecraft.village.TradeOffer;
 import net.minecraft.village.TradeOffers;
+import net.minecraft.village.VillagerProfession;
+
+import java.util.Map;
 
 public class TradeOffersMCA {
-    public static void bootstrap() {
-        TradeOffers.PROFESSION_TO_LEVELED_TRADE.put(ProfessionsMCA.ADVENTURER.get(), new Int2ObjectOpenHashMap<>(
-                ImmutableMap.of(1, new TradeOffers.Factory[] {
-                                new SellItemFactory(Items.SLIME_BALL, 1, 1, 16, 1),
-                                new SellItemFactory(Items.LEATHER_HORSE_ARMOR, 3, 1, 4, 10),
-                                new SellItemFactory(Items.SADDLE, 4, 1, 3, 5),
-                                new SellItemFactory(Items.IRON_HORSE_ARMOR, 5, 1, 2, 20),
-                                new SellItemFactory(Items.DIAMOND, 10, 1, 8, 20),
-                                new SellItemFactory(Items.GOLDEN_HORSE_ARMOR, 10, 1, 3, 30),
-                                new SellItemFactory(Items.GOLDEN_APPLE, 5, 1, 8, 30),
-                                new SellItemFactory(Items.DIAMOND_HORSE_ARMOR, 15, 1, 1, 30),
-                                new SellItemFactory(Items.ENCHANTED_GOLDEN_APPLE, 32, 1, 3, 50),
-                                new BuyForOneEmeraldFactory(Items.BREAD, 10, 10, 30)
-                        },
-                        2, new TradeOffers.Factory[] {},
-                        3, new TradeOffers.Factory[] {},
-                        4, new TradeOffers.Factory[] {},
-                        5, new TradeOffers.Factory[] {}
-                )));
+    public static Map<VillagerProfession, Int2ObjectMap<TradeOffers.Factory[]>> createTradeMap() {
+        return ImmutableMap.of(
+                ProfessionsMCA.ADVENTURER.get(), new Int2ObjectOpenHashMap<>(
+                        ImmutableMap.of(1, new TradeOffers.Factory[]{
+                                        new SellItemFactory(Items.SLIME_BALL, 1, 1, 16, 1),
+                                        new SellItemFactory(Items.LEATHER_HORSE_ARMOR, 3, 1, 4, 10),
+                                        new SellItemFactory(Items.SADDLE, 4, 1, 3, 5),
+                                        new SellItemFactory(Items.IRON_HORSE_ARMOR, 5, 1, 2, 20),
+                                        new SellItemFactory(Items.DIAMOND, 10, 1, 8, 20),
+                                        new SellItemFactory(Items.GOLDEN_HORSE_ARMOR, 10, 1, 3, 30),
+                                        new SellItemFactory(Items.GOLDEN_APPLE, 5, 1, 8, 30),
+                                        new SellItemFactory(Items.DIAMOND_HORSE_ARMOR, 15, 1, 1, 30),
+                                        new SellItemFactory(Items.ENCHANTED_GOLDEN_APPLE, 32, 1, 3, 50),
+                                        new BuyForOneEmeraldFactory(Items.BREAD, 10, 10, 30)
+                                },
+                                2, new TradeOffers.Factory[]{},
+                                3, new TradeOffers.Factory[]{},
+                                4, new TradeOffers.Factory[]{},
+                                5, new TradeOffers.Factory[]{}
+                        )),
 
-        TradeOffers.PROFESSION_TO_LEVELED_TRADE.put(ProfessionsMCA.CULTIST.get(), new Int2ObjectOpenHashMap<>(
-                ImmutableMap.of(1, new TradeOffers.Factory[] {
-                                new SellItemFactory(ItemsMCA.SIRBEN_BABY_BOY.get(), 5, 1, 1, 1),
-                                new SellItemFactory(ItemsMCA.SIRBEN_BABY_GIRL.get(), 5, 1, 1, 1),
-                                new BuyForOneEmeraldFactory(ItemsMCA.BABY_BOY.get(), 1, 1, 1),
-                                new BuyForOneEmeraldFactory(ItemsMCA.BABY_GIRL.get(), 1, 1, 1),
-                                new SellItemFactory(ItemsMCA.BOOK_CULT_0.get(), 1, 1, 1, 1),
-                                new SellItemFactory(ItemsMCA.BOOK_CULT_0.get(), 1, 1, 1, 1),
-                                new SellItemFactory(ItemsMCA.BOOK_CULT_1.get(), 1, 1, 1, 1),
-                                new SellItemFactory(ItemsMCA.BOOK_CULT_1.get(), 1, 1, 1, 1),
-                                new SellItemFactory(ItemsMCA.BOOK_CULT_2.get(), 1, 1, 1, 1),
-                                new SellItemFactory(ItemsMCA.BOOK_CULT_2.get(), 1, 1, 1, 1),
-                                new SellItemFactory(ItemsMCA.BOOK_DEATH.get(), 1, 1, 1, 1),
-                                new SellItemFactory(ItemsMCA.BOOK_INFECTION.get(), 1, 1, 1, 1),
-                                new SellItemFactory(ItemsMCA.BOOK_SUPPORTERS.get(), 1, 1, 1, 1)
-                        },
-                        2, new TradeOffers.Factory[] {},
-                        3, new TradeOffers.Factory[] {},
-                        4, new TradeOffers.Factory[] {},
-                        5, new TradeOffers.Factory[] {}
-                )));
+                ProfessionsMCA.CULTIST.get(), new Int2ObjectOpenHashMap<>(
+                        ImmutableMap.of(1, new TradeOffers.Factory[]{
+                                        new SellItemFactory(ItemsMCA.SIRBEN_BABY_BOY.get(), 5, 1, 1, 1),
+                                        new SellItemFactory(ItemsMCA.SIRBEN_BABY_GIRL.get(), 5, 1, 1, 1),
+                                        new BuyForOneEmeraldFactory(ItemsMCA.BABY_BOY.get(), 1, 1, 1),
+                                        new BuyForOneEmeraldFactory(ItemsMCA.BABY_GIRL.get(), 1, 1, 1),
+                                        new SellItemFactory(ItemsMCA.BOOK_CULT_0.get(), 1, 1, 1, 1),
+                                        new SellItemFactory(ItemsMCA.BOOK_CULT_0.get(), 1, 1, 1, 1),
+                                        new SellItemFactory(ItemsMCA.BOOK_CULT_1.get(), 1, 1, 1, 1),
+                                        new SellItemFactory(ItemsMCA.BOOK_CULT_1.get(), 1, 1, 1, 1),
+                                        new SellItemFactory(ItemsMCA.BOOK_CULT_2.get(), 1, 1, 1, 1),
+                                        new SellItemFactory(ItemsMCA.BOOK_CULT_2.get(), 1, 1, 1, 1),
+                                        new SellItemFactory(ItemsMCA.BOOK_DEATH.get(), 1, 1, 1, 1),
+                                        new SellItemFactory(ItemsMCA.BOOK_INFECTION.get(), 1, 1, 1, 1),
+                                        new SellItemFactory(ItemsMCA.BOOK_SUPPORTERS.get(), 1, 1, 1, 1)
+                                },
+                                2, new TradeOffers.Factory[]{},
+                                3, new TradeOffers.Factory[]{},
+                                4, new TradeOffers.Factory[]{},
+                                5, new TradeOffers.Factory[]{}
+                        ))
+        );
+    }
+
+    public static void bootstrap() {
+        TradeOffers.PROFESSION_TO_LEVELED_TRADE.putAll(createTradeMap());
     }
 
 

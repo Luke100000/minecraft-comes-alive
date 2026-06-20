@@ -1,6 +1,7 @@
 package net.mca.forge;
 
 import dev.architectury.platform.forge.EventBuses;
+import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
 import net.mca.MCA;
 import net.mca.ParticleTypesMCA;
 import net.mca.SoundsMCA;
@@ -13,13 +14,15 @@ import net.mca.forge.cobalt.network.NetworkHandlerImpl;
 import net.mca.item.ItemsMCA;
 import net.mca.network.MessagesMCA;
 import net.mca.resources.*;
+import net.minecraft.village.TradeOffers;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.AddReloadListenerEvent;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.event.village.VillagerTradesEvent;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.common.Mod.EventBusSubscriber.Bus;
-import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
+
+import java.util.Arrays;
 
 @Mod(MCA.MOD_ID)
 @Mod.EventBusSubscriber(modid = MCA.MOD_ID, bus = Bus.MOD)
@@ -29,6 +32,7 @@ public final class MCAForge {
         EventBuses.registerModEventBus(MCA.MOD_ID, FMLJavaModLoadingContext.get().getModEventBus());
         new NetworkHandlerImpl();
         MinecraftForge.EVENT_BUS.addListener(this::onAddReloadListener);
+        MinecraftForge.EVENT_BUS.addListener(this::onVillagerTrades);
 
         BlocksMCA.bootstrap();
         ItemsMCA.bootstrap();
@@ -37,11 +41,6 @@ public final class MCAForge {
         EntitiesMCA.bootstrap();
         MessagesMCA.bootstrap();
         CriterionMCA.bootstrap();
-    }
-
-    @SubscribeEvent
-    public static void onFMLCommonSetupEvent(FMLCommonSetupEvent event) {
-        TradeOffersMCA.bootstrap();
     }
 
     private void onAddReloadListener(AddReloadListenerEvent event) {
@@ -53,5 +52,16 @@ public final class MCAForge {
         event.addListener(new Tasks());
         event.addListener(new Names());
         event.addListener(new BuildingTypes());
+    }
+
+    private void onVillagerTrades(VillagerTradesEvent event) {
+        Int2ObjectMap<TradeOffers.Factory[]> trades = TradeOffersMCA.createTradeMap().get(event.getType());
+        if (trades == null) {
+            return;
+        }
+
+        trades.int2ObjectEntrySet().forEach(entry ->
+                event.getTrades().get(entry.getIntKey()).addAll(Arrays.asList(entry.getValue()))
+        );
     }
 }
