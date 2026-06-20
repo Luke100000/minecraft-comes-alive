@@ -5,6 +5,7 @@ import net.conczin.mca.MCA;
 import net.conczin.mca.MCAClient;
 import net.conczin.mca.client.gui.widget.*;
 import net.conczin.mca.client.resources.ClientUtils;
+import net.conczin.mca.client.resources.ColorPalette;
 import net.conczin.mca.client.tts.SpeechManager;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerLike;
@@ -108,6 +109,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     private int villagerBreedingAge;
     private int traitPage = 0;
     private EditBox villagerNameField;
+    private boolean hsvColoredSkin;
     private boolean hsvColoredHair;
     private int eyeColorTarget = 0; // 0 = Hair, 1 = Left/Both Eye, 2 = Right Eye
     private boolean hsvColoredEyes = false;
@@ -281,20 +283,24 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
 
     private int doubleGeneSliders(int y, Genetics.GeneType... genes) {
         boolean right = false;
-        Genetics genetics = villager.getGenetics();
         for (Genetics.GeneType g : genes) {
             int x = width / 2 + (right ? DATA_WIDTH / 2 : 0);
             int widgetWidth = DATA_WIDTH / 2;
             if (g == Genetics.VOICE_TONE) {
                 addVoicePreviewButton(width / 2 - VOICE_PREVIEW_BUTTON_WIDTH - 2, y);
             }
-            addRenderableWidget(new GeneSliderWidget(x, y, widgetWidth, 20, Component.translatable(g.getTranslationKey()), genetics.getGene(g), b -> genetics.setGene(g, b.floatValue())));
+            addGeneSlider(x, y, widgetWidth, g);
             if (right) {
                 y += 20;
             }
             right = !right;
         }
         return y + 4 + (right ? 20 : 0);
+    }
+
+    private void addGeneSlider(int x, int y, int widgetWidth, Genetics.GeneType gene) {
+        Genetics genetics = villager.getGenetics();
+        addRenderableWidget(new GeneSliderWidget(x, y, widgetWidth, 20, Component.translatable(gene.getTranslationKey()), genetics.getGene(gene), b -> genetics.setGene(gene, b.floatValue())));
     }
 
     private void addVoicePreviewButton(int x, int y) {
@@ -474,12 +480,45 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
             case "body" -> {
                 //genes
                 if (!Config.getServerConfig().allowPlayerSizeAdjustment && villagerUUID.equals(playerUUID)) {
-                    y = doubleGeneSliders(y, Genetics.BREAST/*, Genetics.SKIN*/);
                     genetics.setGene(Genetics.SIZE, 0.80f);
                     genetics.setGene(Genetics.WIDTH, 0.80f);
                 } else {
-                    y = doubleGeneSliders(y, Genetics.SIZE, Genetics.WIDTH, Genetics.BREAST/*, Genetics.SKIN*/);
+                    y = doubleGeneSliders(y, Genetics.SIZE, Genetics.WIDTH);
                 }
+
+                addGeneSlider(width / 2, y, DATA_WIDTH / 2, Genetics.BREAST);
+                addRenderableWidget(new TooltipButtonWidget(width / 2 + DATA_WIDTH / 2, y, DATA_WIDTH / 2, 20,
+                        Component.translatable("gui.villager_editor.skin_color_selection", Component.translatable(hsvColoredSkin ? "gui.villager_editor.color_mode_rgb" : "gui.villager_editor.color_mode_natural")),
+                        Component.translatable("gui.villager_editor.skin_color_mode.tooltip"),
+                        b -> {
+                            hsvColoredSkin = !hsvColoredSkin;
+                            if (hsvColoredSkin) {
+                                int skinDye = villager.getSkinDye();
+                                if (skinDye == 0xFF000000) {
+                                    int naturalSkinColor = ColorPalette.SKIN.getColor(
+                                            genetics.getGene(Genetics.MELANIN),
+                                            genetics.getGene(Genetics.HEMOGLOBIN),
+                                            villager.getInfectionProgress()
+                                    );
+                                    color.setRGB(
+                                            ARGB.red(naturalSkinColor) / 255.0,
+                                            ARGB.green(naturalSkinColor) / 255.0,
+                                            ARGB.blue(naturalSkinColor) / 255.0
+                                    );
+                                } else {
+                                    color.setRGB(
+                                            ARGB.red(skinDye) / 255.0,
+                                            ARGB.green(skinDye) / 255.0,
+                                            ARGB.blue(skinDye) / 255.0
+                                    );
+                                }
+                                refreshSkinColor();
+                            } else {
+                                villager.clearSkinDye();
+                            }
+                            init();
+                        }));
+                y += 24;
 
                 //clothes
                 addRenderableWidget(new ButtonWidget(width / 2, y, DATA_WIDTH / 2, 20, Component.translatable("gui.villager_editor.randClothing"), b -> {
@@ -502,14 +541,28 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                 y += 22;
 
                 //skin color
-                addRenderableWidget(new ColorPickerWidget(width / 2 + margin, y, DATA_WIDTH - margin * 2, DATA_WIDTH - margin * 2,
-                        genetics.getGene(Genetics.HEMOGLOBIN),
-                        genetics.getGene(Genetics.MELANIN),
-                        MCA.locate("textures/colormap/villager_skin.png"),
-                        (vx, vy) -> {
-                            genetics.setGene(Genetics.HEMOGLOBIN, vx.floatValue());
-                            genetics.setGene(Genetics.MELANIN, vy.floatValue());
-                        }));
+                y += 8;
+                if (hsvColoredSkin) {
+                    loadDyeIntoColorSelector(villager.getSkinDye());
+                    y = addRgbColorSliders(y, this::refreshSkinColor);
+                    addRenderableWidget(new ButtonWidget(width / 2, y, DATA_WIDTH, 20,
+                            Component.translatable("gui.villager_editor.clear_skin"),
+                            b -> {
+                                villager.clearSkinDye();
+                                hsvColoredSkin = false;
+                                init();
+                            }));
+                } else {
+                    addRenderableWidget(new ColorPickerWidget(width / 2 + margin, y, DATA_WIDTH - margin * 2, DATA_WIDTH - margin * 2,
+                            genetics.getGene(Genetics.HEMOGLOBIN),
+                            genetics.getGene(Genetics.MELANIN),
+                            MCA.locate("textures/colormap/villager_skin.png"),
+                            (vx, vy) -> {
+                                villager.clearSkinDye();
+                                genetics.setGene(Genetics.HEMOGLOBIN, vx.floatValue());
+                                genetics.setGene(Genetics.MELANIN, vy.floatValue());
+                            }));
+                }
             }
             case "head" -> {
                 boolean hasHetero = villager.getTraits().hasTrait(Traits.HETEROCHROMIA);
@@ -557,11 +610,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                                 case 2 -> villager.getEyeLeftDye();
                                 default -> villager.getHairDye();
                             };
-                            color.setRGB(
-                                    ARGB.red(targetDye) / 255.0,
-                                    ARGB.green(targetDye) / 255.0,
-                                    ARGB.blue(targetDye) / 255.0
-                            );
+                            loadDyeIntoColorSelector(targetDye);
                             init();
                         }));
 
@@ -640,60 +689,13 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                 if (eyeColorTarget > 0) {
                     boolean activeHsv = eyeColorTarget == 1 ? hsvColoredEyes : hsvColoredEyesLeft;
                     if (activeHsv) {
-                        // hue
-                        color.hueWidget = addRenderableWidget(new HorizontalColorPickerWidget(width / 2 + 20, y, DATA_WIDTH - 40, 15,
-                                color.hue / 360.0,
-                                MCA.locate("textures/colormap/hue.png"),
-                                (vx, vy) -> {
-                                    color.setHSV(vx * 360, color.saturation, color.brightness);
-                                    if (eyeColorTarget == 1) {
-                                        refreshEyeColor();
-                                    } else {
-                                        refreshEyeLeftColor();
-                                    }
-                                }));
-
-                        // saturation
-                        color.saturationWidget = addRenderableWidget(new HorizontalGradientWidget(width / 2 + 20, y + 20, DATA_WIDTH - 40, 15,
-                                color.saturation,
-                                () -> {
-                                    double[] rgb = ClientUtils.HSV2RGB(color.hue, 0.0, 1.0);
-                                    return new float[]{(float) rgb[0], (float) rgb[1], (float) rgb[2], 1.0f};
-                                },
-                                () -> {
-                                    double[] rgb = ClientUtils.HSV2RGB(color.hue, 1.0, 1.0);
-                                    return new float[]{(float) rgb[0], (float) rgb[1], (float) rgb[2], 1.0f};
-                                },
-                                (vx, vy) -> {
-                                    color.setHSV(color.hue, vx, color.brightness);
-                                    if (eyeColorTarget == 1) {
-                                        refreshEyeColor();
-                                    } else {
-                                        refreshEyeLeftColor();
-                                    }
-                                }));
-
-                        // brightness
-                        color.brightnessWidget = addRenderableWidget(new HorizontalGradientWidget(width / 2 + 20, y + 40, DATA_WIDTH - 40, 15,
-                                color.brightness,
-                                () -> {
-                                    double[] rgb = ClientUtils.HSV2RGB(color.hue, color.saturation, 0.0);
-                                    return new float[]{(float) rgb[0], (float) rgb[1], (float) rgb[2], 1.0f};
-                                },
-                                () -> {
-                                    double[] rgb = ClientUtils.HSV2RGB(color.hue, color.saturation, 1.0);
-                                    return new float[]{(float) rgb[0], (float) rgb[1], (float) rgb[2], 1.0f};
-                                },
-                                (vx, vy) -> {
-                                    color.setHSV(color.hue, color.saturation, vx);
-                                    if (eyeColorTarget == 1) {
-                                        refreshEyeColor();
-                                    } else {
-                                        refreshEyeLeftColor();
-                                    }
-                                }));
-
-                        y += 65;
+                        y = addRgbColorSliders(y, () -> {
+                            if (eyeColorTarget == 1) {
+                                refreshEyeColor();
+                            } else {
+                                refreshEyeLeftColor();
+                            }
+                        });
 
                         // Clear eye colour
                         String clearLabelKey = switch (eyeColorTarget) {
@@ -717,48 +719,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                 } else {
                     // hair color
                     if (hsvColoredHair) {
-                        // hue
-                        color.hueWidget = addRenderableWidget(new HorizontalColorPickerWidget(width / 2 + 20, y, DATA_WIDTH - 40, 15,
-                                color.hue / 360.0,
-                                MCA.locate("textures/colormap/hue.png"),
-                                (vx, vy) -> {
-                                    color.setHSV(vx * 360, color.saturation, color.brightness);
-                                    refreshHairColor();
-                                }));
-
-                        // saturation
-                        color.saturationWidget = addRenderableWidget(new HorizontalGradientWidget(width / 2 + 20, y + 20, DATA_WIDTH - 40, 15,
-                                color.saturation,
-                                () -> {
-                                    double[] rgb = ClientUtils.HSV2RGB(color.hue, 0.0, 1.0);
-                                    return new float[]{(float) rgb[0], (float) rgb[1], (float) rgb[2], 1.0f};
-                                },
-                                () -> {
-                                    double[] rgb = ClientUtils.HSV2RGB(color.hue, 1.0, 1.0);
-                                    return new float[]{(float) rgb[0], (float) rgb[1], (float) rgb[2], 1.0f};
-                                },
-                                (vx, vy) -> {
-                                    color.setHSV(color.hue, vx, color.brightness);
-                                    refreshHairColor();
-                                }));
-
-                        // brightness
-                        color.brightnessWidget = addRenderableWidget(new HorizontalGradientWidget(width / 2 + 20, y + 40, DATA_WIDTH - 40, 15,
-                                color.brightness,
-                                () -> {
-                                    double[] rgb = ClientUtils.HSV2RGB(color.hue, color.saturation, 0.0);
-                                    return new float[]{(float) rgb[0], (float) rgb[1], (float) rgb[2], 1.0f};
-                                },
-                                () -> {
-                                    double[] rgb = ClientUtils.HSV2RGB(color.hue, color.saturation, 1.0);
-                                    return new float[]{(float) rgb[0], (float) rgb[1], (float) rgb[2], 1.0f};
-                                },
-                                (vx, vy) -> {
-                                    color.setHSV(color.hue, color.saturation, vx);
-                                    refreshHairColor();
-                                }));
-
-                        y += 65;
+                        y = addRgbColorSliders(y, this::refreshHairColor);
 
                         // Clear hair
                         addRenderableWidget(new ButtonWidget(width / 2, y, DATA_WIDTH, 20,
@@ -1026,33 +987,91 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         if (villager.getHairDye() == 0) {
             color.setHSV(0.0, 0.5, 0.5);
         }
-        villager.setHairDye(
-                Math.max(1.0f / 255.0f, (float) color.red),
-                Math.max(1.0f / 255.0f, (float) color.green),
-                Math.max(1.0f / 255.0f, (float) color.blue)
-        );
+        villager.setHairDye(getSelectedDye());
+    }
+
+    private void refreshSkinColor() {
+        if (villager.getSkinDye() == 0xFF000000) {
+            color.setHSV(0.0, 0.5, 0.5);
+        }
+        villager.setSkinDye(getSelectedDye());
     }
 
     private void refreshEyeColor() {
         if (villager.getEyeDye() == 0) {
             color.setHSV(0.0, 0.0, 1.0);
         }
-        villager.setEyeDye(
-                Math.max(1.0f / 255.0f, (float) color.red),
-                Math.max(1.0f / 255.0f, (float) color.green),
-                Math.max(1.0f / 255.0f, (float) color.blue)
+        villager.setEyeDye(getSelectedDye());
+    }
+
+    private int addRgbColorSliders(int y, Runnable onChange) {
+        color.hueWidget = addRenderableWidget(new HorizontalColorPickerWidget(width / 2 + 20, y, DATA_WIDTH - 40, 15,
+                color.hue / 360.0,
+                MCA.locate("textures/colormap/hue.png"),
+                (vx, vy) -> {
+                    color.setHSV(vx * 360, color.saturation, color.brightness);
+                    onChange.run();
+                }));
+
+        color.saturationWidget = addRenderableWidget(new HorizontalGradientWidget(width / 2 + 20, y + 20, DATA_WIDTH - 40, 15,
+                color.saturation,
+                () -> {
+                    double[] rgb = ClientUtils.HSV2RGB(color.hue, 0.0, 1.0);
+                    return new float[]{(float) rgb[0], (float) rgb[1], (float) rgb[2], 1.0f};
+                },
+                () -> {
+                    double[] rgb = ClientUtils.HSV2RGB(color.hue, 1.0, 1.0);
+                    return new float[]{(float) rgb[0], (float) rgb[1], (float) rgb[2], 1.0f};
+                },
+                (vx, vy) -> {
+                    color.setHSV(color.hue, vx, color.brightness);
+                    onChange.run();
+                }));
+
+        color.brightnessWidget = addRenderableWidget(new HorizontalGradientWidget(width / 2 + 20, y + 40, DATA_WIDTH - 40, 15,
+                color.brightness,
+                () -> {
+                    double[] rgb = ClientUtils.HSV2RGB(color.hue, color.saturation, 0.0);
+                    return new float[]{(float) rgb[0], (float) rgb[1], (float) rgb[2], 1.0f};
+                },
+                () -> {
+                    double[] rgb = ClientUtils.HSV2RGB(color.hue, color.saturation, 1.0);
+                    return new float[]{(float) rgb[0], (float) rgb[1], (float) rgb[2], 1.0f};
+                },
+                (vx, vy) -> {
+                    color.setHSV(color.hue, color.saturation, vx);
+                    onChange.run();
+                }));
+
+        return y + 65;
+    }
+
+    private void loadDyeIntoColorSelector(int dye) {
+        color.setRGB(
+                ARGB.red(dye) / 255.0,
+                ARGB.green(dye) / 255.0,
+                ARGB.blue(dye) / 255.0
         );
+    }
+
+    private int getSelectedDye() {
+        return ARGB.colorFromFloat(
+                1.0f,
+                nonZeroColorChannel(color.red),
+                nonZeroColorChannel(color.green),
+                nonZeroColorChannel(color.blue)
+        );
+    }
+
+    private static float nonZeroColorChannel(double value) {
+        return Math.max(1.0f / 255.0f, (float) value);
     }
 
     private void refreshEyeLeftColor() {
         if (villager.getEyeLeftDye() == 0) {
             color.setHSV(0.0, 0.0, 1.0);
         }
-        villager.setEyeLeftDye(
-                Math.max(1.0f / 255.0f, (float) color.red),
-                Math.max(1.0f / 255.0f, (float) color.green),
-                Math.max(1.0f / 255.0f, (float) color.blue)
-        );
+        villager.setEyeLeftDye(getSelectedDye());
     }
 
     private int geneChanger(int y, Genetics.GeneType gene, int maxCount) {
@@ -1820,27 +1839,25 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
             int hairDye = villager.getHairDye();
             int eyeDye = villager.getEyeDye();
             int eyeLeftDye = villager.getEyeLeftDye();
+            int skinDye = villager.getSkinDye();
 
             if (page.equals("loading")) {
+                hsvColoredSkin = skinDye != 0xFF000000;
                 hsvColoredHair = hairDye != 0xFF000000;
                 hsvColoredEyes = eyeDye != 0xFFFFFFFF;
                 hsvColoredEyesLeft = eyeLeftDye != 0xFFFFFFFF;
                 eyeColorTarget = 0;
             }
 
-            int initialDye = switch (eyeColorTarget) {
-                case 1 -> eyeDye;
-                case 2 -> eyeLeftDye;
-                default -> hairDye;
-            };
+            int initialDye = page.equals("body") ? skinDye : switch (eyeColorTarget) {
+                    case 1 -> eyeDye;
+                    case 2 -> eyeLeftDye;
+                    default -> hairDye;
+                };
 
             int currentPick = ARGB.colorFromFloat(1.0f, (float) color.red, (float) color.green, (float) color.blue);
             if (initialDye != currentPick) {
-                color.setRGB(
-                        ARGB.red(initialDye) / 255.0,
-                        ARGB.green(initialDye) / 255.0,
-                        ARGB.blue(initialDye) / 255.0
-                );
+                loadDyeIntoColorSelector(initialDye);
             }
 
             villagerBreedingAge = villagerData.getIntOr("Age", 0);

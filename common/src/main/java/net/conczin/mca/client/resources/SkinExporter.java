@@ -120,6 +120,10 @@ public class SkinExporter {
                 return 0xFFFFFFFF;
             }
         }
+        int skinDye = visuals.skinDye();
+        if (skinDye != 0xFF000000) {
+            return skinDye;
+        }
         float albinism = visuals.albinism() ? 0.1f : 1.0f;
         return ColorPalette.SKIN.getColor(
                 visuals.melaninGene() * albinism,

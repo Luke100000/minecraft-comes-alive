@@ -43,6 +43,11 @@ public class SkinLayer<S extends HumanoidRenderState, M extends HumanoidModel<S>
             }
         }
 
+        int skinDye = visuals.skinDye();
+        if (skinDye != 0xFF000000) {
+            return skinDye;
+        }
+
         float albinism = visuals.albinism() ? 0.1f : 1.0f;
 
         return ColorPalette.SKIN.getColor(

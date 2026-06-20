@@ -63,15 +63,10 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
     CDataParameter<String> HAIR_BACK = CParameter.create("HairBack", "");
     CDataParameter<String> HAIR_FRONT = CParameter.create("HairFront", "");
     CDataParameter<String> HAIR_EXTRA = CParameter.create("HairExtra", "");
-    CDataParameter<Float> HAIR_COLOR_RED = CParameter.create("HairColorRed", 0.0f);
-    CDataParameter<Float> HAIR_COLOR_GREEN = CParameter.create("HairColorGreen", 0.0f);
-    CDataParameter<Float> HAIR_COLOR_BLUE = CParameter.create("HairColorBlue", 0.0f);
-    CDataParameter<Float> EYE_COLOR_RED = CParameter.create("EyeColorRed", 1.0f);
-    CDataParameter<Float> EYE_COLOR_GREEN = CParameter.create("EyeColorGreen", 1.0f);
-    CDataParameter<Float> EYE_COLOR_BLUE = CParameter.create("EyeColorBlue", 1.0f);
-    CDataParameter<Float> EYE_COLOR_LEFT_RED = CParameter.create("EyeColorLeftRed", 1.0f);
-    CDataParameter<Float> EYE_COLOR_LEFT_GREEN = CParameter.create("EyeColorLeftGreen", 1.0f);
-    CDataParameter<Float> EYE_COLOR_LEFT_BLUE = CParameter.create("EyeColorLeftBlue", 1.0f);
+    CDataParameter<Integer> SKIN_COLOR = CParameter.create("SkinColor", 0xFF000000);
+    CDataParameter<Integer> HAIR_COLOR = CParameter.create("HairColor", 0xFF000000);
+    CDataParameter<Integer> EYE_COLOR = CParameter.create("EyeColor", 0xFFFFFFFF);
+    CDataParameter<Integer> EYE_COLOR_LEFT = CParameter.create("EyeColorLeft", 0xFFFFFFFF);
     CEnumParameter<AgeState> AGE_STATE = CParameter.create("AgeState", AgeState.UNASSIGNED);
 
     Identifier SPEED_ID = MCA.locate("trait_speed");
@@ -80,9 +75,8 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
     static <E extends Entity> CDataManager.Builder<E> createTrackedData(CDataManager.Builder<E> builder) {
         return builder
                 .addAll(CLOTHES, SKIN, HAIR, HAIR_BASE, HAIR_BANGS, HAIR_BACK, HAIR_FRONT, HAIR_EXTRA,
-                        HAIR_COLOR_RED, HAIR_COLOR_GREEN, HAIR_COLOR_BLUE,
-                        EYE_COLOR_RED, EYE_COLOR_GREEN, EYE_COLOR_BLUE,
-                        EYE_COLOR_LEFT_RED, EYE_COLOR_LEFT_GREEN, EYE_COLOR_LEFT_BLUE,
+                        SKIN_COLOR,
+                        HAIR_COLOR, EYE_COLOR, EYE_COLOR_LEFT,
                         AGE_STATE)
                 .add(Genetics::createTrackedData)
                 .add(Traits::createTrackedData)
@@ -312,60 +306,67 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
     }
 
     default void setHairDye(float r, float g, float b) {
-        setTrackedValue(HAIR_COLOR_RED, r);
-        setTrackedValue(HAIR_COLOR_GREEN, g);
-        setTrackedValue(HAIR_COLOR_BLUE, b);
+        setHairDye(ARGB.colorFromFloat(1.0f, r, g, b));
+    }
+
+    default void setHairDye(int color) {
+        setTrackedValue(HAIR_COLOR, color);
+    }
+
+    default void setSkinDye(float r, float g, float b) {
+        setSkinDye(ARGB.colorFromFloat(1.0f, r, g, b));
+    }
+
+    default void setSkinDye(int color) {
+        setTrackedValue(SKIN_COLOR, color);
+    }
+
+    default void clearSkinDye() {
+        setSkinDye(0xFF000000);
+    }
+
+    default int getSkinDye() {
+        return getTrackedValue(SKIN_COLOR);
     }
 
     default void clearHairDye() {
-        setHairDye(0.0f, 0.0f, 0.0f);
+        setHairDye(0xFF000000);
     }
 
     default int getHairDye() {
-        return ARGB.colorFromFloat(
-                1.0f,
-                getTrackedValue(HAIR_COLOR_RED),
-                getTrackedValue(HAIR_COLOR_GREEN),
-                getTrackedValue(HAIR_COLOR_BLUE)
-        );
+        return getTrackedValue(HAIR_COLOR);
     }
 
     default void setEyeDye(float r, float g, float b) {
-        setTrackedValue(EYE_COLOR_RED, r);
-        setTrackedValue(EYE_COLOR_GREEN, g);
-        setTrackedValue(EYE_COLOR_BLUE, b);
+        setEyeDye(ARGB.colorFromFloat(1.0f, r, g, b));
+    }
+
+    default void setEyeDye(int color) {
+        setTrackedValue(EYE_COLOR, color);
     }
 
     default void clearEyeDye() {
-        setEyeDye(1.0f, 1.0f, 1.0f);
+        setEyeDye(0xFFFFFFFF);
     }
 
     default int getEyeDye() {
-        return ARGB.colorFromFloat(
-                1.0f,
-                getTrackedValue(EYE_COLOR_RED),
-                getTrackedValue(EYE_COLOR_GREEN),
-                getTrackedValue(EYE_COLOR_BLUE)
-        );
+        return getTrackedValue(EYE_COLOR);
     }
 
     default void setEyeLeftDye(float r, float g, float b) {
-        setTrackedValue(EYE_COLOR_LEFT_RED, r);
-        setTrackedValue(EYE_COLOR_LEFT_GREEN, g);
-        setTrackedValue(EYE_COLOR_LEFT_BLUE, b);
+        setEyeLeftDye(ARGB.colorFromFloat(1.0f, r, g, b));
+    }
+
+    default void setEyeLeftDye(int color) {
+        setTrackedValue(EYE_COLOR_LEFT, color);
     }
 
     default void clearEyeLeftDye() {
-        setEyeLeftDye(1.0f, 1.0f, 1.0f);
+        setEyeLeftDye(0xFFFFFFFF);
     }
 
     default int getEyeLeftDye() {
-        return ARGB.colorFromFloat(
-                1.0f,
-                getTrackedValue(EYE_COLOR_LEFT_RED),
-                getTrackedValue(EYE_COLOR_LEFT_GREEN),
-                getTrackedValue(EYE_COLOR_LEFT_BLUE)
-        );
+        return getTrackedValue(EYE_COLOR_LEFT);
     }
 
     default void setHairDye(DyeColor color) {
@@ -375,9 +376,7 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
             components = ARGB.srgbLerp(0.5f, components, dye);
         }
 
-        setTrackedValue(HAIR_COLOR_RED, ARGB.red(components) / 255.0f);
-        setTrackedValue(HAIR_COLOR_GREEN, ARGB.green(components) / 255.0f);
-        setTrackedValue(HAIR_COLOR_BLUE, ARGB.blue(components) / 255.0f);
+        setHairDye(components);
     }
 
     default AgeState getAgeState() {
@@ -511,9 +510,7 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
                 int fs = DyeColor.byId(p).getTextureDiffuseColor();
                 int gs = DyeColor.byId(q).getTextureDiffuseColor();
                 int color = ARGB.srgbLerp(r, fs, gs);
-                setTrackedValue(HAIR_COLOR_RED, ARGB.red(color) / 255.0f);
-                setTrackedValue(HAIR_COLOR_GREEN, ARGB.green(color) / 255.0f);
-                setTrackedValue(HAIR_COLOR_BLUE, ARGB.blue(color) / 255.0f);
+                setHairDye(color);
             }
         }
     }
