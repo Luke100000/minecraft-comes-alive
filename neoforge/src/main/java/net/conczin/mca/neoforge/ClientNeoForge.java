@@ -21,14 +21,20 @@ import net.minecraft.client.renderer.entity.ZombieVillagerRenderer;
 import net.minecraft.client.renderer.entity.state.LivingEntityRenderState;
 import net.minecraft.world.entity.LivingEntity;
 import net.neoforged.api.distmarker.Dist;
+import net.neoforged.bus.api.IEventBus;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 import net.neoforged.neoforge.client.event.*;
 import net.neoforged.neoforge.client.renderstate.RegisterRenderStateModifiersEvent;
 
+@Mod(value = MCA.MOD_ID, dist = Dist.CLIENT)
 @EventBusSubscriber(modid = MCA.MOD_ID, value = Dist.CLIENT)
 public final class ClientNeoForge extends ClientProxyAbstractImpl {
+    public ClientNeoForge() {
+    }
+
     @SubscribeEvent
     public static void onRegisterRenderers(EntityRenderersEvent.RegisterRenderers event) {
         // Block entity renderers
@@ -58,8 +64,6 @@ public final class ClientNeoForge extends ClientProxyAbstractImpl {
 
     @SubscribeEvent
     public static void data(AddClientReloadListenersEvent event) {
-        new ClientNeoForge();
-
         event.addListener(MCA.locate("screens"), new MCAScreens());
         event.addListener(MCA.locate("color_palettes"), new ColorPaletteLoader());
         event.addListener(MCA.locate("supporters"), new Supporters());

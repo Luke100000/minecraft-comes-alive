@@ -3,6 +3,7 @@ package net.conczin.mca.server.world.data;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.DynamicOps;
 import net.conczin.mca.Config;
+import net.conczin.mca.entity.PlayerDimensions;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.relationship.EntityRelationship;
 import net.conczin.mca.entity.ai.relationship.Gender;
@@ -49,6 +50,7 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
     private @Nullable Integer lastSeenVillageId;
     private boolean entityDataSet;
     private CompoundTag entityData;
+    private PlayerDimensions.Scale dimensionsScale;
 
     PlayerSaveData(ServerLevel world, UUID uuid) {
         this.world = world;
@@ -120,10 +122,18 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
         }
         this.entityDataSet = entityDataSet;
         setDirty();
+        refreshPlayerDimensions();
     }
 
     public CompoundTag getEntityData() {
         return entityData.copy();
+    }
+
+    public PlayerDimensions.Scale getDimensionsScale() {
+        if (dimensionsScale == null) {
+            dimensionsScale = PlayerDimensions.fromEntityData(entityData);
+        }
+        return dimensionsScale;
     }
 
     public void setEntityData(CompoundTag entityData) {
@@ -132,7 +142,15 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
             return;
         }
         this.entityData = copy;
+        dimensionsScale = PlayerDimensions.fromEntityData(copy);
         setDirty();
+        refreshPlayerDimensions();
+    }
+
+    private void refreshPlayerDimensions() {
+        if (world.getPlayerByUUID(uuid) instanceof ServerPlayer player) {
+            player.refreshDimensions();
+        }
     }
 
     @Override
