@@ -1,10 +1,8 @@
 {
     "type":  "minecraft:crafting_shapeless",
     "ingredients":  [
-                        [
-                            "mca:deepslate_upright_headstone",
-                            "minecraft:gold_nugget"
-                        ]
+                        "mca:deepslate_upright_headstone",
+                        "minecraft:gold_nugget"
                     ],
     "result":  {
                    "id":  "mca:golden_upright_headstone"
