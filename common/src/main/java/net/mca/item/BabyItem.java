@@ -221,15 +221,12 @@ public class BabyItem extends Item {
         FamilyTree tree = FamilyTree.get(world);
 
         // Assign parents
-        child.getRelationships().getFamilyEntry().removeMother();
-        child.getRelationships().getFamilyEntry().removeFather();
-        Stream.of("mother", "father").map(key -> getBabyNbt(stack).getUuid(key)).forEach(uuid -> {
-            Optional.ofNullable(world.getEntity(uuid))
-                    .map(tree::getOrCreate)
-                    .or(() -> tree.getOrEmpty(uuid)).ifPresent(entry -> {
-                        child.getRelationships().getFamilyEntry().assignParent(entry);
-                    });
-        });
+        child.getRelationships().getFamilyEntry().replaceParents(Stream.of("mother", "father")
+                .map(key -> getBabyNbt(stack).getUuid(key))
+                .map(uuid -> Optional.ofNullable(world.getEntity(uuid))
+                        .map(tree::getOrCreate)
+                        .or(() -> tree.getOrEmpty(uuid)))
+                .flatMap(Optional::stream));
 
         // notify parents
         Stream.of("mother", "father").map(key -> world.getEntity(getBabyNbt(stack).getUuid(key))).filter(Objects::nonNull)

@@ -302,8 +302,17 @@ public final class FamilyTreeNode implements Serializable {
         return rootNode;
     }
 
-    public boolean assignParents(EntityRelationship one, EntityRelationship two) {
-        return assignParent(one.getFamilyEntry()) | assignParent(two.getFamilyEntry());
+    public boolean replaceParents(EntityRelationship one, EntityRelationship two) {
+        return replaceParents(Stream.of(one.getFamilyEntry(), two.getFamilyEntry()));
+    }
+
+    public boolean replaceParents(FamilyTreeNode one, Optional<FamilyTreeNode> two) {
+        return replaceParents(Stream.concat(Stream.of(one), two.stream()));
+    }
+
+    public boolean replaceParents(Stream<FamilyTreeNode> parents) {
+        boolean result = clearParents();
+        return parents.map(this::assignParent).reduce(result, (changed, parentChanged) -> changed | parentChanged);
     }
 
     public boolean assignParent(FamilyTreeNode parent) {
@@ -325,6 +334,10 @@ public final class FamilyTreeNode implements Serializable {
             }
         }
         return true;
+    }
+
+    public boolean clearParents() {
+        return removeFather() | removeMother();
     }
 
     public boolean setFather(FamilyTreeNode parent) {
