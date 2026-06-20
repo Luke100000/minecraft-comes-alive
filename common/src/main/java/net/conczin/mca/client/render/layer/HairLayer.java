@@ -3,6 +3,7 @@ package net.conczin.mca.client.render.layer;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.conczin.mca.MCA;
 import net.conczin.mca.client.gui.immersive_library.SkinCache;
+import net.conczin.mca.client.model.CommonVillagerModel;
 import net.conczin.mca.client.render.RainbowColor;
 import net.conczin.mca.client.render.VillagerVisuals;
 import net.conczin.mca.client.resources.ColorPalette;
@@ -25,6 +26,13 @@ public class HairLayer<S extends HumanoidRenderState, M extends HumanoidModel<S>
     protected void prepareModel(S state) {
         setAllVisible(this.model, true);
         hideLegs(this.model);
+        hideBreasts(this.model);
+    }
+
+    private static void hideBreasts(HumanoidModel<?> model) {
+        if (model instanceof CommonVillagerModel<?> villagerModel) {
+            villagerModel.getBreastParts().forEach(part -> part.visible = false);
+        }
     }
 
     @Override

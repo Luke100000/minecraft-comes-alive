@@ -84,7 +84,18 @@ public class HairStyle extends SkinListEntry {
 
     public record Definition(Gender gender, float chance, String base, String bangs, String back, String front, String extra) {
         public HairStyle create(String identifier, Gender fallbackGender) {
-            return new HairStyle(identifier, resolveGender(gender, fallbackGender), chance, base, bangs, back, front, extra);
+            Gender resolvedGender = resolveGender(gender, inferLegacyGender(identifier, fallbackGender));
+            return new HairStyle(identifier, resolvedGender, chance, base, bangs, back, front, extra);
+        }
+
+        private static Gender inferLegacyGender(String identifier, Gender fallbackGender) {
+            if (identifier.startsWith("mca:skins/hair/female/")) {
+                return Gender.FEMALE;
+            }
+            if (identifier.startsWith("mca:skins/hair/male/")) {
+                return Gender.MALE;
+            }
+            return fallbackGender;
         }
     }
 }
