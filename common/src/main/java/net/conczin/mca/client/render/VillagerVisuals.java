@@ -89,7 +89,7 @@ public record VillagerVisuals(
                 villager.getHairDye(),
                 villager.getClothes(),
                 villager.getInfectionProgress(),
-                entity.tickCount,
+                (int) (entity.getId() + entity.level().getGameTime()),
                 entity.getId(),
                 entity.isSleeping(),
                 entity.isDeadOrDying()

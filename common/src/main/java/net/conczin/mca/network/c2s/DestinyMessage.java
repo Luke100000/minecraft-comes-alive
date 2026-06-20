@@ -54,15 +54,11 @@ public record DestinyMessage(String location, boolean isClosing) implements Hand
     }
 
     private void notifyDestinationNotFound(ServerPlayer player) {
-        // The teleport target couldn't be located (e.g. no matching structure nearby, possibly due to a
-        // world-generation mod conflict). Let the player know in an immersive, narrative tone instead of
-        // silently leaving them stranded where they spawned.
-        ((ServerLevel) player.level()).getServer().execute(() -> player.sendSystemMessage(
-                Component.translatable("destiny.teleport.failed").withStyle(ChatFormatting.GRAY, ChatFormatting.ITALIC)));
+        player.level().getServer().execute(() -> player.sendSystemMessage(Component.translatable("destiny.teleport.failed").withStyle(ChatFormatting.GRAY, ChatFormatting.ITALIC)));
     }
 
     private void handleBlockPos(ServerPlayer player, BlockPos pos) {
-        ServerLevel level = (ServerLevel) player.level();
+        ServerLevel level = player.level();
         level.getChunkAt(pos);
         if (location.equals("minecraft:ancient_city")) {
             pos = new BlockPos(pos.getX(), -50, pos.getZ());
@@ -75,7 +71,6 @@ public record DestinyMessage(String location, boolean isClosing) implements Hand
         level.getChunkSource().addTicketWithRadius(TicketType.PLAYER_LOADING, chunkPos, 1);
         player.connection.teleport(pos.getX(), pos.getY(), pos.getZ(), player.getYRot(), player.getXRot());
         player.setRespawnPosition(new ServerPlayer.RespawnConfig(LevelData.RespawnData.of(player.level().dimension(), pos, 0.0f, 0.0f), true), false);
-        //noinspection DataFlowIssue
         if (level.getServer().isSingleplayerOwner(player.nameAndId()) && level.getLevelData() instanceof WritableLevelData levelData) {
             levelData.setSpawn(LevelData.RespawnData.of(player.level().dimension(), pos, 0.0f, 0.0f));
         }
