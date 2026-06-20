@@ -7,6 +7,8 @@ import net.conczin.mca.entity.ai.relationship.AgeState;
 import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.entity.ai.relationship.VillagerDimensions;
 import net.conczin.mca.resources.data.skin.LayeredHair;
+import net.minecraft.util.ARGB;
+import net.minecraft.util.Mth;
 import net.minecraft.world.entity.LivingEntity;
 
 public record VillagerVisuals(
@@ -28,6 +30,7 @@ public record VillagerVisuals(
         float faceGene,
         float eumelaninGene,
         float pheomelaninGene,
+        float eyeColorGene,
         String skin,
         String hair,
         String hairBase,
@@ -51,6 +54,12 @@ public record VillagerVisuals(
     private static final int BLINK_INTERVAL_VARIANCE = 80;
     private static final int MIN_BLINK_DURATION = 1;
     private static final int BLINK_DURATION_VARIANCE = 4;
+    private static final int NATURAL_DYE = 0xFFFFFFFF;
+    private static final int ALBINISM_EYE_COLOR = 0xFFE8A0A0;
+    private static final int BLUE_EYE_COLOR = 0xFF557FA6;
+    private static final int GREEN_EYE_COLOR = 0xFF5B8756;
+    private static final int HAZEL_EYE_COLOR = 0xFF8A6A35;
+    private static final int BROWN_EYE_COLOR = 0xFF4A2B18;
 
     public static VillagerVisuals require(Object state) {
         VillagerVisuals visuals = VillagerStateHolder.require(state).mca$getVisuals();
@@ -106,6 +115,7 @@ public record VillagerVisuals(
                 genetics.getGene(Genetics.FACE),
                 genetics.getGene(Genetics.EUMELANIN),
                 genetics.getGene(Genetics.PHEOMELANIN),
+                genetics.getGene(Genetics.EYE_COLOR),
                 villager.getSkin(),
                 legacyHair,
                 hairBase,
@@ -162,6 +172,36 @@ public record VillagerVisuals(
             case FRONT -> hairFront;
             case EXTRA -> hairExtra;
         };
+    }
+
+    public int eyeColor(float tickDelta, boolean left) {
+        if (rainbowEyes) {
+            int offset = left && heterochromia ? RainbowColor.CYCLE_DURATION / 2 : 0;
+            return RainbowColor.sheep(tickCount + tickDelta + offset);
+        }
+
+        return staticEyeColor(left);
+    }
+
+    public int staticEyeColor(boolean left) {
+        int dye = left && heterochromia ? eyeLeftDye : eyeDye;
+        return dye != NATURAL_DYE ? dye : geneticEyeColor(left && heterochromia);
+    }
+
+    private int geneticEyeColor(boolean shifted) {
+        if (albinism) {
+            return ALBINISM_EYE_COLOR;
+        }
+
+        float eyeColor = Mth.frac(eyeColorGene + (shifted ? 0.43F : 0.0F));
+
+        if (eyeColor < 0.35F) {
+            return ARGB.srgbLerp(eyeColor / 0.35F, BLUE_EYE_COLOR, GREEN_EYE_COLOR);
+        }
+        if (eyeColor < 0.70F) {
+            return ARGB.srgbLerp((eyeColor - 0.35F) / 0.35F, GREEN_EYE_COLOR, HAZEL_EYE_COLOR);
+        }
+        return ARGB.srgbLerp((eyeColor - 0.70F) / 0.30F, HAZEL_EYE_COLOR, BROWN_EYE_COLOR);
     }
 
     private static boolean isBlank(String value) {

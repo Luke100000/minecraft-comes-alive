@@ -2,7 +2,6 @@ package net.conczin.mca.client.render.layer;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.conczin.mca.MCA;
-import net.conczin.mca.client.render.RainbowColor;
 import net.conczin.mca.client.render.VillagerVisuals;
 import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.resources.FaceList;
@@ -111,11 +110,7 @@ public class FaceLayer<S extends HumanoidRenderState, M extends HumanoidModel<S>
     }
 
     private static int getEyeColor(VillagerVisuals visuals, float tickDelta, boolean left) {
-        if (visuals.rainbowEyes()) {
-            int offset = left && visuals.heterochromia() ? RainbowColor.CYCLE_DURATION / 2 : 0;
-            return RainbowColor.sheep(visuals.tickCount() + tickDelta + offset);
-        }
-        return left && visuals.heterochromia() ? visuals.eyeLeftDye() : visuals.eyeDye();
+        return visuals.eyeColor(tickDelta, left);
     }
 
     private Identifier getOrGenerateEyeLayer(Identifier original, boolean isSclera, EyeSide side) {

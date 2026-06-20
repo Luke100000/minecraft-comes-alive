@@ -7,13 +7,16 @@ import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.network.HandleablePayload;
 import net.conczin.mca.network.Network;
 import net.conczin.mca.network.s2c.PlayerDataMessage;
+import net.conczin.mca.resources.API;
 import net.conczin.mca.resources.BodySkinList;
 import net.conczin.mca.resources.ClothingList;
 import net.conczin.mca.resources.HairList;
 import net.conczin.mca.resources.HairStyleList;
 import net.conczin.mca.resources.LayeredHairList;
+import net.conczin.mca.resources.data.skin.Hair;
 import net.conczin.mca.resources.data.skin.HairStyle;
 import net.conczin.mca.resources.data.skin.LayeredHair;
+import net.conczin.mca.resources.data.skin.SkinListEntry;
 import net.conczin.mca.server.world.data.FamilyTree;
 import net.conczin.mca.server.world.data.FamilyTreeNode;
 import net.conczin.mca.server.world.data.PlayerSaveData;
@@ -35,6 +38,7 @@ import net.minecraft.world.entity.npc.villager.VillagerProfession;
 import net.minecraft.world.entity.player.Player;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -124,18 +128,19 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
         if (villagerData != null) {
             CompoundTag mcaData = getOrCreateMcaData(villagerData);
 
-            HairStyleList styles = HairStyleList.getInstance();
-            if (styles == null) {
+            List<HairStyle> styles = getHairStyles(getGender(villagerData));
+            if (styles.isEmpty()) {
                 return;
             }
-            String styleId;
+            HairStyle style;
             if (data.contains("offset")) {
-                styleId = styles.getPool(getGender(villagerData)).pickNext(getCurrentHairStyleId(mcaData), data.getInt("offset").orElse(0));
+                String currentStyleId = getCurrentHairStyleId(mcaData, styles);
+                style = pickNextHairStyle(styles, currentStyleId, data.getInt("offset").orElse(0));
             } else {
-                styleId = styles.getPool(getGender(villagerData)).pickOne();
+                style = pickRandomHairStyle(styles);
             }
 
-            applyHairStyle(mcaData, styles.get(styleId));
+            applyHairStyle(mcaData, style);
             saveEntity(player, entity, villagerData);
         }
     }
@@ -228,12 +233,64 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
         return NbtHelper.getOrCreateCompound(villagerData, VillagerEntityMCA.MCA_DATA_KEY);
     }
 
-    private String getCurrentHairStyleId(CompoundTag mcaData) {
+    private List<HairStyle> getHairStyles(Gender gender) {
+        HairStyleList styles = HairStyleList.getInstance();
+        if (styles == null) {
+            return List.of();
+        }
+
+        HairList hairList = HairList.getInstance();
+        Map<String, Hair> legacyHair = hairList == null ? Map.of() : hairList.hair;
+        return styles.getAllStyles(legacyHair).values().stream()
+                .filter(style -> style.getGender() == Gender.NEUTRAL || gender == Gender.NEUTRAL || style.getGender() == gender)
+                .sorted((a, b) -> SkinListEntry.compareIdentifiers(a.getIdentifier(), b.getIdentifier()))
+                .toList();
+    }
+
+    private HairStyle pickRandomHairStyle(List<HairStyle> styles) {
+        double totalChance = styles.stream().mapToDouble(HairStyle::getChance).sum() * API.getRng().nextDouble();
+        for (HairStyle style : styles) {
+            totalChance -= style.getChance();
+            if (totalChance <= 0.0) {
+                return style;
+            }
+        }
+        return styles.get(styles.size() - 1);
+    }
+
+    private HairStyle pickNextHairStyle(List<HairStyle> styles, String currentStyleId, int offset) {
+        for (int i = 0; i < styles.size(); i++) {
+            if (styles.get(i).getIdentifier().equals(currentStyleId)) {
+                return styles.get(Math.floorMod(i + offset, styles.size()));
+            }
+        }
+        return styles.get(offset < 0 ? styles.size() - 1 : 0);
+    }
+
+    private String getCurrentHairStyleId(CompoundTag mcaData, List<HairStyle> styles) {
         String legacyHair = mcaData.getString("Hair").orElse("");
         if (!MCA.isBlankString(legacyHair)) {
             return legacyHair;
         }
-        return mcaData.getString("HairStyle").orElse("");
+        String storedStyle = mcaData.getString("HairStyle").orElse("");
+        if (!MCA.isBlankString(storedStyle)) {
+            return storedStyle;
+        }
+        return styles.stream()
+                .filter(style -> matchesHairStyle(mcaData, style))
+                .map(HairStyle::getIdentifier)
+                .findFirst()
+                .orElse("");
+    }
+
+    private boolean matchesHairStyle(CompoundTag mcaData, HairStyle style) {
+        for (LayeredHair.Category category : LayeredHair.Category.values()) {
+            String selectedLayer = mcaData.getString(category.getDataKey()).orElse("");
+            if (!selectedLayer.equals(style.layer(category))) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private void applyHairStyle(CompoundTag mcaData, HairStyle style) {

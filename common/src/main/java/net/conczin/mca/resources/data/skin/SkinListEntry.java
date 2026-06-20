@@ -57,6 +57,34 @@ public abstract class SkinListEntry {
         return identifier;
     }
 
+    public static int compareIdentifiers(String a, String b) {
+        int idxA = a.lastIndexOf('/');
+        int idxB = b.lastIndexOf('/');
+        String strA = idxA >= 0 ? a.substring(idxA) : a;
+        String strB = idxB >= 0 ? b.substring(idxB) : b;
+        String numA = strA.replaceAll("\\D+", "");
+        String numB = strB.replaceAll("\\D+", "");
+        if (numA.isEmpty() || numB.isEmpty()) {
+            return a.compareTo(b);
+        }
+        String normalizedA = stripLeadingZeroes(numA);
+        String normalizedB = stripLeadingZeroes(numB);
+        int lengthCompare = Integer.compare(normalizedA.length(), normalizedB.length());
+        if (lengthCompare != 0) {
+            return lengthCompare;
+        }
+        int numberCompare = normalizedA.compareTo(normalizedB);
+        return numberCompare != 0 ? numberCompare : a.compareTo(b);
+    }
+
+    private static String stripLeadingZeroes(String value) {
+        int index = 0;
+        while (index < value.length() - 1 && value.charAt(index) == '0') {
+            index++;
+        }
+        return value.substring(index);
+    }
+
     public Gender getGender() {
         return gender;
     }

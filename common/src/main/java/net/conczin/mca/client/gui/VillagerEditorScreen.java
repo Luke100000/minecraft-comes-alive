@@ -1206,7 +1206,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                 .filter(skin -> skin.getGender() == Gender.NEUTRAL || gender == Gender.NEUTRAL || skin.getGender() == gender)
                 .map(SkinListEntry::getIdentifier)
                 .distinct()
-                .sorted(VillagerEditorScreen::mca$compareNumerically)
+                .sorted(SkinListEntry::compareIdentifiers)
                 .toList();
     }
 
@@ -1217,7 +1217,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                 .filter(hair -> hair.getGender() == Gender.NEUTRAL || gender == Gender.NEUTRAL || hair.getGender() == gender)
                 .map(SkinListEntry::getIdentifier)
                 .distinct()
-                .sorted(VillagerEditorScreen::mca$compareNumerically)
+                .sorted(SkinListEntry::compareIdentifiers)
                 .toList();
         if (category.isRequired()) {
             return layers;
@@ -1227,34 +1227,6 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         optionalLayers.add("");
         optionalLayers.addAll(layers);
         return optionalLayers;
-    }
-
-    private static int mca$compareNumerically(String a, String b) {
-        int idxA = a.lastIndexOf('/');
-        int idxB = b.lastIndexOf('/');
-        String strA = idxA >= 0 ? a.substring(idxA) : a;
-        String strB = idxB >= 0 ? b.substring(idxB) : b;
-        String numA = strA.replaceAll("\\D+", "");
-        String numB = strB.replaceAll("\\D+", "");
-        if (numA.isEmpty() || numB.isEmpty()) {
-            return a.compareTo(b);
-        }
-        String normalizedA = mca$stripLeadingZeroes(numA);
-        String normalizedB = mca$stripLeadingZeroes(numB);
-        int lengthCompare = Integer.compare(normalizedA.length(), normalizedB.length());
-        if (lengthCompare != 0) {
-            return lengthCompare;
-        }
-        int numberCompare = normalizedA.compareTo(normalizedB);
-        return numberCompare != 0 ? numberCompare : a.compareTo(b);
-    }
-
-    private static String mca$stripLeadingZeroes(String value) {
-        int index = 0;
-        while (index < value.length() - 1 && value.charAt(index) == '0') {
-            index++;
-        }
-        return value.substring(index);
     }
 
     private void cycleLayeredHair(LayeredHair.Category category, int offset) {
@@ -1277,10 +1249,12 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         if (MCA.isBlankString(selected)) {
             return Component.translatable("gui.villager_editor.hair_layer_value", layerName, Component.translatable("gui.villager_editor.none"));
         }
-        List<String> layers = getLayeredHairIdsForCurrentGender(category);
-        int index = layers.indexOf(selected);
+        List<String> displayLayers = getLayeredHairIdsForCurrentGender(category).stream()
+                .filter(layer -> !MCA.isBlankString(layer))
+                .toList();
+        int index = displayLayers.indexOf(selected);
         int displayIndex = index < 0 ? 1 : index + 1;
-        return Component.translatable("gui.villager_editor.hair_layer_index", layerName, displayIndex, Math.max(1, layers.size()));
+        return Component.translatable("gui.villager_editor.hair_layer_index", layerName, displayIndex, Math.max(1, displayLayers.size()));
     }
 
     private Component getLayerName(LayeredHair.Category category) {
@@ -1334,7 +1308,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                 .filter(v -> MCA.isBlankString(searchString) || v.getKey().contains(searchString))
                 .map(v -> v.getValue().getIdentifier())
                 .distinct()
-                .sorted(VillagerEditorScreen::mca$compareNumerically)
+                .sorted(SkinListEntry::compareIdentifiers)
                 .toList();
 
         clothingPageCount = Math.max(1, (int) Math.ceil(filtered.size() / ((float) getSelectionItemsPerPage())));

@@ -229,7 +229,7 @@ public class SkinExporter {
     }
 
     private static int getEyeColor(VillagerVisuals visuals, boolean left) {
-        return left && visuals.heterochromia() ? visuals.eyeLeftDye() : visuals.eyeDye();
+        return visuals.staticEyeColor(left);
     }
 
     private static void compositeEyeLayer(NativeImage base, NativeImage face, boolean sclera, EyeSide side, int splitX, int tintColor) {
