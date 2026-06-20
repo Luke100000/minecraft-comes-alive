@@ -223,7 +223,6 @@ public class BreedableRelationship extends Relationship<VillagerEntityMCA> {
         if (item == Items.GOLDEN_APPLE && entity.isInfected()) {
             entity.setInfected(false);
             entity.eatFood(entity.getWorld(), stack);
-            stack.decrement(1);
             return true;
         }
 
