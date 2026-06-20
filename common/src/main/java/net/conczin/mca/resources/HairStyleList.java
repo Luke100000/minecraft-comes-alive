@@ -51,31 +51,22 @@ public class HairStyleList extends SimpleJsonResourceReloadListener<JsonElement>
         entries.forEach((key, definition) -> styles.put(key, definition.create(key, fileGender)));
     }
 
-    public HashMap<String, HairStyle> getAllStyles(Map<String, Hair> legacyHair) {
+    public HashMap<String, HairStyle> getAllStyles(Map<String, Hair> extraHair) {
         HashMap<String, HairStyle> allStyles = new HashMap<>(styles);
-        legacyHair.values().forEach(hair -> allStyles.putIfAbsent(hair.getIdentifier(), HairStyle.fromHair(hair)));
+        extraHair.values().forEach(hair -> allStyles.putIfAbsent(hair.getIdentifier(), HairStyle.fromHair(hair)));
         return allStyles;
     }
 
     public HairStyle get(String identifier) {
-        HairStyle style = styles.get(identifier);
-        if (style != null) {
-            return style;
-        }
-
-        HairList hairList = HairList.getInstance();
-        Hair legacy = hairList == null ? null : hairList.hair.get(identifier);
-        return legacy == null ? null : HairStyle.fromHair(legacy);
+        return styles.get(identifier);
     }
 
     public List<HairStyle> getStyles(Gender gender) {
-        HairList hairList = HairList.getInstance();
-        Map<String, Hair> legacyHair = hairList == null ? Map.of() : hairList.hair;
-        return getStyles(gender, legacyHair);
+        return getStyles(gender, Map.of());
     }
 
-    public List<HairStyle> getStyles(Gender gender, Map<String, Hair> legacyHair) {
-        return getAllStyles(legacyHair).values().stream()
+    public List<HairStyle> getStyles(Gender gender, Map<String, Hair> extraHair) {
+        return getAllStyles(extraHair).values().stream()
                 .filter(style -> style.getGender() == Gender.NEUTRAL || gender == Gender.NEUTRAL || style.getGender() == gender)
                 .sorted((a, b) -> SkinListEntry.compareIdentifiers(a.getIdentifier(), b.getIdentifier()))
                 .toList();

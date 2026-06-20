@@ -4,7 +4,6 @@ import net.conczin.mca.network.Network;
 import net.conczin.mca.network.c2s.CustomSkinListRequest;
 import net.conczin.mca.resources.BodySkinList;
 import net.conczin.mca.resources.ClothingList;
-import net.conczin.mca.resources.HairList;
 import net.conczin.mca.resources.HairStyleList;
 import net.conczin.mca.resources.LayeredHairList;
 import net.conczin.mca.resources.data.skin.BodySkin;
@@ -99,12 +98,11 @@ public final class ClientSkinCatalog {
 
     private static void loadClientResources() {
         ClothingList clothingList = ClothingList.getInstance();
-        HairList hairList = HairList.getInstance();
         BodySkinList bodySkinList = BodySkinList.getInstance();
         LayeredHairList layeredHairList = LayeredHairList.getInstance();
 
         clothing = clothingList == null ? new HashMap<>() : new HashMap<>(clothingList.clothing);
-        hair = hairList == null ? new HashMap<>() : new HashMap<>(hairList.hair);
+        hair = new HashMap<>();
         bodySkins = bodySkinList == null ? new HashMap<>() : new HashMap<>(bodySkinList.skins);
         layeredHair = layeredHairList == null ? new HashMap<>() : new HashMap<>(layeredHairList.hair);
         clothing.putAll(customClothing);

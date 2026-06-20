@@ -9,7 +9,6 @@ import net.conczin.mca.network.Network;
 import net.conczin.mca.network.s2c.PlayerDataMessage;
 import net.conczin.mca.resources.BodySkinList;
 import net.conczin.mca.resources.ClothingList;
-import net.conczin.mca.resources.HairList;
 import net.conczin.mca.resources.HairStyleList;
 import net.conczin.mca.resources.LayeredHairList;
 import net.conczin.mca.resources.data.skin.HairStyle;
@@ -250,8 +249,8 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
     }
 
     private boolean isValidHair(String identifier) {
-        HairList list = HairList.getInstance();
-        return list != null && (list.hair.containsKey(identifier) || CustomClothingManager.getHair().getEntries().containsKey(identifier));
+        HairStyleList list = HairStyleList.getInstance();
+        return (list != null && list.get(identifier) != null) || CustomClothingManager.getHair().getEntries().containsKey(identifier);
     }
 
     private boolean isValidHairStyle(String identifier) {
@@ -261,10 +260,10 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
 
     private boolean isValidLayeredHair(String identifier) {
         LayeredHairList list = LayeredHairList.getInstance();
-        HairList hairList = HairList.getInstance();
+        HairStyleList styles = HairStyleList.getInstance();
         return identifier.startsWith("immersive_library")
                 || list != null && list.containsIdentifier(identifier)
-                || hairList != null && hairList.hair.containsKey(identifier)
+                || styles != null && styles.get(identifier) != null
                 || CustomClothingManager.getHair().getEntries().containsKey(identifier);
     }
 

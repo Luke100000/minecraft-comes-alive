@@ -16,12 +16,12 @@ import net.conczin.mca.entity.interaction.EntityCommandHandler;
 import net.conczin.mca.registry.EntitiesMCA;
 import net.conczin.mca.resources.BodySkinList;
 import net.conczin.mca.resources.ClothingList;
-import net.conczin.mca.resources.HairList;
 import net.conczin.mca.resources.HairStyleList;
 import net.conczin.mca.resources.LayeredHairList;
 import net.conczin.mca.resources.Names;
 import net.conczin.mca.resources.data.skin.HairStyle;
 import net.conczin.mca.resources.data.skin.LayeredHair;
+import net.conczin.mca.server.world.data.CustomClothingManager;
 import net.conczin.mca.server.world.data.FamilyTreeNode;
 import net.conczin.mca.server.world.data.PlayerSaveData;
 import net.conczin.mca.util.network.datasync.*;
@@ -541,12 +541,6 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
             }
         }
 
-        HairList hairList = HairList.getInstance();
-        if (hairList != null) {
-            setHairStyle(HairStyle.singleLayer(hairList.getPool(gender).pickOne(), gender, 1.0F));
-            return;
-        }
-
         clearLayeredHair();
         setHair("");
     }
@@ -564,7 +558,7 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
                 randomizeClothes();
             }
 
-            if (!MCA.isBlankString(getHair()) && !getHair().startsWith("immersive_library") && !HairList.getInstance().hair.containsKey(getHair())) {
+            if (!MCA.isBlankString(getHair()) && !isValidHairTexture(getHair())) {
                 MCA.LOGGER.info("Villagers hair {} does not exist!", getHair());
                 randomizeHair();
             }
@@ -587,8 +581,12 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
         if (hair.startsWith("immersive_library")) {
             return true;
         }
-        HairList hairList = HairList.getInstance();
-        return layeredHairList.containsIdentifier(hair) || hairList != null && hairList.hair.containsKey(hair);
+        return layeredHairList.containsIdentifier(hair) || isValidHairTexture(hair);
+    }
+
+    private boolean isValidHairTexture(String hair) {
+        HairStyleList styles = HairStyleList.getInstance();
+        return (styles != null && styles.get(hair) != null) || CustomClothingManager.getHair().getEntries().containsKey(hair);
     }
 
     @SuppressWarnings({"unchecked", "RedundantSuppression"})

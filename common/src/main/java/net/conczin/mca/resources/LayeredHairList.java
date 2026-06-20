@@ -1,29 +1,26 @@
 package net.conczin.mca.resources;
 
-import com.google.gson.JsonElement;
-import com.mojang.serialization.JsonOps;
 import net.conczin.mca.MCA;
 import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.resources.data.skin.LayeredHair;
 import net.conczin.mca.resources.data.skin.SkinListEntry;
-import net.minecraft.resources.FileToIdConverter;
+import net.minecraft.IdentifierException;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.resources.ResourceManager;
-import net.minecraft.server.packs.resources.SimpleJsonResourceReloadListener;
-import net.minecraft.util.ExtraCodecs;
+import net.minecraft.server.packs.resources.SimplePreparableReloadListener;
 import net.minecraft.util.profiling.ProfilerFiller;
 
 import java.util.EnumMap;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
-public class LayeredHairList extends SimpleJsonResourceReloadListener<JsonElement> {
-    public static final Identifier ID = MCA.locate("skins/layered_hair");
+public class LayeredHairList extends SimplePreparableReloadListener<Map<Identifier, List<String>>> {
+    public static final Identifier ID = MCA.locate("hair_layers");
     private static LayeredHairList INSTANCE;
     public final HashMap<String, LayeredHair> hair = new HashMap<>();
 
     public LayeredHairList() {
-        super(ExtraCodecs.JSON, FileToIdConverter.json("skins/layered_hair"));
         INSTANCE = this;
     }
 
@@ -32,23 +29,37 @@ public class LayeredHairList extends SimpleJsonResourceReloadListener<JsonElemen
     }
 
     @Override
-    protected void apply(Map<Identifier, JsonElement> data, ResourceManager manager, ProfilerFiller profiler) {
+    protected Map<Identifier, List<String>> prepare(ResourceManager manager, ProfilerFiller profiler) {
+        return SkinListJson.textureCollections(manager, "hair_layers");
+    }
+
+    @Override
+    protected void apply(Map<Identifier, List<String>> data, ResourceManager manager, ProfilerFiller profiler) {
         hair.clear();
 
         data.forEach(this::addEntries);
     }
 
-    private void addEntries(Identifier id, JsonElement file) {
-        Gender fileGender = BodySkinList.getGenderFromPath(id);
+    private void addEntries(Identifier id, List<String> textures) {
         LayeredHair.Category fileCategory = getCategoryFromPath(id);
-        SkinListJson.entries(id, file).forEach(entry -> {
-            LayeredHair.DEFINITION_CODEC.parse(JsonOps.INSTANCE, entry.metadata())
-                    .resultOrPartial(error -> MCA.LOGGER.warn("Invalid layered hair list entry {} in {}: {}", entry.identifier(), id, error))
-                    .ifPresent(definition -> {
-                        LayeredHair layeredHair = definition.create(entry.identifier(), fileGender, fileCategory);
-                        hair.put(layeredHair.getIdentifier() + "|" + layeredHair.getGender().getDataName() + "|" + layeredHair.getCategory().getId(), layeredHair);
-                    });
-        });
+        textures.forEach(texture -> addEntry(texture, fileCategory));
+    }
+
+    private void addEntry(String texture, LayeredHair.Category category) {
+        Identifier parsed;
+        try {
+            parsed = Identifier.parse(texture);
+        } catch (IdentifierException exception) {
+            MCA.LOGGER.warn("Invalid layered hair texture identifier {}", texture, exception);
+            return;
+        }
+        if (!parsed.getPath().startsWith("skins/layered_hair/")) {
+            MCA.LOGGER.warn("Invalid layered hair texture path {}", texture);
+            return;
+        }
+
+        LayeredHair layeredHair = new LayeredHair(texture, Gender.NEUTRAL, category, 1.0F);
+        hair.put(layeredHair.getIdentifier() + "|" + layeredHair.getGender().getDataName() + "|" + layeredHair.getCategory().getId(), layeredHair);
     }
 
     public boolean containsIdentifier(String identifier) {

@@ -1,0 +1,21 @@
+{
+  "replace": false,
+  "textures": [
+    "mca:skins/layered_hair/back/1.png",
+    "mca:skins/layered_hair/back/2.png",
+    "mca:skins/layered_hair/back/3.png",
+    "mca:skins/layered_hair/back/4.png",
+    "mca:skins/layered_hair/back/5.png",
+    "mca:skins/layered_hair/back/6.png",
+    "mca:skins/layered_hair/back/7.png",
+    "mca:skins/layered_hair/back/8.png",
+    "mca:skins/layered_hair/back/9.png",
+    "mca:skins/layered_hair/back/10.png",
+    "mca:skins/layered_hair/back/11.png",
+    "mca:skins/layered_hair/back/12.png",
+    "mca:skins/layered_hair/back/13.png",
+    "mca:skins/layered_hair/back/14.png",
+    "mca:skins/layered_hair/back/15.png",
+    "mca:skins/layered_hair/back/16.png"
+  ]
+}

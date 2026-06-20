@@ -1079,16 +1079,23 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         int y = height / 2 + 75;
 
         if (isSelection) {
-            addPreviewControlRow(centerX, height / 2 - 76, 22, 14, 0);
+            addPreviewControlRow(centerX, height / 2 - 76, 22, 14, 0, false);
         } else {
-            addPreviewControlRow(centerX, y, 28, 20, 2);
+            addPreviewControlRow(centerX, y, 28, 20, 2, true);
         }
     }
 
-    private void addPreviewControlRow(int centerX, int y, int buttonWidth, int buttonHeight, int gap) {
+    private void addPreviewControlRow(int centerX, int y, int buttonWidth, int buttonHeight, int gap, boolean centerMouseButton) {
         int step = buttonWidth + gap;
-        int mouseFollowIndex = 3;
-        int x = centerX - mouseFollowIndex * step - buttonWidth / 2;
+        int x;
+        if (centerMouseButton) {
+            int mouseFollowIndex = 3;
+            x = centerX - mouseFollowIndex * step - buttonWidth / 2;
+        } else {
+            int buttonCount = 6;
+            int rowWidth = buttonCount * buttonWidth + (buttonCount - 1) * gap;
+            x = centerX - rowWidth / 2;
+        }
 
         addRenderableWidget(new TooltipButtonWidget(x, y, buttonWidth, buttonHeight, Component.literal("R"), Component.translatable("gui.villager_editor.reset_zoom.tooltip"), b -> previewZoom = 1.0F));
         addRenderableWidget(new ButtonWidget(x + step, y, buttonWidth, buttonHeight, Component.literal("-"), b -> zoomPreview(-0.1F)));
