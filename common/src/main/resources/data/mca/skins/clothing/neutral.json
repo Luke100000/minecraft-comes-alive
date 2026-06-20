@@ -1,55 +1,191 @@
-{
-  "mca:skins/clothing/normal/neutral/none/%d.png": {
-    "count": 13,
+[
+  {
+    "id": "mca:skins/clothing/normal/neutral/none/0.png",
     "profession": "minecraft:none",
     "chance": 0.5
   },
-  "mca:skins/clothing/normal/neutral/armorer/%d.png": {
-    "count": 3,
+  {
+    "id": "mca:skins/clothing/normal/neutral/none/1.png",
+    "profession": "minecraft:none",
+    "chance": 0.5
+  },
+  {
+    "id": "mca:skins/clothing/normal/neutral/none/2.png",
+    "profession": "minecraft:none",
+    "chance": 0.5
+  },
+  {
+    "id": "mca:skins/clothing/normal/neutral/none/3.png",
+    "profession": "minecraft:none",
+    "chance": 0.5
+  },
+  {
+    "id": "mca:skins/clothing/normal/neutral/none/4.png",
+    "profession": "minecraft:none",
+    "chance": 0.5
+  },
+  {
+    "id": "mca:skins/clothing/normal/neutral/none/5.png",
+    "profession": "minecraft:none",
+    "chance": 0.5
+  },
+  {
+    "id": "mca:skins/clothing/normal/neutral/none/6.png",
+    "profession": "minecraft:none",
+    "chance": 0.5
+  },
+  {
+    "id": "mca:skins/clothing/normal/neutral/none/7.png",
+    "profession": "minecraft:none",
+    "chance": 0.5
+  },
+  {
+    "id": "mca:skins/clothing/normal/neutral/none/8.png",
+    "profession": "minecraft:none",
+    "chance": 0.5
+  },
+  {
+    "id": "mca:skins/clothing/normal/neutral/none/9.png",
+    "profession": "minecraft:none",
+    "chance": 0.5
+  },
+  {
+    "id": "mca:skins/clothing/normal/neutral/none/10.png",
+    "profession": "minecraft:none",
+    "chance": 0.5
+  },
+  {
+    "id": "mca:skins/clothing/normal/neutral/none/11.png",
+    "profession": "minecraft:none",
+    "chance": 0.5
+  },
+  {
+    "id": "mca:skins/clothing/normal/neutral/none/12.png",
+    "profession": "minecraft:none",
+    "chance": 0.5
+  },
+  {
+    "id": "mca:skins/clothing/normal/neutral/armorer/0.png",
     "profession": "minecraft:armorer"
   },
-  "mca:skins/clothing/normal/neutral/cartographer/%d.png": {
-    "count": 3,
+  {
+    "id": "mca:skins/clothing/normal/neutral/armorer/1.png",
+    "profession": "minecraft:armorer"
+  },
+  {
+    "id": "mca:skins/clothing/normal/neutral/armorer/2.png",
+    "profession": "minecraft:armorer"
+  },
+  {
+    "id": "mca:skins/clothing/normal/neutral/cartographer/0.png",
     "profession": "minecraft:cartographer"
   },
-  "mca:skins/clothing/normal/neutral/cleric/%d.png": {
-    "count": 0,
-    "profession": "minecraft:cleric"
+  {
+    "id": "mca:skins/clothing/normal/neutral/cartographer/1.png",
+    "profession": "minecraft:cartographer"
   },
-  "mca:skins/clothing/normal/neutral/farmer/%d.png": {
-    "count": 3,
+  {
+    "id": "mca:skins/clothing/normal/neutral/cartographer/2.png",
+    "profession": "minecraft:cartographer"
+  },
+  {
+    "id": "mca:skins/clothing/normal/neutral/farmer/0.png",
     "profession": "minecraft:farmer"
   },
-  "mca:skins/clothing/normal/neutral/fisherman/%d.png": {
-    "count": 1,
+  {
+    "id": "mca:skins/clothing/normal/neutral/farmer/1.png",
+    "profession": "minecraft:farmer"
+  },
+  {
+    "id": "mca:skins/clothing/normal/neutral/farmer/2.png",
+    "profession": "minecraft:farmer"
+  },
+  {
+    "id": "mca:skins/clothing/normal/neutral/fisherman/0.png",
     "profession": "minecraft:fisherman"
   },
-  "mca:skins/clothing/normal/neutral/fletcher/%d.png": {
-    "count": 2,
+  {
+    "id": "mca:skins/clothing/normal/neutral/fletcher/0.png",
     "profession": "minecraft:fletcher"
   },
-  "mca:skins/clothing/normal/neutral/leatherworker/%d.png": {
-    "count": 1,
+  {
+    "id": "mca:skins/clothing/normal/neutral/fletcher/1.png",
+    "profession": "minecraft:fletcher"
+  },
+  {
+    "id": "mca:skins/clothing/normal/neutral/leatherworker/0.png",
     "profession": "minecraft:leatherworker"
   },
-  "mca:skins/clothing/normal/neutral/librarian/%d.png": {
-    "count": 6,
+  {
+    "id": "mca:skins/clothing/normal/neutral/librarian/0.png",
     "profession": "minecraft:librarian"
   },
-  "mca:skins/clothing/normal/neutral/mason/%d.png": {
-    "count": 3,
+  {
+    "id": "mca:skins/clothing/normal/neutral/librarian/1.png",
+    "profession": "minecraft:librarian"
+  },
+  {
+    "id": "mca:skins/clothing/normal/neutral/librarian/2.png",
+    "profession": "minecraft:librarian"
+  },
+  {
+    "id": "mca:skins/clothing/normal/neutral/librarian/3.png",
+    "profession": "minecraft:librarian"
+  },
+  {
+    "id": "mca:skins/clothing/normal/neutral/librarian/4.png",
+    "profession": "minecraft:librarian"
+  },
+  {
+    "id": "mca:skins/clothing/normal/neutral/librarian/5.png",
+    "profession": "minecraft:librarian"
+  },
+  {
+    "id": "mca:skins/clothing/normal/neutral/mason/0.png",
     "profession": "minecraft:mason"
   },
-  "mca:skins/clothing/normal/neutral/shepherd/%d.png": {
-    "count": 4,
+  {
+    "id": "mca:skins/clothing/normal/neutral/mason/1.png",
+    "profession": "minecraft:mason"
+  },
+  {
+    "id": "mca:skins/clothing/normal/neutral/mason/2.png",
+    "profession": "minecraft:mason"
+  },
+  {
+    "id": "mca:skins/clothing/normal/neutral/shepherd/0.png",
     "profession": "minecraft:shepherd"
   },
-  "mca:skins/clothing/normal/neutral/toolsmith/%d.png": {
-    "count": 1,
+  {
+    "id": "mca:skins/clothing/normal/neutral/shepherd/1.png",
+    "profession": "minecraft:shepherd"
+  },
+  {
+    "id": "mca:skins/clothing/normal/neutral/shepherd/2.png",
+    "profession": "minecraft:shepherd"
+  },
+  {
+    "id": "mca:skins/clothing/normal/neutral/shepherd/3.png",
+    "profession": "minecraft:shepherd"
+  },
+  {
+    "id": "mca:skins/clothing/normal/neutral/toolsmith/0.png",
     "profession": "minecraft:toolsmith"
   },
-  "mca:skins/clothing/normal/neutral/weaponsmith/%d.png": {
-    "count": 4,
+  {
+    "id": "mca:skins/clothing/normal/neutral/weaponsmith/0.png",
+    "profession": "minecraft:weaponsmith"
+  },
+  {
+    "id": "mca:skins/clothing/normal/neutral/weaponsmith/1.png",
+    "profession": "minecraft:weaponsmith"
+  },
+  {
+    "id": "mca:skins/clothing/normal/neutral/weaponsmith/2.png",
+    "profession": "minecraft:weaponsmith"
+  },
+  {
+    "id": "mca:skins/clothing/normal/neutral/weaponsmith/3.png",
     "profession": "minecraft:weaponsmith"
   }
-}
+]

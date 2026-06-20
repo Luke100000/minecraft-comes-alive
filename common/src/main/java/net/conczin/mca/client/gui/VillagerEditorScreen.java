@@ -4,6 +4,7 @@ import net.conczin.mca.Config;
 import net.conczin.mca.MCA;
 import net.conczin.mca.MCAClient;
 import net.conczin.mca.client.gui.widget.*;
+import net.conczin.mca.client.resources.ClientSkinCatalog;
 import net.conczin.mca.client.resources.ClientUtils;
 import net.conczin.mca.client.resources.ColorPalette;
 import net.conczin.mca.client.tts.SpeechManager;
@@ -17,17 +18,11 @@ import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.entity.ai.relationship.Personality;
 import net.conczin.mca.network.Network;
 import net.conczin.mca.network.c2s.GetVillagerRequest;
-import net.conczin.mca.network.c2s.CustomSkinListRequest;
 import net.conczin.mca.network.c2s.VillagerEditorSyncRequest;
 import net.conczin.mca.network.c2s.VillagerNameRequest;
 import net.conczin.mca.registry.EntitiesMCA;
 import net.conczin.mca.registry.ProfessionsMCA;
-import net.conczin.mca.resources.BodySkinList;
-import net.conczin.mca.resources.ClothingList;
 import net.conczin.mca.resources.FaceList;
-import net.conczin.mca.resources.HairList;
-import net.conczin.mca.resources.HairStyleList;
-import net.conczin.mca.resources.LayeredHairList;
 import net.conczin.mca.resources.data.skin.BodySkin;
 import net.conczin.mca.resources.data.skin.Clothing;
 import net.conczin.mca.resources.data.skin.Hair;
@@ -81,19 +76,13 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     protected static final int DATA_WIDTH = 175;
     private static final Identifier PREVIEW_MOUSE_FOLLOW_TEXTURE = MCA.locate("textures/gui/preview_mouse_follow.png");
     private static final int VOICE_PREVIEW_BUTTON_WIDTH = 22;
+    private static final int STEVE_PROPORTIONS_BUTTON_WIDTH = 54;
+    private static final float STEVE_RAW_WIDTH_SCALE = 1.0F;
+    private static final float STEVE_RAW_HEIGHT_SCALE = 0.9F;
     private static final int TRAITS_PER_PAGE = 8;
     private static final int LAYERED_HAIR_PER_PAGE = 6;
     private static final float MIN_PREVIEW_ZOOM = 0.7F;
     private static final float MAX_PREVIEW_ZOOM = 1.4F;
-    private static boolean isSkinListOutdated = true;
-    private static HashMap<String, Clothing> clothing = new HashMap<>();
-    private static HashMap<String, Hair> hair = new HashMap<>();
-    private static HashMap<String, BodySkin> bodySkins = new HashMap<>();
-    private static HashMap<String, LayeredHair> layeredHair = new HashMap<>();
-    private static HashMap<String, HairStyle> hairStyles = new HashMap<>();
-    private static HashMap<String, Clothing> customClothing = new HashMap<>();
-    private static HashMap<String, Hair> customHair = new HashMap<>();
-    private static boolean isSkinListLoaded;
     protected final VillagerEntityMCA villager = Objects.requireNonNull(EntitiesMCA.MALE_VILLAGER.create(Objects.requireNonNull(Minecraft.getInstance().level), EntitySpawnReason.LOAD));
     protected final VillagerEntityMCA villagerVisualization = Objects.requireNonNull(EntitiesMCA.MALE_VILLAGER.create(Objects.requireNonNull(Minecraft.getInstance().level), EntitySpawnReason.LOAD));
     final UUID villagerUUID;
@@ -171,98 +160,6 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         this(villagerUUID, playerUUID, MCAClient.isPlayerRendererAllowed(), MCAClient.isVillagerRendererAllowed());
     }
 
-    public static void setCustomSkinList(HashMap<String, Clothing> clothing, HashMap<String, Hair> hair) {
-        customClothing = new HashMap<>(clothing);
-        customHair = new HashMap<>(hair);
-        loadClientSkinLists();
-        isSkinListLoaded = true;
-    }
-
-    public static void sync() {
-        seedClientSkinList();
-        if (isSkinListOutdated) {
-            Network.sendToServer(new CustomSkinListRequest());
-            isSkinListOutdated = false;
-        }
-    }
-
-    private static void seedClientSkinList() {
-        if (isSkinListLoaded) {
-            return;
-        }
-
-        loadClientSkinLists();
-        isSkinListLoaded = !clothing.isEmpty() || !hair.isEmpty() || !bodySkins.isEmpty() || !layeredHair.isEmpty() || !hairStyles.isEmpty();
-    }
-
-    private static void loadClientSkinLists() {
-        ClothingList clothingList = ClothingList.getInstance();
-        HairList hairList = HairList.getInstance();
-        BodySkinList bodySkinList = BodySkinList.getInstance();
-        LayeredHairList layeredHairList = LayeredHairList.getInstance();
-
-        clothing = clothingList == null ? new HashMap<>() : new HashMap<>(clothingList.clothing);
-        hair = hairList == null ? new HashMap<>() : new HashMap<>(hairList.hair);
-        bodySkins = bodySkinList == null ? new HashMap<>() : new HashMap<>(bodySkinList.skins);
-        layeredHair = layeredHairList == null ? new HashMap<>() : new HashMap<>(layeredHairList.hair);
-        clothing.putAll(customClothing);
-        hair.putAll(customHair);
-        hairStyles = getClientHairStyles(hair);
-    }
-
-    public static void clearCachedSkinLists() {
-        clothing.clear();
-        hair.clear();
-        bodySkins.clear();
-        layeredHair.clear();
-        hairStyles.clear();
-        customClothing.clear();
-        customHair.clear();
-        isSkinListLoaded = false;
-        isSkinListOutdated = true;
-    }
-
-    private static HashMap<String, HairStyle> getClientHairStyles(Map<String, Hair> legacyHair) {
-        HairStyleList hairStyleList = HairStyleList.getInstance();
-        if (hairStyleList != null) {
-            return hairStyleList.getAllStyles(legacyHair);
-        }
-
-        HashMap<String, HairStyle> styles = new HashMap<>();
-        legacyHair.values().forEach(hair -> styles.putIfAbsent(hair.getIdentifier(), HairStyle.fromHair(hair)));
-        return styles;
-    }
-
-    public static HashMap<String, Clothing> getClothing() {
-        sync();
-        return clothing;
-    }
-
-    public static HashMap<String, Hair> getHair() {
-        sync();
-        return hair;
-    }
-
-    public static HashMap<String, BodySkin> getBodySkins() {
-        sync();
-        return bodySkins;
-    }
-
-    public static HashMap<String, LayeredHair> getLayeredHair() {
-        sync();
-        return layeredHair;
-    }
-
-    public static HashMap<String, HairStyle> getHairStyles() {
-        sync();
-        return hairStyles;
-    }
-
-    public static void setSkinListOutdated() {
-        isSkinListOutdated = true;
-        isSkinListLoaded = false;
-    }
-
     @Override
     public boolean isPauseScreen() {
         return false;
@@ -326,6 +223,54 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                 Component.translatable("gui.villager_editor.preview_voice.tooltip")
         ));
         previewButton.active = SpeechManager.INSTANCE.canPreviewVoiceTone();
+    }
+
+    private void addSteveProportionsButton(int x, int y) {
+        addRenderableWidget(new TooltipButtonWidget(
+                x,
+                y,
+                STEVE_PROPORTIONS_BUTTON_WIDTH,
+                20,
+                Component.translatable("gui.villager_editor.steve_proportions"),
+                Component.translatable("gui.villager_editor.steve_proportions.tooltip"),
+                b -> {
+                    setSteveProportions();
+                    init();
+                }
+        ));
+    }
+
+    private void setSteveProportions() {
+        Genetics genetics = villager.getGenetics();
+        genetics.setGene(Genetics.SIZE, getSteveProportionsMarker(Genetics.SIZE));
+        genetics.setGene(Genetics.WIDTH, getSteveProportionsMarker(Genetics.WIDTH));
+        villager.refreshDimensions();
+    }
+
+    private float getSteveProportionsMarker(Genetics.GeneType gene) {
+        if (gene == Genetics.SIZE) {
+            return geneValueForRawScale(STEVE_RAW_HEIGHT_SCALE, getNonGeneticVerticalScaleFactor());
+        }
+        if (gene == Genetics.WIDTH) {
+            return geneValueForRawScale(STEVE_RAW_WIDTH_SCALE, getNonGeneticHorizontalScaleFactor());
+        }
+        return Float.NaN;
+    }
+
+    private float geneValueForRawScale(float targetRawScale, float nonGeneticScaleFactor) {
+        return Mth.clamp(2.0F * (targetRawScale / nonGeneticScaleFactor - 0.75F), 0.0F, 1.0F);
+    }
+
+    private float getNonGeneticVerticalScaleFactor() {
+        return villager.getTraits().getVerticalScaleFactor()
+                * villager.getVillagerDimensions().getHeight()
+                * villager.getGenetics().getGender().getScaleFactor();
+    }
+
+    private float getNonGeneticHorizontalScaleFactor() {
+        return villager.getTraits().getHorizontalScaleFactor()
+                * villager.getVillagerDimensions().getWidth()
+                * villager.getGenetics().getGender().getHorizontalScaleFactor();
     }
 
     private int integerChanger(int y, IntConsumer onClick, Supplier<Component> content) {
@@ -495,6 +440,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                     genetics.setGene(Genetics.SIZE, 0.80f);
                     genetics.setGene(Genetics.WIDTH, 0.80f);
                 } else {
+                    addSteveProportionsButton(width / 2 - STEVE_PROPORTIONS_BUTTON_WIDTH - 2, y);
                     y = doubleGeneSliders(y, Genetics.SIZE, Genetics.WIDTH);
                 }
 
@@ -1173,7 +1119,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     }
 
     private int addSkinSelectionWidgets(int y) {
-        sync();
+        ClientSkinCatalog.sync();
         addRenderableWidget(new ButtonWidget(width / 2, y, DATA_WIDTH / 2, 20, Component.translatable("gui.villager_editor.randSkin"), b -> {
             sendCommand("skin");
         }));
@@ -1182,7 +1128,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         }));
         y += 22;
 
-        if (!isSkinListLoaded) {
+        if (ClientSkinCatalog.bodySkins().isEmpty()) {
             addRenderableWidget(new ButtonWidget(width / 2, y, DATA_WIDTH, 20, Component.translatable("gui.loading"), b -> {
             })).active = false;
             return y + 24;
@@ -1214,7 +1160,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
 
     private List<String> getBodySkinIdsForCurrentGender() {
         Gender gender = villager.getGenetics().getGender();
-        return getBodySkins().values().stream()
+        return ClientSkinCatalog.bodySkins().values().stream()
                 .filter(skin -> skin.getGender() == Gender.NEUTRAL || gender == Gender.NEUTRAL || skin.getGender() == gender)
                 .map(SkinListEntry::getIdentifier)
                 .distinct()
@@ -1224,7 +1170,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
 
     private List<String> getLayeredHairIdsForCurrentGender(LayeredHair.Category category) {
         Gender gender = villager.getGenetics().getGender();
-        List<String> layers = getLayeredHair().values().stream()
+        List<String> layers = ClientSkinCatalog.layeredHair().values().stream()
                 .filter(hair -> hair.getCategory() == category)
                 .filter(hair -> hair.getGender() == Gender.NEUTRAL || gender == Gender.NEUTRAL || hair.getGender() == gender)
                 .map(SkinListEntry::getIdentifier)
@@ -1294,20 +1240,20 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
 
     private void filter() {
         if (Objects.equals(page, "clothing")) {
-            filteredClothing = filter(getClothing());
+            filteredClothing = filter(ClientSkinCatalog.clothing());
         } else if (Objects.equals(page, "hair")) {
-            filteredHairStyles = filter(getHairStyles());
+            filteredHairStyles = filter(ClientSkinCatalog.hairStyles());
         } else if (Objects.equals(page, "skin")) {
-            filteredBodySkins = filter(getBodySkins());
+            filteredBodySkins = filter(ClientSkinCatalog.bodySkins());
         } else if (isLayeredHairPage()) {
             LayeredHair.Category category = getLayeredHairCategory();
-            filteredLayeredHair = filter(getLayeredHair().entrySet().stream()
+            filteredLayeredHair = filter(ClientSkinCatalog.layeredHair().entrySet().stream()
                     .filter(entry -> entry.getValue().getCategory() == category)
                     .collect(HashMap::new, (map, entry) -> map.put(entry.getKey(), entry.getValue()), HashMap::putAll));
         }
     }
 
-    private <T extends SkinListEntry> List<String> filter(HashMap<String, T> map) {
+    private <T extends SkinListEntry> List<String> filter(Map<String, T> map) {
         List<String> filtered = map.entrySet().stream()
                 .filter(v -> filterGender == v.getValue().getGender() || v.getValue().getGender() == Gender.NEUTRAL)
                 .filter(v -> {
@@ -1916,7 +1862,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     }
 
     private void applyHairStyle(VillagerLike<?> villager, String styleId) {
-        HairStyle style = getHairStyles().get(styleId);
+        HairStyle style = ClientSkinCatalog.hairStyles().get(styleId);
         if (style != null) {
             villager.setHairStyle(style);
         }

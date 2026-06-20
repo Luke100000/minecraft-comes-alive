@@ -1,18 +1,98 @@
-{
-  "mca:skins/layered_hair/back/1.png": { "gender": "female", "category": "back", "chance": 0.65 },
-  "mca:skins/layered_hair/back/2.png": { "gender": "female", "category": "back", "chance": 0.65 },
-  "mca:skins/layered_hair/back/3.png": { "gender": "female", "category": "back", "chance": 0.65 },
-  "mca:skins/layered_hair/back/4.png": { "gender": "female", "category": "back", "chance": 0.65 },
-  "mca:skins/layered_hair/back/5.png": { "gender": "female", "category": "back", "chance": 0.65 },
-  "mca:skins/layered_hair/back/6.png": { "gender": "female", "category": "back", "chance": 0.65 },
-  "mca:skins/layered_hair/back/7.png": { "gender": "female", "category": "back", "chance": 0.65 },
-  "mca:skins/layered_hair/back/8.png": { "gender": "female", "category": "back", "chance": 0.65 },
-  "mca:skins/layered_hair/back/9.png": { "gender": "female", "category": "back", "chance": 0.65 },
-  "mca:skins/layered_hair/back/10.png": { "gender": "female", "category": "back", "chance": 0.65 },
-  "mca:skins/layered_hair/back/11.png": { "gender": "female", "category": "back", "chance": 0.65 },
-  "mca:skins/layered_hair/back/12.png": { "gender": "female", "category": "back", "chance": 0.65 },
-  "mca:skins/layered_hair/back/13.png": { "gender": "female", "category": "back", "chance": 0.65 },
-  "mca:skins/layered_hair/back/14.png": { "gender": "female", "category": "back", "chance": 0.65 },
-  "mca:skins/layered_hair/back/15.png": { "gender": "female", "category": "back", "chance": 0.65 },
-  "mca:skins/layered_hair/back/16.png": { "gender": "female", "category": "back", "chance": 0.65 }
-}
+[
+  {
+    "id": "mca:skins/layered_hair/back/1.png",
+    "gender": "female",
+    "category": "back",
+    "chance": 0.65
+  },
+  {
+    "id": "mca:skins/layered_hair/back/2.png",
+    "gender": "female",
+    "category": "back",
+    "chance": 0.65
+  },
+  {
+    "id": "mca:skins/layered_hair/back/3.png",
+    "gender": "female",
+    "category": "back",
+    "chance": 0.65
+  },
+  {
+    "id": "mca:skins/layered_hair/back/4.png",
+    "gender": "female",
+    "category": "back",
+    "chance": 0.65
+  },
+  {
+    "id": "mca:skins/layered_hair/back/5.png",
+    "gender": "female",
+    "category": "back",
+    "chance": 0.65
+  },
+  {
+    "id": "mca:skins/layered_hair/back/6.png",
+    "gender": "female",
+    "category": "back",
+    "chance": 0.65
+  },
+  {
+    "id": "mca:skins/layered_hair/back/7.png",
+    "gender": "female",
+    "category": "back",
+    "chance": 0.65
+  },
+  {
+    "id": "mca:skins/layered_hair/back/8.png",
+    "gender": "female",
+    "category": "back",
+    "chance": 0.65
+  },
+  {
+    "id": "mca:skins/layered_hair/back/9.png",
+    "gender": "female",
+    "category": "back",
+    "chance": 0.65
+  },
+  {
+    "id": "mca:skins/layered_hair/back/10.png",
+    "gender": "female",
+    "category": "back",
+    "chance": 0.65
+  },
+  {
+    "id": "mca:skins/layered_hair/back/11.png",
+    "gender": "female",
+    "category": "back",
+    "chance": 0.65
+  },
+  {
+    "id": "mca:skins/layered_hair/back/12.png",
+    "gender": "female",
+    "category": "back",
+    "chance": 0.65
+  },
+  {
+    "id": "mca:skins/layered_hair/back/13.png",
+    "gender": "female",
+    "category": "back",
+    "chance": 0.65
+  },
+  {
+    "id": "mca:skins/layered_hair/back/14.png",
+    "gender": "female",
+    "category": "back",
+    "chance": 0.65
+  },
+  {
+    "id": "mca:skins/layered_hair/back/15.png",
+    "gender": "female",
+    "category": "back",
+    "chance": 0.65
+  },
+  {
+    "id": "mca:skins/layered_hair/back/16.png",
+    "gender": "female",
+    "category": "back",
+    "chance": 0.65
+  }
+]

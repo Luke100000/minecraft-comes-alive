@@ -261,7 +261,11 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
 
     private boolean isValidLayeredHair(String identifier) {
         LayeredHairList list = LayeredHairList.getInstance();
-        return list != null && list.containsIdentifier(identifier);
+        HairList hairList = HairList.getInstance();
+        return identifier.startsWith("immersive_library")
+                || list != null && list.containsIdentifier(identifier)
+                || hairList != null && hairList.hair.containsKey(identifier)
+                || CustomClothingManager.getHair().getEntries().containsKey(identifier);
     }
 
     private Gender getGender(CompoundTag villagerData) {

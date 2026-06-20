@@ -26,7 +26,6 @@ public class LayeredHair extends SkinListEntry {
     public static final Codec<Definition> DEFINITION_CODEC = RecordCodecBuilder.create(instance -> instance.group(
             GENDER_CODEC.optionalFieldOf("gender", Gender.NEUTRAL).forGetter(Definition::gender),
             CATEGORY_CODEC.optionalFieldOf("category", Category.BASE).forGetter(Definition::category),
-            Codec.INT.optionalFieldOf("count", -1).forGetter(Definition::count),
             Codec.FLOAT.optionalFieldOf("chance", 1.0f).forGetter(Definition::chance)
     ).apply(instance, Definition::new));
     public static final Codec<LayeredHair> CODEC = RecordCodecBuilder.create(instance -> instance.group(
@@ -113,7 +112,7 @@ public class LayeredHair extends SkinListEntry {
         }
     }
 
-    public record Definition(Gender gender, Category category, int count, float chance) {
+    public record Definition(Gender gender, Category category, float chance) {
         public LayeredHair create(String identifier, Gender fallbackGender, Category fallbackCategory) {
             Category resolvedCategory = category == null ? fallbackCategory : category;
             return new LayeredHair(identifier, resolveGender(gender, fallbackGender), resolvedCategory, chance);

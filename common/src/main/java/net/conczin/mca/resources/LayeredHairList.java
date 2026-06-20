@@ -1,7 +1,6 @@
 package net.conczin.mca.resources;
 
 import com.google.gson.JsonElement;
-import com.mojang.serialization.Codec;
 import com.mojang.serialization.JsonOps;
 import net.conczin.mca.MCA;
 import net.conczin.mca.entity.ai.relationship.Gender;
@@ -19,7 +18,6 @@ import java.util.HashMap;
 import java.util.Map;
 
 public class LayeredHairList extends SimpleJsonResourceReloadListener<JsonElement> {
-    private static final Codec<Map<String, LayeredHair.Definition>> FILE_CODEC = Codec.unboundedMap(Codec.STRING, LayeredHair.DEFINITION_CODEC);
     public static final Identifier ID = MCA.locate("skins/layered_hair");
     private static LayeredHairList INSTANCE;
     public final HashMap<String, LayeredHair> hair = new HashMap<>();
@@ -37,19 +35,19 @@ public class LayeredHairList extends SimpleJsonResourceReloadListener<JsonElemen
     protected void apply(Map<Identifier, JsonElement> data, ResourceManager manager, ProfilerFiller profiler) {
         hair.clear();
 
-        data.forEach((id, file) -> FILE_CODEC.parse(JsonOps.INSTANCE, file)
-                .resultOrPartial(error -> MCA.LOGGER.warn("Invalid layered hair list {}: {}", id, error))
-                .ifPresent(entries -> addEntries(id, entries)));
+        data.forEach(this::addEntries);
     }
 
-    private void addEntries(Identifier id, Map<String, LayeredHair.Definition> entries) {
+    private void addEntries(Identifier id, JsonElement file) {
         Gender fileGender = BodySkinList.getGenderFromPath(id);
         LayeredHair.Category fileCategory = getCategoryFromPath(id);
-        entries.forEach((key, definition) -> {
-            for (String identifier : CountedSkinIds.expand(key, definition.count())) {
-                LayeredHair entry = definition.create(identifier, fileGender, fileCategory);
-                hair.put(entry.getIdentifier() + "|" + entry.getGender().getDataName() + "|" + entry.getCategory().getId(), entry);
-            }
+        SkinListJson.entries(id, file).forEach(entry -> {
+            LayeredHair.DEFINITION_CODEC.parse(JsonOps.INSTANCE, entry.metadata())
+                    .resultOrPartial(error -> MCA.LOGGER.warn("Invalid layered hair list entry {} in {}: {}", entry.identifier(), id, error))
+                    .ifPresent(definition -> {
+                        LayeredHair layeredHair = definition.create(entry.identifier(), fileGender, fileCategory);
+                        hair.put(layeredHair.getIdentifier() + "|" + layeredHair.getGender().getDataName() + "|" + layeredHair.getCategory().getId(), layeredHair);
+                    });
         });
     }
 

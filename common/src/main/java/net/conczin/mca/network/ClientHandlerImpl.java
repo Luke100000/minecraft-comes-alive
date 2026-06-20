@@ -5,6 +5,7 @@ import net.conczin.mca.MCAClient;
 import net.conczin.mca.client.book.Book;
 import net.conczin.mca.client.book.CivilRegistryBook;
 import net.conczin.mca.client.gui.*;
+import net.conczin.mca.client.resources.ClientSkinCatalog;
 import net.conczin.mca.client.tts.SpeechManager;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerLike;
@@ -220,7 +221,7 @@ public class ClientHandlerImpl implements ClientHandler {
     @Override
     public void handleCustomSkinListResponse(CustomSkinListResponse message) {
         Screen screen = client.screen;
-        VillagerEditorScreen.setCustomSkinList(message.clothing(), message.hair());
+        ClientSkinCatalog.installCustomSkins(message.clothing(), message.hair());
         if (screen instanceof SkinListUpdateListener gui) {
             gui.skinListUpdatedCallback();
         }
@@ -245,7 +246,7 @@ public class ClientHandlerImpl implements ClientHandler {
 
     @Override
     public void handleCustomSkinsChangedMessage(CustomSkinsChangedMessage message) {
-        VillagerEditorScreen.setSkinListOutdated();
+        ClientSkinCatalog.markCustomSkinsOutdated();
     }
 
     @Override

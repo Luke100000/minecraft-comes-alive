@@ -1,7 +1,6 @@
 package net.conczin.mca.resources;
 
 import com.google.gson.JsonElement;
-import com.mojang.serialization.Codec;
 import com.mojang.serialization.JsonOps;
 import net.conczin.mca.MCA;
 import net.conczin.mca.entity.ai.relationship.Gender;
@@ -18,7 +17,6 @@ import java.util.HashMap;
 import java.util.Map;
 
 public class BodySkinList extends SimpleJsonResourceReloadListener<JsonElement> {
-    private static final Codec<Map<String, BodySkin.Definition>> FILE_CODEC = Codec.unboundedMap(Codec.STRING, BodySkin.DEFINITION_CODEC);
     public static final Identifier ID = MCA.locate("skins/body");
     private static BodySkinList INSTANCE;
     public final HashMap<String, BodySkin> skins = new HashMap<>();
@@ -36,18 +34,15 @@ public class BodySkinList extends SimpleJsonResourceReloadListener<JsonElement> 
     protected void apply(Map<Identifier, JsonElement> data, ResourceManager manager, ProfilerFiller profiler) {
         skins.clear();
 
-        data.forEach((id, file) -> FILE_CODEC.parse(JsonOps.INSTANCE, file)
-                .resultOrPartial(error -> MCA.LOGGER.warn("Invalid body skin list {}: {}", id, error))
-                .ifPresent(entries -> addEntries(id, entries)));
+        data.forEach(this::addEntries);
     }
 
-    private void addEntries(Identifier id, Map<String, BodySkin.Definition> entries) {
+    private void addEntries(Identifier id, JsonElement file) {
         Gender fileGender = getGenderFromPath(id);
-        entries.forEach((key, definition) -> {
-            for (String identifier : CountedSkinIds.expand(key, definition.count())) {
-                BodySkin skin = definition.create(identifier, fileGender);
-                skins.put(identifier, skin);
-            }
+        SkinListJson.entries(id, file).forEach(entry -> {
+            BodySkin.DEFINITION_CODEC.parse(JsonOps.INSTANCE, entry.metadata())
+                    .resultOrPartial(error -> MCA.LOGGER.warn("Invalid body skin list entry {} in {}: {}", entry.identifier(), id, error))
+                    .ifPresent(definition -> skins.put(entry.identifier(), definition.create(entry.identifier(), fileGender)));
         });
     }
 

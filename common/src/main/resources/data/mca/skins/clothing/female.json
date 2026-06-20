@@ -1,98 +1,604 @@
-{
-  "mca:skins/clothing/normal/female/none/%d.png": {
-    "count": 10,
+[
+  {
+    "id": "mca:skins/clothing/normal/female/none/0.png",
     "profession": "minecraft:none",
     "chance": 0.85
   },
-  "mca:skins/clothing/normal/female/armorer/%d.png": {
-    "count": 5,
+  {
+    "id": "mca:skins/clothing/normal/female/none/1.png",
+    "profession": "minecraft:none",
+    "chance": 0.85
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/none/2.png",
+    "profession": "minecraft:none",
+    "chance": 0.85
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/none/3.png",
+    "profession": "minecraft:none",
+    "chance": 0.85
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/none/4.png",
+    "profession": "minecraft:none",
+    "chance": 0.85
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/none/5.png",
+    "profession": "minecraft:none",
+    "chance": 0.85
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/none/6.png",
+    "profession": "minecraft:none",
+    "chance": 0.85
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/none/7.png",
+    "profession": "minecraft:none",
+    "chance": 0.85
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/none/8.png",
+    "profession": "minecraft:none",
+    "chance": 0.85
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/none/9.png",
+    "profession": "minecraft:none",
+    "chance": 0.85
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/armorer/0.png",
     "profession": "minecraft:armorer"
   },
-  "mca:skins/clothing/normal/female/butcher/%d.png": {
-    "count": 6,
+  {
+    "id": "mca:skins/clothing/normal/female/armorer/1.png",
+    "profession": "minecraft:armorer"
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/armorer/2.png",
+    "profession": "minecraft:armorer"
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/armorer/3.png",
+    "profession": "minecraft:armorer"
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/armorer/4.png",
+    "profession": "minecraft:armorer"
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/butcher/0.png",
     "profession": "minecraft:butcher"
   },
-  "mca:skins/clothing/normal/female/cartographer/%d.png": {
-    "count": 5,
+  {
+    "id": "mca:skins/clothing/normal/female/butcher/1.png",
+    "profession": "minecraft:butcher"
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/butcher/2.png",
+    "profession": "minecraft:butcher"
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/butcher/3.png",
+    "profession": "minecraft:butcher"
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/butcher/4.png",
+    "profession": "minecraft:butcher"
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/butcher/5.png",
+    "profession": "minecraft:butcher"
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/cartographer/0.png",
     "profession": "minecraft:cartographer"
   },
-  "mca:skins/clothing/normal/female/cleric/%d.png": {
-    "count": 5,
+  {
+    "id": "mca:skins/clothing/normal/female/cartographer/1.png",
+    "profession": "minecraft:cartographer"
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/cartographer/2.png",
+    "profession": "minecraft:cartographer"
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/cartographer/3.png",
+    "profession": "minecraft:cartographer"
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/cartographer/4.png",
+    "profession": "minecraft:cartographer"
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/cleric/0.png",
     "profession": "minecraft:cleric"
   },
-  "mca:skins/clothing/normal/female/farmer/%d.png": {
-    "count": 5,
+  {
+    "id": "mca:skins/clothing/normal/female/cleric/1.png",
+    "profession": "minecraft:cleric"
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/cleric/2.png",
+    "profession": "minecraft:cleric"
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/cleric/3.png",
+    "profession": "minecraft:cleric"
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/cleric/4.png",
+    "profession": "minecraft:cleric"
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/farmer/0.png",
     "profession": "minecraft:farmer"
   },
-  "mca:skins/clothing/normal/female/fisherman/%d.png": {
-    "count": 5,
+  {
+    "id": "mca:skins/clothing/normal/female/farmer/1.png",
+    "profession": "minecraft:farmer"
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/farmer/2.png",
+    "profession": "minecraft:farmer"
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/farmer/3.png",
+    "profession": "minecraft:farmer"
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/farmer/4.png",
+    "profession": "minecraft:farmer"
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/fisherman/0.png",
     "profession": "minecraft:fisherman"
   },
-  "mca:skins/clothing/normal/female/fletcher/%d.png": {
-    "count": 5,
+  {
+    "id": "mca:skins/clothing/normal/female/fisherman/1.png",
+    "profession": "minecraft:fisherman"
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/fisherman/2.png",
+    "profession": "minecraft:fisherman"
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/fisherman/3.png",
+    "profession": "minecraft:fisherman"
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/fisherman/4.png",
+    "profession": "minecraft:fisherman"
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/fletcher/0.png",
     "profession": "minecraft:fletcher"
   },
-  "mca:skins/clothing/normal/female/leatherworker/%d.png": {
-    "count": 5,
+  {
+    "id": "mca:skins/clothing/normal/female/fletcher/1.png",
+    "profession": "minecraft:fletcher"
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/fletcher/2.png",
+    "profession": "minecraft:fletcher"
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/fletcher/3.png",
+    "profession": "minecraft:fletcher"
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/fletcher/4.png",
+    "profession": "minecraft:fletcher"
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/leatherworker/0.png",
     "profession": "minecraft:leatherworker"
   },
-  "mca:skins/clothing/normal/female/librarian/%d.png": {
-    "count": 5,
+  {
+    "id": "mca:skins/clothing/normal/female/leatherworker/1.png",
+    "profession": "minecraft:leatherworker"
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/leatherworker/2.png",
+    "profession": "minecraft:leatherworker"
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/leatherworker/3.png",
+    "profession": "minecraft:leatherworker"
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/leatherworker/4.png",
+    "profession": "minecraft:leatherworker"
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/librarian/0.png",
     "profession": "minecraft:librarian"
   },
-  "mca:skins/clothing/normal/female/mason/%d.png": {
-    "count": 5,
+  {
+    "id": "mca:skins/clothing/normal/female/librarian/1.png",
+    "profession": "minecraft:librarian"
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/librarian/2.png",
+    "profession": "minecraft:librarian"
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/librarian/3.png",
+    "profession": "minecraft:librarian"
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/librarian/4.png",
+    "profession": "minecraft:librarian"
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/mason/0.png",
     "profession": "minecraft:mason"
   },
-  "mca:skins/clothing/normal/female/nitwit/%d.png": {
-    "count": 1,
+  {
+    "id": "mca:skins/clothing/normal/female/mason/1.png",
+    "profession": "minecraft:mason"
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/mason/2.png",
+    "profession": "minecraft:mason"
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/mason/3.png",
+    "profession": "minecraft:mason"
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/mason/4.png",
+    "profession": "minecraft:mason"
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/nitwit/0.png",
     "profession": "minecraft:nitwit"
   },
-  "mca:skins/clothing/normal/female/shepherd/%d.png": {
-    "count": 5,
+  {
+    "id": "mca:skins/clothing/normal/female/shepherd/0.png",
     "profession": "minecraft:shepherd"
   },
-  "mca:skins/clothing/normal/female/toolsmith/%d.png": {
-    "count": 5,
+  {
+    "id": "mca:skins/clothing/normal/female/shepherd/1.png",
+    "profession": "minecraft:shepherd"
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/shepherd/2.png",
+    "profession": "minecraft:shepherd"
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/shepherd/3.png",
+    "profession": "minecraft:shepherd"
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/shepherd/4.png",
+    "profession": "minecraft:shepherd"
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/toolsmith/0.png",
     "profession": "minecraft:toolsmith"
   },
-  "mca:skins/clothing/normal/female/weaponsmith/%d.png": {
-    "count": 5,
+  {
+    "id": "mca:skins/clothing/normal/female/toolsmith/1.png",
+    "profession": "minecraft:toolsmith"
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/toolsmith/2.png",
+    "profession": "minecraft:toolsmith"
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/toolsmith/3.png",
+    "profession": "minecraft:toolsmith"
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/toolsmith/4.png",
+    "profession": "minecraft:toolsmith"
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/weaponsmith/0.png",
     "profession": "minecraft:weaponsmith"
   },
-  "mca:skins/clothing/normal/female/baker/%d.png": {
-    "count": 5,
+  {
+    "id": "mca:skins/clothing/normal/female/weaponsmith/1.png",
+    "profession": "minecraft:weaponsmith"
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/weaponsmith/2.png",
+    "profession": "minecraft:weaponsmith"
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/weaponsmith/3.png",
+    "profession": "minecraft:weaponsmith"
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/weaponsmith/4.png",
+    "profession": "minecraft:weaponsmith"
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/baker/0.png",
     "profession": "mca:baker"
   },
-  "mca:skins/clothing/normal/female/miner/%d.png": {
-    "count": 5,
+  {
+    "id": "mca:skins/clothing/normal/female/baker/1.png",
+    "profession": "mca:baker"
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/baker/2.png",
+    "profession": "mca:baker"
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/baker/3.png",
+    "profession": "mca:baker"
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/baker/4.png",
+    "profession": "mca:baker"
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/miner/0.png",
     "profession": "mca:miner"
   },
-  "mca:skins/clothing/normal/female/archer/%d.png": {
-    "count": 5,
+  {
+    "id": "mca:skins/clothing/normal/female/miner/1.png",
+    "profession": "mca:miner"
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/miner/2.png",
+    "profession": "mca:miner"
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/miner/3.png",
+    "profession": "mca:miner"
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/miner/4.png",
+    "profession": "mca:miner"
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/archer/0.png",
     "profession": "mca:archer"
   },
-  "mca:skins/clothing/normal/female/guard/%d.png": {
-    "count": 5,
+  {
+    "id": "mca:skins/clothing/normal/female/archer/1.png",
+    "profession": "mca:archer"
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/archer/2.png",
+    "profession": "mca:archer"
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/archer/3.png",
+    "profession": "mca:archer"
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/archer/4.png",
+    "profession": "mca:archer"
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/guard/0.png",
     "profession": "mca:guard"
   },
-  "mca:skins/clothing/normal/female/child/%d.png": {
-    "count": 10,
+  {
+    "id": "mca:skins/clothing/normal/female/guard/1.png",
+    "profession": "mca:guard"
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/guard/2.png",
+    "profession": "mca:guard"
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/guard/3.png",
+    "profession": "mca:guard"
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/guard/4.png",
+    "profession": "mca:guard"
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/child/0.png",
     "profession": "mca:child",
     "exclude": true
   },
-  "mca:skins/clothing/normal/female/baby/%d.png": {
-    "count": 10,
+  {
+    "id": "mca:skins/clothing/normal/female/child/1.png",
+    "profession": "mca:child",
+    "exclude": true
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/child/2.png",
+    "profession": "mca:child",
+    "exclude": true
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/child/3.png",
+    "profession": "mca:child",
+    "exclude": true
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/child/4.png",
+    "profession": "mca:child",
+    "exclude": true
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/child/5.png",
+    "profession": "mca:child",
+    "exclude": true
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/child/6.png",
+    "profession": "mca:child",
+    "exclude": true
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/child/7.png",
+    "profession": "mca:child",
+    "exclude": true
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/child/8.png",
+    "profession": "mca:child",
+    "exclude": true
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/child/9.png",
+    "profession": "mca:child",
+    "exclude": true
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/baby/0.png",
     "profession": "mca:baby",
     "exclude": true
   },
-  "mca:skins/clothing/normal/female/toddler/%d.png": {
-    "count": 20,
+  {
+    "id": "mca:skins/clothing/normal/female/baby/1.png",
+    "profession": "mca:baby",
+    "exclude": true
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/baby/2.png",
+    "profession": "mca:baby",
+    "exclude": true
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/baby/3.png",
+    "profession": "mca:baby",
+    "exclude": true
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/baby/4.png",
+    "profession": "mca:baby",
+    "exclude": true
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/baby/5.png",
+    "profession": "mca:baby",
+    "exclude": true
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/baby/6.png",
+    "profession": "mca:baby",
+    "exclude": true
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/baby/7.png",
+    "profession": "mca:baby",
+    "exclude": true
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/baby/8.png",
+    "profession": "mca:baby",
+    "exclude": true
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/baby/9.png",
+    "profession": "mca:baby",
+    "exclude": true
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/toddler/0.png",
     "profession": "mca:toddler",
     "exclude": true
   },
-  "mca:skins/clothing/normal/female/cultist/%d.png": {
-    "count": 1,
+  {
+    "id": "mca:skins/clothing/normal/female/toddler/1.png",
+    "profession": "mca:toddler",
+    "exclude": true
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/toddler/2.png",
+    "profession": "mca:toddler",
+    "exclude": true
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/toddler/3.png",
+    "profession": "mca:toddler",
+    "exclude": true
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/toddler/4.png",
+    "profession": "mca:toddler",
+    "exclude": true
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/toddler/5.png",
+    "profession": "mca:toddler",
+    "exclude": true
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/toddler/6.png",
+    "profession": "mca:toddler",
+    "exclude": true
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/toddler/7.png",
+    "profession": "mca:toddler",
+    "exclude": true
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/toddler/8.png",
+    "profession": "mca:toddler",
+    "exclude": true
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/toddler/9.png",
+    "profession": "mca:toddler",
+    "exclude": true
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/toddler/10.png",
+    "profession": "mca:toddler",
+    "exclude": true
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/toddler/11.png",
+    "profession": "mca:toddler",
+    "exclude": true
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/toddler/12.png",
+    "profession": "mca:toddler",
+    "exclude": true
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/toddler/13.png",
+    "profession": "mca:toddler",
+    "exclude": true
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/toddler/14.png",
+    "profession": "mca:toddler",
+    "exclude": true
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/toddler/15.png",
+    "profession": "mca:toddler",
+    "exclude": true
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/toddler/16.png",
+    "profession": "mca:toddler",
+    "exclude": true
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/toddler/17.png",
+    "profession": "mca:toddler",
+    "exclude": true
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/toddler/18.png",
+    "profession": "mca:toddler",
+    "exclude": true
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/toddler/19.png",
+    "profession": "mca:toddler",
+    "exclude": true
+  },
+  {
+    "id": "mca:skins/clothing/normal/female/cultist/0.png",
     "profession": "mca:cultist"
   }
-}
+]
