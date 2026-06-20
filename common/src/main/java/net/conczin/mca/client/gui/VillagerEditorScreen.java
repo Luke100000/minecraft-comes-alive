@@ -17,7 +17,7 @@ import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.entity.ai.relationship.Personality;
 import net.conczin.mca.network.Network;
 import net.conczin.mca.network.c2s.GetVillagerRequest;
-import net.conczin.mca.network.c2s.SkinListRequest;
+import net.conczin.mca.network.c2s.CustomSkinListRequest;
 import net.conczin.mca.network.c2s.VillagerEditorSyncRequest;
 import net.conczin.mca.network.c2s.VillagerNameRequest;
 import net.conczin.mca.registry.EntitiesMCA;
@@ -91,6 +91,8 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     private static HashMap<String, BodySkin> bodySkins = new HashMap<>();
     private static HashMap<String, LayeredHair> layeredHair = new HashMap<>();
     private static HashMap<String, HairStyle> hairStyles = new HashMap<>();
+    private static HashMap<String, Clothing> customClothing = new HashMap<>();
+    private static HashMap<String, Hair> customHair = new HashMap<>();
     private static boolean isSkinListLoaded;
     protected final VillagerEntityMCA villager = Objects.requireNonNull(EntitiesMCA.MALE_VILLAGER.create(Objects.requireNonNull(Minecraft.getInstance().level), EntitySpawnReason.LOAD));
     protected final VillagerEntityMCA villagerVisualization = Objects.requireNonNull(EntitiesMCA.MALE_VILLAGER.create(Objects.requireNonNull(Minecraft.getInstance().level), EntitySpawnReason.LOAD));
@@ -169,21 +171,17 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         this(villagerUUID, playerUUID, MCAClient.isPlayerRendererAllowed(), MCAClient.isVillagerRendererAllowed());
     }
 
-    public static void setSkinList(HashMap<String, Clothing> clothing, HashMap<String, Hair> hair, HashMap<String, BodySkin> bodySkins, HashMap<String, LayeredHair> layeredHair, HashMap<String, HairStyle> hairStyles) {
+    public static void setCustomSkinList(HashMap<String, Clothing> clothing, HashMap<String, Hair> hair) {
+        customClothing = new HashMap<>(clothing);
+        customHair = new HashMap<>(hair);
         loadClientSkinLists();
-        VillagerEditorScreen.clothing.putAll(clothing);
-        VillagerEditorScreen.hair.putAll(hair);
-        VillagerEditorScreen.bodySkins.putAll(bodySkins);
-        VillagerEditorScreen.layeredHair.putAll(layeredHair);
-        VillagerEditorScreen.hairStyles = getClientHairStyles(VillagerEditorScreen.hair);
-        VillagerEditorScreen.hairStyles.putAll(hairStyles);
         isSkinListLoaded = true;
     }
 
     public static void sync() {
         seedClientSkinList();
         if (isSkinListOutdated) {
-            Network.sendToServer(new SkinListRequest());
+            Network.sendToServer(new CustomSkinListRequest());
             isSkinListOutdated = false;
         }
     }
@@ -207,7 +205,21 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         hair = hairList == null ? new HashMap<>() : new HashMap<>(hairList.hair);
         bodySkins = bodySkinList == null ? new HashMap<>() : new HashMap<>(bodySkinList.skins);
         layeredHair = layeredHairList == null ? new HashMap<>() : new HashMap<>(layeredHairList.hair);
+        clothing.putAll(customClothing);
+        hair.putAll(customHair);
         hairStyles = getClientHairStyles(hair);
+    }
+
+    public static void clearCachedSkinLists() {
+        clothing.clear();
+        hair.clear();
+        bodySkins.clear();
+        layeredHair.clear();
+        hairStyles.clear();
+        customClothing.clear();
+        customHair.clear();
+        isSkinListLoaded = false;
+        isSkinListOutdated = true;
     }
 
     private static HashMap<String, HairStyle> getClientHairStyles(Map<String, Hair> legacyHair) {

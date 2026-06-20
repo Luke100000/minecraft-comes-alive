@@ -3,6 +3,7 @@ package net.conczin.mca.client.render.layer;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.conczin.mca.MCA;
 import net.conczin.mca.client.render.VillagerVisuals;
+import net.conczin.mca.client.resources.EyeTextureLayers;
 import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.resources.FaceList;
 import net.minecraft.client.model.HumanoidModel;
@@ -19,8 +20,6 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class FaceLayer<S extends HumanoidRenderState, M extends HumanoidModel<S>> extends VillagerLayer<S, M> {
     private static final int OPAQUE_WHITE = 0xFFFFFFFF;
-    private static final int SCLERA_MIN_CHANNEL = 160;
-    private static final int SCLERA_MAX_CHANNEL_SPREAD = 32;
 
     private final String variant;
 
@@ -56,12 +55,12 @@ public class FaceLayer<S extends HumanoidRenderState, M extends HumanoidModel<S>
             if (visuals.isBlinking()) {
                 renderModel(poseStack, submitNodeCollector, lightCoords, this.model, OPAQUE_WHITE, renderedSkin, tint, visible, glowing, state);
             } else if (visuals.heterochromia()) {
-                renderModel(poseStack, submitNodeCollector, lightCoords, this.model, OPAQUE_WHITE, getOrGenerateEyeLayer(skin, true, EyeSide.FULL), tint, visible, glowing, state);
-                renderModel(poseStack, submitNodeCollector, lightCoords, this.model, getEyeColor(visuals, tickDelta, true), getOrGenerateEyeLayer(skin, false, EyeSide.LEFT), tint, visible, glowing, state);
-                renderModel(poseStack, submitNodeCollector, lightCoords, this.model, getEyeColor(visuals, tickDelta, false), getOrGenerateEyeLayer(skin, false, EyeSide.RIGHT), tint, visible, glowing, state);
+                renderModel(poseStack, submitNodeCollector, lightCoords, this.model, OPAQUE_WHITE, getOrGenerateEyeLayer(skin, true, EyeTextureLayers.Side.FULL), tint, visible, glowing, state);
+                renderModel(poseStack, submitNodeCollector, lightCoords, this.model, getEyeColor(visuals, tickDelta, true), getOrGenerateEyeLayer(skin, false, EyeTextureLayers.Side.LEFT), tint, visible, glowing, state);
+                renderModel(poseStack, submitNodeCollector, lightCoords, this.model, getEyeColor(visuals, tickDelta, false), getOrGenerateEyeLayer(skin, false, EyeTextureLayers.Side.RIGHT), tint, visible, glowing, state);
             } else {
-                renderModel(poseStack, submitNodeCollector, lightCoords, this.model, OPAQUE_WHITE, getOrGenerateEyeLayer(skin, true, EyeSide.FULL), tint, visible, glowing, state);
-                renderModel(poseStack, submitNodeCollector, lightCoords, this.model, getEyeColor(visuals, tickDelta, false), getOrGenerateEyeLayer(skin, false, EyeSide.FULL), tint, visible, glowing, state);
+                renderModel(poseStack, submitNodeCollector, lightCoords, this.model, OPAQUE_WHITE, getOrGenerateEyeLayer(skin, true, EyeTextureLayers.Side.FULL), tint, visible, glowing, state);
+                renderModel(poseStack, submitNodeCollector, lightCoords, this.model, getEyeColor(visuals, tickDelta, false), getOrGenerateEyeLayer(skin, false, EyeTextureLayers.Side.FULL), tint, visible, glowing, state);
             }
         }
 
@@ -100,20 +99,14 @@ public class FaceLayer<S extends HumanoidRenderState, M extends HumanoidModel<S>
         EYE_TEXTURE_CACHE.clear();
     }
 
-    private enum EyeSide {
-        FULL,
-        LEFT,
-        RIGHT
-    }
-
-    private record EyeLayerKey(Identifier texture, boolean sclera, EyeSide side) {
+    private record EyeLayerKey(Identifier texture, boolean sclera, EyeTextureLayers.Side side) {
     }
 
     private static int getEyeColor(VillagerVisuals visuals, float tickDelta, boolean left) {
         return visuals.eyeColor(tickDelta, left);
     }
 
-    private Identifier getOrGenerateEyeLayer(Identifier original, boolean isSclera, EyeSide side) {
+    private Identifier getOrGenerateEyeLayer(Identifier original, boolean isSclera, EyeTextureLayers.Side side) {
         return EYE_TEXTURE_CACHE.computeIfAbsent(new EyeLayerKey(original, isSclera, side), key -> {
             try {
                 Identifier id = key.texture();
@@ -127,8 +120,8 @@ public class FaceLayer<S extends HumanoidRenderState, M extends HumanoidModel<S>
                 
                 int w = originalImage.getWidth();
                 int h = originalImage.getHeight();
-                EyeBounds bounds = findEyeBounds(originalImage);
-                if (key.side() != EyeSide.FULL && bounds.width() % 2 != 0) {
+                EyeTextureLayers.Bounds bounds = EyeTextureLayers.findBounds(originalImage);
+                if (key.side() != EyeTextureLayers.Side.FULL && bounds.width() % 2 != 0) {
                     throw new IllegalStateException("Face eye texture width must be divisible by 2 for heterochromia: " + id + " bounds=" + bounds);
                 }
                 int splitX = bounds.minX() + bounds.width() / 2;
@@ -139,9 +132,9 @@ public class FaceLayer<S extends HumanoidRenderState, M extends HumanoidModel<S>
                         int pixel = originalImage.getPixel(x, y);
                         int a = ARGB.alpha(pixel);
                         if (a == 0) continue;
-                        if (!isInEyeSide(x, splitX, key.side())) continue;
+                        if (!EyeTextureLayers.isInSide(x, splitX, key.side())) continue;
 
-                        boolean isPixelSclera = isScleraPixel(a, ARGB.red(pixel), ARGB.green(pixel), ARGB.blue(pixel));
+                        boolean isPixelSclera = EyeTextureLayers.isScleraPixel(a, ARGB.red(pixel), ARGB.green(pixel), ARGB.blue(pixel));
                         
                         if (key.sclera() == isPixelSclera) {
                             newImage.setPixel(x, y, pixel);
@@ -158,56 +151,5 @@ public class FaceLayer<S extends HumanoidRenderState, M extends HumanoidModel<S>
                 throw new IllegalStateException("Failed to generate eye texture layer for " + key.texture(), e);
             }
         });
-    }
-
-    private static boolean isInEyeSide(int x, int splitX, EyeSide side) {
-        return switch (side) {
-            case FULL -> true;
-            case LEFT -> x >= splitX;
-            case RIGHT -> x < splitX;
-        };
-    }
-
-    private static EyeBounds findEyeBounds(com.mojang.blaze3d.platform.NativeImage image) {
-        int minX = image.getWidth();
-        int minY = image.getHeight();
-        int maxX = -1;
-        int maxY = -1;
-
-        for (int x = 0; x < image.getWidth(); x++) {
-            for (int y = 0; y < image.getHeight(); y++) {
-                if (ARGB.alpha(image.getPixel(x, y)) == 0) {
-                    continue;
-                }
-                minX = Math.min(minX, x);
-                minY = Math.min(minY, y);
-                maxX = Math.max(maxX, x);
-                maxY = Math.max(maxY, y);
-            }
-        }
-
-        if (maxX < minX || maxY < minY) {
-            throw new IllegalStateException("Face eye texture has no visible pixels");
-        }
-        return new EyeBounds(minX, minY, maxX, maxY);
-    }
-
-    private record EyeBounds(int minX, int minY, int maxX, int maxY) {
-        int width() {
-            return maxX - minX + 1;
-        }
-    }
-
-    private static boolean isScleraPixel(int alpha, int red, int green, int blue) {
-        if (alpha == 1) {
-            return true;
-        }
-        if (alpha != 255) {
-            return false;
-        }
-
-        int min = Math.min(red, Math.min(green, blue));
-        int max = Math.max(red, Math.max(green, blue));
-        return min >= SCLERA_MIN_CHANNEL && max - min <= SCLERA_MAX_CHANNEL_SPREAD;
     }
 }

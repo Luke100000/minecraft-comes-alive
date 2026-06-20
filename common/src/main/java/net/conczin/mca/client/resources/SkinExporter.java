@@ -23,8 +23,6 @@ import java.io.InputStream;
 
 public class SkinExporter {
     private static final String IMMERSIVE_LIBRARY_PREFIX = "immersive_library:";
-    private static final int SCLERA_MIN_CHANNEL = 160;
-    private static final int SCLERA_MAX_CHANNEL_SPREAD = 32;
 
     public static void export(VillagerEntityMCA villager) {
         export(villager, null);
@@ -201,12 +199,6 @@ public class SkinExporter {
         return identifier.startsWith(IMMERSIVE_LIBRARY_PREFIX);
     }
 
-    private enum EyeSide {
-        FULL,
-        LEFT,
-        RIGHT
-    }
-
     private static void compositeFace(NativeImage base, Identifier faceId, VillagerVisuals visuals) {
         NativeImage face = loadTexture(faceId);
         if (face == null) {
@@ -214,14 +206,14 @@ public class SkinExporter {
         }
 
         try {
-            EyeBounds bounds = findEyeBounds(face);
+            EyeTextureLayers.Bounds bounds = EyeTextureLayers.findBounds(face);
             int splitX = bounds.minX() + bounds.width() / 2;
-            compositeEyeLayer(base, face, true, EyeSide.FULL, splitX, 0xFFFFFFFF);
+            compositeEyeLayer(base, face, true, EyeTextureLayers.Side.FULL, splitX, 0xFFFFFFFF);
             if (visuals.heterochromia()) {
-                compositeEyeLayer(base, face, false, EyeSide.LEFT, splitX, getEyeColor(visuals, true));
-                compositeEyeLayer(base, face, false, EyeSide.RIGHT, splitX, getEyeColor(visuals, false));
+                compositeEyeLayer(base, face, false, EyeTextureLayers.Side.LEFT, splitX, getEyeColor(visuals, true));
+                compositeEyeLayer(base, face, false, EyeTextureLayers.Side.RIGHT, splitX, getEyeColor(visuals, false));
             } else {
-                compositeEyeLayer(base, face, false, EyeSide.FULL, splitX, getEyeColor(visuals, false));
+                compositeEyeLayer(base, face, false, EyeTextureLayers.Side.FULL, splitX, getEyeColor(visuals, false));
             }
         } finally {
             face.close();
@@ -232,73 +224,22 @@ public class SkinExporter {
         return visuals.staticEyeColor(left);
     }
 
-    private static void compositeEyeLayer(NativeImage base, NativeImage face, boolean sclera, EyeSide side, int splitX, int tintColor) {
+    private static void compositeEyeLayer(NativeImage base, NativeImage face, boolean sclera, EyeTextureLayers.Side side, int splitX, int tintColor) {
         int width = Math.min(base.getWidth(), face.getWidth());
         int height = Math.min(base.getHeight(), face.getHeight());
         for (int x = 0; x < width; x++) {
-            if (!isInEyeSide(x, splitX, side)) {
+            if (!EyeTextureLayers.isInSide(x, splitX, side)) {
                 continue;
             }
             for (int y = 0; y < height; y++) {
                 int pixel = face.getPixel(x, y);
                 int alpha = ARGB.alpha(pixel);
-                if (alpha == 0 || sclera != isScleraPixel(alpha, ARGB.red(pixel), ARGB.green(pixel), ARGB.blue(pixel))) {
+                if (alpha == 0 || sclera != EyeTextureLayers.isScleraPixel(alpha, ARGB.red(pixel), ARGB.green(pixel), ARGB.blue(pixel))) {
                     continue;
                 }
                 compositePixel(base, x, y, pixel, tintColor);
             }
         }
-    }
-
-    private static boolean isInEyeSide(int x, int splitX, EyeSide side) {
-        return switch (side) {
-            case FULL -> true;
-            case LEFT -> x >= splitX;
-            case RIGHT -> x < splitX;
-        };
-    }
-
-    private static EyeBounds findEyeBounds(NativeImage image) {
-        int minX = image.getWidth();
-        int minY = image.getHeight();
-        int maxX = -1;
-        int maxY = -1;
-
-        for (int x = 0; x < image.getWidth(); x++) {
-            for (int y = 0; y < image.getHeight(); y++) {
-                if (ARGB.alpha(image.getPixel(x, y)) == 0) {
-                    continue;
-                }
-                minX = Math.min(minX, x);
-                minY = Math.min(minY, y);
-                maxX = Math.max(maxX, x);
-                maxY = Math.max(maxY, y);
-            }
-        }
-
-        if (maxX < minX || maxY < minY) {
-            throw new IllegalStateException("Face eye texture has no visible pixels: " + image);
-        }
-        return new EyeBounds(minX, minY, maxX, maxY);
-    }
-
-    private record EyeBounds(int minX, int minY, int maxX, int maxY) {
-        int width() {
-            return maxX - minX + 1;
-        }
-    }
-
-    private static boolean isScleraPixel(int alpha, int red, int green, int blue) {
-        if (alpha == 1) {
-            return true;
-        }
-        if (alpha != 255) {
-            return false;
-        }
-
-        int min = Math.min(red, Math.min(green, blue));
-        int max = Math.max(red, Math.max(green, blue));
-        return min >= SCLERA_MIN_CHANNEL && max - min <= SCLERA_MAX_CHANNEL_SPREAD;
     }
 
     private static void composite(NativeImage base, Identifier layerId, int tintColor) {

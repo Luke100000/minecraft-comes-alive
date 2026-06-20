@@ -3,6 +3,7 @@ package net.conczin.mca.resources;
 import com.google.gson.JsonElement;
 import net.conczin.mca.MCA;
 import net.conczin.mca.entity.ai.relationship.Gender;
+import net.conczin.mca.resources.data.skin.SkinListEntry;
 import net.minecraft.IdentifierException;
 import net.minecraft.resources.FileToIdConverter;
 import net.minecraft.resources.Identifier;
@@ -82,7 +83,7 @@ public class FaceList extends SimpleJsonResourceReloadListener<JsonElement> {
     }
 
     private void sortPools() {
-        faces.values().forEach(pool -> pool.sort(String::compareTo));
+        faces.values().forEach(pool -> pool.sort(SkinListEntry::compareIdentifiers));
     }
 
     private static String key(String variant, Gender gender) {

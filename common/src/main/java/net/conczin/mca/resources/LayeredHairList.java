@@ -6,6 +6,7 @@ import com.mojang.serialization.JsonOps;
 import net.conczin.mca.MCA;
 import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.resources.data.skin.LayeredHair;
+import net.conczin.mca.resources.data.skin.SkinListEntry;
 import net.minecraft.resources.FileToIdConverter;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.resources.ResourceManager;
@@ -60,6 +61,7 @@ public class LayeredHairList extends SimpleJsonResourceReloadListener<JsonElemen
         return hair.values().stream()
                 .filter(h -> h.getCategory() == category)
                 .filter(h -> h.getGender() == Gender.NEUTRAL || gender == Gender.NEUTRAL || h.getGender() == gender)
+                .sorted((a, b) -> SkinListEntry.compareIdentifiers(a.getIdentifier(), b.getIdentifier()))
                 .collect(() -> new WeightedPool.Mutable<>(""),
                         (list, entry) -> list.add(entry.getIdentifier(), entry.getChance()),
                         (a, b) -> a.entries.addAll(b.entries));

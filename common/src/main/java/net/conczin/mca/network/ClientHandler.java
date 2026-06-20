@@ -31,7 +31,7 @@ public interface ClientHandler {
 
     void handlePlayerDataMessage(PlayerDataMessage response);
 
-    void handleSkinListResponse(SkinListResponse response);
+    void handleCustomSkinListResponse(CustomSkinListResponse response);
 
     void handleDestinyGuiRequest(OpenDestinyGuiRequest request);
 

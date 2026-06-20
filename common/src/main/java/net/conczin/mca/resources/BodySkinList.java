@@ -6,6 +6,7 @@ import com.mojang.serialization.JsonOps;
 import net.conczin.mca.MCA;
 import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.resources.data.skin.BodySkin;
+import net.conczin.mca.resources.data.skin.SkinListEntry;
 import net.minecraft.resources.FileToIdConverter;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.resources.ResourceManager;
@@ -14,7 +15,6 @@ import net.minecraft.util.ExtraCodecs;
 import net.minecraft.util.profiling.ProfilerFiller;
 
 import java.util.HashMap;
-import java.util.Comparator;
 import java.util.Map;
 
 public class BodySkinList extends SimpleJsonResourceReloadListener<JsonElement> {
@@ -58,7 +58,7 @@ public class BodySkinList extends SimpleJsonResourceReloadListener<JsonElement> 
     public WeightedPool<String> getPool(Gender gender) {
         return skins.values().stream()
                 .filter(s -> s.getGender() == Gender.NEUTRAL || gender == Gender.NEUTRAL || s.getGender() == gender)
-                .sorted(Comparator.comparing(BodySkin::getIdentifier))
+                .sorted((a, b) -> SkinListEntry.compareIdentifiers(a.getIdentifier(), b.getIdentifier()))
                 .collect(() -> new WeightedPool.Mutable<>(""),
                         (list, entry) -> list.add(entry.getIdentifier(), entry.getChance()),
                         (a, b) -> a.entries.addAll(b.entries));
