@@ -1,10 +1,8 @@
 {
     "type":  "minecraft:crafting_shapeless",
     "ingredients":  [
-                        [
-                            "minecraft:book",
-                            "minecraft:emerald"
-                        ]
+                        "minecraft:book",
+                        "minecraft:emerald"
                     ],
     "result":  {
                    "id":  "mca:book_supporters",
