@@ -1,3 +1,9 @@
+# 7.8.6
+
+* Fixed baby drop mechanics.
+* Added player hitbox scaling based on MCA player size and width (controlled by the new `scalePlayerHitboxWithSizeAndWidth` config option).
+  * Recommended is off if your server has a lot of PVP as players could lower their size by a lot to gain an unfair advantage.
+
 # 7.8.5
 
 * Fixed Recipes 
