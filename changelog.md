@@ -7,6 +7,7 @@
 * Trades are no longer reshuffled when switching workplace but not profession
 * Archers now use bows even when not on duty
 * Fixed sleeping offset when using villager model
+* Added textures for adventurer and cultist in Squidward mode
 
 # 7.6.20
 
