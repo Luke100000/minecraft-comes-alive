@@ -3,7 +3,8 @@
 * Fixed golden apple on cure being consumed twice
 * Fixed baby item sent to oblivion on drop
 * Fixed adopting children not always updating parents
-* Fixed doors not always getting closed 
+* Fixed doors not always getting closed
+* Trades are no longer reshuffled when switching workplace but not profession
 
 # 7.6.20
 
