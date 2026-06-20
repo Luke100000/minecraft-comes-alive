@@ -130,6 +130,10 @@ public class BabyItem extends Item {
         return true;
     }
 
+    public static boolean shouldCancelDrop(ItemStack stack, PlayerEntity player) {
+        return stack.getItem() instanceof BabyItem baby && !baby.onDropped(stack, player);
+    }
+
     @Override
     public void inventoryTick(ItemStack stack, World world, Entity entity, int slot, boolean selected) {
         if (world.isClient) {

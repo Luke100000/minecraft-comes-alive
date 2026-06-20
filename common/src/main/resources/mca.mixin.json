@@ -6,7 +6,7 @@
   "mixins": [
     "MixinAbstractFurnaceBlockEntity", "MixinActivity", "MixinCriteria", "MixinDefaultParticleType", "MixinEntityType",
     "MixinFlintAndSteelItem", "MixinGoatEntity", "MixinHorseBaseEntity", "MixinMemoryModuleType", "MixinMilkBucketItem",
-    "MixinPlayerEntity", "MixinPlayerInventory", "MixinProtoChunk", "MixinSensorType", "MixinServerPlayNetworkHandler",
+    "MixinPlayerEntity", "MixinPlayerInventory", "MixinProtoChunk", "MixinScreenHandler", "MixinSensorType", "MixinServerPlayNetworkHandler",
     "MixinServerWorld", "MixinTranslatableText", "MixinVillagerEntity", "MixinVillagerEntityInvoker",
     "MixinVillagerProfession", "MixinZombieEntity", "MixinZombieVillagerEntity"
   ],

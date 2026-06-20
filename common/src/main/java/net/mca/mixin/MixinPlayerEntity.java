@@ -20,7 +20,7 @@ abstract class MixinPlayerEntity extends LivingEntity {
             at = @At("HEAD"),
             cancellable = true)
     private void onDropItem(ItemStack stack, boolean throwRandomly, boolean retainOwnership, CallbackInfoReturnable<ItemEntity> info) {
-        if (stack.getItem() instanceof BabyItem baby && !baby.onDropped(stack, (PlayerEntity) (Object) this)) {
+        if (BabyItem.shouldCancelDrop(stack, (PlayerEntity) (Object) this)) {
             info.setReturnValue(null);
         }
     }

@@ -22,7 +22,7 @@ abstract class MixinPlayerInventory implements Inventory, Nameable {
             cancellable = true)
     public void onDropSelectedItem(boolean dropEntireStack, CallbackInfoReturnable<ItemStack> info) {
         ItemStack stack = ((PlayerInventory)(Object)this).getMainHandStack();
-        if (stack.getItem() instanceof BabyItem baby && !baby.onDropped(stack, this.player)) {
+        if (BabyItem.shouldCancelDrop(stack, this.player)) {
             info.setReturnValue(ItemStack.EMPTY);
         }
     }
