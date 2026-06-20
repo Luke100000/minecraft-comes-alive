@@ -4,16 +4,20 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import net.conczin.mca.MCA;
 import net.conczin.mca.client.render.VillagerVisuals;
 import net.conczin.mca.client.resources.EyeTextureLayers;
-import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.resources.FaceList;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.model.HumanoidModel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
+import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.client.renderer.entity.LivingEntityRenderer;
 import net.minecraft.client.renderer.entity.RenderLayerParent;
 import net.minecraft.client.renderer.entity.state.HumanoidRenderState;
 import net.minecraft.resources.Identifier;
 import net.minecraft.util.ARGB;
 
+import com.mojang.blaze3d.platform.NativeImage;
+import java.io.InputStream;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -73,14 +77,12 @@ public class FaceLayer<S extends HumanoidRenderState, M extends HumanoidModel<S>
     @Override
     public Identifier getSkin(S state) {
         var visuals = VillagerVisuals.require(state);
-        Gender gender = Gender.byName(visuals.genderDataName());
-
         FaceList list = FaceList.getInstance();
         if (list == null) {
             int index = (int) Math.min(11, Math.max(0, visuals.faceGene() * 12));
             return cached("skins/face/normal/" + (index == 11 ? "blink" : index) + ".png", MCA::locate);
         }
-        return list.pick(variant, gender, visuals.faceGene());
+        return list.pick(variant, visuals.faceGene());
     }
 
     private Identifier getBlinkSkin() {
@@ -110,45 +112,46 @@ public class FaceLayer<S extends HumanoidRenderState, M extends HumanoidModel<S>
         return EYE_TEXTURE_CACHE.computeIfAbsent(new EyeLayerKey(original, isSclera, side), key -> {
             try {
                 Identifier id = key.texture();
-                var resource = net.minecraft.client.Minecraft.getInstance().getResourceManager().getResource(id);
+                var resource = Minecraft.getInstance().getResourceManager().getResource(id);
                 if (resource.isEmpty()) return id;
                 
-                com.mojang.blaze3d.platform.NativeImage originalImage;
-                try (java.io.InputStream stream = resource.get().open()) {
-                    originalImage = com.mojang.blaze3d.platform.NativeImage.read(stream);
-                }
-                
-                int w = originalImage.getWidth();
-                int h = originalImage.getHeight();
-                EyeTextureLayers.Bounds bounds = EyeTextureLayers.findBounds(originalImage);
-                if (key.side() != EyeTextureLayers.Side.FULL && bounds.width() % 2 != 0) {
-                    throw new IllegalStateException("Face eye texture width must be divisible by 2 for heterochromia: " + id + " bounds=" + bounds);
-                }
-                int splitX = bounds.minX() + bounds.width() / 2;
-                com.mojang.blaze3d.platform.NativeImage newImage = new com.mojang.blaze3d.platform.NativeImage(w, h, true);
-                
-                for (int x = 0; x < w; x++) {
-                    for (int y = 0; y < h; y++) {
-                        int pixel = originalImage.getPixel(x, y);
-                        int a = ARGB.alpha(pixel);
-                        if (a == 0) continue;
-                        if (!EyeTextureLayers.isInSide(x, splitX, key.side())) continue;
+                try (InputStream stream = resource.get().open(); NativeImage originalImage = NativeImage.read(stream)) {
+                    int w = originalImage.getWidth();
+                    int h = originalImage.getHeight();
+                    EyeTextureLayers.Bounds bounds = EyeTextureLayers.findBounds(originalImage);
+                    if (key.side() != EyeTextureLayers.Side.FULL && bounds.width() % 2 != 0) {
+                        throw new IllegalStateException("Face eye texture width must be divisible by 2 for heterochromia: " + id + " bounds=" + bounds);
+                    }
+                    int splitX = bounds.minX() + bounds.width() / 2;
+                    NativeImage newImage = new NativeImage(w, h, true);
 
-                        boolean isPixelSclera = EyeTextureLayers.isScleraPixel(a, ARGB.red(pixel), ARGB.green(pixel), ARGB.blue(pixel));
-                        
-                        if (key.sclera() == isPixelSclera) {
-                            newImage.setPixel(x, y, pixel);
+                    try {
+                        for (int x = 0; x < w; x++) {
+                            for (int y = 0; y < h; y++) {
+                                int pixel = originalImage.getPixel(x, y);
+                                int a = ARGB.alpha(pixel);
+                                if (a == 0) continue;
+                                if (!EyeTextureLayers.isInSide(x, splitX, key.side())) continue;
+
+                                boolean isPixelSclera = EyeTextureLayers.isScleraPixel(a, ARGB.red(pixel), ARGB.green(pixel), ARGB.blue(pixel));
+
+                                if (key.sclera() == isPixelSclera) {
+                                    newImage.setPixel(x, y, pixel);
+                                }
+                            }
                         }
+
+                        Identifier newId = Identifier.fromNamespaceAndPath("mca", "dynamic/eye/" + key.side().name().toLowerCase(Locale.ROOT) + "/" + (key.sclera() ? "sclera" : "iris") + "/" + id.getNamespace() + "_" + id.getPath().replace("/", "_"));
+                        Minecraft.getInstance().getTextureManager().register(newId, new DynamicTexture(newId::toString, newImage));
+                        return newId;
+                    } catch (Exception exception) {
+                        newImage.close();
+                        throw exception;
                     }
                 }
-                
-                originalImage.close();
-                
-                Identifier newId = Identifier.fromNamespaceAndPath("mca", "dynamic/eye/" + key.side().name().toLowerCase(java.util.Locale.ROOT) + "/" + (key.sclera() ? "sclera" : "iris") + "/" + id.getNamespace() + "_" + id.getPath().replace("/", "_"));
-                net.minecraft.client.Minecraft.getInstance().getTextureManager().register(newId, new net.minecraft.client.renderer.texture.DynamicTexture(newId::toString, newImage));
-                return newId;
             } catch (Exception e) {
-                throw new IllegalStateException("Failed to generate eye texture layer for " + key.texture(), e);
+                MCA.LOGGER.warn("Failed to generate eye texture layer for {}", key.texture(), e);
+                return key.texture();
             }
         });
     }

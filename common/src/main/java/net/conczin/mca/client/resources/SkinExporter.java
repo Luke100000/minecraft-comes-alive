@@ -4,12 +4,12 @@ import com.mojang.blaze3d.platform.NativeImage;
 import net.conczin.mca.MCA;
 import net.conczin.mca.client.render.VillagerVisuals;
 import net.conczin.mca.entity.VillagerEntityMCA;
-import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.resources.BodySkinList;
 import net.conczin.mca.resources.FaceList;
 import net.conczin.mca.resources.data.skin.BodySkin;
 import net.conczin.mca.resources.data.skin.LayeredHair;
 import net.conczin.mca.client.gui.immersive_library.SkinCache;
+import net.conczin.mca.util.ImmersiveLibraryIds;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.ClickEvent;
@@ -22,7 +22,6 @@ import java.io.FileInputStream;
 import java.io.InputStream;
 
 public class SkinExporter {
-    private static final String IMMERSIVE_LIBRARY_PREFIX = "immersive_library:";
 
     public static void export(VillagerEntityMCA villager) {
         export(villager, null);
@@ -32,13 +31,7 @@ public class SkinExporter {
         try {
             VillagerVisuals visuals = VillagerVisuals.capture(villager);
             
-            try (NativeImage base = new NativeImage(64, 64, false)) {
-                for (int x = 0; x < 64; x++) {
-                    for (int y = 0; y < 64; y++) {
-                        base.setPixel(x, y, 0);
-                    }
-                }
-
+            try (NativeImage base = new NativeImage(64, 64, true)) {
                 Identifier skinId = getSkin(visuals);
                 int skinColor = getSkinColor(visuals);
                 composite(base, skinId, skinColor);
@@ -131,13 +124,12 @@ public class SkinExporter {
     }
 
     private static Identifier getFace(VillagerVisuals visuals) {
-        Gender gender = Gender.byName(visuals.genderDataName());
         FaceList list = FaceList.getInstance();
         if (list == null) {
             int index = (int) Math.min(11, Math.max(0, visuals.faceGene() * 12));
             return Identifier.fromNamespaceAndPath("mca", "skins/face/normal/" + (index == 11 ? "blink" : index) + ".png");
         }
-        return list.pick("normal", gender, visuals.faceGene());
+        return list.pick("normal", visuals.faceGene());
     }
 
     private static Identifier getClothes(VillagerVisuals visuals) {
@@ -189,14 +181,11 @@ public class SkinExporter {
     }
 
     private static Identifier getLibraryOrResourceIdentifier(String identifier) {
-        if (isLibraryIdentifier(identifier)) {
-            return SkinCache.getTextureIdentifier(Integer.parseInt(identifier.substring(IMMERSIVE_LIBRARY_PREFIX.length())));
+        var contentId = ImmersiveLibraryIds.contentId(identifier);
+        if (contentId.isPresent()) {
+            return SkinCache.getTextureIdentifier(contentId.getAsInt());
         }
         return Identifier.parse(identifier);
-    }
-
-    private static boolean isLibraryIdentifier(String identifier) {
-        return identifier.startsWith(IMMERSIVE_LIBRARY_PREFIX);
     }
 
     private static void compositeFace(NativeImage base, Identifier faceId, VillagerVisuals visuals) {

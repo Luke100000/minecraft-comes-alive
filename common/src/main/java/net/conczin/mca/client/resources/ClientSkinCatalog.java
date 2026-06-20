@@ -34,11 +34,20 @@ public final class ClientSkinCatalog {
         customClothing = new HashMap<>(clothing);
         customHair = new HashMap<>(hair);
         loadClientResources();
-        loaded = true;
+        loaded = hasClientResources();
     }
 
     public static void markCustomSkinsOutdated() {
         customSkinsOutdated = true;
+        loaded = false;
+    }
+
+    public static void markClientResourcesOutdated() {
+        clothing.clear();
+        hair.clear();
+        bodySkins.clear();
+        layeredHair.clear();
+        hairStyles.clear();
         loaded = false;
     }
 
@@ -93,7 +102,7 @@ public final class ClientSkinCatalog {
         }
 
         loadClientResources();
-        loaded = !clothing.isEmpty() || !hair.isEmpty() || !bodySkins.isEmpty() || !layeredHair.isEmpty() || !hairStyles.isEmpty();
+        loaded = hasClientResourceLists();
     }
 
     private static void loadClientResources() {
@@ -108,6 +117,21 @@ public final class ClientSkinCatalog {
         clothing.putAll(customClothing);
         hair.putAll(customHair);
         hairStyles = loadHairStyles(hair);
+    }
+
+    private static boolean hasClientResources() {
+        return hasClientResourceLists();
+    }
+
+    private static boolean hasClientResourceLists() {
+        ClothingList clothingList = ClothingList.getInstance();
+        BodySkinList bodySkinList = BodySkinList.getInstance();
+        LayeredHairList layeredHairList = LayeredHairList.getInstance();
+        HairStyleList hairStyleList = HairStyleList.getInstance();
+        return clothingList != null && !clothingList.clothing.isEmpty()
+                || bodySkinList != null && !bodySkinList.skins.isEmpty()
+                || layeredHairList != null && !layeredHairList.hair.isEmpty()
+                || hairStyleList != null && !hairStyleList.styles.isEmpty();
     }
 
     private static HashMap<String, HairStyle> loadHairStyles(Map<String, Hair> legacyHair) {

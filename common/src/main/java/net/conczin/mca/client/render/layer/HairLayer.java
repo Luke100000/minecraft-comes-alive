@@ -8,6 +8,7 @@ import net.conczin.mca.client.render.RainbowColor;
 import net.conczin.mca.client.render.VillagerVisuals;
 import net.conczin.mca.client.resources.ColorPalette;
 import net.conczin.mca.resources.data.skin.LayeredHair;
+import net.conczin.mca.util.ImmersiveLibraryIds;
 import net.minecraft.client.model.HumanoidModel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.LivingEntityRenderer;
@@ -16,8 +17,6 @@ import net.minecraft.client.renderer.entity.state.HumanoidRenderState;
 import net.minecraft.resources.Identifier;
 
 public class HairLayer<S extends HumanoidRenderState, M extends HumanoidModel<S>> extends VillagerLayer<S, M> {
-    private static final String IMMERSIVE_LIBRARY_PREFIX = "immersive_library:";
-
     public HairLayer(RenderLayerParent<S, M> renderer, M model) {
         super(renderer, model);
     }
@@ -55,8 +54,9 @@ public class HairLayer<S extends HumanoidRenderState, M extends HumanoidModel<S>
     }
 
     private Identifier getTexture(String identifier) {
-        if (identifier.startsWith(IMMERSIVE_LIBRARY_PREFIX)) {
-            return SkinCache.getTextureIdentifier(Integer.parseInt(identifier.substring(IMMERSIVE_LIBRARY_PREFIX.length())));
+        var contentId = ImmersiveLibraryIds.contentId(identifier);
+        if (contentId.isPresent()) {
+            return SkinCache.getTextureIdentifier(contentId.getAsInt());
         }
         return cached(identifier, Identifier::parse);
     }

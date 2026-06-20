@@ -96,8 +96,12 @@ public class LayeredHairList extends SimplePreparableReloadListener<Map<Identifi
     }
 
     public boolean hasRequiredHair(Gender gender) {
-        return !getPool(LayeredHair.Category.BASE, gender).getEntries().isEmpty()
-                && !getPool(LayeredHair.Category.BANGS, gender).getEntries().isEmpty();
+        for (LayeredHair.Category category : LayeredHair.Category.values()) {
+            if (category.isRequired() && getPool(category, gender).getEntries().isEmpty()) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private float getInclusionChance(LayeredHair.Category category, Gender gender) {

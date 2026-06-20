@@ -1066,7 +1066,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         if (faceList == null) {
             throw new IllegalStateException("Face textures are not loaded yet");
         }
-        return faceList.count("normal", villager.getGenetics().getGender());
+        return faceList.count("normal");
     }
 
     private int fitHairPickerSize(int y, int preferredSize) {
@@ -1220,10 +1220,6 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         int index = displayLayers.indexOf(selected);
         int displayIndex = index < 0 ? 1 : index + 1;
         return Component.translatable("gui.villager_editor.hair_layer_index", layerName, displayIndex, Math.max(1, displayLayers.size()));
-    }
-
-    private Component getLayerName(LayeredHair.Category category) {
-        return Component.translatable("gui.villager_editor.hair_layer." + category.getId());
     }
 
     private Component getLayerDisplayName(LayeredHair.Category category) {
@@ -2072,8 +2068,8 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                 String json = FileUtils.readFileToString(presetFile, StandardCharsets.UTF_8);
                 CompoundTag tag = PresetCodec.fromJsonString(json);
                 
-                // Permanently apply to main villager
                 villager.readNbtForConversion(tag);
+                villager.refreshDimensions();
                 
                 if (tag.contains("PlayerModel")) {
                     int modelVal = tag.getInt("PlayerModel").orElse(0);

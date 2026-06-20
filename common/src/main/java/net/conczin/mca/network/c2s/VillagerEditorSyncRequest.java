@@ -17,6 +17,7 @@ import net.conczin.mca.server.world.data.CustomClothingManager;
 import net.conczin.mca.server.world.data.FamilyTree;
 import net.conczin.mca.server.world.data.FamilyTreeNode;
 import net.conczin.mca.server.world.data.PlayerSaveData;
+import net.conczin.mca.util.ImmersiveLibraryIds;
 import net.conczin.mca.util.NbtHelper;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.UUIDUtil;
@@ -261,7 +262,7 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
     private boolean isValidLayeredHair(String identifier) {
         LayeredHairList list = LayeredHairList.getInstance();
         HairStyleList styles = HairStyleList.getInstance();
-        return identifier.startsWith("immersive_library")
+        return ImmersiveLibraryIds.isValid(identifier)
                 || list != null && list.containsIdentifier(identifier)
                 || styles != null && styles.get(identifier) != null
                 || CustomClothingManager.getHair().getEntries().containsKey(identifier);
