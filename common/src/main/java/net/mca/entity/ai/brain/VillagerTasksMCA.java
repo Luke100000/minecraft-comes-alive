@@ -289,7 +289,10 @@ public class VillagerTasksMCA {
                         VillagerTasksMCA::guardTooHurt
                 )),
                 Pair.of(1, new EquipmentTask(VillagerTasksMCA::isOnDuty, v -> v.getResidency().getHomeVillage()
-                        .map(vil -> vil.getVillageGuardsManager().getGuardEquipment(v.getProfession(), v.getDominantHand())).orElse(VillageGuardsManager.getEquipmentFor(v.getDominantHand(), EquipmentSet.GUARD_0, EquipmentSet.GUARD_0_LEFT)))),
+                        .map(vil -> vil.getVillageGuardsManager().getGuardEquipment(v.getProfession(), v.getDominantHand()))
+                        .orElseGet(() -> v.getProfession() == ProfessionsMCA.ARCHER.get()
+                                ? VillageGuardsManager.getEquipmentFor(v.getDominantHand(), EquipmentSet.ARCHER_0, EquipmentSet.ARCHER_0_LEFT)
+                                : VillageGuardsManager.getEquipmentFor(v.getDominantHand(), EquipmentSet.GUARD_0, EquipmentSet.GUARD_0_LEFT)))),
                 Pair.of(2, UpdateAttackTargetTask.create(t -> true, VillagerTasksMCA::getPreferredTarget)),
                 Pair.of(3, ForgetAttackTargetTask.create(livingEntity -> !VillagerTasksMCA.isPreferredTarget(villager, livingEntity))),
                 Pair.of(4, new BowTask<>(20, 12)),
@@ -348,7 +351,7 @@ public class VillagerTasksMCA {
 
     public static boolean isInDanger(VillagerEntityMCA villager) {
         return villager.getVillagerBrain().isPanicking()
-                || villager.getBrain().getOptionalMemory(MemoryModuleType.ATTACK_TARGET).isPresent();
+               || villager.getBrain().getOptionalMemory(MemoryModuleType.ATTACK_TARGET).isPresent();
     }
 
     private static Activity getActivity(VillagerEntityMCA villager) {
