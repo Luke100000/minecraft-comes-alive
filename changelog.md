@@ -1,3 +1,8 @@
+# 7.6.21
+
+* Fixed golden apple on cure being consumed twice
+* Fixed baby item sent to oblivion on drop
+
 # 7.6.20
 
 * Fixed anvils not counting toward armory and blacksmith buildings.

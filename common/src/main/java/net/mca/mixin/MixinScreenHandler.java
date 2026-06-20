@@ -10,6 +10,7 @@ import net.minecraft.util.collection.DefaultedList;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
@@ -22,13 +23,14 @@ abstract class MixinScreenHandler {
 
     @Inject(method = "onSlotClick", at = @At("HEAD"), cancellable = true)
     private void onSlotClick(int slotIndex, int button, SlotActionType actionType, PlayerEntity player, CallbackInfo info) {
-        ItemStack stack = getDroppedStack(slotIndex, actionType, player);
+        ItemStack stack = mca$getDroppedStack(slotIndex, actionType, player);
         if (BabyItem.shouldCancelDrop(stack, player)) {
             info.cancel();
         }
     }
 
-    private ItemStack getDroppedStack(int slotIndex, SlotActionType actionType, PlayerEntity player) {
+    @Unique
+    private ItemStack mca$getDroppedStack(int slotIndex, SlotActionType actionType, PlayerEntity player) {
         if (slotIndex == ScreenHandler.EMPTY_SPACE_SLOT_INDEX && actionType == SlotActionType.PICKUP) {
             return getCursorStack();
         }
