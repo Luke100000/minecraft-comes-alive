@@ -3,6 +3,7 @@ package net.conczin.mca.client.render.layer;
 import net.conczin.mca.MCA;
 import net.conczin.mca.client.gui.immersive_library.SkinCache;
 import net.conczin.mca.client.render.VillagerVisuals;
+import net.conczin.mca.util.ImmersiveLibraryIds;
 import net.minecraft.client.model.HumanoidModel;
 import net.minecraft.client.renderer.entity.RenderLayerParent;
 import net.minecraft.client.renderer.entity.state.HumanoidRenderState;
@@ -27,8 +28,9 @@ public class ClothingLayer<S extends HumanoidRenderState, M extends HumanoidMode
             return null;
         }
         String v = visuals.burned() ? "burnt" : variant;
-        if (identifier.startsWith("immersive_library:")) {
-            return SkinCache.getTextureIdentifier(Integer.parseInt(identifier.substring(18)));
+        var contentId = ImmersiveLibraryIds.contentId(identifier);
+        if (contentId.isPresent()) {
+            return SkinCache.getTextureIdentifier(contentId.getAsInt());
         }
         return cached(identifier + v, clothes -> {
             Identifier id = Identifier.parse(visuals.clothes());

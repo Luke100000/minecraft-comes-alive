@@ -1,7 +1,6 @@
 package net.conczin.mca.resources;
 
 import net.conczin.mca.MCA;
-import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.resources.data.skin.SkinListEntry;
 import net.minecraft.IdentifierException;
 import net.minecraft.resources.Identifier;
@@ -59,7 +58,7 @@ public class FaceList extends SimplePreparableReloadListener<Map<Identifier, Lis
         });
     }
 
-    public Identifier pick(String variant, Gender gender, float faceGene) {
+    public Identifier pick(String variant, float faceGene) {
         List<String> pool = faces.get(key(variant));
         if (pool == null || pool.isEmpty()) {
             throw new IllegalStateException("No face textures loaded for " + key(variant));
@@ -69,7 +68,7 @@ public class FaceList extends SimplePreparableReloadListener<Map<Identifier, Lis
         return Identifier.parse(pool.get(index));
     }
 
-    public int count(String variant, Gender gender) {
+    public int count(String variant) {
         List<String> pool = faces.get(key(variant));
         if (pool == null || pool.isEmpty()) {
             throw new IllegalStateException("No face textures loaded for " + key(variant));
