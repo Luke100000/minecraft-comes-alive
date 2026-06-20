@@ -11,7 +11,6 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.server.packs.resources.SimpleJsonResourceReloadListener;
 import net.minecraft.util.ExtraCodecs;
-import net.minecraft.util.GsonHelper;
 import net.minecraft.util.profiling.ProfilerFiller;
 
 import java.util.HashMap;
@@ -43,13 +42,12 @@ public class HairList extends SimpleJsonResourceReloadListener<JsonElement> {
                 return;
             }
 
-            for (String key : file.getAsJsonObject().keySet()) {
-                JsonObject object = file.getAsJsonObject().get(key).getAsJsonObject();
+            for (SkinListJson.Entry entry : SkinListJson.entries(id, file)) {
+                JsonObject object = entry.metadata();
 
-                for (String identifier : CountedSkinIds.expand(key, GsonHelper.getAsInt(object, "count", -1))) {
-                    Hair c = new Hair(identifier, gender, GsonHelper.getAsFloat(object, "chance", 1.0f));
-                    hair.put(identifier, c);
-                }
+                float chance = object.has("chance") ? object.get("chance").getAsFloat() : 1.0f;
+                Hair c = new Hair(entry.identifier(), gender, chance);
+                hair.put(entry.identifier(), c);
             }
         });
     }

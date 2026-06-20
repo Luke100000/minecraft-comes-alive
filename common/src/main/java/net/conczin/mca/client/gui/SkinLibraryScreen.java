@@ -1749,8 +1749,8 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
 
     private void refreshServerContent() {
         serverContent.clear();
-        addServerContent(VillagerEditorScreen.getClothing(), "clothing");
-        addServerContent(VillagerEditorScreen.getHair(), "hair");
+        addServerContent(ClientSkinCatalog.clothing(), "clothing");
+        addServerContent(ClientSkinCatalog.hair(), "hair");
     }
 
     public enum Page {

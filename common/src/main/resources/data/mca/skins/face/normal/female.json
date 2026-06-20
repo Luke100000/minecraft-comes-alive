@@ -1,7 +1,14 @@
-{
-  "mca:skins/face/normal/%d.png": {
-    "count": 11
-  },
-  "mca:skins/face/normal/blink.png": {
-  }
-}
+[
+  "mca:skins/face/normal/0.png",
+  "mca:skins/face/normal/1.png",
+  "mca:skins/face/normal/2.png",
+  "mca:skins/face/normal/3.png",
+  "mca:skins/face/normal/4.png",
+  "mca:skins/face/normal/5.png",
+  "mca:skins/face/normal/6.png",
+  "mca:skins/face/normal/7.png",
+  "mca:skins/face/normal/8.png",
+  "mca:skins/face/normal/9.png",
+  "mca:skins/face/normal/10.png",
+  "mca:skins/face/normal/blink.png"
+]

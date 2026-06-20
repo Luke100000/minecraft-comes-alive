@@ -10,7 +10,6 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.server.packs.resources.SimpleJsonResourceReloadListener;
 import net.minecraft.util.ExtraCodecs;
-import net.minecraft.util.GsonHelper;
 import net.minecraft.util.profiling.ProfilerFiller;
 
 import java.util.ArrayList;
@@ -43,24 +42,22 @@ public class FaceList extends SimpleJsonResourceReloadListener<JsonElement> {
 
     private void addEntries(Identifier id, JsonElement file) {
         Gender fileGender = BodySkinList.getGenderFromPath(id);
-        file.getAsJsonObject().keySet().forEach(key -> {
-            int count = GsonHelper.getAsInt(file.getAsJsonObject().get(key).getAsJsonObject(), "count", -1);
-            for (String identifier : CountedSkinIds.expand(key, count)) {
-                Identifier parsed;
-                try {
-                    parsed = Identifier.parse(identifier);
-                } catch (IdentifierException exception) {
-                    MCA.LOGGER.warn("Invalid face texture identifier {}", identifier, exception);
-                    continue;
-                }
-                String[] parts = parsed.getPath().split("/");
-                if (parts.length < 3) {
-                    MCA.LOGGER.warn("Invalid face texture path {}", identifier);
-                    continue;
-                }
-                String mapKey = key(parts[2], fileGender);
-                faces.computeIfAbsent(mapKey, ignored -> new ArrayList<>()).add(identifier);
+        SkinListJson.entries(id, file).forEach(entry -> {
+            String identifier = entry.identifier();
+            Identifier parsed;
+            try {
+                parsed = Identifier.parse(identifier);
+            } catch (IdentifierException exception) {
+                MCA.LOGGER.warn("Invalid face texture identifier {}", identifier, exception);
+                return;
             }
+            String[] parts = parsed.getPath().split("/");
+            if (parts.length < 3) {
+                MCA.LOGGER.warn("Invalid face texture path {}", identifier);
+                return;
+            }
+            String mapKey = key(parts[2], fileGender);
+            faces.computeIfAbsent(mapKey, ignored -> new ArrayList<>()).add(identifier);
         });
     }
 
