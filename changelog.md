@@ -1,3 +1,21 @@
+# 7.8.4
+
+* General fixes and pathfinding improvements
+* Fixed Debug Screen
+* Guard target priorities now support entity type tags such as `#minecraft:undead`.
+  * Refresh your MCA Config to propogate the changes. 
+* Iron golems no longer are able to target villagers.
+* Fixed MCA zombie villager nameplates no longer rendering red.
+* Generic Villager Archer AI Class improvements
+  * Bows now animate when shooting like players do.
+  * Archers now keep skeleton-style distance and respond to threats while outside a home village.
+* Fixed Villager Zombie Conversion, now they shouldn't disappear.
+* Fixed a bug with villagers being stuck when trying to path to their beds.
+  * This will be backported eventually to earlier versions.
+* New config option villagerPathfindingDistance for long villager routes to remembered points of interest such as beds.
+* Fixed first-person MCA hand skin rendering when using the villager model.
+* Fixed MCA babies.
+
 # 7.8.3
 
 * Surprise, more fixes!

@@ -3,15 +3,16 @@ package net.conczin.mca.entity.ai.brain.tasks;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.behavior.Behavior;
+import net.minecraft.world.entity.ai.behavior.BehaviorControl;
 
 import java.util.Map;
 import java.util.function.Predicate;
 
 public class ConditionalTask<E extends LivingEntity> extends Behavior<E> {
-    private final Behavior<? super E> task;
+    private final BehaviorControl<? super E> task;
     private final Predicate<E> predicate;
 
-    public ConditionalTask(Behavior<? super E> task, Predicate<E> predicate) {
+    public ConditionalTask(BehaviorControl<? super E> task, Predicate<E> predicate) {
         super(Map.of());
 
         this.task = task;
@@ -35,7 +36,7 @@ public class ConditionalTask<E extends LivingEntity> extends Behavior<E> {
 
     @Override
     protected boolean canStillUse(ServerLevel world, E entity, long time) {
-        return task.getStatus() == Status.RUNNING;
+        return predicate.test(entity) && task.getStatus() == Status.RUNNING;
     }
 
     @Override

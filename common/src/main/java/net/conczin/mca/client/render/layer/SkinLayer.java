@@ -19,6 +19,10 @@ public class SkinLayer<S extends HumanoidRenderState, M extends HumanoidModel<S>
     }
 
     public Identifier getSkin(VillagerVisuals visuals) {
+        if (!MCA.isBlankString(visuals.skin())) {
+            return cached(visuals.skin(), Identifier::parse);
+        }
+
         int skin = (int) Math.min(4, Math.max(0, visuals.skinGene() * 5));
         return cached("skins/skin/" + visuals.genderDataName() + "/" + skin + ".png", MCA::locate);
     }

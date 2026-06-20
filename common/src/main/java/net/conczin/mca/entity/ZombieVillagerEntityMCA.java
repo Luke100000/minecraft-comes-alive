@@ -12,6 +12,7 @@ import net.conczin.mca.entity.interaction.ZombieCommandHandler;
 import net.conczin.mca.registry.TagsMCA;
 import net.conczin.mca.util.InventoryUtils;
 import net.conczin.mca.util.network.datasync.CDataManager;
+import net.minecraft.ChatFormatting;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.syncher.EntityDataAccessor;
@@ -32,6 +33,9 @@ import net.minecraft.world.level.ServerLevelAccessor;
 import net.minecraft.world.level.storage.TagValueInput;
 import net.minecraft.world.level.storage.ValueInput;
 import net.minecraft.world.level.storage.ValueOutput;
+
+import java.util.UUID;
+
 import org.jetbrains.annotations.Nullable;
 
 public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerLike<ZombieVillagerEntityMCA>, CompassionateEntity<Relationship<ZombieVillagerEntityMCA>> {
@@ -117,6 +121,11 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
         if (name != null) {
             setName(name.getString());
         }
+    }
+
+    @Override
+    public Component getDisplayName() {
+        return super.getDisplayName().copy().withStyle(ChatFormatting.RED);
     }
 
     @Override
@@ -223,6 +232,9 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
     @Nullable
     public <T extends Mob> T convertTo(EntityType<T> type, ConversionParams params, ConversionParams.AfterConversion<T> afterConversion) {
         EntityType<? extends Mob> convertedType = !isRemoved() && type == EntityType.VILLAGER ? getGenetics().getGender().getVillagerType() : type;
+
+        UUID oldUuid = getUUID();
+
         return (T) super.convertTo((EntityType) convertedType, params, mob -> {
             ((ConversionParams.AfterConversion) afterConversion).finalizeConversion(mob);
 
@@ -232,10 +244,12 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
             }
 
             if (mob instanceof VillagerEntityMCA villager) {
-                villager.setUUID(getUUID());
+                villager.setUUID(oldUuid);
                 villager.setInventory(inventory);
                 villager.setAge(getAgeState().toAge());
             }
+
+            this.discard();
         });
     }
 

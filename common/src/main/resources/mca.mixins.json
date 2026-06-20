@@ -8,6 +8,7 @@
     "MixinFlintAndSteelItem",
     "MixinGoat",
     "MixinHorseBase",
+    "MixinIronGolem",
     "MixinInventory",
     "MixinMilkBucketItem",
     "MixinPlayer",

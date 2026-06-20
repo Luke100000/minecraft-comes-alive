@@ -100,7 +100,6 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     private static final CDataParameter<Float> INFECTION_PROGRESS = CParameter.create("InfectionProgress", 0.0f);
     private static final CDataParameter<Integer> GROWTH_AMOUNT = CParameter.create("GrowthAmount", -AgeState.getMaxAge());
     public static final String MCA_DATA_KEY = "MCAData";
-    private static final int SPAWN_EGG_BABY_AGE = AgeState.TODDLER.toAge() + 1;
     private static final CDataManager<VillagerEntityMCA> DATA = createTrackedData(new CDataManager.Builder<>(
             VillagerEntityMCA.class,
             serializer -> SynchedEntityData.defineId(VillagerEntityMCA.class, serializer)
@@ -138,7 +137,9 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
     public VillagerEntityMCA(EntityType<VillagerEntityMCA> type, Level w, Gender gender) {
         super(type, w);
+        this.moveControl = new ArcherMoveControl(this);
         genetics.setGender(gender);
+        this.getNavigation().setRequiredPathLength(Config.getInstance().getVillagerPathfindingDistance());
     }
 
     public static <E extends Entity> CDataManager.Builder<E> createTrackedData(CDataManager.Builder<E> builder) {
@@ -352,7 +353,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
     @Override
     public void setBaby(boolean isBaby) {
-        setAge(isBaby ? SPAWN_EGG_BABY_AGE : 0);
+        setAge(isBaby ? -AgeState.getMaxAge() : 0);
     }
 
     @Override
@@ -776,7 +777,6 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
                 if (infection > 1.0f) {
                     convertTo(EntityType.ZOMBIE_VILLAGER, ConversionParams.single(this, false, false), mob -> {
                     });
-                    discard();
                 }
             }
 
@@ -1192,7 +1192,6 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     @Override
     public void onSyncedDataUpdated(EntityDataAccessor<?> par) {
         if (getTypeDataManager().isParam(AGE_STATE, par)
-                || getTypeDataManager().isParam(GROWTH_AMOUNT, par)
                 || getTypeDataManager().isParam(Genetics.SIZE.getParam(), par)
                 || getTypeDataManager().isParam(Genetics.WIDTH.getParam(), par)) {
             refreshDimensions();
@@ -1252,6 +1251,9 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         residency.leaveHome();
 
         EntityType<? extends Mob> convertedType = !isRemoved() && type == EntityType.ZOMBIE_VILLAGER ? getGenetics().getGender().getZombieType() : type;
+
+        UUID oldUuid = getUUID();
+
         return (T) super.convertTo((EntityType) convertedType, params, mob -> {
             ((ConversionParams.AfterConversion) afterConversion).finalizeConversion(mob);
 
@@ -1266,7 +1268,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
                 zombie.setGossips(getGossips().copy());
                 zombie.setTradeOffers(getOffers().copy());
                 zombie.setVillagerXp(getVillagerXp());
-                zombie.setUUID(getUUID());
+                zombie.setUUID(oldUuid);
                 zombie.setPersistenceRequired();
 
                 level().levelEvent(null, 1026, this.blockPosition(), 0);
@@ -1275,6 +1277,8 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
             if (mob instanceof ZombieVillagerEntityMCA zombie) {
                 zombie.setInventory(inventory);
             }
+
+            this.discard();
         });
     }
 

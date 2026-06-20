@@ -193,6 +193,11 @@ public final class Config extends CommonConfig {
     public double villagerMinTeleportationDistance = 128;
 
     /**
+     * Maximum distance villagers can path toward remembered points of interest such as beds.
+     */
+    public int villagerPathfindingDistance = 192;
+
+    /**
      * Number of hearts a child starts with towards their parent.
      */
     public int childInitialHearts = 100;
@@ -249,8 +254,8 @@ public final class Config extends CommonConfig {
     public int pardonPlayerTicks = 1200;
 
     /**
-     * If true, guards will attack all monsters (including modded ones).
-     * May cause guards to attack neutral mobs depending on configuration.
+     * If true, guards will attack all entities marked as hostile enemies, including modded ones.
+     * Exact entries in guardsTargetEntities can still override or exclude specific entity types.
      */
     public boolean guardsTargetMonsters = false;
 
@@ -725,7 +730,10 @@ public final class Config extends CommonConfig {
     public boolean useModernUSANamesOnly = false;
 
     /**
-     * Map of entity names to guard attack priorities.
+     * Map of entity names or entity type tags to guard attack priorities.
+     * Tag keys use the same leading-hash format as datapacks, such as "#minecraft:skeletons".
+     * Exact entity names are checked before tags, so they can exclude or reprioritize tag members.
+     * If multiple tags match the same entity, the first matching tag in this map is used.
      * Negative values indicate the entity should be ignored.
      */
     public Map<String, Integer> guardsTargetEntities = ImmutableMap.<String, Integer>builder()
@@ -734,16 +742,20 @@ public final class Config extends CommonConfig {
             .put("minecraft:evoker", 3)
             .put("minecraft:husk", 2)
             .put("minecraft:illusioner", 3)
+            .put("minecraft:phantom", 0)
             .put("minecraft:pillager", 3)
             .put("minecraft:ravager", 3)
+            .put("minecraft:skeleton_horse", -1)
             .put("minecraft:vex", 0)
             .put("minecraft:vindicator", 4)
             .put("minecraft:zoglin", 2)
             .put("minecraft:zombie", 4)
+            .put("minecraft:zombie_horse", -1)
             .put("minecraft:zombie_villager", 3)
             .put("minecraft:spider", 0)
-            .put("minecraft:skeleton", 0)
+            .put("minecraft:cave_spider", 0)
             .put("minecraft:slime", 0)
+            .put("#minecraft:undead", 0)
             .put(MCA.MOD_ID + ":female_zombie_villager", 3)
             .put(MCA.MOD_ID + ":male_zombie_villager", 3)
             .build();
@@ -870,6 +882,10 @@ public final class Config extends CommonConfig {
         } else {
             return serverConfig;
         }
+    }
+
+    public int getVillagerPathfindingDistance() {
+        return Math.clamp(villagerPathfindingDistance, 16, 256);
     }
 
     public static void setServerConfig(CommonConfig config) {

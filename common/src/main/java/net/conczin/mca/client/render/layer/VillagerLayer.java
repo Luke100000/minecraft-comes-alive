@@ -106,6 +106,16 @@ public abstract class VillagerLayer<S extends HumanoidRenderState, M extends Hum
     }
 
     protected static void setAllVisible(HumanoidModel model, boolean visible) {
+        if (model instanceof VillagerEntityModelMCA villagerModel) {
+            villagerModel.setAllVisible(visible);
+            return;
+        }
+
+        if (model instanceof PlayerEntityExtendedModel<?> playerModel) {
+            playerModel.setAllVisible(visible);
+            return;
+        }
+
         model.head.visible = visible;
         model.hat.visible = visible;
         model.body.visible = visible;
@@ -113,21 +123,6 @@ public abstract class VillagerLayer<S extends HumanoidRenderState, M extends Hum
         model.leftArm.visible = visible;
         model.rightLeg.visible = visible;
         model.leftLeg.visible = visible;
-
-        if (model instanceof VillagerEntityModelMCA villagerModel) {
-            villagerModel.bodyWear.visible = visible;
-            villagerModel.leftArmwear.visible = visible;
-            villagerModel.rightArmwear.visible = visible;
-            villagerModel.leftLegwear.visible = visible;
-            villagerModel.rightLegwear.visible = visible;
-            villagerModel.breastsWear.visible = visible;
-            villagerModel.breasts.visible = visible;
-        }
-
-        if (model instanceof PlayerEntityExtendedModel<?> playerModel) {
-            playerModel.breastsWear.visible = visible;
-            playerModel.breasts.visible = visible;
-        }
 
         if (model instanceof PlayerArmorExtendedModel<?> armorModel) {
             armorModel.breasts.visible = visible;
