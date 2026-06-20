@@ -22,7 +22,7 @@ abstract class MixinPlayerEntityClient extends LivingEntity {
 
     @Inject(method = "getActiveEyeHeight(Lnet/minecraft/entity/EntityPose;Lnet/minecraft/entity/EntityDimensions;)F", at = @At("RETURN"), cancellable = true)
     public void mca$getActiveEyeHeight(EntityPose pose, EntityDimensions dimensions, CallbackInfoReturnable<Float> cir) {
-        if (Config.getInstance().scaleEyeHeightWithPlayerHeight) {
+        if (Config.getInstance().scaleEyeHeightWithPlayerHeight && !isInPose(EntityPose.SLEEPING)) {
             MCAClient.getPlayerData(getUuid())
                     .filter(data -> data.getPlayerModel() != VillagerLike.PlayerModel.VANILLA)
                     .ifPresent(data -> cir.setReturnValue(Math.min(this.getHeight() - 1.0f / 16.0f, cir.getReturnValue() * data.getRawScaleFactor())));

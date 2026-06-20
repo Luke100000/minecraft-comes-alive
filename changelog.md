@@ -6,6 +6,7 @@
 * Fixed doors not always getting closed
 * Trades are no longer reshuffled when switching workplace but not profession
 * Archers now use bows even when not on duty
+* Fixed sleeping offset when using villager model
 
 # 7.6.20
 

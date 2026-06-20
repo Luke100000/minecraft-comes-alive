@@ -1248,6 +1248,9 @@ public class VillagerEntityMCA extends VillagerEntity implements VillagerLike<Vi
 
     @Override
     protected float getActiveEyeHeight(EntityPose pose, EntityDimensions size) {
+        if (isInPose(EntityPose.SLEEPING)) {
+            return super.getActiveEyeHeight(pose, size);
+        }
         return getScaleFactor() * 1.75f;
     }
 
