@@ -1,5 +1,6 @@
 package net.conczin.mca.neoforge;
 
+import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
 import net.conczin.mca.MCA;
 import net.conczin.mca.block.BlockEntityTypesMCA;
 import net.conczin.mca.entity.ai.ActivitiesMCA;
@@ -26,6 +27,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.entity.npc.VillagerTrades;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
@@ -36,11 +38,13 @@ import net.neoforged.neoforge.event.entity.EntityAttributeCreationEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.tick.LevelTickEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
+import net.neoforged.neoforge.event.village.VillagerTradesEvent;
 import net.neoforged.neoforge.network.PacketDistributor;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 import net.neoforged.neoforge.registries.RegisterEvent;
 
+import java.util.Arrays;
 import java.util.function.Consumer;
 
 @Mod(MCA.MOD_ID)
@@ -102,6 +106,18 @@ public final class CommonNeoForge {
         event.addListener(new Tasks());
         event.addListener(new Names());
         event.addListener(new BuildingTypes());
+    }
+
+    @SubscribeEvent
+    public static void onVillagerTrades(VillagerTradesEvent event) {
+        Int2ObjectMap<VillagerTrades.ItemListing[]> trades = TradeOffersMCA.createTradeMap().get(event.getType());
+        if (trades == null) {
+            return;
+        }
+
+        trades.int2ObjectEntrySet().forEach(entry ->
+                event.getTrades().get(entry.getIntKey()).addAll(Arrays.asList(entry.getValue()))
+        );
     }
 
     @SubscribeEvent

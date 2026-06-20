@@ -107,7 +107,7 @@ public class Pregnancy {
         child.getTraits().inherit(mother.getTraits());
         child.setBaby(true);
         child.setAgeState(AgeState.TODDLER);
-        child.getRelationships().getFamilyEntry().assignParents(mother.getRelationships(), partner.getRelationships());
+        child.getRelationships().getFamilyEntry().replaceParents(mother.getRelationships(), partner.getRelationships());
 
         // advancement
         child.getRelationships().getFamily(2, 0)
