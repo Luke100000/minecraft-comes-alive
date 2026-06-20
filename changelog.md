@@ -3,6 +3,7 @@
 * Fixed golden apple on cure being consumed twice
 * Fixed baby item sent to oblivion on drop
 * Fixed adopting children not always updating parents
+* Fixed doors not always getting closed 
 
 # 7.6.20
 

@@ -87,7 +87,8 @@ public class SmarterOpenDoorsTask extends MultiTickTask<LivingEntity> {
             BlockPos blockPos = pathNode.getBlockPos();
             BlockState blockState = world.getBlockState(blockPos);
             if (isDoor(blockState)) {
-                if (setOpen(entity, world, blockState, blockPos, true)) {
+                boolean wasOpen = blockState.contains(Properties.OPEN) && blockState.get(Properties.OPEN);
+                if (setOpen(entity, world, blockState, blockPos, true) || wasOpen) {
                     this.rememberToCloseDoor(world, entity, blockPos);
                 }
             }
@@ -143,7 +144,6 @@ public class SmarterOpenDoorsTask extends MultiTickTask<LivingEntity> {
 
                 // Door is blocked by entities
                 if (SmarterOpenDoorsTask.hasOtherMobReachedDoor(entity, blockPos)) {
-                    iterator.remove();
                     continue;
                 }
 
@@ -193,4 +193,3 @@ public class SmarterOpenDoorsTask extends MultiTickTask<LivingEntity> {
         }
     }
 }
-
