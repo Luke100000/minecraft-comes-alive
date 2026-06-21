@@ -378,14 +378,8 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                                     Component.translatable(Config.getInstance().enablePlayerShaders
                                                     ? "gui.mca.trait_shaders.on" : "gui.mca.trait_shaders.off")
                                             .withStyle(Config.getInstance().enablePlayerShaders ? ChatFormatting.GREEN : ChatFormatting.GRAY)));
-                        } else if (page.equals("presets")) {
-                            if (SkinExporter.export(selectedPreset == null ? villager : villagerVisualization, selectedPreset)) {
-                                finishSkinExport(true);
-                            }
                         } else {
-                            if (SkinExporter.export(villager)) {
-                                finishSkinExport(false);
-                            }
+                            exportSkinFromCurrentPage();
                         }
                     }
             ));
@@ -882,6 +876,15 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
             onClose();
         } else if (fromPresets) {
             setPage(presetsReturnPage);
+        }
+    }
+
+    private void exportSkinFromCurrentPage() {
+        boolean fromPresets = page.equals("presets");
+        VillagerEntityMCA exportTarget = fromPresets && selectedPreset != null ? villagerVisualization : villager;
+        String exportName = fromPresets ? selectedPreset : null;
+        if (SkinExporter.export(exportTarget, exportName)) {
+            finishSkinExport(fromPresets);
         }
     }
 

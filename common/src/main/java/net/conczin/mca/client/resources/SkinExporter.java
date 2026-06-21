@@ -19,8 +19,13 @@ import net.minecraft.util.ARGB;
 
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public class SkinExporter {
     public static final Identifier BLINK_FACE = MCA.locate("skins/face/normal/blink.png");
@@ -52,28 +57,26 @@ public class SkinExporter {
                     }
                 }
                 
-                File exportDir = new File(Minecraft.getInstance().gameDirectory, "mca/exported_skins");
-                if (!exportDir.exists()) {
-                    exportDir.mkdirs();
-                }
+                Path exportDir = Minecraft.getInstance().gameDirectory.toPath().resolve("mca/exported_skins");
+                Files.createDirectories(exportDir);
                 
-                File destFile = getAvailableExportFile(exportDir, customName);
-                base.writeToFile(destFile.toPath());
+                Path destFile = getAvailableExportFile(exportDir, customName);
+                base.writeToFile(destFile);
                 
                 var player = Minecraft.getInstance().player;
                 if (player != null) {
-                    var message = Component.translatable("chat.mca.skin_export_success", "mca/exported_skins/" + destFile.getName())
+                    var message = Component.translatable("chat.mca.skin_export_success", "mca/exported_skins/" + destFile.getFileName())
                             .withStyle(style -> style.withColor(ChatFormatting.GREEN))
                             .append(Component.literal(" "))
                             .append(Component.translatable("chat.mca.open_image")
                                     .withStyle(style -> style.withColor(ChatFormatting.GREEN)
                                             .withUnderlined(true)
-                                            .withClickEvent(new ClickEvent.OpenFile(destFile))))
+                                            .withClickEvent(new ClickEvent.OpenFile(destFile.toFile()))))
                             .append(Component.literal(" "))
                             .append(Component.translatable("chat.mca.open_folder")
                                     .withStyle(style -> style.withColor(ChatFormatting.GOLD)
                                             .withUnderlined(true)
-                                            .withClickEvent(new ClickEvent.OpenFile(exportDir))));
+                                            .withClickEvent(new ClickEvent.OpenFile(exportDir.toFile()))));
                     
                     player.sendSystemMessage(message);
                 }
@@ -89,7 +92,7 @@ public class SkinExporter {
         return true;
     }
 
-    private static File getAvailableExportFile(File exportDir, String customName) {
+    private static Path getAvailableExportFile(Path exportDir, String customName) throws IOException {
         String fileName;
         if (MCA.isBlankString(customName)) {
             fileName = "Exported_Skin";
@@ -97,13 +100,18 @@ public class SkinExporter {
             fileName = customName.replaceAll("[^a-zA-Z0-9_\\-]", "_") + "_skin";
         }
 
-        String[] listedFiles = exportDir.list();
-        Set<String> existingFiles = listedFiles == null ? Set.of() : Set.of(listedFiles);
+        Set<String> existingFiles;
+        try (Stream<Path> files = Files.list(exportDir)) {
+            existingFiles = files
+                    .map(path -> path.getFileName().toString())
+                    .collect(Collectors.toSet());
+        }
+
         String candidateName = fileName + ".png";
         for (int suffix = 2; existingFiles.contains(candidateName); suffix++) {
             candidateName = fileName + "_" + suffix + ".png";
         }
-        return new File(exportDir, candidateName);
+        return exportDir.resolve(candidateName);
     }
 
     private static Identifier getSkin(VillagerVisuals visuals) {
