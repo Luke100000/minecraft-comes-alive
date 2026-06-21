@@ -129,11 +129,16 @@ public record VillagerVisuals(
                 villager.getEyeLeftDye(),
                 villager.getClothes(),
                 villager.getInfectionProgress(),
-                (int) (entity.getId() + entity.level().getGameTime()),
+                animationTickCount(entity),
                 entity.getId(),
                 entity.isSleeping(),
                 entity.isDeadOrDying()
         );
+    }
+
+    private static int animationTickCount(LivingEntity entity) {
+        long ticks = entity.tickCount > 0 ? entity.tickCount : entity.level().getGameTime();
+        return (int) (entity.getId() + ticks);
     }
 
     public boolean isBlinking() {
