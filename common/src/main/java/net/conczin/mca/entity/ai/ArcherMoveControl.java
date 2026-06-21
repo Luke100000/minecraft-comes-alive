@@ -54,6 +54,10 @@ public class ArcherMoveControl extends MoveControl {
                 return;
             }
 
+            if (this.operation != Operation.STRAFE) {
+                this.mob.setXxa(0.0F);
+                this.mob.setZza(0.0F);
+            }
             super.tick();
             return;
         }
