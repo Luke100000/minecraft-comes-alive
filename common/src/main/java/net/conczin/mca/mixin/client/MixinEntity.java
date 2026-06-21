@@ -19,7 +19,10 @@ public abstract class MixinEntity {
 
     @Inject(method = "getEyeHeight()F", at = @At("RETURN"), cancellable = true)
     private void onGetEyeHeight(CallbackInfoReturnable<Float> cir) {
-        if ((Object) this instanceof Player player && Config.getInstance().scaleEyeHeightWithPlayerHeight) {
+        //noinspection ConstantValue
+        if ((Object) this instanceof Player player
+                && Config.getInstance().scaleEyeHeightWithPlayerHeight
+                && !Config.getServerConfig().scalePlayerHitboxWithSizeAndWidth) {
             MCAClient.getGeneticsRendererData(player.getUUID())
                     .ifPresent(villager -> cir.setReturnValue(cir.getReturnValueF() * villager.getRawVerticalScaleFactor()));
         }
