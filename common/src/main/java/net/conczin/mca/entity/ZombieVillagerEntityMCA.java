@@ -33,10 +33,8 @@ import net.minecraft.world.level.ServerLevelAccessor;
 import net.minecraft.world.level.storage.TagValueInput;
 import net.minecraft.world.level.storage.ValueInput;
 import net.minecraft.world.level.storage.ValueOutput;
-
-import java.util.UUID;
-
 import org.jetbrains.annotations.Nullable;
+import java.util.UUID;
 
 public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerLike<ZombieVillagerEntityMCA>, CompassionateEntity<Relationship<ZombieVillagerEntityMCA>> {
 
