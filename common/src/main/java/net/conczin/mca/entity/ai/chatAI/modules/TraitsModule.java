@@ -26,7 +26,8 @@ public class TraitsModule {
         put("asexual", "$villager is asexual.");
         put("left_handed", "$villager is left handed.");
         put("electrified", "$villager has been struck by lightning.");
-        put("rainbow", "$villager has colorful hair.");
+        put("rainbow", "$villager has rainbow hair.");
+        put("rainbow_eyes", "$villager has rainbow eyes.");
     }};
 
     public static void apply(List<String> input, VillagerEntityMCA villager, ServerPlayer player) {

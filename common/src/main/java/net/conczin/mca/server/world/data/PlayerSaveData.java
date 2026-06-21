@@ -49,6 +49,7 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
     private final List<Letter> inbox = new LinkedList<>();
     private @Nullable Integer lastSeenVillageId;
     private boolean entityDataSet;
+    private boolean overrideVillageRequirements = false;
     private CompoundTag entityData;
     private PlayerDimensions.Scale dimensionsScale;
 
@@ -65,6 +66,7 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
 
         lastSeenVillageId = nbt.getInt("lastSeenVillage").orElse(null);
         entityDataSet = nbt.contains("entityDataSet") && nbt.getBoolean("entityDataSet").orElse(false);
+        overrideVillageRequirements = nbt.contains("overrideVillageRequirements") && nbt.getBoolean("overrideVillageRequirements").orElse(false);
 
         entityData = nbt.getCompound("entityData").orElseGet(() -> {
             resetEntityData();
@@ -260,6 +262,7 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
         }
         nbt.put("entityData", entityData.copy());
         nbt.putBoolean("entityDataSet", entityDataSet);
+        nbt.putBoolean("overrideVillageRequirements", overrideVillageRequirements);
         nbt.put("inbox", NbtHelper.fromList(inbox, v -> v.toTag(provider)));
         return nbt;
     }
@@ -314,6 +317,17 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
             nbt.store("pages", PAGES_CODEC, dynamicOps, pages);
 
             return nbt;
+        }
+    }
+
+    public boolean isOverrideVillageRequirements() {
+        return overrideVillageRequirements;
+    }
+
+    public void setOverrideVillageRequirements(boolean overrideVillageRequirements) {
+        if (this.overrideVillageRequirements != overrideVillageRequirements) {
+            this.overrideVillageRequirements = overrideVillageRequirements;
+            setDirty();
         }
     }
 }

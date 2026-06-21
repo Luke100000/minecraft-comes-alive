@@ -17,9 +17,9 @@ public class ZombieVillagerEntityMCARenderer extends VillagerLikeEntityMCARender
         super(ctx, createModel(VillagerEntityModelMCA.bodyData(CubeDeformation.NONE)).hideWears());
 
         addLayer(new SkinLayer<>(this, model));
-        addLayer(new FaceLayer<>(this, createModel(VillagerEntityModelMCA.bodyData(new CubeDeformation(0.01F))).hideWears(), "zombie"));
+        addLayer(new FaceLayer<>(this, createModel(VillagerEntityModelMCA.bodyData(new CubeDeformation(0.01F))).hideWears(), "normal"));
         addLayer(new ClothingLayer<>(this, createModel(VillagerEntityModelMCA.bodyData(new CubeDeformation(0.075F))), "zombie"));
-        addLayer(new HairLayer<>(this, createModel(VillagerEntityModelMCA.hairData(new CubeDeformation(0.1F)))));
+        addLayer(new HairLayer<>(this, createModel(VillagerEntityModelMCA.hairData(new CubeDeformation(0.1F))).hideWears()));
     }
 
     private static VillagerEntityModelMCA createModel(MeshDefinition data) {

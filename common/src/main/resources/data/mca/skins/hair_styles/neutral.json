@@ -1,0 +1,108 @@
+{
+  "mca:hair_style/layered/short_1": {
+    "gender": "neutral",
+    "base": "mca:skins/layered_hair/base/1.png",
+    "bangs": "mca:skins/layered_hair/bangs/1.png",
+    "front": "mca:skins/layered_hair/front/1.png"
+  },
+  "mca:hair_style/layered/short_2": {
+    "gender": "neutral",
+    "base": "mca:skins/layered_hair/base/2.png",
+    "bangs": "mca:skins/layered_hair/bangs/2.png",
+    "front": "mca:skins/layered_hair/front/2.png"
+  },
+  "mca:hair_style/layered/short_3": {
+    "gender": "neutral",
+    "base": "mca:skins/layered_hair/base/3.png",
+    "bangs": "mca:skins/layered_hair/bangs/3.png"
+  },
+  "mca:hair_style/layered/short_4": {
+    "gender": "neutral",
+    "base": "mca:skins/layered_hair/base/4.png",
+    "bangs": "mca:skins/layered_hair/bangs/4.png",
+    "front": "mca:skins/layered_hair/front/4.png"
+  },
+  "mca:hair_style/layered/short_5": {
+    "gender": "neutral",
+    "base": "mca:skins/layered_hair/base/5.png",
+    "bangs": "mca:skins/layered_hair/bangs/5.png"
+  },
+  "mca:hair_style/layered/short_6": {
+    "gender": "neutral",
+    "base": "mca:skins/layered_hair/base/6.png",
+    "bangs": "mca:skins/layered_hair/bangs/6.png",
+    "front": "mca:skins/layered_hair/front/6.png"
+  },
+  "mca:hair_style/layered/medium_1": {
+    "gender": "neutral",
+    "base": "mca:skins/layered_hair/base/1.png",
+    "bangs": "mca:skins/layered_hair/bangs/7.png",
+    "back": "mca:skins/layered_hair/back/1.png",
+    "front": "mca:skins/layered_hair/front/7.png"
+  },
+  "mca:hair_style/layered/medium_2": {
+    "gender": "neutral",
+    "base": "mca:skins/layered_hair/base/2.png",
+    "bangs": "mca:skins/layered_hair/bangs/8.png",
+    "back": "mca:skins/layered_hair/back/2.png",
+    "front": "mca:skins/layered_hair/front/8.png"
+  },
+  "mca:hair_style/layered/medium_3": {
+    "gender": "neutral",
+    "base": "mca:skins/layered_hair/base/3.png",
+    "bangs": "mca:skins/layered_hair/bangs/9.png",
+    "back": "mca:skins/layered_hair/back/3.png"
+  },
+  "mca:hair_style/layered/medium_4": {
+    "gender": "neutral",
+    "base": "mca:skins/layered_hair/base/4.png",
+    "bangs": "mca:skins/layered_hair/bangs/10.png",
+    "back": "mca:skins/layered_hair/back/4.png",
+    "front": "mca:skins/layered_hair/front/10.png"
+  },
+  "mca:hair_style/layered/long_1": {
+    "gender": "neutral",
+    "base": "mca:skins/layered_hair/base/5.png",
+    "bangs": "mca:skins/layered_hair/bangs/11.png",
+    "back": "mca:skins/layered_hair/back/5.png",
+    "front": "mca:skins/layered_hair/front/11.png",
+    "extra": "mca:skins/layered_hair/extra/1.png"
+  },
+  "mca:hair_style/layered/long_2": {
+    "gender": "neutral",
+    "base": "mca:skins/layered_hair/base/6.png",
+    "bangs": "mca:skins/layered_hair/bangs/12.png",
+    "back": "mca:skins/layered_hair/back/6.png",
+    "front": "mca:skins/layered_hair/front/12.png"
+  },
+  "mca:hair_style/layered/long_3": {
+    "gender": "neutral",
+    "base": "mca:skins/layered_hair/base/1.png",
+    "bangs": "mca:skins/layered_hair/bangs/13.png",
+    "back": "mca:skins/layered_hair/back/7.png",
+    "front": "mca:skins/layered_hair/front/13.png",
+    "extra": "mca:skins/layered_hair/extra/2.png"
+  },
+  "mca:hair_style/layered/long_4": {
+    "gender": "neutral",
+    "base": "mca:skins/layered_hair/base/2.png",
+    "bangs": "mca:skins/layered_hair/bangs/14.png",
+    "back": "mca:skins/layered_hair/back/8.png",
+    "front": "mca:skins/layered_hair/front/14.png"
+  },
+  "mca:hair_style/layered/test_1": {
+    "gender": "neutral",
+    "base": "mca:skins/layered_hair/base/3.png",
+    "bangs": "mca:skins/layered_hair/bangs/14_test.png",
+    "back": "mca:skins/layered_hair/back/9.png",
+    "extra": "mca:skins/layered_hair/extra/3.png"
+  },
+  "mca:hair_style/layered/test_2": {
+    "gender": "neutral",
+    "base": "mca:skins/layered_hair/base/4.png",
+    "bangs": "mca:skins/layered_hair/bangs/15_test.png",
+    "back": "mca:skins/layered_hair/back/10.png",
+    "front": "mca:skins/layered_hair/front/15.png",
+    "extra": "mca:skins/layered_hair/extra/4.png"
+  }
+}

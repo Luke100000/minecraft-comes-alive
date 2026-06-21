@@ -10,6 +10,7 @@ import net.conczin.mca.client.gui.MCAScreens;
 import net.conczin.mca.client.particle.InteractionParticle;
 import net.conczin.mca.client.render.*;
 import net.conczin.mca.client.resources.ColorPaletteLoader;
+import net.conczin.mca.client.resources.GeneratedEyeTextureReloadListener;
 import net.conczin.mca.registry.EntitiesMCA;
 import net.conczin.mca.registry.ParticleTypesMCA;
 import net.conczin.mca.resources.ApiReloadListener;
@@ -67,6 +68,7 @@ public final class ClientNeoForge extends ClientProxyAbstractImpl {
         event.addListener(MCA.locate("color_palettes"), new ColorPaletteLoader());
         event.addListener(MCA.locate("supporters"), new Supporters());
         event.addListener(MCA.locate("api"), new ApiReloadListener());
+        event.addListener(GeneratedEyeTextureReloadListener.ID, GeneratedEyeTextureReloadListener.INSTANCE);
     }
 
     @SubscribeEvent

@@ -18,7 +18,7 @@ public class VillagerEntityMCARenderer extends VillagerLikeEntityMCARenderer<Vil
         addLayer(new SkinLayer<>(this, model));
         addLayer(new FaceLayer<>(this, createModel(VillagerEntityModelMCA.bodyData(new CubeDeformation(0.01F))).hideWears(), "normal"));
         addLayer(new ClothingLayer<>(this, createModel(VillagerEntityModelMCA.bodyData(new CubeDeformation(0.0625F))), "normal"));
-        addLayer(new HairLayer<>(this, createModel(VillagerEntityModelMCA.hairData(new CubeDeformation(0.125F)))));
+        addLayer(new HairLayer<>(this, createModel(VillagerEntityModelMCA.hairData(new CubeDeformation(0.125F))).hideWears()));
     }
 
     private static VillagerEntityModelMCA createModel(MeshDefinition data) {

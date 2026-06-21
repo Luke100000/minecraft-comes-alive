@@ -29,7 +29,7 @@ public interface MessagesMCA {
         c.register(ReportBuildingMessage.TYPE, ReportBuildingMessage.STREAM_CODEC, true);
         c.register(SaveVillageMessage.TYPE, SaveVillageMessage.STREAM_CODEC, true);
         c.register(SetTargetMessage.TYPE, SetTargetMessage.STREAM_CODEC, true);
-        c.register(SkinListRequest.TYPE, SkinListRequest.STREAM_CODEC, true);
+        c.register(CustomSkinListRequest.TYPE, CustomSkinListRequest.STREAM_CODEC, true);
         c.register(VillagerEditorSyncRequest.TYPE, VillagerEditorSyncRequest.STREAM_CODEC, true);
         c.register(VillagerNameRequest.TYPE, VillagerNameRequest.STREAM_CODEC, true);
 
@@ -51,7 +51,7 @@ public interface MessagesMCA {
         c.register(OpenGuiRequest.TYPE, OpenGuiRequest.STREAM_CODEC, false);
         c.register(PlayerDataMessage.TYPE, PlayerDataMessage.STREAM_CODEC, false);
         c.register(ShowToastRequest.TYPE, ShowToastRequest.STREAM_CODEC, false);
-        c.register(SkinListResponse.TYPE, SkinListResponse.STREAM_CODEC, false);
+        c.register(CustomSkinListResponse.TYPE, CustomSkinListResponse.STREAM_CODEC, false);
         c.register(VillagerMessage.TYPE, VillagerMessage.STREAM_CODEC, false);
         c.register(VillagerNameResponse.TYPE, VillagerNameResponse.STREAM_CODEC, false);
     }

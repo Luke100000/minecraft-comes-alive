@@ -14,13 +14,11 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.server.packs.resources.SimpleJsonResourceReloadListener;
 import net.minecraft.util.ExtraCodecs;
-import net.minecraft.util.GsonHelper;
 import net.minecraft.util.profiling.ProfilerFiller;
 import net.minecraft.world.entity.npc.villager.VillagerProfession;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.HashMap;
-import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Stream;
 
@@ -50,20 +48,12 @@ public class ClothingList extends SimpleJsonResourceReloadListener<JsonElement> 
                 return;
             }
 
-            for (String key : file.getAsJsonObject().keySet()) {
-                JsonObject object = file.getAsJsonObject().get(key).getAsJsonObject();
+            for (SkinListJson.Entry entry : SkinListJson.entries(id, file)) {
+                JsonObject object = entry.metadata();
+                object.addProperty("gender", gender.getId());
 
-                for (int i = 0; i < GsonHelper.getAsInt(object, "count", 1); i++) {
-                    String identifier = String.format(Locale.ROOT, key, i);
-
-                    object.addProperty("gender", gender.getId());
-
-                    Clothing c = new Clothing(identifier, object);
-
-                    if (!clothing.containsKey(identifier) || !object.has("count")) {
-                        clothing.put(identifier, c);
-                    }
-                }
+                Clothing c = new Clothing(entry.identifier(), object);
+                clothing.put(entry.identifier(), c);
             }
         });
     }

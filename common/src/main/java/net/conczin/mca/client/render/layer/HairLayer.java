@@ -1,15 +1,20 @@
 package net.conczin.mca.client.render.layer;
 
+import com.mojang.blaze3d.vertex.PoseStack;
 import net.conczin.mca.MCA;
 import net.conczin.mca.client.gui.immersive_library.SkinCache;
+import net.conczin.mca.client.model.CommonVillagerModel;
+import net.conczin.mca.client.render.RainbowColor;
 import net.conczin.mca.client.render.VillagerVisuals;
 import net.conczin.mca.client.resources.ColorPalette;
+import net.conczin.mca.resources.data.skin.LayeredHair;
+import net.conczin.mca.util.ImmersiveLibraryIds;
 import net.minecraft.client.model.HumanoidModel;
+import net.minecraft.client.renderer.SubmitNodeCollector;
+import net.minecraft.client.renderer.entity.LivingEntityRenderer;
 import net.minecraft.client.renderer.entity.RenderLayerParent;
 import net.minecraft.client.renderer.entity.state.HumanoidRenderState;
 import net.minecraft.resources.Identifier;
-import net.minecraft.util.ARGB;
-import net.minecraft.world.item.DyeColor;
 
 public class HairLayer<S extends HumanoidRenderState, M extends HumanoidModel<S>> extends VillagerLayer<S, M> {
     public HairLayer(RenderLayerParent<S, M> renderer, M model) {
@@ -20,44 +25,47 @@ public class HairLayer<S extends HumanoidRenderState, M extends HumanoidModel<S>
     protected void prepareModel(S state) {
         setAllVisible(this.model, true);
         hideLegs(this.model);
+        hideBreasts(this.model);
+    }
+
+    private static void hideBreasts(HumanoidModel<?> model) {
+        if (model instanceof CommonVillagerModel<?> villagerModel) {
+            villagerModel.getBreastParts().forEach(part -> part.visible = false);
+        }
     }
 
     @Override
-    public Identifier getSkin(S state) {
-        var visuals = VillagerVisuals.require(state);
-        String identifier = visuals.hair();
-        if (MCA.isBlankString(identifier)) {
-            return null;
+    public void renderFinal(PoseStack poseStack, SubmitNodeCollector submitNodeCollector, int lightCoords, S state, float tickDelta, boolean visible, boolean glowing) {
+        VillagerVisuals visuals = VillagerVisuals.require(state);
+
+        int overlay = LivingEntityRenderer.getOverlayCoords(state, 0.0F);
+        int color = getColor(state, tickDelta);
+        for (LayeredHair.Category category : LayeredHair.Category.RENDER_ORDER) {
+            String identifier = visuals.layeredHair(category);
+            if (MCA.isBlankString(identifier)) {
+                continue;
+            }
+
+            Identifier texture = getTexture(identifier);
+            if (canUse(texture)) {
+                renderModel(poseStack, submitNodeCollector, lightCoords, this.model, color, texture, overlay, visible, glowing, state);
+            }
         }
-        if (identifier.startsWith("immersive_library:")) {
-            return SkinCache.getTextureIdentifier(Integer.parseInt(identifier.substring(18)));
+    }
+
+    private Identifier getTexture(String identifier) {
+        var contentId = ImmersiveLibraryIds.contentId(identifier);
+        if (contentId.isPresent()) {
+            return SkinCache.getTextureIdentifier(contentId.getAsInt());
         }
         return cached(identifier, Identifier::parse);
     }
 
     @Override
-    protected Identifier getOverlay(S state) {
-        String hair = VillagerVisuals.require(state).hair();
-        if (MCA.isBlankString(hair)) {
-            return null;
-        }
-        return cached(hair.replace(".png", "_overlay.png"), Identifier::parse);
-    }
-
-    private int getRainbow(int tickCount, int entityId, float tickDelta) {
-        int n = Math.abs(tickCount) / 25 + entityId;
-        int o = DyeColor.values().length;
-        int p = n % o;
-        int q = (n + 1) % o;
-        float r = ((float) (Math.abs(tickCount) % 25) + tickDelta) / 25.0f;
-        return ARGB.srgbLerp(r, DyeColor.byId(p).getTextureDiffuseColor(), DyeColor.byId(q).getTextureDiffuseColor());
-    }
-
-    @Override
     public int getColor(S state, float tickDelta) {
         var visuals = VillagerVisuals.require(state);
-        if (visuals.rainbow()) {
-            return getRainbow(visuals.tickCount(), visuals.entityId(), tickDelta);
+        if (visuals.rainbowHair()) {
+            return RainbowColor.sheep(visuals.tickCount() + tickDelta);
         }
 
         int hairDye = visuals.hairDye();
