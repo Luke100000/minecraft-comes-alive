@@ -1,3 +1,17 @@
+# 7.7.12
+
+* Fixed golden apple on cure being consumed twice
+* Fixed baby item sent to oblivion on drop
+* Fixed adopting children not always updating parents
+* Fixed doors not always getting closed
+* Trades are no longer reshuffled when switching workplace but not profession
+* Archers now use bows even when not on duty
+* Fixed sleeping offset when using villager model
+* Added textures for adventurer and cultist in Squidward mode
+* Fixed various crashes
+* Fixed missing names for villagers spawned by spawn egg
+* Fixed cultist trades
+
 # 7.7.11
 
 * Fixed villager tracker search
