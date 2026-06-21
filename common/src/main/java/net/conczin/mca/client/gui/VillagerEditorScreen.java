@@ -42,7 +42,6 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.renderer.entity.EntityRenderDispatcher;
 import net.minecraft.client.renderer.entity.EntityRenderer;
@@ -65,7 +64,6 @@ import net.minecraft.world.level.storage.TagValueOutput;
 import org.joml.Matrix3x2fStack;
 import org.joml.Quaternionf;
 import org.joml.Vector3f;
-import org.lwjgl.glfw.GLFW;
 
 import java.util.*;
 import java.util.function.Consumer;
@@ -74,7 +72,6 @@ import java.util.function.Supplier;
 
 public class VillagerEditorScreen extends Screen implements SkinListUpdateListener {
     protected static final int DATA_WIDTH = 175;
-    private static final Identifier PREVIEW_MOUSE_FOLLOW_TEXTURE = MCA.locate("textures/gui/preview_mouse_follow.png");
     private static final int VOICE_PREVIEW_BUTTON_WIDTH = 22;
     private static final int STEVE_PROPORTIONS_BUTTON_WIDTH = 54;
     private static final float STEVE_RAW_WIDTH_SCALE = 1.0F;
@@ -126,10 +123,6 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     private boolean restoreHideGui;
     private float previewRotation;
     private float previewZoom = 1.0F;
-    private long lastFrameTime = -1L;
-    private boolean rotatePreviewLeft;
-    private boolean rotatePreviewRight;
-    private boolean previewFollowsMouse = true;
 
     private static final int PRESETS_PER_PAGE = 4;
     private final File presetsDir = new File(Minecraft.getInstance().gameDirectory, "config/mca/presets");
@@ -387,7 +380,6 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         int margin = 40;
         Genetics genetics = villager.getGenetics();
         EditBox textFieldWidget;
-        addPreviewRotationWidgets();
 
         switch (page) {
             case "general" -> {
@@ -1073,45 +1065,6 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         return Math.max(48, Math.min(preferredSize, height - y - 8));
     }
 
-    private void addPreviewRotationWidgets() {
-        boolean isSelection = isSelectionPage();
-        int centerX = isSelection ? width / 2 : width / 2 - DATA_WIDTH / 2;
-        int y = height / 2 + 75;
-
-        if (isSelection) {
-            addPreviewControlRow(centerX, height / 2 - 76, 22, 14, 0, false);
-        } else {
-            addPreviewControlRow(centerX, y, 28, 20, 2, true);
-        }
-    }
-
-    private void addPreviewControlRow(int centerX, int y, int buttonWidth, int buttonHeight, int gap, boolean centerMouseButton) {
-        int step = buttonWidth + gap;
-        int x;
-        if (centerMouseButton) {
-            int mouseFollowIndex = 3;
-            x = centerX - mouseFollowIndex * step - buttonWidth / 2;
-        } else {
-            int buttonCount = 6;
-            int rowWidth = buttonCount * buttonWidth + (buttonCount - 1) * gap;
-            x = centerX - rowWidth / 2;
-        }
-
-        addRenderableWidget(new TooltipButtonWidget(x, y, buttonWidth, buttonHeight, Component.literal("R"), Component.translatable("gui.villager_editor.reset_zoom.tooltip"), b -> previewZoom = 1.0F));
-        addRenderableWidget(new ButtonWidget(x + step, y, buttonWidth, buttonHeight, Component.literal("-"), b -> zoomPreview(-0.1F)));
-        addRenderableWidget(new ButtonWidget(x + step * 2, y, buttonWidth, buttonHeight, Component.literal("<"), b -> rotatePreview(22.5F)));
-        addRenderableWidget(new ToggleableTextureButtonWidget(x + step * 3, y, buttonWidth, buttonHeight,
-                PREVIEW_MOUSE_FOLLOW_TEXTURE,
-                previewFollowsMouse,
-                Component.translatable("gui.villager_editor.preview_mouse_follow.tooltip"),
-                b -> {
-                    previewFollowsMouse = !previewFollowsMouse;
-                    setPage(page);
-                }));
-        addRenderableWidget(new ButtonWidget(x + step * 4, y, buttonWidth, buttonHeight, Component.literal(">"), b -> rotatePreview(-22.5F)));
-        addRenderableWidget(new ButtonWidget(x + step * 5, y, buttonWidth, buttonHeight, Component.literal("+"), b -> zoomPreview(0.1F)));
-    }
-
     private void addLayeredHairCyclerRow(int y, LayeredHair.Category category) {
         int arrowWidth = 20;
         int selectWidth = 45;
@@ -1515,49 +1468,12 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     }
 
     @Override
-    public boolean keyPressed(KeyEvent event) {
-        if (acceptsPreviewRotationInput()) {
-            if (event.key() == GLFW.GLFW_KEY_A || event.key() == GLFW.GLFW_KEY_LEFT) {
-                rotatePreviewLeft = true;
-                return true;
-            }
-            if (event.key() == GLFW.GLFW_KEY_D || event.key() == GLFW.GLFW_KEY_RIGHT) {
-                rotatePreviewRight = true;
-                return true;
-            }
-            if (event.key() == GLFW.GLFW_KEY_R) {
-                double mouseX = minecraft.mouseHandler.xpos() * width / minecraft.getWindow().getWidth();
-                double mouseY = minecraft.mouseHandler.ypos() * height / minecraft.getWindow().getHeight();
-                if (isMouseOverPreview(mouseX, mouseY)) {
-                    previewZoom = 1.0F;
-                    return true;
-                }
-            }
-        }
-        return super.keyPressed(event);
-    }
-
-    @Override
-    public boolean keyReleased(KeyEvent event) {
-        if (event.key() == GLFW.GLFW_KEY_A || event.key() == GLFW.GLFW_KEY_LEFT) {
-            rotatePreviewLeft = false;
-        } else if (event.key() == GLFW.GLFW_KEY_D || event.key() == GLFW.GLFW_KEY_RIGHT) {
-            rotatePreviewRight = false;
-        }
-        return super.keyReleased(event);
-    }
-
-    @Override
     public void tick() {
         super.tick();
         if (villager != null) {
             villager.tickCount++;
         }
         villagerVisualization.tickCount++;
-    }
-
-    private boolean acceptsPreviewRotationInput() {
-        return !page.equals("loading") && !(getFocused() instanceof EditBox);
     }
 
     void rotatePreview(float degrees) {
@@ -1570,11 +1486,20 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
-        if (isMouseOverPreview(mouseX, mouseY)) {
+        if (isMouseOverMainPreview(mouseX, mouseY)) {
             zoomPreview((float) scrollY * 0.1F);
             return true;
         }
         return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
+    }
+
+    @Override
+    public boolean mouseDragged(MouseButtonEvent event, double deltaX, double deltaY) {
+        if (event.button() == 0 && isMouseOverMainPreview(event.x(), event.y()) && !(getFocused() instanceof EditBox)) {
+            rotatePreview((float) -deltaX * 0.75F);
+            return true;
+        }
+        return super.mouseDragged(event, deltaX, deltaY);
     }
 
     private boolean isMouseOverPreview(double mouseX, double mouseY) {
@@ -1585,6 +1510,13 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         int x = width / 2 - DATA_WIDTH;
         int y = height / 2 - 8;
         return mouseX >= x && mouseX <= x + DATA_WIDTH && mouseY >= y - 57 && mouseY <= y + 88;
+    }
+
+    private boolean isMouseOverMainPreview(double mouseX, double mouseY) {
+        if (isSelectionPage()) {
+            return false;
+        }
+        return isMouseOverPreview(mouseX, mouseY);
     }
 
     protected void eventCallback(String event) {
@@ -1617,21 +1549,6 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     @Override
     public void extractRenderState(GuiGraphicsExtractor context, int mouseX, int mouseY, float delta) {
         super.extractRenderState(context, mouseX, mouseY, delta);
-
-        long currentTime = System.currentTimeMillis();
-        if (lastFrameTime == -1L) {
-            lastFrameTime = currentTime;
-        }
-        float dt = (currentTime - lastFrameTime) / 1000.0F;
-        lastFrameTime = currentTime;
-        dt = Math.max(0.0F, Math.min(dt, 0.1F));
-
-        if (rotatePreviewLeft) {
-            rotatePreview(120.0F * dt);
-        }
-        if (rotatePreviewRight) {
-            rotatePreview(-120.0F * dt);
-        }
 
         if (villager == null) {
             return;
@@ -1878,8 +1795,8 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     void extractEntityPreview(GuiGraphicsExtractor context, int x0, int y0, int x1, int y1, int size, float offsetY, float mouseX, float mouseY, float delta, LivingEntity entity, float rotationOffset) {
         float centerX = (x0 + x1) / 2.0F;
         float centerY = (y0 + y1) / 2.0F;
-        float xAngle = previewFollowsMouse ? (float) Math.atan((centerX - mouseX) / 40.0F) : 0.0F;
-        float yAngle = previewFollowsMouse ? (float) Math.atan((centerY - mouseY) / 40.0F) : 0.0F;
+        float xAngle = (float) Math.atan((centerX - mouseX) / 40.0F);
+        float yAngle = (float) Math.atan((centerY - mouseY) / 40.0F);
 
         Quaternionf rotation = new Quaternionf().rotateZ((float) Math.PI);
         Quaternionf xRotation = new Quaternionf().rotateX(yAngle * 20.0F * ((float) Math.PI / 180.0F));
@@ -2111,6 +2028,3 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         return villager;
     }
 }
-
-
-
