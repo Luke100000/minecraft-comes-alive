@@ -36,6 +36,9 @@ public class ArcherMovementTask<E extends PathfinderMob> extends Behavior<E> {
     private int repathCooldown;
     private long lastDebugLogTime = Long.MIN_VALUE;
     private String lastDebugState = "";
+    private boolean strafingClockwise;
+    private boolean strafingBackwards;
+    private int strafingTime = -1;
 
     public ArcherMovementTask(int maximumRange, int retreatDistance) {
         super(ImmutableMap.of(MemoryModuleType.ATTACK_TARGET, MemoryStatus.VALUE_PRESENT), 1200);
@@ -62,6 +65,7 @@ public class ArcherMovementTask<E extends PathfinderMob> extends Behavior<E> {
         this.seeTime = 0;
         this.repathCooldown = 0;
         this.lastDebugState = "";
+        this.strafingTime = -1;
         entity.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
         entity.getNavigation().stop();
     }
@@ -147,10 +151,39 @@ public class ArcherMovementTask<E extends PathfinderMob> extends Behavior<E> {
     }
 
     private void hold(E entity, LivingEntity target) {
-        this.movementMode = "hold";
+        this.movementMode = "hold_strafe";
         entity.getNavigation().stop();
-        getArcherMoveControl(entity).face(target);
         entity.getLookControl().setLookAt(target, LOOK_SPEED, LOOK_SPEED);
+
+        double targetDistSqr = entity.distanceToSqr(target);
+
+        this.strafingTime++;
+        if (this.strafingTime >= 20) {
+            if (entity.getRandom().nextFloat() < 0.3) {
+                this.strafingClockwise = !this.strafingClockwise;
+            }
+
+            if (entity.getRandom().nextFloat() < 0.3) {
+                this.strafingBackwards = !this.strafingBackwards;
+            }
+
+            this.strafingTime = 0;
+        }
+
+        if (this.strafingTime > -1) {
+            if (targetDistSqr > this.maximumRangeSquared * 0.75F) {
+                this.strafingBackwards = false;
+            } else if (targetDistSqr < this.maximumRangeSquared * 0.25F) {
+                this.strafingBackwards = true;
+            }
+
+            float yRot = getTargetYRot(entity, target);
+            entity.setYRot(yRot);
+            entity.yBodyRot = yRot;
+            entity.yHeadRot = yRot;
+
+            entity.getMoveControl().strafe(this.strafingBackwards ? -0.5F : 0.0F, this.strafingClockwise ? 0.5F : -0.5F);
+        }
     }
 
     private void retreat(E entity, LivingEntity target) {

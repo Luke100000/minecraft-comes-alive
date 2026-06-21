@@ -68,6 +68,7 @@ import net.minecraft.world.entity.npc.villager.VillagerProfession;
 import net.minecraft.world.entity.npc.villager.VillagerType;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.entity.projectile.Projectile;
 import net.minecraft.world.entity.projectile.ProjectileUtil;
 import net.minecraft.world.entity.projectile.arrow.AbstractArrow;
 import net.minecraft.world.food.FoodProperties;
@@ -1390,15 +1391,21 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
             this.performCrossbowAttack(this, 1.75F);
         } else if (isHolding(Items.BOW)) {
             ItemStack bow = this.getItemInHand(ProjectileUtil.getWeaponHoldingHand(this, Items.BOW));
-            ItemStack arrow = this.getProjectile(bow);
-            AbstractArrow persistentProjectileEntity = ProjectileUtil.getMobArrow(this, arrow, pullProgress, bow);
-            double x = target.getX() - this.getX();
-            double y = target.getY(0.3333333333333333D) - persistentProjectileEntity.getY();
-            double z = target.getZ() - this.getZ();
-            double vel = Math.sqrt(x * x + z * z);
-            persistentProjectileEntity.shoot(x, y + vel * 0.20000000298023224D, z, 1.6F, 3);
+            ItemStack projectile = this.getProjectile(bow);
+            AbstractArrow arrowEntity = ProjectileUtil.getMobArrow(this, projectile, pullProgress, bow);
+            double xd = target.getX() - this.getX();
+            double yd = target.getY(0.3333333333333333D) - arrowEntity.getY();
+            double zd = target.getZ() - this.getZ();
+            double distanceToTarget = Math.sqrt(xd * xd + zd * zd);
+            if (this.level() instanceof ServerLevel serverLevel) {
+                int difficultyId = serverLevel.getDifficulty().getId();
+                // Inverted divergence: Easy (1) -> 2, Normal (2) -> 6, Hard (3) -> 10
+                float uncertainty = 2.0F + (difficultyId - 1) * 4.0F;
+                Projectile.spawnProjectileUsingShoot(
+                    arrowEntity, serverLevel, projectile, xd, yd + distanceToTarget * 0.2F, zd, 1.6F, uncertainty
+                );
+            }
             this.playSound(SoundEvents.SKELETON_SHOOT, 1.0F, 1.0F / (this.getRandom().nextFloat() * 0.4F + 0.8F));
-            this.level().addFreshEntity(persistentProjectileEntity);
         }
     }
 
