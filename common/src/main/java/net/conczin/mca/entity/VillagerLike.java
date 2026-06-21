@@ -1,5 +1,6 @@
 package net.conczin.mca.entity;
 
+import org.jetbrains.annotations.Nullable;
 import com.mojang.serialization.JsonOps;
 import net.conczin.mca.Config;
 import net.conczin.mca.MCA;
@@ -14,11 +15,7 @@ import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.entity.ai.relationship.VillagerDimensions;
 import net.conczin.mca.entity.interaction.EntityCommandHandler;
 import net.conczin.mca.registry.EntitiesMCA;
-import net.conczin.mca.resources.BodySkinList;
-import net.conczin.mca.resources.ClothingList;
-import net.conczin.mca.resources.HairStyleList;
-import net.conczin.mca.resources.LayeredHairList;
-import net.conczin.mca.resources.Names;
+import net.conczin.mca.resources.*;
 import net.conczin.mca.resources.data.skin.HairStyle;
 import net.conczin.mca.resources.data.skin.LayeredHair;
 import net.conczin.mca.server.world.data.CustomClothingManager;
@@ -58,6 +55,7 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
     CDataParameter<String> CLOTHES = CParameter.create("Clothes", "");
     CDataParameter<String> SKIN = CParameter.create("Skin", "");
     CDataParameter<String> HAIR = CParameter.create("Hair", "");
+    CDataParameter<String> HAIR_STYLE = CParameter.create("HairStyle", "");
     CDataParameter<String> HAIR_BASE = CParameter.create("HairBase", "");
     CDataParameter<String> HAIR_BANGS = CParameter.create("HairBangs", "");
     CDataParameter<String> HAIR_BACK = CParameter.create("HairBack", "");
@@ -74,7 +72,7 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
 
     static <E extends Entity> CDataManager.Builder<E> createTrackedData(CDataManager.Builder<E> builder) {
         return builder
-                .addAll(CLOTHES, SKIN, HAIR, HAIR_BASE, HAIR_BANGS, HAIR_BACK, HAIR_FRONT, HAIR_EXTRA,
+                .addAll(CLOTHES, SKIN, HAIR, HAIR_STYLE, HAIR_BASE, HAIR_BANGS, HAIR_BACK, HAIR_FRONT, HAIR_EXTRA,
                         SKIN_COLOR,
                         HAIR_COLOR, EYE_COLOR, EYE_COLOR_LEFT,
                         AGE_STATE)
@@ -249,7 +247,17 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
     }
 
     default void setHair(String hair) {
-        setTrackedValue(HAIR, hair);
+        setHairStyleId(hair);
+    }
+
+    default String getHairStyleId() {
+        String hairStyle = getTrackedValue(HAIR_STYLE);
+        return MCA.isBlankString(hairStyle) ? getTrackedValue(HAIR) : hairStyle;
+    }
+
+    default void setHairStyleId(String hairStyle) {
+        setTrackedValue(HAIR_STYLE, hairStyle);
+        setTrackedValue(HAIR, "");
     }
 
     default String getHairBase() {
@@ -299,22 +307,14 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
     }
 
     default void setHairStyle(HairStyle style) {
-        setHair("");
+        setHairStyleId(style.getIdentifier());
         for (LayeredHair.Category category : LayeredHair.Category.values()) {
-            setLayeredHair(category, style.layer(category));
+            setLayeredHair(category, "");
         }
-    }
-
-    default void setHairDye(float r, float g, float b) {
-        setHairDye(ARGB.colorFromFloat(1.0f, r, g, b));
     }
 
     default void setHairDye(int color) {
         setTrackedValue(HAIR_COLOR, color);
-    }
-
-    default void setSkinDye(float r, float g, float b) {
-        setSkinDye(ARGB.colorFromFloat(1.0f, r, g, b));
     }
 
     default void setSkinDye(int color) {
@@ -337,10 +337,6 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
         return getTrackedValue(HAIR_COLOR);
     }
 
-    default void setEyeDye(float r, float g, float b) {
-        setEyeDye(ARGB.colorFromFloat(1.0f, r, g, b));
-    }
-
     default void setEyeDye(int color) {
         setTrackedValue(EYE_COLOR, color);
     }
@@ -351,10 +347,6 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
 
     default int getEyeDye() {
         return getTrackedValue(EYE_COLOR);
-    }
-
-    default void setEyeLeftDye(float r, float g, float b) {
-        setEyeLeftDye(ARGB.colorFromFloat(1.0f, r, g, b));
     }
 
     default void setEyeLeftDye(int color) {
@@ -534,7 +526,7 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
         Gender gender = getGenetics().getGender();
 
         if (styles != null) {
-            HairStyle style = styles.get(styles.getPool(gender).pickOne());
+            HairStyle style = styles.pick(gender);
             if (style != null) {
                 setHairStyle(style);
                 return;
@@ -542,11 +534,13 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
         }
 
         clearLayeredHair();
-        setHair("");
+        setHairStyleId("");
     }
 
     default void validateClothes() {
         if (!asEntity().level().isClientSide()) {
+            migrateLegacyHairStyle();
+
             BodySkinList bodySkinList = BodySkinList.getInstance();
             if (!MCA.isBlankString(getSkin()) && bodySkinList != null && !bodySkinList.skins.containsKey(getSkin())) {
                 MCA.LOGGER.info("Villagers skin {} does not exist!", getSkin());
@@ -558,8 +552,8 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
                 randomizeClothes();
             }
 
-            if (!MCA.isBlankString(getHair()) && !isValidHairTexture(getHair())) {
-                MCA.LOGGER.info("Villagers hair {} does not exist!", getHair());
+            if (!MCA.isBlankString(getHairStyleId()) && !isValidHairStyle(getHairStyleId())) {
+                MCA.LOGGER.info("Villagers hair style {} does not exist!", getHairStyleId());
                 randomizeHair();
             }
 
@@ -577,14 +571,21 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
         }
     }
 
+    default void migrateLegacyHairStyle() {
+        String legacyHair = getTrackedValue(HAIR);
+        if (MCA.isBlankString(getTrackedValue(HAIR_STYLE)) && !MCA.isBlankString(legacyHair)) {
+            setHairStyleId(legacyHair);
+        }
+    }
+
     private boolean isValidHairTexture(String hair, LayeredHairList layeredHairList) {
         if (hair.startsWith("immersive_library")) {
             return true;
         }
-        return layeredHairList.containsIdentifier(hair) || isValidHairTexture(hair);
+        return layeredHairList.containsIdentifier(hair);
     }
 
-    private boolean isValidHairTexture(String hair) {
+    private boolean isValidHairStyle(String hair) {
         HairStyleList styles = HairStyleList.getInstance();
         return (styles != null && styles.get(hair) != null) || CustomClothingManager.getHair().getEntries().containsKey(hair);
     }
@@ -656,7 +657,7 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
                 .parse(provider.createSerializationContext(NbtOps.INSTANCE), customName)
                 .result();
         if (fromNbt.isPresent()) {
-            return fromNbt;
+            return fromNbt.map(VillagerLike::cleanCustomName);
         }
 
         Optional<String> serialized = nbt.getString("CustomName");
@@ -669,10 +670,23 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
             return ComponentSerialization.CODEC
                     .parse(provider.createSerializationContext(JsonOps.INSTANCE), GsonHelper.parse(name))
                     .result()
-                    .or(() -> Optional.of(Component.literal(name)));
+                    .or(() -> Optional.of(Component.literal(name)))
+                    .map(VillagerLike::cleanCustomName);
         } catch (Exception exception) {
             MCA.LOGGER.warn("Failed to parse entity custom name {}", name, exception);
-            return Optional.of(Component.literal(name));
+            return Optional.of(Component.literal(name)).map(VillagerLike::cleanCustomName);
         }
+    }
+
+    @Nullable
+    static Component cleanCustomName(@Nullable Component name) {
+        if (name == null) {
+            return null;
+        }
+        String str = name.getString();
+        if (str.startsWith("\"") && str.endsWith("\"") && str.length() >= 2) {
+            return Component.literal(str.substring(1, str.length() - 1)).setStyle(name.getStyle());
+        }
+        return name;
     }
 }
