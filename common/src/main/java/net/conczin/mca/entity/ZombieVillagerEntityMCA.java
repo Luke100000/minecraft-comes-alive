@@ -114,10 +114,11 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
 
     @Override
     public void setCustomName(@Nullable Component name) {
-        super.setCustomName(name);
+        Component cleaned = VillagerLike.cleanCustomName(name);
+        super.setCustomName(cleaned);
 
-        if (name != null) {
-            setName(name.getString());
+        if (cleaned != null) {
+            setName(cleaned.getString());
         }
     }
 

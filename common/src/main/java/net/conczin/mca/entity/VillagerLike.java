@@ -1,5 +1,6 @@
 package net.conczin.mca.entity;
 
+import org.jetbrains.annotations.Nullable;
 import com.mojang.serialization.JsonOps;
 import net.conczin.mca.Config;
 import net.conczin.mca.MCA;
@@ -656,7 +657,7 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
                 .parse(provider.createSerializationContext(NbtOps.INSTANCE), customName)
                 .result();
         if (fromNbt.isPresent()) {
-            return fromNbt;
+            return fromNbt.map(VillagerLike::cleanCustomName);
         }
 
         Optional<String> serialized = nbt.getString("CustomName");
@@ -669,10 +670,23 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
             return ComponentSerialization.CODEC
                     .parse(provider.createSerializationContext(JsonOps.INSTANCE), GsonHelper.parse(name))
                     .result()
-                    .or(() -> Optional.of(Component.literal(name)));
+                    .or(() -> Optional.of(Component.literal(name)))
+                    .map(VillagerLike::cleanCustomName);
         } catch (Exception exception) {
             MCA.LOGGER.warn("Failed to parse entity custom name {}", name, exception);
-            return Optional.of(Component.literal(name));
+            return Optional.of(Component.literal(name)).map(VillagerLike::cleanCustomName);
         }
+    }
+
+    @Nullable
+    static Component cleanCustomName(@Nullable Component name) {
+        if (name == null) {
+            return null;
+        }
+        String str = name.getString();
+        if (str.startsWith("\"") && str.endsWith("\"") && str.length() >= 2) {
+            return Component.literal(str.substring(1, str.length() - 1)).setStyle(name.getStyle());
+        }
+        return name;
     }
 }
