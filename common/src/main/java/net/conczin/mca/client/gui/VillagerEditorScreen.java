@@ -815,7 +815,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                 for (int i = 0; i < count; i++) {
                     String name = presetNames.get(startIdx + i);
                     Component btnText = Component.literal(name).withStyle(name.equals(selectedPreset) ? ChatFormatting.GREEN : ChatFormatting.GRAY);
-                    addRenderableWidget(new ButtonWidget(width / 2, yVal, DATA_WIDTH, 20, btnText, b -> selectPreset(name)));
+                    addRenderableWidget(new ButtonWidget(width / 2, yVal, DATA_WIDTH, 20, btnText, b -> selectPreset(name.equals(this.selectedPreset) ? null : name)));
                     yVal += 20;
                 }
 
