@@ -453,9 +453,9 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                     genetics.setGene(Genetics.WIDTH, 0.80f);
                 } else {
                     addSteveProportionsButton(width / 2, y);
-                    addGeneSlider(width / 2 + STEVE_PROPORTIONS_BUTTON_WIDTH + 2, y, DATA_WIDTH - STEVE_PROPORTIONS_BUTTON_WIDTH - 2, Genetics.SIZE);
-                    y += 22;
-                    addGeneSlider(width / 2, y, DATA_WIDTH, Genetics.WIDTH);
+                    int buttonWidth = (DATA_WIDTH - STEVE_PROPORTIONS_BUTTON_WIDTH) / 2 - 2;
+                    addGeneSlider(width / 2 + STEVE_PROPORTIONS_BUTTON_WIDTH + 2, y, buttonWidth, Genetics.SIZE);
+                    addGeneSlider(width / 2 + STEVE_PROPORTIONS_BUTTON_WIDTH + 4 + buttonWidth, y, buttonWidth, Genetics.WIDTH);
                     y += 24;
                 }
 
@@ -498,8 +498,9 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                     loadDyeIntoColorSelector(villager.getSkinDye());
                     addRgbColorSliders(y + 8, this::refreshSkinColor);
                 } else {
-                    int pickerSize = DATA_WIDTH - margin * 2;
-                    addRenderableWidget(new ColorPickerWidget(width / 2 + margin, y + 8, pickerSize, pickerSize,
+                    int pickerSize = fitColorPickerSize(y + 8, DATA_WIDTH - 20);
+                    int pickerX = width / 2 + (DATA_WIDTH - pickerSize) / 2;
+                    addRenderableWidget(new ColorPickerWidget(pickerX, y + 8, pickerSize, pickerSize,
                             genetics.getGene(Genetics.HEMOGLOBIN),
                             genetics.getGene(Genetics.MELANIN),
                             MCA.locate("textures/colormap/villager_skin.png"),
@@ -560,7 +561,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                     addRgbColorSliders(y, this::refreshHairColor);
                 } else {
                     y += 8;
-                    int pickerSize = fitHairPickerSize(y, DATA_WIDTH - 20);
+                    int pickerSize = fitColorPickerSize(y, DATA_WIDTH - 20);
                     int pickerX = width / 2 + (DATA_WIDTH - pickerSize) / 2;
                     addRenderableWidget(new ColorPickerWidget(pickerX, y, pickerSize, pickerSize,
                             genetics.getGene(Genetics.PHEOMELANIN),
@@ -784,7 +785,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                         setPage("hair_style");
                     }
                 }));
-                if (page.equals("clothing") || page.equals("skin")) {
+                if (page.equals("clothing") || page.equals("hair")) {
                     addRenderableWidget(new ButtonWidget(width / 2 + 128, y, 64, 20, Component.translatable("gui.button.library"), b -> {
                         Minecraft.getInstance().setScreen(new SkinLibraryScreen(this, villagerVisualization));
                     }));
@@ -1006,8 +1007,8 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         return faceList.count("normal");
     }
 
-    private int fitHairPickerSize(int y, int preferredSize) {
-        return Math.max(48, Math.min(preferredSize, height - y - 8));
+    private int fitColorPickerSize(int y, int preferredSize) {
+        return Math.clamp(preferredSize, 48, height - y - 8);
     }
 
     private void addCharacterSubpageTabs(int y, String selectedPage) {
@@ -1725,7 +1726,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
 
     private boolean isMainPageSelected(String mainPage) {
         return mainPage.equals(page)
-                || (mainPage.equals("body") && List.of("clothing_style", "hair_style", "head", "eyes", "hair_advanced").contains(page));
+               || (mainPage.equals("body") && List.of("clothing_style", "hair_style", "head", "eyes", "hair_advanced").contains(page));
     }
 
     public void setVillagerName(String name) {
