@@ -8,19 +8,18 @@ import net.conczin.mca.network.c2s.DestinyMessage;
 import net.conczin.mca.util.compat.ButtonWidget;
 import net.conczin.mca.util.localization.FlowingText;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.Identifier;
 import org.joml.Matrix3x2fStack;
+import org.lwjgl.glfw.GLFW;
 
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-
-import net.minecraft.client.input.KeyEvent;
-import org.lwjgl.glfw.GLFW;
 
 public class DestinyScreen extends VillagerEditorScreen {
     private static final Identifier LOGO_TEXTURE = MCA.locate("textures/banner.png");
@@ -53,16 +52,16 @@ public class DestinyScreen extends VillagerEditorScreen {
                 setPage("general");
                 return true;
             } else if (page.equals("clothing")) {
-                setPage("body");
+                setPage("clothing_style");
                 return true;
             } else if (page.equals("hair")) {
-                setPage("head");
+                setPage("hair_style");
                 return true;
             } else if (isLayeredHairPage()) {
                 setPage("hair_advanced");
                 return true;
             } else if (page.equals("hair_advanced")) {
-                setPage("head");
+                setPage("hair_style");
                 return true;
             }
             return true;
@@ -83,7 +82,6 @@ public class DestinyScreen extends VillagerEditorScreen {
         pages.add("general");
         if (Config.getServerConfig().allowBodyCustomizationInDestiny) {
             pages.add("body");
-            pages.add("head");
         }
         if (Config.getServerConfig().allowTraitCustomizationInDestiny) {
             pages.add("traits");
