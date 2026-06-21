@@ -2,13 +2,13 @@ package net.conczin.mca.client.resources;
 
 import com.mojang.blaze3d.platform.NativeImage;
 import net.conczin.mca.MCA;
+import net.conczin.mca.client.gui.immersive_library.SkinCache;
 import net.conczin.mca.client.render.VillagerVisuals;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.resources.BodySkinList;
 import net.conczin.mca.resources.FaceList;
 import net.conczin.mca.resources.data.skin.BodySkin;
 import net.conczin.mca.resources.data.skin.LayeredHair;
-import net.conczin.mca.client.gui.immersive_library.SkinCache;
 import net.conczin.mca.util.ImmersiveLibraryIds;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
@@ -22,6 +22,7 @@ import java.io.FileInputStream;
 import java.io.InputStream;
 
 public class SkinExporter {
+    public static final Identifier BLINK_FACE = MCA.locate("skins/face/normal/blink.png");
 
     public static void export(VillagerEntityMCA villager) {
         export(villager, null);
@@ -125,11 +126,7 @@ public class SkinExporter {
 
     private static Identifier getFace(VillagerVisuals visuals) {
         FaceList list = FaceList.getInstance();
-        if (list == null) {
-            int index = (int) Math.min(11, Math.max(0, visuals.faceGene() * 12));
-            return Identifier.fromNamespaceAndPath("mca", "skins/face/normal/" + (index == 11 ? "blink" : index) + ".png");
-        }
-        return list.pick("normal", visuals.faceGene());
+        return list == null ? BLINK_FACE : list.pick("normal", visuals.faceGene());
     }
 
     private static Identifier getClothes(VillagerVisuals visuals) {

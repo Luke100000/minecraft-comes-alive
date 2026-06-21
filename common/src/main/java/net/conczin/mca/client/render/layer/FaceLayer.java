@@ -16,6 +16,7 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.util.ARGB;
 
 import com.mojang.blaze3d.platform.NativeImage;
+
 import java.io.InputStream;
 import java.util.Locale;
 import java.util.Objects;
@@ -78,11 +79,7 @@ public class FaceLayer<S extends HumanoidRenderState, M extends HumanoidModel<S>
     public Identifier getSkin(S state) {
         var visuals = VillagerVisuals.require(state);
         FaceList list = FaceList.getInstance();
-        if (list == null) {
-            int index = (int) Math.min(11, Math.max(0, visuals.faceGene() * 12));
-            return cached("skins/face/normal/" + (index == 11 ? "blink" : index) + ".png", MCA::locate);
-        }
-        return list.pick(variant, visuals.faceGene());
+        return list == null ? getBlinkSkin() : list.pick(variant, visuals.faceGene());
     }
 
     private Identifier getBlinkSkin() {
@@ -114,7 +111,7 @@ public class FaceLayer<S extends HumanoidRenderState, M extends HumanoidModel<S>
                 Identifier id = key.texture();
                 var resource = Minecraft.getInstance().getResourceManager().getResource(id);
                 if (resource.isEmpty()) return id;
-                
+
                 try (InputStream stream = resource.get().open(); NativeImage originalImage = NativeImage.read(stream)) {
                     int w = originalImage.getWidth();
                     int h = originalImage.getHeight();
