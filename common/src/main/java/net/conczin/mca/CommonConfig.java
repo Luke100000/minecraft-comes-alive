@@ -27,6 +27,12 @@ public class CommonConfig {
     public boolean allowPlayerSizeAdjustment = true;
 
     /**
+     * If true, player hitboxes use MCA size and width genetics.
+     * Disable this to keep full vanilla player hitboxes for PvP.
+     */
+    public boolean scalePlayerHitboxWithSizeAndWidth = false;
+
+    /**
      * Whether body customization (e.g., height, size) is available in the Destiny editor.
      */
     public boolean allowBodyCustomizationInDestiny = true;

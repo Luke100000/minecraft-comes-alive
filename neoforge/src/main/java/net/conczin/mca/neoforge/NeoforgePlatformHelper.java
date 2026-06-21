@@ -1,8 +1,8 @@
 package net.conczin.mca.neoforge;
 
 import net.conczin.mca.PlatformHelper;
-import net.neoforged.fml.loading.FMLEnvironment;
 import net.neoforged.fml.ModList;
+import net.neoforged.fml.loading.FMLEnvironment;
 
 public class NeoforgePlatformHelper extends PlatformHelper {
     @Override

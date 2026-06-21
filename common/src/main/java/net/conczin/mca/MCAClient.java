@@ -9,6 +9,7 @@ import net.conczin.mca.network.Network;
 import net.conczin.mca.network.c2s.ConfigRequest;
 import net.conczin.mca.network.c2s.PlayerDataRequest;
 import net.minecraft.client.Minecraft;
+import net.minecraft.world.entity.player.Player;
 
 import java.util.*;
 
@@ -28,7 +29,7 @@ public class MCAClient {
     }
 
     public static Optional<VillagerLike<?>> getPlayerData(UUID uuid) {
-        if (isPlayerRendererAllowed()) {
+        if (needsPlayerData()) {
             if (!MCAClient.playerDataRequests.contains(uuid) && Minecraft.getInstance().getConnection() != null) {
                 MCAClient.playerDataRequests.add(uuid);
                 Network.sendToServer(new PlayerDataRequest(uuid));
@@ -83,11 +84,17 @@ public class MCAClient {
     public static void addPlayerData(UUID uuid, VillagerEntityMCA villager) {
         playerData.put(uuid, villager);
 
-        // Refresh eye height
         Minecraft client = Minecraft.getInstance();
-        if (client.player != null) {
-            client.player.refreshDimensions();
+        if (client.level != null) {
+            Player player = client.level.getPlayerByUUID(uuid);
+            if (player != null) {
+                player.refreshDimensions();
+            }
         }
+    }
+
+    private static boolean needsPlayerData() {
+        return isPlayerRendererAllowed() || Config.getServerConfig().scalePlayerHitboxWithSizeAndWidth;
     }
 
     public static boolean isPlayerRendererAllowed() {
