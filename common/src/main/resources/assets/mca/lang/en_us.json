@@ -702,6 +702,7 @@
   "gui.villager_editor.color_mode_rgb": "RGB",
   "gui.villager_editor.customize_hair": "Customize Eyes",
   "gui.villager_editor.customize_eyes": "Customize Hair",
+  "gui.villager_editor.drag_hint": "Drag or use arrows to rotate",
   "gui.villager_editor.customize_eyes_right": "Customize Hair",
   "gui.villager_editor.customize_eyes_left": "Customize Right Eye",
   "gui.villager_editor.eye_genetic": "Mode: Natural",
