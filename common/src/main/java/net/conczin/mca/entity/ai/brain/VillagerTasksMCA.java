@@ -314,7 +314,7 @@ public class VillagerTasksMCA {
                                 v.getProfession() == ProfessionsMCA.ARCHER ? EquipmentSet.ARCHER_0_LEFT : EquipmentSet.GUARD_0_LEFT)))),
                 Pair.of(2, StartAttacking.create((level, body) -> true, (level, body) -> VillagerTasksMCA.getPreferredTarget(body))),
                 Pair.of(3, StopAttackingIfTargetInvalid.create((level, livingEntity) -> !VillagerTasksMCA.isPreferredTarget(villager, livingEntity))),
-                Pair.of(4, new ArcherMovementTask<>(15, 8)),
+                Pair.of(4, new ArcherMovementTask<>(15)),
                 Pair.of(5, new BowTask<>(20, 15)),
                 Pair.of(6, BehaviorBuilder.triggerIf(v -> v.isHolding(Items.CROSSBOW),
                         BackUpIfTooClose.create(5, 0.75F)
@@ -375,8 +375,7 @@ public class VillagerTasksMCA {
         return target.isAlive()
                && !target.isRemoved()
                && target.level() == villager.level()
-               && villager.canAttack(target)
-               && shouldRespondToGuardEnemy(villager, target);
+               && villager.canAttack(target);
     }
 
     private static boolean shouldRespondToGuardEnemy(VillagerEntityMCA villager, LivingEntity target) {

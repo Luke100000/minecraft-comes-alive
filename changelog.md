@@ -1,9 +1,10 @@
 # 7.8.7
 
-* Aligned archer shooting logic with vanilla skeletons (applies enchantments/custom arrows, matches vanilla shoot logic).
-* Inverted archer shooting divergence based on difficulty (Easy is highly accurate with divergence `2` to hit tiny slimes, Hard is divergence `10`).
-* Archers now strafe sideways/backwards while drawing their bow instead of standing still, and never advance toward the target while in combat range.
-* Fixed quotation marks appearing around villager names when migrating worlds from older mod versions.
+* Archer fixes and improvements.
+  * Fixed archer crossbow.
+* Fixed quotation marks showing up around villager names when migrating worlds from older mod versions.
+* Fixed guards occasionally ignoring active threats.
+* Fixed a bug where guards doing jobs/chores would repeatedly unequip their weapons during combat.
 
 # 7.8.6
 

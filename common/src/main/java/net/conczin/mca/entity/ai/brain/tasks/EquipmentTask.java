@@ -124,8 +124,18 @@ public class EquipmentTask extends Behavior<VillagerEntityMCA> {
     }
 
     private static boolean isMissingRequestedHandItem(VillagerEntityMCA villager, EquipmentSet set) {
-        return isRequestedItem(set.getMainHand()) && villager.getItemBySlot(villager.getDominantSlot()).isEmpty()
+        return isMissingRequestedItem(villager.getItemBySlot(villager.getDominantSlot()), set.getMainHand())
                 || isRequestedItem(set.getGetOffHand()) && villager.getItemBySlot(villager.getOpposingSlot()).isEmpty();
+    }
+
+    private static boolean isMissingRequestedItem(ItemStack equipped, Item requested) {
+        if (!isRequestedItem(requested)) {
+            return false;
+        }
+        if (requested instanceof ProjectileWeaponItem) {
+            return !(equipped.getItem() instanceof ProjectileWeaponItem);
+        }
+        return equipped.isEmpty();
     }
 
     private static boolean isRequestedItem(Item item) {
