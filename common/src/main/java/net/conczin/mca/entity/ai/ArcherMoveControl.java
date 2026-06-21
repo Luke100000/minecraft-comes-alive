@@ -16,9 +16,18 @@ public class ArcherMoveControl extends MoveControl {
     private LivingEntity retreatTarget;
     private float retreatBackwards;
     private double retreatSpeedModifier;
+    private boolean fleeing;
 
     public ArcherMoveControl(Mob mob) {
         super(mob);
+    }
+
+    public void setFleeing(boolean fleeing) {
+        this.fleeing = fleeing;
+    }
+
+    public boolean isFleeing() {
+        return this.fleeing;
     }
 
     public void retreatFrom(LivingEntity target, float backwards, double speedModifier) {
@@ -30,10 +39,6 @@ public class ArcherMoveControl extends MoveControl {
 
     public void face(LivingEntity target) {
         this.faceTarget = target;
-    }
-
-    public boolean isRetreatingFrom(LivingEntity target) {
-        return this.retreatTarget != null && this.retreatTarget != target && this.retreatTarget.isAlive() && !this.retreatTarget.isRemoved();
     }
 
     @Override
@@ -74,7 +79,8 @@ public class ArcherMoveControl extends MoveControl {
     }
 
     private void syncRotation(LivingEntity target) {
-        float yRot = getYRotTo(this.mob, target);
+        float targetYRot = getYRotTo(this.mob, target);
+        float yRot = this.rotlerp(this.mob.getYRot(), targetYRot, 30.0F);
         this.mob.setYRot(yRot);
         this.mob.yBodyRot = yRot;
         this.mob.yHeadRot = yRot;
@@ -83,8 +89,8 @@ public class ArcherMoveControl extends MoveControl {
     private void checkStepAndJump(float xa, float za) {
         float sin = Mth.sin(this.mob.getYRot() * (float) (Math.PI / 180.0));
         float cos = Mth.cos(this.mob.getYRot() * (float) (Math.PI / 180.0));
-        float dx = xa * cos - za * sin;
-        float dz = za * cos + xa * sin;
+        float dx = za * cos - xa * sin;
+        float dz = xa * cos + za * sin;
 
         double len = Math.sqrt(dx * dx + dz * dz);
         if (len > 1.0E-5) {

@@ -63,6 +63,14 @@ public class BowTask<E extends Mob & CrossbowAttackMob> extends Behavior<E> {
             return;
         }
 
+        if (isFleeing(entity)) {
+            if (entity.isUsingItem()) {
+                logAction(entity, target, false, entity.distanceToSqr(target), "stop_using", "fleeing");
+                entity.stopUsingItem();
+            }
+            return;
+        }
+
         if (target != this.lastTarget) {
             if (entity.isUsingItem()) {
                 logAction(entity, target, false, entity.distanceToSqr(target), "stop_using", "target_changed");
@@ -103,7 +111,7 @@ public class BowTask<E extends Mob & CrossbowAttackMob> extends Behavior<E> {
                 this.attackCooldown = this.fireInterval;
                 logAction(entity, target, visible, distanceSquared, "release", "draw_complete");
             }
-        } else if (visible && distanceSquared <= this.rangeSquared && this.attackCooldown <= 0) {
+        } else if (visible && distanceSquared <= this.rangeSquared && this.attackCooldown <= 0 && !isFleeing(entity)) {
             entity.startUsingItem(getBowHoldingHand(entity));
             logAction(entity, target, visible, distanceSquared, "start_using", "ready");
         }
@@ -176,5 +184,9 @@ public class BowTask<E extends Mob & CrossbowAttackMob> extends Behavior<E> {
             return InteractionHand.OFF_HAND.name();
         }
         return "none";
+    }
+
+    private static boolean isFleeing(Mob entity) {
+        return entity.getMoveControl() instanceof net.conczin.mca.entity.ai.ArcherMoveControl archerMoveControl && archerMoveControl.isFleeing();
     }
 }

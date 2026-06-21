@@ -17,7 +17,7 @@ import net.minecraft.world.item.CrossbowItem;
 
 public class ArcherMovementTask<E extends PathfinderMob> extends Behavior<E> {
     private static final double SPEED_MODIFIER = 0.5;
-    private static final double RETREAT_SPEED_MODIFIER = 0.25;
+    private static final double RETREAT_SPEED_MODIFIER = 0.45;
     private static final float STRAFE_SPEED = -0.5F;
     private static final float LOOK_SPEED = 30.0F;
     private static final int LOST_SIGHT_BEFORE_APPROACH = 10;
@@ -32,6 +32,7 @@ public class ArcherMovementTask<E extends PathfinderMob> extends Behavior<E> {
     private String lastDebugState = "";
     private boolean strafingClockwise;
     private boolean retreating;
+    private boolean fleeing;
     private int strafingTime = -1;
     private int repathCooldown;
 
@@ -71,6 +72,8 @@ public class ArcherMovementTask<E extends PathfinderMob> extends Behavior<E> {
             this.seeTime = 0;
             this.strafingTime = -1;
             this.retreating = false;
+            this.fleeing = false;
+            getArcherMoveControl(entity).setFleeing(false);
             this.repathCooldown = 0;
             entity.getNavigation().stop();
         }
@@ -79,19 +82,25 @@ public class ArcherMovementTask<E extends PathfinderMob> extends Behavior<E> {
         updateSeeTime(visible);
 
         double distanceSquared = entity.distanceToSqr(target);
-        entity.getBrain().setMemory(MemoryModuleType.LOOK_TARGET, new EntityTracker(target, true));
-        entity.getLookControl().setLookAt(target, LOOK_SPEED, LOOK_SPEED);
+        boolean isFleeing = shouldFlee(distanceSquared);
+        getArcherMoveControl(entity).setFleeing(isFleeing);
 
-        if (distanceSquared > this.maximumRangeSquared || this.seeTime < -LOST_SIGHT_BEFORE_APPROACH) {
-            approach(entity, target);
-        } else if (visible) {
-            if (shouldRetreat(distanceSquared)) {
-                retreat(entity, target);
-            } else {
-                strafe(entity, target);
-            }
+        if (isFleeing) {
+            flee(entity, target);
         } else {
-            hold(entity, target);
+            entity.getBrain().setMemory(MemoryModuleType.LOOK_TARGET, new EntityTracker(target, true));
+            entity.getLookControl().setLookAt(target, LOOK_SPEED, LOOK_SPEED);
+            if (distanceSquared > this.maximumRangeSquared || this.seeTime < -LOST_SIGHT_BEFORE_APPROACH) {
+                approach(entity, target);
+            } else if (visible) {
+                if (shouldRetreat(distanceSquared)) {
+                    retreat(entity, target);
+                } else {
+                    strafe(entity, target);
+                }
+            } else {
+                hold(entity, target);
+            }
         }
 
         if (MCA.platformHelper.isDevelopmentEnvironment()) {
@@ -102,6 +111,7 @@ public class ArcherMovementTask<E extends PathfinderMob> extends Behavior<E> {
     @Override
     protected void stop(ServerLevel level, E entity, long gameTime) {
         resetState();
+        getArcherMoveControl(entity).setFleeing(false);
         entity.getNavigation().stop();
     }
 
@@ -112,8 +122,38 @@ public class ArcherMovementTask<E extends PathfinderMob> extends Behavior<E> {
         this.lastDebugState = "";
         this.strafingClockwise = false;
         this.retreating = false;
+        this.fleeing = false;
         this.strafingTime = -1;
         this.repathCooldown = 0;
+    }
+
+    private boolean shouldFlee(double distanceSquared) {
+        this.fleeing = this.fleeing ? distanceSquared < 64.0 : distanceSquared < 25.0;
+        return this.fleeing;
+    }
+
+    private void flee(E entity, LivingEntity target) {
+        boolean changedMode = !"flee".equals(this.movementMode);
+        this.movementMode = "flee";
+        this.strafingTime = -1;
+        this.retreating = false;
+        if (changedMode) {
+            this.repathCooldown = 0;
+            entity.getNavigation().stop();
+        }
+
+        entity.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
+        entity.getBrain().eraseMemory(MemoryModuleType.LOOK_TARGET);
+        if (--this.repathCooldown <= 0) {
+            net.minecraft.world.phys.Vec3 pos = net.minecraft.world.entity.ai.util.DefaultRandomPos.getPosAway(entity, 16, 7, target.position());
+            if (pos != null) {
+                entity.getNavigation().moveTo(pos.x, pos.y, pos.z, 0.65);
+                this.repathCooldown = 15 + entity.getRandom().nextInt(10);
+            } else {
+                getArcherMoveControl(entity).retreatFrom(target, STRAFE_SPEED, 0.65);
+                this.repathCooldown = 5;
+            }
+        }
     }
 
     private void approach(E entity, LivingEntity target) {
@@ -168,7 +208,8 @@ public class ArcherMovementTask<E extends PathfinderMob> extends Behavior<E> {
             this.strafingTime = 0;
         }
 
-        float yRot = getTargetYRot(entity, target);
+        float targetYRot = getTargetYRot(entity, target);
+        float yRot = entity.getMoveControl().rotlerp(entity.getYRot(), targetYRot, 30.0F);
         entity.setYRot(yRot);
         entity.yBodyRot = yRot;
         entity.yHeadRot = yRot;
