@@ -116,6 +116,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     private boolean restoreHideGui;
     private float previewRotation;
     private float previewZoom = 1.0F;
+    private boolean draggingPreview;
 
     private static final int PRESETS_PER_PAGE = 4;
     private final File presetsDir = new File(Minecraft.getInstance().gameDirectory, "config/mca/presets");
@@ -848,9 +849,11 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                         setPage("head");
                     }
                 }));
-                addRenderableWidget(new ButtonWidget(width / 2 + 128, y, 64, 20, Component.translatable("gui.button.library"), b -> {
-                    Minecraft.getInstance().setScreen(new SkinLibraryScreen(this, villagerVisualization));
-                }));
+                if (page.equals("clothing") || page.equals("skin")) {
+                    addRenderableWidget(new ButtonWidget(width / 2 + 128, y, 64, 20, Component.translatable("gui.button.library"), b -> {
+                        Minecraft.getInstance().setScreen(new SkinLibraryScreen(this, villagerVisualization));
+                    }));
+                }
                 widgetMasculine = addRenderableWidget(new ButtonWidget(width / 2 - 32 - 96 - 64, y, 64, 20, Component.translatable("gui.villager_editor.masculine"), b -> {
                     filterGender = Gender.MALE;
                     filter();
@@ -1471,7 +1474,19 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
 
         }
 
+        if (event.button() == 0 && isMouseOverMainPreview(event.x(), event.y())) {
+            draggingPreview = true;
+        }
+
         return super.mouseClicked(event, doubleClick);
+    }
+
+    @Override
+    public boolean mouseReleased(MouseButtonEvent event) {
+        if (event.button() == 0) {
+            draggingPreview = false;
+        }
+        return super.mouseReleased(event);
     }
 
     @Override
@@ -1502,8 +1517,8 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
 
     @Override
     public boolean mouseDragged(MouseButtonEvent event, double deltaX, double deltaY) {
-        if (event.button() == 0 && isMouseOverMainPreview(event.x(), event.y()) && !(getFocused() instanceof EditBox)) {
-            rotatePreview((float) -deltaX * 1.5F);
+        if (event.button() == 0 && draggingPreview) {
+            rotatePreview((float) -deltaX);
             return true;
         }
         return super.mouseDragged(event, deltaX, deltaY);
@@ -1586,9 +1601,9 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
             } else {
                 if (villagerUUID.equals(playerUUID) && shouldUsePlayerModel()) {
                     assert Minecraft.getInstance().player != null;
-                    extractEntityPreview(context, x, y - 57, x + DATA_WIDTH, y + 88, 55, 0, mouseX, mouseY, delta, Minecraft.getInstance().player);
+                    extractEntityPreview(context, x, y - 57, x + DATA_WIDTH, y + 95, 55, 0, mouseX, mouseY, delta, Minecraft.getInstance().player);
                 } else {
-                    extractEntityPreview(context, x, y - 57, x + DATA_WIDTH, y + 88, 55, 0, mouseX, mouseY, delta, villager);
+                    extractEntityPreview(context, x, y - 57, x + DATA_WIDTH, y + 95, 55, 0, mouseX, mouseY, delta, villager);
                 }
 
                 if (shouldShowPageSelection()) {
