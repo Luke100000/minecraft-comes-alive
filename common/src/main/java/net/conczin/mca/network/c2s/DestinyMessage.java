@@ -41,7 +41,7 @@ public record DestinyMessage(String location, boolean isClosing) implements Hand
             sp.removeEffect(MobEffects.INVISIBILITY);
             sp.removeEffect(MobEffects.HEALTH_BOOST);
         }
-        if (Config.getInstance().allowDestinyTeleportation && !location.isEmpty()) {
+        if (Config.getInstance().allowDestinyTeleportation && !location.isEmpty() && !isNoTeleportLocation()) {
             MCA.executorService.execute(() -> {
                 if (location.charAt(0) == '#') {
                     String tagId = location.substring(1);
@@ -55,6 +55,10 @@ public record DestinyMessage(String location, boolean isClosing) implements Hand
 
     private void notifyDestinationNotFound(ServerPlayer player) {
         player.level().getServer().execute(() -> player.sendSystemMessage(Component.translatable("destiny.teleport.failed").withStyle(ChatFormatting.GRAY, ChatFormatting.ITALIC)));
+    }
+
+    private boolean isNoTeleportLocation() {
+        return "somewhere".equals(location);
     }
 
     private void handleBlockPos(ServerPlayer player, BlockPos pos) {
