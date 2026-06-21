@@ -6,6 +6,8 @@ import net.conczin.mca.entity.ai.Traits;
 import net.conczin.mca.entity.ai.relationship.AgeState;
 import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.entity.ai.relationship.VillagerDimensions;
+import net.conczin.mca.resources.HairStyleList;
+import net.conczin.mca.resources.data.skin.HairStyle;
 import net.conczin.mca.resources.data.skin.LayeredHair;
 import net.minecraft.util.ARGB;
 import net.minecraft.util.Mth;
@@ -86,11 +88,8 @@ public record VillagerVisuals(
                 * traits.getVerticalScaleFactor()
                 * dimensions.getHeight()
                 * gender.getScaleFactor();
-        String legacyHair = villager.getHair();
-        String hairBase = villager.getHairBase();
-        if (isBlank(hairBase) && !isBlank(legacyHair)) {
-            hairBase = legacyHair;
-        }
+        String hairStyleId = villager.getHairStyleId();
+        HairStyle hairStyle = getHairStyle(hairStyleId, gender);
         return new VillagerVisuals(
                 gender.getDataName(),
                 gender == Gender.FEMALE,
@@ -117,12 +116,12 @@ public record VillagerVisuals(
                 genetics.getGene(Genetics.PHEOMELANIN),
                 genetics.getGene(Genetics.EYE_COLOR),
                 villager.getSkin(),
-                legacyHair,
-                hairBase,
-                villager.getHairBangs(),
-                villager.getHairBack(),
-                villager.getHairFront(),
-                villager.getHairExtra(),
+                hairStyleId,
+                getHairLayer(villager, hairStyle, LayeredHair.Category.BASE),
+                getHairLayer(villager, hairStyle, LayeredHair.Category.BANGS),
+                getHairLayer(villager, hairStyle, LayeredHair.Category.BACK),
+                getHairLayer(villager, hairStyle, LayeredHair.Category.FRONT),
+                getHairLayer(villager, hairStyle, LayeredHair.Category.EXTRA),
                 villager.getSkinDye(),
                 villager.getHairDye(),
                 villager.getEyeDye(),
@@ -134,6 +133,23 @@ public record VillagerVisuals(
                 entity.isSleeping(),
                 entity.isDeadOrDying()
         );
+    }
+
+    private static HairStyle getHairStyle(String hairStyleId, Gender gender) {
+        if (isBlank(hairStyleId)) {
+            return null;
+        }
+
+        HairStyleList styles = HairStyleList.getInstance();
+        HairStyle style = styles == null ? null : styles.get(hairStyleId);
+        return style == null ? HairStyle.singleLayer(hairStyleId, gender, 1.0F) : style;
+    }
+
+    private static String getHairLayer(VillagerLike<?> villager, HairStyle hairStyle, LayeredHair.Category category) {
+        if (hairStyle != null) {
+            return hairStyle.layer(category);
+        }
+        return villager.getLayeredHair(category);
     }
 
     private static int animationTickCount(LivingEntity entity) {
