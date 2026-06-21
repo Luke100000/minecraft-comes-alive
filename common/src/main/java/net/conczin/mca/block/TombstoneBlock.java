@@ -447,7 +447,7 @@ public class TombstoneBlock extends BaseEntityBlock implements SimpleWaterlogged
         public Optional<Entity> createEntity(Level world, boolean remove) {
             try {
                 return entityData.flatMap(data -> EntityType.create(
-                        TagValueInput.create(ProblemReporter.DISCARDING, world.registryAccess(), data.nbt),
+                        TagValueInput.create(ProblemReporter.DISCARDING, world.registryAccess(), withoutActiveEffects(data.nbt)),
                         world,
                         EntitySpawnReason.LOAD
                 ));
@@ -456,6 +456,12 @@ public class TombstoneBlock extends BaseEntityBlock implements SimpleWaterlogged
                     setEntity(null);
                 }
             }
+        }
+
+        private CompoundTag withoutActiveEffects(CompoundTag nbt) {
+            CompoundTag copy = nbt.copy();
+            copy.remove("ActiveEffects");
+            return copy;
         }
 
         private CompoundTag writeEntityToNbt(Entity entity) {
@@ -544,4 +550,3 @@ public class TombstoneBlock extends BaseEntityBlock implements SimpleWaterlogged
         }
     }
 }
-

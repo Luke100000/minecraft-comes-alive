@@ -23,6 +23,7 @@ public class MCAClient {
     }
 
     public static void onLogin() {
+        playerData.clear();
         playerDataRequests.clear();
         ClientSkinCatalog.clear();
         Network.sendToServer(new ConfigRequest());

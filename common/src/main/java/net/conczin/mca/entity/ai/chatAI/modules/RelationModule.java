@@ -28,7 +28,7 @@ public class RelationModule {
             input.add("$player is $villagers parent. ");
         }
         if (Relationship.IS_KID.test(villager, player)) {
-            input.add("$villagers is players parent. ");
+            input.add("$villager is $player's child. ");
         }
 
         int hearts = villager.getVillagerBrain().getMemoriesForPlayer(player).getHearts();

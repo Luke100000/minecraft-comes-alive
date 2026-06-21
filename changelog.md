@@ -1,12 +1,22 @@
 # 7.8.6
 
-* Fixed baby drop mechanics.
-* Added player hitbox scaling based on MCA player size and width (controlled by the new `scalePlayerHitboxWithSizeAndWidth` config option).
-  * Recommended is off if your server has a lot of PVP as players could lower their size by a lot to gain an unfair advantage.
+* Added optional player hitbox scaling based on MCA size and width via `scalePlayerHitboxWithSizeAndWidth`.
+    * Keep disabled on PvP-heavy servers to prevent size-based advantages.
+* Fixed golden apple on cure being consumed twice
+* Fixed baby item sent to oblivion on drop
+* Fixed adopting children not always updating parents
+* Fixed doors not always getting closed
+* Trades are no longer reshuffled when switching workplace but not profession
+* Archers now use bows even when not on duty
+* Fixed sleeping offset when using villager model
+* Added textures for adventurer and cultist in Squidward mode
+* Fixed various crashes
+* Fixed missing names for villagers spawned by spawn egg
+* Fixed cultist trades
 
 # 7.8.5
 
-* Fixed Recipes 
+* Fixed Recipes
 
 # 7.8.4
 

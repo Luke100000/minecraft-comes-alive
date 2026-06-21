@@ -73,6 +73,10 @@ public class Residency {
                                 return profession.heldJobSite().test(registryEntry);
                             }).findFirst();
                         }).ifPresent(profession -> {
+                            VillagerProfession oldProfession = entity.getVillagerData().profession().value();
+                            if (oldProfession == profession) {
+                                return;
+                            }
                             int level = entity.getVillagerData().level();
                             entity.setVillagerData(entity.getVillagerData().withProfession(BuiltInRegistries.VILLAGER_PROFESSION.wrapAsHolder(profession)).withLevel(1));
                             entity.setOffers(null);

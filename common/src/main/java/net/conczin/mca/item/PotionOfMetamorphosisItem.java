@@ -37,6 +37,7 @@ public class PotionOfMetamorphosisItem extends TooltippedItem {
             CompoundTag villagerData = data.getEntityData();
             NbtHelper.getOrCreateCompound(villagerData, VillagerEntityMCA.MCA_DATA_KEY).putInt("Gender", gender.ordinal());
             data.setEntityData(villagerData);
+            data.setEntityDataSet(true);
 
             common(serverPlayer);
 
@@ -74,4 +75,3 @@ public class PotionOfMetamorphosisItem extends TooltippedItem {
         entry.setGender(gender);
     }
 }
-

@@ -95,7 +95,6 @@ public class SmarterOpenDoorsTask extends Behavior<LivingEntity> {
 
                 // Door is blocked by entities
                 if (SmarterOpenDoorsTask.hasOtherMobReachedDoor(entity, blockPos)) {
-                    iterator.remove();
                     continue;
                 }
 
@@ -194,4 +193,3 @@ public class SmarterOpenDoorsTask extends Behavior<LivingEntity> {
         }
     }
 }
-
