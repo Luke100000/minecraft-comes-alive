@@ -8,10 +8,13 @@ import java.util.Optional;
 import java.util.UUID;
 
 public abstract class ClientProxyAbstractImpl extends ClientProxy.Impl {
-    private final ClientHandler networkHandler = new ClientHandlerImpl();
+    private ClientHandler networkHandler;
 
     @Override
-    public final ClientHandler getNetworkHandler() {
+    public final synchronized ClientHandler getNetworkHandler() {
+        if (networkHandler == null) {
+            networkHandler = new ClientHandlerImpl();
+        }
         return networkHandler;
     }
 
