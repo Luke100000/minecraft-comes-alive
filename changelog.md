@@ -1,7 +1,7 @@
 # 7.8.6
 
-* Added player hitbox scaling based on MCA player size and width (controlled by the new `scalePlayerHitboxWithSizeAndWidth` config option).
-  * Recommended is off if your server has a lot of PVP as players could lower their size by a lot to gain an unfair advantage.
+* Added optional player hitbox scaling based on MCA size and width via `scalePlayerHitboxWithSizeAndWidth`.
+    * Keep disabled on PvP-heavy servers to prevent size-based advantages.
 * Fixed golden apple on cure being consumed twice
 * Fixed baby item sent to oblivion on drop
 * Fixed adopting children not always updating parents
@@ -16,7 +16,7 @@
 
 # 7.8.5
 
-* Fixed Recipes 
+* Fixed Recipes
 
 # 7.8.4
 
