@@ -475,6 +475,15 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         return child;
     }
 
+    @Override
+    protected void onOffspringSpawnedFromEgg(Player player, Mob child) {
+        super.onOffspringSpawnedFromEgg(player, child);
+
+        if (child instanceof VillagerEntityMCA villager) {
+            villager.setCustomName(Component.literal(villager.getRelationships().getFamilyEntry().getName()));
+        }
+    }
+
     private VillagerType getRandomType(AgeableMob partner) {
         double d = random.nextDouble();
 
