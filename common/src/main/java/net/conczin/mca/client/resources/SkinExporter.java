@@ -20,15 +20,16 @@ import net.minecraft.util.ARGB;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.InputStream;
+import java.util.Set;
 
 public class SkinExporter {
     public static final Identifier BLINK_FACE = MCA.locate("skins/face/normal/blink.png");
 
-    public static void export(VillagerEntityMCA villager) {
-        export(villager, null);
+    public static boolean export(VillagerEntityMCA villager) {
+        return export(villager, null);
     }
 
-    public static void export(VillagerEntityMCA villager, String customName) {
+    public static boolean export(VillagerEntityMCA villager, String customName) {
         try {
             VillagerVisuals visuals = VillagerVisuals.capture(villager);
             
@@ -56,15 +57,7 @@ public class SkinExporter {
                     exportDir.mkdirs();
                 }
                 
-                String villagerName = customName;
-                if (MCA.isBlankString(villagerName)) {
-                    villagerName = villager.getName().getString();
-                }
-                if (MCA.isBlankString(villagerName)) {
-                    villagerName = "villager";
-                }
-                villagerName = villagerName.replaceAll("[^a-zA-Z0-9_\\-]", "_");
-                File destFile = new File(exportDir, villagerName + "_skin.png");
+                File destFile = getAvailableExportFile(exportDir, customName);
                 base.writeToFile(destFile.toPath());
                 
                 var player = Minecraft.getInstance().player;
@@ -83,8 +76,6 @@ public class SkinExporter {
                                             .withClickEvent(new ClickEvent.OpenFile(exportDir))));
                     
                     player.sendSystemMessage(message);
-                    
-                    Minecraft.getInstance().setScreen(null);
                 }
             }
         } catch (Exception e) {
@@ -93,7 +84,26 @@ public class SkinExporter {
             if (player != null) {
                 player.sendSystemMessage(Component.translatable("chat.mca.skin_export_failure", e.getMessage()).withStyle(ChatFormatting.RED));
             }
+            return false;
         }
+        return true;
+    }
+
+    private static File getAvailableExportFile(File exportDir, String customName) {
+        String fileName;
+        if (MCA.isBlankString(customName)) {
+            fileName = "Exported_Skin";
+        } else {
+            fileName = customName.replaceAll("[^a-zA-Z0-9_\\-]", "_") + "_skin";
+        }
+
+        String[] listedFiles = exportDir.list();
+        Set<String> existingFiles = listedFiles == null ? Set.of() : Set.of(listedFiles);
+        String candidateName = fileName + ".png";
+        for (int suffix = 2; existingFiles.contains(candidateName); suffix++) {
+            candidateName = fileName + "_" + suffix + ".png";
+        }
+        return new File(exportDir, candidateName);
     }
 
     private static Identifier getSkin(VillagerVisuals visuals) {

@@ -46,6 +46,11 @@ public class DestinyScreen extends VillagerEditorScreen {
     }
 
     @Override
+    protected boolean shouldCloseAfterSkinExport() {
+        return false;
+    }
+
+    @Override
     public boolean keyPressed(KeyEvent event) {
         if (event.key() == GLFW.GLFW_KEY_ESCAPE) {
             if (page.equals("presets") || page.equals("skin")) {
