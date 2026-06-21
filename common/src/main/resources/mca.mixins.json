@@ -13,6 +13,8 @@
     "MixinLivingEntity",
     "MixinMilkBucketItem",
     "MixinProtoChunk",
+    "MixinScreenHandler",
+    "MixinSensorType",
     "MixinServerGamePacketListenerImpl",
     "MixinServerPlayer",
     "MixinServerWorld",
