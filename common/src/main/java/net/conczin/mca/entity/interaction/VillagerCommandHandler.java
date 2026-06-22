@@ -6,6 +6,7 @@ import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.Chore;
 import net.conczin.mca.entity.ai.Memories;
 import net.conczin.mca.entity.ai.MoveState;
+import net.conczin.mca.entity.ai.relationship.AgeState;
 import net.conczin.mca.entity.ai.relationship.RelationshipState;
 import net.conczin.mca.registry.CriterionMCA;
 import net.conczin.mca.registry.ItemsMCA;
@@ -72,16 +73,7 @@ public class VillagerCommandHandler extends EntityCommandHandler<VillagerEntityM
 
         switch (command) {
             case "pick_up" -> {
-                if (player.getPassengers().size() >= 3) {
-                    player.getPassengers().getFirst().stopRiding();
-                }
-                if (entity.isPassenger()) {
-                    entity.stopRiding();
-                } else {
-                    entity.startRiding(player, true, true);
-                }
-                player.connection.send(new ClientboundSetPassengersPacket(player));
-                return false;
+                return handlePickUp(player);
             }
             case "ridehorse" -> {
                 if (entity.isPassenger()) {
@@ -273,5 +265,29 @@ public class VillagerCommandHandler extends EntityCommandHandler<VillagerEntityM
                 }
             }
         }
+    }
+
+    private boolean handlePickUp(ServerPlayer player) {
+        if (!canPickUp()) {
+            return true;
+        }
+
+        if (player.getPassengers().size() >= 3) {
+            player.getPassengers().getFirst().stopRiding();
+        }
+
+        if (entity.isPassenger()) {
+            entity.stopRiding();
+        } else {
+            entity.startRiding(player, true, true);
+        }
+
+        player.connection.send(new ClientboundSetPassengersPacket(player));
+        return false;
+    }
+
+    private boolean canPickUp() {
+        AgeState ageState = entity.getAgeState();
+        return ageState == AgeState.BABY || ageState == AgeState.TODDLER || ageState == AgeState.CHILD;
     }
 }

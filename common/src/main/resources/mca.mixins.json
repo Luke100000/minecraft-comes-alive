@@ -5,6 +5,7 @@
   "compatibilityLevel": "JAVA_25",
   "mixins": [
     "MixinAbstractFurnaceBlockEntity",
+    "MixinEntity",
     "MixinFlintAndSteelItem",
     "MixinGoat",
     "MixinHorseBase",

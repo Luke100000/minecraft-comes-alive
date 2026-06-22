@@ -9,6 +9,7 @@ import net.minecraft.world.entity.ai.memory.MemoryStatus;
 import net.minecraft.world.entity.ai.memory.WalkTarget;
 import net.minecraft.world.entity.ai.util.LandRandomPos;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.Map;
@@ -45,7 +46,8 @@ public abstract class AbstractChoreTask extends Behavior<VillagerEntityMCA> {
             return false;
         }
 
-        return villager == null || !villager.getVillagerBrain().isPanicking();
+        return !entity.getBrain().hasMemoryValue(MemoryModuleType.ATTACK_TARGET)
+                && (villager == null || !villager.getVillagerBrain().isPanicking());
     }
 
     @Override
@@ -59,6 +61,13 @@ public abstract class AbstractChoreTask extends Behavior<VillagerEntityMCA> {
     @Override
     protected void start(ServerLevel world, VillagerEntityMCA entity, long time) {
         this.villager = entity;
+    }
+
+    protected void clearChoreItem(VillagerEntityMCA entity) {
+        if (!entity.getBrain().hasMemoryValue(MemoryModuleType.ATTACK_TARGET)
+                && !entity.getItemInHand(entity.getDominantHand()).isEmpty()) {
+            entity.setItemInHand(entity.getDominantHand(), ItemStack.EMPTY);
+        }
     }
 
     Optional<Player> getAssigningPlayer() {

@@ -2,7 +2,6 @@ package net.conczin.mca.entity.ai.brain.tasks;
 
 import com.google.common.collect.ImmutableMap;
 import net.conczin.mca.MCA;
-import net.conczin.mca.entity.ai.ArcherMoveControl;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.LivingEntity;
@@ -64,6 +63,14 @@ public class BowTask<E extends Mob & CrossbowAttackMob> extends Behavior<E> {
             return;
         }
 
+        if (isFleeing(entity)) {
+            if (entity.isUsingItem()) {
+                logAction(entity, target, false, entity.distanceToSqr(target), "stop_using", "fleeing");
+                entity.stopUsingItem();
+            }
+            return;
+        }
+
         if (target != this.lastTarget) {
             if (entity.isUsingItem()) {
                 logAction(entity, target, false, entity.distanceToSqr(target), "stop_using", "target_changed");
@@ -77,10 +84,8 @@ public class BowTask<E extends Mob & CrossbowAttackMob> extends Behavior<E> {
         boolean visible = entity.getSensing().hasLineOfSight(target);
         double distanceSquared = entity.distanceToSqr(target);
 
-        if (!isRetreatingFromDifferentTarget(entity, target)) {
-            entity.getBrain().setMemory(MemoryModuleType.LOOK_TARGET, new EntityTracker(target, true));
-            entity.getLookControl().setLookAt(target, LOOK_SPEED, LOOK_SPEED);
-        }
+        entity.getBrain().setMemory(MemoryModuleType.LOOK_TARGET, new EntityTracker(target, true));
+        entity.getLookControl().setLookAt(target, LOOK_SPEED, LOOK_SPEED);
 
         if (visible) {
             this.lostSightTicks = 0;
@@ -106,7 +111,7 @@ public class BowTask<E extends Mob & CrossbowAttackMob> extends Behavior<E> {
                 this.attackCooldown = this.fireInterval;
                 logAction(entity, target, visible, distanceSquared, "release", "draw_complete");
             }
-        } else if (visible && distanceSquared <= this.rangeSquared && this.attackCooldown <= 0) {
+        } else if (visible && distanceSquared <= this.rangeSquared && this.attackCooldown <= 0 && !isFleeing(entity)) {
             entity.startUsingItem(getBowHoldingHand(entity));
             logAction(entity, target, visible, distanceSquared, "start_using", "ready");
         }
@@ -171,10 +176,6 @@ public class BowTask<E extends Mob & CrossbowAttackMob> extends Behavior<E> {
         return isBowItem(entity.getMainHandItem().getItem()) ? InteractionHand.MAIN_HAND : InteractionHand.OFF_HAND;
     }
 
-    private static boolean isRetreatingFromDifferentTarget(Mob entity, LivingEntity target) {
-        return entity.getMoveControl() instanceof ArcherMoveControl archerMoveControl && archerMoveControl.isRetreatingFrom(target);
-    }
-
     private static String getBowHoldingHandName(Mob entity) {
         if (isBowItem(entity.getMainHandItem().getItem())) {
             return InteractionHand.MAIN_HAND.name();
@@ -183,5 +184,9 @@ public class BowTask<E extends Mob & CrossbowAttackMob> extends Behavior<E> {
             return InteractionHand.OFF_HAND.name();
         }
         return "none";
+    }
+
+    private static boolean isFleeing(Mob entity) {
+        return entity.getMoveControl() instanceof net.conczin.mca.entity.ai.ArcherMoveControl archerMoveControl && archerMoveControl.isFleeing();
     }
 }

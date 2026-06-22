@@ -5,9 +5,11 @@ import net.conczin.mca.client.gui.VillagerEditorScreen;
 import net.conczin.mca.entity.VillagerLike;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.entity.state.LivingEntityRenderState;
+import net.minecraft.world.entity.EntityAttachment;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Pose;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.phys.Vec3;
 
 public final class VillagerRenderStateHooks {
     private VillagerRenderStateHooks() {
@@ -52,10 +54,21 @@ public final class VillagerRenderStateHooks {
 
         state.boundingBoxWidth = entity.getBbWidth() * horizontalRatio;
         state.boundingBoxHeight = entity.getBbHeight() * verticalRatio;
+        if (state.hasPose(Pose.SLEEPING) && state.bedOrientation == null) {
+            state.pose = Pose.STANDING;
+        } else if (state.hasPose(Pose.SLEEPING)) {
+            state.walkAnimationPos = 0.0F;
+            state.walkAnimationSpeed = 0.0F;
+        }
         // When sleeping, vanilla's extractRenderState() uses getEyeHeight(Pose.STANDING) for the
         // bed head-offset translation in submit(). We must mirror that here instead of using the
         // sleeping pose eye height, otherwise the villager ends up at the wrong position on the bed.
         Pose eyePose = state.bedOrientation != null ? Pose.STANDING : state.pose;
         state.eyeHeight = entity.getEyeHeight(eyePose) * verticalRatio;
+        if (state.nameTagAttachment != null) {
+            Vec3 nameTagAttachment = entity.getAttachments().get(EntityAttachment.NAME_TAG, 0, entity.getYRot());
+            double y = entity.isPassenger() ? 0.55 : state.boundingBoxHeight;
+            state.nameTagAttachment = new Vec3(nameTagAttachment.x, y, nameTagAttachment.z);
+        }
     }
 }
