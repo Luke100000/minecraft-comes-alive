@@ -1,3 +1,14 @@
+# 7.6.22
+
+* Iron golems no longer attack regular MCA villagers
+* Guards detect threats from further away and use the `#minecraft:undead` tag for targeting
+* Villagers now defend themselves when outside their village border
+* Villagers no longer sleep, eat, greet or interact while in combat
+* Smarter pathfinding: villagers walk to a spot next to their bed instead of the bed block
+* Added config option to disable guide books from advancements (`giveAdvancementBooks`)
+* Added config option for villager pathfinding distance (`villagerPathfindingDistance`, default 192)
+* Beta and alpha release tags are now published to the correct Modrinth/CurseForge channels
+
 # 7.6.21
 
 * Fixed golden apple on cure being consumed twice
@@ -61,7 +72,7 @@
 
 # 7.6.6
 
-* Allow tripplets, quadruplets, quintuplets, and beyond
+* Allow tripplets, quadruplets, quintuplets and beyond
 * Fixed a crash in the skin editor
 * Disabled guard teleportation by default again
 * Added experimental support for commands via ChatAI (`villagerChatAIUseTools` in the config, will react to trading, go
@@ -465,7 +476,7 @@
 # 7.3.20
 
 * Added backwards compatibility for 1.16.5 and 1.17.1, to align with the EOL of 1.19.0 and 1.19.1
-    * 1.19.0, 1.19.1, 1.17.1, and 1.16.5 are now officially considered EOL, and users should upgrade to retain support
+    * 1.19.0, 1.19.1, 1.17.1 and 1.16.5 are now officially considered EOL, and users should upgrade to retain support
 * You can no longer set the home of a villager who is either there temporarily or does not require a home
 * Fixed trades
 * Fixed equipment dropping
@@ -550,7 +561,7 @@
     * This trait can be inherited from past/to future generations
     * Having this trait will change their dominant hand in most tasks to be their left hand (Known to the player as the
       off-hand slot)
-    * Some examples of this include Work Tasks, EquipmentSet's, and Melee Attacks (For Equipment, if a preset already
+    * Some examples of this include Work Tasks, EquipmentSet's and Melee Attacks (For Equipment, if a preset already
       uses both hands, it'll remain unchanged.)
     * Given Minecraft was never intended to support this type of gameplay, further tuning may be required in a future
       update.
@@ -794,7 +805,7 @@
 * Villagers will now use your editor name
 * Fixed letter author and creative mode usage
 * Strengthened Grim Reaper
-* Added mod support for atmospheric, autumity, berry good, buzzier bees, environmental, neopolitan, and upgrade aquatic
+* Added mod support for atmospheric, autumity, berry good, buzzier bees, environmental, neopolitan and upgrade aquatic
 * Villager now recognize and estimate the value of every (modded) armor, tool, sword, bow and food as a gift (accuracy
   not guaranteed)
 
