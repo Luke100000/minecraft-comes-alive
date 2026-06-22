@@ -54,7 +54,7 @@ public final class VillagerRenderStateHooks {
 
         state.boundingBoxWidth = entity.getBbWidth() * horizontalRatio;
         state.boundingBoxHeight = entity.getBbHeight() * verticalRatio;
-        if (state.hasPose(Pose.SLEEPING) && state.bedOrientation == null) {
+        if (state.hasPose(Pose.SLEEPING) && state.bedOrientation == null && entity.isPassenger()) {
             state.pose = Pose.STANDING;
         } else if (state.hasPose(Pose.SLEEPING)) {
             state.walkAnimationPos = 0.0F;
