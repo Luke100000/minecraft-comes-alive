@@ -27,10 +27,10 @@ public class ArcherMovementTask<E extends PathfinderMob> extends Behavior<E> {
     private static final int VISIBLE_TICKS_BEFORE_STRAFE = 20;
     private static final int LOST_SIGHT_BEFORE_APPROACH = 10;
     private static final int DEBUG_LOG_INTERVAL_TICKS = 20;
-    private static final double EMERGENCY_ENTER_DISTANCE_SQUARED = 16.0;
-    private static final double EMERGENCY_EXIT_DISTANCE_SQUARED = 36.0;
-    private static final double KITE_ENTER_DISTANCE_SQUARED = 25.0;
-    private static final double KITE_EXIT_DISTANCE_SQUARED = 64.0;
+    private static final double EMERGENCY_ENTER_DISTANCE_SQUARED = 12.25;
+    private static final double EMERGENCY_EXIT_DISTANCE_SQUARED = 25.0;
+    private static final double KITE_ENTER_DISTANCE_SQUARED = 36.0;
+    private static final double KITE_EXIT_DISTANCE_SQUARED = 81.0;
     private static final double CLOSE_RANGE_VERTICAL_THREAT_DISTANCE = 2.5;
     private static final double KITE_SAFE_DISTANCE = 9.0;
     private static final double EMERGENCY_SAFE_DISTANCE = 6.0;
@@ -256,6 +256,7 @@ public class ArcherMovementTask<E extends PathfinderMob> extends Behavior<E> {
     private Path findPathAway(E entity, LivingEntity target, double desiredDistance, boolean allowPartialPath) {
         double currentDistanceSquared = entity.distanceToSqr(target);
         double currentDistance = Math.sqrt(currentDistanceSquared);
+        double desiredDistanceSquared = desiredDistance * desiredDistance;
         double minHorizontalDistance = Math.min(AWAY_HORIZONTAL_DISTANCE - 1.0, Math.max(0.0, desiredDistance - currentDistance));
         Path bestPath = null;
         double bestScore = currentDistanceSquared;
@@ -274,6 +275,9 @@ public class ArcherMovementTask<E extends PathfinderMob> extends Behavior<E> {
             double endDistanceSquared = getPathEndDistanceSquared(path, target);
             if (endDistanceSquared <= currentDistanceSquared + MIN_USEFUL_DISTANCE_GAIN) {
                 continue;
+            }
+            if (path.canReach() && endDistanceSquared >= desiredDistanceSquared) {
+                return path;
             }
 
             double score = endDistanceSquared + (path.canReach() ? this.maximumRangeSquared : 0.0);
