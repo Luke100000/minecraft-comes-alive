@@ -54,7 +54,7 @@ jobs:
 
           name: "[Universal ${{steps.split.outputs._1}}] MCA Reborn - ${{steps.split.outputs._0}}"
           changelog-file: changelog.md
-          version-type: release
+          version-type: ${{ contains(steps.split.outputs._0, 'beta') && 'beta' || contains(steps.split.outputs._0, 'alpha') && 'alpha' || 'release' }}
           files: build/libs/*-@(universal).jar
           loaders: |
             fabric

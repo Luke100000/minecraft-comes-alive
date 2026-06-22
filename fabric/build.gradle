@@ -63,10 +63,11 @@ dependencies {
 }
 
 processResources {
-    inputs.property 'version', project.version
+    def projectVersion = project.version.toString()
+    inputs.property 'version', projectVersion
 
     filesMatching('fabric.mod.json') {
-        expand version: project.version
+        expand version: projectVersion
     }
 
     from 'LICENSE'
