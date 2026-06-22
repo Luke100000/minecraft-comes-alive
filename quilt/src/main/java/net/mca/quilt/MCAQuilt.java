@@ -1,6 +1,5 @@
 package net.mca.quilt;
 
-import net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents;
 import net.mca.MCA;
 import net.mca.ParticleTypesMCA;
 import net.mca.SoundsMCA;

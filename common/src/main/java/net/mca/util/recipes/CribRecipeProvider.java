@@ -1,7 +1,5 @@
 package net.mca.util.recipes;
 
-import java.util.function.Consumer;
-
 import net.mca.entity.CribWoodType;
 import net.mca.item.CribItem;
 import net.mca.item.ItemsMCA;
@@ -11,6 +9,8 @@ import net.minecraft.data.server.recipe.ShapedRecipeJsonBuilder;
 import net.minecraft.item.ItemConvertible;
 import net.minecraft.recipe.book.RecipeCategory;
 import net.minecraft.util.DyeColor;
+
+import java.util.function.Consumer;
 
 public class CribRecipeProvider
 {

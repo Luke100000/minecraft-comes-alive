@@ -1,14 +1,14 @@
 package net.mca.network.c2s;
 
-import net.mca.entity.interaction.Constraint;
 import net.mca.cobalt.network.Message;
 import net.mca.cobalt.network.NetworkHandler;
 import net.mca.entity.VillagerLike;
 import net.mca.entity.ai.relationship.CompassionateEntity;
 import net.mca.entity.ai.relationship.EntityRelationship;
 import net.mca.entity.ai.relationship.RelationshipState;
-import net.mca.server.world.data.FamilyTreeNode;
+import net.mca.entity.interaction.Constraint;
 import net.mca.network.s2c.GetInteractDataResponse;
+import net.mca.server.world.data.FamilyTreeNode;
 import net.minecraft.entity.Entity;
 import net.minecraft.server.network.ServerPlayerEntity;
 

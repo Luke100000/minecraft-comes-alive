@@ -1,17 +1,11 @@
 package net.mca.entity;
 
-import java.util.Arrays;
-
 import net.mca.MCA;
 import net.mca.entity.ai.relationship.AgeState;
 import net.mca.item.BabyItem;
 import net.mca.item.CribItem;
 import net.mca.item.ItemsMCA;
-import net.mca.util.network.datasync.CDataManager;
-import net.mca.util.network.datasync.CDataParameter;
-import net.mca.util.network.datasync.CEnumParameter;
-import net.mca.util.network.datasync.CParameter;
-import net.mca.util.network.datasync.CTrackedEntity;
+import net.mca.util.network.datasync.*;
 import net.minecraft.block.Block;
 import net.minecraft.block.Blocks;
 import net.minecraft.entity.Entity;
@@ -35,6 +29,8 @@ import net.minecraft.util.DyeColor;
 import net.minecraft.util.Hand;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.World;
+
+import java.util.Arrays;
 
 public class CribEntity extends Entity implements CTrackedEntity<CribEntity>
 {

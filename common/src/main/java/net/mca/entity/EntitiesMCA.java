@@ -1,7 +1,5 @@
 package net.mca.entity;
 
-import java.util.function.Supplier;
-
 import dev.architectury.registry.level.entity.EntityAttributeRegistry;
 import dev.architectury.registry.registries.DeferredRegister;
 import dev.architectury.registry.registries.RegistrySupplier;
@@ -18,6 +16,8 @@ import net.minecraft.entity.SpawnGroup;
 import net.minecraft.entity.attribute.DefaultAttributeContainer;
 import net.minecraft.registry.RegistryKeys;
 import net.minecraft.util.Identifier;
+
+import java.util.function.Supplier;
 
 public interface EntitiesMCA {
 

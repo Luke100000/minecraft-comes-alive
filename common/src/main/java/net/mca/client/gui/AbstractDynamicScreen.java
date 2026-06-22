@@ -1,12 +1,11 @@
 package net.mca.client.gui;
 
-import net.mca.entity.interaction.Constraint;
 import net.mca.client.resources.Icon;
+import net.mca.entity.interaction.Constraint;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.client.gui.widget.ClickableWidget;
-import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
 

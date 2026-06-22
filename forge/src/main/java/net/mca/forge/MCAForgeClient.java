@@ -1,16 +1,11 @@
 package net.mca.forge;
 
-import dev.architectury.registry.client.level.entity.EntityRendererRegistry;
 import net.mca.*;
 import net.mca.block.BlockEntityTypesMCA;
 import net.mca.block.BlocksMCA;
 import net.mca.client.gui.MCAScreens;
 import net.mca.client.particle.InteractionParticle;
-import net.mca.client.render.CribEntityRenderer;
-import net.mca.client.render.GrimReaperRenderer;
-import net.mca.client.render.TombstoneBlockEntityRenderer;
-import net.mca.client.render.VillagerEntityMCARenderer;
-import net.mca.client.render.ZombieVillagerEntityMCARenderer;
+import net.mca.client.render.*;
 import net.mca.client.resources.ColorPaletteLoader;
 import net.mca.entity.EntitiesMCA;
 import net.mca.resources.ApiReloadListener;

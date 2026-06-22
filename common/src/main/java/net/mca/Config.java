@@ -43,6 +43,10 @@ public final class Config extends CommonConfig {
     public String villagerChatPrefix = "";
     public boolean canHurtBabies = true;
     public boolean enterVillageNotification = true;
+    /**
+     * If true, players will receive guide/information books when completing certain MCA advancements.
+     */
+    public boolean giveAdvancementBooks = true;
     public boolean villagerMarriageNotification = true;
     public boolean villagerBirthNotification = true;
     public boolean innArrivalNotification = true;
@@ -64,6 +68,7 @@ public final class Config extends CommonConfig {
     public int villagerMaxHealth = 20;
     public boolean allowVillagerTeleporting = false;
     public double villagerMinTeleportationDistance = 128;
+    public int villagerPathfindingDistance = 192;
     public int childInitialHearts = 100;
     public int greetHeartsThreshold = 75;
     public int greetAfterDays = 1;
@@ -211,16 +216,20 @@ public final class Config extends CommonConfig {
             .put("minecraft:evoker", 3)
             .put("minecraft:husk", 2)
             .put("minecraft:illusioner", 3)
+            .put("minecraft:phantom", 0)
             .put("minecraft:pillager", 3)
             .put("minecraft:ravager", 3)
+            .put("minecraft:skeleton_horse", -1)
             .put("minecraft:vex", 0)
             .put("minecraft:vindicator", 4)
             .put("minecraft:zoglin", 2)
             .put("minecraft:zombie", 4)
+            .put("minecraft:zombie_horse", -1)
             .put("minecraft:zombie_villager", 3)
             .put("minecraft:spider", 0)
-            .put("minecraft:skeleton", 0)
+            .put("minecraft:cave_spider", 0)
             .put("minecraft:slime", 0)
+            .put("#minecraft:undead", 0)
             .put(MCA.MOD_ID + ":female_zombie_villager", 3)
             .put(MCA.MOD_ID + ":male_zombie_villager", 3)
             .build();
@@ -338,5 +347,9 @@ public final class Config extends CommonConfig {
         } else {
             return serverConfig;
         }
+    }
+
+    public int getVillagerPathfindingDistance() {
+        return Math.max(16, Math.min(256, villagerPathfindingDistance));
     }
 }

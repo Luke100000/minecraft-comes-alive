@@ -1,16 +1,5 @@
 package net.mca.client.render;
 
-import java.awt.Graphics;
-import java.awt.image.BufferedImage;
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.util.HashMap;
-import java.util.Locale;
-import java.util.Map;
-
-import javax.imageio.ImageIO;
-
 import net.mca.MCA;
 import net.mca.client.model.CribEntityModel;
 import net.mca.entity.CribEntity;
@@ -32,6 +21,16 @@ import net.minecraft.item.ItemStack;
 import net.minecraft.util.DyeColor;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.math.RotationAxis;
+
+import javax.imageio.ImageIO;
+import java.awt.*;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.HashMap;
+import java.util.Locale;
+import java.util.Map;
 
 public class CribEntityRenderer extends EntityRenderer<CribEntity> {
     private final int TEXTURE_WIDTH = 88;

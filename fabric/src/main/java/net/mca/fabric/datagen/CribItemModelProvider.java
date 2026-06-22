@@ -1,23 +1,18 @@
 package net.mca.fabric.datagen;
 
-import java.util.Locale;
-import java.util.Optional;
-
 import net.fabricmc.fabric.api.datagen.v1.FabricDataOutput;
 import net.fabricmc.fabric.api.datagen.v1.provider.FabricModelProvider;
 import net.mca.MCA;
 import net.mca.entity.CribWoodType;
 import net.mca.item.CribItem;
 import net.mca.item.ItemsMCA;
-import net.minecraft.data.client.BlockStateModelGenerator;
-import net.minecraft.data.client.ItemModelGenerator;
-import net.minecraft.data.client.Model;
-import net.minecraft.data.client.ModelIds;
-import net.minecraft.data.client.TextureKey;
-import net.minecraft.data.client.TextureMap;
+import net.minecraft.data.client.*;
 import net.minecraft.item.Item;
 import net.minecraft.util.DyeColor;
 import net.minecraft.util.Identifier;
+
+import java.util.Locale;
+import java.util.Optional;
 
 public class CribItemModelProvider extends FabricModelProvider {
 

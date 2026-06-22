@@ -4,7 +4,6 @@ import net.mca.MCA;
 import net.mca.cobalt.network.Message;
 import net.mca.cobalt.network.NetworkHandler;
 import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.util.Identifier;
 import net.minecraftforge.network.NetworkRegistry;
 import net.minecraftforge.network.PacketDistributor;
 import net.minecraftforge.network.simple.SimpleChannel;
