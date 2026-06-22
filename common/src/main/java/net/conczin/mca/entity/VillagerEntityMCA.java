@@ -98,6 +98,7 @@ import java.util.function.Predicate;
 
 
 public class VillagerEntityMCA extends Villager implements VillagerLike<VillagerEntityMCA>, MenuProvider, CompassionateEntity<BreedableRelationship>, CrossbowAttackMob {
+    private static final float FRIENDLY_ARROW_UNCERTAINTY = 2.0F;
     private static final CDataParameter<Float> INFECTION_PROGRESS = CParameter.create("InfectionProgress", 0.0f);
     private static final CDataParameter<Integer> GROWTH_AMOUNT = CParameter.create("GrowthAmount", -AgeState.getMaxAge());
     public static final String MCA_DATA_KEY = "MCAData";
@@ -882,6 +883,24 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     }
 
     @Override
+    public boolean startRiding(Entity entityToRide, boolean force, boolean sendEventAndTriggers) {
+        boolean mounted = super.startRiding(entityToRide, force, sendEventAndTriggers);
+        if (mounted && entityToRide instanceof Player) {
+            refreshDimensions();
+        }
+        return mounted;
+    }
+
+    @Override
+    public void stopRiding() {
+        boolean wasRidingPlayer = getVehicle() instanceof Player;
+        super.stopRiding();
+        if (wasRidingPlayer) {
+            refreshDimensions();
+        }
+    }
+
+    @Override
     public EntityDimensions getDefaultDimensions(Pose pose) {
         Entity vehicle = getVehicle();
         if (vehicle instanceof Player) {
@@ -1384,6 +1403,10 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     @Override
     @SuppressWarnings("deprecation")
     public void performRangedAttack(LivingEntity target, float pullProgress) {
+        if (this.level().isClientSide() || !(this.level() instanceof ServerLevel serverLevel)) {
+            return;
+        }
+
         setTarget(target);
         attackedEntity(target);
 
@@ -1394,19 +1417,18 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
             ItemStack projectile = this.getProjectile(bow);
             AbstractArrow arrowEntity = ProjectileUtil.getMobArrow(this, projectile, pullProgress, bow);
             double xd = target.getX() - this.getX();
-            double yd = target.getY(0.3333333333333333D) - arrowEntity.getY();
+            double yd = getFriendlyArrowAimY(target) - arrowEntity.getY();
             double zd = target.getZ() - this.getZ();
             double distanceToTarget = Math.sqrt(xd * xd + zd * zd);
-            if (this.level() instanceof ServerLevel serverLevel) {
-                int difficultyId = serverLevel.getDifficulty().getId();
-                // Inverted divergence: Easy (1) -> 2, Normal (2) -> 6, Hard (3) -> 10
-                float uncertainty = 2.0F + (difficultyId - 1) * 4.0F;
-                Projectile.spawnProjectileUsingShoot(
-                    arrowEntity, serverLevel, projectile, xd, yd + distanceToTarget * 0.2F, zd, 1.6F, uncertainty
-                );
-            }
+            Projectile.spawnProjectileUsingShoot(
+                arrowEntity, serverLevel, projectile, xd, yd + distanceToTarget * 0.2F, zd, 1.6F, FRIENDLY_ARROW_UNCERTAINTY
+            );
             this.playSound(SoundEvents.SKELETON_SHOOT, 1.0F, 1.0F / (this.getRandom().nextFloat() * 0.4F + 0.8F));
         }
+    }
+
+    private static double getFriendlyArrowAimY(LivingEntity target) {
+        return target.getY(target.getBbHeight() <= 1.0F ? 0.5D : 1.0D / 3.0D);
     }
 
     @Override

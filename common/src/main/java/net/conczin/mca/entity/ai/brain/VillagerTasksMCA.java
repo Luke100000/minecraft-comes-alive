@@ -30,7 +30,6 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.MobCategory;
 import net.minecraft.world.entity.ai.Brain;
 import net.minecraft.world.entity.ai.behavior.*;
-import net.minecraft.world.entity.ai.behavior.declarative.BehaviorBuilder;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.MemoryStatus;
 import net.minecraft.world.entity.ai.sensing.Sensor;
@@ -316,9 +315,6 @@ public class VillagerTasksMCA {
                 Pair.of(3, StopAttackingIfTargetInvalid.create((level, livingEntity) -> !VillagerTasksMCA.isPreferredTarget(villager, livingEntity))),
                 Pair.of(4, new ArcherMovementTask<>(15)),
                 Pair.of(5, new BowTask<>(20, 15)),
-                Pair.of(6, BehaviorBuilder.triggerIf(v -> v.isHolding(Items.CROSSBOW),
-                        BackUpIfTooClose.create(5, 0.75F)
-                )),
                 Pair.of(7, new ConditionalTask<>(
                         SetWalkTargetFromAttackTargetIfTargetOutOfReach.create(0.75F),
                         (VillagerEntityMCA v) -> !VillagerTasksMCA.isHoldingRangedWeapon(v)
