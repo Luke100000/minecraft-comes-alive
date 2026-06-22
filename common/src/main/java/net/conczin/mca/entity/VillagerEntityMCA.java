@@ -694,7 +694,9 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         }
 
         if (!level().isClientSide()) {
-            if (tickCount % 200 == 0 && getHealth() < getMaxHealth()) {
+            if (tickCount % 200 == 0
+                    && getHealth() < getMaxHealth()
+                    && !getBrain().hasMemoryValue(MemoryModuleType.ATTACK_TARGET)) {
                 // if the villager has food they should try to eat.
                 ItemStack food = getMainHandItem();
                 FoodProperties foodProperties = food.get(DataComponents.FOOD);

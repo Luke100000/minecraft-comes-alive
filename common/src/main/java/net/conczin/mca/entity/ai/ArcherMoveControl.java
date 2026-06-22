@@ -11,7 +11,6 @@ import net.minecraft.world.level.pathfinder.PathType;
 
 public class ArcherMoveControl extends MoveControl {
     private boolean emergencyFleeing;
-    private boolean unsafeKiting;
     private StrafeResult lastStrafeResult = StrafeResult.NONE;
 
     public ArcherMoveControl(Mob mob) {
@@ -24,14 +23,6 @@ public class ArcherMoveControl extends MoveControl {
 
     public boolean isEmergencyFleeing() {
         return this.emergencyFleeing;
-    }
-
-    public void setUnsafeKiting(boolean unsafeKiting) {
-        this.unsafeKiting = unsafeKiting;
-    }
-
-    public boolean isUnsafeKiting() {
-        return this.unsafeKiting;
     }
 
     public boolean wasLastStrafeBlocked() {
