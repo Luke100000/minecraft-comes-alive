@@ -6,9 +6,6 @@ import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.passive.IronGolemEntity;
 import net.minecraft.world.World;
 import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(IronGolemEntity.class)
 public abstract class MixinIronGolem extends LivingEntity {
@@ -16,10 +13,11 @@ public abstract class MixinIronGolem extends LivingEntity {
         super(type, world);
     }
 
-    @Inject(method = "canTarget(Lnet/minecraft/entity/LivingEntity;)Z", at = @At("HEAD"), cancellable = true)
-    private void mca$skipGuardTargets(LivingEntity target, CallbackInfoReturnable<Boolean> cir) {
+    @Override
+    public boolean canTarget(LivingEntity target) {
         if (target instanceof VillagerEntityMCA) {
-            cir.setReturnValue(false);
+            return false;
         }
+        return super.canTarget(target);
     }
 }

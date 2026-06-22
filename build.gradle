@@ -67,9 +67,6 @@ allprojects {
                 }
             }
         }
-        if (task.class.name.contains("RemapJarTask") || task.class.name.contains("TransformingTask")) {
-            task.notCompatibleWithConfigurationCache("Plugin task ${task.class.name} is not compatible with the configuration cache")
-        }
     }
 
     publishing {
