@@ -4,7 +4,7 @@ name: build-commit-artifacts
 on:
   push:
     tags-ignore:
-      - '*\+*'
+      - '**'
   workflow_dispatch:
 
 jobs:
