@@ -113,8 +113,7 @@ public class BowTask<E extends Mob & CrossbowAttackMob> extends Behavior<E> {
             }
         } else if (visible
                 && distanceSquared <= this.rangeSquared
-                && this.attackCooldown <= 0
-                && !isUnsafeKiting(entity)) {
+                && this.attackCooldown <= 0) {
             entity.startUsingItem(getBowHoldingHand(entity));
             logAction(entity, target, visible, distanceSquared, "start_using", "ready");
         }
@@ -191,9 +190,5 @@ public class BowTask<E extends Mob & CrossbowAttackMob> extends Behavior<E> {
 
     private static boolean isEmergencyFleeing(Mob entity) {
         return entity.getMoveControl() instanceof net.conczin.mca.entity.ai.ArcherMoveControl archerMoveControl && archerMoveControl.isEmergencyFleeing();
-    }
-
-    private static boolean isUnsafeKiting(Mob entity) {
-        return entity.getMoveControl() instanceof net.conczin.mca.entity.ai.ArcherMoveControl archerMoveControl && archerMoveControl.isUnsafeKiting();
     }
 }

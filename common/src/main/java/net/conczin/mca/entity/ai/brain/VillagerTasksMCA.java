@@ -87,7 +87,6 @@ public class VillagerTasksMCA {
     );
 
     public static final ImmutableList<SensorType<? extends Sensor<? super Villager>>> SENSOR_TYPES = ImmutableList.of(
-            SensorType.NEAREST_LIVING_ENTITIES,
             SensorType.NEAREST_PLAYERS,
             SensorType.NEAREST_ITEMS,
             SensorType.NEAREST_BED,
@@ -386,7 +385,9 @@ public class VillagerTasksMCA {
     }
 
     public static boolean isOnDuty(VillagerEntityMCA villager) {
-        return getActivity(villager) == Activity.WORK || villager.getBrain().getMemoryInternal(MemoryModuleType.ATTACK_TARGET).isPresent();
+        return getActivity(villager) == Activity.WORK
+                || villager.getBrain().hasMemoryValue(MemoryModuleType.ATTACK_TARGET)
+                || getPreferredTarget(villager).isPresent();
     }
 
     private static boolean isHoldingRangedWeapon(VillagerEntityMCA villager) {

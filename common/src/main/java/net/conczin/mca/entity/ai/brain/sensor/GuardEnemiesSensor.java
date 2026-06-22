@@ -15,21 +15,26 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.NearestVisibleLivingEntities;
-import net.minecraft.world.entity.ai.sensing.Sensor;
+import net.minecraft.world.entity.ai.sensing.NearestLivingEntitySensor;
 import net.minecraft.world.entity.monster.Enemy;
 
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
-public class GuardEnemiesSensor extends Sensor<LivingEntity> {
+public class GuardEnemiesSensor extends NearestLivingEntitySensor<LivingEntity> {
     @Override
     public Set<MemoryModuleType<?>> requires() {
-        return ImmutableSet.of(MemoryModuleTypeMCA.NEAREST_GUARD_ENEMY);
+        return ImmutableSet.of(
+                MemoryModuleType.NEAREST_LIVING_ENTITIES,
+                MemoryModuleType.NEAREST_VISIBLE_LIVING_ENTITIES,
+                MemoryModuleTypeMCA.NEAREST_GUARD_ENEMY
+        );
     }
 
     @Override
     protected void doTick(ServerLevel world, LivingEntity entity) {
+        super.doTick(world, entity);
         entity.getBrain().setMemory(MemoryModuleTypeMCA.NEAREST_GUARD_ENEMY, this.getNearestHostile(entity));
     }
 
