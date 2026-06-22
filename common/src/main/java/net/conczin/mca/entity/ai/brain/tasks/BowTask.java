@@ -63,9 +63,9 @@ public class BowTask<E extends Mob & CrossbowAttackMob> extends Behavior<E> {
             return;
         }
 
-        if (isFleeing(entity)) {
+        if (isEmergencyFleeing(entity)) {
             if (entity.isUsingItem()) {
-                logAction(entity, target, false, entity.distanceToSqr(target), "stop_using", "fleeing");
+                logAction(entity, target, false, entity.distanceToSqr(target), "stop_using", "emergency_fleeing");
                 entity.stopUsingItem();
             }
             return;
@@ -111,7 +111,10 @@ public class BowTask<E extends Mob & CrossbowAttackMob> extends Behavior<E> {
                 this.attackCooldown = this.fireInterval;
                 logAction(entity, target, visible, distanceSquared, "release", "draw_complete");
             }
-        } else if (visible && distanceSquared <= this.rangeSquared && this.attackCooldown <= 0 && !isFleeing(entity)) {
+        } else if (visible
+                && distanceSquared <= this.rangeSquared
+                && this.attackCooldown <= 0
+                && !isUnsafeKiting(entity)) {
             entity.startUsingItem(getBowHoldingHand(entity));
             logAction(entity, target, visible, distanceSquared, "start_using", "ready");
         }
@@ -186,7 +189,11 @@ public class BowTask<E extends Mob & CrossbowAttackMob> extends Behavior<E> {
         return "none";
     }
 
-    private static boolean isFleeing(Mob entity) {
-        return entity.getMoveControl() instanceof net.conczin.mca.entity.ai.ArcherMoveControl archerMoveControl && archerMoveControl.isFleeing();
+    private static boolean isEmergencyFleeing(Mob entity) {
+        return entity.getMoveControl() instanceof net.conczin.mca.entity.ai.ArcherMoveControl archerMoveControl && archerMoveControl.isEmergencyFleeing();
+    }
+
+    private static boolean isUnsafeKiting(Mob entity) {
+        return entity.getMoveControl() instanceof net.conczin.mca.entity.ai.ArcherMoveControl archerMoveControl && archerMoveControl.isUnsafeKiting();
     }
 }

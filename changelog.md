@@ -2,7 +2,8 @@
 
 * General AI improvements.
 * Archer fixes and improvements.
-  * Fixed archer crossbow.
+  * Fixed archers not recognising crossbows.
+  * Archers now flee if too close to a mob.
 * Fixed quotation marks showing up around villager names when migrating worlds from older mod versions.
 * Fixed guards occasionally ignoring active threats.
 * Fixed baby, toddler and child villagers not reliably being pickable.

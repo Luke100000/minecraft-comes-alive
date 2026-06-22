@@ -12,29 +12,51 @@ import net.minecraft.world.entity.ai.behavior.Behavior;
 import net.minecraft.world.entity.ai.behavior.EntityTracker;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.MemoryStatus;
+import net.minecraft.world.entity.ai.util.LandRandomPos;
 import net.minecraft.world.item.BowItem;
 import net.minecraft.world.item.CrossbowItem;
+import net.minecraft.world.level.pathfinder.Path;
+import net.minecraft.world.phys.Vec3;
 
 public class ArcherMovementTask<E extends PathfinderMob> extends Behavior<E> {
     private static final double SPEED_MODIFIER = 0.5;
-    private static final double RETREAT_SPEED_MODIFIER = 0.45;
-    private static final float STRAFE_SPEED = -0.5F;
+    private static final double KITE_SPEED_MODIFIER = 0.85;
+    private static final double EMERGENCY_SPEED_MODIFIER = 0.9;
     private static final float LOOK_SPEED = 30.0F;
     private static final int LOST_SIGHT_BEFORE_APPROACH = 10;
-    private static final double RETREAT_ENTER_RANGE_FRACTION = 0.25;
-    private static final double RETREAT_EXIT_RANGE_FRACTION = 0.36;
+    private static final int DEBUG_LOG_INTERVAL_TICKS = 20;
+    private static final double EMERGENCY_ENTER_DISTANCE_SQUARED = 16.0;
+    private static final double EMERGENCY_EXIT_DISTANCE_SQUARED = 36.0;
+    private static final double KITE_ENTER_DISTANCE_SQUARED = 25.0;
+    private static final double KITE_EXIT_DISTANCE_SQUARED = 64.0;
+    private static final double CLOSE_RANGE_VERTICAL_THREAT_DISTANCE = 2.5;
+    private static final double KITE_SAFE_DISTANCE = 9.0;
+    private static final double EMERGENCY_SAFE_DISTANCE = 6.0;
+    private static final int AWAY_HORIZONTAL_DISTANCE = 12;
+    private static final int AWAY_VERTICAL_DISTANCE = 5;
+    private static final int AWAY_PATH_ATTEMPTS = 10;
+    private static final int EMERGENCY_PATH_TICKS = 10;
+    private static final int KITE_PATH_TICKS = 16;
+    private static final int BLOCKED_PATH_TICKS_BEFORE_REPATH = 5;
+    private static final int BLOCKED_STRAFE_TICKS_BEFORE_PAUSE = 6;
+    private static final double MIN_USEFUL_DISTANCE_GAIN = 0.5;
+    private static final double STUCK_HORIZONTAL_SPEED_SQUARED = 2.5E-5;
 
     private final double maximumRangeSquared;
     private LivingEntity lastTarget;
+    private MovementState state = MovementState.IDLE;
     private String movementMode = "idle";
     private int seeTime;
     private long lastDebugLogTime = Long.MIN_VALUE;
     private String lastDebugState = "";
     private boolean strafingClockwise;
-    private boolean retreating;
-    private boolean fleeing;
+    private boolean emergencyFleeing;
+    private boolean kiting;
     private int strafingTime = -1;
     private int repathCooldown;
+    private int awayPathTicks;
+    private int blockedPathTicks;
+    private int blockedStrafeTicks;
 
     public ArcherMovementTask(int maximumRange) {
         super(ImmutableMap.of(MemoryModuleType.ATTACK_TARGET, MemoryStatus.VALUE_PRESENT), 1200);
@@ -70,11 +92,7 @@ public class ArcherMovementTask<E extends PathfinderMob> extends Behavior<E> {
         if (target != this.lastTarget) {
             this.lastTarget = target;
             this.seeTime = 0;
-            this.strafingTime = -1;
-            this.retreating = false;
-            this.fleeing = false;
-            getArcherMoveControl(entity).setFleeing(false);
-            this.repathCooldown = 0;
+            enterState(entity, MovementState.IDLE);
             entity.getNavigation().stop();
         }
 
@@ -82,145 +100,269 @@ public class ArcherMovementTask<E extends PathfinderMob> extends Behavior<E> {
         updateSeeTime(visible);
 
         double distanceSquared = entity.distanceToSqr(target);
-        boolean isFleeing = shouldFlee(distanceSquared);
-        getArcherMoveControl(entity).setFleeing(isFleeing);
+        double verticalDistance = Math.abs(entity.getY() - target.getY());
+        MovementState nextState = selectState(distanceSquared, verticalDistance, visible);
+        enterState(entity, nextState);
 
-        if (isFleeing) {
-            flee(entity, target);
-        } else {
-            entity.getBrain().setMemory(MemoryModuleType.LOOK_TARGET, new EntityTracker(target, true));
-            entity.getLookControl().setLookAt(target, LOOK_SPEED, LOOK_SPEED);
-            if (distanceSquared > this.maximumRangeSquared || this.seeTime < -LOST_SIGHT_BEFORE_APPROACH) {
+        ArcherMoveControl moveControl = getArcherMoveControl(entity);
+        moveControl.setEmergencyFleeing(this.state == MovementState.EMERGENCY_FLEE);
+        moveControl.setUnsafeKiting(this.state == MovementState.KITE);
+
+        switch (this.state) {
+            case APPROACH -> {
+                trackTarget(entity, target);
                 approach(entity, target);
-            } else if (visible) {
-                if (shouldRetreat(distanceSquared)) {
-                    retreat(entity, target);
-                } else {
-                    strafe(entity, target);
-                }
-            } else {
-                hold(entity, target);
+            }
+            case EMERGENCY_FLEE -> {
+                clearLookTarget(entity);
+                moveAway(entity, target, "emergency_flee", EMERGENCY_SAFE_DISTANCE, EMERGENCY_PATH_TICKS, EMERGENCY_SPEED_MODIFIER, true);
+            }
+            case KITE -> {
+                trackTarget(entity, target);
+                moveAway(entity, target, "kite", KITE_SAFE_DISTANCE, KITE_PATH_TICKS, KITE_SPEED_MODIFIER, false);
+            }
+            case SIDE_STRAFE -> {
+                faceTargetForStrafe(entity, target);
+                strafe(entity);
+            }
+            case HOLD, IDLE -> {
+                trackTarget(entity, target);
+                hold(entity);
             }
         }
 
         if (MCA.platformHelper.isDevelopmentEnvironment()) {
-            logDebugState(level, entity, target, visible, distanceSquared);
+            logDebugState(level, entity, target, visible, distanceSquared, verticalDistance);
         }
     }
 
     @Override
     protected void stop(ServerLevel level, E entity, long gameTime) {
         resetState();
-        getArcherMoveControl(entity).setFleeing(false);
+        ArcherMoveControl moveControl = getArcherMoveControl(entity);
+        moveControl.setEmergencyFleeing(false);
+        moveControl.setUnsafeKiting(false);
         entity.getNavigation().stop();
     }
 
     private void resetState() {
         this.lastTarget = null;
+        this.state = MovementState.IDLE;
         this.movementMode = "idle";
         this.seeTime = 0;
         this.lastDebugState = "";
         this.strafingClockwise = false;
-        this.retreating = false;
-        this.fleeing = false;
+        this.emergencyFleeing = false;
+        this.kiting = false;
         this.strafingTime = -1;
         this.repathCooldown = 0;
+        this.awayPathTicks = 0;
+        this.blockedPathTicks = 0;
+        this.blockedStrafeTicks = 0;
     }
 
-    private boolean shouldFlee(double distanceSquared) {
-        this.fleeing = this.fleeing ? distanceSquared < 64.0 : distanceSquared < 25.0;
-        return this.fleeing;
+    private MovementState selectState(double distanceSquared, double verticalDistance, boolean visible) {
+        boolean closeRangeThreat = verticalDistance <= CLOSE_RANGE_VERTICAL_THREAT_DISTANCE;
+        this.emergencyFleeing = this.emergencyFleeing
+                ? closeRangeThreat && distanceSquared < EMERGENCY_EXIT_DISTANCE_SQUARED
+                : closeRangeThreat && distanceSquared < EMERGENCY_ENTER_DISTANCE_SQUARED;
+        if (this.emergencyFleeing) {
+            this.kiting = false;
+            return MovementState.EMERGENCY_FLEE;
+        }
+
+        this.kiting = this.kiting
+                ? closeRangeThreat && distanceSquared < KITE_EXIT_DISTANCE_SQUARED
+                : closeRangeThreat && distanceSquared < KITE_ENTER_DISTANCE_SQUARED;
+        if (this.kiting) {
+            return MovementState.KITE;
+        }
+
+        if (!visible || distanceSquared > this.maximumRangeSquared || this.seeTime < -LOST_SIGHT_BEFORE_APPROACH) {
+            return MovementState.APPROACH;
+        }
+
+        return MovementState.SIDE_STRAFE;
     }
 
-    private void flee(E entity, LivingEntity target) {
-        boolean changedMode = !"flee".equals(this.movementMode);
-        this.movementMode = "flee";
-        this.strafingTime = -1;
-        this.retreating = false;
-        if (changedMode) {
-            this.repathCooldown = 0;
-            entity.getNavigation().stop();
+    private void enterState(E entity, MovementState nextState) {
+        if (this.state == nextState) {
+            return;
         }
 
-        entity.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
-        entity.getBrain().eraseMemory(MemoryModuleType.LOOK_TARGET);
-        if (--this.repathCooldown <= 0) {
-            net.minecraft.world.phys.Vec3 pos = net.minecraft.world.entity.ai.util.DefaultRandomPos.getPosAway(entity, 16, 7, target.position());
-            if (pos != null) {
-                entity.getNavigation().moveTo(pos.x, pos.y, pos.z, 0.65);
-                this.repathCooldown = 15 + entity.getRandom().nextInt(10);
-            } else {
-                getArcherMoveControl(entity).retreatFrom(target, STRAFE_SPEED, 0.65);
-                this.repathCooldown = 5;
-            }
-        }
+        this.state = nextState;
+        this.movementMode = nextState.debugName;
+        this.strafingTime = nextState == MovementState.SIDE_STRAFE ? 0 : -1;
+        this.repathCooldown = 0;
+        this.awayPathTicks = 0;
+        this.blockedPathTicks = 0;
+        this.blockedStrafeTicks = 0;
+        entity.getNavigation().stop();
     }
 
     private void approach(E entity, LivingEntity target) {
-        boolean changedMode = !"approach".equals(this.movementMode);
         this.movementMode = "approach";
-        this.strafingTime = -1;
-        this.retreating = false;
-        if (changedMode) {
-            this.repathCooldown = 0;
-            entity.getNavigation().stop();
-        }
-
+        this.awayPathTicks = 0;
+        this.blockedPathTicks = 0;
+        this.blockedStrafeTicks = 0;
         entity.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
+
         if (--this.repathCooldown <= 0 || entity.getNavigation().isDone()) {
             entity.getNavigation().moveTo(target, SPEED_MODIFIER);
             this.repathCooldown = getNextRepathCooldown(entity);
         }
     }
 
-    private void hold(E entity, LivingEntity target) {
-        this.movementMode = "hold";
+    private void moveAway(E entity, LivingEntity target, String mode, double desiredDistance, int pathTicks, double speedModifier, boolean allowPartialPath) {
+        this.movementMode = mode;
         this.strafingTime = -1;
-        this.retreating = false;
-        this.repathCooldown = 0;
+        this.blockedStrafeTicks = 0;
         entity.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
-        entity.getNavigation().stop();
-        getArcherMoveControl(entity).face(target);
+
+        if (isCurrentPathBlocked(entity)) {
+            this.blockedPathTicks++;
+        } else {
+            this.blockedPathTicks = 0;
+        }
+
+        if (this.awayPathTicks > 0
+                && !entity.getNavigation().isDone()
+                && this.blockedPathTicks < BLOCKED_PATH_TICKS_BEFORE_REPATH) {
+            this.awayPathTicks--;
+            return;
+        }
+
+        if (--this.repathCooldown > 0 && !entity.getNavigation().isDone()) {
+            return;
+        }
+
+        Path path = findPathAway(entity, target, desiredDistance, allowPartialPath);
+        if (path != null) {
+            entity.getNavigation().moveTo(path, speedModifier);
+            this.awayPathTicks = pathTicks;
+            this.repathCooldown = pathTicks;
+            this.blockedPathTicks = 0;
+        } else {
+            entity.getNavigation().stop();
+            this.awayPathTicks = 0;
+            this.repathCooldown = 4;
+        }
     }
 
-    private void retreat(E entity, LivingEntity target) {
-        this.movementMode = "retreat";
-        this.strafingTime = -1;
-        this.repathCooldown = 0;
-        entity.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
-        entity.getNavigation().stop();
-        getArcherMoveControl(entity).retreatFrom(target, STRAFE_SPEED, RETREAT_SPEED_MODIFIER);
+    private boolean isCurrentPathBlocked(E entity) {
+        if (entity.getNavigation().isDone()) {
+            return false;
+        }
+
+        return entity.onGround()
+                && (entity.horizontalCollision
+                || entity.minorHorizontalCollision
+                || entity.getDeltaMovement().horizontalDistanceSqr() < STUCK_HORIZONTAL_SPEED_SQUARED);
     }
 
-    private void strafe(E entity, LivingEntity target) {
-        this.movementMode = "strafe";
-        this.retreating = false;
-        this.repathCooldown = 0;
-        entity.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
-        entity.getNavigation().stop();
+    private Path findPathAway(E entity, LivingEntity target, double desiredDistance, boolean allowPartialPath) {
+        double currentDistanceSquared = entity.distanceToSqr(target);
+        double currentDistance = Math.sqrt(currentDistanceSquared);
+        double minHorizontalDistance = Math.min(AWAY_HORIZONTAL_DISTANCE - 1.0, Math.max(0.0, desiredDistance - currentDistance));
+        Path bestPath = null;
+        double bestScore = currentDistanceSquared;
 
-        this.strafingTime++;
-        if (this.strafingTime >= 20) {
-            if (entity.getRandom().nextFloat() < 0.3F) {
-                this.strafingClockwise = !this.strafingClockwise;
+        for (int i = 0; i < AWAY_PATH_ATTEMPTS; i++) {
+            Vec3 candidate = LandRandomPos.getPosAway(entity, minHorizontalDistance, AWAY_HORIZONTAL_DISTANCE, AWAY_VERTICAL_DISTANCE, target.position());
+            if (candidate == null || candidate.distanceToSqr(target.position()) <= currentDistanceSquared + MIN_USEFUL_DISTANCE_GAIN) {
+                continue;
             }
 
+            Path path = entity.getNavigation().createPath(candidate.x, candidate.y, candidate.z, 0);
+            if (path == null || !allowPartialPath && !path.canReach()) {
+                continue;
+            }
+
+            double endDistanceSquared = getPathEndDistanceSquared(path, target);
+            if (endDistanceSquared <= currentDistanceSquared + MIN_USEFUL_DISTANCE_GAIN) {
+                continue;
+            }
+
+            double score = endDistanceSquared + (path.canReach() ? this.maximumRangeSquared : 0.0);
+            if (score > bestScore) {
+                bestScore = score;
+                bestPath = path;
+            }
+        }
+
+        return bestPath;
+    }
+
+    private static double getPathEndDistanceSquared(Path path, LivingEntity target) {
+        return path.getEndNode() == null ? 0.0 : path.getEndNode().asBlockPos().distToCenterSqr(target.position());
+    }
+
+    private void strafe(E entity) {
+        this.movementMode = "strafe";
+        this.awayPathTicks = 0;
+        this.blockedPathTicks = 0;
+        this.repathCooldown = 0;
+        entity.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
+        entity.getNavigation().stop();
+
+        ArcherMoveControl moveControl = getArcherMoveControl(entity);
+        this.strafingTime++;
+        if (moveControl.wasLastStrafeBlocked() || isStrafeBlocked(entity)) {
+            this.blockedStrafeTicks++;
+        } else {
+            this.blockedStrafeTicks = 0;
+        }
+
+        if (this.blockedStrafeTicks >= BLOCKED_STRAFE_TICKS_BEFORE_PAUSE) {
+            this.strafingClockwise = !this.strafingClockwise;
+            this.blockedStrafeTicks = 0;
             this.strafingTime = 0;
         }
 
-        float targetYRot = getTargetYRot(entity, target);
-        float yRot = entity.getMoveControl().rotlerp(entity.getYRot(), targetYRot, 30.0F);
-        entity.setYRot(yRot);
-        entity.yBodyRot = yRot;
-        entity.yHeadRot = yRot;
-        entity.getMoveControl().strafe(0.0F, this.strafingClockwise ? 0.5F : -0.5F);
+        if (entity.horizontalCollision) {
+            this.strafingClockwise = !this.strafingClockwise;
+            this.strafingTime = 0;
+        } else if (this.strafingTime >= 20) {
+            if (entity.getRandom().nextFloat() < 0.3F) {
+                this.strafingClockwise = !this.strafingClockwise;
+            }
+            this.strafingTime = 0;
+        }
+
+        moveControl.strafe(0.0F, this.strafingClockwise ? 0.5F : -0.5F);
     }
 
-    private boolean shouldRetreat(double distanceSquared) {
-        double enterDistance = this.maximumRangeSquared * RETREAT_ENTER_RANGE_FRACTION;
-        double exitDistance = this.maximumRangeSquared * RETREAT_EXIT_RANGE_FRACTION;
-        this.retreating = this.retreating ? distanceSquared < exitDistance : distanceSquared < enterDistance;
-        return this.retreating;
+    private boolean isStrafeBlocked(E entity) {
+        return this.strafingTime > 3
+                && entity.onGround()
+                && (entity.horizontalCollision
+                || entity.minorHorizontalCollision
+                || entity.getDeltaMovement().horizontalDistanceSqr() < STUCK_HORIZONTAL_SPEED_SQUARED);
+    }
+
+    private void hold(E entity) {
+        this.movementMode = "hold";
+        this.strafingTime = -1;
+        this.awayPathTicks = 0;
+        this.blockedPathTicks = 0;
+        this.blockedStrafeTicks = 0;
+        this.repathCooldown = 0;
+        entity.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
+        entity.getNavigation().stop();
+    }
+
+    private void trackTarget(E entity, LivingEntity target) {
+        entity.getBrain().setMemory(MemoryModuleType.LOOK_TARGET, new EntityTracker(target, true));
+        entity.getLookControl().setLookAt(target, LOOK_SPEED, LOOK_SPEED);
+    }
+
+    private void faceTargetForStrafe(E entity, LivingEntity target) {
+        entity.getBrain().eraseMemory(MemoryModuleType.LOOK_TARGET);
+        entity.lookAt(target, LOOK_SPEED, LOOK_SPEED);
+    }
+
+    private void clearLookTarget(E entity) {
+        entity.getBrain().eraseMemory(MemoryModuleType.LOOK_TARGET);
     }
 
     private static int getNextRepathCooldown(Mob entity) {
@@ -240,29 +382,39 @@ public class ArcherMovementTask<E extends PathfinderMob> extends Behavior<E> {
         }
     }
 
-    private void logDebugState(ServerLevel level, E entity, LivingEntity target, boolean visible, double distanceSquared) {
-        String state = this.movementMode + ":" + visible + ":" + this.seeTime + ":" + this.strafingTime + ":" + this.retreating + ":" + this.strafingClockwise + ":" + entity.getNavigation().isDone() + ":" + entity.horizontalCollision + ":" + entity.onGround();
+    private void logDebugState(ServerLevel level, E entity, LivingEntity target, boolean visible, double distanceSquared, double verticalDistance) {
+        ArcherMoveControl moveControl = getArcherMoveControl(entity);
+        String stateKey = target.getUUID() + ":" + this.state + ":" + this.movementMode + ":" + visible + ":"
+                + this.emergencyFleeing + ":" + this.kiting + ":" + this.strafingClockwise + ":"
+                + moveControl.getLastStrafeResult() + ":" + entity.getNavigation().isDone() + ":"
+                + entity.horizontalCollision + ":" + entity.onGround();
         long gameTime = level.getGameTime();
-        if (state.equals(this.lastDebugState) && gameTime - this.lastDebugLogTime < 20) {
+        if (stateKey.equals(this.lastDebugState) && gameTime - this.lastDebugLogTime < DEBUG_LOG_INTERVAL_TICKS) {
             return;
         }
 
-        this.lastDebugState = state;
+        this.lastDebugState = stateKey;
         this.lastDebugLogTime = gameTime;
         MCA.LOGGER.info(
-                "[MCA Archer Movement] entity={} entityName=\"{}\" target={} targetName=\"{}\" mode={} movement={} distSqr={} los={} seeTime={} strafingTime={} retreating={} strafingClockwise={} navDone={} horizontalCollision={} minorHorizontalCollision={} onGround={} yRot={} targetYRot={} yHeadRot={} yBodyRot={} movementSpeed={} deltaMovement={} pos={} targetPos={}",
+                "[MCA Archer Movement] entity={} entityName=\"{}\" target={} targetName=\"{}\" mode={} movement={} distSqr={} verticalDist={} los={} seeTime={} strafingTime={} emergencyFleeing={} kiting={} strafingClockwise={} strafeResult={} awayPathTicks={} blockedPathTicks={} blockedStrafeTicks={} navDone={} horizontalCollision={} minorHorizontalCollision={} onGround={} yRot={} targetYRot={} yHeadRot={} yBodyRot={} movementSpeed={} deltaMovement={} pos={} targetPos={}",
                 entity.getStringUUID(),
                 entity.getName().getString(),
                 target.getStringUUID(),
                 target.getName().getString(),
-                this.strafingTime > -1 ? "STRAFE" : "NAVIGATE",
+                this.state == MovementState.SIDE_STRAFE ? "STRAFE" : "NAVIGATE",
                 this.movementMode,
                 String.format("%.2f", distanceSquared),
+                String.format("%.2f", verticalDistance),
                 visible,
                 this.seeTime,
                 this.strafingTime,
-                this.retreating,
+                this.emergencyFleeing,
+                this.kiting,
                 this.strafingClockwise,
+                moveControl.getLastStrafeResult(),
+                this.awayPathTicks,
+                this.blockedPathTicks,
+                this.blockedStrafeTicks,
                 entity.getNavigation().isDone(),
                 entity.horizontalCollision,
                 entity.minorHorizontalCollision,
@@ -304,5 +456,20 @@ public class ArcherMovementTask<E extends PathfinderMob> extends Behavior<E> {
         }
 
         throw new IllegalStateException(entity.getType() + " must use ArcherMoveControl for archer movement");
+    }
+
+    private enum MovementState {
+        IDLE("idle"),
+        APPROACH("approach"),
+        EMERGENCY_FLEE("emergency_flee"),
+        KITE("kite"),
+        SIDE_STRAFE("strafe"),
+        HOLD("hold");
+
+        private final String debugName;
+
+        MovementState(String debugName) {
+            this.debugName = debugName;
+        }
     }
 }
