@@ -3,7 +3,6 @@ package net.mca.client.gui;
 import net.mca.entity.VillagerLike;
 import net.mca.util.localization.FlowingText;
 import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.text.Text;
 
 import java.util.List;

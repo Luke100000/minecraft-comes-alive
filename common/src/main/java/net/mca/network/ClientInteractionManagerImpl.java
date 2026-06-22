@@ -2,10 +2,10 @@ package net.mca.network;
 
 import net.mca.Config;
 import net.mca.MCAClient;
-import net.mca.client.tts.SpeechManager;
 import net.mca.client.book.Book;
 import net.mca.client.book.CivilRegistryBook;
 import net.mca.client.gui.*;
+import net.mca.client.tts.SpeechManager;
 import net.mca.entity.EntitiesMCA;
 import net.mca.entity.VillagerEntityMCA;
 import net.mca.entity.VillagerLike;

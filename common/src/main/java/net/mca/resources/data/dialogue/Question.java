@@ -2,8 +2,8 @@ package net.mca.resources.data.dialogue;
 
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import net.mca.entity.interaction.Constraint;
 import net.mca.entity.VillagerEntityMCA;
+import net.mca.entity.interaction.Constraint;
 import net.mca.entity.interaction.InteractionPredicate;
 import net.minecraft.server.network.ServerPlayerEntity;
 

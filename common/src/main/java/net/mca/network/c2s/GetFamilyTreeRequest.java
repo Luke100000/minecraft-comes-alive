@@ -2,9 +2,9 @@ package net.mca.network.c2s;
 
 import net.mca.cobalt.network.Message;
 import net.mca.cobalt.network.NetworkHandler;
+import net.mca.network.s2c.GetFamilyTreeResponse;
 import net.mca.server.world.data.FamilyTree;
 import net.mca.server.world.data.FamilyTreeNode;
-import net.mca.network.s2c.GetFamilyTreeResponse;
 import net.minecraft.server.network.ServerPlayerEntity;
 
 import java.io.Serial;

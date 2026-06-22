@@ -3,8 +3,8 @@ package net.mca.server.world.data.villageComponents;
 import net.mca.Config;
 import net.mca.entity.VillagerEntityMCA;
 import net.mca.entity.ai.relationship.Gender;
-import net.mca.server.world.data.FamilyTree;
 import net.mca.resources.PoolUtil;
+import net.mca.server.world.data.FamilyTree;
 import net.mca.server.world.data.Village;
 import net.minecraft.server.world.ServerWorld;
 

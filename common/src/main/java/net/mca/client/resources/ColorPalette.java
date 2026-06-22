@@ -1,7 +1,6 @@
 package net.mca.client.resources;
 
 import net.mca.MCA;
-import net.minecraft.client.texture.NativeImage;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.math.ColorHelper;
 import net.minecraft.util.math.MathHelper;

@@ -1,12 +1,11 @@
 package net.mca.client.gui;
 
-import com.mojang.blaze3d.systems.RenderSystem;
 import net.mca.MCA;
 import net.mca.client.resources.Icon;
 import net.mca.cobalt.network.NetworkHandler;
 import net.mca.entity.ai.relationship.RelationshipState;
-import net.mca.server.world.data.FamilyTreeNode;
 import net.mca.network.c2s.GetFamilyTreeRequest;
+import net.mca.server.world.data.FamilyTreeNode;
 import net.mca.util.compat.ButtonWidget;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.font.TextRenderer;
@@ -21,7 +20,6 @@ import net.minecraft.sound.SoundEvents;
 import net.minecraft.text.MutableText;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
-import net.minecraft.util.Identifier;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Matrix4f;
 import org.lwjgl.opengl.GL11;

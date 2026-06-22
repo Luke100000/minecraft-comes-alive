@@ -1,7 +1,5 @@
 package net.mca.fabric.datagen;
 
-import java.util.function.Consumer;
-
 import net.fabricmc.fabric.api.datagen.v1.FabricDataOutput;
 import net.fabricmc.fabric.api.datagen.v1.provider.FabricRecipeProvider;
 import net.mca.entity.CribWoodType;
@@ -14,6 +12,8 @@ import net.minecraft.data.server.recipe.ShapedRecipeJsonBuilder;
 import net.minecraft.item.ItemConvertible;
 import net.minecraft.recipe.book.RecipeCategory;
 import net.minecraft.util.DyeColor;
+
+import java.util.function.Consumer;
 
 public class CribRecipeProvider extends FabricRecipeProvider
 {

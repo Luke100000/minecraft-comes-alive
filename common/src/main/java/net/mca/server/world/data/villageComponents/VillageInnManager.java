@@ -2,15 +2,15 @@ package net.mca.server.world.data.villageComponents;
 
 import net.mca.Config;
 import net.mca.ProfessionsMCA;
-import net.mca.resources.Names;
-import net.minecraft.text.Text;
 import net.mca.entity.VillagerEntityMCA;
 import net.mca.entity.ai.relationship.Gender;
+import net.mca.resources.Names;
 import net.mca.server.world.data.Village;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.SpawnReason;
 import net.minecraft.entity.passive.WanderingTraderEntity;
 import net.minecraft.server.world.ServerWorld;
+import net.minecraft.text.Text;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.BlockView;
 

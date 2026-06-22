@@ -5,7 +5,8 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
 import net.mca.Config;
 import net.mca.MCA;
-import net.mca.client.gui.immersive_library.responses.*;
+import net.mca.client.gui.immersive_library.responses.ErrorResponse;
+import net.mca.client.gui.immersive_library.responses.Response;
 import org.apache.commons.io.IOUtils;
 
 import java.io.IOException;
