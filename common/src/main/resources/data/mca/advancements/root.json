@@ -16,12 +16,52 @@
     "background": "minecraft:textures/block/oak_log.png"
   },
   "criteria": {
-    "village": {
+    "village_desert": {
       "trigger": "minecraft:location",
       "conditions": {
         "player": {
           "location": {
-            "structures": "#minecraft:village"
+            "structure": "minecraft:village_desert"
+          }
+        }
+      }
+    },
+    "village_plains": {
+      "trigger": "minecraft:location",
+      "conditions": {
+        "player": {
+          "location": {
+            "structure": "minecraft:village_plains"
+          }
+        }
+      }
+    },
+    "village_savanna": {
+      "trigger": "minecraft:location",
+      "conditions": {
+        "player": {
+          "location": {
+            "structure": "minecraft:village_savanna"
+          }
+        }
+      }
+    },
+    "village_taiga": {
+      "trigger": "minecraft:location",
+      "conditions": {
+        "player": {
+          "location": {
+            "structure": "minecraft:village_taiga"
+          }
+        }
+      }
+    },
+    "village_snowy": {
+      "trigger": "minecraft:location",
+      "conditions": {
+        "player": {
+          "location": {
+            "structure": "minecraft:village_snowy"
           }
         }
       }
@@ -34,7 +74,11 @@
   },
   "requirements": [
     [
-      "village"
+      "village_desert",
+      "village_plains",
+      "village_savanna",
+      "village_taiga",
+      "village_snowy"
     ]
   ]
 }

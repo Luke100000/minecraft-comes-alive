@@ -1,3 +1,7 @@
+# 7.6.23
+
+* Fixed book being given at spawn, rather than entering a village
+
 # 7.6.22
 
 * Iron golems no longer attack regular MCA villagers
