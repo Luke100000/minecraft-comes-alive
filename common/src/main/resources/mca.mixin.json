@@ -6,6 +6,7 @@
   "mixins": [
     "MixinAbstractFurnaceBlockEntity",
     "MixinActivity",
+    "MixinAdvancementRewardsAccessor",
     "MixinCriteria",
     "MixinDefaultParticleType",
     "MixinEntityType",
@@ -17,6 +18,7 @@
     "MixinMilkBucketItem",
     "MixinPlayerEntity",
     "MixinPlayerInventory",
+    "MixinPlayerAdvancementTracker",
     "MixinProtoChunk",
     "MixinScreenHandler",
     "MixinSensorType",

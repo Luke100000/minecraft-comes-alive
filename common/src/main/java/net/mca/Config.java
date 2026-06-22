@@ -43,6 +43,10 @@ public final class Config extends CommonConfig {
     public String villagerChatPrefix = "";
     public boolean canHurtBabies = true;
     public boolean enterVillageNotification = true;
+    /**
+     * If true, players will receive guide/information books when completing certain MCA advancements.
+     */
+    public boolean giveAdvancementBooks = true;
     public boolean villagerMarriageNotification = true;
     public boolean villagerBirthNotification = true;
     public boolean innArrivalNotification = true;
