@@ -4,31 +4,35 @@ on: [ push ]
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     env:
       MODRINTH_TOKEN: ${{ secrets.MR_API_TOKEN }}
       CURSEFORGE_TOKEN: ${{ secrets.CF_API_TOKEN }}
       MAVEN_USERNAME: ${{ secrets.MAVEN_USERNAME }}
       MAVEN_TOKEN: ${{ secrets.MAVEN_TOKEN }}
+      NO_COLOR: 1
     if: startsWith(github.ref, 'refs/tags/')
     steps:
       - name: Checkout Commit
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
           fetch-tags: true
       - name: Set up JDK 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 21
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
         with:
           cache-read-only: false
+          cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
       - name: Build Artifacts with Gradle
-        run: ./gradlew build --console=plain
+        run: ./gradlew build --console=plain --non-interactive
       - name: Publish to Maven
-        run: ./gradlew publish --console=plain
+        run: ./gradlew publish --console=plain --non-interactive
       - name: Get tag
         if: ${{ success() && startsWith(github.ref, 'refs/tags/') }}
         id: tag

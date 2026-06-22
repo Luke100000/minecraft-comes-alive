@@ -21,4 +21,6 @@ include('fabric')
 include('quilt')
 include('forge')
 
+enableFeaturePreview("NO_IMPLICIT_LOOKUP_IN_PARENT_PROJECTS")
+
 rootProject.name = 'minecraft-comes-alive'
