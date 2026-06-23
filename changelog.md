@@ -7,19 +7,15 @@
 * Added an admin command to override village requirement.
 * Improved villager bed pathfinding.
 * Increased the maximum configured villager pathfinding distance.
-
-# 7.8.7
-
 * General AI improvements.
 * Make guards use their own entity search sensor, instead of vanillas to remove a 40 tick reaction time
 * Archer fixes and improvements.
-  * Stop archers from eating to heal up while in fighting stance to improve combat efficiency.
-  * Fixed archers not recognising crossbows.
-  * Archers now flee if too close to a mob.
+    * Stop archers from eating to heal up while in fighting stance to improve combat efficiency.
+    * Fixed archers not recognizing crossbows.
+    * Archers now flee if too close to a mob.
 * Fixed quotation marks showing up around villager names when migrating worlds from older mod versions.
 * Fixed guards occasionally ignoring active threats.
 * Fixed baby, toddler and child villagers not reliably being pickable.
-
 
 # 7.8.6
 
