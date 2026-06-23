@@ -65,7 +65,7 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<LivingEnt
 
     @Unique
     private static PlayerEntityExtendedModel<?> mca$createHairModel(CubeDeformation dilation) {
-        return new PlayerEntityExtendedModel<>(LayerDefinition.create(VillagerEntityModelMCA.hairData(dilation), 64, 64).bakeRoot());
+        return new PlayerEntityExtendedModel<>(LayerDefinition.create(VillagerEntityModelMCA.hairData(dilation), 64, 64).bakeRoot()).hideWears();
     }
 
     @Inject(method = "<init>(Lnet/minecraft/client/renderer/entity/EntityRendererProvider$Context;Z)V", at = @At("TAIL"))
@@ -96,6 +96,9 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<LivingEnt
 
         var visuals = VillagerVisuals.require(holder);
         poseStack.scale(visuals.rawHorizontalScaleFactor(), visuals.rawVerticalScaleFactor(), visuals.rawHorizontalScaleFactor());
+        if (visuals.baby() && !state.isPassenger) {
+            poseStack.translate(0.0F, 0.6F, 0.0F);
+        }
 
         model = mca$geneticsModel;
     }

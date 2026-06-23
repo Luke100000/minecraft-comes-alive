@@ -4,6 +4,8 @@ import net.conczin.mca.MCA;
 import net.conczin.mca.network.Network;
 import net.conczin.mca.network.c2s.DamageItemMessage;
 
+import net.conczin.mca.resources.data.skin.LayeredHair;
+
 import java.util.UUID;
 
 public class CombScreen extends VillagerEditorScreen {
@@ -22,7 +24,7 @@ public class CombScreen extends VillagerEditorScreen {
 
     @Override
     protected void eventCallback(String event) {
-        if (event.equals("hair")) {
+        if (event.startsWith("hair")) {
             Network.sendToServer(new DamageItemMessage(MCA.locate("comb")));
         }
     }
@@ -34,8 +36,15 @@ public class CombScreen extends VillagerEditorScreen {
         } else if (page.equals("head")) {
             syncVillagerData();
             onClose();
+        } else if (page.equals("hair_advanced") || page.equals("hair") || isLayeredHairDestination(page)) {
+            super.setPage(page);
         } else {
             super.setPage("hair");
         }
+    }
+
+    private boolean isLayeredHairDestination(String dest) {
+        if (!dest.startsWith("hair_")) return false;
+        return LayeredHair.Category.byNameOrNull(dest.substring("hair_".length())) != null;
     }
 }

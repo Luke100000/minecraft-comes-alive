@@ -15,9 +15,10 @@ import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.entity.ai.relationship.VillagerDimensions;
 import net.conczin.mca.entity.interaction.EntityCommandHandler;
 import net.conczin.mca.registry.EntitiesMCA;
-import net.conczin.mca.resources.ClothingList;
-import net.conczin.mca.resources.HairList;
-import net.conczin.mca.resources.Names;
+import net.conczin.mca.resources.*;
+import net.conczin.mca.resources.data.skin.HairStyle;
+import net.conczin.mca.resources.data.skin.LayeredHair;
+import net.conczin.mca.server.world.data.CustomClothingManager;
 import net.conczin.mca.server.world.data.FamilyTreeNode;
 import net.conczin.mca.server.world.data.PlayerSaveData;
 import net.conczin.mca.util.network.datasync.*;
@@ -54,9 +55,16 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
     CDataParameter<String> CLOTHES = CParameter.create("Clothes", "");
     CDataParameter<String> SKIN = CParameter.create("Skin", "");
     CDataParameter<String> HAIR = CParameter.create("Hair", "");
-    CDataParameter<Float> HAIR_COLOR_RED = CParameter.create("HairColorRed", 0.0f);
-    CDataParameter<Float> HAIR_COLOR_GREEN = CParameter.create("HairColorGreen", 0.0f);
-    CDataParameter<Float> HAIR_COLOR_BLUE = CParameter.create("HairColorBlue", 0.0f);
+    CDataParameter<String> HAIR_STYLE = CParameter.create("HairStyle", "");
+    CDataParameter<String> HAIR_BASE = CParameter.create("HairBase", "");
+    CDataParameter<String> HAIR_BANGS = CParameter.create("HairBangs", "");
+    CDataParameter<String> HAIR_BACK = CParameter.create("HairBack", "");
+    CDataParameter<String> HAIR_FRONT = CParameter.create("HairFront", "");
+    CDataParameter<String> HAIR_EXTRA = CParameter.create("HairExtra", "");
+    CDataParameter<Integer> SKIN_COLOR = CParameter.create("SkinColor", 0xFF000000);
+    CDataParameter<Integer> HAIR_COLOR = CParameter.create("HairColor", 0xFF000000);
+    CDataParameter<Integer> EYE_COLOR = CParameter.create("EyeColor", 0xFFFFFFFF);
+    CDataParameter<Integer> EYE_COLOR_LEFT = CParameter.create("EyeColorLeft", 0xFFFFFFFF);
     CEnumParameter<AgeState> AGE_STATE = CParameter.create("AgeState", AgeState.UNASSIGNED);
 
     Identifier SPEED_ID = MCA.locate("trait_speed");
@@ -64,7 +72,10 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
 
     static <E extends Entity> CDataManager.Builder<E> createTrackedData(CDataManager.Builder<E> builder) {
         return builder
-                .addAll(CLOTHES, SKIN, HAIR, HAIR_COLOR_RED, HAIR_COLOR_GREEN, HAIR_COLOR_BLUE, AGE_STATE)
+                .addAll(CLOTHES, SKIN, HAIR, HAIR_STYLE, HAIR_BASE, HAIR_BANGS, HAIR_BACK, HAIR_FRONT, HAIR_EXTRA,
+                        SKIN_COLOR,
+                        HAIR_COLOR, EYE_COLOR, EYE_COLOR_LEFT,
+                        AGE_STATE)
                 .add(Genetics::createTrackedData)
                 .add(Traits::createTrackedData)
                 .add(VillagerBrain::createTrackedData);
@@ -236,26 +247,118 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
     }
 
     default void setHair(String hair) {
-        setTrackedValue(HAIR, hair);
+        setHairStyleId(hair);
     }
 
-    default void setHairDye(float r, float g, float b) {
-        setTrackedValue(HAIR_COLOR_RED, r);
-        setTrackedValue(HAIR_COLOR_GREEN, g);
-        setTrackedValue(HAIR_COLOR_BLUE, b);
+    default String getHairStyleId() {
+        String hairStyle = getTrackedValue(HAIR_STYLE);
+        return MCA.isBlankString(hairStyle) ? getTrackedValue(HAIR) : hairStyle;
+    }
+
+    default void setHairStyleId(String hairStyle) {
+        setTrackedValue(HAIR_STYLE, hairStyle);
+        setTrackedValue(HAIR, "");
+    }
+
+    default String getHairBase() {
+        return getTrackedValue(HAIR_BASE);
+    }
+
+    default String getHairBangs() {
+        return getTrackedValue(HAIR_BANGS);
+    }
+
+    default String getHairBack() {
+        return getTrackedValue(HAIR_BACK);
+    }
+
+    default String getHairFront() {
+        return getTrackedValue(HAIR_FRONT);
+    }
+
+    default String getHairExtra() {
+        return getTrackedValue(HAIR_EXTRA);
+    }
+
+    default String getLayeredHair(LayeredHair.Category category) {
+        return switch (category) {
+            case BASE -> getHairBase();
+            case BANGS -> getHairBangs();
+            case BACK -> getHairBack();
+            case FRONT -> getHairFront();
+            case EXTRA -> getHairExtra();
+        };
+    }
+
+    default void setLayeredHair(LayeredHair.Category category, String hair) {
+        switch (category) {
+            case BASE -> setTrackedValue(HAIR_BASE, hair);
+            case BANGS -> setTrackedValue(HAIR_BANGS, hair);
+            case BACK -> setTrackedValue(HAIR_BACK, hair);
+            case FRONT -> setTrackedValue(HAIR_FRONT, hair);
+            case EXTRA -> setTrackedValue(HAIR_EXTRA, hair);
+        }
+    }
+
+    default void clearLayeredHair() {
+        for (LayeredHair.Category category : LayeredHair.Category.values()) {
+            setLayeredHair(category, "");
+        }
+    }
+
+    default void setHairStyle(HairStyle style) {
+        setHairStyleId(style.getIdentifier());
+        for (LayeredHair.Category category : LayeredHair.Category.values()) {
+            setLayeredHair(category, "");
+        }
+    }
+
+    default void setHairDye(int color) {
+        setTrackedValue(HAIR_COLOR, color);
+    }
+
+    default void setSkinDye(int color) {
+        setTrackedValue(SKIN_COLOR, color);
+    }
+
+    default void clearSkinDye() {
+        setSkinDye(0xFF000000);
+    }
+
+    default int getSkinDye() {
+        return getTrackedValue(SKIN_COLOR);
     }
 
     default void clearHairDye() {
-        setHairDye(0.0f, 0.0f, 0.0f);
+        setHairDye(0xFF000000);
     }
 
     default int getHairDye() {
-        return ARGB.colorFromFloat(
-                1.0f,
-                getTrackedValue(HAIR_COLOR_RED),
-                getTrackedValue(HAIR_COLOR_GREEN),
-                getTrackedValue(HAIR_COLOR_BLUE)
-        );
+        return getTrackedValue(HAIR_COLOR);
+    }
+
+    default void setEyeDye(int color) {
+        setTrackedValue(EYE_COLOR, color);
+    }
+
+    default void clearEyeDye() {
+        setEyeDye(0xFFFFFFFF);
+    }
+
+    default int getEyeDye() {
+        return getTrackedValue(EYE_COLOR);
+    }
+
+    default void setEyeLeftDye(int color) {
+        setTrackedValue(EYE_COLOR_LEFT, color);
+    }
+
+    default void clearEyeLeftDye() {
+        setEyeLeftDye(0xFFFFFFFF);
+    }
+
+    default int getEyeLeftDye() {
+        return getTrackedValue(EYE_COLOR_LEFT);
     }
 
     default void setHairDye(DyeColor color) {
@@ -265,9 +368,7 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
             components = ARGB.srgbLerp(0.5f, components, dye);
         }
 
-        setTrackedValue(HAIR_COLOR_RED, ARGB.red(components) / 255.0f);
-        setTrackedValue(HAIR_COLOR_GREEN, ARGB.green(components) / 255.0f);
-        setTrackedValue(HAIR_COLOR_BLUE, ARGB.blue(components) / 255.0f);
+        setHairDye(components);
     }
 
     default AgeState getAgeState() {
@@ -385,6 +486,7 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
     }
 
     default void initializeSkin(boolean isPlayer) {
+        randomizeSkin();
         randomizeClothes();
         randomizeHair();
 
@@ -400,9 +502,7 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
                 int fs = DyeColor.byId(p).getTextureDiffuseColor();
                 int gs = DyeColor.byId(q).getTextureDiffuseColor();
                 int color = ARGB.srgbLerp(r, fs, gs);
-                setTrackedValue(HAIR_COLOR_RED, ARGB.red(color) / 255.0f);
-                setTrackedValue(HAIR_COLOR_GREEN, ARGB.green(color) / 255.0f);
-                setTrackedValue(HAIR_COLOR_BLUE, ARGB.blue(color) / 255.0f);
+                setHairDye(color);
             }
         }
     }
@@ -411,22 +511,83 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
         setClothes(ClothingList.getInstance().getPool(this).pickOne());
     }
 
+    default void randomizeSkin() {
+        BodySkinList list = BodySkinList.getInstance();
+        if (list == null) {
+            setSkin("");
+            return;
+        }
+
+        setSkin(list.getPool(getGenetics().getGender()).pickOne());
+    }
+
     default void randomizeHair() {
-        setHair(HairList.getInstance().getPool(getGenetics().getGender()).pickOne());
+        HairStyleList styles = HairStyleList.getInstance();
+        Gender gender = getGenetics().getGender();
+
+        if (styles != null) {
+            HairStyle style = styles.pick(gender);
+            if (style != null) {
+                setHairStyle(style);
+                return;
+            }
+        }
+
+        clearLayeredHair();
+        setHairStyleId("");
     }
 
     default void validateClothes() {
         if (!asEntity().level().isClientSide()) {
+            migrateLegacyHairStyle();
+
+            BodySkinList bodySkinList = BodySkinList.getInstance();
+            if (!MCA.isBlankString(getSkin()) && bodySkinList != null && !bodySkinList.skins.containsKey(getSkin())) {
+                MCA.LOGGER.info("Villagers skin {} does not exist!", getSkin());
+                randomizeSkin();
+            }
+
             if (!getClothes().startsWith("immersive_library") && !ClothingList.getInstance().clothing.containsKey(getClothes())) {
                 MCA.LOGGER.info("Villagers clothing {} does not exist!", getClothes());
                 randomizeClothes();
             }
 
-            if (!getHair().startsWith("immersive_library") && !HairList.getInstance().hair.containsKey(getHair())) {
-                MCA.LOGGER.info("Villagers hair {} does not exist!", getHair());
+            if (!MCA.isBlankString(getHairStyleId()) && !isValidHairStyle(getHairStyleId())) {
+                MCA.LOGGER.info("Villagers hair style {} does not exist!", getHairStyleId());
                 randomizeHair();
             }
+
+            LayeredHairList layeredHairList = LayeredHairList.getInstance();
+            if (layeredHairList != null) {
+                for (LayeredHair.Category category : LayeredHair.Category.values()) {
+                    String hair = getLayeredHair(category);
+                    if (!MCA.isBlankString(hair) && !isValidHairTexture(hair, layeredHairList)) {
+                        MCA.LOGGER.info("Villagers layered hair {} does not exist!", hair);
+                        randomizeHair();
+                        break;
+                    }
+                }
+            }
         }
+    }
+
+    default void migrateLegacyHairStyle() {
+        String legacyHair = getTrackedValue(HAIR);
+        if (MCA.isBlankString(getTrackedValue(HAIR_STYLE)) && !MCA.isBlankString(legacyHair)) {
+            setHairStyleId(legacyHair);
+        }
+    }
+
+    private boolean isValidHairTexture(String hair, LayeredHairList layeredHairList) {
+        if (hair.startsWith("immersive_library")) {
+            return true;
+        }
+        return layeredHairList.containsIdentifier(hair);
+    }
+
+    private boolean isValidHairStyle(String hair) {
+        HairStyleList styles = HairStyleList.getInstance();
+        return (styles != null && styles.get(hair) != null) || CustomClothingManager.getHair().getEntries().containsKey(hair);
     }
 
     @SuppressWarnings({"unchecked", "RedundantSuppression"})

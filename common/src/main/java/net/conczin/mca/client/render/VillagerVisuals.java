@@ -6,6 +6,11 @@ import net.conczin.mca.entity.ai.Traits;
 import net.conczin.mca.entity.ai.relationship.AgeState;
 import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.entity.ai.relationship.VillagerDimensions;
+import net.conczin.mca.resources.HairStyleList;
+import net.conczin.mca.resources.data.skin.HairStyle;
+import net.conczin.mca.resources.data.skin.LayeredHair;
+import net.minecraft.util.ARGB;
+import net.minecraft.util.Mth;
 import net.minecraft.world.entity.LivingEntity;
 
 public record VillagerVisuals(
@@ -18,7 +23,8 @@ public record VillagerVisuals(
         float rawVerticalScaleFactor,
         boolean burned,
         boolean albinism,
-        boolean rainbow,
+        boolean rainbowHair,
+        boolean rainbowEyes,
         boolean heterochromia,
         float skinGene,
         float melaninGene,
@@ -26,9 +32,17 @@ public record VillagerVisuals(
         float faceGene,
         float eumelaninGene,
         float pheomelaninGene,
+        float eyeColorGene,
         String skin,
-        String hair,
+        String hairBase,
+        String hairBangs,
+        String hairBack,
+        String hairFront,
+        String hairExtra,
+        int skinDye,
         int hairDye,
+        int eyeDye,
+        int eyeLeftDye,
         String clothes,
         float infectionProgress,
         int tickCount,
@@ -36,6 +50,18 @@ public record VillagerVisuals(
         boolean sleeping,
         boolean deadOrDying
 ) {
+    private static final int MIN_BLINK_INTERVAL_A = 50;
+    private static final int MIN_BLINK_INTERVAL_B = 57;
+    private static final int BLINK_INTERVAL_VARIANCE = 80;
+    private static final int MIN_BLINK_DURATION = 1;
+    private static final int BLINK_DURATION_VARIANCE = 4;
+    private static final int NATURAL_DYE = 0xFFFFFFFF;
+    private static final int ALBINISM_EYE_COLOR = 0xFFE8A0A0;
+    private static final int BLUE_EYE_COLOR = 0xFF557FA6;
+    private static final int GREEN_EYE_COLOR = 0xFF5B8756;
+    private static final int HAZEL_EYE_COLOR = 0xFF8A6A35;
+    private static final int BROWN_EYE_COLOR = 0xFF4A2B18;
+
     public static VillagerVisuals require(Object state) {
         VillagerVisuals visuals = VillagerStateHolder.require(state).mca$getVisuals();
         if (visuals == null) {
@@ -61,6 +87,8 @@ public record VillagerVisuals(
                 * traits.getVerticalScaleFactor()
                 * dimensions.getHeight()
                 * gender.getScaleFactor();
+        String hairStyleId = villager.getHairStyleId();
+        HairStyle hairStyle = getHairStyle(hairStyleId, gender);
         return new VillagerVisuals(
                 gender.getDataName(),
                 gender == Gender.FEMALE,
@@ -77,6 +105,7 @@ public record VillagerVisuals(
                 villager.isBurned(),
                 traits.hasTrait(Traits.ALBINISM),
                 traits.hasTrait(Traits.RAINBOW),
+                traits.hasTrait(Traits.RAINBOW_EYES),
                 traits.hasTrait(Traits.HETEROCHROMIA),
                 genetics.getGene(Genetics.SKIN),
                 genetics.getGene(Genetics.MELANIN),
@@ -84,21 +113,118 @@ public record VillagerVisuals(
                 genetics.getGene(Genetics.FACE),
                 genetics.getGene(Genetics.EUMELANIN),
                 genetics.getGene(Genetics.PHEOMELANIN),
+                genetics.getGene(Genetics.EYE_COLOR),
                 villager.getSkin(),
-                villager.getHair(),
+                getHairLayer(villager, hairStyle, LayeredHair.Category.BASE),
+                getHairLayer(villager, hairStyle, LayeredHair.Category.BANGS),
+                getHairLayer(villager, hairStyle, LayeredHair.Category.BACK),
+                getHairLayer(villager, hairStyle, LayeredHair.Category.FRONT),
+                getHairLayer(villager, hairStyle, LayeredHair.Category.EXTRA),
+                villager.getSkinDye(),
                 villager.getHairDye(),
+                villager.getEyeDye(),
+                villager.getEyeLeftDye(),
                 villager.getClothes(),
                 villager.getInfectionProgress(),
-                (int) (entity.getId() + entity.level().getGameTime()),
+                animationTickCount(entity),
                 entity.getId(),
                 entity.isSleeping(),
                 entity.isDeadOrDying()
         );
     }
 
+    private static HairStyle getHairStyle(String hairStyleId, Gender gender) {
+        if (isBlank(hairStyleId)) {
+            return null;
+        }
+
+        HairStyleList styles = HairStyleList.getInstance();
+        HairStyle style = styles == null ? null : styles.get(hairStyleId);
+        return style == null ? HairStyle.singleLayer(hairStyleId, gender, 1.0F) : style;
+    }
+
+    private static String getHairLayer(VillagerLike<?> villager, HairStyle hairStyle, LayeredHair.Category category) {
+        if (hairStyle != null) {
+            return hairStyle.layer(category);
+        }
+        return villager.getLayeredHair(category);
+    }
+
+    private static int animationTickCount(LivingEntity entity) {
+        long ticks = entity.tickCount > 0 ? entity.tickCount : entity.level().getGameTime();
+        return (int) (entity.getId() + ticks);
+    }
+
     public boolean isBlinking() {
+        if (sleeping || deadOrDying) {
+            return true;
+        }
+
         int time = tickCount / 2 + (int) (hemoglobinGene * 65536);
-        return time % 50 == 1 || time % 57 == 1 || sleeping || deadOrDying;
+        return isInBlinkWindow(time, MIN_BLINK_INTERVAL_A, 0x1EAF)
+                || isInBlinkWindow(time, MIN_BLINK_INTERVAL_B, 0x57B1);
+    }
+
+    private boolean isInBlinkWindow(int time, int minInterval, int salt) {
+        int interval = minInterval + randomBlinkValue(salt, BLINK_INTERVAL_VARIANCE + 1);
+        int phase = randomBlinkValue(salt ^ 0x3459, interval);
+        int phasedTime = time + phase;
+        int cycle = Math.floorDiv(phasedTime, interval);
+        int duration = MIN_BLINK_DURATION + randomBlinkValue(salt ^ cycle, BLINK_DURATION_VARIANCE + 1);
+        return Math.floorMod(phasedTime, interval) < duration;
+    }
+
+    private int randomBlinkValue(int salt, int bound) {
+        int seed = entityId * 0x45D9F3B + salt;
+        seed ^= (int) (hemoglobinGene * 0x10000);
+        seed ^= seed >>> 16;
+        seed *= 0x45D9F3B;
+        seed ^= seed >>> 16;
+        return Math.floorMod(seed, bound);
+    }
+
+    public String layeredHair(LayeredHair.Category category) {
+        return switch (category) {
+            case BASE -> hairBase;
+            case BANGS -> hairBangs;
+            case BACK -> hairBack;
+            case FRONT -> hairFront;
+            case EXTRA -> hairExtra;
+        };
+    }
+
+    public int eyeColor(float tickDelta, boolean left) {
+        if (rainbowEyes) {
+            int offset = left && heterochromia ? RainbowColor.CYCLE_DURATION / 2 : 0;
+            return RainbowColor.sheep(tickCount + tickDelta + offset);
+        }
+
+        return staticEyeColor(left);
+    }
+
+    public int staticEyeColor(boolean left) {
+        int dye = left && heterochromia ? eyeLeftDye : eyeDye;
+        return dye != NATURAL_DYE ? dye : geneticEyeColor(left && heterochromia);
+    }
+
+    private int geneticEyeColor(boolean shifted) {
+        if (albinism) {
+            return ALBINISM_EYE_COLOR;
+        }
+
+        float eyeColor = Mth.frac(eyeColorGene + (shifted ? 0.43F : 0.0F));
+
+        if (eyeColor < 0.35F) {
+            return ARGB.srgbLerp(eyeColor / 0.35F, BLUE_EYE_COLOR, GREEN_EYE_COLOR);
+        }
+        if (eyeColor < 0.70F) {
+            return ARGB.srgbLerp((eyeColor - 0.35F) / 0.35F, GREEN_EYE_COLOR, HAZEL_EYE_COLOR);
+        }
+        return ARGB.srgbLerp((eyeColor - 0.70F) / 0.30F, HAZEL_EYE_COLOR, BROWN_EYE_COLOR);
+    }
+
+    private static boolean isBlank(String value) {
+        return value == null || value.isBlank();
     }
 
     public record Dimensions(

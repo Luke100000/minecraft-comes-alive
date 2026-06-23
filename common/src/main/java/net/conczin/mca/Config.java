@@ -885,7 +885,7 @@ public final class Config extends CommonConfig {
     }
 
     public int getVillagerPathfindingDistance() {
-        return Math.clamp(villagerPathfindingDistance, 16, 256);
+        return Math.clamp(villagerPathfindingDistance, 16, 400);
     }
 
     public static void setServerConfig(CommonConfig config) {

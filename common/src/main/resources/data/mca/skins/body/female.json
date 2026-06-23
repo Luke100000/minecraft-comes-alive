@@ -1,0 +1,27 @@
+[
+  {
+    "id": "mca:skins/skin/female/0.png",
+    "gender": "female",
+    "tint": true
+  },
+  {
+    "id": "mca:skins/skin/female/1.png",
+    "gender": "female",
+    "tint": true
+  },
+  {
+    "id": "mca:skins/skin/female/2.png",
+    "gender": "female",
+    "tint": true
+  },
+  {
+    "id": "mca:skins/skin/female/3.png",
+    "gender": "female",
+    "tint": true
+  },
+  {
+    "id": "mca:skins/skin/female/4.png",
+    "gender": "female",
+    "tint": true
+  }
+]

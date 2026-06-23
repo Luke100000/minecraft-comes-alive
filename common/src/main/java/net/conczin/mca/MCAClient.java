@@ -1,6 +1,7 @@
 package net.conczin.mca;
 
 import net.conczin.mca.client.gui.SkinLibraryScreen;
+import net.conczin.mca.client.resources.ClientSkinCatalog;
 import net.conczin.mca.client.tts.SpeechManager;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerLike;
@@ -24,6 +25,7 @@ public class MCAClient {
     public static void onLogin() {
         playerData.clear();
         playerDataRequests.clear();
+        ClientSkinCatalog.clear();
         Network.sendToServer(new ConfigRequest());
     }
 

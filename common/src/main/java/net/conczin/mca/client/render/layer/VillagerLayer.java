@@ -170,7 +170,7 @@ public abstract class VillagerLayer<S extends HumanoidRenderState, M extends Hum
         }
     }
 
-    private void renderModel(
+    protected void renderModel(
         PoseStack poseStack, SubmitNodeCollector submitNodeCollector, int lightCoords, M model, int color, Identifier texture, int overlay, boolean visible, boolean glowing, S state
     ) {
         RenderType layer = getRenderLayer(texture, visible, isTranslucent(), glowing);

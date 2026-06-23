@@ -1,3 +1,13 @@
+# 7.9.0
+
+* Overhauled the villager editor with the new hair, face, skin, eye, preset, preview and export controls.
+* Added data-driven body skins, face textures, eye definitions, layered hair parts and hair style definitions.
+* Added layered hair rendering, dyeable body skins, dyeable eyes, heterochromia eye colors and rainbow eyes.
+* Added voice preview support in the editor.
+* Added an admin command to override village requirement.
+* Improved villager bed pathfinding.
+* Increased the maximum configured villager pathfinding distance.
+
 # 7.8.7
 
 * General AI improvements.
@@ -132,7 +142,7 @@
 
 # 7.6.6
 
-* Allow tripplets, quadruplets, quintuplets, and beyond
+* Allow tripplets, quadruplets, quintuplets and beyond
 * Fixed a crash in the skin editor
 * Disabled guard teleportation by default again
 * Added experimental support for commands via ChatAI (`villagerChatAIUseTools` in the config, will react to trading, go
@@ -536,7 +546,7 @@
 # 7.3.20
 
 * Added backwards compatibility for 1.16.5 and 1.17.1, to align with the EOL of 1.19.0 and 1.19.1
-    * 1.19.0, 1.19.1, 1.17.1, and 1.16.5 are now officially considered EOL, and users should upgrade to retain support
+    * 1.19.0, 1.19.1, 1.17.1 and 1.16.5 are now officially considered EOL, and users should upgrade to retain support
 * You can no longer set the home of a villager who is either there temporarily or does not require a home
 * Fixed trades
 * Fixed equipment dropping
@@ -621,7 +631,7 @@
     * This trait can be inherited from past/to future generations
     * Having this trait will change their dominant hand in most tasks to be their left hand (Known to the player as the
       off-hand slot)
-    * Some examples of this include Work Tasks, EquipmentSet's, and Melee Attacks (For Equipment, if a preset already
+    * Some examples of this include Work Tasks, EquipmentSet's and Melee Attacks (For Equipment, if a preset already
       uses both hands, it'll remain unchanged.)
     * Given Minecraft was never intended to support this type of gameplay, further tuning may be required in a future
       update.
@@ -865,7 +875,7 @@
 * Villagers will now use your editor name
 * Fixed letter author and creative mode usage
 * Strengthened Grim Reaper
-* Added mod support for atmospheric, autumity, berry good, buzzier bees, environmental, neopolitan, and upgrade aquatic
+* Added mod support for atmospheric, autumity, berry good, buzzier bees, environmental, neopolitan and upgrade aquatic
 * Villager now recognize and estimate the value of every (modded) armor, tool, sword, bow and food as a gift (accuracy
   not guaranteed)
 

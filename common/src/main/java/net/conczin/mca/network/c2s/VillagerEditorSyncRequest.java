@@ -7,11 +7,17 @@ import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.network.HandleablePayload;
 import net.conczin.mca.network.Network;
 import net.conczin.mca.network.s2c.PlayerDataMessage;
+import net.conczin.mca.resources.BodySkinList;
 import net.conczin.mca.resources.ClothingList;
-import net.conczin.mca.resources.HairList;
+import net.conczin.mca.resources.HairStyleList;
+import net.conczin.mca.resources.LayeredHairList;
+import net.conczin.mca.resources.data.skin.HairStyle;
+import net.conczin.mca.resources.data.skin.LayeredHair;
+import net.conczin.mca.server.world.data.CustomClothingManager;
 import net.conczin.mca.server.world.data.FamilyTree;
 import net.conczin.mca.server.world.data.FamilyTreeNode;
 import net.conczin.mca.server.world.data.PlayerSaveData;
+import net.conczin.mca.util.ImmersiveLibraryIds;
 import net.conczin.mca.util.NbtHelper;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.UUIDUtil;
@@ -55,14 +61,35 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
     public void handleServer(ServerPlayer player) {
         Entity entity = player.level().getEntity(uuid);
         switch (command) {
+            case "skin":
+                setSkin(player, entity);
+                break;
             case "hair":
                 setHair(player, entity);
+                break;
+            case "layered_hair":
+                setLayeredHair(player, entity);
+                break;
+            case "hair_base":
+                setLayeredHair(player, entity, LayeredHair.Category.BASE);
+                break;
+            case "hair_bangs":
+                setLayeredHair(player, entity, LayeredHair.Category.BANGS);
+                break;
+            case "hair_back":
+                setLayeredHair(player, entity, LayeredHair.Category.BACK);
+                break;
+            case "hair_front":
+                setLayeredHair(player, entity, LayeredHair.Category.FRONT);
+                break;
+            case "hair_extra":
+                setLayeredHair(player, entity, LayeredHair.Category.EXTRA);
                 break;
             case "clothing":
                 setClothing(player, entity);
                 break;
             case "gender":
-                setHair(player, entity);
+                setSkin(player, entity);
                 setClothing(player, entity);
                 break;
             case "sync":
@@ -77,21 +104,73 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
         }
     }
 
+    private void setSkin(ServerPlayer player, Entity entity) {
+        CompoundTag villagerData = GetVillagerRequest.getVillagerData(entity);
+        BodySkinList list = BodySkinList.getInstance();
+        if (villagerData != null && list != null) {
+            CompoundTag mcaData = getOrCreateMcaData(villagerData);
+            String skin;
+            if (data.contains("offset")) {
+                skin = list.getPool(getGender(villagerData)).pickNext(mcaData.getString("Skin").orElse(""), data.getInt("offset").orElse(0));
+            } else {
+                skin = list.getPool(getGender(villagerData)).pickOne();
+            }
+            mcaData.putString("Skin", skin);
+            saveEntity(player, entity, villagerData);
+        }
+    }
+
     private void setHair(ServerPlayer player, Entity entity) {
         CompoundTag villagerData = GetVillagerRequest.getVillagerData(entity);
-        if (villagerData != null) {
+        HairStyleList styles = HairStyleList.getInstance();
+        if (villagerData != null && styles != null) {
             CompoundTag mcaData = getOrCreateMcaData(villagerData);
+            Gender gender = getGender(villagerData);
 
-            // fetch hair
-            String hair;
+            HairStyle style;
             if (data.contains("offset")) {
-                hair = HairList.getInstance().getPool(getGender(villagerData)).pickNext(mcaData.getString("Hair").orElse(""), data.getInt("offset").orElse(0));
+                String currentStyleId = getCurrentHairStyleId(mcaData, styles, gender);
+                style = styles.pickNext(gender, currentStyleId, data.getInt("offset").orElse(0));
             } else {
-                hair = HairList.getInstance().getPool(getGender(villagerData)).pickOne();
+                style = styles.pick(gender);
             }
 
-            // set
-            mcaData.putString("Hair", hair);
+            if (style == null) {
+                return;
+            }
+            applyHairStyle(mcaData, style);
+            saveEntity(player, entity, villagerData);
+        }
+    }
+
+    private void setLayeredHair(ServerPlayer player, Entity entity) {
+        CompoundTag villagerData = GetVillagerRequest.getVillagerData(entity);
+        LayeredHairList list = LayeredHairList.getInstance();
+        if (villagerData != null && list != null) {
+            CompoundTag mcaData = getOrCreateMcaData(villagerData);
+            mcaData.putString("Hair", "");
+            mcaData.putString("HairStyle", "");
+            list.pickAll(getGender(villagerData)).forEach((category, hair) -> mcaData.putString(category.getDataKey(), hair));
+            saveEntity(player, entity, villagerData);
+        }
+    }
+
+    private void setLayeredHair(ServerPlayer player, Entity entity, LayeredHair.Category category) {
+        CompoundTag villagerData = GetVillagerRequest.getVillagerData(entity);
+        LayeredHairList list = LayeredHairList.getInstance();
+        if (villagerData != null && list != null) {
+            CompoundTag mcaData = getOrCreateMcaData(villagerData);
+            String key = category.getDataKey();
+            String hair;
+            if (data.contains("offset")) {
+                hair = list.getPool(category, getGender(villagerData)).pickNext(mcaData.getString(key).orElse(""), data.getInt("offset").orElse(0));
+            } else {
+                hair = list.pick(category, getGender(villagerData));
+            }
+
+            mcaData.putString("Hair", "");
+            mcaData.putString("HairStyle", "");
+            mcaData.putString(key, hair);
             saveEntity(player, entity, villagerData);
         }
     }
@@ -104,13 +183,13 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
             if (entity instanceof Player) {
                 VillagerProfession noneProfession = BuiltInRegistries.VILLAGER_PROFESSION.getValueOrThrow(VillagerProfession.NONE);
                 if (data.contains("offset")) {
-                    clothes = ClothingList.getInstance().getPool(getGender(villagerData), noneProfession).pickNext(mcaData.getString("Clothes").orElse(""), data.getInt("offset").orElse(0));
+                    clothes = ClothingList.getInstance().getEditorPool(getGender(villagerData)).pickNext(mcaData.getString("Clothes").orElse(""), data.getInt("offset").orElse(0));
                 } else {
                     clothes = ClothingList.getInstance().getPool(getGender(villagerData), noneProfession).pickOne();
                 }
             } else if (entity instanceof VillagerLike<?> villager) {
                 if (data.contains("offset")) {
-                    clothes = ClothingList.getInstance().getPool(villager).pickNext(villager.getClothes(), data.getInt("offset").orElse(0));
+                    clothes = ClothingList.getInstance().getEditorPool(villager.getGenetics().getGender()).pickNext(villager.getClothes(), data.getInt("offset").orElse(0));
                 } else {
                     clothes = ClothingList.getInstance().getPool(villager).pickOne();
                 }
@@ -121,6 +200,7 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
     }
 
     private void saveEntity(ServerPlayer player, Entity entity, CompoundTag villagerData) {
+        sanitizeVisualIdentifiers(villagerData);
         if (entity instanceof ServerPlayer serverPlayer) {
             PlayerSaveData data = PlayerSaveData.get(serverPlayer);
             data.setEntityData(villagerData);
@@ -140,6 +220,51 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
         }
     }
 
+    private void sanitizeVisualIdentifiers(CompoundTag villagerData) {
+        CompoundTag mcaData = getOrCreateMcaData(villagerData);
+        clearInvalidIdentifier(mcaData, "Skin", this::isValidBodySkin);
+        clearInvalidIdentifier(mcaData, "Clothes", this::isValidClothing);
+        clearInvalidIdentifier(mcaData, "Hair", this::isValidHair);
+        clearInvalidIdentifier(mcaData, "HairStyle", this::isValidHairStyle);
+        for (LayeredHair.Category category : LayeredHair.Category.values()) {
+            clearInvalidIdentifier(mcaData, category.getDataKey(), this::isValidLayeredHair);
+        }
+    }
+
+    private void clearInvalidIdentifier(CompoundTag mcaData, String key, java.util.function.Predicate<String> validator) {
+        String identifier = mcaData.getString(key).orElse("");
+        if (!MCA.isBlankString(identifier) && !validator.test(identifier)) {
+            MCA.LOGGER.warn("Ignoring unknown villager editor visual identifier {}={}", key, identifier);
+            mcaData.putString(key, "");
+        }
+    }
+
+    private boolean isValidBodySkin(String identifier) {
+        BodySkinList list = BodySkinList.getInstance();
+        return list != null && list.get(identifier) != null;
+    }
+
+    private boolean isValidClothing(String identifier) {
+        ClothingList list = ClothingList.getInstance();
+        return list != null && (list.clothing.containsKey(identifier) || CustomClothingManager.getClothing().getEntries().containsKey(identifier));
+    }
+
+    private boolean isValidHair(String identifier) {
+        return isValidHairStyle(identifier);
+    }
+
+    private boolean isValidHairStyle(String identifier) {
+        HairStyleList list = HairStyleList.getInstance();
+        return (list != null && list.get(identifier) != null) || CustomClothingManager.getHair().getEntries().containsKey(identifier);
+    }
+
+    private boolean isValidLayeredHair(String identifier) {
+        LayeredHairList list = LayeredHairList.getInstance();
+        return ImmersiveLibraryIds.isValid(identifier)
+                || list != null && list.containsIdentifier(identifier)
+                || CustomClothingManager.getHair().getEntries().containsKey(identifier);
+    }
+
     private Gender getGender(CompoundTag villagerData) {
         return Gender.byId(getMcaData(villagerData).getInt("Gender").orElse(0));
     }
@@ -150,6 +275,31 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
 
     private CompoundTag getOrCreateMcaData(CompoundTag villagerData) {
         return NbtHelper.getOrCreateCompound(villagerData, VillagerEntityMCA.MCA_DATA_KEY);
+    }
+
+    private String getCurrentHairStyleId(CompoundTag mcaData, HairStyleList styles, Gender gender) {
+        String storedStyle = mcaData.getString("HairStyle").orElse("");
+        if (!MCA.isBlankString(storedStyle)) {
+            return storedStyle;
+        }
+        String legacyHair = mcaData.getString("Hair").orElse("");
+        if (!MCA.isBlankString(legacyHair)) {
+            return legacyHair;
+        }
+        return styles.findMatchingStyleId(gender, category -> mcaData.getString(category.getDataKey()).orElse(""))
+                .orElse("");
+    }
+
+    private void applyHairStyle(CompoundTag mcaData, HairStyle style) {
+        if (style == null) {
+            return;
+        }
+
+        mcaData.putString("HairStyle", style.getIdentifier());
+        mcaData.putString("Hair", "");
+        for (LayeredHair.Category category : LayeredHair.Category.values()) {
+            mcaData.putString(category.getDataKey(), "");
+        }
     }
 
     private Optional<FamilyTreeNode> getFamilyNode(ServerPlayer player, FamilyTree tree, String name, Gender gender) {

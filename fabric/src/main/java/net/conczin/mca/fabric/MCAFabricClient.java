@@ -9,6 +9,7 @@ import net.conczin.mca.client.gui.MCAScreens;
 import net.conczin.mca.client.particle.InteractionParticle;
 import net.conczin.mca.client.render.*;
 import net.conczin.mca.client.resources.ColorPaletteLoader;
+import net.conczin.mca.client.resources.GeneratedEyeTextureReloadListener;
 import net.conczin.mca.network.Network;
 import net.conczin.mca.registry.EntitiesMCA;
 import net.conczin.mca.registry.ParticleTypesMCA;
@@ -67,6 +68,7 @@ public final class MCAFabricClient extends ClientProxyAbstractImpl implements Cl
         registerReloadListener(resourceLoader, ColorPaletteLoader.ID, new ColorPaletteLoader());
         registerReloadListener(resourceLoader, Supporters.ID, new Supporters());
         registerReloadListener(resourceLoader, ApiReloadListener.ID, new ApiReloadListener());
+        registerReloadListener(resourceLoader, GeneratedEyeTextureReloadListener.ID, GeneratedEyeTextureReloadListener.INSTANCE);
 
         ClientPlayConnectionEvents.JOIN.register((handler, sender, server) ->
                 MCAClient.onLogin()
