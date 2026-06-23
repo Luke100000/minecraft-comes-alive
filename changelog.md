@@ -1,6 +1,7 @@
 # 7.6.23
 
 * Fixed book being given at spawn, rather than entering a village
+* Fixed crash on Forge
 
 # 7.6.22
 
