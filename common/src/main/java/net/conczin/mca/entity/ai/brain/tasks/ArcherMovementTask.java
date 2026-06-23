@@ -30,17 +30,18 @@ public class ArcherMovementTask<E extends PathfinderMob> extends Behavior<E> {
     private static final int LOST_SIGHT_BEFORE_APPROACH = 10;
     private static final int DEBUG_LOG_INTERVAL_TICKS = 20;
     private static final double EMERGENCY_ENTER_DISTANCE_SQUARED = 12.25;
-    private static final double EMERGENCY_EXIT_DISTANCE_SQUARED = 25.0;
-    private static final double KITE_ENTER_DISTANCE_SQUARED = 36.0;
-    private static final double KITE_EXIT_DISTANCE_SQUARED = 81.0;
+    private static final double EMERGENCY_EXIT_DISTANCE_SQUARED = 49.0;
+    private static final double KITE_ENTER_DISTANCE_SQUARED = 49.0;
+    private static final double KITE_EXIT_DISTANCE_SQUARED = 121.0;
     private static final double CLOSE_RANGE_VERTICAL_THREAT_DISTANCE = 2.5;
-    private static final double KITE_SAFE_DISTANCE = 9.0;
-    private static final double EMERGENCY_SAFE_DISTANCE = 6.0;
+    private static final double EMERGENCY_EXIT_VERTICAL_THREAT_DISTANCE = 4.0;
+    private static final double KITE_SAFE_DISTANCE = 11.0;
+    private static final double EMERGENCY_SAFE_DISTANCE = 8.0;
     private static final int AWAY_HORIZONTAL_DISTANCE = 12;
     private static final int AWAY_VERTICAL_DISTANCE = 5;
     private static final int AWAY_PATH_ATTEMPTS = 10;
-    private static final int EMERGENCY_PATH_TICKS = 10;
-    private static final int KITE_PATH_TICKS = 16;
+    private static final int EMERGENCY_PATH_TICKS = 20;
+    private static final int KITE_PATH_TICKS = 24;
     private static final int BLOCKED_PATH_TICKS_BEFORE_REPATH = 5;
     private static final int BLOCKED_STRAFE_TICKS_BEFORE_PAUSE = 6;
     private static final int UNREACHABLE_TARGET_TICKS_BEFORE_DROP = 20;
@@ -109,7 +110,7 @@ public class ArcherMovementTask<E extends PathfinderMob> extends Behavior<E> {
         boolean visible = entity.getSensing().hasLineOfSight(target);
         updateSeeTime(visible);
 
-        LivingEntity emergencyThreat = getNearestEmergencyThreat(entity, getEmergencyThresholdSquared());
+        LivingEntity emergencyThreat = getNearestEmergencyThreat(entity, getEmergencyThresholdSquared(), getEmergencyVerticalThreatDistance());
         LivingEntity movementThreat = emergencyThreat != null ? emergencyThreat : getNearestMovementThreat(entity, target);
         double targetDistanceSquared = entity.distanceToSqr(target);
         double targetVerticalDistance = Math.abs(entity.getY() - target.getY());
@@ -455,6 +456,10 @@ public class ArcherMovementTask<E extends PathfinderMob> extends Behavior<E> {
         return this.state == MovementState.EMERGENCY_FLEE ? EMERGENCY_EXIT_DISTANCE_SQUARED : EMERGENCY_ENTER_DISTANCE_SQUARED;
     }
 
+    private double getEmergencyVerticalThreatDistance() {
+        return this.state == MovementState.EMERGENCY_FLEE ? EMERGENCY_EXIT_VERTICAL_THREAT_DISTANCE : CLOSE_RANGE_VERTICAL_THREAT_DISTANCE;
+    }
+
     private void logDebugState(ServerLevel level, E entity, LivingEntity target, LivingEntity movementThreat, boolean threatTargetingSelf, boolean visible,
                                double targetDistanceSquared, double threatDistanceSquared, double threatVerticalDistance) {
         ArcherMoveControl moveControl = getArcherMoveControl(entity);
@@ -505,11 +510,11 @@ public class ArcherMovementTask<E extends PathfinderMob> extends Behavior<E> {
         );
     }
 
-    private static LivingEntity getNearestEmergencyThreat(LivingEntity entity, double maximumDistanceSquared) {
+    private static LivingEntity getNearestEmergencyThreat(LivingEntity entity, double maximumDistanceSquared, double maximumVerticalDistance) {
         return entity.getBrain().getMemoryInternal(MemoryModuleType.NEAREST_LIVING_ENTITIES)
                 .flatMap(entities -> entities.stream()
                         .filter(ArcherMovementTask::hasValidTarget)
-                        .filter(candidate -> Math.abs(entity.getY() - candidate.getY()) <= CLOSE_RANGE_VERTICAL_THREAT_DISTANCE)
+                        .filter(candidate -> Math.abs(entity.getY() - candidate.getY()) <= maximumVerticalDistance)
                         .filter(candidate -> entity.distanceToSqr(candidate) < maximumDistanceSquared)
                         .filter(candidate -> GuardEnemiesSensor.isGuardEnemy(candidate, entity))
                         .filter(candidate -> GuardEnemiesSensor.isTargetingGuard(candidate, entity))

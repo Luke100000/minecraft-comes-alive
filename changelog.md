@@ -15,6 +15,7 @@
     * Archers now flee if too close to a mob.
     * Fixed MCA archer arrows bouncing off targets during the target's hurt cooldown.
     * Reduced archer target switching when several enemies are nearby.
+    * Improved archer kiting distance and bow accuracy.
 * Fixed quotation marks showing up around villager names when migrating worlds from older mod versions.
 * Fixed guards occasionally ignoring active threats.
 * Fixed baby, toddler and child villagers not reliably being pickable.

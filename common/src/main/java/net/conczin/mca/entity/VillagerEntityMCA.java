@@ -102,7 +102,7 @@ import java.util.function.Predicate;
 
 
 public class VillagerEntityMCA extends Villager implements VillagerLike<VillagerEntityMCA>, MenuProvider, CompassionateEntity<BreedableRelationship>, CrossbowAttackMob {
-    private static final float FRIENDLY_ARROW_UNCERTAINTY = 2.0F;
+    private static final float FRIENDLY_ARROW_UNCERTAINTY = 0.0F;
     private static final CDataParameter<Float> INFECTION_PROGRESS = CParameter.create("InfectionProgress", 0.0f);
     private static final CDataParameter<Integer> GROWTH_AMOUNT = CParameter.create("GrowthAmount", -AgeState.getMaxAge());
     public static final String MCA_DATA_KEY = "MCAData";
