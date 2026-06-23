@@ -10,6 +10,8 @@ import net.minecraft.world.level.pathfinder.NodeEvaluator;
 import net.minecraft.world.level.pathfinder.PathType;
 
 public class ArcherMoveControl extends MoveControl {
+    private static final double STRAFE_EDGE_LOOKAHEAD = 0.8;
+
     private boolean emergencyFleeing;
     private StrafeResult lastStrafeResult = StrafeResult.NONE;
 
@@ -65,8 +67,17 @@ public class ArcherMoveControl extends MoveControl {
         float dz = za * cos + xa * sin;
         if (!this.isWalkable(dx, dz)) {
             if (this.strafeRight != 0.0F) {
-                this.strafeRight = -this.strafeRight;
-                this.lastStrafeResult = StrafeResult.REDIRECTED;
+                float redirectedZa = -za;
+                float redirectedDx = xa * cos - redirectedZa * sin;
+                float redirectedDz = redirectedZa * cos + xa * sin;
+                if (this.isWalkable(redirectedDx, redirectedDz)) {
+                    this.strafeRight = -this.strafeRight;
+                    this.lastStrafeResult = StrafeResult.REDIRECTED;
+                } else {
+                    this.strafeForwards = 0.0F;
+                    this.strafeRight = 0.0F;
+                    this.lastStrafeResult = StrafeResult.BLOCKED;
+                }
             } else {
                 this.strafeForwards = 0.0F;
                 this.strafeRight = 0.0F;
@@ -86,14 +97,39 @@ public class ArcherMoveControl extends MoveControl {
         PathNavigation pathNavigation = this.mob.getNavigation();
         if (pathNavigation != null) {
             NodeEvaluator nodeEvaluator = pathNavigation.getNodeEvaluator();
-            if (nodeEvaluator != null
-                    && nodeEvaluator.getPathType(this.mob, BlockPos.containing(this.mob.getX() + dx, this.mob.getBlockY(), this.mob.getZ() + dz))
-                    != PathType.WALKABLE) {
+            BlockPos nextPos = BlockPos.containing(this.mob.getX() + dx, this.mob.getBlockY(), this.mob.getZ() + dz);
+            BlockPos lookaheadPos = this.getStrafeLookaheadPos(dx, dz);
+            if (!isWalkableDestination(pathNavigation, nodeEvaluator, nextPos)
+                    || !isWalkableDestination(pathNavigation, nodeEvaluator, lookaheadPos)) {
                 return false;
             }
         }
 
         return true;
+    }
+
+    private boolean isWalkableDestination(PathNavigation pathNavigation, NodeEvaluator nodeEvaluator, BlockPos pos) {
+        return isStableWalkable(pathNavigation, nodeEvaluator, pos)
+                || isStableWalkable(pathNavigation, nodeEvaluator, pos.below());
+    }
+
+    private boolean isStableWalkable(PathNavigation pathNavigation, NodeEvaluator nodeEvaluator, BlockPos pos) {
+        return (nodeEvaluator == null || nodeEvaluator.getPathType(this.mob, pos) == PathType.WALKABLE)
+                && pathNavigation.isStableDestination(pos);
+    }
+
+    private BlockPos getStrafeLookaheadPos(float dx, float dz) {
+        double length = Math.sqrt(dx * dx + dz * dz);
+        if (length < 1.0E-5) {
+            return this.mob.blockPosition();
+        }
+
+        double lookahead = Math.max(STRAFE_EDGE_LOOKAHEAD, this.mob.getBbWidth() * 0.5 + 0.25);
+        return BlockPos.containing(
+                this.mob.getX() + dx / length * lookahead,
+                this.mob.getBlockY(),
+                this.mob.getZ() + dz / length * lookahead
+        );
     }
 
     private enum StrafeResult {

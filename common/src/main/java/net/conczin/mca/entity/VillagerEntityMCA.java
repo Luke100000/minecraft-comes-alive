@@ -7,6 +7,7 @@ import net.conczin.mca.MCAClient;
 import net.conczin.mca.entity.ai.*;
 import net.conczin.mca.entity.ai.brain.VillagerBrain;
 import net.conczin.mca.entity.ai.brain.VillagerTasksMCA;
+import net.conczin.mca.entity.ai.brain.sensor.GuardEnemiesSensor;
 import net.conczin.mca.entity.ai.relationship.*;
 import net.conczin.mca.entity.interaction.VillagerCommandHandler;
 import net.conczin.mca.registry.*;
@@ -25,6 +26,7 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.core.component.DataComponents;
+import net.minecraft.core.particles.ItemParticleOption;
 import net.minecraft.core.particles.ParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -42,6 +44,7 @@ import net.minecraft.stats.Stats;
 import net.minecraft.tags.DamageTypeTags;
 import net.minecraft.util.Mth;
 import net.minecraft.util.ProblemReporter;
+import net.minecraft.util.RandomSource;
 import net.minecraft.world.*;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.effect.MobEffectInstance;
@@ -75,6 +78,7 @@ import net.minecraft.world.food.FoodProperties;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.ChestMenu;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.ItemStackTemplate;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.ProjectileWeaponItem;
 import net.minecraft.world.item.component.Consumable;
@@ -102,6 +106,8 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     private static final CDataParameter<Float> INFECTION_PROGRESS = CParameter.create("InfectionProgress", 0.0f);
     private static final CDataParameter<Integer> GROWTH_AMOUNT = CParameter.create("GrowthAmount", -AgeState.getMaxAge());
     public static final String MCA_DATA_KEY = "MCAData";
+    private static final double CLOSE_FOOD_THREAT_DISTANCE_SQUARED = 25.0;
+    private static final double CLOSE_FOOD_THREAT_VERTICAL_DISTANCE = 2.5;
     private static final CDataManager<VillagerEntityMCA> DATA = createTrackedData(new CDataManager.Builder<>(
             VillagerEntityMCA.class,
             serializer -> SynchedEntityData.defineId(VillagerEntityMCA.class, serializer)
@@ -125,6 +131,12 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     private long lastHit = 0;
     private int prevGrowthAmount;
     private boolean interactedWith;
+    private boolean recoveryFoodUseActive;
+    private boolean completingRecoveryFoodUse;
+    private boolean recoveryFoodFromInventory;
+    private int recoveryFoodUseTicks;
+    private int recoveryFoodNutrition;
+    private ItemStack recoveryPreviousMainHand = ItemStack.EMPTY;
 
     @SuppressWarnings("deprecation")
     public static CompoundTag readMcaSaveData(ValueInput input) {
@@ -694,19 +706,13 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         }
 
         if (!level().isClientSide()) {
+            tickRecoveryFoodUse();
+
             if (tickCount % 200 == 0
                     && getHealth() < getMaxHealth()
-                    && !getBrain().hasMemoryValue(MemoryModuleType.ATTACK_TARGET)) {
-                // if the villager has food they should try to eat.
-                ItemStack food = getMainHandItem();
-                FoodProperties foodProperties = food.get(DataComponents.FOOD);
-                if (canEat(food, foodProperties)) {
-                    eat(food, foodProperties);
-                } else {
-                    //noinspection ConstantConditions
-                    if (!findAndEquipToMain(VillagerEntityMCA::canEat)) {
-                        heal(1); // natural regeneration
-                    }
+                    && canRecoverHealthNow()) {
+                if (!startRecoveryFoodUse()) {
+                    heal(1); // natural regeneration
                 }
             }
 
@@ -751,6 +757,10 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         }
 
         return false;
+    }
+
+    public boolean isUsingRecoveryFood() {
+        return recoveryFoodUseActive;
     }
 
     @Override
@@ -840,9 +850,174 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         this.setOnGround(oldOnGround);
     }
 
-    private void eat(ItemStack stack, FoodProperties foodProperties) {
-        heal(foodProperties.nutrition());
-        setItemInHand(getDominantHand(), stack.finishUsingItem(level(), this));
+    @Override
+    protected void completeUsingItem() {
+        boolean completedRecoveryFoodUse = recoveryFoodUseActive
+                && isUsingItem()
+                && getUsedItemHand() == getDominantHand();
+
+        completingRecoveryFoodUse = completedRecoveryFoodUse;
+        super.completeUsingItem();
+        completingRecoveryFoodUse = false;
+
+        if (completedRecoveryFoodUse) {
+            heal(recoveryFoodNutrition);
+            finishRecoveryFoodUse();
+        }
+    }
+
+    @Override
+    public void stopUsingItem() {
+        boolean interruptedRecoveryFoodUse = recoveryFoodUseActive && !completingRecoveryFoodUse;
+        super.stopUsingItem();
+
+        if (interruptedRecoveryFoodUse) {
+            finishRecoveryFoodUse();
+        }
+    }
+
+    private boolean canRecoverHealthNow() {
+        return !recoveryFoodUseActive && !isUsingItem() && canContinueRecoveryFoodUse();
+    }
+
+    private void tickRecoveryFoodUse() {
+        if (!recoveryFoodUseActive) {
+            return;
+        }
+
+        if (!canContinueRecoveryFoodUse()) {
+            stopUsingItem();
+            return;
+        }
+
+        recoveryFoodUseTicks++;
+        ItemStack food = getItemInHand(getDominantHand());
+        if (!food.isEmpty()
+                && level() instanceof ServerLevel serverLevel
+                && recoveryFoodUseTicks > food.getUseDuration(this) * 7 / 32
+                && recoveryFoodUseTicks % 4 == 0) {
+            spawnRecoveryFoodParticles(serverLevel, food, 4);
+        }
+    }
+
+    private boolean canContinueRecoveryFoodUse() {
+        return !getVillagerBrain().isPanicking() && !hasCloseFoodThreat();
+    }
+
+    private boolean hasCloseFoodThreat() {
+        return isCloseFoodThreat(getBrain().getMemoryInternal(MemoryModuleType.ATTACK_TARGET).orElse(null))
+                || isCloseGuardFoodThreat(getBrain().getMemoryInternal(MemoryModuleTypeMCA.NEAREST_GUARD_ENEMY).orElse(null));
+    }
+
+    private boolean isCloseFoodThreat(@Nullable LivingEntity entity) {
+        return entity != null
+                && entity.isAlive()
+                && !entity.isRemoved()
+                && Math.abs(getY() - entity.getY()) <= CLOSE_FOOD_THREAT_VERTICAL_DISTANCE
+                && distanceToSqr(entity) <= CLOSE_FOOD_THREAT_DISTANCE_SQUARED;
+    }
+
+    private boolean isCloseGuardFoodThreat(@Nullable LivingEntity entity) {
+        return entity != null
+                && GuardEnemiesSensor.isValidGuardEnemy(entity, this)
+                && Math.abs(getY() - entity.getY()) <= CLOSE_FOOD_THREAT_VERTICAL_DISTANCE
+                && distanceToSqr(entity) <= CLOSE_FOOD_THREAT_DISTANCE_SQUARED;
+    }
+
+    private boolean startRecoveryFoodUse() {
+        ItemStack mainHandFood = getMainHandItem();
+        FoodProperties mainHandFoodProperties = mainHandFood.get(DataComponents.FOOD);
+        if (canEat(mainHandFood, mainHandFoodProperties)) {
+            return startRecoveryFoodUse(mainHandFoodProperties, false, ItemStack.EMPTY);
+        }
+
+        int slot = InventoryUtils.getFirstSlotContainingItem(getInventory(), VillagerEntityMCA::canEat);
+        if (slot < 0) {
+            return false;
+        }
+
+        ItemStack food = getInventory().getItem(slot);
+        FoodProperties foodProperties = food.get(DataComponents.FOOD);
+        if (!canEat(food, foodProperties)) {
+            return false;
+        }
+
+        ItemStack previousMainHand = getMainHandItem().copy();
+        ItemStack replacement = food.split(1);
+        if (replacement.isEmpty()) {
+            return false;
+        }
+
+        setItemInHand(getDominantHand(), replacement);
+        return startRecoveryFoodUse(foodProperties, true, previousMainHand);
+    }
+
+    private boolean startRecoveryFoodUse(FoodProperties foodProperties, boolean fromInventory, ItemStack previousMainHand) {
+        recoveryFoodUseActive = true;
+        recoveryFoodFromInventory = fromInventory;
+        recoveryFoodUseTicks = 0;
+        recoveryFoodNutrition = foodProperties.nutrition();
+        recoveryPreviousMainHand = previousMainHand;
+        startUsingItem(getDominantHand());
+
+        if (!isUsingItem()) {
+            finishRecoveryFoodUse();
+            return false;
+        }
+
+        return true;
+    }
+
+    private void finishRecoveryFoodUse() {
+        if (recoveryFoodFromInventory) {
+            ItemStack remainder = getMainHandItem();
+            if (!remainder.isEmpty()) {
+                ItemStack leftover = getInventory().addItem(remainder);
+                if (!leftover.isEmpty() && level() instanceof ServerLevel serverLevel) {
+                    spawnAtLocation(serverLevel, leftover, 0.0F);
+                }
+            }
+            setItemInHand(getDominantHand(), recoveryPreviousMainHand);
+        }
+
+        recoveryFoodUseActive = false;
+        completingRecoveryFoodUse = false;
+        recoveryFoodFromInventory = false;
+        recoveryFoodUseTicks = 0;
+        recoveryFoodNutrition = 0;
+        recoveryPreviousMainHand = ItemStack.EMPTY;
+    }
+
+    private void spawnRecoveryFoodParticles(ServerLevel level, ItemStack food, int count) {
+        RandomSource random = getRandom();
+        ItemParticleOption particle = new ItemParticleOption(ParticleTypes.ITEM, ItemStackTemplate.fromNonEmptyStack(food));
+
+        for (int i = 0; i < count; i++) {
+            Vec3 velocity = new Vec3(
+                    (random.nextFloat() - 0.5) * 0.1,
+                    random.nextFloat() * 0.1 + 0.1,
+                    0.0
+            );
+            velocity = velocity.xRot(-getXRot() * ((float) Math.PI / 180f));
+            velocity = velocity.yRot(-getYRot() * ((float) Math.PI / 180f));
+
+            Vec3 position = new Vec3(
+                    (random.nextFloat() - 0.5) * 0.3,
+                    -random.nextFloat() * 0.6 - 0.3,
+                    0.6
+            );
+            position = position.xRot(-getXRot() * ((float) Math.PI / 180f));
+            position = position.yRot(-getYRot() * ((float) Math.PI / 180f));
+            position = position.add(getX(), getEyeY(), getZ());
+
+            level.sendParticles(
+                    particle,
+                    position.x, position.y, position.z,
+                    1,
+                    velocity.x, velocity.y + 0.05, velocity.z,
+                    0.0
+            );
+        }
     }
 
     @Override
@@ -985,6 +1160,18 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         }
 
         super.teleportTo(destX, destY, destZ);
+    }
+
+    @Override
+    protected void lerpPositionAndRotationStep(int steps, double x, double y, double z, double yRot, double xRot) {
+        if (this.isSleeping()) {
+            this.getSleepingPos().ifPresent(bedPosition -> {
+                this.setPos(bedPosition.getX() + 0.5, bedPosition.getY() + 0.6875, bedPosition.getZ() + 0.5);
+            });
+            this.setRot((float) yRot, (float) xRot);
+            return;
+        }
+        super.lerpPositionAndRotationStep(steps, x, y, z, yRot, xRot);
     }
 
     @Override
@@ -1318,6 +1505,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     public void readAdditionalSaveData(ValueInput input) {
         CompoundTag nbt = readMcaSaveData(input);
         super.readAdditionalSaveData(input);
+        setCanPickUpLoot(true);
 
         getTypeDataManager().load(this, nbt);
         relations.readFromNbt(nbt);

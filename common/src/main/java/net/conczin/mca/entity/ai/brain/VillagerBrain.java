@@ -39,7 +39,7 @@ public class VillagerBrain<E extends Mob & VillagerLike<E>> {
     private static final CDataParameter<Boolean> PANICKING = CParameter.create("IsPanicking", false);
     private static final CDataParameter<Boolean> WEAR_ARMOR = CParameter.create("WearArmor", false);
 
-    private static final int PANIC_ANIMATION_HOLD_TICKS = 20;
+    private static final int PANIC_ANIMATION_HOLD_TICKS = 40;
     private static final float PANIC_ANIMATION_STEP = 0.25F;
     private static final long GRIEVE_COOLDOWN = 24000 * 7;
     private final Random random = new Random();

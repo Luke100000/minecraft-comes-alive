@@ -13,7 +13,6 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.ProjectileWeaponItem;
 import net.minecraft.world.item.component.ItemAttributeModifiers;
 import net.minecraft.world.item.equipment.Equippable;
 import net.minecraft.world.level.storage.TagValueInput;
@@ -98,12 +97,6 @@ public interface InventoryUtils {
 
     static boolean isWeapon(ItemStack stack) {
         return stack.has(DataComponents.WEAPON);
-    }
-
-    static Optional<ItemStack> getBestRanged(Container inv) {
-        return stream(inv)
-                .filter(s -> s.getItem() instanceof ProjectileWeaponItem)
-                .max(Comparator.comparingDouble(ItemStack::getMaxDamage));
     }
 
     static void dropAllItems(Entity entity, Container inv) {

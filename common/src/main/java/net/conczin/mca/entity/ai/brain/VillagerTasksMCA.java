@@ -11,6 +11,7 @@ import net.conczin.mca.entity.ai.ActivitiesMCA;
 import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
 import net.conczin.mca.entity.ai.SchedulesMCA;
 import net.conczin.mca.entity.ai.SensorsMCA;
+import net.conczin.mca.entity.ai.brain.sensor.GuardEnemiesSensor;
 import net.conczin.mca.entity.ai.brain.tasks.*;
 import net.conczin.mca.entity.ai.brain.tasks.chore.ChoppingTask;
 import net.conczin.mca.entity.ai.brain.tasks.chore.FishingTask;
@@ -44,6 +45,10 @@ import net.minecraft.world.item.Items;
 import java.util.Optional;
 
 public class VillagerTasksMCA {
+    private static final double CLOSE_GUARD_TARGET_DISTANCE_SQUARED = 36.0;
+    private static final double IMMEDIATE_GUARD_TARGET_DISTANCE_SQUARED = 16.0;
+    private static final double STICKY_GUARD_TARGET_DISTANCE_SQUARED = 24.0 * 24.0;
+
     public static final ImmutableList<MemoryModuleType<?>> MEMORY_TYPES = ImmutableList.of(
             MemoryModuleType.HOME,
             MemoryModuleType.JOB_SITE,
@@ -311,7 +316,7 @@ public class VillagerTasksMCA {
                                 v.getProfession() == ProfessionsMCA.ARCHER ? EquipmentSet.ARCHER_0 : EquipmentSet.GUARD_0,
                                 v.getProfession() == ProfessionsMCA.ARCHER ? EquipmentSet.ARCHER_0_LEFT : EquipmentSet.GUARD_0_LEFT)))),
                 Pair.of(2, StartAttacking.create((level, body) -> true, (level, body) -> VillagerTasksMCA.getPreferredTarget(body))),
-                Pair.of(3, StopAttackingIfTargetInvalid.create((level, livingEntity) -> !VillagerTasksMCA.isPreferredTarget(villager, livingEntity))),
+                Pair.of(3, StopAttackingIfTargetInvalid.create((level, livingEntity) -> !VillagerTasksMCA.shouldKeepAttackTarget(villager, livingEntity))),
                 Pair.of(4, new ArcherMovementTask<>(15)),
                 Pair.of(5, new BowTask<>(20, 15)),
                 Pair.of(7, new ConditionalTask<>(
@@ -351,26 +356,60 @@ public class VillagerTasksMCA {
     private static Optional<? extends LivingEntity> getPreferredTarget(VillagerEntityMCA villager) {
         if (guardTooHurt(villager)) {
             return Optional.empty();
-        } else {
-            Optional<LivingEntity> current = villager.getBrain().getMemoryInternal(MemoryModuleType.ATTACK_TARGET);
-            if (current.isPresent() && shouldKeepAttackTarget(villager, current.get())) {
-                return current;
-            }
-
-            Optional<LivingEntity> primary = villager.getBrain().getMemoryInternal(MemoryModuleTypeMCA.NEAREST_GUARD_ENEMY);
-            if (primary.isPresent() && shouldRespondToGuardEnemy(villager, primary.get())) {
-                return primary;
-            } else {
-                return Optional.empty();
-            }
         }
+
+        Optional<LivingEntity> current = villager.getBrain().getMemoryInternal(MemoryModuleType.ATTACK_TARGET);
+        Optional<LivingEntity> closeThreat = getCloseGuardThreat(villager);
+        if (current.isPresent() && shouldKeepAttackTarget(villager, current.get())) {
+            if (!isDrawingBow(villager)
+                    && closeThreat.isPresent()
+                    && closeThreat.get() != current.get()
+                    && GuardEnemiesSensor.isTargetingGuard(closeThreat.get(), villager)
+                    && shouldSwitchToCloseThreat(villager, current.get(), closeThreat.get())) {
+                return closeThreat;
+            }
+            return current;
+        }
+
+        if (closeThreat.isPresent()) {
+            return closeThreat;
+        }
+
+        Optional<LivingEntity> primary = villager.getBrain().getMemoryInternal(MemoryModuleTypeMCA.NEAREST_GUARD_ENEMY);
+        if (primary.isPresent()
+                && GuardEnemiesSensor.isValidGuardEnemy(primary.get(), villager)
+                && shouldRespondToGuardEnemy(villager, primary.get())) {
+            return primary;
+        }
+
+        return Optional.empty();
+    }
+
+    private static Optional<LivingEntity> getCloseGuardThreat(VillagerEntityMCA villager) {
+        return villager.getBrain().getMemoryInternal(MemoryModuleType.NEAREST_LIVING_ENTITIES)
+                .flatMap(entities -> entities.stream()
+                        .filter(entity -> entity.distanceToSqr(villager) <= CLOSE_GUARD_TARGET_DISTANCE_SQUARED)
+                        .filter(entity -> GuardEnemiesSensor.isValidGuardEnemy(entity, villager))
+                        .filter(entity -> shouldRespondToGuardEnemy(villager, entity))
+                        .findFirst());
+    }
+
+    private static boolean shouldSwitchToCloseThreat(VillagerEntityMCA villager, LivingEntity current, LivingEntity closeThreat) {
+        double currentDistanceSquared = current.distanceToSqr(villager);
+        double closeThreatDistanceSquared = closeThreat.distanceToSqr(villager);
+        return currentDistanceSquared > CLOSE_GUARD_TARGET_DISTANCE_SQUARED
+                || (closeThreatDistanceSquared <= IMMEDIATE_GUARD_TARGET_DISTANCE_SQUARED
+                && currentDistanceSquared > IMMEDIATE_GUARD_TARGET_DISTANCE_SQUARED);
     }
 
     private static boolean shouldKeepAttackTarget(VillagerEntityMCA villager, LivingEntity target) {
-        return target.isAlive()
+        return !guardTooHurt(villager)
+               && target.isAlive()
                && !target.isRemoved()
                && target.level() == villager.level()
-               && villager.canAttack(target);
+               && villager.canAttack(target)
+               && GuardEnemiesSensor.isGuardEnemy(target, villager)
+               && shouldKeepActiveFightTarget(villager, target);
     }
 
     private static boolean shouldRespondToGuardEnemy(VillagerEntityMCA villager, LivingEntity target) {
@@ -379,9 +418,10 @@ public class VillagerTasksMCA {
                || villager.getResidency().getHomeVillage().filter(village -> village.isWithinBorder(villager)).isEmpty();
     }
 
-    private static boolean isPreferredTarget(VillagerEntityMCA villager, LivingEntity entity) {
-        Optional<? extends LivingEntity> target = getPreferredTarget(villager);
-        return target.filter(livingEntity -> livingEntity == entity).isPresent();
+    private static boolean shouldKeepActiveFightTarget(VillagerEntityMCA villager, LivingEntity target) {
+        return shouldRespondToGuardEnemy(villager, target)
+               || GuardEnemiesSensor.isTargetingGuard(target, villager)
+               || villager.distanceToSqr(target) <= STICKY_GUARD_TARGET_DISTANCE_SQUARED;
     }
 
     public static boolean isOnDuty(VillagerEntityMCA villager) {
@@ -392,6 +432,10 @@ public class VillagerTasksMCA {
 
     private static boolean isHoldingRangedWeapon(VillagerEntityMCA villager) {
         return villager.isHolding(Items.BOW) || villager.isHolding(Items.CROSSBOW);
+    }
+
+    private static boolean isDrawingBow(VillagerEntityMCA villager) {
+        return villager.isUsingItem() && villager.isHolding(Items.BOW);
     }
 
     public static boolean isInDanger(VillagerEntityMCA villager) {

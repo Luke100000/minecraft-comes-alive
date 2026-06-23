@@ -15,6 +15,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.ProjectileWeaponItem;
 
+import java.util.Comparator;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
@@ -33,6 +34,10 @@ public class EquipmentTask extends Behavior<VillagerEntityMCA> {
 
     @Override
     protected boolean checkExtraStartConditions(ServerLevel world, VillagerEntityMCA villager) {
+        if (villager.isUsingRecoveryFood()) {
+            return false;
+        }
+
         EquipmentSet set = equipmentSet.apply(villager);
         if (isNakedCombatSet(set, villager)) {
             return false;
@@ -65,14 +70,21 @@ public class EquipmentTask extends Behavior<VillagerEntityMCA> {
         villager.setItemSlot(villager.getDominantSlot(), stack);
     }
 
-    private void equipBestRanged(VillagerEntityMCA villager, Item fallback) {
-        ItemStack stack = InventoryUtils.getBestRanged(villager.getInventory()).orElse(fallback == null ? ItemStack.EMPTY : new ItemStack(fallback));
+    private void equipRequestedRanged(VillagerEntityMCA villager, Item requested) {
+        ItemStack stack = InventoryUtils.stream(villager.getInventory())
+                .filter(s -> s.is(requested))
+                .max(Comparator.comparingDouble(ItemStack::getMaxDamage))
+                .orElse(requested == null ? ItemStack.EMPTY : new ItemStack(requested));
         villager.setItemSlot(villager.getDominantSlot(), stack);
     }
 
     @Override
     protected void start(ServerLevel world, VillagerEntityMCA villager, long time) {
         super.start(world, villager, time);
+
+        if (villager.isUsingRecoveryFood()) {
+            return;
+        }
 
         lastArmorWearState = villager.getVillagerBrain().getArmorWear();
         EquipmentSet set = equipmentSet.apply(villager);
@@ -92,7 +104,7 @@ public class EquipmentTask extends Behavior<VillagerEntityMCA> {
         //weapon
         if (wear) {
             if (isRequestedItem(set.getMainHand()) && set.getMainHand() instanceof ProjectileWeaponItem) {
-                equipBestRanged(villager, set.getMainHand());
+                equipRequestedRanged(villager, set.getMainHand());
             } else if (isRequestedItem(set.getMainHand())) {
                 equipBestWeapon(villager, set.getMainHand());
             } else {
@@ -132,10 +144,7 @@ public class EquipmentTask extends Behavior<VillagerEntityMCA> {
         if (!isRequestedItem(requested)) {
             return false;
         }
-        if (requested instanceof ProjectileWeaponItem) {
-            return !(equipped.getItem() instanceof ProjectileWeaponItem);
-        }
-        return equipped.isEmpty();
+        return !equipped.is(requested);
     }
 
     private static boolean isRequestedItem(Item item) {

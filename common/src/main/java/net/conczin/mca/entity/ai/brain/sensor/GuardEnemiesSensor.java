@@ -61,10 +61,24 @@ public class GuardEnemiesSensor extends NearestLivingEntitySensor<LivingEntity> 
         return getPriority(entity, guard) >= 0;
     }
 
+    public static boolean isValidGuardEnemy(LivingEntity entity, LivingEntity guard) {
+        return entity != null
+                && entity != guard
+                && entity.isAlive()
+                && !entity.isRemoved()
+                && entity.level() == guard.level()
+                && guard.canAttack(entity)
+                && isGuardEnemy(entity, guard);
+    }
+
+    public static boolean isTargetingGuard(LivingEntity entity, LivingEntity guard) {
+        return entity instanceof Mob mob && mob.getTarget() == guard;
+    }
+
     private static int getPriority(LivingEntity entity, LivingEntity guard) {
         if (entity instanceof VillagerEntityMCA villager) {
             return villager.isHostile() ? 10 : -1;
-        } else if (guard != null && entity instanceof Mob mob && mob.getTarget() == guard) {
+        } else if (guard != null && isTargetingGuard(entity, guard)) {
             //priority is irrelevant if this entity is currently an active threat
             return 9;
         } else {

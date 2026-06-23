@@ -72,8 +72,14 @@ public class VillagerLikeEntityMCARenderer<T extends Mob & VillagerLike<T>>
     protected HumanoidModel.ArmPose getArmPose(T mob, HumanoidArm arm) {
         ItemStack itemStack = mob.getItemHeldByArm(arm);
         InteractionHand hand = arm == mob.getMainArm() ? InteractionHand.MAIN_HAND : InteractionHand.OFF_HAND;
-        if (mob.isUsingItem() && mob.getUsedItemHand() == hand) {
+        if (mob.isUsingItem() && mob.getUsedItemHand() == hand && mob.getUseItemRemainingTicks() > 0) {
             ItemUseAnimation anim = itemStack.getUseAnimation();
+            if (anim == ItemUseAnimation.BLOCK) {
+                return HumanoidModel.ArmPose.BLOCK;
+            }
+            if (anim == ItemUseAnimation.EAT || anim == ItemUseAnimation.DRINK) {
+                return HumanoidModel.ArmPose.ITEM;
+            }
             if (anim == ItemUseAnimation.BOW) {
                 return HumanoidModel.ArmPose.BOW_AND_ARROW;
             }

@@ -63,26 +63,24 @@ public class BowTask<E extends Mob & CrossbowAttackMob> extends Behavior<E> {
             return;
         }
 
+        boolean visible = entity.getSensing().hasLineOfSight(target);
+        double distanceSquared = entity.distanceToSqr(target);
+
         if (isEmergencyFleeing(entity)) {
             if (entity.isUsingItem()) {
-                logAction(entity, target, false, entity.distanceToSqr(target), "stop_using", "emergency_fleeing");
+                logAction(entity, target, visible, distanceSquared, "stop_using", "emergency_fleeing");
                 entity.stopUsingItem();
             }
             return;
         }
 
         if (target != this.lastTarget) {
-            if (entity.isUsingItem()) {
-                logAction(entity, target, false, entity.distanceToSqr(target), "stop_using", "target_changed");
-                entity.stopUsingItem();
-            }
             this.lastTarget = target;
-            this.attackCooldown = 0;
             this.lostSightTicks = 0;
+            if (entity.isUsingItem()) {
+                logAction(entity, target, visible, distanceSquared, "target_changed", "continue_draw");
+            }
         }
-
-        boolean visible = entity.getSensing().hasLineOfSight(target);
-        double distanceSquared = entity.distanceToSqr(target);
 
         entity.getBrain().setMemory(MemoryModuleType.LOOK_TARGET, new EntityTracker(target, true));
         entity.getLookControl().setLookAt(target, LOOK_SPEED, LOOK_SPEED);

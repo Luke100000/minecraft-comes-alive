@@ -19,6 +19,8 @@ import net.minecraft.world.item.CrossbowItem;
 import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.phys.Vec3;
 
+import java.util.Comparator;
+
 public class ArcherMovementTask<E extends PathfinderMob> extends Behavior<E> {
     private static final double SPEED_MODIFIER = 0.5;
     private static final double KITE_SPEED_MODIFIER = 0.85;
@@ -41,6 +43,10 @@ public class ArcherMovementTask<E extends PathfinderMob> extends Behavior<E> {
     private static final int KITE_PATH_TICKS = 16;
     private static final int BLOCKED_PATH_TICKS_BEFORE_REPATH = 5;
     private static final int BLOCKED_STRAFE_TICKS_BEFORE_PAUSE = 6;
+    private static final int UNREACHABLE_TARGET_TICKS_BEFORE_DROP = 20;
+    private static final int UNREACHABLE_TARGET_REPATH_COOLDOWN_TICKS = 5;
+    private static final int FAILED_APPROACH_TICKS_BEFORE_DROP = 40;
+    private static final double UNREACHABLE_VERTICAL_TARGET_DISTANCE = 3.0;
     private static final double MIN_USEFUL_DISTANCE_GAIN = 0.5;
     private static final double STUCK_HORIZONTAL_SPEED_SQUARED = 2.5E-5;
 
@@ -56,6 +62,8 @@ public class ArcherMovementTask<E extends PathfinderMob> extends Behavior<E> {
     private int awayPathTicks;
     private int blockedPathTicks;
     private int blockedStrafeTicks;
+    private int unreachableTargetTicks;
+    private int failedApproachTicks;
 
     public ArcherMovementTask(int maximumRange) {
         super(ImmutableMap.of(
@@ -101,11 +109,14 @@ public class ArcherMovementTask<E extends PathfinderMob> extends Behavior<E> {
         boolean visible = entity.getSensing().hasLineOfSight(target);
         updateSeeTime(visible);
 
-        LivingEntity movementThreat = getNearestMovementThreat(entity, target);
+        LivingEntity emergencyThreat = getNearestEmergencyThreat(entity, getEmergencyThresholdSquared());
+        LivingEntity movementThreat = emergencyThreat != null ? emergencyThreat : getNearestMovementThreat(entity, target);
         double targetDistanceSquared = entity.distanceToSqr(target);
+        double targetVerticalDistance = Math.abs(entity.getY() - target.getY());
         double threatDistanceSquared = entity.distanceToSqr(movementThreat);
         double threatVerticalDistance = Math.abs(entity.getY() - movementThreat.getY());
-        MovementState nextState = selectState(targetDistanceSquared, threatDistanceSquared, threatVerticalDistance);
+        boolean threatTargetingSelf = emergencyThreat != null || GuardEnemiesSensor.isTargetingGuard(movementThreat, entity);
+        MovementState nextState = selectState(targetDistanceSquared, threatDistanceSquared, threatVerticalDistance, emergencyThreat != null);
         enterState(entity, nextState);
 
         ArcherMoveControl moveControl = getArcherMoveControl(entity);
@@ -114,7 +125,10 @@ public class ArcherMovementTask<E extends PathfinderMob> extends Behavior<E> {
         switch (this.state) {
             case APPROACH -> {
                 trackTarget(entity, target);
-                approach(entity, target);
+                if (!approach(entity, target, visible, targetDistanceSquared, targetVerticalDistance)) {
+                    logDebugState(level, entity, target, movementThreat, threatTargetingSelf, visible, targetDistanceSquared, threatDistanceSquared, threatVerticalDistance);
+                    return;
+                }
             }
             case EMERGENCY_FLEE -> {
                 clearLookTarget(entity);
@@ -135,7 +149,7 @@ public class ArcherMovementTask<E extends PathfinderMob> extends Behavior<E> {
         }
 
         if (MCA.platformHelper.isDevelopmentEnvironment()) {
-            logDebugState(level, entity, target, movementThreat, visible, targetDistanceSquared, threatDistanceSquared, threatVerticalDistance);
+            logDebugState(level, entity, target, movementThreat, threatTargetingSelf, visible, targetDistanceSquared, threatDistanceSquared, threatVerticalDistance);
         }
     }
 
@@ -158,13 +172,14 @@ public class ArcherMovementTask<E extends PathfinderMob> extends Behavior<E> {
         this.awayPathTicks = 0;
         this.blockedPathTicks = 0;
         this.blockedStrafeTicks = 0;
+        this.unreachableTargetTicks = 0;
+        this.failedApproachTicks = 0;
     }
 
-    private MovementState selectState(double targetDistanceSquared, double threatDistanceSquared, double threatVerticalDistance) {
+    private MovementState selectState(double targetDistanceSquared, double threatDistanceSquared, double threatVerticalDistance, boolean hasEmergencyThreat) {
         boolean closeRangeThreat = threatVerticalDistance <= CLOSE_RANGE_VERTICAL_THREAT_DISTANCE;
         boolean wasEmergencyFleeing = this.state == MovementState.EMERGENCY_FLEE;
-        double emergencyThreshold = wasEmergencyFleeing ? EMERGENCY_EXIT_DISTANCE_SQUARED : EMERGENCY_ENTER_DISTANCE_SQUARED;
-        if (closeRangeThreat && threatDistanceSquared < emergencyThreshold) {
+        if (closeRangeThreat && hasEmergencyThreat) {
             return MovementState.EMERGENCY_FLEE;
         }
 
@@ -192,19 +207,70 @@ public class ArcherMovementTask<E extends PathfinderMob> extends Behavior<E> {
         this.awayPathTicks = 0;
         this.blockedPathTicks = 0;
         this.blockedStrafeTicks = 0;
+        this.unreachableTargetTicks = 0;
+        this.failedApproachTicks = 0;
         entity.getNavigation().stop();
     }
 
-    private void approach(E entity, LivingEntity target) {
+    private boolean approach(E entity, LivingEntity target, boolean visible, double targetDistanceSquared, double targetVerticalDistance) {
         this.awayPathTicks = 0;
         this.blockedPathTicks = 0;
         this.blockedStrafeTicks = 0;
         entity.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
 
-        if (--this.repathCooldown <= 0 || entity.getNavigation().isDone()) {
+        boolean shouldRepath = --this.repathCooldown <= 0 || entity.getNavigation().isDone() && this.unreachableTargetTicks == 0;
+        if (shouldRepath) {
             entity.getNavigation().moveTo(target, SPEED_MODIFIER);
             this.repathCooldown = getNextRepathCooldown(entity);
         }
+
+        Path path = entity.getNavigation().getPath();
+        if (isUnreachableVerticalTarget(path, targetVerticalDistance)) {
+            this.unreachableTargetTicks++;
+            entity.getNavigation().stop();
+            clearManualMovement(entity);
+            this.repathCooldown = UNREACHABLE_TARGET_REPATH_COOLDOWN_TICKS;
+
+            if (this.unreachableTargetTicks >= UNREACHABLE_TARGET_TICKS_BEFORE_DROP
+                    && (!visible || targetDistanceSquared > this.maximumRangeSquared)) {
+                dropAttackTarget(entity);
+                return false;
+            }
+        } else {
+            this.unreachableTargetTicks = 0;
+        }
+
+        if (isFailedApproach(entity, visible, path)) {
+            this.failedApproachTicks++;
+            if (this.failedApproachTicks >= FAILED_APPROACH_TICKS_BEFORE_DROP) {
+                dropAttackTarget(entity);
+                return false;
+            }
+        } else {
+            this.failedApproachTicks = 0;
+        }
+
+        return true;
+    }
+
+    private static boolean isUnreachableVerticalTarget(Path path, double targetVerticalDistance) {
+        return targetVerticalDistance > UNREACHABLE_VERTICAL_TARGET_DISTANCE
+                && (path == null || !path.canReach());
+    }
+
+    private void dropAttackTarget(E entity) {
+        this.unreachableTargetTicks = 0;
+        this.failedApproachTicks = 0;
+        entity.getBrain().eraseMemory(MemoryModuleType.ATTACK_TARGET);
+        entity.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
+        entity.getNavigation().stop();
+        clearManualMovement(entity);
+    }
+
+    private boolean isFailedApproach(E entity, boolean visible, Path path) {
+        return !visible
+                && (isCurrentPathBlocked(entity)
+                || path == null && entity.getNavigation().isDone());
     }
 
     private void moveAway(E entity, LivingEntity target, double desiredDistance, int pathTicks, double speedModifier, boolean allowPartialPath) {
@@ -342,8 +408,16 @@ public class ArcherMovementTask<E extends PathfinderMob> extends Behavior<E> {
         this.blockedPathTicks = 0;
         this.blockedStrafeTicks = 0;
         this.repathCooldown = 0;
+        this.unreachableTargetTicks = 0;
+        this.failedApproachTicks = 0;
         entity.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
         entity.getNavigation().stop();
+        clearManualMovement(entity);
+    }
+
+    private static void clearManualMovement(Mob entity) {
+        entity.setXxa(0.0F);
+        entity.setZza(0.0F);
     }
 
     private void trackTarget(E entity, LivingEntity target) {
@@ -377,10 +451,14 @@ public class ArcherMovementTask<E extends PathfinderMob> extends Behavior<E> {
         }
     }
 
-    private void logDebugState(ServerLevel level, E entity, LivingEntity target, LivingEntity movementThreat, boolean visible,
+    private double getEmergencyThresholdSquared() {
+        return this.state == MovementState.EMERGENCY_FLEE ? EMERGENCY_EXIT_DISTANCE_SQUARED : EMERGENCY_ENTER_DISTANCE_SQUARED;
+    }
+
+    private void logDebugState(ServerLevel level, E entity, LivingEntity target, LivingEntity movementThreat, boolean threatTargetingSelf, boolean visible,
                                double targetDistanceSquared, double threatDistanceSquared, double threatVerticalDistance) {
         ArcherMoveControl moveControl = getArcherMoveControl(entity);
-        String stateKey = target.getUUID() + ":" + movementThreat.getUUID() + ":" + this.state + ":" + visible;
+        String stateKey = target.getUUID() + ":" + movementThreat.getUUID() + ":" + this.state + ":" + threatTargetingSelf + ":" + visible;
         long gameTime = level.getGameTime();
         if (stateKey.equals(this.lastDebugState) && gameTime - this.lastDebugLogTime < DEBUG_LOG_INTERVAL_TICKS) {
             return;
@@ -389,13 +467,14 @@ public class ArcherMovementTask<E extends PathfinderMob> extends Behavior<E> {
         this.lastDebugState = stateKey;
         this.lastDebugLogTime = gameTime;
         MCA.LOGGER.info(
-                "[MCA Archer Movement] entity={} entityName=\"{}\" target={} targetName=\"{}\" threat={} threatName=\"{}\" movement={} targetDistSqr={} threatDistSqr={} threatVerticalDist={} los={} seeTime={} strafingTime={} strafingClockwise={} strafeResult={} awayPathTicks={} blockedPathTicks={} blockedStrafeTicks={} navDone={} horizontalCollision={} minorHorizontalCollision={} onGround={} yRot={} targetYRot={} yHeadRot={} yBodyRot={} movementSpeed={} deltaMovement={} pos={} targetPos={} threatPos={}",
+                "[MCA Archer Movement] entity={} entityName=\"{}\" target={} targetName=\"{}\" threat={} threatName=\"{}\" threatTargetingSelf={} movement={} targetDistSqr={} threatDistSqr={} threatVerticalDist={} los={} seeTime={} strafingTime={} strafingClockwise={} strafeResult={} awayPathTicks={} blockedPathTicks={} blockedStrafeTicks={} unreachableTargetTicks={} failedApproachTicks={} navDone={} horizontalCollision={} minorHorizontalCollision={} onGround={} yRot={} targetYRot={} yHeadRot={} yBodyRot={} movementSpeed={} deltaMovement={} pos={} targetPos={} threatPos={}",
                 entity.getStringUUID(),
                 entity.getName().getString(),
                 target.getStringUUID(),
                 target.getName().getString(),
                 movementThreat.getStringUUID(),
                 movementThreat.getName().getString(),
+                threatTargetingSelf,
                 this.state.debugName,
                 String.format("%.2f", targetDistanceSquared),
                 String.format("%.2f", threatDistanceSquared),
@@ -408,6 +487,8 @@ public class ArcherMovementTask<E extends PathfinderMob> extends Behavior<E> {
                 this.awayPathTicks,
                 this.blockedPathTicks,
                 this.blockedStrafeTicks,
+                this.unreachableTargetTicks,
+                this.failedApproachTicks,
                 entity.getNavigation().isDone(),
                 entity.horizontalCollision,
                 entity.minorHorizontalCollision,
@@ -422,6 +503,18 @@ public class ArcherMovementTask<E extends PathfinderMob> extends Behavior<E> {
                 target.blockPosition(),
                 movementThreat.blockPosition()
         );
+    }
+
+    private static LivingEntity getNearestEmergencyThreat(LivingEntity entity, double maximumDistanceSquared) {
+        return entity.getBrain().getMemoryInternal(MemoryModuleType.NEAREST_LIVING_ENTITIES)
+                .flatMap(entities -> entities.stream()
+                        .filter(ArcherMovementTask::hasValidTarget)
+                        .filter(candidate -> Math.abs(entity.getY() - candidate.getY()) <= CLOSE_RANGE_VERTICAL_THREAT_DISTANCE)
+                        .filter(candidate -> entity.distanceToSqr(candidate) < maximumDistanceSquared)
+                        .filter(candidate -> GuardEnemiesSensor.isGuardEnemy(candidate, entity))
+                        .filter(candidate -> GuardEnemiesSensor.isTargetingGuard(candidate, entity))
+                        .min(Comparator.comparingDouble(entity::distanceToSqr)))
+                .orElse(null);
     }
 
     private static LivingEntity getNearestMovementThreat(LivingEntity entity, LivingEntity fallback) {
