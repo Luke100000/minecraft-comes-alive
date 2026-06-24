@@ -88,6 +88,10 @@ public class ExtendedWalkTowardsTask {
     }
 
     public static Optional<BlockPos> findBedStandPosition(ServerWorld world, VillagerEntityMCA entity, GlobalPos destination) {
+        if (entity.isSleeping()) {
+            return Optional.empty();
+        }
+
         BlockPos bedPos = destination.getPos();
         BlockState bedState = world.getBlockState(bedPos);
         if (!bedState.isIn(BlockTags.BEDS)) {

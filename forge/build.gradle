@@ -32,9 +32,10 @@ dependencies {
 processResources {
     def projectVersion = project.version.toString()
     inputs.property 'version', projectVersion
+    inputs.property 'update_json_url', rootProject.update_json_url
 
     filesMatching('META-INF/mods.toml') {
-        expand version: projectVersion
+        expand version: projectVersion, update_json_url: rootProject.update_json_url
     }
 }
 

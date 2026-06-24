@@ -1,3 +1,7 @@
+# 7.6.24
+
+* Small pathfinding adjustment for beds
+
 # 7.6.23
 
 * Fixed book being given at spawn, rather than entering a village
