@@ -1,3 +1,7 @@
+# 7.6.25
+
+* Fix pathfinding again
+
 # 7.6.24
 
 * Small pathfinding adjustment for beds

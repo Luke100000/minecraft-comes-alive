@@ -46,12 +46,13 @@ public class ExtendedWalkTowardsTask {
                             GlobalPos globalPos = context.getValue(destinationResult);
                             Optional<Long> optional = context.getOptionalValue(cantReachWalkTargetSince);
                             if (globalPos.getDimension() == world.getRegistryKey() && (optional.isEmpty() || world.getTime() - optional.get() <= (long)maxRunTime)) {
-                                if (globalPos.getPos().getManhattanDistance(entity.getBlockPos()) > maxDistance) {
+                                BlockPos targetPos = walkTargetResolver.resolve(world, entity, globalPos).orElse(globalPos.getPos());
+                                if (targetPos.getManhattanDistance(entity.getBlockPos()) > maxDistance) {
                                     Vec3d vec3d = null;
                                     int l = 0;
 
                                     while (vec3d == null || (BlockPos.ofFloored(vec3d)).getManhattanDistance(entity.getBlockPos()) > maxDistance) {
-                                        vec3d = NoPenaltyTargeting.findTo(entity, 15, 7, Vec3d.ofBottomCenter(globalPos.getPos()), 1.5707963705062866);
+                                        vec3d = NoPenaltyTargeting.findTo(entity, 15, 7, Vec3d.ofBottomCenter(targetPos), 1.5707963705062866);
                                         ++l;
                                         if (l == 1000) {
                                             entity.releaseTicketFor(destination);
@@ -62,13 +63,8 @@ public class ExtendedWalkTowardsTask {
                                     }
 
                                     walkTarget.remember(new WalkTarget(vec3d, speed, completionRange));
-                                } else if (globalPos.getPos().getManhattanDistance(entity.getBlockPos()) > completionRange) {
-                                    Optional<BlockPos> resolvedTarget = walkTargetResolver.resolve(world, entity, globalPos);
-                                    if (resolvedTarget.isPresent()) {
-                                        walkTarget.remember(new WalkTarget(resolvedTarget.get(), speed, 0));
-                                    } else {
-                                        walkTarget.remember(new WalkTarget(globalPos.getPos(), speed, completionRange));
-                                    }
+                                } else if (targetPos.getManhattanDistance(entity.getBlockPos()) > completionRange) {
+                                    walkTarget.remember(new WalkTarget(targetPos, speed, completionRange));
                                 }
                             } else {
                                 if (canGiveUp.test(entity)) {
