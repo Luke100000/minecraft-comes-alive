@@ -1,3 +1,13 @@
+# 7.7.13
+
+* Iron golems no longer attack regular MCA villagers
+* Guards detect threats from further away and use entity tags such as `#minecraft:undead` for targeting
+* Villagers now defend themselves when outside their village border
+* Villagers no longer sleep, eat, greet, or interact while in combat
+* Villagers now walk to a spot next to their bed instead of the bed block
+* Added a config option to disable guide books from advancements (`giveAdvancementBooks`)
+* Added a config option for villager pathfinding distance (`villagerPathfindingDistance`, default 192)
+
 # 7.7.12
 
 * Fixed golden apple on cure being consumed twice

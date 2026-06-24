@@ -7,11 +7,14 @@
   "mixins": [
     "MixinAbstractFurnaceBlockEntity",
     "MixinActivity",
+    "MixinAdvancementRewards",
+    "MixinAdvancementRewardsAccessor",
     "MixinEntityType",
     "MixinFlintAndSteelItem",
     "MixinGoat",
     "MixinHorseBase",
     "MixinInventory",
+    "MixinIronGolem",
     "MixinMemoryModuleType",
     "MixinMilkBucketItem",
     "MixinPlayer",
@@ -30,13 +33,13 @@
   ],
   "client": [
     "client.MixinClientLanguage",
+    "client.MixinEntity",
     "client.MixinGameRenderer",
     "client.MixinHumanoidArmorLayer",
     "client.MixinItemInHandLayer",
     "client.MixinLivingEntityRenderer",
     "client.MixinPlayerRenderer",
-    "client.MixinSoundBufferLibrary",
-    "client.MixinEntity"
+    "client.MixinSoundBufferLibrary"
   ],
   "injectors": {
     "defaultRequire": 1

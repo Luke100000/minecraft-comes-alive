@@ -124,7 +124,12 @@ publishing {
     }
     repositories {
         maven {
-            url = System.getenv('local_maven_url')
+            name = 'reposiliteRepository'
+            url = uri(System.getenv('local_maven_url') ?: 'https://maven.conczin.net/Artifacts')
+            credentials {
+                username = System.getenv('MAVEN_USERNAME')
+                password = System.getenv('MAVEN_TOKEN')
+            }
         }
     }
 }

@@ -4,33 +4,43 @@ import com.google.common.collect.ImmutableSet;
 import net.conczin.mca.Config;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
+import net.conczin.mca.util.RegistryHelper;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.Mth;
+import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.NearestVisibleLivingEntities;
-import net.minecraft.world.entity.ai.sensing.Sensor;
+import net.minecraft.world.entity.ai.sensing.NearestLivingEntitySensor;
 import net.minecraft.world.entity.monster.Enemy;
 
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
-public class GuardEnemiesSensor extends Sensor<LivingEntity> {
+public class GuardEnemiesSensor extends NearestLivingEntitySensor<LivingEntity> {
     @Override
     public Set<MemoryModuleType<?>> requires() {
-        return ImmutableSet.of(MemoryModuleTypeMCA.NEAREST_GUARD_ENEMY);
+        return ImmutableSet.of(
+                MemoryModuleType.NEAREST_LIVING_ENTITIES,
+                MemoryModuleType.NEAREST_VISIBLE_LIVING_ENTITIES,
+                MemoryModuleTypeMCA.NEAREST_GUARD_ENEMY
+        );
     }
 
     @Override
     protected void doTick(ServerLevel world, LivingEntity entity) {
+        super.doTick(world, entity);
         entity.getBrain().setMemory(MemoryModuleTypeMCA.NEAREST_GUARD_ENEMY, this.getNearestHostile(entity));
     }
 
     private Optional<LivingEntity> getNearestHostile(LivingEntity entity) {
-        return getVisibleMobs(entity).flatMap((list) -> list.find(this::isHostile).min((a, b) -> this.compareEntities(entity, a, b)));
+        return getVisibleMobs(entity).flatMap((list) -> list.find(target -> isGuardEnemy(target, entity))
+                .filter(target -> target.distanceToSqr(entity) <= 48.0 * 48.0)
+                .min((a, b) -> this.compareEntities(entity, a, b)));
     }
 
     private Optional<NearestVisibleLivingEntities> getVisibleMobs(LivingEntity entity) {
@@ -46,7 +56,11 @@ public class GuardEnemiesSensor extends Sensor<LivingEntity> {
         return Mth.floor(hostile1.distanceToSqr(entity) - hostile2.distanceToSqr(entity));
     }
 
-    private int getPriority(LivingEntity entity, LivingEntity guard) {
+    public static boolean isGuardEnemy(LivingEntity entity, LivingEntity guard) {
+        return getPriority(entity, guard) >= 0;
+    }
+
+    private static int getPriority(LivingEntity entity, LivingEntity guard) {
         if (entity instanceof VillagerEntityMCA villager) {
             return villager.isHostile() ? 10 : -1;
         } else if (guard != null && entity instanceof Mob mob && mob.getTarget() == guard) {
@@ -56,7 +70,14 @@ public class GuardEnemiesSensor extends Sensor<LivingEntity> {
             ResourceLocation id = BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType());
             if (Config.getInstance().guardsTargetEntities.containsKey(id.toString())) {
                 return Config.getInstance().guardsTargetEntities.get(id.toString());
-            } else if (Config.getInstance().guardsTargetMonsters && entity instanceof Enemy) {
+            } else {
+                Optional<Integer> tagPriority = getTagPriority(entity.getType());
+                if (tagPriority.isPresent()) {
+                    return tagPriority.get();
+                }
+            }
+
+            if (Config.getInstance().guardsTargetMonsters && entity instanceof Enemy) {
                 return 3;
             } else {
                 return -1;
@@ -64,7 +85,16 @@ public class GuardEnemiesSensor extends Sensor<LivingEntity> {
         }
     }
 
-    private boolean isHostile(LivingEntity entity) {
-        return getPriority(entity, null) >= 0;
+    private static Optional<Integer> getTagPriority(EntityType<?> type) {
+        for (Map.Entry<String, Integer> entry : Config.getInstance().guardsTargetEntities.entrySet()) {
+            String key = entry.getKey();
+            if (key.startsWith("#")) {
+                ResourceLocation id = ResourceLocation.tryParse(key.substring(1));
+                if (id != null && RegistryHelper.isObjectInTag(BuiltInRegistries.ENTITY_TYPE, id, type)) {
+                    return Optional.of(entry.getValue());
+                }
+            }
+        }
+        return Optional.empty();
     }
 }

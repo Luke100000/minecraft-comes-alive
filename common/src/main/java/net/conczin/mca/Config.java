@@ -122,6 +122,11 @@ public final class Config extends CommonConfig {
     public boolean showNotificationsAsChat = false;
 
     /**
+     * If true, MCA book rewards are granted from advancements.
+     */
+    public boolean giveAdvancementBooks = true;
+
+    /**
      * The number of hearts required for a villager to consider the player a friend.
      */
     public int heartsToBeConsideredAsFriend = 40;
@@ -191,6 +196,11 @@ public final class Config extends CommonConfig {
      * Minimum squared distance at which teleportation becomes possible for villagers.
      */
     public double villagerMinTeleportationDistance = 128;
+
+    /**
+     * Maximum pathfinding distance used when villagers walk to long-range memories such as beds.
+     */
+    public int villagerPathfindingDistance = 192;
 
     /**
      * Number of hearts a child starts with towards their parent.
@@ -734,16 +744,20 @@ public final class Config extends CommonConfig {
             .put("minecraft:evoker", 3)
             .put("minecraft:husk", 2)
             .put("minecraft:illusioner", 3)
+            .put("minecraft:phantom", 0)
             .put("minecraft:pillager", 3)
             .put("minecraft:ravager", 3)
+            .put("minecraft:skeleton_horse", -1)
             .put("minecraft:vex", 0)
             .put("minecraft:vindicator", 4)
             .put("minecraft:zoglin", 2)
             .put("minecraft:zombie", 4)
+            .put("minecraft:zombie_horse", -1)
             .put("minecraft:zombie_villager", 3)
             .put("minecraft:spider", 0)
-            .put("minecraft:skeleton", 0)
+            .put("minecraft:cave_spider", 0)
             .put("minecraft:slime", 0)
+            .put("#minecraft:undead", 0)
             .put(MCA.MOD_ID + ":female_zombie_villager", 3)
             .put(MCA.MOD_ID + ":male_zombie_villager", 3)
             .build();
@@ -874,6 +888,10 @@ public final class Config extends CommonConfig {
 
     public static void setServerConfig(CommonConfig config) {
         serverConfig = config;
+    }
+
+    public int getVillagerPathfindingDistance() {
+        return Math.max(16, Math.min(256, villagerPathfindingDistance));
     }
 
     public void autocomplete() {

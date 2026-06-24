@@ -54,6 +54,10 @@ public class DeliverMessageTask extends Behavior<VillagerEntityMCA> {
 
     @Override
     protected boolean checkExtraStartConditions(ServerLevel world, VillagerEntityMCA villager) {
+        if (villager.getBrain().getMemory(MemoryModuleType.ATTACK_TARGET).isPresent()) {
+            return false;
+        }
+
         // Get potential message
         Optional<ConversationManager.Message> optionalMessage = getMessage(villager);
         // Set new message if it exists
@@ -75,6 +79,7 @@ public class DeliverMessageTask extends Behavior<VillagerEntityMCA> {
     protected boolean canStillUse(ServerLevel world, VillagerEntityMCA villager, long time) {
         return message != null
                && talked < getMaxTalkingTime()
+               && villager.getBrain().getMemory(MemoryModuleType.ATTACK_TARGET).isEmpty()
                && !villager.getVillagerBrain().isPanicking()
                && !villager.isSleeping();
     }

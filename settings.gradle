@@ -48,3 +48,5 @@ rootProject.name = 'minecraft-comes-alive'
 include('common')
 include('fabric')
 include('neoforge')
+
+enableFeaturePreview("NO_IMPLICIT_LOOKUP_IN_PARENT_PROJECTS")

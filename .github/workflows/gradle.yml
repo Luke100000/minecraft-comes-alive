@@ -17,6 +17,8 @@ jobs:
       CURSEFORGE_TOKEN: ${{ secrets.CF_API_TOKEN }}
       MAVEN_USERNAME: ${{ secrets.MAVEN_USERNAME }}
       MAVEN_TOKEN: ${{ secrets.MAVEN_TOKEN }}
+      NO_COLOR: 1
+    if: startsWith(github.ref, 'refs/tags/')
     steps:
       - name: Checkout Commit
         uses: actions/checkout@v6
@@ -32,8 +34,11 @@ jobs:
         uses: gradle/actions/setup-gradle@v6
         with:
           cache-read-only: false
-      - name: Build with Gradle
-        run: ./gradlew build --console=plain
+          cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
+      - name: Build Artifacts with Gradle
+        run: ./gradlew build --console=plain --non-interactive
+      - name: Publish to Maven
+        run: ./gradlew publish --console=plain --non-interactive
       - name: Get tag
         id: tag
         shell: bash
@@ -53,7 +58,7 @@ jobs:
 
           name: "[Fabric ${{steps.tag.outputs.minecraft_version}}] MCAR - ${{steps.tag.outputs.version}}"
           changelog-file: changelog.md
-          version-type: release
+          version-type: ${{ contains(steps.tag.outputs.version, 'beta') && 'beta' || contains(steps.tag.outputs.version, 'alpha') && 'alpha' || 'release' }}
           files: "fabric/build/libs/mca-fabric-${{steps.tag.outputs.tag}}.jar"
           loaders: |
             fabric
@@ -74,7 +79,7 @@ jobs:
 
           name: "[NeoForge ${{steps.tag.outputs.minecraft_version}}] MCAR - ${{steps.tag.outputs.version}}"
           changelog-file: changelog.md
-          version-type: release
+          version-type: ${{ contains(steps.tag.outputs.version, 'beta') && 'beta' || contains(steps.tag.outputs.version, 'alpha') && 'alpha' || 'release' }}
           files: "neoforge/build/libs/mca-neoforge-${{steps.tag.outputs.tag}}.jar"
           loaders: |
             neoforge

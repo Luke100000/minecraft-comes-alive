@@ -7,6 +7,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    env:
+      NO_COLOR: 1
     steps:
       - uses: actions/checkout@v6
       - name: Set up JDK 21
@@ -18,5 +20,8 @@ jobs:
         uses: gradle/actions/setup-gradle@v6
         with:
           cache-read-only: true
-      - name: Build with Gradle
-        run: ./gradlew build --console=plain
+          cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
+      - name: Build with Gradle - NeoForge
+        run: ./gradlew :neoforge:build --console=plain --non-interactive
+      - name: Build with Gradle - Fabric
+        run: ./gradlew :fabric:build --console=plain --non-interactive
