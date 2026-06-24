@@ -138,7 +138,8 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         return Villager.createAttributes()
                 .add(Attributes.ATTACK_DAMAGE, 3.0f)
                 .add(Attributes.ATTACK_KNOCKBACK, 1.0f)
-                .add(Attributes.MAX_HEALTH, Config.getInstance().villagerMaxHealth);
+                .add(Attributes.MAX_HEALTH, Config.getInstance().villagerMaxHealth)
+                .add(Attributes.FOLLOW_RANGE, Config.getInstance().getVillagerPathfindingDistance());
     }
 
     @Override

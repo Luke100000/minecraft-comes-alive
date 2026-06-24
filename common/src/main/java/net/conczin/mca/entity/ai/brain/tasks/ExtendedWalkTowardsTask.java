@@ -4,6 +4,7 @@ import net.conczin.mca.entity.VillagerEntityMCA;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.GlobalPos;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.world.entity.ai.behavior.OneShot;
 import net.minecraft.world.entity.ai.behavior.declarative.BehaviorBuilder;
@@ -24,14 +25,14 @@ import java.util.stream.Stream;
 public class ExtendedWalkTowardsTask {
     @FunctionalInterface
     public interface WalkTargetResolver {
-        Optional<BlockPos> resolve(VillagerEntityMCA entity, GlobalPos destination);
+        Optional<BlockPos> resolve(ServerLevel world, VillagerEntityMCA entity, GlobalPos destination);
     }
 
     public ExtendedWalkTowardsTask() {
     }
 
     public static OneShot<VillagerEntityMCA> create(MemoryModuleType<GlobalPos> destination, float speed, int completionRange, int maxDistance, int maxRunTime, Predicate<VillagerEntityMCA> canGiveUp, Consumer<VillagerEntityMCA> onGiveUp) {
-        return create(destination, speed, completionRange, maxDistance, maxRunTime, canGiveUp, onGiveUp, (entity, globalPos) -> Optional.empty());
+        return create(destination, speed, completionRange, maxDistance, maxRunTime, canGiveUp, onGiveUp, (world, entity, globalPos) -> Optional.empty());
     }
 
     public static OneShot<VillagerEntityMCA> create(MemoryModuleType<GlobalPos> destination, float speed, int completionRange, int maxDistance, int maxRunTime, Predicate<VillagerEntityMCA> canGiveUp, Consumer<VillagerEntityMCA> onGiveUp, WalkTargetResolver walkTargetResolver) {
@@ -45,7 +46,9 @@ public class ExtendedWalkTowardsTask {
                             GlobalPos globalPos = context.get(destinationResult);
                             Optional<Long> optional = context.tryGet(cantReachWalkTargetSince);
                             if (globalPos.dimension() == world.dimension() && (optional.isEmpty() || world.getGameTime() - optional.get() <= (long) maxRunTime)) {
-                                BlockPos targetPos = walkTargetResolver.resolve(entity, globalPos).orElse(globalPos.pos());
+                                Optional<BlockPos> resolvedTarget = walkTargetResolver.resolve(world, entity, globalPos);
+                                BlockPos targetPos = resolvedTarget.orElse(globalPos.pos());
+                                int targetCompletionRange = resolvedTarget.isPresent() ? 0 : completionRange;
                                 if (targetPos.distManhattan(entity.blockPosition()) > maxDistance) {
                                     Vec3 vec3d = null;
                                     int l = 0;
@@ -62,8 +65,8 @@ public class ExtendedWalkTowardsTask {
                                     }
 
                                     walkTarget.set(new WalkTarget(vec3d, speed, completionRange));
-                                } else if (targetPos.distManhattan(entity.blockPosition()) > completionRange) {
-                                    walkTarget.set(new WalkTarget(targetPos, speed, completionRange));
+                                } else if (targetPos.distManhattan(entity.blockPosition()) > targetCompletionRange) {
+                                    walkTarget.set(new WalkTarget(targetPos, speed, targetCompletionRange));
                                 }
                             } else {
                                 if (canGiveUp.test(entity)) {
@@ -82,13 +85,13 @@ public class ExtendedWalkTowardsTask {
         });
     }
 
-    public static Optional<BlockPos> findBedStandPosition(VillagerEntityMCA entity, GlobalPos destination) {
+    public static Optional<BlockPos> findBedStandPosition(ServerLevel world, VillagerEntityMCA entity, GlobalPos destination) {
         if (entity.isSleeping()) {
             return Optional.empty();
         }
 
         BlockPos bedPos = destination.pos();
-        BlockState bedState = entity.level().getBlockState(bedPos);
+        BlockState bedState = world.getBlockState(bedPos);
         if (!bedState.is(BlockTags.BEDS)) {
             return Optional.empty();
         }
@@ -113,12 +116,9 @@ public class ExtendedWalkTowardsTask {
                         headPos.relative(facing)
                 )
                 .distinct()
-                .filter(candidate -> candidate.distSqr(bedPos) <= 4.0)
+                .filter(candidate -> bedPos.closerToCenterThan(Vec3.atCenterOf(candidate), 2.0))
                 .filter(candidate -> entity.getNavigation().isStableDestination(candidate))
-                .filter(candidate -> {
-                    Vec3 offset = Vec3.atBottomCenterOf(candidate).subtract(entity.position());
-                    return entity.isFree(offset.x, offset.y, offset.z);
-                })
+                .filter(candidate -> world.noCollision(entity, entity.getBoundingBox().move(Vec3.atBottomCenterOf(candidate).subtract(entity.position()))))
                 .min(Comparator.comparingInt(candidate -> candidate.distManhattan(entity.blockPosition())));
     }
 }

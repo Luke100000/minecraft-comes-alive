@@ -1,3 +1,7 @@
+# 7.7.15
+
+* More pathfinding improvements.
+
 # 7.7.14
 
 * Fix pathfinding again
