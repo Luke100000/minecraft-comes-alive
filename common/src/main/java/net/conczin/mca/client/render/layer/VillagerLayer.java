@@ -161,13 +161,10 @@ public abstract class VillagerLayer<S extends HumanoidRenderState, M extends Hum
 
     @Nullable
     protected RenderType getRenderLayer(Identifier texture, boolean showBody, boolean translucent, boolean showOutline) {
-        if (translucent) {
-            return RenderTypes.entityTranslucent(texture);
-        } else if (showBody) {
-            return this.model.renderType(texture);
-        } else {
-            return showOutline ? RenderTypes.outline(texture) : null;
+        if (showBody) {
+            return translucent ? RenderTypes.entityTranslucent(texture) : this.model.renderType(texture);
         }
+        return showOutline ? RenderTypes.outline(texture) : null;
     }
 
     protected void renderModel(

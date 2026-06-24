@@ -54,17 +54,17 @@ public final class VillagerRenderStateHooks {
 
         state.boundingBoxWidth = entity.getBbWidth() * horizontalRatio;
         state.boundingBoxHeight = entity.getBbHeight() * verticalRatio;
+
         if (state.hasPose(Pose.SLEEPING) && state.bedOrientation == null && entity.isPassenger()) {
             state.pose = Pose.STANDING;
         } else if (state.hasPose(Pose.SLEEPING)) {
             state.walkAnimationPos = 0.0F;
             state.walkAnimationSpeed = 0.0F;
         }
-        // When sleeping, vanilla's extractRenderState() uses getEyeHeight(Pose.STANDING) for the
-        // bed head-offset translation in submit(). We must mirror that here instead of using the
-        // sleeping pose eye height, otherwise the villager ends up at the wrong position on the bed.
+
         Pose eyePose = state.bedOrientation != null ? Pose.STANDING : state.pose;
         state.eyeHeight = entity.getEyeHeight(eyePose) * verticalRatio;
+
         if (state.nameTagAttachment != null) {
             Vec3 nameTagAttachment = entity.getAttachments().get(EntityAttachment.NAME_TAG, 0, entity.getYRot());
             double y = entity.isPassenger() ? 0.55 : state.boundingBoxHeight;

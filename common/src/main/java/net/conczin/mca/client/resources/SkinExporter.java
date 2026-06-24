@@ -3,6 +3,7 @@ package net.conczin.mca.client.resources;
 import com.mojang.blaze3d.platform.NativeImage;
 import net.conczin.mca.MCA;
 import net.conczin.mca.client.gui.immersive_library.SkinCache;
+import net.conczin.mca.client.render.RainbowColor;
 import net.conczin.mca.client.render.VillagerVisuals;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.resources.BodySkinList;
@@ -16,7 +17,6 @@ import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.util.ARGB;
-
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -114,7 +114,7 @@ public class SkinExporter {
         return exportDir.resolve(candidateName);
     }
 
-    private static Identifier getSkin(VillagerVisuals visuals) {
+    public static Identifier getSkin(VillagerVisuals visuals) {
         if (!MCA.isBlankString(visuals.skin())) {
             return Identifier.parse(visuals.skin());
         }
@@ -122,7 +122,7 @@ public class SkinExporter {
         return Identifier.fromNamespaceAndPath("mca", "skins/skin/" + visuals.genderDataName() + "/" + skin + ".png");
     }
 
-    private static int getSkinColor(VillagerVisuals visuals) {
+    public static int getSkinColor(VillagerVisuals visuals) {
         if (!MCA.isBlankString(visuals.skin())) {
             BodySkinList list = BodySkinList.getInstance();
             BodySkin skin = list == null ? null : list.get(visuals.skin());
@@ -142,20 +142,38 @@ public class SkinExporter {
         );
     }
 
-    private static Identifier getFace(VillagerVisuals visuals) {
+    public static Identifier getFace(VillagerVisuals visuals) {
         FaceList list = FaceList.getInstance();
         return list == null ? BLINK_FACE : list.pick("normal", visuals.faceGene());
     }
 
-    private static Identifier getClothes(VillagerVisuals visuals) {
+    public static Identifier getClothes(VillagerVisuals visuals) {
+        return getClothes(visuals, "normal");
+    }
+
+    public static Identifier getClothes(VillagerVisuals visuals, String variant) {
         String identifier = visuals.clothes();
         if (MCA.isBlankString(identifier)) {
             return null;
         }
-        return getLibraryOrResourceIdentifier(identifier);
+        String v = visuals.burned() ? "burnt" : variant;
+        var contentId = ImmersiveLibraryIds.contentId(identifier);
+        if (contentId.isPresent()) {
+            return SkinCache.getTextureIdentifier(contentId.getAsInt());
+        }
+
+        Identifier id = Identifier.parse(identifier);
+        Identifier idNew = Identifier.fromNamespaceAndPath(id.getNamespace(), id.getPath().replace("normal", v));
+        if (Minecraft.getInstance().getResourceManager().getResource(idNew).isPresent()) {
+            return idNew;
+        }
+        return id;
     }
 
-    private static int getHairColor(VillagerVisuals visuals) {
+    public static int getHairColor(VillagerVisuals visuals) {
+        if (visuals.rainbowHair()) {
+            return RainbowColor.sheep(visuals.tickCount());
+        }
         int hairDye = visuals.hairDye();
         if (hairDye != 0xFF000000) {
             return hairDye;
@@ -168,7 +186,7 @@ public class SkinExporter {
         );
     }
 
-    private static NativeImage loadTexture(Identifier id) {
+    public static NativeImage loadTexture(Identifier id) {
         if (id.getNamespace().equals("immersive_library")) {
             try {
                 int contentId = Integer.parseInt(id.getPath());
@@ -195,7 +213,7 @@ public class SkinExporter {
         return null;
     }
 
-    private static Identifier getLibraryOrResourceIdentifier(String identifier) {
+    public static Identifier getLibraryOrResourceIdentifier(String identifier) {
         var contentId = ImmersiveLibraryIds.contentId(identifier);
         if (contentId.isPresent()) {
             return SkinCache.getTextureIdentifier(contentId.getAsInt());
@@ -203,7 +221,7 @@ public class SkinExporter {
         return Identifier.parse(identifier);
     }
 
-    private static void compositeFace(NativeImage base, Identifier faceId, VillagerVisuals visuals) {
+    public static void compositeFace(NativeImage base, Identifier faceId, VillagerVisuals visuals) {
         NativeImage face = loadTexture(faceId);
         if (face == null) {
             return;
@@ -224,11 +242,11 @@ public class SkinExporter {
         }
     }
 
-    private static int getEyeColor(VillagerVisuals visuals, boolean left) {
-        return visuals.staticEyeColor(left);
+    public static int getEyeColor(VillagerVisuals visuals, boolean left) {
+        return visuals.eyeColor(0.0f, left);
     }
 
-    private static void compositeEyeLayer(NativeImage base, NativeImage face, boolean sclera, EyeTextureLayers.Side side, int splitX, int tintColor) {
+    public static void compositeEyeLayer(NativeImage base, NativeImage face, boolean sclera, EyeTextureLayers.Side side, int splitX, int tintColor) {
         int width = Math.min(base.getWidth(), face.getWidth());
         int height = Math.min(base.getHeight(), face.getHeight());
         for (int x = 0; x < width; x++) {
@@ -246,7 +264,7 @@ public class SkinExporter {
         }
     }
 
-    private static void composite(NativeImage base, Identifier layerId, int tintColor) {
+    public static void composite(NativeImage base, Identifier layerId, int tintColor) {
         if (layerId == null) {
             return;
         }
@@ -270,7 +288,7 @@ public class SkinExporter {
         }
     }
 
-    private static void compositePixel(NativeImage base, int x, int y, int overPixel, int tintColor) {
+    public static void compositePixel(NativeImage base, int x, int y, int overPixel, int tintColor) {
         int tr = ARGB.red(tintColor);
         int tg = ARGB.green(tintColor);
         int tb = ARGB.blue(tintColor);

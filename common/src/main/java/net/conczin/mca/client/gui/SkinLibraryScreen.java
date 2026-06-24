@@ -130,11 +130,13 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
 
         if (villagerVisualization != null) {
             this.villagerVisualization.load(TagValueInput.create(ProblemReporter.DISCARDING, this.villagerVisualization.registryAccess(), saveEntityData(villagerVisualization)));
+            this.villagerVisualization.clearLayeredHair();
         } else {
             assert Minecraft.getInstance().player != null;
             VillagerLike<?> villagerLike = MCAClient.getPlayerData(Minecraft.getInstance().player.getUUID()).orElse(null);
             if (villagerLike instanceof VillagerEntityMCA villager) {
                 this.villagerVisualization.load(TagValueInput.create(ProblemReporter.DISCARDING, this.villagerVisualization.registryAccess(), saveEntityData(villager)));
+                this.villagerVisualization.clearLayeredHair();
             }
         }
     }
@@ -428,6 +430,8 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
     }
 
     private void setDummyTexture(VillagerEntityMCA preview, LiteContent content) {
+        preview.setHairStyleId("");
+        preview.clearLayeredHair();
         if (content.hasTag("clothing")) {
             preview.setHair(EMPTY_IDENTIFIER);
             preview.setClothes(SkinCache.getTextureIdentifier(content));
@@ -640,7 +644,11 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                     setPage(Page.DETAIL);
                 } else {
                     if (hoveredContent.hasTag("clothing")) {
-                        previousScreen.getVillager().setClothes("immersive_library:" + hoveredContent.contentid());
+                        var villager = previousScreen.getVillager();
+                        villager.setClothes("immersive_library:" + hoveredContent.contentid());
+                        villager.setHair("");
+                        villager.setHairStyleId("");
+                        villager.clearLayeredHair();
                         returnToPreviousScreen();
                     } else if (hoveredContent.hasTag("hair")) {
                         previousScreen.applyLibraryHair("immersive_library:" + hoveredContent.contentid());

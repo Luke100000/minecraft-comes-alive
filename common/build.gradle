@@ -66,6 +66,7 @@ neoForge {
 
 dependencies {
     compileOnly 'org.spongepowered:mixin:0.8.5'
+    compileOnly 'io.github.llamalad7:mixinextras-fabric:0.5.4'
 }
 
 configurations {

@@ -1,3 +1,18 @@
+# 7.9.2
+
+* Fix dedicated server crashes
+* Fix eyes showing when invisible.
+
+# 7.9.1
+
+* Villagers now show up with their correct face and skin icons on map mods (such as Xaero's maps and JourneyMap) instead of appearing as broken pink squares.
+* Archer villagers' arrows will now consistently hit and damage their targets instead of occasionally bouncing off without doing anything.
+* Fixed villagers appearing in the wrong spot or floating next to their beds while sleeping.
+* Fixed the Minecraft Comes Alive keybind translation key category
+* Bug fixes
+* Hats / Models correctly render.
+* Fixed Library Editor
+
 # 7.9.0
 
 * Overhauled the villager editor with the new hair, face, skin, eye, preset, preview and export controls.
