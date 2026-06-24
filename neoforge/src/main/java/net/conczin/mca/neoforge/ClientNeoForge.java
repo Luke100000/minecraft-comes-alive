@@ -14,6 +14,7 @@ import net.conczin.mca.client.resources.GeneratedEyeTextureReloadListener;
 import net.conczin.mca.registry.EntitiesMCA;
 import net.conczin.mca.registry.ParticleTypesMCA;
 import net.conczin.mca.resources.ApiReloadListener;
+import net.conczin.mca.resources.FaceList;
 import net.conczin.mca.resources.Supporters;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.entity.LivingEntityRenderer;
@@ -68,6 +69,7 @@ public final class ClientNeoForge extends ClientProxyAbstractImpl {
         event.addListener(MCA.locate("color_palettes"), new ColorPaletteLoader());
         event.addListener(MCA.locate("supporters"), new Supporters());
         event.addListener(MCA.locate("api"), new ApiReloadListener());
+        event.addListener(MCA.locate("faces_client"), new FaceList());
         event.addListener(GeneratedEyeTextureReloadListener.ID, GeneratedEyeTextureReloadListener.INSTANCE);
     }
 

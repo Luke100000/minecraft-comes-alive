@@ -1,3 +1,8 @@
+# 7.9.2
+
+* Fix dedicated server crashes
+* Fix eyes showing when invisible.
+
 # 7.9.1
 
 * Villagers now show up with their correct face and skin icons on map mods (such as Xaero's maps and JourneyMap) instead of appearing as broken pink squares.

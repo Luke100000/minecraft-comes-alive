@@ -14,6 +14,7 @@ import net.conczin.mca.network.Network;
 import net.conczin.mca.registry.EntitiesMCA;
 import net.conczin.mca.registry.ParticleTypesMCA;
 import net.conczin.mca.resources.ApiReloadListener;
+import net.conczin.mca.resources.FaceList;
 import net.conczin.mca.resources.Supporters;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
@@ -68,6 +69,7 @@ public final class MCAFabricClient extends ClientProxyAbstractImpl implements Cl
         registerReloadListener(resourceLoader, ColorPaletteLoader.ID, new ColorPaletteLoader());
         registerReloadListener(resourceLoader, Supporters.ID, new Supporters());
         registerReloadListener(resourceLoader, ApiReloadListener.ID, new ApiReloadListener());
+        registerReloadListener(resourceLoader, FaceList.ID, new FaceList());
         registerReloadListener(resourceLoader, GeneratedEyeTextureReloadListener.ID, GeneratedEyeTextureReloadListener.INSTANCE);
 
         ClientPlayConnectionEvents.JOIN.register((handler, sender, server) ->
