@@ -246,7 +246,8 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
 
     private boolean isValidClothing(String identifier) {
         ClothingList list = ClothingList.getInstance();
-        return list != null && (list.clothing.containsKey(identifier) || CustomClothingManager.getClothing().getEntries().containsKey(identifier));
+        return ImmersiveLibraryIds.isValid(identifier)
+                || list != null && (list.clothing.containsKey(identifier) || CustomClothingManager.getClothing().getEntries().containsKey(identifier));
     }
 
     private boolean isValidHair(String identifier) {
@@ -255,7 +256,8 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
 
     private boolean isValidHairStyle(String identifier) {
         HairStyleList list = HairStyleList.getInstance();
-        return (list != null && list.get(identifier) != null) || CustomClothingManager.getHair().getEntries().containsKey(identifier);
+        return ImmersiveLibraryIds.isValid(identifier)
+                || (list != null && list.get(identifier) != null) || CustomClothingManager.getHair().getEntries().containsKey(identifier);
     }
 
     private boolean isValidLayeredHair(String identifier) {
@@ -297,7 +299,17 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
 
         mcaData.putString("HairStyle", style.getIdentifier());
         mcaData.putString("Hair", "");
-        for (LayeredHair.Category category : LayeredHair.Category.values()) {
+        clearLayeredHair(mcaData);
+    }
+
+    private void clearHair(CompoundTag mcaData) {
+        mcaData.putString("Hair", "");
+        mcaData.putString("HairStyle", "");
+        clearLayeredHair(mcaData);
+    }
+
+    private void clearLayeredHair(CompoundTag mcaData) {
+        for (LayeredHair.Category category : LayeredHair.Category.RENDER_ORDER) {
             mcaData.putString(category.getDataKey(), "");
         }
     }

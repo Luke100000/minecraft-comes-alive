@@ -4,6 +4,7 @@
   "package": "net.conczin.mca.mixin",
   "compatibilityLevel": "JAVA_25",
   "mixins": [
+    "MixinAbstractArrow",
     "MixinAbstractFurnaceBlockEntity",
     "MixinEntity",
     "MixinFlintAndSteelItem",

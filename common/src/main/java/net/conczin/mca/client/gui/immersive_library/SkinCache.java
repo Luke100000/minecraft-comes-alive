@@ -201,4 +201,8 @@ public class SkinCache {
         sync(contentid, -2);
         return textureIdentifiers.getOrDefault(contentid, DEFAULT_SKIN);
     }
+
+    public static boolean isLoaded(int contentid) {
+        return textureIdentifiers.containsKey(contentid);
+    }
 }

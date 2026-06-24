@@ -50,6 +50,11 @@ public class HairLayer<S extends HumanoidRenderState, M extends HumanoidModel<S>
             if (canUse(texture)) {
                 renderModel(poseStack, submitNodeCollector, lightCoords, this.model, color, texture, overlay, visible, glowing, state);
             }
+
+            Identifier overlayTexture = getOverlayTexture(identifier);
+            if (canUse(overlayTexture)) {
+                renderModel(poseStack, submitNodeCollector, lightCoords, this.model, 0xFFFFFFFF, overlayTexture, overlay, visible, glowing, state);
+            }
         }
     }
 
@@ -59,6 +64,14 @@ public class HairLayer<S extends HumanoidRenderState, M extends HumanoidModel<S>
             return SkinCache.getTextureIdentifier(contentId.getAsInt());
         }
         return cached(identifier, Identifier::parse);
+    }
+
+    private Identifier getOverlayTexture(String identifier) {
+        if (ImmersiveLibraryIds.contentId(identifier).isPresent() || !identifier.endsWith(".png")) {
+            return null;
+        }
+        String overlay = identifier.replace(".png", "_overlay.png");
+        return cached(overlay, Identifier::parse);
     }
 
     @Override

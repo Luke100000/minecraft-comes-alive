@@ -1509,6 +1509,8 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
 
         if (page.equals("skin") && (hoveredClothingId >= 0 && filteredBodySkins.size() > hoveredClothingId)) {
             villager.setSkin(filteredBodySkins.get(hoveredClothingId));
+            villager.setHairStyleId("");
+            villager.clearLayeredHair();
             setPage("body");
             eventCallback("skin");
             return true;

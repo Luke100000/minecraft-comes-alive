@@ -1,6 +1,5 @@
 package net.conczin.mca.entity;
 
-import org.jetbrains.annotations.Nullable;
 import com.mojang.serialization.JsonOps;
 import net.conczin.mca.Config;
 import net.conczin.mca.MCA;
@@ -21,6 +20,7 @@ import net.conczin.mca.resources.data.skin.LayeredHair;
 import net.conczin.mca.server.world.data.CustomClothingManager;
 import net.conczin.mca.server.world.data.FamilyTreeNode;
 import net.conczin.mca.server.world.data.PlayerSaveData;
+import net.conczin.mca.util.ImmersiveLibraryIds;
 import net.conczin.mca.util.network.datasync.*;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.nbt.CompoundTag;
@@ -47,6 +47,7 @@ import net.minecraft.world.entity.npc.villager.VillagerDataHolder;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.level.storage.TagValueInput;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.Optional;
 import java.util.Set;
@@ -579,13 +580,16 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
     }
 
     private boolean isValidHairTexture(String hair, LayeredHairList layeredHairList) {
-        if (hair.startsWith("immersive_library")) {
+        if (ImmersiveLibraryIds.isValid(hair)) {
             return true;
         }
         return layeredHairList.containsIdentifier(hair);
     }
 
     private boolean isValidHairStyle(String hair) {
+        if (ImmersiveLibraryIds.isValid(hair)) {
+            return true;
+        }
         HairStyleList styles = HairStyleList.getInstance();
         return (styles != null && styles.get(hair) != null) || CustomClothingManager.getHair().getEntries().containsKey(hair);
     }
