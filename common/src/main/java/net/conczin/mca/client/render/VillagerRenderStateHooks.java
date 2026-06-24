@@ -54,14 +54,16 @@ public final class VillagerRenderStateHooks {
 
         state.boundingBoxWidth = entity.getBbWidth() * horizontalRatio;
         state.boundingBoxHeight = entity.getBbHeight() * verticalRatio;
-        Pose eyePose = state.bedOrientation != null ? Pose.STANDING : state.pose;
-        state.eyeHeight = entity.getEyeHeight(eyePose) * verticalRatio;
 
-        if (state.hasPose(Pose.SLEEPING)) {
+        if (state.hasPose(Pose.SLEEPING) && state.bedOrientation == null && entity.isPassenger()) {
+            state.pose = Pose.STANDING;
+        } else if (state.hasPose(Pose.SLEEPING)) {
             state.walkAnimationPos = 0.0F;
             state.walkAnimationSpeed = 0.0F;
-            return;
         }
+
+        Pose eyePose = state.bedOrientation != null ? Pose.STANDING : state.pose;
+        state.eyeHeight = entity.getEyeHeight(eyePose) * verticalRatio;
 
         if (state.nameTagAttachment != null) {
             Vec3 nameTagAttachment = entity.getAttachments().get(EntityAttachment.NAME_TAG, 0, entity.getYRot());
