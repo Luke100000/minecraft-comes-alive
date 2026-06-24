@@ -1480,7 +1480,8 @@ public class VillagerEntityMCA extends VillagerEntity implements VillagerLike<Vi
         return VillagerEntity.createVillagerAttributes()
                 .add(EntityAttributes.GENERIC_ATTACK_DAMAGE, 3.0f)
                 .add(EntityAttributes.GENERIC_ATTACK_KNOCKBACK, 1.0f)
-                .add(EntityAttributes.GENERIC_MAX_HEALTH, Config.getInstance().villagerMaxHealth);
+                .add(EntityAttributes.GENERIC_MAX_HEALTH, Config.getInstance().villagerMaxHealth)
+                .add(EntityAttributes.GENERIC_FOLLOW_RANGE, Config.getInstance().getVillagerPathfindingDistance());
     }
 
     private void tickDespawnDelay() {

@@ -46,7 +46,9 @@ public class ExtendedWalkTowardsTask {
                             GlobalPos globalPos = context.getValue(destinationResult);
                             Optional<Long> optional = context.getOptionalValue(cantReachWalkTargetSince);
                             if (globalPos.getDimension() == world.getRegistryKey() && (optional.isEmpty() || world.getTime() - optional.get() <= (long)maxRunTime)) {
-                                BlockPos targetPos = walkTargetResolver.resolve(world, entity, globalPos).orElse(globalPos.getPos());
+                                Optional<BlockPos> resolvedTarget = walkTargetResolver.resolve(world, entity, globalPos);
+                                BlockPos targetPos = resolvedTarget.orElse(globalPos.getPos());
+                                int targetCompletionRange = resolvedTarget.isPresent() ? 0 : completionRange;
                                 if (targetPos.getManhattanDistance(entity.getBlockPos()) > maxDistance) {
                                     Vec3d vec3d = null;
                                     int l = 0;
@@ -63,8 +65,8 @@ public class ExtendedWalkTowardsTask {
                                     }
 
                                     walkTarget.remember(new WalkTarget(vec3d, speed, completionRange));
-                                } else if (targetPos.getManhattanDistance(entity.getBlockPos()) > completionRange) {
-                                    walkTarget.remember(new WalkTarget(targetPos, speed, completionRange));
+                                } else if (targetPos.getManhattanDistance(entity.getBlockPos()) > targetCompletionRange) {
+                                    walkTarget.remember(new WalkTarget(targetPos, speed, targetCompletionRange));
                                 }
                             } else {
                                 if (canGiveUp.test(entity)) {
@@ -116,10 +118,7 @@ public class ExtendedWalkTowardsTask {
                 .distinct()
                 .filter(candidate -> bedPos.isWithinDistance(Vec3d.ofCenter(candidate), 2.0))
                 .filter(candidate -> entity.getNavigation().isValidPosition(candidate))
-                .filter(candidate -> {
-                    Vec3d offset = Vec3d.ofBottomCenter(candidate).subtract(entity.getPos());
-                    return entity.doesNotCollide(offset.x, offset.y, offset.z);
-                })
+                .filter(candidate -> world.isSpaceEmpty(entity, entity.getBoundingBox().offset(Vec3d.ofBottomCenter(candidate).subtract(entity.getPos()))))
                 .min(Comparator.comparingInt(candidate -> candidate.getManhattanDistance(entity.getBlockPos())));
     }
 }
