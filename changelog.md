@@ -1,3 +1,7 @@
+# 7.7.14
+
+* Fix pathfinding again
+
 # 7.7.13
 
 * Iron golems no longer attack regular MCA villagers
