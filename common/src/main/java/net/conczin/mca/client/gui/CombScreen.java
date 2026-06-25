@@ -33,14 +33,18 @@ public class CombScreen extends VillagerEditorScreen {
     protected void setPage(String page) {
         if (page.equals("loading")) {
             super.setPage("loading");
-        } else if (page.equals("head") || page.equals("hair_style") || page.equals("hair_advanced")) {
+        } else if (page.equals("head") || page.equals("hair_style") || isDoneFromLayeredHair(page)) {
             syncVillagerData();
             onClose();
-        } else if (page.equals("hair") || isLayeredHairDestination(page)) {
+        } else if (page.equals("hair_advanced") || page.equals("hair") || isLayeredHairDestination(page)) {
             super.setPage(page);
         } else {
             super.setPage("hair");
         }
+    }
+
+    private boolean isDoneFromLayeredHair(String dest) {
+        return dest.equals("hair_advanced") && page != null && isLayeredHairDestination(page);
     }
 
     private boolean isLayeredHairDestination(String dest) {
