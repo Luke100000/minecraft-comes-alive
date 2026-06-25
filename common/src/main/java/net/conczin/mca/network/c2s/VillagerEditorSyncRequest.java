@@ -7,17 +7,12 @@ import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.network.HandleablePayload;
 import net.conczin.mca.network.Network;
 import net.conczin.mca.network.s2c.PlayerDataMessage;
-import net.conczin.mca.resources.BodySkinList;
-import net.conczin.mca.resources.ClothingList;
-import net.conczin.mca.resources.HairStyleList;
-import net.conczin.mca.resources.LayeredHairList;
+import net.conczin.mca.resources.*;
 import net.conczin.mca.resources.data.skin.HairStyle;
 import net.conczin.mca.resources.data.skin.LayeredHair;
-import net.conczin.mca.server.world.data.CustomClothingManager;
 import net.conczin.mca.server.world.data.FamilyTree;
 import net.conczin.mca.server.world.data.FamilyTreeNode;
 import net.conczin.mca.server.world.data.PlayerSaveData;
-import net.conczin.mca.util.ImmersiveLibraryIds;
 import net.conczin.mca.util.NbtHelper;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.UUIDUtil;
@@ -222,12 +217,12 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
 
     private void sanitizeVisualIdentifiers(CompoundTag villagerData) {
         CompoundTag mcaData = getOrCreateMcaData(villagerData);
-        clearInvalidIdentifier(mcaData, "Skin", this::isValidBodySkin);
-        clearInvalidIdentifier(mcaData, "Clothes", this::isValidClothing);
-        clearInvalidIdentifier(mcaData, "Hair", this::isValidHair);
-        clearInvalidIdentifier(mcaData, "HairStyle", this::isValidHairStyle);
+        clearInvalidIdentifier(mcaData, "Skin", SkinVisualIds::isBodySkin);
+        clearInvalidIdentifier(mcaData, "Clothes", SkinVisualIds::isClothing);
+        clearInvalidIdentifier(mcaData, "Hair", SkinVisualIds::isHairStyle);
+        clearInvalidIdentifier(mcaData, "HairStyle", SkinVisualIds::isHairStyle);
         for (LayeredHair.Category category : LayeredHair.Category.values()) {
-            clearInvalidIdentifier(mcaData, category.getDataKey(), this::isValidLayeredHair);
+            clearInvalidIdentifier(mcaData, category.getDataKey(), identifier -> SkinVisualIds.isHairLayer(identifier, category));
         }
     }
 
@@ -237,34 +232,6 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
             MCA.LOGGER.warn("Ignoring unknown villager editor visual identifier {}={}", key, identifier);
             mcaData.putString(key, "");
         }
-    }
-
-    private boolean isValidBodySkin(String identifier) {
-        BodySkinList list = BodySkinList.getInstance();
-        return list != null && list.get(identifier) != null;
-    }
-
-    private boolean isValidClothing(String identifier) {
-        ClothingList list = ClothingList.getInstance();
-        return ImmersiveLibraryIds.isValid(identifier)
-                || list != null && (list.clothing.containsKey(identifier) || CustomClothingManager.getClothing().getEntries().containsKey(identifier));
-    }
-
-    private boolean isValidHair(String identifier) {
-        return isValidHairStyle(identifier);
-    }
-
-    private boolean isValidHairStyle(String identifier) {
-        HairStyleList list = HairStyleList.getInstance();
-        return ImmersiveLibraryIds.isValid(identifier)
-                || (list != null && list.get(identifier) != null) || CustomClothingManager.getHair().getEntries().containsKey(identifier);
-    }
-
-    private boolean isValidLayeredHair(String identifier) {
-        LayeredHairList list = LayeredHairList.getInstance();
-        return ImmersiveLibraryIds.isValid(identifier)
-                || list != null && list.containsIdentifier(identifier)
-                || CustomClothingManager.getHair().getEntries().containsKey(identifier);
     }
 
     private Gender getGender(CompoundTag villagerData) {

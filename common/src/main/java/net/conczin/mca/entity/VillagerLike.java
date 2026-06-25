@@ -17,7 +17,6 @@ import net.conczin.mca.registry.EntitiesMCA;
 import net.conczin.mca.resources.*;
 import net.conczin.mca.resources.data.skin.HairStyle;
 import net.conczin.mca.resources.data.skin.LayeredHair;
-import net.conczin.mca.server.world.data.CustomClothingManager;
 import net.conczin.mca.server.world.data.FamilyTreeNode;
 import net.conczin.mca.server.world.data.PlayerSaveData;
 import net.conczin.mca.util.ImmersiveLibraryIds;
@@ -542,31 +541,27 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
         if (!asEntity().level().isClientSide()) {
             migrateLegacyHairStyle();
 
-            BodySkinList bodySkinList = BodySkinList.getInstance();
-            if (!MCA.isBlankString(getSkin()) && bodySkinList != null && !bodySkinList.skins.containsKey(getSkin())) {
+            if (!MCA.isBlankString(getSkin()) && !SkinVisualIds.isBodySkin(getSkin())) {
                 MCA.LOGGER.info("Villagers skin {} does not exist!", getSkin());
                 randomizeSkin();
             }
 
-            if (!getClothes().startsWith("immersive_library") && !ClothingList.getInstance().clothing.containsKey(getClothes())) {
+            if (!SkinVisualIds.isClothing(getClothes())) {
                 MCA.LOGGER.info("Villagers clothing {} does not exist!", getClothes());
                 randomizeClothes();
             }
 
-            if (!MCA.isBlankString(getHairStyleId()) && !isValidHairStyle(getHairStyleId())) {
+            if (!MCA.isBlankString(getHairStyleId()) && !SkinVisualIds.isHairStyle(getHairStyleId())) {
                 MCA.LOGGER.info("Villagers hair style {} does not exist!", getHairStyleId());
                 randomizeHair();
             }
 
-            LayeredHairList layeredHairList = LayeredHairList.getInstance();
-            if (layeredHairList != null) {
-                for (LayeredHair.Category category : LayeredHair.Category.values()) {
-                    String hair = getLayeredHair(category);
-                    if (!MCA.isBlankString(hair) && !isValidHairTexture(hair, layeredHairList)) {
-                        MCA.LOGGER.info("Villagers layered hair {} does not exist!", hair);
-                        randomizeHair();
-                        break;
-                    }
+            for (LayeredHair.Category category : LayeredHair.Category.values()) {
+                String hair = getLayeredHair(category);
+                if (!MCA.isBlankString(hair) && !SkinVisualIds.isHairLayer(hair, category)) {
+                    MCA.LOGGER.info("Villagers layered hair {} does not exist!", hair);
+                    randomizeHair();
+                    break;
                 }
             }
         }
@@ -598,21 +593,6 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
             }
         }
         return false;
-    }
-
-    private boolean isValidHairTexture(String hair, LayeredHairList layeredHairList) {
-        if (ImmersiveLibraryIds.isValid(hair)) {
-            return true;
-        }
-        return layeredHairList.containsIdentifier(hair);
-    }
-
-    private boolean isValidHairStyle(String hair) {
-        if (ImmersiveLibraryIds.isValid(hair)) {
-            return true;
-        }
-        HairStyleList styles = HairStyleList.getInstance();
-        return (styles != null && styles.get(hair) != null) || CustomClothingManager.getHair().getEntries().containsKey(hair);
     }
 
     @SuppressWarnings({"unchecked", "RedundantSuppression"})
