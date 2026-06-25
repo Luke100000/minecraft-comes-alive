@@ -1,6 +1,7 @@
 # 7.7.15
 
-* More pathfinding improvements.
+* More pathfinding improvements, NPC's should now properly pathfind to their beds without getting stuck,
+  * If they get stuck, increase villagerPathfindingDistance
 
 # 7.7.14
 
