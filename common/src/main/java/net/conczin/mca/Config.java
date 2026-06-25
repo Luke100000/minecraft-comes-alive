@@ -410,6 +410,12 @@ public final class Config extends CommonConfig {
     public String villagerChatAISystemPrompt = "";
 
     /**
+     * If true, the system prompt is prepended to the user message instead of sent as a separate system message.
+     * Use this for OpenAI-compatible endpoints that ignore the system role.
+     */
+    public boolean villagerChatAIFuseSystemPrompt = false;
+
+    /**
      * If true, AI uses long-term memory for persistent conversations.
      */
     public boolean villagerChatAIUseLongTermMemory = false;

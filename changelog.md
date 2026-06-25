@@ -1,3 +1,7 @@
+# 7.9.4
+
+* Added `villagerChatAIFuseSystemPrompt` config flag for extra scuffed setups.
+
 # 7.9.3
 
 * Fix multiplayer sync.
