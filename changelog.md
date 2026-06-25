@@ -5,6 +5,7 @@
 * Fixed destiny spawning you out of world border.
 * Tombstones now have more explosion resistance, and spawn better after death-by-explosion.
 * Tombstones now drop their NBT, allowing them to be moved
+* Fixed high characters from glitching into blocks
 
 # 7.9.3
 

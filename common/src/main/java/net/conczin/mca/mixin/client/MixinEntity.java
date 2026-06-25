@@ -25,7 +25,7 @@ public abstract class MixinEntity {
                 && player.getPose() != Pose.SLEEPING && Config.getInstance().scaleEyeHeightWithPlayerHeight
                 && !Config.getServerConfig().scalePlayerHitboxWithSizeAndWidth) {
             MCAClient.getGeneticsRendererData(player.getUUID())
-                    .ifPresent(villager -> cir.setReturnValue(cir.getReturnValueF() * villager.getRawVerticalScaleFactor()));
+                    .ifPresent(villager -> cir.setReturnValue(cir.getReturnValueF() * villager.getVerticalScaleFactor()));
         }
     }
 }

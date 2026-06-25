@@ -239,7 +239,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         Brain<VillagerEntityMCA> brain = getMCABrain();
         Optional<Player> followingPlayer = brain.getMemoryInternal(MemoryModuleTypeMCA.PLAYER_FOLLOWING);
         brain.stopAll(world, this);
-        this.brain = (Brain<Villager>) (Brain<?>) VillagerTasksMCA.createProfile().makeBrain(this, brain.pack());
+        this.brain = VillagerTasksMCA.createProfile().makeBrain(this, brain.pack());
         followingPlayer.ifPresent(player -> getMCABrain().setMemory(MemoryModuleTypeMCA.PLAYER_FOLLOWING, player));
         VillagerTasksMCA.initializeTasks(this, getMCABrain());
     }
