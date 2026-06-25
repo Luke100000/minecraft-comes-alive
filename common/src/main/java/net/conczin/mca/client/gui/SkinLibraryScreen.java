@@ -20,6 +20,7 @@ import net.conczin.mca.network.c2s.RemoveCustomClothingMessage;
 import net.conczin.mca.registry.EntitiesMCA;
 import net.conczin.mca.resources.data.skin.Clothing;
 import net.conczin.mca.resources.data.skin.Hair;
+import net.conczin.mca.resources.data.skin.HairStyle;
 import net.conczin.mca.resources.data.skin.SkinListEntry;
 import net.conczin.mca.util.compat.ButtonWidget;
 import net.conczin.mca.util.localization.FlowingText;
@@ -111,6 +112,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
     private EditBox textFieldWidget;
     private boolean skipHairWarning;
     private List<LiteContent> libraryContents = new LinkedList<>();
+    private CompoundTag basePreviewData;
 
     public SkinLibraryScreen() {
         this(null, null);
@@ -130,15 +132,14 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
 
         if (villagerVisualization != null) {
             this.villagerVisualization.load(TagValueInput.create(ProblemReporter.DISCARDING, this.villagerVisualization.registryAccess(), saveEntityData(villagerVisualization)));
-            this.villagerVisualization.clearLayeredHair();
         } else {
             assert Minecraft.getInstance().player != null;
             VillagerLike<?> villagerLike = MCAClient.getPlayerData(Minecraft.getInstance().player.getUUID()).orElse(null);
             if (villagerLike instanceof VillagerEntityMCA villager) {
                 this.villagerVisualization.load(TagValueInput.create(ProblemReporter.DISCARDING, this.villagerVisualization.registryAccess(), saveEntityData(villager)));
-                this.villagerVisualization.clearLayeredHair();
             }
         }
+        basePreviewData = saveEntityData(this.villagerVisualization);
     }
 
     private static CompoundTag saveEntityData(VillagerEntityMCA entity) {
@@ -327,11 +328,11 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                 matrices.popMatrix();
 
                 //dummy
+                applyBasePreview(villagerVisualization);
                 if (workspace.skinType == SkinType.CLOTHING) {
-                    villagerVisualization.setHair(EMPTY_IDENTIFIER);
                     villagerVisualization.setClothes(CANVAS_IDENTIFIER);
                 } else {
-                    villagerVisualization.setHair(CANVAS_IDENTIFIER);
+                    villagerVisualization.setHairStyle(HairStyle.singleLayer(CANVAS_IDENTIFIER.toString(), workspace.gender.binary(), 1.0F));
                     villagerVisualization.setClothes(EMPTY_IDENTIFIER);
                 }
 
@@ -430,14 +431,18 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
     }
 
     private void setDummyTexture(VillagerEntityMCA preview, LiteContent content) {
-        preview.setHairStyleId("");
-        preview.clearLayeredHair();
+        applyBasePreview(preview);
         if (content.hasTag("clothing")) {
-            preview.setHair(EMPTY_IDENTIFIER);
             preview.setClothes(SkinCache.getTextureIdentifier(content));
         } else {
-            preview.setHair(SkinCache.getTextureIdentifier(content));
+            preview.setHairStyle(HairStyle.singleLayer(SkinCache.getTextureIdentifier(content).toString(), preview.getGenetics().getGender(), 1.0F));
             preview.setClothes(EMPTY_IDENTIFIER);
+        }
+    }
+
+    private void applyBasePreview(VillagerEntityMCA preview) {
+        if (basePreviewData != null) {
+            preview.load(TagValueInput.create(ProblemReporter.DISCARDING, preview.registryAccess(), basePreviewData));
         }
     }
 
@@ -646,9 +651,6 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                     if (hoveredContent.hasTag("clothing")) {
                         var villager = previousScreen.getVillager();
                         villager.setClothes("immersive_library:" + hoveredContent.contentid());
-                        villager.setHair("");
-                        villager.setHairStyleId("");
-                        villager.clearLayeredHair();
                         returnToPreviousScreen();
                     } else if (hoveredContent.hasTag("hair")) {
                         previousScreen.applyLibraryHair("immersive_library:" + hoveredContent.contentid());
