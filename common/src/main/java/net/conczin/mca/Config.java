@@ -4,6 +4,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonSyntaxException;
+import net.conczin.mca.entity.EquipmentSet;
 import net.conczin.mca.entity.ai.Traits;
 
 import java.io.File;
@@ -499,6 +500,25 @@ public final class Config extends CommonConfig {
      * Fraction (0–1) of villagers that spawn as guards.
      */
     public float guardSpawnFraction = 0.175f;
+
+    /**
+     * Equipment used by guards at each village equipment level.
+     * Level 0 is the default, level 1 requires an armory, level 2 requires an armory with a blacksmith.
+     */
+    public Map<String, EquipmentSet> guardEquipment = ImmutableMap.<String, EquipmentSet>builder()
+            .put("0", EquipmentSet.GUARD_0)
+            .put("1", EquipmentSet.GUARD_1)
+            .put("2", EquipmentSet.GUARD_2)
+            .build();
+
+    /**
+     * Equipment used by archers at each village equipment level.
+     */
+    public Map<String, EquipmentSet> archerEquipment = ImmutableMap.<String, EquipmentSet>builder()
+            .put("0", EquipmentSet.ARCHER_0)
+            .put("1", EquipmentSet.ARCHER_1)
+            .put("2", EquipmentSet.ARCHER_2)
+            .build();
 
     /**
      * Multiplier of taxes paid by villages.
