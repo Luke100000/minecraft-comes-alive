@@ -1,3 +1,8 @@
+# 7.9.3
+
+* Fix multiplayer sync.
+* Fix changing skins making the character bald.
+
 # 7.9.2
 
 * Fix dedicated server crashes
