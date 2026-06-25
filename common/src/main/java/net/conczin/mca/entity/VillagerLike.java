@@ -310,7 +310,7 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
     default void setHairStyle(HairStyle style) {
         setHairStyleId(style.getIdentifier());
         for (LayeredHair.Category category : LayeredHair.Category.values()) {
-            setLayeredHair(category, "");
+            setLayeredHair(category, style.layer(category));
         }
     }
 
@@ -575,8 +575,29 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
     default void migrateLegacyHairStyle() {
         String legacyHair = getTrackedValue(HAIR);
         if (MCA.isBlankString(getTrackedValue(HAIR_STYLE)) && !MCA.isBlankString(legacyHair)) {
-            setHairStyleId(legacyHair);
+            HairStyleList styles = HairStyleList.getInstance();
+            HairStyle style = styles == null ? null : styles.get(legacyHair);
+            setHairStyle(style == null ? HairStyle.singleLayer(legacyHair, getGenetics().getGender(), 1.0F) : style);
+            return;
         }
+
+        String hairStyle = getHairStyleId();
+        if (!MCA.isBlankString(hairStyle) && !hasLayeredHair()) {
+            HairStyleList styles = HairStyleList.getInstance();
+            HairStyle style = styles == null ? null : styles.get(hairStyle);
+            if (style != null || ImmersiveLibraryIds.isValid(hairStyle)) {
+                setHairStyle(style == null ? HairStyle.singleLayer(hairStyle, getGenetics().getGender(), 1.0F) : style);
+            }
+        }
+    }
+
+    private boolean hasLayeredHair() {
+        for (LayeredHair.Category category : LayeredHair.Category.values()) {
+            if (!MCA.isBlankString(getLayeredHair(category))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private boolean isValidHairTexture(String hair, LayeredHairList layeredHairList) {

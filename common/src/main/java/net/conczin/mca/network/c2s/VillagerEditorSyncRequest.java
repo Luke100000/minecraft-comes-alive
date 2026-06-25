@@ -299,7 +299,9 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
 
         mcaData.putString("HairStyle", style.getIdentifier());
         mcaData.putString("Hair", "");
-        clearLayeredHair(mcaData);
+        for (LayeredHair.Category category : LayeredHair.Category.RENDER_ORDER) {
+            mcaData.putString(category.getDataKey(), style.layer(category));
+        }
     }
 
     private void clearHair(CompoundTag mcaData) {

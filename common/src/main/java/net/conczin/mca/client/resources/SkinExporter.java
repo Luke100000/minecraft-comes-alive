@@ -6,9 +6,7 @@ import net.conczin.mca.client.gui.immersive_library.SkinCache;
 import net.conczin.mca.client.render.RainbowColor;
 import net.conczin.mca.client.render.VillagerVisuals;
 import net.conczin.mca.entity.VillagerEntityMCA;
-import net.conczin.mca.resources.BodySkinList;
 import net.conczin.mca.resources.FaceList;
-import net.conczin.mca.resources.data.skin.BodySkin;
 import net.conczin.mca.resources.data.skin.LayeredHair;
 import net.conczin.mca.util.ImmersiveLibraryIds;
 import net.minecraft.ChatFormatting;
@@ -123,13 +121,6 @@ public class SkinExporter {
     }
 
     public static int getSkinColor(VillagerVisuals visuals) {
-        if (!MCA.isBlankString(visuals.skin())) {
-            BodySkinList list = BodySkinList.getInstance();
-            BodySkin skin = list == null ? null : list.get(visuals.skin());
-            if (skin == null ? !BodySkin.isBuiltInTinted(visuals.skin()) : !skin.isTinted()) {
-                return 0xFFFFFFFF;
-            }
-        }
         int skinDye = visuals.skinDye();
         if (skinDye != 0xFF000000) {
             return skinDye;

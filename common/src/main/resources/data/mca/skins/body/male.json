@@ -1,27 +1,22 @@
 [
   {
     "id": "mca:skins/skin/male/0.png",
-    "gender": "male",
-    "tint": true
+    "gender": "male"
   },
   {
     "id": "mca:skins/skin/male/1.png",
-    "gender": "male",
-    "tint": true
+    "gender": "male"
   },
   {
     "id": "mca:skins/skin/male/2.png",
-    "gender": "male",
-    "tint": true
+    "gender": "male"
   },
   {
     "id": "mca:skins/skin/male/3.png",
-    "gender": "male",
-    "tint": true
+    "gender": "male"
   },
   {
     "id": "mca:skins/skin/male/4.png",
-    "gender": "male",
-    "tint": true
+    "gender": "male"
   }
 ]
