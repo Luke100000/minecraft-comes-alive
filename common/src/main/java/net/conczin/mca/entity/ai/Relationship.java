@@ -19,6 +19,7 @@ import net.conczin.mca.util.WorldUtils;
 import net.conczin.mca.util.network.datasync.CDataManager;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.damagesource.DamageSource;
@@ -81,7 +82,7 @@ public class Relationship<T extends Mob & VillagerLike<T>> implements EntityRela
     }
 
     private Optional<BlockPos> placeTombstone(ServerLevel world, BlockPos entityPos) {
-        int range = 2;
+        int range = 3;
         for (int y = -range; y <= range; y++) {
             // prefer center
             BlockPos pos = entityPos.offset(0, y, 0);
@@ -106,6 +107,13 @@ public class Relationship<T extends Mob & VillagerLike<T>> implements EntityRela
     }
 
     public void onDeath(DamageSource cause) {
+        MinecraftServer server = entity.level().getServer();
+        if (server != null) {
+            server.schedule(server.wrapRunnable(() -> finalizeDeath(cause)));
+        }
+    }
+
+    private void finalizeDeath(DamageSource cause) {
         boolean beRemembered = getFamilyEntry().willBeRemembered();
         boolean beLoved = entity.getVillagerBrain().getMemories().values().stream().anyMatch(m -> m.getHearts() > Config.getInstance().heartsRequiredToAutoSpawnGravestone);
 
