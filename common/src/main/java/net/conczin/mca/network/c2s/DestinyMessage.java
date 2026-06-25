@@ -71,6 +71,10 @@ public record DestinyMessage(String location, boolean isClosing) implements Hand
         }
         pos = RandomPos.moveUpOutOfSolid(pos, level.getHeight(), p -> level.getBlockState(p).isSuffocating(level, p));
         pos = ExtendedFuzzyPositions.downWhile(pos, 1, p -> !level.getBlockState(p.below()).isCollisionShapeFullBlock(level, p));
+        if (!level.isInWorldBounds(pos) || !level.getWorldBorder().isWithinBounds(pos)) {
+            notifyDestinationNotFound(player);
+            return;
+        }
         ChunkPos chunkPos = ChunkPos.containing(pos);
         level.getChunkSource().addTicketWithRadius(TicketType.PLAYER_LOADING, chunkPos, 1);
         player.connection.teleport(pos.getX(), pos.getY(), pos.getZ(), player.getYRot(), player.getXRot());

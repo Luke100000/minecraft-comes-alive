@@ -1,7 +1,8 @@
 # 7.9.4
 
 * Added `villagerChatAIFuseSystemPrompt` config flag for extra scuffed setups.
-* Maybe fixed the "Spouse not found" issue
+* Maybe fixed the "Spouse not found" issue.
+* Fixed destiny spawning you out of world border.
 
 # 7.9.3
 
