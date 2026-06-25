@@ -1,3 +1,7 @@
+# 7.7.16
+
+* Fixed Sirben shaders.
+
 # 7.7.15
 
 * More pathfinding improvements, NPC's should now properly pathfind to their beds without getting stuck,
