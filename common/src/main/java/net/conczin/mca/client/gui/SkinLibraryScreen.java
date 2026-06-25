@@ -433,6 +433,9 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
     private void setDummyTexture(VillagerEntityMCA preview, LiteContent content) {
         applyBasePreview(preview);
         if (content.hasTag("clothing")) {
+            preview.setHair("");
+            preview.setHairStyleId("");
+            preview.clearLayeredHair();
             preview.setClothes(SkinCache.getTextureIdentifier(content));
         } else {
             preview.setHairStyle(HairStyle.singleLayer(SkinCache.getTextureIdentifier(content).toString(), preview.getGenetics().getGender(), 1.0F));
@@ -651,6 +654,9 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                     if (hoveredContent.hasTag("clothing")) {
                         var villager = previousScreen.getVillager();
                         villager.setClothes("immersive_library:" + hoveredContent.contentid());
+                        villager.setHair("");
+                        villager.setHairStyleId("");
+                        villager.clearLayeredHair();
                         returnToPreviousScreen();
                     } else if (hoveredContent.hasTag("hair")) {
                         previousScreen.applyLibraryHair("immersive_library:" + hoveredContent.contentid());
