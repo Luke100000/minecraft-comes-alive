@@ -44,7 +44,7 @@ import org.jetbrains.annotations.Nullable;
 import java.util.*;
 
 public class PlayerSaveData extends SavedData implements EntityRelationship {
-    private final ServerLevel world;
+    private ServerLevel world;
     private final UUID uuid;
     private final List<Letter> inbox = new LinkedList<>();
     private @Nullable Integer lastSeenVillageId;
@@ -78,7 +78,9 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
     }
 
     public static PlayerSaveData get(ServerPlayer player) {
-        return get(player.level(), player.getUUID());
+        PlayerSaveData data = get(player.level(), player.getUUID());
+        data.world = player.level();
+        return data;
     }
 
     public static PlayerSaveData get(ServerLevel world, UUID uuid) {

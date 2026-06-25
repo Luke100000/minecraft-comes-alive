@@ -1,6 +1,7 @@
 # 7.9.4
 
 * Added `villagerChatAIFuseSystemPrompt` config flag for extra scuffed setups.
+* Maybe fixed the "Spouse not found" issue
 
 # 7.9.3
 
