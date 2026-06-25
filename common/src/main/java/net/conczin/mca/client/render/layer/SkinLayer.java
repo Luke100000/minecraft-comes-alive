@@ -38,7 +38,7 @@ public class SkinLayer<S extends HumanoidRenderState, M extends HumanoidModel<S>
         if (!MCA.isBlankString(visuals.skin())) {
             BodySkinList list = BodySkinList.getInstance();
             BodySkin skin = list == null ? null : list.get(visuals.skin());
-            if (skin == null || !skin.isTinted()) {
+            if (skin == null ? !BodySkin.isBuiltInTinted(visuals.skin()) : !skin.isTinted()) {
                 return 0xFFFFFFFF;
             }
         }

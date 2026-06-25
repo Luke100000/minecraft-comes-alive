@@ -11,6 +11,8 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.util.GsonHelper;
 
 public class BodySkin extends SkinListEntry {
+    private static final String BUILT_IN_SKIN_NAMESPACE = "mca";
+    private static final String BUILT_IN_SKIN_PATH_PREFIX = "skins/skin/";
     public static final Codec<Definition> DEFINITION_CODEC = RecordCodecBuilder.create(instance -> instance.group(
             GENDER_CODEC.optionalFieldOf("gender", Gender.NEUTRAL).forGetter(Definition::gender),
             Codec.FLOAT.optionalFieldOf("chance", 1.0f).forGetter(Definition::chance),
@@ -44,6 +46,17 @@ public class BodySkin extends SkinListEntry {
 
     public boolean isTinted() {
         return tint;
+    }
+
+    public static boolean isBuiltInTinted(String identifier) {
+        Identifier id;
+        try {
+            id = Identifier.parse(identifier);
+        } catch (Exception e) {
+            return false;
+        }
+        return BUILT_IN_SKIN_NAMESPACE.equals(id.getNamespace())
+                && id.getPath().startsWith(BUILT_IN_SKIN_PATH_PREFIX);
     }
 
     @Override
