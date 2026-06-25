@@ -1,6 +1,6 @@
 # 7.6.25
 
-* Fix pathfinding again
+* Port remaining pathfinding fixes from 26.1
 
 # 7.6.24
 
