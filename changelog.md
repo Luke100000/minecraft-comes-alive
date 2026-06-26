@@ -1,3 +1,7 @@
+# 7.7.17
+
+* Fixed destiny status not being saved reliably
+
 # 7.7.16
 
 * Fixed Sirben shaders.
