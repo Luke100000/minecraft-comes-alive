@@ -114,10 +114,12 @@ public class PlayerSaveData extends PersistentState implements EntityRelationshi
 
     public void setEntityDataSet(boolean entityDataSet) {
         this.entityDataSet = entityDataSet;
+        markDirty();
     }
 
     public void setEntityData(NbtCompound entityData) {
         this.entityData = entityData;
+        markDirty();
     }
 
     @Override

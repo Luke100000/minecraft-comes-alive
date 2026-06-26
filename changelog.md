@@ -1,3 +1,7 @@
+# 7.6.27
+
+* Fixed destiny status not being saved reliably
+
 # 7.6.26
 
 * Port remaining pathfinding improvements from 26.1
