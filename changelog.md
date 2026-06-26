@@ -1,6 +1,7 @@
 # 7.7.17
 
 * Fixed destiny status not being saved reliably
+* Fixed Hair buttons such as previous, next or random making you bald.
 
 # 7.7.16
 

@@ -16,6 +16,7 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.Tag;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.codec.ByteBufCodecs;
@@ -129,6 +130,10 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
     }
 
     private Gender getGender(CompoundTag villagerData) {
+        if (villagerData.contains("Gender", Tag.TAG_ANY_NUMERIC)) {
+            return Gender.byId(villagerData.getInt("Gender"));
+        }
+
         return Gender.byId(villagerData.getInt("gender"));
     }
 
@@ -167,7 +172,7 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
     private void syncFamilyTree(ServerPlayer player, Entity entity, CompoundTag villagerData) {
         FamilyTree tree = FamilyTree.get((ServerLevel) entity.level());
         FamilyTreeNode entry = tree.getOrCreate(entity);
-        entry.setGender(getGender(data));
+        entry.setGender(getGender(villagerData));
 
         String s = villagerData.getString("CustomName");
         if (!s.isEmpty()) {
