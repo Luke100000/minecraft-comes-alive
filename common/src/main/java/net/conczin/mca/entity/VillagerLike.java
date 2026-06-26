@@ -53,6 +53,7 @@ import java.util.Set;
 
 public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrackedEntity<E>, VillagerDataHolder, Infectable, Messenger {
     CDataParameter<String> CLOTHES = CParameter.create("Clothes", "");
+    CDataParameter<Boolean> CLOTHING_LOCKED = CParameter.create("ClothingLocked", false);
     CDataParameter<String> SKIN = CParameter.create("Skin", "");
     CDataParameter<String> HAIR = CParameter.create("Hair", "");
     CDataParameter<String> HAIR_STYLE = CParameter.create("HairStyle", "");
@@ -73,9 +74,7 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
     static <E extends Entity> CDataManager.Builder<E> createTrackedData(CDataManager.Builder<E> builder) {
         return builder
                 .addAll(CLOTHES, SKIN, HAIR, HAIR_STYLE, HAIR_BASE, HAIR_BANGS, HAIR_BACK, HAIR_FRONT, HAIR_EXTRA,
-                        SKIN_COLOR,
-                        HAIR_COLOR, EYE_COLOR, EYE_COLOR_LEFT,
-                        AGE_STATE)
+                        SKIN_COLOR, HAIR_COLOR, EYE_COLOR, EYE_COLOR_LEFT, AGE_STATE, CLOTHING_LOCKED)
                 .add(Genetics::createTrackedData)
                 .add(Traits::createTrackedData)
                 .add(VillagerBrain::createTrackedData);
@@ -228,6 +227,14 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
 
     default void setClothes(String clothes) {
         setTrackedValue(CLOTHES, clothes);
+    }
+
+    default boolean isClothingLocked() {
+        return getTrackedValue(CLOTHING_LOCKED);
+    }
+
+    default void setClothingLocked(boolean clothingLocked) {
+        setTrackedValue(CLOTHING_LOCKED, clothingLocked);
     }
 
     default String getSkin() {
@@ -508,6 +515,14 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
     }
 
     default void randomizeClothes() {
+        if (isClothingLocked()) {
+            return;
+        }
+
+        forceRandomizeClothes();
+    }
+
+    default void forceRandomizeClothes() {
         setClothes(ClothingList.getInstance().getPool(this).pickOne());
     }
 
@@ -548,7 +563,7 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
 
             if (!SkinVisualIds.isClothing(getClothes())) {
                 MCA.LOGGER.info("Villagers clothing {} does not exist!", getClothes());
-                randomizeClothes();
+                forceRandomizeClothes();
             }
 
             if (!MCA.isBlankString(getHairStyleId()) && !SkinVisualIds.isHairStyle(getHairStyleId())) {

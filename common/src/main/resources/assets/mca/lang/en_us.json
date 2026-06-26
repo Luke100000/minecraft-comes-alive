@@ -654,6 +654,7 @@
   "gui.villager_editor.selectSkin": "Select Skin",
   "gui.villager_editor.skin_index": "Skin %1$s/%2$s",
   "gui.villager_editor.clothing_index": "Clothes %1$s/%2$s",
+  "gui.villager_editor.clothing_lock.tooltip": "Locked outfits are not replaced by job or age changes.",
   "gui.villager_editor.hair_index": "Hair %1$s/%2$s",
   "gui.villager_editor.randHair": "Random Hair",
   "gui.villager_editor.selectHair": "Select Hair",

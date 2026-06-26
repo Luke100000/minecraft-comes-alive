@@ -1,5 +1,6 @@
 # 7.9.4
 
+* Clothes can be locked now, and are automatically clocked when using Needle and Thread / Editor
 * Added `villagerChatAIFuseSystemPrompt` config flag for extra scuffed setups.
 * Maybe fixed the "Spouse not found" issue.
 * Fixed destiny spawning you out of world border.

@@ -62,7 +62,6 @@ import org.joml.Quaternionf;
 import org.joml.Vector3f;
 import org.lwjgl.glfw.GLFW;
 
-
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -73,15 +72,19 @@ import java.util.function.Supplier;
 
 public class VillagerEditorScreen extends Screen implements SkinListUpdateListener {
     protected static final int DATA_WIDTH = 175;
+
+    private static final int TRAITS_PER_PAGE = 8;
+    private static final int LAYERED_HAIR_PER_PAGE = 6;
+
+    private static final float MIN_PREVIEW_ZOOM = 0.7F;
+    private static final float MAX_PREVIEW_ZOOM = 1.4F;
     private static final Identifier PREVIEW_MOUSE_FOLLOW_TEXTURE = MCA.locate("textures/gui/preview_mouse_follow.png");
+
     private static final int VOICE_PREVIEW_BUTTON_WIDTH = 22;
     private static final int STEVE_PROPORTIONS_BUTTON_WIDTH = 22;
     private static final float STEVE_RAW_WIDTH_SCALE = 1.0F;
     private static final float STEVE_RAW_HEIGHT_SCALE = 0.9F;
-    private static final int TRAITS_PER_PAGE = 8;
-    private static final int LAYERED_HAIR_PER_PAGE = 6;
-    private static final float MIN_PREVIEW_ZOOM = 0.7F;
-    private static final float MAX_PREVIEW_ZOOM = 1.4F;
+
     protected final VillagerEntityMCA villager = Objects.requireNonNull(EntitiesMCA.MALE_VILLAGER.create(Objects.requireNonNull(Minecraft.getInstance().level), EntitySpawnReason.LOAD));
     protected final VillagerEntityMCA villagerVisualization = Objects.requireNonNull(EntitiesMCA.MALE_VILLAGER.create(Objects.requireNonNull(Minecraft.getInstance().level), EntitySpawnReason.LOAD));
     final UUID villagerUUID;
@@ -909,6 +912,25 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                 }));
         addRenderableWidget(new ButtonWidget(x + step * 3, y, buttonWidth, buttonHeight, Component.literal(">"), b -> rotatePreview(-22.5F)));
         addRenderableWidget(new ButtonWidget(x + step * 4, y, buttonWidth, buttonHeight, Component.literal("+"), b -> zoomPreview(0.1F)));
+        addPreviewControlRowExtraButtons(x + rowWidth + gap, y, buttonWidth, buttonHeight, gap);
+    }
+
+    private void addPreviewControlRowExtraButtons(int x, int y, int buttonWidth, int buttonHeight, int gap) {
+        if (!page.equals("clothing")) {
+            return;
+        }
+
+        addRenderableWidget(new ClothingLockButtonWidget(
+                x + 8,
+                y + (buttonHeight - ClothingLockButtonWidget.SIZE) / 2,
+                villager.isClothingLocked(),
+                Component.translatable("gui.villager_editor.clothing_lock.tooltip"),
+                b -> {
+                    villager.setClothingLocked(!villager.isClothingLocked());
+                    syncVillagerData();
+                    setPage(page);
+                }
+        ));
     }
 
     private void refreshHairColor() {
@@ -1493,6 +1515,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
 
         if (page.equals("clothing") && (hoveredClothingId >= 0 && filteredClothing.size() > hoveredClothingId)) {
             villager.setClothes(filteredClothing.get(hoveredClothingId));
+            markClothingSelected();
             setPage("clothing_style");
             eventCallback("clothing");
             return true;
@@ -1867,6 +1890,10 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         copyEditorMcaFields(nbt, "PlayerModel");
         nbt.putInt("Age", villagerBreedingAge);
         Network.sendToServer(new VillagerEditorSyncRequest("sync", villagerUUID, nbt));
+    }
+
+    void markClothingSelected() {
+        villager.setClothingLocked(true);
     }
 
     private void copyEditorFields(CompoundTag target, String... keys) {

@@ -654,6 +654,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                     if (hoveredContent.hasTag("clothing")) {
                         var villager = previousScreen.getVillager();
                         villager.setClothes("immersive_library:" + hoveredContent.contentid());
+                        previousScreen.markClothingSelected();
                         villager.setHair("");
                         villager.setHairStyleId("");
                         villager.clearLayeredHair();
@@ -1813,6 +1814,3 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         }
     }
 }
-
-
-
