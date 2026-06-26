@@ -115,6 +115,7 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
 
     public void setEntityDataSet(boolean entityDataSet) {
         this.entityDataSet = entityDataSet;
+        setDirty();
     }
 
     public CompoundTag getEntityData() {
@@ -123,6 +124,7 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
 
     public void setEntityData(CompoundTag entityData) {
         this.entityData = entityData;
+        setDirty();
     }
 
     @Override
