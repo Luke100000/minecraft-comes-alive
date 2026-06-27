@@ -78,7 +78,7 @@ jobs:
 
           name: "[Fabric ${{needs.validate-tag.outputs.minecraft_version}}] MCAR - ${{needs.validate-tag.outputs.version}}"
           changelog-file: changelog.md
-          version-type: release
+          version-type: ${{ contains(needs.validate-tag.outputs.version, 'beta') && 'beta' || contains(needs.validate-tag.outputs.version, 'alpha') && 'alpha' || 'release' }}
           files: "fabric/build/libs/mca-fabric-${{needs.validate-tag.outputs.tag}}.jar"
           loaders: |
             fabric
@@ -99,7 +99,7 @@ jobs:
 
           name: "[NeoForge ${{needs.validate-tag.outputs.minecraft_version}}] MCAR - ${{needs.validate-tag.outputs.version}}"
           changelog-file: changelog.md
-          version-type: release
+          version-type: ${{ contains(needs.validate-tag.outputs.version, 'beta') && 'beta' || contains(needs.validate-tag.outputs.version, 'alpha') && 'alpha' || 'release' }}
           files: "neoforge/build/libs/mca-neoforge-${{needs.validate-tag.outputs.tag}}.jar"
           loaders: |
             neoforge
