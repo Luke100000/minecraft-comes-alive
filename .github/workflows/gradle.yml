@@ -47,7 +47,6 @@ jobs:
       CURSEFORGE_TOKEN: ${{ secrets.CF_API_TOKEN }}
       MAVEN_USERNAME: ${{ secrets.MAVEN_USERNAME }}
       MAVEN_TOKEN: ${{ secrets.MAVEN_TOKEN }}
-      NO_COLOR: 1
     if: startsWith(github.ref, 'refs/tags/')
     steps:
       - name: Checkout Commit
