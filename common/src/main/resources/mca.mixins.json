@@ -6,6 +6,8 @@
   "mixins": [
     "MixinAbstractArrow",
     "MixinAbstractFurnaceBlockEntity",
+    "MixinAdvancementRewards",
+    "MixinAdvancementRewardsAccessor",
     "MixinEntity",
     "MixinFlintAndSteelItem",
     "MixinGoat",
