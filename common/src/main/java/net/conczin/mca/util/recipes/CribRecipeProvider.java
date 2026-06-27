@@ -3,10 +3,10 @@ package net.conczin.mca.util.recipes;
 import net.conczin.mca.MCA;
 import net.conczin.mca.entity.CribWoodType;
 import net.conczin.mca.registry.ItemsMCA;
-import net.minecraft.advancements.CriteriaTriggers;
-import net.minecraft.advancements.Criterion;
-import net.minecraft.advancements.criterion.InventoryChangeTrigger;
-import net.minecraft.advancements.criterion.ItemPredicate;
+import net.minecraft.advancements.predicates.ItemPredicate;
+import net.minecraft.advancements.triggers.CriteriaTriggers;
+import net.minecraft.advancements.triggers.Criterion;
+import net.minecraft.advancements.triggers.InventoryChangeTrigger;
 import net.minecraft.core.HolderGetter;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -91,23 +91,6 @@ public class CribRecipeProvider {
     }
 
     private static ItemLike carpetFromColor(DyeColor color) {
-        return switch (color) {
-            case WHITE -> Blocks.WHITE_CARPET;
-            case ORANGE -> Blocks.ORANGE_CARPET;
-            case MAGENTA -> Blocks.MAGENTA_CARPET;
-            case LIGHT_BLUE -> Blocks.LIGHT_BLUE_CARPET;
-            case YELLOW -> Blocks.YELLOW_CARPET;
-            case LIME -> Blocks.LIME_CARPET;
-            case PINK -> Blocks.PINK_CARPET;
-            case GRAY -> Blocks.GRAY_CARPET;
-            case LIGHT_GRAY -> Blocks.LIGHT_GRAY_CARPET;
-            case CYAN -> Blocks.CYAN_CARPET;
-            case PURPLE -> Blocks.PURPLE_CARPET;
-            case BLUE -> Blocks.BLUE_CARPET;
-            case BROWN -> Blocks.BROWN_CARPET;
-            case GREEN -> Blocks.GREEN_CARPET;
-            case BLACK -> Blocks.BLACK_CARPET;
-            default -> Blocks.RED_CARPET;
-        };
+        return Blocks.CARPET.pick(color);
     }
 }

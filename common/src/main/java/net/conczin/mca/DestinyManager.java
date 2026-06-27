@@ -8,9 +8,9 @@ public class DestinyManager {
     private boolean allowTeleportation;
 
     public void tick(Minecraft client) {
-        if (openDestiny && client.screen == null) {
+        if (openDestiny && client.gui.screen() == null) {
             assert client.player != null;
-            client.setScreen(new DestinyScreen(client.player.getUUID(), allowTeleportation));
+            client.gui.setScreen(new DestinyScreen(client.player.getUUID(), allowTeleportation));
         }
     }
 

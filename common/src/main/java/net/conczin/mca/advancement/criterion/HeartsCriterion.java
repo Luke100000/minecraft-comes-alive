@@ -4,11 +4,11 @@ import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.conczin.mca.MCA;
 import net.conczin.mca.registry.CriterionMCA;
-import net.minecraft.advancements.Criterion;
-import net.minecraft.advancements.criterion.ContextAwarePredicate;
-import net.minecraft.advancements.criterion.EntityPredicate;
-import net.minecraft.advancements.criterion.MinMaxBounds;
-import net.minecraft.advancements.criterion.SimpleCriterionTrigger;
+import net.minecraft.advancements.predicates.ContextAwarePredicate;
+import net.minecraft.advancements.predicates.MinMaxBounds;
+import net.minecraft.advancements.predicates.entity.EntityPredicate;
+import net.minecraft.advancements.triggers.Criterion;
+import net.minecraft.advancements.triggers.SimpleCriterionTrigger;
 import net.minecraft.server.level.ServerPlayer;
 
 import java.util.Optional;
@@ -19,13 +19,13 @@ public class HeartsCriterion extends SimpleCriterionTrigger<HeartsCriterion.Trig
     }
 
     public void trigger(ServerPlayer player, int hearts, int increase, String source) {
-        trigger(player, (conditions) -> conditions.test(hearts, increase, source));
+        trigger(player, conditions -> conditions.test(hearts, increase, source));
     }
 
     public record TriggerInstance(Optional<ContextAwarePredicate> player, MinMaxBounds.Ints hearts,
                                   MinMaxBounds.Ints increase,
                                   String source) implements SimpleCriterionTrigger.SimpleInstance {
-        public static final Codec<TriggerInstance> CODEC = RecordCodecBuilder.create((instance) ->
+        public static final Codec<TriggerInstance> CODEC = RecordCodecBuilder.create(instance ->
                 instance.group(
                         EntityPredicate.ADVANCEMENT_CODEC.optionalFieldOf("player").forGetter(TriggerInstance::player),
                         MinMaxBounds.Ints.CODEC.optionalFieldOf("hearts", MinMaxBounds.Ints.ANY).forGetter(TriggerInstance::hearts),

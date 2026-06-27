@@ -9,13 +9,13 @@ import net.conczin.mca.MCA;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.Messenger;
 import net.conczin.mca.entity.ai.chatAI.modules.*;
+import net.conczin.mca.resources.data.SerializablePair;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.HoverEvent;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.util.Tuple;
 import org.apache.commons.io.IOUtils;
 import org.jetbrains.annotations.Nullable;
 
@@ -31,7 +31,7 @@ public class OpenAIChatAI implements ChatAIStrategy {
     private static final int MAX_MEMORY = 500;
     private static final int MAX_MEMORY_TIME = 20 * 60 * 45;
 
-    private static final Map<UUID, List<Tuple<String, String>>> memory = new HashMap<>();
+    private static final Map<UUID, List<SerializablePair<String, String>>> memory = new HashMap<>();
     private static final Map<UUID, Long> lastInteractions = new HashMap<>();
 
     public static String translate(String phrase) {
@@ -45,8 +45,6 @@ public class OpenAIChatAI implements ChatAIStrategy {
         con.setRequestProperty("Content-Type", "application/json");
         con.setRequestProperty("Accept", "application/json");
         con.setRequestProperty("Authorization", "Bearer " + token);
-
-        // Enable input and output streams
         con.setDoOutput(true);
         return con;
     }
@@ -57,12 +55,10 @@ public class OpenAIChatAI implements ChatAIStrategy {
         String error = map.has("error") ? map.get("error").getAsString().trim().replace("\n", " ") : null;
 
         if (message != null) {
-            // Parse json further
             message = message.replaceAll("```", "");
             int bracketStart = message.indexOf("{");
             int bracketEnd = message.lastIndexOf("}");
             if (bracketEnd > bracketStart && bracketStart != -1) {
-                // We have json! Include the brackets.
                 message = message.substring(bracketStart, bracketEnd + 1);
             }
         }
@@ -72,8 +68,6 @@ public class OpenAIChatAI implements ChatAIStrategy {
             structuredReply = new Gson().fromJson(message, StructuredResponse.class);
         } catch (JsonSyntaxException e) {
             MCA.LOGGER.warn("Error parsing answer: {} ({})", message, e.getMessage());
-
-            // just treat the message as normal
             structuredReply = new StructuredResponse(cleanupAnswer(message), "");
         }
 
@@ -83,8 +77,6 @@ public class OpenAIChatAI implements ChatAIStrategy {
     public static Answer post(String url, String requestBody, String token) {
         try {
             HttpURLConnection con = getHttpURLConnection(url, token);
-
-            // Write the request body to the connection
             try (DataOutputStream wr = new DataOutputStream(con.getOutputStream())) {
                 wr.write(requestBody.getBytes(StandardCharsets.UTF_8));
                 wr.flush();
@@ -92,7 +84,6 @@ public class OpenAIChatAI implements ChatAIStrategy {
 
             InputStream response = con.getInputStream();
             String body = IOUtils.toString(response, StandardCharsets.UTF_8);
-
             return parseAnswer(body);
         } catch (Exception e) {
             MCA.LOGGER.error(e);
@@ -102,13 +93,10 @@ public class OpenAIChatAI implements ChatAIStrategy {
 
     public static String verify(String encodedURL) {
         try {
-            // receive
             HttpURLConnection con = (HttpURLConnection) URI.create(encodedURL).toURL().openConnection();
             con.setRequestProperty("Accept-Charset", StandardCharsets.UTF_8.toString());
             InputStream response = con.getInputStream();
             String body = IOUtils.toString(response, StandardCharsets.UTF_8);
-
-            // parse json
             JsonObject map = JsonParser.parseString(body).getAsJsonObject();
             return map.has("answer") ? map.get("answer").getAsString().trim().replace("\n", " ") : "";
         } catch (Exception e) {
@@ -127,8 +115,7 @@ public class OpenAIChatAI implements ChatAIStrategy {
                 case '\n' -> "\\n";
                 case '\f' -> "\\f";
                 case '\r' -> "\\r";
-                default -> //noinspection MalformedFormatString
-                        c < ' ' ? String.format(Locale.ROOT, "\\u%04x", c) : c;
+                default -> c < ' ' ? String.format(Locale.ROOT, "\\u%04x", c) : c;
             });
         return sb.append('"').toString();
     }
@@ -149,20 +136,17 @@ public class OpenAIChatAI implements ChatAIStrategy {
             String playerName = Messenger.getName(player);
             String villagerName = villager.getName().getString();
 
-            // forgot about last conversation if it's too long ago
             long time = villager.level().getGameTime();
             if (time > lastInteractions.getOrDefault(villager.getUUID(), 0L) + MAX_MEMORY_TIME) {
                 memory.remove(villager.getUUID());
             }
             lastInteractions.put(villager.getUUID(), time);
 
-            // remember phrase
-            List<Tuple<String, String>> pastDialogue = memory.computeIfAbsent(villager.getUUID(), key -> new LinkedList<>());
-            while (pastDialogue.stream().mapToInt(v -> (v.getB().length() / 4)).sum() > MAX_MEMORY) {
+            List<SerializablePair<String, String>> pastDialogue = memory.computeIfAbsent(villager.getUUID(), key -> new LinkedList<>());
+            while (pastDialogue.stream().mapToInt(v -> (v.right().length() / 4)).sum() > MAX_MEMORY) {
                 pastDialogue.removeFirst();
             }
 
-            // construct context
             List<String> input = new LinkedList<>();
             PersonalityModule.apply(input, villager, player);
             TraitsModule.apply(input, villager, player);
@@ -171,23 +155,18 @@ public class OpenAIChatAI implements ChatAIStrategy {
             EnvironmentModule.apply(input, villager, player);
             PlayerModule.apply(input, villager, player);
 
-            // gather variables
             Map<String, String> variables = Map.of(
                     "player", playerName,
                     "villager", villagerName
             );
 
-            // construct system message
             StringBuilder sb = new StringBuilder();
 
-            // add control variables
             if (isInHouse || config.villagerChatAIIncludeSessionInformation) {
                 long seed = player.level().getSeed();
                 sb.append("[world_id:").append(seed).append("]");
-
                 sb.append("[player_id:").append(player.getUUID()).append("]");
                 sb.append("[character_id:").append(villager.getUUID()).append("]");
-
                 if (config.villagerChatAIUseLongTermMemory) {
                     sb.append("[use_memory:true]");
                 }
@@ -197,18 +176,14 @@ public class OpenAIChatAI implements ChatAIStrategy {
             }
 
             if (!config.villagerChatAISystemPrompt.isEmpty()) {
-                // add user specified prompt
                 sb.append(config.villagerChatAISystemPrompt);
                 sb.append("\n");
             } else if (!isInHouse) {
-                // when not using conczin.net, use some default prompt
                 String defaultPrompt = "You are a Minecraft villager, fully immersed in their virtual world, unaware of its artificial nature. You respond based on your description, your role, and your knowledge of the world. You have no knowledge of the real world, and do not realize that you are within Minecraft. You are no assistant! You can be sarcastic, funny, or even rude when appropriate.";
                 sb.append(defaultPrompt);
                 sb.append("\n");
-
             }
 
-            // fill in variables and add to system message
             for (String s : input) {
                 for (Map.Entry<String, String> entry : variables.entrySet()) {
                     s = s.replaceAll("\\$" + entry.getKey(), entry.getValue());
@@ -216,12 +191,10 @@ public class OpenAIChatAI implements ChatAIStrategy {
                 sb.append(s);
             }
 
-            // try to match player language
             if (MCA.language != null) {
                 sb.append("Match the language of the player, and use ").append(MCA.language).append(" when unsure.");
             }
 
-            // structure and commands (if available)
             List<TriggerCommandInfo> validCommands;
             if (config.villagerChatAIUseTools) {
                 validCommands = TriggerCommandInfos.triggerCommands.stream()
@@ -243,48 +216,38 @@ public class OpenAIChatAI implements ChatAIStrategy {
             }
 
             String system = sb.toString();
-
-            // construct body
             StringBuilder body = new StringBuilder();
             body.append("{");
             body.append("\"model\": \"").append(config.villagerChatAIModel).append("\",");
-            // START Messages
             body.append("\"messages\": [");
-            // System Message
             if (!config.villagerChatAIFuseSystemPrompt) {
                 body.append("{\"role\": \"system\", \"content\": ").append(jsonStringQuote(system)).append("},");
             }
-            for (Tuple<String, String> pair : pastDialogue) {
-                String role = pair.getA();
-                String content = pair.getB();
+            for (SerializablePair<String, String> pair : pastDialogue) {
+                String role = pair.left();
+                String content = pair.right();
                 String name = role.equals("user") ? playerName : villagerName;
                 body.append("{\"role\": \"").append(role)
                         .append("\", \"name\": \"").append(name)
                         .append("\", \"content\": ").append(jsonStringQuote(content)).append("},");
             }
-            // User Message
             String userContent = config.villagerChatAIFuseSystemPrompt ? system + "\n\n" + msg : msg;
             body.append("{\"role\": \"user\", \"name\": \"").append(playerName).append("\", \"content\": ").append(jsonStringQuote(userContent)).append("}");
-            // END Messages
             body.append("]");
             body.append("}");
 
-            // get access token
             String token = config.villagerChatAIToken;
             if (token.isEmpty() || config.villagerChatAIEndpoint.contains("conczin.net")) {
                 token = player.getName().getString();
             }
 
-            // encode and create url
             Answer message = post(config.villagerChatAIEndpoint, body.toString(), token);
 
             if (message.error == null) {
                 if (message.answer != null) {
-                    // remember
-                    pastDialogue.add(new Tuple<>("user", msg));
-                    pastDialogue.add(new Tuple<>("assistant", message.answer.message != null ? message.answer.message : "..."));
+                    pastDialogue.add(new SerializablePair<>("user", msg));
+                    pastDialogue.add(new SerializablePair<>("assistant", message.answer.message != null ? message.answer.message : "..."));
 
-                    // act
                     if (message.answer.optionalCommand() != null && !message.answer.optionalCommand().isEmpty()) {
                         Optional<TriggerCommandInfo> command = TriggerCommandInfos.findCommand(message.answer.optionalCommand(), player, villager);
                         command.ifPresent(triggerCommandInfo -> triggerCommandInfo.call.accept(player, villager));
@@ -299,7 +262,6 @@ public class OpenAIChatAI implements ChatAIStrategy {
                         .withColor(ChatFormatting.GOLD)
                         .withClickEvent(new ClickEvent.OpenUrl(URI.create("https://github.com/Luke100000/minecraft-comes-alive/wiki/GPT3-based-conversations#increase-conversation-limit")))
                         .withHoverEvent(new HoverEvent.ShowText(Component.translatable("mca.limit.patreon.hover"))));
-
                 player.sendSystemMessage(styled);
             } else if (message.error.equals("limit_premium")) {
                 player.sendSystemMessage(Component.translatable("mca.limit.premium").withStyle(ChatFormatting.RED));
@@ -315,7 +277,6 @@ public class OpenAIChatAI implements ChatAIStrategy {
     }
 
     public record StructuredResponse(@Nullable String message, String optionalCommand) {
-
     }
 
     public record Answer(StructuredResponse answer, String error) {

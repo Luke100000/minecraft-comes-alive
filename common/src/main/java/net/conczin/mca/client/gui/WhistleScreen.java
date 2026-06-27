@@ -77,10 +77,10 @@ public class WhistleScreen extends Screen {
 
         callButton = addRenderableWidget(new ButtonWidget(width / 2 - 100, height / 2 + 90, 60, 20, Component.translatable("gui.button.call"), (b) -> {
             Network.sendToServer(new CallToPlayerMessage(UUID.fromString(keys.get(selectedIndex))));
-            Objects.requireNonNull(this.minecraft).setScreen(null);
+            Objects.requireNonNull(this.minecraft).gui.setScreen(null);
         }));
 
-        addRenderableWidget(new ButtonWidget(width / 2 + 40, height / 2 + 90, 60, 20, Component.translatable("gui.button.exit"), b -> Objects.requireNonNull(this.minecraft).setScreen(null)));
+        addRenderableWidget(new ButtonWidget(width / 2 + 40, height / 2 + 90, 60, 20, Component.translatable("gui.button.exit"), b -> Objects.requireNonNull(this.minecraft).gui.setScreen(null)));
 
         toggleButtons(false);
     }

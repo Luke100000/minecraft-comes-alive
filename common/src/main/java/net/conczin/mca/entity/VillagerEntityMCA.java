@@ -139,7 +139,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
     public VillagerEntityMCA(EntityType<VillagerEntityMCA> type, Level w, Gender gender) {
         super(type, w);
-        this.moveControl = new ArcherMoveControl(this);
+        this.moveControl = new ArcherMoveControl<>(this);
         genetics.setGender(gender);
         this.getNavigation().setRequiredPathLength(Config.getInstance().getVillagerPathfindingDistance());
     }
@@ -788,7 +788,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
                 setInfectionProgress(infection);
 
                 if (infection > 1.0f) {
-                    convertTo(EntityType.ZOMBIE_VILLAGER, ConversionParams.single(this, false, false), mob -> {
+                    convertTo(EntityTypes.ZOMBIE_VILLAGER, ConversionParams.single(this, false, false), mob -> {
                     });
                 }
             }
@@ -1282,7 +1282,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     public <T extends Mob> T convertTo(EntityType<T> type, ConversionParams params, ConversionParams.AfterConversion<T> afterConversion) {
         residency.leaveHome();
 
-        EntityType<? extends Mob> convertedType = !isRemoved() && type == EntityType.ZOMBIE_VILLAGER ? getGenetics().getGender().getZombieType() : type;
+        EntityType<? extends Mob> convertedType = !isRemoved() && type == EntityTypes.ZOMBIE_VILLAGER ? getGenetics().getGender().getZombieType() : type;
 
         UUID oldUuid = getUUID();
 
@@ -1380,7 +1380,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
     //friends will not get slapped in revenge
     public boolean isFriend(EntityType<?> type) {
-        return type == EntityType.IRON_GOLEM || type == EntitiesMCA.FEMALE_VILLAGER || type == EntitiesMCA.MALE_VILLAGER;
+        return type == EntityTypes.IRON_GOLEM || type == EntitiesMCA.FEMALE_VILLAGER || type == EntitiesMCA.MALE_VILLAGER;
     }
 
     public boolean canFireProjectileWeapon(ProjectileWeaponItem weapon) {

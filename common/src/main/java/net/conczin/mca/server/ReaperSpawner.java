@@ -19,7 +19,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.world.entity.EntitySpawnReason;
-import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
@@ -98,7 +98,7 @@ public class ReaperSpawner {
 
         start(new SummonPosition(pos.above(), totems));
 
-        EntityType.LIGHTNING_BOLT.spawn(world, pos, EntitySpawnReason.TRIGGERED);
+        EntityTypes.LIGHTNING_BOLT.spawn(world, pos, EntitySpawnReason.TRIGGERED);
 
         world.setBlock(pos, Blocks.SOUL_SOIL.defaultBlockState(), Block.UPDATE_NEIGHBORS | Block.UPDATE_CLIENTS);
         world.setBlock(pos.above(), BlocksMCA.INFERNAL_FLAME.defaultBlockState(), Block.UPDATE_NEIGHBORS | Block.UPDATE_CLIENTS);
@@ -259,7 +259,7 @@ public class ReaperSpawner {
             }
 
             if (--ticks % 20 == 0) {
-                EntityType.LIGHTNING_BOLT.spawn(world, position.spawnPosition, EntitySpawnReason.TRIGGERED);
+                EntityTypes.LIGHTNING_BOLT.spawn(world, position.spawnPosition, EntitySpawnReason.TRIGGERED);
             }
 
             if (ticks == 0) {
@@ -282,4 +282,3 @@ public class ReaperSpawner {
         }
     }
 }
-

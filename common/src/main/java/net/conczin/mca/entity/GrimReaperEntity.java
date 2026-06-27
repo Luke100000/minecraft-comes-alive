@@ -59,7 +59,7 @@ public class GrimReaperEntity extends PathfinderMob implements CTrackedEntity<Gr
 
         xpReward = 100;
 
-        this.moveControl = new FlyingMoveControl(this, 10, false);
+        this.moveControl = new FlyingMoveControl<>(this, 10, false);
     }
 
     public static AttributeSupplier.Builder createAttributes() {

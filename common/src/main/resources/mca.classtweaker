@@ -6,6 +6,8 @@ accessible method net/minecraft/world/entity/ai/memory/MemoryModuleType <init> (
 accessible method net/minecraft/world/entity/ai/sensing/SensorType <init> (Ljava/util/function/Supplier;)V
 accessible method net/minecraft/world/entity/schedule/Activity <init> (Ljava/lang/String;)V
 
+# Keep MCA's custom villager baby-state override working on 26.2.
+extendable method net/minecraft/world/entity/AgeableMob setBaby (Z)V
+
 # Widen MoveControl.rotlerp for task usage
 accessible method net/minecraft/world/entity/ai/control/MoveControl rotlerp (FFF)F
-

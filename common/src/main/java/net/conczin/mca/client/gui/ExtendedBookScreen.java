@@ -58,7 +58,7 @@ public class ExtendedBookScreen extends Screen {
     }
 
     protected void addCloseButton() {
-        addRenderableWidget(new ButtonWidget(width / 2 - 100, 196, 200, 20, CommonComponents.GUI_DONE, (buttonWidget) -> this.minecraft.setScreen(null)));
+        addRenderableWidget(new ButtonWidget(width / 2 - 100, 196, 200, 20, CommonComponents.GUI_DONE, (buttonWidget) -> this.minecraft.gui.setScreen(null)));
     }
 
     protected void addPageButtons() {
@@ -120,11 +120,9 @@ public class ExtendedBookScreen extends Screen {
     public void extractBackground(GuiGraphicsExtractor context, int mouseX, int mouseY, float partialTick) {
         super.extractBackground(context, mouseX, mouseY, partialTick);
 
-        // background
         int i = (width - 192) / 2;
         context.blit(RenderPipelines.GUI_TEXTURED, book.getBackground(), i, 2, 0, 0, 192, 192, 256, 256);
 
-        // page number
         if (book.showPageCount()) {
             Component pageIndexText = Component.translatable("book.pageIndicator", this.pageIndex + 1, Math.max(book.getPageCount(), 1)).withStyle(book.getTextFormatting());
             int k = font.width(pageIndexText);
@@ -170,7 +168,7 @@ public class ExtendedBookScreen extends Screen {
             }
             case ClickEvent.RunCommand(String command) -> {
                 LocalPlayer player = Objects.requireNonNull(minecraft.player, "Player not available");
-                minecraft.setScreen(null);
+                minecraft.gui.setScreen(null);
                 clickCommandAction(player, command, null);
                 return true;
             }

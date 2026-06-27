@@ -9,11 +9,11 @@ import net.minecraft.world.entity.ai.navigation.PathNavigation;
 import net.minecraft.world.level.pathfinder.NodeEvaluator;
 import net.minecraft.world.level.pathfinder.PathType;
 
-public class ArcherMoveControl extends MoveControl {
+public class ArcherMoveControl<T extends Mob> extends MoveControl<T> {
     private boolean emergencyFleeing;
     private StrafeResult lastStrafeResult = StrafeResult.NONE;
 
-    public ArcherMoveControl(Mob mob) {
+    public ArcherMoveControl(T mob) {
         super(mob);
     }
 

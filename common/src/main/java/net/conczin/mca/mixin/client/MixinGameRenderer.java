@@ -3,10 +3,10 @@ package net.conczin.mca.mixin.client;
 import net.conczin.mca.Config;
 import net.conczin.mca.MCAClient;
 import net.conczin.mca.entity.VillagerLike;
+import net.conczin.mca.resources.data.SerializablePair;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.resources.Identifier;
-import net.minecraft.util.Tuple;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import org.jetbrains.annotations.Nullable;
@@ -34,7 +34,7 @@ public abstract class MixinGameRenderer {
     public abstract @Nullable Identifier currentPostEffect();
 
     @Unique
-    private Tuple<String, Identifier> mca$currentShader;
+    private SerializablePair<String, Identifier> mca$currentShader;
 
     @Unique
     private static @Nullable VillagerLike<?> mca$getCameraVillager(Entity entity) {
@@ -63,10 +63,10 @@ public abstract class MixinGameRenderer {
     }
 
     @Unique
-    private static @Nullable Tuple<String, Identifier> mca$findShader(VillagerLike<?> villager) {
+    private static @Nullable SerializablePair<String, Identifier> mca$findShader(VillagerLike<?> villager) {
         for (var entry : Config.getInstance().shaderLocationsMap.entrySet()) {
             if (villager.getTraits().hasTrait(entry.getKey()) && MCAClient.areShadersAllowed(entry.getKey() + "_shader")) {
-                return new Tuple<>(entry.getKey(), mca$normalizePostEffectId(entry.getValue()));
+                return new SerializablePair<>(entry.getKey(), mca$normalizePostEffectId(entry.getValue()));
             }
         }
         return null;
@@ -87,14 +87,14 @@ public abstract class MixinGameRenderer {
         if (villagerLike != null) {
             if (currentPostEffect() == null) {
                 if (mca$currentShader != null) {
-                    setPostEffect(mca$currentShader.getB());
+                    setPostEffect(mca$currentShader.right());
                 } else {
                     mca$currentShader = mca$findShader(villagerLike);
                     if (mca$currentShader != null) {
-                        setPostEffect(mca$currentShader.getB());
+                        setPostEffect(mca$currentShader.right());
                     }
                 }
-            } else if (mca$currentShader != null && !villagerLike.getTraits().hasTrait(mca$currentShader.getA())) {
+            } else if (mca$currentShader != null && !villagerLike.getTraits().hasTrait(mca$currentShader.left())) {
                 clearPostEffect();
                 this.mca$currentShader = null;
             }

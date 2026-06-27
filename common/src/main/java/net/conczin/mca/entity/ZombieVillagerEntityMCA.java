@@ -34,6 +34,7 @@ import net.minecraft.world.level.storage.TagValueInput;
 import net.minecraft.world.level.storage.ValueInput;
 import net.minecraft.world.level.storage.ValueOutput;
 import org.jetbrains.annotations.Nullable;
+
 import java.util.UUID;
 
 public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerLike<ZombieVillagerEntityMCA>, CompassionateEntity<Relationship<ZombieVillagerEntityMCA>> {
@@ -167,7 +168,7 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
         }
 
         if (getAgeState() == AgeState.BABY) {
-            // baby zombie villager just cause weird bugs, so we skip that stage
+            // Baby zombie villagers cause weird lifecycle bugs, so skip that stage.
             setAgeState(AgeState.TODDLER);
         }
 
@@ -230,7 +231,7 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
     @Override
     @Nullable
     public <T extends Mob> T convertTo(EntityType<T> type, ConversionParams params, ConversionParams.AfterConversion<T> afterConversion) {
-        EntityType<? extends Mob> convertedType = !isRemoved() && type == EntityType.VILLAGER ? getGenetics().getGender().getVillagerType() : type;
+        EntityType<? extends Mob> convertedType = !isRemoved() && type == EntityTypes.VILLAGER ? getGenetics().getGender().getVillagerType() : type;
 
         UUID oldUuid = getUUID();
 
@@ -295,4 +296,3 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
         return !isPersistenceRequired();
     }
 }
-

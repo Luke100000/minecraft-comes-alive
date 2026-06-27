@@ -10,7 +10,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EntitySpawnReason;
-import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.npc.wanderingtrader.WanderingTrader;
 import net.minecraft.world.level.BlockGetter;
 
@@ -50,7 +50,6 @@ public class VillageInnManager {
 
     private boolean trySpawnAdventurer(ServerLevel world, BlockPos blockPos) {
         if (!world.isPositionEntityTicking(blockPos)) {
-            // prevent any additional retries
             return true;
         }
 
@@ -58,7 +57,7 @@ public class VillageInnManager {
         if (this.doesNotSuffocateAt(world, blockPos)) {
             int i = world.getRandom().nextInt(10);
             if (i == 0 && Config.getInstance().innSpawnsWanderingTraders) {
-                WanderingTrader trader = EntityType.WANDERING_TRADER.spawn(world, blockPos, EntitySpawnReason.EVENT);
+                WanderingTrader trader = EntityTypes.WANDERING_TRADER.spawn(world, blockPos, EntitySpawnReason.EVENT);
                 if (trader != null) {
                     name = trader.getName().getString();
                     trader.setDespawnDelay(Config.getInstance().adventurerStayTime);

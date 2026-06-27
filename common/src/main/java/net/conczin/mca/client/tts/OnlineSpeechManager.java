@@ -27,10 +27,10 @@ public class OnlineSpeechManager {
     private boolean warningIssued = false;
 
     public static void languageNotSupported() {
-        Minecraft.getInstance().gui.getChat().addClientSystemMessage(
+        Minecraft.getInstance().gui.chatListener().handleSystemMessage(
                 Component.translatable("command.tts_unsupported_language").withStyle(s -> s
                         .withColor(ChatFormatting.RED)
-                        .withClickEvent(new ClickEvent.OpenUrl(URI.create("https://github.com/Luke100000/minecraft-comes-alive/wiki/TTS")))));
+                        .withClickEvent(new ClickEvent.OpenUrl(URI.create("https://github.com/Luke100000/minecraft-comes-alive/wiki/TTS")))), false);
     }
 
     @SuppressWarnings("SpellCheckingInspection")
@@ -68,7 +68,6 @@ public class OnlineSpeechManager {
         String text = OnlineSpeechManager.cleanPhrase(phrase);
         String language = OnlineLanguageMap.LANGUAGE_MAP.getOrDefault(gameLang, "");
         if (language.isEmpty()) {
-            // The language is not supported by the TTS server
             languageNotSupported();
         } else {
             int tone = Math.min(TOTAL_VOICES - 1, (int) Math.floor(gene * TOTAL_VOICES));
@@ -82,9 +81,8 @@ public class OnlineSpeechManager {
                     Identifier soundLocation = MCA.locate("tts_cache/" + hash);
                     SpeechManager.INSTANCE.playSound(pitch, entity, soundLocation);
                 } else if (!warningIssued) {
-                    // Server queued the request but the audio is not ready yet
                     warningIssued = true;
-                    Minecraft.getInstance().getChatListener().handleSystemMessage(
+                    Minecraft.getInstance().gui.chatListener().handleSystemMessage(
                             Component.translatable("command.tts_busy").withStyle(ChatFormatting.ITALIC, ChatFormatting.GRAY),
                             false
                     );

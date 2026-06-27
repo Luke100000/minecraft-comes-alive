@@ -369,7 +369,7 @@ public class TombstoneBlock extends BaseEntityBlock implements SimpleWaterlogged
                         boolean alreadySpawned = false;
                         if (cure && (entity instanceof ZombieVillager zombie)) {
                             // spawnEntity is called here, so don't call it twice
-                            entity = zombie.convertTo(EntityType.VILLAGER, ConversionParams.single(zombie, false, false), villager -> {
+                            entity = zombie.convertTo(EntityTypes.VILLAGER, ConversionParams.single(zombie, false, false), villager -> {
                             });
                             alreadySpawned = true;
                         }
@@ -393,7 +393,7 @@ public class TombstoneBlock extends BaseEntityBlock implements SimpleWaterlogged
 
         private void generateLightning() {
             level.setSkyFlashTime(10);
-            LightningBolt bolt = EntityType.LIGHTNING_BOLT.create(level, EntitySpawnReason.EVENT);
+            LightningBolt bolt = EntityTypes.LIGHTNING_BOLT.create(level, EntitySpawnReason.EVENT);
             if (bolt != null) {
                 bolt.setVisualOnly(true);
                 bolt.snapTo(worldPosition.getX() + 0.5F, worldPosition.getY(), worldPosition.getZ() + 0.5F);
@@ -449,7 +449,7 @@ public class TombstoneBlock extends BaseEntityBlock implements SimpleWaterlogged
                 return entityData.flatMap(data -> EntityType.create(
                         TagValueInput.create(ProblemReporter.DISCARDING, world.registryAccess(), withoutActiveEffects(data.nbt)),
                         world,
-                        EntitySpawnReason.LOAD
+                        new EntitySpawnRequest(EntitySpawnReason.LOAD, true)
                 ));
             } finally {
                 if (remove) {

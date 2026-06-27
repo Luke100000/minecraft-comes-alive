@@ -30,9 +30,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.ProblemReporter;
 import net.minecraft.util.Util;
-import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.EntitySpawnReason;
-import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.*;
 import net.minecraft.world.entity.npc.villager.Villager;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
@@ -154,7 +152,7 @@ public class AdminCommand {
     private static int convertVanillaVillagers(CommandContext<CommandSourceStack> ctx) {
         int radius = IntegerArgumentType.getInteger(ctx, "radius");
         ServerLevel world = ctx.getSource().getLevel();
-        world.getEntities(EntityType.VILLAGER, x -> true).stream().map(Villager.class::cast).forEach(v -> {
+        world.getEntities(EntityTypes.VILLAGER, x -> true).stream().map(Villager.class::cast).forEach(v -> {
             if (v.distanceTo(ctx.getSource().getEntity()) < radius) {
                 SpawnQueue.getInstance().convert(v);
             }
@@ -280,7 +278,7 @@ public class AdminCommand {
 
     private static int restoreClearedVillagers(CommandContext<CommandSourceStack> ctx) {
         storedVillagers.forEach(tag ->
-                EntityType.create(TagValueInput.create(ProblemReporter.DISCARDING, ctx.getSource().getLevel().registryAccess(), tag), ctx.getSource().getLevel(), EntitySpawnReason.LOAD).ifPresent(v ->
+                EntityType.create(TagValueInput.create(ProblemReporter.DISCARDING, ctx.getSource().getLevel().registryAccess(), tag), ctx.getSource().getLevel(), new EntitySpawnRequest(EntitySpawnReason.LOAD, false)).ifPresent(v ->
                         ctx.getSource().getLevel().addFreshEntity(v)
                 )
         );

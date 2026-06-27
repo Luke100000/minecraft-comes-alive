@@ -42,7 +42,6 @@ public class GrimReaperRestGoal extends Goal {
     @Override
     public void start() {
         reaper.teleportTo(reaper.getX(), reaper.getY() + 8, reaper.getZ());
-
         healingTime = MAX_HEALING_TIME;
         lastHeal = reaper.tickCount;
         healingCount++;
@@ -57,29 +56,20 @@ public class GrimReaperRestGoal extends Goal {
     public void tick() {
         healingTime--;
         reaper.setAttackState(ReaperAttackState.REST);
-
         reaper.setDeltaMovement(Vec3.ZERO);
-
         if (!reaper.level().isClientSide() && healingTime % (10 + healingCount * 5) == 0) {
             reaper.setHealth(reaper.getHealth() + 1);
         }
-
         if (!reaper.level().isClientSide() && healingTime % 50 == 0) {
-            // Let's have a light show.
             int dX = reaper.getRandom().nextInt(16) - 8;
             int dZ = reaper.getRandom().nextInt(16) - 8;
             int y = TaskUtils.getSpawnSafeTopLevel(reaper.level(), (int) reaper.getX() + dX, 256, (int) reaper.getZ() + dZ);
-
-            EntityType.LIGHTNING_BOLT.spawn((ServerLevel) reaper.level(), BlockPos.containing(reaper.getX() + dX, y, reaper.getZ() + dZ), EntitySpawnReason.TRIGGERED);
-
+            EntityTypes.LIGHTNING_BOLT.spawn((ServerLevel) reaper.level(), BlockPos.containing(reaper.getX() + dX, y, reaper.getZ() + dZ), EntitySpawnReason.TRIGGERED);
             if (!reaper.level().isClientSide() && healingTime % 100 == 0) {
-                // Also spawn a random enemy
-                EntityType<?> m = reaper.getRandom().nextFloat() < 0.5f ? EntityType.ZOMBIE : EntityType.SKELETON;
+                EntityType<?> m = reaper.getRandom().nextFloat() < 0.5f ? EntityTypes.ZOMBIE : EntityTypes.SKELETON;
                 Entity e = m.spawn((ServerLevel) reaper.level(), BlockPos.containing(reaper.getX() + dX, y, reaper.getZ() + dZ), EntitySpawnReason.TRIGGERED);
-
-                // Equip them
                 if (e instanceof Mob mob) {
-                    if (m == EntityType.SKELETON) {
+                    if (m == EntityTypes.SKELETON) {
                         mob.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.BOW));
                     } else {
                         mob.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.IRON_SWORD));
@@ -93,4 +83,3 @@ public class GrimReaperRestGoal extends Goal {
         }
     }
 }
-

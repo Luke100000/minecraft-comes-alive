@@ -70,7 +70,7 @@ public class InteractScreen extends AbstractDynamicScreen {
 
     @Override
     public void onClose() {
-        Objects.requireNonNull(this.minecraft).setScreen(null);
+        Objects.requireNonNull(this.minecraft).gui.setScreen(null);
         Network.sendToServer(new InteractionCloseRequest(villager.asEntity().getUUID()));
     }
 
@@ -355,7 +355,7 @@ public class InteractScreen extends AbstractDynamicScreen {
         } else if (id.equals("gui.button.clothing")) {
             setLayout("clothing");
         } else if (id.equals("gui.button.familyTree")) {
-            Minecraft.getInstance().setScreen(new FamilyTreeScreen(villager.asEntity().getUUID()));
+            Minecraft.getInstance().gui.setScreen(new FamilyTreeScreen(villager.asEntity().getUUID()));
         } else if (id.equals("gui.button.talk")) {
             clearWidgets();
             Network.sendToServer(new InteractionDialogueInitMessage(villager.asEntity().getUUID()));

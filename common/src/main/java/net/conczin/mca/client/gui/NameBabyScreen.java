@@ -18,7 +18,7 @@ public class NameBabyScreen extends Screen {
     private final ItemStack baby;
     private final Player player;
     private EditBox babyNameTextField;
-    private boolean restoreHideGui;
+    private boolean restoreHudHidden;
 
     public NameBabyScreen(Player player, ItemStack baby) {
         super(Component.translatable("gui.nameBaby.title"));
@@ -28,18 +28,15 @@ public class NameBabyScreen extends Screen {
 
     @Override
     public void init() {
-        addRenderableWidget(new ButtonWidget(width / 2 - 40, height / 2 + 20, 80, 20, Component.translatable("gui.button.done"), (b) -> {
+        addRenderableWidget(new ButtonWidget(width / 2 - 40, height / 2 + 20, 80, 20, Component.translatable("gui.button.done"), b -> {
             Network.sendToServer(new BabyNamingVillagerMessage(player.getInventory().getSelectedSlot(), babyNameTextField.getValue().trim()));
-            Objects.requireNonNull(this.minecraft).setScreen(null);
+            Objects.requireNonNull(this.minecraft).gui.setScreen(null);
         }));
-        addRenderableWidget(new ButtonWidget(width / 2 + 105, height / 2 - 20, 60, 20, Component.translatable("gui.button.random"), (b) -> {
-            Network.sendToServer(new BabyNameRequest(((BabyItem) baby.getItem()).getGender()));
-        }));
+        addRenderableWidget(new ButtonWidget(width / 2 + 105, height / 2 - 20, 60, 20, Component.translatable("gui.button.random"), b -> Network.sendToServer(new BabyNameRequest(((BabyItem) baby.getItem()).getGender()))));
 
         babyNameTextField = new EditBox(this.font, width / 2 - 100, height / 2 - 20, 200, 20, Component.translatable("structure_block.structure_name"));
         babyNameTextField.setMaxLength(32);
         addRenderableWidget(babyNameTextField);
-
         setInitialFocus(babyNameTextField);
     }
 
@@ -51,14 +48,16 @@ public class NameBabyScreen extends Screen {
     @Override
     public void added() {
         super.added();
-        restoreHideGui = Objects.requireNonNull(this.minecraft).options.hideGui;
-        this.minecraft.options.hideGui = true;
+        restoreHudHidden = Objects.requireNonNull(this.minecraft).gui.hud.isHidden();
+        if (!restoreHudHidden) {
+            this.minecraft.gui.hud.toggle();
+        }
     }
 
     @Override
     public void removed() {
-        if (this.minecraft != null) {
-            this.minecraft.options.hideGui = restoreHideGui;
+        if (this.minecraft != null && this.minecraft.gui.hud.isHidden() != restoreHudHidden) {
+            this.minecraft.gui.hud.toggle();
         }
         super.removed();
     }
@@ -71,9 +70,7 @@ public class NameBabyScreen extends Screen {
     @Override
     public void extractRenderState(GuiGraphicsExtractor context, int w, int h, float scale) {
         super.extractRenderState(context, w, h, scale);
-
         setFocused(babyNameTextField);
-
         context.centeredText(this.font, this.title, this.width / 2, 70, 16777215);
     }
 

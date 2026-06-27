@@ -3,26 +3,10 @@ plugins {
     id 'net.neoforged.moddev' version "${moddev_version}" apply false
 }
 
-def nativeAccessJvmArgs = ['--enable-native-access=ALL-UNNAMED', '--illegal-native-access=allow']
-
 allprojects {
-    gradle.projectsEvaluated {
-        tasks.withType(JavaCompile).tap {
-            configureEach {
-                options.deprecation = true
-                options.compilerArgs << "-Xmaxerrs" << "1000" << "-Xlint:deprecation" << "-Xlint:unchecked"
-            }
-        }
-
-        tasks.configureEach { task ->
-            if (task instanceof JavaForkOptions) {
-                nativeAccessJvmArgs.each { nativeAccessJvmArg ->
-                    if (!task.jvmArgs.contains(nativeAccessJvmArg)) {
-                        task.jvmArgs(nativeAccessJvmArg)
-                    }
-                }
-            }
-        }
+    tasks.withType(JavaCompile).configureEach {
+        options.deprecation = true
+        options.compilerArgs << "-Xmaxerrs" << "1000" << "-Xlint:deprecation" << "-Xlint:unchecked"
     }
 }
 

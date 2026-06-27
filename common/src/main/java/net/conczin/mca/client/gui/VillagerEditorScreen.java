@@ -58,6 +58,7 @@ import net.minecraft.world.level.storage.TagValueInput;
 import net.minecraft.world.level.storage.TagValueOutput;
 import org.apache.commons.io.FileUtils;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 import org.joml.Matrix3x2fStack;
 import org.joml.Quaternionf;
 import org.joml.Vector3f;
@@ -129,7 +130,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     private ButtonWidget exportSkinButton;
     private ButtonWidget genderButtonFemale;
     private ButtonWidget genderButtonMale;
-    private boolean restoreHideGui;
+    private boolean restoreHudHidden;
     private float previewRotation;
     private float previewZoom = 1.0F;
     private boolean draggingPreview;
@@ -175,14 +176,19 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     public void added() {
         super.added();
         Minecraft minecraft = Minecraft.getInstance();
-        restoreHideGui = minecraft.options.hideGui;
-        minecraft.options.hideGui = true;
+        // 26.2 keeps HUD visibility on Hud instead of Options, so preserve the current state here.
+        restoreHudHidden = minecraft.gui.hud.isHidden();
+        if (!restoreHudHidden) {
+            minecraft.gui.hud.toggle();
+        }
     }
 
     @Override
     public void removed() {
         Minecraft minecraft = Minecraft.getInstance();
-        minecraft.options.hideGui = restoreHideGui;
+        if (minecraft.gui.hud.isHidden() != restoreHudHidden) {
+            minecraft.gui.hud.toggle();
+        }
         super.removed();
     }
 
@@ -793,7 +799,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                 }));
                 if (page.equals("clothing") || page.equals("hair")) {
                     addRenderableWidget(new ButtonWidget(width / 2 + 128, y, 64, 20, Component.translatable("gui.button.library"), b -> {
-                        Minecraft.getInstance().setScreen(new SkinLibraryScreen(this, villagerVisualization));
+                        Minecraft.getInstance().gui.setScreen(new SkinLibraryScreen(this, villagerVisualization));
                     }));
                 }
                 widgetMasculine = addRenderableWidget(new ButtonWidget(width / 2 - 32 - 96 - 64, y, 64, 20, Component.translatable("gui.villager_editor.masculine"), b -> {
@@ -1957,6 +1963,8 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     }
 
     private EntityRenderState createInventoryRenderState(LivingEntity entity, float delta) {
+        // Vanilla render-state extraction assumes preview entities already have a non-zero ID.
+        ensurePreviewEntityId(entity);
         EntityRenderDispatcher dispatcher = Minecraft.getInstance().getEntityRenderDispatcher();
         EntityRenderer<? super LivingEntity, ?> renderer = dispatcher.getRenderer(entity);
         EntityRenderState renderState = renderer.createRenderState(entity, delta);
@@ -1964,6 +1972,42 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         renderState.outlineColor = 0;
         renderState.isInvisible = false;
         return renderState;
+    }
+
+    private void ensurePreviewEntityId(LivingEntity entity) {
+        try {
+            entity.getId();
+        } catch (IllegalStateException ignored) {
+            entity.setId(previewEntityId());
+        }
+    }
+
+    private int previewEntityId() {
+        LivingEntity realEntity = getRealEditedEntity();
+        if (realEntity != null) {
+            try {
+                return realEntity.getId();
+            } catch (IllegalStateException ignored) {
+            }
+        }
+        return stableNonZeroId(villagerUUID.hashCode());
+    }
+
+    @Nullable
+    private LivingEntity getRealEditedEntity() {
+        Minecraft client = Minecraft.getInstance();
+        if (client.level == null) {
+            return null;
+        }
+        if (villagerUUID.equals(playerUUID)) {
+            return client.level.getPlayerByUUID(playerUUID);
+        }
+        return null;
+    }
+
+    private static int stableNonZeroId(int hash) {
+        int id = Math.floorMod(hash, Integer.MAX_VALUE - 1) + 1;
+        return id == 0 ? 1 : id;
     }
 
     void applyLibraryHair(String hairId) {
@@ -2078,8 +2122,8 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
 
     private void confirmPresetUpdate() {
         Minecraft client = Objects.requireNonNull(minecraft);
-        client.setScreen(new ConfirmScreen(confirmed -> {
-            client.setScreen(this);
+        client.gui.setScreen(new ConfirmScreen(confirmed -> {
+            client.gui.setScreen(this);
             if (confirmed) {
                 savePreset();
             }

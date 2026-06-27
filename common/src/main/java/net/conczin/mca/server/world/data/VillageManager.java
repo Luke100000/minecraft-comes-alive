@@ -21,10 +21,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.Mth;
 import net.minecraft.world.Difficulty;
-import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.EntitySpawnReason;
-import net.minecraft.world.entity.EntityType;
-import net.minecraft.world.entity.SpawnPlacements;
+import net.minecraft.world.entity.*;
 import net.minecraft.world.entity.monster.illager.AbstractIllager;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.levelgen.Heightmap;
@@ -125,9 +122,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
     public void tick() {
         //keep track of where player are currently
         if (world.getOverworldClockTime() % 100 == 0) {
-            world.players().forEach(player ->
-                    PlayerSaveData.get(player).updateLastSeenVillage(this, player)
-            );
+            world.players().forEach(player -> PlayerSaveData.get(player).updateLastSeenVillage(this, player));
         }
 
         //send bounty hunters
@@ -165,7 +160,6 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         if (sender.getPopulation() == 0) {
             //the village has been wiped out, lets send one last wave
             sender.cleanReputation();
-
             count *= 2;
         } else {
             //slightly increase your reputation
@@ -178,15 +172,14 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         //spawn the bois
         for (int c = 0; c < count; c++) {
             if (world.getRandom().nextBoolean()) {
-                spawnBountyHunter(EntityType.PILLAGER, player);
+                spawnBountyHunter(EntityTypes.PILLAGER, player);
             } else {
-                spawnBountyHunter(EntityType.VINDICATOR, player);
+                spawnBountyHunter(EntityTypes.VINDICATOR, player);
             }
         }
 
         //warn the player
         player.sendSystemMessage(Component.translatable(sender.getPopulation() == 0 ? "events.bountyHuntersFinal" : "events.bountyHunters", sender.getName()).withStyle(ChatFormatting.RED));
-
         //civil entry
         sender.getCivilRegistry().ifPresent(r -> r.addText(Component.translatable("civil_registry.bounty_hunters", player.getName())));
     }
@@ -214,7 +207,6 @@ public class VillageManager extends SavedData implements Iterable<Village> {
     public void reportBuilding(BlockPos pos) {
         //mark in cache
         cache.add(pos);
-
         buildingQueue.add(pos);
     }
 
@@ -246,31 +238,25 @@ public class VillageManager extends SavedData implements Iterable<Village> {
     public Building.validationResult processBuilding(BlockPos pos, boolean enforce, boolean strictScan) {
         //find the closest village
         Optional<Village> optionalVillage = findNearestVillage(pos, Village.MERGE_MARGIN);
-
         //check if this might be a grouped building
         BuildingType groupedBuildingType = getGroupedBuildingType(pos);
-
         //block existing buildings to prevent overlaps
         Set<BlockPos> blocked = new HashSet<>();
-
         //look for existing building
         boolean found = false;
         List<Integer> toRemove = new LinkedList<>();
         if (optionalVillage.isPresent()) {
             Village village = optionalVillage.get();
-
             blocked = getBlockedSet(village);
             if (groupedBuildingType != null) {
                 String name = groupedBuildingType.name();
                 double range = groupedBuildingType.mergeRange() * groupedBuildingType.mergeRange();
-
-                //add POI to the nearest one
                 Optional<Building> building = village.getBuildings().values().stream()
                         .filter(b -> b.getType().equals(name))
                         .min((a, b) -> (int) (a.getCenter().distSqr(pos) - b.getCenter().distSqr(pos)))
                         .filter(b -> b.getCenter().distSqr(pos) < range);
-
                 if (building.isPresent()) {
+                    //add POI to the nearest one
                     found = true;
                     building.get().addPOI(world, pos);
                     setDirty();
@@ -288,13 +274,11 @@ public class VillageManager extends SavedData implements Iterable<Village> {
                     }
                 }
             }
-
             //remove buildings, which became invalid for whatever reason
             for (int id : toRemove) {
                 village.removeBuilding(id);
                 setDirty();
             }
-
             //village is empty
             if (village.getBuildings().isEmpty()) {
                 villages.remove(village.getId());
@@ -307,7 +291,6 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         if (!found && !blocked.contains(pos)) {
             //create new village
             Village village = optionalVillage.orElse(new Village(lastVillageId++, world));
-
             //create new building
             Building building = new Building(pos, strictScan);
             if (groupedBuildingType != null) {
@@ -327,29 +310,25 @@ public class VillageManager extends SavedData implements Iterable<Village> {
                     return result;
                 }
             }
-
             //add to building list
             villages.put(village.getId(), village);
             building.setId(lastBuildingId++);
             village.getBuildings().put(building.getId(), building);
             village.calculateDimensions();
-
             //attempt to merge
             villages.values().stream()
                     .filter(v -> v != village)
                     .filter(v -> v.getBox().inflatedBy(Village.MERGE_MARGIN).intersects(village.getBox()))
                     .findAny()
                     .ifPresent(v -> {
-                                if (v.getPopulation() > village.getPopulation()) {
-                                    merge(v, village);
-                                    villages.remove(village.getId());
-                                } else {
-                                    merge(village, v);
-                                    villages.remove(v.getId());
-                                }
-                            }
-                    );
-
+                        if (v.getPopulation() > village.getPopulation()) {
+                            merge(v, village);
+                            villages.remove(village.getId());
+                        } else {
+                            merge(village, v);
+                            villages.remove(v.getId());
+                        }
+                    });
             setDirty();
         }
 
@@ -364,4 +343,3 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         into.merge(from);
     }
 }
-

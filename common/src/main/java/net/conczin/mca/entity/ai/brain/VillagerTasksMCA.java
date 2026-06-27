@@ -25,7 +25,7 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.attribute.EnvironmentAttributes;
-import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.MobCategory;
 import net.minecraft.world.entity.ai.Brain;
@@ -455,7 +455,7 @@ public class VillagerTasksMCA {
                                 Pair.of(new UseBonemeal(), isFarmer ? 4 : 7))
                 )),
                 Pair.of(10, new ShowTradesToPlayer(400, 1600)),
-                Pair.of(10, SetLookAndInteract.create(EntityType.PLAYER, 4)),
+                Pair.of(10, SetLookAndInteract.create(EntityTypes.PLAYER, 4)),
                 Pair.of(2, SetWalkTargetFromBlockMemory.create(MemoryModuleType.JOB_SITE, speedModifier, 9, 100, 1200)),
                 Pair.of(3, new GiveGiftToHero(100)),
                 Pair.of(99, UpdateActivityFromSchedule.create())
@@ -470,8 +470,8 @@ public class VillagerTasksMCA {
                 Pair.of(5, new RunOne<>(
                         ImmutableMap.of(MemoryModuleType.VISIBLE_VILLAGER_BABIES, MemoryStatus.VALUE_ABSENT),
                         ImmutableList.of(
-                                Pair.of(InteractWith.of(EntityType.VILLAGER, 8, MemoryModuleType.INTERACTION_TARGET, speedModifier, 2), 2),
-                                Pair.of(InteractWith.of(EntityType.CAT, 8, MemoryModuleType.INTERACTION_TARGET, speedModifier, 2), 1),
+                                Pair.of(InteractWith.of(EntityTypes.VILLAGER, 8, MemoryModuleType.INTERACTION_TARGET, speedModifier, 2), 2),
+                                Pair.of(InteractWith.of(EntityTypes.CAT, 8, MemoryModuleType.INTERACTION_TARGET, speedModifier, 2), 1),
                                 Pair.of(VillageBoundRandomStroll.create(speedModifier), 1),
                                 Pair.of(SetWalkTargetFromLookTarget.create(speedModifier, 2), 1),
                                 Pair.of(new JumpOnBed(speedModifier), 2),
@@ -522,7 +522,7 @@ public class VillagerTasksMCA {
                         Pair.of(SocializeAtBell.create(), 2))
                 )),
                 Pair.of(10, new ShowTradesToPlayer(400, 1600)),
-                Pair.of(10, SetLookAndInteract.create(EntityType.PLAYER, 4)),
+                Pair.of(10, SetLookAndInteract.create(EntityTypes.PLAYER, 4)),
                 Pair.of(2, SetWalkTargetFromBlockMemory.create(MemoryModuleType.MEETING_POINT, speedModifier, 6, 100, 200)),
                 Pair.of(3, new GiveGiftToHero(100)),
                 Pair.of(3, ValidateNearbyPoi.create(registryEntry -> registryEntry.is(PoiTypes.MEETING), MemoryModuleType.MEETING_POINT)),
@@ -544,14 +544,14 @@ public class VillagerTasksMCA {
                 Pair.of(2, new RunOne<>(ImmutableList.of(
                         Pair.of(InteractWith.of(EntitiesMCA.FEMALE_VILLAGER, 8, MemoryModuleType.INTERACTION_TARGET, speedModifier, 2), 2),
                         Pair.of(InteractWith.of(EntitiesMCA.MALE_VILLAGER, 8, MemoryModuleType.INTERACTION_TARGET, speedModifier, 2), 2),
-                        Pair.of(InteractWith.of(EntityType.CAT, 8, MemoryModuleType.INTERACTION_TARGET, speedModifier, 2), 1),
+                        Pair.of(InteractWith.of(EntityTypes.CAT, 8, MemoryModuleType.INTERACTION_TARGET, speedModifier, 2), 1),
                         Pair.of(VillageBoundRandomStroll.create(speedModifier), 1),
                         Pair.of(SetWalkTargetFromLookTarget.create(speedModifier, 2), 1),
                         Pair.of(new JumpOnBed(speedModifier), 1),
                         Pair.of(new DoNothing(30, 60), 1))
                 )),
                 Pair.of(3, new GiveGiftToHero(100)),
-                Pair.of(3, SetLookAndInteract.create(EntityType.PLAYER, 4)),
+                Pair.of(3, SetLookAndInteract.create(EntityTypes.PLAYER, 4)),
                 Pair.of(3, new ShowTradesToPlayer(400, 1600)),
                 Pair.of(3, new GrieveTask()),
                 Pair.of(3, new GateBehavior<>(ImmutableMap.of(),
@@ -623,7 +623,7 @@ public class VillagerTasksMCA {
         return ImmutableList.of(
                 Pair.of(5, InteractWith.of(EntitiesMCA.FEMALE_VILLAGER, 8, MemoryModuleType.INTERACTION_TARGET, speedModifier, 2)),
                 Pair.of(5, InteractWith.of(EntitiesMCA.MALE_VILLAGER, 8, MemoryModuleType.INTERACTION_TARGET, speedModifier, 2)),
-                Pair.of(5, InteractWith.of(EntityType.CAT, 8, MemoryModuleType.INTERACTION_TARGET, speedModifier, 2)),
+                Pair.of(5, InteractWith.of(EntityTypes.CAT, 8, MemoryModuleType.INTERACTION_TARGET, speedModifier, 2)),
                 Pair.of(5, VillageBoundRandomStroll.create(speedModifier)),
                 Pair.of(5, SetWalkTargetFromLookTarget.create(speedModifier, 2)),
                 Pair.of(5, new EnterBuildingTask("inn", 0.5f))
@@ -640,9 +640,9 @@ public class VillagerTasksMCA {
     // Reference: VillagerTaskListProvider#createFreeFollowTask
     private static Pair<Integer, BehaviorControl<LivingEntity>> getFullLookBehavior() {
         return Pair.of(5, new RunOne<>(ImmutableList.of(
-                Pair.of(SetEntityLookTarget.create(EntityType.CAT, 8.0F), 8),
-                Pair.of(SetEntityLookTarget.create(EntityType.VILLAGER, 8.0F), 2),
-                Pair.of(SetEntityLookTarget.create(EntityType.PLAYER, 8.0F), 2),
+                Pair.of(SetEntityLookTarget.create(EntityTypes.CAT, 8.0F), 8),
+                Pair.of(SetEntityLookTarget.create(EntityTypes.VILLAGER, 8.0F), 2),
+                Pair.of(SetEntityLookTarget.create(EntityTypes.PLAYER, 8.0F), 2),
                 Pair.of(SetEntityLookTarget.create(MobCategory.CREATURE, 8.0F), 1),
                 Pair.of(SetEntityLookTarget.create(MobCategory.WATER_CREATURE, 8.0F), 1),
                 Pair.of(SetEntityLookTarget.create(MobCategory.WATER_AMBIENT, 8.0F), 1),
@@ -654,8 +654,8 @@ public class VillagerTasksMCA {
     // Reference: VillagerTaskListProvider#createBusyFollowTask
     private static Pair<Integer, BehaviorControl<LivingEntity>> getMinimalLookBehavior() {
         return Pair.of(5, new RunOne<>(ImmutableList.of(
-                Pair.of(SetEntityLookTarget.create(EntityType.VILLAGER, 8.0F), 2),
-                Pair.of(SetEntityLookTarget.create(EntityType.PLAYER, 8.0F), 2),
+                Pair.of(SetEntityLookTarget.create(EntityTypes.VILLAGER, 8.0F), 2),
+                Pair.of(SetEntityLookTarget.create(EntityTypes.PLAYER, 8.0F), 2),
                 Pair.of(new DoNothing(30, 60), 8)))
         );
     }

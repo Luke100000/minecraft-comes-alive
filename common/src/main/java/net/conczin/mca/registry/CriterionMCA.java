@@ -2,7 +2,7 @@ package net.conczin.mca.registry;
 
 import net.conczin.mca.MCA;
 import net.conczin.mca.advancement.criterion.*;
-import net.minecraft.advancements.CriterionTrigger;
+import net.minecraft.advancements.triggers.CriterionTrigger;
 import net.minecraft.resources.Identifier;
 
 import java.util.HashMap;

@@ -181,7 +181,7 @@ public class SpeechManager {
                 if (firstRun || enabled) {
                     CompletableFuture.runAsync(() -> {
                         if (player2SpeechManager.checkHealth() && firstRun && !enabled) {
-                            client.gui.getChat().addClientSystemMessage(Component.translatable("command.chat_ai.player2.hint", "/mca chatAI player2"));
+                            client.gui.chatListener().handleSystemMessage(Component.translatable("command.chat_ai.player2.hint", "/mca chatAI player2"), false);
                             firstRun = false;
                         }
                     });

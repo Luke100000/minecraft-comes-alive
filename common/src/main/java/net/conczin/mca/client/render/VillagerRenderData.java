@@ -1,6 +1,7 @@
 package net.conczin.mca.client.render;
 
 import net.conczin.mca.entity.VillagerLike;
+import net.minecraft.world.entity.LivingEntity;
 import org.jspecify.annotations.Nullable;
 
 import java.util.Objects;
@@ -22,6 +23,13 @@ public record VillagerRenderData(
             return null;
         }
         return new VillagerRenderData(playerModel, VillagerVisuals.capture(visualsSource));
+    }
+
+    public static @Nullable VillagerRenderData create(VillagerLike.PlayerModel playerModel, @Nullable VillagerLike<?> visualsSource, LivingEntity renderEntity) {
+        if (playerModel == VillagerLike.PlayerModel.VANILLA || visualsSource == null) {
+            return null;
+        }
+        return new VillagerRenderData(playerModel, VillagerVisuals.capture(visualsSource, renderEntity));
     }
 
     public boolean usesGeneticsRenderer() {

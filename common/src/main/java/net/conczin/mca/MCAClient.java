@@ -76,13 +76,14 @@ public class MCAClient {
         destinyManager.tick(client);
 
         if (KeyBindings.SKIN_LIBRARY.consumeClick()) {
-            Minecraft.getInstance().setScreen(new SkinLibraryScreen());
+            Minecraft.getInstance().gui.setScreen(new SkinLibraryScreen());
         }
 
         SpeechManager.INSTANCE.tick(client);
     }
 
     public static void addPlayerData(UUID uuid, VillagerEntityMCA villager) {
+        assignPlayerDataId(uuid, villager);
         playerData.put(uuid, villager);
 
         Minecraft client = Minecraft.getInstance();
@@ -92,6 +93,30 @@ public class MCAClient {
                 player.refreshDimensions();
             }
         }
+    }
+
+    private static void assignPlayerDataId(UUID uuid, VillagerEntityMCA villager) {
+        try {
+            villager.getId();
+            return;
+        } catch (IllegalStateException ignored) {
+        }
+
+        Minecraft client = Minecraft.getInstance();
+        if (client.level != null) {
+            Player player = client.level.getPlayerByUUID(uuid);
+            if (player != null) {
+                villager.setId(player.getId());
+                return;
+            }
+        }
+
+        villager.setId(stableNonZeroId(uuid.hashCode()));
+    }
+
+    private static int stableNonZeroId(int hash) {
+        int id = Math.floorMod(hash, Integer.MAX_VALUE - 1) + 1;
+        return id == 0 ? 1 : id;
     }
 
     private static boolean needsPlayerData() {

@@ -113,8 +113,7 @@ public class VillagerLikeEntityMCARenderer<T extends Mob & VillagerLike<T>>
     @Nullable
     @Override
     protected RenderType getRenderType(VillagerRenderState state, boolean showBody, boolean translucent, boolean showOutlines) {
-        //setting the type to null prevents it from rendering
-        //we need a skin layer anyway because of the color
+        // MCA draws the layered body manually, so the base body render has to stay disabled.
         return null;
     }
 
@@ -122,7 +121,7 @@ public class VillagerLikeEntityMCARenderer<T extends Mob & VillagerLike<T>>
     protected boolean shouldShowName(T villager, double distanceToCameraSq) {
         Player player = Minecraft.getInstance().player;
         return villager.getCustomName() != null
-               && !(Minecraft.getInstance().screen instanceof VillagerEditorScreen)
+               && !(Minecraft.getInstance().gui.screen() instanceof VillagerEditorScreen)
                && player != null
                && Config.getInstance().showNameTags
                && player.distanceToSqr(villager) < Math.pow(Config.getInstance().nameTagDistance, 2.0f)

@@ -120,7 +120,7 @@ public class BlueprintScreen extends ExtendedScreen {
     private void setPage(String page) {
         if (page.equals("close")) {
             assert minecraft != null;
-            minecraft.setScreen(null);
+            minecraft.gui.setScreen(null);
             return;
         }
 
@@ -612,7 +612,7 @@ public class BlueprintScreen extends ExtendedScreen {
     public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
         if (page.equals("villagers") && selectedVillager != null) {
             assert minecraft != null;
-            minecraft.setScreen(new FamilyTreeScreen(selectedVillager));
+            minecraft.gui.setScreen(new FamilyTreeScreen(selectedVillager));
         }
 
         return super.mouseClicked(event, doubleClick);

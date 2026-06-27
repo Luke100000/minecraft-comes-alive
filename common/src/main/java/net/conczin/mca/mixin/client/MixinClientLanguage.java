@@ -3,11 +3,11 @@ package net.conczin.mca.mixin.client;
 import net.conczin.mca.MCA;
 import net.conczin.mca.entity.CommonSpeechManager;
 import net.conczin.mca.entity.ai.DialogueType;
+import net.conczin.mca.resources.data.SerializablePair;
 import net.conczin.mca.util.localization.PooledTranslationStorage;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.resources.language.ClientLanguage;
 import net.minecraft.locale.Language;
-import net.minecraft.util.Tuple;
 import org.jetbrains.annotations.NotNull;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
@@ -44,14 +44,14 @@ abstract class MixinClientLanguage extends Language {
     private void mca$injectGetOrDefault(String key, String fallback, CallbackInfoReturnable<String> info) {
         String modifiedKey = DialogueType.applyFallback(key);
 
-        Tuple<String, String> unpooled = mca$getPool().get(modifiedKey);
+        SerializablePair<String, String> unpooled = mca$getPool().get(modifiedKey);
         if (unpooled != null) {
-            CommonSpeechManager.INSTANCE.lastResolvedKey = unpooled.getA();
-            if (storage.containsKey(unpooled.getA()) && !storage.get(unpooled.getA()).equals(unpooled.getB())) {
-                // In this case, the text has been dynamically created and we need to return directly
-                info.setReturnValue(unpooled.getB());
+            CommonSpeechManager.INSTANCE.lastResolvedKey = unpooled.left();
+            if (storage.containsKey(unpooled.left()) && !storage.get(unpooled.left()).equals(unpooled.right())) {
+                // Dynamically generated lines bypass vanilla lookup so template substitutions survive.
+                info.setReturnValue(unpooled.right());
             } else {
-                info.setReturnValue(getOrDefault(unpooled.getA(), fallback));
+                info.setReturnValue(getOrDefault(unpooled.left(), fallback));
             }
         } else if (!key.equals(modifiedKey)) {
             info.setReturnValue(getOrDefault(modifiedKey, fallback));

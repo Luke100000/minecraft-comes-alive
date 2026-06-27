@@ -153,7 +153,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         if (previousScreen == null) {
             super.onClose();
         } else {
-            Minecraft.getInstance().setScreen(previousScreen);
+            Minecraft.getInstance().gui.setScreen(previousScreen);
         }
     }
 

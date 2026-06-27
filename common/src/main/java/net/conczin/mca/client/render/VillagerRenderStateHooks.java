@@ -25,12 +25,12 @@ public final class VillagerRenderStateHooks {
                 ? visualsSource.getPlayerModel()
                 : VillagerLike.PlayerModel.VANILLA;
 
-        if (Minecraft.getInstance().screen instanceof VillagerEditorScreen editor && editor.hasVillagerData() && editor.isEditingPlayer(entity.getUUID())) {
+        if (Minecraft.getInstance().gui.screen() instanceof VillagerEditorScreen editor && editor.hasVillagerData() && editor.isEditingPlayer(entity.getUUID())) {
             visualsSource = editor.getVillager();
             playerModel = editor.getSelectedPlayerModel();
         }
 
-        holder.mca$setVillagerRenderData(VillagerRenderData.create(playerModel, visualsSource));
+        holder.mca$setVillagerRenderData(VillagerRenderData.create(playerModel, visualsSource, entity));
     }
 
     public static void extractScaledBounds(LivingEntity entity, LivingEntityRenderState state) {

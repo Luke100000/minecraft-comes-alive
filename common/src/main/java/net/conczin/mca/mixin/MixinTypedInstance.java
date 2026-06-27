@@ -6,6 +6,7 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EntityTypes;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
@@ -24,7 +25,7 @@ public interface MixinTypedInstance {
             return;
         }
 
-        cir.setReturnValue(Stream.concat(cir.getReturnValue(), EntityType.VILLAGER.builtInRegistryHolder().tags()).distinct());
+        cir.setReturnValue(Stream.concat(cir.getReturnValue(), EntityTypes.VILLAGER.builtInRegistryHolder().tags()).distinct());
     }
 
     @SuppressWarnings({"ConstantConditions", "deprecation", "unchecked"})
@@ -35,7 +36,7 @@ public interface MixinTypedInstance {
             return;
         }
 
-        if (!EntityType.VILLAGER.builtInRegistryHolder().is((TagKey<EntityType<?>>) tag)) {
+        if (!EntityTypes.VILLAGER.builtInRegistryHolder().is((TagKey<EntityType<?>>) tag)) {
             return;
         }
 

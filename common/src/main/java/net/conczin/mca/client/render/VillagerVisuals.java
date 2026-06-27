@@ -69,6 +69,10 @@ public record VillagerVisuals(
     }
 
     public static VillagerVisuals capture(VillagerLike<?> villager) {
+        return capture(villager, villager.asEntity());
+    }
+
+    public static VillagerVisuals capture(VillagerLike<?> villager, LivingEntity renderEntity) {
         Genetics genetics = villager.getGenetics();
         Traits traits = villager.getTraits();
         LivingEntity entity = villager.asEntity();
@@ -122,10 +126,10 @@ public record VillagerVisuals(
                 villager.getEyeLeftDye(),
                 villager.getClothes(),
                 villager.getInfectionProgress(),
-                animationTickCount(entity),
-                entity.getId(),
-                entity.isSleeping(),
-                entity.isDeadOrDying()
+                animationTickCount(renderEntity),
+                renderEntity.getId(),
+                renderEntity.isSleeping(),
+                renderEntity.isDeadOrDying()
         );
     }
 

@@ -1,5 +1,6 @@
 package net.conczin.mca.client.resources;
 
+import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 
@@ -26,7 +27,7 @@ public class ProfessionIcons {
         ICONS.put("toolsmith", Items.SMITHING_TABLE.getDefaultInstance());
         ICONS.put("weaponsmith", Items.GRINDSTONE.getDefaultInstance());
 
-        ICONS.put("mca.outlaw", Items.BLACK_BANNER.getDefaultInstance());
+        ICONS.put("mca.outlaw", Items.BANNER.pick(DyeColor.BLACK).getDefaultInstance());
         ICONS.put("mca.guard", Items.IRON_SWORD.getDefaultInstance());
         ICONS.put("mca.archer", Items.BOW.getDefaultInstance());
         ICONS.put("mca.adventurer", Items.MAP.getDefaultInstance());

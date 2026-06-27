@@ -30,14 +30,11 @@ public abstract class MixinGoat extends Animal {
         if (!this.level().isClientSide() && this.level().isRaining()) {
             long time = this.level().getOverworldClockTime() % 24000;
             BlockPos pos = blockPosition();
-            if (time > 16000 && time < 20000 && this.level().getBiome(pos).value().coldEnoughToSnow(pos, this.level().getSeaLevel()) && SpawnPlacements.isSpawnPositionOk(EntityType.WITHER_SKELETON, level(), pos)) {
-                WitherSkeleton ancientCultist = EntityType.WITHER_SKELETON.create(level(), EntitySpawnReason.EVENT);
+            if (time > 16000 && time < 20000 && this.level().getBiome(pos).value().coldEnoughToSnow(pos, this.level().getSeaLevel()) && SpawnPlacements.isSpawnPositionOk(EntityTypes.WITHER_SKELETON, level(), pos)) {
+                WitherSkeleton ancientCultist = EntityTypes.WITHER_SKELETON.create(level(), EntitySpawnReason.EVENT);
                 if (ancientCultist != null) {
-                    //place the ancient boi
                     ancientCultist.setPos(pos.getX(), pos.getY(), pos.getZ());
                     WorldUtils.spawnEntity(level(), ancientCultist, EntitySpawnReason.EVENT);
-
-                    //drip
                     ancientCultist.setItemSlot(EquipmentSlot.HEAD, new ItemStack(Items.GOLDEN_HELMET));
                     ancientCultist.setItemSlot(EquipmentSlot.CHEST, new ItemStack(Items.GOLDEN_CHESTPLATE));
                     ancientCultist.setItemSlot(EquipmentSlot.LEGS, new ItemStack(Items.GOLDEN_LEGGINGS));
@@ -45,22 +42,13 @@ public abstract class MixinGoat extends Animal {
                     ancientCultist.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.GOLDEN_SWORD));
                     ancientCultist.setItemSlot(EquipmentSlot.OFFHAND, new ItemStack(ItemsMCA.BOOK_CULT_ANCIENT));
                     ancientCultist.setDropChance(EquipmentSlot.OFFHAND, 1.0f);
-
                     ancientCultist.setCustomName(Component.translatable("entity.mca.ancient_cultist"));
-
-                    //advancement
-                    ((ServerLevel) this.level()).players().stream().filter(p -> p.distanceTo(this) < 30).forEach(p -> {
-                        CriterionMCA.GENERIC_EVENT.trigger(p, "ancient_cultists");
-                    });
-
-                    //remove the goat
+                    ((ServerLevel) this.level()).players().stream().filter(p -> p.distanceTo(this) < 30).forEach(p -> CriterionMCA.GENERIC_EVENT.trigger(p, "ancient_cultists"));
                     if (this.level() instanceof ServerLevel serverLevel) {
                         kill(serverLevel);
                     }
-
-                    //extra spiciness
                     level().setSkyFlashTime(10);
-                    LightningBolt bolt = EntityType.LIGHTNING_BOLT.create(level(), EntitySpawnReason.EVENT);
+                    LightningBolt bolt = EntityTypes.LIGHTNING_BOLT.create(level(), EntitySpawnReason.EVENT);
                     if (bolt != null) {
                         bolt.setVisualOnly(true);
                         bolt.snapTo(pos.getX() + 0.5F, pos.getY(), pos.getZ() + 0.5F);
@@ -71,4 +59,3 @@ public abstract class MixinGoat extends Animal {
         }
     }
 }
-

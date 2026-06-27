@@ -43,7 +43,7 @@ public class FamilyTreeScreen extends Screen {
     public FamilyTreeScreen(UUID entityId) {
         super(Component.translatable("gui.family_tree.title"));
         this.focusedEntityId = entityId;
-        this.parent = Minecraft.getInstance().screen;
+        this.parent = Minecraft.getInstance().gui.screen();
     }
 
     @Override
@@ -77,7 +77,7 @@ public class FamilyTreeScreen extends Screen {
     @Override
     public void onClose() {
         assert minecraft != null;
-        minecraft.setScreen(parent);
+        minecraft.gui.setScreen(parent);
     }
 
     @Override
@@ -390,6 +390,3 @@ public class FamilyTreeScreen extends Screen {
         }
     }
 }
-
-
-

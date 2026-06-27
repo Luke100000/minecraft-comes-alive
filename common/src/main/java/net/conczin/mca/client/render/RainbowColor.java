@@ -1,6 +1,7 @@
 package net.conczin.mca.client.render;
 
 import net.minecraft.client.color.ColorLerper;
+import net.minecraft.util.Mth;
 import net.minecraft.world.item.DyeColor;
 
 public final class RainbowColor {
@@ -10,6 +11,7 @@ public final class RainbowColor {
     }
 
     public static int sheep(float tick) {
-        return ColorLerper.getLerpedColor(ColorLerper.Type.SHEEP, tick);
+        // Vanilla's lerper expects a non-negative phase; normalize ours so negative or wrapped ticks never crash.
+        return ColorLerper.getLerpedColor(ColorLerper.Type.SHEEP, Mth.positiveModulo(tick, CYCLE_DURATION));
     }
 }
