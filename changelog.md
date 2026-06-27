@@ -1,3 +1,7 @@
+# 7.9.5
+
+* Initial 26.2 port.
+
 # 7.9.4
 
 * Clothes can be locked now, and are automatically clocked when using Needle and Thread / Editor

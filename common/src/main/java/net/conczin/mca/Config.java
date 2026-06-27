@@ -123,6 +123,11 @@ public final class Config extends CommonConfig {
     public boolean showNotificationsAsChat = false;
 
     /**
+     * If true, MCA book rewards are granted from advancements.
+     */
+    public boolean giveAdvancementBooks = true;
+
+    /**
      * The number of hearts required for a villager to consider the player a friend.
      */
     public int heartsToBeConsideredAsFriend = 40;
@@ -194,7 +199,7 @@ public final class Config extends CommonConfig {
     public double villagerMinTeleportationDistance = 128;
 
     /**
-     * Maximum distance villagers can path toward remembered points of interest such as beds.
+     * Maximum pathfinding distance used when villagers walk to long-range memories such as beds.
      */
     public int villagerPathfindingDistance = 192;
 
