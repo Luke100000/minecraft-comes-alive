@@ -14,7 +14,9 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.Entity;
 
 import java.nio.charset.StandardCharsets;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 public final class DynamicSkinCache {
@@ -99,25 +101,30 @@ public final class DynamicSkinCache {
         }
     }
 
-    private static final Map<SkinKey, Identifier> CACHE = new MaxSizeHashMap<>(128) {
+    private static final Set<SkinKey> INCOMPLETE_CACHE = new HashSet<>();
+    private static final Set<SkinKey> INCOMPLETE_FACE_CACHE = new HashSet<>();
+
+    private static final Map<SkinKey, Identifier> CACHE = new MaxSizeHashMap<>(128, true) {
         @Override
         protected boolean removeEldestEntry(Map.Entry<SkinKey, Identifier> eldest) {
             boolean remove = super.removeEldestEntry(eldest);
             if (remove) {
                 Identifier id = eldest.getValue();
                 Minecraft.getInstance().getTextureManager().release(id);
+                INCOMPLETE_CACHE.remove(eldest.getKey());
             }
             return remove;
         }
     };
 
-    private static final Map<SkinKey, Identifier> FACE_CACHE = new MaxSizeHashMap<>(128) {
+    private static final Map<SkinKey, Identifier> FACE_CACHE = new MaxSizeHashMap<>(128, true) {
         @Override
         protected boolean removeEldestEntry(Map.Entry<SkinKey, Identifier> eldest) {
             boolean remove = super.removeEldestEntry(eldest);
             if (remove) {
                 Identifier id = eldest.getValue();
                 Minecraft.getInstance().getTextureManager().release(id);
+                INCOMPLETE_FACE_CACHE.remove(eldest.getKey());
             }
             return remove;
         }
@@ -145,28 +152,46 @@ public final class DynamicSkinCache {
 
     public static Identifier getOrCreateStitchedSkin(VillagerVisuals visuals) {
         SkinKey key = SkinKey.from(visuals);
+        boolean missingAssets = isMissingImmersiveLibraryAssets(visuals);
         Identifier cachedId = CACHE.get(key);
         if (cachedId != null) {
-            return cachedId;
+            if (!missingAssets && INCOMPLETE_CACHE.remove(key)) {
+                Minecraft.getInstance().getTextureManager().release(cachedId);
+                CACHE.remove(key);
+            } else {
+                return cachedId;
+            }
         }
 
         Identifier newId = generateStitchedSkin(visuals, key);
-        if (!isMissingImmersiveLibraryAssets(visuals)) {
-            CACHE.put(key, newId);
+        CACHE.put(key, newId);
+        if (missingAssets) {
+            INCOMPLETE_CACHE.add(key);
+        } else {
+            INCOMPLETE_CACHE.remove(key);
         }
         return newId;
     }
 
     public static Identifier getOrCreateCroppedFace(VillagerVisuals visuals) {
         SkinKey key = SkinKey.from(visuals);
+        boolean missingAssets = isMissingImmersiveLibraryAssets(visuals);
         Identifier cachedId = FACE_CACHE.get(key);
         if (cachedId != null) {
-            return cachedId;
+            if (!missingAssets && INCOMPLETE_FACE_CACHE.remove(key)) {
+                Minecraft.getInstance().getTextureManager().release(cachedId);
+                FACE_CACHE.remove(key);
+            } else {
+                return cachedId;
+            }
         }
 
         Identifier newId = generateCroppedFace(visuals, key);
-        if (!isMissingImmersiveLibraryAssets(visuals)) {
-            FACE_CACHE.put(key, newId);
+        FACE_CACHE.put(key, newId);
+        if (missingAssets) {
+            INCOMPLETE_FACE_CACHE.add(key);
+        } else {
+            INCOMPLETE_FACE_CACHE.remove(key);
         }
         return newId;
     }

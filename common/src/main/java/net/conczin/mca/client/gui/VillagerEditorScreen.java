@@ -1489,8 +1489,8 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
 
     private void setTraitPage(int i) {
         Traits.Trait[] traits = getValidTraits();
-        int maxPage = (int) Math.ceil((double) traits.length / TRAITS_PER_PAGE) - 1;
-        traitPage = Math.clamp(maxPage, 0, i);
+        int maxPage = Math.max(0, (int) Math.ceil((double) traits.length / TRAITS_PER_PAGE) - 1);
+        traitPage = Math.clamp(i, 0, maxPage);
         setPage("traits");
     }
 

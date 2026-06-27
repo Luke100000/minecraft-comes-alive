@@ -1,3 +1,8 @@
+# 7.9.5
+
+* Fixed trait pagination in the villager editor
+* Reduced dynamic skin texture churn while Immersive Library assets are still loading
+
 # 7.9.4
 
 * Clothes can be locked now, and are automatically clocked when using Needle and Thread / Editor
