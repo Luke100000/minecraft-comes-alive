@@ -99,8 +99,11 @@ public final class CommonNeoForge {
     @SubscribeEvent
     public static void onAddReloadListener(AddReloadListenerEvent event) {
         event.addListener(new ApiReloadListener());
+        event.addListener(new BodySkinList());
         event.addListener(new ClothingList());
         event.addListener(new HairList());
+        event.addListener(new HairStyleList());
+        event.addListener(new LayeredHairList());
         event.addListener(new GiftLoader());
         event.addListener(new Dialogues());
         event.addListener(new Tasks());

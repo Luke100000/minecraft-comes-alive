@@ -99,8 +99,11 @@ public final class MCAFabric implements ModInitializer {
         // Register resource reload listeners
         ResourceManagerHelper managerHelper = ResourceManagerHelper.get(PackType.SERVER_DATA);
         managerHelper.registerReloadListener(new ApiIdentifiableReloadListener());
+        managerHelper.registerReloadListener(new FabricBodySkinList());
         managerHelper.registerReloadListener(new FabricClothingList());
         managerHelper.registerReloadListener(new FabricHairList());
+        managerHelper.registerReloadListener(new FabricHairStyleList());
+        managerHelper.registerReloadListener(new FabricLayeredHairList());
         managerHelper.registerReloadListener(new FabricGiftLoader());
         managerHelper.registerReloadListener(new FabricDialogues());
         managerHelper.registerReloadListener(new FabricTasks());

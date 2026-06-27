@@ -14,6 +14,7 @@ import net.conczin.mca.registry.EntitiesMCA;
 import net.conczin.mca.registry.ModelPredicatesMCA;
 import net.conczin.mca.registry.ParticleTypesMCA;
 import net.conczin.mca.resources.ApiReloadListener;
+import net.conczin.mca.resources.FaceList;
 import net.conczin.mca.resources.Supporters;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.ItemBlockRenderTypes;
@@ -64,6 +65,7 @@ public final class ClientNeoForge extends ClientProxyAbstractImpl {
         event.registerReloadListener(new ColorPaletteLoader());
         event.registerReloadListener(new Supporters());
         event.registerReloadListener(new ApiReloadListener());
+        event.registerReloadListener(new FaceList());
     }
 
     @SubscribeEvent
