@@ -2,6 +2,7 @@
 
 * Fixed trait pagination in the villager editor
 * Reduced dynamic skin texture churn while Immersive Library assets are still loading
+* Advancement book addition can be toggled with a config option.
 
 # 7.9.4
 
