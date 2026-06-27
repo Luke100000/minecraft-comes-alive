@@ -9,6 +9,9 @@ config = "${mod_id}.mixins.json"
 [[mixins]]
 config = "${mod_id}.neoforge.mixins.json"
 
+[[mixins]]
+config = "${mod_id}.emf_compat.mixins.json"
+
 [[mods]]
 modId = "${mod_id}"
 version = "${version}"

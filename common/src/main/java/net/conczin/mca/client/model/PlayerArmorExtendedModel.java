@@ -84,6 +84,11 @@ public class PlayerArmorExtendedModel<T extends LivingEntity> extends HumanoidMo
         this.breastSize = breastSize;
     }
 
+    @Override
+    public boolean usesCommonRendering() {
+        return true;
+    }
+
 
     @Override
     public void setupAnim(HumanoidRenderState state) {

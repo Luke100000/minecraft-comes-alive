@@ -2,8 +2,8 @@ package net.conczin.mca.mixin.client;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.conczin.mca.MCAClient;
+import net.conczin.mca.client.model.ModelLayersMCA;
 import net.conczin.mca.client.model.PlayerEntityExtendedModel;
-import net.conczin.mca.client.model.VillagerEntityModelMCA;
 import net.conczin.mca.client.render.VillagerStateHolder;
 import net.conczin.mca.client.render.VillagerVisuals;
 import net.conczin.mca.client.render.layer.ClothingLayer;
@@ -12,8 +12,7 @@ import net.conczin.mca.client.render.layer.HairLayer;
 import net.conczin.mca.client.render.layer.SkinLayer;
 import net.conczin.mca.ducks.client.PlayerRendererMCA;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.model.geom.builders.CubeDeformation;
-import net.minecraft.client.model.geom.builders.LayerDefinition;
+import net.minecraft.client.model.geom.ModelLayerLocation;
 import net.minecraft.client.model.player.PlayerModel;
 import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.client.renderer.SubmitNodeCollector;
@@ -26,6 +25,7 @@ import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.HumanoidArm;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.Pose;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
@@ -36,10 +36,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @SuppressWarnings({"rawtypes", "unchecked"})
 public abstract class MixinPlayerRenderer extends LivingEntityRenderer<LivingEntity, AvatarRenderState, PlayerModel> implements PlayerRendererMCA {
     @Unique
-    private PlayerModel mca$geneticsModel;
-    @Unique
-    private PlayerModel mca$vanillaModel;
-    @Unique
     private SkinLayer mca$skinLayer;
     @Unique
     private ClothingLayer mca$clothingLayer;
@@ -49,23 +45,9 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<LivingEnt
     }
 
     @Unique
-    private static PlayerEntityExtendedModel<?> mca$createModel(CubeDeformation dilation) {
-        return mca$createModel(dilation, false);
-    }
-
-    @Unique
-    private static PlayerEntityExtendedModel<?> mca$createModel(CubeDeformation dilation, boolean slim) {
-        return new PlayerEntityExtendedModel<>(LayerDefinition.create(VillagerEntityModelMCA.bodyData(dilation, slim), 64, 64).bakeRoot(), slim);
-    }
-
-    @Unique
-    private static PlayerEntityExtendedModel<?> mca$createWearlessModel(CubeDeformation dilation) {
-        return mca$createModel(dilation).hideWears();
-    }
-
-    @Unique
-    private static PlayerEntityExtendedModel<?> mca$createHairModel(CubeDeformation dilation) {
-        return new PlayerEntityExtendedModel<>(LayerDefinition.create(VillagerEntityModelMCA.hairData(dilation), 64, 64).bakeRoot()).hideWears();
+    private static PlayerEntityExtendedModel<?> mca$createModel(EntityRendererProvider.Context ctx, boolean slim) {
+        ModelLayerLocation layer = slim ? ModelLayersMCA.PLAYER_SLIM : ModelLayersMCA.PLAYER;
+        return new PlayerEntityExtendedModel<>(ctx.bakeLayer(layer), slim);
     }
 
     @Inject(method = "<init>(Lnet/minecraft/client/renderer/entity/EntityRendererProvider$Context;Z)V", at = @At("TAIL"))
@@ -74,33 +56,29 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<LivingEnt
             return;
         }
 
-        mca$vanillaModel = model;
-        mca$geneticsModel = mca$createModel(new CubeDeformation(0.0F), slim);
-
-        mca$skinLayer = new SkinLayer((AvatarRenderer) (Object) this, mca$createWearlessModel(new CubeDeformation(0.0F)));
+        mca$skinLayer = new SkinLayer((AvatarRenderer) (Object) this, mca$createModel(ctx, slim).hideWears());
         this.addLayer(mca$skinLayer);
-        this.addLayer(new FaceLayer((AvatarRenderer) (Object) this, mca$createWearlessModel(new CubeDeformation(0.01F)), "normal"));
-        mca$clothingLayer = new ClothingLayer((AvatarRenderer) (Object) this, mca$createModel(new CubeDeformation(0.0625F)), "normal");
+        this.addLayer(new FaceLayer((AvatarRenderer) (Object) this, mca$createModel(ctx, slim).hideWears(), "normal"));
+        mca$clothingLayer = new ClothingLayer((AvatarRenderer) (Object) this, mca$createModel(ctx, slim), "normal");
         this.addLayer(mca$clothingLayer);
-        this.addLayer(new HairLayer((AvatarRenderer) (Object) this, mca$createHairModel(new CubeDeformation(0.125F))));
+        this.addLayer(new HairLayer((AvatarRenderer) (Object) this, mca$createModel(ctx, slim)));
     }
 
     @Inject(method = "scale(Lnet/minecraft/client/renderer/entity/state/AvatarRenderState;Lcom/mojang/blaze3d/vertex/PoseStack;)V", at = @At("TAIL"))
     private void mca$injectScale(AvatarRenderState state, PoseStack poseStack, CallbackInfo ci) {
         if (!(state instanceof VillagerStateHolder holder) || !holder.mca$isGeneticsRendererActive()) {
-            if (MCAClient.isPlayerRendererAllowed()) {
-                model = mca$vanillaModel;
-            }
             return;
         }
 
-        var visuals = VillagerVisuals.require(holder);
-        poseStack.scale(visuals.rawHorizontalScaleFactor(), visuals.rawVerticalScaleFactor(), visuals.rawHorizontalScaleFactor());
-        if (visuals.baby() && !state.isPassenger) {
-            poseStack.translate(0.0F, 0.6F, 0.0F);
+        VillagerVisuals visuals = holder.mca$getVisuals();
+        if (visuals == null) {
+            return;
         }
 
-        model = mca$geneticsModel;
+        poseStack.scale(visuals.rawHorizontalScaleFactor(), visuals.rawVerticalScaleFactor(), visuals.rawHorizontalScaleFactor());
+        if (visuals.baby() && !state.isPassenger && !state.hasPose(Pose.SLEEPING)) {
+            poseStack.translate(0.0F, 0.6F, 0.0F);
+        }
     }
 
     @Inject(

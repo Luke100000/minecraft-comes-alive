@@ -2,7 +2,9 @@ package net.conczin.mca.client.render;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.conczin.mca.Config;
+import net.conczin.mca.client.gui.SkinLibraryScreen;
 import net.conczin.mca.client.gui.VillagerEditorScreen;
+import net.conczin.mca.client.gui.WhistleScreen;
 import net.conczin.mca.client.model.VillagerEntityBaseModelMCA;
 import net.conczin.mca.client.model.VillagerEntityModelMCA;
 import net.conczin.mca.entity.Infectable;
@@ -12,11 +14,14 @@ import net.minecraft.client.model.HumanoidModel;
 import net.minecraft.client.model.geom.builders.CubeDeformation;
 import net.minecraft.client.model.geom.builders.LayerDefinition;
 import net.minecraft.client.model.geom.builders.MeshDefinition;
+import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.ArmorModelSet;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.HumanoidMobRenderer;
 import net.minecraft.client.renderer.entity.layers.HumanoidArmorLayer;
 import net.minecraft.client.renderer.rendertype.RenderType;
+import net.minecraft.client.renderer.rendertype.RenderTypes;
+import net.minecraft.client.renderer.state.level.CameraRenderState;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -34,10 +39,28 @@ import java.util.Set;
 public class VillagerLikeEntityMCARenderer<T extends Mob & VillagerLike<T>>
     extends HumanoidMobRenderer<T, VillagerRenderState, VillagerEntityModelMCA> {
     private static final Identifier TEXTURE = Identifier.parse("textures/entity/steve.png");
+    private final VillagerEntityModelMCA liveModel;
+    private final VillagerEntityModelMCA previewModel;
 
-    public VillagerLikeEntityMCARenderer(EntityRendererProvider.Context ctx, VillagerEntityModelMCA model) {
-        super(ctx, model, 0.5F);
+    public VillagerLikeEntityMCARenderer(EntityRendererProvider.Context ctx, VillagerEntityModelMCA liveModel, VillagerEntityModelMCA previewModel) {
+        super(ctx, liveModel, 0.5F);
+        this.liveModel = liveModel;
+        this.previewModel = previewModel;
         addLayer(new HumanoidArmorLayer<>(this, createArmorModelSet(), ctx.getEquipmentRenderer()));
+    }
+
+    @Override
+    public void submit(VillagerRenderState state, PoseStack poseStack, SubmitNodeCollector submitNodeCollector, CameraRenderState camera) {
+        state.mcaInventoryPreview = Minecraft.getInstance().screen instanceof VillagerEditorScreen
+                || Minecraft.getInstance().screen instanceof SkinLibraryScreen
+                || Minecraft.getInstance().screen instanceof WhistleScreen;
+        VillagerEntityModelMCA previousModel = this.model;
+        this.model = state.mcaInventoryPreview ? previewModel : liveModel;
+        try {
+            super.submit(state, poseStack, submitNodeCollector, camera);
+        } finally {
+            this.model = previousModel;
+        }
     }
 
     private ArmorModelSet<VillagerEntityBaseModelMCA> createArmorModelSet() {
@@ -113,9 +136,14 @@ public class VillagerLikeEntityMCARenderer<T extends Mob & VillagerLike<T>>
     @Nullable
     @Override
     protected RenderType getRenderType(VillagerRenderState state, boolean showBody, boolean translucent, boolean showOutlines) {
-        //setting the type to null prevents it from rendering
-        //we need a skin layer anyway because of the color
-        return null;
+        if (!state.mcaInventoryPreview) {
+            return null;
+        }
+        if (showBody) {
+            Identifier texture = getTextureLocation(state);
+            return translucent ? RenderTypes.entityTranslucent(texture) : this.model.renderType(texture);
+        }
+        return showOutlines ? RenderTypes.outline(getTextureLocation(state)) : null;
     }
 
     @Override

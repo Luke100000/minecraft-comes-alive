@@ -13,7 +13,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public class MixinModel {
     @Inject(method = "renderToBuffer(Lcom/mojang/blaze3d/vertex/PoseStack;Lcom/mojang/blaze3d/vertex/VertexConsumer;III)V", at = @At("HEAD"), cancellable = true)
     private void mca$renderCommonModel(PoseStack poseStack, VertexConsumer buffer, int lightCoords, int overlayCoords, int color, CallbackInfo ci) {
-        if ((Object) this instanceof CommonVillagerModel<?> commonVillagerModel) {
+        if ((Object) this instanceof CommonVillagerModel<?> commonVillagerModel && commonVillagerModel.usesCommonRendering()) {
             commonVillagerModel.renderCommon(poseStack, buffer, lightCoords, overlayCoords, color);
             ci.cancel();
         }

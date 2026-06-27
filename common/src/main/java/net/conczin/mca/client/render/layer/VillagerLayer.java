@@ -3,13 +3,16 @@ package net.conczin.mca.client.render.layer;
 import com.google.common.collect.Maps;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.conczin.mca.MCA;
+import net.conczin.mca.client.model.CommonVillagerModel;
 import net.conczin.mca.client.model.PlayerArmorExtendedModel;
 import net.conczin.mca.client.model.PlayerEntityExtendedModel;
 import net.conczin.mca.client.model.VillagerEntityModelMCA;
 import net.conczin.mca.client.render.VillagerStateHolder;
+import net.conczin.mca.client.render.VillagerVisuals;
 import net.minecraft.IdentifierException;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.model.HumanoidModel;
+import net.minecraft.client.model.player.PlayerModel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.LivingEntityRenderer;
 import net.minecraft.client.renderer.entity.RenderLayerParent;
@@ -64,16 +67,26 @@ public abstract class VillagerLayer<S extends HumanoidRenderState, M extends Hum
         if (!(state instanceof VillagerStateHolder holder) || !holder.mca$isVillagerRendererActive()) {
             return;
         }
+        if (state instanceof net.conczin.mca.client.render.VillagerRenderState villagerState && villagerState.mcaInventoryPreview) {
+            return;
+        }
 
         boolean visible = !state.isInvisible;
         boolean glowing = state.appearsGlowing();
 
         copyParentModelState();
+        applyVillagerDimensions(state);
         prepareModel(state);
         renderFinal(poseStack, submitNodeCollector, lightCoords, state, state.ageInTicks, visible, glowing);
     }
 
     protected void prepareModel(S state) {
+    }
+
+    protected void applyVillagerDimensions(S state) {
+        if (this.model instanceof CommonVillagerModel<?> commonModel) {
+            commonModel.applyVillagerDimensions(VillagerVisuals.require(state), state.isCrouching);
+        }
     }
 
     protected void copyParentModelState() {
@@ -93,6 +106,36 @@ public abstract class VillagerLayer<S extends HumanoidRenderState, M extends Hum
         if ((Object) parentModel instanceof PlayerEntityExtendedModel parentPlayer && (Object) this.model instanceof PlayerArmorExtendedModel armorModel) {
             parentPlayer.copyPropertiesTo((HumanoidModel) armorModel);
         }
+
+        if ((Object) parentModel instanceof PlayerModel sourcePlayer && (Object) this.model instanceof PlayerEntityExtendedModel targetPlayer) {
+            copyPlayerPose(sourcePlayer, targetPlayer);
+        }
+
+        if ((Object) parentModel instanceof PlayerModel sourcePlayer && (Object) this.model instanceof PlayerArmorExtendedModel armorModel) {
+            CommonVillagerModel.copyPartState(armorModel.head, sourcePlayer.head);
+            CommonVillagerModel.copyPartState(armorModel.hat, sourcePlayer.hat);
+            CommonVillagerModel.copyPartState(armorModel.body, sourcePlayer.body);
+            CommonVillagerModel.copyPartState(armorModel.leftArm, sourcePlayer.leftArm);
+            CommonVillagerModel.copyPartState(armorModel.rightArm, sourcePlayer.rightArm);
+            CommonVillagerModel.copyPartState(armorModel.leftLeg, sourcePlayer.leftLeg);
+            CommonVillagerModel.copyPartState(armorModel.rightLeg, sourcePlayer.rightLeg);
+        }
+    }
+
+    private static void copyPlayerPose(PlayerModel source, PlayerEntityExtendedModel target) {
+        CommonVillagerModel.copyPartState(target.head, source.head);
+        CommonVillagerModel.copyPartState(target.hat, source.hat);
+        CommonVillagerModel.copyPartState(target.body, source.body);
+        CommonVillagerModel.copyPartState(target.leftArm, source.leftArm);
+        CommonVillagerModel.copyPartState(target.rightArm, source.rightArm);
+        CommonVillagerModel.copyPartState(target.leftLeg, source.leftLeg);
+        CommonVillagerModel.copyPartState(target.rightLeg, source.rightLeg);
+        CommonVillagerModel.copyPartState(target.jacket, source.jacket);
+        CommonVillagerModel.copyPartState(target.leftPants, source.leftPants);
+        CommonVillagerModel.copyPartState(target.rightPants, source.rightPants);
+        CommonVillagerModel.copyPartState(target.leftSleeve, source.leftSleeve);
+        CommonVillagerModel.copyPartState(target.rightSleeve, source.rightSleeve);
+        target.copyVisibility(source);
     }
 
     protected static void copyVisibility(HumanoidModel source, HumanoidModel target) {
@@ -116,13 +159,7 @@ public abstract class VillagerLayer<S extends HumanoidRenderState, M extends Hum
             return;
         }
 
-        model.head.visible = visible;
-        model.hat.visible = visible;
-        model.body.visible = visible;
-        model.rightArm.visible = visible;
-        model.leftArm.visible = visible;
-        model.rightLeg.visible = visible;
-        model.leftLeg.visible = visible;
+        CommonVillagerModel.setBaseVisible(model, visible);
 
         if (model instanceof PlayerArmorExtendedModel<?> armorModel) {
             armorModel.breasts.visible = visible;

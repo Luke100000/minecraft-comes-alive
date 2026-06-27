@@ -15,7 +15,6 @@ public class MixinLivingEntityRenderer {
     @Inject(method = "getRenderType(Lnet/minecraft/client/renderer/entity/state/LivingEntityRenderState;ZZZ)Lnet/minecraft/client/renderer/rendertype/RenderType;", at = @At("HEAD"), cancellable = true)
     public void mca$injectGetRenderLayer(LivingEntityRenderState state, boolean showBody, boolean translucent, boolean showOutline, CallbackInfoReturnable<@Nullable RenderType> cir) {
         if (state instanceof VillagerStateHolder holder && holder.mca$isVillagerRendererActive()) {
-            //disable original model when villager renderer is active
             cir.setReturnValue(null);
         }
     }

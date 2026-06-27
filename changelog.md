@@ -8,7 +8,8 @@
 * Tombstones now drop their NBT, allowing them to be moved.
 * Fixed high characters from glitching into blocks.
 * Guard armor can now be configured.
-
+* Improve Villager UI backend logic
+* Add support for Fresh Moves and other animation packs for EMF (Entity Model Features) mod only
 # 7.9.3
 
 * Fix multiplayer sync.

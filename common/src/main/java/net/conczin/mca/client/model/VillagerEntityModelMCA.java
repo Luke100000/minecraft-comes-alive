@@ -27,13 +27,13 @@ public class VillagerEntityModelMCA extends VillagerEntityBaseModelMCA {
 
     public VillagerEntityModelMCA(ModelPart tree) {
         super(tree);
-        bodyWear = body.getChild(PartNames.JACKET);
-        leftArmwear = leftArm.getChild("left_sleeve");
-        rightArmwear = rightArm.getChild("right_sleeve");
-        leftLegwear = leftLeg.getChild("left_pants");
-        rightLegwear = rightLeg.getChild("right_pants");
+        bodyWear = getChildOrEmpty(body, PartNames.JACKET);
+        leftArmwear = getChildOrEmpty(leftArm, "left_sleeve");
+        rightArmwear = getChildOrEmpty(rightArm, "right_sleeve");
+        leftLegwear = getChildOrEmpty(leftLeg, "left_pants");
+        rightLegwear = getChildOrEmpty(rightLeg, "right_pants");
 
-        breastsWear = tree.getChild(BREASTPLATE);
+        breastsWear = getChildOrEmpty(tree, BREASTPLATE);
     }
 
     //
@@ -51,10 +51,20 @@ public class VillagerEntityModelMCA extends VillagerEntityBaseModelMCA {
     }
 
     public static MeshDefinition bodyData(CubeDeformation dilation) {
-        return bodyData(dilation, false);
+        return playerData(dilation, false);
     }
 
     public static MeshDefinition bodyData(CubeDeformation dilation, boolean slim) {
+        return playerData(dilation, slim);
+    }
+
+    public static MeshDefinition playerData(CubeDeformation dilation) {
+        return playerData(dilation, false);
+    }
+
+    public static MeshDefinition playerData(CubeDeformation dilation, boolean slim) {
+        // Start from Mojang's player mesh so EMF/Fresh Moves sees the normal player part tree.
+        // MCA only adds root-level breast extras; proportions, skins, and clothes are applied at render time.
         MeshDefinition modelData = PlayerModel.createMesh(dilation, slim);
         PartDefinition root = modelData.getRoot();
         root.addOrReplaceChild(BREASTS, newBreasts(dilation, 0), PartPose.ZERO);
@@ -86,19 +96,11 @@ public class VillagerEntityModelMCA extends VillagerEntityBaseModelMCA {
 
     public void setupAnim(VillagerRenderState state) {
         super.setupAnim(state);
-        // These parts are already parented to their limbs/body in the baked model,
-        // so copying the parent transform onto them applies that transform twice.
         CommonVillagerModel.copyPartState(breastsWear, breasts);
     }
 
     public void setAllVisible(boolean visible) {
-        head.visible = visible;
-        hat.visible = visible;
-        body.visible = visible;
-        leftArm.visible = visible;
-        rightArm.visible = visible;
-        leftLeg.visible = visible;
-        rightLeg.visible = visible;
+        CommonVillagerModel.setBaseVisible(this, visible);
         breasts.visible = visible;
         leftArmwear.visible = !wearsHidden && visible;
         rightArmwear.visible = !wearsHidden && visible;

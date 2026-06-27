@@ -15,17 +15,22 @@ import net.minecraft.client.model.geom.builders.MeshDefinition;
 import net.minecraft.client.model.geom.builders.PartDefinition;
 import net.minecraft.util.Mth;
 
+import java.util.List;
+import java.util.Map;
+
 public class VillagerEntityBaseModelMCA extends HumanoidModel<VillagerRenderState> implements CommonVillagerModel<VillagerRenderState> {
     protected static final String BREASTS = "breasts";
 
     public final ModelPart breasts;
+    private final boolean commonRendering;
 
     final VillagerDimensions.Mutable dimensions = new VillagerDimensions.Mutable(AgeState.ADULT);
     float breastSize;
 
     public VillagerEntityBaseModelMCA(ModelPart root) {
         super(root);
-        this.breasts = root.getChild(BREASTS);
+        this.commonRendering = root.hasChild(BREASTS);
+        this.breasts = getChildOrEmpty(root, BREASTS);
     }
 
     public static MeshDefinition getModelData(CubeDeformation dilation) {
@@ -148,6 +153,15 @@ public class VillagerEntityBaseModelMCA extends HumanoidModel<VillagerRenderStat
     @Override
     public void setBreastSize(float breastSize) {
         this.breastSize = breastSize;
+    }
+
+    @Override
+    public boolean usesCommonRendering() {
+        return commonRendering;
+    }
+
+    protected static ModelPart getChildOrEmpty(ModelPart root, String name) {
+        return root.hasChild(name) ? root.getChild(name) : new ModelPart(List.of(), Map.of());
     }
 
 }

@@ -6,6 +6,7 @@ import net.conczin.mca.KeyBindings;
 import net.conczin.mca.MCAClient;
 import net.conczin.mca.block.BlockEntityTypesMCA;
 import net.conczin.mca.client.gui.MCAScreens;
+import net.conczin.mca.client.model.ModelLayersMCA;
 import net.conczin.mca.client.particle.InteractionParticle;
 import net.conczin.mca.client.render.*;
 import net.conczin.mca.client.resources.ColorPaletteLoader;
@@ -22,6 +23,7 @@ import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.fabricmc.fabric.api.client.particle.v1.ParticleProviderRegistry;
+import net.fabricmc.fabric.api.client.rendering.v1.ModelLayerRegistry;
 import net.fabricmc.fabric.api.resource.v1.ResourceLoader;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.blockentity.BlockEntityRenderers;
@@ -40,6 +42,7 @@ public final class MCAFabricClient extends ClientProxyAbstractImpl implements Cl
     @Override
     public void onInitializeClient() {
         Network.registerClientSender(ClientPlayNetworking::send);
+        registerModelLayers();
 
         if (Config.getInstance().useSquidwardModels) {
             EntityRenderers.register(EntitiesMCA.MALE_VILLAGER, VillagerRenderer::new);
@@ -79,6 +82,10 @@ public final class MCAFabricClient extends ClientProxyAbstractImpl implements Cl
         ClientTickEvents.START_CLIENT_TICK.register(MCAClient::tickClient);
 
         KeyBindings.list.forEach(KeyMappingHelper::registerKeyMapping);
+    }
+
+    private static void registerModelLayers() {
+        ModelLayersMCA.register((layer, definition) -> ModelLayerRegistry.registerModelLayer(layer, definition::get));
     }
 
     @Override

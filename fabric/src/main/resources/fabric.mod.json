@@ -25,7 +25,8 @@
   },
   "mixins": [
     "${mod_id}.mixins.json",
-    "${mod_id}.fabric.mixins.json"
+    "${mod_id}.fabric.mixins.json",
+    "${mod_id}.emf_compat.mixins.json"
   ],
   "accessWidener": "${mod_id}.classtweaker",
   "custom": {

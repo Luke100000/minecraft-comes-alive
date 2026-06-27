@@ -7,6 +7,7 @@ import net.conczin.mca.MCA;
 import net.conczin.mca.MCAClient;
 import net.conczin.mca.block.BlockEntityTypesMCA;
 import net.conczin.mca.client.gui.MCAScreens;
+import net.conczin.mca.client.model.ModelLayersMCA;
 import net.conczin.mca.client.particle.InteractionParticle;
 import net.conczin.mca.client.render.*;
 import net.conczin.mca.client.resources.ColorPaletteLoader;
@@ -55,6 +56,11 @@ public final class ClientNeoForge extends ClientProxyAbstractImpl {
         }
         event.registerEntityRenderer(EntitiesMCA.GRIM_REAPER, GrimReaperRenderer::new);
         event.registerEntityRenderer(EntitiesMCA.CRIB, CribEntityRenderer::new);
+    }
+
+    @SubscribeEvent
+    public static void onRegisterLayerDefinitions(EntityRenderersEvent.RegisterLayerDefinitions event) {
+        ModelLayersMCA.register(event::registerLayerDefinition);
     }
 
     @SubscribeEvent

@@ -16,6 +16,7 @@ import static net.conczin.mca.client.model.VillagerEntityModelMCA.BREASTPLATE;
 public class PlayerEntityExtendedModel<T extends LivingEntity> extends PlayerModel implements CommonVillagerModel<T> {
     public final ModelPart breasts;
     public final ModelPart breastsWear;
+    private final boolean commonRendering;
 
     final VillagerDimensions.Mutable dimensions = new VillagerDimensions.Mutable(AgeState.ADULT);
     float breastSize;
@@ -27,8 +28,9 @@ public class PlayerEntityExtendedModel<T extends LivingEntity> extends PlayerMod
 
     public PlayerEntityExtendedModel(ModelPart root, boolean slim) {
         super(root, slim);
-        this.breasts = root.getChild(BREASTS);
-        this.breastsWear = root.getChild(BREASTPLATE);
+        this.commonRendering = root.hasChild(BREASTS);
+        this.breasts = VillagerEntityBaseModelMCA.getChildOrEmpty(root, BREASTS);
+        this.breastsWear = VillagerEntityBaseModelMCA.getChildOrEmpty(root, BREASTPLATE);
     }
 
     public void copyPropertiesTo(HumanoidModel<?> target) {
@@ -114,6 +116,11 @@ public class PlayerEntityExtendedModel<T extends LivingEntity> extends PlayerMod
         this.breastSize = breastSize;
     }
 
+    @Override
+    public boolean usesCommonRendering() {
+        return commonRendering;
+    }
+
 
     public PlayerEntityExtendedModel<T> hideWears() {
         this.wearsHidden = true;
@@ -127,13 +134,7 @@ public class PlayerEntityExtendedModel<T extends LivingEntity> extends PlayerMod
     }
 
     public void setAllVisible(boolean visible) {
-        head.visible = visible;
-        hat.visible = visible;
-        body.visible = visible;
-        leftArm.visible = visible;
-        rightArm.visible = visible;
-        leftLeg.visible = visible;
-        rightLeg.visible = visible;
+        CommonVillagerModel.setBaseVisible(this, visible);
         breasts.visible = visible;
         jacket.visible = !wearsHidden && visible;
         leftPants.visible = !wearsHidden && visible;

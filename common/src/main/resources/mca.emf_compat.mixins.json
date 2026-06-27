@@ -1,0 +1,12 @@
+{
+  "required": false,
+  "minVersion": "0.7",
+  "package": "net.conczin.mca.mixin.compat.emf",
+  "compatibilityLevel": "JAVA_25",
+  "client": [
+    "MixinEMFManager"
+  ],
+  "injectors": {
+    "defaultRequire": 0
+  }
+}
