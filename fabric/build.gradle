@@ -38,3 +38,15 @@ loom {
         }
     }
 }
+
+fabricApi {
+    configureDataGeneration {
+        addToResources = false
+        client = true
+        createRunConfiguration = true
+        createSourceSet = true
+        modId = "${mod_id}-datagen"
+        outputDirectory = rootProject.project(':common').file('src/generated/resources')
+        strictValidation = true
+    }
+}

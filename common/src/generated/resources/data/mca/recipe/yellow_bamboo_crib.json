@@ -1,0 +1,25 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "C": {
+      "item": "minecraft:yellow_carpet"
+    },
+    "F": {
+      "item": "minecraft:oak_fence"
+    },
+    "P": {
+      "item": "minecraft:oak_planks"
+    }
+  },
+  "pattern": [
+    "F F",
+    "FCF",
+    "PPP"
+  ],
+  "result": {
+    "count": 1,
+    "id": "mca:yellow_bamboo_crib"
+  },
+  "show_notification": true
+}

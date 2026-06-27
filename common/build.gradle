@@ -26,7 +26,25 @@ configurations {
     }
 }
 
+sourceSets.main.resources {
+    srcDir 'src/generated/resources'
+}
+
+def commonResourcesOutput = layout.buildDirectory.dir('commonResources')
+
+tasks.register('prepareCommonResources', Sync) {
+    from(sourceSets.main.resources)
+    into(commonResourcesOutput)
+    duplicatesStrategy = DuplicatesStrategy.FAIL
+}
+
+tasks.named('sourcesJar') {
+    dependsOn(':fabric:runDatagen')
+}
+
 artifacts {
     commonJava sourceSets.main.java.sourceDirectories.singleFile
-    commonResources sourceSets.main.resources.sourceDirectories.singleFile
+    commonResources(commonResourcesOutput) {
+        builtBy tasks.named('prepareCommonResources')
+    }
 }

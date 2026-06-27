@@ -21,9 +21,6 @@
     ],
     "client": [
       "net.conczin.mca.fabric.MCAFabricClient"
-    ],
-    "fabric-datagen": [
-      "net.conczin.mca.fabric.datagen.CribDatagen"
     ]
   },
   "mixins": [

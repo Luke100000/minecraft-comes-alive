@@ -2,6 +2,7 @@ package net.conczin.mca.util.recipes;
 
 import net.conczin.mca.entity.CribWoodType;
 import net.conczin.mca.registry.ItemsMCA;
+import net.minecraft.advancements.critereon.InventoryChangeTrigger;
 import net.minecraft.data.recipes.RecipeCategory;
 import net.minecraft.data.recipes.RecipeOutput;
 import net.minecraft.data.recipes.ShapedRecipeBuilder;
@@ -23,6 +24,7 @@ public class CribRecipeProvider {
                         .pattern("F F")
                         .pattern("FCF")
                         .pattern("PPP")
+                        .unlockedBy("has_" + wood.toString().toLowerCase() + "_planks", InventoryChangeTrigger.TriggerInstance.hasItems(plankFromWoodType(wood)))
                         .save(recipeOutput);
             }
         }

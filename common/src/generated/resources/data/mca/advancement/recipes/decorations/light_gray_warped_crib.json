@@ -1,0 +1,33 @@
+{
+  "parent": "minecraft:recipes/root",
+  "criteria": {
+    "has_the_recipe": {
+      "conditions": {
+        "recipe": "mca:light_gray_warped_crib"
+      },
+      "trigger": "minecraft:recipe_unlocked"
+    },
+    "has_warped_planks": {
+      "conditions": {
+        "items": [
+          {
+            "items": "minecraft:warped_planks"
+          }
+        ]
+      },
+      "trigger": "minecraft:inventory_changed"
+    }
+  },
+  "requirements": [
+    [
+      "has_the_recipe",
+      "has_warped_planks"
+    ]
+  ],
+  "rewards": {
+    "recipes": [
+      "mca:light_gray_warped_crib"
+    ]
+  },
+  "sends_telemetry_event": false
+}
