@@ -8,8 +8,7 @@ public class CribDatagen implements DataGeneratorEntrypoint {
     public void onInitializeDataGenerator(FabricDataGenerator generator) {
         FabricDataGenerator.Pack pack = generator.createPack();
 
-        pack.addProvider(FabricCribRecipeProvider::new);
+        pack.addProvider(CribRecipeDataProvider::new);
         pack.addProvider(CribItemModelProvider::new);
-        pack.addProvider(CribJsonShapeProvider::new);
     }
 }

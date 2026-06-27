@@ -6,10 +6,10 @@
       "item": "minecraft:cyan_carpet"
     },
     "F": {
-      "item": "minecraft:oak_fence"
+      "item": "minecraft:bamboo_fence"
     },
     "P": {
-      "item": "minecraft:oak_planks"
+      "item": "minecraft:bamboo_planks"
     }
   },
   "pattern": [

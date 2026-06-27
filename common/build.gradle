@@ -28,6 +28,7 @@ configurations {
 
 sourceSets.main.resources {
     srcDir 'src/generated/resources'
+    exclude '.cache/**'
 }
 
 def commonResourcesOutput = layout.buildDirectory.dir('commonResources')
