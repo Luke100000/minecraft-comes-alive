@@ -505,7 +505,9 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
 
                     y += 65;
                 } else {
-                    addRenderableWidget(new ColorPickerWidget(width / 2 + margin, y, DATA_WIDTH - margin * 2, DATA_WIDTH - margin * 2,
+                    int pickerSize = fitColorPickerSize(y, DATA_WIDTH - 20);
+                    int pickerX = width / 2 + (DATA_WIDTH - pickerSize) / 2;
+                    addRenderableWidget(new ColorPickerWidget(pickerX, y, pickerSize, pickerSize,
                             genetics.getGene(Genetics.PHEOMELANIN),
                             genetics.getGene(Genetics.EUMELANIN),
                             MCA.locate("textures/colormap/villager_hair.png"),
@@ -1638,8 +1640,8 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         float displayRotation = previewRotation + rotationOffset;
         float followXAngle = baseXAngle * Mth.cos(displayRotation * ((float)Math.PI / 180.0F));
         Quaternionf pose = new Quaternionf().rotateZ((float)Math.PI);
-        pose.rotateY(-displayRotation * ((float)Math.PI / 180.0F));
         Quaternionf cameraOrientation = new Quaternionf().rotateX(yAngle * 20.0F * (float)(Math.PI / 180.0));
+        pose.mul(cameraOrientation);
 
         float previousBodyRot = entity.yBodyRot;
         float previousBodyRotO = entity.yBodyRotO;
@@ -1650,9 +1652,9 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         float previousHeadRotO = entity.yHeadRotO;
         float previousHeadRot = entity.yHeadRot;
 
-        entity.yBodyRot = 180.0F + followXAngle * 20.0F;
+        entity.yBodyRot = 180.0F + displayRotation + followXAngle * 20.0F;
         entity.yBodyRotO = entity.yBodyRot;
-        entity.setYRot(180.0F + followXAngle * 40.0F);
+        entity.setYRot(180.0F + displayRotation + followXAngle * 40.0F);
         entity.yRotO = entity.getYRot();
         entity.setXRot(-yAngle * 20.0F);
         entity.xRotO = entity.getXRot();
