@@ -39,6 +39,11 @@ public class DestinyScreen extends VillagerEditorScreen {
     }
 
     @Override
+    protected boolean shouldCloseAfterSkinExport() {
+        return false;
+    }
+
+    @Override
     public void onClose() {
         if (!page.equals("general") && !page.equals("story")) {
             setPage("destiny");

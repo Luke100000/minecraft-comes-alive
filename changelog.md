@@ -1,6 +1,6 @@
-# 7.7.18-beta
+# 7.7.18-beta.1
 
-* Beta release of the 1.21.1 major backport from 26.1.2
+* Beta release of the 1.21.1 content backport from 26.1.2
 * Added generated crib resources and datagen-backed recipes, advancements, and item models
 * Added updated skin, face, hair style, layered hair, and eye customization resources
 * Added generated eye texture cache clearing on resource reload
@@ -10,7 +10,6 @@
 * Fixed Destiny teleportation using invalid or out-of-bounds destinations
 * Fixed MCA player data refresh and cache handling for renderer and scaling updates
 * Fixed village requirement override data being saved, loaded, and applied to rank checks
-* Known beta limitation: archer/guard AI parity work is not included in this pass
 
 
 # 7.7.17

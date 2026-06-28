@@ -336,17 +336,10 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                     20,
                     Component.translatable(isPresetsPage ? "gui.mca.export_skin" : "gui.mca.quick_export"),
                     b -> {
-                        if (isPresetsPage) {
-                            if (selectedPreset != null) {
-                                SkinExporter.export(villagerVisualization, selectedPreset);
-                            }
-                        } else {
-                            SkinExporter.export(villager);
-                            onClose();
-                        }
+                        exportSkinFromCurrentPage();
                     }
             ));
-            exportSkinButton.visible = isPresetsPage || !isSelectionPage();
+            exportSkinButton.visible = (isPresetsPage || !isSelectionPage()) && !(this instanceof DestinyScreen);
             exportSkinButton.active = !isPresetsPage || (selectedPreset != null);
         }
 
@@ -768,7 +761,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                 }
 
                 y += 4;
-                addRenderableWidget(new ButtonWidget(width / 2, y, DATA_WIDTH, 20, Component.translatable("gui.back"), b -> {
+                addRenderableWidget(new ButtonWidget(width / 2, y, DATA_WIDTH, 20, Component.translatable("gui.button.back"), b -> {
                     setPage("hair_style");
                 }));
             }
@@ -894,7 +887,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                 yVal += 24;
 
                 // Back Button
-                addRenderableWidget(new ButtonWidget(width / 2, yVal, DATA_WIDTH, 20, Component.translatable("gui.back"), b -> setPage(presetsReturnPage)));
+                addRenderableWidget(new ButtonWidget(width / 2, yVal, DATA_WIDTH, 20, Component.translatable("gui.button.back"), b -> setPage(presetsReturnPage)));
             }
         }
 
@@ -1714,13 +1707,13 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                 // Draw labels below the presets/export controls.
                 final PoseStack matrices = context.pose();
                 matrices.pushPose();
-                matrices.translate(x + 48.0F, y - 50, 0);
+                matrices.translate(x + 48.0F, y - 37, 0);
                 matrices.scale(0.75f, 0.75f, 0.75f);
                 context.drawCenteredString(font, Component.translatable("gui.mca.presets.original"), 0, 0, 0xAAFFFFFF);
                 matrices.popPose();
 
                 matrices.pushPose();
-                matrices.translate(x + 128.0F, y - 50, 0);
+                matrices.translate(x + 128.0F, y - 37, 0);
                 matrices.scale(0.75f, 0.75f, 0.75f);
                 context.drawCenteredString(font, Component.translatable("gui.mca.presets.preview"), 0, 0, 0xAAFFFFFF);
                 matrices.popPose();
@@ -2197,6 +2190,27 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         if (isLayeredHairPage()) {
             setPage("hair_advanced");
         }
+    }
+
+    private void exportSkinFromCurrentPage() {
+        boolean fromPresets = page.equals("presets");
+        VillagerEntityMCA exportTarget = fromPresets && selectedPreset != null ? villagerVisualization : villager;
+        String exportName = fromPresets ? selectedPreset : null;
+        if (SkinExporter.export(exportTarget, exportName)) {
+            finishSkinExport(fromPresets);
+        }
+    }
+
+    private void finishSkinExport(boolean fromPresets) {
+        if (shouldCloseAfterSkinExport()) {
+            onClose();
+        } else if (fromPresets) {
+            setPage(presetsReturnPage);
+        }
+    }
+
+    protected boolean shouldCloseAfterSkinExport() {
+        return true;
     }
 
     public VillagerEntityMCA getVillager() {

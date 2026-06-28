@@ -22,11 +22,11 @@ import java.io.FileInputStream;
 import java.io.InputStream;
 
 public class SkinExporter {
-    public static void export(VillagerEntityMCA villager) {
-        export(villager, null);
+    public static boolean export(VillagerEntityMCA villager) {
+        return export(villager, null);
     }
 
-    public static void export(VillagerEntityMCA villager, String customName) {
+    public static boolean export(VillagerEntityMCA villager, String customName) {
         try {
             try (NativeImage base = new NativeImage(64, 64, false)) {
                 // Clear base canvas to transparent black
@@ -120,6 +120,7 @@ public class SkinExporter {
                     // Close the MCA editor screen
                     Minecraft.getInstance().setScreen(null);
                 }
+                return true;
             }
         } catch (Exception e) {
             MCA.LOGGER.error("Failed to export villager skin", e);
@@ -127,6 +128,7 @@ public class SkinExporter {
             if (player != null) {
                 player.sendSystemMessage(Component.translatable("chat.mca.skin_export_failure", e.getMessage()).withStyle(ChatFormatting.RED));
             }
+            return false;
         }
     }
 
