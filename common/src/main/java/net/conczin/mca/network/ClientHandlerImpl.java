@@ -219,7 +219,6 @@ public class ClientHandlerImpl implements ClientHandler {
     public void handleSkinListResponse(SkinListResponse message) {
         Screen screen = client.screen;
         ClientSkinCatalog.installCustomSkins(message.clothing(), message.hair());
-        VillagerEditorScreen.setSkinList(message.clothing(), message.hair());
         if (screen instanceof SkinListUpdateListener gui) {
             gui.skinListUpdatedCallback();
         }
@@ -245,7 +244,6 @@ public class ClientHandlerImpl implements ClientHandler {
     @Override
     public void handleCustomSkinsChangedMessage(CustomSkinsChangedMessage message) {
         ClientSkinCatalog.markCustomSkinsOutdated();
-        VillagerEditorScreen.setSkinListOutdated();
     }
 
     @Override
