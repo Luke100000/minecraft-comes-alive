@@ -1,3 +1,7 @@
+# 8.0.0-beta.2
+
+* Fixed NeoForge startup crash.
+
 # 8.0.0-beta.1
 
 * Initial 26.2 port.
