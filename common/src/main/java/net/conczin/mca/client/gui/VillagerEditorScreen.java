@@ -40,6 +40,7 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.FastColor;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.LivingEntity;
@@ -63,6 +64,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     private static final int STEVE_PROPORTIONS_BUTTON_WIDTH = 22;
     private static final float STEVE_RAW_WIDTH_SCALE = 1.0F;
     private static final float STEVE_RAW_HEIGHT_SCALE = 0.9F;
+    private static final ResourceLocation PREVIEW_MOUSE_FOLLOW_TEXTURE = MCA.locate("textures/gui/preview_mouse_follow.png");
     protected final VillagerEntityMCA villager = Objects.requireNonNull(EntitiesMCA.MALE_VILLAGER.create(Objects.requireNonNull(Minecraft.getInstance().level)));
     protected final VillagerEntityMCA villagerVisualization = Objects.requireNonNull(EntitiesMCA.MALE_VILLAGER.create(Objects.requireNonNull(Minecraft.getInstance().level)));
     final UUID villagerUUID;
@@ -764,13 +766,13 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
 
         addRenderableWidget(new ButtonWidget(x, y, buttonWidth, buttonHeight, Component.literal("-"), b -> zoomPreview(-0.1F)));
         addRenderableWidget(new ButtonWidget(x + step, y, buttonWidth, buttonHeight, Component.literal("<"), b -> rotatePreview(22.5F)));
-        addRenderableWidget(new ToggleableTooltipButtonWidget(
+        addRenderableWidget(new ToggleableTextureButtonWidget(
                 x + step * 2,
                 y,
                 buttonWidth,
                 buttonHeight,
+                PREVIEW_MOUSE_FOLLOW_TEXTURE,
                 previewFollowsMouse,
-                Component.literal("M"),
                 Component.translatable("gui.villager_editor.preview_mouse_follow.tooltip"),
                 b -> {
                     previewFollowsMouse = !previewFollowsMouse;
@@ -779,21 +781,18 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         ));
         addRenderableWidget(new ButtonWidget(x + step * 3, y, buttonWidth, buttonHeight, Component.literal(">"), b -> rotatePreview(-22.5F)));
         addRenderableWidget(new ButtonWidget(x + step * 4, y, buttonWidth, buttonHeight, Component.literal("+"), b -> zoomPreview(0.1F)));
-        addPreviewControlRowExtraButtons(x + rowWidth + gap, y, buttonWidth, buttonHeight);
+        addPreviewControlRowExtraButtons(x + rowWidth + gap, y, buttonWidth, buttonHeight, gap);
     }
 
-    private void addPreviewControlRowExtraButtons(int x, int y, int buttonWidth, int buttonHeight) {
+    private void addPreviewControlRowExtraButtons(int x, int y, int buttonWidth, int buttonHeight, int gap) {
         if (!page.equals("clothing")) {
             return;
         }
 
-        addRenderableWidget(new ToggleableTooltipButtonWidget(
+        addRenderableWidget(new ClothingLockButtonWidget(
                 x + 8,
-                y,
-                buttonWidth,
-                buttonHeight,
+                y + (buttonHeight - ClothingLockButtonWidget.SIZE) / 2,
                 villager.isClothingLocked(),
-                Component.literal("L"),
                 Component.translatable("gui.villager_editor.clothing_lock.tooltip"),
                 b -> {
                     villager.setClothingLocked(!villager.isClothingLocked());
@@ -1704,7 +1703,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
 
             int initialDye;
             if (page.equals("eyes")) {
-                initialDye = eyeColorTarget == 2 ? eyeLeftDye : eyeDye;
+                initialDye = eyeColorTarget == 2 ? getEditableEyeColor(true) : getEditableEyeColor(false);
             } else if (page.equals("body")) {
                 initialDye = skinDye;
             } else {
