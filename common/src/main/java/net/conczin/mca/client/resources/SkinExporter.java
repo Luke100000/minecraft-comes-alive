@@ -158,7 +158,7 @@ public class SkinExporter {
             int index = (int) Math.min(21, Math.max(0, villager.getGenetics().getGene(Genetics.FACE) * 22));
             return ResourceLocation.fromNamespaceAndPath("mca", "skins/face/normal/" + gender.getDataName() + "/" + index + ".png");
         }
-        return list.pick("normal", gender, villager.getGenetics().getGene(Genetics.FACE), "");
+        return list.pick("normal", villager.getGenetics().getGene(Genetics.FACE));
     }
 
     private static ResourceLocation getClothes(VillagerEntityMCA villager) {
