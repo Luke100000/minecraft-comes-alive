@@ -317,7 +317,8 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
             }));
 
             boolean isPresetsPage = page.equals("presets");
-            int presetsX = width / 2 - DATA_WIDTH + 10;
+            boolean showExportButton = (isPresetsPage || !isSelectionPage()) && !(this instanceof DestinyScreen);
+            int presetsX = showExportButton ? (width / 2 - DATA_WIDTH + 10) : (width / 2 - DATA_WIDTH + 50);
 
             presetsButton = addRenderableWidget(new ButtonWidget(
                     presetsX,
@@ -339,7 +340,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                         exportSkinFromCurrentPage();
                     }
             ));
-            exportSkinButton.visible = (isPresetsPage || !isSelectionPage()) && !(this instanceof DestinyScreen);
+            exportSkinButton.visible = showExportButton;
             exportSkinButton.active = !isPresetsPage || (selectedPreset != null);
         }
 
