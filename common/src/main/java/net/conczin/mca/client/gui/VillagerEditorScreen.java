@@ -753,7 +753,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         boolean selectionPage = isSelectionPage();
         int centerX = selectionPage ? width / 2 : width / 2 - DATA_WIDTH / 2;
         if (selectionPage) {
-            addPreviewControlRow(centerX, height / 2 - 76, 22, 14, 0);
+            addPreviewControlRow(centerX, height / 2 - 78, 24, 20, 2);
         } else {
             addPreviewControlRow(centerX, height / 2 + 75, 28, 20, 2);
         }
@@ -1533,10 +1533,10 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         float frameSeconds = Mth.clamp((currentTime - lastPreviewFrameTime) / 1000.0F, 0.0F, 0.1F);
         lastPreviewFrameTime = currentTime;
         if (rotatePreviewLeft) {
-            rotatePreview(-120.0F * frameSeconds);
+            rotatePreview(120.0F * frameSeconds);
         }
         if (rotatePreviewRight) {
-            rotatePreview(120.0F * frameSeconds);
+            rotatePreview(-120.0F * frameSeconds);
         }
 
         villager.tickCount = (int) (System.currentTimeMillis() / 50L);
@@ -1596,11 +1596,11 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                 boolean layeredHairSelection = isLayeredHairPage();
                 int spacing = layeredHairSelection ? 56 : 40;
                 int cx = width / 2 + (int) ((column - countInRow / 2.0 + 0.5 - 0.5 * (row % 2)) * spacing);
-                int cy = layeredHairSelection ? height / 2 + 8 : height / 2 + (int) ((row - CLOTHES_V / 2.0 + 0.5) * 65);
+                int cy = layeredHairSelection ? height / 2 + 8 : height / 2 + (int) ((row - CLOTHES_V / 2.0 + 0.5) * 65) + 10;
 
                 int rx = layeredHairSelection ? 25 : 20;
-                int ry0 = layeredHairSelection ? 60 : 25;
-                int ry1 = layeredHairSelection ? 60 : 40;
+                int ry0 = layeredHairSelection ? 60 : 35;
+                int ry1 = layeredHairSelection ? 60 : 45;
 
                 int x0 = cx - rx;
                 int y0 = cy - ry0;
@@ -1612,13 +1612,14 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                     hoveredClothingId = index;
                 }
 
+                int previewPadding = (hoveredClothingId == index) ? 5 : 0;
                 float rotationOffset = layeredHairSelection && getLayeredHairCategory() == LayeredHair.Category.BACK ? 180.0F : 0.0F;
                 renderPreviewEntity(
                         context,
-                        x0,
-                        y0,
-                        x1,
-                        y1,
+                        x0 - previewPadding,
+                        y0 - previewPadding,
+                        x1 + previewPadding,
+                        y1 + previewPadding,
                         (hoveredClothingId == index) ? (layeredHairSelection ? 45 : 35) : (layeredHairSelection ? 40 : 30),
                         mouseX,
                         mouseY,
