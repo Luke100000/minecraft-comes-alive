@@ -16,6 +16,9 @@ import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.FastColor;
+import net.minecraft.util.Mth;
+import net.minecraft.world.entity.animal.Sheep;
+import net.minecraft.world.item.DyeColor;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -43,7 +46,7 @@ public class SkinExporter {
                 
                 // 2. Face
                 ResourceLocation faceId = getFace(villager);
-                composite(base, faceId, 0xFFFFFFFF);
+                compositeFace(base, faceId, villager);
                 
                 // 3. Clothing
                 ResourceLocation clothesId = getClothes(villager);
@@ -87,16 +90,7 @@ public class SkinExporter {
                     exportDir.mkdirs();
                 }
                 
-                String villagerName = customName;
-                if (MCA.isBlankString(villagerName)) {
-                    villagerName = villager.getName().getString();
-                }
-                if (MCA.isBlankString(villagerName)) {
-                    villagerName = "villager";
-                }
-                // Sanitize name
-                villagerName = villagerName.replaceAll("[^a-zA-Z0-9_\\-]", "_");
-                File destFile = new File(exportDir, villagerName + "_skin.png");
+                File destFile = getAvailableExportFile(exportDir, customName);
                 base.writeToFile(destFile.toPath());
                 
                 // 6. Notify player with chat message
@@ -220,51 +214,141 @@ public class SkinExporter {
         if (overlay == null) return;
         
         try {
-            // tintColor is ARGB
-            int tr = (tintColor >> 16) & 0xFF;
-            int tg = (tintColor >> 8) & 0xFF;
-            int tb = tintColor & 0xFF;
-            int ta = (tintColor >> 24) & 0xFF;
-
             int width = Math.min(base.getWidth(), overlay.getWidth());
             int height = Math.min(base.getHeight(), overlay.getHeight());
 
             for (int x = 0; x < width; x++) {
                 for (int y = 0; y < height; y++) {
-                    int overPixel = overlay.getPixelRGBA(x, y); // ABGR
-                    int overAlpha = (overPixel >> 24) & 0xFF;
-                    if (overAlpha == 0) {
-                        continue;
-                    }
-                    
-                    int overR = ((overPixel & 0xFF) * tr) / 255;
-                    int overG = (((overPixel >> 8) & 0xFF) * tg) / 255;
-                    int overB = (((overPixel >> 16) & 0xFF) * tb) / 255;
-                    int overA = (overAlpha * ta) / 255;
-                    
-                    if (overA == 0) {
-                        continue;
-                    } else if (overA == 255) {
-                        base.setPixelRGBA(x, y, 0xFF000000 | (overB << 16) | (overG << 8) | overR); // ABGR
-                    } else {
-                        int basePixel = base.getPixelRGBA(x, y); // ABGR
-                        int baseAlpha = (basePixel >> 24) & 0xFF;
-                        int baseR = basePixel & 0xFF;
-                        int baseG = (basePixel >> 8) & 0xFF;
-                        int baseB = (basePixel >> 16) & 0xFF;
-                        
-                        int outAlpha = overA + (baseAlpha * (255 - overA)) / 255;
-                        if (outAlpha > 0) {
-                            int outR = (overR * overA + baseR * baseAlpha * (255 - overA) / 255) / outAlpha;
-                            int outG = (overG * overA + baseG * baseAlpha * (255 - overA) / 255) / outAlpha;
-                            int outB = (overB * overA + baseB * baseAlpha * (255 - overA) / 255) / outAlpha;
-                            base.setPixelRGBA(x, y, (outAlpha << 24) | (outB << 16) | (outG << 8) | outR); // ABGR
-                        }
-                    }
+                    int overPixel = overlay.getPixelRGBA(x, y);
+                    compositePixel(base, x, y, overPixel, tintColor);
                 }
             }
         } finally {
             overlay.close();
         }
+    }
+
+    public static void compositeFace(NativeImage base, ResourceLocation faceId, VillagerEntityMCA villager) {
+        NativeImage face = loadTexture(faceId);
+        if (face == null) {
+            return;
+        }
+
+        try {
+            EyeTextureLayers.Bounds bounds = EyeTextureLayers.findBounds(face);
+            int splitX = bounds.minX() + bounds.width() / 2;
+            compositeEyeLayer(base, face, true, EyeTextureLayers.Side.FULL, splitX, 0xFFFFFFFF);
+            if (villager.getTraits().hasTrait(Traits.HETEROCHROMIA)) {
+                compositeEyeLayer(base, face, false, EyeTextureLayers.Side.LEFT, splitX, getEyeColor(villager, true));
+                compositeEyeLayer(base, face, false, EyeTextureLayers.Side.RIGHT, splitX, getEyeColor(villager, false));
+            } else {
+                compositeEyeLayer(base, face, false, EyeTextureLayers.Side.FULL, splitX, getEyeColor(villager, false));
+            }
+        } finally {
+            face.close();
+        }
+    }
+
+    public static void compositeEyeLayer(NativeImage base, NativeImage face, boolean sclera, EyeTextureLayers.Side side, int splitX, int tintColor) {
+        int width = Math.min(base.getWidth(), face.getWidth());
+        int height = Math.min(base.getHeight(), face.getHeight());
+        for (int x = 0; x < width; x++) {
+            if (!EyeTextureLayers.isInSide(x, splitX, side)) {
+                continue;
+            }
+            for (int y = 0; y < height; y++) {
+                int pixel = face.getPixelRGBA(x, y); // ABGR
+                int alpha = (pixel >> 24) & 0xFF;
+                if (alpha == 0 || sclera != EyeTextureLayers.isScleraPixel(alpha, pixel & 0xFF, (pixel >> 8) & 0xFF, (pixel >> 16) & 0xFF)) {
+                    continue;
+                }
+                compositePixel(base, x, y, pixel, tintColor);
+            }
+        }
+    }
+
+    public static int getEyeColor(VillagerEntityMCA villager, boolean left) {
+        if (villager.getTraits().hasTrait(Traits.RAINBOW_EYES)) {
+            int offset = left && villager.getTraits().hasTrait(Traits.HETEROCHROMIA) ? (25 * DyeColor.values().length) / 2 : 0;
+            int ticks = offset;
+            int block = ticks / 25 + villager.getId();
+            int count = DyeColor.values().length;
+            int first = block % count;
+            int second = (block + 1) % count;
+            return FastColor.ARGB32.lerp(0.0f, Sheep.getColor(DyeColor.byId(first)), Sheep.getColor(DyeColor.byId(second)));
+        }
+
+        boolean heterochromia = villager.getTraits().hasTrait(Traits.HETEROCHROMIA);
+        int dye = left && heterochromia ? villager.getEyeLeftDye() : villager.getEyeDye();
+        if (dye != 0xFFFFFFFF) {
+            return dye;
+        }
+
+        if (villager.getTraits().hasTrait(Traits.ALBINISM)) {
+            return 0xFFE8A0A0; // ALBINISM_EYE_COLOR
+        }
+
+        float eyeColor = Mth.frac(villager.getGenetics().getGene(Genetics.FACE) + (left && heterochromia ? 0.43F : 0.0F));
+        int blueColor = 0xFF557FA6;
+        int greenColor = 0xFF5B8756;
+        int hazelColor = 0xFF8A6A35;
+        int brownColor = 0xFF4A2B18;
+        if (eyeColor < 0.35F) {
+            return FastColor.ARGB32.lerp(eyeColor / 0.35F, blueColor, greenColor);
+        }
+        if (eyeColor < 0.70F) {
+            return FastColor.ARGB32.lerp((eyeColor - 0.35F) / 0.35F, greenColor, hazelColor);
+        }
+        return FastColor.ARGB32.lerp((eyeColor - 0.70F) / 0.30F, hazelColor, brownColor);
+    }
+
+    public static void compositePixel(NativeImage base, int x, int y, int overPixel, int tintColor) {
+        int tr = (tintColor >> 16) & 0xFF;
+        int tg = (tintColor >> 8) & 0xFF;
+        int tb = tintColor & 0xFF;
+        int ta = (tintColor >> 24) & 0xFF;
+        
+        int overAlpha = (overPixel >> 24) & 0xFF;
+        if (overAlpha == 0) return;
+        
+        int overR = ((overPixel & 0xFF) * tr) / 255;
+        int overG = (((overPixel >> 8) & 0xFF) * tg) / 255;
+        int overB = (((overPixel >> 16) & 0xFF) * tb) / 255;
+        int overA = (overAlpha * ta) / 255;
+        
+        if (overA == 0) {
+            return;
+        } else if (overA == 255) {
+            base.setPixelRGBA(x, y, 0xFF000000 | (overB << 16) | (overG << 8) | overR);
+        } else {
+            int basePixel = base.getPixelRGBA(x, y);
+            int baseAlpha = (basePixel >> 24) & 0xFF;
+            int baseR = basePixel & 0xFF;
+            int baseG = (basePixel >> 8) & 0xFF;
+            int baseB = (basePixel >> 16) & 0xFF;
+            
+            int outAlpha = overA + (baseAlpha * (255 - overA)) / 255;
+            if (outAlpha > 0) {
+                int outR = (overR * overA + baseR * baseAlpha * (255 - overA) / 255) / outAlpha;
+                int outG = (overG * overA + baseG * baseAlpha * (255 - overA) / 255) / outAlpha;
+                int outB = (overB * overA + baseB * baseAlpha * (255 - overA) / 255) / outAlpha;
+                base.setPixelRGBA(x, y, (outAlpha << 24) | (outB << 16) | (outG << 8) | outR);
+            }
+        }
+    }
+
+    private static File getAvailableExportFile(File exportDir, String customName) {
+        String fileName;
+        if (MCA.isBlankString(customName)) {
+            fileName = "Exported_Skin";
+        } else {
+            fileName = customName.replaceAll("[^a-zA-Z0-9_\\-]", "_") + "_skin";
+        }
+
+        File candidateFile = new File(exportDir, fileName + ".png");
+        for (int suffix = 2; candidateFile.exists(); suffix++) {
+            candidateFile = new File(exportDir, fileName + "_" + suffix + ".png");
+        }
+        return candidateFile;
     }
 }

@@ -1,7 +1,6 @@
 package net.conczin.mca.client.resources;
 
 import com.mojang.blaze3d.platform.NativeImage;
-import net.minecraft.util.FastColor;
 
 public final class EyeTextureLayers {
     private static final int SCLERA_MIN_CHANNEL = 160;
@@ -18,7 +17,9 @@ public final class EyeTextureLayers {
 
         for (int x = 0; x < image.getWidth(); x++) {
             for (int y = 0; y < image.getHeight(); y++) {
-                if (FastColor.ABGR32.alpha(image.getPixelRGBA(x, y)) == 0) {
+                int pixel = image.getPixelRGBA(x, y);
+                int alpha = (pixel >> 24) & 0xFF;
+                if (alpha == 0) {
                     continue;
                 }
                 minX = Math.min(minX, x);
@@ -31,7 +32,6 @@ public final class EyeTextureLayers {
         if (maxX < minX || maxY < minY) {
             throw new IllegalStateException("Face eye texture has no visible pixels");
         }
-
         return new Bounds(minX, minY, maxX, maxY);
     }
 
