@@ -11,6 +11,9 @@ import net.conczin.mca.network.HandleablePayload;
 import net.conczin.mca.network.MessagesMCA;
 import net.conczin.mca.network.Network;
 import net.conczin.mca.registry.*;
+import net.conczin.mca.resources.BodySkinList;
+import net.conczin.mca.resources.HairStyleList;
+import net.conczin.mca.resources.LayeredHairList;
 import net.conczin.mca.server.ServerInteractionManager;
 import net.conczin.mca.server.command.AdminCommand;
 import net.conczin.mca.server.command.Command;
@@ -99,11 +102,10 @@ public final class MCAFabric implements ModInitializer {
         // Register resource reload listeners
         ResourceManagerHelper managerHelper = ResourceManagerHelper.get(PackType.SERVER_DATA);
         managerHelper.registerReloadListener(new ApiIdentifiableReloadListener());
-        managerHelper.registerReloadListener(new FabricBodySkinList());
+        managerHelper.registerReloadListener(new FabricReloadListener<>(BodySkinList.ID, new BodySkinList()));
         managerHelper.registerReloadListener(new FabricClothingList());
-        managerHelper.registerReloadListener(new FabricHairList());
-        managerHelper.registerReloadListener(new FabricHairStyleList());
-        managerHelper.registerReloadListener(new FabricLayeredHairList());
+        managerHelper.registerReloadListener(new FabricReloadListener<>(HairStyleList.ID, new HairStyleList()));
+        managerHelper.registerReloadListener(new FabricReloadListener<>(LayeredHairList.ID, new LayeredHairList()));
         managerHelper.registerReloadListener(new FabricGiftLoader());
         managerHelper.registerReloadListener(new FabricDialogues());
         managerHelper.registerReloadListener(new FabricTasks());

@@ -10,13 +10,14 @@ import net.conczin.mca.client.render.*;
 import net.conczin.mca.fabric.client.gui.FabricMCAScreens;
 import net.conczin.mca.fabric.resources.ApiIdentifiableReloadListener;
 import net.conczin.mca.fabric.resources.FabricColorPaletteLoader;
-import net.conczin.mca.fabric.resources.FabricFaceList;
+import net.conczin.mca.fabric.resources.FabricReloadListener;
 import net.conczin.mca.fabric.resources.FabricSupportersLoader;
 import net.conczin.mca.network.Network;
 import net.conczin.mca.registry.BlocksMCA;
 import net.conczin.mca.registry.EntitiesMCA;
 import net.conczin.mca.registry.ModelPredicatesMCA;
 import net.conczin.mca.registry.ParticleTypesMCA;
+import net.conczin.mca.resources.FaceList;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.blockrenderlayer.v1.BlockRenderLayerMap;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
@@ -68,7 +69,7 @@ public final class MCAFabricClient extends ClientProxyAbstractImpl implements Cl
         managerHelper.registerReloadListener(new FabricColorPaletteLoader());
         managerHelper.registerReloadListener(new FabricSupportersLoader());
         managerHelper.registerReloadListener(new ApiIdentifiableReloadListener());
-        managerHelper.registerReloadListener(new FabricFaceList());
+        managerHelper.registerReloadListener(new FabricReloadListener<>(FaceList.ID, new FaceList()));
 
         ModelPredicatesMCA.setup(ItemProperties::register);
 

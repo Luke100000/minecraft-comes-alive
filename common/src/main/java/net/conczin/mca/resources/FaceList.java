@@ -53,6 +53,9 @@ public class FaceList extends SimplePreparableReloadListener<Map<ResourceLocatio
                 MCA.LOGGER.warn("Invalid face texture path {}", identifier);
                 return;
             }
+            if (parsed.getPath().endsWith("/blink.png")) {
+                return;
+            }
             faces.computeIfAbsent(key(variant), ignored -> new ArrayList<>()).add(identifier);
         });
     }

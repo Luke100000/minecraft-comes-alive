@@ -94,6 +94,7 @@ import java.util.function.Predicate;
 public class VillagerEntityMCA extends Villager implements VillagerLike<VillagerEntityMCA>, MenuProvider, CompassionateEntity<BreedableRelationship>, CrossbowAttackMob {
     private static final CDataParameter<Float> INFECTION_PROGRESS = CParameter.create("InfectionProgress", 0.0f);
     private static final CDataParameter<Integer> GROWTH_AMOUNT = CParameter.create("GrowthAmount", -AgeState.getMaxAge());
+    public static final String MCA_DATA_KEY = "MCAData";
     private static final CDataManager<VillagerEntityMCA> DATA = createTrackedData(VillagerEntityMCA.class).build();
     private static final int RECALCULATE_DIMENSIONS_EVERY_N_TICKS = 100;
     public final ConversationManager conversationManager = new ConversationManager(this);
@@ -1070,10 +1071,11 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
     @Override
     public void setCustomName(@Nullable Component name) {
-        super.setCustomName(name);
+        Component cleaned = VillagerLike.cleanCustomName(name);
+        super.setCustomName(cleaned);
 
-        if (name != null) {
-            setName(name.getString());
+        if (cleaned != null) {
+            setName(cleaned.getString());
         }
     }
 
@@ -1239,7 +1241,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         relations.readFromNbt(nbt);
         longTermMemory.readFromNbt(nbt);
 
-        playerModel = PlayerModel.VALUES[nbt.getInt("PlayerModel")];
+        playerModel = PlayerModel.byId(nbt.getInt("PlayerModel"));
 
         updateAttributes();
 
@@ -1261,6 +1263,18 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         if (getVillagerBrain().getPersonality() == Personality.UNASSIGNED) {
             getVillagerBrain().randomize();
         }
+    }
+
+    @Override
+    public void readAdditionalSaveDataForEditor(CompoundTag nbt) {
+        CompoundTag merged = nbt.copy();
+        if (merged.contains(MCA_DATA_KEY, 10)) {
+            CompoundTag mcaData = merged.getCompound(MCA_DATA_KEY);
+            for (String key : mcaData.getAllKeys()) {
+                merged.put(key, mcaData.get(key).copy());
+            }
+        }
+        readAdditionalSaveData(merged);
     }
 
     @Override

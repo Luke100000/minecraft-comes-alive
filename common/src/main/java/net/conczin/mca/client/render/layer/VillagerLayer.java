@@ -108,7 +108,7 @@ public abstract class VillagerLayer<T extends LivingEntity, M extends HumanoidMo
         }
     }
 
-    private void renderModel(PoseStack transform, MultiBufferSource provider, int light, M model, int color, ResourceLocation texture, int overlay, boolean visible, boolean glowing) {
+    protected void renderModel(PoseStack transform, MultiBufferSource provider, int light, M model, int color, ResourceLocation texture, int overlay, boolean visible, boolean glowing) {
         RenderType layer = getRenderLayer(texture, visible, isTranslucent(), glowing);
         if (layer == null) return;
         VertexConsumer buffer = provider.getBuffer(layer);

@@ -1,0 +1,11 @@
+{
+  "replace": false,
+  "textures": [
+    "mca:skins/layered_hair/base/1.png",
+    "mca:skins/layered_hair/base/2.png",
+    "mca:skins/layered_hair/base/3.png",
+    "mca:skins/layered_hair/base/4.png",
+    "mca:skins/layered_hair/base/5.png",
+    "mca:skins/layered_hair/base/6.png"
+  ]
+}

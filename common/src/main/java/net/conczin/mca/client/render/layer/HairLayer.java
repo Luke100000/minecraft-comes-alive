@@ -2,11 +2,14 @@ package net.conczin.mca.client.render.layer;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.conczin.mca.client.gui.immersive_library.SkinCache;
+import net.conczin.mca.client.model.CommonVillagerModel;
 import net.conczin.mca.client.resources.ColorPalette;
 import net.conczin.mca.entity.ai.Genetics;
 import net.conczin.mca.entity.ai.Traits;
+import net.conczin.mca.resources.data.skin.LayeredHair;
 import net.minecraft.client.model.HumanoidModel;
 import net.minecraft.client.renderer.MultiBufferSource;
+import net.minecraft.client.renderer.entity.LivingEntityRenderer;
 import net.minecraft.client.renderer.entity.RenderLayerParent;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.FastColor;
@@ -26,22 +29,65 @@ public class HairLayer<T extends LivingEntity, M extends HumanoidModel<T>> exten
         model.setAllVisible(true);
         this.model.leftLeg.visible = false;
         this.model.rightLeg.visible = false;
+        if (model instanceof CommonVillagerModel<?> villagerModel) {
+            villagerModel.getBreastParts().forEach(part -> part.visible = false);
+        }
 
         super.render(transform, provider, light, villager, limbAngle, limbDistance, tickDelta, animationProgress, headYaw, headPitch);
     }
 
     @Override
+    public void renderFinal(PoseStack transform, MultiBufferSource provider, int light, T villager, float tickDelta, boolean visible, boolean glowing) {
+        int overlay = LivingEntityRenderer.getOverlayCoords(villager, 0);
+        int color = getColor(villager, tickDelta);
+        boolean renderedLayeredHair = false;
+
+        for (LayeredHair.Category category : LayeredHair.Category.RENDER_ORDER) {
+            String identifier = getVillager(villager).getLayeredHair(category);
+            if (identifier.isBlank()) {
+                continue;
+            }
+
+            renderedLayeredHair = true;
+
+            ResourceLocation texture = getTexture(identifier);
+            if (canUse(texture)) {
+                renderModel(transform, provider, light, model, color, texture, overlay, visible, glowing);
+            }
+
+            ResourceLocation overlayTexture = getOverlayTexture(identifier);
+            if (canUse(overlayTexture)) {
+                renderModel(transform, provider, light, model, 0xFFFFFFFF, overlayTexture, overlay, visible, glowing);
+            }
+        }
+
+        if (!renderedLayeredHair) {
+            super.renderFinal(transform, provider, light, villager, tickDelta, visible, glowing);
+        }
+    }
+
+    @Override
     public ResourceLocation getSkin(T villager) {
-        String identifier = getVillager(villager).getHair();
+        return getTexture(getVillager(villager).getHair());
+    }
+
+    private ResourceLocation getTexture(String identifier) {
         if (identifier.startsWith("immersive_library:")) {
-            return SkinCache.getTextureIdentifier(Integer.parseInt(identifier.substring(18)));
+            return SkinCache.getTextureIdentifier(Integer.parseInt(identifier.substring("immersive_library:".length())));
         }
         return cached(identifier, ResourceLocation::parse);
     }
 
     @Override
     protected ResourceLocation getOverlay(T villager) {
-        return cached(getVillager(villager).getHair().replace(".png", "_overlay.png"), ResourceLocation::parse);
+        return getOverlayTexture(getVillager(villager).getHair());
+    }
+
+    private ResourceLocation getOverlayTexture(String identifier) {
+        if (identifier.startsWith("immersive_library:") || !identifier.endsWith(".png")) {
+            return null;
+        }
+        return cached(identifier.replace(".png", "_overlay.png"), ResourceLocation::parse);
     }
 
     private int getRainbow(LivingEntity entity, float tickDelta) {

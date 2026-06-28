@@ -107,10 +107,11 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
 
     @Override
     public void setCustomName(@Nullable Component name) {
-        super.setCustomName(name);
+        Component cleaned = VillagerLike.cleanCustomName(name);
+        super.setCustomName(cleaned);
 
-        if (name != null) {
-            setName(name.getString());
+        if (cleaned != null) {
+            setName(cleaned.getString());
         }
     }
 
@@ -247,6 +248,18 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
         InventoryUtils.readFromNBT(this.registryAccess(), inventory, nbt);
 
         validateClothes();
+    }
+
+    @Override
+    public void readAdditionalSaveDataForEditor(CompoundTag nbt) {
+        CompoundTag merged = nbt.copy();
+        if (merged.contains(VillagerEntityMCA.MCA_DATA_KEY, 10)) {
+            CompoundTag mcaData = merged.getCompound(VillagerEntityMCA.MCA_DATA_KEY);
+            for (String key : mcaData.getAllKeys()) {
+                merged.put(key, mcaData.get(key).copy());
+            }
+        }
+        readAdditionalSaveData(merged);
     }
 
     @Override
