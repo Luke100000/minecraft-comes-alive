@@ -220,44 +220,45 @@ public class SkinExporter {
         if (overlay == null) return;
         
         try {
-            int tr = FastColor.ARGB32.red(tintColor);
-            int tg = FastColor.ARGB32.green(tintColor);
-            int tb = FastColor.ARGB32.blue(tintColor);
-            int ta = FastColor.ARGB32.alpha(tintColor);
+            // tintColor is ARGB
+            int tr = (tintColor >> 16) & 0xFF;
+            int tg = (tintColor >> 8) & 0xFF;
+            int tb = tintColor & 0xFF;
+            int ta = (tintColor >> 24) & 0xFF;
 
             int width = Math.min(base.getWidth(), overlay.getWidth());
             int height = Math.min(base.getHeight(), overlay.getHeight());
 
             for (int x = 0; x < width; x++) {
                 for (int y = 0; y < height; y++) {
-                    int overPixel = overlay.getPixelRGBA(x, y);
-                    int overAlpha = FastColor.ARGB32.alpha(overPixel);
+                    int overPixel = overlay.getPixelRGBA(x, y); // ABGR
+                    int overAlpha = (overPixel >> 24) & 0xFF;
                     if (overAlpha == 0) {
                         continue;
                     }
                     
-                    int overR = (FastColor.ARGB32.red(overPixel) * tr) / 255;
-                    int overG = (FastColor.ARGB32.green(overPixel) * tg) / 255;
-                    int overB = (FastColor.ARGB32.blue(overPixel) * tb) / 255;
+                    int overR = ((overPixel & 0xFF) * tr) / 255;
+                    int overG = (((overPixel >> 8) & 0xFF) * tg) / 255;
+                    int overB = (((overPixel >> 16) & 0xFF) * tb) / 255;
                     int overA = (overAlpha * ta) / 255;
                     
                     if (overA == 0) {
                         continue;
                     } else if (overA == 255) {
-                        base.setPixelRGBA(x, y, FastColor.ARGB32.color(255, overR, overG, overB));
+                        base.setPixelRGBA(x, y, 0xFF000000 | (overB << 16) | (overG << 8) | overR); // ABGR
                     } else {
-                        int basePixel = base.getPixelRGBA(x, y);
-                        int baseAlpha = FastColor.ARGB32.alpha(basePixel);
-                        int baseR = FastColor.ARGB32.red(basePixel);
-                        int baseG = FastColor.ARGB32.green(basePixel);
-                        int baseB = FastColor.ARGB32.blue(basePixel);
+                        int basePixel = base.getPixelRGBA(x, y); // ABGR
+                        int baseAlpha = (basePixel >> 24) & 0xFF;
+                        int baseR = basePixel & 0xFF;
+                        int baseG = (basePixel >> 8) & 0xFF;
+                        int baseB = (basePixel >> 16) & 0xFF;
                         
                         int outAlpha = overA + (baseAlpha * (255 - overA)) / 255;
                         if (outAlpha > 0) {
                             int outR = (overR * overA + baseR * baseAlpha * (255 - overA) / 255) / outAlpha;
                             int outG = (overG * overA + baseG * baseAlpha * (255 - overA) / 255) / outAlpha;
                             int outB = (overB * overA + baseB * baseAlpha * (255 - overA) / 255) / outAlpha;
-                            base.setPixelRGBA(x, y, FastColor.ARGB32.color(outAlpha, outR, outG, outB));
+                            base.setPixelRGBA(x, y, (outAlpha << 24) | (outB << 16) | (outG << 8) | outR); // ABGR
                         }
                     }
                 }
