@@ -8,6 +8,11 @@ import net.conczin.mca.client.gui.widget.*;
 import net.conczin.mca.client.resources.ColorPalette;
 import net.conczin.mca.client.resources.ClientSkinCatalog;
 import net.conczin.mca.client.resources.ClientUtils;
+import net.conczin.mca.client.resources.SkinExporter;
+import net.conczin.mca.client.resources.PresetCodec;
+import org.apache.commons.io.FileUtils;
+import java.io.File;
+import java.nio.charset.StandardCharsets;
 import net.conczin.mca.client.tts.SpeechManager;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerLike;
@@ -108,6 +113,22 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     private boolean rotatePreviewLeft;
     private boolean rotatePreviewRight;
     private boolean previewFollowsMouse = true;
+    private ButtonWidget presetsButton;
+    private ButtonWidget exportSkinButton;
+    private static final int PRESETS_PER_PAGE = 4;
+    private final File presetsDir = new File(Minecraft.getInstance().gameDirectory, "config/mca/presets");
+    private final List<String> presetNames = new ArrayList<>();
+    private String selectedPreset = null;
+    private String presetsReturnPage = "general";
+    private int currentPage = 0;
+    private int maxPage = 0;
+    private EditBox nameField;
+    private ButtonWidget useButton;
+    private ButtonWidget overwriteButton;
+    private ButtonWidget deleteButton;
+    private ButtonWidget renameButton;
+    private CompoundTag presetsBackupNbt = null;
+    private boolean hasVisualChange = false;
     private ButtonWidget genderButtonFemale;
     private ButtonWidget genderButtonMale;
 
@@ -245,12 +266,38 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     }
 
     protected void setPage(String page) {
+        String prevPage = this.page;
+        // Backup / restore logic for presets page
+        if (this.page != null && this.page.equals("presets") && presetsBackupNbt != null && !page.equals("presets")) {
+            if (villagerData != null) {
+                villager.load(villagerData);
+            }
+            villager.readAdditionalSaveDataForEditor(presetsBackupNbt);
+            villager.refreshDimensions();
+            presetsBackupNbt = null;
+        }
+
+        if (page.equals("presets") && prevPage != null && !prevPage.equals("presets") && !prevPage.equals("loading")) {
+            presetsReturnPage = prevPage;
+        }
+
         this.page = page;
 
         clearWidgets();
 
         if (page.equals("loading")) {
             return;
+        }
+
+        if (page.equals("presets")) {
+            if (presetsBackupNbt == null) {
+                presetsBackupNbt = saveEntityData(villager);
+            }
+            if (prevPage == null || !prevPage.equals("presets")) {
+                hasVisualChange = false;
+                selectedPreset = null;
+            }
+            refreshPresets();
         }
 
         //page selection
@@ -268,6 +315,39 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                 syncVillagerData();
                 onClose();
             }));
+
+            boolean isPresetsPage = page.equals("presets");
+            int presetsX = isPresetsPage ? (width / 2 - DATA_WIDTH + 10) : (width / 2 - DATA_WIDTH + 50);
+
+            presetsButton = addRenderableWidget(new ButtonWidget(
+                    presetsX,
+                    height / 2 - 80,
+                    75,
+                    20,
+                    Component.translatable("gui.mca.presets"),
+                    b -> setPage("presets")
+            ));
+            presetsButton.active = !isPresetsPage;
+
+            exportSkinButton = addRenderableWidget(new ButtonWidget(
+                    width / 2 - DATA_WIDTH + 90,
+                    height / 2 - 80,
+                    75,
+                    20,
+                    Component.translatable(isPresetsPage ? "gui.mca.export_skin" : "gui.mca.quick_export"),
+                    b -> {
+                        if (isPresetsPage) {
+                            if (selectedPreset != null) {
+                                SkinExporter.export(villagerVisualization, selectedPreset);
+                            }
+                        } else {
+                            SkinExporter.export(villager);
+                            onClose();
+                        }
+                    }
+            ));
+            exportSkinButton.visible = isPresetsPage || !isSelectionPage();
+            exportSkinButton.active = !isPresetsPage || (selectedPreset != null);
         }
 
         addPreviewRotationWidgets();
@@ -746,6 +826,75 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                 }));
                 widgetFeminine.active = filterGender != Gender.FEMALE;
                 filter();
+            }
+            case "presets" -> {
+                int startIdx = currentPage * PRESETS_PER_PAGE;
+                int count = Math.min(PRESETS_PER_PAGE, presetNames.size() - startIdx);
+                int startY = height / 2 - 100;
+                int yVal = startY + 20;
+
+                // Preset buttons on current page
+                for (int i = 0; i < count; i++) {
+                    String name = presetNames.get(startIdx + i);
+                    Component btnText = Component.literal(name).withStyle(name.equals(selectedPreset) ? ChatFormatting.GREEN : ChatFormatting.GRAY);
+                    addRenderableWidget(new ButtonWidget(width / 2, yVal, DATA_WIDTH, 20, btnText, b -> selectPreset(name.equals(this.selectedPreset) ? null : name)));
+                    yVal += 20;
+                }
+
+                // Pagination buttons
+                yVal += 2;
+                addRenderableWidget(new ButtonWidget(width / 2, yVal, 28, 20, Component.literal("<<"), b -> {
+                    currentPage = Math.max(0, currentPage - 1);
+                    setPage("presets");
+                }));
+                addRenderableWidget(new ButtonWidget(width / 2 + DATA_WIDTH - 28, yVal, 28, 20, Component.literal(">>"), b -> {
+                    currentPage = Math.min(maxPage, currentPage + 1);
+                    setPage("presets");
+                }));
+                yVal += 25;
+
+                // Name input field + Save / Rename button row
+                nameField = addRenderableWidget(new EditBox(this.font, width / 2, yVal + 1, DATA_WIDTH - 82, 18, Component.translatable("gui.mca.presets.name_field")));
+                nameField.setMaxLength(32);
+                if (selectedPreset != null) {
+                    nameField.setValue(selectedPreset);
+                }
+                
+                ButtonWidget saveButton = addRenderableWidget(new ButtonWidget(width / 2 + DATA_WIDTH - 80, yVal, 38, 20, Component.translatable("gui.mca.presets.save"), b -> savePreset()));
+                renameButton = addRenderableWidget(new ButtonWidget(width / 2 + DATA_WIDTH - 40, yVal, 40, 20, Component.translatable("gui.mca.presets.rename"), b -> renamePreset()));
+
+                // Set initial states
+                String initialVal = nameField.getValue().trim();
+                saveButton.active = !initialVal.isEmpty();
+                renameButton.active = selectedPreset != null 
+                    && !initialVal.isEmpty() 
+                    && !initialVal.equals(selectedPreset) 
+                    && !presetNames.contains(initialVal);
+
+                // Set responder for reactive updates
+                nameField.setResponder(val -> {
+                    String newName = val.trim();
+                    saveButton.active = !newName.isEmpty();
+                    renameButton.active = selectedPreset != null 
+                        && !newName.isEmpty() 
+                        && !newName.equals(selectedPreset) 
+                        && !presetNames.contains(newName);
+                });
+                yVal += 23;
+
+                // Action Buttons: Use, Overwrite, Delete
+                useButton = addRenderableWidget(new ButtonWidget(width / 2, yVal, 57, 20, Component.translatable("gui.mca.presets.use"), b -> usePreset()));
+                useButton.active = selectedPreset != null;
+                
+                overwriteButton = addRenderableWidget(new ButtonWidget(width / 2 + 58, yVal, 59, 20, Component.translatable("gui.mca.presets.overwrite"), b -> overwritePreset()));
+                overwriteButton.active = selectedPreset != null;
+                
+                deleteButton = addRenderableWidget(new ButtonWidget(width / 2 + 118, yVal, 57, 20, Component.translatable("gui.mca.presets.delete"), b -> deletePreset()));
+                deleteButton.active = selectedPreset != null;
+                yVal += 24;
+
+                // Back Button
+                addRenderableWidget(new ButtonWidget(width / 2, yVal, DATA_WIDTH, 20, Component.translatable("gui.back"), b -> setPage(presetsReturnPage)));
             }
         }
 
@@ -1375,6 +1524,16 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (nameField != null) {
+            boolean overEditBox = mouseX >= nameField.getX() && mouseX < nameField.getX() + nameField.getWidth()
+                                  && mouseY >= nameField.getY() && mouseY < nameField.getY() + nameField.getHeight();
+            if (!overEditBox) {
+                nameField.setFocused(false);
+                if (getFocused() == nameField) {
+                    setFocused(null);
+                }
+            }
+        }
         if (page.equals("clothing") && (hoveredClothingId >= 0 && filteredClothing.size() > hoveredClothingId)) {
             villager.setClothes(filteredClothing.get(hoveredClothingId));
             markClothingSelected();
@@ -1547,21 +1706,42 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         if (shouldDrawEntity()) {
             int x = width / 2 - DATA_WIDTH;
             int y = height / 2 - 8;
-            if (villagerUUID.equals(playerUUID) && shouldUsePlayerModel()) {
-                assert Minecraft.getInstance().player != null;
-                renderPreviewEntity(context, x, y - 57, x + DATA_WIDTH, y + 95, 55, mouseX, mouseY, Minecraft.getInstance().player, 0.0F);
-            } else {
-                renderPreviewEntity(context, x, y - 57, x + DATA_WIDTH, y + 95, 55, mouseX, mouseY, villager, 0.0F);
-            }
+            if (page.equals("presets") && hasVisualChange) {
+                // Left: Original
+                renderPreviewEntity(context, x + 8, y - 57, x + 88, y + 95, 40, mouseX, mouseY, villager, 0.0F);
+                // Right: Preset
+                renderPreviewEntity(context, x + 88, y - 57, x + 168, y + 95, 40, mouseX, mouseY, villagerVisualization, 0.0F);
 
-            // hint for confused people
-            if (shouldPrintPlayerHint() && villagerUUID.equals(playerUUID) && getSelectedPlayerModel() != VillagerLike.PlayerModel.VILLAGER) {
+                // Draw labels above the preview models
                 final PoseStack matrices = context.pose();
                 matrices.pushPose();
-                matrices.translate(x, y - 127, 0);
-                matrices.scale(0.5f, 0.5f, 0.5f);
-                context.drawCenteredString(font, Component.translatable("gui.villager_editor.model_hint"), 0, 0, 0xAAFFFFFF);
+                matrices.translate(x + 48.0F, y - 72, 0);
+                matrices.scale(0.75f, 0.75f, 0.75f);
+                context.drawCenteredString(font, Component.translatable("gui.mca.presets.original"), 0, 0, 0xAAFFFFFF);
                 matrices.popPose();
+
+                matrices.pushPose();
+                matrices.translate(x + 128.0F, y - 72, 0);
+                matrices.scale(0.75f, 0.75f, 0.75f);
+                context.drawCenteredString(font, Component.translatable("gui.mca.presets.preview"), 0, 0, 0xAAFFFFFF);
+                matrices.popPose();
+            } else {
+                if (villagerUUID.equals(playerUUID) && shouldUsePlayerModel()) {
+                    assert Minecraft.getInstance().player != null;
+                    renderPreviewEntity(context, x, y - 57, x + DATA_WIDTH, y + 95, 55, mouseX, mouseY, Minecraft.getInstance().player, 0.0F);
+                } else {
+                    renderPreviewEntity(context, x, y - 57, x + DATA_WIDTH, y + 95, 55, mouseX, mouseY, villager, 0.0F);
+                }
+
+                // hint for confused people
+                if (shouldPrintPlayerHint() && villagerUUID.equals(playerUUID) && getSelectedPlayerModel() != VillagerLike.PlayerModel.VILLAGER) {
+                    final PoseStack matrices = context.pose();
+                    matrices.pushPose();
+                    matrices.translate(x, y - 127, 0);
+                    matrices.scale(0.5f, 0.5f, 0.5f);
+                    context.drawCenteredString(font, Component.translatable("gui.villager_editor.model_hint"), 0, 0, 0xAAFFFFFF);
+                    matrices.popPose();
+                }
             }
         }
 
@@ -1629,6 +1809,16 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                         rotationOffset
                 );
             }
+        }
+
+        if (page.equals("presets")) {
+            int startIdx = currentPage * PRESETS_PER_PAGE;
+            int count = Math.min(PRESETS_PER_PAGE, presetNames.size() - startIdx);
+            int startY = height / 2 - 100;
+
+            int rightX = width / 2;
+            int paginationY = startY + 22 + count * 20 + 6;
+            context.drawCenteredString(font, Component.literal((currentPage + 1) + " / " + (maxPage + 1)), rightX + DATA_WIDTH / 2, paginationY, 0xFFAAAAAA);
         }
     }
 
@@ -1839,6 +2029,168 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         CompoundTag nbt = new CompoundTag();
         entity.save(nbt);
         return nbt;
+    }
+
+    private void refreshPresets() {
+        if (!presetsDir.exists()) {
+            presetsDir.mkdirs();
+        }
+        presetNames.clear();
+        File[] files = presetsDir.listFiles((d, name) -> name.endsWith(".json"));
+        if (files != null) {
+            for (File f : files) {
+                String name = f.getName();
+                presetNames.add(name.substring(0, name.length() - 5)); // remove .json
+            }
+        }
+        presetNames.sort(String::compareToIgnoreCase);
+        maxPage = Math.max(0, (presetNames.size() - 1) / PRESETS_PER_PAGE);
+        currentPage = Math.min(currentPage, maxPage);
+    }
+
+    private void selectPreset(String name) {
+        this.selectedPreset = name;
+        if (name != null) {
+            if (nameField != null) {
+                nameField.setValue(name);
+            }
+            try {
+                File presetFile = new File(presetsDir, name + ".json");
+                if (presetFile.exists()) {
+                    String json = FileUtils.readFileToString(presetFile, StandardCharsets.UTF_8);
+                    CompoundTag tag = PresetCodec.fromJsonString(json);
+                    
+                    // Load selected preset NBT into villagerVisualization for preview/comparison
+                    if (villagerData != null) {
+                        villagerVisualization.load(villagerData);
+                    }
+                    villagerVisualization.readAdditionalSaveDataForEditor(tag);
+                    villagerVisualization.refreshDimensions();
+                    
+                    // Restore main villager back to the original backup NBT to keep it unmodified until "Use" is clicked
+                    if (presetsBackupNbt != null) {
+                        if (villagerData != null) {
+                            villager.load(villagerData);
+                        }
+                        villager.readAdditionalSaveDataForEditor(presetsBackupNbt);
+                        villager.refreshDimensions();
+                    }
+                    
+                    // Cache the visual change flag
+                    if (presetsBackupNbt != null) {
+                        hasVisualChange = !presetsBackupNbt.equals(tag);
+                    } else {
+                        hasVisualChange = false;
+                    }
+                }
+            } catch (Exception e) {
+                MCA.LOGGER.error("Failed to load preset for preview", e);
+            }
+        } else {
+            hasVisualChange = false;
+        }
+        setPage("presets");
+    }
+
+    private void savePreset() {
+        if (nameField == null) return;
+        String name = nameField.getValue().trim();
+        if (name.isEmpty()) return;
+        
+        try {
+            CompoundTag tag = saveEntityData(villager);
+            
+            // Extract PlayerModel from villagerData NBT if present
+            if (villagerData != null) {
+                CompoundTag parentMca = getMcaData(villagerData);
+                if (parentMca != null && parentMca.contains("PlayerModel")) {
+                    tag.putInt("PlayerModel", parentMca.getInt("PlayerModel"));
+                }
+            }
+
+            File file = new File(presetsDir, name + ".json");
+            String json = PresetCodec.toJsonString(tag);
+            FileUtils.writeStringToFile(file, json, StandardCharsets.UTF_8);
+            
+            // Update backup NBT so saving doesn't trigger visual difference anymore
+            presetsBackupNbt = tag.copy();
+            hasVisualChange = false;
+            
+            refreshPresets();
+            selectPreset(name);
+        } catch (Exception e) {
+            MCA.LOGGER.error("Failed to save preset", e);
+        }
+    }
+
+    private void renamePreset() {
+        if (selectedPreset == null || nameField == null) return;
+        String newName = nameField.getValue().trim();
+        if (newName.isEmpty() || newName.equals(selectedPreset)) return;
+
+        try {
+            File oldFile = new File(presetsDir, selectedPreset + ".json");
+            File newFile = new File(presetsDir, newName + ".json");
+            if (oldFile.exists() && !newFile.exists()) {
+                if (oldFile.renameTo(newFile)) {
+                    selectedPreset = newName;
+                    refreshPresets();
+                    selectPreset(newName);
+                }
+            }
+        } catch (Exception e) {
+            MCA.LOGGER.error("Failed to rename preset", e);
+        }
+    }
+
+    private void overwritePreset() {
+        if (selectedPreset == null) return;
+        savePreset();
+    }
+
+    private void deletePreset() {
+        if (selectedPreset == null) return;
+        try {
+            File file = new File(presetsDir, selectedPreset + ".json");
+            if (file.exists()) {
+                file.delete();
+            }
+            selectedPreset = null;
+            hasVisualChange = false;
+            refreshPresets();
+            setPage("presets");
+        } catch (Exception e) {
+            MCA.LOGGER.error("Failed to delete preset", e);
+        }
+    }
+
+    private void usePreset() {
+        if (selectedPreset == null) return;
+        try {
+            File presetFile = new File(presetsDir, selectedPreset + ".json");
+            if (presetFile.exists()) {
+                String json = FileUtils.readFileToString(presetFile, StandardCharsets.UTF_8);
+                CompoundTag tag = PresetCodec.fromJsonString(json);
+                
+                // Permanently apply to main villager
+                villager.readAdditionalSaveDataForEditor(tag);
+                
+                if (tag.contains("PlayerModel")) {
+                    int modelVal = tag.getInt("PlayerModel");
+                    if (villagerData != null) {
+                        CompoundTag parentMca = getOrCreateMcaData(villagerData);
+                        parentMca.putInt("PlayerModel", modelVal);
+                    }
+                }
+                
+                presetsBackupNbt = null; // Discard backup so it doesn't restore on exit
+                hasVisualChange = false;
+                syncVillagerData();
+                setPage("general");
+            }
+        } catch (Exception e) {
+            MCA.LOGGER.error("Failed to apply preset", e);
+        }
     }
 
     void applyLibraryHair(String hairId) {
