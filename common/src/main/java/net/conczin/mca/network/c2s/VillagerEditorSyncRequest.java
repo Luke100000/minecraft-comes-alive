@@ -85,7 +85,7 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
         if (villagerData != null && list != null) {
             String skin;
             if (data.contains("offset")) {
-                skin = list.getPool(getGender(villagerData)).pickNext(getMcaData(villagerData).getString("Skin"), data.getInt("offset"));
+                skin = list.getPool(getGender(villagerData)).pickNext(getStringValue(villagerData, "Skin"), data.getInt("offset"));
             } else {
                 skin = list.getPool(getGender(villagerData)).pickOne();
             }
@@ -103,7 +103,7 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
 
             HairStyle style;
             if (data.contains("offset")) {
-                String currentStyleId = getCurrentHairStyleId(mcaData, styles, gender);
+                String currentStyleId = getCurrentHairStyleId(villagerData, styles, gender);
                 style = styles.pickNext(gender, currentStyleId, data.getInt("offset"));
             } else {
                 style = styles.pick(gender);
@@ -137,7 +137,7 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
             String key = category.getDataKey();
             String hair;
             if (data.contains("offset")) {
-                hair = list.getPool(category, getGender(villagerData)).pickNext(mcaData.getString(key), data.getInt("offset"));
+                hair = list.getPool(category, getGender(villagerData)).pickNext(getStringValue(villagerData, key), data.getInt("offset"));
             } else {
                 hair = list.pick(category, getGender(villagerData));
             }
@@ -155,13 +155,13 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
             String clothes = "mca:missing";
             if (entity instanceof Player) {
                 if (data.contains("offset")) {
-                    clothes = ClothingList.getInstance().getEditorPool(getGender(villagerData)).pickNext(mcaData.getString("Clothes"), data.getInt("offset"));
+                    clothes = ClothingList.getInstance().getEditorPool(getGender(villagerData)).pickNext(getStringValue(villagerData, "Clothes"), data.getInt("offset"));
                 } else {
                     clothes = ClothingList.getInstance().getPool(getGender(villagerData), VillagerProfession.NONE).pickOne();
                 }
             } else if (entity instanceof VillagerLike<?> villager) {
                 if (data.contains("offset")) {
-                    clothes = ClothingList.getInstance().getEditorPool(villager.getGenetics().getGender()).pickNext(villager.getClothes(), data.getInt("offset"));
+                    clothes = ClothingList.getInstance().getEditorPool(villager.getGenetics().getGender()).pickNext(getStringValue(villagerData, "Clothes"), data.getInt("offset"));
                 } else {
                     clothes = ClothingList.getInstance().getPool(villager).pickOne();
                 }
@@ -235,16 +235,29 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
         return villagerData.getCompound(VillagerEntityMCA.MCA_DATA_KEY);
     }
 
-    private String getCurrentHairStyleId(CompoundTag mcaData, HairStyleList styles, Gender gender) {
-        String storedStyle = mcaData.getString("HairStyle");
+    private String getStringValue(CompoundTag villagerData, String key) {
+        if (villagerData.contains(key)) {
+            return villagerData.getString(key);
+        }
+        if (villagerData.contains(VillagerEntityMCA.MCA_DATA_KEY, 10)) {
+            CompoundTag mcaData = villagerData.getCompound(VillagerEntityMCA.MCA_DATA_KEY);
+            if (mcaData.contains(key)) {
+                return mcaData.getString(key);
+            }
+        }
+        return "";
+    }
+
+    private String getCurrentHairStyleId(CompoundTag villagerData, HairStyleList styles, Gender gender) {
+        String storedStyle = getStringValue(villagerData, "HairStyle");
         if (!MCA.isBlankString(storedStyle)) {
             return storedStyle;
         }
-        String legacyHair = mcaData.getString("Hair");
+        String legacyHair = getStringValue(villagerData, "Hair");
         if (!MCA.isBlankString(legacyHair)) {
             return legacyHair;
         }
-        return styles.findMatchingStyleId(gender, category -> mcaData.getString(category.getDataKey())).orElse("");
+        return styles.findMatchingStyleId(gender, category -> getStringValue(villagerData, category.getDataKey())).orElse("");
     }
 
     private void applyHairStyle(CompoundTag mcaData, HairStyle style) {

@@ -264,7 +264,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
             }
 
             //close
-            doneWidget = addRenderableWidget(new ButtonWidget(width / 2 - DATA_WIDTH + 20, height / 2 + 85, DATA_WIDTH - 40, 20, Component.translatable("gui.done"), sender -> {
+            doneWidget = addRenderableWidget(new ButtonWidget(width / 2 - DATA_WIDTH + 20, height / 2 + 98, DATA_WIDTH - 40, 20, Component.translatable("gui.done"), sender -> {
                 syncVillagerData();
                 onClose();
             }));
@@ -1511,7 +1511,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
 
         int x = width / 2 - DATA_WIDTH;
         int y = height / 2 - 8;
-        return mouseX >= x && mouseX <= x + DATA_WIDTH && mouseY >= y - 57 && mouseY <= y + 88;
+        return mouseX >= x && mouseX <= x + DATA_WIDTH && mouseY >= y - 57 && mouseY <= y + 95;
     }
 
     private boolean isMouseOverMainPreview(double mouseX, double mouseY) {
@@ -1533,10 +1533,10 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         float frameSeconds = Mth.clamp((currentTime - lastPreviewFrameTime) / 1000.0F, 0.0F, 0.1F);
         lastPreviewFrameTime = currentTime;
         if (rotatePreviewLeft) {
-            rotatePreview(120.0F * frameSeconds);
+            rotatePreview(-120.0F * frameSeconds);
         }
         if (rotatePreviewRight) {
-            rotatePreview(-120.0F * frameSeconds);
+            rotatePreview(120.0F * frameSeconds);
         }
 
         villager.tickCount = (int) (System.currentTimeMillis() / 50L);
@@ -1547,9 +1547,9 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
             int y = height / 2 - 8;
             if (villagerUUID.equals(playerUUID) && shouldUsePlayerModel()) {
                 assert Minecraft.getInstance().player != null;
-                renderPreviewEntity(context, x, y - 57, x + DATA_WIDTH, y + 88, 60, mouseX, mouseY, Minecraft.getInstance().player, 0.0F);
+                renderPreviewEntity(context, x, y - 57, x + DATA_WIDTH, y + 95, 55, mouseX, mouseY, Minecraft.getInstance().player, 0.0F);
             } else {
-                renderPreviewEntity(context, x, y - 57, x + DATA_WIDTH, y + 88, 60, mouseX, mouseY, villager, 0.0F);
+                renderPreviewEntity(context, x, y - 57, x + DATA_WIDTH, y + 95, 55, mouseX, mouseY, villager, 0.0F);
             }
 
             // hint for confused people
@@ -1637,19 +1637,25 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         float displayRotation = previewRotation + rotationOffset;
         float followXAngle = baseXAngle * Mth.cos(displayRotation * ((float)Math.PI / 180.0F));
         Quaternionf pose = new Quaternionf().rotateZ((float)Math.PI);
-        pose.rotateY(displayRotation * ((float)Math.PI / 180.0F));
+        pose.rotateY(-displayRotation * ((float)Math.PI / 180.0F));
         Quaternionf cameraOrientation = new Quaternionf().rotateX(yAngle * 20.0F * (float)(Math.PI / 180.0));
         pose.mul(cameraOrientation);
 
         float previousBodyRot = entity.yBodyRot;
+        float previousBodyRotO = entity.yBodyRotO;
         float previousYRot = entity.getYRot();
+        float previousYRotO = entity.yRotO;
         float previousXRot = entity.getXRot();
+        float previousXRotO = entity.xRotO;
         float previousHeadRotO = entity.yHeadRotO;
         float previousHeadRot = entity.yHeadRot;
 
         entity.yBodyRot = 180.0F + followXAngle * 20.0F;
+        entity.yBodyRotO = entity.yBodyRot;
         entity.setYRot(180.0F + followXAngle * 40.0F);
+        entity.yRotO = entity.getYRot();
         entity.setXRot(-yAngle * 20.0F);
+        entity.xRotO = entity.getXRot();
         entity.yHeadRot = entity.getYRot();
         entity.yHeadRotO = entity.getYRot();
 
@@ -1660,8 +1666,11 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         context.disableScissor();
 
         entity.yBodyRot = previousBodyRot;
+        entity.yBodyRotO = previousBodyRotO;
         entity.setYRot(previousYRot);
+        entity.yRotO = previousYRotO;
         entity.setXRot(previousXRot);
+        entity.xRotO = previousXRotO;
         entity.yHeadRotO = previousHeadRotO;
         entity.yHeadRot = previousHeadRot;
     }

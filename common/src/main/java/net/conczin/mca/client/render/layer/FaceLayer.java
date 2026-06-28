@@ -99,7 +99,7 @@ public class FaceLayer<T extends LivingEntity, M extends HumanoidModel<T>> exten
     }
 
     private ResourceLocation getBlinkSkin() {
-        return cached("skins/face/" + variant + "/blink.png", MCA::locate);
+        return cached("skins/face/normal/blink.png", MCA::locate);
     }
 
     @Override
