@@ -6,6 +6,7 @@ import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.network.HandleablePayload;
 import net.conczin.mca.network.Network;
+import net.conczin.mca.network.s2c.GetVillagerResponse;
 import net.conczin.mca.network.s2c.PlayerDataMessage;
 import net.conczin.mca.resources.BodySkinList;
 import net.conczin.mca.resources.ClothingList;
@@ -188,6 +189,7 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
                 villager.getResidency().getHomeVillage().ifPresent(b -> b.updateResident(villager));
             }
         }
+        Network.sendToPlayer(new GetVillagerResponse(villagerData), player);
     }
 
     private void sanitizeVisualIdentifiers(CompoundTag villagerData) {

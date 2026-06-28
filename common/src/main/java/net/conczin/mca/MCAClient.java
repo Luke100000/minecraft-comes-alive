@@ -27,7 +27,7 @@ public class MCAClient {
     }
 
     public static Optional<VillagerLike<?>> getPlayerData(UUID uuid) {
-        if (isPlayerRendererAllowed()) {
+        if (isPlayerRendererAllowed() || Config.getServerConfig().scalePlayerHitboxWithSizeAndWidth) {
             if (!MCAClient.playerDataRequests.contains(uuid) && Minecraft.getInstance().getConnection() != null) {
                 MCAClient.playerDataRequests.add(uuid);
                 Network.sendToServer(new PlayerDataRequest(uuid));

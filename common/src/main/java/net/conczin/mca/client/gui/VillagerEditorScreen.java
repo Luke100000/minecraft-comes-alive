@@ -317,7 +317,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
             }));
 
             boolean isPresetsPage = page.equals("presets");
-            int presetsX = isPresetsPage ? (width / 2 - DATA_WIDTH + 10) : (width / 2 - DATA_WIDTH + 50);
+            int presetsX = width / 2 - DATA_WIDTH + 10;
 
             presetsButton = addRenderableWidget(new ButtonWidget(
                     presetsX,
@@ -1512,7 +1512,6 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     private void sendCommand(String command, CompoundTag nbt) {
         syncVillagerData();
         Network.sendToServer(new VillagerEditorSyncRequest(command, villagerUUID, nbt));
-        requestVillagerData();
     }
 
     private void setTraitPage(int i) {
@@ -1712,16 +1711,16 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                 // Right: Preset
                 renderPreviewEntity(context, x + 88, y - 57, x + 168, y + 95, 40, mouseX, mouseY, villagerVisualization, 0.0F);
 
-                // Draw labels above the preview models
+                // Draw labels below the presets/export controls.
                 final PoseStack matrices = context.pose();
                 matrices.pushPose();
-                matrices.translate(x + 48.0F, y - 72, 0);
+                matrices.translate(x + 48.0F, y - 50, 0);
                 matrices.scale(0.75f, 0.75f, 0.75f);
                 context.drawCenteredString(font, Component.translatable("gui.mca.presets.original"), 0, 0, 0xAAFFFFFF);
                 matrices.popPose();
 
                 matrices.pushPose();
-                matrices.translate(x + 128.0F, y - 72, 0);
+                matrices.translate(x + 128.0F, y - 50, 0);
                 matrices.scale(0.75f, 0.75f, 0.75f);
                 context.drawCenteredString(font, Component.translatable("gui.mca.presets.preview"), 0, 0, 0xAAFFFFFF);
                 matrices.popPose();

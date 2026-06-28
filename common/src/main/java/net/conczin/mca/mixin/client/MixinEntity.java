@@ -2,7 +2,6 @@ package net.conczin.mca.mixin.client;
 
 import net.conczin.mca.Config;
 import net.conczin.mca.MCAClient;
-import net.conczin.mca.client.model.CommonVillagerModel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Pose;
 import net.minecraft.world.entity.player.Player;
@@ -21,8 +20,12 @@ public abstract class MixinEntity {
 
     @Inject(method = "getEyeHeight()F", at = @At("RETURN"), cancellable = true)
     private void onGetEyeHeight(CallbackInfoReturnable<Float> cir) {
-        if ((Object) this instanceof Player player && player.getPose() != Pose.SLEEPING && Config.getInstance().scaleEyeHeightWithPlayerHeight && MCAClient.useGeneticsRenderer(getUUID())) {
-            cir.setReturnValue(cir.getReturnValueF() * CommonVillagerModel.getVillager(player).getRawVerticalScaleFactor());
+        if ((Object) this instanceof Player player
+                && player.getPose() != Pose.SLEEPING
+                && Config.getInstance().scaleEyeHeightWithPlayerHeight
+                && !Config.getServerConfig().scalePlayerHitboxWithSizeAndWidth) {
+            MCAClient.getPlayerData(getUUID())
+                    .ifPresent(villager -> cir.setReturnValue(cir.getReturnValueF() * villager.getRawVerticalScaleFactor()));
         }
     }
 }

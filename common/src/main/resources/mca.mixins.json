@@ -15,6 +15,7 @@
     "MixinHorseBase",
     "MixinInventory",
     "MixinIronGolem",
+    "MixinLivingEntity",
     "MixinMemoryModuleType",
     "MixinMilkBucketItem",
     "MixinPlayer",

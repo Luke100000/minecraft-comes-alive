@@ -4,6 +4,7 @@ import com.google.gson.JsonElement;
 import net.conczin.mca.MCA;
 import net.conczin.mca.resources.data.tasks.Task;
 import net.conczin.mca.resources.data.tasks.TaskRegistry;
+import net.conczin.mca.server.world.data.PlayerSaveData;
 import net.conczin.mca.server.world.data.Village;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
@@ -35,6 +36,9 @@ public class Tasks extends SimpleJsonResourceReloadListener {
     }
 
     public static Rank getRank(Village village, ServerPlayer player) {
+        if (player != null && PlayerSaveData.get(player).isOverrideVillageRequirements()) {
+            return Rank.MONARCH;
+        }
         Rank[] ranks = Rank.values();
         for (int i = ranks.length - 1; i >= 0; i--) {
             if (getInstance().tasks.get(ranks[i]).stream().allMatch(t -> !t.isRequired() || t.isCompleted(village, player))) {

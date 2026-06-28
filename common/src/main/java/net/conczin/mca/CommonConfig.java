@@ -27,6 +27,11 @@ public class CommonConfig {
     public boolean allowPlayerSizeAdjustment = true;
 
     /**
+     * Scale player hitboxes using MCA size and width genetics.
+     */
+    public boolean scalePlayerHitboxWithSizeAndWidth = false;
+
+    /**
      * Whether body customization (e.g., height, size) is available in the Destiny editor.
      */
     public boolean allowBodyCustomizationInDestiny = true;

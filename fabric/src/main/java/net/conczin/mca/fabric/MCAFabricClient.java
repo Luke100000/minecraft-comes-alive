@@ -7,6 +7,7 @@ import net.conczin.mca.MCAClient;
 import net.conczin.mca.block.BlockEntityTypesMCA;
 import net.conczin.mca.client.particle.InteractionParticle;
 import net.conczin.mca.client.render.*;
+import net.conczin.mca.client.resources.GeneratedEyeTextureReloadListener;
 import net.conczin.mca.fabric.client.gui.FabricMCAScreens;
 import net.conczin.mca.fabric.resources.ApiIdentifiableReloadListener;
 import net.conczin.mca.fabric.resources.FabricColorPaletteLoader;
@@ -70,6 +71,7 @@ public final class MCAFabricClient extends ClientProxyAbstractImpl implements Cl
         managerHelper.registerReloadListener(new FabricSupportersLoader());
         managerHelper.registerReloadListener(new ApiIdentifiableReloadListener());
         managerHelper.registerReloadListener(new FabricReloadListener<>(FaceList.ID, new FaceList()));
+        managerHelper.registerReloadListener(new FabricReloadListener<>(GeneratedEyeTextureReloadListener.ID, GeneratedEyeTextureReloadListener.INSTANCE));
 
         ModelPredicatesMCA.setup(ItemProperties::register);
 

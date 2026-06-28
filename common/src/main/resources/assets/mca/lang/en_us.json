@@ -1136,6 +1136,7 @@
   "gui.mca.presets.use": "Use",
   "gui.mca.presets.delete": "Delete",
   "gui.mca.presets.rename": "Rename",
+  "gui.mca.presets.overwrite": "Overwrite",
   "gui.mca.presets.original": "Current",
   "gui.mca.presets.preview": "Selected Preset",
   "chat.mca.skin_export_success": "Successfully exported skin to %s",

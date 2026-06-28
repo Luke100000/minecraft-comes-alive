@@ -5,9 +5,11 @@ import net.conczin.mca.MCA;
 import net.conczin.mca.network.HandleablePayload;
 import net.conczin.mca.util.WorldUtils;
 import net.conczin.mca.util.compat.ExtendedFuzzyPositions;
+import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.chat.Component;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
@@ -39,16 +41,26 @@ public record DestinyMessage(String location, boolean isClosing) implements Hand
             sp.removeEffect(MobEffects.INVISIBILITY);
             sp.removeEffect(MobEffects.HEALTH_BOOST);
         }
-        if (Config.getInstance().allowDestinyTeleportation && !location.isEmpty()) {
+        if (Config.getInstance().allowDestinyTeleportation && !location.isEmpty() && !isNoTeleportLocation()) {
             MCA.executorService.execute(() -> {
                 if (location.charAt(0) == '#') {
                     String tagId = location.substring(1);
-                    WorldUtils.getClosestStructurePosition(sp.serverLevel(), sp.blockPosition(), TagKey.create(Registries.STRUCTURE, ResourceLocation.parse(tagId)), 128).ifPresent(pos -> handleBlockPos(sp, pos));
+                    WorldUtils.getClosestStructurePosition(sp.serverLevel(), sp.blockPosition(), TagKey.create(Registries.STRUCTURE, ResourceLocation.parse(tagId)), 128)
+                            .ifPresentOrElse(pos -> handleBlockPos(sp, pos), () -> notifyDestinationNotFound(sp));
                 } else {
-                    WorldUtils.getClosestStructurePosition(sp.serverLevel(), sp.blockPosition(), ResourceLocation.parse(location), 128).ifPresent(pos -> handleBlockPos(sp, pos));
+                    WorldUtils.getClosestStructurePosition(sp.serverLevel(), sp.blockPosition(), ResourceLocation.parse(location), 128)
+                            .ifPresentOrElse(pos -> handleBlockPos(sp, pos), () -> notifyDestinationNotFound(sp));
                 }
             });
         }
+    }
+
+    private boolean isNoTeleportLocation() {
+        return "somewhere".equals(location);
+    }
+
+    private void notifyDestinationNotFound(ServerPlayer player) {
+        player.server.execute(() -> player.sendSystemMessage(Component.translatable("destiny.teleport.failed").withStyle(ChatFormatting.GRAY, ChatFormatting.ITALIC)));
     }
 
     private void handleBlockPos(ServerPlayer player, BlockPos pos) {
@@ -60,6 +72,10 @@ public record DestinyMessage(String location, boolean isClosing) implements Hand
         }
         pos = RandomPos.moveUpOutOfSolid(pos, player.level().getHeight(), p -> player.level().getBlockState(p).isSuffocating(player.level(), p));
         pos = ExtendedFuzzyPositions.downWhile(pos, 1, p -> !player.level().getBlockState(p.below()).isCollisionShapeFullBlock(player.level(), p));
+        if (!player.level().isInWorldBounds(pos) || !player.level().getWorldBorder().isWithinBounds(pos)) {
+            notifyDestinationNotFound(player);
+            return;
+        }
         ChunkPos chunkPos = new ChunkPos(pos);
         player.serverLevel().getChunkSource().addRegionTicket(TicketType.POST_TELEPORT, chunkPos, 1, player.getId());
         player.connection.teleport(pos.getX(), pos.getY(), pos.getZ(), player.getYRot(), player.getXRot(), EnumSet.noneOf(RelativeMovement.class));

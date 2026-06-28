@@ -21,10 +21,6 @@ public abstract class MixinItemInHandLayer {
 
     @Inject(method = "render(Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;ILnet/minecraft/world/entity/LivingEntity;FFFFFF)V", at = @At("HEAD"), cancellable = true)
     public void mca$injectRender(PoseStack matrixStack, MultiBufferSource vertexConsumerProvider, int i, LivingEntity livingEntity, float f, float g, float h, float j, float k, float l, CallbackInfo ci) {
-        if (net.minecraft.client.Minecraft.getInstance().screen instanceof net.conczin.mca.client.gui.VillagerEditorScreen) {
-            ci.cancel();
-            return;
-        }
         if (livingEntity instanceof VillagerLike<?>) {
             boolean bl = livingEntity.getMainArm() == HumanoidArm.RIGHT;
             ItemStack itemStack = bl ? livingEntity.getOffhandItem() : livingEntity.getMainHandItem();
