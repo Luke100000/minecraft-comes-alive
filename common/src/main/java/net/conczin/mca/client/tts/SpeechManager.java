@@ -26,6 +26,7 @@ import java.util.Collection;
 import java.util.Locale;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ThreadLocalRandom;
 
 public class SpeechManager {
     public static final SpeechManager INSTANCE = new SpeechManager();
@@ -55,6 +56,27 @@ public class SpeechManager {
 
     public void playSound(float pitch, Entity entity, ResourceLocation soundLocation) {
         client.execute(() -> client.getSoundManager().play(SpeechManager.INSTANCE.getSound(pitch, entity, soundLocation)));
+    }
+
+    public void playPreview(VillagerEntityMCA villager) {
+        stopPreview(villager);
+        String phrase = VoicePreviewSamples.random(ThreadLocalRandom.current());
+        if (Config.getInstance().enableOnlineTTS) {
+            speak(phrase, villager.getUUID(), villager, true);
+        } else {
+            tryPlayVoicePackSound(phrase, villager.getUUID(), villager);
+        }
+    }
+
+    public boolean canPreviewVoiceTone() {
+        return Config.getInstance().enableOnlineTTS || hasVoicePackSounds();
+    }
+
+    public void stopPreview(VillagerEntityMCA villager) {
+        EntityBoundSoundInstance sound = currentlyPlaying.remove(villager.getUUID());
+        if (sound != null) {
+            client.getSoundManager().stop(sound);
+        }
     }
 
     public void onChatMessage(Component message, UUID sender) {
@@ -87,6 +109,13 @@ public class SpeechManager {
         VillagerEntityMCA villager = getSpeaker(client, sender);
         if (villager == null) return;
 
+        speak(phrase, sender, villager, translatable);
+    }
+
+    private void speak(String phrase, UUID sender, VillagerEntityMCA villager, boolean translatable) {
+        Minecraft client = Minecraft.getInstance();
+        if (client.level == null) return;
+
         if (villager.isSpeechImpaired()) return;
         if (villager.isToYoungToSpeak()) return;
 
@@ -113,19 +142,35 @@ public class SpeechManager {
                 default -> onlineSpeechManager.play(phrase, gameLang, gender, pitch, gene, villager, translatable);
             }
         } else if (translatable) {
-            // Use the resourcepack, if available
-            int tone = Math.min(9, (int) Math.floor(gene * 10.0f));
-            ResourceLocation sound = ResourceLocation.fromNamespaceAndPath("mca_voices", phrase.toLowerCase(Locale.ROOT) + "/" + gender + "_" + tone);
-
-            if (client.level != null && client.player != null) {
-                Collection<ResourceLocation> keys = client.getSoundManager().getAvailableSounds();
-                if (keys.contains(sound)) {
-                    EntityBoundSoundInstance instance = new EntityBoundSoundInstance(SoundEvent.createVariableRangeEvent(sound), SoundSource.NEUTRAL, 1.0f, pitch, villager, threadSafeRandom.nextLong());
-                    currentlyPlaying.put(sender, instance);
-                    client.getSoundManager().play(instance);
-                }
-            }
+            tryPlayVoicePackSound(phrase, sender, villager);
         }
+    }
+
+    private boolean tryPlayVoicePackSound(String phrase, UUID sender, VillagerEntityMCA villager) {
+        Minecraft client = Minecraft.getInstance();
+        if (client.level == null || client.player == null) {
+            return false;
+        }
+
+        float pitch = villager.getVoicePitch();
+        float gene = villager.getGenetics().getGene(Genetics.VOICE_TONE);
+        String gender = villager.getGenetics().getGender().binary().getDataName();
+        int tone = Math.min(9, (int) Math.floor(gene * 10.0f));
+        ResourceLocation sound = ResourceLocation.fromNamespaceAndPath("mca_voices", phrase.toLowerCase(Locale.ROOT) + "/" + gender + "_" + tone);
+        Collection<ResourceLocation> keys = client.getSoundManager().getAvailableSounds();
+        if (!keys.contains(sound)) {
+            return false;
+        }
+
+        EntityBoundSoundInstance instance = new EntityBoundSoundInstance(SoundEvent.createVariableRangeEvent(sound), SoundSource.NEUTRAL, 1.0f, pitch, villager, threadSafeRandom.nextLong());
+        currentlyPlaying.put(sender, instance);
+        client.getSoundManager().play(instance);
+        return true;
+    }
+
+    private boolean hasVoicePackSounds() {
+        return client.getSoundManager().getAvailableSounds().stream()
+                .anyMatch(sound -> sound.getNamespace().equals("mca_voices"));
     }
 
     public void tick(Minecraft client) {

@@ -5,8 +5,10 @@ import net.conczin.mca.Config;
 import net.conczin.mca.MCA;
 import net.conczin.mca.MCAClient;
 import net.conczin.mca.client.gui.widget.*;
+import net.conczin.mca.client.resources.ColorPalette;
 import net.conczin.mca.client.resources.ClientSkinCatalog;
 import net.conczin.mca.client.resources.ClientUtils;
+import net.conczin.mca.client.tts.SpeechManager;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.entity.ai.Genetics;
@@ -39,7 +41,10 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.util.FastColor;
+import net.minecraft.util.Mth;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.npc.VillagerProfession;
+import org.lwjgl.glfw.GLFW;
 
 import java.util.*;
 import java.util.function.Consumer;
@@ -50,6 +55,12 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     protected static final int DATA_WIDTH = 175;
     private static final int TRAITS_PER_PAGE = 8;
     private static final int LAYERED_HAIR_PER_PAGE = 6;
+    private static final float MIN_PREVIEW_ZOOM = 0.7F;
+    private static final float MAX_PREVIEW_ZOOM = 1.4F;
+    private static final int VOICE_PREVIEW_BUTTON_WIDTH = 22;
+    private static final int STEVE_PROPORTIONS_BUTTON_WIDTH = 22;
+    private static final float STEVE_RAW_WIDTH_SCALE = 1.0F;
+    private static final float STEVE_RAW_HEIGHT_SCALE = 0.9F;
     protected final VillagerEntityMCA villager = Objects.requireNonNull(EntitiesMCA.MALE_VILLAGER.create(Objects.requireNonNull(Minecraft.getInstance().level)));
     protected final VillagerEntityMCA villagerVisualization = Objects.requireNonNull(EntitiesMCA.MALE_VILLAGER.create(Objects.requireNonNull(Minecraft.getInstance().level)));
     final UUID villagerUUID;
@@ -86,6 +97,12 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     private ButtonWidget playerSkinWidget;
     private ButtonWidget vanillaSkinWidget;
     private ButtonWidget doneWidget;
+    private float previewRotation;
+    private float previewZoom = 1.0F;
+    private boolean draggingPreview;
+    private boolean rotatePreviewLeft;
+    private boolean rotatePreviewRight;
+    private boolean previewFollowsMouse = true;
     private ButtonWidget genderButtonFemale;
     private ButtonWidget genderButtonMale;
 
@@ -116,15 +133,87 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
 
     private int doubleGeneSliders(int y, Genetics.GeneType... genes) {
         boolean right = false;
-        Genetics genetics = villager.getGenetics();
         for (Genetics.GeneType g : genes) {
-            addRenderableWidget(new GeneSliderWidget(width / 2 + (right ? DATA_WIDTH / 2 : 0), y, DATA_WIDTH / 2, 20, Component.translatable(g.getTranslationKey()), genetics.getGene(g), b -> genetics.setGene(g, b.floatValue())));
+            int x = width / 2 + (right ? DATA_WIDTH / 2 : 0);
+            int widgetWidth = DATA_WIDTH / 2;
+            if (g == Genetics.VOICE_TONE) {
+                addVoicePreviewButton(x, y);
+                addGeneSlider(x + VOICE_PREVIEW_BUTTON_WIDTH + 2, y, widgetWidth - VOICE_PREVIEW_BUTTON_WIDTH - 2, g);
+            } else {
+                addGeneSlider(x, y, widgetWidth, g);
+            }
             if (right) {
                 y += 20;
             }
             right = !right;
         }
         return y + 4 + (right ? 20 : 0);
+    }
+
+    private void addGeneSlider(int x, int y, int widgetWidth, Genetics.GeneType gene) {
+        Genetics genetics = villager.getGenetics();
+        addRenderableWidget(new GeneSliderWidget(x, y, widgetWidth, 20, Component.translatable(gene.getTranslationKey()), genetics.getGene(gene), b -> genetics.setGene(gene, b.floatValue())));
+    }
+
+    private void addVoicePreviewButton(int x, int y) {
+        ButtonWidget previewButton = addRenderableWidget(new ButtonWidget(
+                x,
+                y,
+                VOICE_PREVIEW_BUTTON_WIDTH,
+                20,
+                Component.literal(">"),
+                b -> SpeechManager.INSTANCE.playPreview(villager),
+                Component.translatable("gui.villager_editor.preview_voice.tooltip")
+        ));
+        previewButton.active = SpeechManager.INSTANCE.canPreviewVoiceTone();
+    }
+
+    private void addSteveProportionsButton(int x, int y) {
+        addRenderableWidget(new TooltipButtonWidget(
+                x,
+                y,
+                STEVE_PROPORTIONS_BUTTON_WIDTH,
+                20,
+                Component.literal("V"),
+                Component.translatable("gui.villager_editor.steve_proportions.tooltip"),
+                b -> {
+                    setSteveProportions();
+                    init();
+                }
+        ));
+    }
+
+    private void setSteveProportions() {
+        Genetics genetics = villager.getGenetics();
+        genetics.setGene(Genetics.SIZE, getSteveProportionsMarker(Genetics.SIZE));
+        genetics.setGene(Genetics.WIDTH, getSteveProportionsMarker(Genetics.WIDTH));
+        villager.refreshDimensions();
+    }
+
+    private float getSteveProportionsMarker(Genetics.GeneType gene) {
+        if (gene == Genetics.SIZE) {
+            return geneValueForRawScale(STEVE_RAW_HEIGHT_SCALE, getNonGeneticVerticalScaleFactor());
+        }
+        if (gene == Genetics.WIDTH) {
+            return geneValueForRawScale(STEVE_RAW_WIDTH_SCALE, getNonGeneticHorizontalScaleFactor());
+        }
+        return Float.NaN;
+    }
+
+    private float geneValueForRawScale(float targetRawScale, float nonGeneticScaleFactor) {
+        return Mth.clamp(2.0F * (targetRawScale / nonGeneticScaleFactor - 0.75F), 0.0F, 1.0F);
+    }
+
+    private float getNonGeneticVerticalScaleFactor() {
+        return villager.getTraits().getVerticalScaleFactor()
+               * villager.getVillagerDimensions().getHeight()
+               * villager.getGenetics().getGender().getScaleFactor();
+    }
+
+    private float getNonGeneticHorizontalScaleFactor() {
+        return villager.getTraits().getHorizontalScaleFactor()
+               * villager.getVillagerDimensions().getWidth()
+               * villager.getGenetics().getGender().getHorizontalScaleFactor();
     }
 
     private int integerChanger(int y, IntConsumer onClick, Supplier<Component> content) {
@@ -176,6 +265,8 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
             }));
         }
 
+        addPreviewRotationWidgets();
+
         int y = height / 2 - 80;
         int margin = 40;
         Genetics genetics = villager.getGenetics();
@@ -195,6 +286,8 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                     addModelSelectionWidgets(width / 2, y);
                     y += 22;
                 }
+
+                y = doubleGeneSliders(y, Genetics.VOICE_TONE, Genetics.VOICE);
 
                 //age
                 if (!villagerUUID.equals(playerUUID)) {
@@ -231,22 +324,67 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
 
                 //genes
                 if (!Config.getServerConfig().allowPlayerSizeAdjustment && villagerUUID.equals(playerUUID)) {
-                    y = doubleGeneSliders(y, Genetics.BREAST, Genetics.SKIN);
                     genetics.setGene(Genetics.SIZE, 0.80f);
                     genetics.setGene(Genetics.WIDTH, 0.80f);
                 } else {
-                    y = doubleGeneSliders(y, Genetics.SIZE, Genetics.WIDTH, Genetics.BREAST, Genetics.SKIN);
+                    addSteveProportionsButton(width / 2, y);
+                    int buttonWidth = (DATA_WIDTH - STEVE_PROPORTIONS_BUTTON_WIDTH) / 2 - 2;
+                    addGeneSlider(width / 2 + STEVE_PROPORTIONS_BUTTON_WIDTH + 2, y, buttonWidth, Genetics.SIZE);
+                    addGeneSlider(width / 2 + STEVE_PROPORTIONS_BUTTON_WIDTH + 4 + buttonWidth, y, buttonWidth, Genetics.WIDTH);
+                    y += 24;
                 }
 
-                //skin color
-                addRenderableWidget(new ColorPickerWidget(width / 2 + margin, y, DATA_WIDTH - margin * 2, DATA_WIDTH - margin * 2,
-                        genetics.getGene(Genetics.HEMOGLOBIN),
-                        genetics.getGene(Genetics.MELANIN),
-                        MCA.locate("textures/colormap/villager_skin.png"),
-                        (vx, vy) -> {
-                            genetics.setGene(Genetics.HEMOGLOBIN, vx.floatValue());
-                            genetics.setGene(Genetics.MELANIN, vy.floatValue());
+                addGeneSlider(width / 2, y, DATA_WIDTH / 2, Genetics.BREAST);
+                addRenderableWidget(new TooltipButtonWidget(width / 2 + DATA_WIDTH / 2, y, DATA_WIDTH / 2, 20,
+                        Component.translatable("gui.villager_editor.skin_color_selection", Component.translatable(hsvColoredSkin ? "gui.villager_editor.color_mode_rgb" : "gui.villager_editor.color_mode_natural")),
+                        Component.translatable("gui.villager_editor.skin_color_mode.tooltip"),
+                        b -> {
+                            hsvColoredSkin = !hsvColoredSkin;
+                            if (hsvColoredSkin) {
+                                int skinDye = villager.getSkinDye();
+                                if (skinDye == 0xFF000000) {
+                                    int naturalSkinColor = ColorPalette.SKIN.getColor(
+                                            genetics.getGene(Genetics.MELANIN),
+                                            genetics.getGene(Genetics.HEMOGLOBIN),
+                                            villager.getInfectionProgress()
+                                    );
+                                    color.setRGB(
+                                            FastColor.ARGB32.red(naturalSkinColor) / 255.0,
+                                            FastColor.ARGB32.green(naturalSkinColor) / 255.0,
+                                            FastColor.ARGB32.blue(naturalSkinColor) / 255.0
+                                    );
+                                } else {
+                                    color.setRGB(
+                                            FastColor.ARGB32.red(skinDye) / 255.0,
+                                            FastColor.ARGB32.green(skinDye) / 255.0,
+                                            FastColor.ARGB32.blue(skinDye) / 255.0
+                                    );
+                                }
+                                refreshSkinColor();
+                            } else {
+                                villager.clearSkinDye();
+                            }
+                            init();
                         }));
+                y += 24;
+
+                //skin color
+                if (hsvColoredSkin) {
+                    loadDyeIntoColorSelector(villager.getSkinDye());
+                    addRgbColorSliders(y + 8, this::refreshSkinColor);
+                } else {
+                    int pickerSize = fitColorPickerSize(y + 8, DATA_WIDTH - 20);
+                    int pickerX = width / 2 + (DATA_WIDTH - pickerSize) / 2;
+                    addRenderableWidget(new ColorPickerWidget(pickerX, y + 8, pickerSize, pickerSize,
+                            genetics.getGene(Genetics.HEMOGLOBIN),
+                            genetics.getGene(Genetics.MELANIN),
+                            MCA.locate("textures/colormap/villager_skin.png"),
+                            (vx, vy) -> {
+                                villager.clearSkinDye();
+                                genetics.setGene(Genetics.HEMOGLOBIN, vx.floatValue());
+                                genetics.setGene(Genetics.MELANIN, vy.floatValue());
+                            }));
+                }
             }
             case "clothing_style" -> {
                 addCharacterSubpageTabs(y, "clothing_style");
@@ -272,13 +410,12 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                         Component.translatable("gui.villager_editor.hair_mode.tooltip"),
                         b -> {
                             hsvColoredHair = !hsvColoredHair;
+                            if (!hsvColoredHair) {
+                                villager.clearHairDye();
+                            }
                             init();
                         }));
                 y += 22;
-
-                //genes
-                y = doubleGeneSliders(y, Genetics.FACE);
-                y = doubleGeneSliders(y, Genetics.VOICE_TONE, Genetics.VOICE);
 
                 //hair
                 addRenderableWidget(new ButtonWidget(width / 2, y, DATA_WIDTH / 2, 20, Component.translatable("gui.villager_editor.randHair"), b -> {
@@ -362,14 +499,6 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                             }));
 
                     y += 65;
-
-                    // Clear hair
-                    addRenderableWidget(new ButtonWidget(width / 2, y, DATA_WIDTH, 20,
-                            Component.translatable("gui.villager_editor.clear_hair"),
-                            b -> {
-                                villager.clearHairDye();
-                                init();
-                            }));
                 } else {
                     addRenderableWidget(new ColorPickerWidget(width / 2 + margin, y, DATA_WIDTH - margin * 2, DATA_WIDTH - margin * 2,
                             genetics.getGene(Genetics.PHEOMELANIN),
@@ -612,6 +741,70 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                 filter();
             }
         }
+
+    }
+
+    private void addPreviewRotationWidgets() {
+        boolean selectionPage = isSelectionPage();
+        int centerX = selectionPage ? width / 2 : width / 2 - DATA_WIDTH / 2;
+        if (selectionPage) {
+            addPreviewControlRow(centerX, height / 2 - 76, 22, 14, 0);
+        } else {
+            addPreviewControlRow(centerX, height / 2 + 75, 28, 20, 2);
+        }
+    }
+
+    private void addPreviewControlRow(int centerX, int y, int buttonWidth, int buttonHeight, int gap) {
+        int step = buttonWidth + gap;
+        int rowWidth = 5 * buttonWidth + 4 * gap;
+        int x = centerX - rowWidth / 2;
+
+        addRenderableWidget(new ButtonWidget(x, y, buttonWidth, buttonHeight, Component.literal("-"), b -> zoomPreview(-0.1F)));
+        addRenderableWidget(new ButtonWidget(x + step, y, buttonWidth, buttonHeight, Component.literal("<"), b -> rotatePreview(22.5F)));
+        addRenderableWidget(new ToggleableTooltipButtonWidget(
+                x + step * 2,
+                y,
+                buttonWidth,
+                buttonHeight,
+                previewFollowsMouse,
+                Component.literal("M"),
+                Component.translatable("gui.villager_editor.preview_mouse_follow.tooltip"),
+                b -> {
+                    previewFollowsMouse = !previewFollowsMouse;
+                    setPage(page);
+                }
+        ));
+        addRenderableWidget(new ButtonWidget(x + step * 3, y, buttonWidth, buttonHeight, Component.literal(">"), b -> rotatePreview(-22.5F)));
+        addRenderableWidget(new ButtonWidget(x + step * 4, y, buttonWidth, buttonHeight, Component.literal("+"), b -> zoomPreview(0.1F)));
+        addPreviewControlRowExtraButtons(x + rowWidth + gap, y, buttonWidth, buttonHeight);
+    }
+
+    private void addPreviewControlRowExtraButtons(int x, int y, int buttonWidth, int buttonHeight) {
+        if (!page.equals("clothing")) {
+            return;
+        }
+
+        addRenderableWidget(new ToggleableTooltipButtonWidget(
+                x + 8,
+                y,
+                buttonWidth,
+                buttonHeight,
+                villager.isClothingLocked(),
+                Component.literal("L"),
+                Component.translatable("gui.villager_editor.clothing_lock.tooltip"),
+                b -> {
+                    villager.setClothingLocked(!villager.isClothingLocked());
+                    syncVillagerData();
+                    setPage(page);
+                }
+        ));
+    }
+
+    private void refreshSkinColor() {
+        if (villager.getSkinDye() == 0xFF000000) {
+            color.setHSV(0.0, 0.5, 0.5);
+        }
+        villager.setSkinDye(getSelectedDye());
     }
 
     private void refreshHairColor() {
@@ -696,6 +889,10 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
 
     private static float nonZeroColorChannel(double value) {
         return Math.max(1.0f / 255.0f, (float) value);
+    }
+
+    private int fitColorPickerSize(int y, int preferredSize) {
+        return Math.max(48, Math.min(preferredSize, height - y - 8));
     }
 
     private int geneChanger(int y, Genetics.GeneType gene, int maxCount) {
@@ -1109,31 +1306,31 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     void addModelSelectionWidgets(int x, int y) {
         if (allowPlayerModel && allowVillagerModel) {
             villagerSkinWidget = addRenderableWidget(new TooltipButtonWidget(x, y, DATA_WIDTH / 3, 20, "gui.villager_editor.villager_skin", b -> {
-                villagerData.putInt("PlayerModel", VillagerLike.PlayerModel.VILLAGER.ordinal());
+                setSelectedPlayerModel(VillagerLike.PlayerModel.VILLAGER);
                 syncVillagerData();
                 playerSkinWidget.active = true;
                 villagerSkinWidget.active = false;
                 vanillaSkinWidget.active = true;
             }));
-            villagerSkinWidget.active = villagerData.getInt("PlayerModel") != VillagerLike.PlayerModel.VILLAGER.ordinal();
+            villagerSkinWidget.active = getSelectedPlayerModel() != VillagerLike.PlayerModel.VILLAGER;
 
             playerSkinWidget = addRenderableWidget(new TooltipButtonWidget(x + DATA_WIDTH / 3, y, DATA_WIDTH / 3, 20, "gui.villager_editor.player_skin", b -> {
-                villagerData.putInt("PlayerModel", VillagerLike.PlayerModel.PLAYER.ordinal());
+                setSelectedPlayerModel(VillagerLike.PlayerModel.PLAYER);
                 syncVillagerData();
                 playerSkinWidget.active = false;
                 villagerSkinWidget.active = true;
                 vanillaSkinWidget.active = true;
             }));
-            playerSkinWidget.active = villagerData.getInt("PlayerModel") != VillagerLike.PlayerModel.PLAYER.ordinal();
+            playerSkinWidget.active = getSelectedPlayerModel() != VillagerLike.PlayerModel.PLAYER;
 
             vanillaSkinWidget = addRenderableWidget(new TooltipButtonWidget(x + DATA_WIDTH / 3 * 2, y, DATA_WIDTH / 3, 20, "gui.villager_editor.vanilla_skin", b -> {
-                villagerData.putInt("PlayerModel", VillagerLike.PlayerModel.VANILLA.ordinal());
+                setSelectedPlayerModel(VillagerLike.PlayerModel.VANILLA);
                 syncVillagerData();
                 villagerSkinWidget.active = true;
                 playerSkinWidget.active = true;
                 vanillaSkinWidget.active = false;
             }));
-            vanillaSkinWidget.active = villagerData.getInt("PlayerModel") != VillagerLike.PlayerModel.VANILLA.ordinal();
+            vanillaSkinWidget.active = getSelectedPlayerModel() != VillagerLike.PlayerModel.VANILLA;
         } else {
             addRenderableWidget(new TooltipButtonWidget(x, y, DATA_WIDTH, 20, "gui.villager_editor.model_blacklist_hint", b -> {
             })).active = false;
@@ -1161,6 +1358,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         if (page.equals("clothing") && (hoveredClothingId >= 0 && filteredClothing.size() > hoveredClothingId)) {
             villager.setClothes(filteredClothing.get(hoveredClothingId));
+            markClothingSelected();
             setPage("clothing_style");
             eventCallback("clothing");
             return true;
@@ -1191,7 +1389,80 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
             return true;
         }
 
+        if (button == 0 && isMouseOverMainPreview(mouseX, mouseY)) {
+            draggingPreview = true;
+        }
+
         return super.mouseClicked(mouseX, mouseY, button);
+    }
+
+    @Override
+    public boolean mouseReleased(double mouseX, double mouseY, int button) {
+        if (button == 0) {
+            draggingPreview = false;
+        }
+        return super.mouseReleased(mouseX, mouseY, button);
+    }
+
+    @Override
+    public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
+        if (button == 0 && draggingPreview) {
+            rotatePreview((float)-dragX);
+            return true;
+        }
+        return super.mouseDragged(mouseX, mouseY, button, dragX, dragY);
+    }
+
+    @Override
+    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+        if (isMouseOverMainPreview(mouseX, mouseY)) {
+            zoomPreview((float)scrollY * 0.1F);
+            return true;
+        }
+        return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
+    }
+
+    @Override
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (acceptsPreviewRotationInput()) {
+            if (keyCode == GLFW.GLFW_KEY_A || keyCode == GLFW.GLFW_KEY_LEFT) {
+                rotatePreviewLeft = true;
+                return true;
+            }
+            if (keyCode == GLFW.GLFW_KEY_D || keyCode == GLFW.GLFW_KEY_RIGHT) {
+                rotatePreviewRight = true;
+                return true;
+            }
+            if (keyCode == GLFW.GLFW_KEY_R) {
+                previewZoom = 1.0F;
+                previewRotation = 0.0F;
+                return true;
+            }
+        }
+        return super.keyPressed(keyCode, scanCode, modifiers);
+    }
+
+    @Override
+    public boolean keyReleased(int keyCode, int scanCode, int modifiers) {
+        if (keyCode == GLFW.GLFW_KEY_A || keyCode == GLFW.GLFW_KEY_LEFT) {
+            rotatePreviewLeft = false;
+        } else if (keyCode == GLFW.GLFW_KEY_D || keyCode == GLFW.GLFW_KEY_RIGHT) {
+            rotatePreviewRight = false;
+        }
+        return super.keyReleased(keyCode, scanCode, modifiers);
+    }
+
+    @Override
+    public void tick() {
+        super.tick();
+        villager.tickCount++;
+        villagerVisualization.tickCount++;
+        if (rotatePreviewLeft) {
+            rotatePreview(6.0F);
+        }
+        if (rotatePreviewRight) {
+            rotatePreview(-6.0F);
+        }
     }
 
     protected void eventCallback(String event) {
@@ -1199,11 +1470,37 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     }
 
     protected boolean shouldUsePlayerModel() {
-        return false;
+        return getSelectedPlayerModel() != VillagerLike.PlayerModel.VILLAGER && page.equals("general");
     }
 
     protected boolean shouldPrintPlayerHint() {
         return true;
+    }
+
+    private boolean acceptsPreviewRotationInput() {
+        return !page.equals("loading") && !(getFocused() instanceof EditBox);
+    }
+
+    private void rotatePreview(float degrees) {
+        previewRotation = (previewRotation + degrees) % 360.0F;
+    }
+
+    private void zoomPreview(float amount) {
+        previewZoom = Mth.clamp(previewZoom + amount, MIN_PREVIEW_ZOOM, MAX_PREVIEW_ZOOM);
+    }
+
+    private boolean isMouseOverPreview(double mouseX, double mouseY) {
+        if (isSelectionPage()) {
+            return mouseY >= height / 2.0 - 90 && mouseY <= height / 2.0 + 75;
+        }
+
+        int x = width / 2 - DATA_WIDTH;
+        int y = height / 2;
+        return mouseX >= x && mouseX <= x + DATA_WIDTH && mouseY >= y - 75 && mouseY <= y + 75;
+    }
+
+    private boolean isMouseOverMainPreview(double mouseX, double mouseY) {
+        return !isSelectionPage() && isMouseOverPreview(mouseX, mouseY);
     }
 
     @Override
@@ -1215,19 +1512,20 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         }
 
         villager.tickCount = (int) (System.currentTimeMillis() / 50L);
+        villagerVisualization.tickCount = villager.tickCount;
 
         if (shouldDrawEntity()) {
             int x = width / 2 - DATA_WIDTH;
             int y = height / 2;
             if (villagerUUID.equals(playerUUID) && shouldUsePlayerModel()) {
                 assert Minecraft.getInstance().player != null;
-                InventoryScreen.renderEntityInInventoryFollowsMouse(context, x, y - 75, x + DATA_WIDTH, y + 75, 60, 0, mouseX, mouseY, Minecraft.getInstance().player);
+                renderPreviewEntity(context, x, y - 75, x + DATA_WIDTH, y + 75, 60, mouseX, mouseY, Minecraft.getInstance().player, 0.0F);
             } else {
-                InventoryScreen.renderEntityInInventoryFollowsMouse(context, x, y - 75, x + DATA_WIDTH, y + 75, 60, 0, mouseX, mouseY, villager);
+                renderPreviewEntity(context, x, y - 75, x + DATA_WIDTH, y + 75, 60, mouseX, mouseY, villager, 0.0F);
             }
 
             // hint for confused people
-            if (shouldPrintPlayerHint() && villagerUUID.equals(playerUUID) && villagerData.getInt("PlayerModel") != VillagerLike.PlayerModel.VILLAGER.ordinal()) {
+            if (shouldPrintPlayerHint() && villagerUUID.equals(playerUUID) && getSelectedPlayerModel() != VillagerLike.PlayerModel.VILLAGER) {
                 final PoseStack matrices = context.pose();
                 matrices.pushPose();
                 matrices.translate(x, y - 145, 0);
@@ -1248,54 +1546,80 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
             List<String> selection = getFilteredSelection();
             int itemsPerPage = getSelectionItemsPerPage();
             int totalOnPage = Math.min(itemsPerPage, Math.max(0, selection.size() - clothingPage * itemsPerPage));
+            int row0Count = Math.min(totalOnPage, isLayeredHairPage() ? LAYERED_HAIR_PER_PAGE : CLOTHES_H);
+            int row1Count = Math.max(0, totalOnPage - row0Count);
 
-            if (isLayeredHairPage()) {
-                LayeredHair.Category category = getLayeredHairCategory();
-                for (int i = 0; i < totalOnPage; i++) {
-                    int index = clothingPage * itemsPerPage + i;
-                    villagerVisualization.setHair("");
-                    villagerVisualization.setLayeredHair(category, selection.get(index));
+            for (int i = 0; i < totalOnPage; i++) {
+                int index = clothingPage * itemsPerPage + i;
+                int row = i < row0Count ? 0 : 1;
+                int column = row == 0 ? i : i - row0Count;
+                int countInRow = row == 0 ? row0Count : row1Count;
 
-                    int cx = width / 2 + (int) ((i - totalOnPage / 2.0 + 0.5) * 56);
-                    int cy = height / 2 + 8;
-                    if (Math.abs(cx - mouseX) <= 25 && Math.abs(cy - mouseY) <= 60) {
-                        hoveredClothingId = index;
-                    }
-
-                    InventoryScreen.renderEntityInInventoryFollowsMouse(context, cx - 25, cy - 60, cx + 25, cy + 60,
-                            (hoveredClothingId == index) ? 45 : 40, 0, mouseX, mouseY, villagerVisualization);
-                }
-            } else {
-                int i = 0;
-                for (int y = 0; y < CLOTHES_V; y++) {
-                    for (int x = 0; x < CLOTHES_H + y; x++) {
-                        int index = clothingPage * CLOTHES_PER_PAGE + i;
-                        if (selection.size() > index) {
-                            if (page.equals("clothing")) {
-                                villagerVisualization.setClothes(selection.get(index));
-                            } else if (page.equals("hair")) {
-                                applyHairStyle(villagerVisualization, selection.get(index));
-                            } else {
-                                villagerVisualization.setSkin(selection.get(index));
-                            }
-
-                            int cx = width / 2 + (int) ((x - CLOTHES_H / 2.0 + 0.5 - 0.5 * (y % 2)) * 40);
-                            int cy = height / 2 + (int) ((y - CLOTHES_V / 2.0 + 0.5) * 65);
-
-                            if (Math.abs(cx - mouseX) <= 20 && Math.abs(cy - mouseY + 5) <= 30) {
-                                hoveredClothingId = index;
-                            }
-
-                            InventoryScreen.renderEntityInInventoryFollowsMouse(context, cx - 20, cy - 25, cx + 20, cy + 40,
-                                    (hoveredClothingId == index) ? 35 : 30, 0, mouseX, mouseY, villagerVisualization);
-                            i++;
-                        } else {
-                            break;
-                        }
+                switch (page) {
+                    case "clothing" -> villagerVisualization.setClothes(selection.get(index));
+                    case "hair" -> applyHairStyle(villagerVisualization, selection.get(index));
+                    case "skin" -> villagerVisualization.setSkin(selection.get(index));
+                    default -> {
+                        villagerVisualization.setHair("");
+                        villagerVisualization.setLayeredHair(getLayeredHairCategory(), selection.get(index));
                     }
                 }
+
+                boolean layeredHairSelection = isLayeredHairPage();
+                int spacing = layeredHairSelection ? 56 : 40;
+                int cx = width / 2 + (int) ((column - countInRow / 2.0 + 0.5 - 0.5 * (row % 2)) * spacing);
+                int cy = layeredHairSelection ? height / 2 + 8 : height / 2 + (int) ((row - CLOTHES_V / 2.0 + 0.5) * 65);
+
+                int rx = layeredHairSelection ? 25 : 20;
+                int ry0 = layeredHairSelection ? 60 : 25;
+                int ry1 = layeredHairSelection ? 60 : 40;
+
+                int x0 = cx - rx;
+                int y0 = cy - ry0;
+                int x1 = cx + rx;
+                int y1 = cy + ry1;
+
+                int hoverYMax = layeredHairSelection ? y1 : y1 - 5;
+                if (mouseX >= x0 && mouseX <= x1 && mouseY >= y0 && mouseY <= hoverYMax) {
+                    hoveredClothingId = index;
+                }
+
+                float rotationOffset = layeredHairSelection && getLayeredHairCategory() == LayeredHair.Category.BACK ? 180.0F : 0.0F;
+                renderPreviewEntity(
+                        context,
+                        x0,
+                        y0,
+                        x1,
+                        y1,
+                        (hoveredClothingId == index) ? (layeredHairSelection ? 45 : 35) : (layeredHairSelection ? 40 : 30),
+                        mouseX,
+                        mouseY,
+                        villagerVisualization,
+                        rotationOffset
+                );
             }
         }
+    }
+
+    private void renderPreviewEntity(GuiGraphics context, int x0, int y0, int x1, int y1, int size, float mouseX, float mouseY, LivingEntity entity, float rotationOffset) {
+        float centerX = (x0 + x1) / 2.0F;
+        float centerY = (y0 + y1) / 2.0F;
+        float renderMouseX = previewFollowsMouse ? mouseX : centerX;
+        float renderMouseY = previewFollowsMouse ? mouseY : centerY;
+        renderMouseX -= (previewRotation + rotationOffset) * 2.0F;
+
+        InventoryScreen.renderEntityInInventoryFollowsMouse(
+                context,
+                x0,
+                y0,
+                x1,
+                y1,
+                Math.max(1, Math.round(size * previewZoom)),
+                0,
+                renderMouseX,
+                renderMouseY,
+                entity
+        );
     }
 
     protected boolean shouldDrawEntity() {
@@ -1319,7 +1643,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     public void setVillagerData(CompoundTag villagerData) {
         if (villager != null) {
             this.villagerData = villagerData;
-            villager.load(villagerData);
+            villager.readAdditionalSaveDataForEditor(villagerData);
 
             int hairDye = villager.getHairDye();
             int skinDye = villager.getSkinDye();
@@ -1341,7 +1665,15 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
             } else {
                 initialDye = hairDye;
             }
-            loadDyeIntoColorSelector(initialDye);
+            int currentPick = FastColor.ARGB32.color(
+                    255,
+                    Mth.clamp((int)Math.round(color.red), 0, 255),
+                    Mth.clamp((int)Math.round(color.green), 0, 255),
+                    Mth.clamp((int)Math.round(color.blue), 0, 255)
+            );
+            if (initialDye != currentPick) {
+                loadDyeIntoColorSelector(initialDye);
+            }
 
             villagerBreedingAge = villagerData.getInt("Age");
             villager.setAge(villagerBreedingAge);
@@ -1354,7 +1686,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         if (page.equals("loading")) {
             setPage("general");
         } else {
-            setPage(page);
+            rebuildCurrentPageFromData();
         }
     }
 
@@ -1363,22 +1695,100 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     }
 
     public void syncVillagerData() {
-        CompoundTag nbt = villagerData;
-        villager.save(nbt);
+        CompoundTag nbt = saveEntityData(villager);
+        copyEditorFields(nbt,
+                "FamilyTreeNewFatherName",
+                "FamilyTreeNewMotherName",
+                "FamilyTreeNewSpouseName",
+                "VillagerDataFinalized"
+        );
+        copyEditorMcaFields(nbt, "PlayerModel");
         nbt.putInt("Age", villagerBreedingAge);
         Network.sendToServer(new VillagerEditorSyncRequest("sync", villagerUUID, nbt));
+    }
+
+    void markClothingSelected() {
+        villager.setClothingLocked(true);
     }
 
     @Override
     public void skinListUpdatedCallback() {
         filter();
-        setPage(page);
+        rebuildCurrentPageFromData();
     }
 
     protected void applyHairStyle(VillagerLike<?> villager, String styleId) {
         HairStyle style = ClientSkinCatalog.hairStyles().get(styleId);
         if (style != null) {
             villager.setHairStyle(style);
+        }
+    }
+
+    protected void rebuildCurrentPageFromData() {
+        setPage(page);
+    }
+
+    protected VillagerLike.PlayerModel getSelectedPlayerModel() {
+        if (villagerData == null) {
+            return VillagerLike.PlayerModel.VILLAGER;
+        }
+        return VillagerLike.PlayerModel.byId(getMcaData(villagerData).getInt("PlayerModel"));
+    }
+
+    private void setSelectedPlayerModel(VillagerLike.PlayerModel playerModel) {
+        if (villagerData != null) {
+            getOrCreateMcaData(villagerData).putInt("PlayerModel", playerModel.ordinal());
+        }
+    }
+
+    private void copyEditorFields(CompoundTag target, String... keys) {
+        if (villagerData == null) {
+            return;
+        }
+        for (String key : keys) {
+            if (villagerData.contains(key)) {
+                target.put(key, Objects.requireNonNull(villagerData.get(key)).copy());
+            }
+        }
+    }
+
+    private void copyEditorMcaFields(CompoundTag target, String... keys) {
+        if (villagerData == null) {
+            return;
+        }
+        CompoundTag source = getMcaData(villagerData);
+        for (String key : keys) {
+            if (source.contains(key)) {
+                getOrCreateMcaData(target).put(key, Objects.requireNonNull(source.get(key)).copy());
+            }
+        }
+    }
+
+    private CompoundTag getMcaData(CompoundTag data) {
+        return data.contains(VillagerEntityMCA.MCA_DATA_KEY, 10) ? data.getCompound(VillagerEntityMCA.MCA_DATA_KEY) : data;
+    }
+
+    private CompoundTag getOrCreateMcaData(CompoundTag data) {
+        if (!data.contains(VillagerEntityMCA.MCA_DATA_KEY, 10)) {
+            CompoundTag mcaData = new CompoundTag();
+            if (data.contains("Gender")) {
+                mcaData.putInt("Gender", data.getInt("Gender"));
+            }
+            data.put(VillagerEntityMCA.MCA_DATA_KEY, mcaData);
+        }
+        return data.getCompound(VillagerEntityMCA.MCA_DATA_KEY);
+    }
+
+    private CompoundTag saveEntityData(VillagerEntityMCA entity) {
+        CompoundTag nbt = new CompoundTag();
+        entity.save(nbt);
+        return nbt;
+    }
+
+    void applyLibraryHair(String hairId) {
+        villager.setHairStyle(HairStyle.singleLayer(hairId, villager.getGenetics().getGender(), 1.0F));
+        if (isLayeredHairPage()) {
+            setPage("hair_advanced");
         }
     }
 

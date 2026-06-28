@@ -20,7 +20,7 @@ public class LimitedVillagerEditorScreen extends VillagerEditorScreen {
 
     @Override
     protected boolean shouldUsePlayerModel() {
-        return villagerData.getInt("PlayerModel") != VillagerLike.PlayerModel.VILLAGER.ordinal();
+        return getSelectedPlayerModel() != VillagerLike.PlayerModel.VILLAGER;
     }
 
     @Override

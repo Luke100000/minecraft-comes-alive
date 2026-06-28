@@ -119,11 +119,11 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
     }
 
     public CompoundTag getEntityData() {
-        return entityData;
+        return entityData.copy();
     }
 
     public void setEntityData(CompoundTag entityData) {
-        this.entityData = entityData;
+        this.entityData = entityData.copy();
         setDirty();
     }
 
@@ -212,7 +212,15 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
 
     @Override
     public Gender getGender() {
-        return Gender.byId(getEntityData().getInt("gender"));
+        CompoundTag entityData = getEntityData();
+        CompoundTag mcaData = entityData.contains(VillagerEntityMCA.MCA_DATA_KEY, 10) ? entityData.getCompound(VillagerEntityMCA.MCA_DATA_KEY) : entityData;
+        if (mcaData.contains("Gender")) {
+            return Gender.byId(mcaData.getInt("Gender"));
+        }
+        if (entityData.contains("gender")) {
+            return Gender.byId(entityData.getInt("gender"));
+        }
+        return Gender.UNASSIGNED;
     }
 
     @Override
