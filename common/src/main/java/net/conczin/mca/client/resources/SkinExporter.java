@@ -14,8 +14,8 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.Identifier;
-import net.minecraft.util.ARGB;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.FastColor;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -39,16 +39,16 @@ public class SkinExporter {
                 }
 
                 // 1. Base skin
-                Identifier skinId = getSkin(visuals);
+                ResourceLocation skinId = getSkin(visuals);
                 int skinColor = getSkinColor(visuals);
                 composite(base, skinId, skinColor);
                 
                 // 2. Face
-                Identifier faceId = getFace(visuals);
+                ResourceLocation faceId = getFace(visuals);
                 composite(base, faceId, 0xFFFFFFFF);
                 
                 // 3. Clothing
-                Identifier clothesId = getClothes(visuals);
+                ResourceLocation clothesId = getClothes(visuals);
                 composite(base, clothesId, 0xFFFFFFFF);
                 
                 // 4. Hair
@@ -63,21 +63,21 @@ public class SkinExporter {
                     }) {
                         String identifier = visuals.layeredHair(category);
                         if (!MCA.isBlankString(identifier)) {
-                            composite(base, Identifier.parse(identifier), hairColor);
+                            composite(base, ResourceLocation.parse(identifier), hairColor);
                         }
                     }
                 } else {
                     String hair = visuals.hair();
                     if (!MCA.isBlankString(hair)) {
-                        Identifier texture = hair.startsWith("immersive_library:") 
+                        ResourceLocation texture = hair.startsWith("immersive_library:") 
                             ? SkinCache.getTextureIdentifier(Integer.parseInt(hair.substring(18)))
-                            : Identifier.parse(hair);
+                            : ResourceLocation.parse(hair);
                         int hairColor = getHairColor(visuals);
                         composite(base, texture, hairColor);
                         
                         if (!hair.startsWith("immersive_library:")) {
                             // Overlay
-                            Identifier overlay = Identifier.parse(hair.replace(".png", "_overlay.png"));
+                            ResourceLocation overlay = ResourceLocation.parse(hair.replace(".png", "_overlay.png"));
                             composite(base, overlay, 0xFFFFFFFF);
                         }
                     }
@@ -132,12 +132,12 @@ public class SkinExporter {
         }
     }
 
-    private static Identifier getSkin(VillagerVisuals visuals) {
+    private static ResourceLocation getSkin(VillagerVisuals visuals) {
         if (!MCA.isBlankString(visuals.skin())) {
-            return Identifier.parse(visuals.skin());
+            return ResourceLocation.parse(visuals.skin());
         }
         int skin = (int) Math.min(4, Math.max(0, visuals.skinGene() * 5));
-        return Identifier.fromNamespaceAndPath("mca", "skins/skin/" + visuals.genderDataName() + "/" + skin + ".png");
+        return ResourceLocation.fromNamespaceAndPath("mca", "skins/skin/" + visuals.genderDataName() + "/" + skin + ".png");
     }
 
     private static int getSkinColor(VillagerVisuals visuals) {
@@ -156,17 +156,17 @@ public class SkinExporter {
         );
     }
 
-    private static Identifier getFace(VillagerVisuals visuals) {
+    private static ResourceLocation getFace(VillagerVisuals visuals) {
         Gender gender = Gender.byName(visuals.genderDataName());
         FaceList list = FaceList.getInstance();
         if (list == null) {
             int index = (int) Math.min(21, Math.max(0, visuals.faceGene() * 22));
-            return Identifier.fromNamespaceAndPath("mca", "skins/face/normal/" + visuals.genderDataName() + "/" + index + ".png");
+            return ResourceLocation.fromNamespaceAndPath("mca", "skins/face/normal/" + visuals.genderDataName() + "/" + index + ".png");
         }
         return list.pick("normal", gender, visuals.faceGene(), "");
     }
 
-    private static Identifier getClothes(VillagerVisuals visuals) {
+    private static ResourceLocation getClothes(VillagerVisuals visuals) {
         String identifier = visuals.clothes();
         if (MCA.isBlankString(identifier)) {
             return null;
@@ -174,7 +174,7 @@ public class SkinExporter {
         if (identifier.startsWith("immersive_library:")) {
             return SkinCache.getTextureIdentifier(Integer.parseInt(identifier.substring(18)));
         }
-        return Identifier.parse(identifier);
+        return ResourceLocation.parse(identifier);
     }
 
     private static int getHairColor(VillagerVisuals visuals) {
@@ -190,7 +190,7 @@ public class SkinExporter {
         );
     }
 
-    private static NativeImage loadTexture(Identifier id) {
+    private static NativeImage loadTexture(ResourceLocation id) {
         if (id.getNamespace().equals("immersive_library")) {
             try {
                 int contentId = Integer.parseInt(id.getPath());
@@ -217,16 +217,16 @@ public class SkinExporter {
         return null;
     }
 
-    private static void composite(NativeImage base, Identifier layerId, int tintColor) {
+    private static void composite(NativeImage base, ResourceLocation layerId, int tintColor) {
         if (layerId == null) return;
         NativeImage overlay = loadTexture(layerId);
         if (overlay == null) return;
         
         try {
-            int tr = ARGB.red(tintColor);
-            int tg = ARGB.green(tintColor);
-            int tb = ARGB.blue(tintColor);
-            int ta = ARGB.alpha(tintColor);
+            int tr = FastColor.ARGB32.red(tintColor);
+            int tg = FastColor.ARGB32.green(tintColor);
+            int tb = FastColor.ARGB32.blue(tintColor);
+            int ta = FastColor.ARGB32.alpha(tintColor);
 
             int width = Math.min(base.getWidth(), overlay.getWidth());
             int height = Math.min(base.getHeight(), overlay.getHeight());
@@ -234,33 +234,33 @@ public class SkinExporter {
             for (int x = 0; x < width; x++) {
                 for (int y = 0; y < height; y++) {
                     int overPixel = overlay.getPixel(x, y);
-                    int overAlpha = ARGB.alpha(overPixel);
+                    int overAlpha = FastColor.ARGB32.alpha(overPixel);
                     if (overAlpha == 0) {
                         continue;
                     }
                     
-                    int overR = (ARGB.red(overPixel) * tr) / 255;
-                    int overG = (ARGB.green(overPixel) * tg) / 255;
-                    int overB = (ARGB.blue(overPixel) * tb) / 255;
+                    int overR = (FastColor.ARGB32.red(overPixel) * tr) / 255;
+                    int overG = (FastColor.ARGB32.green(overPixel) * tg) / 255;
+                    int overB = (FastColor.ARGB32.blue(overPixel) * tb) / 255;
                     int overA = (overAlpha * ta) / 255;
                     
                     if (overA == 0) {
                         continue;
                     } else if (overA == 255) {
-                        base.setPixel(x, y, ARGB.color(255, overR, overG, overB));
+                        base.setPixel(x, y, FastColor.ARGB32.color(255, overR, overG, overB));
                     } else {
                         int basePixel = base.getPixel(x, y);
-                        int baseAlpha = ARGB.alpha(basePixel);
-                        int baseR = ARGB.red(basePixel);
-                        int baseG = ARGB.green(basePixel);
-                        int baseB = ARGB.blue(basePixel);
+                        int baseAlpha = FastColor.ARGB32.alpha(basePixel);
+                        int baseR = FastColor.ARGB32.red(basePixel);
+                        int baseG = FastColor.ARGB32.green(basePixel);
+                        int baseB = FastColor.ARGB32.blue(basePixel);
                         
                         int outAlpha = overA + (baseAlpha * (255 - overA)) / 255;
                         if (outAlpha > 0) {
                             int outR = (overR * overA + baseR * baseAlpha * (255 - overA) / 255) / outAlpha;
                             int outG = (overG * overA + baseG * baseAlpha * (255 - overA) / 255) / outAlpha;
                             int outB = (overB * overA + baseB * baseAlpha * (255 - overA) / 255) / outAlpha;
-                            base.setPixel(x, y, ARGB.color(outAlpha, outR, outG, outB));
+                            base.setPixel(x, y, FastColor.ARGB32.color(outAlpha, outR, outG, outB));
                         }
                     }
                 }
