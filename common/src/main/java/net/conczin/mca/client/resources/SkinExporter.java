@@ -2,12 +2,12 @@ package net.conczin.mca.client.resources;
 
 import com.mojang.blaze3d.platform.NativeImage;
 import net.conczin.mca.MCA;
-import net.conczin.mca.client.render.VillagerVisuals;
+import net.conczin.mca.client.resources.ColorPalette;
 import net.conczin.mca.entity.VillagerEntityMCA;
+import net.conczin.mca.entity.ai.Genetics;
+import net.conczin.mca.entity.ai.Traits;
 import net.conczin.mca.entity.ai.relationship.Gender;
-import net.conczin.mca.resources.BodySkinList;
 import net.conczin.mca.resources.FaceList;
-import net.conczin.mca.resources.data.skin.BodySkin;
 import net.conczin.mca.resources.data.skin.LayeredHair;
 import net.conczin.mca.client.gui.immersive_library.SkinCache;
 import net.minecraft.ChatFormatting;
@@ -28,32 +28,30 @@ public class SkinExporter {
 
     public static void export(VillagerEntityMCA villager, String customName) {
         try {
-            VillagerVisuals visuals = VillagerVisuals.capture(villager);
-            
             try (NativeImage base = new NativeImage(64, 64, false)) {
                 // Clear base canvas to transparent black
                 for (int x = 0; x < 64; x++) {
                     for (int y = 0; y < 64; y++) {
-                        base.setPixel(x, y, 0);
+                        base.setPixelRGBA(x, y, 0);
                     }
                 }
 
                 // 1. Base skin
-                ResourceLocation skinId = getSkin(visuals);
-                int skinColor = getSkinColor(visuals);
+                ResourceLocation skinId = getSkin(villager);
+                int skinColor = getSkinColor(villager);
                 composite(base, skinId, skinColor);
                 
                 // 2. Face
-                ResourceLocation faceId = getFace(visuals);
+                ResourceLocation faceId = getFace(villager);
                 composite(base, faceId, 0xFFFFFFFF);
                 
                 // 3. Clothing
-                ResourceLocation clothesId = getClothes(visuals);
+                ResourceLocation clothesId = getClothes(villager);
                 composite(base, clothesId, 0xFFFFFFFF);
                 
                 // 4. Hair
-                if (visuals.hasLayeredHair()) {
-                    int hairColor = getHairColor(visuals);
+                if (MCA.isBlankString(villager.getHair())) {
+                    int hairColor = getHairColor(villager);
                     for (LayeredHair.Category category : new LayeredHair.Category[]{
                             LayeredHair.Category.BACK,
                             LayeredHair.Category.BASE,
@@ -61,18 +59,18 @@ public class SkinExporter {
                             LayeredHair.Category.FRONT,
                             LayeredHair.Category.EXTRA
                     }) {
-                        String identifier = visuals.layeredHair(category);
+                        String identifier = villager.getLayeredHair(category);
                         if (!MCA.isBlankString(identifier)) {
                             composite(base, ResourceLocation.parse(identifier), hairColor);
                         }
                     }
                 } else {
-                    String hair = visuals.hair();
+                    String hair = villager.getHairStyleId();
                     if (!MCA.isBlankString(hair)) {
                         ResourceLocation texture = hair.startsWith("immersive_library:") 
                             ? SkinCache.getTextureIdentifier(Integer.parseInt(hair.substring(18)))
                             : ResourceLocation.parse(hair);
-                        int hairColor = getHairColor(visuals);
+                        int hairColor = getHairColor(villager);
                         composite(base, texture, hairColor);
                         
                         if (!hair.startsWith("immersive_library:")) {
@@ -110,12 +108,12 @@ public class SkinExporter {
                             .append(Component.translatable("chat.mca.open_image")
                                     .withStyle(style -> style.withColor(ChatFormatting.GREEN)
                                             .withUnderlined(true)
-                                            .withClickEvent(new ClickEvent.OpenFile(destFile))))
+                                            .withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_FILE, destFile.getAbsolutePath()))))
                             .append(Component.literal(" "))
                             .append(Component.translatable("chat.mca.open_folder")
                                     .withStyle(style -> style.withColor(ChatFormatting.GOLD)
                                             .withUnderlined(true)
-                                            .withClickEvent(new ClickEvent.OpenFile(exportDir))));
+                                            .withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_FILE, exportDir.getAbsolutePath()))));
                     
                     player.sendSystemMessage(message);
                     
@@ -132,42 +130,39 @@ public class SkinExporter {
         }
     }
 
-    private static ResourceLocation getSkin(VillagerVisuals visuals) {
-        if (!MCA.isBlankString(visuals.skin())) {
-            return ResourceLocation.parse(visuals.skin());
+    private static ResourceLocation getSkin(VillagerEntityMCA villager) {
+        if (!MCA.isBlankString(villager.getSkin())) {
+            return ResourceLocation.parse(villager.getSkin());
         }
-        int skin = (int) Math.min(4, Math.max(0, visuals.skinGene() * 5));
-        return ResourceLocation.fromNamespaceAndPath("mca", "skins/skin/" + visuals.genderDataName() + "/" + skin + ".png");
+        int skin = (int) Math.min(4, Math.max(0, villager.getGenetics().getGene(Genetics.SKIN) * 5));
+        return ResourceLocation.fromNamespaceAndPath("mca", "skins/skin/" + villager.getGenetics().getGender().getDataName() + "/" + skin + ".png");
     }
 
-    private static int getSkinColor(VillagerVisuals visuals) {
-        if (!MCA.isBlankString(visuals.skin())) {
-            BodySkinList list = BodySkinList.getInstance();
-            BodySkin skin = list == null ? null : list.get(visuals.skin());
-            if (skin == null || !skin.isTinted()) {
-                return 0xFFFFFFFF;
-            }
+    private static int getSkinColor(VillagerEntityMCA villager) {
+        int skinDye = villager.getSkinDye();
+        if (skinDye != 0xFF000000) {
+            return skinDye;
         }
-        float albinism = visuals.albinism() ? 0.1f : 1.0f;
+        float albinism = villager.getTraits().hasTrait(Traits.ALBINISM) ? 0.1f : 1.0f;
         return ColorPalette.SKIN.getColor(
-                visuals.melaninGene() * albinism,
-                visuals.hemoglobinGene() * albinism,
-                visuals.infectionProgress()
+                villager.getGenetics().getGene(Genetics.MELANIN) * albinism,
+                villager.getGenetics().getGene(Genetics.HEMOGLOBIN) * albinism,
+                villager.getInfectionProgress()
         );
     }
 
-    private static ResourceLocation getFace(VillagerVisuals visuals) {
-        Gender gender = Gender.byName(visuals.genderDataName());
+    private static ResourceLocation getFace(VillagerEntityMCA villager) {
+        Gender gender = villager.getGenetics().getGender();
         FaceList list = FaceList.getInstance();
         if (list == null) {
-            int index = (int) Math.min(21, Math.max(0, visuals.faceGene() * 22));
-            return ResourceLocation.fromNamespaceAndPath("mca", "skins/face/normal/" + visuals.genderDataName() + "/" + index + ".png");
+            int index = (int) Math.min(21, Math.max(0, villager.getGenetics().getGene(Genetics.FACE) * 22));
+            return ResourceLocation.fromNamespaceAndPath("mca", "skins/face/normal/" + gender.getDataName() + "/" + index + ".png");
         }
-        return list.pick("normal", gender, visuals.faceGene(), "");
+        return list.pick("normal", gender, villager.getGenetics().getGene(Genetics.FACE), "");
     }
 
-    private static ResourceLocation getClothes(VillagerVisuals visuals) {
-        String identifier = visuals.clothes();
+    private static ResourceLocation getClothes(VillagerEntityMCA villager) {
+        String identifier = villager.getClothes();
         if (MCA.isBlankString(identifier)) {
             return null;
         }
@@ -177,15 +172,15 @@ public class SkinExporter {
         return ResourceLocation.parse(identifier);
     }
 
-    private static int getHairColor(VillagerVisuals visuals) {
-        int hairDye = visuals.hairDye();
+    private static int getHairColor(VillagerEntityMCA villager) {
+        int hairDye = villager.getHairDye();
         if (hairDye != 0xFF000000) {
             return hairDye;
         }
-        float albinism = visuals.albinism() ? 0.1f : 1.0f;
+        float albinism = villager.getTraits().hasTrait(Traits.ALBINISM) ? 0.1f : 1.0f;
         return ColorPalette.HAIR.getColor(
-                visuals.eumelaninGene() * albinism,
-                visuals.pheomelaninGene() * albinism,
+                villager.getGenetics().getGene(Genetics.EUMELANIN) * albinism,
+                villager.getGenetics().getGene(Genetics.PHEOMELANIN) * albinism,
                 0
         );
     }
@@ -233,7 +228,7 @@ public class SkinExporter {
 
             for (int x = 0; x < width; x++) {
                 for (int y = 0; y < height; y++) {
-                    int overPixel = overlay.getPixel(x, y);
+                    int overPixel = overlay.getPixelRGBA(x, y);
                     int overAlpha = FastColor.ARGB32.alpha(overPixel);
                     if (overAlpha == 0) {
                         continue;
@@ -247,9 +242,9 @@ public class SkinExporter {
                     if (overA == 0) {
                         continue;
                     } else if (overA == 255) {
-                        base.setPixel(x, y, FastColor.ARGB32.color(255, overR, overG, overB));
+                        base.setPixelRGBA(x, y, FastColor.ARGB32.color(255, overR, overG, overB));
                     } else {
-                        int basePixel = base.getPixel(x, y);
+                        int basePixel = base.getPixelRGBA(x, y);
                         int baseAlpha = FastColor.ARGB32.alpha(basePixel);
                         int baseR = FastColor.ARGB32.red(basePixel);
                         int baseG = FastColor.ARGB32.green(basePixel);
@@ -260,7 +255,7 @@ public class SkinExporter {
                             int outR = (overR * overA + baseR * baseAlpha * (255 - overA) / 255) / outAlpha;
                             int outG = (overG * overA + baseG * baseAlpha * (255 - overA) / 255) / outAlpha;
                             int outB = (overB * overA + baseB * baseAlpha * (255 - overA) / 255) / outAlpha;
-                            base.setPixel(x, y, FastColor.ARGB32.color(outAlpha, outR, outG, outB));
+                            base.setPixelRGBA(x, y, FastColor.ARGB32.color(outAlpha, outR, outG, outB));
                         }
                     }
                 }
