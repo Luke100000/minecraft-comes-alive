@@ -44,6 +44,8 @@ import net.minecraft.util.FastColor;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.npc.VillagerProfession;
+import org.joml.Quaternionf;
+import org.joml.Vector3f;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.*;
@@ -100,6 +102,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     private float previewRotation;
     private float previewZoom = 1.0F;
     private boolean draggingPreview;
+    private long lastPreviewFrameTime = -1L;
     private boolean rotatePreviewLeft;
     private boolean rotatePreviewRight;
     private boolean previewFollowsMouse = true;
@@ -1434,9 +1437,13 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                 return true;
             }
             if (keyCode == GLFW.GLFW_KEY_R) {
-                previewZoom = 1.0F;
-                previewRotation = 0.0F;
-                return true;
+                double mouseX = minecraft.mouseHandler.xpos() * width / minecraft.getWindow().getWidth();
+                double mouseY = minecraft.mouseHandler.ypos() * height / minecraft.getWindow().getHeight();
+                if (isMouseOverPreview(mouseX, mouseY)) {
+                    previewZoom = 1.0F;
+                    previewRotation = 0.0F;
+                    return true;
+                }
             }
         }
         return super.keyPressed(keyCode, scanCode, modifiers);
@@ -1457,12 +1464,6 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         super.tick();
         villager.tickCount++;
         villagerVisualization.tickCount++;
-        if (rotatePreviewLeft) {
-            rotatePreview(6.0F);
-        }
-        if (rotatePreviewRight) {
-            rotatePreview(-6.0F);
-        }
     }
 
     protected void eventCallback(String event) {
@@ -1495,8 +1496,8 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         }
 
         int x = width / 2 - DATA_WIDTH;
-        int y = height / 2;
-        return mouseX >= x && mouseX <= x + DATA_WIDTH && mouseY >= y - 75 && mouseY <= y + 75;
+        int y = height / 2 - 8;
+        return mouseX >= x && mouseX <= x + DATA_WIDTH && mouseY >= y - 57 && mouseY <= y + 88;
     }
 
     private boolean isMouseOverMainPreview(double mouseX, double mouseY) {
@@ -1511,24 +1512,37 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
             return;
         }
 
+        long currentTime = System.currentTimeMillis();
+        if (lastPreviewFrameTime == -1L) {
+            lastPreviewFrameTime = currentTime;
+        }
+        float frameSeconds = Mth.clamp((currentTime - lastPreviewFrameTime) / 1000.0F, 0.0F, 0.1F);
+        lastPreviewFrameTime = currentTime;
+        if (rotatePreviewLeft) {
+            rotatePreview(120.0F * frameSeconds);
+        }
+        if (rotatePreviewRight) {
+            rotatePreview(-120.0F * frameSeconds);
+        }
+
         villager.tickCount = (int) (System.currentTimeMillis() / 50L);
         villagerVisualization.tickCount = villager.tickCount;
 
         if (shouldDrawEntity()) {
             int x = width / 2 - DATA_WIDTH;
-            int y = height / 2;
+            int y = height / 2 - 8;
             if (villagerUUID.equals(playerUUID) && shouldUsePlayerModel()) {
                 assert Minecraft.getInstance().player != null;
-                renderPreviewEntity(context, x, y - 75, x + DATA_WIDTH, y + 75, 60, mouseX, mouseY, Minecraft.getInstance().player, 0.0F);
+                renderPreviewEntity(context, x, y - 57, x + DATA_WIDTH, y + 88, 60, mouseX, mouseY, Minecraft.getInstance().player, 0.0F);
             } else {
-                renderPreviewEntity(context, x, y - 75, x + DATA_WIDTH, y + 75, 60, mouseX, mouseY, villager, 0.0F);
+                renderPreviewEntity(context, x, y - 57, x + DATA_WIDTH, y + 88, 60, mouseX, mouseY, villager, 0.0F);
             }
 
             // hint for confused people
             if (shouldPrintPlayerHint() && villagerUUID.equals(playerUUID) && getSelectedPlayerModel() != VillagerLike.PlayerModel.VILLAGER) {
                 final PoseStack matrices = context.pose();
                 matrices.pushPose();
-                matrices.translate(x, y - 145, 0);
+                matrices.translate(x, y - 127, 0);
                 matrices.scale(0.5f, 0.5f, 0.5f);
                 context.drawCenteredString(font, Component.translatable("gui.villager_editor.model_hint"), 0, 0, 0xAAFFFFFF);
                 matrices.popPose();
@@ -1604,22 +1618,37 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     private void renderPreviewEntity(GuiGraphics context, int x0, int y0, int x1, int y1, int size, float mouseX, float mouseY, LivingEntity entity, float rotationOffset) {
         float centerX = (x0 + x1) / 2.0F;
         float centerY = (y0 + y1) / 2.0F;
-        float renderMouseX = previewFollowsMouse ? mouseX : centerX;
-        float renderMouseY = previewFollowsMouse ? mouseY : centerY;
-        renderMouseX -= (previewRotation + rotationOffset) * 2.0F;
+        float xAngle = previewFollowsMouse ? (float)Math.atan((centerX - mouseX) / 40.0F) : 0.0F;
+        float yAngle = previewFollowsMouse ? (float)Math.atan((centerY - mouseY) / 40.0F) : 0.0F;
+        Quaternionf pose = new Quaternionf().rotateZ((float)Math.PI);
+        Quaternionf cameraOrientation = new Quaternionf().rotateX(yAngle * 20.0F * (float)(Math.PI / 180.0));
+        pose.mul(cameraOrientation);
 
-        InventoryScreen.renderEntityInInventoryFollowsMouse(
-                context,
-                x0,
-                y0,
-                x1,
-                y1,
-                Math.max(1, Math.round(size * previewZoom)),
-                0,
-                renderMouseX,
-                renderMouseY,
-                entity
-        );
+        float previousBodyRot = entity.yBodyRot;
+        float previousYRot = entity.getYRot();
+        float previousXRot = entity.getXRot();
+        float previousHeadRotO = entity.yHeadRotO;
+        float previousHeadRot = entity.yHeadRot;
+
+        float displayRotation = previewRotation + rotationOffset;
+        float followFactor = (float)Math.cos(Math.toRadians(displayRotation));
+        entity.yBodyRot = 180.0F + displayRotation + xAngle * 20.0F * followFactor;
+        entity.setYRot(180.0F + displayRotation + xAngle * 40.0F * followFactor);
+        entity.setXRot(-yAngle * 20.0F);
+        entity.yHeadRot = entity.getYRot();
+        entity.yHeadRotO = entity.getYRot();
+
+        float scale = Math.max(1.0F, size * previewZoom) / entity.getScale();
+        Vector3f translate = new Vector3f(0.0F, entity.getBbHeight() / 2.0F, 0.0F);
+        context.enableScissor(x0, y0, x1, y1);
+        InventoryScreen.renderEntityInInventory(context, centerX, centerY, scale, translate, pose, cameraOrientation, entity);
+        context.disableScissor();
+
+        entity.yBodyRot = previousBodyRot;
+        entity.setYRot(previousYRot);
+        entity.setXRot(previousXRot);
+        entity.yHeadRotO = previousHeadRotO;
+        entity.yHeadRot = previousHeadRot;
     }
 
     protected boolean shouldDrawEntity() {
@@ -1667,9 +1696,9 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
             }
             int currentPick = FastColor.ARGB32.color(
                     255,
-                    Mth.clamp((int)Math.round(color.red), 0, 255),
-                    Mth.clamp((int)Math.round(color.green), 0, 255),
-                    Mth.clamp((int)Math.round(color.blue), 0, 255)
+                    Mth.clamp((int)Math.round(color.red * 255.0), 0, 255),
+                    Mth.clamp((int)Math.round(color.green * 255.0), 0, 255),
+                    Mth.clamp((int)Math.round(color.blue * 255.0), 0, 255)
             );
             if (initialDye != currentPick) {
                 loadDyeIntoColorSelector(initialDye);
@@ -1686,7 +1715,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         if (page.equals("loading")) {
             setPage("general");
         } else {
-            rebuildCurrentPageFromData();
+            setPage(page);
         }
     }
 
