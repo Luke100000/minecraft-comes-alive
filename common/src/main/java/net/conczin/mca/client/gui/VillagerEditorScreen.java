@@ -47,8 +47,6 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.npc.VillagerProfession;
 import org.joml.Quaternionf;
 import org.joml.Vector3f;
-import net.minecraft.world.InteractionHand;
-import net.minecraft.world.item.ItemStack;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.*;
@@ -1652,11 +1650,6 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         float previousHeadRotO = entity.yHeadRotO;
         float previousHeadRot = entity.yHeadRot;
 
-        ItemStack previousMainHand = entity.getMainHandItem();
-        ItemStack previousOffHand = entity.getOffhandItem();
-        entity.setItemInHand(InteractionHand.MAIN_HAND, ItemStack.EMPTY);
-        entity.setItemInHand(InteractionHand.OFF_HAND, ItemStack.EMPTY);
-
         entity.yBodyRot = 180.0F + followXAngle * 20.0F;
         entity.yBodyRotO = entity.yBodyRot;
         entity.setYRot(180.0F + followXAngle * 40.0F);
@@ -1681,9 +1674,6 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         entity.xRotO = previousXRotO;
         entity.yHeadRotO = previousHeadRotO;
         entity.yHeadRot = previousHeadRot;
-
-        entity.setItemInHand(InteractionHand.MAIN_HAND, previousMainHand);
-        entity.setItemInHand(InteractionHand.OFF_HAND, previousOffHand);
     }
 
     protected boolean shouldDrawEntity() {
