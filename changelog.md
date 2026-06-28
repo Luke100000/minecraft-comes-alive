@@ -1,5 +1,7 @@
-# 7.7.18-beta.1
 
+# 7.7.17# 7.7.18-beta.1
+
+* Backup your world before using.
 * Beta release of the 1.21.1 content backport from 26.1.2
 * Added generated crib resources and datagen-backed recipes, advancements, and item models
 * Added updated skin, face, hair style, layered hair, and eye customization resources
@@ -12,7 +14,6 @@
 * Fixed village requirement override data being saved, loaded, and applied to rank checks
 
 
-# 7.7.17
 
 * Fixed destiny status not being saved reliably
 * Fixed Hair buttons such as previous, next or random making you bald.
