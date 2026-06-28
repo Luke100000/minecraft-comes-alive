@@ -36,7 +36,7 @@ jobs:
           cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
 
       - name: Build Fabric and NeoForge jars
-        run: ./gradlew :fabric:jar :neoforge:jar --configuration-cache --console=plain --non-interactive
+        run: ./gradlew :fabric:build :neoforge:build --configuration-cache --console=plain --non-interactive
 
       - name: Upload Fabric jars
         uses: actions/upload-artifact@v7
