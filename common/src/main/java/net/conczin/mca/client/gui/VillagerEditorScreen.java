@@ -530,7 +530,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                             Component.translatable(eyeColorTarget == 1 ? "gui.villager_editor.customize_eyes_left" : "gui.villager_editor.customize_eyes_right"),
                             b -> {
                                 eyeColorTarget = eyeColorTarget == 1 ? 2 : 1;
-                                loadDyeIntoColorSelector(eyeColorTarget == 1 ? villager.getEyeDye() : villager.getEyeLeftDye());
+                                loadDyeIntoColorSelector(eyeColorTarget == 1 ? getEditableEyeColor(false) : getEditableEyeColor(true));
                                 init();
                             }));
                 } else {
@@ -549,7 +549,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                             if (eyeColorTarget == 1) {
                                 hsvColoredEyes = !hsvColoredEyes;
                                 if (hsvColoredEyes) {
-                                    color.setHSV(0.0, 0.0, 1.0);
+                                    loadDyeIntoColorSelector(getEditableEyeColor(false));
                                     refreshEyeColor();
                                 } else {
                                     villager.clearEyeDye();
@@ -557,7 +557,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                             } else {
                                 hsvColoredEyesLeft = !hsvColoredEyesLeft;
                                 if (hsvColoredEyesLeft) {
-                                    color.setHSV(0.0, 0.0, 1.0);
+                                    loadDyeIntoColorSelector(getEditableEyeColor(true));
                                     refreshEyeLeftColor();
                                 } else {
                                     villager.clearEyeLeftDye();
@@ -818,17 +818,32 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     }
 
     private void refreshEyeColor() {
-        if (villager.getEyeDye() == 0xFFFFFFFF) {
-            color.setHSV(0.0, 0.0, 1.0);
-        }
         villager.setEyeDye(getSelectedDye());
     }
 
     private void refreshEyeLeftColor() {
-        if (villager.getEyeLeftDye() == 0xFFFFFFFF) {
-            color.setHSV(0.0, 0.0, 1.0);
-        }
         villager.setEyeLeftDye(getSelectedDye());
+    }
+
+    private int getEditableEyeColor(boolean targetLeftEye) {
+        int dye = targetLeftEye ? villager.getEyeLeftDye() : villager.getEyeDye();
+        if (dye != 0xFFFFFFFF) {
+            return dye;
+        }
+
+        boolean heterochromia = villager.getTraits().hasTrait(Traits.HETEROCHROMIA);
+        if (villager.getTraits().hasTrait(Traits.ALBINISM)) {
+            return 0xFFE8A0A0;
+        }
+
+        float eyeColor = Mth.frac(villager.getGenetics().getGene(Genetics.FACE) + (targetLeftEye && heterochromia ? 0.43F : 0.0F));
+        if (eyeColor < 0.35F) {
+            return FastColor.ARGB32.lerp(eyeColor / 0.35F, 0xFF557FA6, 0xFF5B8756);
+        }
+        if (eyeColor < 0.70F) {
+            return FastColor.ARGB32.lerp((eyeColor - 0.35F) / 0.35F, 0xFF5B8756, 0xFF8A6A35);
+        }
+        return FastColor.ARGB32.lerp((eyeColor - 0.70F) / 0.30F, 0xFF8A6A35, 0xFF4A2B18);
     }
 
     private int addRgbColorSliders(int y, Runnable onChange) {
@@ -1618,9 +1633,12 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     private void renderPreviewEntity(GuiGraphics context, int x0, int y0, int x1, int y1, int size, float mouseX, float mouseY, LivingEntity entity, float rotationOffset) {
         float centerX = (x0 + x1) / 2.0F;
         float centerY = (y0 + y1) / 2.0F;
-        float xAngle = previewFollowsMouse ? (float)Math.atan((centerX - mouseX) / 40.0F) : 0.0F;
+        float baseXAngle = previewFollowsMouse ? (float)Math.atan((centerX - mouseX) / 40.0F) : 0.0F;
         float yAngle = previewFollowsMouse ? (float)Math.atan((centerY - mouseY) / 40.0F) : 0.0F;
+        float displayRotation = previewRotation + rotationOffset;
+        float followXAngle = baseXAngle * Mth.cos(displayRotation * ((float)Math.PI / 180.0F));
         Quaternionf pose = new Quaternionf().rotateZ((float)Math.PI);
+        pose.rotateY(displayRotation * ((float)Math.PI / 180.0F));
         Quaternionf cameraOrientation = new Quaternionf().rotateX(yAngle * 20.0F * (float)(Math.PI / 180.0));
         pose.mul(cameraOrientation);
 
@@ -1630,10 +1648,8 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         float previousHeadRotO = entity.yHeadRotO;
         float previousHeadRot = entity.yHeadRot;
 
-        float displayRotation = previewRotation + rotationOffset;
-        float followFactor = (float)Math.cos(Math.toRadians(displayRotation));
-        entity.yBodyRot = 180.0F + displayRotation + xAngle * 20.0F * followFactor;
-        entity.setYRot(180.0F + displayRotation + xAngle * 40.0F * followFactor);
+        entity.yBodyRot = 180.0F + followXAngle * 20.0F;
+        entity.setYRot(180.0F + followXAngle * 40.0F);
         entity.setXRot(-yAngle * 20.0F);
         entity.yHeadRot = entity.getYRot();
         entity.yHeadRotO = entity.getYRot();
