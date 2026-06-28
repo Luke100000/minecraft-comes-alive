@@ -47,6 +47,8 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.npc.VillagerProfession;
 import org.joml.Quaternionf;
 import org.joml.Vector3f;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.item.ItemStack;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.*;
@@ -1640,7 +1642,6 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         Quaternionf pose = new Quaternionf().rotateZ((float)Math.PI);
         pose.rotateY(-displayRotation * ((float)Math.PI / 180.0F));
         Quaternionf cameraOrientation = new Quaternionf().rotateX(yAngle * 20.0F * (float)(Math.PI / 180.0));
-        pose.mul(cameraOrientation);
 
         float previousBodyRot = entity.yBodyRot;
         float previousBodyRotO = entity.yBodyRotO;
@@ -1650,6 +1651,11 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         float previousXRotO = entity.xRotO;
         float previousHeadRotO = entity.yHeadRotO;
         float previousHeadRot = entity.yHeadRot;
+
+        ItemStack previousMainHand = entity.getMainHandItem();
+        ItemStack previousOffHand = entity.getOffhandItem();
+        entity.setItemInHand(InteractionHand.MAIN_HAND, ItemStack.EMPTY);
+        entity.setItemInHand(InteractionHand.OFF_HAND, ItemStack.EMPTY);
 
         entity.yBodyRot = 180.0F + followXAngle * 20.0F;
         entity.yBodyRotO = entity.yBodyRot;
@@ -1664,6 +1670,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         Vector3f translate = new Vector3f(0.0F, entity.getBbHeight() / 2.0F, 0.0F);
         context.enableScissor(x0, y0, x1, y1);
         InventoryScreen.renderEntityInInventory(context, centerX, centerY, scale, translate, pose, cameraOrientation, entity);
+        context.flush();
         context.disableScissor();
 
         entity.yBodyRot = previousBodyRot;
@@ -1674,6 +1681,9 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         entity.xRotO = previousXRotO;
         entity.yHeadRotO = previousHeadRotO;
         entity.yHeadRot = previousHeadRot;
+
+        entity.setItemInHand(InteractionHand.MAIN_HAND, previousMainHand);
+        entity.setItemInHand(InteractionHand.OFF_HAND, previousOffHand);
     }
 
     protected boolean shouldDrawEntity() {
