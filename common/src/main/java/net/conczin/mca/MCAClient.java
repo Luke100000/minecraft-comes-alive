@@ -1,6 +1,7 @@
 package net.conczin.mca;
 
 import net.conczin.mca.client.gui.SkinLibraryScreen;
+import net.conczin.mca.client.resources.ClientSkinCatalog;
 import net.conczin.mca.client.tts.SpeechManager;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerLike;
@@ -8,6 +9,7 @@ import net.conczin.mca.network.Network;
 import net.conczin.mca.network.c2s.ConfigRequest;
 import net.conczin.mca.network.c2s.PlayerDataRequest;
 import net.minecraft.client.Minecraft;
+import net.minecraft.world.entity.player.Player;
 
 import java.util.*;
 
@@ -22,7 +24,9 @@ public class MCAClient {
     }
 
     public static void onLogin() {
+        playerData.clear();
         playerDataRequests.clear();
+        ClientSkinCatalog.clear();
         Network.sendToServer(new ConfigRequest());
     }
 
@@ -76,8 +80,11 @@ public class MCAClient {
 
         // Refresh eye height
         Minecraft client = Minecraft.getInstance();
-        if (client.player != null) {
-            client.player.refreshDimensions();
+        if (client.level != null) {
+            Player player = client.level.getPlayerByUUID(uuid);
+            if (player != null) {
+                player.refreshDimensions();
+            }
         }
     }
 

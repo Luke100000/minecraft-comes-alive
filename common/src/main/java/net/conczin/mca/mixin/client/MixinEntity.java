@@ -25,7 +25,7 @@ public abstract class MixinEntity {
                 && Config.getInstance().scaleEyeHeightWithPlayerHeight
                 && !Config.getServerConfig().scalePlayerHitboxWithSizeAndWidth) {
             MCAClient.getPlayerData(getUUID())
-                    .ifPresent(villager -> cir.setReturnValue(cir.getReturnValueF() * villager.getRawVerticalScaleFactor()));
+                    .ifPresent(villager -> cir.setReturnValue(cir.getReturnValueF() * villager.getVerticalScaleFactor()));
         }
     }
 }
