@@ -1,6 +1,9 @@
-# 7.9.5
+# 8.0.0-beta.1
 
 * Initial 26.2 port.
+* This is a beta release, recommended to backup your world.
+* Any bugs, please report them!
+
 
 # 7.9.4
 
