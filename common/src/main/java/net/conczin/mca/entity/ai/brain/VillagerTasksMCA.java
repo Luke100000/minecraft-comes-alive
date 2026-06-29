@@ -119,8 +119,13 @@ public class VillagerTasksMCA {
         } else if (brain.getMemoryInternal(MemoryModuleTypeMCA.PLAYER_FOLLOWING).isPresent()) {
             brain.addActivity(Activity.CORE, VillagerTasksMCA.getFollowingPackage());
             brain.addActivity(Activity.CORE, VillagerTasksMCA.getImportantCorePackage(0.5f));
-            brain.addActivity(Activity.CORE, VillagerTasksMCA.getSelfDefencePackage());
-            brain.addActivity(Activity.PANIC, VillagerTasksMCA.getPanicPackage(0.5F));
+            if (villager.isGuard()) {
+                brain.addActivity(Activity.CORE, VillagerTasksMCA.getGuardCorePackage(villager));
+                brain.addActivity(Activity.PANIC, VillagerTasksMCA.getGuardPanicPackage(0.5F));
+            } else {
+                brain.addActivity(Activity.CORE, VillagerTasksMCA.getSelfDefencePackage());
+                brain.addActivity(Activity.PANIC, VillagerTasksMCA.getPanicPackage(0.5F));
+            }
             noDefault = true;
         } else if (profession == ProfessionsMCA.MERCENARY) {
             brain.setSchedule(SchedulesMCA.GUESTS);
@@ -358,9 +363,14 @@ public class VillagerTasksMCA {
 
     private static boolean shouldRespondToGuardEnemy(VillagerEntityMCA villager, LivingEntity target) {
         return GuardEnemiesSensor.isGuardEnemy(target, villager)
-               && (getActivity(villager) != Activity.REST
+               && (isFollowingPlayer(villager)
+                   || getActivity(villager) != Activity.REST
                    || target.distanceTo(villager) < 8.0
                    || villager.getResidency().getHomeVillage().filter(village -> village.isWithinBorder(villager)).isEmpty());
+    }
+
+    private static boolean isFollowingPlayer(VillagerEntityMCA villager) {
+        return villager.getBrain().getMemoryInternal(MemoryModuleTypeMCA.PLAYER_FOLLOWING).isPresent();
     }
 
     private static boolean isPreferredTarget(VillagerEntityMCA villager, LivingEntity entity) {

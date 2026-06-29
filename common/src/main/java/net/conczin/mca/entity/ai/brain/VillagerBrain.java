@@ -15,7 +15,11 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.ai.behavior.EntityTracker;
+import net.minecraft.world.entity.ai.memory.MemoryModuleType;
+import net.minecraft.world.entity.ai.memory.WalkTarget;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.schedule.Activity;
 import org.jetbrains.annotations.Nullable;
@@ -192,6 +196,8 @@ public class VillagerBrain<E extends Mob & VillagerLike<E>> {
     }
 
     public void setMoveState(MoveState state, @Nullable Player leader) {
+        Optional<LivingEntity> combatWalkTarget = getCombatWalkTargetToRestore(state);
+        boolean refreshBrain = true;
         entity.setTrackedValue(MOVE_STATE, state);
         if (state == MoveState.MOVE) {
             entity.getBrain().eraseMemory(MemoryModuleTypeMCA.PLAYER_FOLLOWING);
@@ -205,9 +211,26 @@ public class VillagerBrain<E extends Mob & VillagerLike<E>> {
             entity.getBrain().setMemory(MemoryModuleTypeMCA.PLAYER_FOLLOWING, leader);
             entity.getBrain().eraseMemory(MemoryModuleTypeMCA.STAYING);
             abandonJob();
+            refreshBrain = false;
         }
 
-        resetsBrain();
+        if (refreshBrain) {
+            resetsBrain();
+        }
+        combatWalkTarget.ifPresent(this::restoreCombatWalkTarget);
+    }
+
+    private Optional<LivingEntity> getCombatWalkTargetToRestore(MoveState state) {
+        if (state == MoveState.FOLLOW && entity.asEntity() instanceof VillagerEntityMCA villager && villager.isGuard()) {
+            return villager.getBrain().getMemoryInternal(MemoryModuleType.ATTACK_TARGET)
+                    .filter(target -> target.isAlive() && target.level() == villager.level());
+        }
+        return Optional.empty();
+    }
+
+    private void restoreCombatWalkTarget(LivingEntity target) {
+        entity.getBrain().setMemory(MemoryModuleType.LOOK_TARGET, new EntityTracker(target, true));
+        entity.getBrain().setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(new EntityTracker(target, false), 0.75F, 0));
     }
 
     private void resetsBrain() {

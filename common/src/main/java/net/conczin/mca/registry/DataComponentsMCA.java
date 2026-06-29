@@ -29,6 +29,7 @@ public interface DataComponentsMCA {
     DataComponentType<Integer> BABY_AGE = register("baby_age", (b) -> b.persistent(Codec.INT).networkSynchronized(ByteBufCodecs.INT));
     DataComponentType<Integer> BABY_DROP_ATTEMPTS = register("baby_drop_attempts", (b) -> b.persistent(Codec.INT).networkSynchronized(ByteBufCodecs.INT));
     DataComponentType<Boolean> BABY_INVALIDATED = register("baby_invalidated", (b) -> b.persistent(Codec.BOOL).networkSynchronized(ByteBufCodecs.BOOL));
+    @SuppressWarnings("deprecation")
     DataComponentType<CustomData> BABY_NBT = register("baby_nbt", (b) -> b.persistent(CustomData.CODEC_WITH_ID).networkSynchronized(CustomData.STREAM_CODEC));
 
     DataComponentType<Boolean> SCYTHE_ACTIVE = register("scythe_active", (b) -> b.persistent(Codec.BOOL).networkSynchronized(ByteBufCodecs.BOOL));
