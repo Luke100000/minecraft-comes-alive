@@ -6,11 +6,7 @@ import net.conczin.mca.resources.BodySkinList;
 import net.conczin.mca.resources.ClothingList;
 import net.conczin.mca.resources.HairStyleList;
 import net.conczin.mca.resources.LayeredHairList;
-import net.conczin.mca.resources.data.skin.BodySkin;
-import net.conczin.mca.resources.data.skin.Clothing;
-import net.conczin.mca.resources.data.skin.Hair;
-import net.conczin.mca.resources.data.skin.HairStyle;
-import net.conczin.mca.resources.data.skin.LayeredHair;
+import net.conczin.mca.resources.data.skin.*;
 
 import java.util.Collections;
 import java.util.HashMap;

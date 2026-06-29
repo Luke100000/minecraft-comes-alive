@@ -1,7 +1,7 @@
 package net.conczin.mca;
 
-import net.conczin.mca.network.ClientHandler;
 import net.conczin.mca.entity.VillagerLike;
+import net.conczin.mca.network.ClientHandler;
 import net.minecraft.world.entity.player.Player;
 import org.jetbrains.annotations.Nullable;
 

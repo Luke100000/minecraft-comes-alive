@@ -8,11 +8,7 @@ import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.server.packs.resources.SimplePreparableReloadListener;
 import net.minecraft.util.profiling.ProfilerFiller;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
+import java.util.*;
 
 public class FaceList extends SimplePreparableReloadListener<Map<ResourceLocation, List<String>>> {
     public static final ResourceLocation ID = MCA.locate("eyes");

@@ -2,14 +2,13 @@ package net.conczin.mca.client.resources;
 
 import com.mojang.blaze3d.platform.NativeImage;
 import net.conczin.mca.MCA;
-import net.conczin.mca.client.resources.ColorPalette;
+import net.conczin.mca.client.gui.immersive_library.SkinCache;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.Genetics;
 import net.conczin.mca.entity.ai.Traits;
 import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.resources.FaceList;
 import net.conczin.mca.resources.data.skin.LayeredHair;
-import net.conczin.mca.client.gui.immersive_library.SkinCache;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.ClickEvent;

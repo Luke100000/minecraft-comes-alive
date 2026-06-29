@@ -1,8 +1,8 @@
 package net.conczin.mca;
 
+import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.network.ClientHandler;
 import net.conczin.mca.network.ClientHandlerImpl;
-import net.conczin.mca.entity.VillagerLike;
 
 import java.util.Optional;
 import java.util.UUID;
