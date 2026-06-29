@@ -1235,28 +1235,29 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
     @Override
     public void readAdditionalSaveData(CompoundTag nbt) {
+        CompoundTag data = flattenMcaData(nbt);
         super.readAdditionalSaveData(nbt);
 
-        getTypeDataManager().load(this, nbt);
-        relations.readFromNbt(nbt);
-        longTermMemory.readFromNbt(nbt);
+        getTypeDataManager().load(this, data);
+        relations.readFromNbt(data);
+        longTermMemory.readFromNbt(data);
 
-        playerModel = PlayerModel.byId(nbt.getInt("PlayerModel"));
+        playerModel = PlayerModel.byId(data.getInt("PlayerModel"));
 
         updateAttributes();
 
         inventory.clearContent();
-        InventoryUtils.readFromNBT(this.registryAccess(), inventory, nbt);
+        InventoryUtils.readFromNBT(this.registryAccess(), inventory, data);
 
-        if (nbt.contains("DespawnDelay")) {
-            this.despawnDelay = nbt.getInt("DespawnDelay");
+        if (data.contains("DespawnDelay")) {
+            this.despawnDelay = data.getInt("DespawnDelay");
         }
 
-        if (nbt.contains("InteractedWith")) {
-            this.interactedWith = nbt.getBoolean("InteractedWith");
+        if (data.contains("InteractedWith")) {
+            this.interactedWith = data.getBoolean("InteractedWith");
         }
 
-        if (nbt.contains("Clothes")) {
+        if (data.contains("Clothes")) {
             validateClothes();
         }
 
@@ -1267,14 +1268,18 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
     @Override
     public void readAdditionalSaveDataForEditor(CompoundTag nbt) {
+        readAdditionalSaveData(nbt);
+    }
+
+    private CompoundTag flattenMcaData(CompoundTag nbt) {
         CompoundTag merged = nbt.copy();
         if (merged.contains(MCA_DATA_KEY, 10)) {
             CompoundTag mcaData = merged.getCompound(MCA_DATA_KEY);
             for (String key : mcaData.getAllKeys()) {
-                merged.put(key, mcaData.get(key).copy());
+                merged.put(key, Objects.requireNonNull(mcaData.get(key)).copy());
             }
         }
-        readAdditionalSaveData(merged);
+        return merged;
     }
 
     @Override

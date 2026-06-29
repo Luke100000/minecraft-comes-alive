@@ -66,6 +66,25 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     private static final float STEVE_RAW_WIDTH_SCALE = 1.0F;
     private static final float STEVE_RAW_HEIGHT_SCALE = 0.9F;
     private static final ResourceLocation PREVIEW_MOUSE_FOLLOW_TEXTURE = MCA.locate("textures/gui/preview_mouse_follow.png");
+    private static final String[] MCA_VISUAL_KEYS = {
+            "Gender",
+            "Clothes",
+            "ClothingLocked",
+            "Skin",
+            "Hair",
+            "HairStyle",
+            "HairBase",
+            "HairBangs",
+            "HairBack",
+            "HairFront",
+            "HairExtra",
+            "SkinColor",
+            "HairColor",
+            "EyeColor",
+            "EyeColorLeft",
+            "AgeState",
+            "PlayerModel"
+    };
     protected final VillagerEntityMCA villager = Objects.requireNonNull(EntitiesMCA.MALE_VILLAGER.create(Objects.requireNonNull(Minecraft.getInstance().level)));
     protected final VillagerEntityMCA villagerVisualization = Objects.requireNonNull(EntitiesMCA.MALE_VILLAGER.create(Objects.requireNonNull(Minecraft.getInstance().level)));
     final UUID villagerUUID;
@@ -2005,8 +2024,10 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     private CompoundTag getOrCreateMcaData(CompoundTag data) {
         if (!data.contains(VillagerEntityMCA.MCA_DATA_KEY, 10)) {
             CompoundTag mcaData = new CompoundTag();
-            if (data.contains("Gender")) {
-                mcaData.putInt("Gender", data.getInt("Gender"));
+            for (String key : MCA_VISUAL_KEYS) {
+                if (data.contains(key)) {
+                    mcaData.put(key, Objects.requireNonNull(data.get(key)).copy());
+                }
             }
             data.put(VillagerEntityMCA.MCA_DATA_KEY, mcaData);
         }

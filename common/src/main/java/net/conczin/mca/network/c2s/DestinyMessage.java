@@ -46,10 +46,10 @@ public record DestinyMessage(String location, boolean isClosing) implements Hand
                 if (location.charAt(0) == '#') {
                     String tagId = location.substring(1);
                     WorldUtils.getClosestStructurePosition(sp.serverLevel(), sp.blockPosition(), TagKey.create(Registries.STRUCTURE, ResourceLocation.parse(tagId)), 128)
-                            .ifPresentOrElse(pos -> handleBlockPos(sp, pos), () -> notifyDestinationNotFound(sp));
+                            .ifPresentOrElse(pos -> sp.server.execute(() -> handleBlockPos(sp, pos)), () -> notifyDestinationNotFound(sp));
                 } else {
                     WorldUtils.getClosestStructurePosition(sp.serverLevel(), sp.blockPosition(), ResourceLocation.parse(location), 128)
-                            .ifPresentOrElse(pos -> handleBlockPos(sp, pos), () -> notifyDestinationNotFound(sp));
+                            .ifPresentOrElse(pos -> sp.server.execute(() -> handleBlockPos(sp, pos)), () -> notifyDestinationNotFound(sp));
                 }
             });
         }

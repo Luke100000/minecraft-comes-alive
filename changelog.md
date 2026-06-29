@@ -1,6 +1,7 @@
 # 7.7.18-beta.2
 
-* Fixed changing clothes making you bald
+* Fixed selecting clothes in the editor resetting hair to bald
+* Small improvements.
 
 # 7.7.18-beta.1
 

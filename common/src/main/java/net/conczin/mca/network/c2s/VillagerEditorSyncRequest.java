@@ -31,12 +31,32 @@ import net.minecraft.world.entity.npc.VillagerProfession;
 import net.minecraft.world.entity.player.Player;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag data) implements HandleablePayload {
+    private static final String[] MCA_VISUAL_KEYS = {
+            "Gender",
+            "Clothes",
+            "ClothingLocked",
+            "Skin",
+            "Hair",
+            "HairStyle",
+            "HairBase",
+            "HairBangs",
+            "HairBack",
+            "HairFront",
+            "HairExtra",
+            "SkinColor",
+            "HairColor",
+            "EyeColor",
+            "EyeColorLeft",
+            "AgeState",
+            "PlayerModel"
+    };
     public static final CustomPacketPayload.Type<VillagerEditorSyncRequest> TYPE = new CustomPacketPayload.Type<>(MCA.locate("villager_editor_sync_request"));
     public static final StreamCodec<FriendlyByteBuf, VillagerEditorSyncRequest> STREAM_CODEC = StreamCodec.composite(
             ByteBufCodecs.STRING_UTF8, VillagerEditorSyncRequest::command,
@@ -225,8 +245,10 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
     private CompoundTag getOrCreateMcaData(CompoundTag villagerData) {
         if (!villagerData.contains(VillagerEntityMCA.MCA_DATA_KEY, 10)) {
             CompoundTag mcaData = new CompoundTag();
-            if (villagerData.contains("Gender")) {
-                mcaData.putInt("Gender", villagerData.getInt("Gender"));
+            for (String key : MCA_VISUAL_KEYS) {
+                if (villagerData.contains(key)) {
+                    mcaData.put(key, Objects.requireNonNull(villagerData.get(key)).copy());
+                }
             }
             villagerData.put(VillagerEntityMCA.MCA_DATA_KEY, mcaData);
         }
