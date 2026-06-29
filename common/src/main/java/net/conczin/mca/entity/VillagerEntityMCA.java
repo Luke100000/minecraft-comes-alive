@@ -73,6 +73,7 @@ import net.minecraft.world.entity.projectile.ProjectileUtil;
 import net.minecraft.world.food.FoodProperties;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.ChestMenu;
+import net.minecraft.world.item.CrossbowItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.ProjectileWeaponItem;
@@ -1338,7 +1339,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         if (isHolding(Items.CROSSBOW)) {
             this.performCrossbowAttack(this, 1.75F);
         } else if (isHolding(Items.BOW)) {
-            ItemStack bow = this.getItemInHand(ProjectileUtil.getWeaponHoldingHand(this, Items.BOW));
+            ItemStack bow = this.getItemInHand(getMainHandItem().is(Items.BOW) ? InteractionHand.MAIN_HAND : InteractionHand.OFF_HAND);
             ItemStack arrow = this.getProjectile(bow);
             AbstractArrow persistentProjectileEntity = ProjectileUtil.getMobArrow(this, arrow, pullProgress, bow);
             double x = target.getX() - this.getX();
@@ -1352,9 +1353,10 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     }
 
     @Override
+    @SuppressWarnings("deprecation")
     public ItemStack getProjectile(ItemStack stack) {
         if (stack.getItem() instanceof ProjectileWeaponItem weapon) {
-            Predicate<ItemStack> predicate = weapon.getSupportedHeldProjectiles();
+            Predicate<ItemStack> predicate = weapon instanceof CrossbowItem ? ProjectileWeaponItem.ARROW_OR_FIREWORK : weapon.getAllSupportedProjectiles();
             ItemStack itemStack = ProjectileWeaponItem.getHeldProjectile(this, predicate);
             return itemStack.isEmpty() ? new ItemStack(Items.ARROW) : itemStack;
         } else {

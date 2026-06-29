@@ -232,6 +232,7 @@ public class ClientHandlerImpl implements ClientHandler {
     @Override
     public void handleConfigResponse(ConfigResponse message) {
         Config.setServerConfig(message.getConfig());
+        MCAClient.refreshPlayerDataDependentDimensions();
     }
 
     @Override

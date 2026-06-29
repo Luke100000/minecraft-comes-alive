@@ -38,7 +38,9 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceKey;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.PackType;
+import net.minecraft.server.packs.resources.PreparableReloadListener;
 import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -73,6 +75,10 @@ public final class MCAFabric implements ModInitializer {
         consumer.accept((name, value) -> Registry.register(register, name, value));
     }
 
+    private static void registerReloadListener(ResourceManagerHelper managerHelper, ResourceLocation id, PreparableReloadListener listener) {
+        managerHelper.registerReloadListener(new FabricReloadListener<>(id, listener));
+    }
+
     @Override
     public void onInitialize() {
         registerHelper(BuiltInRegistries.ITEM, ItemsMCA::registerItems);
@@ -102,10 +108,10 @@ public final class MCAFabric implements ModInitializer {
         // Register resource reload listeners
         ResourceManagerHelper managerHelper = ResourceManagerHelper.get(PackType.SERVER_DATA);
         managerHelper.registerReloadListener(new ApiIdentifiableReloadListener());
-        managerHelper.registerReloadListener(new FabricReloadListener<>(BodySkinList.ID, new BodySkinList()));
+        registerReloadListener(managerHelper, BodySkinList.ID, new BodySkinList());
         managerHelper.registerReloadListener(new FabricClothingList());
-        managerHelper.registerReloadListener(new FabricReloadListener<>(HairStyleList.ID, new HairStyleList()));
-        managerHelper.registerReloadListener(new FabricReloadListener<>(LayeredHairList.ID, new LayeredHairList()));
+        registerReloadListener(managerHelper, HairStyleList.ID, new HairStyleList());
+        registerReloadListener(managerHelper, LayeredHairList.ID, new LayeredHairList());
         managerHelper.registerReloadListener(new FabricGiftLoader());
         managerHelper.registerReloadListener(new FabricDialogues());
         managerHelper.registerReloadListener(new FabricTasks());

@@ -34,7 +34,9 @@ import net.minecraft.client.renderer.blockentity.BlockEntityRenderers;
 import net.minecraft.client.renderer.entity.VillagerRenderer;
 import net.minecraft.client.renderer.entity.ZombieVillagerRenderer;
 import net.minecraft.client.renderer.item.ItemProperties;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.PackType;
+import net.minecraft.server.packs.resources.PreparableReloadListener;
 import net.minecraft.world.entity.player.Player;
 
 public final class MCAFabricClient extends ClientProxyAbstractImpl implements ClientModInitializer {
@@ -70,8 +72,8 @@ public final class MCAFabricClient extends ClientProxyAbstractImpl implements Cl
         managerHelper.registerReloadListener(new FabricColorPaletteLoader());
         managerHelper.registerReloadListener(new FabricSupportersLoader());
         managerHelper.registerReloadListener(new ApiIdentifiableReloadListener());
-        managerHelper.registerReloadListener(new FabricReloadListener<>(FaceList.ID, new FaceList()));
-        managerHelper.registerReloadListener(new FabricReloadListener<>(GeneratedEyeTextureReloadListener.ID, GeneratedEyeTextureReloadListener.INSTANCE));
+        registerReloadListener(managerHelper, FaceList.ID, new FaceList());
+        registerReloadListener(managerHelper, GeneratedEyeTextureReloadListener.ID, GeneratedEyeTextureReloadListener.INSTANCE);
 
         ModelPredicatesMCA.setup(ItemProperties::register);
 
@@ -89,5 +91,9 @@ public final class MCAFabricClient extends ClientProxyAbstractImpl implements Cl
     @Override
     public Player getClientPlayer() {
         return Minecraft.getInstance().player;
+    }
+
+    private static void registerReloadListener(ResourceManagerHelper managerHelper, ResourceLocation id, PreparableReloadListener listener) {
+        managerHelper.registerReloadListener(new FabricReloadListener<>(id, listener));
     }
 }

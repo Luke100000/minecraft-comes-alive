@@ -164,6 +164,7 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
     }
 
     @Override
+    @SuppressWarnings("deprecation")
     protected void onOffspringSpawnedFromEgg(Player player, Mob child) {
         child.finalizeSpawn((ServerLevelAccessor) level(), level().getCurrentDifficultyAt(child.blockPosition()), MobSpawnType.SPAWN_EGG, null);
     }

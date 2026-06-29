@@ -132,7 +132,7 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
 
     public PlayerDimensions.Scale getDimensionsScale() {
         if (dimensionsScale == null) {
-            dimensionsScale = PlayerDimensions.fromEntityData(entityData);
+            dimensionsScale = PlayerDimensions.fromPlayerData(this);
         }
         return dimensionsScale;
     }
@@ -143,14 +143,16 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
             return;
         }
         this.entityData = copy;
-        dimensionsScale = PlayerDimensions.fromEntityData(copy);
+        dimensionsScale = PlayerDimensions.fromPlayerData(this);
         setDirty();
         refreshPlayerDimensions();
     }
 
     private void refreshPlayerDimensions() {
         if (world.getPlayerByUUID(uuid) instanceof ServerPlayer player) {
+            PlayerDimensions.debugRefresh(player, "before server player data refresh");
             player.refreshDimensions();
+            PlayerDimensions.debugRefresh(player, "after server player data refresh");
         }
     }
 

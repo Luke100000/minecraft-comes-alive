@@ -3,6 +3,7 @@ package net.conczin.mca;
 import net.conczin.mca.client.gui.SkinLibraryScreen;
 import net.conczin.mca.client.resources.ClientSkinCatalog;
 import net.conczin.mca.client.tts.SpeechManager;
+import net.conczin.mca.entity.PlayerDimensions;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.network.Network;
@@ -78,14 +79,33 @@ public class MCAClient {
     public static void addPlayerData(UUID uuid, VillagerEntityMCA villager) {
         playerData.put(uuid, villager);
 
-        // Refresh eye height
         Minecraft client = Minecraft.getInstance();
         if (client.level != null) {
             Player player = client.level.getPlayerByUUID(uuid);
             if (player != null) {
-                player.refreshDimensions();
+                refreshPlayerDimensions(player, "client player data refresh");
             }
         }
+    }
+
+    public static void refreshPlayerDataDependentDimensions() {
+        Minecraft client = Minecraft.getInstance();
+        if (client.level == null) {
+            return;
+        }
+
+        for (Player player : client.level.players()) {
+            if (Config.getServerConfig().scalePlayerHitboxWithSizeAndWidth) {
+                getPlayerData(player.getUUID());
+            }
+            refreshPlayerDimensions(player, "client config refresh");
+        }
+    }
+
+    private static void refreshPlayerDimensions(Player player, String reason) {
+        PlayerDimensions.debugRefresh(player, "before " + reason);
+        player.refreshDimensions();
+        PlayerDimensions.debugRefresh(player, "after " + reason);
     }
 
     public static boolean isPlayerRendererAllowed() {

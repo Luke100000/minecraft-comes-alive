@@ -1,3 +1,9 @@
+# 7.7.18-beta.3
+
+* Fixed player hitbox scaling.
+* Player size changes now update more reliably after joining or editing a player.
+* Internal improvements.
+
 # 7.7.18-beta.2
 
 * Fixed selecting clothes in the editor resetting hair to bald

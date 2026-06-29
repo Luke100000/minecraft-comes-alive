@@ -20,6 +20,7 @@ import net.minecraft.world.item.*;
 import java.util.*;
 import java.util.stream.Collectors;
 
+@SuppressWarnings("deprecation")
 public interface ItemsMCA {
     Map<ResourceLocation, Item> ITEMS = new LinkedHashMap<>();
 

@@ -18,8 +18,11 @@ abstract class MixinLivingEntity {
             return;
         }
 
-        PlayerDimensions.getScale(player).ifPresent(scale ->
-                info.setReturnValue(info.getReturnValue().scale(scale.width(), scale.height()))
-        );
+        PlayerDimensions.getScale(player).ifPresent(scale -> {
+            EntityDimensions original = info.getReturnValue();
+            EntityDimensions scaled = original.scale(scale.width(), scale.height());
+            PlayerDimensions.debugAppliedScale(player, original, scaled, scale);
+            info.setReturnValue(scaled);
+        });
     }
 }
