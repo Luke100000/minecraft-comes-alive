@@ -1739,9 +1739,8 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         }
 
         if (isSelectionPage()) {
-            CompoundTag nbt = new CompoundTag();
-            villager.save(nbt);
-            villagerVisualization.load(nbt);
+            CompoundTag nbt = saveEntityData(villager);
+            villagerVisualization.readAdditionalSaveDataForEditor(nbt);
             villagerVisualization.setAge(villager.getAge());
             villagerVisualization.refreshDimensions();
 
@@ -2020,7 +2019,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
 
     private CompoundTag saveEntityData(VillagerEntityMCA entity) {
         CompoundTag nbt = new CompoundTag();
-        entity.save(nbt);
+        entity.addAdditionalSaveData(nbt);
         return nbt;
     }
 

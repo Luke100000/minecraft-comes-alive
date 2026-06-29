@@ -1,3 +1,7 @@
+# 7.7.18-beta.2
+
+* Fixed changing clothes making you bald
+
 # 7.7.18-beta.1
 
 * Backup your world before using.
