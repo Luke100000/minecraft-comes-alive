@@ -21,8 +21,6 @@ import net.minecraft.world.entity.player.Player;
 import org.jetbrains.annotations.Nullable;
 
 public class VillagerLikeEntityMCARenderer<T extends Mob & VillagerLike<T>> extends HumanoidMobRenderer<T, VillagerEntityModelMCA<T>> {
-    private static final ResourceLocation TEXTURE = ResourceLocation.parse("textures/entity/steve.png");
-
     public VillagerLikeEntityMCARenderer(EntityRendererProvider.Context ctx, VillagerEntityModelMCA<T> model) {
         super(ctx, model, 0.5F);
         addLayer(new HumanoidArmorLayer<>(this, createArmorModel(0.3f), createArmorModel(0.55f), ctx.getModelManager()));
@@ -67,7 +65,7 @@ public class VillagerLikeEntityMCARenderer<T extends Mob & VillagerLike<T>> exte
 
     @Override
     public ResourceLocation getTextureLocation(T mobEntity) {
-        return TEXTURE;
+        return DynamicSkinCache.getOrCreateStitchedSkin(mobEntity);
     }
 
     @Override

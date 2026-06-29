@@ -61,7 +61,12 @@ public interface EntityRelationship {
     }
 
     default Optional<Entity> getPartner() {
-        return Optional.ofNullable(getWorld().getEntity(getFamilyEntry().partner()));
+        UUID partnerUUID = getFamilyEntry().partner();
+        Entity entity = getWorld().getEntity(partnerUUID);
+        if (entity == null) {
+            entity = getWorld().getServer().getPlayerList().getPlayer(partnerUUID);
+        }
+        return Optional.ofNullable(entity);
     }
 
     //try to load a PlayerSaveData before loading the entity

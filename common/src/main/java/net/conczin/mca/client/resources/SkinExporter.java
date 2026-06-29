@@ -3,6 +3,7 @@ package net.conczin.mca.client.resources;
 import com.mojang.blaze3d.platform.NativeImage;
 import net.conczin.mca.MCA;
 import net.conczin.mca.client.gui.immersive_library.SkinCache;
+import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.Genetics;
 import net.conczin.mca.entity.ai.Traits;
@@ -30,60 +31,7 @@ public class SkinExporter {
 
     public static boolean export(VillagerEntityMCA villager, String customName) {
         try {
-            try (NativeImage base = new NativeImage(64, 64, false)) {
-                // Clear base canvas to transparent black
-                for (int x = 0; x < 64; x++) {
-                    for (int y = 0; y < 64; y++) {
-                        base.setPixelRGBA(x, y, 0);
-                    }
-                }
-
-                // 1. Base skin
-                ResourceLocation skinId = getSkin(villager);
-                int skinColor = getSkinColor(villager);
-                composite(base, skinId, skinColor);
-                
-                // 2. Face
-                ResourceLocation faceId = getFace(villager);
-                compositeFace(base, faceId, villager);
-                
-                // 3. Clothing
-                ResourceLocation clothesId = getClothes(villager);
-                composite(base, clothesId, 0xFFFFFFFF);
-                
-                // 4. Hair
-                if (MCA.isBlankString(villager.getHair())) {
-                    int hairColor = getHairColor(villager);
-                    for (LayeredHair.Category category : new LayeredHair.Category[]{
-                            LayeredHair.Category.BACK,
-                            LayeredHair.Category.BASE,
-                            LayeredHair.Category.BANGS,
-                            LayeredHair.Category.FRONT,
-                            LayeredHair.Category.EXTRA
-                    }) {
-                        String identifier = villager.getLayeredHair(category);
-                        if (!MCA.isBlankString(identifier)) {
-                            composite(base, ResourceLocation.parse(identifier), hairColor);
-                        }
-                    }
-                } else {
-                    String hair = villager.getHairStyleId();
-                    if (!MCA.isBlankString(hair)) {
-                        ResourceLocation texture = hair.startsWith("immersive_library:") 
-                            ? SkinCache.getTextureIdentifier(Integer.parseInt(hair.substring(18)))
-                            : ResourceLocation.parse(hair);
-                        int hairColor = getHairColor(villager);
-                        composite(base, texture, hairColor);
-                        
-                        if (!hair.startsWith("immersive_library:")) {
-                            // Overlay
-                            ResourceLocation overlay = ResourceLocation.parse(hair.replace(".png", "_overlay.png"));
-                            composite(base, overlay, 0xFFFFFFFF);
-                        }
-                    }
-                }
-                
-                // 5. Save the image
+            try (NativeImage base = createSkin(villager, "normal")) {
                 File exportDir = new File(Minecraft.getInstance().gameDirectory, "mca/exported_skins");
                 if (!exportDir.exists()) {
                     exportDir.mkdirs();
@@ -125,7 +73,16 @@ public class SkinExporter {
         }
     }
 
-    private static ResourceLocation getSkin(VillagerEntityMCA villager) {
+    public static NativeImage createSkin(VillagerLike<?> villager, String clothesVariant) {
+        NativeImage base = new NativeImage(64, 64, true);
+        composite(base, getSkin(villager), getSkinColor(villager));
+        compositeFace(base, getFace(villager), villager);
+        composite(base, getClothes(villager, clothesVariant), 0xFFFFFFFF);
+        compositeHair(base, villager);
+        return base;
+    }
+
+    public static ResourceLocation getSkin(VillagerLike<?> villager) {
         if (!MCA.isBlankString(villager.getSkin())) {
             return ResourceLocation.parse(villager.getSkin());
         }
@@ -133,7 +90,7 @@ public class SkinExporter {
         return ResourceLocation.fromNamespaceAndPath("mca", "skins/skin/" + villager.getGenetics().getGender().getDataName() + "/" + skin + ".png");
     }
 
-    private static int getSkinColor(VillagerEntityMCA villager) {
+    public static int getSkinColor(VillagerLike<?> villager) {
         int skinDye = villager.getSkinDye();
         if (skinDye != 0xFF000000) {
             return skinDye;
@@ -146,7 +103,7 @@ public class SkinExporter {
         );
     }
 
-    private static ResourceLocation getFace(VillagerEntityMCA villager) {
+    public static ResourceLocation getFace(VillagerLike<?> villager) {
         Gender gender = villager.getGenetics().getGender();
         FaceList list = FaceList.getInstance();
         if (list == null) {
@@ -156,7 +113,11 @@ public class SkinExporter {
         return list.pick("normal", villager.getGenetics().getGene(Genetics.FACE));
     }
 
-    private static ResourceLocation getClothes(VillagerEntityMCA villager) {
+    public static ResourceLocation getClothes(VillagerLike<?> villager) {
+        return getClothes(villager, "normal");
+    }
+
+    public static ResourceLocation getClothes(VillagerLike<?> villager, String variant) {
         String identifier = villager.getClothes();
         if (MCA.isBlankString(identifier)) {
             return null;
@@ -164,10 +125,16 @@ public class SkinExporter {
         if (identifier.startsWith("immersive_library:")) {
             return SkinCache.getTextureIdentifier(Integer.parseInt(identifier.substring(18)));
         }
-        return ResourceLocation.parse(identifier);
+        ResourceLocation id = ResourceLocation.parse(identifier);
+        ResourceLocation variantId = ResourceLocation.fromNamespaceAndPath(id.getNamespace(), id.getPath().replace("normal", variant));
+        return Minecraft.getInstance().getResourceManager().getResource(variantId).isPresent() ? variantId : id;
     }
 
-    private static int getHairColor(VillagerEntityMCA villager) {
+    public static int getHairColor(VillagerLike<?> villager) {
+        if (villager.getTraits().hasTrait(Traits.RAINBOW)) {
+            return getRainbow(villager, 0);
+        }
+
         int hairDye = villager.getHairDye();
         if (hairDye != 0xFF000000) {
             return hairDye;
@@ -180,7 +147,44 @@ public class SkinExporter {
         );
     }
 
-    private static NativeImage loadTexture(ResourceLocation id) {
+    private static ResourceLocation getLibraryOrResourceIdentifier(String identifier) {
+        return identifier.startsWith("immersive_library:")
+                ? SkinCache.getTextureIdentifier(Integer.parseInt(identifier.substring(18)))
+                : ResourceLocation.parse(identifier);
+    }
+
+    private static ResourceLocation getOverlayIdentifier(String identifier) {
+        if (identifier.startsWith("immersive_library:") || !identifier.endsWith(".png")) {
+            return null;
+        }
+        ResourceLocation id = ResourceLocation.parse(identifier);
+        ResourceLocation overlay = ResourceLocation.fromNamespaceAndPath(id.getNamespace(), id.getPath().replace(".png", "_overlay.png"));
+        return Minecraft.getInstance().getResourceManager().getResource(overlay).isPresent() ? overlay : null;
+    }
+
+    private static void compositeHair(NativeImage base, VillagerLike<?> villager) {
+        int hairColor = getHairColor(villager);
+        boolean renderedLayeredHair = false;
+        for (LayeredHair.Category category : LayeredHair.Category.RENDER_ORDER) {
+            String identifier = villager.getLayeredHair(category);
+            if (MCA.isBlankString(identifier)) {
+                continue;
+            }
+            renderedLayeredHair = true;
+            compositeHairLayer(base, identifier, hairColor);
+        }
+
+        if (!renderedLayeredHair && !MCA.isBlankString(villager.getHair())) {
+            compositeHairLayer(base, villager.getHair(), hairColor);
+        }
+    }
+
+    private static void compositeHairLayer(NativeImage base, String identifier, int hairColor) {
+        composite(base, getLibraryOrResourceIdentifier(identifier), hairColor);
+        composite(base, getOverlayIdentifier(identifier), 0xFFFFFFFF);
+    }
+
+    public static NativeImage loadTexture(ResourceLocation id) {
         if (id.getNamespace().equals("immersive_library")) {
             try {
                 int contentId = Integer.parseInt(id.getPath());
@@ -207,7 +211,7 @@ public class SkinExporter {
         return null;
     }
 
-    private static void composite(NativeImage base, ResourceLocation layerId, int tintColor) {
+    public static void composite(NativeImage base, ResourceLocation layerId, int tintColor) {
         if (layerId == null) return;
         NativeImage overlay = loadTexture(layerId);
         if (overlay == null) return;
@@ -227,7 +231,7 @@ public class SkinExporter {
         }
     }
 
-    public static void compositeFace(NativeImage base, ResourceLocation faceId, VillagerEntityMCA villager) {
+    public static void compositeFace(NativeImage base, ResourceLocation faceId, VillagerLike<?> villager) {
         NativeImage face = loadTexture(faceId);
         if (face == null) {
             return;
@@ -266,15 +270,10 @@ public class SkinExporter {
         }
     }
 
-    public static int getEyeColor(VillagerEntityMCA villager, boolean left) {
+    public static int getEyeColor(VillagerLike<?> villager, boolean left) {
         if (villager.getTraits().hasTrait(Traits.RAINBOW_EYES)) {
             int offset = left && villager.getTraits().hasTrait(Traits.HETEROCHROMIA) ? (25 * DyeColor.values().length) / 2 : 0;
-            int ticks = offset;
-            int block = ticks / 25 + villager.getId();
-            int count = DyeColor.values().length;
-            int first = block % count;
-            int second = (block + 1) % count;
-            return FastColor.ARGB32.lerp(0.0f, Sheep.getColor(DyeColor.byId(first)), Sheep.getColor(DyeColor.byId(second)));
+            return getRainbow(villager, offset);
         }
 
         boolean heterochromia = villager.getTraits().hasTrait(Traits.HETEROCHROMIA);
@@ -299,6 +298,16 @@ public class SkinExporter {
             return FastColor.ARGB32.lerp((eyeColor - 0.35F) / 0.35F, greenColor, hazelColor);
         }
         return FastColor.ARGB32.lerp((eyeColor - 0.70F) / 0.30F, hazelColor, brownColor);
+    }
+
+    private static int getRainbow(VillagerLike<?> villager, int offset) {
+        int ticks = Math.abs(villager.asEntity().tickCount) + offset;
+        int block = ticks / 25 + villager.asEntity().getId();
+        int count = DyeColor.values().length;
+        int first = block % count;
+        int second = (block + 1) % count;
+        float mix = (float) (ticks % 25) / 25.0F;
+        return FastColor.ARGB32.lerp(mix, Sheep.getColor(DyeColor.byId(first)), Sheep.getColor(DyeColor.byId(second)));
     }
 
     public static void compositePixel(NativeImage base, int x, int y, int overPixel, int tintColor) {
