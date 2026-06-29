@@ -13,24 +13,24 @@ import net.minecraft.world.entity.player.Player;
 
 import java.util.HashMap;
 
-public record SkinListResponse(
+public record CustomSkinListResponse(
         HashMap<String, Clothing> clothing,
         HashMap<String, Hair> hair
 ) implements HandleablePayload {
-    public static final CustomPacketPayload.Type<SkinListResponse> TYPE = new CustomPacketPayload.Type<>(MCA.locate("skin_list_response"));
-    public static final StreamCodec<FriendlyByteBuf, SkinListResponse> STREAM_CODEC = StreamCodec.composite(
-            ByteBufCodecs.map(HashMap::new, ByteBufCodecs.STRING_UTF8, Clothing.STREAM_CODEC), SkinListResponse::clothing,
-            ByteBufCodecs.map(HashMap::new, ByteBufCodecs.STRING_UTF8, Hair.STREAM_CODEC), SkinListResponse::hair,
-            SkinListResponse::new
+    public static final CustomPacketPayload.Type<CustomSkinListResponse> TYPE = new CustomPacketPayload.Type<>(MCA.locate("custom_skin_list_response"));
+    public static final StreamCodec<FriendlyByteBuf, CustomSkinListResponse> STREAM_CODEC = StreamCodec.composite(
+            ByteBufCodecs.map(HashMap::new, ByteBufCodecs.STRING_UTF8, Clothing.STREAM_CODEC), CustomSkinListResponse::clothing,
+            ByteBufCodecs.map(HashMap::new, ByteBufCodecs.STRING_UTF8, Hair.STREAM_CODEC), CustomSkinListResponse::hair,
+            CustomSkinListResponse::new
     );
 
     @Override
     public void handle(Player player) {
-        ClientProxy.getNetworkHandler().handleSkinListResponse(this);
+        ClientProxy.getNetworkHandler().handleCustomSkinListResponse(this);
     }
 
     @Override
-    public CustomPacketPayload.Type<SkinListResponse> type() {
+    public CustomPacketPayload.Type<CustomSkinListResponse> type() {
         return TYPE;
     }
 }

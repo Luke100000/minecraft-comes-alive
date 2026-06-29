@@ -1,7 +1,7 @@
 package net.conczin.mca.client.resources;
 
 import net.conczin.mca.network.Network;
-import net.conczin.mca.network.c2s.SkinListRequest;
+import net.conczin.mca.network.c2s.CustomSkinListRequest;
 import net.conczin.mca.resources.BodySkinList;
 import net.conczin.mca.resources.ClothingList;
 import net.conczin.mca.resources.HairStyleList;
@@ -87,7 +87,7 @@ public final class ClientSkinCatalog {
     public static void sync() {
         seedClientResources();
         if (customSkinsOutdated) {
-            Network.sendToServer(new SkinListRequest());
+            Network.sendToServer(new CustomSkinListRequest());
             customSkinsOutdated = false;
         }
     }

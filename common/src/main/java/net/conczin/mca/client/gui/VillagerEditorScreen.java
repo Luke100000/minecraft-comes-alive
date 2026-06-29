@@ -21,7 +21,6 @@ import net.conczin.mca.network.c2s.VillagerEditorSyncRequest;
 import net.conczin.mca.network.c2s.VillagerNameRequest;
 import net.conczin.mca.registry.EntitiesMCA;
 import net.conczin.mca.registry.ProfessionsMCA;
-import net.conczin.mca.resources.ClothingList;
 import net.conczin.mca.resources.FaceList;
 import net.conczin.mca.resources.data.skin.Clothing;
 import net.conczin.mca.resources.data.skin.HairStyle;
@@ -1172,10 +1171,13 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
 
     private Component getClothingText() {
         ClientSkinCatalog.sync();
-        ClothingList clothingList = ClothingList.getInstance();
-        Collection<Clothing> available = ClientSkinCatalog.clothing().values();
-        List<Clothing> options = clothingList.getEditorOptions(villager.getGenetics().getGender(), available);
-        List<String> clothes = options.stream().map(Clothing::getIdentifier).toList();
+        List<String> clothes = ClientSkinCatalog.clothing().values().stream()
+                .filter(this::matchesCurrentGender)
+                .filter(clothing -> !clothing.exclude)
+                .map(Clothing::getIdentifier)
+                .distinct()
+                .sorted(SkinListEntry::compareIdentifiers)
+                .toList();
         return getSelectionIndexText("gui.villager_editor.clothing_index", clothes, villager.getClothes());
     }
 
