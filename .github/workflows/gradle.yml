@@ -64,7 +64,7 @@ jobs:
           cache-read-only: false
           cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
       - name: Build Artifacts with Gradle
-        run: ./gradlew build --console=plain --non-interactive
+        run: ./gradlew build --configuration-cache --console=plain --non-interactive
       - name: Publish to Maven
         run: ./gradlew publish --console=plain --non-interactive
       - name: "Upload Fabric"
