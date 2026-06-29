@@ -251,7 +251,9 @@ public class OpenAIChatAI implements ChatAIStrategy {
             // START Messages
             body.append("\"messages\": [");
             // System Message
-            body.append("{\"role\": \"system\", \"content\": ").append(jsonStringQuote(system)).append("},");
+            if (!config.villagerChatAIFuseSystemPrompt) {
+                body.append("{\"role\": \"system\", \"content\": ").append(jsonStringQuote(system)).append("},");
+            }
             for (Tuple<String, String> pair : pastDialogue) {
                 String role = pair.getA();
                 String content = pair.getB();
@@ -261,7 +263,8 @@ public class OpenAIChatAI implements ChatAIStrategy {
                         .append("\", \"content\": ").append(jsonStringQuote(content)).append("},");
             }
             // User Message
-            body.append("{\"role\": \"user\", \"name\": \"").append(playerName).append("\", \"content\": ").append(jsonStringQuote(msg)).append("}");
+            String userContent = config.villagerChatAIFuseSystemPrompt ? system + "\n\n" + msg : msg;
+            body.append("{\"role\": \"user\", \"name\": \"").append(playerName).append("\", \"content\": ").append(jsonStringQuote(userContent)).append("}");
             // END Messages
             body.append("]");
             body.append("}");
