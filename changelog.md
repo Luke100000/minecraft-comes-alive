@@ -1,3 +1,15 @@
+# 7.7.18-beta.4
+
+* Backports/fixes from 26.1.2
+* Guards now fight while you're following them. [BRAND NEW]
+* Fixed the clothing picker in the editor crashing on a server.
+* Fixed library.
+* Fixed spouse lookup for online players and made villager textures render properly.
+* Added configurable guards and archer equipment levels.
+* Added the AI system prompt fuse option for endpoints that do not support a separate system role.
+* Tombstones are now more resistant to explosions.
+* Minimaps now support MCA villagers (no more empty squares).
+
 # 7.7.18-beta.3
 
 * Fixed player hitbox scaling.
