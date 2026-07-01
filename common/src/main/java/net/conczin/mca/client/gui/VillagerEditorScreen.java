@@ -18,7 +18,6 @@ import net.conczin.mca.network.Network;
 import net.conczin.mca.network.c2s.GetVillagerRequest;
 import net.conczin.mca.network.c2s.VillagerEditorSyncRequest;
 import net.conczin.mca.network.c2s.VillagerNameRequest;
-import net.conczin.mca.registry.EntitiesMCA;
 import net.conczin.mca.registry.ProfessionsMCA;
 import net.conczin.mca.resources.ClothingList;
 import net.conczin.mca.resources.FaceList;
@@ -50,7 +49,6 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.util.ARGB;
 import net.minecraft.util.Mth;
 import net.minecraft.util.ProblemReporter;
-import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Pose;
 import net.minecraft.world.entity.npc.villager.VillagerProfession;
@@ -58,7 +56,6 @@ import net.minecraft.world.level.storage.TagValueInput;
 import net.minecraft.world.level.storage.TagValueOutput;
 import org.apache.commons.io.FileUtils;
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
 import org.joml.Matrix3x2fStack;
 import org.joml.Quaternionf;
 import org.joml.Vector3f;
@@ -88,9 +85,9 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     private static final float STEVE_RAW_HEIGHT_SCALE = 0.9F;
 
     @NotNull
-    protected final VillagerEntityMCA villager = Objects.requireNonNull(EntitiesMCA.MALE_VILLAGER.create(Objects.requireNonNull(Minecraft.getInstance().level), EntitySpawnReason.LOAD));
+    protected final VillagerEntityMCA villager = PreviewEntities.villager();
     @NotNull
-    protected final VillagerEntityMCA villagerVisualization = Objects.requireNonNull(EntitiesMCA.MALE_VILLAGER.create(Objects.requireNonNull(Minecraft.getInstance().level), EntitySpawnReason.LOAD));
+    protected final VillagerEntityMCA villagerVisualization = PreviewEntities.villager();
 
     final UUID villagerUUID;
     final UUID playerUUID;
@@ -1963,8 +1960,6 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     }
 
     private EntityRenderState createInventoryRenderState(LivingEntity entity, float delta) {
-        // Vanilla render-state extraction assumes preview entities already have a non-zero ID.
-        ensurePreviewEntityId(entity);
         EntityRenderDispatcher dispatcher = Minecraft.getInstance().getEntityRenderDispatcher();
         EntityRenderer<? super LivingEntity, ?> renderer = dispatcher.getRenderer(entity);
         EntityRenderState renderState = renderer.createRenderState(entity, delta);
@@ -1972,42 +1967,6 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         renderState.outlineColor = 0;
         renderState.isInvisible = false;
         return renderState;
-    }
-
-    private void ensurePreviewEntityId(LivingEntity entity) {
-        try {
-            entity.getId();
-        } catch (IllegalStateException ignored) {
-            entity.setId(previewEntityId());
-        }
-    }
-
-    private int previewEntityId() {
-        LivingEntity realEntity = getRealEditedEntity();
-        if (realEntity != null) {
-            try {
-                return realEntity.getId();
-            } catch (IllegalStateException ignored) {
-            }
-        }
-        return stableNonZeroId(villagerUUID.hashCode());
-    }
-
-    @Nullable
-    private LivingEntity getRealEditedEntity() {
-        Minecraft client = Minecraft.getInstance();
-        if (client.level == null) {
-            return null;
-        }
-        if (villagerUUID.equals(playerUUID)) {
-            return client.level.getPlayerByUUID(playerUUID);
-        }
-        return null;
-    }
-
-    private static int stableNonZeroId(int hash) {
-        int id = Math.floorMod(hash, Integer.MAX_VALUE - 1) + 1;
-        return id == 0 ? 1 : id;
     }
 
     void applyLibraryHair(String hairId) {

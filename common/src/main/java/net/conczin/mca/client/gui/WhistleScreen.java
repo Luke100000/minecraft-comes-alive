@@ -4,7 +4,6 @@ import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.network.Network;
 import net.conczin.mca.network.c2s.CallToPlayerMessage;
 import net.conczin.mca.network.c2s.GetFamilyRequest;
-import net.conczin.mca.registry.EntitiesMCA;
 import net.conczin.mca.util.compat.ButtonWidget;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -13,7 +12,6 @@ import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.ProblemReporter;
-import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.level.storage.TagValueInput;
 import org.jetbrains.annotations.NotNull;
 
@@ -127,7 +125,7 @@ public class WhistleScreen extends Screen {
         if (!keys.isEmpty()) {
             CompoundTag firstData = villagerData.getCompound(keys.get(index)).orElseGet(CompoundTag::new);
 
-            dummy = EntitiesMCA.MALE_VILLAGER.create(Minecraft.getInstance().level, EntitySpawnReason.LOAD);
+            dummy = PreviewEntities.villager();
             dummy.load(TagValueInput.create(ProblemReporter.DISCARDING, dummy.registryAccess(), firstData));
 
             villagerNameButton.setMessage(dummy.getDisplayName());

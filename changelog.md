@@ -1,3 +1,7 @@
+# 8.0.0
+
+* Fixed crashes in specific UI sections.
+
 # 8.0.0-beta.2
 
 * Fixed NeoForge startup crash.
