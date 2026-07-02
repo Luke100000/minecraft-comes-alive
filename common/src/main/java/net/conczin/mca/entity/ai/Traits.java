@@ -40,6 +40,7 @@ public class Traits {
     public static Trait VEGETARIAN = registerTrait("vegetarian", 1.0F, 1.0F, false); // TODO
     public static Trait INFERTILE = registerTrait("infertile", 1.0F, 0.0F);
     public static Trait ELECTRIFIED = registerTrait("electrified", 0.0F, 0.0F, false);
+    public static Trait NO_AGING = registerTrait("no_aging", 0.0F, 0.0F, false);
     // public static Trait UNKNOWN = registerTrait("unknown", 0.0F, 0.0F, false);
 
     private final VillagerLike<?> entity;

@@ -264,12 +264,13 @@
   "trait.left_handed": "Left Handed",
   "trait.infertile": "Infertile",
   "trait.electrified": "Electrified",
+  "trait.no_aging": "No Aging",
   "trait.rainbow": "Rainbow Hair",
   "trait.rainbow_eyes": "Rainbow Eyes",
   "trait.tough": "Tough",
   "trait.weak": "Weak",
   "trait.unknown": "Unknown",
-
+ 
   "traitDescription.athletic": "Runs faster",
   "traitDescription.lactose_intolerance": "Intolerant to lactose.",
   "traitDescription.coeliac_disease": "Gets massive diarrhea on gluten.",
@@ -286,6 +287,7 @@
   "traitDescription.left_handed": "Uses their left-hand as their dominant hand.",
   "traitDescription.infertile": "Cannot have children.",
   "traitDescription.electrified": "Struck by lightning.",
+  "traitDescription.no_aging": "Prevents this villager from growing up or aging.",
   "traitDescription.rainbow": "Hair colored using Jeb's secret sauce.",
   "traitDescription.rainbow_eyes": "Eyes colored using Jeb's secret sauce.",
   "traitDescription.tough": "Tough as nails, and deals quite some blows.",
