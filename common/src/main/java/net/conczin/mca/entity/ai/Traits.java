@@ -38,8 +38,9 @@ public class Traits {
     public static Trait COELIAC_DISEASE = registerTrait("coeliac_disease", 1.0F, 1.0F, false); // TODO
     public static Trait DIABETES = registerTrait("diabetes", 1.0F, 1.0F, false); // TODO
     public static Trait VEGETARIAN = registerTrait("vegetarian", 1.0F, 1.0F, false); // TODO
+    public static Trait INFERTILE = registerTrait("infertile", 1.0F, 0.0F);
     public static Trait ELECTRIFIED = registerTrait("electrified", 0.0F, 0.0F, false);
-    public static Trait UNKNOWN = registerTrait("unknown", 0.0F, 0.0F, false);
+    // public static Trait UNKNOWN = registerTrait("unknown", 0.0F, 0.0F, false);
 
     private final VillagerLike<?> entity;
     private RandomSource random = RandomSource.create();
@@ -155,7 +156,7 @@ public class Traits {
         }
 
         public static Trait valueOf(String id) {
-            return TRAIT_REGISTRY.getOrDefault(id, UNKNOWN);
+            return TRAIT_REGISTRY.getOrDefault(id, null);
         }
 
         public String id() {

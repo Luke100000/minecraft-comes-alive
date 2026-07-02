@@ -1,3 +1,28 @@
+# 7.7.18-beta.5
+
+* Added a configuration option to choose the headstone/grave type spawned when a villager dies.
+* Fixed multiplayer issues when editing villagers and loading custom skin data.
+* Internal networking changes to hopefully make multiplayer work properly.
+  * As a result, generally especially in multiplayer sessions, UI changes are faster.
+* Fixed library clothing previews hiding legacy hair.
+* Selecting clothing generally or picking an outfit no longer hides hair.
+  * This was done initially because of the new hair system, however, if the hair overlaps with your character, you can just select the bald hair option
+    in the hair screen.
+* Prevented babies, children, and non-spouse relatives from flirting, kissing, or accepting romantic items (bouquets, engagement rings).
+* Age-locked the `Flirty` personality so it cannot be assigned to babies, toddlers, or children.
+* Added personality re-randomization when villagers age up to allow true character development and natural trait changes.
+  * - So children will change their personality.
+* Added an INFERTILE trait, villagers now have a chance to be infertile.
+  * If you'd like to remove the trait, you can do so in the MCA Debug Book.
+* Experimental JourneyMap compatibility.
+* Unknown trait doesn't show up anymore.
+* Spouses no longer count as biologically related.
+* Fixed `building_types` block tag resolution — tags like `#minecraft:candles` and `#minecraft:water` now correctly match blocks during building scans.
+  * Previously, all data-pack block tags were silently ignored.
+  * For datapacks, you can now add in all tags including fluids!
+* Please report any issues on the GitHub Issues page or the Discord server, backing up your world is always recommended!
+* If you have any suggestions, please let me know!
+
 # 7.7.18-beta.4
 
 * Backports/fixes from 26.1.2

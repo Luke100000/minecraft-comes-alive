@@ -32,6 +32,17 @@ public interface NbtHelper {
         return to;
     }
 
+    static CompoundTag getCompoundOrSelf(CompoundTag nbt, String key) {
+        return nbt.contains(key, 10) ? nbt.getCompound(key) : nbt;
+    }
+
+    static CompoundTag getOrCreateCompound(CompoundTag nbt, String key) {
+        if (!nbt.contains(key, 10)) {
+            nbt.put(key, new CompoundTag());
+        }
+        return nbt.getCompound(key);
+    }
+
     static <V> List<V> toList(Tag nbt, Function<Tag, V> valueMapper) {
         return toStream(nbt, valueMapper).collect(Collectors.toList());
     }

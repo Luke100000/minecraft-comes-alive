@@ -3,7 +3,6 @@ package net.conczin.mca.resources;
 import net.conczin.mca.MCA;
 import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.resources.data.skin.LayeredHair;
-import net.conczin.mca.resources.data.skin.SkinListEntry;
 import net.minecraft.ResourceLocationException;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.resources.ResourceManager;
@@ -66,13 +65,7 @@ public class LayeredHairList extends SimplePreparableReloadListener<Map<Resource
     }
 
     public WeightedPool<String> getPool(LayeredHair.Category category, Gender gender) {
-        return hair.values().stream()
-                .filter(h -> h.getCategory() == category)
-                .filter(h -> h.getGender() == Gender.NEUTRAL || gender == Gender.NEUTRAL || h.getGender() == gender)
-                .sorted((a, b) -> SkinListEntry.compareIdentifiers(a.getIdentifier(), b.getIdentifier()))
-                .collect(() -> new WeightedPool.Mutable<>(""),
-                        (list, entry) -> list.add(entry.getIdentifier(), entry.getChance()),
-                        (a, b) -> a.entries.addAll(b.entries));
+        return SkinSelection.toPool(SkinSelection.layeredHair(hair.values(), category, gender), "");
     }
 
     public String pick(LayeredHair.Category category, Gender gender) {
@@ -104,12 +97,7 @@ public class LayeredHairList extends SimplePreparableReloadListener<Map<Resource
     }
 
     private float getInclusionChance(LayeredHair.Category category, Gender gender) {
-        return (float) hair.values().stream()
-                .filter(h -> h.getCategory() == category)
-                .filter(h -> h.getGender() == Gender.NEUTRAL || gender == Gender.NEUTRAL || h.getGender() == gender)
-                .mapToDouble(LayeredHair::getChance)
-                .max()
-                .orElse(0.0);
+        return SkinSelection.maxChance(SkinSelection.layeredHair(hair.values(), category, gender));
     }
 
     private static LayeredHair.Category getCategoryFromPath(ResourceLocation id) {

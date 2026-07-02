@@ -6,6 +6,7 @@ import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.Chore;
 import net.conczin.mca.entity.ai.Memories;
 import net.conczin.mca.entity.ai.MoveState;
+import net.conczin.mca.entity.ai.Traits;
 import net.conczin.mca.entity.ai.relationship.RelationshipState;
 import net.conczin.mca.mixin.MixinVillagerInvoker;
 import net.conczin.mca.registry.CriterionMCA;
@@ -133,6 +134,8 @@ public class VillagerCommandHandler extends EntityCommandHandler<VillagerEntityM
             case "procreate" -> {
                 if (memory.getHearts() < 100) {
                     entity.sendChatMessage(player, "interaction.procreate.fail.lowhearts");
+                } else if (entity.getTraits().hasTrait(Traits.INFERTILE)) {
+                    entity.sendChatMessage(player, "interaction.procreate.fail.infertile");
                 } else if (entity.getRelationships().mayProcreateAgain(player.level().getGameTime())) {
                     entity.getRelationships().startProcreating(player.level().getGameTime());
                 } else {

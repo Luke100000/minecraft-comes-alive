@@ -16,6 +16,5 @@ public final class GeneratedEyeTextureReloadListener implements ResourceManagerR
     @Override
     public void onResourceManagerReload(ResourceManager manager) {
         FaceLayer.clearGeneratedEyeTextureCache();
-        ClientSkinCatalog.markClientResourcesOutdated();
     }
 }

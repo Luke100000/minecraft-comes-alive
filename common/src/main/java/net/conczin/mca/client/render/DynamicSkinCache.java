@@ -1,5 +1,6 @@
 package net.conczin.mca.client.render;
 
+import com.mojang.blaze3d.platform.NativeImage;
 import net.conczin.mca.MCA;
 import net.conczin.mca.client.gui.immersive_library.SkinCache;
 import net.conczin.mca.client.resources.SkinExporter;
@@ -10,6 +11,7 @@ import net.conczin.mca.entity.ai.Traits;
 import net.conczin.mca.resources.data.skin.LayeredHair;
 import net.conczin.mca.util.MaxSizeHashMap;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.texture.AbstractTexture;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.Entity;
@@ -26,6 +28,7 @@ public final class DynamicSkinCache {
     private static final ResourceLocation EMPTY_LIBRARY_TEXTURE = MCA.locate("skins/empty.png");
 
     private static final Set<SkinKey> INCOMPLETE_CACHE = new HashSet<>();
+    private static final Set<SkinKey> INCOMPLETE_FACE_CACHE = new HashSet<>();
     private static final Map<SkinKey, ResourceLocation> CACHE = new MaxSizeHashMap<>(128) {
         @Override
         protected boolean removeEldestEntry(Map.Entry<SkinKey, ResourceLocation> eldest) {
@@ -33,6 +36,17 @@ public final class DynamicSkinCache {
             if (remove) {
                 Minecraft.getInstance().getTextureManager().release(eldest.getValue());
                 INCOMPLETE_CACHE.remove(eldest.getKey());
+            }
+            return remove;
+        }
+    };
+    private static final Map<SkinKey, ResourceLocation> FACE_CACHE = new MaxSizeHashMap<>(128) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<SkinKey, ResourceLocation> eldest) {
+            boolean remove = super.removeEldestEntry(eldest);
+            if (remove) {
+                Minecraft.getInstance().getTextureManager().release(eldest.getValue());
+                INCOMPLETE_FACE_CACHE.remove(eldest.getKey());
             }
             return remove;
         }
@@ -68,6 +82,41 @@ public final class DynamicSkinCache {
         return generated;
     }
 
+    public static ResourceLocation getOrCreateCroppedFace(Entity entity) {
+        if (!(entity instanceof VillagerLike<?> villager)) {
+            return null;
+        }
+
+        SkinKey key = SkinKey.from(entity, villager);
+        boolean missingAssets = isMissingImmersiveLibraryAssets(villager);
+
+        ResourceLocation cachedId = FACE_CACHE.get(key);
+        if (cachedId != null) {
+            if (!missingAssets && INCOMPLETE_FACE_CACHE.remove(key)) {
+                Minecraft.getInstance().getTextureManager().release(cachedId);
+                FACE_CACHE.remove(key);
+            } else {
+                return cachedId;
+            }
+        }
+
+        if (!Minecraft.getInstance().isSameThread()) {
+            return null;
+        }
+
+        ResourceLocation generated = generateCroppedFace(entity, key);
+        if (generated == null) {
+            return null;
+        }
+        FACE_CACHE.put(key, generated);
+        if (missingAssets) {
+            INCOMPLETE_FACE_CACHE.add(key);
+        } else {
+            INCOMPLETE_FACE_CACHE.remove(key);
+        }
+        return generated;
+    }
+
     private static ResourceLocation generateStitchedSkin(Entity entity, VillagerLike<?> villager, SkinKey key) {
         try {
             String clothesVariant = villager.isBurned() ? "burnt" : entity instanceof ZombieVillagerEntityMCA ? "zombie" : "normal";
@@ -77,6 +126,49 @@ public final class DynamicSkinCache {
         } catch (Exception exception) {
             MCA.LOGGER.error("Failed to generate dynamic MCA skin texture", exception);
             return STEVE;
+        }
+    }
+
+    private static ResourceLocation generateCroppedFace(Entity entity, SkinKey key) {
+        try {
+            ResourceLocation stitchedId = getOrCreateStitchedSkin(entity);
+            AbstractTexture texture = Minecraft.getInstance().getTextureManager().getTexture(stitchedId);
+            if (!(texture instanceof DynamicTexture dynamicTexture) || dynamicTexture.getPixels() == null) {
+                return null;
+            }
+
+            NativeImage base = dynamicTexture.getPixels();
+            NativeImage face = new NativeImage(8, 8, true);
+            try {
+                for (int x = 0; x < 8; x++) {
+                    for (int y = 0; y < 8; y++) {
+                        face.setPixelRGBA(x, y, base.getPixelRGBA(8 + x, 8 + y));
+                    }
+                }
+
+                for (int x = 0; x < 8; x++) {
+                    for (int y = 0; y < 8; y++) {
+                        int overlayPixel = base.getPixelRGBA(40 + x, 8 + y);
+                        SkinExporter.compositePixel(face, x, y, overlayPixel, 0xFFFFFFFF);
+                    }
+                }
+
+                NativeImage scaled = new NativeImage(24, 24, true);
+                for (int x = 0; x < 24; x++) {
+                    for (int y = 0; y < 24; y++) {
+                        scaled.setPixelRGBA(x, y, face.getPixelRGBA(x / 3, y / 3));
+                    }
+                }
+
+                ResourceLocation id = MCA.locate("dynamic/icon/" + key.id());
+                Minecraft.getInstance().getTextureManager().register(id, new DynamicTexture(scaled));
+                return id;
+            } finally {
+                face.close();
+            }
+        } catch (Throwable exception) {
+            MCA.LOGGER.error("Failed to generate dynamic MCA face icon texture", exception);
+            return null;
         }
     }
 

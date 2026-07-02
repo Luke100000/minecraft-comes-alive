@@ -2,10 +2,7 @@ package net.conczin.mca.client.resources;
 
 import net.conczin.mca.network.Network;
 import net.conczin.mca.network.c2s.CustomSkinListRequest;
-import net.conczin.mca.resources.BodySkinList;
-import net.conczin.mca.resources.ClothingList;
-import net.conczin.mca.resources.HairStyleList;
-import net.conczin.mca.resources.LayeredHairList;
+import net.conczin.mca.resources.BuiltInSkinCatalog;
 import net.conczin.mca.resources.data.skin.*;
 
 import java.util.Collections;
@@ -20,31 +17,31 @@ public final class ClientSkinCatalog {
     private static HashMap<String, BodySkin> bodySkins = new HashMap<>();
     private static HashMap<String, LayeredHair> layeredHair = new HashMap<>();
     private static HashMap<String, HairStyle> hairStyles = new HashMap<>();
-    private static HashMap<String, Clothing> customClothing = new HashMap<>();
-    private static HashMap<String, Hair> customHair = new HashMap<>();
+    private static HashMap<String, Clothing> builtInClothing = new HashMap<>();
+    private static HashMap<String, BodySkin> builtInBodySkins = new HashMap<>();
+    private static HashMap<String, LayeredHair> builtInLayeredHair = new HashMap<>();
+    private static HashMap<String, HairStyle> builtInHairStyles = new HashMap<>();
+    private static HashMap<String, Clothing> serverClothing = new HashMap<>();
+    private static HashMap<String, BodySkin> serverBodySkins = new HashMap<>();
+    private static HashMap<String, LayeredHair> serverLayeredHair = new HashMap<>();
+    private static HashMap<String, HairStyle> serverHairStyles = new HashMap<>();
+    private static HashMap<String, Hair> serverHair = new HashMap<>();
 
     private ClientSkinCatalog() {
     }
 
-    public static void installCustomSkins(HashMap<String, Clothing> clothing, HashMap<String, Hair> hair) {
-        customClothing = new HashMap<>(clothing);
-        customHair = new HashMap<>(hair);
-        loadClientResources();
-        loaded = hasClientResources();
+    public static void installServerDelta(HashMap<String, Clothing> clothing, HashMap<String, BodySkin> bodySkins, HashMap<String, LayeredHair> layeredHair, HashMap<String, HairStyle> hairStyles, HashMap<String, Hair> hair) {
+        serverClothing = new HashMap<>(clothing);
+        serverBodySkins = new HashMap<>(bodySkins);
+        serverLayeredHair = new HashMap<>(layeredHair);
+        serverHairStyles = new HashMap<>(hairStyles);
+        serverHair = new HashMap<>(hair);
+        mergeCatalogs();
+        loaded = hasBuiltInResources();
     }
 
     public static void markCustomSkinsOutdated() {
         customSkinsOutdated = true;
-        loaded = false;
-    }
-
-    public static void markClientResourcesOutdated() {
-        clothing.clear();
-        hair.clear();
-        bodySkins.clear();
-        layeredHair.clear();
-        hairStyles.clear();
-        loaded = false;
     }
 
     public static void clear() {
@@ -53,9 +50,13 @@ public final class ClientSkinCatalog {
         bodySkins.clear();
         layeredHair.clear();
         hairStyles.clear();
-        customClothing.clear();
-        customHair.clear();
-        loaded = false;
+        serverClothing.clear();
+        serverBodySkins.clear();
+        serverLayeredHair.clear();
+        serverHairStyles.clear();
+        serverHair.clear();
+        mergeCatalogs();
+        loaded = hasBuiltInResources();
         customSkinsOutdated = true;
     }
 
@@ -97,47 +98,39 @@ public final class ClientSkinCatalog {
             return;
         }
 
-        loadClientResources();
-        loaded = hasClientResourceLists();
+        loadBuiltInCatalog();
+        mergeCatalogs();
+        loaded = hasBuiltInResources();
     }
 
-    private static void loadClientResources() {
-        ClothingList clothingList = ClothingList.getInstance();
-        BodySkinList bodySkinList = BodySkinList.getInstance();
-        LayeredHairList layeredHairList = LayeredHairList.getInstance();
+    private static void loadBuiltInCatalog() {
+        BuiltInSkinCatalog.Catalog catalog = BuiltInSkinCatalog.get();
+        builtInClothing = new HashMap<>(catalog.clothing());
+        builtInBodySkins = new HashMap<>(catalog.bodySkins());
+        builtInLayeredHair = new HashMap<>(catalog.layeredHair());
+        builtInHairStyles = new HashMap<>(catalog.hairStyles());
+    }
 
-        clothing = clothingList == null ? new HashMap<>() : new HashMap<>(clothingList.clothing);
+    private static void mergeCatalogs() {
+        clothing = new HashMap<>(builtInClothing);
+        bodySkins = new HashMap<>(builtInBodySkins);
+        layeredHair = new HashMap<>(builtInLayeredHair);
+        hairStyles = new HashMap<>(builtInHairStyles);
         hair = new HashMap<>();
-        bodySkins = bodySkinList == null ? new HashMap<>() : new HashMap<>(bodySkinList.skins);
-        layeredHair = layeredHairList == null ? new HashMap<>() : new HashMap<>(layeredHairList.hair);
-        clothing.putAll(customClothing);
-        hair.putAll(customHair);
-        hairStyles = loadHairStyles(hair);
+
+        clothing.putAll(serverClothing);
+        bodySkins.putAll(serverBodySkins);
+        layeredHair.putAll(serverLayeredHair);
+        hairStyles.putAll(serverHairStyles);
+        hair.putAll(serverHair);
+        serverHair.values().forEach(custom -> hairStyles.putIfAbsent(custom.getIdentifier(), HairStyle.fromHair(custom)));
     }
 
-    private static boolean hasClientResources() {
-        return hasClientResourceLists();
+    private static boolean hasBuiltInResources() {
+        return !builtInClothing.isEmpty()
+                || !builtInBodySkins.isEmpty()
+                || !builtInLayeredHair.isEmpty()
+                || !builtInHairStyles.isEmpty();
     }
 
-    private static boolean hasClientResourceLists() {
-        ClothingList clothingList = ClothingList.getInstance();
-        BodySkinList bodySkinList = BodySkinList.getInstance();
-        LayeredHairList layeredHairList = LayeredHairList.getInstance();
-        HairStyleList hairStyleList = HairStyleList.getInstance();
-        return clothingList != null && !clothingList.clothing.isEmpty()
-                || bodySkinList != null && !bodySkinList.skins.isEmpty()
-                || layeredHairList != null && !layeredHairList.hair.isEmpty()
-                || hairStyleList != null && !hairStyleList.styles.isEmpty();
-    }
-
-    private static HashMap<String, HairStyle> loadHairStyles(Map<String, Hair> legacyHair) {
-        HairStyleList hairStyleList = HairStyleList.getInstance();
-        if (hairStyleList != null) {
-            return hairStyleList.getAllStyles(legacyHair);
-        }
-
-        HashMap<String, HairStyle> styles = new HashMap<>();
-        legacyHair.values().forEach(hair -> styles.putIfAbsent(hair.getIdentifier(), HairStyle.fromHair(hair)));
-        return styles;
-    }
 }

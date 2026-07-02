@@ -270,6 +270,10 @@ public class Building {
                                 interiorSize++;
                                 queue.add(n);
                             }
+                        } else if (!state.getFluidState().isEmpty()) {
+                            //fluid blocks (water, lava, etc.) are treated as passable interior
+                            interiorSize++;
+                            queue.add(n);
                         } else if (state.getBlock() instanceof DoorBlock) {
                             //skip door and start a new room
                             if (!strictScan) {
@@ -310,10 +314,10 @@ public class Building {
                 ey = Math.max(ey, p.getY());
                 ez = Math.max(ez, p.getZ());
 
-                //count blocks types
+                //count block types using BlockState for live tag resolution
                 BlockState blockState = world.getBlockState(p);
                 Block block = blockState.getBlock();
-                if (isBuildingBlock(BuiltInRegistries.BLOCK.getKey(block))) {
+                if (isBuildingBlock(blockState)) {
                     if (block instanceof BedBlock) {
                         // TODO: look for better solution for 7.4.0
                         if (blockState.getValue(BedBlock.PART) == BedPart.HEAD) {
@@ -341,9 +345,9 @@ public class Building {
         }
     }
 
-    private boolean isBuildingBlock(ResourceLocation blockId) {
+    private boolean isBuildingBlock(BlockState state) {
         for (BuildingType bt : BuildingTypes.getInstance()) {
-            if (bt.matchesBlock(blockId)) {
+            if (bt.matchesBlock(state)) {
                 return true;
             }
         }

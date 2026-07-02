@@ -26,6 +26,9 @@ public enum Constraint implements BiPredicate<VillagerLike<?>, ServerPlayer> {
     FAMILY("family", Relationship.IS_FAMILY.asConstraint()),
     NOT_FAMILY("!family", Relationship.IS_FAMILY.negate().asConstraint()),
 
+    RELATIVE("relative", Relationship.IS_RELATIVE.asConstraint()),
+    NOT_RELATIVE("!relative", Relationship.IS_RELATIVE.negate().asConstraint()),
+
     BABY("baby", (villager, player) -> villager.getAgeState() == AgeState.BABY),
     NOT_BABY("!baby", (villager, player) -> villager.getAgeState() != AgeState.BABY),
 

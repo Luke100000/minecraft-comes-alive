@@ -24,7 +24,8 @@
     ]
   },
   "mixins": [
-    "${mod_id}.mixins.json"
+    "${mod_id}.mixins.json",
+    "${mod_id}.journeymap.mixins.json"
   ],
   "depends": {
     "fabricloader": ">=0.14",

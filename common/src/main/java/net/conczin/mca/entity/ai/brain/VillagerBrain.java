@@ -5,6 +5,7 @@ import net.conczin.mca.entity.Status;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.entity.ai.*;
+import net.conczin.mca.entity.ai.relationship.AgeState;
 import net.conczin.mca.entity.ai.relationship.Personality;
 import net.conczin.mca.registry.CriterionMCA;
 import net.conczin.mca.util.network.datasync.CDataManager;
@@ -133,7 +134,11 @@ public class VillagerBrain<E extends Mob & VillagerLike<E>> {
     }
 
     public void randomize() {
-        entity.setTrackedValue(PERSONALITY, Personality.getRandom());
+        randomize(entity.getAgeState());
+    }
+
+    public void randomize(AgeState ageState) {
+        entity.setTrackedValue(PERSONALITY, Personality.getRandom(ageState));
         entity.setTrackedValue(MOOD, entity.level().random.nextInt(MoodGroup.MAX_LEVEL - MoodGroup.NORMAL_MIN_LEVEL + 1) + MoodGroup.NORMAL_MIN_LEVEL);
     }
 

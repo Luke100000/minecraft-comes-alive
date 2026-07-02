@@ -17,11 +17,11 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-final class SkinListJson {
+public final class SkinListJson {
     private SkinListJson() {
     }
 
-    static List<Entry> entries(ResourceLocation fileId, JsonElement file) {
+    public static List<Entry> entries(ResourceLocation fileId, JsonElement file) {
         if (!file.isJsonArray()) {
             MCA.LOGGER.warn("Invalid skin list {}, expected an array", fileId);
             return List.of();
@@ -52,7 +52,7 @@ final class SkinListJson {
         return entries;
     }
 
-    static Map<ResourceLocation, List<String>> textureCollections(ResourceManager manager, String directory) {
+    public static Map<ResourceLocation, List<String>> textureCollections(ResourceManager manager, String directory) {
         FileToIdConverter converter = FileToIdConverter.json(directory);
         Map<ResourceLocation, List<String>> collections = new LinkedHashMap<>();
 
@@ -69,6 +69,12 @@ final class SkinListJson {
         });
 
         return collections;
+    }
+
+    public static List<String> textureCollection(ResourceLocation id, JsonElement file) {
+        List<String> textures = new ArrayList<>();
+        appendTextureCollection(id, file, textures);
+        return textures;
     }
 
     private static void appendTextureCollection(ResourceLocation id, JsonElement file, List<String> textures) {
@@ -105,6 +111,6 @@ final class SkinListJson {
         });
     }
 
-    record Entry(String identifier, JsonObject metadata) {
+    public record Entry(String identifier, JsonObject metadata) {
     }
 }

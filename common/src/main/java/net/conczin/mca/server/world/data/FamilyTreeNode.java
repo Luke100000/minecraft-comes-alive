@@ -288,7 +288,38 @@ public final class FamilyTreeNode {
     }
 
     public boolean isRelative(UUID with) {
-        return getAllRelatives(9).anyMatch(with::equals);
+        if (with == null) {
+            return false;
+        }
+        return isBloodRelative(with);
+    }
+
+    public boolean isBloodRelative(UUID otherId) {
+        if (otherId == null) {
+            return false;
+        }
+        Set<UUID> myAncestors = new HashSet<>();
+        gatherAncestors(this.id, myAncestors);
+
+        Set<UUID> otherAncestors = new HashSet<>();
+        gatherAncestors(otherId, otherAncestors);
+
+        for (UUID ancestor : myAncestors) {
+            if (otherAncestors.contains(ancestor)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void gatherAncestors(UUID startId, Set<UUID> ancestors) {
+        if (startId == null || ancestors.contains(startId)) {
+            return;
+        }
+        ancestors.add(startId);
+        getRoot().getOrEmpty(startId).ifPresent(node -> {
+            node.streamParents().forEach(parentId -> gatherAncestors(parentId, ancestors));
+        });
     }
 
     public Stream<FamilyTreeNode> getParents() {

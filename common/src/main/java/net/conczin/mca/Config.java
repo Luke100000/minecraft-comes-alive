@@ -351,6 +351,14 @@ public final class Config extends CommonConfig {
     public int heartsRequiredToAutoSpawnGravestone = 10;
 
     /**
+     * The type of headstone that automatically spawns when a villager dies.
+     * Options: "cross_headstone", "gravelling_headstone", "upright_headstone", "slanted_headstone", "wall_headstone",
+     * "cobblestone_upright_headstone", "cobblestone_slanted_headstone", "wooden_upright_headstone", "wooden_slanted_headstone",
+     * "golden_upright_headstone", "golden_slanted_headstone", "deepslate_upright_headstone", "deepslate_slanted_headstone"
+     */
+    public String defaultHeadstoneType = "cross_headstone";
+
+    /**
      * Enables smarter villager door AI,
      * allowing them to open gates as well.
      */

@@ -13,6 +13,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.tags.TagKey;
 import net.minecraft.util.GsonHelper;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.*;
 
@@ -217,8 +218,43 @@ public final class BuildingType {
         return Optional.empty();
     }
 
+    /**
+     * Matches a block against this building type's requirements using the BlockState's live
+     * holder, which has data-pack tags populated (unlike BuiltInRegistries which uses only
+     * static tag data). Tag-matched blocks are cached into blockToGroup for determineType().
+     */
+    private Optional<ResourceLocation> getGroupForBlock(BlockState state) {
+        getBlockToGroup();
+
+        ResourceLocation blockId = BuiltInRegistries.BLOCK.getKey(state.getBlock());
+
+        // Direct block ID match
+        ResourceLocation directGroup = blockToGroup.get(blockId);
+        if (directGroup != null) {
+            return Optional.of(directGroup);
+        }
+
+        // Tag match using blockState.is(tag) — uses live data-pack tag data
+        for (Map.Entry<TagKey<Block>, ResourceLocation> entry : tagToGroup.entrySet()) {
+            if (state.is(entry.getKey())) {
+                // Cache so determineType() (ResourceLocation-based) finds it too
+                blockToGroup.put(blockId, entry.getValue());
+                return Optional.of(entry.getValue());
+            }
+        }
+
+        return Optional.empty();
+    }
+
     public boolean matchesBlock(ResourceLocation blockId) {
         return getGroupForBlock(blockId).isPresent();
+    }
+
+    /**
+     * Preferred overload for use during building scans — uses live data-pack tags.
+     */
+    public boolean matchesBlock(BlockState state) {
+        return getGroupForBlock(state).isPresent();
     }
 
     public Map<ResourceLocation, Integer> getGroups() {

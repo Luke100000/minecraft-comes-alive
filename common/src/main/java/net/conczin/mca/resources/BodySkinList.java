@@ -56,7 +56,7 @@ public class BodySkinList extends SimpleJsonResourceReloadListener {
                         (a, b) -> a.entries.addAll(b.entries));
     }
 
-    static Gender getGenderFromPath(ResourceLocation id) {
+    public static Gender getGenderFromPath(ResourceLocation id) {
         String path = id.getPath();
         int slash = path.lastIndexOf('/');
         return Gender.byName(slash >= 0 ? path.substring(slash + 1) : path);
