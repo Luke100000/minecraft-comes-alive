@@ -87,7 +87,7 @@ public class Relationship<T extends Mob & VillagerLike<T>> implements EntityRela
             // prefer center
             BlockPos pos = entityPos.offset(0, y, 0);
             if (world.getBlockState(pos).isAir()) {
-                world.setBlockAndUpdate(pos, BlocksMCA.CROSS_HEADSTONE.defaultBlockState());
+                world.setBlockAndUpdate(pos, BlocksMCA.BLOCKS.getOrDefault(Config.getInstance().defaultHeadstoneType, BlocksMCA.CROSS_HEADSTONE).defaultBlockState());
                 return Optional.ofNullable(pos);
             }
 
@@ -96,7 +96,7 @@ public class Relationship<T extends Mob & VillagerLike<T>> implements EntityRela
                     if (x != 0 || z != 0) {
                         pos = entityPos.offset(x, y, z);
                         if (world.getBlockState(pos).isAir()) {
-                            world.setBlockAndUpdate(pos, BlocksMCA.CROSS_HEADSTONE.defaultBlockState());
+                            world.setBlockAndUpdate(pos, BlocksMCA.BLOCKS.getOrDefault(Config.getInstance().defaultHeadstoneType, BlocksMCA.CROSS_HEADSTONE).defaultBlockState());
                             return Optional.ofNullable(pos);
                         }
                     }
