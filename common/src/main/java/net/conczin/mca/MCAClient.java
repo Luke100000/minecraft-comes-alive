@@ -27,6 +27,7 @@ public class MCAClient {
         playerDataRequests.clear();
         ClientSkinCatalog.clear();
         Network.sendToServer(new ConfigRequest());
+        ClientSkinCatalog.sync();
     }
 
     public static Optional<VillagerLike<?>> getPlayerData(UUID uuid) {

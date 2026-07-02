@@ -1,3 +1,23 @@
+# 7.9.6
+
+* Added a No Aging trait that prevents villagers from automatically growing up or aging over time.
+    * This trait has a spawn chance of 0% and is only accessible/configurable via the Villager Editor.
+* Added an Infertile trait, causing some villagers to be unable to have children.
+    * If needed, the trait can be removed with the MCA Debug Book.
+* Fixed pregnancy checks so infertile parents reject pregnancy correctly.
+* Internal networking changes to make multiplayer editor and custom skin data sync more reliably.
+    * Visual editor selections are now picked client-side and validated by the server.
+* Fixed multiplayer issues when editing villagers and loading custom skin data.
+* Prevented babies, children, and non-spouse relatives from flirting, kissing, or accepting romantic items.
+* Age-locked the Flirty personality so it cannot be assigned to babies, toddlers, or children.
+* Added personality re-randomization when villagers age up to allow natural character development.
+* Spouses no longer count as biologically related.
+* Fixed `building_types` block tag resolution so tags like `#minecraft:candles` and `#minecraft:water` match blocks during building scans.
+    * Datapacks can now use tags, including fluids, in building type definitions.
+* Guards now fight while following you.
+* Fixed guard follow/combat behavior.
+* Fixed left-handed default guard and archer equipment orientation.
+
 # 7.9.5
 
 * Fixed trait pagination in the villager editor

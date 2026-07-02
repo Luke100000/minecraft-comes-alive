@@ -655,9 +655,6 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                         var villager = previousScreen.getVillager();
                         villager.setClothes("immersive_library:" + hoveredContent.contentid());
                         previousScreen.markClothingSelected();
-                        villager.setHair("");
-                        villager.setHairStyleId("");
-                        villager.clearLayeredHair();
                         returnToPreviousScreen();
                     } else if (hoveredContent.hasTag("hair")) {
                         previousScreen.applyLibraryHair("immersive_library:" + hoveredContent.contentid());

@@ -70,6 +70,16 @@ final class SkinListJson {
         return collections;
     }
 
+    static List<String> textureCollection(Identifier id, JsonElement file) {
+        List<String> textures = new ArrayList<>();
+        try {
+            appendTextureCollection(id, file, textures);
+        } catch (Exception exception) {
+            MCA.LOGGER.warn("Failed to parse built-in skin list {}", id, exception);
+        }
+        return textures;
+    }
+
     private static void appendTextureCollection(Identifier id, JsonElement file, List<String> textures) {
         if (file.isJsonArray()) {
             appendTextureArray(id, file, textures);

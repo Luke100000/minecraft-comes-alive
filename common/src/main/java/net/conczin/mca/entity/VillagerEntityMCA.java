@@ -1213,6 +1213,8 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
                 refreshBrain((ServerLevel) level());
 
+                getVillagerBrain().randomize(state);
+
                 // set age specific clothes
                 randomizeClothes();
             }

@@ -43,6 +43,11 @@ public class CombScreen extends VillagerEditorScreen {
         }
     }
 
+    @Override
+    protected void rebuildCurrentPageFromData() {
+        super.setPage(page);
+    }
+
     private boolean isDoneFromLayeredHair(String dest) {
         return dest.equals("hair_advanced") && page != null && isLayeredHairDestination(page);
     }

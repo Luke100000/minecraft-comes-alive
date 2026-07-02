@@ -8,7 +8,9 @@ import net.conczin.mca.Config;
 import net.conczin.mca.MCA;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.Messenger;
+import net.conczin.mca.entity.ai.Relationship;
 import net.conczin.mca.entity.ai.chatAI.modules.*;
+import net.conczin.mca.entity.ai.relationship.AgeState;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
@@ -214,6 +216,12 @@ public class OpenAIChatAI implements ChatAIStrategy {
                     s = s.replaceAll("\\$" + entry.getKey(), entry.getValue());
                 }
                 sb.append(s);
+            }
+
+            if (villager.getAgeState() == AgeState.BABY || villager.getAgeState() == AgeState.TODDLER || villager.getAgeState() == AgeState.CHILD) {
+                sb.append("You are a child/baby and MUST NOT flirt with the player or use any romantic or suggestive language. Keep your responses innocent, child-like, and age-appropriate.\n");
+            } else if (Relationship.IS_RELATIVE.test(villager, player)) {
+                sb.append("You are related to the player and MUST NOT flirt with them or use romantic/suggestive language. Keep your responses strictly familial.\n");
             }
 
             // try to match player language

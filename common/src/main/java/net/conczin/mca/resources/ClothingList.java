@@ -7,7 +7,6 @@ import net.conczin.mca.MCA;
 import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.resources.data.skin.Clothing;
-import net.conczin.mca.resources.data.skin.SkinListEntry;
 import net.conczin.mca.server.world.data.CustomClothingManager;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.FileToIdConverter;
@@ -73,26 +72,13 @@ public class ClothingList extends SimpleJsonResourceReloadListener<JsonElement> 
     }
 
     private List<Clothing> getOptions(VillagerLike<?> villager, Collection<Clothing> available) {
-        Gender gender = villager.getGenetics().getGender();
-        String agePool = switch (villager.getAgeState()) {
-            case BABY -> MCA.locate("baby").toString();
-            case TODDLER -> MCA.locate("toddler").toString();
-            case CHILD, TEEN -> MCA.locate("child").toString();
-            default -> null;
-        };
-        if (agePool != null) {
-            return getOptions(gender, agePool, available);
-        }
-
-        List<Clothing> options = getOptions(gender, villager.getVillagerData().profession().value(), available);
-        return options.isEmpty() ? getOptions(gender, (VillagerProfession) null, available) : options;
+        return SkinSelection.clothingForVillager(available, villager, Config.getInstance().professionConversionsMap);
     }
 
     private List<Clothing> getOptions(Gender gender, @Nullable VillagerProfession profession, Collection<Clothing> available) {
         Map<String, String> map = Config.getInstance().professionConversionsMap;
         String currentValue = profession == null ? "minecraft:none" : BuiltInRegistries.VILLAGER_PROFESSION.getKey(profession).toString();
-        String identifier = map.getOrDefault(currentValue, map.getOrDefault("default", currentValue));
-        return getOptions(gender, identifier, available);
+        return getOptions(gender, SkinSelection.mapProfession(currentValue, map), available);
     }
 
     public WeightedPool<String> getPool(Gender gender, @Nullable String profession) {
@@ -104,19 +90,11 @@ public class ClothingList extends SimpleJsonResourceReloadListener<JsonElement> 
     }
 
     public List<Clothing> getEditorOptions(Gender gender, Collection<Clothing> available) {
-        return available.stream()
-                .filter(c -> c.getGender() == Gender.NEUTRAL || gender == Gender.NEUTRAL || c.getGender() == gender)
-                .filter(c -> !c.exclude)
-                .sorted((a, b) -> SkinListEntry.compareIdentifiers(a.getIdentifier(), b.getIdentifier()))
-                .toList();
+        return SkinSelection.editorClothing(available, gender);
     }
 
     private List<Clothing> getOptions(Gender gender, @Nullable String profession, Collection<Clothing> available) {
-        return available.stream()
-                .filter(c -> c.getGender() == Gender.NEUTRAL || gender == Gender.NEUTRAL || c.getGender() == gender)
-                .filter(c -> c.profession == null || profession == null && !c.exclude || c.profession.equals(profession) || profession != null && c.profession.equals(profession.replace(":", ".")))
-                .sorted((a, b) -> SkinListEntry.compareIdentifiers(a.getIdentifier(), b.getIdentifier()))
-                .toList();
+        return SkinSelection.clothingForProfession(available, gender, profession);
     }
 
     private List<Clothing> allClothing() {
@@ -124,9 +102,6 @@ public class ClothingList extends SimpleJsonResourceReloadListener<JsonElement> 
     }
 
     private WeightedPool<String> toPool(List<Clothing> options) {
-        return options.stream().collect(() -> new WeightedPool.Mutable<>("mca:missing"),
-                (pool, entry) -> pool.add(entry.getIdentifier(), entry.getChance()),
-                (a, b) -> a.entries.addAll(b.entries));
+        return SkinSelection.toPool(options, "mca:missing");
     }
-
 }
