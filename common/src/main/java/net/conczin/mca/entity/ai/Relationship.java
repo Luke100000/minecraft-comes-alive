@@ -29,6 +29,11 @@ import net.minecraft.world.entity.ai.behavior.BlockPosTracker;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.WalkTarget;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.Blocks;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -44,6 +49,8 @@ public class Relationship<T extends Mob & VillagerLike<T>> implements EntityRela
     public static final Predicate IS_ENGAGED = (villager, player) -> villager.getRelationships().isEngagedWith(player);
     public static final Predicate IS_PROMISED = (villager, player) -> villager.getRelationships().isPromisedTo(player);
     public static final Predicate IS_RELATIVE = (villager, player) -> villager.getRelationships().getFamilyEntry().isRelative(player);
+    public static final Predicate IS_ROMANTIC_PARTNER = IS_MARRIED.or(IS_ENGAGED).or(IS_PROMISED);
+    public static final Predicate IS_TRUE_RELATIVE = (villager, player) -> IS_RELATIVE.test(villager, player) && !IS_ROMANTIC_PARTNER.test(villager, player);
     public static final Predicate IS_FAMILY = IS_MARRIED.or(IS_RELATIVE);
     public static final Predicate IS_PARENT = (villager, player) -> villager.getRelationships().getFamilyEntry().isParent(player);
     public static final Predicate IS_KID = (villager, player) -> FamilyTree.get(villager.getRelationships().getWorld()).getOrEmpty(player).filter(n -> n.isParent(villager.getRelationships().getUUID())).isPresent();
@@ -80,13 +87,30 @@ public class Relationship<T extends Mob & VillagerLike<T>> implements EntityRela
         return getFamilyTree().getOrCreate(entity);
     }
 
+    private BlockState getConfiguredTombstoneState() {
+        String configuredName = Config.getInstance().defaultHeadstoneType;
+        if (configuredName != null && !configuredName.contains(":")) {
+            configuredName = "mca:" + configuredName;
+        }
+
+        ResourceLocation location = configuredName == null ? null : ResourceLocation.tryParse(configuredName);
+        Block block = location == null ? null : BuiltInRegistries.BLOCK.get(location);
+
+        if (block instanceof TombstoneBlock) {
+            return block.defaultBlockState();
+        }
+
+        return BlocksMCA.CROSS_HEADSTONE.defaultBlockState();
+    }
+
     private Optional<BlockPos> placeTombstone(ServerLevel world, BlockPos entityPos) {
+        BlockState state = getConfiguredTombstoneState();
         int range = 2;
         for (int y = -range; y <= range; y++) {
             // prefer center
             BlockPos pos = entityPos.offset(0, y, 0);
-            if (world.getBlockState(pos).isAir()) {
-                world.setBlockAndUpdate(pos, BlocksMCA.CROSS_HEADSTONE.defaultBlockState());
+            if (world.getBlockState(pos).isAir() && state.canSurvive(world, pos)) {
+                world.setBlockAndUpdate(pos, state);
                 return Optional.ofNullable(pos);
             }
 
@@ -94,8 +118,8 @@ public class Relationship<T extends Mob & VillagerLike<T>> implements EntityRela
                 for (int z = -range; z <= range; z++) {
                     if (x != 0 || z != 0) {
                         pos = entityPos.offset(x, y, z);
-                        if (world.getBlockState(pos).isAir()) {
-                            world.setBlockAndUpdate(pos, BlocksMCA.CROSS_HEADSTONE.defaultBlockState());
+                        if (world.getBlockState(pos).isAir() && state.canSurvive(world, pos)) {
+                            world.setBlockAndUpdate(pos, state);
                             return Optional.ofNullable(pos);
                         }
                     }

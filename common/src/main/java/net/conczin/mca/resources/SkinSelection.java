@@ -21,7 +21,7 @@ public final class SkinSelection {
     }
 
     public static boolean matchesGender(SkinListEntry entry, Gender gender) {
-        return entry.getGender() == Gender.NEUTRAL || gender == Gender.NEUTRAL || entry.getGender() == gender;
+        return entry.getGender() == Gender.NEUTRAL || entry.getGender() == Gender.UNASSIGNED || gender == Gender.NEUTRAL || gender == Gender.UNASSIGNED || entry.getGender() == gender;
     }
 
     public static List<Clothing> editorClothing(Collection<Clothing> available, Gender gender) {

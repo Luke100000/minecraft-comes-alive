@@ -245,6 +245,9 @@ public class ClientHandlerImpl implements ClientHandler {
     @Override
     public void handleCustomSkinsChangedMessage(CustomSkinsChangedMessage message) {
         ClientSkinCatalog.markCustomSkinsOutdated();
+        if (client.screen instanceof SkinListUpdateListener) {
+            ClientSkinCatalog.sync();
+        }
     }
 
     @Override

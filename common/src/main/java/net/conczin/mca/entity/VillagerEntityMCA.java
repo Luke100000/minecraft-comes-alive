@@ -832,6 +832,24 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     }
 
     @Override
+    public boolean startRiding(Entity vehicle, boolean force) {
+        boolean result = super.startRiding(vehicle, force);
+        if (result && vehicle instanceof Player) {
+            this.refreshDimensions();
+        }
+        return result;
+    }
+
+    @Override
+    public void removeVehicle() {
+        Entity vehicle = this.getVehicle();
+        super.removeVehicle();
+        if (vehicle instanceof Player) {
+            this.refreshDimensions();
+        }
+    }
+
+    @Override
     public EntityDimensions getDefaultDimensions(Pose pose) {
         Entity vehicle = getVehicle();
         if (vehicle instanceof Player) {
