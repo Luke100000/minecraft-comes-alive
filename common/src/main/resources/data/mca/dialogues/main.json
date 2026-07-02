@@ -152,7 +152,7 @@
     },
     {
       "name": "flirt",
-      "constraints": "!kids,adult",
+      "constraints": "!kids,!relative,adult",
       "results": [
         {
           "actions": {
@@ -163,7 +163,7 @@
     },
     {
       "name": "kiss",
-      "constraints": "!kids,adult",
+      "constraints": "!kids,!relative,adult",
       "results": [
         {
           "actions": {
