@@ -221,7 +221,7 @@ public class ClientHandlerImpl implements ClientHandler {
     @Override
     public void handleCustomSkinListResponse(CustomSkinListResponse message) {
         Screen screen = client.gui.screen();
-        ClientSkinCatalog.installCustomSkins(message.clothing(), message.hair());
+        ClientSkinCatalog.installServerDelta(message.clothing(), message.bodySkins(), message.layeredHair(), message.hairStyles(), message.hair());
         if (screen instanceof SkinListUpdateListener gui) {
             gui.skinListUpdatedCallback();
         }

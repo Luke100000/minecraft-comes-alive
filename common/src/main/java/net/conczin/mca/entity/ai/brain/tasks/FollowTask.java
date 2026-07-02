@@ -31,11 +31,17 @@ public class FollowTask extends Behavior<VillagerEntityMCA> {
         villager.getBrain().getMemoryInternal(MemoryModuleTypeMCA.PLAYER_FOLLOWING).ifPresent(playerToFollow -> {
             if (villager.getVillagerBrain().isPanicking() && villager.getBrain().getMemoryInternal(MemoryModuleType.HURT_BY_ENTITY).filter(livingEntity -> livingEntity == playerToFollow).isPresent()) {
                 villager.getBrain().eraseMemory(MemoryModuleTypeMCA.PLAYER_FOLLOWING);
+            } else if (shouldYieldToGuardCombat(villager)) {
+                return;
             } else {
                 float dist = villager.distanceTo(playerToFollow) - 2;
                 float speed = Math.min(1.0f, Math.max(0.6f, dist * 0.4f * 0.25f));
                 BehaviorUtils.setWalkAndLookTargetMemories(villager, playerToFollow, (villager.isPassenger() ? 1.7f : 0.8f) * speed, 2);
             }
         });
+    }
+
+    private boolean shouldYieldToGuardCombat(VillagerEntityMCA villager) {
+        return villager.isGuard() && villager.getBrain().hasMemoryValue(MemoryModuleType.ATTACK_TARGET);
     }
 }
