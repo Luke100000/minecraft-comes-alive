@@ -3,8 +3,7 @@
 * Fixed vilagers sometimes losing their trades.
 * Improved performance
 * Villagers shouldn't drown anymore.
-
-
+* Fixed RGB eye slider.
 
 # 7.9.7
 

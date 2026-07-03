@@ -823,11 +823,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                 }
 
                 yVal += 2;
-                // Align the shared header buttons with the pagination row when the list is empty
-                if (presetNames.isEmpty()) {
-                    presetsButton.setY(yVal);
-                    exportSkinButton.setY(yVal);
-                }
+
                 addRenderableWidget(new ButtonWidget(width / 2, yVal, 28, 20, Component.literal("<<"), b -> {
                     currentPage = Math.max(0, currentPage - 1);
                     setPage("presets");
@@ -934,23 +930,14 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     }
 
     private void refreshHairColor() {
-        if (villager.getHairDye() == 0) {
-            color.setHSV(0.0, 0.5, 0.5);
-        }
         villager.setHairDye(getSelectedDye());
     }
 
     private void refreshSkinColor() {
-        if (villager.getSkinDye() == 0xFF000000) {
-            color.setHSV(0.0, 0.5, 0.5);
-        }
         villager.setSkinDye(getSelectedDye());
     }
 
     private void refreshEyeColor() {
-        if (villager.getEyeDye() == 0xFFFFFFFF) {
-            color.setHSV(0.0, 0.0, 1.0);
-        }
         villager.setEyeDye(getSelectedDye());
     }
 
@@ -1018,9 +1005,6 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     }
 
     private void refreshEyeLeftColor() {
-        if (villager.getEyeLeftDye() == 0xFFFFFFFF) {
-            color.setHSV(0.0, 0.0, 1.0);
-        }
         villager.setEyeLeftDye(getSelectedDye());
     }
 
