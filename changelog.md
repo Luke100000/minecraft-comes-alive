@@ -1,3 +1,9 @@
+# 7.9.7
+
+* Fixed villager editor not saving changes, sorry!
+* Fixed eye color customization and Heterochromia traits getting wiped in the editor.
+* Added genetic eye color slider in the editor's eyes customization page.
+
 # 7.9.6
 
 * Added a "No Aging" trait to stop specific villagers from growing up or aging (available only through the Villager Editor).
