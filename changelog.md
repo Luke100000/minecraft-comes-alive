@@ -1,3 +1,11 @@
+# 7.9.8
+
+* Fixed vilagers sometimes losing their trades.
+* Improved performance
+* Villagers shouldn't drown anymore.
+
+
+
 # 7.9.7
 
 * Fixed villager editor not saving changes, sorry!
