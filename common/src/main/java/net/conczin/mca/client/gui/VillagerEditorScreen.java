@@ -503,7 +503,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
 
                 addCycleCommandRow(y, "clothing", getClothingText());
             }
-            case "hair_style", "head" -> {
+            case "hair_style" -> {
                 addCharacterSubpageTabs(y, "hair_style");
                 y += 24;
 
@@ -2044,7 +2044,20 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
 
     private boolean isMainPageSelected(String mainPage) {
         return mainPage.equals(page)
-               || (mainPage.equals("body") && List.of("clothing_style", "hair_style", "head", "eyes", "hair_advanced", "skin", "clothing", "hair").contains(page));
+               || (mainPage.equals("body") && List.of(
+                       "clothing_style",
+                       "hair_style",
+                       "eyes",
+                       "hair_advanced",
+                       "skin",
+                       "clothing",
+                       "hair",
+                       "hair_base",
+                       "hair_bangs",
+                       "hair_back",
+                       "hair_front",
+                       "hair_extra"
+               ).contains(page));
     }
 
     public void setVillagerName(String name) {
