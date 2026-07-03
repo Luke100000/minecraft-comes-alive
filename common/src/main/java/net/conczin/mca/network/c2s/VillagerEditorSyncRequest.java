@@ -69,6 +69,96 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
         data = data.copy();
     }
 
+    public static boolean isAllowedTopLevelKey(String key) {
+        return key.equals("Age") ||
+               key.equals("CustomName") ||
+               key.equals("CustomNameVisible") ||
+               key.equals("FamilyTreeNewFatherName") ||
+               key.equals("FamilyTreeNewMotherName") ||
+               key.equals("FamilyTreeNewSpouseName") ||
+               key.equals("VillagerDataFinalized");
+    }
+
+    public static boolean isAllowedMcaKey(String key) {
+        if (key.startsWith("Gene")) {
+            return true;
+        }
+        if (key.equals("Personality") || key.equals("Traits")) {
+            return true;
+        }
+        for (String visualKey : MCA_VISUAL_KEYS) {
+            if (visualKey.equals(key)) {
+                return true;
+            }
+        }
+        if (key.equals("HairDye") || key.equals("SkinDye") || key.equals("EyeDye") || key.equals("EyeLeftDye")) {
+            return true;
+        }
+        return false;
+    }
+
+    public static CompoundTag createEditorPatch(CompoundTag sourceNbt) {
+        CompoundTag patch = new CompoundTag();
+        for (String key : sourceNbt.keySet()) {
+            if (isAllowedTopLevelKey(key)) {
+                patch.put(key, Objects.requireNonNull(sourceNbt.get(key)).copy());
+            }
+        }
+
+        CompoundTag mcaPatch = new CompoundTag();
+        for (String key : sourceNbt.keySet()) {
+            if (isAllowedMcaKey(key)) {
+                mcaPatch.put(key, Objects.requireNonNull(sourceNbt.get(key)).copy());
+            }
+        }
+
+        sourceNbt.getCompound("MCAData").ifPresent(sourceMca -> {
+            for (String key : sourceMca.keySet()) {
+                if (isAllowedMcaKey(key)) {
+                    mcaPatch.put(key, Objects.requireNonNull(sourceMca.get(key)).copy());
+                }
+            }
+        });
+
+        if (!mcaPatch.isEmpty()) {
+            patch.put("MCAData", mcaPatch);
+        }
+        return patch;
+    }
+
+    public static CompoundTag mergeAllowedEditorPatch(CompoundTag serverData, CompoundTag patch) {
+        CompoundTag merged = serverData.copy();
+        for (String key : patch.keySet()) {
+            if (isAllowedTopLevelKey(key)) {
+                merged.put(key, Objects.requireNonNull(patch.get(key)).copy());
+            }
+        }
+
+        patch.getCompound("MCAData").ifPresent(patchMca -> {
+            CompoundTag mergedMca = merged.getCompound("MCAData").orElseGet(() -> {
+                CompoundTag compound = new CompoundTag();
+                merged.put("MCAData", compound);
+                return compound;
+            });
+            for (String key : patchMca.keySet()) {
+                if (isAllowedMcaKey(key)) {
+                    mergedMca.put(key, Objects.requireNonNull(patchMca.get(key)).copy());
+                }
+            }
+        });
+
+        // Defensive preservation:
+        String[] preservedKeys = {"Offers", "Gossips", "Inventory", "VillagerXp", "UUID", "UUIDMost", "UUIDLeast"};
+        for (String key : preservedKeys) {
+            if (serverData.contains(key)) {
+                merged.put(key, Objects.requireNonNull(serverData.get(key)).copy());
+            } else {
+                merged.remove(key);
+            }
+        }
+        return merged;
+    }
+
     public CompoundTag data() {
         return data.copy();
     }
@@ -88,28 +178,43 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
         }
     }
 
-    private void saveEntity(ServerPlayer player, Entity entity, CompoundTag villagerData) {
+    private void saveEntity(ServerPlayer player, Entity entity, CompoundTag patch) {
         if (entity == null) {
             return;
         }
 
-        sanitizeVisualIdentifiers(entity, villagerData);
         if (entity instanceof ServerPlayer serverPlayer) {
+            CompoundTag serverData = PlayerSaveData.get(serverPlayer).getEntityData();
+            CompoundTag merged = mergeAllowedEditorPatch(serverData, patch);
             PlayerSaveData data = PlayerSaveData.get(serverPlayer);
-            data.setEntityData(villagerData);
+            data.setEntityData(merged);
             data.setEntityDataSet(true);
-            syncFamilyTree(player, entity, villagerData);
-            serverPlayer.level().players().forEach(p -> Network.sendToPlayer(new PlayerDataMessage(serverPlayer.getUUID(), villagerData), p));
-        } else if (entity instanceof VillagerLike<?> villagerLike) {
-            villagerLike.syncFromEditor(villagerData);
+            syncFamilyTree(player, entity, merged);
+            serverPlayer.level().players().forEach(p -> Network.sendToPlayer(new PlayerDataMessage(serverPlayer.getUUID(), merged), p));
+            Network.sendToPlayer(new GetVillagerResponse(merged), player);
+            return;
+        }
+
+        if (entity instanceof VillagerLike<?> villagerLike) {
+            CompoundTag serverData = GetVillagerRequest.getVillagerData(entity);
+            if (serverData == null) {
+                return;
+            }
+
+            CompoundTag merged = mergeAllowedEditorPatch(serverData, patch);
+            sanitizeVisualIdentifiers(entity, merged);
+
+            villagerLike.syncFromEditor(merged);
             entity.refreshDimensions();
-            syncFamilyTree(player, entity, villagerData);
+            syncFamilyTree(player, entity, merged);
 
             if (entity instanceof VillagerEntityMCA villager) {
                 villager.getResidency().getHomeVillage().ifPresent(b -> b.updateResident(villager));
             }
+
+            CompoundTag fresh = GetVillagerRequest.getVillagerData(entity);
+            Network.sendToPlayer(new GetVillagerResponse(fresh != null ? fresh : merged), player);
         }
-        Network.sendToPlayer(new GetVillagerResponse(villagerData), player);
     }
 
     private void sanitizeVisualIdentifiers(Entity entity, CompoundTag villagerData) {
