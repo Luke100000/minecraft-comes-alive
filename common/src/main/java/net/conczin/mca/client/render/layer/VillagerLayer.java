@@ -99,13 +99,10 @@ public abstract class VillagerLayer<T extends LivingEntity, M extends HumanoidMo
 
     @Nullable
     protected RenderType getRenderLayer(ResourceLocation texture, boolean showBody, boolean translucent, boolean showOutline) {
-        if (translucent) {
-            return RenderType.itemEntityTranslucentCull(texture);
-        } else if (showBody) {
-            return this.model.renderType(texture);
-        } else {
-            return showOutline ? RenderType.outline(texture) : null;
+        if (showBody) {
+            return translucent ? RenderType.itemEntityTranslucentCull(texture) : this.model.renderType(texture);
         }
+        return showOutline ? RenderType.outline(texture) : null;
     }
 
     protected void renderModel(PoseStack transform, MultiBufferSource provider, int light, M model, int color, ResourceLocation texture, int overlay, boolean visible, boolean glowing) {

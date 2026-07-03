@@ -1,6 +1,7 @@
 # 7.7.18-beta.6
 
-* Removed old Head category from showing.
+* Removed old Head category from Destiny Screen.
+* Fixed eye layers rendering when you're invisible.
 * Added a NO_AGING trait ("No Aging") that prevents villagers from automatically growing up or aging over time. This trait has a spawn chance of 0% and is only accessible/configurable via the Villager Editor (MCA Debug Book/Item).
 * Please report any issues on the GitHub Issues page or the Discord server, backing up your world is always recommended!
 
