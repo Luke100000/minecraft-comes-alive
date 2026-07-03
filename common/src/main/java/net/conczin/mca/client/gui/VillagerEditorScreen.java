@@ -1679,7 +1679,8 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         villagerVisualization.setAge(villager.getAge());
         villagerVisualization.refreshDimensions();
 
-        Network.sendToServer(new VillagerEditorSyncRequest(command, villagerUUID, commandData));
+        CompoundTag patch = VillagerEditorSyncRequest.createEditorPatch(commandData);
+        Network.sendToServer(new VillagerEditorSyncRequest(command, villagerUUID, patch));
     }
 
     private void setTraitPage(int i) {
@@ -2131,7 +2132,8 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     }
 
     public void syncVillagerData() {
-        Network.sendToServer(new VillagerEditorSyncRequest("sync", villagerUUID, createEditorData()));
+        CompoundTag patch = VillagerEditorSyncRequest.createEditorPatch(createEditorData());
+        Network.sendToServer(new VillagerEditorSyncRequest("sync", villagerUUID, patch));
     }
 
     private CompoundTag createEditorData() {
