@@ -682,9 +682,14 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
     @Override
     public void aiStep() {
+        int oldAge = getAge();
         updateSwingTime();
 
         super.aiStep();
+
+        if (getTraits().hasTrait(Traits.NO_AGING)) {
+            setAge(oldAge);
+        }
 
         burned--;
         if (isOnFire()) {

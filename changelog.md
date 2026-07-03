@@ -1,3 +1,7 @@
+# 8.0.2
+
+* Ported over 7.9.7 update from 26.1.2
+
 # 8.0.1
 
 * Fixed multiplayer.
@@ -16,6 +20,12 @@
 * Initial 26.2 port.
 * This is a beta release, recommended to backup your world.
 * Any bugs, please report them!
+
+# 7.9.7
+
+* Fixed villager editor not saving changes, sorry!
+* Fixed eye color customization and Heterochromia traits getting wiped in the editor.
+* Added genetic eye color slider in the editor's eyes customization page.
 
 # 7.9.6
 

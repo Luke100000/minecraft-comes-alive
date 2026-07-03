@@ -15,22 +15,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(Entity.class)
 abstract class MixinEntity {
-    @Unique
-    private int mca$ageBeforeTick;
-
-    @Inject(method = "tick", at = @At("HEAD"))
-    private void mca$captureAgeBeforeTick(CallbackInfo ci) {
-        if ((Object) this instanceof VillagerEntityMCA villager) {
-            mca$ageBeforeTick = villager.getAge();
-        }
-    }
-
-    @Inject(method = "tick", at = @At("RETURN"))
-    private void mca$restoreAgeForNoAgingTrait(CallbackInfo ci) {
-        if ((Object) this instanceof VillagerEntityMCA villager && villager.getTraits().hasTrait(Traits.NO_AGING)) {
-            villager.setAge(mca$ageBeforeTick);
-        }
-    }
 
     @Redirect(
             method = "startRiding(Lnet/minecraft/world/entity/Entity;ZZ)Z",

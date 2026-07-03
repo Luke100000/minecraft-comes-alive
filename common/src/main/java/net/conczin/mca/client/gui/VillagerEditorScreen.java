@@ -592,6 +592,8 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                 }
 
                 y = geneChanger(y, Genetics.FACE, getFaceCount());
+                addGeneSlider(width / 2, y, DATA_WIDTH, Genetics.EYE_COLOR);
+                y += 24;
 
                 if (hasHetero) {
                     addRenderableWidget(new ButtonWidget(width / 2, y, DATA_WIDTH / 2, 20,
@@ -949,7 +951,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     }
 
     private void refreshEyeColor() {
-        if (villager.getEyeDye() == 0) {
+        if (villager.getEyeDye() == 0xFFFFFFFF) {
             color.setHSV(0.0, 0.0, 1.0);
         }
         villager.setEyeDye(getSelectedDye());
@@ -1019,7 +1021,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     }
 
     private void refreshEyeLeftColor() {
-        if (villager.getEyeLeftDye() == 0) {
+        if (villager.getEyeLeftDye() == 0xFFFFFFFF) {
             color.setHSV(0.0, 0.0, 1.0);
         }
         villager.setEyeLeftDye(getSelectedDye());
