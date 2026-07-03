@@ -1,3 +1,7 @@
+# 8.0.3
+
+* Ported over 7.9.8 update from 26.1.2
+* 
 # 8.0.2
 
 * Ported over 7.9.7 update from 26.1.2
@@ -20,6 +24,13 @@
 * Initial 26.2 port.
 * This is a beta release, recommended to backup your world.
 * Any bugs, please report them!
+
+# 7.9.8
+
+* Fixed vilagers sometimes losing their trades.
+* Improved performance
+* Villagers shouldn't drown anymore.
+* Fixed RGB eye slider.
 
 # 7.9.7
 
@@ -44,6 +55,9 @@
 
 # 7.9.5
 
+* Fixed trait pagination in the villager editor
+* Reduced dynamic skin texture churn while Immersive Library assets are still loading
+* Advancement book addition can be toggled with a config option.
 
 # 7.9.4
 

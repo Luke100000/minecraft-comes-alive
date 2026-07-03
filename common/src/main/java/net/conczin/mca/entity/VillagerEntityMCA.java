@@ -82,6 +82,7 @@ import net.minecraft.world.item.component.SuspiciousStewEffects;
 import net.minecraft.world.item.consume_effects.ApplyStatusEffectsConsumeEffect;
 import net.minecraft.world.item.trading.MerchantOffer;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.pathfinder.PathType;
 import net.minecraft.world.level.ServerLevelAccessor;
 import net.minecraft.world.level.storage.TagValueInput;
 import net.minecraft.world.level.storage.ValueInput;
@@ -141,7 +142,10 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         super(type, w);
         this.moveControl = new ArcherMoveControl<>(this);
         genetics.setGender(gender);
-        this.getNavigation().setRequiredPathLength(Config.getInstance().getVillagerPathfindingDistance());
+        this.setPathfindingMalus(PathType.WATER_BORDER, 16.0F);
+        this.setPathfindingMalus(PathType.TRAPDOOR, 8.0F);
+        this.setPathfindingMalus(PathType.ON_TOP_OF_TRAPDOOR, 8.0F);
+        this.getNavigation().setRequiredPathLength((float) Config.getInstance().getVillagerPathfindingDistance());
     }
 
     public static <E extends Entity> CDataManager.Builder<E> createTrackedData(CDataManager.Builder<E> builder) {
@@ -191,7 +195,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
                 .add(Attributes.ATTACK_DAMAGE, 3.0f)
                 .add(Attributes.ATTACK_KNOCKBACK, 1.0f)
                 .add(Attributes.MAX_HEALTH, Config.getInstance().villagerMaxHealth)
-                .add(Attributes.FOLLOW_RANGE, Config.getInstance().getVillagerPathfindingDistance());
+                .add(Attributes.FOLLOW_RANGE, 25.0);
     }
 
     @Override

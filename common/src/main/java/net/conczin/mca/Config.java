@@ -201,7 +201,7 @@ public final class Config extends CommonConfig {
     /**
      * Maximum pathfinding distance used when villagers walk to long-range memories such as beds.
      */
-    public int villagerPathfindingDistance = 192;
+    public int villagerPathfindingDistance = 100;
 
     /**
      * Number of hearts a child starts with towards their parent.
