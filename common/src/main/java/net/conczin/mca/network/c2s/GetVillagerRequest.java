@@ -52,6 +52,7 @@ public record GetVillagerRequest(UUID id) implements HandleablePayload {
 
         FamilyTree tree = FamilyTree.get((ServerLevel) e.level());
         FamilyTreeNode entry = tree.getOrCreate(e);
+        data.putString("FamilyTreeName", entry.getName());
 
         storeNode(data, tree.getOrEmpty(entry.partner()), "Spouse");
         storeNode(data, tree.getOrEmpty(entry.father()), "Father");

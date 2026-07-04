@@ -730,9 +730,10 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                 y += 22;
 
                 //hearts
-                assert minecraft.player != null;
-                Memories player = villager.getVillagerBrain().getMemoriesForPlayer(minecraft.player);
-                y = integerChanger(y, player::modHearts, () -> Component.translatable("gui.blueprint.reputation", player.getHearts()));
+                if (minecraft.player != null) {
+                    Memories player = villager.getVillagerBrain().getMemoriesForPlayer(minecraft.player);
+                    y = integerChanger(y, player::modHearts, () -> Component.translatable("gui.blueprint.reputation", player.getHearts()));
+                }
 
                 //mood
                 integerChanger(y, v -> villager.getVillagerBrain().modifyMoodValue(v), () -> Component.translatable("gui.interact.label.mood", villager.getVillagerBrain().getMoodValue()));
@@ -1465,25 +1466,26 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         Component villagerName = null;
         boolean isPlayer = villagerUUID.equals(playerUUID);
         if (isPlayer) {
-            assert minecraft.player != null;
-            villagerName = minecraft.player.getCustomName();
+            if (minecraft.player != null) {
+                villagerName = minecraft.player.getCustomName();
+            }
         } else if (villager.hasCustomName()) {
             villagerName = villager.getCustomName();
         }
 
         if (villagerName == null || MCA.isBlankString(villagerName.getString())) {
-            // Failsafe-conditions for non-present custom names
             if (isPlayer) {
-                assert minecraft.player != null;
-                villagerName = minecraft.player.getName();
+                if (minecraft.player != null) {
+                    villagerName = minecraft.player.getName();
+                }
+                if (villagerName != null && !MCA.isBlankString(villagerName.getString())) {
+                    updateName(villagerName.getString());
+                }
             } else {
-                villagerName = villager.getName();
-            }
-
-            if (MCA.isBlankString(villagerName.getString())) {
-                Network.sendToServer(new VillagerNameRequest(villager.getGenetics().getGender()));
-            } else {
-                updateName(villagerName.getString());
+                String familyTreeName = villagerData == null ? "" : villagerData.getString("FamilyTreeName").orElse("");
+                villagerName = !MCA.isBlankString(familyTreeName)
+                        ? Component.literal(familyTreeName)
+                        : Component.empty();
             }
         }
 
@@ -1495,14 +1497,15 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
             Component newName = Component.nullToEmpty(name);
             boolean isPlayer = villagerUUID.equals(playerUUID);
             if (isPlayer) {
-                assert minecraft.player != null;
-                final Component realName = minecraft.player.getName();
-                if (realName.getString().equals(name)) {
-                    // Remove Custom name if it is the same as our actual name
-                    newName = null;
+                if (minecraft.player != null) {
+                    final Component realName = minecraft.player.getName();
+                    if (realName.getString().equals(name)) {
+                        // Remove Custom name if it is the same as our actual name
+                        newName = null;
+                    }
+                    minecraft.player.setCustomName(newName);
+                    minecraft.player.setCustomNameVisible(newName != null);
                 }
-                minecraft.player.setCustomName(newName);
-                minecraft.player.setCustomNameVisible(newName != null);
             }
             villager.setCustomName(newName);
         }
@@ -1835,8 +1838,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                 context.centeredText(font, Component.translatable("gui.mca.presets.preview"), 0, 0, 0xAAFFFFFF);
                 matrices.popMatrix();
             } else {
-                if (villagerUUID.equals(playerUUID) && shouldUsePlayerModel()) {
-                    assert Minecraft.getInstance().player != null;
+                if (villagerUUID.equals(playerUUID) && shouldUsePlayerModel() && Minecraft.getInstance().player != null) {
                     extractEntityPreview(context, x, y - 57, x + DATA_WIDTH, y + 95, 55, 0, mouseX, mouseY, delta, Minecraft.getInstance().player);
                 } else {
                     extractEntityPreview(context, x, y - 57, x + DATA_WIDTH, y + 95, 55, 0, mouseX, mouseY, delta, villager);
