@@ -1,3 +1,8 @@
+# 8.0.5
+
+* Fixed guards attacking tamed/owned Zombie Nautiluses.
+* Tamed/owned mobs are no longer targeted or attacked by guards.
+
 # 7.9.9
 
 * Fixed nameless villagers being saved as their profession label after opening the Villager Editor.

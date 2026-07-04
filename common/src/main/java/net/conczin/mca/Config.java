@@ -790,6 +790,7 @@ public final class Config extends CommonConfig {
             .put("minecraft:zoglin", 2)
             .put("minecraft:zombie", 4)
             .put("minecraft:zombie_horse", -1)
+            .put("minecraft:zombie_nautilus", -1)
             .put("minecraft:zombie_villager", 3)
             .put("minecraft:spider", 0)
             .put("minecraft:cave_spider", 0)
