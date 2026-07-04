@@ -1,6 +1,6 @@
 # 7.7.18-beta.7
 
-* Fixed nameless villagers being saved as their profession label after opening the Villager Editor.
+* Villagers should stop having their trades reset.
 * Backported pathfinding maluses and pathfinding distance fixes.
 * Please report any issues on the GitHub Issues page or the Discord server, backing up your world is always recommended!
 
@@ -9,7 +9,6 @@
 * Removed old Head category from Destiny Screen.
 * Fixed eye layers rendering when you're invisible.
 * Added a NO_AGING trait ("No Aging") that prevents villagers from automatically growing up or aging over time. This trait has a spawn chance of 0% and is only accessible/configurable via the Villager Editor (MCA Debug Book/Item).
-* Please report any issues on the GitHub Issues page or the Discord server, backing up your world is always recommended!
 
 # 7.7.18-beta.5
 
@@ -33,8 +32,6 @@
 * Fixed `building_types` block tag resolution — tags like `#minecraft:candles` and `#minecraft:water` now correctly match blocks during building scans.
   * Previously, all data-pack block tags were silently ignored.
   * For datapacks, you can now add in all tags including fluids!
-* Please report any issues on the GitHub Issues page or the Discord server, backing up your world is always recommended!
-* If you have any suggestions, please let me know!
 
 # 7.7.18-beta.4
 
