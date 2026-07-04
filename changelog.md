@@ -1,10 +1,13 @@
+# 7.9.9
+
+* Fixed nameless villagers being saved as their profession label after opening the Villager Editor.
+
 # 7.9.8
 
 * Fixed vilagers sometimes losing their trades.
 * Improved performance
 * Villagers shouldn't drown anymore.
 * Fixed RGB eye slider.
-* Fixed nameless villagers being saved as their profession label after opening the Villager Editor.
 
 # 7.9.7
 
