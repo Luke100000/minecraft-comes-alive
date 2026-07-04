@@ -1,7 +1,10 @@
+# 8.0.4
+
+* Fixed nameless villagers being saved as their profession label after opening the Villager Editor.
+
 # 8.0.3
 
 * Ported over 7.9.8 update from 26.1.2
-* Fixed nameless villagers being saved as their profession label after opening the Villager Editor.
 
 # 8.0.2
 
