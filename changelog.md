@@ -1,3 +1,8 @@
+# 7.7.18-beta.7
+
+* Fixed nameless villagers being saved as their profession label after opening the Villager Editor.
+* Please report any issues on the GitHub Issues page or the Discord server, backing up your world is always recommended!
+
 # 7.7.18-beta.6
 
 * Removed old Head category from Destiny Screen.
