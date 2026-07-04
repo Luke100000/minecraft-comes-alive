@@ -80,6 +80,7 @@ import net.minecraft.world.item.ProjectileWeaponItem;
 import net.minecraft.world.item.trading.MerchantOffer;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.ServerLevelAccessor;
+import net.minecraft.world.level.pathfinder.PathType;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.NotNull;
@@ -121,6 +122,9 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         super(type, w);
         inventory.addListener(this::onInvChange);
         genetics.setGender(gender);
+        this.setPathfindingMalus(PathType.WATER_BORDER, 16.0F);
+        this.setPathfindingMalus(PathType.TRAPDOOR, 8.0F);
+        this.setPathfindingMalus(PathType.DANGER_TRAPDOOR, 8.0F);
     }
 
     public static <E extends Entity> CDataManager.Builder<E> createTrackedData(Class<E> type) {
