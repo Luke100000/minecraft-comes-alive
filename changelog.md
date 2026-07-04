@@ -1,3 +1,8 @@
+# 8.0.5
+
+* Fixed guards attacking tamed/owned Zombie Nautiluses.
+* Tamed/owned mobs are no longer targeted or attacked by guards.
+
 # 8.0.4
 
 * Fixed nameless villagers being saved as their profession label after opening the Villager Editor.
@@ -28,7 +33,6 @@
 * Initial 26.2 port.
 * This is a beta release, recommended to backup your world.
 * Any bugs, please report them!
-
 # 7.9.8
 
 * Fixed vilagers sometimes losing their trades.

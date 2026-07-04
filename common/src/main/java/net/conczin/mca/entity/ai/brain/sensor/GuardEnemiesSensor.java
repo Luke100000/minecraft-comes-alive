@@ -17,6 +17,7 @@ import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.NearestVisibleLivingEntities;
 import net.minecraft.world.entity.ai.sensing.NearestLivingEntitySensor;
 import net.minecraft.world.entity.monster.Enemy;
+import net.minecraft.world.entity.OwnableEntity;
 
 import java.util.Map;
 import java.util.Optional;
@@ -94,6 +95,8 @@ public class GuardEnemiesSensor extends NearestLivingEntitySensor<LivingEntity> 
         } else if (guard != null && entity instanceof Mob mob && (mob.getTarget() == guard || followedPlayer != null && mob.getTarget() == followedPlayer)) {
             //priority is irrelevant if this entity is currently an active threat
             return 9;
+        } else if (entity instanceof OwnableEntity ownable && ownable.getOwnerReference() != null) {
+            return -1;
         } else {
             Identifier id = BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType());
             if (Config.getInstance().guardsTargetEntities.containsKey(id.toString())) {
