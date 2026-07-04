@@ -45,9 +45,11 @@ public record DestinyMessage(String location, boolean isClosing) implements Hand
             MCA.executorService.execute(() -> {
                 if (location.charAt(0) == '#') {
                     String tagId = location.substring(1);
-                    WorldUtils.getClosestStructurePosition(sp.level(), sp.blockPosition(), TagKey.create(Registries.STRUCTURE, Identifier.parse(tagId)), 128).ifPresentOrElse(pos -> handleBlockPos(sp, pos), () -> notifyDestinationNotFound(sp));
+                    WorldUtils.getClosestStructurePosition(sp.level(), sp.blockPosition(), TagKey.create(Registries.STRUCTURE, Identifier.parse(tagId)), 128)
+                            .ifPresentOrElse(pos -> sp.level().getServer().execute(() -> handleBlockPos(sp, pos)), () -> notifyDestinationNotFound(sp));
                 } else {
-                    WorldUtils.getClosestStructurePosition(sp.level(), sp.blockPosition(), Identifier.parse(location), 128).ifPresentOrElse(pos -> handleBlockPos(sp, pos), () -> notifyDestinationNotFound(sp));
+                    WorldUtils.getClosestStructurePosition(sp.level(), sp.blockPosition(), Identifier.parse(location), 128)
+                            .ifPresentOrElse(pos -> sp.level().getServer().execute(() -> handleBlockPos(sp, pos)), () -> notifyDestinationNotFound(sp));
                 }
             });
         }
@@ -71,6 +73,10 @@ public record DestinyMessage(String location, boolean isClosing) implements Hand
         }
         pos = RandomPos.moveUpOutOfSolid(pos, level.getHeight(), p -> level.getBlockState(p).isSuffocating(level, p));
         pos = ExtendedFuzzyPositions.downWhile(pos, 1, p -> !level.getBlockState(p.below()).isCollisionShapeFullBlock(level, p));
+        if (!level.isInWorldBounds(pos) || !level.getWorldBorder().isWithinBounds(pos)) {
+            notifyDestinationNotFound(player);
+            return;
+        }
         ChunkPos chunkPos = ChunkPos.containing(pos);
         level.getChunkSource().addTicketWithRadius(TicketType.PLAYER_LOADING, chunkPos, 1);
         player.connection.teleport(pos.getX(), pos.getY(), pos.getZ(), player.getYRot(), player.getXRot());

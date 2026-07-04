@@ -86,6 +86,7 @@ import net.minecraft.world.item.component.SuspiciousStewEffects;
 import net.minecraft.world.item.consume_effects.ApplyStatusEffectsConsumeEffect;
 import net.minecraft.world.item.trading.MerchantOffer;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.pathfinder.PathType;
 import net.minecraft.world.level.ServerLevelAccessor;
 import net.minecraft.world.level.storage.TagValueInput;
 import net.minecraft.world.level.storage.ValueInput;
@@ -153,7 +154,10 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         super(type, w);
         this.moveControl = new ArcherMoveControl(this);
         genetics.setGender(gender);
-        this.getNavigation().setRequiredPathLength(Config.getInstance().getVillagerPathfindingDistance());
+        this.setPathfindingMalus(PathType.WATER_BORDER, 16.0F);
+        this.setPathfindingMalus(PathType.TRAPDOOR, 8.0F);
+        this.setPathfindingMalus(PathType.ON_TOP_OF_TRAPDOOR, 8.0F);
+        this.getNavigation().setRequiredPathLength((float) Config.getInstance().getVillagerPathfindingDistance());
     }
 
     public static <E extends Entity> CDataManager.Builder<E> createTrackedData(CDataManager.Builder<E> builder) {
@@ -202,7 +206,8 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         return Villager.createAttributes()
                 .add(Attributes.ATTACK_DAMAGE, 3.0f)
                 .add(Attributes.ATTACK_KNOCKBACK, 1.0f)
-                .add(Attributes.MAX_HEALTH, Config.getInstance().villagerMaxHealth);
+                .add(Attributes.MAX_HEALTH, Config.getInstance().villagerMaxHealth)
+                .add(Attributes.FOLLOW_RANGE, 25.0);
     }
 
     @Override
@@ -251,7 +256,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         Brain<VillagerEntityMCA> brain = getMCABrain();
         Optional<Player> followingPlayer = brain.getMemoryInternal(MemoryModuleTypeMCA.PLAYER_FOLLOWING);
         brain.stopAll(world, this);
-        this.brain = (Brain<Villager>) (Brain<?>) VillagerTasksMCA.createProfile().makeBrain(this, brain.pack());
+        this.brain = VillagerTasksMCA.createProfile().makeBrain(this, brain.pack());
         followingPlayer.ifPresent(player -> getMCABrain().setMemory(MemoryModuleTypeMCA.PLAYER_FOLLOWING, player));
         VillagerTasksMCA.initializeTasks(this, getMCABrain());
     }
@@ -693,9 +698,14 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
     @Override
     public void aiStep() {
+        int oldAge = getAge();
         updateSwingTime();
 
         super.aiStep();
+
+        if (getTraits().hasTrait(Traits.NO_AGING)) {
+            setAge(oldAge);
+        }
 
         burned--;
         if (isOnFire()) {
@@ -1398,6 +1408,8 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
                 }
 
                 refreshBrain((ServerLevel) level());
+
+                getVillagerBrain().randomize(state);
 
                 // set age specific clothes
                 randomizeClothes();

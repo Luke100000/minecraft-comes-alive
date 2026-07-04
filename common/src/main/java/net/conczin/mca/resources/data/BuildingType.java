@@ -13,6 +13,7 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.tags.TagKey;
 import net.minecraft.util.GsonHelper;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.*;
 
@@ -217,8 +218,31 @@ public final class BuildingType {
         return Optional.empty();
     }
 
+    private Optional<Identifier> getGroupForBlock(BlockState state) {
+        getBlockToGroup();
+
+        Identifier blockId = BuiltInRegistries.BLOCK.getKey(state.getBlock());
+        Identifier directGroup = blockToGroup.get(blockId);
+        if (directGroup != null) {
+            return Optional.of(directGroup);
+        }
+
+        for (Map.Entry<TagKey<Block>, Identifier> entry : tagToGroup.entrySet()) {
+            if (state.is(entry.getKey())) {
+                blockToGroup.put(blockId, entry.getValue());
+                return Optional.of(entry.getValue());
+            }
+        }
+
+        return Optional.empty();
+    }
+
     public boolean matchesBlock(Identifier blockId) {
         return getGroupForBlock(blockId).isPresent();
+    }
+
+    public boolean matchesBlock(BlockState state) {
+        return getGroupForBlock(state).isPresent();
     }
 
     public Map<Identifier, Integer> getGroups() {

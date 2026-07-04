@@ -6,6 +6,7 @@ import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
 import net.conczin.mca.util.InventoryUtils;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.ai.behavior.Behavior;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
@@ -38,7 +39,7 @@ public class EquipmentTask extends Behavior<VillagerEntityMCA> {
             return false;
         }
 
-        EquipmentSet set = equipmentSet.apply(villager);
+        EquipmentSet set = orientForDominantHand(villager, equipmentSet.apply(villager));
         if (isNakedCombatSet(set, villager)) {
             return false;
         }
@@ -87,7 +88,7 @@ public class EquipmentTask extends Behavior<VillagerEntityMCA> {
         }
 
         lastArmorWearState = villager.getVillagerBrain().getArmorWear();
-        EquipmentSet set = equipmentSet.apply(villager);
+        EquipmentSet set = orientForDominantHand(villager, equipmentSet.apply(villager));
         if (isNakedCombatSet(set, villager)) {
             return;
         }
@@ -133,6 +134,25 @@ public class EquipmentTask extends Behavior<VillagerEntityMCA> {
     private static boolean isNakedCombatSet(EquipmentSet set, VillagerEntityMCA villager) {
         return set == EquipmentSet.NAKED
                 && villager.getBrain().getMemoryInternal(MemoryModuleType.ATTACK_TARGET).isPresent();
+    }
+
+    private static EquipmentSet orientForDominantHand(VillagerEntityMCA villager, EquipmentSet set) {
+        if (villager.getDominantHand() != InteractionHand.OFF_HAND) {
+            return set;
+        }
+        if (set == EquipmentSet.GUARD_0) {
+            return EquipmentSet.GUARD_0_LEFT;
+        }
+        if (set == EquipmentSet.ARCHER_0) {
+            return EquipmentSet.ARCHER_0_LEFT;
+        }
+        if (set == EquipmentSet.ARCHER_1) {
+            return EquipmentSet.ARCHER_1_LEFT;
+        }
+        if (set == EquipmentSet.ARCHER_2) {
+            return EquipmentSet.ARCHER_2_LEFT;
+        }
+        return set;
     }
 
     private static boolean isMissingRequestedHandItem(VillagerEntityMCA villager, EquipmentSet set) {

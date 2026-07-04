@@ -13,6 +13,7 @@ import net.minecraft.world.entity.Entity;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -38,8 +39,10 @@ public class Traits {
     public static Trait COELIAC_DISEASE = registerTrait("coeliac_disease", 1.0F, 1.0F, false); // TODO
     public static Trait DIABETES = registerTrait("diabetes", 1.0F, 1.0F, false); // TODO
     public static Trait VEGETARIAN = registerTrait("vegetarian", 1.0F, 1.0F, false); // TODO
+    public static Trait INFERTILE = registerTrait("infertile", 1.0F, 0.0F);
     public static Trait ELECTRIFIED = registerTrait("electrified", 0.0F, 0.0F, false);
-    public static Trait UNKNOWN = registerTrait("unknown", 0.0F, 0.0F, false);
+    public static Trait NO_AGING = registerTrait("no_aging", 0.0F, 0.0F, false);
+    // public static Trait UNKNOWN = registerTrait("unknown", 0.0F, 0.0F, false);
 
     private final VillagerLike<?> entity;
     private RandomSource random = RandomSource.create();
@@ -63,7 +66,7 @@ public class Traits {
     }
 
     public Set<Trait> getTraits() {
-        return entity.getTrackedValue(TRAITS).keySet().stream().map(Trait::valueOf).collect(Collectors.toSet());
+        return entity.getTrackedValue(TRAITS).keySet().stream().map(Trait::valueOf).filter(Objects::nonNull).collect(Collectors.toSet());
     }
 
     public Set<Trait> getInheritedTraits() {
@@ -71,7 +74,7 @@ public class Traits {
     }
 
     public boolean hasTrait(VillagerLike<?> target, Trait trait) {
-        return target.getTrackedValue(TRAITS).contains(trait.id());
+        return trait != null && target.getTrackedValue(TRAITS).contains(trait.id());
     }
 
     public boolean hasTrait(Trait trait) {
@@ -79,10 +82,8 @@ public class Traits {
     }
 
     public boolean hasTrait(String trait) {
-        if (Trait.valueOf(trait) != null) {
-            return hasTrait(entity, Trait.valueOf(trait));
-        }
-        return false;
+        Trait value = Trait.valueOf(trait);
+        return value != null && hasTrait(entity, value);
     }
 
     public boolean eitherHaveTrait(Trait trait, VillagerLike<?> other) {
@@ -94,12 +95,18 @@ public class Traits {
     }
 
     public void addTrait(Trait trait) {
+        if (trait == null) {
+            return;
+        }
         CompoundTag traits = entity.getTrackedValue(TRAITS).copy();
         traits.putBoolean(trait.id(), true);
         entity.setTrackedValue(TRAITS, traits);
     }
 
     public void removeTrait(Trait trait) {
+        if (trait == null) {
+            return;
+        }
         CompoundTag traits = entity.getTrackedValue(TRAITS).copy();
         traits.remove(trait.id());
         entity.setTrackedValue(TRAITS, traits);
@@ -155,7 +162,7 @@ public class Traits {
         }
 
         public static Trait valueOf(String id) {
-            return TRAIT_REGISTRY.getOrDefault(id, UNKNOWN);
+            return TRAIT_REGISTRY.getOrDefault(id, null);
         }
 
         public String id() {

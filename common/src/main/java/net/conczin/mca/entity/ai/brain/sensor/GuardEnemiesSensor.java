@@ -4,6 +4,7 @@ import com.google.common.collect.ImmutableSet;
 import net.conczin.mca.Config;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
+import net.conczin.mca.util.RegistryHelper;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.Identifier;
@@ -23,12 +24,16 @@ import java.util.Optional;
 import java.util.Set;
 
 public class GuardEnemiesSensor extends NearestLivingEntitySensor<LivingEntity> {
+    private static final double GUARD_ENEMY_RANGE = 48.0;
+    private static final double GUARD_ENEMY_RANGE_SQR = GUARD_ENEMY_RANGE * GUARD_ENEMY_RANGE;
+
     @Override
     public Set<MemoryModuleType<?>> requires() {
         return ImmutableSet.of(
                 MemoryModuleType.NEAREST_LIVING_ENTITIES,
                 MemoryModuleType.NEAREST_VISIBLE_LIVING_ENTITIES,
-                MemoryModuleTypeMCA.NEAREST_GUARD_ENEMY
+                MemoryModuleTypeMCA.NEAREST_GUARD_ENEMY,
+                MemoryModuleTypeMCA.PLAYER_FOLLOWING
         );
     }
 
@@ -39,18 +44,37 @@ public class GuardEnemiesSensor extends NearestLivingEntitySensor<LivingEntity> 
     }
 
     private Optional<LivingEntity> getNearestHostile(LivingEntity entity) {
-        return getVisibleMobs(entity).flatMap((list) -> list.find(e -> isGuardEnemy(e, entity))
-                .filter(e -> e.distanceToSqr(entity) <= 48.0 * 48.0)
-                .min((a, b) -> this.compareEntities(entity, a, b)));
+        LivingEntity followedPlayer = entity.getBrain().getMemoryInternal(MemoryModuleTypeMCA.PLAYER_FOLLOWING)
+                .map(player -> (LivingEntity) player)
+                .orElse(null);
+
+        return getVisibleMobs(entity).flatMap((list) -> list.find(e -> isGuardEnemy(e, entity, followedPlayer))
+                .filter(e -> isWithinGuardRange(e, entity, followedPlayer))
+                .min((a, b) -> this.compareEntities(entity, followedPlayer, a, b)));
+    }
+
+    private boolean isWithinGuardRange(LivingEntity hostile, LivingEntity guard, LivingEntity followedPlayer) {
+        return hostile.distanceToSqr(guard) <= GUARD_ENEMY_RANGE_SQR
+                || followedPlayer != null && hostile.distanceToSqr(followedPlayer) <= GUARD_ENEMY_RANGE_SQR;
     }
 
     private Optional<NearestVisibleLivingEntities> getVisibleMobs(LivingEntity entity) {
         return entity.getBrain().getMemoryInternal(MemoryModuleType.NEAREST_VISIBLE_LIVING_ENTITIES);
     }
 
-    private int compareEntities(LivingEntity entity, LivingEntity hostile1, LivingEntity hostile2) {
-        int i = getPriority(hostile2, entity) - getPriority(hostile1, entity);
-        return i == 0 ? compareDistances(entity, hostile1, hostile2) : i;
+    private int compareEntities(LivingEntity guard, LivingEntity followedPlayer, LivingEntity hostile1, LivingEntity hostile2) {
+        boolean hostile1TargetsFollowed = isTargeting(hostile1, followedPlayer);
+        boolean hostile2TargetsFollowed = isTargeting(hostile2, followedPlayer);
+        if (hostile1TargetsFollowed != hostile2TargetsFollowed) {
+            return hostile1TargetsFollowed ? -1 : 1;
+        }
+
+        int i = getPriority(hostile2, guard, followedPlayer) - getPriority(hostile1, guard, followedPlayer);
+        return i == 0 ? compareDistances(guard, hostile1, hostile2) : i;
+    }
+
+    private boolean isTargeting(LivingEntity hostile, LivingEntity target) {
+        return target != null && hostile instanceof Mob mob && mob.getTarget() == target;
     }
 
     private int compareDistances(LivingEntity entity, LivingEntity hostile1, LivingEntity hostile2) {
@@ -58,7 +82,7 @@ public class GuardEnemiesSensor extends NearestLivingEntitySensor<LivingEntity> 
     }
 
     public static boolean isGuardEnemy(LivingEntity entity, LivingEntity guard) {
-        return getPriority(entity, guard) >= 0;
+        return getPriority(entity, guard, null) >= 0;
     }
 
     public static boolean isValidGuardEnemy(LivingEntity entity, LivingEntity guard) {
@@ -75,10 +99,14 @@ public class GuardEnemiesSensor extends NearestLivingEntitySensor<LivingEntity> 
         return entity instanceof Mob mob && mob.getTarget() == guard;
     }
 
-    private static int getPriority(LivingEntity entity, LivingEntity guard) {
+    private static boolean isGuardEnemy(LivingEntity entity, LivingEntity guard, LivingEntity followedPlayer) {
+        return getPriority(entity, guard, followedPlayer) >= 0;
+    }
+
+    private static int getPriority(LivingEntity entity, LivingEntity guard, LivingEntity followedPlayer) {
         if (entity instanceof VillagerEntityMCA villager) {
             return villager.isHostile() ? 10 : -1;
-        } else if (guard != null && isTargetingGuard(entity, guard)) {
+        } else if (guard != null && (isTargetingGuard(entity, guard) || followedPlayer != null && entity instanceof Mob mob && mob.getTarget() == followedPlayer)) {
             //priority is irrelevant if this entity is currently an active threat
             return 9;
         } else {

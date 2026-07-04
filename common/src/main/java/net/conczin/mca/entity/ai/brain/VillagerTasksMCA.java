@@ -311,10 +311,10 @@ public class VillagerTasksMCA {
                         VillagerTasksMCA::guardTooHurt
                 )),
                 Pair.of(1, new EquipmentTask(VillagerTasksMCA::isOnDuty, v -> v.getResidency().getHomeVillage()
-                        .map(village -> village.getVillageGuardsManager().getGuardEquipment(v.getProfession(), v.getDominantHand()))
-                        .orElse(VillageGuardsManager.getEquipmentFor(v.getDominantHand(),
-                                v.getProfession() == ProfessionsMCA.ARCHER ? EquipmentSet.ARCHER_0 : EquipmentSet.GUARD_0,
-                                v.getProfession() == ProfessionsMCA.ARCHER ? EquipmentSet.ARCHER_0_LEFT : EquipmentSet.GUARD_0_LEFT)))),
+                        .map(village -> village.getVillageGuardsManager().getGuardEquipment(v.getProfession()))
+                        .orElseGet(() -> v.getProfession() == ProfessionsMCA.ARCHER
+                                ? VillageGuardsManager.getArcherEquipmentForLevel(0)
+                                : VillageGuardsManager.getGuardEquipmentForLevel(0)))),
                 Pair.of(2, StartAttacking.create((level, body) -> true, (level, body) -> VillagerTasksMCA.getPreferredTarget(body))),
                 Pair.of(3, StopAttackingIfTargetInvalid.create((level, livingEntity) -> !VillagerTasksMCA.shouldKeepAttackTarget(villager, livingEntity))),
                 Pair.of(4, new ArcherMovementTask<>(15)),
@@ -426,8 +426,8 @@ public class VillagerTasksMCA {
 
     public static boolean isOnDuty(VillagerEntityMCA villager) {
         return getActivity(villager) == Activity.WORK
-                || villager.getBrain().hasMemoryValue(MemoryModuleType.ATTACK_TARGET)
-                || getPreferredTarget(villager).isPresent();
+               || villager.getBrain().hasMemoryValue(MemoryModuleType.ATTACK_TARGET)
+               || getPreferredTarget(villager).isPresent();
     }
 
     private static boolean isHoldingRangedWeapon(VillagerEntityMCA villager) {

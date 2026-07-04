@@ -16,6 +16,9 @@ allprojects {
 
         tasks.configureEach { task ->
             if (task instanceof JavaForkOptions) {
+                if (task.maxHeapSize == null) {
+                    task.maxHeapSize = '4G'
+                }
                 nativeAccessJvmArgs.each { nativeAccessJvmArg ->
                     if (!task.jvmArgs.contains(nativeAccessJvmArg)) {
                         task.jvmArgs(nativeAccessJvmArg)

@@ -1,3 +1,57 @@
+# 7.9.9
+
+* Fixed nameless villagers being saved as their profession label after opening the Villager Editor.
+
+# 7.9.8
+
+* Fixed vilagers sometimes losing their trades.
+* Improved performance
+* Villagers shouldn't drown anymore.
+* Fixed RGB eye slider.
+
+# 7.9.7
+
+* Fixed villager editor not saving changes, sorry!
+* Fixed eye color customization and Heterochromia traits getting wiped in the editor.
+* Added genetic eye color slider in the editor's eyes customization page.
+
+# 7.9.6
+
+* Added a "No Aging" trait to stop specific villagers from growing up or aging (available only through the Villager Editor).
+* Added an "Infertile" trait, meaning some villagers cannot have children (can be removed using the MCA Debug Book).
+* Added a configuration option to choose which type of headstone/grave spawns when a villager dies.
+* Selecting clothing or picking an outfit in the editor or library will no longer make the villager bald.
+* Spouses are no longer considered biologically related when looking at family lines.
+* Babies, children, and relatives (other than spouses) can no longer flirt, kiss, or accept romantic items.
+* Children can no longer have the "Flirty" personality.
+* When children grow up into teens and adults, their personalities will now re-roll for natural character development.
+* Guards now actively fight enemies while following you.
+* Fixed guards holding their weapons or shields in the wrong hand if they are left-handed.
+* Fixed a multiplayer issue where editing villagers or using custom skins would sometimes cause sync issues.
+* Fixed building scans so blocks like candles and water are correctly recognized in custom building definitions.
+
+# 7.9.5
+
+* Fixed trait pagination in the villager editor
+* Reduced dynamic skin texture churn while Immersive Library assets are still loading
+* Advancement book addition can be toggled with a config option.
+
+# 7.9.4
+
+* Clothes can be locked now, and are automatically clocked when using Needle and Thread / Editor
+* Added `villagerChatAIFuseSystemPrompt` config flag for extra scuffed setups.
+* Maybe fixed the "Spouse not found" issue.
+* Fixed destiny spawning you out of world border.
+* Tombstones now have more explosion resistance, and spawn better after death-by-explosion.
+* Tombstones now drop their NBT, allowing them to be moved.
+* Fixed high characters from glitching into blocks.
+* Guard armor can now be configured.
+
+# 7.9.3
+
+* Fix multiplayer sync.
+* Fix changing skins making the character bald.
+
 # 7.9.2
 
 * Fix dedicated server crashes

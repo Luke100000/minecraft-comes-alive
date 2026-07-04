@@ -1,62 +1,58 @@
 package net.conczin.mca.entity;
 
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.Items;
 
-public enum EquipmentSet {
-    NAKED(Items.AIR, Items.AIR, Items.AIR, Items.AIR, Items.AIR, Items.AIR),
+public record EquipmentSet(String mainHand, String offHand, String head, String chest, String legs, String feet) {
+    public static final EquipmentSet NAKED = new EquipmentSet("air", "air", "air", "air", "air", "air");
 
-    GUARD_0(Items.IRON_SWORD, Items.AIR, Items.AIR, Items.IRON_CHESTPLATE, Items.LEATHER_LEGGINGS, Items.LEATHER_BOOTS),
-    GUARD_0_LEFT(Items.AIR, Items.IRON_SWORD, Items.AIR, Items.IRON_CHESTPLATE, Items.LEATHER_LEGGINGS, Items.LEATHER_BOOTS),
-    GUARD_1(Items.IRON_SWORD, Items.SHIELD, Items.IRON_HELMET, Items.IRON_CHESTPLATE, Items.LEATHER_LEGGINGS, Items.IRON_BOOTS),
-    GUARD_2(Items.DIAMOND_SWORD, Items.SHIELD, Items.IRON_HELMET, Items.IRON_CHESTPLATE, Items.IRON_LEGGINGS, Items.IRON_BOOTS),
+    public static final EquipmentSet GUARD_0 = new EquipmentSet("iron_sword", "air", "air", "iron_chestplate", "leather_leggings", "leather_boots");
+    public static final EquipmentSet GUARD_0_LEFT = new EquipmentSet("air", "iron_sword", "air", "iron_chestplate", "leather_leggings", "leather_boots");
+    public static final EquipmentSet GUARD_1 = new EquipmentSet("iron_sword", "shield", "iron_helmet", "iron_chestplate", "leather_leggings", "iron_boots");
+    public static final EquipmentSet GUARD_2 = new EquipmentSet("diamond_sword", "shield", "iron_helmet", "iron_chestplate", "iron_leggings", "iron_boots");
 
-    ARCHER_0(Items.BOW, Items.AIR, Items.AIR, Items.LEATHER_CHESTPLATE, Items.AIR, Items.AIR),
-    ARCHER_0_LEFT(Items.AIR, Items.BOW, Items.AIR, Items.LEATHER_CHESTPLATE, Items.AIR, Items.AIR),
-    ARCHER_1(Items.BOW, Items.AIR, Items.AIR, Items.IRON_CHESTPLATE, Items.LEATHER_LEGGINGS, Items.LEATHER_BOOTS),
-    ARCHER_1_LEFT(Items.AIR, Items.BOW, Items.AIR, Items.IRON_CHESTPLATE, Items.LEATHER_LEGGINGS, Items.LEATHER_BOOTS),
-    ARCHER_2(Items.BOW, Items.AIR, Items.AIR, Items.DIAMOND_CHESTPLATE, Items.LEATHER_LEGGINGS, Items.IRON_BOOTS),
-    ARCHER_2_LEFT(Items.AIR, Items.BOW, Items.AIR, Items.DIAMOND_CHESTPLATE, Items.LEATHER_LEGGINGS, Items.IRON_BOOTS),
+    public static final EquipmentSet ARCHER_0 = new EquipmentSet("bow", "air", "air", "leather_chestplate", "air", "air");
+    public static final EquipmentSet ARCHER_0_LEFT = new EquipmentSet("air", "bow", "air", "leather_chestplate", "air", "air");
+    public static final EquipmentSet ARCHER_1 = new EquipmentSet("bow", "air", "air", "iron_chestplate", "leather_leggings", "leather_boots");
+    public static final EquipmentSet ARCHER_1_LEFT = new EquipmentSet("air", "bow", "air", "iron_chestplate", "leather_leggings", "leather_boots");
+    public static final EquipmentSet ARCHER_2 = new EquipmentSet("bow", "air", "air", "diamond_chestplate", "leather_leggings", "iron_boots");
+    public static final EquipmentSet ARCHER_2_LEFT = new EquipmentSet("air", "bow", "air", "diamond_chestplate", "leather_leggings", "iron_boots");
 
-    ELITE(Items.NETHERITE_SWORD, Items.NETHERITE_SWORD, Items.DIAMOND_HELMET, Items.NETHERITE_CHESTPLATE, Items.GOLDEN_LEGGINGS, Items.NETHERITE_BOOTS),
-    ROYAL(Items.TRIDENT, Items.DIAMOND_AXE, Items.GOLDEN_HELMET, Items.GOLDEN_CHESTPLATE, Items.GOLDEN_LEGGINGS, Items.GOLDEN_BOOTS);
-
-    final Item mainHand;
-    final Item getOffHand;
-    final Item head;
-    final Item chest;
-    final Item legs;
-    final Item feet;
-    EquipmentSet(Item mainHand, Item offHand, Item head, Item chest, Item legs, Item feet) {
-        this.mainHand = mainHand;
-        this.getOffHand = offHand;
-        this.head = head;
-        this.chest = chest;
-        this.legs = legs;
-        this.feet = feet;
-    }
+    public static final EquipmentSet ELITE = new EquipmentSet("netherite_sword", "netherite_sword", "diamond_helmet", "netherite_chestplate", "golden_leggings", "netherite_boots");
+    public static final EquipmentSet ROYAL = new EquipmentSet("trident", "diamond_axe", "golden_helmet", "golden_chestplate", "golden_leggings", "golden_boots");
 
     public Item getMainHand() {
-        return mainHand;
+        return getItem(mainHand);
     }
 
     public Item getGetOffHand() {
-        return getOffHand;
+        return getItem(offHand);
     }
 
     public Item getHead() {
-        return head;
+        return getItem(head);
     }
 
     public Item getChest() {
-        return chest;
+        return getItem(chest);
     }
 
     public Item getLegs() {
-        return legs;
+        return getItem(legs);
     }
 
     public Item getFeet() {
-        return feet;
+        return getItem(feet);
+    }
+
+    public static Item getItem(String itemName) {
+        if (itemName == null || itemName.isBlank()) {
+            return Items.AIR;
+        }
+
+        Identifier identifier = Identifier.tryParse(itemName);
+        return identifier == null ? Items.AIR : BuiltInRegistries.ITEM.getOptional(identifier).orElse(Items.AIR);
     }
 }

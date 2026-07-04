@@ -18,7 +18,10 @@ import net.conczin.mca.server.world.data.GraveyardManager;
 import net.conczin.mca.util.WorldUtils;
 import net.conczin.mca.util.network.datasync.CDataManager;
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.damagesource.DamageSource;
@@ -81,22 +84,23 @@ public class Relationship<T extends Mob & VillagerLike<T>> implements EntityRela
     }
 
     private Optional<BlockPos> placeTombstone(ServerLevel world, BlockPos entityPos) {
-        int range = 2;
+        BlockState tombstoneState = getConfiguredTombstoneState();
+        int range = 3;
         for (int y = -range; y <= range; y++) {
             // prefer center
             BlockPos pos = entityPos.offset(0, y, 0);
-            if (world.getBlockState(pos).isAir()) {
-                world.setBlockAndUpdate(pos, BlocksMCA.CROSS_HEADSTONE.defaultBlockState());
-                return Optional.ofNullable(pos);
+            if (world.getBlockState(pos).isAir() && tombstoneState.canSurvive(world, pos)) {
+                world.setBlockAndUpdate(pos, tombstoneState);
+                return Optional.of(pos);
             }
 
             for (int x = -range; x <= range; x++) {
                 for (int z = -range; z <= range; z++) {
                     if (x != 0 || z != 0) {
                         pos = entityPos.offset(x, y, z);
-                        if (world.getBlockState(pos).isAir()) {
-                            world.setBlockAndUpdate(pos, BlocksMCA.CROSS_HEADSTONE.defaultBlockState());
-                            return Optional.ofNullable(pos);
+                        if (world.getBlockState(pos).isAir() && tombstoneState.canSurvive(world, pos)) {
+                            world.setBlockAndUpdate(pos, tombstoneState);
+                            return Optional.of(pos);
                         }
                     }
                 }
@@ -105,7 +109,22 @@ public class Relationship<T extends Mob & VillagerLike<T>> implements EntityRela
         return Optional.empty();
     }
 
+    private BlockState getConfiguredTombstoneState() {
+        Block block = BlocksMCA.BLOCKS.get(Config.getInstance().defaultHeadstoneType);
+        if (block instanceof TombstoneBlock) {
+            return block.defaultBlockState();
+        }
+        return BlocksMCA.CROSS_HEADSTONE.defaultBlockState();
+    }
+
     public void onDeath(DamageSource cause) {
+        MinecraftServer server = entity.level().getServer();
+        if (server != null) {
+            server.schedule(server.wrapRunnable(() -> finalizeDeath(cause)));
+        }
+    }
+
+    private void finalizeDeath(DamageSource cause) {
         boolean beRemembered = getFamilyEntry().willBeRemembered();
         boolean beLoved = entity.getVillagerBrain().getMemories().values().stream().anyMatch(m -> m.getHearts() > Config.getInstance().heartsRequiredToAutoSpawnGravestone);
 
