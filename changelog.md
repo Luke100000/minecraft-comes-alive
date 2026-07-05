@@ -1,3 +1,9 @@
+# 7.7.18-beta.8
+
+* Villagers should stop floating in passenger seats such as boats.
+* Baby nametags are correctly adjusted
+* Added old skins and old eye texture back.
+
 # 7.7.18-beta.7
 
 * Villagers should stop having their trades reset.
