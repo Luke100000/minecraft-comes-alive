@@ -12,7 +12,6 @@
     "MixinEntityType",
     "MixinFlintAndSteelItem",
     "MixinGoat",
-    "MixinHorseBase",
     "MixinInventory",
     "MixinIronGolem",
     "MixinLivingEntity",

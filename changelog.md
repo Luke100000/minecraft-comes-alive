@@ -2,7 +2,7 @@
 
 * Villagers should stop floating in passenger seats such as boats.
 * Baby nametags are correctly adjusted
-* Added old skins and old eye texture back.
+* Villagers should be able to ride any entity that is rideable, including modded entities.
 
 # 7.7.18-beta.7
 

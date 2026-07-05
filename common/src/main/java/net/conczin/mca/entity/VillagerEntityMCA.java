@@ -914,19 +914,6 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         }
     }
 
-    @Override
-    public MoveControl getMoveControl() {
-        return isRidingHorse() ? moveControl : super.getMoveControl();
-    }
-
-    @Override
-    public PathNavigation getNavigation() {
-        return isRidingHorse() ? navigation : super.getNavigation();
-    }
-
-    protected boolean isRidingHorse() {
-        return isPassenger() && getVehicle() instanceof AbstractHorse;
-    }
 
     @Override
     public void teleportTo(double destX, double destY, double destZ) {
