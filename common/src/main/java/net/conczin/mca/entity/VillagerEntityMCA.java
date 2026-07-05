@@ -102,6 +102,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     private static final float FRIENDLY_ARROW_UNCERTAINTY = 2.0F;
     private static final CDataParameter<Float> INFECTION_PROGRESS = CParameter.create("InfectionProgress", 0.0f);
     private static final CDataParameter<Integer> GROWTH_AMOUNT = CParameter.create("GrowthAmount", -AgeState.getMaxAge());
+    private static final float VEHICLE_ATTACHMENT_Y = 0.6F;
     public static final String MCA_DATA_KEY = "MCAData";
     private static final CDataManager<VillagerEntityMCA> DATA = createTrackedData(new CDataManager.Builder<>(
             VillagerEntityMCA.class,
@@ -923,10 +924,12 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
             return SLEEPING_DIMENSIONS;
         }
 
-        float height = getVerticalScaleFactor() * 2.0F;
-        float width = getHorizontalScaleFactor() * 0.6F;
+        boolean useRawDimensions = getAgeState() == AgeState.TEEN || getAgeState() == AgeState.ADULT;
+        float height = (useRawDimensions ? getRawVerticalScaleFactor() : getVerticalScaleFactor()) * 2.0F;
+        float width = (useRawDimensions ? getRawHorizontalScaleFactor() : getHorizontalScaleFactor()) * 0.6F;
 
-        return EntityDimensions.scalable(width, height);
+        return EntityDimensions.scalable(width, height).withAttachments(EntityAttachments.builder()
+                .attach(EntityAttachment.VEHICLE, 0.0F, getRawVerticalScaleFactor() * VEHICLE_ATTACHMENT_Y, 0.0F));
     }
 
     @Override
@@ -970,19 +973,6 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         }
     }
 
-    @Override
-    public MoveControl getMoveControl() {
-        return isRidingHorse() ? moveControl : super.getMoveControl();
-    }
-
-    @Override
-    public PathNavigation getNavigation() {
-        return isRidingHorse() ? navigation : super.getNavigation();
-    }
-
-    protected boolean isRidingHorse() {
-        return isPassenger() && getVehicle() instanceof AbstractHorse;
-    }
 
     @Override
     public void teleportTo(double destX, double destY, double destZ) {

@@ -67,7 +67,7 @@ public final class VillagerRenderStateHooks {
 
         if (state.nameTagAttachment != null) {
             Vec3 nameTagAttachment = entity.getAttachments().get(EntityAttachment.NAME_TAG, 0, entity.getYRot());
-            double y = entity.isPassenger() ? 0.55 : state.boundingBoxHeight;
+            double y = (entity.isPassenger() && entity.getVehicle() instanceof Player) ? 0.55 : state.boundingBoxHeight;
             state.nameTagAttachment = new Vec3(nameTagAttachment.x, y, nameTagAttachment.z);
         }
     }

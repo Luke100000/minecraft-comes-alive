@@ -27,7 +27,6 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.ItemUseAnimation;
 import org.jetbrains.annotations.Nullable;
-
 import java.util.Set;
 
 @SuppressWarnings({"rawtypes", "unchecked"})
