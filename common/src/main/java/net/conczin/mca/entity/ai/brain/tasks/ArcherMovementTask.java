@@ -76,12 +76,12 @@ public class ArcherMovementTask<E extends PathfinderMob> extends Behavior<E> {
 
     @Override
     protected boolean checkExtraStartConditions(ServerLevel level, E entity) {
-        return hasValidTarget(getAttackTarget(entity)) && isHoldingRangedWeapon(entity);
+        return !entity.isPassenger() && hasValidTarget(getAttackTarget(entity)) && isHoldingRangedWeapon(entity);
     }
 
     @Override
     protected boolean canStillUse(ServerLevel level, E entity, long gameTime) {
-        return hasValidTarget(getAttackTarget(entity)) && isHoldingRangedWeapon(entity);
+        return !entity.isPassenger() && hasValidTarget(getAttackTarget(entity)) && isHoldingRangedWeapon(entity);
     }
 
     @Override
