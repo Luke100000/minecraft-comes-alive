@@ -22,10 +22,13 @@ import net.minecraft.network.protocol.game.ClientboundSetPassengersPacket;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.ai.util.RandomPos;
+import net.minecraft.world.entity.animal.camel.Camel;
 import net.minecraft.world.entity.animal.equine.AbstractHorse;
 import net.minecraft.world.entity.npc.villager.VillagerProfession;
 import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.entity.vehicle.boat.AbstractBoat;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.phys.AABB;
@@ -37,6 +40,10 @@ import java.util.Optional;
 public class VillagerCommandHandler extends EntityCommandHandler<VillagerEntityMCA> {
     public VillagerCommandHandler(VillagerEntityMCA entity) {
         super(entity);
+    }
+
+    private static boolean canRideMount(Entity mount) {
+        return mount.getPassengers().size() < (mount instanceof Camel || mount instanceof AbstractBoat ? 2 : 1);
     }
 
     /**
@@ -79,14 +86,23 @@ public class VillagerCommandHandler extends EntityCommandHandler<VillagerEntityM
                 if (entity.isPassenger()) {
                     entity.stopRiding();
                 } else {
-                    entity.level().getEntities(player, player.getBoundingBox()
-                                    .inflate(10), e -> e instanceof AbstractHorse horse && horse.isSaddled())
-                            .stream()
-                            .filter(horse -> !horse.isVehicle())
-                            .min(Comparator.comparingDouble(a -> a.distanceToSqr(entity))).ifPresentOrElse(horse -> {
-                                entity.startRiding(horse, false, true);
-                                entity.sendChatMessage(player, "interaction.ridehorse.success");
-                            }, () -> entity.sendChatMessage(player, "interaction.ridehorse.fail.notnearby"));
+                    Entity playerVehicle = player.getVehicle();
+                    if (playerVehicle != null
+                            && canRideMount(playerVehicle)
+                            && entity.startRiding(playerVehicle, false, true)) {
+                        entity.sendChatMessage(player, "interaction.ridehorse.success");
+                    } else {
+                        entity.level().getEntities(player, player.getBoundingBox().inflate(10), e ->
+                                        e instanceof AbstractHorse horse && horse.isSaddled() || e instanceof AbstractBoat)
+                                .stream()
+                                .filter(VillagerCommandHandler::canRideMount)
+                                .min(Comparator.comparingDouble(a -> a.distanceToSqr(entity)))
+                                .filter(mount -> entity.startRiding(mount, false, true))
+                                .ifPresentOrElse(
+                                        mount -> entity.sendChatMessage(player, "interaction.ridehorse.success"),
+                                        () -> entity.sendChatMessage(player, "interaction.ridehorse.fail.notnearby")
+                                );
+                    }
                 }
                 return true;
             }
