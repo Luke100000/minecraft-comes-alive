@@ -6,6 +6,8 @@
 * Fixed guards attacking tamed/owned Zombie Nautiluses.
 * Tamed/owned mobs are no longer targeted or attacked by guards.
 * Villagers should be able to ride any entity that is rideable, including modded entities.
+* Fix Mood, Infection Progress and hearts not being editable due to recent modifications.
+
 
 # 7.9.9
 
