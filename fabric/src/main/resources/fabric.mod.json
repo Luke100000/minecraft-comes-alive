@@ -23,6 +23,7 @@
       "net.conczin.mca.fabric.MCAFabricClient"
     ]
   },
+  "accessWidener": "${mod_id}.classtweaker",
   "mixins": [
     "${mod_id}.mixins.json",
     "${mod_id}.journeymap.mixins.json"

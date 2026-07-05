@@ -10,7 +10,6 @@ import net.conczin.mca.entity.ai.brain.VillagerBrain;
 import net.conczin.mca.entity.ai.brain.VillagerTasksMCA;
 import net.conczin.mca.entity.ai.relationship.*;
 import net.conczin.mca.entity.interaction.VillagerCommandHandler;
-import net.conczin.mca.mixin.MixinVillagerInvoker;
 import net.conczin.mca.registry.*;
 import net.conczin.mca.resources.Names;
 import net.conczin.mca.resources.Rank;
@@ -389,8 +388,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
             if (player.isShiftKeyDown()) {
                 if (!level().isClientSide && canTradeWithProfession()) {
                     getInteractions().stopInteracting();
-                    MixinVillagerInvoker invoker = (MixinVillagerInvoker) this;
-                    invoker.invokeStartTrading(player);
+                    startTrading(player);
                 }
             } else {
                 playWelcomeSound();

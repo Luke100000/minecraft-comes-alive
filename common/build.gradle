@@ -3,13 +3,71 @@ plugins {
     id 'net.neoforged.moddev'
 }
 
+tasks.register('generateAccessTransformer') {
+    def awFile = file("src/main/resources/${mod_id}.classtweaker")
+    def outputFile = layout.buildDirectory.file("generated/accesstransformer.cfg")
+
+    inputs.file(awFile)
+    outputs.file(outputFile)
+
+    doLast {
+        if (!awFile.exists()) return
+
+        def lines = awFile.readLines("UTF-8")
+        def atLines = []
+
+        for (line in lines) {
+            line = line.trim()
+            if (line.isEmpty() || line.startsWith("#")) {
+                atLines << line
+                continue
+            }
+
+            def lower = line.toLowerCase(Locale.ROOT)
+            if (lower.startsWith("classtweaker") || lower.startsWith("accesswidener")) {
+                atLines << "# " + line
+                continue
+            }
+
+            def parts = line.split("\\s+")
+            if (parts.length < 3) continue
+
+            def access = parts[0]
+            def type = parts[1]
+            def className = parts[2].replace('/', '.')
+
+            def atAccess = "public"
+            if (access == "extendable" || access == "mutable") {
+                atAccess = "public-f"
+            }
+
+            if (type == "class") {
+                atLines << "${atAccess} ${className}"
+            } else if (type == "field") {
+                def fieldName = parts[3]
+                atLines << "${atAccess} ${className} ${fieldName}"
+            } else if (type == "method") {
+                def methodName = parts[3]
+                def methodDesc = parts[4..-1].join("")
+                atLines << "${atAccess} ${className} ${methodName}${methodDesc}"
+            }
+        }
+
+        def file = outputFile.get().asFile
+        file.parentFile.mkdirs()
+        file.write(atLines.join("\n"), "UTF-8")
+    }
+}
+
 neoForge {
     neoFormVersion = neo_form_version
     parchment {
         minecraftVersion = parchment_minecraft
         mappingsVersion = parchment_version
     }
+    accessTransformers.from(tasks.named('generateAccessTransformer'))
 }
+
 
 dependencies {
     compileOnly 'org.spongepowered:mixin:0.8.5'
@@ -28,7 +86,6 @@ configurations {
 
 sourceSets.main.resources {
     srcDir 'src/generated/resources'
-    exclude '.cache/**'
 }
 
 def commonResourcesOutput = layout.buildDirectory.dir('commonResources')

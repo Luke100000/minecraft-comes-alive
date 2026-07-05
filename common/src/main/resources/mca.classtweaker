@@ -1,0 +1,18 @@
+classTweaker v1 official
+
+# Widen vanilla registry value constructors used by common registrations.
+accessible method net/minecraft/core/particles/SimpleParticleType <init> (Z)V
+accessible method net/minecraft/world/entity/ai/memory/MemoryModuleType <init> (Ljava/util/Optional;)V
+accessible method net/minecraft/world/entity/ai/sensing/SensorType <init> (Ljava/util/function/Supplier;)V
+accessible method net/minecraft/world/entity/schedule/Activity <init> (Ljava/lang/String;)V
+accessible method net/minecraft/world/entity/npc/VillagerProfession <init> (Ljava/lang/String;Ljava/util/function/Predicate;Ljava/util/function/Predicate;Lcom/google/common/collect/ImmutableSet;Lcom/google/common/collect/ImmutableSet;Lnet/minecraft/sounds/SoundEvent;)V
+
+# Widen Villager.startTrading so it can be called directly without an invoker mixin.
+accessible method net/minecraft/world/entity/npc/Villager startTrading (Lnet/minecraft/world/entity/player/Player;)V
+
+# Widen AdvancementRewards.loot to allow temporary modification without an accessor mixin.
+accessible field net/minecraft/advancements/AdvancementRewards loot Ljava/util/List;
+mutable field net/minecraft/advancements/AdvancementRewards loot Ljava/util/List;
+
+# Widen MoveControl.rotlerp for task usage
+accessible method net/minecraft/world/entity/ai/control/MoveControl rotlerp (FFF)F

@@ -8,7 +8,6 @@ import net.conczin.mca.entity.ai.Memories;
 import net.conczin.mca.entity.ai.MoveState;
 import net.conczin.mca.entity.ai.Traits;
 import net.conczin.mca.entity.ai.relationship.RelationshipState;
-import net.conczin.mca.mixin.MixinVillagerInvoker;
 import net.conczin.mca.registry.CriterionMCA;
 import net.conczin.mca.registry.ItemsMCA;
 import net.conczin.mca.registry.ProfessionsMCA;
@@ -125,8 +124,7 @@ public class VillagerCommandHandler extends EntityCommandHandler<VillagerEntityM
             }
             case "trade" -> {
                 entity.getInteractions().stopInteracting();
-                MixinVillagerInvoker invoker = (MixinVillagerInvoker) this.entity;
-                invoker.invokeStartTrading(player);
+                this.entity.startTrading(player);
                 return false;
             }
             case "inventory" -> {

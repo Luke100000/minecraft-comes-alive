@@ -9,6 +9,7 @@ neoForge {
         minecraftVersion = parchment_minecraft
         mappingsVersion = parchment_version
     }
+    accessTransformers.from(project(':common').tasks.named('generateAccessTransformer'))
     runs {
         configureEach {
             systemProperty('neoforge.enabledGameTestNamespaces', mod_id)
