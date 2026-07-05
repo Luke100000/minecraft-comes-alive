@@ -1,8 +1,10 @@
 package net.conczin.mca.mixin;
 
 import net.conczin.mca.entity.PlayerDimensions;
+import net.conczin.mca.entity.VillagerEntityMCA;
 import net.minecraft.world.entity.EntityDimensions;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.Pose;
 import net.minecraft.world.entity.player.Player;
 import org.spongepowered.asm.mixin.Mixin;
@@ -22,5 +24,12 @@ abstract class MixinLivingEntity {
         PlayerDimensions.getScale(player).ifPresent(scale ->
                 info.setReturnValue(info.getReturnValue().scale(scale.width(), scale.height()))
         );
+    }
+
+    @Inject(method = "isImmobile()Z", at = @At("HEAD"), cancellable = true)
+    private void mca$onIsImmobile(CallbackInfoReturnable<Boolean> info) {
+        if ((Object) this instanceof Mob mob && mob.getControllingPassenger() instanceof VillagerEntityMCA) {
+            info.setReturnValue(false);
+        }
     }
 }

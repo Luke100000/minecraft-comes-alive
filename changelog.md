@@ -1,7 +1,11 @@
 # 8.0.5
 
+* Villagers should stop floating in passenger seats such as boats.
+* Baby nametags are correctly adjusted
+* Added old skins and old eye texture back.
 * Fixed guards attacking tamed/owned Zombie Nautiluses.
 * Tamed/owned mobs are no longer targeted or attacked by guards.
+* Villagers should be able to ride any entity that is rideable, including modded entities.
 
 # 7.9.9
 
