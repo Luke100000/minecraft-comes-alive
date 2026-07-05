@@ -3,6 +3,7 @@
 * Villagers should stop floating in passenger seats such as boats.
 * Baby nametags are correctly adjusted
 * Villagers should be able to ride any entity that is rideable, including modded entities.
+* Fix Mood, Infection Progress and hearts not being editable due to recent modifications.
 
 # 7.7.18-beta.7
 
