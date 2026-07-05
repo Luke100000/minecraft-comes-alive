@@ -22,9 +22,12 @@ import net.minecraft.network.protocol.game.ClientboundSetPassengersPacket;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Saddleable;
 import net.minecraft.world.entity.ai.util.RandomPos;
+import net.minecraft.world.entity.animal.camel.Camel;
 import net.minecraft.world.entity.npc.VillagerProfession;
+import net.minecraft.world.entity.vehicle.Boat;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -87,14 +90,23 @@ public class VillagerCommandHandler extends EntityCommandHandler<VillagerEntityM
                 if (entity.isPassenger()) {
                     entity.stopRiding();
                 } else {
-                    entity.level().getEntities(player, player.getBoundingBox()
-                                    .inflate(10), e -> e instanceof Saddleable && ((Saddleable) e).isSaddled())
-                            .stream()
-                            .filter(horse -> !horse.isVehicle())
-                            .min(Comparator.comparingDouble(a -> a.distanceToSqr(entity))).ifPresentOrElse(horse -> {
-                                entity.startRiding(horse, false);
-                                entity.sendChatMessage(player, "interaction.ridehorse.success");
-                            }, () -> entity.sendChatMessage(player, "interaction.ridehorse.fail.notnearby"));
+                    Entity playerVehicle = player.getVehicle();
+                    if (playerVehicle != null
+                            && playerVehicle.getPassengers().size() < ((playerVehicle instanceof Camel || playerVehicle instanceof Boat) ? 2 : 1)
+                            && entity.startRiding(playerVehicle, false)) {
+                        entity.sendChatMessage(player, "interaction.ridehorse.success");
+                    } else {
+                        entity.level().getEntities(player, player.getBoundingBox().inflate(10), e ->
+                                        (e instanceof Saddleable saddleable && saddleable.isSaddled()) || e instanceof Boat)
+                                .stream()
+                                .filter(mount -> mount.getPassengers().size() < ((mount instanceof Camel || mount instanceof Boat) ? 2 : 1))
+                                .min(Comparator.comparingDouble(a -> a.distanceToSqr(entity)))
+                                .filter(mount -> entity.startRiding(mount, false))
+                                .ifPresentOrElse(
+                                        mount -> entity.sendChatMessage(player, "interaction.ridehorse.success"),
+                                        () -> entity.sendChatMessage(player, "interaction.ridehorse.fail.notnearby")
+                                );
+                    }
                 }
                 return true;
             }

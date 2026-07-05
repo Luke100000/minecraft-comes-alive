@@ -1288,7 +1288,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
     @Override
     public void readAdditionalSaveDataForEditor(CompoundTag nbt) {
-        readAdditionalSaveData(nbt);
+        readAdditionalSaveData(flattenMcaData(nbt));
     }
 
     private CompoundTag flattenMcaData(CompoundTag nbt) {

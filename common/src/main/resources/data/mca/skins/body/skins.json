@@ -1,0 +1,22 @@
+[
+  { "id": "mca:skins/skin/male/0.png", "gender": "male" },
+  { "id": "mca:skins/skin/male/1.png", "gender": "male" },
+  { "id": "mca:skins/skin/male/2.png", "gender": "male" },
+  { "id": "mca:skins/skin/male/3.png", "gender": "male" },
+  { "id": "mca:skins/skin/male/4.png", "gender": "male" },
+  { "id": "mca:skins/skin/male/0_classic.png", "gender": "male" },
+  { "id": "mca:skins/skin/male/1_classic.png", "gender": "male" },
+  { "id": "mca:skins/skin/male/2_classic.png", "gender": "male" },
+  { "id": "mca:skins/skin/male/3_classic.png", "gender": "male" },
+  { "id": "mca:skins/skin/male/4_classic.png", "gender": "male" },
+  { "id": "mca:skins/skin/female/0.png", "gender": "female" },
+  { "id": "mca:skins/skin/female/1.png", "gender": "female" },
+  { "id": "mca:skins/skin/female/2.png", "gender": "female" },
+  { "id": "mca:skins/skin/female/3.png", "gender": "female" },
+  { "id": "mca:skins/skin/female/4.png", "gender": "female" },
+  { "id": "mca:skins/skin/female/0_classic.png", "gender": "female" },
+  { "id": "mca:skins/skin/female/1_classic.png", "gender": "female" },
+  { "id": "mca:skins/skin/female/2_classic.png", "gender": "female" },
+  { "id": "mca:skins/skin/female/3_classic.png", "gender": "female" },
+  { "id": "mca:skins/skin/female/4_classic.png", "gender": "female" }
+]
