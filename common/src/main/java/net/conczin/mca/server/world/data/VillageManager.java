@@ -244,29 +244,25 @@ public class VillageManager extends SavedData implements Iterable<Village> {
                 .collect(Collectors.toSet());
     }
 
-    public BuildingBlockedResult getBlockedResult(BlockPos pos, boolean enforce) {
+    public BuildingBlockedResult getBlockedResult(BlockPos pos) {
         Optional<Village> optionalVillage = findNearestVillage(pos, Village.MERGE_MARGIN);
         Set<BlockPos> blocked = new java.util.HashSet<>();
-        boolean found = false;
         Building existingBuilding = null;
         if (optionalVillage.isPresent()) {
             Village village = optionalVillage.get();
             blocked = getBlockedSet(village);
             for (Building b : village.getBuildings().values()) {
                 if (b.containsPos(pos) && !b.getBuildingType().grouped()) {
-                    if (!enforce) {
-                        found = true;
-                    }
                     existingBuilding = b;
                     break;
                 }
             }
         }
-        return new BuildingBlockedResult(blocked, found, existingBuilding, optionalVillage.orElse(null));
+        return new BuildingBlockedResult(blocked, existingBuilding, optionalVillage.orElse(null));
     }
 
     public BuildingScanResult analyzeBuilding(BlockPos pos, boolean strictScan) {
-        BuildingBlockedResult blockResult = getBlockedResult(pos, true);
+        BuildingBlockedResult blockResult = getBlockedResult(pos);
         Building building;
         if (blockResult.existingBuilding() != null) {
             building = new Building(blockResult.existingBuilding().getSourceBlock(), blockResult.existingBuilding().isStrictScan());
@@ -288,7 +284,20 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         );
     }
 
-    public Building.validationResult commitBuilding(Building building, Village village, String forcedType) {
+    public Building.validationResult commitBuilding(BuildingScanResult scan, String forcedType) {
+        if (scan.result() != Building.validationResult.SUCCESS) {
+            return scan.result();
+        }
+        if (forcedType != null && !scan.matchesType(forcedType)) {
+            return Building.validationResult.INVALID_TYPE;
+        }
+        if (forcedType == null && scan.isAmbiguous()) {
+            return Building.validationResult.INVALID_TYPE;
+        }
+        return commitBuilding(scan.building(), scan.village(), forcedType);
+    }
+
+    private Building.validationResult commitBuilding(Building building, Village village, String forcedType) {
         Village targetVillage = village;
         if (targetVillage == null) {
             targetVillage = new Village(lastVillageId++, world);
@@ -316,7 +325,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
                 building.setTypeForced(false);
                 building.determineType();
             }
-            BuildingBlockedResult blockResult = getBlockedResult(building.getSourceBlock(), true);
+            BuildingBlockedResult blockResult = getBlockedResult(building.getSourceBlock());
             Building.validationResult result = building.validateBuilding(world, blockResult.blocked());
             if (result != Building.validationResult.SUCCESS) {
                 return result;
@@ -383,8 +392,8 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         }
         BuildingScanResult scan = analyzeBuilding(pos, strictScan);
         if (scan.result() != Building.validationResult.SUCCESS) {
-            if (enforce && scan.result() != Building.validationResult.SUCCESS) {
-                BuildingBlockedResult blockResult = getBlockedResult(pos, true);
+            if (enforce) {
+                BuildingBlockedResult blockResult = getBlockedResult(pos);
                 if (blockResult.existingBuilding() != null) {
                     Village village = blockResult.village();
                     if (village != null) {
@@ -398,7 +407,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
             }
             return scan.result();
         }
-        return commitBuilding(scan.building(), scan.village(), forcedType);
+        return commitBuilding(scan, forcedType);
     }
 
     public void setBuildingCooldown(int buildingCooldown) {

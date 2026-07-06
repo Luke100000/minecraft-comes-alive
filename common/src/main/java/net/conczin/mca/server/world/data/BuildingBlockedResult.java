@@ -5,7 +5,6 @@ import java.util.Set;
 
 public record BuildingBlockedResult(
     Set<BlockPos> blocked,
-    boolean found,
     Building existingBuilding,
     Village village
 ) {}

@@ -10,4 +10,12 @@ public record BuildingScanResult(
     Building building,
     List<String> matchingTypes,
     Village village
-) {}
+) {
+    public boolean isAmbiguous() {
+        return matchingTypes.size() > 1;
+    }
+
+    public boolean matchesType(String type) {
+        return matchingTypes.contains(type);
+    }
+}

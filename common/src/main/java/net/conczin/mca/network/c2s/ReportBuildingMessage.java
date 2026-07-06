@@ -2,7 +2,10 @@ package net.conczin.mca.network.c2s;
 
 import net.conczin.mca.MCA;
 import net.conczin.mca.network.HandleablePayload;
+import net.conczin.mca.network.Network;
+import net.conczin.mca.network.s2c.BuildingPolymorphMessage;
 import net.conczin.mca.server.world.data.Building;
+import net.conczin.mca.server.world.data.BuildingScanResult;
 import net.conczin.mca.server.world.data.Village;
 import net.conczin.mca.server.world.data.VillageManager;
 import net.minecraft.network.FriendlyByteBuf;
@@ -12,9 +15,6 @@ import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.server.level.ServerPlayer;
 
-import net.conczin.mca.server.world.data.BuildingScanResult;
-import net.conczin.mca.network.Network;
-import net.conczin.mca.network.s2c.BuildingPolymorphMessage;
 import java.util.Locale;
 import java.util.Optional;
 
@@ -37,10 +37,10 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
             case ADD, ADD_ROOM -> {
                 boolean isRoom = action == Action.ADD_ROOM;
                 BuildingScanResult scan = villages.analyzeBuilding(player.blockPosition(), isRoom);
-                if (scan.result() == Building.validationResult.SUCCESS && scan.matchingTypes().size() > 1) {
+                if (scan.result() == Building.validationResult.SUCCESS && scan.isAmbiguous()) {
                     Network.sendToPlayer(new BuildingPolymorphMessage(scan.matchingTypes(), scan.source(), scan.strictScan()), player);
                 } else {
-                    Building.validationResult result = villages.processBuilding(player.blockPosition(), true, isRoom);
+                    Building.validationResult result = villages.commitBuilding(scan, null);
                     player.displayClientMessage(Component.translatable("blueprint.scan." + result.name().toLowerCase(Locale.ENGLISH)), true);
                 }
             }
