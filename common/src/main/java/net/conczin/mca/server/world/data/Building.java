@@ -357,7 +357,7 @@ public class Building {
     public List<BuildingType> getMatchingTypes() {
         List<BuildingType> matches = new ArrayList<>();
         for (BuildingType bt : BuildingTypes.getInstance()) {
-            if (bt.grouped() || !bt.visible()) {
+            if (bt.grouped()) {
                 continue;
             }
             if (matchesType(bt)) {
