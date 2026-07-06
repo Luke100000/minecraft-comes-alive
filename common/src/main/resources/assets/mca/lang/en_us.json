@@ -330,7 +330,7 @@
   "buildingType.graveyard.description": "One or more tombstones. The souls of fallen villagers need an empty tombstone to be able to find rest.",
   "buildingType.town_center": "Town Center",
   "buildingType.music_store": "Music Store",
-  "buildingType.music_store.description": "Work in Progress",
+  "buildingType.music_store.description": "A lively place with records, instruments, and songs. Unhappy villagers visit it to cheer up and recover their mood.",
   "buildingType.library": "Library",
   "buildingType.library.description": "A quiet place for librarians, clerics, and the cartographer. By improving the village logistics the taxes are increased by 50%!",
   "buildingType.inn": "Inn",
