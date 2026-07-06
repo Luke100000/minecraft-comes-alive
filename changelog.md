@@ -2,10 +2,12 @@
 
 * Villagers should stop floating in passenger seats such as boats.
 * Baby nametags are correctly adjusted
-* Added old skins back.
+* Added old skins texture back.
 * Fixed guards attacking tamed/owned Zombie Nautiluses.
 * Tamed/owned mobs are no longer targeted or attacked by guards.
 * Villagers should be able to ride any entity that is rideable, including modded entities.
+* Fix Mood, Infection Progress and hearts not being editable due to recent modifications.
+
 
 # 7.9.9
 
@@ -91,13 +93,9 @@
     * Stop archers from eating to heal up while in fighting stance to improve combat efficiency.
     * Fixed archers not recognizing crossbows.
     * Archers now flee if too close to a mob.
-    * Fixed MCA archer arrows bouncing off targets during the target's hurt cooldown.
-    * Reduced archer target switching when several enemies are nearby.
-    * Improved archer kiting distance and bow accuracy.
 * Fixed quotation marks showing up around villager names when migrating worlds from older mod versions.
 * Fixed guards occasionally ignoring active threats.
 * Fixed baby, toddler and child villagers not reliably being pickable.
-
 
 # 7.8.6
 
@@ -220,7 +218,7 @@
 
 # 7.6.6
 
-* Allow tripplets, quadruplets, quintuplets, and beyond
+* Allow tripplets, quadruplets, quintuplets and beyond
 * Fixed a crash in the skin editor
 * Disabled guard teleportation by default again
 * Added experimental support for commands via ChatAI (`villagerChatAIUseTools` in the config, will react to trading, go
@@ -624,7 +622,7 @@
 # 7.3.20
 
 * Added backwards compatibility for 1.16.5 and 1.17.1, to align with the EOL of 1.19.0 and 1.19.1
-    * 1.19.0, 1.19.1, 1.17.1, and 1.16.5 are now officially considered EOL, and users should upgrade to retain support
+    * 1.19.0, 1.19.1, 1.17.1 and 1.16.5 are now officially considered EOL, and users should upgrade to retain support
 * You can no longer set the home of a villager who is either there temporarily or does not require a home
 * Fixed trades
 * Fixed equipment dropping
@@ -709,7 +707,7 @@
     * This trait can be inherited from past/to future generations
     * Having this trait will change their dominant hand in most tasks to be their left hand (Known to the player as the
       off-hand slot)
-    * Some examples of this include Work Tasks, EquipmentSet's, and Melee Attacks (For Equipment, if a preset already
+    * Some examples of this include Work Tasks, EquipmentSet's and Melee Attacks (For Equipment, if a preset already
       uses both hands, it'll remain unchanged.)
     * Given Minecraft was never intended to support this type of gameplay, further tuning may be required in a future
       update.
@@ -953,7 +951,7 @@
 * Villagers will now use your editor name
 * Fixed letter author and creative mode usage
 * Strengthened Grim Reaper
-* Added mod support for atmospheric, autumity, berry good, buzzier bees, environmental, neopolitan, and upgrade aquatic
+* Added mod support for atmospheric, autumity, berry good, buzzier bees, environmental, neopolitan and upgrade aquatic
 * Villager now recognize and estimate the value of every (modded) armor, tool, sword, bow and food as a gift (accuracy
   not guaranteed)
 
