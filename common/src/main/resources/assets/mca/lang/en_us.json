@@ -517,6 +517,8 @@
   "gui.blueprint.renameVillage": "Rename Village",
   "gui.blueprint.rename": "Rename",
   "gui.blueprint.cancel": "Cancel",
+  "gui.building_polymorph.title": "Choose Building Type",
+  "gui.building_polymorph.desc": "This structure satisfies multiple building recipes. Select one:",
   "gui.blueprint.catalogFull": "Building Catalog",
   "gui.blueprint.catalogHint": "Build special buildings by fulfilling those conditions!",
   "gui.blueprint.autoScanDisabled": "Enable auto-scan (under advanced) or add buildings manually!",

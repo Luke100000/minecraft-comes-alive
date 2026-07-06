@@ -12,6 +12,9 @@ import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.server.level.ServerPlayer;
 
+import net.conczin.mca.server.world.data.BuildingScanResult;
+import net.conczin.mca.network.Network;
+import net.conczin.mca.network.s2c.BuildingPolymorphMessage;
 import java.util.Locale;
 import java.util.Optional;
 
@@ -32,8 +35,14 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
         VillageManager villages = VillageManager.get(player.serverLevel());
         switch (action) {
             case ADD, ADD_ROOM -> {
-                Building.validationResult result = villages.processBuilding(player.blockPosition(), true, action == Action.ADD_ROOM);
-                player.displayClientMessage(Component.translatable("blueprint.scan." + result.name().toLowerCase(Locale.ENGLISH)), true);
+                boolean isRoom = action == Action.ADD_ROOM;
+                BuildingScanResult scan = villages.analyzeBuilding(player.blockPosition(), isRoom);
+                if (scan.result() == Building.validationResult.SUCCESS && scan.matchingTypes().size() > 1) {
+                    Network.sendToPlayer(new BuildingPolymorphMessage(scan.matchingTypes(), scan.source(), scan.strictScan()), player);
+                } else {
+                    Building.validationResult result = villages.processBuilding(player.blockPosition(), true, isRoom);
+                    player.displayClientMessage(Component.translatable("blueprint.scan." + result.name().toLowerCase(Locale.ENGLISH)), true);
+                }
             }
             case AUTO_SCAN -> villages.findNearestVillage(player).ifPresent(Village::toggleAutoScan);
             case FULL_SCAN -> villages.findNearestVillage(player).ifPresent(buildings ->

@@ -341,8 +341,33 @@ public class Building {
             size = interiorSize;
 
             //determine type
-            return isTypeForced() || determineType() ? validationResult.SUCCESS : validationResult.INVALID_TYPE;
+            if (isTypeForced()) {
+                return matchesType(getBuildingType()) ? validationResult.SUCCESS : validationResult.INVALID_TYPE;
+            }
+            return determineType() ? validationResult.SUCCESS : validationResult.INVALID_TYPE;
         }
+    }
+
+    public boolean matchesType(BuildingType bt) {
+        Map<ResourceLocation, List<BlockPos>> available = bt.getGroups(blocks);
+        return bt.getGroups().entrySet().stream()
+                .noneMatch(e -> !available.containsKey(e.getKey()) || available.get(e.getKey()).size() < e.getValue());
+    }
+
+    public List<BuildingType> getMatchingTypes() {
+        List<BuildingType> matches = new ArrayList<>();
+        for (BuildingType bt : BuildingTypes.getInstance()) {
+            if (bt.grouped() || !bt.visible()) {
+                continue;
+            }
+            if (matchesType(bt)) {
+                matches.add(bt);
+            }
+        }
+        matches.sort(Comparator
+                .comparingInt(BuildingType::priority).reversed()
+                .thenComparing(BuildingType::name));
+        return matches;
     }
 
     private boolean isBuildingBlock(BlockState state) {
@@ -355,22 +380,12 @@ public class Building {
     }
 
     public boolean determineType() {
-        int bestPriority = -1;
-        boolean assignedType = false;
-
-        for (BuildingType bt : BuildingTypes.getInstance()) {
-            if (bt.priority() > bestPriority) {
-                //get an overview of the satisfied blocks
-                Map<ResourceLocation, List<BlockPos>> available = bt.getGroups(blocks);
-                boolean valid = bt.getGroups().entrySet().stream().noneMatch(e -> !available.containsKey(e.getKey()) || available.get(e.getKey()).size() < e.getValue());
-                if (valid) {
-                    bestPriority = bt.priority();
-                    type = bt.name();
-                    assignedType = true;
-                }
-            }
+        List<BuildingType> matches = getMatchingTypes();
+        if (matches.isEmpty()) {
+            return false;
         }
-        return assignedType;
+        type = matches.getFirst().name();
+        return true;
     }
 
     public String getType() {
