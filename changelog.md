@@ -1,6 +1,23 @@
 # 7.7.18-beta.9
+* Added a **Music Store** building.
+  * Villagers can now visit the Music Store when they are feeling sad.
+  * This helps raise their happiness, similar to how the inn works.
 
-* WIP
+* Improved overlapping building detection.
+  * When multiple building structures overlap, you can now choose which one should be used.
+
+* Improved villager AI performance.
+  * Villagers now do less unnecessary work every tick.
+  * Large villages should have fewer lag spikes and smoother server performance.
+  * Guard enemy scans are now cheaper, running only for villagers actively guarding, following a player, or fighting (non-combat villagers skip this scan entirely to save performance).
+  * Villagers are less likely to waste pathfinding work when moving around the village.
+  * Villagers should no longer forget homes or jobs just because a path search briefly failed.
+  * Equipment checks for guards and archers are now cached, reducing repeated work.
+  * Villager health bonus updates are now cached instead of being recalculated every tick.
+
+* Fixed an issue where some villager movement state updates were running far more often than intended.
+* Fixed excessive repeated max-health modifier updates on villagers.
+* Fixed some expensive villager walking logic that could retry too many times in one tick by adding a retry cooldown after failed attempts.
 
 # 7.7.18-beta.8
 

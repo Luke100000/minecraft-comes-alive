@@ -14,7 +14,7 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.NearestVisibleLivingEntities;
-import net.minecraft.world.entity.ai.sensing.NearestLivingEntitySensor;
+import net.minecraft.world.entity.ai.sensing.Sensor;
 import net.minecraft.world.entity.monster.Enemy;
 import net.minecraft.world.entity.player.Player;
 
@@ -22,15 +22,22 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
-public class GuardEnemiesSensor extends NearestLivingEntitySensor<LivingEntity> {
+/**
+ * Sensor to detect nearby enemies for guards or combat-active villagers.
+ * <p>
+ * PERFORMANCE NOTE: To optimize server TPS, this sensor only performs entity scanning and visibility
+ * checks if the villager is explicitly configured as a guard, is currently following a player, or already
+ * has an active attack target. Non-guard/non-combat villagers will skip this check entirely.
+ */
+public class GuardEnemiesSensor extends Sensor<LivingEntity> {
     private static final double GUARD_ENEMY_RANGE = 48.0;
     private static final double GUARD_ENEMY_RANGE_SQR = GUARD_ENEMY_RANGE * GUARD_ENEMY_RANGE;
 
     @Override
     public Set<MemoryModuleType<?>> requires() {
         return ImmutableSet.of(
-                MemoryModuleType.NEAREST_LIVING_ENTITIES,
                 MemoryModuleType.NEAREST_VISIBLE_LIVING_ENTITIES,
+                MemoryModuleType.ATTACK_TARGET,
                 MemoryModuleTypeMCA.PLAYER_FOLLOWING,
                 MemoryModuleTypeMCA.NEAREST_GUARD_ENEMY
         );
@@ -38,11 +45,26 @@ public class GuardEnemiesSensor extends NearestLivingEntitySensor<LivingEntity> 
 
     @Override
     protected void doTick(ServerLevel world, LivingEntity entity) {
-        super.doTick(world, entity);
-        entity.getBrain().setMemory(MemoryModuleTypeMCA.NEAREST_GUARD_ENEMY, this.getNearestHostile(entity));
+        if (!(entity instanceof VillagerEntityMCA villager)) {
+            return;
+        }
+
+        // Performance optimization: only scan if the villager is a guard,
+        // is following a player, or has an active attack target.
+        // Otherwise, skip the expensive scan and clear any remaining guard enemy memory.
+        boolean shouldScan = villager.isGuard()
+                || villager.getBrain().getMemoryInternal(MemoryModuleTypeMCA.PLAYER_FOLLOWING).isPresent()
+                || villager.getBrain().getMemoryInternal(MemoryModuleType.ATTACK_TARGET).isPresent();
+
+        if (!shouldScan) {
+            villager.getBrain().eraseMemory(MemoryModuleTypeMCA.NEAREST_GUARD_ENEMY);
+            return;
+        }
+
+        villager.getBrain().setMemory(MemoryModuleTypeMCA.NEAREST_GUARD_ENEMY, this.getNearestHostile(villager));
     }
 
-    private Optional<LivingEntity> getNearestHostile(LivingEntity entity) {
+    private Optional<LivingEntity> getNearestHostile(VillagerEntityMCA entity) {
         return getVisibleMobs(entity).flatMap((list) -> list.find(target -> isGuardEnemy(target, entity))
                 .filter(target -> isWithinGuardEnemyRange(entity, target))
                 .min((a, b) -> this.compareEntities(entity, a, b)));

@@ -114,6 +114,8 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     private long lastHit = 0;
     private int prevGrowthAmount;
     private boolean interactedWith;
+    private int lastAppliedHealthLevel = Integer.MIN_VALUE;
+    private double lastAppliedHealthBonus = Double.NaN;
 
     public VillagerEntityMCA(EntityType<VillagerEntityMCA> type, Level w, Gender gender) {
         super(type, w);
@@ -142,7 +144,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
                 .add(Attributes.ATTACK_DAMAGE, 3.0f)
                 .add(Attributes.ATTACK_KNOCKBACK, 1.0f)
                 .add(Attributes.MAX_HEALTH, Config.getInstance().villagerMaxHealth)
-                .add(Attributes.FOLLOW_RANGE, Config.getInstance().getVillagerPathfindingDistance());
+                .add(Attributes.FOLLOW_RANGE, Config.getInstance().getVillagerFollowRange());
     }
 
     @Override
@@ -752,13 +754,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
                 sendChatToAllAround("sirben");
             }
 
-            //strengthen experienced villagers
-            AttributeInstance instance = this.getAttributes().getInstance(Attributes.MAX_HEALTH);
-            if (instance != null) {
-                int level = this.getVillagerData().getLevel() - 1;
-                instance.removeModifier(EXTRA_HEALTH_EFFECT_ID);
-                instance.addTransientModifier(new AttributeModifier(EXTRA_HEALTH_EFFECT_ID, Config.getInstance().villagerHealthBonusPerLevel * level, AttributeModifier.Operation.ADD_VALUE));
-            }
+            updateLevelHealthBonus();
 
             //twice a day, randomize the mood a bit
             if (this.tickCount % 12000 == 0) {
@@ -766,6 +762,33 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
                 int value = random.nextInt(7) - 3;
                 mcaBrain.modifyMoodValue(value - base);
             }
+        }
+    }
+
+    private void updateLevelHealthBonus() {
+        int level = this.getVillagerData().getLevel() - 1;
+        double bonus = Config.getInstance().villagerHealthBonusPerLevel * level;
+
+        if (level == lastAppliedHealthLevel && bonus == lastAppliedHealthBonus) {
+            return;
+        }
+
+        lastAppliedHealthLevel = level;
+        lastAppliedHealthBonus = bonus;
+
+        AttributeInstance instance = this.getAttributes().getInstance(Attributes.MAX_HEALTH);
+        if (instance == null) {
+            return;
+        }
+
+        instance.removeModifier(EXTRA_HEALTH_EFFECT_ID);
+
+        if (bonus != 0.0D) {
+            instance.addTransientModifier(new AttributeModifier(
+                    EXTRA_HEALTH_EFFECT_ID,
+                    bonus,
+                    AttributeModifier.Operation.ADD_VALUE
+            ));
         }
     }
 

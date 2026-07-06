@@ -10,6 +10,7 @@ import net.minecraft.world.entity.ai.behavior.BehaviorUtils;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.MemoryStatus;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.Comparator;
 import java.util.Map;
@@ -37,10 +38,11 @@ public class EnterBuildingTask extends Behavior<VillagerEntityMCA> {
                         .min(Comparator.comparingInt(a -> a.getCenter().distManhattan(villager.blockPosition()))));
     }
 
-    protected Optional<BlockPos> getRandomPositionIn(Building b, Level world) {
+    protected Optional<BlockPos> getRandomPositionIn(Building b, Level world, VillagerEntityMCA villager) {
         if (b.getBuildingType().grouped()) {
             //todo randomize
-            return Optional.ofNullable(b.getCenter());
+            return Optional.ofNullable(b.getCenter())
+                    .filter(pos -> isGoodIndoorWalkTarget(world, villager, pos));
         }
 
         RandomSource r = world.getRandom();
@@ -55,17 +57,26 @@ public class EnterBuildingTask extends Behavior<VillagerEntityMCA> {
                     r.nextInt(Math.max(1, diff.getY() - margin * 2)) + margin,
                     r.nextInt(Math.max(1, diff.getZ() - margin * 2)) + margin
             ));
-            if (!world.canSeeSky(p)) {
+            if (isGoodIndoorWalkTarget(world, villager, p)) {
                 return Optional.of(p);
             }
         }
         return Optional.empty();
     }
 
+    private boolean isGoodIndoorWalkTarget(Level world, VillagerEntityMCA villager, BlockPos pos) {
+        return !world.canSeeSky(pos)
+                && villager.getNavigation().isStableDestination(pos)
+                && world.noCollision(
+                        villager,
+                        villager.getBoundingBox().move(Vec3.atBottomCenterOf(pos).subtract(villager.position()))
+                );
+    }
+
     protected Optional<BlockPos> getNextPosition(VillagerEntityMCA villager) {
         Optional<Building> b = getNearestBuilding(villager);
         if (b.isPresent() && !b.get().containsPos(villager.blockPosition())) {
-            return getRandomPositionIn(b.get(), villager.level());
+            return getRandomPositionIn(b.get(), villager.level(), villager);
         }
         return Optional.empty();
     }

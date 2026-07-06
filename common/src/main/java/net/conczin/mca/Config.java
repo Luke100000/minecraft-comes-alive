@@ -6,6 +6,7 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.JsonSyntaxException;
 import net.conczin.mca.entity.EquipmentSet;
 import net.conczin.mca.entity.ai.Traits;
+import net.minecraft.util.Mth;
 
 import java.io.File;
 import java.io.FileReader;
@@ -201,7 +202,14 @@ public final class Config extends CommonConfig {
     /**
      * Maximum pathfinding distance used when villagers walk to long-range memories such as beds.
      */
-    public int villagerPathfindingDistance = 100;
+    public int villagerPathfindingDistance = 80;
+
+    /**
+     * Maximum follow-range attribute for villagers. Affects how far they pursue entities and how large the pathfinding search budget is.
+     * Smaller values improve performance at the cost of reduced detection range.
+     */
+    public int villagerFollowRange = 48;
+
 
     /**
      * Number of hearts a child starts with towards their parent.
@@ -926,6 +934,10 @@ public final class Config extends CommonConfig {
 
     public int getVillagerPathfindingDistance() {
         return Math.max(16, Math.min(256, villagerPathfindingDistance));
+    }
+
+    public int getVillagerFollowRange() {
+        return Mth.clamp(villagerFollowRange, 16, 64);
     }
 
     public void autocomplete() {

@@ -82,7 +82,7 @@ public class VillagerBrain<E extends Mob & VillagerLike<E>> {
             entity.setTrackedValue(PANICKING, panicking);
         }
 
-        if (entity.tickCount % 20 != 0) {
+        if (entity.tickCount % 20 == 0) {
             updateMoveState();
         }
 

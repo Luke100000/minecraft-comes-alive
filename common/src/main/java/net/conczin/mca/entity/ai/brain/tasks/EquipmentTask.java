@@ -18,10 +18,14 @@ import java.util.function.Predicate;
 
 public class EquipmentTask extends Behavior<VillagerEntityMCA> {
     private static final int COOLDOWN = 100;
+    private static final int CHECK_INTERVAL = 20;
     private final Predicate<VillagerEntityMCA> condition;
     private final Function<VillagerEntityMCA, EquipmentSet> equipmentSet;
     private int lastEquipTime;
     private boolean lastArmorWearState;
+    private int lastCheckTick = -CHECK_INTERVAL;
+    private boolean cachedConditionResult;
+    private EquipmentSet cachedEquipmentSet;
 
     public EquipmentTask(Predicate<VillagerEntityMCA> condition, Function<VillagerEntityMCA, EquipmentSet> set) {
         super(ImmutableMap.of(MemoryModuleTypeMCA.WEARS_ARMOR, MemoryStatus.REGISTERED));
@@ -36,11 +40,17 @@ public class EquipmentTask extends Behavior<VillagerEntityMCA> {
             return true;
         }
 
-        //armor change necessary
+        // Check condition with cache to avoid repeated expensive tests
+        if (villager.tickCount - lastCheckTick >= CHECK_INTERVAL) {
+            lastCheckTick = villager.tickCount;
+            cachedConditionResult = condition.test(villager);
+            cachedEquipmentSet = cachedConditionResult ? equipmentSet.apply(villager) : null;
+        }
+
         boolean present = villager.getBrain().getMemoryInternal(MemoryModuleTypeMCA.WEARS_ARMOR).isPresent();
-        if (condition.test(villager)) {
+        if (cachedConditionResult) {
             lastEquipTime = villager.tickCount;
-            return !present || equipmentSet.apply(villager).getMainHand() != null && villager.getMainHandItem().isEmpty();
+            return !present || cachedEquipmentSet != null && cachedEquipmentSet.getMainHand() != null && villager.getMainHandItem().isEmpty();
         } else if (villager.tickCount - lastEquipTime > COOLDOWN) {
             return present;
         } else {
@@ -68,8 +78,13 @@ public class EquipmentTask extends Behavior<VillagerEntityMCA> {
         super.start(world, villager, time);
 
         lastArmorWearState = villager.getVillagerBrain().getArmorWear();
-        EquipmentSet set = equipmentSet.apply(villager);
-        boolean wear = condition.test(villager);
+        boolean wear = cachedConditionResult;
+        EquipmentSet set = cachedEquipmentSet;
+
+        if ((wear || villager.getVillagerBrain().getArmorWear()) && set == null) {
+            set = equipmentSet.apply(villager);
+            cachedEquipmentSet = set;
+        }
 
         //remember last state
         if (wear) {
