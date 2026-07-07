@@ -1,4 +1,8 @@
 # 7.7.18-beta.9
+* The **Ride Mount** button on the villager interaction screen now changes to **Dismount** if the villager is riding something, making it easy to get them down.
+* Fixed a bug on dedicated servers where changing a villager's mood, infection, traits, personality, or relationship hearts in the editor wouldn't save.
+* Improved how villager skins and clothing registries are loaded behind the scenes to be cleaner and more flexible.
+
 * Added a **Music Store** building.
   * Villagers can now visit the Music Store when they are feeling sad.
   * This helps raise their happiness, similar to how the inn works.

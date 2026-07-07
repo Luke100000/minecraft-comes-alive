@@ -46,7 +46,8 @@ public class HairStyleList extends SimpleJsonResourceReloadListener {
 
     private void addEntries(ResourceLocation id, Map<String, HairStyle.Definition> entries) {
         Gender fileGender = BodySkinList.getGenderFromPath(id);
-        entries.forEach((key, definition) -> styles.put(key, definition.create(key, fileGender)));
+        entries.forEach((key, definition) -> styles.put(key, definition.create(key,
+                fileGender == Gender.UNASSIGNED ? Gender.NEUTRAL : fileGender)));
     }
 
     public HashMap<String, HairStyle> getAllStyles(Map<String, Hair> extraHair) {

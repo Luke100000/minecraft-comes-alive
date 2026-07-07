@@ -4,6 +4,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.JsonOps;
+import com.google.gson.JsonObject;
 import net.conczin.mca.MCA;
 import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.resources.data.skin.BodySkin;
@@ -18,13 +19,14 @@ import java.io.InputStreamReader;
 import java.io.Reader;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
 public final class BuiltInSkinCatalog {
     private static final Codec<Map<String, HairStyle.Definition>> HAIR_STYLE_FILE_CODEC = Codec.unboundedMap(Codec.STRING, HairStyle.DEFINITION_CODEC);
-    private static final List<String> BODY_SKIN_FILES = List.of("female", "male");
-    private static final List<String> GENDERED_SKIN_FILES = List.of("female", "male", "neutral");
+    private static final List<String> BODY_SKIN_FILES = List.of("skin", "female", "male");
+    private static final List<String> GENDERED_SKIN_FILES = List.of("skin", "female", "male", "neutral");
     private static final List<String> HAIR_LAYER_FILES = List.of("back", "bangs", "base", "extra", "front");
     private static final Catalog CATALOG = load();
 
@@ -42,25 +44,28 @@ public final class BuiltInSkinCatalog {
         HashMap<String, HairStyle> hairStyles = new HashMap<>();
 
         readBundledJsonFiles("skins/clothing", GENDERED_SKIN_FILES, (id, file) -> {
-            Gender gender = Gender.byName(id.getPath());
-            if (gender == Gender.UNASSIGNED) {
-                MCA.LOGGER.warn("Invalid built-in clothing pool gender: {}", id);
-                return;
-            }
+            Gender fileGender = Gender.byName(id.getPath());
 
             for (SkinListJson.Entry entry : SkinListJson.entries(id, file)) {
-                entry.metadata().addProperty("gender", gender.getId());
-                clothing.put(entry.identifier(), new Clothing(entry.identifier(), entry.metadata()));
+                Gender entryGender = SkinListJson.resolveGender(fileGender, entry);
+                if (entryGender == Gender.UNASSIGNED) {
+                    MCA.LOGGER.warn("Invalid built-in clothing entry gender for {} in {}", entry.identifier(), id);
+                    continue;
+                }
+
+                JsonObject metadata = SkinListJson.metadataWithNumericGender(entry, entryGender);
+                clothing.put(entry.identifier(), new Clothing(entry.identifier(), metadata));
             }
         });
 
         readBundledJsonFiles(BodySkinList.ID.getPath(), BODY_SKIN_FILES, (id, file) -> {
-            Gender gender = BodySkinList.getGenderFromPath(id);
-            SkinListJson.entries(id, file).forEach(entry ->
-                    BodySkin.DEFINITION_CODEC.parse(JsonOps.INSTANCE, entry.metadata())
+            Gender fileGender = BodySkinList.getGenderFromPath(id);
+            SkinListJson.entries(id, file).forEach(entry -> {
+                Gender entryGender = SkinListJson.resolveGender(fileGender, entry);
+                BodySkin.DEFINITION_CODEC.parse(JsonOps.INSTANCE, SkinListJson.metadataWithStringGender(entry, entryGender))
                             .resultOrPartial(error -> MCA.LOGGER.warn("Invalid built-in body skin entry {} in {}: {}", entry.identifier(), id, error))
-                            .ifPresent(definition -> bodySkins.put(entry.identifier(), definition.create(entry.identifier(), gender)))
-            );
+                            .ifPresent(definition -> bodySkins.put(entry.identifier(), definition.create(entry.identifier(), entryGender)));
+            });
         });
 
         readBundledJsonFiles("skins/hair_styles", GENDERED_SKIN_FILES, (id, file) -> {
@@ -101,20 +106,27 @@ public final class BuiltInSkinCatalog {
 
     private static void readBundledJsonFiles(String directory, List<String> files, JsonFileConsumer consumer) {
         ClassLoader loader = BuiltInSkinCatalog.class.getClassLoader();
+        List<String> missing = new ArrayList<>();
+        boolean foundAny = false;
         for (String file : files) {
             String path = "data/" + MCA.MOD_ID + "/" + directory + "/" + file + ".json";
             ResourceLocation id = ResourceLocation.fromNamespaceAndPath(MCA.MOD_ID, file);
             try (InputStream stream = loader.getResourceAsStream(path)) {
                 if (stream != null) {
+                    foundAny = true;
                     try (Reader reader = new InputStreamReader(stream, StandardCharsets.UTF_8)) {
                         consumer.accept(id, JsonParser.parseReader(reader));
                     }
                 } else {
-                    MCA.LOGGER.warn("Failed to find built-in skin list {}", path);
+                    missing.add(path);
                 }
             } catch (Exception exception) {
                 MCA.LOGGER.warn("Failed to read built-in skin list {}", path, exception);
             }
+        }
+
+        if (!foundAny) {
+            missing.forEach(path -> MCA.LOGGER.warn("Failed to find built-in skin list {}", path));
         }
     }
 

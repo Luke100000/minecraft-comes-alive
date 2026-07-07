@@ -36,11 +36,12 @@ public class BodySkinList extends SimpleJsonResourceReloadListener {
 
     private void addEntries(ResourceLocation id, JsonElement file) {
         Gender fileGender = getGenderFromPath(id);
-        SkinListJson.entries(id, file).forEach(entry ->
-                BodySkin.DEFINITION_CODEC.parse(JsonOps.INSTANCE, entry.metadata())
+        SkinListJson.entries(id, file).forEach(entry -> {
+            Gender entryGender = SkinListJson.resolveGender(fileGender, entry);
+            BodySkin.DEFINITION_CODEC.parse(JsonOps.INSTANCE, SkinListJson.metadataWithStringGender(entry, entryGender))
                         .resultOrPartial(error -> MCA.LOGGER.warn("Invalid body skin list entry {} in {}: {}", entry.identifier(), id, error))
-                        .ifPresent(definition -> skins.put(entry.identifier(), definition.create(entry.identifier(), fileGender)))
-        );
+                        .ifPresent(definition -> skins.put(entry.identifier(), definition.create(entry.identifier(), entryGender)));
+        });
     }
 
     public BodySkin get(String identifier) {
