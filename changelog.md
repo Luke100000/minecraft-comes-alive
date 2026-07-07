@@ -1,3 +1,7 @@
+# 7.7.18-beta.11
+
+* Guards now retaliate against players again.
+
 # 7.7.18-beta.10
 
 * Improved smart selection filtering in the polymorph UI: the generic **House** option is automatically filtered out if **Big House** is also matched, preventing unnecessary choice prompts when scanning.

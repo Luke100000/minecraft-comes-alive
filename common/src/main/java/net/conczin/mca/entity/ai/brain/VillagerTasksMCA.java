@@ -359,15 +359,19 @@ public class VillagerTasksMCA {
                && !target.isRemoved()
                && target.level() == villager.level()
                && villager.canAttack(target)
-               && shouldRespondToGuardEnemy(villager, target);
+               && shouldRespondToAttackTarget(villager, target);
     }
 
     private static boolean shouldRespondToGuardEnemy(VillagerEntityMCA villager, LivingEntity target) {
         return GuardEnemiesSensor.isGuardEnemy(target, villager)
-               && (isFollowingPlayer(villager)
-                   || getActivity(villager) != Activity.REST
-                   || target.distanceTo(villager) < 8.0
-                   || villager.getResidency().getHomeVillage().filter(village -> village.isWithinBorder(villager)).isEmpty());
+               && shouldRespondToAttackTarget(villager, target);
+    }
+
+    private static boolean shouldRespondToAttackTarget(VillagerEntityMCA villager, LivingEntity target) {
+        return isFollowingPlayer(villager)
+               || getActivity(villager) != Activity.REST
+               || target.distanceTo(villager) < 8.0
+               || villager.getResidency().getHomeVillage().filter(village -> village.isWithinBorder(villager)).isEmpty();
     }
 
     private static boolean isFollowingPlayer(VillagerEntityMCA villager) {
