@@ -138,11 +138,7 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
         }
 
         patch.getCompound("MCAData").ifPresent(patchMca -> {
-            CompoundTag mergedMca = merged.getCompound("MCAData").orElseGet(() -> {
-                CompoundTag compound = new CompoundTag();
-                merged.put("MCAData", compound);
-                return compound;
-            });
+            CompoundTag mergedMca = NbtHelper.getOrCreateCompound(merged, "MCAData");
             for (String key : patchMca.keySet()) {
                 if (isAllowedMcaKey(key)) {
                     mergedMca.put(key, Objects.requireNonNull(patchMca.get(key)).copy());
@@ -222,6 +218,7 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
 
     private void sanitizeVisualIdentifiers(Entity entity, CompoundTag villagerData) {
         CompoundTag mcaData = normalizeVisualData(villagerData);
+        migrateLegacyHairStyle(mcaData);
         CompoundTag fallbackData = GetVillagerRequest.getVillagerData(entity);
         CompoundTag fallbackMcaData = fallbackData == null ? new CompoundTag() : getMcaData(fallbackData);
         Gender gender = getGender(villagerData);
@@ -234,17 +231,32 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
         }
     }
 
-    private CompoundTag normalizeVisualData(CompoundTag villagerData) {
-        CompoundTag mcaData = getOrCreateMcaData(villagerData);
+    private void migrateLegacyHairStyle(CompoundTag mcaData) {
+        String hairStyle = mcaData.getString("HairStyle").orElse("");
+        if (SkinVisualIds.isLegacyHairTexture(hairStyle)) {
+            mcaData.putString("HairBase", hairStyle);
+            mcaData.putString("HairStyle", "");
+            mcaData.putString("Hair", "");
+        }
+    }
 
+    private CompoundTag normalizeVisualData(CompoundTag villagerData) {
+        CompoundTag source = getOrCreateMcaData(villagerData);
+        CompoundTag sanitized = new CompoundTag();
         for (String key : MCA_VISUAL_KEYS) {
-            if (!mcaData.contains(key) && villagerData.contains(key)) {
-                mcaData.put(key, Objects.requireNonNull(villagerData.get(key)).copy());
+            if (!source.contains(key) && villagerData.contains(key)) {
+                source.put(key, Objects.requireNonNull(villagerData.get(key)).copy());
             }
             villagerData.remove(key);
         }
+        for (String key : source.keySet()) {
+            if (isAllowedMcaKey(key)) {
+                sanitized.put(key, Objects.requireNonNull(source.get(key)).copy());
+            }
+        }
 
-        return mcaData;
+        villagerData.put(VillagerEntityMCA.MCA_DATA_KEY, sanitized);
+        return sanitized;
     }
 
     private void clearInvalidIdentifier(CompoundTag mcaData, CompoundTag fallbackMcaData, String key, Predicate<String> validator) {

@@ -20,7 +20,8 @@ public class MoodGroup {
                     .particles(50, ParticleTypes.SPLASH)
                     .building("inn")
                     .color(ChatFormatting.GOLD).build(),
-            new MoodBuilder("unhappy").build(),
+            new MoodBuilder("unhappy")
+                    .building("music_store").build(),
             new MoodBuilder("passive").build(),
             new MoodBuilder("fine").build(),
             new MoodBuilder("happy")
