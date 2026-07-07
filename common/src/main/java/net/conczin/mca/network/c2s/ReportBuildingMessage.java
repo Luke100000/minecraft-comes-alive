@@ -27,6 +27,9 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
             ReportBuildingMessage::new
     );
 
+    private static final int BUILDING_LOOKUP_HORIZONTAL_MARGIN = 1;
+    private static final int BUILDING_LOOKUP_VERTICAL_MARGIN = 2;
+
     public ReportBuildingMessage(Action action) {
         this(action, null);
     }
@@ -76,8 +79,8 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
 
                         double distance = b.getCenter().distSqr(playerPos);
                         if (targetBuilding == null
-                                || exact && !targetExact
-                                || exact == targetExact && distance < targetDistance) {
+                                || (exact && !targetExact)
+                                || (exact == targetExact && distance < targetDistance)) {
                             targetBuilding = b;
                             targetVillage = v;
                             targetExact = exact;
@@ -110,9 +113,9 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
         BlockPos p0 = building.getPos0();
         BlockPos p1 = building.getPos1();
 
-        return pos.getX() >= p0.getX() - 1 && pos.getX() <= p1.getX() + 1
-                && pos.getY() >= p0.getY() - 2 && pos.getY() <= p1.getY() + 2
-                && pos.getZ() >= p0.getZ() - 1 && pos.getZ() <= p1.getZ() + 1;
+        return pos.getX() >= p0.getX() - BUILDING_LOOKUP_HORIZONTAL_MARGIN && pos.getX() <= p1.getX() + BUILDING_LOOKUP_HORIZONTAL_MARGIN
+                && pos.getY() >= p0.getY() - BUILDING_LOOKUP_VERTICAL_MARGIN && pos.getY() <= p1.getY() + BUILDING_LOOKUP_VERTICAL_MARGIN
+                && pos.getZ() >= p0.getZ() - BUILDING_LOOKUP_HORIZONTAL_MARGIN && pos.getZ() <= p1.getZ() + BUILDING_LOOKUP_HORIZONTAL_MARGIN;
     }
 
     @Override
