@@ -272,7 +272,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         Building.validationResult result = building.validateBuilding(world, blockResult.blocked());
         List<String> matchingTypes = new java.util.ArrayList<>();
         if (result == Building.validationResult.SUCCESS) {
-            building.getMatchingTypes().forEach(bt -> matchingTypes.add(bt.name()));
+            building.getVisibleMatchingTypes().forEach(bt -> matchingTypes.add(bt.name()));
         }
         return new BuildingScanResult(
             result,

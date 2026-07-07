@@ -8,6 +8,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.entity.EntityRenderDispatcher;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.LivingEntity;
 import org.joml.Matrix4f;
 import org.joml.Matrix4fStack;
@@ -15,6 +16,14 @@ import org.joml.Quaternionf;
 
 // FIXME: 1.20 loses the DrawableHelper attachment, determine if DrawContext can replace this
 public class WidgetUtils {
+    public static void drawBuildingIcon(GuiGraphics context, ResourceLocation texture, int x, int y, int u, int v) {
+        PoseStack matrices = context.pose();
+        matrices.pushPose();
+        matrices.translate(x - 6.6, y - 6.6, 0);
+        matrices.scale(0.66f, 0.66f, 0.66f);
+        context.blit(texture, 0, 0, u, v, 20, 20);
+        matrices.popPose();
+    }
     public static void drawRectangle(GuiGraphics context, int x0, int y0, int x1, int y1, int color) {
         context.fill(x0 + 1, y0, x1, y0 + 1, color);
         context.fill(x1 - 1, y0 + 1, x1, y1, color);

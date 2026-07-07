@@ -370,6 +370,12 @@ public class Building {
         return matches;
     }
 
+    public List<BuildingType> getVisibleMatchingTypes() {
+        return getMatchingTypes().stream()
+                .filter(bt -> !bt.name().equals("blocked") && !bt.name().equals("building"))
+                .toList();
+    }
+
     private boolean isBuildingBlock(BlockState state) {
         for (BuildingType bt : BuildingTypes.getInstance()) {
             if (bt.matchesBlock(state)) {

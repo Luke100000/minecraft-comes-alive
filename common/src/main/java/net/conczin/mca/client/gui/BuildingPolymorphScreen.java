@@ -7,12 +7,18 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
+import net.conczin.mca.MCA;
+import net.conczin.mca.resources.BuildingTypes;
+import net.conczin.mca.resources.data.BuildingType;
+import net.conczin.mca.client.gui.widget.WidgetUtils;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
 
 import java.util.List;
 import java.util.Objects;
 
 public class BuildingPolymorphScreen extends Screen {
+    private static final ResourceLocation ICON_TEXTURES = MCA.locate("textures/buildings.png");
     private static final int BUTTON_WIDTH = 180;
     private static final int BUTTON_HEIGHT = 20;
     private static final int BUTTON_SPACING = 6;
@@ -28,6 +34,11 @@ public class BuildingPolymorphScreen extends Screen {
         this.matchingTypes = List.copyOf(matchingTypes);
         this.scanPos = scanPos;
         this.isRoom = isRoom;
+    }
+
+    private void drawBuildingIcon(GuiGraphics context, String typeName, int x, int y) {
+        BuildingType type = BuildingTypes.getInstance().getBuildingType(typeName);
+        WidgetUtils.drawBuildingIcon(context, ICON_TEXTURES, x, y, type.iconU(), type.iconV());
     }
 
     private int getEntriesPerPage() {
@@ -71,12 +82,12 @@ public class BuildingPolymorphScreen extends Screen {
         for (int i = 0; i < visibleEntries; i++) {
             String typeName = matchingTypes.get(pageStart + i);
             int y = startY + i * (BUTTON_HEIGHT + BUTTON_SPACING);
-            addRenderableWidget(new ButtonWidget(
+            addRenderableWidget(new PolymorphButton(
                     width / 2 - BUTTON_WIDTH / 2,
                     y,
                     BUTTON_WIDTH,
                     BUTTON_HEIGHT,
-                    Component.translatable("buildingType." + typeName),
+                    typeName,
                     button -> {
                         Network.sendToServer(new ConfirmBuildingPolymorphMessage(scanPos, isRoom, typeName));
                         Objects.requireNonNull(this.minecraft).setScreen(null);
@@ -135,5 +146,27 @@ public class BuildingPolymorphScreen extends Screen {
         int textYStart = getContentTop();
         context.drawCenteredString(font, Component.translatable("gui.building_polymorph.title"), width / 2, textYStart, 0xffffff);
         context.drawCenteredString(font, Component.translatable("gui.building_polymorph.desc"), width / 2, textYStart + 15, 0xaaaaaa);
+    }
+
+    private class PolymorphButton extends ButtonWidget {
+        private final String typeName;
+
+        public PolymorphButton(int x, int y, int width, int height, String typeName, OnPress onPress) {
+            super(x, y, width, height, Component.empty(), onPress);
+            this.typeName = typeName;
+        }
+
+        @Override
+        public void renderWidget(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
+            super.renderWidget(guiGraphics, mouseX, mouseY, partialTick);
+            
+            // Draw building icon at (getX() + 10, getY() + 10)
+            drawBuildingIcon(guiGraphics, typeName, getX() + 10, getY() + 10);
+            
+            // Draw text next to it, left-aligned
+            Component text = Component.translatable("buildingType." + typeName);
+            int textColor = active ? 0xffffff : 0xa0a0a0;
+            guiGraphics.drawString(font, text, getX() + 28, getY() + 6, textColor);
+        }
     }
 }

@@ -3,6 +3,13 @@ plugins {
     id 'net.neoforged.moddev'
 }
 
+dependencies {
+    runtimeOnly "maven.modrinth:sodium:${sodium_neoforge_version}"
+    //runtimeOnly "maven.modrinth:iris:${iris_neoforge_version}"
+    runtimeOnly "maven.modrinth:ferrite-core:${ferritecore_neoforge_version}"
+    //runtimeOnly "maven.modrinth:packet-fixer:${packetfixer_neoforge_version}"
+}
+
 neoForge {
     version = neoforge_version
     parchment {

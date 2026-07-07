@@ -101,12 +101,7 @@ public class BlueprintScreen extends ExtendedScreen {
     }
 
     protected void drawBuildingIcon(GuiGraphics context, ResourceLocation texture, int x, int y, int u, int v) {
-        final PoseStack matrices = context.pose();
-        matrices.pushPose();
-        matrices.translate(x - 6.6, y - 6.6, 0);
-        matrices.scale(0.66f, 0.66f, 0.66f);
-        context.blit(texture, 0, 0, u, v, 20, 20);
-        matrices.popPose();
+        WidgetUtils.drawBuildingIcon(context, texture, x, y, u, v);
     }
 
     @Override
