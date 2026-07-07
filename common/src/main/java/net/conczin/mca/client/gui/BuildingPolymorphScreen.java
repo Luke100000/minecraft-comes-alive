@@ -1,16 +1,16 @@
 package net.conczin.mca.client.gui;
 
+import net.conczin.mca.MCA;
+import net.conczin.mca.client.gui.widget.WidgetUtils;
 import net.conczin.mca.network.Network;
 import net.conczin.mca.network.c2s.ConfirmBuildingPolymorphMessage;
+import net.conczin.mca.resources.BuildingTypes;
+import net.conczin.mca.resources.data.BuildingType;
 import net.conczin.mca.util.compat.ButtonWidget;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
-import net.conczin.mca.MCA;
-import net.conczin.mca.resources.BuildingTypes;
-import net.conczin.mca.resources.data.BuildingType;
-import net.conczin.mca.client.gui.widget.WidgetUtils;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
 
@@ -38,6 +38,9 @@ public class BuildingPolymorphScreen extends Screen {
 
     private void drawBuildingIcon(GuiGraphics context, String typeName, int x, int y) {
         BuildingType type = BuildingTypes.getInstance().getBuildingType(typeName);
+        if (!type.hasIcon()) {
+            return;
+        }
         WidgetUtils.drawBuildingIcon(context, ICON_TEXTURES, x, y, type.iconU(), type.iconV());
     }
 

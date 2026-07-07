@@ -1,3 +1,9 @@
+# 7.7.18-beta.10
+
+* Improved smart selection filtering in the polymorph UI: the generic **House** option is automatically filtered out if **Big House** is also matched, preventing unnecessary choice prompts when scanning.
+* Empty icons don't render as graveyard anymore, House option now has an icon.
+* Improved building removal logic.
+
 # 7.7.18-beta.9
 * The **Ride Mount** button on the villager interaction screen now changes to **Dismount** if the villager is riding something, making it easy to get them down.
 * Fixed a bug on dedicated servers where changing a villager's mood, infection, traits, personality, or relationship hearts in the editor wouldn't save.

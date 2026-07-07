@@ -280,6 +280,14 @@ public final class BuildingType {
         return icon;
     }
 
+    /**
+     * @return true when this building type has a renderable icon in textures/buildings.png.
+     * Explicit icon=true keeps support for icons at texture coordinate 0,0.
+     */
+    public boolean hasIcon() {
+        return icon || iconU != 0 || iconV != 0;
+    }
+
     public int iconU() {
         return iconU * 20;
     }

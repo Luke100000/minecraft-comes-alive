@@ -8,6 +8,7 @@ import net.conczin.mca.server.world.data.Building;
 import net.conczin.mca.server.world.data.BuildingScanResult;
 import net.conczin.mca.server.world.data.Village;
 import net.conczin.mca.server.world.data.VillageManager;
+import net.minecraft.core.BlockPos;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.codec.ByteBufCodecs;
@@ -51,29 +52,67 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
                     )
             );
             case FORCE_TYPE, REMOVE -> {
+                BlockPos playerPos = player.blockPosition();
                 Optional<Village> village = villages.findNearestVillage(player);
-                Optional<Building> building = village.flatMap(v -> v.getBuildings().values().stream()
-                        .filter(b -> b.containsPos(player.blockPosition()))
-                        .filter(b -> action != Action.FORCE_TYPE || !b.getBuildingType().grouped())
-                        .findAny());
-                building.ifPresentOrElse(b -> {
-                    if (action == Action.FORCE_TYPE) {
-                        if (b.getType().equals(data)) {
-                            b.setTypeForced(false);
-                            b.determineType();
-                        } else {
-                            b.setTypeForced(true);
-                            b.setType(data);
+
+                Building targetBuilding = null;
+                Village targetVillage = null;
+                boolean targetExact = false;
+                double targetDistance = Double.MAX_VALUE;
+
+                if (village.isPresent()) {
+                    Village v = village.get();
+                    for (Building b : v.getBuildings().values()) {
+                        if (action == Action.FORCE_TYPE && b.getBuildingType().grouped()) {
+                            continue;
                         }
-                    } else {
-                        //noinspection OptionalGetWithoutIsPresent
-                        village.get().removeBuilding(b.getId());
+
+                        boolean exact = b.containsPos(playerPos);
+                        boolean lenient = containsLenient(b, playerPos);
+
+                        if (!exact && !lenient) {
+                            continue;
+                        }
+
+                        double distance = b.getCenter().distSqr(playerPos);
+                        if (targetBuilding == null
+                                || exact && !targetExact
+                                || exact == targetExact && distance < targetDistance) {
+                            targetBuilding = b;
+                            targetVillage = v;
+                            targetExact = exact;
+                            targetDistance = distance;
+                        }
                     }
-                }, () -> {
+                }
+
+                if (targetBuilding != null && targetVillage != null) {
+                    if (action == Action.FORCE_TYPE) {
+                        if (targetBuilding.getType().equals(data)) {
+                            targetBuilding.setTypeForced(false);
+                            targetBuilding.determineType();
+                        } else {
+                            targetBuilding.setTypeForced(true);
+                            targetBuilding.setType(data);
+                        }
+                        targetVillage.markDirty();
+                    } else {
+                        targetVillage.removeBuilding(targetBuilding.getId());
+                    }
+                } else {
                     player.displayClientMessage(Component.translatable("blueprint.noBuilding"), true);
-                });
+                }
             }
         }
+    }
+
+    private static boolean containsLenient(Building building, BlockPos pos) {
+        BlockPos p0 = building.getPos0();
+        BlockPos p1 = building.getPos1();
+
+        return pos.getX() >= p0.getX() - 1 && pos.getX() <= p1.getX() + 1
+                && pos.getY() >= p0.getY() - 2 && pos.getY() <= p1.getY() + 2
+                && pos.getZ() >= p0.getZ() - 1 && pos.getZ() <= p1.getZ() + 1;
     }
 
     @Override

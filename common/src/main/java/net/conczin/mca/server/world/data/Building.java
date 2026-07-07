@@ -371,9 +371,16 @@ public class Building {
     }
 
     public List<BuildingType> getVisibleMatchingTypes() {
-        return getMatchingTypes().stream()
+        List<BuildingType> matches = new ArrayList<>(getMatchingTypes().stream()
+                .filter(bt -> bt.visible() || bt.name().equals("house"))
                 .filter(bt -> !bt.name().equals("blocked") && !bt.name().equals("building"))
-                .toList();
+                .toList());
+
+        boolean hasBigHouse = matches.stream().anyMatch(bt -> bt.name().equals("big_house"));
+        if (hasBigHouse) {
+            matches.removeIf(bt -> bt.name().equals("house"));
+        }
+        return matches;
     }
 
     private boolean isBuildingBlock(BlockState state) {
