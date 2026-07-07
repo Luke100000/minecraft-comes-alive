@@ -89,7 +89,7 @@ public class GuardEnemiesSensor extends Sensor<LivingEntity> {
     }
 
     private int compareDistances(LivingEntity entity, LivingEntity hostile1, LivingEntity hostile2) {
-        return Mth.floor(hostile1.distanceToSqr(entity) - hostile2.distanceToSqr(entity));
+        return Double.compare(hostile1.distanceToSqr(entity), hostile2.distanceToSqr(entity));
     }
 
     public static boolean isGuardEnemy(LivingEntity entity, LivingEntity guard) {
