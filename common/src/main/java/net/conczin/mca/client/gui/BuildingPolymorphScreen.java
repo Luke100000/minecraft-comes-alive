@@ -88,6 +88,7 @@ public class BuildingPolymorphScreen extends Screen {
                     BUTTON_WIDTH,
                     BUTTON_HEIGHT,
                     typeName,
+                    Component.translatable("buildingType." + typeName),
                     button -> {
                         Network.sendToServer(new ConfirmBuildingPolymorphMessage(scanPos, isRoom, typeName));
                         Objects.requireNonNull(this.minecraft).setScreen(null);
@@ -151,22 +152,16 @@ public class BuildingPolymorphScreen extends Screen {
     private class PolymorphButton extends ButtonWidget {
         private final String typeName;
 
-        public PolymorphButton(int x, int y, int width, int height, String typeName, OnPress onPress) {
-            super(x, y, width, height, Component.empty(), onPress);
+        public PolymorphButton(int x, int y, int width, int height, String typeName, Component text, OnPress onPress) {
+            super(x, y, width, height, text, onPress);
             this.typeName = typeName;
         }
 
         @Override
         public void renderWidget(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
             super.renderWidget(guiGraphics, mouseX, mouseY, partialTick);
-            
-            // Draw building icon at (getX() + 10, getY() + 10)
+
             drawBuildingIcon(guiGraphics, typeName, getX() + 10, getY() + 10);
-            
-            // Draw text next to it, left-aligned
-            Component text = Component.translatable("buildingType." + typeName);
-            int textColor = active ? 0xffffff : 0xa0a0a0;
-            guiGraphics.drawString(font, text, getX() + 28, getY() + 6, textColor);
         }
     }
 }
