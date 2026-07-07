@@ -398,7 +398,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
             return scan.result();
         }
 
-        return Building.validationResult.SUCCESS;
+        return commitBuilding(scan, forcedType);
     }
 
     public void setBuildingCooldown(int buildingCooldown) {
