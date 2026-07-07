@@ -19,10 +19,10 @@ import net.conczin.mca.util.compat.ButtonWidget;
 import net.conczin.mca.util.localization.FlowingText;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.player.LocalPlayer;
-import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Vec3i;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -103,12 +103,7 @@ public class BlueprintScreen extends ExtendedScreen {
     }
 
     protected void drawBuildingIcon(GuiGraphicsExtractor context, Identifier texture, int x, int y, int u, int v) {
-        final Matrix3x2fStack matrices = context.pose();
-        matrices.pushMatrix();
-        matrices.translate(x - 6.6f, y - 6.6f);
-        matrices.scale(0.66f, 0.66f);
-        context.blit(RenderPipelines.GUI_TEXTURED, texture, 0, 0, u, v, 20, 20, 256, 256);
-        matrices.popMatrix();
+        WidgetUtils.drawBuildingIcon(context, texture, x, y, u, v);
     }
 
     @Override
@@ -244,12 +239,21 @@ public class BlueprintScreen extends ExtendedScreen {
                 catalogButtons.clear();
                 for (BuildingType bt : BuildingTypes.getInstance()) {
                     if (bt.visible()) {
-                        LegacyImageButton widget = new LegacyImageButton(
-                                row * size + x + 10, col * size + y - 10, 20, 20, bt.iconU(), bt.iconV() + 20, 20, ICON_TEXTURES, 256, 256, button -> {
-                            selectBuilding(bt);
-                            button.active = false;
-                            catalogButtons.forEach(b -> b.active = true);
-                        }, Component.translatable("buildingType." + bt.name()));
+                        Button widget;
+                        if (bt.hasIcon()) {
+                            widget = new LegacyImageButton(
+                                    row * size + x + 10, col * size + y - 10, 20, 20, bt.iconU(), bt.iconV() + 20, 20, ICON_TEXTURES, 256, 256, button -> {
+                                selectBuilding(bt);
+                                button.active = false;
+                                catalogButtons.forEach(b -> b.active = true);
+                            }, Component.translatable("buildingType." + bt.name()));
+                        } else {
+                            widget = new ButtonWidget(row * size + x + 10, col * size + y - 10, 20, 20, Component.empty(), button -> {
+                                selectBuilding(bt);
+                                button.active = false;
+                                catalogButtons.forEach(b -> b.active = true);
+                            }, Component.translatable("buildingType." + bt.name()));
+                        }
                         catalogButtons.add(addRenderableWidget(widget));
 
                         row++;
@@ -421,7 +425,7 @@ public class BlueprintScreen extends ExtendedScreen {
                 WidgetUtils.drawRectangle(context, p0.getX(), p0.getZ(), p1.getX(), p1.getZ(), bt.getColor());
 
                 //icon
-                if (bt.visible()) {
+                if (bt.visible() && bt.hasIcon()) {
                     BlockPos c = building.getCenter();
                     drawBuildingIcon(context, ICON_TEXTURES, c.getX(), c.getZ(), bt.iconU(), bt.iconV());
                 }

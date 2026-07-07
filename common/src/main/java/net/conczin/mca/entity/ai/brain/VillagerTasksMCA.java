@@ -87,6 +87,7 @@ public class VillagerTasksMCA {
     );
 
     public static final ImmutableList<SensorType<? extends Sensor<? super Villager>>> SENSOR_TYPES = ImmutableList.of(
+            SensorType.NEAREST_LIVING_ENTITIES,
             SensorType.NEAREST_PLAYERS,
             SensorType.NEAREST_ITEMS,
             SensorType.NEAREST_BED,

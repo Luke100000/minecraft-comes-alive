@@ -1,3 +1,47 @@
+# 8.1.0
+
+* Added the **Music Store** building, giving sad villagers another place to visit for happiness recovery.
+* Added building polymorph handling for overlapping scans, including a paginated selection screen, building icons, smarter filtering for generic **House** matches, and clearer building removal/lookup behavior.
+* Improved villager AI performance by reducing unnecessary guard enemy scans, caching equipment checks, caching health bonus updates, and adding retry cooldowns for failed walking/building entry logic.
+* Fixed several villager editor and skin registry issues, including saving mood, infection, traits, personality, relationship hearts, legacy hair styles, body skins, clothing, and gendered skin metadata more reliably.
+* Improved villager interaction UI text so **Ride Mount** changes to **Dismount** when the villager is already riding.
+* Added config support for villager follow range.
+
+# 7.7.18-beta.10
+
+* Improved smart selection filtering in the polymorph UI: the generic **House** option is automatically filtered out if **Big House** is also matched, preventing unnecessary choice prompts when scanning.
+* Empty icons don't render as graveyard anymore, House option now has an icon.
+* Improved building removal logic.
+
+# 7.7.18-beta.9
+* The **Ride Mount** button on the villager interaction screen now changes to **Dismount** if the villager is riding something, making it easy to get them down.
+* Fixed a bug on dedicated servers where changing a villager's mood, infection, traits, personality, or relationship hearts in the editor wouldn't save.
+* Improved how villager skins and clothing registries are loaded behind the scenes to be cleaner and more flexible.
+
+* Added a **Music Store** building.
+  * Villagers can now visit the Music Store when they are feeling sad.
+  * This helps raise their happiness, similar to how the inn works.
+
+* Improved overlapping building detection.
+  * When multiple building structures overlap, you can now choose which one should be used.
+
+* Improved villager AI performance.
+  * Villagers now do less unnecessary work every tick.
+  * Large villages should have fewer lag spikes and smoother server performance.
+  * Guard enemy scans are now cheaper, running only for villagers actively guarding, following a player, or fighting (non-combat villagers skip this scan entirely to save performance).
+  * Villagers are less likely to waste pathfinding work when moving around the village.
+  * Villagers should no longer forget homes or jobs just because a path search briefly failed.
+  * Equipment checks for guards and archers are now cached, reducing repeated work.
+  * Villager health bonus updates are now cached instead of being recalculated every tick.
+
+* Fixed an issue where some villager movement state updates were running far more often than intended.
+* Fixed excessive repeated max-health modifier updates on villagers.
+* Fixed some expensive villager walking logic that could retry too many times in one tick by adding a retry cooldown after failed attempts.
+
+# 8.0.6
+
+* Fixed gifting boquets/engagement rings causing errors.
+
 # 8.0.5
 
 * Villagers should stop floating in passenger seats such as boats.
