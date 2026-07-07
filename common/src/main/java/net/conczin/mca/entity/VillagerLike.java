@@ -82,11 +82,12 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
 
     static VillagerLike<?> toVillager(PlayerSaveData player) {
         CompoundTag villagerData = player.getEntityData();
-        return (VillagerLike<?>) EntitiesMCA.MALE_VILLAGER.create(
-                TagValueInput.create(ProblemReporter.DISCARDING, player.getWorld().registryAccess(), villagerData),
-                player.getWorld(),
-                EntitySpawnReason.LOAD
-        ).orElse(null);
+        VillagerEntityMCA villager = EntitiesMCA.MALE_VILLAGER.create(player.getWorld(), EntitySpawnReason.LOAD);
+        if (villager == null) {
+            return null;
+        }
+        villager.readAdditionalSaveDataForEditor(villagerData);
+        return villager;
     }
 
     static VillagerLike<?> toVillager(Entity entity) {
@@ -164,7 +165,7 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
     }
 
     default boolean canBeAttractedTo(VillagerLike<?> other) {
-        return getAttractedGenderSet(this).contains(other.getGenetics().getGender()) && getAttractedGenderSet(other).contains(getGenetics().getGender());
+        return other != null && getAttractedGenderSet(this).contains(other.getGenetics().getGender()) && getAttractedGenderSet(other).contains(getGenetics().getGender());
     }
 
     default boolean canBeAttractedTo(PlayerSaveData other) {

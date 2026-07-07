@@ -1,3 +1,7 @@
+# 8.0.6
+
+* Fixed gifting boquets/engagement rings causing errors.
+
 # 8.0.5
 
 * Villagers should stop floating in passenger seats such as boats.
