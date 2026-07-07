@@ -93,7 +93,7 @@ public class BuildingPolymorphScreen extends ExtendedScreen {
                     Component.translatable("buildingType." + typeName),
                     button -> {
                         Network.sendToServer(new ConfirmBuildingPolymorphMessage(scanPos, isRoom, typeName));
-                        Objects.requireNonNull(this.minecraft).setScreen(null);
+                        this.minecraft.gui.setScreen(null);
                     }
             ));
         }
@@ -134,7 +134,7 @@ public class BuildingPolymorphScreen extends ExtendedScreen {
                 100,
                 BUTTON_HEIGHT,
                 Component.translatable("gui.blueprint.cancel"),
-                button -> Objects.requireNonNull(this.minecraft).setScreen(null)
+                button -> this.minecraft.gui.setScreen(null)
         ));
     }
 
