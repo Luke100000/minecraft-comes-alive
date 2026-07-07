@@ -10,11 +10,21 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.world.entity.LivingEntity;
+import org.joml.Matrix3x2fStack;
 
 import java.util.List;
 
 // FIXME: 1.20 loses the DrawableHelper attachment, determine if DrawContext can replace this
 public class WidgetUtils {
+    public static void drawBuildingIcon(GuiGraphicsExtractor context, Identifier texture, int x, int y, int u, int v) {
+        Matrix3x2fStack matrices = context.pose();
+        matrices.pushMatrix();
+        matrices.translate(x - 6.6f, y - 6.6f);
+        matrices.scale(0.66f, 0.66f);
+        context.blit(RenderPipelines.GUI_TEXTURED, texture, 0, 0, u, v, 20, 20, 256, 256);
+        matrices.popMatrix();
+    }
+
     public static void drawRectangle(GuiGraphicsExtractor context, int x0, int y0, int x1, int y1, int color) {
         context.fill(x0 + 1, y0, x1, y0 + 1, color);
         context.fill(x1 - 1, y0 + 1, x1, y1, color);

@@ -3,6 +3,8 @@ package net.conczin.mca.resources;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonParseException;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonPrimitive;
+import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.MCA;
 import net.minecraft.resources.FileToIdConverter;
 import net.minecraft.resources.Identifier;
@@ -49,6 +51,49 @@ final class SkinListJson {
             entries.add(new Entry(identifier, metadata));
         });
         return entries;
+    }
+
+    /**
+     * Resolves gender for both the old split-file layout:
+     *   skins/body/female.json + skins/body/male.json
+     * and the merged layout:
+     *   skins/body/skin.json with per-entry gender metadata.
+     *
+     * This also keeps old numeric gender metadata working for list types that
+     * predate the newer string codecs.
+     */
+    public static Gender resolveGender(Gender fileGender, Entry entry) {
+        Gender metadataGender = getGenderFromMetadata(entry.metadata());
+        if (metadataGender != Gender.UNASSIGNED) {
+            return metadataGender;
+        }
+
+        Gender inferred = inferGenderFromIdentifier(entry.identifier());
+        if (inferred != Gender.UNASSIGNED) {
+            return inferred;
+        }
+
+        return fileGender == null ? Gender.UNASSIGNED : fileGender;
+    }
+
+    private static Gender getGenderFromMetadata(JsonObject metadata) {
+        JsonElement element = metadata.get("gender");
+        if (element == null || !element.isJsonPrimitive()) {
+            return Gender.UNASSIGNED;
+        }
+
+        JsonPrimitive primitive = element.getAsJsonPrimitive();
+        return primitive.isNumber() ? Gender.byId(primitive.getAsInt()) : Gender.byName(primitive.getAsString());
+    }
+
+    private static Gender inferGenderFromIdentifier(String identifier) {
+        if (identifier.contains("/female/") || identifier.contains("/female_")) {
+            return Gender.FEMALE;
+        }
+        if (identifier.contains("/male/") || identifier.contains("/male_")) {
+            return Gender.MALE;
+        }
+        return Gender.UNASSIGNED;
     }
 
     static Map<Identifier, List<String>> textureCollections(ResourceManager manager, String directory) {

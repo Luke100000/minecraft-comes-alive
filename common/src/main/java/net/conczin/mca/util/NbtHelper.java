@@ -63,7 +63,7 @@ public interface NbtHelper {
                     if (k == null) return null;
                     V v = valueMapper.apply(k, nbt.get(e));
                     if (v == null) return null;
-                    return k == null ? null : new Pair<>(k, v);
+                    return new Pair<>(k, v);
                 })
                 .filter(Objects::nonNull)
                 .collect(Collectors.toMap(Pair::getFirst, Pair::getSecond));

@@ -14,6 +14,7 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.server.packs.resources.SimpleJsonResourceReloadListener;
 import net.minecraft.util.ExtraCodecs;
+import net.minecraft.util.GsonHelper;
 import net.minecraft.util.profiling.ProfilerFiller;
 import net.minecraft.world.entity.npc.villager.VillagerProfession;
 import org.jetbrains.annotations.Nullable;
@@ -43,19 +44,21 @@ public class ClothingList extends SimpleJsonResourceReloadListener<JsonElement> 
         clothing.clear();
 
         data.forEach((id, file) -> {
-            Gender gender = Gender.byName(id.getPath().split("\\.")[0]);
-
-            if (gender == Gender.UNASSIGNED) {
-                MCA.LOGGER.warn("Invalid gender for clothing pool: {}", id);
-                return;
-            }
+            Gender fileGender = BodySkinList.getGenderFromPath(id);
 
             for (SkinListJson.Entry entry : SkinListJson.entries(id, file)) {
-                JsonObject object = entry.metadata();
-                object.addProperty("gender", gender.getId());
+                Gender entryGender = SkinListJson.resolveGender(fileGender, entry);
+                if (entryGender == Gender.UNASSIGNED) {
+                    MCA.LOGGER.warn("Invalid gender for clothing entry {} in {}", entry.identifier(), id);
+                    continue;
+                }
 
-                Clothing c = new Clothing(entry.identifier(), object);
-                clothing.put(entry.identifier(), c);
+                JsonObject metadata = entry.metadata();
+                String profession = metadata.has("profession") && !metadata.get("profession").isJsonNull() ? GsonHelper.getAsString(metadata, "profession", null) : null;
+                boolean exclude = GsonHelper.getAsBoolean(metadata, "exclude", false);
+                int temperature = GsonHelper.getAsInt(metadata, "temperature", 0);
+
+                clothing.put(entry.identifier(), new Clothing(entry.identifier(), profession, temperature, exclude, entryGender));
             }
         });
     }

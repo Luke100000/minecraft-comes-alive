@@ -21,10 +21,14 @@ import java.util.function.Predicate;
 
 public class EquipmentTask extends Behavior<VillagerEntityMCA> {
     private static final int COOLDOWN = 100;
+    private static final int CHECK_INTERVAL = 20;
     private final Predicate<VillagerEntityMCA> condition;
     private final Function<VillagerEntityMCA, EquipmentSet> equipmentSet;
     private int lastEquipTime;
     private boolean lastArmorWearState;
+    private int lastCheckTick = -CHECK_INTERVAL;
+    private boolean cachedConditionResult;
+    private EquipmentSet cachedEquipmentSet;
 
     public EquipmentTask(Predicate<VillagerEntityMCA> condition, Function<VillagerEntityMCA, EquipmentSet> set) {
         super(ImmutableMap.of(MemoryModuleTypeMCA.WEARS_ARMOR, MemoryStatus.REGISTERED));
@@ -34,21 +38,27 @@ public class EquipmentTask extends Behavior<VillagerEntityMCA> {
 
     @Override
     protected boolean checkExtraStartConditions(ServerLevel world, VillagerEntityMCA villager) {
-        EquipmentSet set = orientForDominantHand(villager, equipmentSet.apply(villager));
-        if (isNakedCombatSet(set, villager)) {
-            return false;
-        }
-
         //armor visibility settings have been changed
         if (lastArmorWearState != villager.getVillagerBrain().getArmorWear()) {
             return true;
         }
 
-        //armor change necessary
+        // Check condition with cache to avoid repeated expensive tests
+        if (villager.tickCount - lastCheckTick >= CHECK_INTERVAL) {
+            lastCheckTick = villager.tickCount;
+            cachedConditionResult = condition.test(villager);
+            cachedEquipmentSet = cachedConditionResult ? orientForDominantHand(villager, equipmentSet.apply(villager)) : null;
+        }
+
+        EquipmentSet set = cachedEquipmentSet;
+        if (set != null && isNakedCombatSet(set, villager)) {
+            return false;
+        }
+
         boolean present = villager.getBrain().getMemoryInternal(MemoryModuleTypeMCA.WEARS_ARMOR).isPresent();
-        if (condition.test(villager)) {
+        if (cachedConditionResult) {
             lastEquipTime = villager.tickCount;
-            return !present || isMissingRequestedHandItem(villager, set);
+            return !present || set != null && isMissingRequestedHandItem(villager, set);
         } else if (villager.tickCount - lastEquipTime > COOLDOWN) {
             return present;
         } else {
@@ -76,12 +86,17 @@ public class EquipmentTask extends Behavior<VillagerEntityMCA> {
         super.start(world, villager, time);
 
         lastArmorWearState = villager.getVillagerBrain().getArmorWear();
-        EquipmentSet set = orientForDominantHand(villager, equipmentSet.apply(villager));
-        if (isNakedCombatSet(set, villager)) {
-            return;
+        boolean wear = cachedConditionResult;
+        EquipmentSet set = cachedEquipmentSet;
+
+        if ((wear || villager.getVillagerBrain().getArmorWear()) && set == null) {
+            set = orientForDominantHand(villager, equipmentSet.apply(villager));
+            cachedEquipmentSet = set;
         }
 
-        boolean wear = condition.test(villager);
+        if (set != null && isNakedCombatSet(set, villager)) {
+            return;
+        }
 
         //remember last state
         if (wear) {

@@ -256,4 +256,9 @@ public class ClientHandlerImpl implements ClientHandler {
             civilRegistryBook.receive(response.getIndex(), response.getLines());
         }
     }
+
+    @Override
+    public void handleBuildingPolymorph(BuildingPolymorphMessage message) {
+        client.setScreen(new BuildingPolymorphScreen(message.matchingTypes(), message.scanPos(), message.isRoom()));
+    }
 }
