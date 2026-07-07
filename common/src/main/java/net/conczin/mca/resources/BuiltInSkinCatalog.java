@@ -13,6 +13,7 @@ import net.conczin.mca.resources.data.skin.HairStyle;
 import net.conczin.mca.resources.data.skin.LayeredHair;
 import net.minecraft.ResourceLocationException;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.GsonHelper;
 
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -44,7 +45,7 @@ public final class BuiltInSkinCatalog {
         HashMap<String, HairStyle> hairStyles = new HashMap<>();
 
         readBundledJsonFiles("skins/clothing", GENDERED_SKIN_FILES, (id, file) -> {
-            Gender fileGender = Gender.byName(id.getPath());
+            Gender fileGender = BodySkinList.getGenderFromPath(id);
 
             for (SkinListJson.Entry entry : SkinListJson.entries(id, file)) {
                 Gender entryGender = SkinListJson.resolveGender(fileGender, entry);
@@ -53,8 +54,12 @@ public final class BuiltInSkinCatalog {
                     continue;
                 }
 
-                JsonObject metadata = SkinListJson.metadataWithNumericGender(entry, entryGender);
-                clothing.put(entry.identifier(), new Clothing(entry.identifier(), metadata));
+                JsonObject metadata = entry.metadata();
+                String profession = metadata.has("profession") && !metadata.get("profession").isJsonNull() ? GsonHelper.getAsString(metadata, "profession", null) : null;
+                boolean exclude = GsonHelper.getAsBoolean(metadata, "exclude", false);
+                int temperature = GsonHelper.getAsInt(metadata, "temperature", 0);
+
+                clothing.put(entry.identifier(), new Clothing(entry.identifier(), profession, temperature, exclude, entryGender));
             }
         });
 
@@ -62,9 +67,8 @@ public final class BuiltInSkinCatalog {
             Gender fileGender = BodySkinList.getGenderFromPath(id);
             SkinListJson.entries(id, file).forEach(entry -> {
                 Gender entryGender = SkinListJson.resolveGender(fileGender, entry);
-                BodySkin.DEFINITION_CODEC.parse(JsonOps.INSTANCE, SkinListJson.metadataWithStringGender(entry, entryGender))
-                            .resultOrPartial(error -> MCA.LOGGER.warn("Invalid built-in body skin entry {} in {}: {}", entry.identifier(), id, error))
-                            .ifPresent(definition -> bodySkins.put(entry.identifier(), definition.create(entry.identifier(), entryGender)));
+                float chance = GsonHelper.getAsFloat(entry.metadata(), "chance", 1.0f);
+                bodySkins.put(entry.identifier(), new BodySkin(entry.identifier(), entryGender, chance));
             });
         });
 

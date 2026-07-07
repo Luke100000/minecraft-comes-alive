@@ -139,13 +139,12 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
 
         if (patch.contains("MCAData", 10)) {
             CompoundTag patchMca = patch.getCompound("MCAData");
-            CompoundTag mergedMca = merged.contains("MCAData", 10) ? merged.getCompound("MCAData") : new CompoundTag();
+            CompoundTag mergedMca = NbtHelper.getOrCreateCompound(merged, "MCAData");
             for (String key : patchMca.getAllKeys()) {
                 if (isAllowedMcaKey(key)) {
                     mergedMca.put(key, Objects.requireNonNull(patchMca.get(key)).copy());
                 }
             }
-            merged.put("MCAData", mergedMca);
         }
 
         // Defensive preservation:

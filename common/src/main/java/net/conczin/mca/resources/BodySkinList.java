@@ -9,6 +9,7 @@ import net.conczin.mca.resources.data.skin.SkinListEntry;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.server.packs.resources.SimpleJsonResourceReloadListener;
+import net.minecraft.util.GsonHelper;
 import net.minecraft.util.profiling.ProfilerFiller;
 
 import java.util.HashMap;
@@ -38,9 +39,8 @@ public class BodySkinList extends SimpleJsonResourceReloadListener {
         Gender fileGender = getGenderFromPath(id);
         SkinListJson.entries(id, file).forEach(entry -> {
             Gender entryGender = SkinListJson.resolveGender(fileGender, entry);
-            BodySkin.DEFINITION_CODEC.parse(JsonOps.INSTANCE, SkinListJson.metadataWithStringGender(entry, entryGender))
-                        .resultOrPartial(error -> MCA.LOGGER.warn("Invalid body skin list entry {} in {}: {}", entry.identifier(), id, error))
-                        .ifPresent(definition -> skins.put(entry.identifier(), definition.create(entry.identifier(), entryGender)));
+            float chance = GsonHelper.getAsFloat(entry.metadata(), "chance", 1.0f);
+            skins.put(entry.identifier(), new BodySkin(entry.identifier(), entryGender, chance));
         });
     }
 

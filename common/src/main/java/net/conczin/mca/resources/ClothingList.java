@@ -12,6 +12,7 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.server.packs.resources.SimpleJsonResourceReloadListener;
+import net.minecraft.util.GsonHelper;
 import net.minecraft.util.profiling.ProfilerFiller;
 import net.minecraft.world.entity.npc.VillagerProfession;
 import org.jetbrains.annotations.Nullable;
@@ -23,12 +24,12 @@ import java.util.Map;
 import java.util.stream.Stream;
 
 public class ClothingList extends SimpleJsonResourceReloadListener {
-    protected static final ResourceLocation ID = MCA.locate("skins/clothing");
+    public static final ResourceLocation ID = MCA.locate("skins/clothing");
     private static ClothingList INSTANCE;
     public final HashMap<String, Clothing> clothing = new HashMap<>();
 
     public ClothingList() {
-        super(Resources.GSON, "skins/clothing");
+        super(Resources.GSON, ID.getPath());
         INSTANCE = this;
     }
 
@@ -50,9 +51,12 @@ public class ClothingList extends SimpleJsonResourceReloadListener {
                     continue;
                 }
 
-                JsonObject object = SkinListJson.metadataWithNumericGender(entry, entryGender);
-                Clothing c = new Clothing(entry.identifier(), object);
-                clothing.put(entry.identifier(), c);
+                JsonObject metadata = entry.metadata();
+                String profession = metadata.has("profession") && !metadata.get("profession").isJsonNull() ? GsonHelper.getAsString(metadata, "profession", null) : null;
+                boolean exclude = GsonHelper.getAsBoolean(metadata, "exclude", false);
+                int temperature = GsonHelper.getAsInt(metadata, "temperature", 0);
+
+                clothing.put(entry.identifier(), new Clothing(entry.identifier(), profession, temperature, exclude, entryGender));
             }
         });
     }

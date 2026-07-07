@@ -77,22 +77,6 @@ public final class SkinListJson {
         return fileGender == null ? Gender.UNASSIGNED : fileGender;
     }
 
-    public static JsonObject metadataWithStringGender(Entry entry, Gender gender) {
-        JsonObject metadata = entry.metadata().deepCopy();
-        if (gender != null && gender != Gender.UNASSIGNED) {
-            metadata.addProperty("gender", gender.getDataName());
-        }
-        return metadata;
-    }
-
-    public static JsonObject metadataWithNumericGender(Entry entry, Gender gender) {
-        JsonObject metadata = entry.metadata().deepCopy();
-        if (gender != null && gender != Gender.UNASSIGNED) {
-            metadata.addProperty("gender", gender.getId());
-        }
-        return metadata;
-    }
-
     private static Gender getGenderFromMetadata(JsonObject metadata) {
         JsonElement element = metadata.get("gender");
         if (element == null || !element.isJsonPrimitive()) {
