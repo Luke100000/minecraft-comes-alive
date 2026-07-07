@@ -105,7 +105,10 @@ public enum Constraint implements BiPredicate<VillagerLike<?>, ServerPlayer> {
             return false;
         }
     }),
-    NOT_HIT_BY("!hit_by", (villager, player) -> !HIT_BY.test(villager, player));
+    NOT_HIT_BY("!hit_by", (villager, player) -> !HIT_BY.test(villager, player)),
+
+    RIDING("riding", (villager, player) -> villager.asEntity().isPassenger()),
+    NOT_RIDING("!riding", (villager, player) -> !villager.asEntity().isPassenger());
 
     public static final Map<String, Constraint> REGISTRY = Stream.of(values()).collect(Collectors.toMap(a -> a.id, Function.identity()));
     private final String id;
