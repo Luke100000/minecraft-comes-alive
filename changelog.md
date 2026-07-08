@@ -1,12 +1,13 @@
-# 7.7.18-beta.11
+# 7.7.18
+Initial Release
 
+* Added Sirben female noises, thanks mintymacaron!
 * Guards now correctly defend villagers again when hostile players attack them.
 * Archer guards are smarter in combat.
 * Villagers/Guards can now visibly eat food to recover health when they are safe and out of combat, as long as they have any.
 * Improved villager movement around awkward decorative blocks such as lanterns, which could previously confuse pathfinding in busy villages - more below.
   * Added a new MCA pathfinding tag and Config options so modpacks and addons can tell villagers which custom blocks have unusual collision shapes such as lanterns or modded weirdly collision shaped blocks.
-    * Added an optional config setting for all blocks to be collision checked while villagers pathfind. 
-      * It is disabled by default because it can be more expensive in villages with more complex villagers/paths.
+    * Added an optional config setting default off for all blocks to be collision checked while villagers pathfind.
 
 # 7.7.18-beta.10
 
