@@ -301,16 +301,23 @@ public class VillagerTasksMCA {
                         VillagerTasksMCA::guardTooHurt
                 )),
                 Pair.of(1, new EquipmentTask(VillagerTasksMCA::isOnDuty, v -> v.getResidency().getHomeVillage()
-                        .map(vil -> vil.getVillageGuardsManager().getGuardEquipment(v.getProfession(), v.getDominantHand())).orElse(VillageGuardsManager.getEquipmentFor(v.getDominantHand(), EquipmentSet.GUARD_0, EquipmentSet.GUARD_0_LEFT)))),
+                        .map(vil -> vil.getVillageGuardsManager().getGuardEquipment(v.getProfession(), v.getDominantHand()))
+                        .orElseGet(() -> v.getProfession() == ProfessionsMCA.ARCHER
+                                ? VillageGuardsManager.getEquipmentFor(v.getDominantHand(), EquipmentSet.ARCHER_0, EquipmentSet.ARCHER_0_LEFT)
+                                : VillageGuardsManager.getEquipmentFor(v.getDominantHand(), EquipmentSet.GUARD_0, EquipmentSet.GUARD_0_LEFT)))),
                 Pair.of(2, StartAttacking.create(t -> true, VillagerTasksMCA::getPreferredTarget)),
                 Pair.of(3, StopAttackingIfTargetInvalid.create(livingEntity -> !VillagerTasksMCA.isPreferredTarget(villager, livingEntity))),
-                Pair.of(4, new BowTask<>(20, 12)),
-                Pair.of(5, BehaviorBuilder.triggerIf(v -> v.isHolding(Items.CROSSBOW),
-                        BackUpIfTooClose.create(5, 0.75F)
+                Pair.of(4, new ArcherMovementTask<>(15)),
+                Pair.of(5, new BowTask<>(20, 15)),
+                Pair.of(7, new ConditionalTask<>(
+                        SetWalkTargetFromAttackTargetIfTargetOutOfReach.create(0.75F),
+                        (VillagerEntityMCA v) -> !VillagerTasksMCA.isHoldingRangedWeapon(v)
                 )),
-                Pair.of(6, SetWalkTargetFromAttackTargetIfTargetOutOfReach.create(0.75F)),
-                Pair.of(7, new ExtendedMeleeAttackTask(20, 2.0F)),
-                Pair.of(8, new CrossbowAttack<VillagerEntityMCA, VillagerEntityMCA>())
+                Pair.of(8, new ConditionalTask<>(
+                        new ExtendedMeleeAttackTask(20, 2.0F),
+                        (VillagerEntityMCA v) -> !VillagerTasksMCA.isHoldingRangedWeapon(v)
+                )),
+                Pair.of(9, new CrossbowAttack<VillagerEntityMCA, VillagerEntityMCA>())
         );
     }
 
@@ -387,6 +394,10 @@ public class VillagerTasksMCA {
         return getActivity(villager) == Activity.WORK
                || villager.getBrain().getMemoryInternal(MemoryModuleType.ATTACK_TARGET).isPresent()
                || getPreferredTarget(villager).isPresent();
+    }
+
+    private static boolean isHoldingRangedWeapon(VillagerEntityMCA villager) {
+        return villager.isHolding(Items.BOW) || villager.isHolding(Items.CROSSBOW);
     }
 
     public static boolean isInDanger(VillagerEntityMCA villager) {

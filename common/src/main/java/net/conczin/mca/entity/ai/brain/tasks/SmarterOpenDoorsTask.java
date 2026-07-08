@@ -58,7 +58,8 @@ public class SmarterOpenDoorsTask extends Behavior<LivingEntity> {
     }
 
     private static boolean isDoor(BlockState blockState) {
-        return blockState.is(BlockTags.WOODEN_DOORS, state -> state.getBlock() instanceof DoorBlock) || blockState.is(BlockTags.FENCE_GATES, state -> state.getBlock() instanceof FenceGateBlock);
+        return blockState.is(BlockTags.MOB_INTERACTABLE_DOORS, state -> state.getBlock() instanceof DoorBlock)
+               || blockState.is(BlockTags.FENCE_GATES, state -> state.getBlock() instanceof FenceGateBlock);
     }
 
     public static void closeDoors(ServerLevel world, LivingEntity entity, @Nullable Node lastNode, @Nullable Node currentNode) {
@@ -163,10 +164,8 @@ public class SmarterOpenDoorsTask extends Behavior<LivingEntity> {
         if (pathNode != null) {
             BlockPos blockPos = pathNode.asBlockPos();
             BlockState blockState = world.getBlockState(blockPos);
-            if (isDoor(blockState)) {
-                if (setOpen(entity, world, blockState, blockPos, true)) {
-                    this.rememberToCloseDoor(world, entity, blockPos);
-                }
+            if (isDoor(blockState) && setOpen(entity, world, blockState, blockPos, true)) {
+                this.rememberToCloseDoor(world, entity, blockPos);
             }
         }
     }

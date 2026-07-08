@@ -11,6 +11,7 @@ import net.minecraft.world.entity.ai.behavior.Behavior;
 import net.minecraft.world.entity.ai.memory.MemoryStatus;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.item.ProjectileWeaponItem;
 
 import java.util.function.Function;
@@ -35,6 +36,10 @@ public class EquipmentTask extends Behavior<VillagerEntityMCA> {
 
     @Override
     protected boolean checkExtraStartConditions(ServerLevel world, VillagerEntityMCA villager) {
+        if (villager.isUsingRecoveryFood()) {
+            return false;
+        }
+
         //armor visibility settings have been changed
         if (lastArmorWearState != villager.getVillagerBrain().getArmorWear()) {
             return true;
@@ -50,12 +55,25 @@ public class EquipmentTask extends Behavior<VillagerEntityMCA> {
         boolean present = villager.getBrain().getMemoryInternal(MemoryModuleTypeMCA.WEARS_ARMOR).isPresent();
         if (cachedConditionResult) {
             lastEquipTime = villager.tickCount;
-            return !present || cachedEquipmentSet != null && cachedEquipmentSet.getMainHand() != null && villager.getMainHandItem().isEmpty();
+            return !present || isMissingHandEquipment(villager, cachedEquipmentSet);
         } else if (villager.tickCount - lastEquipTime > COOLDOWN) {
             return present;
         } else {
             return false;
         }
+    }
+
+    private boolean isMissingHandEquipment(VillagerEntityMCA villager, EquipmentSet set) {
+        if (set == null) {
+            return false;
+        }
+
+        return isEquipmentItem(set.getMainHand()) && villager.getItemBySlot(villager.getDominantSlot()).isEmpty()
+               || isEquipmentItem(set.getGetOffHand()) && villager.getItemBySlot(villager.getOpposingSlot()).isEmpty();
+    }
+
+    private boolean isEquipmentItem(Item item) {
+        return item != null && item != Items.AIR;
     }
 
     private void equipBestArmor(VillagerEntityMCA villager, EquipmentSlot slot, Item fallback) {
@@ -76,6 +94,10 @@ public class EquipmentTask extends Behavior<VillagerEntityMCA> {
     @Override
     protected void start(ServerLevel world, VillagerEntityMCA villager, long time) {
         super.start(world, villager, time);
+
+        if (villager.isUsingRecoveryFood()) {
+            return;
+        }
 
         lastArmorWearState = villager.getVillagerBrain().getArmorWear();
         boolean wear = cachedConditionResult;

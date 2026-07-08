@@ -807,7 +807,7 @@ public final class Config extends CommonConfig {
     /**
      * List of blocks or tags that villagers will not teleport onto.
      */
-    public List<String> villagerPathfindingBlacklist = List.of(
+    public List<String> safeBlocksToTeleportOn = List.of(
             "#minecraft:climbable",
             "#minecraft:fence_gates",
             "#minecraft:fences",
@@ -818,6 +818,21 @@ public final class Config extends CommonConfig {
             "#minecraft:trapdoors",
             "#minecraft:walls"
     );
+
+    /**
+     * Blocks or tags that should trigger exact villager body clearance checks during pathfinding.
+     * Use this for small decorative blocks with awkward collision shapes, such as lanterns.
+     */
+    public List<String> villagerPathfindingCollisionCheckBlocks = List.of(
+            "#mca:villager_pathfinding_collision_checks"
+    );
+
+    /**
+     * If enabled, villagers run exact body clearance checks for every accepted path node.
+     * This can help with unusual modded collision issues, but it is more expensive in busy villages.
+     * For example, modded lanterns, it'd probably save a bit of performance keeping this off.
+     */
+    public boolean villagerPathfindingCheckAllNodeCollisions = false;
 
     /**
      * Structures that can be mentioned in Rumors conversation options.
