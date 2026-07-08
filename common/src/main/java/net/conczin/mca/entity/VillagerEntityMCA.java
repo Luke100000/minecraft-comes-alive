@@ -1055,7 +1055,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
             //sirben
             if (random.nextBoolean() && getTraits().hasTrait(Traits.SIRBEN)) {
-                return SoundsMCA.SIRBEN;
+                return getGenetics().getGender() == Gender.MALE ? SoundsMCA.VILLAGER_MALE_SIRBEN : SoundsMCA.VILLAGER_FEMALE_SIRBEN;
             }
 
             //generic mood sounds

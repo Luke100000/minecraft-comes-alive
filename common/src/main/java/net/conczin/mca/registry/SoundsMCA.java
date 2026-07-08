@@ -55,7 +55,8 @@ public interface SoundsMCA {
     SoundEvent VILLAGER_MALE_SNORE = register("villager.male.snore");
     SoundEvent VILLAGER_FEMALE_SNORE = register("villager.female.snore");
 
-    SoundEvent SIRBEN = register("villager.sirben");
+    SoundEvent VILLAGER_MALE_SIRBEN = register("villager.male.sirben");
+    SoundEvent VILLAGER_FEMALE_SIRBEN = register("villager.female.sirben");
 
     SoundEvent SILENT = register("silent");
 

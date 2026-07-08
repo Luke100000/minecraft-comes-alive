@@ -1,3 +1,7 @@
+# 8.1.1
+
+* Added Sirben female noises, thanks mintymacaron!
+
 # 8.1.0
 
 * Added the **Music Store** building, giving sad villagers another place to visit for happiness recovery.
