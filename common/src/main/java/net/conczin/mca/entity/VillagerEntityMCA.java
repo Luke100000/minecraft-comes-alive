@@ -8,7 +8,6 @@ import net.conczin.mca.client.model.CommonVillagerModel;
 import net.conczin.mca.entity.ai.*;
 import net.conczin.mca.entity.ai.brain.VillagerBrain;
 import net.conczin.mca.entity.ai.brain.VillagerTasksMCA;
-import net.conczin.mca.entity.ai.brain.sensor.GuardEnemiesSensor;
 import net.conczin.mca.entity.ai.navigation.MCAGroundPathNavigation;
 import net.conczin.mca.entity.ai.relationship.*;
 import net.conczin.mca.entity.interaction.VillagerCommandHandler;
@@ -99,8 +98,6 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     private static final CDataParameter<Float> INFECTION_PROGRESS = CParameter.create("InfectionProgress", 0.0f);
     private static final CDataParameter<Integer> GROWTH_AMOUNT = CParameter.create("GrowthAmount", -AgeState.getMaxAge());
     private static final float VEHICLE_ATTACHMENT_Y = 0.6F;
-    private static final double CLOSE_FOOD_THREAT_DISTANCE_SQUARED = 25.0;
-    private static final double CLOSE_FOOD_THREAT_VERTICAL_DISTANCE = 2.5;
     public static final String MCA_DATA_KEY = "MCAData";
     private static final CDataManager<VillagerEntityMCA> DATA = createTrackedData(VillagerEntityMCA.class).build();
     private static final int RECALCULATE_DIMENSIONS_EVERY_N_TICKS = 100;
@@ -754,27 +751,19 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     }
 
     private boolean canContinueRecoveryFoodUse() {
-        return !getVillagerBrain().isPanicking() && !hasCloseFoodThreat();
+        return !isInRecoveryDanger();
     }
 
-    private boolean hasCloseFoodThreat() {
-        return isCloseFoodThreat(getBrain().getMemoryInternal(MemoryModuleType.ATTACK_TARGET).orElse(null))
-               || isCloseGuardFoodThreat(getBrain().getMemoryInternal(MemoryModuleTypeMCA.NEAREST_GUARD_ENEMY).orElse(null));
+    private boolean isInRecoveryDanger() {
+        return getVillagerBrain().isPanicking()
+               || hasActiveRecoveryThreat(MemoryModuleType.ATTACK_TARGET)
+               || hasActiveRecoveryThreat(MemoryModuleTypeMCA.NEAREST_GUARD_ENEMY);
     }
 
-    private boolean isCloseFoodThreat(@Nullable LivingEntity entity) {
-        return entity != null
-               && entity.isAlive()
-               && !entity.isRemoved()
-               && Math.abs(getY() - entity.getY()) <= CLOSE_FOOD_THREAT_VERTICAL_DISTANCE
-               && distanceToSqr(entity) <= CLOSE_FOOD_THREAT_DISTANCE_SQUARED;
-    }
-
-    private boolean isCloseGuardFoodThreat(@Nullable LivingEntity entity) {
-        return entity != null
-               && GuardEnemiesSensor.isGuardEnemy(entity, this)
-               && Math.abs(getY() - entity.getY()) <= CLOSE_FOOD_THREAT_VERTICAL_DISTANCE
-               && distanceToSqr(entity) <= CLOSE_FOOD_THREAT_DISTANCE_SQUARED;
+    private boolean hasActiveRecoveryThreat(MemoryModuleType<? extends LivingEntity> memoryType) {
+        return getBrain().getMemoryInternal(memoryType)
+                .filter(entity -> entity.isAlive() && !entity.isRemoved())
+                .isPresent();
     }
 
     private boolean startRecoveryFoodUse() {

@@ -1,6 +1,6 @@
 # 7.7.18-beta.11
 
-18* Guards now correctly defend villagers again when hostile players attack them.
+* Guards now correctly defend villagers again when hostile players attack them.
 * Archer guards are smarter in combat.
 * Villagers/Guards can now visibly eat food to recover health when they are safe and out of combat, as long as they have any.
 * Improved villager movement around awkward decorative blocks such as lanterns, which could previously confuse pathfinding in busy villages - more below.

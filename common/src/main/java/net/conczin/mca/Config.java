@@ -807,7 +807,7 @@ public final class Config extends CommonConfig {
     /**
      * List of blocks or tags that villagers will not teleport onto.
      */
-    public List<String> safeBlocksToTeleportOn = List.of(
+    public List<String> unSafeBlocksToTeleportOn = List.of(
             "#minecraft:climbable",
             "#minecraft:fence_gates",
             "#minecraft:fences",

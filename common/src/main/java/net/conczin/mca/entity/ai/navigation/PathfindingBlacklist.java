@@ -67,7 +67,7 @@ public final class PathfindingBlacklist {
     }
 
     private static void refreshCacheIfNeeded() {
-        List<String> configured = Config.getInstance().safeBlocksToTeleportOn;
+        List<String> configured = Config.getInstance().unSafeBlocksToTeleportOn;
         int size = configured.size();
         int hash = configured.hashCode();
 
@@ -75,7 +75,7 @@ public final class PathfindingBlacklist {
             return;
         }
 
-        cachedMatchers = buildMatchers(configured, "safeBlocksToTeleportOn");
+        cachedMatchers = buildMatchers(configured, "unSafeBlocksToTeleportOn");
         cachedSize = size;
         cachedHash = hash;
     }
