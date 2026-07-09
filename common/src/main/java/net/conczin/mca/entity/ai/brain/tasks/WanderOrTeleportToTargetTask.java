@@ -1,19 +1,12 @@
 package net.conczin.mca.entity.ai.brain.tasks;
 
-import com.google.gson.JsonSyntaxException;
 import net.conczin.mca.Config;
-import net.conczin.mca.util.RegistryHelper;
+import net.conczin.mca.entity.ai.navigation.PathfindingBlacklist;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.core.registries.Registries;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.tags.TagKey;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.behavior.MoveToTargetSink;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
-import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.pathfinder.PathType;
 import net.minecraft.world.level.pathfinder.WalkNodeEvaluator;
 
@@ -97,23 +90,6 @@ public class WanderOrTeleportToTargetTask extends MoveToTargetSink {
     private boolean isAreaSafe(ServerLevel world, BlockPos pos) {
         // The following conditions define whether it is logically
         // safe for the entity to teleport to the specified pos within world
-        final BlockState aboveState = world.getBlockState(pos);
-        final ResourceLocation aboveId = BuiltInRegistries.BLOCK.getKey(aboveState.getBlock());
-        for (String blockId : Config.getInstance().villagerPathfindingBlacklist) {
-            if (blockId.equals(aboveId.toString())) {
-                return false;
-            } else if (blockId.charAt(0) == '#') {
-                ResourceLocation identifier = ResourceLocation.parse(blockId.substring(1));
-                TagKey<Block> tag = TagKey.create(Registries.BLOCK, identifier);
-                if (!RegistryHelper.isTagEmpty(tag)) {
-                    if (aboveState.is(tag)) {
-                        return false;
-                    }
-                } else {
-                    throw new JsonSyntaxException("Unknown block tag in villagerPathfindingBlacklist '" + identifier + "'");
-                }
-            }
-        }
-        return true;
+        return !PathfindingBlacklist.isBlocked(world.getBlockState(pos));
     }
 }

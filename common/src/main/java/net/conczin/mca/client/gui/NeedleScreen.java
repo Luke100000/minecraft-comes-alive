@@ -31,11 +31,16 @@ public class NeedleScreen extends VillagerEditorScreen {
     protected void setPage(String page) {
         if (page.equals("loading")) {
             super.setPage("loading");
-        } else if (page.equals("body")) {
+        } else if (page.equals("body") || page.equals("clothing_style")) {
             syncVillagerData();
             onClose();
         } else {
             super.setPage("clothing");
         }
+    }
+
+    @Override
+    protected void rebuildCurrentPageFromData() {
+        super.setPage(page);
     }
 }

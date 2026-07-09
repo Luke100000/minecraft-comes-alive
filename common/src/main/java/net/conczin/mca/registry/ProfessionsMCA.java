@@ -2,7 +2,6 @@ package net.conczin.mca.registry;
 
 import com.google.common.collect.ImmutableSet;
 import net.conczin.mca.MCA;
-import net.conczin.mca.mixin.MixinVillagerProfession;
 import net.minecraft.core.Holder;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
@@ -48,7 +47,7 @@ public interface ProfessionsMCA {
 
     static VillagerProfession register(String name, boolean canTradeWith, boolean important, boolean needsNoHome, Predicate<Holder<PoiType>> heldWorkstation, Predicate<Holder<PoiType>> acquirableWorkstation, ImmutableSet<Item> gatherableItems, ImmutableSet<Block> secondaryJobSites, @Nullable SoundEvent workSound) {
         ResourceLocation id = MCA.locate(name);
-        VillagerProfession result = MixinVillagerProfession.init(
+        VillagerProfession result = new VillagerProfession(
                 id.toString().replace(':', '.'), heldWorkstation, acquirableWorkstation, gatherableItems, secondaryJobSites, workSound
         );
         if (!canTradeWith) {

@@ -1,0 +1,59 @@
+# Builds every pushed commit and uploads the Fabric and NeoForge jars as artifacts.
+name: build-commit-artifacts
+
+on:
+  push:
+    branches:
+      - '**'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      GRADLE_OPTS: --enable-native-access=ALL-UNNAMED
+      NO_COLOR: 1
+
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v6
+
+      - name: Extract Minecraft version
+        id: versions
+        shell: bash
+        run: echo "minecraft_version=$(grep '^minecraft_version=' gradle.properties | cut -d= -f2)" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Java 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-read-only: false
+          cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
+
+      - name: Build Fabric and NeoForge jars
+        run: ./gradlew :fabric:build :neoforge:build --configuration-cache --console=plain --non-interactive
+
+      - name: Upload Fabric jars
+        uses: actions/upload-artifact@v7
+        with:
+          name: mca-fabric-${{ steps.versions.outputs.minecraft_version }}
+          path: |
+            fabric/build/libs/*.jar
+            !fabric/build/libs/*-sources.jar
+            !fabric/build/libs/*-javadoc.jar
+          if-no-files-found: error
+
+      - name: Upload NeoForge jars
+        uses: actions/upload-artifact@v7
+        with:
+          name: mca-neoforge-${{ steps.versions.outputs.minecraft_version }}
+          path: |
+            neoforge/build/libs/*.jar
+            !neoforge/build/libs/*-sources.jar
+            !neoforge/build/libs/*-javadoc.jar
+          if-no-files-found: error

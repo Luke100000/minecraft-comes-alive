@@ -9,6 +9,7 @@ import net.conczin.mca.resources.data.skin.Clothing;
 import net.conczin.mca.resources.data.skin.Hair;
 import net.conczin.mca.resources.data.skin.SkinListEntry;
 import net.minecraft.client.renderer.texture.DynamicTexture;
+import net.minecraft.util.FastColor;
 import net.minecraft.util.Mth;
 
 import java.util.LinkedList;
@@ -30,6 +31,10 @@ public final class Workspace {
 
     private boolean dirty;
     private boolean dirtySinceSnapshot;
+
+    private static int packedColor(int alpha, int red, int green, int blue) {
+        return FastColor.ABGR32.color(alpha, red, green, blue);
+    }
 
     public Workspace(NativeImage image) {
         this.currentImage = image;
@@ -82,7 +87,7 @@ public final class Workspace {
                 int b = currentImage.getBlueOrLuminance(x, y) & 0xFF;
                 int a = currentImage.getLuminanceOrAlpha(x, y) & 0xFF;
                 int l = Mth.clamp((int) (0.2126 * r + 0.7152 * g + 0.0722 * b), 0, 255);
-                currentImage.setPixelRGBA(x, y, a << 24 | l << 16 | l << 8 | l);
+                currentImage.setPixelRGBA(x, y, packedColor(a, l, l, l));
             }
         }
 
@@ -98,7 +103,7 @@ public final class Workspace {
                 int g = Mth.clamp((currentImage.getGreenOrLuminance(x, y) & 0xFF) + i, 0, 255);
                 int b = Mth.clamp((currentImage.getBlueOrLuminance(x, y) & 0xFF) + i, 0, 255);
                 int a = currentImage.getLuminanceOrAlpha(x, y) & 0xFF;
-                currentImage.setPixelRGBA(x, y, a << 24 | r << 16 | g << 8 | b);
+                currentImage.setPixelRGBA(x, y, packedColor(a, r, g, b));
             }
         }
 
@@ -129,7 +134,7 @@ public final class Workspace {
                 int g = Mth.clamp((int) (((currentImage.getGreenOrLuminance(x, y) & 0xFF) - average) * (1.0f + c) + average), 0, 255);
                 int b = Mth.clamp((int) (((currentImage.getBlueOrLuminance(x, y) & 0xFF) - average) * (1.0f + c) + average), 0, 255);
                 int a = currentImage.getLuminanceOrAlpha(x, y) & 0xFF;
-                currentImage.setPixelRGBA(x, y, a << 24 | r << 16 | g << 8 | b);
+                currentImage.setPixelRGBA(x, y, packedColor(a, r, g, b));
             }
         }
 

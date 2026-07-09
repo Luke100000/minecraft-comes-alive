@@ -39,6 +39,11 @@ public class DestinyScreen extends VillagerEditorScreen {
     }
 
     @Override
+    protected boolean shouldCloseAfterSkinExport() {
+        return false;
+    }
+
+    @Override
     public void onClose() {
         if (!page.equals("general") && !page.equals("story")) {
             setPage("destiny");
@@ -51,7 +56,6 @@ public class DestinyScreen extends VillagerEditorScreen {
         pages.add("general");
         if (Config.getServerConfig().allowBodyCustomizationInDestiny) {
             pages.add("body");
-            pages.add("head");
         }
         if (Config.getServerConfig().allowTraitCustomizationInDestiny) {
             pages.add("traits");

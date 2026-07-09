@@ -51,6 +51,7 @@ public interface WorldUtils {
                 dataId);
     }
 
+    @SuppressWarnings("deprecation")
     static void spawnEntity(Level world, Mob entity, MobSpawnType reason) {
         entity.finalizeSpawn((ServerLevelAccessor) world, world.getCurrentDifficultyAt(entity.blockPosition()), reason, null);
         world.addFreshEntity(entity);

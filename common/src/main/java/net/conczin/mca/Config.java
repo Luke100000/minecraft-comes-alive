@@ -4,7 +4,9 @@ import com.google.common.collect.ImmutableMap;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonSyntaxException;
+import net.conczin.mca.entity.EquipmentSet;
 import net.conczin.mca.entity.ai.Traits;
+import net.minecraft.util.Mth;
 
 import java.io.File;
 import java.io.FileReader;
@@ -200,7 +202,14 @@ public final class Config extends CommonConfig {
     /**
      * Maximum pathfinding distance used when villagers walk to long-range memories such as beds.
      */
-    public int villagerPathfindingDistance = 192;
+    public int villagerPathfindingDistance = 80;
+
+    /**
+     * Maximum follow-range attribute for villagers. Affects how far they pursue entities and how large the pathfinding search budget is.
+     * Smaller values improve performance at the cost of reduced detection range.
+     */
+    public int villagerFollowRange = 48;
+
 
     /**
      * Number of hearts a child starts with towards their parent.
@@ -350,6 +359,14 @@ public final class Config extends CommonConfig {
     public int heartsRequiredToAutoSpawnGravestone = 10;
 
     /**
+     * The type of headstone that automatically spawns when a villager dies.
+     * Options: "cross_headstone", "gravelling_headstone", "upright_headstone", "slanted_headstone", "wall_headstone",
+     * "cobblestone_upright_headstone", "cobblestone_slanted_headstone", "wooden_upright_headstone", "wooden_slanted_headstone",
+     * "golden_upright_headstone", "golden_slanted_headstone", "deepslate_upright_headstone", "deepslate_slanted_headstone"
+     */
+    public String defaultHeadstoneType = "cross_headstone";
+
+    /**
      * Enables smarter villager door AI,
      * allowing them to open gates as well.
      */
@@ -413,6 +430,12 @@ public final class Config extends CommonConfig {
      * System prompt used to guide global villager AI behavior.
      */
     public String villagerChatAISystemPrompt = "";
+
+    /**
+     * If true, the system prompt is prepended to the user message instead of sent as a separate system message.
+     * Use this for OpenAI-compatible endpoints that ignore the system role.
+     */
+    public boolean villagerChatAIFuseSystemPrompt = false;
 
     /**
      * If true, AI uses long-term memory for persistent conversations.
@@ -498,6 +521,25 @@ public final class Config extends CommonConfig {
      * Fraction (0–1) of villagers that spawn as guards.
      */
     public float guardSpawnFraction = 0.175f;
+
+    /**
+     * Equipment used by guards at each village equipment level.
+     * Level 0 is the default, level 1 requires an armory, level 2 requires an armory with a blacksmith.
+     */
+    public Map<String, EquipmentSet> guardEquipment = ImmutableMap.<String, EquipmentSet>builder()
+            .put("0", EquipmentSet.GUARD_0)
+            .put("1", EquipmentSet.GUARD_1)
+            .put("2", EquipmentSet.GUARD_2)
+            .build();
+
+    /**
+     * Equipment used by archers at each village equipment level.
+     */
+    public Map<String, EquipmentSet> archerEquipment = ImmutableMap.<String, EquipmentSet>builder()
+            .put("0", EquipmentSet.ARCHER_0)
+            .put("1", EquipmentSet.ARCHER_1)
+            .put("2", EquipmentSet.ARCHER_2)
+            .build();
 
     /**
      * Multiplier of taxes paid by villages.
@@ -765,7 +807,7 @@ public final class Config extends CommonConfig {
     /**
      * List of blocks or tags that villagers will not teleport onto.
      */
-    public List<String> villagerPathfindingBlacklist = List.of(
+    public List<String> unSafeBlocksToTeleportOn = List.of(
             "#minecraft:climbable",
             "#minecraft:fence_gates",
             "#minecraft:fences",
@@ -776,6 +818,21 @@ public final class Config extends CommonConfig {
             "#minecraft:trapdoors",
             "#minecraft:walls"
     );
+
+    /**
+     * Blocks or tags that should trigger exact villager body clearance checks during pathfinding.
+     * Use this for small decorative blocks with awkward collision shapes, such as lanterns.
+     */
+    public List<String> villagerPathfindingCollisionCheckBlocks = List.of(
+            "#mca:villager_pathfinding_collision_checks"
+    );
+
+    /**
+     * If enabled, villagers run exact body clearance checks for every accepted path node.
+     * This can help with unusual modded collision issues, but it is more expensive in busy villages.
+     * For example, modded lanterns, it'd probably save a bit of performance keeping this off.
+     */
+    public boolean villagerPathfindingCheckAllNodeCollisions = false;
 
     /**
      * Structures that can be mentioned in Rumors conversation options.
@@ -892,6 +949,10 @@ public final class Config extends CommonConfig {
 
     public int getVillagerPathfindingDistance() {
         return Math.max(16, Math.min(256, villagerPathfindingDistance));
+    }
+
+    public int getVillagerFollowRange() {
+        return Mth.clamp(villagerFollowRange, 16, 64);
     }
 
     public void autocomplete() {

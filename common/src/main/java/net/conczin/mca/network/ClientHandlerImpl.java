@@ -5,6 +5,7 @@ import net.conczin.mca.MCAClient;
 import net.conczin.mca.client.book.Book;
 import net.conczin.mca.client.book.CivilRegistryBook;
 import net.conczin.mca.client.gui.*;
+import net.conczin.mca.client.resources.ClientSkinCatalog;
 import net.conczin.mca.client.tts.SpeechManager;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerLike;
@@ -215,9 +216,9 @@ public class ClientHandlerImpl implements ClientHandler {
     }
 
     @Override
-    public void handleSkinListResponse(SkinListResponse message) {
+    public void handleCustomSkinListResponse(CustomSkinListResponse message) {
         Screen screen = client.screen;
-        VillagerEditorScreen.setSkinList(message.clothing(), message.hair());
+        ClientSkinCatalog.installServerDelta(message.clothing(), message.bodySkins(), message.layeredHair(), message.hairStyles(), message.hair());
         if (screen instanceof SkinListUpdateListener gui) {
             gui.skinListUpdatedCallback();
         }
@@ -231,6 +232,7 @@ public class ClientHandlerImpl implements ClientHandler {
     @Override
     public void handleConfigResponse(ConfigResponse message) {
         Config.setServerConfig(message.getConfig());
+        MCAClient.refreshPlayerDataDependentDimensions();
     }
 
     @Override
@@ -242,7 +244,10 @@ public class ClientHandlerImpl implements ClientHandler {
 
     @Override
     public void handleCustomSkinsChangedMessage(CustomSkinsChangedMessage message) {
-        VillagerEditorScreen.setSkinListOutdated();
+        ClientSkinCatalog.markCustomSkinsOutdated();
+        if (client.screen instanceof SkinListUpdateListener) {
+            ClientSkinCatalog.sync();
+        }
     }
 
     @Override
@@ -251,5 +256,10 @@ public class ClientHandlerImpl implements ClientHandler {
         if (screen instanceof ExtendedBookScreen extendedBookScreen && (extendedBookScreen.getBook() instanceof CivilRegistryBook civilRegistryBook)) {
             civilRegistryBook.receive(response.getIndex(), response.getLines());
         }
+    }
+
+    @Override
+    public void handleBuildingPolymorph(BuildingPolymorphMessage message) {
+        client.setScreen(new BuildingPolymorphScreen(message.matchingTypes(), message.scanPos(), message.isRoom()));
     }
 }

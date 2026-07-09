@@ -1,3 +1,133 @@
+# 7.7.18
+Initial Release
+
+* Added Sirben female noises, thanks mintymacaron!
+* Improved guard behavior when players attack villagers.
+  * Guards now keep chasing attackers long enough to deliver their warning hits.
+  * Guards now warn, attack and pardon more consistently based on the player's warning level.
+  * Guard warning dialogue no longer stacks with the normal "ouch" dialogue on the same hit.
+* Improved archer guards in combat.
+  * Archers now draw and fire bows more reliably.
+  * Archer arrows should no longer be blocked by normal hurt immunity during fast combat.
+  * Left-handed villagers still look left-handed, while bows and weapons stay in the correct hand for Minecraft's combat checks.
+* Guards without a home village can now wander instead of standing idle.
+* Villagers and guards can now visibly eat food to recover health when they are safe and out of combat.
+* Improved villager movement around awkward decorative blocks such as lanterns, which could previously confuse pathfinding.
+  * Added a new MCA pathfinding tag so modpacks and addons can mark custom blocks with unusual collision shapes.
+  * Added config options for extra collision checks while villagers pathfind.
+  * The broader collision-check option is off by default, but can help modpacks with many custom block shapes.
+
+# 7.7.18-beta.10
+
+* Improved smart selection filtering in the polymorph UI: the generic **House** option is automatically filtered out if **Big House** is also matched, preventing unnecessary choice prompts when scanning.
+* Empty icons don't render as graveyard anymore, House option now has an icon.
+* Improved building removal logic.
+
+# 7.7.18-beta.9
+* The **Ride Mount** button on the villager interaction screen now changes to **Dismount** if the villager is riding something, making it easy to get them down.
+* Fixed a bug on dedicated servers where changing a villager's mood, infection, traits, personality, or relationship hearts in the editor wouldn't save.
+* Improved how villager skins and clothing registries are loaded behind the scenes to be cleaner and more flexible.
+
+* Added a **Music Store** building.
+  * Villagers can now visit the Music Store when they are feeling sad.
+  * This helps raise their happiness, similar to how the inn works.
+
+* Improved overlapping building detection.
+  * When multiple building structures overlap, you can now choose which one should be used.
+
+* Improved villager AI performance.
+  * Villagers now do less unnecessary work every tick.
+  * Large villages should have fewer lag spikes and smoother server performance.
+  * Guard enemy scans are now cheaper, running only for villagers actively guarding, following a player, or fighting (non-combat villagers skip this scan entirely to save performance).
+  * Villagers are less likely to waste pathfinding work when moving around the village.
+  * Villagers should no longer forget homes or jobs just because a path search briefly failed.
+  * Equipment checks for guards and archers are now cached, reducing repeated work.
+  * Villager health bonus updates are now cached instead of being recalculated every tick.
+
+* Fixed an issue where some villager movement state updates were running far more often than intended.
+* Fixed excessive repeated max-health modifier updates on villagers.
+* Fixed some expensive villager walking logic that could retry too many times in one tick by adding a retry cooldown after failed attempts.
+
+# 7.7.18-beta.8
+
+* Villagers should stop floating in passenger seats such as boats.
+* Baby nametags are correctly adjusted
+* Villagers should be able to ride any entity that is rideable, including modded entities.
+* Fix Mood, Infection Progress and hearts not being editable due to recent modifications.
+
+# 7.7.18-beta.7
+
+* Villagers should stop having their trades reset.
+* Backported pathfinding maluses and pathfinding distance fixes.
+* Please report any issues on the GitHub Issues page or the Discord server, backing up your world is always recommended!
+
+# 7.7.18-beta.6
+
+* Removed old Head category from Destiny Screen.
+* Fixed eye layers rendering when you're invisible.
+* Added a NO_AGING trait ("No Aging") that prevents villagers from automatically growing up or aging over time. This trait has a spawn chance of 0% and is only accessible/configurable via the Villager Editor (MCA Debug Book/Item).
+
+# 7.7.18-beta.5
+
+* Added a configuration option to choose the headstone/grave type spawned when a villager dies.
+* Fixed multiplayer issues when editing villagers and loading custom skin data.
+* Internal networking changes to hopefully make multiplayer work properly.
+  * As a result, generally especially in multiplayer sessions, UI changes are faster.
+* Fixed library clothing previews hiding legacy hair.
+* Selecting clothing generally or picking an outfit no longer hides hair.
+  * This was done initially because of the new hair system, however, if the hair overlaps with your character, you can just select the bald hair option
+    in the hair screen.
+* Prevented babies, children, and non-spouse relatives from flirting, kissing, or accepting romantic items (bouquets, engagement rings).
+* Age-locked the `Flirty` personality so it cannot be assigned to babies, toddlers, or children.
+* Added personality re-randomization when villagers age up to allow true character development and natural trait changes.
+  * - So children will change their personality.
+* Added an INFERTILE trait, villagers now have a chance to be infertile.
+  * If you'd like to remove the trait, you can do so in the MCA Debug Book.
+* Experimental JourneyMap compatibility.
+* Unknown trait doesn't show up anymore.
+* Spouses no longer count as biologically related.
+* Fixed `building_types` block tag resolution — tags like `#minecraft:candles` and `#minecraft:water` now correctly match blocks during building scans.
+  * Previously, all data-pack block tags were silently ignored.
+  * For datapacks, you can now add in all tags including fluids!
+
+# 7.7.18-beta.4
+
+* Backports/fixes from 26.1.2
+* Guards now fight while you're following them. [BRAND NEW]
+* Fixed the clothing picker in the editor crashing on a server.
+* Fixed library.
+* Fixed spouse lookup for online players and made villager textures render properly.
+* Added configurable guards and archer equipment levels.
+* Added the AI system prompt fuse option for endpoints that do not support a separate system role.
+* Tombstones are now more resistant to explosions.
+* Minimaps now support MCA villagers (no more empty squares).
+
+# 7.7.18-beta.3
+
+* Fixed player hitbox scaling.
+* Player size changes now update more reliably after joining or editing a player.
+* Internal improvements.
+
+# 7.7.18-beta.2
+
+* Fixed selecting clothes in the editor resetting hair to bald
+* Small improvements.
+
+# 7.7.18-beta.1
+
+* Backup your world before using.
+* Beta release of the 1.21.1 content backport from 26.1.2
+* Added generated crib resources and datagen-backed recipes, advancements, and item models
+* Added updated skin, face, hair style, layered hair, and eye customization resources
+* Added generated eye texture cache clearing on resource reload
+* Added player hitbox scaling based on MCA player size and width (`scalePlayerHitboxWithSizeAndWidth`, disabled by default)
+* Added `/mca-admin overrideVillageRequirements <target> <value>` for bypassing village rank requirements
+* Fixed Destiny teleportation failing silently when no valid destination is found
+* Fixed Destiny teleportation using invalid or out-of-bounds destinations
+* Fixed MCA player data refresh and cache handling for renderer and scaling updates
+* Fixed village requirement override data being saved, loaded, and applied to rank checks
+
+
 # 7.7.17
 
 * Fixed destiny status not being saved reliably

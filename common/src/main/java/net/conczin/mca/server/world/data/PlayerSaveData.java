@@ -4,6 +4,7 @@ import com.mojang.serialization.Codec;
 import com.mojang.serialization.DynamicOps;
 import net.conczin.mca.Config;
 import net.conczin.mca.MCA;
+import net.conczin.mca.entity.PlayerDimensions;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.relationship.EntityRelationship;
 import net.conczin.mca.entity.ai.relationship.Gender;
@@ -47,7 +48,9 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
     private final List<Letter> inbox = new LinkedList<>();
     private Optional<Integer> lastSeenVillage = Optional.empty();
     private boolean entityDataSet;
+    private boolean overrideVillageRequirements;
     private CompoundTag entityData;
+    private PlayerDimensions.Scale dimensionsScale;
 
     PlayerSaveData(ServerLevel world, UUID uuid) {
         this.world = world;
@@ -62,6 +65,7 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
 
         lastSeenVillage = nbt.contains("lastSeenVillage", Tag.TAG_INT) ? Optional.of(nbt.getInt("lastSeenVillage")) : Optional.empty();
         entityDataSet = nbt.contains("entityDataSet") && nbt.getBoolean("entityDataSet");
+        overrideVillageRequirements = nbt.contains("overrideVillageRequirements") && nbt.getBoolean("overrideVillageRequirements");
 
         if (nbt.contains("entityData")) {
             entityData = nbt.getCompound("entityData");
@@ -114,17 +118,42 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
     }
 
     public void setEntityDataSet(boolean entityDataSet) {
+        if (this.entityDataSet == entityDataSet) {
+            return;
+        }
         this.entityDataSet = entityDataSet;
         setDirty();
+        refreshPlayerDimensions();
     }
 
     public CompoundTag getEntityData() {
-        return entityData;
+        return entityData.copy();
+    }
+
+    public PlayerDimensions.Scale getDimensionsScale() {
+        if (dimensionsScale == null) {
+            dimensionsScale = PlayerDimensions.fromPlayerData(this);
+        }
+        return dimensionsScale;
     }
 
     public void setEntityData(CompoundTag entityData) {
-        this.entityData = entityData;
+        CompoundTag copy = entityData.copy();
+        if (copy.equals(this.entityData)) {
+            return;
+        }
+        this.entityData = copy;
+        dimensionsScale = PlayerDimensions.fromPlayerData(this);
         setDirty();
+        refreshPlayerDimensions();
+    }
+
+    private void refreshPlayerDimensions() {
+        if (world.getPlayerByUUID(uuid) instanceof ServerPlayer player) {
+            PlayerDimensions.debugRefresh(player, "before server player data refresh");
+            player.refreshDimensions();
+            PlayerDimensions.debugRefresh(player, "after server player data refresh");
+        }
     }
 
     @Override
@@ -212,7 +241,15 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
 
     @Override
     public Gender getGender() {
-        return Gender.byId(getEntityData().getInt("gender"));
+        CompoundTag entityData = getEntityData();
+        CompoundTag mcaData = entityData.contains(VillagerEntityMCA.MCA_DATA_KEY, 10) ? entityData.getCompound(VillagerEntityMCA.MCA_DATA_KEY) : entityData;
+        if (mcaData.contains("Gender")) {
+            return Gender.byId(mcaData.getInt("Gender"));
+        }
+        if (entityData.contains("gender")) {
+            return Gender.byId(entityData.getInt("gender"));
+        }
+        return Gender.UNASSIGNED;
     }
 
     @Override
@@ -233,6 +270,7 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
         lastSeenVillage.ifPresent(id -> nbt.putInt("lastSeenVillage", id));
         nbt.put("entityData", entityData);
         nbt.putBoolean("entityDataSet", entityDataSet);
+        nbt.putBoolean("overrideVillageRequirements", overrideVillageRequirements);
         nbt.put("inbox", NbtHelper.fromList(inbox, v -> v.toTag(provider)));
         return nbt;
     }
@@ -292,6 +330,17 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
                     .ifPresent(tag -> nbt.put("pages", tag));
 
             return nbt;
+        }
+    }
+
+    public boolean isOverrideVillageRequirements() {
+        return overrideVillageRequirements;
+    }
+
+    public void setOverrideVillageRequirements(boolean overrideVillageRequirements) {
+        if (this.overrideVillageRequirements != overrideVillageRequirements) {
+            this.overrideVillageRequirements = overrideVillageRequirements;
+            setDirty();
         }
     }
 }

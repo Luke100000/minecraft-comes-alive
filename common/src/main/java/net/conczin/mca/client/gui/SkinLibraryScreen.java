@@ -22,6 +22,7 @@ import net.conczin.mca.network.c2s.RemoveCustomClothingMessage;
 import net.conczin.mca.registry.EntitiesMCA;
 import net.conczin.mca.resources.data.skin.Clothing;
 import net.conczin.mca.resources.data.skin.Hair;
+import net.conczin.mca.resources.data.skin.HairStyle;
 import net.conczin.mca.resources.data.skin.SkinListEntry;
 import net.conczin.mca.util.compat.ButtonWidget;
 import net.conczin.mca.util.localization.FlowingText;
@@ -104,6 +105,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
     private EditBox textFieldWidget;
     private boolean skipHairWarning;
     private List<LiteContent> libraryContents = new LinkedList<>();
+    private CompoundTag basePreviewData;
 
     public SkinLibraryScreen() {
         this(null, null);
@@ -122,18 +124,21 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         }
 
         if (villagerVisualization != null) {
-            CompoundTag nbt = new CompoundTag();
-            villagerVisualization.addAdditionalSaveData(nbt);
-            this.villagerVisualization.readAdditionalSaveData(nbt);
+            this.villagerVisualization.readAdditionalSaveData(saveEntityData(villagerVisualization));
         } else {
             assert Minecraft.getInstance().player != null;
             VillagerLike<?> villagerLike = CommonVillagerModel.getVillager(Minecraft.getInstance().level, Minecraft.getInstance().player.getUUID());
             if (villagerLike instanceof VillagerEntityMCA villager) {
-                CompoundTag nbt = new CompoundTag();
-                villager.addAdditionalSaveData(nbt);
-                this.villagerVisualization.readAdditionalSaveData(nbt);
+                this.villagerVisualization.readAdditionalSaveData(saveEntityData(villager));
             }
         }
+        basePreviewData = saveEntityData(this.villagerVisualization);
+    }
+
+    private static CompoundTag saveEntityData(VillagerEntityMCA entity) {
+        CompoundTag nbt = new CompoundTag();
+        entity.addAdditionalSaveData(nbt);
+        return nbt;
     }
 
     @Override
@@ -241,7 +246,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                         if (contents.size() > i) {
                             LiteContent c = contents.get(i);
 
-                            setDummyTexture(c);
+                            setDummyTexture(villagerVisualization, c);
 
                             int cx = width / 2 + (int) ((x - CLOTHES_H / 2.0 + 0.5 - 0.5 * (y % 2)) * 55);
                             int cy = height / 2 + (int) ((y - CLOTHES_V / 2.0 + 0.5) * 80);
@@ -324,11 +329,11 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                 matrices.popPose();
 
                 //dummy
+                applyBasePreview(villagerVisualization);
                 if (workspace.skinType == SkinType.CLOTHING) {
-                    villagerVisualization.setHair(EMPTY_IDENTIFIER);
                     villagerVisualization.setClothes(CANVAS_IDENTIFIER);
                 } else {
-                    villagerVisualization.setHair(CANVAS_IDENTIFIER);
+                    villagerVisualization.setHairStyle(HairStyle.singleLayer(CANVAS_IDENTIFIER.toString(), workspace.gender.binary(), 1.0F));
                     villagerVisualization.setClothes(EMPTY_IDENTIFIER);
                 }
 
@@ -401,7 +406,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
             }
             case DETAIL -> {
                 //dummy
-                setDummyTexture(focusedContent);
+                setDummyTexture(villagerVisualization, focusedContent);
 
                 int cx = width / 2;
                 int cy = height / 2;
@@ -426,13 +431,20 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         }
     }
 
-    private void setDummyTexture(LiteContent content) {
+    private void setDummyTexture(VillagerEntityMCA preview, LiteContent content) {
+        applyBasePreview(preview);
         if (content.hasTag("clothing")) {
-            villagerVisualization.setHair(EMPTY_IDENTIFIER);
-            villagerVisualization.setClothes(SkinCache.getTextureIdentifier(content));
+            preview.clearLayeredHair();
+            preview.setClothes(SkinCache.getTextureIdentifier(content));
         } else {
-            villagerVisualization.setHair(SkinCache.getTextureIdentifier(content));
-            villagerVisualization.setClothes(EMPTY_IDENTIFIER);
+            preview.setHairStyle(HairStyle.singleLayer(SkinCache.getTextureIdentifier(content).toString(), preview.getGenetics().getGender(), 1.0F));
+            preview.setClothes(EMPTY_IDENTIFIER);
+        }
+    }
+
+    private void applyBasePreview(VillagerEntityMCA preview) {
+        if (basePreviewData != null) {
+            preview.readAdditionalSaveData(basePreviewData.copy());
         }
     }
 
@@ -638,10 +650,12 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                     setPage(Page.DETAIL);
                 } else {
                     if (hoveredContent.hasTag("clothing")) {
-                        previousScreen.getVillager().setClothes("immersive_library:" + hoveredContent.contentid());
+                        var villager = previousScreen.getVillager();
+                        villager.setClothes("immersive_library:" + hoveredContent.contentid());
+                        previousScreen.markClothingSelected();
                         returnToPreviousScreen();
                     } else if (hoveredContent.hasTag("hair")) {
-                        previousScreen.getVillager().setHair("immersive_library:" + hoveredContent.contentid());
+                        previousScreen.applyLibraryHair("immersive_library:" + hoveredContent.contentid());
                         returnToPreviousScreen();
                     }
                 }
@@ -1733,8 +1747,8 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
 
     private void refreshServerContent() {
         serverContent.clear();
-        addServerContent(VillagerEditorScreen.getClothing(), "clothing");
-        addServerContent(VillagerEditorScreen.getHair(), "hair");
+        addServerContent(ClientSkinCatalog.clothing(), "clothing");
+        addServerContent(ClientSkinCatalog.hair(), "hair");
     }
 
     public enum Page {

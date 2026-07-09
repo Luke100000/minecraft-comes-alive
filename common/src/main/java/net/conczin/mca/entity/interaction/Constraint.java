@@ -26,6 +26,9 @@ public enum Constraint implements BiPredicate<VillagerLike<?>, ServerPlayer> {
     FAMILY("family", Relationship.IS_FAMILY.asConstraint()),
     NOT_FAMILY("!family", Relationship.IS_FAMILY.negate().asConstraint()),
 
+    RELATIVE("relative", Relationship.IS_RELATIVE.asConstraint()),
+    NOT_RELATIVE("!relative", Relationship.IS_RELATIVE.negate().asConstraint()),
+
     BABY("baby", (villager, player) -> villager.getAgeState() == AgeState.BABY),
     NOT_BABY("!baby", (villager, player) -> villager.getAgeState() != AgeState.BABY),
 
@@ -102,7 +105,10 @@ public enum Constraint implements BiPredicate<VillagerLike<?>, ServerPlayer> {
             return false;
         }
     }),
-    NOT_HIT_BY("!hit_by", (villager, player) -> !HIT_BY.test(villager, player));
+    NOT_HIT_BY("!hit_by", (villager, player) -> !HIT_BY.test(villager, player)),
+
+    RIDING("riding", (villager, player) -> villager.asEntity().isPassenger()),
+    NOT_RIDING("!riding", (villager, player) -> !villager.asEntity().isPassenger());
 
     public static final Map<String, Constraint> REGISTRY = Stream.of(values()).collect(Collectors.toMap(a -> a.id, Function.identity()));
     private final String id;

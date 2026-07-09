@@ -1,7 +1,6 @@
 package net.conczin.mca.entity.ai;
 
 import net.conczin.mca.MCA;
-import net.conczin.mca.mixin.MixinActivity;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.schedule.Activity;
 
@@ -16,7 +15,7 @@ public interface ActivitiesMCA {
 
     static Activity activity(String name) {
         ResourceLocation id = MCA.locate(name);
-        Activity init = MixinActivity.init(id.toString());
+        Activity init = new Activity(id.toString());
         ACTIVITIES.put(id, init);
         return init;
     }

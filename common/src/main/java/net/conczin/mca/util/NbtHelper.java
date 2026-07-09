@@ -32,6 +32,17 @@ public interface NbtHelper {
         return to;
     }
 
+    static CompoundTag getCompoundOrSelf(CompoundTag nbt, String key) {
+        return nbt.contains(key, 10) ? nbt.getCompound(key) : nbt;
+    }
+
+    static CompoundTag getOrCreateCompound(CompoundTag nbt, String key) {
+        if (!nbt.contains(key, 10)) {
+            nbt.put(key, new CompoundTag());
+        }
+        return nbt.getCompound(key);
+    }
+
     static <V> List<V> toList(Tag nbt, Function<Tag, V> valueMapper) {
         return toStream(nbt, valueMapper).collect(Collectors.toList());
     }
@@ -51,7 +62,7 @@ public interface NbtHelper {
                     if (k == null) return null;
                     V v = valueMapper.apply(k, nbt.get(e));
                     if (v == null) return null;
-                    return k == null ? null : new Pair<>(k, v);
+                    return new Pair<>(k, v);
                 })
                 .filter(Objects::nonNull)
                 .collect(Collectors.toMap(Pair::getFirst, Pair::getSecond)

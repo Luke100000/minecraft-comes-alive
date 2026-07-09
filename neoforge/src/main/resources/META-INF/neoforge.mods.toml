@@ -6,6 +6,10 @@ issueTrackerURL = "${mod_issues}"
 [[mixins]]
 config = "${mod_id}.mixins.json"
 
+[[mixins]]
+config = "${mod_id}.journeymap.mixins.json"
+requiredMods = ["journeymap"]
+
 [[mods]]
 modId = "${mod_id}"
 version = "${version}"

@@ -2,6 +2,7 @@ package net.conczin.mca.server.command;
 
 import com.mojang.brigadier.Command;
 import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.arguments.BoolArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.ArgumentBuilder;
@@ -18,6 +19,7 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.Util;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
+import net.minecraft.commands.arguments.EntityArgument;
 import net.minecraft.commands.arguments.UuidArgument;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
@@ -61,6 +63,10 @@ public class AdminCommand {
                 .then(register("convertVanillaVillagers").then(Commands.argument("radius", IntegerArgumentType.integer()).executes(AdminCommand::convertVanillaVillagers)))
                 .then(register("removeVillage").then(Commands.argument("name", StringArgumentType.string()).executes(AdminCommand::removeVillage)))
                 .then(register("buildingProcessingRate").then(Commands.argument("cooldown", IntegerArgumentType.integer()).executes(AdminCommand::buildingProcessingRate)))
+                .then(register("overrideVillageRequirements")
+                        .then(Commands.argument("target", EntityArgument.player())
+                                .then(Commands.argument("value", BoolArgumentType.bool())
+                                        .executes(AdminCommand::toggleOverrideVillageRequirements))))
                 .requires((serverCommandSource) -> serverCommandSource.hasPermission(2))
         );
     }
@@ -353,6 +359,7 @@ public class AdminCommand {
 
         sendMessage(player, WHITE + " /mca-admin listVillages " + GOLD + " - List all known villages.");
         sendMessage(player, WHITE + " /mca-admin removeVillage " + GOLD + " - Remove a given village.");
+        sendMessage(player, WHITE + " /mca-admin overrideVillageRequirements <player> <true|false> " + GOLD + " - Toggles ignoring village requirements for the target player.");
 
         sendMessage(player, DARK_RED + "--- " + GOLD + "GLOBAL COMMANDS" + DARK_RED + " ---");
         sendMessage(player, WHITE + " /mca-admin help " + GOLD + " - Shows this list of commands.");
@@ -360,6 +367,14 @@ public class AdminCommand {
         return 0;
     }
 
+    private static int toggleOverrideVillageRequirements(CommandContext<CommandSourceStack> ctx) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
+        ServerPlayer target = EntityArgument.getPlayer(ctx, "target");
+        boolean value = BoolArgumentType.getBool(ctx, "value");
+
+        PlayerSaveData.get(target).setOverrideVillageRequirements(value);
+        success("overrideVillageRequirements for " + target.getGameProfile().getName() + " set to " + value, ctx);
+        return 0;
+    }
 
     private static void sendMessage(Entity commandSender, String message) {
         commandSender.sendSystemMessage(Component.literal(GOLD + "[MCA] " + RESET + message));

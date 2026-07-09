@@ -1,13 +1,16 @@
 package net.conczin.mca;
 
 import net.conczin.mca.client.gui.SkinLibraryScreen;
+import net.conczin.mca.client.resources.ClientSkinCatalog;
 import net.conczin.mca.client.tts.SpeechManager;
+import net.conczin.mca.entity.PlayerDimensions;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.network.Network;
 import net.conczin.mca.network.c2s.ConfigRequest;
 import net.conczin.mca.network.c2s.PlayerDataRequest;
 import net.minecraft.client.Minecraft;
+import net.minecraft.world.entity.player.Player;
 
 import java.util.*;
 
@@ -22,12 +25,15 @@ public class MCAClient {
     }
 
     public static void onLogin() {
+        playerData.clear();
         playerDataRequests.clear();
+        ClientSkinCatalog.clear();
         Network.sendToServer(new ConfigRequest());
+        ClientSkinCatalog.sync();
     }
 
     public static Optional<VillagerLike<?>> getPlayerData(UUID uuid) {
-        if (isPlayerRendererAllowed()) {
+        if (isPlayerRendererAllowed() || Config.getServerConfig().scalePlayerHitboxWithSizeAndWidth) {
             if (!MCAClient.playerDataRequests.contains(uuid) && Minecraft.getInstance().getConnection() != null) {
                 MCAClient.playerDataRequests.add(uuid);
                 Network.sendToServer(new PlayerDataRequest(uuid));
@@ -74,11 +80,33 @@ public class MCAClient {
     public static void addPlayerData(UUID uuid, VillagerEntityMCA villager) {
         playerData.put(uuid, villager);
 
-        // Refresh eye height
         Minecraft client = Minecraft.getInstance();
-        if (client.player != null) {
-            client.player.refreshDimensions();
+        if (client.level != null) {
+            Player player = client.level.getPlayerByUUID(uuid);
+            if (player != null) {
+                refreshPlayerDimensions(player, "client player data refresh");
+            }
         }
+    }
+
+    public static void refreshPlayerDataDependentDimensions() {
+        Minecraft client = Minecraft.getInstance();
+        if (client.level == null) {
+            return;
+        }
+
+        for (Player player : client.level.players()) {
+            if (Config.getServerConfig().scalePlayerHitboxWithSizeAndWidth) {
+                getPlayerData(player.getUUID());
+            }
+            refreshPlayerDimensions(player, "client config refresh");
+        }
+    }
+
+    private static void refreshPlayerDimensions(Player player, String reason) {
+        PlayerDimensions.debugRefresh(player, "before " + reason);
+        player.refreshDimensions();
+        PlayerDimensions.debugRefresh(player, "after " + reason);
     }
 
     public static boolean isPlayerRendererAllowed() {

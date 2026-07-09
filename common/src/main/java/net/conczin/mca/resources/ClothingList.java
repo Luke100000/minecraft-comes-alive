@@ -17,18 +17,19 @@ import net.minecraft.util.profiling.ProfilerFiller;
 import net.minecraft.world.entity.npc.VillagerProfession;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.Collection;
 import java.util.HashMap;
-import java.util.Locale;
+import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
 
 public class ClothingList extends SimpleJsonResourceReloadListener {
-    protected static final ResourceLocation ID = MCA.locate("skins/clothing");
+    public static final ResourceLocation ID = MCA.locate("skins/clothing");
     private static ClothingList INSTANCE;
     public final HashMap<String, Clothing> clothing = new HashMap<>();
 
     public ClothingList() {
-        super(Resources.GSON, "skins/clothing");
+        super(Resources.GSON, ID.getPath());
         INSTANCE = this;
     }
 
@@ -41,27 +42,21 @@ public class ClothingList extends SimpleJsonResourceReloadListener {
         clothing.clear();
 
         data.forEach((id, file) -> {
-            Gender gender = Gender.byName(id.getPath().split("\\.")[0]);
+            Gender fileGender = BodySkinList.getGenderFromPath(id);
 
-            if (gender == Gender.UNASSIGNED) {
-                MCA.LOGGER.warn("Invalid gender for clothing pool: {}", id);
-                return;
-            }
-
-            for (String key : file.getAsJsonObject().keySet()) {
-                JsonObject object = file.getAsJsonObject().get(key).getAsJsonObject();
-
-                for (int i = 0; i < GsonHelper.getAsInt(object, "count", 1); i++) {
-                    String identifier = String.format(Locale.ROOT, key, i);
-
-                    object.addProperty("gender", gender.getId());
-
-                    Clothing c = new Clothing(identifier, object);
-
-                    if (!clothing.containsKey(identifier) || !object.has("count")) {
-                        clothing.put(identifier, c);
-                    }
+            for (SkinListJson.Entry entry : SkinListJson.entries(id, file)) {
+                Gender entryGender = SkinListJson.resolveGender(fileGender, entry);
+                if (entryGender == Gender.UNASSIGNED) {
+                    MCA.LOGGER.warn("Invalid gender for clothing entry {} in {}", entry.identifier(), id);
+                    continue;
                 }
+
+                JsonObject metadata = entry.metadata();
+                String profession = metadata.has("profession") && !metadata.get("profession").isJsonNull() ? GsonHelper.getAsString(metadata, "profession", null) : null;
+                boolean exclude = GsonHelper.getAsBoolean(metadata, "exclude", false);
+                int temperature = GsonHelper.getAsInt(metadata, "temperature", 0);
+
+                clothing.put(entry.identifier(), new Clothing(entry.identifier(), profession, temperature, exclude, entryGender));
             }
         });
     }
@@ -70,37 +65,44 @@ public class ClothingList extends SimpleJsonResourceReloadListener {
      * Gets a pool of clothing options valid for this entity's gender and profession.
      */
     public WeightedPool<String> getPool(VillagerLike<?> villager) {
-        Gender gender = villager.getGenetics().getGender();
-        return switch (villager.getAgeState()) {
-            case BABY -> getPool(gender, MCA.locate("baby").toString());
-            case TODDLER -> getPool(gender, MCA.locate("toddler").toString());
-            case CHILD, TEEN -> getPool(gender, MCA.locate("child").toString());
-            default -> {
-                WeightedPool<String> pool = getPool(gender, villager.getVillagerData().getProfession());
-                if (pool.entries.isEmpty()) {
-                    pool = getPool(gender, VillagerProfession.NONE);
-                }
-                yield pool;
-            }
-        };
+        return toPool(getOptions(villager, allClothing()));
     }
 
     public WeightedPool<String> getPool(Gender gender, @Nullable VillagerProfession profession) {
+        return toPool(getOptions(gender, profession, allClothing()));
+    }
+
+    private List<Clothing> getOptions(VillagerLike<?> villager, Collection<Clothing> available) {
+        return SkinSelection.clothingForVillager(available, villager, Config.getInstance().professionConversionsMap);
+    }
+
+    private List<Clothing> getOptions(Gender gender, @Nullable VillagerProfession profession, Collection<Clothing> available) {
         Map<String, String> map = Config.getInstance().professionConversionsMap;
         String currentValue = profession == null ? "minecraft:none" : BuiltInRegistries.VILLAGER_PROFESSION.getKey(profession).toString();
-        String identifier = map.getOrDefault(currentValue, map.getOrDefault("default", currentValue));
-        return getPool(gender, identifier);
+        return getOptions(gender, SkinSelection.mapProfession(currentValue, map), available);
     }
 
     public WeightedPool<String> getPool(Gender gender, @Nullable String profession) {
-        return Stream.concat(clothing.values().stream(), CustomClothingManager.getClothing().getEntries().values().stream())
-                .filter(c -> c.getGender() == Gender.NEUTRAL || gender == Gender.NEUTRAL || c.getGender() == gender)
-                .filter(c -> c.profession == null || profession == null && !c.exclude || c.profession.equals(profession) || profession != null && c.profession.equals(profession.replace(":", ".")))
-                .collect(() -> new WeightedPool.Mutable<>("mca:missing"),
-                        (list, entry) -> list.add(entry.getIdentifier(), entry.getChance()),
-                        (a, b) -> {
-                            a.entries.addAll(b.entries);
-                        });
+        return toPool(getOptions(gender, profession, allClothing()));
     }
 
+    public WeightedPool<String> getEditorPool(Gender gender) {
+        return toPool(getEditorOptions(gender, allClothing()));
+    }
+
+    public List<Clothing> getEditorOptions(Gender gender, Collection<Clothing> available) {
+        return SkinSelection.editorClothing(available, gender);
+    }
+
+    private List<Clothing> getOptions(Gender gender, @Nullable String profession, Collection<Clothing> available) {
+        return SkinSelection.clothingForProfession(available, gender, profession);
+    }
+
+    private List<Clothing> allClothing() {
+        return Stream.concat(clothing.values().stream(), CustomClothingManager.getClothing().getEntries().values().stream()).toList();
+    }
+
+    private WeightedPool<String> toPool(List<Clothing> options) {
+        return SkinSelection.toPool(options, "mca:missing");
+    }
 }

@@ -2,6 +2,7 @@ package net.conczin.mca.util.recipes;
 
 import net.conczin.mca.entity.CribWoodType;
 import net.conczin.mca.registry.ItemsMCA;
+import net.minecraft.advancements.critereon.InventoryChangeTrigger;
 import net.minecraft.data.recipes.RecipeCategory;
 import net.minecraft.data.recipes.RecipeOutput;
 import net.minecraft.data.recipes.ShapedRecipeBuilder;
@@ -23,6 +24,7 @@ public class CribRecipeProvider {
                         .pattern("F F")
                         .pattern("FCF")
                         .pattern("PPP")
+                        .unlockedBy("has_" + wood.toString().toLowerCase() + "_planks", InventoryChangeTrigger.TriggerInstance.hasItems(plankFromWoodType(wood)))
                         .save(recipeOutput);
             }
         }
@@ -30,8 +32,10 @@ public class CribRecipeProvider {
 
     private static ItemLike plankFromWoodType(CribWoodType woodType) {
         return switch (woodType) {
+            case OAK -> Blocks.OAK_PLANKS;
             case SPRUCE -> Blocks.SPRUCE_PLANKS;
             case ACACIA -> Blocks.ACACIA_PLANKS;
+            case BAMBOO -> Blocks.BAMBOO_PLANKS;
             case BIRCH -> Blocks.BIRCH_PLANKS;
             case CHERRY -> Blocks.CHERRY_PLANKS;
             case CRIMSON -> Blocks.CRIMSON_PLANKS;
@@ -39,14 +43,15 @@ public class CribRecipeProvider {
             case JUNGLE -> Blocks.JUNGLE_PLANKS;
             case MANGROVE -> Blocks.MANGROVE_PLANKS;
             case WARPED -> Blocks.WARPED_PLANKS;
-            default -> Blocks.OAK_PLANKS;
         };
     }
 
     private static ItemLike fenceFromWoodType(CribWoodType woodType) {
         return switch (woodType) {
+            case OAK -> Blocks.OAK_FENCE;
             case SPRUCE -> Blocks.SPRUCE_FENCE;
             case ACACIA -> Blocks.ACACIA_FENCE;
+            case BAMBOO -> Blocks.BAMBOO_FENCE;
             case BIRCH -> Blocks.BIRCH_FENCE;
             case CHERRY -> Blocks.CHERRY_FENCE;
             case CRIMSON -> Blocks.CRIMSON_FENCE;
@@ -54,7 +59,6 @@ public class CribRecipeProvider {
             case JUNGLE -> Blocks.JUNGLE_FENCE;
             case MANGROVE -> Blocks.MANGROVE_FENCE;
             case WARPED -> Blocks.WARPED_FENCE;
-            default -> Blocks.OAK_FENCE;
         };
     }
 

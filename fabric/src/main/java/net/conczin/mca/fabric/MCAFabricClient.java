@@ -7,15 +7,18 @@ import net.conczin.mca.MCAClient;
 import net.conczin.mca.block.BlockEntityTypesMCA;
 import net.conczin.mca.client.particle.InteractionParticle;
 import net.conczin.mca.client.render.*;
+import net.conczin.mca.client.resources.GeneratedEyeTextureReloadListener;
 import net.conczin.mca.fabric.client.gui.FabricMCAScreens;
 import net.conczin.mca.fabric.resources.ApiIdentifiableReloadListener;
 import net.conczin.mca.fabric.resources.FabricColorPaletteLoader;
+import net.conczin.mca.fabric.resources.FabricReloadListener;
 import net.conczin.mca.fabric.resources.FabricSupportersLoader;
 import net.conczin.mca.network.Network;
 import net.conczin.mca.registry.BlocksMCA;
 import net.conczin.mca.registry.EntitiesMCA;
 import net.conczin.mca.registry.ModelPredicatesMCA;
 import net.conczin.mca.registry.ParticleTypesMCA;
+import net.conczin.mca.resources.FaceList;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.blockrenderlayer.v1.BlockRenderLayerMap;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
@@ -31,7 +34,9 @@ import net.minecraft.client.renderer.blockentity.BlockEntityRenderers;
 import net.minecraft.client.renderer.entity.VillagerRenderer;
 import net.minecraft.client.renderer.entity.ZombieVillagerRenderer;
 import net.minecraft.client.renderer.item.ItemProperties;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.PackType;
+import net.minecraft.server.packs.resources.PreparableReloadListener;
 import net.minecraft.world.entity.player.Player;
 
 public final class MCAFabricClient extends ClientProxyAbstractImpl implements ClientModInitializer {
@@ -67,6 +72,8 @@ public final class MCAFabricClient extends ClientProxyAbstractImpl implements Cl
         managerHelper.registerReloadListener(new FabricColorPaletteLoader());
         managerHelper.registerReloadListener(new FabricSupportersLoader());
         managerHelper.registerReloadListener(new ApiIdentifiableReloadListener());
+        registerReloadListener(managerHelper, FaceList.ID, new FaceList());
+        registerReloadListener(managerHelper, GeneratedEyeTextureReloadListener.ID, GeneratedEyeTextureReloadListener.INSTANCE);
 
         ModelPredicatesMCA.setup(ItemProperties::register);
 
@@ -84,5 +91,9 @@ public final class MCAFabricClient extends ClientProxyAbstractImpl implements Cl
     @Override
     public Player getClientPlayer() {
         return Minecraft.getInstance().player;
+    }
+
+    private static void registerReloadListener(ResourceManagerHelper managerHelper, ResourceLocation id, PreparableReloadListener listener) {
+        managerHelper.registerReloadListener(new FabricReloadListener<>(id, listener));
     }
 }

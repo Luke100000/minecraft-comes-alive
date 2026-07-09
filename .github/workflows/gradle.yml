@@ -3,22 +3,50 @@ name: Java Release with Gradle
 on:
   push:
     tags:
-      - '*'
+      - '*\+*'
 
 jobs:
+  validate-tag:
+    runs-on: ubuntu-latest
+    outputs:
+      valid: ${{ steps.validate.outputs.valid }}
+      tag: ${{ steps.validate.outputs.tag }}
+      version: ${{ steps.validate.outputs.version }}
+      minecraft_version: ${{ steps.validate.outputs.minecraft_version }}
+    steps:
+      - name: Validate release tag
+        id: validate
+        shell: bash
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          tag_pattern='^[0-9]+[.][0-9]+[.][0-9]+(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?[+][0-9]+([.][0-9]+){1,2}$'
+
+          if [[ ! "${tag}" =~ ${tag_pattern} ]]; then
+            echo "::notice title=Invalid release tag::Skipping release. Expected '<mod_version>+<minecraft_version>', for example '1.1.1+1.2.3'."
+            echo "valid=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "valid=true" >> "$GITHUB_OUTPUT"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "version=${tag%%+*}" >> "$GITHUB_OUTPUT"
+          echo "minecraft_version=${tag#*+}" >> "$GITHUB_OUTPUT"
+
   build:
+    needs: validate-tag
+    if: needs.validate-tag.outputs.valid == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
     env:
+      GRADLE_OPTS: --enable-native-access=ALL-UNNAMED
+      NO_COLOR: 1
       MODRINTH_ID: "1W98a849"
       CURSEFORGE_ID: "535291"
       MODRINTH_TOKEN: ${{ secrets.MR_API_TOKEN }}
       CURSEFORGE_TOKEN: ${{ secrets.CF_API_TOKEN }}
       MAVEN_USERNAME: ${{ secrets.MAVEN_USERNAME }}
       MAVEN_TOKEN: ${{ secrets.MAVEN_TOKEN }}
-      NO_COLOR: 1
-    if: startsWith(github.ref, 'refs/tags/')
     steps:
       - name: Checkout Commit
         uses: actions/checkout@v6
@@ -36,17 +64,9 @@ jobs:
           cache-read-only: false
           cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
       - name: Build Artifacts with Gradle
-        run: ./gradlew build --console=plain --non-interactive
+        run: ./gradlew build --configuration-cache --console=plain --non-interactive
       - name: Publish to Maven
         run: ./gradlew publish --console=plain --non-interactive
-      - name: Get tag
-        id: tag
-        shell: bash
-        run: |
-          tag="${GITHUB_REF_NAME}"
-          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
-          echo "version=${tag%%+*}" >> "$GITHUB_OUTPUT"
-          echo "minecraft_version=${tag#*+}" >> "$GITHUB_OUTPUT"
       - name: "Upload Fabric"
         uses: Kir-Antipov/mc-publish@v3.3.0
         with:
@@ -56,14 +76,14 @@ jobs:
           curseforge-token: ${{ env.CURSEFORGE_TOKEN }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-          name: "[Fabric ${{steps.tag.outputs.minecraft_version}}] MCAR - ${{steps.tag.outputs.version}}"
+          name: "[Fabric ${{needs.validate-tag.outputs.minecraft_version}}] MCAR - ${{needs.validate-tag.outputs.version}}"
           changelog-file: changelog.md
-          version-type: ${{ contains(steps.tag.outputs.version, 'beta') && 'beta' || contains(steps.tag.outputs.version, 'alpha') && 'alpha' || 'release' }}
-          files: "fabric/build/libs/mca-fabric-${{steps.tag.outputs.tag}}.jar"
+          version-type: ${{ contains(needs.validate-tag.outputs.version, 'beta') && 'beta' || contains(needs.validate-tag.outputs.version, 'alpha') && 'alpha' || 'release' }}
+          files: "fabric/build/libs/mca-fabric-${{needs.validate-tag.outputs.tag}}.jar"
           loaders: |
             fabric
           game-versions: |
-            ${{steps.tag.outputs.minecraft_version}}
+            ${{needs.validate-tag.outputs.minecraft_version}}
           java: |
             Java 21
 
@@ -77,14 +97,14 @@ jobs:
           curseforge-token: ${{ env.CURSEFORGE_TOKEN }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-          name: "[NeoForge ${{steps.tag.outputs.minecraft_version}}] MCAR - ${{steps.tag.outputs.version}}"
+          name: "[NeoForge ${{needs.validate-tag.outputs.minecraft_version}}] MCAR - ${{needs.validate-tag.outputs.version}}"
           changelog-file: changelog.md
-          version-type: ${{ contains(steps.tag.outputs.version, 'beta') && 'beta' || contains(steps.tag.outputs.version, 'alpha') && 'alpha' || 'release' }}
-          files: "neoforge/build/libs/mca-neoforge-${{steps.tag.outputs.tag}}.jar"
+          version-type: ${{ contains(needs.validate-tag.outputs.version, 'beta') && 'beta' || contains(needs.validate-tag.outputs.version, 'alpha') && 'alpha' || 'release' }}
+          files: "neoforge/build/libs/mca-neoforge-${{needs.validate-tag.outputs.tag}}.jar"
           loaders: |
             neoforge
           game-versions: |
-            ${{steps.tag.outputs.minecraft_version}}
+            ${{needs.validate-tag.outputs.minecraft_version}}
           java: |
             Java 21
 

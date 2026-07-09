@@ -37,6 +37,7 @@ import net.minecraft.world.entity.ai.sensing.SensorType;
 import net.minecraft.world.entity.ai.village.poi.PoiTypes;
 import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.entity.npc.VillagerProfession;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.schedule.Activity;
 import net.minecraft.world.entity.schedule.Schedule;
 import net.minecraft.world.item.ItemStack;
@@ -88,6 +89,7 @@ public class VillagerTasksMCA {
     );
 
     public static final ImmutableList<SensorType<? extends Sensor<? super Villager>>> SENSOR_TYPES = ImmutableList.of(
+            SensorType.NEAREST_LIVING_ENTITIES,
             SensorType.NEAREST_PLAYERS,
             SensorType.NEAREST_ITEMS,
             SensorType.NEAREST_BED,
@@ -119,8 +121,13 @@ public class VillagerTasksMCA {
         } else if (brain.getMemoryInternal(MemoryModuleTypeMCA.PLAYER_FOLLOWING).isPresent()) {
             brain.addActivity(Activity.CORE, VillagerTasksMCA.getFollowingPackage());
             brain.addActivity(Activity.CORE, VillagerTasksMCA.getImportantCorePackage(0.5f));
-            brain.addActivity(Activity.CORE, VillagerTasksMCA.getSelfDefencePackage());
-            brain.addActivity(Activity.PANIC, VillagerTasksMCA.getPanicPackage(0.5F));
+            if (villager.isGuard()) {
+                brain.addActivity(Activity.CORE, VillagerTasksMCA.getGuardCorePackage(villager));
+                brain.addActivity(Activity.PANIC, VillagerTasksMCA.getGuardPanicPackage(0.5F));
+            } else {
+                brain.addActivity(Activity.CORE, VillagerTasksMCA.getSelfDefencePackage());
+                brain.addActivity(Activity.PANIC, VillagerTasksMCA.getPanicPackage(0.5F));
+            }
             noDefault = true;
         } else if (profession == ProfessionsMCA.MERCENARY) {
             brain.setSchedule(SchedulesMCA.GUESTS);
@@ -295,24 +302,45 @@ public class VillagerTasksMCA {
                         VillagerTasksMCA::guardTooHurt
                 )),
                 Pair.of(1, new EquipmentTask(VillagerTasksMCA::isOnDuty, v -> v.getResidency().getHomeVillage()
-                        .map(vil -> vil.getVillageGuardsManager().getGuardEquipment(v.getProfession(), v.getDominantHand())).orElse(VillageGuardsManager.getEquipmentFor(v.getDominantHand(), EquipmentSet.GUARD_0, EquipmentSet.GUARD_0_LEFT)))),
+                        .map(vil -> vil.getVillageGuardsManager().getGuardEquipment(v.getProfession(), v.getDominantHand()))
+                        .orElseGet(() -> v.getProfession() == ProfessionsMCA.ARCHER
+                                ? VillageGuardsManager.getEquipmentFor(v.getDominantHand(), EquipmentSet.ARCHER_0, EquipmentSet.ARCHER_0_LEFT)
+                                : VillageGuardsManager.getEquipmentFor(v.getDominantHand(), EquipmentSet.GUARD_0, EquipmentSet.GUARD_0_LEFT)))),
                 Pair.of(2, StartAttacking.create(t -> true, VillagerTasksMCA::getPreferredTarget)),
-                Pair.of(3, StopAttackingIfTargetInvalid.create(livingEntity -> !VillagerTasksMCA.isPreferredTarget(villager, livingEntity))),
-                Pair.of(4, new BowTask<>(20, 12)),
-                Pair.of(5, BehaviorBuilder.triggerIf(v -> v.isHolding(Items.CROSSBOW),
-                        BackUpIfTooClose.create(5, 0.75F)
+                Pair.of(3, StopAttackingIfTargetInvalid.create(
+                        livingEntity -> !VillagerTasksMCA.isPreferredTarget(villager, livingEntity),
+                        VillagerTasksMCA::onGuardTargetErased,
+                        false
                 )),
-                Pair.of(6, SetWalkTargetFromAttackTargetIfTargetOutOfReach.create(0.75F)),
-                Pair.of(7, new ExtendedMeleeAttackTask(20, 2.0F)),
-                Pair.of(8, new CrossbowAttack<VillagerEntityMCA, VillagerEntityMCA>())
+                Pair.of(4, new ArcherMovementTask<>(15)),
+                Pair.of(5, new BowTask<>(20, 15)),
+                Pair.of(7, new ConditionalTask<>(
+                        SetWalkTargetFromAttackTargetIfTargetOutOfReach.create(0.75F),
+                        (VillagerEntityMCA v) -> !VillagerTasksMCA.isHoldingRangedWeapon(v)
+                )),
+                Pair.of(8, new ConditionalTask<>(
+                        new ExtendedMeleeAttackTask(20, 2.0F),
+                        (VillagerEntityMCA v) -> !VillagerTasksMCA.isHoldingRangedWeapon(v)
+                )),
+                Pair.of(9, new CrossbowAttack<VillagerEntityMCA, VillagerEntityMCA>())
         );
     }
 
     public static ImmutableList<Pair<Integer, ? extends BehaviorControl<? super VillagerEntityMCA>>> getGuardWorkPackage() {
         return ImmutableList.of(
                 Pair.of(10, new PatrolVillageTask(4, 0.4f)),
+                Pair.of(10, new ConditionalTask<>(
+                        RandomStroll.stroll(0.4f),
+                        VillagerTasksMCA::shouldUseHomelessGuardStroll
+                )),
                 Pair.of(99, UpdateActivityFromSchedule.create())
         );
+    }
+
+    private static boolean shouldUseHomelessGuardStroll(VillagerEntityMCA villager) {
+        return villager.getResidency().getHomeVillage().isEmpty()
+               && villager.getBrain().getMemoryInternal(MemoryModuleType.ATTACK_TARGET).isEmpty()
+               && villager.getBrain().getMemoryInternal(MemoryModuleType.INTERACTION_TARGET).isEmpty();
     }
 
     public static ImmutableList<Pair<Integer, ? extends BehaviorControl<? super VillagerEntityMCA>>> getGuardPanicPackage(float speedModifier) {
@@ -352,15 +380,29 @@ public class VillagerTasksMCA {
         return target.isAlive()
                && !target.isRemoved()
                && target.level() == villager.level()
-               && villager.canAttack(target)
-               && shouldRespondToGuardEnemy(villager, target);
+               && villager.canAttack(target);
     }
 
     private static boolean shouldRespondToGuardEnemy(VillagerEntityMCA villager, LivingEntity target) {
         return GuardEnemiesSensor.isGuardEnemy(target, villager)
-               && (getActivity(villager) != Activity.REST
-                   || target.distanceTo(villager) < 8.0
-                   || villager.getResidency().getHomeVillage().filter(village -> village.isWithinBorder(villager)).isEmpty());
+               && shouldRespondToAttackTarget(villager, target);
+    }
+
+    private static boolean shouldRespondToAttackTarget(VillagerEntityMCA villager, LivingEntity target) {
+        return isFollowingPlayer(villager)
+               || getActivity(villager) != Activity.REST
+               || target.distanceTo(villager) < 8.0
+               || villager.getResidency().getHomeVillage().filter(village -> village.isWithinBorder(villager)).isEmpty();
+    }
+
+    private static boolean isFollowingPlayer(VillagerEntityMCA villager) {
+        return villager.getBrain().getMemoryInternal(MemoryModuleTypeMCA.PLAYER_FOLLOWING).isPresent();
+    }
+
+    private static void onGuardTargetErased(VillagerEntityMCA villager, LivingEntity target) {
+        if (target instanceof Player && !target.isAlive()) {
+            villager.pardonPlayers(Integer.MAX_VALUE);
+        }
     }
 
     private static boolean isPreferredTarget(VillagerEntityMCA villager, LivingEntity entity) {
@@ -372,6 +414,10 @@ public class VillagerTasksMCA {
         return getActivity(villager) == Activity.WORK
                || villager.getBrain().getMemoryInternal(MemoryModuleType.ATTACK_TARGET).isPresent()
                || getPreferredTarget(villager).isPresent();
+    }
+
+    private static boolean isHoldingRangedWeapon(VillagerEntityMCA villager) {
+        return villager.isHolding(Items.BOW) || villager.isHolding(Items.CROSSBOW);
     }
 
     public static boolean isInDanger(VillagerEntityMCA villager) {

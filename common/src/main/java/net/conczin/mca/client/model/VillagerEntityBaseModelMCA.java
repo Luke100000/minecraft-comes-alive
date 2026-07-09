@@ -14,7 +14,13 @@ import net.minecraft.client.model.geom.builders.CubeDeformation;
 import net.minecraft.client.model.geom.builders.CubeListBuilder;
 import net.minecraft.client.model.geom.builders.MeshDefinition;
 import net.minecraft.client.model.geom.builders.PartDefinition;
+import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.HumanoidArm;
+import net.minecraft.world.item.CrossbowItem;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.item.UseAnim;
 
 public class VillagerEntityBaseModelMCA<T extends LivingEntity & VillagerLike<T>> extends HumanoidModel<T> implements CommonVillagerModel<T> {
     protected static final String BREASTS = "breasts";
@@ -58,8 +64,54 @@ public class VillagerEntityBaseModelMCA<T extends LivingEntity & VillagerLike<T>
 
     @Override
     public void prepareMobModel(T entity, float limbAngle, float limbDistance, float tickDelta) {
+        updateArmPoses(entity);
         super.prepareMobModel(entity, limbDistance, limbAngle, tickDelta);
         riding |= entity.getAgeState() == AgeState.BABY;
+    }
+
+    private void updateArmPoses(T entity) {
+        this.leftArmPose = ArmPose.EMPTY;
+        this.rightArmPose = ArmPose.EMPTY;
+
+        applyArmPose(entity, InteractionHand.MAIN_HAND, getArmPose(entity, InteractionHand.MAIN_HAND));
+        applyArmPose(entity, InteractionHand.OFF_HAND, getArmPose(entity, InteractionHand.OFF_HAND));
+    }
+
+    private HumanoidModel.ArmPose getArmPose(T entity, InteractionHand hand) {
+        ItemStack stack = entity.getItemInHand(hand);
+        if (stack.isEmpty()) {
+            return ArmPose.EMPTY;
+        }
+
+        if (entity.isUsingItem() && entity.getUsedItemHand() == hand && entity.getUseItemRemainingTicks() > 0) {
+            UseAnim useAnim = stack.getUseAnimation();
+            if (useAnim == UseAnim.BOW) {
+                return ArmPose.BOW_AND_ARROW;
+            }
+            if (useAnim == UseAnim.CROSSBOW) {
+                return ArmPose.CROSSBOW_CHARGE;
+            }
+        } else if (!entity.swinging && stack.is(Items.CROSSBOW) && CrossbowItem.isCharged(stack)) {
+            return ArmPose.CROSSBOW_HOLD;
+        }
+
+        return ArmPose.EMPTY;
+    }
+
+    private void applyArmPose(T entity, InteractionHand hand, HumanoidModel.ArmPose pose) {
+        if (pose == ArmPose.EMPTY) {
+            return;
+        }
+
+        if (isRightArm(entity, hand)) {
+            this.rightArmPose = pose;
+        } else {
+            this.leftArmPose = pose;
+        }
+    }
+
+    private static boolean isRightArm(LivingEntity entity, InteractionHand hand) {
+        return (hand == InteractionHand.MAIN_HAND) == (entity.getMainArm() == HumanoidArm.RIGHT);
     }
 
     @Override

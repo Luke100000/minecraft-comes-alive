@@ -270,6 +270,10 @@ public class Building {
                                 interiorSize++;
                                 queue.add(n);
                             }
+                        } else if (!state.getFluidState().isEmpty()) {
+                            //fluid blocks (water, lava, etc.) are treated as passable interior
+                            interiorSize++;
+                            queue.add(n);
                         } else if (state.getBlock() instanceof DoorBlock) {
                             //skip door and start a new room
                             if (!strictScan) {
@@ -310,10 +314,10 @@ public class Building {
                 ey = Math.max(ey, p.getY());
                 ez = Math.max(ez, p.getZ());
 
-                //count blocks types
+                //count block types using BlockState for live tag resolution
                 BlockState blockState = world.getBlockState(p);
                 Block block = blockState.getBlock();
-                if (isBuildingBlock(BuiltInRegistries.BLOCK.getKey(block))) {
+                if (isBuildingBlock(blockState)) {
                     if (block instanceof BedBlock) {
                         // TODO: look for better solution for 7.4.0
                         if (blockState.getValue(BedBlock.PART) == BedPart.HEAD) {
@@ -337,13 +341,51 @@ public class Building {
             size = interiorSize;
 
             //determine type
-            return isTypeForced() || determineType() ? validationResult.SUCCESS : validationResult.INVALID_TYPE;
+            if (isTypeForced()) {
+                return matchesType(getBuildingType()) ? validationResult.SUCCESS : validationResult.INVALID_TYPE;
+            }
+            return determineType() ? validationResult.SUCCESS : validationResult.INVALID_TYPE;
         }
     }
 
-    private boolean isBuildingBlock(ResourceLocation blockId) {
+    public boolean matchesType(BuildingType bt) {
+        Map<ResourceLocation, List<BlockPos>> available = bt.getGroups(blocks);
+        return bt.getGroups().entrySet().stream()
+                .noneMatch(e -> !available.containsKey(e.getKey()) || available.get(e.getKey()).size() < e.getValue());
+    }
+
+    public List<BuildingType> getMatchingTypes() {
+        List<BuildingType> matches = new ArrayList<>();
         for (BuildingType bt : BuildingTypes.getInstance()) {
-            if (bt.matchesBlock(blockId)) {
+            if (bt.grouped()) {
+                continue;
+            }
+            if (matchesType(bt)) {
+                matches.add(bt);
+            }
+        }
+        matches.sort(Comparator
+                .comparingInt(BuildingType::priority).reversed()
+                .thenComparing(BuildingType::name));
+        return matches;
+    }
+
+    public List<BuildingType> getVisibleMatchingTypes() {
+        List<BuildingType> matches = new ArrayList<>(getMatchingTypes().stream()
+                .filter(bt -> bt.visible() || bt.name().equals("house"))
+                .filter(bt -> !bt.name().equals("blocked") && !bt.name().equals("building"))
+                .toList());
+
+        boolean hasBigHouse = matches.stream().anyMatch(bt -> bt.name().equals("big_house"));
+        if (hasBigHouse) {
+            matches.removeIf(bt -> bt.name().equals("house"));
+        }
+        return matches;
+    }
+
+    private boolean isBuildingBlock(BlockState state) {
+        for (BuildingType bt : BuildingTypes.getInstance()) {
+            if (bt.matchesBlock(state)) {
                 return true;
             }
         }
@@ -351,22 +393,12 @@ public class Building {
     }
 
     public boolean determineType() {
-        int bestPriority = -1;
-        boolean assignedType = false;
-
-        for (BuildingType bt : BuildingTypes.getInstance()) {
-            if (bt.priority() > bestPriority) {
-                //get an overview of the satisfied blocks
-                Map<ResourceLocation, List<BlockPos>> available = bt.getGroups(blocks);
-                boolean valid = bt.getGroups().entrySet().stream().noneMatch(e -> !available.containsKey(e.getKey()) || available.get(e.getKey()).size() < e.getValue());
-                if (valid) {
-                    bestPriority = bt.priority();
-                    type = bt.name();
-                    assignedType = true;
-                }
-            }
+        List<BuildingType> matches = getMatchingTypes();
+        if (matches.isEmpty()) {
+            return false;
         }
-        return assignedType;
+        type = matches.getFirst().name();
+        return true;
     }
 
     public String getType() {

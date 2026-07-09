@@ -1,0 +1,4 @@
+# Disable autocrlf on generated files, they always generate with LF.
+# Add any extra generated paths here to make git stop reporting
+# changes when only line endings change.
+*/src/generated/**/*.json text eol=lf

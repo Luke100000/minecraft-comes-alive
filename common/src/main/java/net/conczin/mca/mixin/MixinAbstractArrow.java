@@ -1,0 +1,49 @@
+package net.conczin.mca.mixin;
+
+import net.conczin.mca.entity.VillagerEntityMCA;
+import net.conczin.mca.registry.ProfessionsMCA;
+import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.projectile.AbstractArrow;
+import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Unique;
+import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Redirect;
+
+@Mixin(AbstractArrow.class)
+abstract class MixinAbstractArrow {
+    @Redirect(
+            method = "onHitEntity",
+            at = @At(
+                    value = "INVOKE",
+                    target = "Lnet/minecraft/world/entity/Entity;hurt(Lnet/minecraft/world/damagesource/DamageSource;F)Z"
+            )
+    )
+    private boolean mca$allowMcaArcherArrowsThroughHurtCooldown(Entity target, DamageSource source, float damage) {
+        VillagerEntityMCA archer = mca$getMcaArcherOwner();
+        if (!(target instanceof LivingEntity livingTarget) || archer == null) {
+            return target.hurt(source, damage);
+        }
+
+        if (target.level().isClientSide()) {
+            return true;
+        }
+
+        livingTarget.invulnerableTime = 0;
+        boolean hurt = target.hurt(source, damage);
+        if (hurt) {
+            archer.onRangedAttackLanded(target);
+        }
+        return hurt;
+    }
+
+    @Unique
+    private VillagerEntityMCA mca$getMcaArcherOwner() {
+        Entity owner = ((AbstractArrow) (Object) this).getOwner();
+        if (owner instanceof VillagerEntityMCA villager && villager.getProfession() == ProfessionsMCA.ARCHER) {
+            return villager;
+        }
+        return null;
+    }
+}

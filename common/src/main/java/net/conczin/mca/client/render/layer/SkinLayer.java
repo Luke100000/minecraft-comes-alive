@@ -18,6 +18,10 @@ public class SkinLayer<T extends LivingEntity, M extends HumanoidModel<T>> exten
 
     @Override
     public ResourceLocation getSkin(T villager) {
+        if (!MCA.isBlankString(getVillager(villager).getSkin())) {
+            return cached(getVillager(villager).getSkin(), ResourceLocation::parse);
+        }
+
         Genetics genetics = getVillager(villager).getGenetics();
         int skin = (int) Math.min(4, Math.max(0, genetics.getGene(Genetics.SKIN) * 5));
         return cached("skins/skin/" + genetics.getGender().getDataName() + "/" + skin + ".png", MCA::locate);
@@ -25,8 +29,12 @@ public class SkinLayer<T extends LivingEntity, M extends HumanoidModel<T>> exten
 
     @Override
     public int getColor(T villager, float tickDelta) {
-        float albinism = getVillager(villager).getTraits().hasTrait(Traits.ALBINISM) ? 0.1f : 1.0f;
+        int skinDye = getVillager(villager).getSkinDye();
+        if (skinDye != 0xFF000000) {
+            return skinDye;
+        }
 
+        float albinism = getVillager(villager).getTraits().hasTrait(Traits.ALBINISM) ? 0.1f : 1.0f;
         return ColorPalette.SKIN.getColor(
                 getVillager(villager).getGenetics().getGene(Genetics.MELANIN) * albinism,
                 getVillager(villager).getGenetics().getGene(Genetics.HEMOGLOBIN) * albinism,

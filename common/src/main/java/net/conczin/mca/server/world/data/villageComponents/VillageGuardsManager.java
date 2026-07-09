@@ -11,6 +11,7 @@ import net.minecraft.world.entity.npc.VillagerProfession;
 
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 
 public class VillageGuardsManager {
     private final Village village;
@@ -21,6 +22,24 @@ public class VillageGuardsManager {
 
     public static EquipmentSet getEquipmentFor(InteractionHand dominantHand, EquipmentSet rightSet, EquipmentSet leftSet) {
         return dominantHand == InteractionHand.OFF_HAND && leftSet != null ? leftSet : rightSet;
+    }
+
+    public static EquipmentSet getGuardEquipmentForLevel(int level, InteractionHand dominantHand) {
+        EquipmentSet fallback = switch (clampEquipmentLevel(level)) {
+            case 2 -> EquipmentSet.GUARD_2;
+            case 1 -> EquipmentSet.GUARD_1;
+            default -> getEquipmentFor(dominantHand, EquipmentSet.GUARD_0, EquipmentSet.GUARD_0_LEFT);
+        };
+        return getConfiguredEquipment(Config.getInstance().guardEquipment, level, fallback);
+    }
+
+    public static EquipmentSet getArcherEquipmentForLevel(int level, InteractionHand dominantHand) {
+        EquipmentSet fallback = switch (clampEquipmentLevel(level)) {
+            case 2 -> getEquipmentFor(dominantHand, EquipmentSet.ARCHER_2, EquipmentSet.ARCHER_2_LEFT);
+            case 1 -> getEquipmentFor(dominantHand, EquipmentSet.ARCHER_1, EquipmentSet.ARCHER_1_LEFT);
+            default -> getEquipmentFor(dominantHand, EquipmentSet.ARCHER_0, EquipmentSet.ARCHER_0_LEFT);
+        };
+        return getConfiguredEquipment(Config.getInstance().archerEquipment, level, fallback);
     }
 
     public void spawnGuards(ServerLevel world) {
@@ -54,26 +73,34 @@ public class VillageGuardsManager {
     }
 
     public EquipmentSet getGuardEquipment(VillagerProfession profession, InteractionHand dominantHand) {
+        int villageLevel = getVillageEquipmentLevel();
         if (profession == ProfessionsMCA.ARCHER) {
-            if (village.hasBuilding("armory")) {
-                if (village.hasBuilding("blacksmith")) {
-                    return getEquipmentFor(dominantHand, EquipmentSet.ARCHER_2, EquipmentSet.ARCHER_2_LEFT);
-                } else {
-                    return getEquipmentFor(dominantHand, EquipmentSet.ARCHER_1, EquipmentSet.ARCHER_1_LEFT);
-                }
-            } else {
-                return getEquipmentFor(dominantHand, EquipmentSet.ARCHER_0, EquipmentSet.ARCHER_0_LEFT);
-            }
+            return getArcherEquipmentForLevel(villageLevel, dominantHand);
         } else {
-            if (village.hasBuilding("armory")) {
-                if (village.hasBuilding("blacksmith")) {
-                    return EquipmentSet.GUARD_2;
-                } else {
-                    return EquipmentSet.GUARD_1;
-                }
-            } else {
-                return getEquipmentFor(dominantHand, EquipmentSet.GUARD_0, EquipmentSet.GUARD_0_LEFT);
-            }
+            return getGuardEquipmentForLevel(villageLevel, dominantHand);
         }
+    }
+
+    private int getVillageEquipmentLevel() {
+        int level = 0;
+        if (village.hasBuilding("armory")) {
+            level++;
+        }
+        if (village.hasBuilding("blacksmith")) {
+            level++;
+        }
+        return level;
+    }
+
+    private static EquipmentSet getConfiguredEquipment(Map<String, EquipmentSet> config, int level, EquipmentSet fallback) {
+        if (config == null) {
+            return fallback;
+        }
+
+        return config.getOrDefault(Integer.toString(clampEquipmentLevel(level)), fallback);
+    }
+
+    private static int clampEquipmentLevel(int level) {
+        return Math.max(0, Math.min(2, level));
     }
 }

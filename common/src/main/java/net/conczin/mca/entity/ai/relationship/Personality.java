@@ -29,10 +29,17 @@ public enum Personality {
     private static final RandomSource random = RandomSource.create();
 
     public static Personality getRandom() {
+        return getRandom(AgeState.ADULT);
+    }
+
+    public static Personality getRandom(AgeState ageState) {
         List<Personality> validList = new ArrayList<>();
 
         for (Personality personality : Personality.values()) {
             if (personality != UNASSIGNED) {
+                if (personality == FLIRTY && (ageState == AgeState.BABY || ageState == AgeState.TODDLER || ageState == AgeState.CHILD)) {
+                    continue;
+                }
                 validList.add(personality);
             }
         }

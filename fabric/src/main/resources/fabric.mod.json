@@ -21,13 +21,12 @@
     ],
     "client": [
       "net.conczin.mca.fabric.MCAFabricClient"
-    ],
-    "fabric-datagen": [
-      "net.conczin.mca.fabric.datagen.CribDatagen"
     ]
   },
+  "accessWidener": "${mod_id}.classtweaker",
   "mixins": [
-    "${mod_id}.mixins.json"
+    "${mod_id}.mixins.json",
+    "${mod_id}.journeymap.mixins.json"
   ],
   "depends": {
     "fabricloader": ">=0.14",
