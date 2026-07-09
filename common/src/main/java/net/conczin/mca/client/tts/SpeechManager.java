@@ -26,10 +26,10 @@ import java.util.Collection;
 import java.util.Locale;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ThreadLocalRandom;
 
 public class SpeechManager {
     public static final SpeechManager INSTANCE = new SpeechManager();
+    private static final String PREVIEW_PHRASE = "dialogue.main/1";
 
     private final Minecraft client;
     private final LimitedLinkedHashMap<UUID, EntityBoundSoundInstance> currentlyPlaying = new LimitedLinkedHashMap<>(10);
@@ -60,16 +60,13 @@ public class SpeechManager {
 
     public void playPreview(VillagerEntityMCA villager) {
         stopPreview(villager);
-        String phrase = VoicePreviewSamples.random(ThreadLocalRandom.current());
         if (Config.getInstance().enableOnlineTTS) {
-            speak(phrase, villager.getUUID(), villager, true);
-        } else {
-            tryPlayVoicePackSound(phrase, villager.getUUID(), villager);
+            speak(PREVIEW_PHRASE, villager.getUUID(), villager, true);
         }
     }
 
     public boolean canPreviewVoiceTone() {
-        return Config.getInstance().enableOnlineTTS || hasVoicePackSounds();
+        return Config.getInstance().enableOnlineTTS;
     }
 
     public void stopPreview(VillagerEntityMCA villager) {
@@ -166,11 +163,6 @@ public class SpeechManager {
         currentlyPlaying.put(sender, instance);
         client.getSoundManager().play(instance);
         return true;
-    }
-
-    private boolean hasVoicePackSounds() {
-        return client.getSoundManager().getAvailableSounds().stream()
-                .anyMatch(sound -> sound.getNamespace().equals("mca_voices"));
     }
 
     public void tick(Minecraft client) {
