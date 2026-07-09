@@ -1,8 +1,8 @@
 plugins {
     id 'java-library'
-    id 'architectury-plugin' version '3.5-SNAPSHOT'
-    id 'dev.architectury.loom' version '1.17.483' apply false
-    id "io.github.pacifistmc.forgix" version "1.2.9"
+    id 'architectury-plugin' version '3.5.167'
+    id 'dev.architectury.loom' version '1.17.477' apply false
+    id "io.github.pacifistmc.forgix" version "2.0.0-SNAPSHOT.5.1"
 }
 
 architectury {
@@ -39,9 +39,6 @@ allprojects {
     description = rootProject.displayname
     base.archivesName = rootProject.name
     version = getAppVersion()
-
-    build.finalizedBy(mergeJars)
-    assemble.finalizedBy(mergeJars)
 
     java {
         withSourcesJar()
@@ -85,19 +82,21 @@ allprojects {
 
 forgix {
     group = rootProject.groupId
-    mergedJarName = "${rootProject.name}-${rootProject.version}-universal.jar"
-    outputDir = "build/libs"
+    autoRun = true
+
+    archiveClassifier = "universal"
+    archiveVersion = rootProject.version.toString()
+    destinationDirectory = layout.projectDirectory.dir("build/libs")
 
     forge {
-        jarLocation = "build/libs/${rootProject.name}-${rootProject.version}.jar"
-        mixin "mca.mixin.json"
+        inputJar = project(":forge").tasks.remapJar.archiveFile
     }
 
     fabric {
-        jarLocation = "build/libs/${rootProject.name}-${rootProject.version}.jar"
+        inputJar = project(":fabric").tasks.remapJar.archiveFile
     }
 
     quilt {
-        jarLocation = "build/libs/${rootProject.name}-${rootProject.version}.jar"
+        inputJar = project(":quilt").tasks.remapJar.archiveFile
     }
 }
