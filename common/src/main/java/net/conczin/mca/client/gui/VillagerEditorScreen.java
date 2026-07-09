@@ -1903,7 +1903,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                 if (shouldPrintPlayerHint() && villagerUUID.equals(playerUUID) && getSelectedPlayerModel() != VillagerLike.PlayerModel.VILLAGER) {
                     final PoseStack matrices = context.pose();
                     matrices.pushPose();
-                    matrices.translate(x, y - 127, 0);
+                    matrices.translate((presetsButton.getX() + presetsButton.getWidth() + exportSkinButton.getX()) / 2.0F, presetsButton.getY() + presetsButton.getHeight() + 6, 0);
                     matrices.scale(0.5f, 0.5f, 0.5f);
                     context.drawCenteredString(font, Component.translatable("gui.villager_editor.model_hint"), 0, 0, 0xAAFFFFFF);
                     matrices.popPose();

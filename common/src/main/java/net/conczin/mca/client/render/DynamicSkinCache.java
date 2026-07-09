@@ -34,7 +34,7 @@ public final class DynamicSkinCache {
         protected boolean removeEldestEntry(Map.Entry<SkinKey, ResourceLocation> eldest) {
             boolean remove = super.removeEldestEntry(eldest);
             if (remove) {
-                Minecraft.getInstance().getTextureManager().release(eldest.getValue());
+                releaseDynamicTexture(eldest.getValue());
                 INCOMPLETE_CACHE.remove(eldest.getKey());
             }
             return remove;
@@ -45,7 +45,7 @@ public final class DynamicSkinCache {
         protected boolean removeEldestEntry(Map.Entry<SkinKey, ResourceLocation> eldest) {
             boolean remove = super.removeEldestEntry(eldest);
             if (remove) {
-                Minecraft.getInstance().getTextureManager().release(eldest.getValue());
+                releaseDynamicTexture(eldest.getValue());
                 INCOMPLETE_FACE_CACHE.remove(eldest.getKey());
             }
             return remove;
@@ -53,6 +53,15 @@ public final class DynamicSkinCache {
     };
 
     private DynamicSkinCache() {
+    }
+
+    public static void clear() {
+        CACHE.values().forEach(DynamicSkinCache::releaseDynamicTexture);
+        FACE_CACHE.values().forEach(DynamicSkinCache::releaseDynamicTexture);
+        CACHE.clear();
+        FACE_CACHE.clear();
+        INCOMPLETE_CACHE.clear();
+        INCOMPLETE_FACE_CACHE.clear();
     }
 
     public static ResourceLocation getOrCreateStitchedSkin(Entity entity) {
@@ -65,7 +74,7 @@ public final class DynamicSkinCache {
         ResourceLocation cachedId = CACHE.get(key);
         if (cachedId != null) {
             if (!missingAssets && INCOMPLETE_CACHE.remove(key)) {
-                Minecraft.getInstance().getTextureManager().release(cachedId);
+                releaseDynamicTexture(cachedId);
                 CACHE.remove(key);
             } else {
                 return cachedId;
@@ -93,7 +102,7 @@ public final class DynamicSkinCache {
         ResourceLocation cachedId = FACE_CACHE.get(key);
         if (cachedId != null) {
             if (!missingAssets && INCOMPLETE_FACE_CACHE.remove(key)) {
-                Minecraft.getInstance().getTextureManager().release(cachedId);
+                releaseDynamicTexture(cachedId);
                 FACE_CACHE.remove(key);
             } else {
                 return cachedId;
@@ -154,21 +163,35 @@ public final class DynamicSkinCache {
                 }
 
                 NativeImage scaled = new NativeImage(24, 24, true);
-                for (int x = 0; x < 24; x++) {
-                    for (int y = 0; y < 24; y++) {
-                        scaled.setPixelRGBA(x, y, face.getPixelRGBA(x / 3, y / 3));
+                boolean registered = false;
+                try {
+                    for (int x = 0; x < 24; x++) {
+                        for (int y = 0; y < 24; y++) {
+                            scaled.setPixelRGBA(x, y, face.getPixelRGBA(x / 3, y / 3));
+                        }
+                    }
+
+                    ResourceLocation id = MCA.locate("dynamic/icon/" + key.id());
+                    Minecraft.getInstance().getTextureManager().register(id, new DynamicTexture(scaled));
+                    registered = true;
+                    return id;
+                } finally {
+                    if (!registered) {
+                        scaled.close();
                     }
                 }
-
-                ResourceLocation id = MCA.locate("dynamic/icon/" + key.id());
-                Minecraft.getInstance().getTextureManager().register(id, new DynamicTexture(scaled));
-                return id;
             } finally {
                 face.close();
             }
-        } catch (Throwable exception) {
+        } catch (Exception exception) {
             MCA.LOGGER.error("Failed to generate dynamic MCA face icon texture", exception);
             return null;
+        }
+    }
+
+    private static void releaseDynamicTexture(ResourceLocation id) {
+        if (id.getNamespace().equals(MCA.MOD_ID) && id.getPath().startsWith("dynamic/")) {
+            Minecraft.getInstance().getTextureManager().release(id);
         }
     }
 
@@ -208,7 +231,6 @@ public final class DynamicSkinCache {
 
     private record SkinKey(
             String gender,
-            boolean female,
             boolean albinism,
             boolean heterochromia,
             boolean rainbowEyes,
@@ -238,7 +260,6 @@ public final class DynamicSkinCache {
         static SkinKey from(Entity entity, VillagerLike<?> villager) {
             return new SkinKey(
                     villager.getGenetics().getGender().getDataName(),
-                    villager.getGenetics().getGender().getDataName().equals("female"),
                     villager.getTraits().hasTrait(Traits.ALBINISM),
                     villager.getTraits().hasTrait(Traits.HETEROCHROMIA),
                     villager.getTraits().hasTrait(Traits.RAINBOW_EYES),

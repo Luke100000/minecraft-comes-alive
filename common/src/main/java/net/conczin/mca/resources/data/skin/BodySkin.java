@@ -10,10 +10,6 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.GsonHelper;
 
 public class BodySkin extends SkinListEntry {
-    public static final Codec<Definition> DEFINITION_CODEC = RecordCodecBuilder.create(instance -> instance.group(
-            GENDER_CODEC.optionalFieldOf("gender", Gender.NEUTRAL).forGetter(Definition::gender),
-            Codec.FLOAT.optionalFieldOf("chance", 1.0f).forGetter(Definition::chance)
-    ).apply(instance, Definition::new));
     public static final Codec<BodySkin> CODEC = RecordCodecBuilder.create(instance -> instance.group(
             ResourceLocation.CODEC.fieldOf("id").forGetter(BodySkin::getIdentifierValue),
             GENDER_CODEC.optionalFieldOf("gender", Gender.NEUTRAL).forGetter(BodySkin::getGender),
@@ -36,9 +32,4 @@ public class BodySkin extends SkinListEntry {
         super(identifier, gender, chance);
     }
 
-    public record Definition(Gender gender, float chance) {
-        public BodySkin create(String identifier, Gender fallbackGender) {
-            return new BodySkin(identifier, resolveGender(gender, fallbackGender), chance);
-        }
-    }
 }

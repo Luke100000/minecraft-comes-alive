@@ -23,11 +23,6 @@ public class LayeredHair extends SkinListEntry {
         return DataResult.success(category);
     }, Category::getId);
     public static final StreamCodec<ByteBuf, Category> CATEGORY_STREAM_CODEC = ByteBufCodecs.STRING_UTF8.map(Category::byName, Category::getId);
-    public static final Codec<Definition> DEFINITION_CODEC = RecordCodecBuilder.create(instance -> instance.group(
-            GENDER_CODEC.optionalFieldOf("gender", Gender.NEUTRAL).forGetter(Definition::gender),
-            CATEGORY_CODEC.optionalFieldOf("category", Category.BASE).forGetter(Definition::category),
-            Codec.FLOAT.optionalFieldOf("chance", 1.0f).forGetter(Definition::chance)
-    ).apply(instance, Definition::new));
     public static final Codec<LayeredHair> CODEC = RecordCodecBuilder.create(instance -> instance.group(
             ResourceLocation.CODEC.fieldOf("id").forGetter(LayeredHair::getIdentifierValue),
             GENDER_CODEC.optionalFieldOf("gender", Gender.NEUTRAL).forGetter(LayeredHair::getGender),
@@ -117,10 +112,4 @@ public class LayeredHair extends SkinListEntry {
         }
     }
 
-    public record Definition(Gender gender, Category category, float chance) {
-        public LayeredHair create(String identifier, Gender fallbackGender, Category fallbackCategory) {
-            Category resolvedCategory = category == null ? fallbackCategory : category;
-            return new LayeredHair(identifier, resolveGender(gender, fallbackGender), resolvedCategory, chance);
-        }
-    }
 }

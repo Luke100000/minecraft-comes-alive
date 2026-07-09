@@ -1,6 +1,7 @@
 package net.conczin.mca.client.resources;
 
 import net.conczin.mca.MCA;
+import net.conczin.mca.client.render.DynamicSkinCache;
 import net.conczin.mca.client.render.layer.FaceLayer;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.resources.ResourceManager;
@@ -16,5 +17,6 @@ public final class GeneratedEyeTextureReloadListener implements ResourceManagerR
     @Override
     public void onResourceManagerReload(ResourceManager manager) {
         FaceLayer.clearGeneratedEyeTextureCache();
+        DynamicSkinCache.clear();
     }
 }
