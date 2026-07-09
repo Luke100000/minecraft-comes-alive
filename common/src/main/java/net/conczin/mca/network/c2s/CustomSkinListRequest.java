@@ -23,7 +23,7 @@ import net.minecraft.server.level.ServerPlayer;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
-import java.util.function.Function;
+import java.util.function.BiPredicate;
 
 public record CustomSkinListRequest() implements HandleablePayload {
     public static final CustomPacketPayload.Type<CustomSkinListRequest> TYPE = new CustomPacketPayload.Type<>(MCA.locate("custom_skin_list_request"));
@@ -32,10 +32,10 @@ public record CustomSkinListRequest() implements HandleablePayload {
     @Override
     public void handleServer(ServerPlayer player) {
         BuiltInSkinCatalog.Catalog builtIn = BuiltInSkinCatalog.get();
-        HashMap<String, Clothing> clothing = delta(ClothingList.getInstance() == null ? Map.of() : ClothingList.getInstance().clothing, builtIn.clothing(), CustomSkinListRequest::clothingSignature);
-        HashMap<String, BodySkin> bodySkins = delta(BodySkinList.getInstance() == null ? Map.of() : BodySkinList.getInstance().skins, builtIn.bodySkins(), CustomSkinListRequest::bodySkinSignature);
-        HashMap<String, LayeredHair> layeredHair = delta(LayeredHairList.getInstance() == null ? Map.of() : LayeredHairList.getInstance().hair, builtIn.layeredHair(), CustomSkinListRequest::layeredHairSignature);
-        HashMap<String, HairStyle> hairStyles = delta(HairStyleList.getInstance() == null ? Map.of() : HairStyleList.getInstance().styles, builtIn.hairStyles(), CustomSkinListRequest::hairStyleSignature);
+        HashMap<String, Clothing> clothing = delta(ClothingList.getInstance() == null ? Map.of() : ClothingList.getInstance().clothing, builtIn.clothing(), CustomSkinListRequest::sameClothing);
+        HashMap<String, BodySkin> bodySkins = delta(BodySkinList.getInstance() == null ? Map.of() : BodySkinList.getInstance().skins, builtIn.bodySkins(), CustomSkinListRequest::sameBodySkin);
+        HashMap<String, LayeredHair> layeredHair = delta(LayeredHairList.getInstance() == null ? Map.of() : LayeredHairList.getInstance().hair, builtIn.layeredHair(), CustomSkinListRequest::sameLayeredHair);
+        HashMap<String, HairStyle> hairStyles = delta(HairStyleList.getInstance() == null ? Map.of() : HairStyleList.getInstance().styles, builtIn.hairStyles(), CustomSkinListRequest::sameHairStyle);
         HashMap<String, Hair> hair = new HashMap<>(CustomClothingManager.getHair().getEntries());
 
         clothing.putAll(CustomClothingManager.getClothing().getEntries());
@@ -47,37 +47,42 @@ public record CustomSkinListRequest() implements HandleablePayload {
         return TYPE;
     }
 
-    private static <T> HashMap<String, T> delta(Map<String, T> effective, Map<String, T> builtIn, Function<T, String> signature) {
+    private static <T> HashMap<String, T> delta(Map<String, T> effective, Map<String, T> builtIn, BiPredicate<T, T> matches) {
         HashMap<String, T> result = new HashMap<>();
         effective.forEach((key, value) -> {
             T builtInValue = builtIn.get(key);
-            if (builtInValue == null || !Objects.equals(signature.apply(value), signature.apply(builtInValue))) {
+            if (builtInValue == null || !matches.test(value, builtInValue)) {
                 result.put(key, value);
             }
         });
         return result;
     }
 
-    private static String clothingSignature(Clothing clothing) {
-        return clothing.getIdentifier() + "|" + clothing.toJson();
+    private static boolean sameClothing(Clothing left, Clothing right) {
+        return left.getGender() == right.getGender()
+                && Objects.equals(left.profession, right.profession)
+                && left.exclude == right.exclude
+                && left.temperature == right.temperature;
     }
 
-    private static String bodySkinSignature(BodySkin bodySkin) {
-        return bodySkin.getIdentifier() + "|" + bodySkin.getGender().getDataName() + "|" + bodySkin.getChance();
+    private static boolean sameBodySkin(BodySkin left, BodySkin right) {
+        return left.getGender() == right.getGender()
+                && Float.compare(left.getChance(), right.getChance()) == 0;
     }
 
-    private static String layeredHairSignature(LayeredHair hair) {
-        return hair.getIdentifier() + "|" + hair.toJson();
+    private static boolean sameLayeredHair(LayeredHair left, LayeredHair right) {
+        return left.getGender() == right.getGender()
+                && left.getCategory() == right.getCategory()
+                && Float.compare(left.getChance(), right.getChance()) == 0;
     }
 
-    private static String hairStyleSignature(HairStyle style) {
-        return style.getIdentifier()
-                + "|" + style.getGender().getDataName()
-                + "|" + style.getChance()
-                + "|" + style.base()
-                + "|" + style.bangs()
-                + "|" + style.back()
-                + "|" + style.front()
-                + "|" + style.extra();
+    private static boolean sameHairStyle(HairStyle left, HairStyle right) {
+        return left.getGender() == right.getGender()
+                && Float.compare(left.getChance(), right.getChance()) == 0
+                && Objects.equals(left.base(), right.base())
+                && Objects.equals(left.bangs(), right.bangs())
+                && Objects.equals(left.back(), right.back())
+                && Objects.equals(left.front(), right.front())
+                && Objects.equals(left.extra(), right.extra());
     }
 }

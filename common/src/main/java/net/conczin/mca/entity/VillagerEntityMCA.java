@@ -634,7 +634,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         Entity attacker = source.getEntity();
 
         // Notify the surrounding guards when a villager is attacked. Yoinks!
-        if (!level().isClientSide && attacker instanceof LivingEntity livingEntity && !isHostile() && !isFriend(attacker.getType())) {
+        if (!level().isClientSide() && attacker instanceof LivingEntity livingEntity && !isHostile() && !isFriend(attacker.getType())) {
             int victimBountyBeforeHit = getSmallBounty();
 
             // remember the specific attacker
