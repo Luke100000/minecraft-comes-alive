@@ -23,7 +23,8 @@ abstract class MixinAbstractArrow {
     )
     @SuppressWarnings("deprecation")
     private boolean mca$allowMcaArcherArrowsThroughHurtCooldown(Entity target, DamageSource source, float damage, Operation<Boolean> original) {
-        if (!(target instanceof LivingEntity livingTarget) || !mca$isMcaArcherArrow()) {
+        VillagerEntityMCA archer = mca$getMcaArcherOwner();
+        if (!(target instanceof LivingEntity livingTarget) || archer == null) {
             return original.call(target, source, damage);
         }
 
@@ -32,12 +33,19 @@ abstract class MixinAbstractArrow {
         }
 
         livingTarget.invulnerableTime = 0;
-        return original.call(target, source, damage);
+        boolean hurt = original.call(target, source, damage);
+        if (hurt) {
+            archer.onRangedAttackLanded(target);
+        }
+        return hurt;
     }
 
     @Unique
-    private boolean mca$isMcaArcherArrow() {
+    private VillagerEntityMCA mca$getMcaArcherOwner() {
         Entity owner = ((AbstractArrow) (Object) this).getOwner();
-        return owner instanceof VillagerEntityMCA villager && villager.getProfession() == ProfessionsMCA.ARCHER;
+        if (owner instanceof VillagerEntityMCA villager && villager.getProfession() == ProfessionsMCA.ARCHER) {
+            return villager;
+        }
+        return null;
     }
 }
