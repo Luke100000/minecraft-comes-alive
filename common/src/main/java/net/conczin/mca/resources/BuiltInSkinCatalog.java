@@ -26,7 +26,7 @@ import java.util.Map;
 
 public final class BuiltInSkinCatalog {
     private static final Codec<Map<String, HairStyle.Definition>> HAIR_STYLE_FILE_CODEC = Codec.unboundedMap(Codec.STRING, HairStyle.DEFINITION_CODEC);
-    private static final List<String> BODY_SKIN_FILES = List.of("skin", "female", "male");
+    private static final List<String> BODY_SKIN_FILES = List.of("skins", "female", "male");
     private static final List<String> GENDERED_SKIN_FILES = List.of("skin", "female", "male", "neutral");
     private static final List<String> HAIR_LAYER_FILES = List.of("back", "bangs", "base", "extra", "front");
     private static final Catalog CATALOG = load();
