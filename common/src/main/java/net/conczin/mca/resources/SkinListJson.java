@@ -57,7 +57,7 @@ final class SkinListJson {
      * Resolves gender for both the old split-file layout:
      *   skins/body/female.json + skins/body/male.json
      * and the merged layout:
-     *   skins/body/skin.json with per-entry gender metadata.
+     *   skins/body/skins.json with per-entry gender metadata.
      *
      * This also keeps old numeric gender metadata working for list types that
      * predate the newer string codecs.
