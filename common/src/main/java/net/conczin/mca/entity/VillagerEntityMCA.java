@@ -268,6 +268,11 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     }
 
     @Override
+    public HumanoidArm getMainArm() {
+        return getTraits().hasTrait(Traits.LEFT_HANDED) ? HumanoidArm.LEFT : HumanoidArm.RIGHT;
+    }
+
+    @Override
     public BreedableRelationship getRelationships() {
         return relations;
     }
@@ -388,10 +393,11 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
     @Override
     public boolean doHurtTarget(ServerLevel level, Entity target) {
-        // player just get a beating
-        attackedEntity(target);
-
-        return super.doHurtTarget(level, target);
+        boolean hurt = super.doHurtTarget(level, target);
+        if (hurt) {
+            attackedEntity(target);
+        }
+        return hurt;
     }
 
     private void attackedEntity(Entity target) {
@@ -594,7 +600,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
             if (source.getEntity() instanceof Player player) {
                 if (level().getGameTime() - lastHit > 40) {
                     lastHit = level().getGameTime();
-                    if ((!isGuard() || getSmallBounty() == 0) && requestCooldown()) {
+                    if (!isGuard() && requestCooldown()) {
                         if (getHealth() < getMaxHealth() / 2) {
                             sendChatMessage(player, "villager.badly_hurt");
                         } else {
@@ -624,16 +630,18 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         Entity attacker = source.getEntity();
 
         // Notify the surrounding guards when a villager is attacked. Yoinks!
-        if (attacker instanceof LivingEntity livingEntity && !isHostile() && !isFriend(attacker.getType())) {
+        if (!level().isClientSide && attacker instanceof LivingEntity livingEntity && !isHostile() && !isFriend(attacker.getType())) {
+            int victimBountyBeforeHit = getSmallBounty();
+
             // remember the specific attacker
             getBrain().setMemory(MemoryModuleTypeMCA.HIT_BY_PLAYER, Optional.of(livingEntity));
-            getBrain().setMemory(MemoryModuleTypeMCA.SMALL_BOUNTY, getSmallBounty() + 1);
+            getBrain().setMemory(MemoryModuleTypeMCA.SMALL_BOUNTY, victimBountyBeforeHit + 1);
 
             Vec3 pos = position();
             level().getEntitiesOfClass(VillagerEntityMCA.class, new AABB(pos, pos).inflate(32)).forEach(v -> {
                 if (this.distanceToSqr(v) <= (v.getTarget() == null ? 1024 : 64)) {
                     if (attacker instanceof Player player) {
-                        int bounty = v.getSmallBounty();
+                        int bounty = v == this ? victimBountyBeforeHit : v.getSmallBounty();
                         if (v.isGuard()) {
                             int maxWarning = v.getMaxWarnings(player);
                             if (bounty > maxWarning) {
@@ -641,6 +649,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
                                 v.getBrain().setMemory(MemoryModuleType.ATTACK_TARGET, livingEntity);
                             } else if (bounty == 0 || bounty == maxWarning) {
                                 // just a warning
+                                v.getBrain().eraseMemory(MemoryModuleType.ATTACK_TARGET);
                                 v.sendChatMessage(player, "villager.warning");
                             }
                             v.getBrain().setMemory(MemoryModuleTypeMCA.SMALL_BOUNTY, bounty + 1);
@@ -1435,7 +1444,6 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         }
 
         setTarget(target);
-        attackedEntity(target);
 
         if (isHolding(Items.CROSSBOW)) {
             this.performCrossbowAttack(this, 1.75F);

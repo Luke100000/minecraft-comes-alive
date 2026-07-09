@@ -32,7 +32,8 @@ public class PatrolVillageTask extends Behavior<VillagerEntityMCA> {
 
     @Override
     protected boolean checkExtraStartConditions(ServerLevel world, VillagerEntityMCA entity) {
-        return !InteractTask.shouldRun(entity);
+        return entity.getResidency().getHomeVillage().isPresent()
+               && !InteractTask.shouldRun(entity);
     }
 
     @Override
