@@ -102,12 +102,7 @@ public class BlueprintScreen extends ExtendedScreen {
     }
 
     protected void drawBuildingIcon(DrawContext context, Identifier texture, int x, int y, int u, int v) {
-        final MatrixStack matrices = context.getMatrices();
-        matrices.push();
-        matrices.translate(x - 6.6, y - 6.6, 0);
-        matrices.scale(0.66f, 0.66f, 0.66f);
-        context.drawTexture(texture, 0, 0, u, v, 20, 20);
-        matrices.pop();
+        WidgetUtils.drawBuildingIcon(context, texture, x, y, u, v);
     }
 
     @Override
@@ -243,12 +238,22 @@ public class BlueprintScreen extends ExtendedScreen {
                 catalogButtons.clear();
                 for (BuildingType bt : BuildingTypes.getInstance()) {
                     if (bt.visible()) {
-                        TexturedButtonWidget widget = new TexturedButtonWidget(
-                                row * size + x + 10, col * size + y - 10, 20, 20, bt.iconU(), bt.iconV() + 20, 20, ICON_TEXTURES, 256, 256, button -> {
-                            selectBuilding(bt);
-                            button.active = false;
-                            catalogButtons.forEach(b -> b.active = true);
-                        }, Text.translatable("buildingType." + bt.name()));
+                        net.minecraft.client.gui.widget.ButtonWidget widget;
+                        if (bt.hasIcon()) {
+                            widget = new TexturedButtonWidget(
+                                    row * size + x + 10, col * size + y - 10, 20, 20, bt.iconU(), bt.iconV() + 20, 20, ICON_TEXTURES, 256, 256, button -> {
+                                selectBuilding(bt);
+                                button.active = false;
+                                catalogButtons.forEach(entry -> entry.active = true);
+                            }, Text.translatable("buildingType." + bt.name()));
+                        } else {
+                            widget = new ButtonWidget(
+                                    row * size + x + 10, col * size + y - 10, 20, 20, Text.empty(), button -> {
+                                selectBuilding(bt);
+                                button.active = false;
+                                catalogButtons.forEach(entry -> entry.active = true);
+                            }, Text.translatable("buildingType." + bt.name()));
+                        }
                         catalogButtons.add(addDrawableChild(widget));
 
                         row++;
@@ -422,7 +427,7 @@ public class BlueprintScreen extends ExtendedScreen {
                 WidgetUtils.drawRectangle(context, p0.getX(), p0.getZ(), p1.getX(), p1.getZ(), bt.getColor());
 
                 //icon
-                if (bt.visible()) {
+                if (bt.visible() && bt.hasIcon()) {
                     BlockPos c = building.getCenter();
                     drawBuildingIcon(context, ICON_TEXTURES, c.getX(), c.getZ(), bt.iconU(), bt.iconV());
                 }

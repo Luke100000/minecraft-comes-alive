@@ -243,125 +243,205 @@ public class VillageManager extends PersistentState implements Iterable<Village>
     }
 
     //returns the scan-source blocks of all buildings, used to check for overlaps
-    private Set<BlockPos> getBlockedSet(Village village) {
+    public Set<BlockPos> getBlockedSet(Village village) {
         return village.getBuildings().values().stream()
                 .filter(b -> !b.getBuildingType().grouped())
                 .map(Building::getSourceBlock)
                 .collect(Collectors.toSet());
     }
 
-    //processed a building at given position
-    public Building.validationResult processBuilding(BlockPos pos, boolean enforce, boolean strictScan) {
-        //find the closest village
+    /**
+     * Resolves the village context, occupied scan sources and any existing non-grouped
+     * building that contains the supplied position. This is shared by the preview and
+     * commit paths so both operate on the same overlap information.
+     */
+    public BuildingBlockedResult getBlockedResult(BlockPos pos) {
         Optional<Village> optionalVillage = findNearestVillage(pos, Village.MERGE_MARGIN);
-
-        //check if this might be a grouped building
-        BuildingType groupedBuildingType = getGroupedBuildingType(pos);
-
-        //block existing buildings to prevent overlaps
         Set<BlockPos> blocked = new HashSet<>();
-
-        //look for existing building
-        boolean found = false;
-        List<Integer> toRemove = new LinkedList<>();
+        Building existingBuilding = null;
         if (optionalVillage.isPresent()) {
             Village village = optionalVillage.get();
-
             blocked = getBlockedSet(village);
-            if (groupedBuildingType != null) {
+            for (Building building : village.getBuildings().values()) {
+                if (building.containsPos(pos) && !building.getBuildingType().grouped()) {
+                    existingBuilding = building;
+                    break;
+                }
+            }
+        }
+        return new BuildingBlockedResult(blocked, existingBuilding, optionalVillage.orElse(null));
+    }
+
+    /**
+     * Scans a potential building without mutating village data. The result can be sent
+     * to the client when more than one visible building type matches and committed after
+     * the player chooses a type.
+     */
+    public BuildingScanResult analyzeBuilding(BlockPos pos, boolean strictScan) {
+        BuildingBlockedResult blockResult = getBlockedResult(pos);
+        Building building;
+        if (blockResult.existingBuilding() != null) {
+            building = new Building(blockResult.existingBuilding().getSourceBlock(), blockResult.existingBuilding().isStrictScan());
+        } else {
+            building = new Building(pos, strictScan);
+        }
+        Building.validationResult result = building.validateBuilding(world, blockResult.blocked());
+        List<String> matchingTypes = new ArrayList<>();
+        if (result == Building.validationResult.SUCCESS) {
+            building.getVisibleMatchingTypes().forEach(type -> matchingTypes.add(type.name()));
+        }
+        return new BuildingScanResult(
+                result,
+                building.getSourceBlock(),
+                building.isStrictScan(),
+                building,
+                matchingTypes,
+                blockResult.village()
+        );
+    }
+
+    public Building.validationResult commitBuilding(BuildingScanResult scan, String forcedType) {
+        if (scan.result() != Building.validationResult.SUCCESS) {
+            return scan.result();
+        }
+        if (forcedType != null && !scan.matchesType(forcedType)) {
+            return Building.validationResult.INVALID_TYPE;
+        }
+        if (forcedType == null && scan.isAmbiguous()) {
+            return Building.validationResult.INVALID_TYPE;
+        }
+        return commitBuilding(scan.building(), scan.village(), forcedType);
+    }
+
+    private Building.validationResult commitBuilding(Building building, Village village, String forcedType) {
+        Village targetVillage = village;
+        if (targetVillage == null) {
+            targetVillage = new Village(lastVillageId++, world);
+        }
+
+        Building existing = targetVillage.getBuildings().values().stream()
+                .filter(entry -> entry.getSourceBlock().equals(building.getSourceBlock()))
+                .findFirst()
+                .orElse(null);
+
+        if (existing != null) {
+            existing.getBlocks().clear();
+            existing.getBlocks().putAll(building.getBlocks());
+            existing.setLastScan(world.getTime());
+            if (forcedType != null) {
+                existing.setTypeForced(true);
+                existing.setType(forcedType);
+            } else {
+                existing.setTypeForced(false);
+                existing.determineType();
+            }
+            existing.validateBuilding(world, getBlockedSet(targetVillage));
+        } else {
+            if (forcedType != null) {
+                building.setTypeForced(true);
+                building.setType(forcedType);
+            } else {
+                building.setTypeForced(false);
+                building.determineType();
+            }
+
+            BuildingBlockedResult blockResult = getBlockedResult(building.getSourceBlock());
+            Building.validationResult result = building.validateBuilding(world, blockResult.blocked());
+            if (result != Building.validationResult.SUCCESS) {
+                return result;
+            }
+
+            // The building is valid, but it might be identical to an existing one.
+            if (targetVillage.getBuildings().values().stream().anyMatch(entry -> entry.isIdentical(building))) {
+                return Building.validationResult.IDENTICAL;
+            }
+
+            villages.put(targetVillage.getId(), targetVillage);
+            building.setId(lastBuildingId++);
+            targetVillage.getBuildings().put(building.getId(), building);
+        }
+
+        targetVillage.calculateDimensions();
+        Village finalVillage = targetVillage;
+
+        // Attempt to merge villages whose expanded borders now overlap.
+        villages.values().stream()
+                .filter(candidate -> candidate != finalVillage)
+                .filter(candidate -> candidate.getBox().expand(Village.MERGE_MARGIN).intersects(finalVillage.getBox()))
+                .findAny()
+                .ifPresent(candidate -> {
+                    if (candidate.getPopulation() > finalVillage.getPopulation()) {
+                        merge(candidate, finalVillage);
+                        villages.remove(finalVillage.getId());
+                    } else {
+                        merge(finalVillage, candidate);
+                        villages.remove(candidate.getId());
+                    }
+                });
+
+        markDirty();
+        return Building.validationResult.SUCCESS;
+    }
+
+    //processed a building at given position
+    public Building.validationResult processBuilding(BlockPos pos, boolean enforce, boolean strictScan) {
+        return processBuilding(pos, enforce, strictScan, null);
+    }
+
+    public Building.validationResult processBuilding(BlockPos pos, boolean enforce, boolean strictScan, String forcedType) {
+        // Check first whether this is a grouped building, e.g. a town bell or gravestone.
+        BuildingType groupedBuildingType = getGroupedBuildingType(pos);
+        if (groupedBuildingType != null) {
+            Optional<Village> optionalVillage = findNearestVillage(pos, Village.MERGE_MARGIN);
+            if (optionalVillage.isPresent()) {
+                Village village = optionalVillage.get();
                 String name = groupedBuildingType.name();
                 double range = groupedBuildingType.mergeRange() * groupedBuildingType.mergeRange();
 
-                //add POI to the nearest one
+                // Add the POI to the nearest compatible grouped building.
                 Optional<Building> building = village.getBuildings().values().stream()
-                        .filter(b -> b.getType().equals(name))
-                        .min((a, b) -> (int)(a.getCenter().getSquaredDistance(pos) - b.getCenter().getSquaredDistance(pos)))
-                        .filter(b -> b.getCenter().getSquaredDistance(pos) < range);
-
+                        .filter(entry -> entry.getType().equals(name))
+                        .min((a, b) -> Double.compare(a.getCenter().getSquaredDistance(pos), b.getCenter().getSquaredDistance(pos)))
+                        .filter(entry -> entry.getCenter().getSquaredDistance(pos) < range);
                 if (building.isPresent()) {
-                    found = true;
                     building.get().addPOI(world, pos);
                     markDirty();
-                }
-            } else {
-                //verify affected buildings
-                for (Building b : village.getBuildings().values()) {
-                    if (b.containsPos(pos)) {
-                        if (!enforce) {
-                            found = true;
-                        }
-                        if ((enforce || world.getTime() - b.getLastScan() > Building.SCAN_COOLDOWN) && b.validateBuilding(world, blocked) != Building.validationResult.SUCCESS) {
-                            toRemove.add(b.getId());
-                        }
-                    }
+                    return Building.validationResult.SUCCESS;
                 }
             }
 
-            //remove buildings, which became invalid for whatever reason
-            for (int id : toRemove) {
-                village.removeBuilding(id);
-                markDirty();
-            }
-
-            //village is empty
-            if (village.getBuildings().isEmpty()) {
-                villages.remove(village.getId());
-                optionalVillage = Optional.empty();
-                markDirty();
-            }
-        }
-
-        //add a new building, if no overlap has been found or the player enforced a full add
-        if (!found && !blocked.contains(pos)) {
-            //create new village
+            // No nearby grouped building exists, so create one in the nearest/new village.
             Village village = optionalVillage.orElse(new Village(lastVillageId++, world));
-
-            //create new building
             Building building = new Building(pos, strictScan);
-            if (groupedBuildingType != null) {
-                //add initial poi
-                building.setType(groupedBuildingType.name());
-                building.addPOI(world, pos);
-            } else {
-                //check its boundaries, count the blocks, etc
-                Building.validationResult result = building.validateBuilding(world, blocked);
-                if (result == Building.validationResult.SUCCESS) {
-                    //the building is valid, but might be identical to an old one with an existing one
-                    if (village.getBuildings().values().stream().anyMatch(b -> b.isIdentical(building))) {
-                        return Building.validationResult.IDENTICAL;
-                    }
-                } else {
-                    //not valid
-                    return result;
-                }
-            }
-
-            //add to building list
+            building.setType(groupedBuildingType.name());
+            building.addPOI(world, pos);
             villages.put(village.getId(), village);
             building.setId(lastBuildingId++);
             village.getBuildings().put(building.getId(), building);
             village.calculateDimensions();
-
-            //attempt to merge
-            villages.values().stream()
-                    .filter(v -> v != village)
-                    .filter(v -> v.getBox().expand(Village.MERGE_MARGIN).intersects(village.getBox()))
-                    .findAny()
-                    .ifPresent(v -> {
-                                if (v.getPopulation() > village.getPopulation()) {
-                                    merge(v, village);
-                                    villages.remove(village.getId());
-                                } else {
-                                    merge(village, v);
-                                    villages.remove(v.getId());
-                                }
-                            }
-                    );
-
             markDirty();
+            return Building.validationResult.SUCCESS;
         }
 
-        return Building.validationResult.SUCCESS;
+        BuildingScanResult scan = analyzeBuilding(pos, strictScan);
+        if (scan.result() != Building.validationResult.SUCCESS) {
+            // Enforced rescans remove a now-invalid existing building just like the legacy path.
+            if (enforce) {
+                BuildingBlockedResult blockResult = getBlockedResult(pos);
+                if (blockResult.existingBuilding() != null) {
+                    Village village = blockResult.village();
+                    if (village != null) {
+                        village.removeBuilding(blockResult.existingBuilding().getId());
+                        if (village.getBuildings().isEmpty()) {
+                            villages.remove(village.getId());
+                        }
+                        markDirty();
+                    }
+                }
+            }
+            return scan.result();
+        }
+        return commitBuilding(scan, forcedType);
     }
 
     public void setBuildingCooldown(int buildingCooldown) {

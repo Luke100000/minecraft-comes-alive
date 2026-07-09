@@ -253,6 +253,7 @@ public class HarvestingTask extends AbstractChoreTask {
         });
     }
 
+    @SuppressWarnings("deprecation")
     private void bonemealCrop(ServerWorld world, VillagerEntityMCA villager, BlockPos pos) {
         if (swapItem(stack -> stack.getItem() instanceof BoneMealItem) == ITEM_READY && BoneMealItem.useOnFertilizable(villager.getEquippedStack(villager.getDominantSlot()), world, pos)) {
             villager.swingHand(villager.getDominantHand());

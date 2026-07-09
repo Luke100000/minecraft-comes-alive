@@ -32,7 +32,8 @@ public class PatrolVillageTask extends MultiTickTask<VillagerEntityMCA> {
 
     @Override
     protected boolean shouldRun(ServerWorld world, VillagerEntityMCA entity) {
-        return !InteractTask.shouldRun(entity);
+        return entity.getResidency().getHomeVillage().isPresent()
+                && !InteractTask.shouldRun(entity);
     }
 
     @Override

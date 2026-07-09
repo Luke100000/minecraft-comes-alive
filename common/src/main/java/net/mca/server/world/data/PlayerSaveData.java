@@ -4,6 +4,7 @@ import net.mca.Config;
 import net.mca.advancement.criterion.CriterionMCA;
 import net.mca.cobalt.network.NetworkHandler;
 import net.mca.entity.EntitiesMCA;
+import net.mca.entity.PlayerDimensions;
 import net.mca.entity.VillagerEntityMCA;
 import net.mca.entity.ai.relationship.EntityRelationship;
 import net.mca.entity.ai.relationship.Gender;
@@ -47,7 +48,9 @@ public class PlayerSaveData extends PersistentState implements EntityRelationshi
     private Optional<Integer> lastSeenVillage = Optional.empty();
 
     private boolean entityDataSet;
+    private boolean overrideVillageRequirements;
     private NbtCompound entityData;
+    private PlayerDimensions.Scale dimensionsScale;
 
     private final List<NbtCompound> inbox = new LinkedList<>();
 
@@ -76,6 +79,7 @@ public class PlayerSaveData extends PersistentState implements EntityRelationshi
 
         lastSeenVillage = nbt.contains("lastSeenVillage", NbtElement.INT_TYPE) ? Optional.of(nbt.getInt("lastSeenVillage")) : Optional.empty();
         entityDataSet = nbt.contains("entityDataSet") && nbt.getBoolean("entityDataSet");
+        overrideVillageRequirements = nbt.contains("overrideVillageRequirements") && nbt.getBoolean("overrideVillageRequirements");
 
         if (nbt.contains("entityData")) {
             entityData = nbt.getCompound("entityData");
@@ -109,16 +113,55 @@ public class PlayerSaveData extends PersistentState implements EntityRelationshi
     }
 
     public NbtCompound getEntityData() {
-        return entityData;
+        return entityData.copy();
     }
 
     public void setEntityDataSet(boolean entityDataSet) {
+        if (this.entityDataSet == entityDataSet) {
+            return;
+        }
         this.entityDataSet = entityDataSet;
         markDirty();
+        refreshPlayerDimensions();
+    }
+
+    public PlayerDimensions.Scale getDimensionsScale() {
+        if (dimensionsScale == null) {
+            dimensionsScale = PlayerDimensions.fromPlayerData(this);
+        }
+        return dimensionsScale;
     }
 
     public void setEntityData(NbtCompound entityData) {
-        this.entityData = entityData;
+        NbtCompound copy = entityData.copy();
+        if (copy.equals(this.entityData)) {
+            return;
+        }
+        this.entityData = copy;
+        dimensionsScale = PlayerDimensions.fromPlayerData(this);
+        markDirty();
+        refreshPlayerDimensions();
+    }
+
+    private void refreshPlayerDimensions() {
+        PlayerEntity player = world.getPlayerByUuid(uuid);
+        if (player instanceof ServerPlayerEntity serverPlayer) {
+            PlayerDimensions.debugRefresh(serverPlayer, "before server player data refresh");
+            serverPlayer.calculateDimensions();
+            PlayerDimensions.debugRefresh(serverPlayer, "after server player data refresh");
+        }
+    }
+
+    public boolean shouldOverrideVillageRequirements() {
+        return overrideVillageRequirements;
+    }
+
+    public boolean isOverrideVillageRequirements() {
+        return overrideVillageRequirements;
+    }
+
+    public void setOverrideVillageRequirements(boolean overrideVillageRequirements) {
+        this.overrideVillageRequirements = overrideVillageRequirements;
         markDirty();
     }
 
@@ -207,7 +250,17 @@ public class PlayerSaveData extends PersistentState implements EntityRelationshi
 
     @Override
     public Gender getGender() {
-        return Gender.byId(getEntityData().getInt("gender"));
+        NbtCompound entityData = getEntityData();
+        NbtCompound mcaData = entityData.contains(VillagerEntityMCA.MCA_DATA_KEY, NbtElement.COMPOUND_TYPE)
+                ? entityData.getCompound(VillagerEntityMCA.MCA_DATA_KEY)
+                : entityData;
+        if (mcaData.contains("Gender")) {
+            return Gender.byId(mcaData.getInt("Gender"));
+        }
+        if (entityData.contains("gender")) {
+            return Gender.byId(entityData.getInt("gender"));
+        }
+        return Gender.UNASSIGNED;
     }
 
     @Override
@@ -228,6 +281,7 @@ public class PlayerSaveData extends PersistentState implements EntityRelationshi
         lastSeenVillage.ifPresent(id -> nbt.putInt("lastSeenVillage", id));
         nbt.put("entityData", entityData);
         nbt.putBoolean("entityDataSet", entityDataSet);
+        nbt.putBoolean("overrideVillageRequirements", overrideVillageRequirements);
         nbt.put("inbox", NbtHelper.fromList(inbox, v -> v));
         return nbt;
     }

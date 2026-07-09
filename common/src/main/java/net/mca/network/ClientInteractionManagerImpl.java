@@ -5,6 +5,7 @@ import net.mca.MCAClient;
 import net.mca.client.book.Book;
 import net.mca.client.book.CivilRegistryBook;
 import net.mca.client.gui.*;
+import net.mca.client.resources.ClientSkinCatalog;
 import net.mca.client.tts.SpeechManager;
 import net.mca.entity.EntitiesMCA;
 import net.mca.entity.VillagerEntityMCA;
@@ -215,7 +216,16 @@ public class ClientInteractionManagerImpl implements ClientInteractionManager {
     @Override
     public void handleSkinListResponse(SkinListResponse message) {
         Screen screen = client.currentScreen;
-        VillagerEditorScreen.setSkinList(message.getClothing(), message.getHair());
+        ClientSkinCatalog.installLegacyServerDelta(message.getClothing(), message.getHair());
+        if (screen instanceof SkinListUpdateListener gui) {
+            gui.skinListUpdatedCallback();
+        }
+    }
+
+    @Override
+    public void handleCustomSkinListResponse(CustomSkinListResponse response) {
+        ClientSkinCatalog.installServerDelta(response.clothing(), response.bodySkins(), response.layeredHair(), response.hairStyles(), response.hair());
+        Screen screen = client.currentScreen;
         if (screen instanceof SkinListUpdateListener gui) {
             gui.skinListUpdatedCallback();
         }
@@ -229,6 +239,7 @@ public class ClientInteractionManagerImpl implements ClientInteractionManager {
     @Override
     public void handleConfigResponse(ConfigResponse message) {
         Config.setServerConfig(message.getConfig());
+        MCAClient.refreshPlayerDataDependentDimensions();
     }
 
     @Override
@@ -239,7 +250,10 @@ public class ClientInteractionManagerImpl implements ClientInteractionManager {
 
     @Override
     public void handleCustomSkinsChangedMessage(CustomSkinsChangedMessage message) {
-        VillagerEditorScreen.setSkinListOutdated();
+        ClientSkinCatalog.markCustomSkinsOutdated();
+        if (client.currentScreen instanceof SkinListUpdateListener) {
+            ClientSkinCatalog.sync();
+        }
     }
 
     @Override
@@ -248,5 +262,10 @@ public class ClientInteractionManagerImpl implements ClientInteractionManager {
         if (screen instanceof ExtendedBookScreen extendedBookScreen && (extendedBookScreen.getBook() instanceof CivilRegistryBook civilRegistryBook)) {
             civilRegistryBook.receive(response.getIndex(), response.getLines());
         }
+    }
+
+    @Override
+    public void handleBuildingPolymorph(BuildingPolymorphMessage message) {
+        client.setScreen(new BuildingPolymorphScreen(message.matchingTypes(), message.scanPos(), message.isRoom()));
     }
 }

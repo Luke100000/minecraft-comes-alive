@@ -57,71 +57,55 @@ import java.util.stream.Stream;
 import static net.mca.client.gui.immersive_library.Api.request;
 
 public class SkinLibraryScreen extends Screen implements SkinListUpdateListener {
+    static final int CLOTHES_H = 7;
+    static final int CLOTHES_V = 2;
+    static final int CLOTHES_PER_PAGE = CLOTHES_H * CLOTHES_V + 1;
     private static final Identifier TEMPLATE_IDENTIFIER = MCA.locate("textures/skin_template.png");
     private static final Identifier EMPTY_IDENTIFIER = MCA.locate("skins/empty.png");
     private static final Identifier CANVAS_IDENTIFIER = MCA.locate("temp");
     private static final float CANVAS_SCALE = 2.35f;
-
+    protected final VillagerEntityMCA villagerVisualization = Objects.requireNonNull(EntitiesMCA.MALE_VILLAGER.get().create(Objects.requireNonNull(MinecraftClient.getInstance().world)));
+    private final List<LiteContent> serverContent = new ArrayList<>();
+    private final ColorSelector color = new ColorSelector();
+    private final VillagerEditorScreen previousScreen;
+    private final List<LiteContent> contents = new LinkedList<>();
     private String filteredString = "";
-    private SortingMode sortingMode = SortingMode.LIKES;
+    private SortingMode sortingMode = SortingMode.RECOMMENDATIONS;
     private boolean filterInvalidSkins = true;
     private boolean moderatorMode = false;
     private boolean filterHair = false;
     private boolean filterClothing = false;
-
-    private final List<LiteContent> serverContent = new ArrayList<>();
     private SubscriptionFilter subscriptionFilter = SubscriptionFilter.LIBRARY;
-
     private User currentUser;
-
     private int selectionPage;
     private LiteContent focusedContent;
     private LiteContent hoveredContent;
     private LiteContent deleteConfirmationContent;
     private LiteContent reportConfirmationContent;
     private Page page;
-
     private String lastFilteredString = "";
     private int lastLoadedPage = -1;
-
     private ButtonWidget pageWidget;
-
     private Workspace workspace;
-
-    private final ColorSelector color = new ColorSelector();
     private int activeMouseButton;
     private int lastPixelMouseX;
     private int lastPixelMouseY;
-
     private float x0, x1, y0, y1;
     private boolean isPanning;
     private boolean hasPanned;
     private double lastMouseX;
     private double lastMouseY;
-
     private int timeSinceLastRebuild;
-
     private Text error;
-
-    private final VillagerEditorScreen previousScreen;
-
-    protected final VillagerEntityMCA villagerVisualization = Objects.requireNonNull(EntitiesMCA.MALE_VILLAGER.get().create(MinecraftClient.getInstance().world));
-
-    static final int CLOTHES_H = 7;
-    static final int CLOTHES_V = 2;
-    static final int CLOTHES_PER_PAGE = CLOTHES_H * CLOTHES_V + 1;
-
     private boolean authenticated = false;
     private boolean awaitingAuthentication = false;
     private boolean isBrowserOpen = false;
     private boolean uploading = false;
     private Thread thread;
-
     private TextFieldWidget textFieldWidget;
     private boolean skipHairWarning;
-
-    private final List<LiteContent> contents = new LinkedList<>();
     private List<LiteContent> libraryContents = new LinkedList<>();
+    private final NbtCompound basePreviewData;
 
     public SkinLibraryScreen() {
         this(null, null);
@@ -140,18 +124,21 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         }
 
         if (villagerVisualization != null) {
-            NbtCompound nbt = new NbtCompound();
-            villagerVisualization.writeCustomDataToNbt(nbt);
-            this.villagerVisualization.readCustomDataFromNbt(nbt);
+            this.villagerVisualization.readCustomDataFromNbt(saveEntityData(villagerVisualization));
         } else {
             assert MinecraftClient.getInstance().player != null;
             VillagerLike<?> villagerLike = CommonVillagerModel.getVillager(MinecraftClient.getInstance().world, MinecraftClient.getInstance().player.getUuid());
             if (villagerLike instanceof VillagerEntityMCA villager) {
-                NbtCompound nbt = new NbtCompound();
-                villager.writeCustomDataToNbt(nbt);
-                this.villagerVisualization.readCustomDataFromNbt(nbt);
+                this.villagerVisualization.readCustomDataFromNbt(saveEntityData(villager));
             }
         }
+        basePreviewData = saveEntityData(this.villagerVisualization);
+    }
+
+    private static NbtCompound saveEntityData(VillagerEntityMCA entity) {
+        NbtCompound nbt = new NbtCompound();
+        entity.writeCustomDataToNbt(nbt);
+        return nbt;
     }
 
     @Override
@@ -257,6 +244,8 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         villagerVisualization.setBreedingAge(0);
         villagerVisualization.calculateDimensions();
 
+        List<Text> tooltip = null;
+
         switch (page) {
             case LIBRARY -> {
                 int i = 0;
@@ -265,14 +254,14 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                         if (contents.size() > i) {
                             LiteContent c = contents.get(i);
 
-                            setDummyTexture(c);
+                            setDummyTexture(villagerVisualization, c);
 
                             int cx = width / 2 + (int) ((x - CLOTHES_H / 2.0 + 0.5 - 0.5 * (y % 2)) * 55);
                             int cy = height / 2 + 15 + (int) ((y - CLOTHES_V / 2.0 + 0.5) * 80);
 
                             if (Math.abs(cx - mouseX) <= 15 && Math.abs(cy - mouseY - 25) <= 24) {
                                 hoveredContent = c;
-                                context.drawTooltip(textRenderer, getMetaDataText(c), mouseX, mouseY);
+                                tooltip = getMetaDataText(c);
                             }
 
                             villagerVisualization.getGenetics().setGender(SkinCache.getMeta(c).map(SkinMeta::getGender).orElse(Gender.MALE).binary());
@@ -348,8 +337,8 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                 matrices.pop();
 
                 //dummy
+                applyBasePreview(villagerVisualization);
                 if (workspace.skinType == SkinType.CLOTHING) {
-                    villagerVisualization.setHair(EMPTY_IDENTIFIER);
                     villagerVisualization.setClothes(CANVAS_IDENTIFIER);
                 } else {
                     villagerVisualization.setHair(CANVAS_IDENTIFIER);
@@ -425,7 +414,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
             }
             case DETAIL -> {
                 //dummy
-                setDummyTexture(focusedContent);
+                setDummyTexture(villagerVisualization, focusedContent);
 
                 int cx = width / 2;
                 int cy = height / 2 + 50;
@@ -441,20 +430,31 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
             }
         }
 
+        super.render(context, mouseX, mouseY, delta);
+
+        if (tooltip != null) {
+            context.drawTooltip(textRenderer, tooltip, mouseX, mouseY);
+        }
+
         if (error != null) {
             context.drawCenteredTextWithShadow(textRenderer, error, width / 2, height / 2, 0xFFFF0000);
         }
-
-        super.render(context, mouseX, mouseY, delta);
     }
 
-    private void setDummyTexture(LiteContent content) {
+    private void setDummyTexture(VillagerEntityMCA preview, LiteContent content) {
+        applyBasePreview(preview);
         if (content.hasTag("clothing")) {
-            villagerVisualization.setHair(EMPTY_IDENTIFIER);
-            villagerVisualization.setClothes(SkinCache.getTextureIdentifier(content));
+            preview.setHair(EMPTY_IDENTIFIER);
+            preview.setClothes(SkinCache.getTextureIdentifier(content));
         } else {
-            villagerVisualization.setHair(SkinCache.getTextureIdentifier(content));
-            villagerVisualization.setClothes(EMPTY_IDENTIFIER);
+            preview.setHair(SkinCache.getTextureIdentifier(content));
+            preview.setClothes(EMPTY_IDENTIFIER);
+        }
+    }
+
+    private void applyBasePreview(VillagerEntityMCA preview) {
+        if (basePreviewData != null) {
+            preview.readCustomDataFromNbt(basePreviewData.copy());
         }
     }
 
@@ -660,10 +660,12 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                     setPage(Page.DETAIL);
                 } else {
                     if (hoveredContent.hasTag("clothing")) {
-                        previousScreen.getVillager().setClothes("immersive_library:" + hoveredContent.contentid());
+                        var villager = previousScreen.getVillager();
+                        villager.setClothes("immersive_library:" + hoveredContent.contentid());
+                        previousScreen.markClothingSelected();
                         returnToPreviousScreen();
                     } else if (hoveredContent.hasTag("hair")) {
-                        previousScreen.getVillager().setHair("immersive_library:" + hoveredContent.contentid());
+                        previousScreen.applyLibraryHair("immersive_library:" + hoveredContent.contentid());
                         returnToPreviousScreen();
                     }
                 }
@@ -772,7 +774,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                 }));
                 setSelectionPage(selectionPage);
 
-                int iconX = width / 2 + 80;
+                int iconX = width / 2 - 170;
 
                 //sorting icons
                 addDrawableChild(new ToggleableTooltipIconButtonWidget(iconX, height / 2 + 82, 6 * 16, 3 * 16,
@@ -789,7 +791,15 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                             sortingMode = SortingMode.NEWEST;
                             loadPage(true);
                         }));
+                addDrawableChild(new ToggleableTooltipIconButtonWidget(iconX + 22 * 2, height / 2 + 82, 14 * 16, 3 * 16,
+                        sortingMode == SortingMode.RECOMMENDATIONS,
+                        Text.translatable("gui.skin_library.sort_recommendations"),
+                        v -> {
+                            sortingMode = SortingMode.RECOMMENDATIONS;
+                            loadPage(true);
+                        }));
 
+                iconX = width / 2 + 50;
                 if (subscriptionFilter == SubscriptionFilter.LIBRARY) {
                     //filter
                     addDrawableChild(new ToggleableTooltipIconButtonWidget(iconX + 22 * 2, height / 2 + 82, 9 * 16, 3 * 16,
@@ -1018,15 +1028,6 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                         v -> {
                             setPage(Page.DETAIL);
                         }));
-
-                if (isModerator()) {
-                    addDrawableChild(new ButtonWidget(width / 2 - 50, height / 2 + 44, 100, 20,
-                            Text.literal("Counter Report"),
-                            v -> {
-                                reportContent(reportConfirmationContent.contentid(), "COUNTER_DEFAULT");
-                                setPage(Page.DETAIL);
-                            }));
-                }
             }
             case EDITOR -> {
                 // name
@@ -1754,8 +1755,8 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
 
     private void refreshServerContent() {
         serverContent.clear();
-        addServerContent(VillagerEditorScreen.getClothing(), "clothing");
-        addServerContent(VillagerEditorScreen.getHair(), "hair");
+        addServerContent(ClientSkinCatalog.clothing(), "clothing");
+        addServerContent(ClientSkinCatalog.hair(), "hair");
     }
 
     public enum Page {
@@ -1781,6 +1782,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
     public enum SortingMode {
         LIKES("likes"),
         NEWEST("date"),
+        RECOMMENDATIONS("recommendations"),
         REPORTS("reports");
 
         public final String order;

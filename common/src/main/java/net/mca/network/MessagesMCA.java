@@ -17,6 +17,8 @@ public interface MessagesMCA {
         NetworkHandler.registerMessage(GetVillageFailedResponse.class);
         NetworkHandler.registerMessage(OpenGuiRequest.class);
         NetworkHandler.registerMessage(ReportBuildingMessage.class);
+        NetworkHandler.registerMessage(ConfirmBuildingPolymorphMessage.class);
+        NetworkHandler.registerMessage(BuildingPolymorphMessage.class);
         NetworkHandler.registerMessage(SaveVillageMessage.class);
         NetworkHandler.registerMessage(GetFamilyTreeRequest.class);
         NetworkHandler.registerMessage(GetFamilyTreeResponse.class);
@@ -42,6 +44,8 @@ public interface MessagesMCA {
         NetworkHandler.registerMessage(PlayerDataRequest.class);
         NetworkHandler.registerMessage(SkinListRequest.class);
         NetworkHandler.registerMessage(SkinListResponse.class);
+        NetworkHandler.registerMessage(CustomSkinListRequest.class);
+        NetworkHandler.registerMessage(CustomSkinListResponse.class);
         NetworkHandler.registerMessage(OpenDestinyGuiRequest.class);
         NetworkHandler.registerMessage(DamageItemMessage.class);
         NetworkHandler.registerMessage(InteractionDialogueQuestionResponse.class);

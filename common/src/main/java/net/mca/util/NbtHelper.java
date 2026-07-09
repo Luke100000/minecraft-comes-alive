@@ -27,6 +27,17 @@ public interface NbtHelper {
         return (T)nbt.get(key);
     }
 
+    static NbtCompound getOrCreateCompound(NbtCompound nbt, String key) {
+        if (!nbt.contains(key, 10)) {
+            nbt.put(key, new NbtCompound());
+        }
+        return nbt.getCompound(key);
+    }
+
+    static NbtCompound getCompoundOrSelf(NbtCompound nbt, String key) {
+        return nbt.contains(key, 10) ? nbt.getCompound(key) : nbt;
+    }
+
     static NbtCompound copyTo(NbtCompound from, NbtCompound to) {
         from.getKeys().forEach(key -> to.put(key, from.get(key)));
         return to;

@@ -30,6 +30,9 @@ public class RelationModule {
         if (Relationship.IS_KID.test(villager, player)) {
             input.add("$villager is $player's child. ");
         }
+        if (Relationship.IS_RELATIVE.test(villager, player)) {
+            input.add("$villager is related to $player. ");
+        }
 
         int hearts = villager.getVillagerBrain().getMemoriesForPlayer(player).getHearts();
         if (hearts < -25) {

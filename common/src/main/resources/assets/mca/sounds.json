@@ -252,13 +252,19 @@
       "mca:villager/female/laugh/laugh4"
     ]
   },
-  "villager.sirben": {
+  "villager.male.sirben": {
     "sounds": [
-      "mca:villager/sirben/sirben1",
-      "mca:villager/sirben/sirben2",
-      "mca:villager/sirben/sirben3",
-      "mca:villager/sirben/sirben4",
-      "mca:villager/sirben/sirben5"
+      "mca:villager/sirben/male/sirben1",
+      "mca:villager/sirben/male/sirben2",
+      "mca:villager/sirben/male/sirben3",
+      "mca:villager/sirben/male/sirben4",
+      "mca:villager/sirben/male/sirben5"
+    ]
+  },
+  "villager.female.sirben": {
+    "sounds": [
+      "mca:villager/sirben/female/sirben1",
+      "mca:villager/sirben/female/sirben2"
     ]
   },
   "silent": {

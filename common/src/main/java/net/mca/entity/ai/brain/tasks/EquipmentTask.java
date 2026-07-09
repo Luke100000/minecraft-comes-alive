@@ -7,9 +7,11 @@ import net.mca.entity.ai.MemoryModuleTypeMCA;
 import net.mca.util.InventoryUtils;
 import net.minecraft.entity.EquipmentSlot;
 import net.minecraft.entity.ai.brain.MemoryModuleState;
+import net.minecraft.entity.ai.brain.MemoryModuleType;
 import net.minecraft.entity.ai.brain.task.MultiTickTask;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
+import net.minecraft.item.Items;
 import net.minecraft.item.RangedWeaponItem;
 import net.minecraft.server.world.ServerWorld;
 
@@ -18,10 +20,14 @@ import java.util.function.Predicate;
 
 public class EquipmentTask extends MultiTickTask<VillagerEntityMCA> {
     private static final int COOLDOWN = 100;
+    private static final int CHECK_INTERVAL = 20;
     private int lastEquipTime;
     private final Predicate<VillagerEntityMCA> condition;
     private final Function<VillagerEntityMCA, EquipmentSet> equipmentSet;
     private boolean lastArmorWearState;
+    private int lastCheckTick = -CHECK_INTERVAL;
+    private boolean cachedConditionResult;
+    private EquipmentSet cachedEquipmentSet;
 
     public EquipmentTask(Predicate<VillagerEntityMCA> condition, Function<VillagerEntityMCA, EquipmentSet> set) {
         super(ImmutableMap.of(MemoryModuleTypeMCA.WEARS_ARMOR.get(), MemoryModuleState.REGISTERED));
@@ -31,16 +37,31 @@ public class EquipmentTask extends MultiTickTask<VillagerEntityMCA> {
 
     @Override
     protected boolean shouldRun(ServerWorld world, VillagerEntityMCA villager) {
-        //armor visibility settings have been changed
+        if (villager.isUsingRecoveryFood()) {
+            return false;
+        }
+
+        // Armor visibility settings have been changed.
         if (lastArmorWearState != villager.getVillagerBrain().getArmorWear()) {
             return true;
         }
 
-        //armor change necessary
+        // Cache potentially expensive equipment predicates.
+        if (villager.age - lastCheckTick >= CHECK_INTERVAL) {
+            lastCheckTick = villager.age;
+            cachedConditionResult = condition.test(villager);
+            cachedEquipmentSet = cachedConditionResult ? equipmentSet.apply(villager) : null;
+        }
+
+        EquipmentSet set = cachedEquipmentSet;
+        if (set != null && isNakedCombatSet(set, villager)) {
+            return false;
+        }
+
         boolean present = villager.getBrain().getOptionalMemory(MemoryModuleTypeMCA.WEARS_ARMOR.get()).isPresent();
-        if (condition.test(villager)) {
+        if (cachedConditionResult) {
             lastEquipTime = villager.age;
-            return !present || equipmentSet.apply(villager).getMainHand() != null && villager.getMainHandStack().isEmpty();
+            return !present || set != null && isMissingRequestedHandItem(villager, set);
         } else if (villager.age - lastEquipTime > COOLDOWN) {
             return present;
         } else {
@@ -67,32 +88,47 @@ public class EquipmentTask extends MultiTickTask<VillagerEntityMCA> {
     protected void run(ServerWorld world, VillagerEntityMCA villager, long time) {
         super.run(world, villager, time);
 
-        lastArmorWearState = villager.getVillagerBrain().getArmorWear();
-        EquipmentSet set = equipmentSet.apply(villager);
-        boolean wear = condition.test(villager);
+        if (villager.isUsingRecoveryFood()) {
+            return;
+        }
 
-        //remember last state
+        lastArmorWearState = villager.getVillagerBrain().getArmorWear();
+        boolean wear = cachedConditionResult;
+        EquipmentSet set = cachedEquipmentSet;
+
+        if ((wear || villager.getVillagerBrain().getArmorWear()) && set == null) {
+            set = equipmentSet.apply(villager);
+            cachedEquipmentSet = set;
+        }
+
+        if (set != null && isNakedCombatSet(set, villager)) {
+            return;
+        }
+
+        // Remember the last equipment state.
         if (wear) {
             villager.getBrain().remember(MemoryModuleTypeMCA.WEARS_ARMOR.get(), true);
         } else {
             villager.getBrain().forget(MemoryModuleTypeMCA.WEARS_ARMOR.get());
         }
 
-        //weapon
-        if (wear) {
-            if (set.getMainHand() instanceof RangedWeaponItem) {
+        // Weapon.
+        if (wear && set != null) {
+            if (isRequestedItem(set.getMainHand()) && set.getMainHand() instanceof RangedWeaponItem) {
                 equipBestRanged(villager, set.getMainHand());
-            } else {
+            } else if (isRequestedItem(set.getMainHand())) {
                 equipBestWeapon(villager, set.getMainHand());
+            } else {
+                villager.equipStack(villager.getDominantSlot(), ItemStack.EMPTY);
             }
-            villager.equipStack(villager.getOpposingSlot(), new ItemStack(set.getGetOffHand()));
-        } else {
+            villager.equipStack(villager.getOpposingSlot(), isRequestedItem(set.getGetOffHand()) ? new ItemStack(set.getGetOffHand()) : ItemStack.EMPTY);
+        } else if (!wear) {
             villager.setStackInHand(villager.getDominantHand(), ItemStack.EMPTY);
             villager.setStackInHand(villager.getOpposingHand(), ItemStack.EMPTY);
         }
 
-        //armor
-        if (wear || villager.getVillagerBrain().getArmorWear()) {
+        // Armor.
+        if ((wear || villager.getVillagerBrain().getArmorWear()) && set != null) {
             equipBestArmor(villager, EquipmentSlot.HEAD, set.getHead());
             equipBestArmor(villager, EquipmentSlot.CHEST, set.getChest());
             equipBestArmor(villager, EquipmentSlot.LEGS, set.getLegs());
@@ -104,4 +140,29 @@ public class EquipmentTask extends MultiTickTask<VillagerEntityMCA> {
             villager.equipStack(EquipmentSlot.FEET, ItemStack.EMPTY);
         }
     }
+
+    private static boolean isNakedCombatSet(EquipmentSet set, VillagerEntityMCA villager) {
+        return EquipmentSet.NAKED.equals(set)
+                && villager.getBrain().getOptionalMemory(MemoryModuleType.ATTACK_TARGET).isPresent();
+    }
+
+    private static boolean isMissingRequestedHandItem(VillagerEntityMCA villager, EquipmentSet set) {
+        return isMissingRequestedItem(villager.getEquippedStack(villager.getDominantSlot()), set.getMainHand())
+                || isRequestedItem(set.getGetOffHand()) && villager.getEquippedStack(villager.getOpposingSlot()).isEmpty();
+    }
+
+    private static boolean isMissingRequestedItem(ItemStack equipped, Item requested) {
+        if (!isRequestedItem(requested)) {
+            return false;
+        }
+        if (requested instanceof RangedWeaponItem) {
+            return !(equipped.getItem() instanceof RangedWeaponItem);
+        }
+        return equipped.isEmpty();
+    }
+
+    private static boolean isRequestedItem(Item item) {
+        return item != null && item != Items.AIR;
+    }
+
 }

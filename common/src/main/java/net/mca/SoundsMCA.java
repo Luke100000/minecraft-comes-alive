@@ -54,7 +54,8 @@ public interface SoundsMCA {
     RegistrySupplier<SoundEvent> VILLAGER_MALE_SNORE = register("villager.male.snore");
     RegistrySupplier<SoundEvent> VILLAGER_FEMALE_SNORE = register("villager.female.snore");
 
-    RegistrySupplier<SoundEvent> SIRBEN = register("villager.sirben");
+    RegistrySupplier<SoundEvent> VILLAGER_MALE_SIRBEN = register("villager.male.sirben");
+    RegistrySupplier<SoundEvent> VILLAGER_FEMALE_SIRBEN = register("villager.female.sirben");
 
     RegistrySupplier<SoundEvent> SILENT = register("silent");
 

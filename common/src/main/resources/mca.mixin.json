@@ -4,6 +4,7 @@
   "package": "net.mca.mixin",
   "compatibilityLevel": "JAVA_17",
   "mixins": [
+    "MixinAbstractArrow",
     "MixinAbstractFurnaceBlockEntity",
     "MixinActivity",
     "MixinAdvancementRewards",
@@ -13,17 +14,19 @@
     "MixinEntityType",
     "MixinFlintAndSteelItem",
     "MixinGoatEntity",
-    "MixinHorseBaseEntity",
     "MixinIronGolem",
+    "MixinLivingEntity",
     "MixinMemoryModuleType",
     "MixinMilkBucketItem",
     "MixinPlayerEntity",
+    "MixinPlayerEntityDimensions",
     "MixinPlayerInventory",
     "MixinProtoChunk",
     "MixinScreenHandler",
     "MixinSensorType",
     "MixinServerPlayNetworkHandler",
     "MixinServerWorld",
+    "MixinSynchedEntityData",
     "MixinTranslatableText",
     "MixinVillagerEntity",
     "MixinVillagerEntityInvoker",
@@ -32,8 +35,8 @@
     "MixinZombieVillagerEntity"
   ],
   "client": [
-    "client.MixinArmorFeatureRenderer", "client.MixinGameRenderer", "client.MixinHeldItemFeatureRenderer",
-    "client.MixinLivingEntityRenderer", "client.MixinPlayerEntityClient",
+    "client.MixinArmorFeatureRenderer", "client.MixinEntity", "client.MixinGameRenderer", "client.MixinHeldItemFeatureRenderer",
+    "client.MixinLivingEntityRenderer",
     "client.MixinPlayerEntityRenderer", "client.MixinSoundLoader", "client.MixinTranslationStorage"
   ],
   "injectors": {

@@ -32,7 +32,8 @@
     ]
   },
   "mixins": [
-    "mca.mixin.json"
+    "mca.mixin.json",
+    "mca.journeymap.mixin.json"
   ],
   "depends": {
     "fabricloader": ">=0.14.12",

@@ -36,6 +36,14 @@ public final class Workspace {
     private boolean dirty;
     private boolean dirtySinceSnapshot;
 
+    /**
+     * NativeImage stores colors as ABGR on 1.20.1. Keep editor operations from
+     * swapping red and blue when writing modified pixels back to the image.
+     */
+    private static int packedColor(int alpha, int red, int green, int blue) {
+        return (alpha & 0xFF) << 24 | (blue & 0xFF) << 16 | (green & 0xFF) << 8 | (red & 0xFF);
+    }
+
     public Workspace(NativeImage image) {
         this.currentImage = image;
         this.backendTexture = new NativeImageBackedTexture(currentImage);
@@ -91,7 +99,7 @@ public final class Workspace {
                 int b = currentImage.getBlue(x, y) & 0xFF;
                 int a = currentImage.getOpacity(x, y) & 0xFF;
                 int l = MathHelper.clamp((int) (0.2126 * r + 0.7152 * g + 0.0722 * b), 0, 255);
-                currentImage.setColor(x, y, a << 24 | l << 16 | l << 8 | l);
+                currentImage.setColor(x, y, packedColor(a, l, l, l));
             }
         }
 
@@ -107,7 +115,7 @@ public final class Workspace {
                 int g = MathHelper.clamp((currentImage.getGreen(x, y) & 0xFF) + i, 0, 255);
                 int b = MathHelper.clamp((currentImage.getBlue(x, y) & 0xFF) + i, 0, 255);
                 int a = currentImage.getOpacity(x, y) & 0xFF;
-                currentImage.setColor(x, y, a << 24 | r << 16 | g << 8 | b);
+                currentImage.setColor(x, y, packedColor(a, r, g, b));
             }
         }
 
@@ -138,7 +146,7 @@ public final class Workspace {
                 int g = MathHelper.clamp((int) (((currentImage.getGreen(x, y) & 0xFF) - average) * (1.0f + c) + average), 0, 255);
                 int b = MathHelper.clamp((int) (((currentImage.getBlue(x, y) & 0xFF) - average) * (1.0f + c) + average), 0, 255);
                 int a = currentImage.getOpacity(x, y) & 0xFF;
-                currentImage.setColor(x, y, a << 24 | r << 16 | g << 8 | b);
+                currentImage.setColor(x, y, packedColor(a, r, g, b));
             }
         }
 

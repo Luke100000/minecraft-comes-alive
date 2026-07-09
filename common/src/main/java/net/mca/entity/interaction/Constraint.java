@@ -26,6 +26,9 @@ public enum Constraint implements BiPredicate<VillagerLike<?>, ServerPlayerEntit
     FAMILY("family", Relationship.IS_FAMILY.asConstraint()),
     NOT_FAMILY("!family", Relationship.IS_FAMILY.negate().asConstraint()),
 
+    RELATIVE("relative", Relationship.IS_RELATIVE.asConstraint()),
+    NOT_RELATIVE("!relative", Relationship.IS_RELATIVE.negate().asConstraint()),
+
     BABY("baby", (villager, player) -> villager.getAgeState() == AgeState.BABY),
     NOT_BABY("!baby", (villager, player) -> villager.getAgeState() != AgeState.BABY),
 
@@ -95,6 +98,9 @@ public enum Constraint implements BiPredicate<VillagerLike<?>, ServerPlayerEntit
     HAS_VILLAGE("has_village", (villager, player) -> villager instanceof VillagerEntityMCA mcaVillager && mcaVillager.getResidency().getHomeVillage().isPresent()),
     NOT_HAS_VILLAGE("!has_village", (villager, player) -> villager instanceof VillagerEntityMCA mcaVillager && mcaVillager.getResidency().getHomeVillage().isEmpty()),
 
+    RIDING("riding", (villager, player) -> villager.asEntity().hasVehicle()),
+    NOT_RIDING("!riding", (villager, player) -> !villager.asEntity().hasVehicle()),
+
     HIT_BY("hit_by", (villager, player) -> {
         if (villager instanceof VillagerEntityMCA v) {
             return v.isHitBy(player);
@@ -142,4 +148,3 @@ public enum Constraint implements BiPredicate<VillagerLike<?>, ServerPlayerEntit
                 .collect(Collectors.toList());
     }
 }
-

@@ -260,7 +260,7 @@ public class Building implements Serializable {
                         done.add(n);
 
                         //if not solid, continue
-                        if (state.isAir()) {
+                        if (isPassable(state)) {
                             if (!roofCache.containsKey(n)) {
                                 BlockPos n2 = n;
                                 int maxScanHeight = 16;
@@ -270,7 +270,8 @@ public class Building implements Serializable {
 
                                     //found valid block
                                     BlockState block = world.getBlockState(n2);
-                                    if (!block.isAir() || roofCache.containsKey(n2)) {
+                                    //found valid block
+                                    if (!isPassable(block) || roofCache.containsKey(n2)) {
                                         if (!(roofCache.containsKey(n2) && !roofCache.get(n2)) && !block.isIn(BlockTags.LEAVES)) {
                                             for (int i2 = i; i2 >= 0; i2--) {
                                                 n2 = n2.down();
@@ -328,7 +329,7 @@ public class Building implements Serializable {
                 //count blocks types
                 BlockState blockState = world.getBlockState(p);
                 Block block = blockState.getBlock();
-                if (isBuildingBlock(Registries.BLOCK.getId(block))) {
+                if (isBuildingBlock(blockState)) {
                     if (block instanceof BedBlock) {
                         // TODO: look for better solution for 7.4.0
                         if (blockState.get(BedBlock.PART) == BedPart.HEAD) {
@@ -351,37 +352,65 @@ public class Building implements Serializable {
 
             size = interiorSize;
 
-            //determine type
-            return isTypeForced() || determineType() ? validationResult.SUCCESS : validationResult.INVALID_TYPE;
+            // Determine type. Forced types must still match the scanned building.
+            if (isTypeForced()) {
+                return matchesType(getBuildingType()) ? validationResult.SUCCESS : validationResult.INVALID_TYPE;
+            }
+            return determineType() ? validationResult.SUCCESS : validationResult.INVALID_TYPE;
         }
     }
 
-    private boolean isBuildingBlock(Identifier blockId) {
+    private static boolean isPassable(BlockState state) {
+        return state.isAir() || !state.getFluidState().isEmpty();
+    }
+
+    private boolean isBuildingBlock(BlockState state) {
         for (BuildingType bt : BuildingTypes.getInstance()) {
-            if (bt.matchesBlock(blockId)) {
+            if (bt.matchesBlock(state)) {
                 return true;
             }
         }
         return false;
     }
 
-    public boolean determineType() {
-        int bestPriority = -1;
-        boolean assignedType = false;
+    public boolean matchesType(BuildingType buildingType) {
+        Map<Identifier, List<BlockPos>> available = buildingType.getGroups(blocks);
+        return buildingType.getGroups().entrySet().stream()
+                .noneMatch(entry -> !available.containsKey(entry.getKey()) || available.get(entry.getKey()).size() < entry.getValue());
+    }
 
-        for (BuildingType bt : BuildingTypes.getInstance()) {
-            if (bt.priority() > bestPriority) {
-                //get an overview of the satisfied blocks
-                Map<Identifier, List<BlockPos>> available = bt.getGroups(blocks);
-                boolean valid = bt.getGroups().entrySet().stream().noneMatch(e -> !available.containsKey(e.getKey()) || available.get(e.getKey()).size() < e.getValue());
-                if (valid) {
-                    bestPriority = bt.priority();
-                    type = bt.name();
-                    assignedType = true;
-                }
+    public List<BuildingType> getMatchingTypes() {
+        List<BuildingType> matches = new ArrayList<>();
+        for (BuildingType buildingType : BuildingTypes.getInstance()) {
+            if (!buildingType.grouped() && matchesType(buildingType)) {
+                matches.add(buildingType);
             }
         }
-        return assignedType;
+        matches.sort(Comparator
+                .comparingInt(BuildingType::priority).reversed()
+                .thenComparing(BuildingType::name));
+        return matches;
+    }
+
+    public List<BuildingType> getVisibleMatchingTypes() {
+        List<BuildingType> matches = new ArrayList<>(getMatchingTypes().stream()
+                .filter(buildingType -> buildingType.visible() || buildingType.name().equals("house"))
+                .filter(buildingType -> !buildingType.name().equals("blocked") && !buildingType.name().equals("building"))
+                .toList());
+
+        if (matches.stream().anyMatch(buildingType -> buildingType.name().equals("big_house"))) {
+            matches.removeIf(buildingType -> buildingType.name().equals("house"));
+        }
+        return matches;
+    }
+
+    public boolean determineType() {
+        List<BuildingType> matches = getMatchingTypes();
+        if (matches.isEmpty()) {
+            return false;
+        }
+        type = matches.get(0).name();
+        return true;
     }
 
     public String getType() {

@@ -22,6 +22,7 @@ import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
 import net.minecraft.nbt.NbtCompound;
+import net.minecraft.nbt.NbtElement;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.text.Text;
 import net.minecraft.util.ActionResult;
@@ -126,8 +127,9 @@ public class ZombieVillagerEntityMCA extends ZombieVillagerEntity implements Vil
             return SLEEPING_DIMENSIONS;
         }
 
-        float height = getScaleFactor() * 2.0F;
-        float width = getHorizontalScaleFactor() * 0.6F;
+        boolean useRawDimensions = getAgeState() == AgeState.TEEN || getAgeState() == AgeState.ADULT;
+        float height = (useRawDimensions ? getRawVerticalScaleFactor() : getVerticalScaleFactor()) * 2.0F;
+        float width = (useRawDimensions ? getRawHorizontalScaleFactor() : getHorizontalScaleFactor()) * 0.6F;
 
         return EntityDimensions.changing(width, height);
     }
@@ -271,6 +273,21 @@ public class ZombieVillagerEntityMCA extends ZombieVillagerEntity implements Vil
         InventoryUtils.readFromNBT(inventory, nbt);
 
         validateClothes();
+    }
+
+    @Override
+    public void readAdditionalSaveDataForEditor(NbtCompound nbt) {
+        NbtCompound merged = nbt.copy();
+        if (merged.contains(VillagerEntityMCA.MCA_DATA_KEY, NbtElement.COMPOUND_TYPE)) {
+            NbtCompound mcaData = merged.getCompound(VillagerEntityMCA.MCA_DATA_KEY);
+            for (String key : mcaData.getKeys()) {
+                NbtElement value = mcaData.get(key);
+                if (value != null) {
+                    merged.put(key, value.copy());
+                }
+            }
+        }
+        readCustomDataFromNbt(merged);
     }
 
     @Override

@@ -18,6 +18,7 @@ public class CommonConfig implements Serializable {
         this.villagerMaxAgeTime = config.villagerMaxAgeTime;
         this.allowEveryoneToAddContentGlobally = config.allowEveryoneToAddContentGlobally;
         this.allowPlayerSizeAdjustment = config.allowPlayerSizeAdjustment;
+        this.scalePlayerHitboxWithSizeAndWidth = config.scalePlayerHitboxWithSizeAndWidth;
         this.allowBodyCustomizationInDestiny = config.allowBodyCustomizationInDestiny;
         this.allowTraitCustomizationInDestiny = config.allowTraitCustomizationInDestiny;
         this.destinySpawnLocations = config.destinySpawnLocations;
@@ -44,6 +45,11 @@ public class CommonConfig implements Serializable {
      * Allow players to modify their size.
      */
     public boolean allowPlayerSizeAdjustment = true;
+
+    /**
+     * If true, scale player hitboxes from their server-side size and width genetics.
+     */
+    public boolean scalePlayerHitboxWithSizeAndWidth = false;
 
     /**
      * Whether body customization (e.g., height, size) is available in the Destiny editor.

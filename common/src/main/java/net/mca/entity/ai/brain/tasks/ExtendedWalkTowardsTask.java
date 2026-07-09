@@ -23,6 +23,8 @@ import java.util.function.Predicate;
 import java.util.stream.Stream;
 
 public class ExtendedWalkTowardsTask {
+    private static final long RANDOM_POS_RETRY_COOLDOWN = 20L;
+    private static final int MAX_RANDOM_POS_ATTEMPTS = 32;
     @FunctionalInterface
     public interface WalkTargetResolver {
         Optional<BlockPos> resolve(ServerWorld world, VillagerEntityMCA entity, GlobalPos destination);
@@ -46,22 +48,30 @@ public class ExtendedWalkTowardsTask {
                             GlobalPos globalPos = context.getValue(destinationResult);
                             Optional<Long> optional = context.getOptionalValue(cantReachWalkTargetSince);
                             if (globalPos.getDimension() == world.getRegistryKey() && (optional.isEmpty() || world.getTime() - optional.get() <= (long)maxRunTime)) {
+                                if (optional.isPresent() && world.getTime() - optional.get() < RANDOM_POS_RETRY_COOLDOWN) {
+                                    return true;
+                                }
                                 Optional<BlockPos> resolvedTarget = walkTargetResolver.resolve(world, entity, globalPos);
                                 BlockPos targetPos = resolvedTarget.orElse(globalPos.getPos());
                                 int targetCompletionRange = resolvedTarget.isPresent() ? 0 : completionRange;
                                 if (targetPos.getManhattanDistance(entity.getBlockPos()) > maxDistance) {
                                     Vec3d vec3d = null;
-                                    int l = 0;
+                                    for (int l = 0; l < MAX_RANDOM_POS_ATTEMPTS; l++) {
+                                        Vec3d candidate = NoPenaltyTargeting.findTo(entity, 15, 7, Vec3d.ofBottomCenter(targetPos), 1.5707963705062866);
+                                        if (candidate != null && BlockPos.ofFloored(candidate).getManhattanDistance(entity.getBlockPos()) <= maxDistance) {
+                                            vec3d = candidate;
+                                            break;
+                                        }
+                                    }
 
-                                    while (vec3d == null || (BlockPos.ofFloored(vec3d)).getManhattanDistance(entity.getBlockPos()) > maxDistance) {
-                                        vec3d = NoPenaltyTargeting.findTo(entity, 15, 7, Vec3d.ofBottomCenter(targetPos), 1.5707963705062866);
-                                        ++l;
-                                        if (l == 1000) {
+                                    if (vec3d == null) {
+                                        cantReachWalkTargetSince.remember(time);
+                                        if (canGiveUp.test(entity)) {
                                             entity.releaseTicketFor(destination);
                                             destinationResult.forget();
-                                            cantReachWalkTargetSince.remember(time);
-                                            return true;
+                                            onGiveUp.accept(entity);
                                         }
+                                        return true;
                                     }
 
                                     walkTarget.remember(new WalkTarget(vec3d, speed, completionRange));

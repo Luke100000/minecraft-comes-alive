@@ -7,11 +7,21 @@ import net.minecraft.client.render.*;
 import net.minecraft.client.render.entity.EntityRenderDispatcher;
 import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.entity.LivingEntity;
+import net.minecraft.util.Identifier;
 import org.joml.Matrix4f;
 import org.joml.Quaternionf;
 
 // FIXME: 1.20 loses the DrawableHelper attachment, determine if DrawContext can replace this
 public class WidgetUtils {
+    public static void drawBuildingIcon(DrawContext context, Identifier texture, int x, int y, int u, int v) {
+        MatrixStack matrices = context.getMatrices();
+        matrices.push();
+        matrices.translate(x - 6.6, y - 6.6, 0);
+        matrices.scale(0.66f, 0.66f, 0.66f);
+        context.drawTexture(texture, 0, 0, u, v, 20, 20);
+        matrices.pop();
+    }
+
     public static void drawRectangle(DrawContext context, int x0, int y0, int x1, int y1, int color) {
         context.fill(x0 + 1, y0, x1, y0 + 1, color);
         context.fill(x1 - 1, y0 + 1, x1, y1, color);

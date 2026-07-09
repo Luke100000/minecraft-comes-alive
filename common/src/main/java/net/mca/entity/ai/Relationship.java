@@ -17,6 +17,8 @@ import net.mca.server.world.data.FamilyTreeNode;
 import net.mca.server.world.data.GraveyardManager;
 import net.mca.util.WorldUtils;
 import net.mca.util.network.datasync.CDataManager;
+import net.minecraft.block.Block;
+import net.minecraft.block.BlockState;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.ai.brain.BlockPosLookTarget;
 import net.minecraft.entity.ai.brain.MemoryModuleType;
@@ -26,8 +28,10 @@ import net.minecraft.entity.damage.DamageTypes;
 import net.minecraft.entity.mob.MobEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.nbt.NbtCompound;
+import net.minecraft.registry.Registries;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
+import net.minecraft.util.Identifier;
 import net.minecraft.util.math.BlockPos;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -44,6 +48,8 @@ public class Relationship<T extends MobEntity & VillagerLike<T>> implements Enti
     public static final Predicate IS_ENGAGED = (villager, player) -> villager.getRelationships().isEngagedWith(player);
     public static final Predicate IS_PROMISED = (villager, player) -> villager.getRelationships().isPromisedTo(player);
     public static final Predicate IS_RELATIVE = (villager, player) -> villager.getRelationships().getFamilyEntry().isRelative(player);
+    public static final Predicate IS_ROMANTIC_PARTNER = IS_MARRIED.or(IS_ENGAGED).or(IS_PROMISED);
+    public static final Predicate IS_TRUE_RELATIVE = (villager, player) -> IS_RELATIVE.test(villager, player) && !IS_ROMANTIC_PARTNER.test(villager, player);
     public static final Predicate IS_FAMILY = IS_MARRIED.or(IS_RELATIVE);
     public static final Predicate IS_PARENT = (villager, player) -> villager.getRelationships().getFamilyEntry().isParent(player);
     public static final Predicate IS_KID = (villager, player) -> FamilyTree.get(villager.getRelationships().getWorld()).getOrEmpty(player).filter(n -> n.isParent(villager.getRelationships().getUUID())).isPresent();
@@ -82,13 +88,35 @@ public class Relationship<T extends MobEntity & VillagerLike<T>> implements Enti
         return getFamilyTree().getOrCreate(entity);
     }
 
+    private BlockState getConfiguredTombstoneState() {
+        String configuredName = Config.getInstance().defaultHeadstoneType;
+        if (configuredName != null && !configuredName.contains(":")) {
+            configuredName = "mca:" + configuredName;
+        }
+
+        Block block = null;
+        if (configuredName != null) {
+            try {
+                block = Registries.BLOCK.getOrEmpty(new Identifier(configuredName)).orElse(null);
+            } catch (RuntimeException ignored) {
+                // Invalid configuration falls back to MCA's default cross headstone.
+            }
+        }
+
+        if (block instanceof TombstoneBlock) {
+            return block.getDefaultState();
+        }
+        return BlocksMCA.CROSS_HEADSTONE.get().getDefaultState();
+    }
+
     private Optional<BlockPos> placeTombstone(ServerWorld world, BlockPos entityPos) {
+        BlockState state = getConfiguredTombstoneState();
         int range = 2;
         for (int y = -range; y <= range; y++) {
             // prefer center
             BlockPos pos = entityPos.add(0, y, 0);
-            if (world.getBlockState(pos).isAir()) {
-                world.setBlockState(pos, BlocksMCA.CROSS_HEADSTONE.get().getDefaultState());
+            if (world.getBlockState(pos).isAir() && state.canPlaceAt(world, pos)) {
+                world.setBlockState(pos, state);
                 return Optional.ofNullable(pos);
             }
 
@@ -96,8 +124,8 @@ public class Relationship<T extends MobEntity & VillagerLike<T>> implements Enti
                 for (int z = -range; z <= range; z++) {
                     if (x != 0 || z != 0) {
                         pos = entityPos.add(x, y, z);
-                        if (world.getBlockState(pos).isAir()) {
-                            world.setBlockState(pos, BlocksMCA.CROSS_HEADSTONE.get().getDefaultState());
+                        if (world.getBlockState(pos).isAir() && state.canPlaceAt(world, pos)) {
+                            world.setBlockState(pos, state);
                             return Optional.ofNullable(pos);
                         }
                     }

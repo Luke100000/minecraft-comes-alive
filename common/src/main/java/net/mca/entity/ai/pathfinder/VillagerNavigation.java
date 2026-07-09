@@ -14,6 +14,7 @@ public class VillagerNavigation extends MobNavigation {
     protected PathNodeNavigator createPathNodeNavigator(int range) {
         nodeMaker = new VillagerLandPathNodeMaker();
         nodeMaker.setCanEnterOpenDoors(true);
+        nodeMaker.setCanOpenDoors(true);
         return new PathNodeNavigator(nodeMaker, range);
     }
 }

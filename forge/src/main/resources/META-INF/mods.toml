@@ -4,6 +4,9 @@ loaderVersion = "[44,)"
 updateJSONURL = "${update_json_url}"
 license = "GNU"
 
+[[mixins]]
+config = "mca.journeymap.mixin.json"
+
 [[mods]]
 modId = "mca"
 version = "${version}"

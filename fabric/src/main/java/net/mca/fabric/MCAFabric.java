@@ -40,6 +40,9 @@ public final class MCAFabric implements ModInitializer {
         ResourceManagerHelper.get(ResourceType.SERVER_DATA).registerReloadListener(new ApiIdentifiableReloadListener());
         ResourceManagerHelper.get(ResourceType.SERVER_DATA).registerReloadListener(new FabricClothingList());
         ResourceManagerHelper.get(ResourceType.SERVER_DATA).registerReloadListener(new FabricHairList());
+        ResourceManagerHelper.get(ResourceType.SERVER_DATA).registerReloadListener(new FabricBodySkinList());
+        ResourceManagerHelper.get(ResourceType.SERVER_DATA).registerReloadListener(new FabricLayeredHairList());
+        ResourceManagerHelper.get(ResourceType.SERVER_DATA).registerReloadListener(new FabricHairStyleList());
         ResourceManagerHelper.get(ResourceType.SERVER_DATA).registerReloadListener(new FabricGiftLoader());
         ResourceManagerHelper.get(ResourceType.SERVER_DATA).registerReloadListener(new FabricDialogues());
         ResourceManagerHelper.get(ResourceType.SERVER_DATA).registerReloadListener(new FabricTasks());

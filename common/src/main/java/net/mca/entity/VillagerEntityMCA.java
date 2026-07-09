@@ -35,6 +35,7 @@ import net.minecraft.entity.ai.control.MoveControl;
 import net.minecraft.entity.ai.goal.GoalSelector;
 import net.minecraft.entity.ai.goal.TrackTargetGoal;
 import net.minecraft.entity.ai.pathing.EntityNavigation;
+import net.minecraft.entity.ai.pathing.PathNodeType;
 import net.minecraft.entity.attribute.DefaultAttributeContainer;
 import net.minecraft.entity.attribute.EntityAttributeInstance;
 import net.minecraft.entity.attribute.EntityAttributeModifier;
@@ -63,7 +64,9 @@ import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
 import net.minecraft.item.RangedWeaponItem;
 import net.minecraft.nbt.NbtCompound;
+import net.minecraft.nbt.NbtElement;
 import net.minecraft.nbt.NbtOps;
+import net.minecraft.particle.ItemStackParticleEffect;
 import net.minecraft.particle.ParticleEffect;
 import net.minecraft.particle.ParticleTypes;
 import net.minecraft.registry.Registries;
@@ -77,10 +80,7 @@ import net.minecraft.sound.SoundEvent;
 import net.minecraft.sound.SoundEvents;
 import net.minecraft.stat.Stats;
 import net.minecraft.text.Text;
-import net.minecraft.util.ActionResult;
-import net.minecraft.util.Formatting;
-import net.minecraft.util.Hand;
-import net.minecraft.util.Identifier;
+import net.minecraft.util.*;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Box;
 import net.minecraft.util.math.MathHelper;
@@ -102,6 +102,8 @@ import java.util.function.Predicate;
 import static net.mca.client.model.CommonVillagerModel.getVillager;
 
 public class VillagerEntityMCA extends VillagerEntity implements VillagerLike<VillagerEntityMCA>, NamedScreenHandlerFactory, CompassionateEntity<BreedableRelationship>, CrossbowUser {
+    public static final String MCA_DATA_KEY = "MCAData";
+
     final UUID EXTRA_HEALTH_EFFECT_ID = UUID.fromString("87f56a96-686f-4796-b035-22e16ee9e038");
 
     private static final CDataParameter<Float> INFECTION_PROGRESS = CParameter.create("infectionProgress", 0.0f);
@@ -127,6 +129,12 @@ public class VillagerEntityMCA extends VillagerEntity implements VillagerLike<Vi
     private long lastHit = 0;
     private int prevGrowthAmount;
     private boolean interactedWith;
+    private int lastAppliedHealthLevel = Integer.MIN_VALUE;
+    private double lastAppliedHealthBonus = Double.NaN;
+    private boolean recoveryFoodUseActive;
+    private boolean recoveryFoodFromInventory;
+    private int recoveryFoodUseTicks;
+    private ItemStack recoveryPreviousMainHand = ItemStack.EMPTY;
 
     private static final int RECALCULATE_DIMENSIONS_EVERY_N_TICKS = 100;
 
@@ -136,10 +144,23 @@ public class VillagerEntityMCA extends VillagerEntity implements VillagerLike<Vi
                 .add(BreedableRelationship::createTrackedData);
     }
 
+    private static boolean canEat(ItemStack stack) {
+        if (!stack.isFood() || stack.getItem().getFoodComponent() == null) {
+            return false;
+        }
+        return stack.getItem().getFoodComponent().getHunger() > 0
+                && stack.getItem().getFoodComponent().getStatusEffects().stream()
+                .noneMatch(effect -> StatusEffectDangerSet.isDanger.contains(effect.getFirst().getEffectType()));
+    }
+
     public VillagerEntityMCA(EntityType<VillagerEntityMCA> type, World w, Gender gender) {
         super(type, w);
         inventory.addListener(this::onInvChange);
+        this.moveControl = new ArcherMoveControl(this);
         genetics.setGender(gender);
+        this.setPathfindingPenalty(PathNodeType.WATER_BORDER, 16.0F);
+        this.setPathfindingPenalty(PathNodeType.TRAPDOOR, 8.0F);
+        this.setPathfindingPenalty(PathNodeType.WATER, 16.0F);
     }
 
     @Override
@@ -223,6 +244,11 @@ public class VillagerEntityMCA extends VillagerEntity implements VillagerLike<Vi
     @Override
     public Traits getTraits() {
         return traits;
+    }
+
+    @Override
+    public Arm getMainArm() {
+        return getTraits().hasTrait(Traits.LEFT_HANDED) ? Arm.LEFT : Arm.RIGHT;
     }
 
     @Override
@@ -322,15 +348,20 @@ public class VillagerEntityMCA extends VillagerEntity implements VillagerLike<Vi
 
     @Override
     public void setCustomName(@Nullable Text name) {
-        super.setCustomName(name);
+        Text cleaned = VillagerLike.cleanCustomName(name);
+        super.setCustomName(cleaned);
 
-        if (name != null) {
-            setName(name.getString());
+        if (cleaned != null) {
+            setName(cleaned.getString());
         }
     }
 
     @Override
     public void setBreedingAge(int age) {
+        if (!getWorld().isClient && getTraits().hasTrait(Traits.NO_AGING) && age > getBreedingAge()) {
+            return;
+        }
+
         super.setBreedingAge(age);
 
         // high quality iguana tweaks reborn LivestockSlowdownFeature fix
@@ -351,9 +382,6 @@ public class VillagerEntityMCA extends VillagerEntity implements VillagerLike<Vi
 
     @Override
     public boolean tryAttack(Entity target) {
-        //player just get a beating
-        attackedEntity(target);
-
         //base damage
         double baseDamage = getAttributeValue(EntityAttributes.GENERIC_ATTACK_DAMAGE);
         float damage = (float) (baseDamage * (getProfession() == ProfessionsMCA.GUARD.get() ? 3.0f : 1.0f));
@@ -380,6 +408,9 @@ public class VillagerEntityMCA extends VillagerEntity implements VillagerLike<Vi
         }
 
         boolean damageDealt = target.damage(getWorld().getDamageSources().mobAttack(this), damage);
+        if (damageDealt) {
+            attackedEntity(target);
+        }
 
         //knockback and post damage stuff
         if (damageDealt) {
@@ -397,6 +428,10 @@ public class VillagerEntityMCA extends VillagerEntity implements VillagerLike<Vi
         }
 
         return damageDealt;
+    }
+
+    public void onRangedAttackLanded(Entity target) {
+        attackedEntity(target);
     }
 
     private void attackedEntity(Entity target) {
@@ -589,7 +624,7 @@ public class VillagerEntityMCA extends VillagerEntity implements VillagerLike<Vi
             if (source.getAttacker() instanceof PlayerEntity player) {
                 if (getWorld().getTime() - lastHit > 40) {
                     lastHit = getWorld().getTime();
-                    if ((!isGuard() || getSmallBounty() == 0) && requestCooldown()) {
+                    if (!isGuard() && requestCooldown()) {
                         if (getHealth() < getMaxHealth() / 2) {
                             sendChatMessage(player, "villager.badly_hurt");
                         } else {
@@ -620,16 +655,18 @@ public class VillagerEntityMCA extends VillagerEntity implements VillagerLike<Vi
         Entity attacker = source != null ? source.getAttacker() : null;
 
         // Notify the surrounding guards when a villager is attacked. Yoinks!
-        if (attacker instanceof LivingEntity livingEntity && !isHostile() && !isFriend(attacker.getType())) {
+        if (!getWorld().isClient && attacker instanceof LivingEntity livingEntity && !isHostile() && !isFriend(attacker.getType())) {
+            int victimBountyBeforeHit = getSmallBounty();
+
             // remember the specific attacker
             getBrain().remember(MemoryModuleTypeMCA.HIT_BY_PLAYER.get(), Optional.of(livingEntity));
-            getBrain().remember(MemoryModuleTypeMCA.SMALL_BOUNTY.get(), getSmallBounty() + 1);
+            getBrain().remember(MemoryModuleTypeMCA.SMALL_BOUNTY.get(), victimBountyBeforeHit + 1);
 
             Vec3d pos = getPos();
             getWorld().getNonSpectatingEntities(VillagerEntityMCA.class, new Box(pos, pos).expand(32)).forEach(v -> {
                 if (this.squaredDistanceTo(v) <= (v.getTarget() == null ? 1024 : 64)) {
                     if (attacker instanceof PlayerEntity player) {
-                        int bounty = v.getSmallBounty();
+                        int bounty = v == this ? victimBountyBeforeHit : v.getSmallBounty();
                         if (v.isGuard()) {
                             int maxWarning = v.getMaxWarnings(player);
                             if (bounty > maxWarning) {
@@ -637,6 +674,7 @@ public class VillagerEntityMCA extends VillagerEntity implements VillagerLike<Vi
                                 v.getBrain().remember(MemoryModuleType.ATTACK_TARGET, livingEntity);
                             } else if (bounty == 0 || bounty == maxWarning) {
                                 // just a warning
+                                v.getBrain().forget(MemoryModuleType.ATTACK_TARGET);
                                 v.sendChatMessage(player, "villager.warning");
                             }
                             v.getBrain().remember(MemoryModuleTypeMCA.SMALL_BOUNTY.get(), bounty + 1);
@@ -713,21 +751,11 @@ public class VillagerEntityMCA extends VillagerEntity implements VillagerLike<Vi
         }
 
         if (!getWorld().isClient) {
-            if (age % 200 == 0
-                    && getHealth() < getMaxHealth()
-                    && !getBrain().getOptionalMemory(MemoryModuleType.ATTACK_TARGET).isPresent()) {
-                // if the villager has food they should try to eat.
-                ItemStack food = getMainHandStack();
+            tickRecoveryFoodUse();
 
-                if (food.isFood()) {
-                    eatFood(getWorld(), food);
-                } else {
-                    //noinspection ConstantConditions
-                    if (!findAndEquipToMain(i -> i.isFood()
-                                                 && i.getItem().getFoodComponent().getHunger() > 0
-                                                 && i.getItem().getFoodComponent().getStatusEffects().stream().noneMatch(e -> StatusEffectDangerSet.isDanger.contains(e.getFirst().getEffectType())))) {
-                        heal(1); // natural regeneration
-                    }
+            if (age % 200 == 0 && getHealth() < getMaxHealth() && canRecoverHealthNow()) {
+                if (!startRecoveryFoodUse()) {
+                    heal(1); // natural regeneration
                 }
             }
 
@@ -756,6 +784,148 @@ public class VillagerEntityMCA extends VillagerEntity implements VillagerLike<Vi
             if (interactedWith && age % Config.getInstance().trackVillagerPositionEveryNTicks == 0) {
                 VillagerTrackerManager.update(this);
             }
+        }
+    }
+
+    public boolean isUsingRecoveryFood() {
+        return recoveryFoodUseActive;
+    }
+
+    private boolean canRecoverHealthNow() {
+        return !recoveryFoodUseActive && !isUsingItem() && !isInRecoveryDanger();
+    }
+
+    private void tickRecoveryFoodUse() {
+        if (!recoveryFoodUseActive) {
+            return;
+        }
+
+        // Vanilla completes food use during super.tickMovement(). Restore the previous
+        // hand item on the following server tick once item use has finished.
+        if (!isUsingItem()) {
+            finishRecoveryFoodUse();
+            return;
+        }
+
+        if (isInRecoveryDanger()) {
+            stopUsingItem();
+            finishRecoveryFoodUse();
+            return;
+        }
+
+        recoveryFoodUseTicks++;
+        ItemStack food = getStackInHand(getDominantHand());
+        if (!food.isEmpty()
+                && getWorld() instanceof ServerWorld serverWorld
+                && recoveryFoodUseTicks > food.getMaxUseTime() * 7 / 32
+                && recoveryFoodUseTicks % 4 == 0) {
+            spawnRecoveryFoodParticles(serverWorld, food, 4);
+        }
+    }
+
+    private boolean isInRecoveryDanger() {
+        return getVillagerBrain().isPanicking()
+                || hasActiveRecoveryThreat(MemoryModuleType.ATTACK_TARGET)
+                || hasActiveRecoveryThreat(MemoryModuleTypeMCA.NEAREST_GUARD_ENEMY.get());
+    }
+
+    private boolean hasActiveRecoveryThreat(MemoryModuleType<? extends LivingEntity> memoryType) {
+        return getBrain().getOptionalMemory(memoryType)
+                .filter(entity -> entity.isAlive() && !entity.isRemoved())
+                .isPresent();
+    }
+
+    private boolean startRecoveryFoodUse() {
+        ItemStack heldFood = getStackInHand(getDominantHand());
+        if (canEat(heldFood)) {
+            return startRecoveryFoodUse(false, ItemStack.EMPTY);
+        }
+
+        int slot = InventoryUtils.getFirstSlotContainingItem(getInventory(), VillagerEntityMCA::canEat);
+        if (slot < 0) {
+            return false;
+        }
+
+        ItemStack food = getInventory().getStack(slot);
+        if (!canEat(food)) {
+            return false;
+        }
+
+        ItemStack previousMainHand = getStackInHand(getDominantHand()).copy();
+        ItemStack replacement = food.split(1);
+        if (replacement.isEmpty()) {
+            return false;
+        }
+
+        setStackInHand(getDominantHand(), replacement);
+        return startRecoveryFoodUse(true, previousMainHand);
+    }
+
+    private boolean startRecoveryFoodUse(boolean fromInventory, ItemStack previousMainHand) {
+        ItemStack food = getStackInHand(getDominantHand());
+        if (!canEat(food)) {
+            return false;
+        }
+
+        recoveryFoodUseActive = true;
+        recoveryFoodFromInventory = fromInventory;
+        recoveryFoodUseTicks = 0;
+        recoveryPreviousMainHand = previousMainHand;
+        setCurrentHand(getDominantHand());
+
+        if (!isUsingItem()) {
+            finishRecoveryFoodUse();
+            return false;
+        }
+
+        return true;
+    }
+
+    private void finishRecoveryFoodUse() {
+        if (recoveryFoodFromInventory) {
+            ItemStack remainder = getStackInHand(getDominantHand());
+            if (!remainder.isEmpty()) {
+                ItemStack leftover = getInventory().addStack(remainder);
+                if (!leftover.isEmpty()) {
+                    dropStack(leftover);
+                }
+            }
+            setStackInHand(getDominantHand(), recoveryPreviousMainHand);
+        }
+
+        recoveryFoodUseActive = false;
+        recoveryFoodFromInventory = false;
+        recoveryFoodUseTicks = 0;
+        recoveryPreviousMainHand = ItemStack.EMPTY;
+    }
+
+    private void spawnRecoveryFoodParticles(ServerWorld world, ItemStack food, int count) {
+        var random = getRandom();
+        ItemStackParticleEffect particle = new ItemStackParticleEffect(ParticleTypes.ITEM, food.copy());
+
+        for (int i = 0; i < count; i++) {
+            Vec3d velocity = new Vec3d(
+                    (random.nextFloat() - 0.5) * 0.1,
+                    random.nextFloat() * 0.1 + 0.1,
+                    0.0
+            ).rotateX(-getPitch() * ((float) Math.PI / 180.0F))
+                    .rotateY(-getYaw() * ((float) Math.PI / 180.0F));
+
+            Vec3d position = new Vec3d(
+                    (random.nextFloat() - 0.5) * 0.3,
+                    -random.nextFloat() * 0.6 - 0.3,
+                    0.6
+            ).rotateX(-getPitch() * ((float) Math.PI / 180.0F))
+                    .rotateY(-getYaw() * ((float) Math.PI / 180.0F))
+                    .add(getX(), getEyeY(), getZ());
+
+            world.spawnParticles(
+                    particle,
+                    position.x, position.y, position.z,
+                    1,
+                    velocity.x, velocity.y + 0.05, velocity.z,
+                    0.0
+            );
         }
     }
 
@@ -823,13 +993,8 @@ public class VillagerEntityMCA extends VillagerEntity implements VillagerLike<Vi
                 sendChatToAllAround("sirben");
             }
 
-            //strengthen experienced villagers
-            EntityAttributeInstance instance = this.getAttributes().getCustomInstance(EntityAttributes.GENERIC_MAX_HEALTH);
-            if (instance != null) {
-                int level = this.getVillagerData().getLevel() - 1;
-                instance.removeModifier(EXTRA_HEALTH_EFFECT_ID);
-                instance.addTemporaryModifier(new EntityAttributeModifier(EXTRA_HEALTH_EFFECT_ID, "level health boost", Config.getInstance().villagerHealthBonusPerLevel * level, EntityAttributeModifier.Operation.ADDITION));
-            }
+            // strengthen experienced villagers without rebuilding the modifier every tick
+            updateLevelHealthBonus();
 
             //twice a day, randomize the mood a bit
             if (this.age % 12000 == 0) {
@@ -837,6 +1002,33 @@ public class VillagerEntityMCA extends VillagerEntity implements VillagerLike<Vi
                 int value = random.nextInt(7) - 3;
                 mcaBrain.modifyMoodValue(value - base);
             }
+        }
+    }
+
+    private void updateLevelHealthBonus() {
+        int level = this.getVillagerData().getLevel() - 1;
+        double bonus = Config.getInstance().villagerHealthBonusPerLevel * level;
+
+        if (level == lastAppliedHealthLevel && bonus == lastAppliedHealthBonus) {
+            return;
+        }
+
+        lastAppliedHealthLevel = level;
+        lastAppliedHealthBonus = bonus;
+
+        EntityAttributeInstance instance = this.getAttributes().getCustomInstance(EntityAttributes.GENERIC_MAX_HEALTH);
+        if (instance == null) {
+            return;
+        }
+
+        instance.removeModifier(EXTRA_HEALTH_EFFECT_ID);
+        if (bonus != 0.0D) {
+            instance.addTemporaryModifier(new EntityAttributeModifier(
+                    EXTRA_HEALTH_EFFECT_ID,
+                    "level health boost",
+                    bonus,
+                    EntityAttributeModifier.Operation.ADDITION
+            ));
         }
     }
 
@@ -867,6 +1059,24 @@ public class VillagerEntityMCA extends VillagerEntity implements VillagerLike<Vi
             heal(stack.getItem().getFoodComponent().getHunger());
         }
         return super.eatFood(world, stack);
+    }
+
+    @Override
+    public boolean startRiding(Entity vehicle, boolean force) {
+        boolean result = super.startRiding(vehicle, force);
+        if (result && vehicle instanceof PlayerEntity) {
+            calculateDimensions();
+        }
+        return result;
+    }
+
+    @Override
+    public void stopRiding() {
+        Entity vehicle = getVehicle();
+        super.stopRiding();
+        if (vehicle instanceof PlayerEntity) {
+            calculateDimensions();
+        }
     }
 
     @Override
@@ -926,8 +1136,9 @@ public class VillagerEntityMCA extends VillagerEntity implements VillagerLike<Vi
             return SLEEPING_DIMENSIONS;
         }
 
-        float height = getScaleFactor() * 2.0F;
-        float width = getHorizontalScaleFactor() * 0.6F;
+        boolean useRawDimensions = getAgeState() == AgeState.TEEN || getAgeState() == AgeState.ADULT;
+        float height = (useRawDimensions ? getRawVerticalScaleFactor() : getVerticalScaleFactor()) * 2.0F;
+        float width = (useRawDimensions ? getRawHorizontalScaleFactor() : getHorizontalScaleFactor()) * 0.6F;
 
         return EntityDimensions.changing(width, height);
     }
@@ -1057,7 +1268,7 @@ public class VillagerEntityMCA extends VillagerEntity implements VillagerLike<Vi
 
             //sirben
             if (random.nextBoolean() && getTraits().hasTrait(Traits.SIRBEN)) {
-                return SoundsMCA.SIRBEN.get();
+                return getGenetics().getGender() == Gender.MALE ? SoundsMCA.VILLAGER_MALE_SIRBEN.get() : SoundsMCA.VILLAGER_FEMALE_SIRBEN.get();
             }
 
             //generic mood sounds
@@ -1233,6 +1444,7 @@ public class VillagerEntityMCA extends VillagerEntity implements VillagerLike<Vi
                 }
 
                 reinitializeBrain((ServerWorld) getWorld());
+                getVillagerBrain().randomize(state);
 
                 // set age specific clothes
                 randomizeClothes();
@@ -1350,33 +1562,55 @@ public class VillagerEntityMCA extends VillagerEntity implements VillagerLike<Vi
 
     @Override
     public void readCustomDataFromNbt(NbtCompound nbt) {
+        NbtCompound data = flattenMcaData(nbt);
+        VillagerLike.migrateHairDyeNbt(data);
         super.readCustomDataFromNbt(nbt);
-        getTypeDataManager().load(this, nbt);
-        relations.readFromNbt(nbt);
-        longTermMemory.readFromNbt(nbt);
+        getTypeDataManager().load(this, data);
+        relations.readFromNbt(data);
+        longTermMemory.readFromNbt(data);
 
-        playerModel = PlayerModel.VALUES[nbt.getInt("playerModel")];
+        int playerModelId = data.contains("PlayerModel") ? data.getInt("PlayerModel") : data.getInt("playerModel");
+        playerModel = PlayerModel.byId(playerModelId);
 
         updateSpeed();
 
         inventory.clear();
-        InventoryUtils.readFromNBT(inventory, nbt);
+        InventoryUtils.readFromNBT(inventory, data);
 
-        if (nbt.contains("DespawnDelay")) {
-            this.despawnDelay = nbt.getInt("DespawnDelay");
+        if (data.contains("DespawnDelay")) {
+            this.despawnDelay = data.getInt("DespawnDelay");
         }
 
-        if (nbt.contains("InteractedWith")) {
-            this.interactedWith = nbt.getBoolean("InteractedWith");
+        if (data.contains("InteractedWith")) {
+            this.interactedWith = data.getBoolean("InteractedWith");
         }
 
-        if (nbt.contains("clothes")) {
+        if (data.contains("Clothes") || data.contains("clothes")) {
             validateClothes();
         }
 
         if (getVillagerBrain().getPersonality() == Personality.UNASSIGNED) {
             getVillagerBrain().randomize();
         }
+    }
+
+    @Override
+    public void readAdditionalSaveDataForEditor(NbtCompound nbt) {
+        readCustomDataFromNbt(flattenMcaData(nbt));
+    }
+
+    private NbtCompound flattenMcaData(NbtCompound nbt) {
+        NbtCompound merged = nbt.copy();
+        if (merged.contains(MCA_DATA_KEY, NbtElement.COMPOUND_TYPE)) {
+            NbtCompound mcaData = merged.getCompound(MCA_DATA_KEY);
+            for (String key : mcaData.getKeys()) {
+                NbtElement value = mcaData.get(key);
+                if (value != null) {
+                    merged.put(key, value.copy());
+                }
+            }
+        }
+        return merged;
     }
 
     @Override
@@ -1444,12 +1678,12 @@ public class VillagerEntityMCA extends VillagerEntity implements VillagerLike<Vi
     @Override
     public void attack(LivingEntity target, float pullProgress) {
         setTarget(target);
-        attackedEntity(target);
 
         if (isHolding(Items.CROSSBOW)) {
             this.shoot(this, 1.75F);
         } else if (isHolding(Items.BOW)) {
-            ItemStack itemStack = this.getProjectileType(this.getStackInHand(ProjectileUtil.getHandPossiblyHolding(this, Items.BOW)));
+            Hand bowHand = getMainHandStack().isOf(Items.BOW) ? Hand.MAIN_HAND : Hand.OFF_HAND;
+            ItemStack itemStack = this.getProjectileType(this.getStackInHand(bowHand));
             PersistentProjectileEntity persistentProjectileEntity = this.createArrowProjectile(itemStack, pullProgress);
             double x = target.getX() - this.getX();
             double y = target.getBodyY(0.3333333333333333D) - persistentProjectileEntity.getY();
@@ -1481,7 +1715,7 @@ public class VillagerEntityMCA extends VillagerEntity implements VillagerLike<Vi
                 .add(EntityAttributes.GENERIC_ATTACK_DAMAGE, 3.0f)
                 .add(EntityAttributes.GENERIC_ATTACK_KNOCKBACK, 1.0f)
                 .add(EntityAttributes.GENERIC_MAX_HEALTH, Config.getInstance().villagerMaxHealth)
-                .add(EntityAttributes.GENERIC_FOLLOW_RANGE, Config.getInstance().getVillagerPathfindingDistance());
+                .add(EntityAttributes.GENERIC_FOLLOW_RANGE, Config.getInstance().getVillagerFollowRange());
     }
 
     private void tickDespawnDelay() {

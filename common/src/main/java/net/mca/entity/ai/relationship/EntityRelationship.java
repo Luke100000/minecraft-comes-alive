@@ -50,7 +50,15 @@ public interface EntityRelationship {
     }
 
     default Optional<Entity> getPartner() {
-        return Optional.ofNullable(getWorld().getEntity(getFamilyEntry().partner()));
+        UUID partner = getFamilyEntry().partner();
+        Entity entity = getWorld().getEntity(partner);
+        if (entity != null) {
+            return Optional.of(entity);
+        }
+        return getWorld().getServer().getPlayerManager().getPlayerList().stream()
+                .filter(player -> player.getUuid().equals(partner))
+                .map(player -> (Entity)player)
+                .findFirst();
     }
 
     //try to load a PlayerSaveData before loading the entity
@@ -65,7 +73,7 @@ public interface EntityRelationship {
 
     default void onTragedy(DamageSource cause, @Nullable BlockPos burialSite, RelationshipType type, Entity victim) {
         if (type == RelationshipType.STRANGER) {
-            return; // effects don't propagate from strangers
+            return;
         }
 
         // notify family

@@ -4,6 +4,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonSyntaxException;
+import net.mca.entity.EquipmentSet;
 import net.mca.entity.ai.Traits;
 
 import java.io.File;
@@ -68,7 +69,8 @@ public final class Config extends CommonConfig {
     public int villagerMaxHealth = 20;
     public boolean allowVillagerTeleporting = false;
     public double villagerMinTeleportationDistance = 128;
-    public int villagerPathfindingDistance = 192;
+    public int villagerPathfindingDistance = 80;
+    public int villagerFollowRange = 48;
     public int childInitialHearts = 100;
     public int greetHeartsThreshold = 75;
     public int greetAfterDays = 1;
@@ -97,6 +99,7 @@ public final class Config extends CommonConfig {
     public int burnedClothingTickLength = 3600;
     public float coloredHairChance = 0.02f;
     public int heartsRequiredToAutoSpawnGravestone = 10;
+    public String defaultHeadstoneType = "cross_headstone";
     public boolean useSmarterDoorAI = false;
     public int procreationCooldown = 72000;
 
@@ -113,6 +116,7 @@ public final class Config extends CommonConfig {
     public String villagerChatAIToken = "";
     public String villagerChatAIModel = "default";
     public String villagerChatAISystemPrompt = "";
+    public boolean villagerChatAIFuseSystemPrompt = false;
     public boolean villagerChatAIUseLongTermMemory = false;
     public boolean villagerChatAIUseSharedLongTermMemory = false;
     public boolean villagerChatAIIncludeSessionInformation = false;
@@ -143,6 +147,16 @@ public final class Config extends CommonConfig {
 
     //village behavior
     public float guardSpawnFraction = 0.175f;
+    public Map<String, EquipmentSet> guardEquipment = ImmutableMap.<String, EquipmentSet>builder()
+            .put("0", EquipmentSet.GUARD_0)
+            .put("1", EquipmentSet.GUARD_1)
+            .put("2", EquipmentSet.GUARD_2)
+            .build();
+    public Map<String, EquipmentSet> archerEquipment = ImmutableMap.<String, EquipmentSet>builder()
+            .put("0", EquipmentSet.ARCHER_0)
+            .put("1", EquipmentSet.ARCHER_1)
+            .put("2", EquipmentSet.ARCHER_2)
+            .build();
     public float taxesFactor = 0.5f;
     public int taxSeason = 168000;
     public float marriageChancePerMinute = 0.05f;
@@ -245,6 +259,21 @@ public final class Config extends CommonConfig {
             "#minecraft:trapdoors",
             "#minecraft:walls"
     );
+
+
+    /**
+     * Blocks or tags that should trigger exact villager body clearance checks during pathfinding.
+     * Use this for small decorative blocks with awkward collision shapes, such as lanterns.
+     */
+    public List<String> villagerPathfindingCollisionCheckBlocks = List.of(
+            "#mca:villager_pathfinding_collision_checks"
+    );
+
+    /**
+     * If enabled, villagers run exact body clearance checks for every accepted path node.
+     * This can help with unusual modded collision issues, but it is more expensive in busy villages.
+     */
+    public boolean villagerPathfindingCheckAllNodeCollisions = false;
 
     public List<String> structuresInRumors = List.of(
             "minecraft:igloo",
@@ -351,5 +380,9 @@ public final class Config extends CommonConfig {
 
     public int getVillagerPathfindingDistance() {
         return Math.max(16, Math.min(256, villagerPathfindingDistance));
+    }
+
+    public int getVillagerFollowRange() {
+        return Math.max(16, Math.min(64, villagerFollowRange));
     }
 }

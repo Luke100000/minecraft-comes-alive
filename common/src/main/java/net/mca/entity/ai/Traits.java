@@ -16,7 +16,7 @@ import java.util.stream.Collectors;
 public class Traits {
     private static final CDataParameter<NbtCompound> TRAITS = CParameter.create("traits", new NbtCompound());
 
-    public static final Map<String, Trait> TRAIT_REGISTRY = new HashMap<>();
+    public static final Map<String, Trait> TRAIT_REGISTRY = new LinkedHashMap<>();
 
     public static Trait LEFT_HANDED = registerTrait("LEFT_HANDED", 1.0F, 0.5F, false);
     public static Trait WEAK = registerTrait("WEAK", 1.0F, 1.0F, false);
@@ -35,6 +35,9 @@ public class Traits {
     public static Trait ELECTRIFIED = registerTrait("ELECTRIFIED", 0.0F, 0.0F, false);
     public static Trait SIRBEN = registerTrait("SIRBEN", 0.025F, 1.0F);
     public static Trait RAINBOW = registerTrait("RAINBOW", 0.05F, 0.0F);
+    public static Trait RAINBOW_EYES = registerTrait("RAINBOW_EYES", 0.05F, 0.0F);
+    public static Trait INFERTILE = registerTrait("INFERTILE", 1.0F, 0.0F);
+    public static Trait NO_AGING = registerTrait("NO_AGING", 0.0F, 0.0F, false);
     public static Trait UNKNOWN = registerTrait("UNKNOWN", 0.0F, 0.0F, false);
 
     public static Trait registerTrait(String id, float chance, float inherit, boolean usableOnPlayer) {

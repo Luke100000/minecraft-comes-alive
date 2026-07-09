@@ -22,18 +22,26 @@ public enum Personality {
     GREEDY,        //Finds less on chores
     ODD,           //some interactions are more difficult
     LAZY,          //20% slower
-    GRUMPY,        //Hard to talk to -- TODO: 7.4.0
-    PEPPY;         //They're super loud and hyperactive
+    GRUMPY,        //likes to insult and argue
+    PEPPY;         //Very happy
 
     private static final Random random = Random.create();
 
     public static Personality getRandom() {
+        return getRandom(AgeState.ADULT);
+    }
+
+    public static Personality getRandom(AgeState ageState) {
         List<Personality> validList = new ArrayList<>();
 
         for (Personality personality : Personality.values()) {
-            if (personality != UNASSIGNED) {
-                validList.add(personality);
+            if (personality == UNASSIGNED) {
+                continue;
             }
+            if (personality == FLIRTY && ageState != AgeState.ADULT) {
+                continue;
+            }
+            validList.add(personality);
         }
 
         return validList.get(random.nextInt(validList.size()));

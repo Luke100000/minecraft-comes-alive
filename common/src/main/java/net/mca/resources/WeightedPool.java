@@ -26,6 +26,10 @@ public class WeightedPool<T> {
     }
 
     public T pickNext(T current, int next) {
+        if (entries.isEmpty()) {
+            return defaultValue;
+        }
+
         //look for the current one
         for (int i = 0; i < entries.size(); i++) {
             if (entries.get(i).value.equals(current)) {
@@ -34,7 +38,7 @@ public class WeightedPool<T> {
         }
 
         //fallback
-        return pickOne();
+        return entries.get(next < 0 ? entries.size() - 1 : 0).value;
     }
 
     public List<Entry<T>> getEntries() {

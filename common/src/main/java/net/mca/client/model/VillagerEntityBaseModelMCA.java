@@ -10,6 +10,12 @@ import net.minecraft.client.render.VertexConsumer;
 import net.minecraft.client.render.entity.model.BipedEntityModel;
 import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.entity.LivingEntity;
+import net.minecraft.item.CrossbowItem;
+import net.minecraft.item.ItemStack;
+import net.minecraft.item.Items;
+import net.minecraft.util.Arm;
+import net.minecraft.util.Hand;
+import net.minecraft.util.UseAction;
 
 public class VillagerEntityBaseModelMCA<T extends LivingEntity & VillagerLike<T>> extends BipedEntityModel<T> implements CommonVillagerModel<T> {
     protected static final String BREASTS = "breasts";
@@ -53,8 +59,54 @@ public class VillagerEntityBaseModelMCA<T extends LivingEntity & VillagerLike<T>
 
     @Override
     public void animateModel(T entity, float limbAngle, float limbDistance, float tickDelta) {
+        updateArmPoses(entity);
         super.animateModel(entity, limbDistance, limbAngle, tickDelta);
         riding |= entity.getAgeState() == AgeState.BABY;
+    }
+
+    private void updateArmPoses(T entity) {
+        this.leftArmPose = ArmPose.EMPTY;
+        this.rightArmPose = ArmPose.EMPTY;
+
+        applyArmPose(entity, Hand.MAIN_HAND, getArmPose(entity, Hand.MAIN_HAND));
+        applyArmPose(entity, Hand.OFF_HAND, getArmPose(entity, Hand.OFF_HAND));
+    }
+
+    private ArmPose getArmPose(T entity, Hand hand) {
+        ItemStack stack = entity.getStackInHand(hand);
+        if (stack.isEmpty()) {
+            return ArmPose.EMPTY;
+        }
+
+        if (entity.isUsingItem() && entity.getActiveHand() == hand && entity.getItemUseTimeLeft() > 0) {
+            UseAction useAction = stack.getUseAction();
+            if (useAction == UseAction.BOW) {
+                return ArmPose.BOW_AND_ARROW;
+            }
+            if (useAction == UseAction.CROSSBOW) {
+                return ArmPose.CROSSBOW_CHARGE;
+            }
+        } else if (!entity.handSwinging && stack.isOf(Items.CROSSBOW) && CrossbowItem.isCharged(stack)) {
+            return ArmPose.CROSSBOW_HOLD;
+        }
+
+        return ArmPose.EMPTY;
+    }
+
+    private void applyArmPose(T entity, Hand hand, ArmPose pose) {
+        if (pose == ArmPose.EMPTY) {
+            return;
+        }
+
+        if (isRightArm(entity, hand)) {
+            this.rightArmPose = pose;
+        } else {
+            this.leftArmPose = pose;
+        }
+    }
+
+    private static boolean isRightArm(LivingEntity entity, Hand hand) {
+        return (hand == Hand.MAIN_HAND) == (entity.getMainArm() == Arm.RIGHT);
     }
 
     @Override

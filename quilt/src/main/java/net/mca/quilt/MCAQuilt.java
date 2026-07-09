@@ -42,6 +42,9 @@ public final class MCAQuilt implements ModInitializer {
         ResourceLoader.get(ResourceType.SERVER_DATA).registerReloader(new ApiIdentifiableReloadListener());
         ResourceLoader.get(ResourceType.SERVER_DATA).registerReloader(new QuiltClothingList());
         ResourceLoader.get(ResourceType.SERVER_DATA).registerReloader(new QuiltHairList());
+        ResourceLoader.get(ResourceType.SERVER_DATA).registerReloader(new QuiltBodySkinList());
+        ResourceLoader.get(ResourceType.SERVER_DATA).registerReloader(new QuiltLayeredHairList());
+        ResourceLoader.get(ResourceType.SERVER_DATA).registerReloader(new QuiltHairStyleList());
         ResourceLoader.get(ResourceType.SERVER_DATA).registerReloader(new QuiltGiftLoader());
         ResourceLoader.get(ResourceType.SERVER_DATA).registerReloader(new QuiltDialogues());
         ResourceLoader.get(ResourceType.SERVER_DATA).registerReloader(new QuiltTasks());

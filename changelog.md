@@ -1,3 +1,17 @@
+# 7.6.28
+
+* Backported a batch of safer 1.21.1 fixes and gameplay improvements.
+* Fixed scaled player eye height so camera and interaction height update correctly without corrupting saved player dimensions.
+* Made Destiny teleports safer by validating the target world, border, and height before moving the player.
+* Added stronger family and age safeguards: relatives no longer receive romance actions, children avoid romantic personalities and AI replies, and age-locked villagers can stay fixed at their current age.
+* Added an admin override for player village requirements and monarch-rank checks.
+* Improved village scans and guard behavior, including better building block checks, passable interior fluids, retained guard memories after brain resets, and guards defending the player they follow.
+* Added configurable guard and archer equipment by village equipment level.
+* Made headstones much more resistant to explosions.
+* Fixed bamboo crib recipes to use bamboo ingredients.
+* Restored editor/library preview isolation so clothing previews no longer mutate hair state, and skin/hair lists sort numerically.
+* Restored comments that were accidentally stripped while porting the previous patch.
+
 # 7.6.27
 
 * Fixed destiny status not being saved reliably
@@ -93,7 +107,7 @@
 
 # 7.6.6
 
-* Allow tripplets, quadruplets, quintuplets and beyond
+* Allow tripplets, quadruplets, quintuplets, and beyond
 * Fixed a crash in the skin editor
 * Disabled guard teleportation by default again
 * Added experimental support for commands via ChatAI (`villagerChatAIUseTools` in the config, will react to trading, go
@@ -497,7 +511,7 @@
 # 7.3.20
 
 * Added backwards compatibility for 1.16.5 and 1.17.1, to align with the EOL of 1.19.0 and 1.19.1
-    * 1.19.0, 1.19.1, 1.17.1 and 1.16.5 are now officially considered EOL, and users should upgrade to retain support
+    * 1.19.0, 1.19.1, 1.17.1, and 1.16.5 are now officially considered EOL, and users should upgrade to retain support
 * You can no longer set the home of a villager who is either there temporarily or does not require a home
 * Fixed trades
 * Fixed equipment dropping
@@ -582,7 +596,7 @@
     * This trait can be inherited from past/to future generations
     * Having this trait will change their dominant hand in most tasks to be their left hand (Known to the player as the
       off-hand slot)
-    * Some examples of this include Work Tasks, EquipmentSet's and Melee Attacks (For Equipment, if a preset already
+    * Some examples of this include Work Tasks, EquipmentSet's, and Melee Attacks (For Equipment, if a preset already
       uses both hands, it'll remain unchanged.)
     * Given Minecraft was never intended to support this type of gameplay, further tuning may be required in a future
       update.
@@ -826,7 +840,7 @@
 * Villagers will now use your editor name
 * Fixed letter author and creative mode usage
 * Strengthened Grim Reaper
-* Added mod support for atmospheric, autumity, berry good, buzzier bees, environmental, neopolitan and upgrade aquatic
+* Added mod support for atmospheric, autumity, berry good, buzzier bees, environmental, neopolitan, and upgrade aquatic
 * Villager now recognize and estimate the value of every (modded) armor, tool, sword, bow and food as a gift (accuracy
   not guaranteed)
 

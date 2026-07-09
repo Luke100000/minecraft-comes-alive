@@ -2,16 +2,17 @@ package net.mca.entity.ai.brain.tasks;
 
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.ai.brain.task.MultiTickTask;
+import net.minecraft.entity.ai.brain.task.Task;
 import net.minecraft.server.world.ServerWorld;
 
 import java.util.Map;
 import java.util.function.Predicate;
 
 public class ConditionalTask<E extends LivingEntity> extends MultiTickTask<E> {
-    private final MultiTickTask<? super E> task;
+    private final Task<? super E> task;
     private final Predicate<E> predicate;
 
-    public ConditionalTask(MultiTickTask<? super E> task, Predicate<E> predicate) {
+    public ConditionalTask(Task<? super E> task, Predicate<E> predicate) {
         super(Map.of());
 
         this.task = task;
@@ -35,7 +36,7 @@ public class ConditionalTask<E extends LivingEntity> extends MultiTickTask<E> {
 
     @Override
     protected boolean shouldKeepRunning(ServerWorld world, E entity, long time) {
-        return predicate.test(entity) && task.getStatus() == Status.RUNNING;
+        return task.getStatus() == Status.RUNNING;
     }
 
     @Override

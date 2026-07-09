@@ -41,10 +41,16 @@ public class GetVillagerRequest implements Message {
         if (entry.isPresent()) {
             data.putString("tree_" + prefix + "_name", entry.get().getName());
             data.putUuid("tree_" + prefix + "_uuid", entry.get().id());
+            data.putString("FamilyTree" + capitalize(prefix) + "Name", entry.get().getName());
         } else {
             data.putString("tree_" + prefix + "_name", "");
             data.putUuid("tree_" + prefix + "_uuid", Util.NIL_UUID);
+            data.putString("FamilyTree" + capitalize(prefix) + "Name", "");
         }
+    }
+
+    private static String capitalize(String value) {
+        return value.isEmpty() ? value : Character.toUpperCase(value.charAt(0)) + value.substring(1);
     }
 
     public static NbtCompound getVillagerData(Entity e) {
@@ -52,15 +58,18 @@ public class GetVillagerRequest implements Message {
 
         if (e instanceof ServerPlayerEntity serverPlayer) {
             data = PlayerSaveData.get(serverPlayer).getEntityData();
+        } else if (e instanceof MobEntity mob) {
+            data = new NbtCompound();
+            mob.writeCustomDataToNbt(data);
         } else if (e instanceof LivingEntity) {
             data = new NbtCompound();
-            ((MobEntity)e).writeCustomDataToNbt(data);
         } else {
             return null;
         }
 
         FamilyTree tree = FamilyTree.get((ServerWorld)e.getWorld());
         FamilyTreeNode entry = tree.getOrCreate(e);
+        data.putString("FamilyTreeName", entry.getName());
 
         storeNode(data, tree.getOrEmpty(entry.partner()), "spouse");
         storeNode(data, tree.getOrEmpty(entry.father()), "father");

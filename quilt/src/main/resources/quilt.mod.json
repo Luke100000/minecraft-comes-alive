@@ -1,7 +1,8 @@
 {
   "schema_version": 1,
   "mixin": [
-    "mca.mixin.json"
+    "mca.mixin.json",
+    "mca.journeymap.mixin.json"
   ],
   "quilt_loader": {
     "group": "${group}",

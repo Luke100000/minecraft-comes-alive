@@ -3,10 +3,12 @@ package net.mca.server;
 import it.unimi.dsi.fastutil.objects.Object2LongArrayMap;
 import net.mca.Config;
 import net.mca.cobalt.network.NetworkHandler;
+import net.mca.entity.PlayerDimensions;
 import net.mca.entity.ai.relationship.EntityRelationship;
 import net.mca.entity.ai.relationship.RelationshipState;
 import net.mca.item.BabyItem;
 import net.mca.network.s2c.OpenDestinyGuiRequest;
+import net.mca.network.s2c.PlayerDataMessage;
 import net.mca.network.s2c.ShowToastRequest;
 import net.mca.server.world.data.PlayerSaveData;
 import net.minecraft.entity.effect.StatusEffectInstance;
@@ -76,6 +78,17 @@ public class ServerInteractionManager {
 
         if (playerData.hasMail()) {
             PlayerSaveData.showMailNotification(player);
+        }
+
+        if (Config.getServerConfig().scalePlayerHitboxWithSizeAndWidth) {
+            PlayerDimensions.debugRefresh(player, "before server join refresh");
+            player.calculateDimensions();
+            PlayerDimensions.debugRefresh(player, "after server join refresh");
+            if (playerData.isEntityDataSet()) {
+                player.getServerWorld().getPlayers().forEach(recipient ->
+                        NetworkHandler.sendToPlayer(new PlayerDataMessage(player.getUuid(), playerData.getEntityData()), recipient)
+                );
+            }
         }
     }
 

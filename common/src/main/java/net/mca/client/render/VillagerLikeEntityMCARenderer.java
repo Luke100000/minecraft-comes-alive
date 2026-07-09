@@ -12,6 +12,7 @@ import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.model.Dilation;
 import net.minecraft.client.model.TexturedModelData;
 import net.minecraft.client.render.RenderLayer;
+import net.minecraft.client.render.VertexConsumerProvider;
 import net.minecraft.client.render.entity.BipedEntityRenderer;
 import net.minecraft.client.render.entity.EntityRendererFactory;
 import net.minecraft.client.render.entity.feature.ArmorFeatureRenderer;
@@ -19,6 +20,7 @@ import net.minecraft.client.util.DefaultSkinHelper;
 import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.entity.mob.MobEntity;
 import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.Uuids;
 import org.jetbrains.annotations.Nullable;
@@ -26,6 +28,8 @@ import org.jetbrains.annotations.Nullable;
 import java.util.Map;
 
 public class VillagerLikeEntityMCARenderer<T extends MobEntity & VillagerLike<T>> extends BipedEntityRenderer<T, VillagerEntityModelMCA<T>> {
+    private static final double CARRIED_NAME_TAG_Y = 0.63;
+
     public VillagerLikeEntityMCARenderer(EntityRendererFactory.Context ctx, VillagerEntityModelMCA<T> model) {
         super(ctx, model, 0.5F);
         addFeature(new ArmorFeatureRenderer<>(this, createArmorModel(0.3f), createArmorModel(0.55f), ctx.getModelManager()));
@@ -41,8 +45,8 @@ public class VillagerLikeEntityMCARenderer<T extends MobEntity & VillagerLike<T>
 
     @Override
     protected void scale(T villager, MatrixStack matrices, float tickDelta) {
-        float height = villager.getRawScaleFactor();
-        float width = villager.getHorizontalScaleFactor();
+        float height = villager.getRawVerticalScaleFactor();
+        float width = villager.getRawHorizontalScaleFactor();
         matrices.scale(width, height, width);
         if (villager.getAgeState() == AgeState.BABY && !villager.hasVehicle()) {
             matrices.translate(0, 0.6F, 0);
@@ -84,11 +88,22 @@ public class VillagerLikeEntityMCARenderer<T extends MobEntity & VillagerLike<T>
                 && !villager.isInvisibleTo(player);
     }
 
-    private static final Identifier TEXTURE = new Identifier("textures/entity/steve.png");
+    @Override
+    protected void renderLabelIfPresent(T villager, Text displayName, MatrixStack matrices, VertexConsumerProvider vertexConsumers, int light) {
+        if (!(villager.getVehicle() instanceof PlayerEntity)) {
+            super.renderLabelIfPresent(villager, displayName, matrices, vertexConsumers, light);
+            return;
+        }
+
+        matrices.push();
+        matrices.translate(0.0D, CARRIED_NAME_TAG_Y + 0.5D - villager.getNameLabelHeight(), 0.0D);
+        super.renderLabelIfPresent(villager, displayName, matrices, vertexConsumers, light);
+        matrices.pop();
+    }
 
     @Override
     public Identifier getTexture(T mobEntity) {
-        return TEXTURE;
+        return DynamicSkinCache.getOrCreateStitchedSkin(mobEntity);
     }
 
     @Override

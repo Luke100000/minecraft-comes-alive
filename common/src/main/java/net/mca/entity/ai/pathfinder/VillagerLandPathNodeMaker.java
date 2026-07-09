@@ -1,10 +1,13 @@
 package net.mca.entity.ai.pathfinder;
 
+import it.unimi.dsi.fastutil.longs.Long2BooleanMap;
+import it.unimi.dsi.fastutil.longs.Long2BooleanOpenHashMap;
 import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import it.unimi.dsi.fastutil.objects.Object2BooleanMap;
 import it.unimi.dsi.fastutil.objects.Object2BooleanOpenHashMap;
 import net.mca.Config;
+import net.mca.entity.ai.navigation.PathfindingBlacklist;
 import net.minecraft.block.*;
 import net.minecraft.entity.ai.pathing.*;
 import net.minecraft.entity.mob.MobEntity;
@@ -23,6 +26,7 @@ public class VillagerLandPathNodeMaker extends PathNodeMaker {
     protected float waterPathNodeTypeWeight;
     private final Long2ObjectMap<ExtendedPathNodeType> nodeTypes = new Long2ObjectOpenHashMap<>();
     private final Object2BooleanMap<Box> collidedBoxes = new Object2BooleanOpenHashMap<>();
+    private final Long2BooleanMap clearanceCache = new Long2BooleanOpenHashMap();
 
     @Override
     public void init(ChunkCache cachedWorld, MobEntity entity) {
@@ -35,6 +39,7 @@ public class VillagerLandPathNodeMaker extends PathNodeMaker {
         this.entity.setPathfindingPenalty(ExtendedPathNodeType.WATER.toVanilla(), this.waterPathNodeTypeWeight);
         this.nodeTypes.clear();
         this.collidedBoxes.clear();
+        this.clearanceCache.clear();
         super.clear();
     }
 
@@ -141,8 +146,11 @@ public class VillagerLandPathNodeMaker extends PathNodeMaker {
         return i;
     }
 
-    protected boolean isValidAdjacentSuccessor( PathNode node, PathNode successor1) {
-        return node != null && !node.visited && (node.penalty >= 0.0f || successor1.penalty < 0.0f);
+    protected boolean isValidAdjacentSuccessor(PathNode node, PathNode successor1) {
+        return node != null
+                && !node.visited
+                && (node.penalty >= 0.0f || successor1.penalty < 0.0f)
+                && hasExactClearance(node);
     }
 
     protected boolean isValidDiagonalSuccessor(PathNode xNode,  PathNode zNode,  PathNode xDiagNode,  PathNode zDiagNode) {
@@ -159,7 +167,48 @@ public class VillagerLandPathNodeMaker extends PathNodeMaker {
             return false;
         }
         boolean bl = xDiagNode.type == ExtendedPathNodeType.FENCE.toVanilla() && zNode.type == ExtendedPathNodeType.FENCE.toVanilla() && (double) this.entity.getWidth() < 0.5;
-        return zDiagNode.penalty >= 0.0f && (xDiagNode.y < xNode.y || xDiagNode.penalty >= 0.0f || bl) && (zNode.y < xNode.y || zNode.penalty >= 0.0f || bl);
+        return zDiagNode.penalty >= 0.0f
+                && (xDiagNode.y < xNode.y || xDiagNode.penalty >= 0.0f || bl)
+                && (zNode.y < xNode.y || zNode.penalty >= 0.0f || bl)
+                && hasExactClearance(zDiagNode);
+    }
+
+    private boolean hasExactClearance(PathNode node) {
+        if (!shouldCheckExactClearance(node.type)) {
+            return true;
+        }
+
+        Box box = getMobBoxAt(node);
+        if (!Config.getInstance().villagerPathfindingCheckAllNodeCollisions
+                && !PathfindingBlacklist.overlapsSpecialCollisionBlock(this.cachedWorld, box)) {
+            return true;
+        }
+
+        long key = BlockPos.asLong(node.x, node.y, node.z);
+        if (this.clearanceCache.containsKey(key)) {
+            return this.clearanceCache.get(key);
+        }
+
+        boolean hasClearance = this.cachedWorld.isSpaceEmpty(this.entity, box);
+        this.clearanceCache.put(key, hasClearance);
+        return hasClearance;
+    }
+
+    private static boolean shouldCheckExactClearance(PathNodeType type) {
+        return type != PathNodeType.WALKABLE_DOOR
+                && type != PathNodeType.DOOR_OPEN
+                && type != PathNodeType.TRAPDOOR;
+    }
+
+    private Box getMobBoxAt(PathNode node) {
+        Box box = this.entity.getBoundingBox();
+        BlockPos pos = new BlockPos(node.x, node.y, node.z);
+        double floorY = this.getFeetY(pos);
+        return box.offset(
+                node.x + 0.5D - this.entity.getX(),
+                floorY + 0.001D - this.entity.getY(),
+                node.z + 0.5D - this.entity.getZ()
+        );
     }
 
     private boolean isBlocked(PathNode node) {

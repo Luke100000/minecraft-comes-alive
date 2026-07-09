@@ -84,12 +84,16 @@ public class Pregnancy {
 
     public boolean tryStartGestation() {
         // You can't get double-pregnant
-        if (isPregnant()) {
+        if (isPregnant() || mother.getTraits().hasTrait(Traits.INFERTILE)) {
             return false;
         }
 
         return getFather().map(father -> {
             // In case we're the father, impregnate the other
+            if (father.getTraits().hasTrait(Traits.INFERTILE)) {
+                return false;
+            }
+
             if (mother.getGenetics().getGender() == Gender.MALE && father.getGenetics().getGender() != Gender.MALE) {
                 return father.getRelationships().getPregnancy().tryStartGestation();
             }

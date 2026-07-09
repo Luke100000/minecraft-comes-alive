@@ -38,10 +38,6 @@ public class DeliverMessageTask extends MultiTickTask<VillagerEntityMCA> {
 
     @Override
     protected boolean shouldRun(ServerWorld world, VillagerEntityMCA villager) {
-        if (villager.getBrain().getOptionalMemory(MemoryModuleType.ATTACK_TARGET).isPresent()) {
-            return false;
-        }
-
         // Get potential message
         Optional<ConversationManager.Message> optionalMessage = getMessage(villager);
         // Set new message if it exists
@@ -63,7 +59,6 @@ public class DeliverMessageTask extends MultiTickTask<VillagerEntityMCA> {
     protected boolean shouldKeepRunning(ServerWorld world, VillagerEntityMCA villager, long time) {
         return  message != null
                 && talked < getMaxTalkingTime()
-                && villager.getBrain().getOptionalMemory(MemoryModuleType.ATTACK_TARGET).isEmpty()
                 && !villager.getVillagerBrain().isPanicking()
                 && !villager.isSleeping();
     }

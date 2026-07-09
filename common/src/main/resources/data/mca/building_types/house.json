@@ -4,5 +4,7 @@
   "priority": 1,
   "blocks": {
     "#minecraft:beds": 1
-  }
+  },
+  "iconU": 4,
+  "iconV": 1
 }

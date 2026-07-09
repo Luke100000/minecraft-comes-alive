@@ -8,7 +8,6 @@ import net.mca.entity.ai.Memories;
 import net.mca.entity.ai.Relationship;
 import net.mca.server.world.data.PlayerSaveData;
 import net.mca.server.world.data.Village;
-import net.minecraft.entity.ai.brain.MemoryModuleType;
 import net.minecraft.entity.ai.brain.task.MultiTickTask;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.server.network.ServerPlayerEntity;
@@ -27,7 +26,7 @@ public class GreetPlayerTask extends MultiTickTask<VillagerEntityMCA> {
     @Override
     protected boolean shouldRun(ServerWorld world, VillagerEntityMCA entity) {
         cooldown--;
-        return cooldown < 0 && entity.getBrain().getOptionalMemory(MemoryModuleType.ATTACK_TARGET).isEmpty();
+        return cooldown < 0;
     }
 
     @Override

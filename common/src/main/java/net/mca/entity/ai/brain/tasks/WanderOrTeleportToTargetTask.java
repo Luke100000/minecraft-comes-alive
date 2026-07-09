@@ -1,20 +1,13 @@
 package net.mca.entity.ai.brain.tasks;
 
-import com.google.gson.JsonSyntaxException;
 import net.mca.Config;
-import net.mca.util.RegistryHelper;
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
+import net.mca.entity.ai.navigation.PathfindingBlacklist;
 import net.minecraft.entity.ai.brain.MemoryModuleType;
 import net.minecraft.entity.ai.brain.task.WanderAroundTask;
 import net.minecraft.entity.ai.pathing.LandPathNodeMaker;
 import net.minecraft.entity.ai.pathing.PathNodeType;
 import net.minecraft.entity.mob.MobEntity;
-import net.minecraft.registry.Registries;
-import net.minecraft.registry.RegistryKeys;
-import net.minecraft.registry.tag.TagKey;
 import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.Identifier;
 import net.minecraft.util.math.BlockPos;
 
 public class WanderOrTeleportToTargetTask extends WanderAroundTask {
@@ -97,23 +90,7 @@ public class WanderOrTeleportToTargetTask extends WanderAroundTask {
     private boolean isAreaSafe(ServerWorld world, BlockPos pos) {
         // The following conditions define whether it is logically
         // safe for the entity to teleport to the specified pos within world
-        final BlockState aboveState = world.getBlockState(pos);
-        final Identifier aboveId = Registries.BLOCK.getId(aboveState.getBlock());
-        for (String blockId : Config.getInstance().villagerPathfindingBlacklist) {
-            if (blockId.equals(aboveId.toString())) {
-                return false;
-            } else if (blockId.charAt(0) == '#') {
-                Identifier identifier = new Identifier(blockId.substring(1));
-                TagKey<Block> tag = TagKey.of(RegistryKeys.BLOCK, identifier);
-                if (tag != null && !RegistryHelper.isTagEmpty(tag)) {
-                    if (aboveState.isIn(tag)) {
-                        return false;
-                    }
-                } else {
-                    throw new JsonSyntaxException("Unknown block tag in villagerPathfindingBlacklist '" + identifier + "'");
-                }
-            }
-        }
-        return true;
+        return !PathfindingBlacklist.isBlocked(world.getBlockState(pos));
     }
+
 }

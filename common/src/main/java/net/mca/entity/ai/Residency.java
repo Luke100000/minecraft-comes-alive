@@ -107,17 +107,8 @@ public class Residency {
     public void seekHome() {
         if (entity.requiresHome()) {
             VillageManager manager = VillageManager.get((ServerWorld) entity.getWorld());
-            Optional<Village> current = getHomeVillage();
-            Optional<Village> target = getHome()
-                    .filter(home -> home.getDimension() == entity.getWorld().getRegistryKey())
-                    .flatMap(home -> manager.findNearestVillage(home.getPos(), Village.BORDER_MARGIN))
-                    .or(() -> current)
-                    .or(() -> manager.findNearestVillage(entity));
-
-            target.ifPresent(v -> {
-                if (current.filter(existing -> existing.getId() == v.getId()).isEmpty()) {
-                    leaveHome();
-                }
+            manager.findNearestVillage(entity).ifPresent(v -> {
+                leaveHome();
                 v.updateResident(entity);
                 entity.setTrackedValue(VILLAGE, v.getId());
             });

@@ -1,0 +1,35 @@
+package net.mca.mixin.client.journeymap;
+
+import net.mca.client.render.JourneyMapIconBridge;
+import net.mca.entity.VillagerLike;
+import net.minecraft.entity.LivingEntity;
+import net.minecraft.util.Identifier;
+import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Pseudo;
+import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+
+@Pseudo
+@Mixin(targets = "journeymap.client.model.entity.EntityDTO", remap = false)
+public abstract class MixinEntityDTO {
+    @Shadow(remap = false)
+    public abstract void setEntityIconLocation(Identifier entityIconLocation);
+
+    @Shadow(remap = false)
+    public abstract void setDrawOutline(boolean drawOutline);
+
+    @Inject(method = "update", at = @At("TAIL"), remap = false, require = 0)
+    private void mca$useDynamicFaceIcon(LivingEntity entity, boolean ignored, CallbackInfo ci) {
+        if (!(entity instanceof VillagerLike<?> villager)) {
+            return;
+        }
+
+        Identifier icon = JourneyMapIconBridge.getOrCreateFaceIcon(villager);
+        if (icon != null) {
+            this.setDrawOutline(false);
+            this.setEntityIconLocation(icon);
+        }
+    }
+}

@@ -14,8 +14,13 @@ public class PlayerDataMessage extends NbtDataMessage {
     public final UUID uuid;
 
     public PlayerDataMessage(UUID uuid, NbtCompound nbt) {
-        super(nbt);
+        super(nbt.copy());
         this.uuid = uuid;
+    }
+
+    @Override
+    public NbtCompound getData() {
+        return super.getData().copy();
     }
 
     @Override

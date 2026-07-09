@@ -8,6 +8,7 @@ import net.mca.entity.VillagerEntityMCA;
 import net.mca.entity.ai.Chore;
 import net.mca.entity.ai.Memories;
 import net.mca.entity.ai.MoveState;
+import net.mca.entity.ai.Traits;
 import net.mca.entity.ai.relationship.RelationshipState;
 import net.mca.item.ItemsMCA;
 import net.mca.mixin.MixinVillagerEntityInvoker;
@@ -15,9 +16,12 @@ import net.mca.server.world.data.FamilyTree;
 import net.mca.server.world.data.FamilyTreeNode;
 import net.mca.server.world.data.PlayerSaveData;
 import net.mca.util.WorldUtils;
+import net.minecraft.entity.Entity;
 import net.minecraft.entity.Saddleable;
 import net.minecraft.entity.ai.FuzzyPositions;
+import net.minecraft.entity.passive.CamelEntity;
 import net.minecraft.entity.player.PlayerInventory;
+import net.minecraft.entity.vehicle.BoatEntity;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
 import net.minecraft.network.packet.s2c.play.EntityPassengersSetS2CPacket;
@@ -34,6 +38,11 @@ import java.util.Comparator;
 import java.util.Optional;
 
 public class VillagerCommandHandler extends EntityCommandHandler<VillagerEntityMCA> {
+    private static boolean canMount(Entity mount) {
+        int seats = (mount instanceof CamelEntity || mount instanceof BoatEntity) ? 2 : 1;
+        return mount.getPassengerList().size() < seats;
+    }
+
     public VillagerCommandHandler(VillagerEntityMCA entity) {
         super(entity);
     }
@@ -86,14 +95,20 @@ public class VillagerCommandHandler extends EntityCommandHandler<VillagerEntityM
                 if (entity.hasVehicle()) {
                     entity.stopRiding();
                 } else {
-                    entity.getWorld().getOtherEntities(player, player.getBoundingBox()
-                                    .expand(10), e -> e instanceof Saddleable && ((Saddleable) e).isSaddled())
-                            .stream()
-                            .filter(horse -> !horse.hasPassengers())
-                            .min(Comparator.comparingDouble(a -> a.squaredDistanceTo(entity))).ifPresentOrElse(horse -> {
-                                entity.startRiding(horse, false);
-                                entity.sendChatMessage(player, "interaction.ridehorse.success");
-                            }, () -> entity.sendChatMessage(player, "interaction.ridehorse.fail.notnearby"));
+                    Entity playerVehicle = player.getVehicle();
+                    if (playerVehicle != null && canMount(playerVehicle) && entity.startRiding(playerVehicle, false)) {
+                        entity.sendChatMessage(player, "interaction.ridehorse.success");
+                    } else {
+                        entity.getWorld().getOtherEntities(player, player.getBoundingBox().expand(10), e -> (e instanceof Saddleable saddleable && saddleable.isSaddled()) || e instanceof BoatEntity)
+                                .stream()
+                                .filter(VillagerCommandHandler::canMount)
+                                .min(Comparator.comparingDouble(a -> a.squaredDistanceTo(entity)))
+                                .filter(mount -> entity.startRiding(mount, false))
+                                .ifPresentOrElse(
+                                        mount -> entity.sendChatMessage(player, "interaction.ridehorse.success"),
+                                        () -> entity.sendChatMessage(player, "interaction.ridehorse.fail.notnearby")
+                                );
+                    }
                 }
                 return true;
             }
@@ -133,6 +148,8 @@ public class VillagerCommandHandler extends EntityCommandHandler<VillagerEntityM
             case "procreate" -> {
                 if (memory.getHearts() < 100) {
                     entity.sendChatMessage(player, "interaction.procreate.fail.lowhearts");
+                } else if (entity.getTraits().hasTrait(Traits.INFERTILE)) {
+                    entity.sendChatMessage(player, "interaction.procreate.fail.infertile");
                 } else if (entity.getRelationships().mayProcreateAgain(player.getWorld().getTime())) {
                     entity.getRelationships().startProcreating(player.getWorld().getTime());
                 } else {
@@ -210,7 +227,6 @@ public class VillagerCommandHandler extends EntityCommandHandler<VillagerEntityM
                         entity.sendChatMessage(player, "profession.set.none");
                     }
                     case "guard" -> {
-
                         entity.setProfession(ProfessionsMCA.GUARD.get());
                         entity.sendChatMessage(player, "profession.set.guard");
                     }

@@ -8,6 +8,7 @@ import net.minecraft.entity.ai.brain.task.LookTargetUtil;
 import net.minecraft.entity.ai.brain.task.MultiTickTask;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.Vec3d;
 import net.minecraft.util.math.random.Random;
 import net.minecraft.world.World;
 
@@ -37,10 +38,11 @@ public class EnterBuildingTask extends MultiTickTask<VillagerEntityMCA> {
                         .min(Comparator.comparingInt(a -> a.getCenter().getManhattanDistance(villager.getBlockPos()))));
     }
 
-    protected Optional<BlockPos> getRandomPositionIn(Building b, World world) {
+    protected Optional<BlockPos> getRandomPositionIn(Building b, World world, VillagerEntityMCA villager) {
         if (b.getBuildingType().grouped()) {
             //todo randomize
-            return Optional.ofNullable(b.getCenter());
+            return Optional.ofNullable(b.getCenter())
+                    .filter(pos -> isGoodIndoorWalkTarget(world, villager, pos));
         }
 
         Random r = world.getRandom();
@@ -55,17 +57,26 @@ public class EnterBuildingTask extends MultiTickTask<VillagerEntityMCA> {
                     r.nextInt(Math.max(1, diff.getY() - margin * 2)) + margin,
                     r.nextInt(Math.max(1, diff.getZ() - margin * 2)) + margin
             ));
-            if (!world.isSkyVisible(p)) {
+            if (isGoodIndoorWalkTarget(world, villager, p)) {
                 return Optional.of(p);
             }
         }
         return Optional.empty();
     }
 
+    private boolean isGoodIndoorWalkTarget(World world, VillagerEntityMCA villager, BlockPos pos) {
+        return !world.isSkyVisible(pos)
+                && villager.getNavigation().isValidPosition(pos)
+                && world.isSpaceEmpty(
+                        villager,
+                        villager.getBoundingBox().offset(Vec3d.ofBottomCenter(pos).subtract(villager.getPos()))
+                );
+    }
+
     protected Optional<BlockPos> getNextPosition(VillagerEntityMCA villager) {
         Optional<Building> b = getNearestBuilding(villager);
         if (b.isPresent() && !b.get().containsPos(villager.getBlockPos())) {
-            return getRandomPositionIn(b.get(), villager.getWorld());
+            return getRandomPositionIn(b.get(), villager.getWorld(), villager);
         }
         return Optional.empty();
     }

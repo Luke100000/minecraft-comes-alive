@@ -14,6 +14,9 @@ public class PersonalityModule {
         input.add("This is a conversation with a " + translate(villager.getGenetics().getGender().name()) + " Minecraft villager named $villager and the Player named $player." + " ");
 
         input.add("$villager is " + translate(villager.getVillagerBrain().getPersonality().name()) + " and " + translate(villager.getVillagerBrain().getMood().getName()) + ". ");
+        if (villager.getAgeState() == AgeState.BABY) {
+            input.add("$villager is a baby. ");
+        }
         if (villager.getAgeState() == AgeState.TODDLER) {
             input.add("$villager is a toddler. ");
         }

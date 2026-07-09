@@ -2,6 +2,7 @@ package net.mca.server.command;
 
 import com.mojang.brigadier.Command;
 import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.arguments.BoolArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.ArgumentBuilder;
@@ -13,6 +14,7 @@ import net.mca.entity.ai.relationship.RelationshipState;
 import net.mca.item.BabyItem;
 import net.mca.server.SpawnQueue;
 import net.mca.server.world.data.*;
+import net.minecraft.command.argument.EntityArgumentType;
 import net.minecraft.command.argument.UuidArgumentType;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityType;
@@ -52,6 +54,10 @@ public class AdminCommand {
                 .then(register("incrementHearts", AdminCommand::incrementHearts))
                 .then(register("decrementHearts", AdminCommand::decrementHearts))
                 .then(register("resetPlayerData", AdminCommand::resetPlayerData))
+                .then(register("overrideVillageRequirements")
+                        .then(CommandManager.argument("target", EntityArgumentType.player())
+                                .then(CommandManager.argument("value", BoolArgumentType.bool())
+                                        .executes(AdminCommand::overrideVillageRequirements))))
                 .then(register("resetMarriage", AdminCommand::resetMarriage))
                 .then(register("listVillages", AdminCommand::listVillages))
                 .then(register("assumeNameDead").then(CommandManager.argument("name", StringArgumentType.string()).executes(AdminCommand::assumeNameDead)))
@@ -65,6 +71,7 @@ public class AdminCommand {
     }
 
     private static int listVillages(CommandContext<ServerCommandSource> ctx) {
+        //remove from villages
         for (Village village : VillageManager.get(ctx.getSource().getWorld())) {
             final BlockPos pos = village.getBox().getCenter();
             success(String.format(Locale.ROOT, "%d: %s with %d buildings and %d/%d villager(s)",
@@ -82,6 +89,7 @@ public class AdminCommand {
 
     private static int assumeNameDead(CommandContext<ServerCommandSource> ctx) {
         String name = StringArgumentType.getString(ctx, "name");
+        //remove spouse too
         FamilyTree tree = FamilyTree.get(ctx.getSource().getWorld());
         List<FamilyTreeNode> collect = tree.getAllWithName(name).filter(n -> !n.isDeceased()).toList();
         if (collect.isEmpty()) {
@@ -111,12 +119,10 @@ public class AdminCommand {
     }
 
     private static void assumeDead(CommandContext<ServerCommandSource> ctx, UUID uuid) {
-        //remove from villages
         for (Village village : VillageManager.get(ctx.getSource().getWorld())) {
             village.removeResident(uuid);
         }
 
-        //remove spouse too
         FamilyTree tree = FamilyTree.get(ctx.getSource().getWorld());
         Optional<FamilyTreeNode> node = tree.getOrEmpty(uuid);
         node.filter(n -> n.partner() != null).ifPresent(n -> n.updatePartner(null, RelationshipState.WIDOW));
@@ -210,6 +216,14 @@ public class AdminCommand {
         PlayerSaveData playerData = PlayerSaveData.get(player);
         playerData.reset();
         success("Player data reset.", ctx);
+        return 0;
+    }
+
+    private static int overrideVillageRequirements(CommandContext<ServerCommandSource> ctx) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
+        ServerPlayerEntity target = EntityArgumentType.getPlayer(ctx, "target");
+        boolean value = BoolArgumentType.getBool(ctx, "value");
+        PlayerSaveData.get(target).setOverrideVillageRequirements(value);
+        success("Village requirement override for " + target.getGameProfile().getName() + " set to " + value + ".", ctx);
         return 0;
     }
 
@@ -340,6 +354,7 @@ public class AdminCommand {
         sendMessage(player, WHITE + " /mca-admin forceChildGrowth " + GOLD + " - Force nearby children to grow.");
         sendMessage(player, WHITE + " /mca-admin clearLoadedVillagers " + GOLD + " - Clear all loaded villagers. " + RED + "(IRREVERSIBLE)");
         sendMessage(player, WHITE + " /mca-admin restoreClearedVillagers " + GOLD + " - Restores cleared villagers. ");
+        sendMessage(player, WHITE + " /mca-admin overrideVillageRequirements true|false " + GOLD + " - Override village requirements for this player.");
 
         sendMessage(player, WHITE + " /mca-admin listVillages " + GOLD + " - Prints a list of all villages.");
         sendMessage(player, WHITE + " /mca-admin removeVillage id" + GOLD + " - Removed a village with given ID.");

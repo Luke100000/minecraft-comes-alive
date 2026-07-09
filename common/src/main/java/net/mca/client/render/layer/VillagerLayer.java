@@ -117,7 +117,7 @@ public abstract class VillagerLayer<T extends LivingEntity, M extends BipedEntit
         }
     }
 
-    private void renderModel(MatrixStack transform, VertexConsumerProvider provider, int light, M model, float r, float g, float b, Identifier texture, int overlay, boolean visible, boolean glowing) {
+    protected void renderModel(MatrixStack transform, VertexConsumerProvider provider, int light, M model, float r, float g, float b, Identifier texture, int overlay, boolean visible, boolean glowing) {
         RenderLayer layer = getRenderLayer(texture, visible, isTranslucent(), glowing);
         if (layer == null) return;
         VertexConsumer buffer = provider.getBuffer(layer);

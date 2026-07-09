@@ -31,8 +31,7 @@ public class BuildingTask extends Task {
 
     @Override
     public boolean isCompleted(Village village, ServerPlayerEntity player) {
-        return village.getBuildings().values().stream()
-                .anyMatch(b -> b.getType().equals(type));
+        return village.hasBuilding(type);
     }
 
     @Override

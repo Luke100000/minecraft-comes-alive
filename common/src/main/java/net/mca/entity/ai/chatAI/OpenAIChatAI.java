@@ -7,7 +7,9 @@ import com.google.gson.JsonSyntaxException;
 import net.mca.Config;
 import net.mca.MCA;
 import net.mca.entity.VillagerEntityMCA;
+import net.mca.entity.ai.Relationship;
 import net.mca.entity.ai.chatAI.modules.*;
+import net.mca.entity.ai.relationship.AgeState;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.text.ClickEvent;
 import net.minecraft.text.HoverEvent;
@@ -196,6 +198,12 @@ public class OpenAIChatAI implements ChatAIStrategy {
                     s = s.replaceAll("\\$" + entry.getKey(), entry.getValue());
                 }
                 sb.append(s);
+            }
+
+            if (villager.getAgeState() == AgeState.BABY || villager.getAgeState() == AgeState.TODDLER || villager.getAgeState() == AgeState.CHILD) {
+                sb.append("You are a child/baby and MUST NOT flirt with the player or use any romantic or suggestive language. Keep your responses innocent, child-like, and age-appropriate.\n");
+            } else if (Relationship.IS_RELATIVE.test(villager, player)) {
+                sb.append("You are related to the player and MUST NOT flirt with them or use romantic/suggestive language. Keep your responses strictly familial.\n");
             }
 
             // try to match player language

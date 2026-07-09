@@ -7,8 +7,10 @@ import net.mca.client.gui.MCAScreens;
 import net.mca.client.particle.InteractionParticle;
 import net.mca.client.render.*;
 import net.mca.client.resources.ColorPaletteLoader;
+import net.mca.client.resources.GeneratedEyeTextureReloadListener;
 import net.mca.entity.EntitiesMCA;
 import net.mca.resources.ApiReloadListener;
+import net.mca.resources.FaceList;
 import net.mca.resources.Supporters;
 import net.minecraft.client.item.ModelPredicateProviderRegistry;
 import net.minecraft.client.render.RenderLayer;
@@ -33,6 +35,8 @@ public final class MCAForgeClient {
         new ClientProxyImpl();
         event.registerReloadListener(new MCAScreens());
         event.registerReloadListener(new ColorPaletteLoader());
+        event.registerReloadListener(new FaceList());
+        event.registerReloadListener(new GeneratedEyeTextureReloadListener());
         event.registerReloadListener(new Supporters());
         event.registerReloadListener(new ApiReloadListener());
     }

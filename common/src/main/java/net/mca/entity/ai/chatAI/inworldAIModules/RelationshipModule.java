@@ -4,6 +4,7 @@ import net.mca.entity.VillagerEntityMCA;
 import net.mca.entity.ai.Relationship;
 import net.mca.entity.ai.chatAI.inworldAIModules.api.Interaction;
 import net.mca.entity.ai.chatAI.inworldAIModules.api.TriggerEvent;
+import net.mca.entity.ai.relationship.AgeState;
 import net.minecraft.server.network.ServerPlayerEntity;
 
 /**
@@ -22,13 +23,23 @@ public class RelationshipModule {
     public void updateRelationship(Interaction interaction, ServerPlayerEntity player, VillagerEntityMCA villager) {
         Interaction.RelationshipUpdate update = interaction.relationshipUpdate();
 
+        int flirtatious = update.flirtatious();
+        int attraction = update.attraction();
+        if (villager.getAgeState() == AgeState.BABY
+                || villager.getAgeState() == AgeState.TODDLER
+                || villager.getAgeState() == AgeState.CHILD
+                || Relationship.IS_RELATIVE.test(villager, player)) {
+            flirtatious = 0;
+            attraction = 0;
+        }
+
         // Get total, with different weights applied to different relationship values
         // Can be customized if certain parameters seem more important for heart levels
-        int weightedTotal = 1 * update.trust()
-                + 1 * update.respect()
-                + 1 * update.familiar()
-                + 1 * update.flirtatious()
-                + 1 * update.attraction();
+        int weightedTotal = update.trust()
+                + update.respect()
+                + update.familiar()
+                + flirtatious
+                + attraction;
 
         int heartsUpdate = weightedTotal / 10;
 

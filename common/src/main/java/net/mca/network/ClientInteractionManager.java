@@ -33,6 +33,8 @@ public interface ClientInteractionManager {
 
     void handleSkinListResponse(SkinListResponse response);
 
+    void handleCustomSkinListResponse(CustomSkinListResponse response);
+
     void handleDestinyGuiRequest(OpenDestinyGuiRequest request);
 
     void handleDialogueQuestionResponse(InteractionDialogueQuestionResponse response);
@@ -44,4 +46,6 @@ public interface ClientInteractionManager {
     void handleCustomSkinsChangedMessage(CustomSkinsChangedMessage message);
 
     void handleCivilRegistryResponse(CivilRegistryResponse response);
+
+    void handleBuildingPolymorph(BuildingPolymorphMessage message);
 }

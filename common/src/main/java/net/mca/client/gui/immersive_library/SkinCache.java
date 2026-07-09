@@ -113,21 +113,25 @@ public class SkinCache {
                 loadResources(contentid);
             }
 
-            // Download assets when versions mismatch
-            if (!requested.containsKey(contentid) && (currentVersion > version || !textureIdentifiers.containsKey(contentid))) {
-                requested.put(contentid, true);
+            // Download assets when versions mismatch. putIfAbsent prevents duplicate concurrent requests.
+            if ((currentVersion > version || !textureIdentifiers.containsKey(contentid)) && requested.putIfAbsent(contentid, true) == null) {
                 CompletableFuture.runAsync(() -> {
-                    logger("Requested asset " + contentid + " with version " + version + " and current version " + currentVersion);
-                    Response response = request(Api.HttpMethod.GET, ContentResponse.class, "content/mca/" + contentid, Map.of("version", String.valueOf(version)));
-                    if (response instanceof ContentResponse contentResponse) {
-                        int newVersion = contentResponse.content().version();
-                        write(contentid + ".png", Base64.getDecoder().decode(contentResponse.content().data()));
-                        write(contentid + ".json", contentResponse.content().meta());
-                        write(contentid + ".version", Integer.toString(newVersion));
-                        cachedVersions.put(contentid, newVersion);
+                    try {
+                        logger("Requested asset " + contentid + " with version " + version + " and current version " + currentVersion);
+                        Response response = request(Api.HttpMethod.GET, ContentResponse.class, "content/mca/" + contentid, Map.of("version", String.valueOf(version)));
+                        if (response instanceof ContentResponse contentResponse) {
+                            int newVersion = contentResponse.content().version();
+                            write(contentid + ".png", Base64.getDecoder().decode(contentResponse.content().data()));
+                            write(contentid + ".json", contentResponse.content().meta());
+                            write(contentid + ".version", Integer.toString(newVersion));
+                            cachedVersions.put(contentid, newVersion);
+                            textureIdentifiers.remove(contentid);
+                            logger("Received " + contentid);
+                        }
+                    } catch (RuntimeException e) {
+                        MCA.LOGGER.warn("Unable to sync immersive library asset {}", contentid, e);
+                    } finally {
                         requested.remove(contentid);
-                        textureIdentifiers.remove(contentid);
-                        logger("Received " + contentid);
                     }
                 });
             }

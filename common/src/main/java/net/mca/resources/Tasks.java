@@ -4,6 +4,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import net.mca.MCA;
 import net.mca.resources.data.tasks.*;
+import net.mca.server.world.data.PlayerSaveData;
 import net.mca.server.world.data.Village;
 import net.minecraft.resource.JsonDataLoader;
 import net.minecraft.resource.ResourceManager;
@@ -66,6 +67,10 @@ public class Tasks extends JsonDataLoader {
     }
 
     public static Rank getRank(Village village, ServerPlayerEntity player) {
+        if (PlayerSaveData.get(player).shouldOverrideVillageRequirements()) {
+            return Rank.MONARCH;
+        }
+
         Rank[] ranks = Rank.values();
         for (int i = ranks.length - 1; i >= 0; i--) {
             if (getInstance().tasks.get(ranks[i]).stream().allMatch(t -> !t.isRequired() || t.isCompleted(village, player))) {

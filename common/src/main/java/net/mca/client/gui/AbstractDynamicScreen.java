@@ -130,7 +130,7 @@ public abstract class AbstractDynamicScreen extends Screen {
                     (int)(screen.height * Alignment.alignments.get(apiButton.align()).v + apiButton.y()),
                     apiButton.width(),
                     apiButton.height(),
-                    Text.translatable(apiButton.identifier()),
+                    getButtonMessage(apiButton, screen),
                     a -> screen.buttonPressed(apiButton),
                     DEFAULT_NARRATION_SUPPLIER);
             this.apiButton = apiButton;
@@ -143,6 +143,14 @@ public abstract class AbstractDynamicScreen extends Screen {
                 }
                 active = false;
             }
+        }
+
+        private static Text getButtonMessage(Button apiButton, AbstractDynamicScreen screen) {
+            if ("gui.button.ridehorse".equals(apiButton.identifier())
+                    && screen.getConstraints().contains(Constraint.RIDING)) {
+                return Text.translatable("gui.button.dismount");
+            }
+            return Text.translatable(apiButton.identifier());
         }
 
         public Button getApiButton() {

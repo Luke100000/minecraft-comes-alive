@@ -1,0 +1,176 @@
+package net.mca.client.gui;
+
+import net.mca.MCA;
+import net.mca.client.gui.widget.WidgetUtils;
+import net.mca.cobalt.network.NetworkHandler;
+import net.mca.network.c2s.ConfirmBuildingPolymorphMessage;
+import net.mca.resources.BuildingTypes;
+import net.mca.resources.data.BuildingType;
+import net.mca.util.compat.ButtonWidget;
+import net.minecraft.client.gui.DrawContext;
+import net.minecraft.client.gui.screen.Screen;
+import net.minecraft.text.Text;
+import net.minecraft.util.Identifier;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.MathHelper;
+
+import java.util.List;
+import java.util.Objects;
+
+public class BuildingPolymorphScreen extends Screen {
+    private static final Identifier ICON_TEXTURES = new Identifier(MCA.MOD_ID, "textures/buildings.png");
+    private static final int BUTTON_WIDTH = 180;
+    private static final int BUTTON_HEIGHT = 20;
+    private static final int BUTTON_SPACING = 6;
+    private static final int MAX_ENTRIES_PER_PAGE = 7;
+
+    private final List<String> matchingTypes;
+    private final BlockPos scanPos;
+    private final boolean isRoom;
+    private int page;
+
+    public BuildingPolymorphScreen(List<String> matchingTypes, BlockPos scanPos, boolean isRoom) {
+        super(Text.translatable("gui.building_polymorph.title"));
+        this.matchingTypes = List.copyOf(matchingTypes);
+        this.scanPos = scanPos;
+        this.isRoom = isRoom;
+    }
+
+    private void drawBuildingIcon(DrawContext context, String typeName, int x, int y) {
+        BuildingType type = BuildingTypes.getInstance().getBuildingType(typeName);
+        if (type == null || !type.isIcon()) {
+            return;
+        }
+        WidgetUtils.drawBuildingIcon(context, ICON_TEXTURES, x, y, type.iconU(), type.iconV());
+    }
+
+    private int getEntriesPerPage() {
+        return Math.max(1, Math.min(MAX_ENTRIES_PER_PAGE, (height - 116) / (BUTTON_HEIGHT + BUTTON_SPACING)));
+    }
+
+    private int getPageCount() {
+        return Math.max(1, (matchingTypes.size() + getEntriesPerPage() - 1) / getEntriesPerPage());
+    }
+
+    private int getVisibleEntries() {
+        int pageStart = page * getEntriesPerPage();
+        return Math.min(getEntriesPerPage(), Math.max(0, matchingTypes.size() - pageStart));
+    }
+
+    private boolean hasMultiplePages() {
+        return getPageCount() > 1;
+    }
+
+    private int getContentTop() {
+        int visibleEntries = getVisibleEntries();
+        int listHeight = visibleEntries * BUTTON_HEIGHT + Math.max(0, visibleEntries - 1) * BUTTON_SPACING;
+        int navigationHeight = hasMultiplePages() ? BUTTON_HEIGHT + BUTTON_SPACING : 0;
+        int contentHeight = 35 + listHeight + 10 + navigationHeight + BUTTON_HEIGHT;
+        return Math.max(18, height / 2 - contentHeight / 2);
+    }
+
+    private void setPage(int page) {
+        this.page = MathHelper.clamp(page, 0, getPageCount() - 1);
+        clearChildren();
+        init();
+    }
+
+    @Override
+    protected void init() {
+        super.init();
+        page = MathHelper.clamp(page, 0, getPageCount() - 1);
+        int startY = getContentTop() + 35;
+        int pageStart = page * getEntriesPerPage();
+        int visibleEntries = getVisibleEntries();
+
+        for (int i = 0; i < visibleEntries; i++) {
+            String typeName = matchingTypes.get(pageStart + i);
+            int y = startY + i * (BUTTON_HEIGHT + BUTTON_SPACING);
+            addDrawableChild(new PolymorphButton(
+                    width / 2 - BUTTON_WIDTH / 2,
+                    y,
+                    BUTTON_WIDTH,
+                    BUTTON_HEIGHT,
+                    typeName,
+                    Text.translatable("buildingType." + typeName),
+                    button -> {
+                        NetworkHandler.sendToServer(new ConfirmBuildingPolymorphMessage(scanPos, isRoom, typeName));
+                        Objects.requireNonNull(client).setScreen(null);
+                    }
+            ));
+        }
+
+        int footerY = startY + visibleEntries * (BUTTON_HEIGHT + BUTTON_SPACING) + 10;
+        if (hasMultiplePages()) {
+            ButtonWidget previous = addDrawableChild(new ButtonWidget(
+                    width / 2 - 90,
+                    footerY,
+                    32,
+                    BUTTON_HEIGHT,
+                    Text.literal("<"),
+                    button -> setPage(page - 1)
+            ));
+            previous.active = page > 0;
+
+            ButtonWidget pageLabel = addDrawableChild(new ButtonWidget(
+                    width / 2 - 54,
+                    footerY,
+                    108,
+                    BUTTON_HEIGHT,
+                    Text.literal((page + 1) + " / " + getPageCount()),
+                    button -> {
+                    }
+            ));
+            pageLabel.active = false;
+
+            ButtonWidget next = addDrawableChild(new ButtonWidget(
+                    width / 2 + 58,
+                    footerY,
+                    32,
+                    BUTTON_HEIGHT,
+                    Text.literal(">"),
+                    button -> setPage(page + 1)
+            ));
+            next.active = page < getPageCount() - 1;
+            footerY += BUTTON_HEIGHT + BUTTON_SPACING;
+        }
+
+        addDrawableChild(new ButtonWidget(
+                width / 2 - 50,
+                footerY,
+                100,
+                BUTTON_HEIGHT,
+                Text.translatable("gui.blueprint.cancel"),
+                button -> Objects.requireNonNull(client).setScreen(null)
+        ));
+    }
+
+    @Override
+    public boolean shouldPause() {
+        return false;
+    }
+
+    @Override
+    public void render(DrawContext context, int mouseX, int mouseY, float delta) {
+        renderBackground(context);
+        super.render(context, mouseX, mouseY, delta);
+        int textYStart = getContentTop();
+        context.drawCenteredTextWithShadow(textRenderer, Text.translatable("gui.building_polymorph.title"), width / 2, textYStart, 0xffffff);
+        context.drawCenteredTextWithShadow(textRenderer, Text.translatable("gui.building_polymorph.desc"), width / 2, textYStart + 15, 0xaaaaaa);
+    }
+
+    private class PolymorphButton extends ButtonWidget {
+        private final String typeName;
+
+        public PolymorphButton(int x, int y, int width, int height, String typeName, Text text, PressAction onPress) {
+            super(x, y, width, height, text, onPress);
+            this.typeName = typeName;
+        }
+
+        @Override
+        public void renderButton(DrawContext context, int mouseX, int mouseY, float delta) {
+            super.renderButton(context, mouseX, mouseY, delta);
+            drawBuildingIcon(context, typeName, getX() + 10, getY() + 10);
+        }
+    }
+}

@@ -1,13 +1,20 @@
 package net.mca.resources.data.skin;
 
 import com.google.gson.JsonObject;
+import com.mojang.serialization.Codec;
+import com.mojang.serialization.DataResult;
 import net.mca.entity.ai.relationship.Gender;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.JsonHelper;
 
-import java.io.Serializable;
-
-public abstract class SkinListEntry implements Serializable {
+public abstract class SkinListEntry {
+    public static final Codec<Gender> GENDER_CODEC = Codec.STRING.comapFlatMap(name -> {
+        Gender gender = Gender.byName(name);
+        if (gender == Gender.UNASSIGNED) {
+            return DataResult.error(() -> "Invalid gender: " + name);
+        }
+        return DataResult.success(gender);
+    }, Gender::getDataName);
     protected final String identifier;
     protected final Gender gender;
     protected final float chance;
@@ -45,6 +52,34 @@ public abstract class SkinListEntry implements Serializable {
         return identifier;
     }
 
+    public static int compareIdentifiers(String a, String b) {
+        int idxA = a.lastIndexOf('/');
+        int idxB = b.lastIndexOf('/');
+        String strA = idxA >= 0 ? a.substring(idxA) : a;
+        String strB = idxB >= 0 ? b.substring(idxB) : b;
+        String numA = strA.replaceAll("\\D+", "");
+        String numB = strB.replaceAll("\\D+", "");
+        if (numA.isEmpty() || numB.isEmpty()) {
+            return a.compareTo(b);
+        }
+        String normalizedA = stripLeadingZeroes(numA);
+        String normalizedB = stripLeadingZeroes(numB);
+        int lengthCompare = Integer.compare(normalizedA.length(), normalizedB.length());
+        if (lengthCompare != 0) {
+            return lengthCompare;
+        }
+        int numberCompare = normalizedA.compareTo(normalizedB);
+        return numberCompare != 0 ? numberCompare : a.compareTo(b);
+    }
+
+    private static String stripLeadingZeroes(String value) {
+        int index = 0;
+        while (index < value.length() - 1 && value.charAt(index) == '0') {
+            index++;
+        }
+        return value.substring(index);
+    }
+
     public Gender getGender() {
         return gender;
     }
@@ -55,5 +90,16 @@ public abstract class SkinListEntry implements Serializable {
             return 1.0f;
         }
         return chance;
+    }
+
+    protected static Gender resolveGender(Gender gender, Gender fallback) {
+        if (gender == null || gender == Gender.UNASSIGNED || gender == Gender.NEUTRAL) {
+            return fallback == Gender.UNASSIGNED ? Gender.NEUTRAL : fallback;
+        }
+        return gender;
+    }
+
+    protected Identifier getIdentifierValue() {
+        return new Identifier(identifier);
     }
 }

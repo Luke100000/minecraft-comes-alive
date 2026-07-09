@@ -13,10 +13,12 @@ import net.mca.block.BlockEntityTypesMCA;
 import net.mca.block.BlocksMCA;
 import net.mca.client.particle.InteractionParticle;
 import net.mca.client.render.*;
+import net.mca.client.resources.GeneratedEyeTextureReloadListener;
 import net.mca.entity.EntitiesMCA;
 import net.mca.fabric.client.gui.FabricMCAScreens;
 import net.mca.fabric.resources.ApiIdentifiableReloadListener;
 import net.mca.fabric.resources.FabricColorPaletteLoader;
+import net.mca.fabric.resources.FabricFaceList;
 import net.mca.fabric.resources.FabricSupportersLoader;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.item.ModelPredicateProviderRegistry;
@@ -54,6 +56,8 @@ public final class MCAFabricClient extends ClientProxyAbstractImpl implements Cl
 
         ResourceManagerHelper.get(ResourceType.CLIENT_RESOURCES).registerReloadListener(new FabricMCAScreens());
         ResourceManagerHelper.get(ResourceType.CLIENT_RESOURCES).registerReloadListener(new FabricColorPaletteLoader());
+        ResourceManagerHelper.get(ResourceType.CLIENT_RESOURCES).registerReloadListener(new FabricFaceList());
+        ResourceManagerHelper.get(ResourceType.CLIENT_RESOURCES).registerReloadListener(new GeneratedEyeTextureReloadListener());
         ResourceManagerHelper.get(ResourceType.CLIENT_RESOURCES).registerReloadListener(new FabricSupportersLoader());
         ResourceManagerHelper.get(ResourceType.CLIENT_RESOURCES).registerReloadListener(new ApiIdentifiableReloadListener());
 

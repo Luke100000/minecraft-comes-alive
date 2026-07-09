@@ -21,7 +21,7 @@ public abstract class RelationshipItem extends TooltippedItem implements Special
 
         if (villager.isBaby()) {
             response = "interaction.relationship.fail.isbaby";
-        } else if (Relationship.IS_PARENT.test(villager, player)) {
+        } else if (Relationship.IS_RELATIVE.test(villager, player)) {
             response = "interaction.relationship.fail.isparent";
         } else if (Relationship.IS_MARRIED.test(villager, player)) {
             response = "interaction.relationship.fail.marriedtogiver";

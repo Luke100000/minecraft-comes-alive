@@ -44,6 +44,8 @@ public class CribRecipeProvider
 				return Blocks.SPRUCE_PLANKS;
 			case ACACIA:
 				return Blocks.ACACIA_PLANKS;
+			case BAMBOO:
+				return Blocks.BAMBOO_PLANKS;
 			case BIRCH:
 				return Blocks.BIRCH_PLANKS;
 			case CHERRY:
@@ -71,6 +73,8 @@ public class CribRecipeProvider
 				return Blocks.SPRUCE_FENCE;
 			case ACACIA:
 				return Blocks.ACACIA_FENCE;
+			case BAMBOO:
+				return Blocks.BAMBOO_FENCE;
 			case BIRCH:
 				return Blocks.BIRCH_FENCE;
 			case CHERRY:

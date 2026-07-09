@@ -1,10 +1,14 @@
 package net.mca.client.render.layer;
 
+import net.mca.MCA;
 import net.mca.client.gui.immersive_library.SkinCache;
 import net.mca.client.resources.ColorPalette;
+import net.mca.entity.VillagerLike;
 import net.mca.entity.ai.Genetics;
 import net.mca.entity.ai.Traits;
+import net.mca.resources.data.skin.LayeredHair;
 import net.minecraft.client.render.VertexConsumerProvider;
+import net.minecraft.client.render.entity.LivingEntityRenderer;
 import net.minecraft.client.render.entity.feature.FeatureRendererContext;
 import net.minecraft.client.render.entity.model.BipedEntityModel;
 import net.minecraft.client.util.math.MatrixStack;
@@ -30,17 +34,56 @@ public class HairLayer<T extends LivingEntity, M extends BipedEntityModel<T>> ex
     }
 
     @Override
+    public void renderFinal(MatrixStack transform, VertexConsumerProvider provider, int light, T villager, float tickDelta, boolean visible, boolean glowing) {
+        int overlay = LivingEntityRenderer.getOverlay(villager, 0);
+        float[] color = getColor(villager, tickDelta);
+        boolean renderedLayeredHair = false;
+
+        for (LayeredHair.Category category : LayeredHair.Category.RENDER_ORDER) {
+            String identifier = getVillager(villager).getLayeredHair(category);
+            if (MCA.isBlankString(identifier)) {
+                continue;
+            }
+
+            renderedLayeredHair = true;
+            Identifier texture = getTexture(identifier);
+            if (canUse(texture)) {
+                renderModel(transform, provider, light, model, color[0], color[1], color[2], texture, overlay, visible, glowing);
+            }
+
+            Identifier overlayTexture = getOverlayTexture(identifier);
+            if (canUse(overlayTexture)) {
+                renderModel(transform, provider, light, model, 1, 1, 1, overlayTexture, overlay, visible, glowing);
+            }
+        }
+
+        if (!renderedLayeredHair) {
+            super.renderFinal(transform, provider, light, villager, tickDelta, visible, glowing);
+        }
+    }
+
+    @Override
     public Identifier getSkin(T villager) {
-        String identifier = getVillager(villager).getHair();
+        return getTexture(getVillager(villager).getHair());
+    }
+
+    private Identifier getTexture(String identifier) {
         if (identifier.startsWith("immersive_library:")) {
-            return SkinCache.getTextureIdentifier(Integer.parseInt(identifier.substring(18)));
+            return SkinCache.getTextureIdentifier(Integer.parseInt(identifier.substring("immersive_library:".length())));
         }
         return cached(identifier, Identifier::new);
     }
 
     @Override
     protected Identifier getOverlay(T villager) {
-        return cached(getVillager(villager).getHair().replace(".png", "_overlay.png"), Identifier::new);
+        return getOverlayTexture(getVillager(villager).getHair());
+    }
+
+    private Identifier getOverlayTexture(String identifier) {
+        if (identifier.startsWith("immersive_library:") || !identifier.endsWith(".png")) {
+            return null;
+        }
+        return cached(identifier.replace(".png", "_overlay.png"), Identifier::new);
     }
 
     private float[] getRainbow(LivingEntity entity, float tickDelta) {
@@ -64,9 +107,8 @@ public class HairLayer<T extends LivingEntity, M extends BipedEntityModel<T>> ex
             return getRainbow(villager, tickDelta);
         }
 
-        float[] hairDye = getVillager(villager).getHairDye();
-        if (hairDye[0] > 0.0f) {
-            return hairDye;
+        if (getVillager(villager).hasHairDye()) {
+            return VillagerLike.unpackHairDyeRgb(getVillager(villager).getHairDye());
         }
 
         float albinism = getVillager(villager).getTraits().hasTrait(Traits.ALBINISM) ? 0.1f : 1.0f;
@@ -77,4 +119,5 @@ public class HairLayer<T extends LivingEntity, M extends BipedEntityModel<T>> ex
                 0
         );
     }
+
 }
