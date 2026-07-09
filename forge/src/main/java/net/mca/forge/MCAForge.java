@@ -27,8 +27,9 @@ import java.util.Arrays;
 @Mod(MCA.MOD_ID)
 @Mod.EventBusSubscriber(modid = MCA.MOD_ID, bus = Bus.MOD)
 public final class MCAForge {
+    @SuppressWarnings("removal")
     public MCAForge() {
-        //noinspection removal
+
         EventBuses.registerModEventBus(MCA.MOD_ID, FMLJavaModLoadingContext.get().getModEventBus());
         new NetworkHandlerImpl();
         MinecraftForge.EVENT_BUS.addListener(this::onAddReloadListener);
