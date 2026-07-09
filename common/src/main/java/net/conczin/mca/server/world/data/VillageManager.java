@@ -133,7 +133,8 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         }
 
         //send bounty hunters
-        if (world.getDayTime() % (Config.getInstance().bountyHunterInterval / 10) == 0 && world.getDifficulty() != Difficulty.PEACEFUL) {
+        int bountyHunterInterval = Config.getInstance().bountyHunterInterval;
+        if (bountyHunterInterval > 0 && world.getDayTime() % Math.max(1, bountyHunterInterval / 10) == 0 && world.getDifficulty() != Difficulty.PEACEFUL) {
             world.players().forEach(player -> {
                 if (world.random.nextInt(10) == 0 && !isWithinHorizontalBoundaries(player.blockPosition()) && !player.isCreative()) {
                     villages.values().stream()
