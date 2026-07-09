@@ -37,6 +37,7 @@ import net.minecraft.world.entity.ai.sensing.SensorType;
 import net.minecraft.world.entity.ai.village.poi.PoiTypes;
 import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.entity.npc.VillagerProfession;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.schedule.Activity;
 import net.minecraft.world.entity.schedule.Schedule;
 import net.minecraft.world.item.ItemStack;
@@ -306,7 +307,11 @@ public class VillagerTasksMCA {
                                 ? VillageGuardsManager.getEquipmentFor(v.getDominantHand(), EquipmentSet.ARCHER_0, EquipmentSet.ARCHER_0_LEFT)
                                 : VillageGuardsManager.getEquipmentFor(v.getDominantHand(), EquipmentSet.GUARD_0, EquipmentSet.GUARD_0_LEFT)))),
                 Pair.of(2, StartAttacking.create(t -> true, VillagerTasksMCA::getPreferredTarget)),
-                Pair.of(3, StopAttackingIfTargetInvalid.create(livingEntity -> !VillagerTasksMCA.isPreferredTarget(villager, livingEntity))),
+                Pair.of(3, StopAttackingIfTargetInvalid.create(
+                        livingEntity -> !VillagerTasksMCA.isPreferredTarget(villager, livingEntity),
+                        VillagerTasksMCA::onGuardTargetErased,
+                        false
+                )),
                 Pair.of(4, new ArcherMovementTask<>(15)),
                 Pair.of(5, new BowTask<>(20, 15)),
                 Pair.of(7, new ConditionalTask<>(
@@ -324,8 +329,18 @@ public class VillagerTasksMCA {
     public static ImmutableList<Pair<Integer, ? extends BehaviorControl<? super VillagerEntityMCA>>> getGuardWorkPackage() {
         return ImmutableList.of(
                 Pair.of(10, new PatrolVillageTask(4, 0.4f)),
+                Pair.of(10, new ConditionalTask<>(
+                        RandomStroll.stroll(0.4f),
+                        VillagerTasksMCA::shouldUseHomelessGuardStroll
+                )),
                 Pair.of(99, UpdateActivityFromSchedule.create())
         );
+    }
+
+    private static boolean shouldUseHomelessGuardStroll(VillagerEntityMCA villager) {
+        return villager.getResidency().getHomeVillage().isEmpty()
+               && villager.getBrain().getMemoryInternal(MemoryModuleType.ATTACK_TARGET).isEmpty()
+               && villager.getBrain().getMemoryInternal(MemoryModuleType.INTERACTION_TARGET).isEmpty();
     }
 
     public static ImmutableList<Pair<Integer, ? extends BehaviorControl<? super VillagerEntityMCA>>> getGuardPanicPackage(float speedModifier) {
@@ -365,8 +380,7 @@ public class VillagerTasksMCA {
         return target.isAlive()
                && !target.isRemoved()
                && target.level() == villager.level()
-               && villager.canAttack(target)
-               && shouldRespondToAttackTarget(villager, target);
+               && villager.canAttack(target);
     }
 
     private static boolean shouldRespondToGuardEnemy(VillagerEntityMCA villager, LivingEntity target) {
@@ -383,6 +397,12 @@ public class VillagerTasksMCA {
 
     private static boolean isFollowingPlayer(VillagerEntityMCA villager) {
         return villager.getBrain().getMemoryInternal(MemoryModuleTypeMCA.PLAYER_FOLLOWING).isPresent();
+    }
+
+    private static void onGuardTargetErased(VillagerEntityMCA villager, LivingEntity target) {
+        if (target instanceof Player && !target.isAlive()) {
+            villager.pardonPlayers(Integer.MAX_VALUE);
+        }
     }
 
     private static boolean isPreferredTarget(VillagerEntityMCA villager, LivingEntity entity) {

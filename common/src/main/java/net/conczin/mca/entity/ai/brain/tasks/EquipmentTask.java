@@ -8,6 +8,7 @@ import net.conczin.mca.util.InventoryUtils;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.ai.behavior.Behavior;
+import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.MemoryStatus;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -52,28 +53,20 @@ public class EquipmentTask extends Behavior<VillagerEntityMCA> {
             cachedEquipmentSet = cachedConditionResult ? equipmentSet.apply(villager) : null;
         }
 
+        EquipmentSet set = cachedEquipmentSet;
+        if (set != null && isNakedCombatSet(set, villager)) {
+            return false;
+        }
+
         boolean present = villager.getBrain().getMemoryInternal(MemoryModuleTypeMCA.WEARS_ARMOR).isPresent();
         if (cachedConditionResult) {
             lastEquipTime = villager.tickCount;
-            return !present || isMissingHandEquipment(villager, cachedEquipmentSet);
+            return !present || set != null && isMissingRequestedHandItem(villager, set);
         } else if (villager.tickCount - lastEquipTime > COOLDOWN) {
             return present;
         } else {
             return false;
         }
-    }
-
-    private boolean isMissingHandEquipment(VillagerEntityMCA villager, EquipmentSet set) {
-        if (set == null) {
-            return false;
-        }
-
-        return isEquipmentItem(set.getMainHand()) && villager.getItemBySlot(villager.getDominantSlot()).isEmpty()
-               || isEquipmentItem(set.getGetOffHand()) && villager.getItemBySlot(villager.getOpposingSlot()).isEmpty();
-    }
-
-    private boolean isEquipmentItem(Item item) {
-        return item != null && item != Items.AIR;
     }
 
     private void equipBestArmor(VillagerEntityMCA villager, EquipmentSlot slot, Item fallback) {
@@ -108,6 +101,10 @@ public class EquipmentTask extends Behavior<VillagerEntityMCA> {
             cachedEquipmentSet = set;
         }
 
+        if (set != null && isNakedCombatSet(set, villager)) {
+            return;
+        }
+
         //remember last state
         if (wear) {
             villager.getBrain().setMemory(MemoryModuleTypeMCA.WEARS_ARMOR, true);
@@ -117,10 +114,12 @@ public class EquipmentTask extends Behavior<VillagerEntityMCA> {
 
         //weapon
         if (wear) {
-            if (set.getMainHand() instanceof ProjectileWeaponItem) {
+            if (isRequestedItem(set.getMainHand()) && set.getMainHand() instanceof ProjectileWeaponItem) {
                 equipBestRanged(villager, set.getMainHand());
-            } else {
+            } else if (isRequestedItem(set.getMainHand())) {
                 equipBestWeapon(villager, set.getMainHand());
+            } else {
+                villager.setItemSlot(villager.getDominantSlot(), ItemStack.EMPTY);
             }
             villager.setItemSlot(villager.getOpposingSlot(), new ItemStack(set.getGetOffHand()));
         } else {
@@ -140,5 +139,29 @@ public class EquipmentTask extends Behavior<VillagerEntityMCA> {
             villager.setItemSlot(EquipmentSlot.LEGS, ItemStack.EMPTY);
             villager.setItemSlot(EquipmentSlot.FEET, ItemStack.EMPTY);
         }
+    }
+
+    private static boolean isNakedCombatSet(EquipmentSet set, VillagerEntityMCA villager) {
+        return EquipmentSet.NAKED.equals(set)
+               && villager.getBrain().getMemoryInternal(MemoryModuleType.ATTACK_TARGET).isPresent();
+    }
+
+    private static boolean isMissingRequestedHandItem(VillagerEntityMCA villager, EquipmentSet set) {
+        return isMissingRequestedItem(villager.getItemBySlot(villager.getDominantSlot()), set.getMainHand())
+               || isRequestedItem(set.getGetOffHand()) && villager.getItemBySlot(villager.getOpposingSlot()).isEmpty();
+    }
+
+    private static boolean isMissingRequestedItem(ItemStack equipped, Item requested) {
+        if (!isRequestedItem(requested)) {
+            return false;
+        }
+        if (requested instanceof ProjectileWeaponItem) {
+            return !(equipped.getItem() instanceof ProjectileWeaponItem);
+        }
+        return equipped.isEmpty();
+    }
+
+    private static boolean isRequestedItem(Item item) {
+        return item != null && item != Items.AIR;
     }
 }

@@ -2,12 +2,20 @@
 Initial Release
 
 * Added Sirben female noises, thanks mintymacaron!
-* Guards now correctly defend villagers again when hostile players attack them.
-* Archer guards are smarter in combat.
-* Villagers/Guards can now visibly eat food to recover health when they are safe and out of combat, as long as they have any.
-* Improved villager movement around awkward decorative blocks such as lanterns, which could previously confuse pathfinding in busy villages - more below.
-  * Added a new MCA pathfinding tag and Config options so modpacks and addons can tell villagers which custom blocks have unusual collision shapes such as lanterns or modded weirdly collision shaped blocks.
-    * Added an optional config setting default off for all blocks to be collision checked while villagers pathfind.
+* Improved guard behavior when players attack villagers.
+  * Guards now keep chasing valid attackers instead of forgetting them too easily.
+  * Guards now warn or attack more consistently based on the player's warning level.
+  * Guard warning dialogue no longer stacks with the normal "ouch" dialogue on the same hit.
+* Improved archer guards in combat.
+  * Archers now draw and fire bows more reliably.
+  * Archer arrows should no longer be blocked by normal hurt immunity during fast combat.
+  * Left-handed villagers still look left-handed, while bows and weapons stay in the correct hand for Minecraft's combat checks.
+* Guards without a home village can now wander instead of standing idle.
+* Villagers and guards can now visibly eat food to recover health when they are safe and out of combat.
+* Improved villager movement around awkward decorative blocks such as lanterns, which could previously confuse pathfinding.
+  * Added a new MCA pathfinding tag so modpacks and addons can mark custom blocks with unusual collision shapes.
+  * Added config options for extra collision checks while villagers pathfind.
+  * The broader collision-check option is off by default, but can help modpacks with many custom block shapes.
 
 # 7.7.18-beta.10
 
