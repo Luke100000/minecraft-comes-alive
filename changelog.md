@@ -3,8 +3,8 @@ Initial Release
 
 * Added Sirben female noises, thanks mintymacaron!
 * Improved guard behavior when players attack villagers.
-  * Guards now keep chasing valid attackers instead of forgetting them too easily.
-  * Guards now warn or attack more consistently based on the player's warning level.
+  * Guards now keep chasing attackers long enough to deliver their warning hits.
+  * Guards now warn, attack and pardon more consistently based on the player's warning level.
   * Guard warning dialogue no longer stacks with the normal "ouch" dialogue on the same hit.
 * Improved archer guards in combat.
   * Archers now draw and fire bows more reliably.

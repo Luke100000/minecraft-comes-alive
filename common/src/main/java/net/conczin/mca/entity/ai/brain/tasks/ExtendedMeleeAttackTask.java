@@ -57,7 +57,7 @@ public class ExtendedMeleeAttackTask extends Behavior<Mob> {
     private boolean withinRange(LivingEntity attacker, LivingEntity target) {
         double d = attacker.distanceToSqr(target.getX(), target.getY(), target.getZ());
         double r = attacker.getBbWidth() + target.getBbWidth() + range;
-        return d <= r;
+        return d <= r * r;
     }
 
     private LivingEntity getTarget(Mob mobEntity) {

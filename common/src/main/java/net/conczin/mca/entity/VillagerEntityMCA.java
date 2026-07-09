@@ -362,6 +362,10 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         return hurt;
     }
 
+    public void onRangedAttackLanded(Entity target) {
+        attackedEntity(target);
+    }
+
     private void attackedEntity(Entity target) {
         if (target instanceof Player player) {
             pardonPlayers(player);
