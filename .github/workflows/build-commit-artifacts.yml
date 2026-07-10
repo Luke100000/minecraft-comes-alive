@@ -23,12 +23,12 @@ jobs:
         shell: bash
         run: echo "minecraft_version=$(grep '^minecraft_version=' gradle.properties | cut -d= -f2)" >> "$GITHUB_OUTPUT"
 
-      # Java 17 for Minecraft 1.20.1
-      - name: Setup Java 17
+      # Restored to Java 21 so modern Architectury Loom / Gradle 9+ buildscripts can run
+      - name: Setup Java 21
         uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: 17
+          java-version: 21
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v6
@@ -36,11 +36,9 @@ jobs:
           cache-read-only: false
           cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
 
-      # Using root build to let the multiloader setup compile the universal targets
       - name: Build Artifacts with Gradle
         run: ./gradlew build --console=plain --non-interactive
 
-      # Consolidated into a single upload step using the universal path pattern
       - name: Upload Universal Jars
         uses: actions/upload-artifact@v7
         with:
