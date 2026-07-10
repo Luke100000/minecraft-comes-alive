@@ -820,11 +820,12 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                         setPage("hair_style");
                     }
                 }));
-                if (page.equals("clothing") || page.equals("hair")) {
+                if ((page.equals("clothing") || page.equals("hair")) && showSelectionLibraryButton()) {
                     addDrawableChild(new ButtonWidget(width / 2 + 128, y, 64, 20, Text.translatable("gui.button.library"), b -> {
                         MinecraftClient.getInstance().setScreen(new SkinLibraryScreen(this, villagerVisualization));
                     }));
                 }
+                addSelectionPageButtons(y);
                 widgetMasculine = addDrawableChild(new ButtonWidget(width / 2 - 32 - 96 - 64, y, 64, 20, Text.translatable("gui.villager_editor.masculine"), b -> {
                     filterGender = Gender.MALE;
                     filter();
@@ -2048,6 +2049,13 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
 
     protected boolean shouldShowPageSelection() {
         return !isSelectionPage();
+    }
+
+    protected boolean showSelectionLibraryButton() {
+        return true;
+    }
+
+    protected void addSelectionPageButtons(int y) {
     }
 
     private boolean isMainPageSelected(String mainPage) {

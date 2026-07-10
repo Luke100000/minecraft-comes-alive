@@ -77,10 +77,10 @@ public class VillagerEditorSyncRequest extends NbtDataMessage implements Message
     }
 
     public static boolean isAllowedMcaKey(String key) {
-        if (key.startsWith("Gene")) {
+        if (key.startsWith("gene_")) {
             return true;
         }
-        if (key.equals("Personality") || key.equals("Traits")) {
+        if (key.equals("gender") || key.equals("personality") || key.equals("traits") || key.equals("ageState") || key.equals("hair")) {
             return true;
         }
         for (String visualKey : MCA_VISUAL_KEYS) {
