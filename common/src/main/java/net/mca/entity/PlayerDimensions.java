@@ -64,13 +64,20 @@ public final class PlayerDimensions {
                 : entityData;
         NbtCompound traits = mcaData.contains("Traits", 10) ? mcaData.getCompound("Traits") : new NbtCompound();
         AgeScale age = getAgeScale(entityData);
-        Gender gender = Gender.byId(mcaData.contains("Gender") ? mcaData.getInt("Gender") : Gender.UNASSIGNED.ordinal());
+        int genderId = mcaData.contains("Gender")
+                ? mcaData.getInt("Gender")
+                : mcaData.contains("gender")
+                        ? mcaData.getInt("gender")
+                        : entityData.contains("gender")
+                                ? entityData.getInt("gender")
+                                : Gender.UNASSIGNED.ordinal();
+        Gender gender = Gender.byId(genderId);
 
-        float width = geneScale(mcaData, Genetics.WIDTH)
+        float width = geneScale(entityData, mcaData, Genetics.WIDTH)
                 * getTraitsHorizontalScaleFactor(traits)
                 * age.width()
                 * gender.getHorizontalScaleFactor();
-        float height = geneScale(mcaData, Genetics.SIZE)
+        float height = geneScale(entityData, mcaData, Genetics.SIZE)
                 * getTraitsVerticalScaleFactor(traits)
                 * age.height()
                 * gender.getScaleFactor();
@@ -122,8 +129,11 @@ public final class PlayerDimensions {
         }
     }
 
-    private static float geneScale(NbtCompound mcaData, Genetics.GeneType gene) {
-        return 0.75F + (mcaData.contains("Gene" + gene.key()) ? mcaData.getFloat("Gene" + gene.key()) : 0.5F) / 2.0F;
+    private static float geneScale(NbtCompound entityData, NbtCompound mcaData, Genetics.GeneType gene) {
+        float value = mcaData.contains(gene.key())
+                ? mcaData.getFloat(gene.key())
+                : entityData.contains(gene.key()) ? entityData.getFloat(gene.key()) : 0.5F;
+        return 0.75F + value / 2.0F;
     }
 
     private static AgeScale getAgeScale(NbtCompound entityData) {
