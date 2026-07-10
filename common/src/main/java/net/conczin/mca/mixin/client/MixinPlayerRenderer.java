@@ -11,7 +11,6 @@ import net.conczin.mca.client.render.layer.FaceLayer;
 import net.conczin.mca.client.render.layer.HairLayer;
 import net.conczin.mca.client.render.layer.SkinLayer;
 import net.conczin.mca.ducks.client.PlayerRendererMCA;
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.model.geom.builders.CubeDeformation;
 import net.minecraft.client.model.geom.builders.LayerDefinition;
 import net.minecraft.client.model.player.PlayerModel;
@@ -101,42 +100,6 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<LivingEnt
         }
 
         model = mca$geneticsModel;
-    }
-
-    @Inject(
-            method = "renderRightHand(Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/SubmitNodeCollector;ILnet/minecraft/resources/Identifier;Z)V",
-            at = @At("HEAD"),
-            cancellable = true
-    )
-    private void mca$injectRenderRightHand(
-            PoseStack poseStack,
-            SubmitNodeCollector submitNodeCollector,
-            int lightCoords,
-            Identifier skinTexture,
-            boolean hasSleeve,
-            CallbackInfo ci
-    ) {
-        if (mca$renderHand(Minecraft.getInstance().player, poseStack, submitNodeCollector, lightCoords, true, hasSleeve)) {
-            ci.cancel();
-        }
-    }
-
-    @Inject(
-            method = "renderLeftHand(Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/SubmitNodeCollector;ILnet/minecraft/resources/Identifier;Z)V",
-            at = @At("HEAD"),
-            cancellable = true
-    )
-    private void mca$injectRenderLeftHand(
-            PoseStack poseStack,
-            SubmitNodeCollector submitNodeCollector,
-            int lightCoords,
-            Identifier skinTexture,
-            boolean hasSleeve,
-            CallbackInfo ci
-    ) {
-        if (mca$renderHand(Minecraft.getInstance().player, poseStack, submitNodeCollector, lightCoords, false, hasSleeve)) {
-            ci.cancel();
-        }
     }
 
     @Unique

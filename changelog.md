@@ -1,3 +1,9 @@
+# 8.1.2
+
+* Fixed MCA Debug Editor breaking when editing a character while it is sitting down.
+* Fixed crash on Neoforge .10 beta, this is now the minimum NeoForge requirement.
+
+
 # 8.1.1
 
 * Added Sirben female noises, thanks mintymacaron!
