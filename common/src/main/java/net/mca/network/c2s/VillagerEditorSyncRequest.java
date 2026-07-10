@@ -167,11 +167,12 @@ public class VillagerEditorSyncRequest extends NbtDataMessage implements Message
                 if (entity instanceof VillagerEntityMCA villager) {
                     VillagerProfession profession = Registries.VILLAGER_PROFESSION.get(new Identifier(getData().getString("profession")));
                     if (profession != null) {
+                        // Apply editor state (name, genetics, etc.) atomically with the profession change.
+                        // This replaces the separate sync packet the client used to send first.
+                        NbtCompound merged = applyVillagerPatch(player, entity, getData().copy());
                         villager.setProfession(profession);
                         NbtCompound fresh = GetVillagerRequest.getVillagerData(entity);
-                        if (fresh != null) {
-                            NetworkHandler.sendToPlayer(new GetVillagerResponse(fresh), player);
-                        }
+                        NetworkHandler.sendToPlayer(new GetVillagerResponse(fresh != null ? fresh : merged), player);
                     }
                 }
             }
@@ -195,26 +196,39 @@ public class VillagerEditorSyncRequest extends NbtDataMessage implements Message
             return;
         }
 
-        if (entity instanceof VillagerLike<?> villagerLike) {
-            NbtCompound serverData = GetVillagerRequest.getVillagerData(entity);
-            if (serverData == null) {
-                return;
-            }
-
-            NbtCompound merged = mergeAllowedEditorPatch(serverData, patch);
-            sanitizeVisualIdentifiers(entity, merged);
-
-            villagerLike.syncFromEditor(merged);
-            entity.calculateDimensions();
-            syncFamilyTree(player, entity, merged);
-
-            if (entity instanceof VillagerEntityMCA villager) {
-                villager.getResidency().getHomeVillage().ifPresent(b -> b.updateResident(villager));
-            }
-
-            NbtCompound fresh = GetVillagerRequest.getVillagerData(entity);
-            NetworkHandler.sendToPlayer(new GetVillagerResponse(fresh != null ? fresh : merged), player);
+        NbtCompound merged = applyVillagerPatch(player, entity, patch);
+        if (merged == null) {
+            return;
         }
+        NbtCompound fresh = GetVillagerRequest.getVillagerData(entity);
+        NetworkHandler.sendToPlayer(new GetVillagerResponse(fresh != null ? fresh : merged), player);
+    }
+
+    /**
+     * Merges {@code patch} into the entity's current server NBT, sanitizes visual identifiers,
+     * writes the result back via {@link VillagerLike#syncFromEditor}, and handles
+     * family-tree and village-residency side-effects.
+     *
+     * @return the merged compound, or {@code null} if {@code entity} is not a {@link VillagerLike}
+     *         or its server data is unavailable.
+     */
+    private NbtCompound applyVillagerPatch(ServerPlayerEntity player, Entity entity, NbtCompound patch) {
+        if (!(entity instanceof VillagerLike<?> villagerLike)) {
+            return null;
+        }
+        NbtCompound serverData = GetVillagerRequest.getVillagerData(entity);
+        if (serverData == null) {
+            return null;
+        }
+        NbtCompound merged = mergeAllowedEditorPatch(serverData, patch);
+        sanitizeVisualIdentifiers(entity, merged);
+        villagerLike.syncFromEditor(merged);
+        entity.calculateDimensions();
+        syncFamilyTree(player, entity, merged);
+        if (entity instanceof VillagerEntityMCA villager) {
+            villager.getResidency().getHomeVillage().ifPresent(b -> b.updateResident(villager));
+        }
+        return merged;
     }
 
     private void sanitizeVisualIdentifiers(Entity entity, NbtCompound villagerData) {
