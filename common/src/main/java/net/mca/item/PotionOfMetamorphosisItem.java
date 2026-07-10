@@ -1,6 +1,7 @@
 package net.mca.item;
 
 import net.mca.cobalt.network.NetworkHandler;
+import net.mca.entity.VillagerEntityMCA;
 import net.mca.entity.VillagerLike;
 import net.mca.entity.ai.relationship.Gender;
 import net.mca.network.s2c.PlayerDataMessage;
@@ -12,6 +13,7 @@ import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NbtCompound;
+import net.minecraft.nbt.NbtElement;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.sound.SoundEvents;
@@ -34,7 +36,10 @@ public class PotionOfMetamorphosisItem extends TooltippedItem {
             // set gender
             PlayerSaveData data = PlayerSaveData.get(serverPlayer);
             NbtCompound villagerData = data.getEntityData();
-            villagerData.putInt("gender", gender.ordinal());
+            NbtCompound mcaData = villagerData.contains(VillagerEntityMCA.MCA_DATA_KEY, NbtElement.COMPOUND_TYPE)
+                    ? villagerData.getCompound(VillagerEntityMCA.MCA_DATA_KEY)
+                    : villagerData;
+            mcaData.putInt("Gender", gender.ordinal());
             data.setEntityData(villagerData);
 
             common(serverPlayer);
