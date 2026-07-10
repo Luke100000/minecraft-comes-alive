@@ -20,6 +20,7 @@ Initial Release
     * Added config options for extra collision checks while villagers pathfind.
     * The broader collision-check option is off by default, but can help modpacks with many custom block shapes.
 * Fixed `bountyHunterInterval <= 0` crashing
+* Fixed some mods breaking lighting rituals on fire.
 
 # 7.7.18-beta.10
 
