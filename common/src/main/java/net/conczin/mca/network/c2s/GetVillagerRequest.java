@@ -44,7 +44,7 @@ public record GetVillagerRequest(UUID id) implements HandleablePayload {
             data = PlayerSaveData.get(serverPlayer).getEntityData();
         } else if (e instanceof LivingEntity) {
             TagValueOutput output = TagValueOutput.createWithContext(ProblemReporter.DISCARDING, e.registryAccess());
-            e.save(output);
+            e.saveAsPassenger(output);
             data = output.buildResult();
         } else {
             return null;
