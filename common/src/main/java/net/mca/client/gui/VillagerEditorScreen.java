@@ -736,11 +736,12 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                 }) {
                     MutableText text = Text.translatable("entity.minecraft.villager." + p);
                     ButtonWidget widget = addDrawableChild(new ButtonWidget(width / 2 + (right ? DATA_WIDTH / 2 : 0), y, DATA_WIDTH / 2, 20, text, b -> {
+                        if (!beginEditorCommand()) {
+                            return;
+                        }
                         NbtCompound compound = new NbtCompound();
                         compound.putString("profession", Registries.VILLAGER_PROFESSION.getKey(p).toString());
-                        syncVillagerData();
-                        NetworkHandler.sendToServer(new VillagerEditorSyncRequest("profession", villagerUUID, compound));
-                        requestVillagerData();
+                        sendCommandLocked("profession", compound);
                         professionButtons.forEach(button -> button.active = true);
                         b.active = false;
                     }));
@@ -819,12 +820,11 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                         setPage("hair_style");
                     }
                 }));
-                if ((page.equals("clothing") || page.equals("hair")) && showSelectionLibraryButton()) {
+                if (page.equals("clothing") || page.equals("hair")) {
                     addDrawableChild(new ButtonWidget(width / 2 + 128, y, 64, 20, Text.translatable("gui.button.library"), b -> {
                         MinecraftClient.getInstance().setScreen(new SkinLibraryScreen(this, villagerVisualization));
                     }));
                 }
-                addSelectionPageButtons(y);
                 widgetMasculine = addDrawableChild(new ButtonWidget(width / 2 - 32 - 96 - 64, y, 64, 20, Text.translatable("gui.villager_editor.masculine"), b -> {
                     filterGender = Gender.MALE;
                     filter();
@@ -1656,7 +1656,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     }
 
     private boolean beginEditorCommand() {
-        return true;
+        return commandsInFlightCount == 0;
     }
 
     private void sendCommandLocked(String command) {
@@ -1665,16 +1665,17 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
 
     private void sendCommandLocked(String command, NbtCompound nbt) {
         NbtCompound commandData = createEditorData();
-        commandData.copyFrom(nbt);
 
         commandsInFlightCount++;
 
-        // Sync visualization immediately with local predicted changes
+        // Sync visualization immediately with local predicted changes.
         villagerVisualization.readAdditionalSaveDataForEditor(commandData);
         villagerVisualization.setBreedingAge(villager.getBreedingAge());
         villagerVisualization.calculateDimensions();
 
         NbtCompound patch = VillagerEditorSyncRequest.createEditorPatch(commandData);
+        // Command-specific fields such as profession are intentionally outside the generic editor allowlist.
+        patch.copyFrom(nbt);
         NetworkHandler.sendToServer(new VillagerEditorSyncRequest(command, villagerUUID, patch));
     }
 
@@ -2047,13 +2048,6 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
 
     protected boolean shouldShowPageSelection() {
         return !isSelectionPage();
-    }
-
-    protected boolean showSelectionLibraryButton() {
-        return true;
-    }
-
-    protected void addSelectionPageButtons(int y) {
     }
 
     private boolean isMainPageSelected(String mainPage) {

@@ -23,14 +23,17 @@ import net.minecraft.item.ItemStack;
 import net.minecraft.registry.Registries;
 import net.minecraft.util.Hand;
 
+import java.util.UUID;
+
 public class ClientInteractionManagerImpl implements ClientInteractionManager {
     private final MinecraftClient client = MinecraftClient.getInstance();
 
     @Override
     public void handleGuiRequest(OpenGuiRequest message) {
         Entity entity;
-        assert client.world != null;
-        assert MinecraftClient.getInstance().player != null;
+        if (client.world == null || client.player == null) {
+            return;
+        }
         switch (message.getGui()) {
             case WHISTLE:
                 client.setScreen(new WhistleScreen());
@@ -58,14 +61,10 @@ public class ClientInteractionManagerImpl implements ClientInteractionManager {
                 }
                 break;
             case VILLAGER_EDITOR:
-                entity = client.world.getEntityById(message.villager);
-                assert entity != null;
-                client.setScreen(new VillagerEditorScreen(entity.getUuid(), MinecraftClient.getInstance().player.getUuid()));
+                openVillagerEditor(message, false);
                 break;
             case LIMITED_VILLAGER_EDITOR:
-                entity = client.world.getEntityById(message.villager);
-                assert entity != null;
-                client.setScreen(new LimitedVillagerEditorScreen(entity.getUuid(), MinecraftClient.getInstance().player.getUuid()));
+                openVillagerEditor(message, true);
                 break;
             case NEEDLE_AND_THREAD:
                 entity = client.world.getEntityById(message.villager);
@@ -99,6 +98,19 @@ public class ClientInteractionManagerImpl implements ClientInteractionManager {
                 break;
             default:
         }
+    }
+
+    private void openVillagerEditor(OpenGuiRequest message, boolean limited) {
+        Entity entity = client.world.getEntityById(message.villager);
+        UUID targetUuid = entity != null ? entity.getUuid() : message.villagerUuid;
+        if (targetUuid == null) {
+            return;
+        }
+
+        Screen screen = limited
+                ? new LimitedVillagerEditorScreen(targetUuid, client.player.getUuid())
+                : new VillagerEditorScreen(targetUuid, client.player.getUuid());
+        client.setScreen(screen);
     }
 
     @Override

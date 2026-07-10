@@ -49,19 +49,6 @@ public class CombScreen extends VillagerEditorScreen {
         super.setPage(page);
     }
 
-    @Override
-    protected boolean showSelectionLibraryButton() {
-        return false;
-    }
-
-    @Override
-    protected void addSelectionPageButtons(int y) {
-        if (page.equals("hair")) {
-            addDrawableChild(new ButtonWidget(width / 2 + 128, y, 64, 20,
-                    Text.translatable("gui.villager_editor.advancedHair"), b -> setPage("hair_advanced")));
-        }
-    }
-
     private boolean isDoneFromLayeredHair(String dest) {
         return dest.equals("hair_advanced") && page != null && isLayeredHairDestination(page);
     }

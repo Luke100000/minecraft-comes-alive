@@ -5,6 +5,7 @@ import net.mca.cobalt.network.Message;
 import net.minecraft.entity.Entity;
 
 import java.io.Serial;
+import java.util.UUID;
 
 public class OpenGuiRequest implements Message {
     @Serial
@@ -14,17 +15,24 @@ public class OpenGuiRequest implements Message {
 
     public final int villager;
 
+    public final UUID villagerUuid;
+
     public OpenGuiRequest(OpenGuiRequest.Type gui, Entity villager) {
-        this(gui, villager.getId());
+        this(gui, villager.getId(), villager.getUuid());
     }
 
     public OpenGuiRequest(OpenGuiRequest.Type gui, int villager) {
+        this(gui, villager, null);
+    }
+
+    private OpenGuiRequest(OpenGuiRequest.Type gui, int villager, UUID villagerUuid) {
         this.gui = gui.ordinal();
         this.villager = villager;
+        this.villagerUuid = villagerUuid;
     }
 
     public OpenGuiRequest(OpenGuiRequest.Type gui) {
-        this(gui, 0);
+        this(gui, 0, null);
     }
 
     @Override

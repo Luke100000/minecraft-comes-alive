@@ -1,0 +1,50 @@
+# Builds every pushed commit and uploads the universal jar as an artifact.
+name: build-commit-artifacts
+
+on:
+  push:
+    branches:
+      - '**'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      GRADLE_OPTS: --enable-native-access=ALL-UNNAMED
+      NO_COLOR: 1
+
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v6
+
+      - name: Extract Minecraft version
+        id: versions
+        shell: bash
+        run: echo "minecraft_version=$(grep '^minecraft_version=' gradle.properties | cut -d= -f2)" >> "$GITHUB_OUTPUT"
+
+      # Java 17 for Minecraft 1.20.1
+      - name: Setup Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-read-only: false
+          cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
+
+      # Using root build to let the multiloader setup compile the universal targets
+      - name: Build Artifacts with Gradle
+        run: ./gradlew build --console=plain --non-interactive
+
+      # Consolidated into a single upload step using the universal path pattern
+      - name: Upload Universal Jars
+        uses: actions/upload-artifact@v7
+        with:
+          name: mca-universal-${{ steps.versions.outputs.minecraft_version }}
+          path: |
+            build/libs/*-@(universal).jar
+          if-no-files-found: error

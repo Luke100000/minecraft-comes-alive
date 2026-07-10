@@ -629,7 +629,9 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (timeSinceLastRebuild < 2) {
+        // Keep the anti-click-through delay for standalone browsing only. When opened from an editor,
+        // the first intentional selection click must not be discarded after an async content rebuild.
+        if (previousScreen == null && timeSinceLastRebuild < 2) {
             return false;
         }
 
@@ -664,9 +666,11 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                         villager.setClothes("immersive_library:" + hoveredContent.contentid());
                         previousScreen.markClothingSelected();
                         returnToPreviousScreen();
+                        return true;
                     } else if (hoveredContent.hasTag("hair")) {
                         previousScreen.applyLibraryHair("immersive_library:" + hoveredContent.contentid());
                         returnToPreviousScreen();
+                        return true;
                     }
                 }
             }
@@ -677,11 +681,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
 
     private void returnToPreviousScreen() {
         previousScreen.syncVillagerData();
-        if (previousScreen instanceof DestinyScreen) {
-            close();
-        } else {
-            previousScreen.close();
-        }
+        close();
     }
 
     @Override

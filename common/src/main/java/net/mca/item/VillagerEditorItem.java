@@ -15,6 +15,7 @@ public class VillagerEditorItem extends TooltippedItem {
         super(settings);
     }
 
+    @Override
     public ActionResult useOnEntity(ItemStack stack, PlayerEntity player, LivingEntity entity, Hand hand) {
         if (entity instanceof VillagerLike<?> villager && !entity.getWorld().isClient && player instanceof ServerPlayerEntity serverPlayer) {
             if (player.isSneaking()) {

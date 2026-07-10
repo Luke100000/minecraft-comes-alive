@@ -36,7 +36,7 @@ public class MCAClient {
     }
 
     public static Optional<VillagerLike<?>> getPlayerData(UUID uuid) {
-        if (isPlayerRendererAllowed() || Config.getServerConfig().scalePlayerHitboxWithSizeAndWidth) {
+        if (isPlayerRendererAllowed() || needsPlayerDataForDimensions()) {
             if (!MCAClient.playerDataRequests.contains(uuid) && MinecraftClient.getInstance().getNetworkHandler() != null) {
                 MCAClient.playerDataRequests.add(uuid);
                 NetworkHandler.sendToServer(new PlayerDataRequest(uuid));
@@ -100,7 +100,7 @@ public class MCAClient {
         }
 
         for (PlayerEntity player : client.world.getPlayers()) {
-            if (Config.getServerConfig().scalePlayerHitboxWithSizeAndWidth) {
+            if (needsPlayerDataForDimensions()) {
                 getPlayerData(player.getUuid());
             }
             refreshPlayerDimensions(player, "client config refresh");
@@ -111,6 +111,11 @@ public class MCAClient {
         PlayerDimensions.debugRefresh(player, "before " + reason);
         player.calculateDimensions();
         PlayerDimensions.debugRefresh(player, "after " + reason);
+    }
+
+    private static boolean needsPlayerDataForDimensions() {
+        return Config.getServerConfig().scalePlayerHitboxWithSizeAndWidth
+                || Config.getInstance().scaleEyeHeightWithPlayerHeight;
     }
 
     public static boolean isPlayerRendererAllowed() {
