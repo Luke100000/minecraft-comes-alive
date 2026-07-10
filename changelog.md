@@ -1,6 +1,25 @@
 # 8.1.1
 
 * Added Sirben female noises, thanks mintymacaron!
+* Improved guard behavior when players attack villagers.
+  * Guards now keep chasing attackers long enough to deliver their warning hits.
+  * Guards now warn, attack and pardon more consistently based on the player's warning level.
+  * Guard warning dialogue no longer stacks with the normal "ouch" dialogue on the same hit.
+* Improved archer guards in combat.
+  * Archers now draw and fire bows more reliably.
+  * Archer arrows should no longer be blocked by normal hurt immunity during fast combat.
+  * Left-handed villagers still look left-handed, while bows and weapons stay in the correct hand for Minecraft's
+    combat checks.
+* Guards without a home village can now wander instead of standing idle.
+* Villagers and guards can now visibly eat food to recover health when they are safe and out of combat.
+* Improved villager movement around awkward decorative blocks such as lanterns, which could previously confuse
+  pathfinding.
+  * Added a new MCA pathfinding tag so modpacks and addons can mark custom blocks with unusual collision shapes.
+  * Added config options for extra collision checks while villagers pathfind.
+  * The broader collision-check option is off by default, but can help modpacks with many custom block shapes.
+* Fixed `bountyHunterInterval <= 0` crashing
+* Fixed some mods breaking lighting rituals on fire.
+* 
 # 8.1.0
 
 * Added the **Music Store** building, giving sad villagers another place to visit for happiness recovery.
