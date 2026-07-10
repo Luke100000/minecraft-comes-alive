@@ -34,7 +34,6 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
@@ -44,13 +43,8 @@ import net.minecraft.util.FastColor;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.npc.VillagerProfession;
-import org.apache.commons.io.FileUtils;
-import org.joml.Quaternionf;
-import org.joml.Vector3f;
 import org.lwjgl.glfw.GLFW;
 
-import java.io.File;
-import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.function.Consumer;
 import java.util.function.IntConsumer;
@@ -133,7 +127,9 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     private ButtonWidget presetsButton;
     private ButtonWidget exportSkinButton;
     private static final int PRESETS_PER_PAGE = 4;
-    private final File presetsDir = new File(Minecraft.getInstance().gameDirectory, "config/mca/presets");
+    private final VillagerPresetManager presetManager = new VillagerPresetManager(
+            Minecraft.getInstance().gameDirectory.toPath().resolve("config/mca/presets")
+    );
     private final List<String> presetNames = new ArrayList<>();
     private String selectedPreset = null;
     private String presetsReturnPage = "general";
@@ -371,7 +367,6 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         addPreviewRotationWidgets();
 
         int y = height / 2 - 80;
-        int margin = 40;
         Genetics genetics = villager.getGenetics();
         EditBox textFieldWidget;
 
@@ -741,11 +736,9 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                 }) {
                     MutableComponent text = Component.translatable("entity.minecraft.villager." + p);
                     ButtonWidget widget = addRenderableWidget(new ButtonWidget(width / 2 + (right ? DATA_WIDTH / 2 : 0), y, DATA_WIDTH / 2, 20, text, b -> {
-                        CompoundTag compound = new CompoundTag();
+                        CompoundTag compound = VillagerEditorSyncRequest.createEditorPatch(createEditorData());
                         compound.putString("profession", BuiltInRegistries.VILLAGER_PROFESSION.getKey(p).toString());
-                        syncVillagerData();
                         Network.sendToServer(new VillagerEditorSyncRequest("profession", villagerUUID, compound));
-                        requestVillagerData();
                         professionButtons.forEach(button -> button.active = true);
                         b.active = false;
                     }));
@@ -1238,9 +1231,6 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         if (selected.isEmpty()) {
             return;
         }
-        if (!beginEditorCommand()) {
-            return;
-        }
         villager.setClothes(selected.get());
         sendCommandLocked("clothing");
     }
@@ -1252,7 +1242,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                 .sorted(SkinListEntry::compareIdentifiers)
                 .toList();
         Optional<String> selected = SkinSelection.cycleValue(clothes, villager.getClothes(), offset);
-        if (selected.isEmpty() || !beginEditorCommand()) {
+        if (selected.isEmpty()) {
             return;
         }
         villager.setClothes(selected.get());
@@ -1274,7 +1264,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     private void cycleHairStyle(int offset) {
         List<String> styles = getIdsForCurrentGender(ClientSkinCatalog.hairStyles().values());
         Optional<String> selected = SkinSelection.cycleValue(styles, findCurrentHairStyle(styles).orElse(""), offset);
-        if (selected.isEmpty() || !beginEditorCommand()) {
+        if (selected.isEmpty()) {
             return;
         }
         applyHairStyle(villager, selected.get());
@@ -1286,9 +1276,6 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         if (selected.isEmpty()) {
             return;
         }
-        if (!beginEditorCommand()) {
-            return;
-        }
         villager.setSkin(selected.get());
         sendCommandLocked("skin");
     }
@@ -1296,7 +1283,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     private void cycleSkin(int offset) {
         List<String> skins = getIdsForCurrentGender(ClientSkinCatalog.bodySkins().values());
         Optional<String> selected = SkinSelection.cycleValue(skins, villager.getSkin(), offset);
-        if (selected.isEmpty() || !beginEditorCommand()) {
+        if (selected.isEmpty()) {
             return;
         }
         villager.setSkin(selected.get());
@@ -1309,9 +1296,6 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     }
 
     private void randomLayeredHair() {
-        if (!beginEditorCommand()) {
-            return;
-        }
         villager.setHair("");
         for (LayeredHair.Category category : LayeredHair.Category.values()) {
             villager.setLayeredHair(category, pickRandomLayeredHair(category));
@@ -1598,9 +1582,6 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
 
     void drawGender(int x, int y) {
         genderButtonFemale = new ButtonWidget(x, y, DATA_WIDTH / 2, 20, Component.translatable("gui.villager_editor.feminine"), sender -> {
-            if (!beginEditorCommand()) {
-                return;
-            }
             villager.getGenetics().setGender(Gender.FEMALE);
             refreshAppearanceForCurrentGender();
             sendCommandLocked("gender");
@@ -1610,9 +1591,6 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         addRenderableWidget(genderButtonFemale);
 
         genderButtonMale = new ButtonWidget(x + DATA_WIDTH / 2, y, DATA_WIDTH / 2, 20, Component.translatable("gui.villager_editor.masculine"), sender -> {
-            if (!beginEditorCommand()) {
-                return;
-            }
             villager.getGenetics().setGender(Gender.MALE);
             refreshAppearanceForCurrentGender();
             sendCommandLocked("gender");
@@ -1657,10 +1635,6 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
             addRenderableWidget(new TooltipButtonWidget(x, y, DATA_WIDTH, 20, "gui.villager_editor.model_blacklist_hint", b -> {
             })).active = false;
         }
-    }
-
-    private boolean beginEditorCommand() {
-        return true;
     }
 
     private void sendCommandLocked(String command) {
@@ -1988,49 +1962,10 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     }
 
     private void renderPreviewEntity(GuiGraphics context, int x0, int y0, int x1, int y1, int size, float mouseX, float mouseY, LivingEntity entity, float rotationOffset) {
-        float centerX = (x0 + x1) / 2.0F;
-        float centerY = (y0 + y1) / 2.0F;
-        float baseXAngle = previewFollowsMouse ? (float)Math.atan((centerX - mouseX) / 40.0F) : 0.0F;
-        float yAngle = previewFollowsMouse ? (float)Math.atan((centerY - mouseY) / 40.0F) : 0.0F;
-        float displayRotation = previewRotation + rotationOffset;
-        float followXAngle = baseXAngle * Mth.cos(displayRotation * ((float)Math.PI / 180.0F));
-        Quaternionf pose = new Quaternionf().rotateZ((float)Math.PI);
-        Quaternionf cameraOrientation = new Quaternionf().rotateX(yAngle * 20.0F * (float)(Math.PI / 180.0));
-        pose.mul(cameraOrientation);
-
-        float previousBodyRot = entity.yBodyRot;
-        float previousBodyRotO = entity.yBodyRotO;
-        float previousYRot = entity.getYRot();
-        float previousYRotO = entity.yRotO;
-        float previousXRot = entity.getXRot();
-        float previousXRotO = entity.xRotO;
-        float previousHeadRotO = entity.yHeadRotO;
-        float previousHeadRot = entity.yHeadRot;
-
-        entity.yBodyRot = 180.0F + displayRotation + followXAngle * 20.0F;
-        entity.yBodyRotO = entity.yBodyRot;
-        entity.setYRot(180.0F + displayRotation + followXAngle * 40.0F);
-        entity.yRotO = entity.getYRot();
-        entity.setXRot(-yAngle * 20.0F);
-        entity.xRotO = entity.getXRot();
-        entity.yHeadRot = entity.getYRot();
-        entity.yHeadRotO = entity.getYRot();
-
-        float scale = Math.max(1.0F, size * previewZoom) / entity.getScale();
-        Vector3f translate = new Vector3f(0.0F, entity.getBbHeight() / 2.0F, 0.0F);
-        context.enableScissor(x0, y0, x1, y1);
-        InventoryScreen.renderEntityInInventory(context, centerX, centerY, scale, translate, pose, cameraOrientation, entity);
-        context.flush();
-        context.disableScissor();
-
-        entity.yBodyRot = previousBodyRot;
-        entity.yBodyRotO = previousBodyRotO;
-        entity.setYRot(previousYRot);
-        entity.yRotO = previousYRotO;
-        entity.setXRot(previousXRot);
-        entity.xRotO = previousXRotO;
-        entity.yHeadRotO = previousHeadRotO;
-        entity.yHeadRot = previousHeadRot;
+        VillagerEditorPreviewRenderer.render(
+                context, x0, y0, x1, y1, size, mouseX, mouseY, entity,
+                rotationOffset, previewRotation, previewZoom, previewFollowsMouse
+        );
     }
 
     protected boolean shouldDrawEntity() {
@@ -2228,18 +2163,12 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     }
 
     private void refreshPresets() {
-        if (!presetsDir.exists()) {
-            presetsDir.mkdirs();
-        }
         presetNames.clear();
-        File[] files = presetsDir.listFiles((d, name) -> name.endsWith(".json"));
-        if (files != null) {
-            for (File f : files) {
-                String name = f.getName();
-                presetNames.add(name.substring(0, name.length() - 5)); // remove .json
-            }
+        try {
+            presetNames.addAll(presetManager.listNames());
+        } catch (Exception e) {
+            MCA.LOGGER.error("Failed to list villager editor presets", e);
         }
-        presetNames.sort(String::compareToIgnoreCase);
         maxPage = Math.max(0, (presetNames.size() - 1) / PRESETS_PER_PAGE);
         currentPage = Math.min(currentPage, maxPage);
     }
@@ -2247,22 +2176,24 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     private void selectPreset(String name) {
         this.selectedPreset = name;
         if (name != null) {
-            if (nameField != null) {
-                nameField.setValue(name);
-            }
             try {
-                File presetFile = new File(presetsDir, name + ".json");
-                if (presetFile.exists()) {
-                    String json = FileUtils.readFileToString(presetFile, StandardCharsets.UTF_8);
-                    CompoundTag tag = PresetCodec.fromJsonString(json);
-                    
+                Optional<CompoundTag> preset = presetManager.load(name);
+                if (preset.isEmpty()) {
+                    selectedPreset = null;
+                    hasVisualChange = false;
+                } else {
+                    if (nameField != null) {
+                        nameField.setValue(name);
+                    }
+                    CompoundTag tag = preset.get();
+
                     // Load selected preset NBT into villagerVisualization for preview/comparison
                     if (villagerData != null) {
                         villagerVisualization.load(villagerData);
                     }
                     villagerVisualization.readAdditionalSaveDataForEditor(tag);
                     villagerVisualization.refreshDimensions();
-                    
+
                     // Restore main villager back to the original backup NBT to keep it unmodified until "Use" is clicked
                     if (presetsBackupNbt != null) {
                         if (villagerData != null) {
@@ -2271,15 +2202,12 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                         villager.readAdditionalSaveDataForEditor(presetsBackupNbt);
                         villager.refreshDimensions();
                     }
-                    
-                    // Cache the visual change flag
-                    if (presetsBackupNbt != null) {
-                        hasVisualChange = !presetsBackupNbt.equals(tag);
-                    } else {
-                        hasVisualChange = false;
-                    }
+
+                    hasVisualChange = presetsBackupNbt != null && !presetsBackupNbt.equals(tag);
                 }
             } catch (Exception e) {
+                selectedPreset = null;
+                hasVisualChange = false;
                 MCA.LOGGER.error("Failed to load preset for preview", e);
             }
         } else {
@@ -2290,12 +2218,15 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
 
     private void savePreset() {
         if (nameField == null) return;
-        String name = nameField.getValue().trim();
+        savePreset(nameField.getValue().trim());
+    }
+
+    private void savePreset(String name) {
         if (name.isEmpty()) return;
-        
+
         try {
             CompoundTag tag = saveEntityData(villager);
-            
+
             // Extract PlayerModel from villagerData NBT if present
             if (villagerData != null) {
                 CompoundTag parentMca = getMcaData(villagerData);
@@ -2304,14 +2235,12 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                 }
             }
 
-            File file = new File(presetsDir, name + ".json");
-            String json = PresetCodec.toJsonString(tag);
-            FileUtils.writeStringToFile(file, json, StandardCharsets.UTF_8);
-            
+            presetManager.save(name, tag);
+
             // Update backup NBT so saving doesn't trigger visual difference anymore
             presetsBackupNbt = tag.copy();
             hasVisualChange = false;
-            
+
             refreshPresets();
             selectPreset(name);
         } catch (Exception e) {
@@ -2325,14 +2254,10 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         if (newName.isEmpty() || newName.equals(selectedPreset)) return;
 
         try {
-            File oldFile = new File(presetsDir, selectedPreset + ".json");
-            File newFile = new File(presetsDir, newName + ".json");
-            if (oldFile.exists() && !newFile.exists()) {
-                if (oldFile.renameTo(newFile)) {
-                    selectedPreset = newName;
-                    refreshPresets();
-                    selectPreset(newName);
-                }
+            if (presetManager.rename(selectedPreset, newName)) {
+                selectedPreset = newName;
+                refreshPresets();
+                selectPreset(newName);
             }
         } catch (Exception e) {
             MCA.LOGGER.error("Failed to rename preset", e);
@@ -2341,16 +2266,13 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
 
     private void overwritePreset() {
         if (selectedPreset == null) return;
-        savePreset();
+        savePreset(selectedPreset);
     }
 
     private void deletePreset() {
         if (selectedPreset == null) return;
         try {
-            File file = new File(presetsDir, selectedPreset + ".json");
-            if (file.exists()) {
-                file.delete();
-            }
+            presetManager.delete(selectedPreset);
             selectedPreset = null;
             hasVisualChange = false;
             refreshPresets();
@@ -2363,14 +2285,13 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     private void usePreset() {
         if (selectedPreset == null) return;
         try {
-            File presetFile = new File(presetsDir, selectedPreset + ".json");
-            if (presetFile.exists()) {
-                String json = FileUtils.readFileToString(presetFile, StandardCharsets.UTF_8);
-                CompoundTag tag = PresetCodec.fromJsonString(json);
-                
+            Optional<CompoundTag> preset = presetManager.load(selectedPreset);
+            if (preset.isPresent()) {
+                CompoundTag tag = preset.get();
+
                 // Permanently apply to main villager
                 villager.readAdditionalSaveDataForEditor(tag);
-                
+
                 if (tag.contains("PlayerModel")) {
                     int modelVal = tag.getInt("PlayerModel");
                     if (villagerData != null) {
@@ -2378,7 +2299,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                         parentMca.putInt("PlayerModel", modelVal);
                     }
                 }
-                
+
                 presetsBackupNbt = null; // Discard backup so it doesn't restore on exit
                 hasVisualChange = false;
                 syncVillagerData();

@@ -167,8 +167,26 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
                     saveEntity(player, entity, data.copy());
             case "profession" -> {
                 if (entity instanceof VillagerEntityMCA villager) {
-                    VillagerProfession profession = BuiltInRegistries.VILLAGER_PROFESSION.get(ResourceLocation.parse(data.getString("profession")));
-                    villager.setProfession(profession);
+                    String professionString = data.getString("profession");
+                    ResourceLocation professionId = ResourceLocation.tryParse(professionString);
+                    if (professionId == null) {
+                        MCA.LOGGER.warn("Ignoring invalid villager editor profession identifier {}", professionString);
+                        return;
+                    }
+                    Optional<VillagerProfession> profession = BuiltInRegistries.VILLAGER_PROFESSION.getOptional(professionId);
+                    if (profession.isEmpty()) {
+                        MCA.LOGGER.warn("Ignoring unknown villager editor profession {}", professionId);
+                        return;
+                    }
+
+                    // Apply pending editor state and profession atomically, then send one authoritative response.
+                    CompoundTag merged = applyVillagerPatch(player, entity, data.copy());
+                    if (merged == null) {
+                        return;
+                    }
+                    villager.setProfession(profession.get());
+                    updateVillageResident(villager);
+                    sendAuthoritativeVillagerData(player, entity, merged);
                 }
             }
         }
@@ -191,26 +209,44 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
             return;
         }
 
-        if (entity instanceof VillagerLike<?> villagerLike) {
-            CompoundTag serverData = GetVillagerRequest.getVillagerData(entity);
-            if (serverData == null) {
-                return;
-            }
-
-            CompoundTag merged = mergeAllowedEditorPatch(serverData, patch);
-            sanitizeVisualIdentifiers(entity, merged);
-
-            villagerLike.syncFromEditor(merged);
-            entity.refreshDimensions();
-            syncFamilyTree(player, entity, merged);
-
-            if (entity instanceof VillagerEntityMCA villager) {
-                villager.getResidency().getHomeVillage().ifPresent(b -> b.updateResident(villager));
-            }
-
-            CompoundTag fresh = GetVillagerRequest.getVillagerData(entity);
-            Network.sendToPlayer(new GetVillagerResponse(fresh != null ? fresh : merged), player);
+        CompoundTag merged = applyVillagerPatch(player, entity, patch);
+        if (merged == null) {
+            return;
         }
+        if (entity instanceof VillagerEntityMCA villager) {
+            updateVillageResident(villager);
+        }
+        sendAuthoritativeVillagerData(player, entity, merged);
+    }
+
+    /**
+     * Applies an allow-listed editor patch to a villager-like entity without replacing unrelated
+     * entity data such as trades, gossip, inventory, XP, or UUID fields.
+     */
+    private CompoundTag applyVillagerPatch(ServerPlayer player, Entity entity, CompoundTag patch) {
+        if (!(entity instanceof VillagerLike<?> villagerLike)) {
+            return null;
+        }
+        CompoundTag serverData = GetVillagerRequest.getVillagerData(entity);
+        if (serverData == null) {
+            return null;
+        }
+
+        CompoundTag merged = mergeAllowedEditorPatch(serverData, patch);
+        sanitizeVisualIdentifiers(entity, merged);
+        villagerLike.syncFromEditor(merged);
+        entity.refreshDimensions();
+        syncFamilyTree(player, entity, merged);
+        return merged;
+    }
+
+    private void updateVillageResident(VillagerEntityMCA villager) {
+        villager.getResidency().getHomeVillage().ifPresent(village -> village.updateResident(villager));
+    }
+
+    private void sendAuthoritativeVillagerData(ServerPlayer player, Entity entity, CompoundTag fallback) {
+        CompoundTag fresh = GetVillagerRequest.getVillagerData(entity);
+        Network.sendToPlayer(new GetVillagerResponse(fresh != null ? fresh : fallback), player);
     }
 
     private void sanitizeVisualIdentifiers(Entity entity, CompoundTag villagerData) {
