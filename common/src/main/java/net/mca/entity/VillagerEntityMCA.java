@@ -8,7 +8,7 @@ import net.mca.cobalt.network.NetworkHandler;
 import net.mca.entity.ai.*;
 import net.mca.entity.ai.brain.VillagerBrain;
 import net.mca.entity.ai.brain.VillagerTasksMCA;
-import net.mca.entity.ai.pathfinder.VillagerNavigation;
+import net.mca.entity.ai.navigation.MCAGroundPathNavigation;
 import net.mca.entity.ai.relationship.*;
 import net.mca.entity.interaction.VillagerCommandHandler;
 import net.mca.item.ItemsMCA;
@@ -214,7 +214,7 @@ public class VillagerEntityMCA extends VillagerEntity implements VillagerLike<Vi
 
     @Override
     protected EntityNavigation createNavigation(World world) {
-        return new VillagerNavigation(this, world);
+        return new MCAGroundPathNavigation(this, world);
     }
 
     @Override

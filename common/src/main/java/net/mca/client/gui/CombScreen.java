@@ -4,8 +4,6 @@ import net.mca.MCA;
 import net.mca.cobalt.network.NetworkHandler;
 import net.mca.network.c2s.DamageItemMessage;
 import net.mca.resources.data.skin.LayeredHair;
-import net.minecraft.text.Text;
-import net.mca.util.compat.ButtonWidget;
 
 import java.util.UUID;
 
@@ -47,19 +45,6 @@ public class CombScreen extends VillagerEditorScreen {
     @Override
     protected void rebuildCurrentPageFromData() {
         super.setPage(page);
-    }
-
-    @Override
-    protected boolean showSelectionLibraryButton() {
-        return false;
-    }
-
-    @Override
-    protected void addSelectionPageButtons(int y) {
-        if (page.equals("hair")) {
-            addDrawableChild(new ButtonWidget(width / 2 + 128, y, 64, 20,
-                    Text.translatable("gui.villager_editor.advancedHair"), b -> setPage("hair_advanced")));
-        }
     }
 
     private boolean isDoneFromLayeredHair(String dest) {

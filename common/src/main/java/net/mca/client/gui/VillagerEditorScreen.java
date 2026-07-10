@@ -783,7 +783,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
 
                 y += 4;
                 addDrawableChild(new ButtonWidget(width / 2, y, DATA_WIDTH, 20, Text.translatable("gui.button.back"), b -> {
-                    setPage("hair_style");
+                    setPage(this instanceof CombScreen ? "hair" : "hair_style");
                 }));
             }
             case "clothing", "hair", "skin", "hair_base", "hair_bangs", "hair_back", "hair_front", "hair_extra" -> {
@@ -798,6 +798,10 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                     searchString = v;
                     filter();
                 });
+                if (page.equals("hair") && this instanceof CombScreen) {
+                    addDrawableChild(new ButtonWidget(width / 2 + DATA_WIDTH / 2 + 5, height / 2 - 100, 80, 20,
+                            Text.translatable("gui.villager_editor.advancedHair"), b -> setPage("hair_advanced")));
+                }
                 y = height / 2 + 85;
                 pageButtonWidget = addDrawableChild(new ButtonWidget(width / 2 - 30, y, 60, 20, Text.literal(""), b -> {
                 }));
@@ -1266,6 +1270,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         }
         applyHairStyle(villager, selected.get());
         sendCommandLocked("hair");
+        eventCallback("hair");
     }
 
     private void cycleHairStyle(int offset) {
@@ -1276,6 +1281,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         }
         applyHairStyle(villager, selected.get());
         sendCommandLocked("hair");
+        eventCallback("hair");
     }
 
     private void randomSkin() {

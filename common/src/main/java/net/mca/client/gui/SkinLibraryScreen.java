@@ -20,6 +20,7 @@ import net.mca.network.c2s.AddCustomClothingMessage;
 import net.mca.network.c2s.RemoveCustomClothingMessage;
 import net.mca.resources.data.skin.Clothing;
 import net.mca.resources.data.skin.Hair;
+import net.mca.resources.data.skin.HairStyle;
 import net.mca.resources.data.skin.SkinListEntry;
 import net.mca.util.compat.ButtonWidget;
 import net.mca.util.localization.FlowingText;
@@ -447,8 +448,11 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
             preview.setHair(EMPTY_IDENTIFIER);
             preview.setClothes(SkinCache.getTextureIdentifier(content));
         } else {
-            preview.setHair(SkinCache.getTextureIdentifier(content));
-            preview.setClothes(EMPTY_IDENTIFIER);
+            preview.setHairStyle(HairStyle.singleLayer(SkinCache.getTextureIdentifier(content).toString(),
+                    preview.getGenetics().getGender(), 1.0F));
+            if (!(previousScreen instanceof CombScreen)) {
+                preview.setClothes(EMPTY_IDENTIFIER);
+            }
         }
     }
 

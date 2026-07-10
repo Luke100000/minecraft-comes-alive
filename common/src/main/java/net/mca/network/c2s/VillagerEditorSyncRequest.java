@@ -167,7 +167,6 @@ public class VillagerEditorSyncRequest extends NbtDataMessage implements Message
                 if (entity instanceof VillagerEntityMCA villager) {
                     VillagerProfession profession = Registries.VILLAGER_PROFESSION.get(new Identifier(getData().getString("profession")));
                     villager.setProfession(profession);
-                    saveEntity(player, entity, getData().copy());
                 }
             }
         }
