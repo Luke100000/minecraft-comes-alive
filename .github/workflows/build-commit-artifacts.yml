@@ -18,17 +18,17 @@ jobs:
       - name: Checkout sources
         uses: actions/checkout@v6
         with:
-          fetch-depth: 0 # Fixes 128 by fetching all tags and history for buildscripts
+          fetch-depth: 0 # Fetches all tags and history to prevent Git 128 errors in buildscripts
 
       - name: Extract Minecraft version
         id: versions
         shell: bash
         run: echo "minecraft_version=$(grep '^minecraft_version=' gradle.properties | cut -d= -f2)" >> "$GITHUB_OUTPUT"
 
-      # Fixes potential 128 safe directory permissions errors
       - name: Fix Git Safe Directory
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
+      # Java 21 is required to run modern build tools like Architectury Loom 1.17+
       - name: Setup Java 21
         uses: actions/setup-java@v5
         with:
@@ -44,10 +44,13 @@ jobs:
       - name: Build Artifacts with Gradle
         run: ./gradlew build --console=plain --non-interactive
 
+      # Standard glob matching for the root build output folder
       - name: Upload Universal Jars
         uses: actions/upload-artifact@v7
         with:
           name: mca-universal-${{ steps.versions.outputs.minecraft_version }}
           path: |
-            build/libs/*-@(universal).jar
+            build/libs/*.jar
+            !build/libs/*-sources.jar
+            !build/libs/*-javadoc.jar
           if-no-files-found: error
