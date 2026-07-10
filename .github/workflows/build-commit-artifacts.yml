@@ -17,13 +17,18 @@ jobs:
     steps:
       - name: Checkout sources
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0 # Fixes 128 by fetching all tags and history for buildscripts
 
       - name: Extract Minecraft version
         id: versions
         shell: bash
         run: echo "minecraft_version=$(grep '^minecraft_version=' gradle.properties | cut -d= -f2)" >> "$GITHUB_OUTPUT"
 
-      # Restored to Java 21 so modern Architectury Loom / Gradle 9+ buildscripts can run
+      # Fixes potential 128 safe directory permissions errors
+      - name: Fix Git Safe Directory
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
       - name: Setup Java 21
         uses: actions/setup-java@v5
         with:

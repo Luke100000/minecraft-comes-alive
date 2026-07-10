@@ -7,7 +7,7 @@ import net.minecraft.resource.SinglePreparationResourceReloader;
 import net.minecraft.util.profiler.Profiler;
 
 /** Releases client-generated textures before resource reloads replace their source assets. */
-public final class GeneratedEyeTextureReloadListener extends SinglePreparationResourceReloader<Void> {
+public class GeneratedEyeTextureReloadListener extends SinglePreparationResourceReloader<Void> {
     @Override
     protected Void prepare(ResourceManager manager, Profiler profiler) {
         return null;

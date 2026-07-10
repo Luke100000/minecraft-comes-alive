@@ -3,6 +3,7 @@ package net.mca.quilt;
 import dev.architectury.registry.client.level.entity.EntityRendererRegistry;
 import dev.architectury.registry.client.particle.ParticleProviderRegistry;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
+import net.fabricmc.fabric.api.resource.ResourceManagerHelper;
 import net.mca.*;
 import net.mca.block.BlockEntityTypesMCA;
 import net.mca.block.BlocksMCA;
@@ -11,10 +12,7 @@ import net.mca.client.render.*;
 import net.mca.client.resources.GeneratedEyeTextureReloadListener;
 import net.mca.entity.EntitiesMCA;
 import net.mca.quilt.client.gui.QuiltMCAScreens;
-import net.mca.quilt.resources.ApiIdentifiableReloadListener;
-import net.mca.quilt.resources.QuiltColorPaletteLoader;
-import net.mca.quilt.resources.QuiltFaceList;
-import net.mca.quilt.resources.QuiltSupportersLoader;
+import net.mca.quilt.resources.*;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.item.ModelPredicateProviderRegistry;
 import net.minecraft.client.render.RenderLayer;
@@ -59,7 +57,8 @@ public final class MCAQuiltClient extends ClientProxyAbstractImpl implements Cli
         ResourceLoader.get(ResourceType.CLIENT_RESOURCES).registerReloader(new QuiltMCAScreens());
         ResourceLoader.get(ResourceType.CLIENT_RESOURCES).registerReloader(new QuiltColorPaletteLoader());
         ResourceLoader.get(ResourceType.CLIENT_RESOURCES).registerReloader(new QuiltFaceList());
-        ResourceLoader.get(ResourceType.CLIENT_RESOURCES).registerReloader(new GeneratedEyeTextureReloadListener());
+        ResourceLoader.get(ResourceType.CLIENT_RESOURCES)
+                .registerReloader(new QuiltGeneratedEyeTextureReloadListener());
         ResourceLoader.get(ResourceType.CLIENT_RESOURCES).registerReloader(new QuiltSupportersLoader());
         ResourceLoader.get(ResourceType.CLIENT_RESOURCES).registerReloader(new ApiIdentifiableReloadListener());
 
