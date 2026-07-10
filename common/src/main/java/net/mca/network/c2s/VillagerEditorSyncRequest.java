@@ -166,7 +166,13 @@ public class VillagerEditorSyncRequest extends NbtDataMessage implements Message
             case "profession" -> {
                 if (entity instanceof VillagerEntityMCA villager) {
                     VillagerProfession profession = Registries.VILLAGER_PROFESSION.get(new Identifier(getData().getString("profession")));
-                    villager.setProfession(profession);
+                    if (profession != null) {
+                        villager.setProfession(profession);
+                        NbtCompound fresh = GetVillagerRequest.getVillagerData(entity);
+                        if (fresh != null) {
+                            NetworkHandler.sendToPlayer(new GetVillagerResponse(fresh), player);
+                        }
+                    }
                 }
             }
         }

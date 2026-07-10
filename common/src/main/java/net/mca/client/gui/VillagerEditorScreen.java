@@ -740,7 +740,6 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                         compound.putString("profession", Registries.VILLAGER_PROFESSION.getId(p).toString());
                         syncVillagerData();
                         NetworkHandler.sendToServer(new VillagerEditorSyncRequest("profession", villagerUUID, compound));
-                        requestVillagerData();
                         professionButtons.forEach(button -> button.active = true);
                         b.active = false;
                     }));
