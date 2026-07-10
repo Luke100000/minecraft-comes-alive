@@ -1,3 +1,7 @@
+# 7.7.19
+
+* Fixed MCA Debug Editor breaking when editing a character while it is sitting down. 
+
 # 7.7.18
 
 Initial Release
