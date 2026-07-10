@@ -1,17 +1,31 @@
-# 7.6.28
+# 7.6.28-beta.1
+> Always backup your world before updating!
 
-* Backported a batch of safer 1.21.1 fixes and gameplay improvements.
+* Backported every feature from 1.21.1.
 * Fixed scaled player eye height so camera and interaction height update correctly without corrupting saved player dimensions.
 * Made Destiny teleports safer by validating the target world, border, and height before moving the player.
 * Added stronger family and age safeguards: relatives no longer receive romance actions, children avoid romantic personalities and AI replies, and age-locked villagers can stay fixed at their current age.
 * Added an admin override for player village requirements and monarch-rank checks.
 * Improved village scans and guard behavior, including better building block checks, passable interior fluids, retained guard memories after brain resets, and guards defending the player they follow.
+* Overhauled guard archer combat AI and targeting behavior.
 * Added configurable guard and archer equipment by village equipment level.
 * Made headstones much more resistant to explosions.
 * Fixed bamboo crib recipes to use bamboo ingredients.
 * Restored editor/library preview isolation so clothing previews no longer mutate hair state, and skin/hair lists sort numerically.
-* Restored comments that were accidentally stripped while porting the previous patch.
-
+* Added a preset manager to save, load, rename, and delete character appearances.
+* Added a side-by-side preview window to compare the current appearance against a selected preset.
+* Reorganized the character editor into tabs for body, clothes, hair, and eyes.
+* Added RGB color sliders for advanced skin, hair, and eye customization.
+* Enabled independent eye color customization for characters with heterochromia.
+* Overhauled the hair system to support separate base, bangs, back, front, and extra layers.
+* Added an outfit lock feature to protect custom clothing from automatic age or profession changes.
+* Added a voice preview button to the character editor.
+* Added a selection screen when a scanned structure matches multiple building recipes.
+* Improved pathfinding node evaluation around awkward decorative block collisions like lanterns.
+* Programmed unhappy villagers to visit music stores to improve their mood.
+* Low-health villagers will now seek safety and visibly eat food from their inventory to heal.
+* Added the infertile and rainbow eyes genetic traits.
+* Integrated dynamic map icons for villagers and players on Xaero/JourneyMap.
 # 7.6.27
 
 * Fixed destiny status not being saved reliably
