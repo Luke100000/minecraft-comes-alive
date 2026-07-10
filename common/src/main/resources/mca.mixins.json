@@ -9,7 +9,7 @@
     "MixinAbstractFurnaceBlockEntity",
     "MixinAdvancementRewards",
     "MixinEntityType",
-    "MixinFlintAndSteelItem",
+    "MixinItemStack",
     "MixinGoat",
     "MixinInventory",
     "MixinIronGolem",
