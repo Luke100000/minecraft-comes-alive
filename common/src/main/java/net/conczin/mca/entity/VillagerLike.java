@@ -173,11 +173,11 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
     }
 
     default InteractionHand getDominantHand() {
-        return getTraits().hasTrait(Traits.LEFT_HANDED) ? InteractionHand.OFF_HAND : InteractionHand.MAIN_HAND;
+        return InteractionHand.MAIN_HAND;
     }
 
     default InteractionHand getOpposingHand() {
-        return getDominantHand() == InteractionHand.OFF_HAND ? InteractionHand.MAIN_HAND : InteractionHand.OFF_HAND;
+        return InteractionHand.OFF_HAND;
     }
 
     default EquipmentSlot getDominantSlot() {
