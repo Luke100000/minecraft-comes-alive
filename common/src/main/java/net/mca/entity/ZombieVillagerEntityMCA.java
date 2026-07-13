@@ -129,7 +129,7 @@ public class ZombieVillagerEntityMCA extends ZombieVillagerEntity implements Vil
 
         boolean useRawDimensions = getAgeState() == AgeState.TEEN || getAgeState() == AgeState.ADULT;
         float height = (useRawDimensions ? getRawVerticalScaleFactor() : getVerticalScaleFactor()) * 2.0F;
-        float width = (useRawDimensions ? getRawHorizontalScaleFactor() : getHorizontalScaleFactor()) * 0.6F;
+        float width = getHorizontalScaleFactor() * 0.6F;
 
         return EntityDimensions.changing(width, height);
     }
