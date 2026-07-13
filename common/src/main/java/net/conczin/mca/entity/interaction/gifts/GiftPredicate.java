@@ -102,8 +102,14 @@ public class GiftPredicate {
 
             return Ingredient.of(tag);
         }, (Ingredient ingredient) -> (villager, stack, player) -> ingredient.test(stack) ? 1.0f : 0.0f);
-        register("trait", (json, name) ->
-                Traits.Trait.valueOf(GsonHelper.convertToString(json, name).toUpperCase(Locale.ENGLISH)), trait ->
+        register("trait", (json, name) -> {
+            String id = GsonHelper.convertToString(json, name).toLowerCase(Locale.ENGLISH);
+            Traits.Trait trait = Traits.Trait.valueOf(id);
+            if (trait == null) {
+                throw new JsonSyntaxException("Unknown trait '" + id + "'");
+            }
+            return trait;
+        }, trait ->
                 (villager, stack, player) ->
                         villager.getTraits().hasTrait(trait) ? 1.0f : 0.0f
         );

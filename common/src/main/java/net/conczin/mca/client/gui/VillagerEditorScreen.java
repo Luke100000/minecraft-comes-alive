@@ -2224,6 +2224,10 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     private CompoundTag saveEntityData(VillagerEntityMCA entity) {
         CompoundTag nbt = new CompoundTag();
         entity.addAdditionalSaveData(nbt);
+        Component customName = entity.getCustomName();
+        if (customName != null) {
+            nbt.putString("CustomName", Component.Serializer.toJson(customName, entity.registryAccess()));
+        }
         return nbt;
     }
 

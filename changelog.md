@@ -1,3 +1,9 @@
+# 7.7.20
+
+* Fixed Rumours not working and throwing an error.
+* Fixed villager name changes not applying
+
+
 # 7.7.19
 
 * Fixed MCA Debug Editor breaking when editing a character while it is sitting down. 
