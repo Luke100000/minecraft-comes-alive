@@ -243,7 +243,9 @@ public final class Config extends CommonConfig {
             .put("minecraft:spider", 0)
             .put("minecraft:cave_spider", 0)
             .put("minecraft:slime", 0)
-            .put("#minecraft:undead", 0)
+            .put("#minecraft:skeletons", 0)
+            .put("minecraft:zombified_piglin", 0)
+            .put("minecraft:wither", 0)
             .put(MCA.MOD_ID + ":female_zombie_villager", 3)
             .put(MCA.MOD_ID + ":male_zombie_villager", 3)
             .build();
@@ -323,6 +325,18 @@ public final class Config extends CommonConfig {
     public void autocomplete() {
         for (Traits.Trait trait : Traits.Trait.values()) {
             enabledTraits.putIfAbsent(trait.id(), true);
+        }
+
+        // Minecraft 1.20.1 has no #minecraft:undead entity-type tag. Migrate old
+        // configs without resetting unrelated user settings or explicit priorities.
+        Integer undeadPriority = guardsTargetEntities.get("#minecraft:undead");
+        if (undeadPriority != null) {
+            Map<String, Integer> migrated = new HashMap<>(guardsTargetEntities);
+            migrated.remove("#minecraft:undead");
+            migrated.putIfAbsent("#minecraft:skeletons", undeadPriority);
+            migrated.putIfAbsent("minecraft:zombified_piglin", undeadPriority);
+            migrated.putIfAbsent("minecraft:wither", undeadPriority);
+            guardsTargetEntities = migrated;
         }
     }
 

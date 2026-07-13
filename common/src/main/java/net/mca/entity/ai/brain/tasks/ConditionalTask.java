@@ -36,7 +36,7 @@ public class ConditionalTask<E extends LivingEntity> extends MultiTickTask<E> {
 
     @Override
     protected boolean shouldKeepRunning(ServerWorld world, E entity, long time) {
-        return task.getStatus() == Status.RUNNING;
+        return predicate.test(entity) && task.getStatus() == Status.RUNNING;
     }
 
     @Override

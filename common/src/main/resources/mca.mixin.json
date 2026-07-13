@@ -12,7 +12,7 @@
     "MixinCriteria",
     "MixinDefaultParticleType",
     "MixinEntityType",
-    "MixinFlintAndSteelItem",
+    "MixinItemStack",
     "MixinGoatEntity",
     "MixinIronGolem",
     "MixinLivingEntity",

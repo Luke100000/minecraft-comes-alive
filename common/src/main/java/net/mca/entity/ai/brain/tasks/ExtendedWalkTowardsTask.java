@@ -47,10 +47,10 @@ public class ExtendedWalkTowardsTask {
                         return (world, entity, time) -> {
                             GlobalPos globalPos = context.getValue(destinationResult);
                             Optional<Long> optional = context.getOptionalValue(cantReachWalkTargetSince);
+                            if (optional.isPresent() && world.getTime() - optional.get() < RANDOM_POS_RETRY_COOLDOWN) {
+                                return true;
+                            }
                             if (globalPos.getDimension() == world.getRegistryKey() && (optional.isEmpty() || world.getTime() - optional.get() <= (long)maxRunTime)) {
-                                if (optional.isPresent() && world.getTime() - optional.get() < RANDOM_POS_RETRY_COOLDOWN) {
-                                    return true;
-                                }
                                 Optional<BlockPos> resolvedTarget = walkTargetResolver.resolve(world, entity, globalPos);
                                 BlockPos targetPos = resolvedTarget.orElse(globalPos.getPos());
                                 int targetCompletionRange = resolvedTarget.isPresent() ? 0 : completionRange;

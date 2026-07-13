@@ -29,6 +29,7 @@ import net.minecraft.entity.ai.brain.sensor.Sensor;
 import net.minecraft.entity.ai.brain.sensor.SensorType;
 import net.minecraft.entity.ai.brain.task.*;
 import net.minecraft.entity.passive.VillagerEntity;
+import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
 import net.minecraft.server.world.ServerWorld;
@@ -114,8 +115,13 @@ public class VillagerTasksMCA {
         } else if (brain.getOptionalMemory(MemoryModuleTypeMCA.PLAYER_FOLLOWING.get()).isPresent()) {
             brain.setTaskList(Activity.CORE, VillagerTasksMCA.getFollowingPackage());
             brain.setTaskList(Activity.CORE, VillagerTasksMCA.getImportantCorePackage(0.5f));
-            brain.setTaskList(Activity.CORE, VillagerTasksMCA.getSelfDefencePackage());
-            brain.setTaskList(Activity.PANIC, VillagerTasksMCA.getPanicPackage(0.5F));
+            if (villager.isGuard()) {
+                brain.setTaskList(Activity.CORE, VillagerTasksMCA.getGuardCorePackage(villager));
+                brain.setTaskList(Activity.PANIC, VillagerTasksMCA.getGuardPanicPackage(0.5F));
+            } else {
+                brain.setTaskList(Activity.CORE, VillagerTasksMCA.getSelfDefencePackage());
+                brain.setTaskList(Activity.PANIC, VillagerTasksMCA.getPanicPackage(0.5F));
+            }
             noDefault = true;
         } else if (profession == ProfessionsMCA.MERCENARY.get()) {
             brain.setSchedule(SchedulesMCA.GUESTS);
@@ -123,7 +129,7 @@ public class VillagerTasksMCA {
             brain.setTaskList(Activity.IDLE, VillagerTasksMCA.getMercenaryPackage(0.5f));
             brain.setTaskList(Activity.CORE, VillagerTasksMCA.getGuardCorePackage(villager));
             brain.setTaskList(Activity.PANIC, VillagerTasksMCA.getPanicPackage(0.5F));
-            brain.setTaskList(Activity.REST, VillagerTasksMCA.getRestPackage(0.5F));
+            brain.setTaskList(Activity.REST, VillagerTasksMCA.getRestPackage(0.5F), ImmutableSet.of(Pair.of(MemoryModuleType.ATTACK_TARGET, MemoryModuleState.VALUE_ABSENT)));
             brain.setTaskList(ActivityMCA.CHORE.get(), VillagerTasksMCA.getChorePackage());
             noDefault = true;
         } else if (!villager.requiresHome()) {
@@ -132,7 +138,7 @@ public class VillagerTasksMCA {
             brain.setTaskList(Activity.IDLE, VillagerTasksMCA.getAdventurerPackage(0.5f));
             brain.setTaskList(Activity.CORE, VillagerTasksMCA.getSelfDefencePackage());
             brain.setTaskList(Activity.PANIC, VillagerTasksMCA.getPanicPackage(0.5F));
-            brain.setTaskList(Activity.REST, VillagerTasksMCA.getRestPackage(0.5F));
+            brain.setTaskList(Activity.REST, VillagerTasksMCA.getRestPackage(0.5F), ImmutableSet.of(Pair.of(MemoryModuleType.ATTACK_TARGET, MemoryModuleState.VALUE_ABSENT)));
             noDefault = true;
         } else if (age == AgeState.BABY) {
             brain.setSchedule(Schedule.VILLAGER_BABY);
@@ -162,7 +168,7 @@ public class VillagerTasksMCA {
             brain.setTaskList(Activity.CORE, VillagerTasksMCA.getImportantCorePackage(0.5F));
             brain.setTaskList(Activity.CORE, VillagerTasksMCA.getCorePackage(0.5F));
             brain.setTaskList(Activity.MEET, VillagerTasksMCA.getMeetPackage(0.5F), ImmutableSet.of(Pair.of(MemoryModuleType.MEETING_POINT, MemoryModuleState.VALUE_PRESENT)));
-            brain.setTaskList(Activity.REST, VillagerTasksMCA.getRestPackage(0.5F));
+            brain.setTaskList(Activity.REST, VillagerTasksMCA.getRestPackage(0.5F), ImmutableSet.of(Pair.of(MemoryModuleType.ATTACK_TARGET, MemoryModuleState.VALUE_ABSENT)));
             brain.setTaskList(Activity.IDLE, VillagerTasksMCA.getIdlePackage(0.5F));
             brain.setTaskList(Activity.PANIC, VillagerTasksMCA.getPanicPackage(0.5F));
             brain.setTaskList(Activity.PRE_RAID, VillagerTasksMCA.getPreRaidPackage(0.5F));
@@ -289,13 +295,17 @@ public class VillagerTasksMCA {
                         new ExtendedMeleeAttackTask(15, 2.5F, MemoryModuleType.NEAREST_HOSTILE),
                         VillagerTasksMCA::guardTooHurt
                 )),
-                Pair.of(1, new EquipmentTask(VillagerTasksMCA::isOnDuty, v -> v.getResidency().getHomeVillage()
+                Pair.of(1, new EquipmentTask(VillagerTasksMCA::shouldWearGuardEquipment, v -> v.getResidency().getHomeVillage()
                         .map(vil -> vil.getVillageGuardsManager().getGuardEquipment(v.getProfession(), v.getDominantHand()))
                         .orElseGet(() -> v.getProfession() == ProfessionsMCA.ARCHER.get()
                                 ? VillageGuardsManager.getEquipmentFor(v.getDominantHand(), EquipmentSet.ARCHER_0, EquipmentSet.ARCHER_0_LEFT)
                                 : VillageGuardsManager.getEquipmentFor(v.getDominantHand(), EquipmentSet.GUARD_0, EquipmentSet.GUARD_0_LEFT)))),
                 Pair.of(2, UpdateAttackTargetTask.create(t -> true, VillagerTasksMCA::getPreferredTarget)),
-                Pair.of(3, ForgetAttackTargetTask.create(livingEntity -> !VillagerTasksMCA.isPreferredTarget(villager, livingEntity))),
+                Pair.of(3, ForgetAttackTargetTask.create(
+                        livingEntity -> !VillagerTasksMCA.isPreferredTarget(villager, livingEntity),
+                        VillagerTasksMCA::onGuardTargetErased,
+                        false
+                )),
                 Pair.of(4, new ArcherMovementTask<>(15)),
                 Pair.of(5, new BowTask<>(20, 15)),
                 Pair.of(7, new ConditionalTask<>(
@@ -376,11 +386,23 @@ public class VillagerTasksMCA {
         return isFollowingPlayer(villager)
                 || getActivity(villager) != Activity.REST
                 || target.distanceTo(villager) < 8.0F
-                || villager.getResidency().getHomeVillage().filter(village -> village.isWithinBorder(villager)).isEmpty();
+                || isOutsideHomeVillage(villager);
+    }
+
+    private static boolean isOutsideHomeVillage(VillagerEntityMCA villager) {
+        return villager.getResidency().getHomeVillage()
+                .filter(village -> village.isWithinBorder(villager))
+                .isEmpty();
     }
 
     private static boolean isFollowingPlayer(VillagerEntityMCA villager) {
         return villager.getBrain().getOptionalMemory(MemoryModuleTypeMCA.PLAYER_FOLLOWING.get()).isPresent();
+    }
+
+    private static void onGuardTargetErased(VillagerEntityMCA villager, LivingEntity target) {
+        if (target instanceof PlayerEntity && !target.isAlive()) {
+            villager.pardonPlayers(Integer.MAX_VALUE);
+        }
     }
 
     private static boolean isPreferredTarget(VillagerEntityMCA villager, LivingEntity entity) {
@@ -392,6 +414,11 @@ public class VillagerTasksMCA {
         return getActivity(villager) == Activity.WORK
                 || villager.getBrain().getOptionalMemory(MemoryModuleType.ATTACK_TARGET).isPresent()
                 || getPreferredTarget(villager).isPresent();
+    }
+
+    private static boolean shouldWearGuardEquipment(VillagerEntityMCA villager) {
+        return isOnDuty(villager)
+                || villager.isGuard() && (isFollowingPlayer(villager) || isOutsideHomeVillage(villager));
     }
 
     private static boolean isHoldingRangedWeapon(VillagerEntityMCA villager) {
@@ -487,7 +514,7 @@ public class VillagerTasksMCA {
     public static ImmutableList<Pair<Integer, ? extends Task<? super VillagerEntityMCA>>> getRestPackage(float speed) {
         return ImmutableList.of(
                 // try to reach the bed, and if not a set home, forget if out of range
-                Pair.of(2, ExtendedWalkTowardsTask.create(MemoryModuleType.HOME, speed, 1, 192, 1200, (v) -> {
+                Pair.of(2, ExtendedWalkTowardsTask.create(MemoryModuleType.HOME, speed, 1, Config.getInstance().getVillagerPathfindingDistance(), 1200, (v) -> {
                     Optional<Boolean> memory = v.getBrain().getOptionalMemory(MemoryModuleTypeMCA.FORCED_HOME.get());
                     boolean forced = memory != null && memory.isPresent();
                     if (forced) {
@@ -496,7 +523,7 @@ public class VillagerTasksMCA {
                     return !forced;
                 }, v -> {
                     v.getResidency().seekHome();
-                })),
+                }, ExtendedWalkTowardsTask::findBedStandPosition)),
                 //verify the bed, occupancies state and similar
                 Pair.of(3, new ConditionalSingleTickTask<>(ExtendedForgetCompletedPointOfInterestTask.create(
                         registryEntry -> registryEntry.matchesKey(PointOfInterestTypes.HOME), MemoryModuleType.HOME, (entity) -> {

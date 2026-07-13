@@ -25,6 +25,7 @@ public class InteractTask extends MultiTickTask<VillagerEntityMCA> {
 
     public static boolean shouldRun(VillagerEntityMCA villager) {
         return villager.isAlive()
+                && villager.getBrain().getOptionalMemory(MemoryModuleType.ATTACK_TARGET).isEmpty()
                 && villager.getInteractions().getInteractingPlayer().filter(player -> villager.squaredDistanceTo(player) <= 25).isPresent()
                 && !villager.isTouchingWater()
                 && !villager.velocityModified

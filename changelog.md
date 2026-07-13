@@ -1,5 +1,16 @@
-# 7.6.28-beta.1
+# 7.6.28-beta.2
+
 > Always backup your world before updating!
+
+* Fixed guards not being able to attack while following you.
+* Fixed backporting regressions.
+* Fixed Rumours not working (was already present in non-beta versions)
+* Fixed guards not being able to have equipment while outside their home village
+* Fixed guard priorities (minecraft:undead tag was not available in this version)
+* Fixed more bugs, if any bugs are still present, please report them in the Discord server or the GitHub Issues page.  
+* Fixed Rumours not working and throwing an error.
+* Fixed villager name changes not applying
+# 7.6.28-beta.1
 
 * Backported every feature from 1.21.1.
 * Fixed scaled player eye height so camera and interaction height update correctly without corrupting saved player dimensions.

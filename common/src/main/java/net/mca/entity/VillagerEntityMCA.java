@@ -31,7 +31,6 @@ import net.minecraft.entity.ai.brain.BlockPosLookTarget;
 import net.minecraft.entity.ai.brain.Brain;
 import net.minecraft.entity.ai.brain.MemoryModuleType;
 import net.minecraft.entity.ai.brain.WalkTarget;
-import net.minecraft.entity.ai.control.MoveControl;
 import net.minecraft.entity.ai.goal.GoalSelector;
 import net.minecraft.entity.ai.goal.TrackTargetGoal;
 import net.minecraft.entity.ai.pathing.EntityNavigation;
@@ -48,7 +47,6 @@ import net.minecraft.entity.mob.MobEntity;
 import net.minecraft.entity.mob.PathAwareEntity;
 import net.minecraft.entity.mob.ZombieEntity;
 import net.minecraft.entity.mob.ZombieVillagerEntity;
-import net.minecraft.entity.passive.AbstractHorseEntity;
 import net.minecraft.entity.passive.IronGolemEntity;
 import net.minecraft.entity.passive.PassiveEntity;
 import net.minecraft.entity.passive.VillagerEntity;
@@ -1196,19 +1194,6 @@ public class VillagerEntityMCA extends VillagerEntity implements VillagerLike<Vi
         }
     }
 
-    @Override
-    public MoveControl getMoveControl() {
-        return isRidingHorse() ? moveControl : super.getMoveControl();
-    }
-
-    @Override
-    public EntityNavigation getNavigation() {
-        return isRidingHorse() ? navigation : super.getNavigation();
-    }
-
-    protected boolean isRidingHorse() {
-        return hasVehicle() && getVehicle() instanceof AbstractHorseEntity;
-    }
 
     @Override
     public void requestTeleport(double destX, double destY, double destZ) {

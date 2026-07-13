@@ -139,7 +139,10 @@ public class VillageManager extends PersistentState implements Iterable<Village>
         }
 
         //send bounty hunters
-        if (world.getTimeOfDay() % (Config.getInstance().bountyHunterInterval / 10) == 0 && world.getDifficulty() != Difficulty.PEACEFUL) {
+        int bountyHunterInterval = Config.getInstance().bountyHunterInterval;
+        if (bountyHunterInterval > 0
+                && world.getTimeOfDay() % Math.max(1, bountyHunterInterval / 10) == 0
+                && world.getDifficulty() != Difficulty.PEACEFUL) {
             world.getPlayers().forEach(player -> {
                 if (world.random.nextInt(10) == 0 && !isWithinHorizontalBoundaries(player.getBlockPos()) && !player.isCreative()) {
                     villages.values().stream()

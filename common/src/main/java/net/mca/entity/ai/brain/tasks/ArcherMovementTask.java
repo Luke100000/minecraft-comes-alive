@@ -251,6 +251,7 @@ public class ArcherMovementTask<E extends PathAwareEntity> extends MultiTickTask
 
         return entity.isOnGround()
                 && (entity.horizontalCollision
+                || entity.collidedSoftly
                 || entity.getVelocity().horizontalLengthSquared() < STUCK_HORIZONTAL_SPEED_SQUARED);
     }
 
@@ -331,6 +332,7 @@ public class ArcherMovementTask<E extends PathAwareEntity> extends MultiTickTask
         return this.strafingTime > 3
                 && entity.isOnGround()
                 && (entity.horizontalCollision
+                || entity.collidedSoftly
                 || entity.getVelocity().horizontalLengthSquared() < STUCK_HORIZONTAL_SPEED_SQUARED);
     }
 
