@@ -64,14 +64,10 @@ public final class PlayerDimensions {
                 : entityData;
         NbtCompound traits = mcaData.contains("Traits", 10) ? mcaData.getCompound("Traits") : new NbtCompound();
         AgeScale age = getAgeScale(entityData);
-        int genderId = mcaData.contains("Gender")
-                ? mcaData.getInt("Gender")
-                : mcaData.contains("gender")
-                        ? mcaData.getInt("gender")
-                        : entityData.contains("gender")
-                                ? entityData.getInt("gender")
-                                : Gender.UNASSIGNED.ordinal();
-        Gender gender = Gender.byId(genderId);
+        Gender gender = Genetics.readGender(mcaData);
+        if (gender == Gender.UNASSIGNED && mcaData != entityData) {
+            gender = Genetics.readGender(entityData);
+        }
 
         float width = geneScale(entityData, mcaData, Genetics.WIDTH)
                 * getTraitsHorizontalScaleFactor(traits)

@@ -65,7 +65,7 @@ public class MCAClient {
     }
 
     public static boolean renderArms(UUID uuid, String key) {
-        return useVillagerRenderer(uuid) &&
+        return isPlayerRendererAllowed() && useVillagerRenderer(uuid) &&
                 Config.getInstance().playerRendererBlacklist.entrySet().stream()
                         .filter(entry -> entry.getValue().equals("arms") || entry.getValue().equals(key))
                         .noneMatch(entry -> MCA.doesModExist(entry.getKey()));

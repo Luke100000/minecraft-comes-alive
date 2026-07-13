@@ -5,6 +5,7 @@ import net.mca.cobalt.network.Message;
 import net.mca.cobalt.network.NetworkHandler;
 import net.mca.entity.VillagerEntityMCA;
 import net.mca.entity.VillagerLike;
+import net.mca.entity.ai.Genetics;
 import net.mca.entity.ai.relationship.Gender;
 import net.mca.network.NbtDataMessage;
 import net.mca.network.s2c.GetVillagerResponse;
@@ -80,7 +81,7 @@ public class VillagerEditorSyncRequest extends NbtDataMessage implements Message
         if (key.startsWith("gene_")) {
             return true;
         }
-        if (key.equals("gender") || key.equals("personality") || key.equals("traits") || key.equals("ageState") || key.equals("hair")) {
+        if (key.equals(Genetics.GENDER_KEY) || key.equals("personality") || key.equals("traits") || key.equals("ageState") || key.equals("hair")) {
             return true;
         }
         for (String visualKey : MCA_VISUAL_KEYS) {
@@ -142,6 +143,9 @@ public class VillagerEditorSyncRequest extends NbtDataMessage implements Message
                 if (isAllowedMcaKey(key)) {
                     mergedMca.put(key, Objects.requireNonNull(patchMca.get(key)).copy());
                 }
+            }
+            if (patchMca.contains(Genetics.GENDER_KEY)) {
+                Genetics.writeGender(mergedMca, Genetics.readGender(patchMca));
             }
         }
 
@@ -284,13 +288,11 @@ public class VillagerEditorSyncRequest extends NbtDataMessage implements Message
 
     private Gender getGender(NbtCompound villagerData) {
         NbtCompound mcaData = getMcaData(villagerData);
-        if (mcaData.contains("Gender")) {
-            return Gender.byId(mcaData.getInt("Gender"));
+        Gender gender = Genetics.readGender(mcaData);
+        if (gender != Gender.UNASSIGNED || mcaData == villagerData) {
+            return gender;
         }
-        if (villagerData.contains("Gender")) {
-            return Gender.byId(villagerData.getInt("Gender"));
-        }
-        return Gender.UNASSIGNED;
+        return Genetics.readGender(villagerData);
     }
 
     private NbtCompound getMcaData(NbtCompound villagerData) {

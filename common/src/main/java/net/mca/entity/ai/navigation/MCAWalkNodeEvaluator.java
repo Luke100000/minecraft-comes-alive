@@ -50,6 +50,8 @@ public class MCAWalkNodeEvaluator extends LandPathNodeMaker {
         return diagonal.penalty >= 0.0F
                 && (xNode.y < node.y || xNode.penalty >= 0.0F || narrowFence)
                 && (zNode.y < node.y || zNode.penalty >= 0.0F || narrowFence)
+                && hasExactClearance(xNode)
+                && hasExactClearance(zNode)
                 && hasExactClearance(diagonal);
     }
 

@@ -6,6 +6,7 @@ import net.mca.cobalt.network.NetworkHandler;
 import net.mca.entity.EntitiesMCA;
 import net.mca.entity.PlayerDimensions;
 import net.mca.entity.VillagerEntityMCA;
+import net.mca.entity.ai.Genetics;
 import net.mca.entity.ai.relationship.EntityRelationship;
 import net.mca.entity.ai.relationship.Gender;
 import net.mca.entity.ai.relationship.RelationshipState;
@@ -254,13 +255,11 @@ public class PlayerSaveData extends PersistentState implements EntityRelationshi
         NbtCompound mcaData = entityData.contains(VillagerEntityMCA.MCA_DATA_KEY, NbtElement.COMPOUND_TYPE)
                 ? entityData.getCompound(VillagerEntityMCA.MCA_DATA_KEY)
                 : entityData;
-        if (mcaData.contains("Gender")) {
-            return Gender.byId(mcaData.getInt("Gender"));
+        Gender gender = Genetics.readGender(mcaData);
+        if (gender != Gender.UNASSIGNED || mcaData == entityData) {
+            return gender;
         }
-        if (entityData.contains("gender")) {
-            return Gender.byId(entityData.getInt("gender"));
-        }
-        return Gender.UNASSIGNED;
+        return Genetics.readGender(entityData);
     }
 
     @Override

@@ -1413,7 +1413,9 @@ public class VillagerEntityMCA extends VillagerEntity implements VillagerLike<Vi
 
     @Override
     public void onTrackedDataSet(TrackedData<?> par) {
-        if (getTypeDataManager().isParam(AGE_STATE, par) || getTypeDataManager().isParam(Genetics.SIZE.getParam(), par)) {
+        if (getTypeDataManager().isParam(AGE_STATE, par)
+                || getTypeDataManager().isParam(Genetics.SIZE.getParam(), par)
+                || getTypeDataManager().isParam(Genetics.WIDTH.getParam(), par)) {
             calculateDimensions();
         }
         if (getTypeDataManager().isParam(CUSTOM_SKIN, par)) {

@@ -139,12 +139,20 @@ public class Traits {
         NbtCompound traits = entity.getTrackedValue(TRAITS).copy();
         traits.putBoolean(trait.id(), true);
         entity.setTrackedValue(TRAITS, traits);
+        updateAttributes(trait);
     }
 
     public void removeTrait(Trait trait) {
         NbtCompound traits = entity.getTrackedValue(TRAITS).copy();
         traits.remove(trait.id());
         entity.setTrackedValue(TRAITS, traits);
+        updateAttributes(trait);
+    }
+
+    private void updateAttributes(Trait trait) {
+        if (trait == WEAK || trait == TOUGH) {
+            entity.updateAttributes();
+        }
     }
 
     //initializes the genes with random numbers

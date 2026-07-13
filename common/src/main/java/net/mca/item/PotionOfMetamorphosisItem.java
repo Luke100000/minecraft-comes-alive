@@ -3,6 +3,7 @@ package net.mca.item;
 import net.mca.cobalt.network.NetworkHandler;
 import net.mca.entity.VillagerEntityMCA;
 import net.mca.entity.VillagerLike;
+import net.mca.entity.ai.Genetics;
 import net.mca.entity.ai.relationship.Gender;
 import net.mca.network.s2c.PlayerDataMessage;
 import net.mca.server.world.data.FamilyTree;
@@ -39,7 +40,7 @@ public class PotionOfMetamorphosisItem extends TooltippedItem {
             NbtCompound mcaData = villagerData.contains(VillagerEntityMCA.MCA_DATA_KEY, NbtElement.COMPOUND_TYPE)
                     ? villagerData.getCompound(VillagerEntityMCA.MCA_DATA_KEY)
                     : villagerData;
-            mcaData.putInt("Gender", gender.ordinal());
+            Genetics.writeGender(mcaData, gender);
             data.setEntityData(villagerData);
 
             common(serverPlayer);

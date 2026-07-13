@@ -8,6 +8,7 @@ import net.mca.util.network.datasync.CDataParameter;
 import net.mca.util.network.datasync.CEnumParameter;
 import net.mca.util.network.datasync.CParameter;
 import net.minecraft.entity.Entity;
+import net.minecraft.nbt.NbtCompound;
 import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.random.Random;
 
@@ -31,7 +32,24 @@ public class Genetics implements Iterable<Genetics.Gene> {
     public static final GeneType VOICE = new GeneType("gene_voice");
     public static final GeneType VOICE_TONE = new GeneType("gene_voice_tone");
 
-    private static final CEnumParameter<Gender> GENDER = CParameter.create("gender", Gender.UNASSIGNED);
+    public static final String GENDER_KEY = "gender";
+    private static final String LEGACY_GENDER_KEY = "Gender";
+    private static final CEnumParameter<Gender> GENDER = CParameter.create(GENDER_KEY, Gender.UNASSIGNED);
+
+    public static Gender readGender(NbtCompound nbt) {
+        if (nbt.contains(LEGACY_GENDER_KEY)) {
+            return Gender.byId(nbt.getInt(LEGACY_GENDER_KEY));
+        }
+        if (nbt.contains(GENDER_KEY)) {
+            return Gender.byId(nbt.getInt(GENDER_KEY));
+        }
+        return Gender.UNASSIGNED;
+    }
+
+    public static void writeGender(NbtCompound nbt, Gender gender) {
+        nbt.putInt(GENDER_KEY, gender.getId());
+        nbt.remove(LEGACY_GENDER_KEY);
+    }
 
     public static <E extends Entity> CDataManager.Builder<E> createTrackedData(CDataManager.Builder<E> builder) {
         GENOMES.forEach(g -> builder.addAll(g.getParam()));

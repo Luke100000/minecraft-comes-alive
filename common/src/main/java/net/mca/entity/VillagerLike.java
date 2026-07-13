@@ -723,6 +723,13 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
 
     static VillagerLike<?> toVillager(PlayerSaveData player) {
         NbtCompound villagerData = player.getEntityData();
+        Gender gender = player.getGender();
+        if (gender != Gender.UNASSIGNED) {
+            NbtCompound mcaData = villagerData.contains(VillagerEntityMCA.MCA_DATA_KEY, 10)
+                    ? villagerData.getCompound(VillagerEntityMCA.MCA_DATA_KEY)
+                    : villagerData;
+            Genetics.writeGender(mcaData, gender);
+        }
         VillagerEntityMCA villager = EntitiesMCA.MALE_VILLAGER.get().create(player.getWorld());
         if (villager == null) {
             return null;
