@@ -1,3 +1,7 @@
+# 7.7.21
+
+* Fixed Villagers not being able to get through doors cause of their width.
+
 # 7.7.20
 
 * Fixed Rumours not working and throwing an error.
