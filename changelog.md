@@ -2,7 +2,7 @@
 
 * Fixed Rumours not working and throwing an error.
 * Fixed villager name changes not applying
-
+* Fixed typo in pastries.json which caused an error
 
 # 7.7.19
 
