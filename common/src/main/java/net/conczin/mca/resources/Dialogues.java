@@ -86,13 +86,13 @@ public class Dialogues extends SimpleJsonResourceReloadListener<JsonElement> {
     public void selectAnswer(VillagerEntityMCA villager, ServerPlayer player, String questionId, String answerId) {
         Question question = getQuestion(questionId);
         if (question == null) {
-            MCA.LOGGER.warn("Player {} tried to select an unknown dialogue question '{}'", player.getGameProfile().getName(), questionId);
+            MCA.LOGGER.warn("Player {} tried to select an unknown dialogue question '{}'", player.getGameProfile().name(), questionId);
             return;
         }
 
         Answer answer = question.getAnswer(answerId);
         if (answer == null) {
-            MCA.LOGGER.warn("Player {} tried to select unknown answer '{}' for dialogue question '{}'", player.getGameProfile().getName(), answerId, questionId);
+            MCA.LOGGER.warn("Player {} tried to select unknown answer '{}' for dialogue question '{}'", player.getGameProfile().name(), answerId, questionId);
             return;
         }
 

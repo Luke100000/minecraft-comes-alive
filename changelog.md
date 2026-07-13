@@ -1,9 +1,6 @@
 # 8.1.3
 
 * Fixed Rumours not working and throwing an error.
-* Fixed villager name changes not applying.
-* Fixed typo in pastries.json which caused an error.
-
 
 # 8.1.2
 
