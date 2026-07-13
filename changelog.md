@@ -1,3 +1,9 @@
+# 8.1.3
+
+* Fixed Rumours not working and throwing an error.
+* Fixed villager name changes not applying.
+
+
 # 8.1.2
 
 * Fixed MCA Debug Editor breaking when editing a character while it is sitting down.
