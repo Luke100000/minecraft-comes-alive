@@ -68,6 +68,7 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
 
     int NO_HAIR_DYE = 0xFF000000;
     UUID SPEED_ID = UUID.fromString("1eaf83ff-7207-5596-c37a-d7a07b3ec4ce");
+    UUID DAMAGE_ID = UUID.fromString("c9f8312d-808a-4a1b-b5ea-4c37f0708667");
 
     static <E extends Entity> CDataManager.Builder<E> createTrackedData(Class<E> type) {
         return new CDataManager.Builder<>(type)
@@ -434,7 +435,7 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
         return getAgeState();
     }
 
-    default void updateSpeed() {
+    default void updateAttributes() {
         //set speed
         float speed = getVillagerBrain().getPersonality().getSpeedModifier();
 
@@ -451,6 +452,23 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
             EntityAttributeModifier speedModifier = new EntityAttributeModifier(SPEED_ID, "Speed", speed - 1.0f, EntityAttributeModifier.Operation.MULTIPLY_BASE);
             entityAttributeInstance.addTemporaryModifier(speedModifier);
         }
+
+        float damageMultiplier = 1.0f;
+        if (getTraits().hasTrait(Traits.WEAK)) {
+            damageMultiplier *= 0.75f;
+        }
+        if (getTraits().hasTrait(Traits.TOUGH)) {
+            damageMultiplier *= 1.5f;
+        }
+
+        EntityAttributeInstance attackAttributeInstance = asEntity().getAttributeInstance(EntityAttributes.GENERIC_ATTACK_DAMAGE);
+        if (attackAttributeInstance != null) {
+            if (attackAttributeInstance.getModifier(DAMAGE_ID) != null) {
+                attackAttributeInstance.removeModifier(DAMAGE_ID);
+            }
+            EntityAttributeModifier damageModifier = new EntityAttributeModifier(DAMAGE_ID, "Damage", damageMultiplier - 1.0f, EntityAttributeModifier.Operation.MULTIPLY_BASE);
+            attackAttributeInstance.addTemporaryModifier(damageModifier);
+        }
     }
 
     default boolean setAgeState(AgeState state) {
@@ -461,7 +479,7 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
 
         setTrackedValue(AGE_STATE, state);
         asEntity().calculateDimensions();
-        updateSpeed();
+        updateAttributes();
 
         return old != AgeState.UNASSIGNED;
     }

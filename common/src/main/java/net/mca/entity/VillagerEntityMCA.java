@@ -25,7 +25,6 @@ import net.mca.util.network.datasync.CDataManager;
 import net.mca.util.network.datasync.CDataParameter;
 import net.mca.util.network.datasync.CParameter;
 import net.minecraft.block.entity.SkullBlockEntity;
-import net.minecraft.enchantment.EnchantmentHelper;
 import net.minecraft.entity.*;
 import net.minecraft.entity.ai.brain.BlockPosLookTarget;
 import net.minecraft.entity.ai.brain.Brain;
@@ -380,51 +379,10 @@ public class VillagerEntityMCA extends VillagerEntity implements VillagerLike<Vi
 
     @Override
     public boolean tryAttack(Entity target) {
-        //base damage
-        double baseDamage = getAttributeValue(EntityAttributes.GENERIC_ATTACK_DAMAGE);
-        float damage = (float) (baseDamage * (getProfession() == ProfessionsMCA.GUARD.get() ? 3.0f : 1.0f));
-        float knockback = (float) getAttributeValue(EntityAttributes.GENERIC_ATTACK_KNOCKBACK);
-
-        //traits
-        if (getTraits().hasTrait(Traits.WEAK)) {
-            damage *= 0.75f;
-        }
-        if (getTraits().hasTrait(Traits.TOUGH)) {
-            damage *= 1.25f;
-        }
-
-        //enchantment
-        if (target instanceof LivingEntity livingEntity) {
-            damage += EnchantmentHelper.getAttackDamage(getMainHandStack(), livingEntity.getGroup());
-            knockback += EnchantmentHelper.getKnockback(this);
-        }
-
-        //fire aspect
-        int i = EnchantmentHelper.getFireAspect(this);
-        if (i > 0) {
-            target.setOnFireFor(i * 4);
-        }
-
-        boolean damageDealt = target.damage(getWorld().getDamageSources().mobAttack(this), damage);
+        boolean damageDealt = super.tryAttack(target);
         if (damageDealt) {
             attackedEntity(target);
         }
-
-        //knockback and post damage stuff
-        if (damageDealt) {
-            if (knockback > 0 && target instanceof LivingEntity livingEntity) {
-                livingEntity.takeKnockback(
-                        knockback / 2, MathHelper.sin(getYaw() * ((float) Math.PI / 180F)),
-                        -MathHelper.cos(getYaw() * ((float) Math.PI / 180F))
-                );
-
-                setVelocity(getVelocity().multiply(0.6D, 1, 0.6));
-            }
-
-            applyDamageEffects(this, target);
-            onAttacking(target);
-        }
-
         return damageDealt;
     }
 
@@ -1557,7 +1515,7 @@ public class VillagerEntityMCA extends VillagerEntity implements VillagerLike<Vi
         int playerModelId = data.contains("PlayerModel") ? data.getInt("PlayerModel") : data.getInt("playerModel");
         playerModel = PlayerModel.byId(playerModelId);
 
-        updateSpeed();
+        updateAttributes();
 
         inventory.clear();
         InventoryUtils.readFromNBT(inventory, data);

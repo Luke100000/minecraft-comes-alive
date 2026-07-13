@@ -1,3 +1,8 @@
+# 7.6.28-beta.3
+> Always backup your world before updating!
+
+* Fix Damage Calculations for villagers.
+
 # 7.6.28-beta.2
 
 > Always backup your world before updating!

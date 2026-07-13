@@ -267,7 +267,7 @@ public class ZombieVillagerEntityMCA extends ZombieVillagerEntity implements Vil
         getTypeDataManager().load(this, nbt);
         relations.readFromNbt(nbt);
 
-        updateSpeed();
+        updateAttributes();
 
         inventory.clear();
         InventoryUtils.readFromNBT(inventory, nbt);
