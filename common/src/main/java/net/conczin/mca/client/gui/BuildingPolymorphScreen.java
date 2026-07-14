@@ -4,6 +4,7 @@ import net.conczin.mca.MCA;
 import net.conczin.mca.client.gui.widget.WidgetUtils;
 import net.conczin.mca.network.Network;
 import net.conczin.mca.network.c2s.ConfirmBuildingPolymorphMessage;
+import net.conczin.mca.network.s2c.BuildingPolymorphMessage;
 import net.conczin.mca.resources.BuildingTypes;
 import net.conczin.mca.resources.data.BuildingType;
 import net.conczin.mca.util.compat.ButtonWidget;
@@ -26,14 +27,22 @@ public class BuildingPolymorphScreen extends Screen {
 
     private final List<String> matchingTypes;
     private final BlockPos scanPos;
-    private final boolean isRoom;
+    private final BuildingPolymorphMessage.ScanAction action;
+    private final int expectedRoomId;
+    private final Screen returnScreen;
     private int page;
 
-    public BuildingPolymorphScreen(List<String> matchingTypes, BlockPos scanPos, boolean isRoom) {
+    public BuildingPolymorphScreen(List<String> matchingTypes,
+                                   BlockPos scanPos,
+                                   BuildingPolymorphMessage.ScanAction action,
+                                   int expectedRoomId,
+                                   Screen returnScreen) {
         super(Component.translatable("gui.building_polymorph.title"));
         this.matchingTypes = List.copyOf(matchingTypes);
         this.scanPos = scanPos;
-        this.isRoom = isRoom;
+        this.action = action;
+        this.expectedRoomId = expectedRoomId;
+        this.returnScreen = returnScreen;
     }
 
     private void drawBuildingIcon(GuiGraphics context, String typeName, int x, int y) {
@@ -93,8 +102,9 @@ public class BuildingPolymorphScreen extends Screen {
                     typeName,
                     Component.translatable("buildingType." + typeName),
                     button -> {
-                        Network.sendToServer(new ConfirmBuildingPolymorphMessage(scanPos, isRoom, typeName));
-                        Objects.requireNonNull(this.minecraft).setScreen(null);
+                        Network.sendToServer(new ConfirmBuildingPolymorphMessage(
+                                scanPos, action, expectedRoomId, typeName));
+                        Objects.requireNonNull(this.minecraft).setScreen(returnScreen);
                     }
             ));
         }
@@ -135,8 +145,20 @@ public class BuildingPolymorphScreen extends Screen {
                 100,
                 BUTTON_HEIGHT,
                 Component.translatable("gui.blueprint.cancel"),
-                button -> Objects.requireNonNull(this.minecraft).setScreen(null)
+                button -> cancelSelection()
         ));
+    }
+
+    private void cancelSelection() {
+        if (returnScreen instanceof BlueprintScreen blueprintScreen) {
+            blueprintScreen.cancelPendingFloorSelection();
+        }
+        Objects.requireNonNull(minecraft).setScreen(returnScreen);
+    }
+
+    @Override
+    public void onClose() {
+        cancelSelection();
     }
 
     @Override

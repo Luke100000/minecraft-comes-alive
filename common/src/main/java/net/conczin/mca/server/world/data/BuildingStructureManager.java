@@ -154,10 +154,6 @@ final class BuildingStructureManager {
                 .toList();
     }
 
-    static int memberCount(Village village, int structureId) {
-        return members(village, structureId).size();
-    }
-
     static void removeStructure(Village village, int structureId) {
         if (village == null) {
             return;
@@ -190,7 +186,7 @@ final class BuildingStructureManager {
                 continue;
             }
 
-            Candidate candidate = scoreCandidate(scanned, existing, preferredBuildingId);
+            Candidate candidate = scoreCandidate(scanned, existing, village, preferredBuildingId);
             if (candidate != null) {
                 candidates.add(candidate);
             }
@@ -236,8 +232,12 @@ final class BuildingStructureManager {
         return MatchResult.match(primary, mergedIds);
     }
 
-    private static Candidate scoreCandidate(Building scanned, Building existing, int preferredBuildingId) {
-        if (scanned.isStrictScan() && !scanned.sharesFloorBandWith(existing)) {
+    private static Candidate scoreCandidate(Building scanned,
+                                            Building existing,
+                                            Village village,
+                                            int preferredBuildingId) {
+        boolean preferred = existing.getId() == preferredBuildingId;
+        if (scanned.isStrictScan() && !preferred && !sharesDetectedStructureFloor(scanned, existing, village)) {
             return null;
         }
 
@@ -248,8 +248,6 @@ final class BuildingStructureManager {
 
         boolean sourceAnchor = scanned.containsRawPos(existing.getSourceBlock());
         boolean scannedInsideExisting = existing.containsRawBounds(scanned);
-        boolean preferred = existing.getId() == preferredBuildingId;
-
         double retainedOld = intersection / (double) Math.max(1L, existing.getRawVolume());
         double coveredNew = intersection / (double) Math.max(1L, scanned.getRawVolume());
 
@@ -296,6 +294,25 @@ final class BuildingStructureManager {
         return new Candidate(existing, score, sourceAnchor);
     }
 
+    private static boolean sharesDetectedStructureFloor(Building scanned,
+                                                         Building existing,
+                                                         Village village) {
+        Building root = village.getBuildings().values().stream()
+                .filter(Building::isStructureContainer)
+                .filter(candidate -> candidate.getEffectiveStructureId() == existing.getEffectiveStructureId())
+                .findFirst()
+                .orElse(null);
+        if (root == null) {
+            return scanned.sharesFloorBandWith(existing);
+        }
+
+        OptionalInt scannedAnchor = root.getClosestFloorAnchorY(scanned.getFloorY());
+        OptionalInt existingAnchor = root.getClosestFloorAnchorY(existing.getFloorY());
+        return scannedAnchor.isPresent()
+                && existingAnchor.isPresent()
+                && scannedAnchor.getAsInt() == existingAnchor.getAsInt();
+    }
+
     /**
      * Assigns a genuinely new room to exactly one rooted structure.
      */
@@ -308,16 +325,22 @@ final class BuildingStructureManager {
 
         Set<Integer> candidateStructures = new TreeSet<>();
         for (Building existing : village.getBuildings().values()) {
-            if (!existing.isComplete()
-                    || existing.getBuildingType().grouped()
-                    || !existing.hasStructure()
-                    || !hasValidRoot(village, existing.getStructureId())) {
+            boolean complete = existing.isComplete();
+            boolean grouped = existing.getBuildingType().grouped();
+            boolean hasStructure = existing.hasStructure();
+            boolean validRoot = hasStructure && hasValidRoot(village, existing.getStructureId());
+            boolean attached = complete && !grouped && validRoot
+                    && room.isStructurallyAttachedTo(existing, ROOM_ATTACHMENT_VERTICAL_GAP);
+            MCA.LOGGER.info(
+                    "[BuildingRoomAttach] roomSource={} roomBounds={}..{} existingId={} structure={} root={} complete={} grouped={} hasStructure={} validRoot={} bounds={}..{} attached={}",
+                    room.getSourceBlock(), room.getPos0(), room.getPos1(), existing.getId(), existing.getStructureId(),
+                    existing.isStructureRoot(), complete, grouped, hasStructure, validRoot,
+                    existing.getPos0(), existing.getPos1(), attached);
+            if (!attached) {
                 continue;
             }
 
-            if (room.isStructurallyAttachedTo(existing, ROOM_ATTACHMENT_VERTICAL_GAP)) {
-                candidateStructures.add(existing.getStructureId());
-            }
+            candidateStructures.add(existing.getStructureId());
         }
 
         if (candidateStructures.isEmpty()) {

@@ -8,8 +8,11 @@ import java.util.List;
 
 /**
  * Compact persistent metadata for one semantic walkable floor band inside a
- * connected building interior. Components preserve disconnected balconies or
- * platforms, while row spans preserve atrium voids without storing every cell.
+ * connected building interior. A fresh scan starts with a physically detected
+ * {@code anchorY}; registered rooms may retain that value as their semantic floor
+ * assignment while replacing the component geometry from a newer scan. Components
+ * preserve disconnected balconies or platforms, while row spans preserve atrium
+ * voids without storing every cell.
  */
 public record BuildingFloorRegion(int anchorY, int area, List<Component> components) {
     public BuildingFloorRegion {
@@ -42,6 +45,13 @@ public record BuildingFloorRegion(int anchorY, int area, List<Component> compone
 
     public boolean containsHorizontally(int x, int z) {
         return components.stream().anyMatch(component -> component.containsHorizontally(x, z));
+    }
+
+    /**
+     * Keeps newly scanned floor geometry attached to an already-assigned semantic floor.
+     */
+    BuildingFloorRegion withAnchorY(int anchorY) {
+        return this.anchorY == anchorY ? this : new BuildingFloorRegion(anchorY, area, components);
     }
 
     public record Component(int minX,

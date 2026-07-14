@@ -1,6 +1,7 @@
 package net.conczin.mca.server.world.data;
 
 import net.conczin.mca.Config;
+import net.conczin.mca.MCA;
 import net.conczin.mca.resources.BuildingTypes;
 import net.conczin.mca.resources.data.BuildingType;
 import net.conczin.mca.util.NbtHelper;
@@ -13,18 +14,20 @@ import net.minecraft.nbt.Tag;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.block.BedBlock;
-import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.DoorBlock;
-import net.minecraft.world.level.block.TrapDoorBlock;
+import net.minecraft.world.level.block.*;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BedPart;
+import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
 
 import java.util.*;
 import java.util.stream.Stream;
 
 public class Building {
     public static final long SCAN_COOLDOWN = 4800;
+    public static final int PLAYER_POSITION_HORIZONTAL_MARGIN = 1;
+    public static final int PLAYER_POSITION_VERTICAL_MARGIN = 2;
+    /** Tolerance used for semantic floor identity, not broad room matching. */
+    public static final int SEMANTIC_FLOOR_TOLERANCE = 1;
     private static final int FLOOR_MATCH_TOLERANCE = BuildingFloorRegionDetector.FLOOR_CLUSTER_TOLERANCE;
     private static final Direction[] directions = {
             Direction.UP, Direction.DOWN, Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST
@@ -41,6 +44,8 @@ public class Building {
     private int pos1X, pos1Y, pos1Z;
     private int posX, posY, posZ;
     private int floorY;
+    private int groundFloorY;
+    private boolean hasGroundFloorAnchor;
     private int structureId = -1;
     private boolean structureRoot;
     private int id;
@@ -69,6 +74,7 @@ public class Building {
         posY = pos0Y;
         posZ = pos0Z;
         floorY = pos0Y;
+        groundFloorY = floorY;
 
         this.strictScan = strictScan;
     }
@@ -94,6 +100,8 @@ public class Building {
         }
 
         floorY = v.contains("floorY") ? v.getInt("floorY") : pos0Y + 1;
+        groundFloorY = v.contains("groundFloorY") ? v.getInt("groundFloorY") : floorY;
+        hasGroundFloorAnchor = v.contains("groundFloorY");
         if (v.contains("floorRegions", Tag.TAG_LIST)) {
             floorRegions = List.copyOf(NbtHelper.toList(
                     v.getList("floorRegions", Tag.TAG_COMPOUND),
@@ -127,6 +135,9 @@ public class Building {
         v.putInt("posY", posY);
         v.putInt("posZ", posZ);
         v.putInt("floorY", floorY);
+        if (hasGroundFloorAnchor) {
+            v.putInt("groundFloorY", groundFloorY);
+        }
         v.put("floorRegions", NbtHelper.fromList(floorRegions, BuildingFloorRegion::save));
         v.putInt("structureId", structureId);
         v.putBoolean("structureRoot", structureRoot);
@@ -175,6 +186,15 @@ public class Building {
         return floorY;
     }
 
+    /**
+     * The persistent semantic ground floor for a structure root. New roots derive this
+     * from their entrance during the whole-building scan; existing roots retain it when
+     * rescanned so room changes cannot relabel the structure's floors.
+     */
+    public int getGroundFloorY() {
+        return groundFloorY;
+    }
+
     public List<BuildingFloorRegion> getFloorRegions() {
         return floorRegions;
     }
@@ -196,6 +216,25 @@ public class Building {
                 .mapToInt(region -> Math.abs(region.anchorY() - pos.getY()))
                 .min()
                 .orElseGet(() -> Math.abs(floorY - pos.getY()));
+    }
+
+    OptionalInt getClosestFloorAnchorY(int y) {
+        return floorRegions.stream()
+                .min(Comparator.comparingInt(region -> Math.abs(region.anchorY() - y)))
+                .stream()
+                .mapToInt(BuildingFloorRegion::anchorY)
+                .findFirst();
+    }
+
+    public int getLowestFloorY() {
+        return floorRegions.stream()
+                .mapToInt(BuildingFloorRegion::anchorY)
+                .min()
+                .orElse(floorY);
+    }
+
+    public boolean isOnGroundFloorY(int y) {
+        return Math.abs(groundFloorY - y) <= SEMANTIC_FLOOR_TOLERANCE;
     }
 
     public boolean containsFloorPosition(Vec3i pos) {
@@ -235,8 +274,24 @@ public class Building {
         return structureRoot;
     }
 
+    public boolean isStructureContainer() {
+        return structureRoot && !strictScan;
+    }
+
+    public boolean isFunctionalRoom() {
+        return strictScan && !structureRoot && !getBuildingType().grouped();
+    }
+
     public void setStructureRoot(boolean structureRoot) {
         this.structureRoot = structureRoot;
+    }
+
+    void makeStructureContainer() {
+        strictScan = false;
+        structureRoot = true;
+        isTypeForced = false;
+        type = "building";
+        blocks.clear();
     }
 
     public void validateBlocks(Level world) {
@@ -298,6 +353,9 @@ public class Building {
         LinkedList<BlockPos> queue = new LinkedList<>();
         Map<Long, Integer> lowestInteriorY = new HashMap<>();
         Set<BuildingFloorRegionDetector.SupportedCell> supportedCells = new HashSet<>();
+        Set<BlockPos> reachableInteriorCells = new HashSet<>();
+        Set<BlockPos> doorBlocks = new HashSet<>();
+        Set<BlockPos> trapDoorBlocks = new HashSet<>();
 
         //start point
         BlockPos center = getSourceBlock();
@@ -305,6 +363,7 @@ public class Building {
         done.add(center);
         BlockState centerState = world.getBlockState(center);
         if (centerState.isAir() || !centerState.getFluidState().isEmpty()) {
+            reachableInteriorCells.add(center);
             recordInteriorColumn(lowestInteriorY, center);
             recordSupportedInteriorCell(world, supportedCells, center);
         }
@@ -364,6 +423,7 @@ public class Building {
                             if (roofCache.get(n)) {
                                 interiorSize++;
                                 queue.add(n);
+                                reachableInteriorCells.add(n);
                                 recordInteriorColumn(lowestInteriorY, n);
                                 recordSupportedInteriorCell(world, supportedCells, n);
                             }
@@ -371,14 +431,28 @@ public class Building {
                             //fluid blocks (water, lava, etc.) are treated as passable interior
                             interiorSize++;
                             queue.add(n);
+                            reachableInteriorCells.add(n);
                             recordInteriorColumn(lowestInteriorY, n);
                             recordSupportedInteriorCell(world, supportedCells, n);
-                        } else if (state.getBlock() instanceof DoorBlock || state.getBlock() instanceof TrapDoorBlock) {
-                            //doors and trapdoors are room boundaries and valid entrances
+                        } else if (state.getBlock() instanceof DoorBlock) {
+                            if (!strictScan) {
+                                queue.add(n);
+                                doorBlocks.add(state.getValue(DoorBlock.HALF) == DoubleBlockHalf.UPPER
+                                        ? n.below()
+                                        : n);
+                            }
+                            hasDoor = true;
+                        } else if (state.getBlock() instanceof TrapDoorBlock) {
+                            if (!strictScan) {
+                                queue.add(n);
+                                trapDoorBlocks.add(n);
+                            }
+                            hasDoor = true;
+                        } else if (state.getBlock() instanceof LadderBlock) {
+                            // Ladders connect whole-building scans but keep strict room scans separate.
                             if (!strictScan) {
                                 queue.add(n);
                             }
-                            hasDoor = true;
                         }
                     }
                 }
@@ -448,12 +522,143 @@ public class Building {
                     .map(BuildingFloorRegion::anchorY)
                     .orElse(legacyFloorY);
 
+            EntranceCells normalDoors = classifyNormalDoorEntrances(world, doorBlocks, reachableInteriorCells);
+            EntranceCells trapDoors = classifyTrapDoorEntrances(world, trapDoorBlocks, reachableInteriorCells);
+            Collection<BlockPos> entranceInteriorCells;
+            String entranceSource;
+            if (!normalDoors.exterior().isEmpty()) {
+                entranceInteriorCells = normalDoors.exterior();
+                entranceSource = "exterior-door";
+            } else if (!trapDoors.exterior().isEmpty()) {
+                entranceInteriorCells = trapDoors.exterior();
+                entranceSource = "exterior-trapdoor";
+            } else if (!normalDoors.all().isEmpty()) {
+                entranceInteriorCells = normalDoors.all();
+                entranceSource = "door-fallback";
+            } else if (!trapDoors.all().isEmpty()) {
+                entranceInteriorCells = trapDoors.all();
+                entranceSource = "trapdoor-fallback";
+            } else {
+                entranceInteriorCells = List.of();
+                entranceSource = "floor-fallback";
+            }
+            groundFloorY = determineGroundFloorY(
+                    entranceInteriorCells,
+                    floorRegions,
+                    floorY
+            );
+            hasGroundFloorAnchor = true;
+            MCA.LOGGER.info(
+                    "[BuildingGroundFloor] source={} normalDoors={} exteriorNormalCells={} trapdoors={} exteriorTrapdoorCells={} selection={} floorY={} groundFloorY={}",
+                    center, doorBlocks.size(), normalDoors.exterior().size(), trapDoorBlocks.size(),
+                    trapDoors.exterior().size(), entranceSource, floorY, groundFloorY);
+
             //determine type
             if (isTypeForced()) {
                 return matchesType(getBuildingType()) ? validationResult.SUCCESS : validationResult.INVALID_TYPE;
             }
             return determineType() ? validationResult.SUCCESS : validationResult.INVALID_TYPE;
         }
+    }
+
+    private static EntranceCells classifyNormalDoorEntrances(Level world,
+                                                              Collection<BlockPos> doorBlocks,
+                                                              Set<BlockPos> reachableInteriorCells) {
+        Set<BlockPos> all = new HashSet<>();
+        Set<BlockPos> exterior = new HashSet<>();
+
+        for (BlockPos doorPos : doorBlocks) {
+            BlockState state = world.getBlockState(doorPos);
+            if (!(state.getBlock() instanceof DoorBlock)) {
+                continue;
+            }
+            Direction facing = state.getValue(DoorBlock.FACING);
+            List<BlockPos> neighbours = new ArrayList<>(4);
+            for (Direction side : List.of(facing, facing.getOpposite())) {
+                BlockPos neighbour = doorPos.relative(side);
+                neighbours.add(neighbour);
+                neighbours.add(neighbour.above());
+            }
+            classifyEntranceSides(
+                    world,
+                    neighbours,
+                    reachableInteriorCells,
+                    all,
+                    exterior
+            );
+        }
+        return new EntranceCells(all, exterior);
+    }
+
+    private static EntranceCells classifyTrapDoorEntrances(Level world,
+                                                            Collection<BlockPos> trapDoorBlocks,
+                                                            Set<BlockPos> reachableInteriorCells) {
+        Set<BlockPos> all = new HashSet<>();
+        Set<BlockPos> exterior = new HashSet<>();
+
+        for (BlockPos trapDoorPos : trapDoorBlocks) {
+            List<BlockPos> neighbours = Arrays.stream(directions)
+                    .map(trapDoorPos::relative)
+                    .toList();
+            classifyEntranceSides(world, neighbours, reachableInteriorCells, all, exterior);
+        }
+        return new EntranceCells(all, exterior);
+    }
+
+    private static void classifyEntranceSides(Level world,
+                                              Collection<BlockPos> neighbours,
+                                              Set<BlockPos> reachableInteriorCells,
+                                              Set<BlockPos> allInteriorCells,
+                                              Set<BlockPos> exteriorInteriorCells) {
+        List<BlockPos> interiorNeighbours = neighbours.stream()
+                .filter(reachableInteriorCells::contains)
+                .toList();
+        if (interiorNeighbours.isEmpty()) {
+            return;
+        }
+
+        allInteriorCells.addAll(interiorNeighbours);
+        boolean hasPassableExterior = neighbours.stream()
+                .filter(pos -> !reachableInteriorCells.contains(pos))
+                .map(world::getBlockState)
+                .anyMatch(state -> state.isAir() || !state.getFluidState().isEmpty());
+        if (hasPassableExterior) {
+            exteriorInteriorCells.addAll(interiorNeighbours);
+        }
+    }
+
+    private record EntranceCells(Set<BlockPos> all, Set<BlockPos> exterior) {
+        private EntranceCells {
+            all = Set.copyOf(all);
+            exterior = Set.copyOf(exterior);
+        }
+    }
+
+    private static int determineGroundFloorY(Collection<BlockPos> entranceInteriorCells,
+                                             List<BuildingFloorRegion> regions,
+                                             int fallbackY) {
+        if (entranceInteriorCells.isEmpty() || regions.isEmpty()) {
+            return fallbackY;
+        }
+
+        return regions.stream()
+                .min(Comparator
+                        .comparingInt((BuildingFloorRegion region) -> minimumEntranceDistance(
+                                entranceInteriorCells, region, true))
+                        .thenComparingInt(region -> minimumEntranceDistance(entranceInteriorCells, region, false))
+                        .thenComparingInt(BuildingFloorRegion::anchorY))
+                .map(BuildingFloorRegion::anchorY)
+                .orElse(fallbackY);
+    }
+
+    private static int minimumEntranceDistance(Collection<BlockPos> entranceInteriorCells,
+                                                BuildingFloorRegion region,
+                                                boolean requireHorizontalOverlap) {
+        return entranceInteriorCells.stream()
+                .filter(pos -> !requireHorizontalOverlap || region.containsHorizontally(pos.getX(), pos.getZ()))
+                .mapToInt(pos -> Math.abs(region.anchorY() - pos.getY()))
+                .min()
+                .orElse(Integer.MAX_VALUE);
     }
 
     private static void recordSupportedInteriorCell(Level world,
@@ -625,6 +830,27 @@ public class Building {
                && pos.getZ() >= pos0Z && pos.getZ() <= pos1Z;
     }
 
+    /**
+     * Player-position lookup used by both blueprint controls and server validation.
+     * The small margin covers a room immediately beside or above an existing scan
+     * without allowing an unrelated building elsewhere in the village to match.
+     */
+    public boolean containsStructurePosition(Vec3i pos) {
+        if (getBuildingType().grouped()) {
+            return containsPos(pos);
+        }
+        return containsFloorPosition(pos)
+                || containsPositionWithMargin(pos,
+                PLAYER_POSITION_HORIZONTAL_MARGIN,
+                PLAYER_POSITION_VERTICAL_MARGIN);
+    }
+
+    public boolean containsPositionWithMargin(Vec3i pos, int horizontalMargin, int verticalMargin) {
+        return pos.getX() >= pos0X - horizontalMargin && pos.getX() <= pos1X + horizontalMargin
+                && pos.getY() >= pos0Y - verticalMargin && pos.getY() <= pos1Y + verticalMargin
+                && pos.getZ() >= pos0Z - horizontalMargin && pos.getZ() <= pos1Z + horizontalMargin;
+    }
+
     public boolean isIdentical(Building b) {
         boolean sameBounds = pos0X == b.pos0X && pos1X == b.pos1X
                 && pos0Y == b.pos0Y && pos1Y == b.pos1Y
@@ -707,11 +933,15 @@ public class Building {
 
     /**
      * Updates mutable scan geometry while preserving persistent room/structure identity.
-     * The old source anchor is retained only while it remains passable and inside the
-     * new room; otherwise the successful scan source becomes the new persistent anchor.
+     * A registered room keeps its semantic floor assignment while the newly scanned
+     * region components, POIs, and type are refreshed. The old source anchor is retained
+     * only while it remains passable and inside the new room; otherwise the successful
+     * scan source becomes the new persistent anchor.
      */
-    public void copyScannedGeometryFrom(Building scanned, Level world) {
+    public void copyScannedGeometryFrom(Building scanned, Level world, boolean preserveFloorClassification) {
         BlockPos oldSource = getSourceBlock();
+        int previousFloorY = floorY;
+        int previousGroundFloorY = groundFloorY;
 
         size = scanned.size;
         pos0X = scanned.pos0X;
@@ -720,8 +950,12 @@ public class Building {
         pos1X = scanned.pos1X;
         pos1Y = scanned.pos1Y;
         pos1Z = scanned.pos1Z;
-        floorY = scanned.floorY;
-        floorRegions = scanned.floorRegions;
+        floorY = preserveFloorClassification ? previousFloorY : scanned.floorY;
+        floorRegions = preserveFloorClassification
+                ? scanned.floorRegions.stream().map(region -> region.withAnchorY(previousFloorY)).toList()
+                : scanned.floorRegions;
+        groundFloorY = structureRoot && hasGroundFloorAnchor ? previousGroundFloorY : scanned.groundFloorY;
+        hasGroundFloorAnchor = true;
         lastScan = scanned.lastScan;
 
         blocks.clear();

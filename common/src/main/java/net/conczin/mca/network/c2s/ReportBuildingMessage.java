@@ -4,10 +4,7 @@ import net.conczin.mca.MCA;
 import net.conczin.mca.network.HandleablePayload;
 import net.conczin.mca.network.Network;
 import net.conczin.mca.network.s2c.BuildingPolymorphMessage;
-import net.conczin.mca.server.world.data.Building;
-import net.conczin.mca.server.world.data.BuildingScanResult;
-import net.conczin.mca.server.world.data.Village;
-import net.conczin.mca.server.world.data.VillageManager;
+import net.conczin.mca.server.world.data.*;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.chat.Component;
@@ -28,9 +25,6 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
             ReportBuildingMessage::new
     );
 
-    private static final int BUILDING_LOOKUP_HORIZONTAL_MARGIN = 1;
-    private static final int BUILDING_LOOKUP_VERTICAL_MARGIN = 2;
-
     public ReportBuildingMessage(Action action) {
         this(action, null);
     }
@@ -38,9 +32,11 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
     @Override
     public void handleServer(ServerPlayer player) {
         VillageManager villages = VillageManager.get(player.serverLevel());
-        switch (action) {
+        try {
+            switch (action) {
             case ADD -> addBuildingAndCurrentRoom(villages, player);
             case ADD_ROOM -> addRoom(villages, player);
+            case UPDATE_ROOM -> updateRoom(villages, player, player.blockPosition(), null);
             case AUTO_SCAN -> villages.findNearestVillage(player).ifPresent(Village::toggleAutoScan);
             case FULL_SCAN -> villages.findNearestVillage(player).ifPresent(village -> {
                 villages.ensureStructureHierarchy(village);
@@ -50,9 +46,14 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
             case FORCE_TYPE, REMOVE, REMOVE_ROOM -> {
                 BlockPos playerPos = player.blockPosition();
                 Optional<Village> village = villages.findNearestVillage(player);
+                MCA.LOGGER.info("[BuildingRemove] stage=received action={} source={} villageId={}",
+                        action, playerPos, village.map(Village::getId).orElse(-1));
 
                 if (action == Action.REMOVE_ROOM
-                        && village.filter(v -> isOnStructuralGroundFloor(v, playerPos)).isPresent()) {
+                        && village.flatMap(v -> v.getFunctionalRoomAt(playerPos)
+                                .filter(v::isStructuralGroundFloor)).isPresent()) {
+                    MCA.LOGGER.info("[BuildingRemove] stage=blocked-ground-floor source={}", playerPos);
+                    player.displayClientMessage(Component.translatable("blueprint.cannot_remove_ground_floor"), true);
                     return;
                 }
 
@@ -64,34 +65,42 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
                 if (village.isPresent()) {
                     Village v = village.get();
                     villages.ensureStructureHierarchy(v);
-                    for (Building b : v.getBuildings().values()) {
-                        if ((action == Action.FORCE_TYPE && b.getBuildingType().grouped())
-                                || (action == Action.REMOVE_ROOM
-                                && (b.getBuildingType().grouped() || !b.isStrictScan()))) {
-                            continue;
-                        }
-
-                        boolean exact = action == Action.REMOVE_ROOM
-                                ? b.containsFloorPosition(playerPos)
-                                : b.containsPos(playerPos);
-                        boolean lenient = containsLenient(b, playerPos)
-                                && (action != Action.REMOVE_ROOM
-                                || b.getFloorDistanceTo(playerPos) <= BUILDING_LOOKUP_VERTICAL_MARGIN);
-
-                        if (!exact && !lenient) {
-                            continue;
-                        }
-
-                        double distance = action == Action.REMOVE_ROOM
-                                ? b.getFloorDistanceTo(playerPos)
-                                : b.getCenter().distSqr(playerPos);
-                        if (targetBuilding == null
-                                || (exact && !targetExact)
-                                || (exact == targetExact && distance < targetDistance)) {
-                            targetBuilding = b;
+                    if (action == Action.REMOVE_ROOM) {
+                        targetBuilding = v.getFunctionalRoomAt(playerPos).orElse(null);
+                        if (targetBuilding != null) {
                             targetVillage = v;
-                            targetExact = exact;
-                            targetDistance = distance;
+                            targetExact = targetBuilding.containsRawPos(playerPos);
+                        }
+                    } else if (action == Action.FORCE_TYPE) {
+                        targetBuilding = v.getFunctionalRoomAt(playerPos).orElse(null);
+                        if (targetBuilding != null) {
+                            targetVillage = v;
+                            targetExact = targetBuilding.containsRawPos(playerPos);
+                        }
+                    } else {
+                        for (Building b : v.getBuildings().values()) {
+                            if (action == Action.FORCE_TYPE && b.getBuildingType().grouped()) {
+                                continue;
+                            }
+
+                            boolean exact = b.containsPos(playerPos);
+                            boolean lenient = b.containsPositionWithMargin(
+                                    playerPos,
+                                    Building.PLAYER_POSITION_HORIZONTAL_MARGIN,
+                                    Building.PLAYER_POSITION_VERTICAL_MARGIN);
+                            if (!exact && !lenient) {
+                                continue;
+                            }
+
+                            double distance = b.getCenter().distSqr(playerPos);
+                            if (targetBuilding == null
+                                    || (exact && !targetExact)
+                                    || (exact == targetExact && distance < targetDistance)) {
+                                targetBuilding = b;
+                                targetVillage = v;
+                                targetExact = exact;
+                                targetDistance = distance;
+                            }
                         }
                     }
                 }
@@ -116,6 +125,10 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
                 }
 
                 if (targetBuilding != null && targetVillage != null) {
+                    MCA.LOGGER.info(
+                            "[BuildingRemove] stage=target action={} source={} targetId={} structureId={} strict={} root={} exact={}",
+                            action, playerPos, targetBuilding.getId(), targetBuilding.getEffectiveStructureId(),
+                            targetBuilding.isStrictScan(), targetBuilding.isStructureRoot(), targetExact);
                     if (action == Action.FORCE_TYPE) {
                         if (targetBuilding.getType().equals(data)) {
                             targetBuilding.setTypeForced(false);
@@ -127,100 +140,173 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
                         targetVillage.markDirty();
                     } else if (action == Action.REMOVE_ROOM) {
                         int structureId = targetBuilding.getEffectiveStructureId();
-                        if (isStructuralGroundFloor(targetVillage, targetBuilding)) {
+                        if (targetVillage.isStructuralGroundFloor(targetBuilding)) {
+                            player.displayClientMessage(Component.translatable("blueprint.cannot_remove_ground_floor"), true);
                             return;
                         }
-                        if (targetBuilding.isStructureRoot()
-                                && villages.getStructureMemberCount(targetVillage, structureId) > 1) {
-                            player.displayClientMessage(
-                                    Component.translatable("blueprint.cannot_remove_root_room"), true);
-                            return;
-                        }
-
                         targetVillage.removeBuilding(targetBuilding.getId());
+                        MCA.LOGGER.info("[BuildingRemove] stage=room-removed source={} targetId={}",
+                                playerPos, targetBuilding.getId());
+                        player.displayClientMessage(Component.translatable("blueprint.roomRemoved"), true);
                         if (targetVillage.getBuildings().isEmpty()) {
                             villages.removeVillage(targetVillage.getId());
                         }
                     } else if (targetBuilding.getBuildingType().grouped()) {
                         targetVillage.removeBuilding(targetBuilding.getId());
+                        MCA.LOGGER.info("[BuildingRemove] stage=building-removed source={} targetId={}",
+                                playerPos, targetBuilding.getId());
                     } else {
                         int structureId = targetBuilding.getEffectiveStructureId();
                         villages.removeStructure(targetVillage, structureId);
+                        MCA.LOGGER.info("[BuildingRemove] stage=structure-removed source={} structureId={}",
+                                playerPos, structureId);
                     }
                 } else {
+                    MCA.LOGGER.info("[BuildingRemove] stage=no-target action={} source={} insideStructure={}",
+                            action, playerPos,
+                            village.map(v -> v.hasStructuralBuildingAt(playerPos)).orElse(false));
                     if (action == Action.REMOVE_ROOM
-                            && village.filter(v -> isInsideStructuralBuilding(v, playerPos)).isPresent()) {
+                            && village.filter(v -> v.hasStructuralBuildingAt(playerPos)).isPresent()) {
                         player.displayClientMessage(Component.translatable("blueprint.noRoomOnFloor"), true);
                     } else {
                         player.displayClientMessage(Component.translatable("blueprint.noBuilding"), true);
                     }
                 }
             }
+            }
+        } finally {
+            GetVillageRequest.sendResponse(player);
         }
     }
 
     private static void addBuildingAndCurrentRoom(VillageManager villages, ServerPlayer player) {
-        BuildingScanResult scan = villages.analyzeBuilding(player.blockPosition(), false);
-        if (scan.result() == Building.validationResult.SUCCESS && scan.isAmbiguous()) {
-            requestType(scan, player);
+        InitialStructureScan scan = villages.analyzeInitialStructure(player.blockPosition());
+        logAddScan("building-scan", scan.root());
+        logAddScan("initial-room-scan", scan.room());
+        if (scan.isRoomAmbiguous()) {
+            requestType(scan.room(), player, BuildingPolymorphMessage.ScanAction.BUILDING);
             return;
         }
         commitBuildingAndCurrentRoom(villages, player, scan, null);
     }
 
     private static void addRoom(VillageManager villages, ServerPlayer player) {
-        commitRoom(villages, player, villages.analyzeRoom(player.blockPosition()), null);
+        Village.StructuralPosition structuralPosition = getStructuralPosition(villages, player);
+        if (structuralPosition == Village.StructuralPosition.REGISTERED_ROOM) {
+            player.displayClientMessage(Component.translatable("blueprint.roomAlreadyAdded"), true);
+            return;
+        }
+        BuildingScanResult scan = villages.analyzeRoom(player.blockPosition());
+        logAddScan("add-room-scan", scan);
+        commitRoom(villages, player, scan, null, false);
+    }
+
+    static void updateRoom(VillageManager villages, ServerPlayer player, BlockPos source, String forcedType) {
+        updateRoom(villages, player, source, forcedType, -1);
+    }
+
+    static void updateRoom(VillageManager villages,
+                           ServerPlayer player,
+                           BlockPos source,
+                           String forcedType,
+                           int originalExpectedRoomId) {
+        Village village = villages.findNearestVillage(source, Village.MERGE_MARGIN).orElse(null);
+        Building existing = village == null ? null : village.getFunctionalRoomAt(source).orElse(null);
+        if (originalExpectedRoomId >= 0
+                && (existing == null || existing.getId() != originalExpectedRoomId)) {
+            player.displayClientMessage(Component.translatable("blueprint.roomUpdateConflict"), true);
+            return;
+        }
+        if (existing == null) {
+            player.displayClientMessage(Component.translatable("blueprint.noRoomOnFloor"), true);
+            return;
+        }
+
+        int expectedRoomId = existing.getId();
+        BuildingScanResult scan = villages.analyzeRegisteredRoom(village, expectedRoomId, source);
+        logAddScan("update-room-scan", scan);
+        if (scan.result() == Building.validationResult.SUCCESS
+                && (scan.existingBuildingId() != expectedRoomId || !scan.mergedBuildingIds().isEmpty())) {
+            player.displayClientMessage(Component.translatable("blueprint.roomUpdateConflict"), true);
+            return;
+        }
+        commitRoom(villages, player, scan, forcedType, true);
     }
 
     static void commitBuildingAndCurrentRoom(VillageManager villages,
                                              ServerPlayer player,
-                                             BuildingScanResult scan,
+                                             InitialStructureScan scan,
                                              String forcedType) {
-        Building.validationResult result = villages.commitBuilding(scan, forcedType);
+        Building.validationResult result = villages.commitInitialStructure(scan, forcedType);
+        MCA.LOGGER.info("[BuildingAdd] stage=building-commit result={} source={} existing={}",
+                result, scan.root().source(), scan.root().existingBuildingId());
         if (result != Building.validationResult.SUCCESS) {
             displayScanResult(player, result);
             return;
         }
-
-        BuildingScanResult roomScan = villages.analyzeRoom(player.blockPosition());
-        if (roomScan.result() == Building.validationResult.SUCCESS && roomScan.isAmbiguous()) {
-            requestType(roomScan, player);
-            player.displayClientMessage(Component.translatable("blueprint.buildingAddedChooseRoomType"), true);
-            return;
-        }
-
-        Building.validationResult roomResult = villages.commitBuilding(roomScan, null);
-        if (roomResult == Building.validationResult.SUCCESS) {
-            player.displayClientMessage(Component.translatable(
-                    roomScan.hasExistingBuilding() ? "blueprint.buildingUpdatedRoomExists" : "blueprint.buildingAddedRoomAdded"), true);
-        } else {
-            player.displayClientMessage(Component.translatable(
-                    "blueprint.buildingAddedRoomFailed",
-                    Component.translatable("blueprint.scan." + roomResult.name().toLowerCase(Locale.ENGLISH))), true);
-        }
+        player.displayClientMessage(Component.translatable("blueprint.buildingAddedRoomAdded"), true);
     }
 
     static void commitRoom(VillageManager villages,
                            ServerPlayer player,
                            BuildingScanResult scan,
-                           String forcedType) {
+                           String forcedType,
+                           boolean updating) {
+        MCA.LOGGER.info("[BuildingAdd] stage={} result={} source={} existing={}",
+                updating ? "update-room-commit" : "add-room-commit",
+                scan.result(), scan.source(), scan.existingBuildingId());
+        if (!updating && scan.village() != null
+                && scan.village().getStructuralPosition(scan.source()) == Village.StructuralPosition.REGISTERED_ROOM) {
+            player.displayClientMessage(Component.translatable("blueprint.roomAlreadyAdded"), true);
+            return;
+        }
+        if (updating
+                && scan.result() == Building.validationResult.SUCCESS
+                && !scan.hasExistingBuilding()) {
+            player.displayClientMessage(Component.translatable("blueprint.noRoomOnFloor"), true);
+            return;
+        }
         if (forcedType == null && scan.result() == Building.validationResult.SUCCESS && scan.isAmbiguous()) {
-            requestType(scan, player);
+            BuildingPolymorphMessage.ScanAction action = updating
+                    ? BuildingPolymorphMessage.ScanAction.UPDATE_ROOM
+                    : BuildingPolymorphMessage.ScanAction.ADD_ROOM;
+            requestType(scan, player, action, updating ? scan.existingBuildingId() : -1);
             return;
         }
 
         Building.validationResult result = villages.commitBuilding(scan, forcedType);
+        MCA.LOGGER.info("[BuildingAdd] stage={} result={} source={} existing={}",
+                updating ? "update-room-commit-result" : "add-room-commit-result",
+                result, scan.source(), scan.existingBuildingId());
         if (result == Building.validationResult.SUCCESS) {
-            player.displayClientMessage(Component.translatable(
-                    scan.hasExistingBuilding() ? "blueprint.roomAlreadyAdded" : "blueprint.roomAdded"), true);
+            player.displayClientMessage(Component.translatable(updating ? "blueprint.roomUpdated" : "blueprint.roomAdded"), true);
         } else {
             displayScanResult(player, result);
         }
     }
 
-    private static void requestType(BuildingScanResult scan, ServerPlayer player) {
+    private static void logAddScan(String stage, BuildingScanResult scan) {
+        Building building = scan.building();
+        MCA.LOGGER.info(
+                "[BuildingAdd] stage={} result={} source={} strict={} ambiguous={} types={} existing={} merged={} floorY={} groundFloorY={} floorRegions={} bounds={}..{}",
+                stage, scan.result(), scan.source(), scan.strictScan(), scan.isAmbiguous(), scan.matchingTypes(),
+                scan.existingBuildingId(), scan.mergedBuildingIds(), building.getFloorY(), building.getGroundFloorY(),
+                building.getFloorRegions().stream().map(BuildingFloorRegion::anchorY).toList(),
+                building.getPos0(), building.getPos1());
+    }
+
+    private static void requestType(BuildingScanResult scan,
+                                    ServerPlayer player,
+                                    BuildingPolymorphMessage.ScanAction action) {
+        requestType(scan, player, action, -1);
+    }
+
+    private static void requestType(BuildingScanResult scan,
+                                    ServerPlayer player,
+                                    BuildingPolymorphMessage.ScanAction action,
+                                    int expectedRoomId) {
         Network.sendToPlayer(new BuildingPolymorphMessage(
-                scan.matchingTypes(), scan.source(), scan.strictScan()), player);
+                scan.matchingTypes(), scan.source(), action, expectedRoomId), player);
     }
 
     private static void displayScanResult(ServerPlayer player, Building.validationResult result) {
@@ -228,44 +314,20 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
                 "blueprint.scan." + result.name().toLowerCase(Locale.ENGLISH)), true);
     }
 
-    private static boolean isInsideStructuralBuilding(Village village, BlockPos pos) {
-        return village.getBuildings().values().stream()
-                .filter(building -> !building.getBuildingType().grouped())
-                .anyMatch(building -> building.containsFloorPosition(pos) || containsLenient(building, pos));
-    }
-
-    private static boolean isStructuralGroundFloor(Village village, Building room) {
-        return village.getBuildings().values().stream()
-                .filter(Building::isStructureRoot)
-                .filter(root -> root.getEffectiveStructureId() == room.getEffectiveStructureId())
-                .anyMatch(root -> Math.abs(root.getFloorY() - room.getFloorY()) <= BUILDING_LOOKUP_VERTICAL_MARGIN);
-    }
-
-    private static boolean isOnStructuralGroundFloor(Village village, BlockPos pos) {
-        return village.getBuildings().values().stream()
-                .filter(Building::isStructureRoot)
-                .filter(root -> !root.getBuildingType().grouped())
-                .anyMatch(root -> root.containsFloorPosition(pos)
-                        && Math.abs(root.getFloorY() - pos.getY()) <= BUILDING_LOOKUP_VERTICAL_MARGIN);
-    }
-
-    private static boolean containsLenient(Building building, BlockPos pos) {
-        BlockPos p0 = building.getPos0();
-        BlockPos p1 = building.getPos1();
-
-        return pos.getX() >= p0.getX() - BUILDING_LOOKUP_HORIZONTAL_MARGIN && pos.getX() <= p1.getX() + BUILDING_LOOKUP_HORIZONTAL_MARGIN
-                && pos.getY() >= p0.getY() - BUILDING_LOOKUP_VERTICAL_MARGIN && pos.getY() <= p1.getY() + BUILDING_LOOKUP_VERTICAL_MARGIN
-                && pos.getZ() >= p0.getZ() - BUILDING_LOOKUP_HORIZONTAL_MARGIN && pos.getZ() <= p1.getZ() + BUILDING_LOOKUP_HORIZONTAL_MARGIN;
+    private static Village.StructuralPosition getStructuralPosition(VillageManager villages, ServerPlayer player) {
+        return villages.findNearestVillage(player)
+                .map(village -> village.getStructuralPosition(player.blockPosition()))
+                .orElse(Village.StructuralPosition.OUTSIDE);
     }
 
     private static boolean containsHorizontally(Building building, BlockPos pos) {
         BlockPos p0 = building.getPos0();
         BlockPos p1 = building.getPos1();
 
-        return pos.getX() >= p0.getX() - BUILDING_LOOKUP_HORIZONTAL_MARGIN
-                && pos.getX() <= p1.getX() + BUILDING_LOOKUP_HORIZONTAL_MARGIN
-                && pos.getZ() >= p0.getZ() - BUILDING_LOOKUP_HORIZONTAL_MARGIN
-                && pos.getZ() <= p1.getZ() + BUILDING_LOOKUP_HORIZONTAL_MARGIN;
+        return pos.getX() >= p0.getX() - Building.PLAYER_POSITION_HORIZONTAL_MARGIN
+                && pos.getX() <= p1.getX() + Building.PLAYER_POSITION_HORIZONTAL_MARGIN
+                && pos.getZ() >= p0.getZ() - Building.PLAYER_POSITION_HORIZONTAL_MARGIN
+                && pos.getZ() <= p1.getZ() + Building.PLAYER_POSITION_HORIZONTAL_MARGIN;
     }
 
     @Override
@@ -280,6 +342,7 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
         REMOVE,
         FORCE_TYPE,
         FULL_SCAN,
-        REMOVE_ROOM
+        REMOVE_ROOM,
+        UPDATE_ROOM
     }
 }
