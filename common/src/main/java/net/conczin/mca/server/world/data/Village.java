@@ -425,6 +425,61 @@ public class Village implements Iterable<Building> {
                 .anyMatch(building -> !building.getBuildingType().grouped() && building.isStructureRoot());
     }
 
+    public boolean hasStructuralBuildingAt(Vec3i pos) {
+        return getStructuralPosition(pos) != StructuralPosition.OUTSIDE;
+    }
+
+    public StructuralPosition getStructuralPosition(Vec3i pos) {
+        if (getRegisteredRoomAt(pos).isPresent()) {
+            return StructuralPosition.REGISTERED_ROOM;
+        }
+        return getStructureRootContaining(pos).isPresent()
+                ? StructuralPosition.ATTACHABLE_ROOM
+                : StructuralPosition.OUTSIDE;
+    }
+
+    public Optional<Building> getStructureRootContaining(Vec3i pos) {
+        return getBuildings().values().stream()
+                .filter(Building::isComplete)
+                .filter(Building::isStructureContainer)
+                .filter(building -> building.containsStructurePosition(pos))
+                .min(Comparator.comparingInt(Building::getId));
+    }
+
+    public Optional<Building> getFunctionalRoomAt(Vec3i pos) {
+        return getRegisteredRoomAt(pos);
+    }
+
+    public Optional<Building> getRegisteredRoomAt(Vec3i pos) {
+        return getBuildings().values().stream()
+                .filter(Building::isComplete)
+                .filter(Building::isFunctionalRoom)
+                .filter(building -> building.containsRawPos(pos))
+                .min(Comparator.comparingInt((Building building) -> building.getFloorDistanceTo(pos))
+                        .thenComparingInt(Building::getId));
+    }
+
+    public boolean isStructuralGroundFloor(Building room) {
+        return getStructureRoot(room)
+                .filter(root -> root.isOnGroundFloorY(room.getFloorY()))
+                .isPresent();
+    }
+
+    private Optional<Building> getStructureRoot(Building room) {
+        return getBuildings().values().stream()
+                .filter(Building::isStructureRoot)
+                .filter(Building::isComplete)
+                .filter(root -> !root.getBuildingType().grouped())
+                .filter(root -> root.getEffectiveStructureId() == room.getEffectiveStructureId())
+                .min(Comparator.comparingInt(Building::getId));
+    }
+
+    public enum StructuralPosition {
+        OUTSIDE,
+        REGISTERED_ROOM,
+        ATTACHABLE_ROOM
+    }
+
     public boolean isVillage() {
         return getStructureCount() >= Config.getInstance().minimumBuildingsToBeConsideredAVillage;
     }
