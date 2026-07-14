@@ -254,7 +254,6 @@ public class BlueprintScreen extends ExtendedScreen {
                         Component.empty(), b -> {
                     selectFloor(null);
                 }));
-                floorLabelButton.active = true;
                 floorNextButton = addRenderableWidget(new ButtonWidget(floorControlX + 126, floorControlY, 24, 20,
                         Component.literal(">"), b -> changeSelectedFloor(1)));
                 buildingIconsButton = addRenderableWidget(new ButtonWidget(
@@ -621,9 +620,6 @@ public class BlueprintScreen extends ExtendedScreen {
 
         boolean canChangeFloors = floorLayout.ordinals().size() > 1;
         Component tooltip = getFloorControlTooltip();
-        floorPreviousButton.visible = true;
-        floorLabelButton.visible = true;
-        floorNextButton.visible = true;
         floorPreviousButton.active = canChangeFloors;
         floorNextButton.active = canChangeFloors;
         floorLabelButton.active = canChangeFloors;
@@ -889,15 +885,9 @@ public class BlueprintScreen extends ExtendedScreen {
     }
 
     public void setVillage(Village village) {
-        Integer previousFloor = selectedFloorOrdinal;
         this.village = village;
         this.floorLayout = village == null ? BlueprintFloorLayout.empty() : BlueprintFloorLayout.build(village);
         reconcileSelectedFloor();
-        if (village != null) {
-            floorLayout.logDebug(village);
-            MCA.LOGGER.info("[BlueprintFloors] Client selection previous={} available={} selected={}",
-                    previousFloor, floorLayout.ordinals(), selectedFloorOrdinal);
-        }
         updateFloorControls();
         updateBuildingIconsControl();
         updateStructureScanControl();

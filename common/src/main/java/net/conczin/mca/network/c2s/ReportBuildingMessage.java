@@ -38,8 +38,6 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
     @Override
     public void handleServer(ServerPlayer player) {
         VillageManager villages = VillageManager.get(player.serverLevel());
-        MCA.LOGGER.info("[BuildingSelection] request action={} player={} pos={}",
-                action, player.getName().getString(), player.blockPosition());
         switch (action) {
             case ADD -> addBuildingAndCurrentRoom(villages, player);
             case ADD_ROOM -> addRoom(villages, player);
@@ -55,8 +53,6 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
 
                 if (action == Action.REMOVE_ROOM
                         && village.filter(v -> isOnStructuralGroundFloor(v, playerPos)).isPresent()) {
-                    MCA.LOGGER.info("[BuildingSelection] rejected ground-floor room removal player={} pos={}",
-                            player.getName().getString(), playerPos);
                     return;
                 }
 
@@ -81,12 +77,6 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
                         boolean lenient = containsLenient(b, playerPos)
                                 && (action != Action.REMOVE_ROOM
                                 || b.getFloorDistanceTo(playerPos) <= BUILDING_LOOKUP_VERTICAL_MARGIN);
-
-                        MCA.LOGGER.info(
-                                "[BuildingSelection] candidate action={} village={} id={} structure={} root={} strict={} grouped={} complete={} exact={} lenient={} bounds={}..{}",
-                                action, v.getId(), b.getId(), b.getEffectiveStructureId(), b.isStructureRoot(),
-                                b.isStrictScan(), b.getBuildingType().grouped(), b.isComplete(), exact, lenient,
-                                b.getPos0(), b.getPos1());
 
                         if (!exact && !lenient) {
                             continue;
@@ -126,12 +116,6 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
                 }
 
                 if (targetBuilding != null && targetVillage != null) {
-                    MCA.LOGGER.info(
-                            "[BuildingSelection] selected action={} village={} id={} structure={} root={} strict={} exact={} memberCount={}",
-                            action, targetVillage.getId(), targetBuilding.getId(),
-                            targetBuilding.getEffectiveStructureId(), targetBuilding.isStructureRoot(),
-                            targetBuilding.isStrictScan(), targetExact,
-                            villages.getStructureMemberCount(targetVillage, targetBuilding.getEffectiveStructureId()));
                     if (action == Action.FORCE_TYPE) {
                         if (targetBuilding.getType().equals(data)) {
                             targetBuilding.setTypeForced(false);
@@ -144,8 +128,6 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
                     } else if (action == Action.REMOVE_ROOM) {
                         int structureId = targetBuilding.getEffectiveStructureId();
                         if (isStructuralGroundFloor(targetVillage, targetBuilding)) {
-                            MCA.LOGGER.info("[BuildingSelection] rejected ground-floor room removal player={} village={} id={}",
-                                    player.getName().getString(), targetVillage.getId(), targetBuilding.getId());
                             return;
                         }
                         if (targetBuilding.isStructureRoot()
@@ -156,35 +138,18 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
                         }
 
                         targetVillage.removeBuilding(targetBuilding.getId());
-                        MCA.LOGGER.info(
-                                "[BuildingSelection] removed room village={} id={} structure={} remainingBuildings={} remainingMembers={}",
-                                targetVillage.getId(), targetBuilding.getId(), structureId,
-                                targetVillage.getBuildings().size(),
-                                villages.getStructureMemberCount(targetVillage, structureId));
                         if (targetVillage.getBuildings().isEmpty()) {
                             villages.removeVillage(targetVillage.getId());
                         }
                     } else if (targetBuilding.getBuildingType().grouped()) {
                         targetVillage.removeBuilding(targetBuilding.getId());
-                        MCA.LOGGER.info(
-                                "[BuildingSelection] removed grouped building village={} id={} remainingBuildings={}",
-                                targetVillage.getId(), targetBuilding.getId(), targetVillage.getBuildings().size());
                     } else {
                         int structureId = targetBuilding.getEffectiveStructureId();
                         villages.removeStructure(targetVillage, structureId);
-                        MCA.LOGGER.info(
-                                "[BuildingSelection] removed structure village={} structure={} remainingBuildings={} remainingMembers={}",
-                                targetVillage.getId(), structureId, targetVillage.getBuildings().size(),
-                                villages.getStructureMemberCount(targetVillage, structureId));
                     }
                 } else {
-                    MCA.LOGGER.info("[BuildingSelection] no target action={} player={} pos={} village={}",
-                            action, player.getName().getString(), playerPos,
-                            village.map(Village::getId).orElse(-1));
                     if (action == Action.REMOVE_ROOM
                             && village.filter(v -> isInsideStructuralBuilding(v, playerPos)).isPresent()) {
-                        MCA.LOGGER.info("[BuildingSelection] no room on current floor player={} pos={} village={}",
-                                player.getName().getString(), playerPos, village.get().getId());
                         player.displayClientMessage(Component.translatable("blueprint.noRoomOnFloor"), true);
                     } else {
                         player.displayClientMessage(Component.translatable("blueprint.noBuilding"), true);
@@ -195,22 +160,31 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
     }
 
     private static void addBuildingAndCurrentRoom(VillageManager villages, ServerPlayer player) {
-        BuildingScanResult buildingScan = villages.analyzeBuilding(player.blockPosition(), false);
-        if (buildingScan.result() == Building.validationResult.SUCCESS && buildingScan.isAmbiguous()) {
-            Network.sendToPlayer(new BuildingPolymorphMessage(
-                    buildingScan.matchingTypes(), buildingScan.source(), buildingScan.strictScan()), player);
+        BuildingScanResult scan = villages.analyzeBuilding(player.blockPosition(), false);
+        if (scan.result() == Building.validationResult.SUCCESS && scan.isAmbiguous()) {
+            requestType(scan, player);
             return;
         }
+        commitBuildingAndCurrentRoom(villages, player, scan, null);
+    }
 
-        Building.validationResult buildingResult = villages.commitBuilding(buildingScan, null);
-        if (buildingResult != Building.validationResult.SUCCESS) {
-            displayScanResult(player, buildingResult);
+    private static void addRoom(VillageManager villages, ServerPlayer player) {
+        commitRoom(villages, player, villages.analyzeRoom(player.blockPosition()), null);
+    }
+
+    static void commitBuildingAndCurrentRoom(VillageManager villages,
+                                             ServerPlayer player,
+                                             BuildingScanResult scan,
+                                             String forcedType) {
+        Building.validationResult result = villages.commitBuilding(scan, forcedType);
+        if (result != Building.validationResult.SUCCESS) {
+            displayScanResult(player, result);
             return;
         }
 
         BuildingScanResult roomScan = villages.analyzeRoom(player.blockPosition());
         if (roomScan.result() == Building.validationResult.SUCCESS && roomScan.isAmbiguous()) {
-            Network.sendToPlayer(new BuildingPolymorphMessage(roomScan.matchingTypes(), roomScan.source(), true), player);
+            requestType(roomScan, player);
             player.displayClientMessage(Component.translatable("blueprint.buildingAddedChooseRoomType"), true);
             return;
         }
@@ -226,20 +200,27 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
         }
     }
 
-    private static void addRoom(VillageManager villages, ServerPlayer player) {
-        BuildingScanResult scan = villages.analyzeRoom(player.blockPosition());
-        if (scan.result() == Building.validationResult.SUCCESS && scan.isAmbiguous()) {
-            Network.sendToPlayer(new BuildingPolymorphMessage(scan.matchingTypes(), scan.source(), true), player);
+    static void commitRoom(VillageManager villages,
+                           ServerPlayer player,
+                           BuildingScanResult scan,
+                           String forcedType) {
+        if (forcedType == null && scan.result() == Building.validationResult.SUCCESS && scan.isAmbiguous()) {
+            requestType(scan, player);
             return;
         }
 
-        Building.validationResult result = villages.commitBuilding(scan, null);
+        Building.validationResult result = villages.commitBuilding(scan, forcedType);
         if (result == Building.validationResult.SUCCESS) {
             player.displayClientMessage(Component.translatable(
                     scan.hasExistingBuilding() ? "blueprint.roomAlreadyAdded" : "blueprint.roomAdded"), true);
         } else {
             displayScanResult(player, result);
         }
+    }
+
+    private static void requestType(BuildingScanResult scan, ServerPlayer player) {
+        Network.sendToPlayer(new BuildingPolymorphMessage(
+                scan.matchingTypes(), scan.source(), scan.strictScan()), player);
     }
 
     private static void displayScanResult(ServerPlayer player, Building.validationResult result) {
@@ -257,7 +238,7 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
         return village.getBuildings().values().stream()
                 .filter(Building::isStructureRoot)
                 .filter(root -> root.getEffectiveStructureId() == room.getEffectiveStructureId())
-                .anyMatch(root -> Math.abs(lowestFloorY(root) - room.getFloorY()) <= BUILDING_LOOKUP_VERTICAL_MARGIN);
+                .anyMatch(root -> Math.abs(root.getFloorY() - room.getFloorY()) <= BUILDING_LOOKUP_VERTICAL_MARGIN);
     }
 
     private static boolean isOnStructuralGroundFloor(Village village, BlockPos pos) {
@@ -265,14 +246,7 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
                 .filter(Building::isStructureRoot)
                 .filter(root -> !root.getBuildingType().grouped())
                 .anyMatch(root -> root.containsFloorPosition(pos)
-                        && Math.abs(lowestFloorY(root) - pos.getY()) <= BUILDING_LOOKUP_VERTICAL_MARGIN);
-    }
-
-    private static int lowestFloorY(Building building) {
-        return building.getFloorRegions().stream()
-                .mapToInt(region -> region.anchorY())
-                .min()
-                .orElse(building.getFloorY());
+                        && Math.abs(root.getFloorY() - pos.getY()) <= BUILDING_LOOKUP_VERTICAL_MARGIN);
     }
 
     private static boolean containsLenient(Building building, BlockPos pos) {

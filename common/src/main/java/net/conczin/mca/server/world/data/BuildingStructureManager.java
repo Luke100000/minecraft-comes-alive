@@ -163,8 +163,6 @@ final class BuildingStructureManager {
             return;
         }
         List<Integer> ids = members(village, structureId).stream().map(Building::getId).toList();
-        MCA.LOGGER.info("[BuildingSelection] remove structure village={} structure={} members={}",
-                village.getId(), structureId, ids);
         ids.forEach(village::removeBuilding);
     }
 

@@ -25,10 +25,10 @@ public record BuildingFloorRegion(int anchorY, int area, List<Component> compone
     }
 
     static BuildingFloorRegion load(CompoundTag tag) {
-        List<Component> components = tag.contains("components", Tag.TAG_LIST)
-                ? NbtHelper.toList(tag.getList("components", Tag.TAG_COMPOUND), value ->
-                Component.load((CompoundTag) value))
-                : List.of();
+        List<Component> components = NbtHelper.toList(
+                tag.getList("components", Tag.TAG_COMPOUND),
+                value -> Component.load((CompoundTag) value)
+        );
         return new BuildingFloorRegion(tag.getInt("anchorY"), tag.getInt("area"), components);
     }
 
@@ -66,10 +66,10 @@ public record BuildingFloorRegion(int anchorY, int area, List<Component> compone
         }
 
         private static Component load(CompoundTag tag) {
-            List<Span> spans = tag.contains("spans", Tag.TAG_LIST)
-                    ? NbtHelper.toList(tag.getList("spans", Tag.TAG_COMPOUND), value ->
-                    Span.load((CompoundTag) value))
-                    : List.of();
+            List<Span> spans = NbtHelper.toList(
+                    tag.getList("spans", Tag.TAG_COMPOUND),
+                    value -> Span.load((CompoundTag) value)
+            );
             return new Component(
                     tag.getInt("minX"),
                     tag.getInt("minZ"),
