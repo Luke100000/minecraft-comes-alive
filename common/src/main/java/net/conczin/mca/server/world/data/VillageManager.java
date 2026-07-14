@@ -327,11 +327,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
 
         if (result == Building.validationResult.SUCCESS) {
             if (roomScan) {
-                int detectedFloorCount = building.getFloorRegions().size();
                 building.retainFloorClosestTo(scanSource.getY());
-                MCA.LOGGER.info(
-                        "[BlueprintFloors] Room source={} selectedBandY={} detectedBands={} retainedBands={}",
-                        scanSource, building.getFloorY(), detectedFloorCount, building.getFloorRegions().size());
             }
 
             BuildingStructureManager.MatchResult match =

@@ -12,7 +12,6 @@ public final class BuildingFloorRegionDetectorTest {
         keepsTallSingleStoryHallOnOneFloor();
         clustersTwoBlockSplitLevelIntoOneSemanticBand();
         detectsOpenBasementAndGroundFloor();
-        reportsRejectedTransitionSlices();
         preservesAtriumVoidInSpans();
         suppressesSmallLandingInSmallBuilding();
         retainsMeaningfulLongMezzanine();
@@ -87,27 +86,6 @@ public final class BuildingFloorRegionDetectorTest {
                 plane(0, 60, 0, 8, 8),
                 plane(0, 64, 0, 10, 10)
         ), 60, 64);
-    }
-
-
-    private static void reportsRejectedTransitionSlices() {
-        BuildingFloorRegionDetector.DetectionResult result = BuildingFloorRegionDetector.analyze(cells(
-                plane(0, 64, 0, 10, 10),
-                lineX(3, 65, 4, 4),
-                lineX(3, 66, 4, 4),
-                plane(0, 68, 0, 9, 9)
-        ));
-
-        BuildingFloorRegionDetector.SliceDecision transition = result.slices().stream()
-                .filter(slice -> slice.y() == 65)
-                .findFirst()
-                .orElseThrow();
-        if (transition.promoted()) {
-            throw new AssertionError("stair transition Y=65 should not be promoted");
-        }
-        if (transition.reason() != BuildingFloorRegionDetector.SliceReason.BELOW_AREA_THRESHOLD) {
-            throw new AssertionError("expected BELOW_AREA_THRESHOLD but got " + transition.reason());
-        }
     }
 
 

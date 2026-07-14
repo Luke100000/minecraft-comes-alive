@@ -18,12 +18,8 @@ final class BuildingFloorRegionDetector {
     }
 
     static List<DetectedRegion> detect(Collection<SupportedCell> supportedCells) {
-        return analyze(supportedCells).regions();
-    }
-
-    static DetectionResult analyze(Collection<SupportedCell> supportedCells) {
         if (supportedCells == null || supportedCells.isEmpty()) {
-            return new DetectionResult(List.of(), List.of());
+            return List.of();
         }
 
         Map<Integer, Set<HorizontalCell>> byY = new TreeMap<>();
@@ -39,25 +35,12 @@ final class BuildingFloorRegionDetector {
         );
 
         List<HeightSlice> meaningfulSlices = new ArrayList<>();
-        List<SliceDecision> decisions = new ArrayList<>();
         for (Map.Entry<Integer, Set<HorizontalCell>> entry : byY.entrySet()) {
             List<DetectedComponent> components = findComponents(entry.getValue());
             int area = entry.getValue().size();
-            boolean hasUsableComponent = components.stream().anyMatch(BuildingFloorRegionDetector::isUsableComponent);
-            SliceReason reason;
-            if (area < minimumArea) {
-                reason = SliceReason.BELOW_AREA_THRESHOLD;
-            } else if (!hasUsableComponent) {
-                reason = SliceReason.NO_USABLE_COMPONENT;
-            } else {
-                reason = SliceReason.PROMOTED;
+            if (area >= minimumArea && components.stream().anyMatch(BuildingFloorRegionDetector::isUsableComponent)) {
                 meaningfulSlices.add(new HeightSlice(entry.getKey(), area, components));
             }
-            decisions.add(new SliceDecision(entry.getKey(), area, reason == SliceReason.PROMOTED, reason));
-        }
-
-        if (meaningfulSlices.isEmpty()) {
-            return new DetectionResult(List.of(), decisions);
         }
 
         List<MutableBand> bands = new ArrayList<>();
@@ -70,10 +53,7 @@ final class BuildingFloorRegionDetector {
             band.add(slice);
         }
 
-        return new DetectionResult(
-                bands.stream().map(MutableBand::freeze).toList(),
-                decisions
-        );
+        return bands.stream().map(MutableBand::freeze).toList();
     }
 
     private static boolean isUsableComponent(DetectedComponent component) {
@@ -97,13 +77,11 @@ final class BuildingFloorRegionDetector {
             int minZ = start.z();
             int maxX = start.x();
             int maxZ = start.z();
-            int area = 0;
             List<HorizontalCell> componentCells = new ArrayList<>();
 
             while (!queue.isEmpty()) {
                 HorizontalCell current = queue.removeFirst();
                 componentCells.add(current);
-                area++;
                 minX = Math.min(minX, current.x());
                 minZ = Math.min(minZ, current.z());
                 maxX = Math.max(maxX, current.x());
@@ -116,7 +94,7 @@ final class BuildingFloorRegionDetector {
             }
 
             components.add(new DetectedComponent(
-                    minX, minZ, maxX, maxZ, area, buildSpans(componentCells)));
+                    minX, minZ, maxX, maxZ, componentCells.size(), buildSpans(componentCells)));
         }
 
         components.sort(Comparator
@@ -136,7 +114,7 @@ final class BuildingFloorRegionDetector {
 
         List<DetectedSpan> spans = new ArrayList<>();
         for (Map.Entry<Integer, List<Integer>> entry : xsByZ.entrySet()) {
-            List<Integer> xs = entry.getValue().stream().distinct().sorted().toList();
+            List<Integer> xs = entry.getValue().stream().sorted().toList();
             if (xs.isEmpty()) {
                 continue;
             }
@@ -162,22 +140,6 @@ final class BuildingFloorRegionDetector {
         if (unvisited.remove(candidate)) {
             queue.addLast(candidate);
         }
-    }
-
-    record DetectionResult(List<DetectedRegion> regions, List<SliceDecision> slices) {
-        DetectionResult {
-            regions = List.copyOf(regions);
-            slices = List.copyOf(slices);
-        }
-    }
-
-    record SliceDecision(int y, int area, boolean promoted, SliceReason reason) {
-    }
-
-    enum SliceReason {
-        PROMOTED,
-        BELOW_AREA_THRESHOLD,
-        NO_USABLE_COMPONENT
     }
 
     record SupportedCell(int x, int y, int z) {

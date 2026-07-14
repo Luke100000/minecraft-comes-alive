@@ -1,7 +1,6 @@
 package net.conczin.mca.server.world.data;
 
 import net.conczin.mca.Config;
-import net.conczin.mca.MCA;
 import net.conczin.mca.resources.BuildingTypes;
 import net.conczin.mca.resources.data.BuildingType;
 import net.conczin.mca.util.NbtHelper;
@@ -111,10 +110,7 @@ public class Building {
 
         blocks.putAll(NbtHelper.toMap(v.getCompound("blocks2"),
                 ResourceLocation::parse,
-                l -> NbtHelper.toList(l, e -> {
-                    CompoundTag c = (CompoundTag) e;
-                    return new BlockPos(c.getInt("x"), c.getInt("y"), c.getInt("z"));
-                })));
+                l -> NbtHelper.toList(l, Building::loadBlockPos)));
     }
 
     public CompoundTag save() {
@@ -139,21 +135,18 @@ public class Building {
         v.putBoolean("strictScan", strictScan);
 
         CompoundTag b = new CompoundTag();
-        NbtHelper.fromMap(
-                b,
-                blocks,
-                ResourceLocation::toString,
-                e -> NbtHelper.fromList(e, p -> {
-                    CompoundTag entry = new CompoundTag();
-                    entry.putInt("x", p.getX());
-                    entry.putInt("y", p.getY());
-                    entry.putInt("z", p.getZ());
-                    return entry;
-                })
-        );
+        NbtHelper.fromMap(b, blocks, ResourceLocation::toString,
+                positions -> NbtHelper.fromList(positions, NbtHelper::encodeBlockPos));
         v.put("blocks2", b);
 
         return v;
+    }
+
+    private static BlockPos loadBlockPos(Tag tag) {
+        if (tag instanceof CompoundTag legacy && legacy.contains("x")) {
+            return new BlockPos(legacy.getInt("x"), legacy.getInt("y"), legacy.getInt("z"));
+        }
+        return NbtHelper.decodeBlockPos(tag);
     }
 
     public BlockPos getPos0() {
@@ -446,9 +439,7 @@ public class Building {
 
             size = interiorSize;
             int legacyFloorY = determineDominantFloorY(lowestInteriorY, pos0Y + 1);
-            BuildingFloorRegionDetector.DetectionResult floorDetection =
-                    BuildingFloorRegionDetector.analyze(supportedCells);
-            floorRegions = floorDetection.regions().stream()
+            floorRegions = BuildingFloorRegionDetector.detect(supportedCells).stream()
                     .map(BuildingFloorRegion::fromDetected)
                     .toList();
             floorY = floorRegions.stream()
@@ -456,26 +447,6 @@ public class Building {
                             .thenComparing(Comparator.comparingInt(BuildingFloorRegion::anchorY).reversed()))
                     .map(BuildingFloorRegion::anchorY)
                     .orElse(legacyFloorY);
-
-            MCA.LOGGER.info(
-                    "[BlueprintFloors] Scan source={} reachableInterior={} supportedCells={} floorRegions={}",
-                    center, interiorSize, supportedCells.size(), floorRegions.size());
-            for (BuildingFloorRegionDetector.SliceDecision slice : floorDetection.slices()) {
-                if (slice.promoted()) {
-                    MCA.LOGGER.info(
-                            "[BlueprintFloors] supportedSlice y={} area={} promoted=true",
-                            slice.y(), slice.area());
-                } else {
-                    MCA.LOGGER.info(
-                            "[BlueprintFloors] supportedSlice y={} area={} promoted=false reason={}",
-                            slice.y(), slice.area(), slice.reason());
-                }
-            }
-            for (BuildingFloorRegion region : floorRegions) {
-                MCA.LOGGER.info(
-                        "[BlueprintFloors] candidateBand y={} area={} components={}",
-                        region.anchorY(), region.area(), region.components().size());
-            }
 
             //determine type
             if (isTypeForced()) {

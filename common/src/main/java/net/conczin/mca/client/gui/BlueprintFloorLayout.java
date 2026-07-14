@@ -1,6 +1,5 @@
 package net.conczin.mca.client.gui;
 
-import net.conczin.mca.MCA;
 import net.conczin.mca.server.world.data.Building;
 import net.conczin.mca.server.world.data.BuildingFloorRegion;
 import net.conczin.mca.server.world.data.Village;
@@ -21,32 +20,20 @@ final class BlueprintFloorLayout {
     private static final int FLOOR_CLUSTER_TOLERANCE = 2;
     private static final String TOWN_CENTER_TYPE = "town_center";
 
-    private final Map<Integer, Set<Integer>> buildingOrdinals;
     private final Map<Integer, List<AssignedRegion>> assignedRegions;
     private final List<Integer> ordinals;
-    private final int globalGroundY;
-    private final String groundSource;
     private final List<VerticalStack> stacks;
-    private final List<FloorLevel> absoluteFloors;
 
-    private BlueprintFloorLayout(Map<Integer, Set<Integer>> buildingOrdinals,
-                                 Map<Integer, List<AssignedRegion>> assignedRegions,
+    private BlueprintFloorLayout(Map<Integer, List<AssignedRegion>> assignedRegions,
                                  List<Integer> ordinals,
-                                 int globalGroundY,
-                                 String groundSource,
-                                 List<VerticalStack> stacks,
-                                 List<FloorLevel> absoluteFloors) {
-        this.buildingOrdinals = buildingOrdinals;
+                                 List<VerticalStack> stacks) {
         this.assignedRegions = assignedRegions;
         this.ordinals = ordinals;
-        this.globalGroundY = globalGroundY;
-        this.groundSource = groundSource;
         this.stacks = stacks;
-        this.absoluteFloors = absoluteFloors;
     }
 
     static BlueprintFloorLayout empty() {
-        return new BlueprintFloorLayout(Map.of(), Map.of(), List.of(), 0, "NONE", List.of(), List.of());
+        return new BlueprintFloorLayout(Map.of(), List.of(), List.of());
     }
 
     static BlueprintFloorLayout build(Village village) {
@@ -73,9 +60,9 @@ final class BlueprintFloorLayout {
         }
 
         List<FloorLevel> discoveredAbsoluteFloors = getAbsoluteFloorLevels(allCandidates);
-        GroundFloorDecision globalGround = getGroundFloorDecision(village, discoveredAbsoluteFloors);
-        int globalGroundY = globalGround.index() >= 0
-                ? discoveredAbsoluteFloors.get(globalGround.index()).anchorY()
+        int groundIndex = getGroundFloorIndex(village, discoveredAbsoluteFloors);
+        int globalGroundY = groundIndex >= 0
+                ? discoveredAbsoluteFloors.get(groundIndex).anchorY()
                 : allCandidates.getFirst().anchorY();
 
         Map<Integer, Integer> rootGroundAnchors = new HashMap<>();
@@ -83,7 +70,8 @@ final class BlueprintFloorLayout {
             if (building.isStrictScan()) {
                 continue;
             }
-            candidatesFor(building).stream()
+            allCandidates.stream()
+                    .filter(candidate -> candidate.buildingId() == building.getId())
                     .min(Comparator.comparingInt(candidate -> Math.abs(candidate.anchorY() - globalGroundY)))
                     .ifPresent(candidate -> rootGroundAnchors.put(building.getId(), candidate.anchorY()));
         }
@@ -98,9 +86,6 @@ final class BlueprintFloorLayout {
             return empty();
         }
 
-        List<FloorLevel> absoluteFloors = getAbsoluteFloorLevels(candidates);
-
-        Map<Integer, Set<Integer>> mutableBuildingOrdinals = new HashMap<>();
         Map<Integer, List<AssignedRegion>> mutableAssignedRegions = new HashMap<>();
         TreeSet<Integer> availableOrdinals = new TreeSet<>();
         List<VerticalStack> stacks = new ArrayList<>();
@@ -115,10 +100,6 @@ final class BlueprintFloorLayout {
                 availableOrdinals.add(ordinal);
 
                 for (FloorCandidate candidate : level.candidates()) {
-                    mutableBuildingOrdinals
-                            .computeIfAbsent(candidate.buildingId(), ignored -> new TreeSet<>())
-                            .add(ordinal);
-
                     List<AssignedRegion> regions = mutableAssignedRegions
                             .computeIfAbsent(candidate.buildingId(), ignored -> new ArrayList<>());
                     for (RegionBounds bounds : candidate.bounds()) {
@@ -131,13 +112,9 @@ final class BlueprintFloorLayout {
         }
 
         return new BlueprintFloorLayout(
-                freezeOrdinalMap(mutableBuildingOrdinals),
                 freezeRegionMap(mutableAssignedRegions),
                 List.copyOf(availableOrdinals),
-                globalGroundY,
-                globalGround.source(),
-                List.copyOf(stacks),
-                List.copyOf(absoluteFloors)
+                List.copyOf(stacks)
         );
     }
 
@@ -164,11 +141,9 @@ final class BlueprintFloorLayout {
             return selectedFloor == null || selectedFloor == 0;
         }
 
-        Set<Integer> floors = buildingOrdinals.get(building.getId());
-        if (floors == null || floors.isEmpty()) {
-            return false;
-        }
-        return selectedFloor == null || floors.contains(selectedFloor);
+        List<AssignedRegion> regions = assignedRegions.get(building.getId());
+        return regions != null && !regions.isEmpty()
+                && (selectedFloor == null || regions.stream().anyMatch(region -> region.ordinal() == selectedFloor));
     }
 
     List<RegionBounds> regionsFor(Building building, Integer selectedFloor) {
@@ -252,81 +227,6 @@ final class BlueprintFloorLayout {
         }
 
         return nearest == null ? selectedFloor == 0 : nearest.ordinal() == selectedFloor;
-    }
-
-    void logDebug(Village village) {
-        if (ordinals.isEmpty()) {
-            MCA.LOGGER.info("[BlueprintFloors] Village \"{}\" id={} has no structural floors",
-                    village.getName(), village.getId());
-            return;
-        }
-
-        MCA.LOGGER.info(
-                "[BlueprintFloors] Village \"{}\" id={} absoluteBands={} semanticFloors={} globalGroundAnchorY={} source={}",
-                village.getName(), village.getId(), absoluteFloors.size(), ordinals, globalGroundY, groundSource);
-
-        for (VerticalStack stack : stacks) {
-            StackFloorLevel ground = stack.levels().get(stack.groundLevelIndex());
-            MCA.LOGGER.info(
-                    "[BlueprintFloors] Structure {} localLevels={} groundLocalLevel={} groundAnchorY={}",
-                    stack.structureId(), stack.levels().size(), stack.groundLevelIndex(), ground.anchorY());
-
-            for (int levelIndex = 0; levelIndex < stack.levels().size(); levelIndex++) {
-                StackFloorLevel level = stack.levels().get(levelIndex);
-                int ordinal = levelIndex - stack.groundLevelIndex();
-                String semanticName = ordinal == 0
-                        ? "Ground Floor"
-                        : ordinal > 0 ? "Floor " + ordinal : "Basement " + (-ordinal);
-
-                MCA.LOGGER.info(
-                        "[BlueprintFloors] semanticFloor structure={} localLevel={} semantic=\"{}\" ordinal={} anchorY={} weight={} candidates={}",
-                        stack.structureId(), levelIndex, semanticName, ordinal,
-                        level.anchorY(), level.weight(), level.candidates().size());
-
-                for (FloorCandidate candidate : level.candidates()) {
-                    village.getBuilding(candidate.buildingId()).ifPresent(building -> MCA.LOGGER.info(
-                            "[BlueprintFloors]   building id={} structureId={} root={} type={} regionAnchorY={} regionArea={} components={} floorY={} semanticOrdinal={}",
-                            building.getId(), building.getEffectiveStructureId(), building.isStructureRoot(),
-                            building.getType(), candidate.anchorY(), candidate.weight(), candidate.bounds().size(),
-                            building.getFloorY(), ordinal));
-                }
-            }
-        }
-
-        logTownCenterGroundDecision(village);
-        MCA.LOGGER.info("[BlueprintFloors] Ground anchor decision: source={} anchorY={}", groundSource, globalGroundY);
-    }
-
-    private void logTownCenterGroundDecision(Village village) {
-        boolean foundTownCenter = false;
-        for (Building building : village.getBuildings().values()) {
-            if (!TOWN_CENTER_TYPE.equals(building.getType())) {
-                continue;
-            }
-
-            List<BlockPos> positions = building.getBlockPosStream().toList();
-            if (positions.isEmpty()) {
-                positions = List.of(building.getCenter());
-            }
-
-            for (BlockPos pos : positions) {
-                int supportingFloor = getSupportingFloorIndex(absoluteFloors, pos.getY());
-                int anchorY = supportingFloor >= 0
-                        ? absoluteFloors.get(supportingFloor).anchorY()
-                        : Integer.MIN_VALUE;
-                MCA.LOGGER.info(
-                        "[BlueprintFloors] Town center POI buildingId={} pos=({}, {}, {}) supportingAbsoluteBand={} anchorY={} verticalOffset={}",
-                        building.getId(), pos.getX(), pos.getY(), pos.getZ(), supportingFloor, anchorY,
-                        supportingFloor >= 0 ? pos.getY() - anchorY : 0);
-                foundTownCenter = true;
-            }
-        }
-
-        if (!foundTownCenter) {
-            MCA.LOGGER.info(
-                    "[BlueprintFloors] No town center POI found; structural fallback selected global anchor Y={}",
-                    globalGroundY);
-        }
     }
 
     private static List<FloorCandidate> candidatesFor(Building building) {
@@ -427,14 +327,14 @@ final class BlueprintFloorLayout {
         return bestIndex;
     }
 
-    private static GroundFloorDecision getGroundFloorDecision(Village village, List<FloorLevel> floors) {
+    private static int getGroundFloorIndex(Village village, List<FloorLevel> floors) {
         if (floors.isEmpty()) {
-            return new GroundFloorDecision(-1, "NONE");
+            return -1;
         }
 
         int townCenterFloor = getTownCenterGroundFloorIndex(village, floors);
         if (townCenterFloor >= 0) {
-            return new GroundFloorDecision(townCenterFloor, "TOWN_CENTER_SUPPORT");
+            return townCenterFloor;
         }
 
         int villageCenterY = village.getCenter().getY();
@@ -454,7 +354,7 @@ final class BlueprintFloorLayout {
                 bestIndex = i;
             }
         }
-        return new GroundFloorDecision(bestIndex, "STRUCTURAL_FALLBACK");
+        return bestIndex;
     }
 
     private static int getTownCenterGroundFloorIndex(Village village, List<FloorLevel> floors) {
@@ -535,12 +435,6 @@ final class BlueprintFloorLayout {
         return value * value;
     }
 
-    private static Map<Integer, Set<Integer>> freezeOrdinalMap(Map<Integer, Set<Integer>> source) {
-        Map<Integer, Set<Integer>> frozen = new HashMap<>();
-        source.forEach((buildingId, floors) -> frozen.put(buildingId, Set.copyOf(floors)));
-        return Map.copyOf(frozen);
-    }
-
     private static Map<Integer, List<AssignedRegion>> freezeRegionMap(Map<Integer, List<AssignedRegion>> source) {
         Map<Integer, List<AssignedRegion>> frozen = new HashMap<>();
         source.forEach((buildingId, regions) -> frozen.put(buildingId, List.copyOf(regions)));
@@ -586,13 +480,10 @@ final class BlueprintFloorLayout {
     private record FloorLevel(int anchorY, long weight, int buildingCount) {
     }
 
-    private record GroundFloorDecision(int index, String source) {
-    }
-
     private record VerticalStack(int structureId, List<StackFloorLevel> levels, int groundLevelIndex) {
     }
 
-    private record StackFloorLevel(int anchorY, long weight, List<FloorCandidate> candidates) {
+    private record StackFloorLevel(int anchorY, List<FloorCandidate> candidates) {
     }
 
     private static final class MutableFloorLevel {
@@ -635,7 +526,7 @@ final class BlueprintFloorLayout {
 
         private StackFloorLevel freeze() {
             int anchorY = (int) Math.round((double) weightedY / totalWeight);
-            return new StackFloorLevel(anchorY, totalWeight, List.copyOf(candidates));
+            return new StackFloorLevel(anchorY, List.copyOf(candidates));
         }
     }
 }
