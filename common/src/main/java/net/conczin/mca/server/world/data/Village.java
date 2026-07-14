@@ -142,7 +142,19 @@ public class Village implements Iterable<Building> {
     }
 
     public Optional<Building> getBuildingAt(Vec3i pos) {
-        return getBuildings().values().stream().filter(b -> b.containsPos(pos)).findAny();
+        return getFunctionalRoomAt(pos)
+                .or(() -> getBuildings().values().stream()
+                        .filter(building -> building.getBuildingType().grouped())
+                        .filter(building -> building.containsPos(pos))
+                        .min(Comparator.comparingInt(Building::getId)))
+                .or(() -> getBuildings().values().stream()
+                        .filter(Building::isStructureRoot)
+                        .filter(building -> !building.getBuildingType().grouped())
+                        .filter(building -> building.containsPos(pos))
+                        .min(Comparator.comparingInt(Building::getId)))
+                .or(() -> getBuildings().values().stream()
+                        .filter(building -> building.containsPos(pos))
+                        .min(Comparator.comparingInt(Building::getId)));
     }
 
     public void calculateDimensions() {
@@ -419,38 +431,36 @@ public class Village implements Iterable<Building> {
         return Math.toIntExact(structural + grouped);
     }
 
-    public boolean hasStructuralBuilding() {
-        return getBuildings().values().stream()
-                .filter(Building::isComplete)
-                .anyMatch(building -> !building.getBuildingType().grouped() && building.isStructureRoot());
-    }
-
     public boolean hasStructuralBuildingAt(Vec3i pos) {
         return getStructuralPosition(pos) != StructuralPosition.OUTSIDE;
     }
 
     public StructuralPosition getStructuralPosition(Vec3i pos) {
-        if (getRegisteredRoomAt(pos).isPresent()) {
-            return StructuralPosition.REGISTERED_ROOM;
-        }
-        return getStructureRootContaining(pos).isPresent()
-                ? StructuralPosition.ATTACHABLE_ROOM
-                : StructuralPosition.OUTSIDE;
+        return getStructuralLookup(pos).position();
     }
 
-    public Optional<Building> getStructureRootContaining(Vec3i pos) {
+    public StructuralLookup getStructuralLookup(Vec3i pos) {
+        Optional<Building> functionalRoom = getFunctionalRoomAt(pos);
+        if (functionalRoom.isPresent()) {
+            return new StructuralLookup(StructuralPosition.REGISTERED_ROOM, functionalRoom);
+        }
+
+        Optional<Building> structureRoot = getStructureRootContaining(pos);
+        return structureRoot.isPresent()
+                ? new StructuralLookup(StructuralPosition.ATTACHABLE_ROOM, structureRoot)
+                : new StructuralLookup(StructuralPosition.OUTSIDE, Optional.empty());
+    }
+
+    private Optional<Building> getStructureRootContaining(Vec3i pos) {
         return getBuildings().values().stream()
                 .filter(Building::isComplete)
-                .filter(Building::isStructureContainer)
+                .filter(Building::isStructureRoot)
+                .filter(building -> !building.getBuildingType().grouped())
                 .filter(building -> building.containsStructurePosition(pos))
                 .min(Comparator.comparingInt(Building::getId));
     }
 
     public Optional<Building> getFunctionalRoomAt(Vec3i pos) {
-        return getRegisteredRoomAt(pos);
-    }
-
-    public Optional<Building> getRegisteredRoomAt(Vec3i pos) {
         return getBuildings().values().stream()
                 .filter(Building::isComplete)
                 .filter(Building::isFunctionalRoom)
@@ -478,6 +488,12 @@ public class Village implements Iterable<Building> {
         OUTSIDE,
         REGISTERED_ROOM,
         ATTACHABLE_ROOM
+    }
+
+    public record StructuralLookup(StructuralPosition position, Optional<Building> building) {
+        public Optional<Building> functionalRoom() {
+            return position == StructuralPosition.REGISTERED_ROOM ? building : Optional.empty();
+        }
     }
 
     public boolean isVillage() {

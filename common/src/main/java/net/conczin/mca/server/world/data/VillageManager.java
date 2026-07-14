@@ -250,22 +250,17 @@ public class VillageManager extends SavedData implements Iterable<Village> {
 
     public BuildingBlockedResult getBlockedResult(BlockPos pos) {
         Optional<Village> optionalVillage = findNearestVillage(pos, Village.MERGE_MARGIN);
-        Set<BlockPos> blocked = new java.util.HashSet<>();
+        Set<BlockPos> blocked = new HashSet<>();
         Building existingBuilding = null;
         if (optionalVillage.isPresent()) {
             Village village = optionalVillage.get();
             blocked = getBlockedSet(village);
-            for (Building b : village.getBuildings().values()) {
-                if (b.containsPos(pos) && !b.getBuildingType().grouped()) {
-                    existingBuilding = b;
-                    break;
-                }
-            }
+            existingBuilding = village.getStructuralLookup(pos).building().orElse(null);
         }
         return new BuildingBlockedResult(blocked, existingBuilding, optionalVillage.orElse(null));
     }
 
-    public BuildingScanResult analyzeBuilding(BlockPos pos, boolean strictScan) {
+    private BuildingScanResult analyzeBuilding(BlockPos pos, boolean strictScan) {
         return analyzeBuilding(pos, strictScan, false, null, -1);
     }
 
@@ -331,9 +326,9 @@ public class VillageManager extends SavedData implements Iterable<Village> {
                     .forEach(member -> blocked.remove(member.getSourceBlock()));
         }
 
-        boolean effectiveStrictScan = roomScan
+        boolean effectiveStrictScan = (roomScan
                 || preferred == null
-                || preferredBuildingId >= 0
+                || preferredBuildingId >= 0)
                 ? strictScan
                 : preferred.isStrictScan();
         BlockPos scanSource = !roomScan && preferred != null && preferredBuildingId < 0
@@ -355,7 +350,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
 
             BuildingStructureManager.MatchResult match =
                     BuildingStructureManager.matchExistingRoom(building, village, effectivePreferredId);
-            MCA.LOGGER.info(
+            MCA.LOGGER.debug(
                     "[BuildingRoomScan] source={} roomScan={} matchResult={} matchedId={} mergedIds={} floorY={} groundFloorY={} floorRegions={}",
                     scanSource, roomScan, match.result(),
                     match.primary() == null ? -1 : match.primary().getId(), match.mergedBuildingIds(),
@@ -372,15 +367,14 @@ public class VillageManager extends SavedData implements Iterable<Village> {
                 mergedBuildingIds = match.mergedBuildingIds();
             } else if (roomScan && assignRoom) {
                 result = BuildingStructureManager.assignNewRoom(building, village);
-                MCA.LOGGER.info("[BuildingRoomScan] source={} assignmentResult={} structureId={}",
+                MCA.LOGGER.debug("[BuildingRoomScan] source={} assignmentResult={} structureId={}",
                         scanSource, result, building.getStructureId());
             }
         }
 
-        List<String> matchingTypes = new ArrayList<>();
-        if (result == Building.validationResult.SUCCESS) {
-            building.getVisibleMatchingTypes().forEach(bt -> matchingTypes.add(bt.name()));
-        }
+        List<String> matchingTypes = result == Building.validationResult.SUCCESS
+                ? building.getVisibleMatchingTypes().stream().map(BuildingType::name).toList()
+                : List.of();
 
         return new BuildingScanResult(
                 result,
@@ -550,10 +544,6 @@ public class VillageManager extends SavedData implements Iterable<Village> {
                     }
                 });
         setDirty();
-    }
-
-    public Building.validationResult processRoom(BlockPos pos, String forcedType) {
-        return commitBuilding(analyzeRoom(pos), forcedType);
     }
 
     public void ensureStructureHierarchy(Village village) {

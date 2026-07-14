@@ -3,7 +3,6 @@ package net.conczin.mca.client.gui;
 import net.conczin.mca.server.world.data.Building;
 import net.conczin.mca.server.world.data.BuildingFloorRegion;
 import net.conczin.mca.server.world.data.Village;
-import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.BlockPos;
 
 import java.util.*;
@@ -20,19 +19,22 @@ final class BlueprintFloorLayout {
     private static final int FLOOR_CLUSTER_TOLERANCE = Building.SEMANTIC_FLOOR_TOLERANCE;
 
     private final Map<Integer, List<AssignedRegion>> assignedRegions;
+    private final Map<Integer, BlockPos> structureIconPositions;
     private final List<Integer> ordinals;
     private final List<VerticalStack> stacks;
 
     private BlueprintFloorLayout(Map<Integer, List<AssignedRegion>> assignedRegions,
+                                 Map<Integer, BlockPos> structureIconPositions,
                                  List<Integer> ordinals,
                                  List<VerticalStack> stacks) {
         this.assignedRegions = assignedRegions;
+        this.structureIconPositions = structureIconPositions;
         this.ordinals = ordinals;
         this.stacks = stacks;
     }
 
     static BlueprintFloorLayout empty() {
-        return new BlueprintFloorLayout(Map.of(), List.of(), List.of());
+        return new BlueprintFloorLayout(Map.of(), Map.of(), List.of(), List.of());
     }
 
     static BlueprintFloorLayout build(Village village) {
@@ -54,30 +56,22 @@ final class BlueprintFloorLayout {
                 .sorted(Comparator.comparingInt(FloorCandidate::anchorY)
                         .thenComparingInt(FloorCandidate::buildingId))
                 .toList();
-        if (allCandidates.isEmpty()) {
-            return empty();
-        }
 
         Map<Integer, Integer> rootGroundAnchors = new HashMap<>();
+        Map<Integer, BlockPos> structureIconPositions = new HashMap<>();
         for (Building building : structuralBuildings) {
             if (!building.isStructureRoot()) {
                 continue;
             }
             rootGroundAnchors.put(building.getEffectiveStructureId(), building.getGroundFloorY());
-        }
-
-        // Root regions define the physical vertical stack. Only strict children own
-        // functional rooms and therefore receive visible floor assignments.
-        List<FloorCandidate> candidates = allCandidates;
-        if (candidates.isEmpty()) {
-            return empty();
+            structureIconPositions.putIfAbsent(building.getEffectiveStructureId(), building.getCenter());
         }
 
         Map<Integer, List<AssignedRegion>> mutableAssignedRegions = new HashMap<>();
         TreeSet<Integer> availableOrdinals = new TreeSet<>();
         List<VerticalStack> stacks = new ArrayList<>();
 
-        for (Map.Entry<Integer, List<FloorCandidate>> entry : getVerticalStacks(candidates).entrySet()) {
+        for (Map.Entry<Integer, List<FloorCandidate>> entry : getVerticalStacks(allCandidates).entrySet()) {
             List<StackFloorLevel> levels = clusterStackFloorLevels(entry.getValue());
             int groundY = rootGroundAnchors.getOrDefault(entry.getKey(), levels.getFirst().anchorY());
             int groundLevelIndex = getClosestStackFloorIndexPreferLower(levels, groundY);
@@ -107,6 +101,7 @@ final class BlueprintFloorLayout {
 
         return new BlueprintFloorLayout(
                 freezeRegionMap(mutableAssignedRegions),
+                Map.copyOf(structureIconPositions),
                 List.copyOf(availableOrdinals),
                 List.copyOf(stacks)
         );
@@ -165,49 +160,13 @@ final class BlueprintFloorLayout {
     }
 
     BlockPos iconPositionFor(Building building) {
-        return building.getCenter();
+        return structureIconPositions.getOrDefault(building.getEffectiveStructureId(), building.getCenter());
     }
 
-    boolean isPlayerVisible(LocalPlayer player, int selectedFloor, Village village) {
-        BlockPos playerPos = player.blockPosition();
-        AssignedRegion bestContaining = null;
-
-        for (Map.Entry<Integer, List<AssignedRegion>> entry : assignedRegions.entrySet()) {
-            Building building = village.getBuilding(entry.getKey()).orElse(null);
-            if (building == null || !building.isComplete() || building.getBuildingType().grouped()) {
-                continue;
-            }
-
-            for (AssignedRegion region : entry.getValue()) {
-                if (!region.bounds().containsHorizontally(playerPos.getX(), playerPos.getZ())) {
-                    continue;
-                }
-                if (bestContaining == null || isBetterPlayerRegion(region, bestContaining, playerPos.getY())) {
-                    bestContaining = region;
-                }
-            }
-        }
-
-        if (bestContaining != null) {
-            return bestContaining.ordinal() == selectedFloor;
-        }
-
-        AssignedRegion nearest = null;
-        long nearestDistance = Long.MAX_VALUE;
-        for (List<AssignedRegion> regions : assignedRegions.values()) {
-            for (AssignedRegion region : regions) {
-                long distance = region.bounds().horizontalDistanceSqr(playerPos.getX(), playerPos.getZ())
-                        + square((long) playerPos.getY() - region.anchorY());
-                if (distance < nearestDistance
-                        || (distance == nearestDistance && nearest != null
-                        && region.anchorY() < nearest.anchorY())) {
-                    nearest = region;
-                    nearestDistance = distance;
-                }
-            }
-        }
-
-        return nearest == null ? selectedFloor == 0 : nearest.ordinal() == selectedFloor;
+    OptionalInt floorOrdinalFor(Building building) {
+        return assignedRegions.getOrDefault(building.getId(), List.of()).stream()
+                .mapToInt(AssignedRegion::ordinal)
+                .findFirst();
     }
 
     private static List<FloorCandidate> candidatesFor(Building building) {
@@ -287,18 +246,6 @@ final class BlueprintFloorLayout {
             }
         }
         return bestIndex;
-    }
-
-    private static boolean isBetterPlayerRegion(AssignedRegion candidate, AssignedRegion current, int playerY) {
-        boolean candidateSupporting = candidate.anchorY() <= playerY;
-        boolean currentSupporting = current.anchorY() <= playerY;
-        if (candidateSupporting != currentSupporting) {
-            return candidateSupporting;
-        }
-        if (candidateSupporting) {
-            return candidate.anchorY() > current.anchorY();
-        }
-        return candidate.anchorY() < current.anchorY();
     }
 
     private static long square(long value) {

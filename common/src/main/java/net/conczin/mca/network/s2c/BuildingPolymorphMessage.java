@@ -3,6 +3,7 @@ package net.conczin.mca.network.s2c;
 import net.conczin.mca.ClientProxy;
 import net.conczin.mca.MCA;
 import net.conczin.mca.network.HandleablePayload;
+import net.conczin.mca.network.c2s.ReportBuildingMessage;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
@@ -15,27 +16,17 @@ import java.util.List;
 
 public record BuildingPolymorphMessage(List<String> matchingTypes,
                                        BlockPos scanPos,
-                                       ScanAction action,
+                                       ReportBuildingMessage.Action action,
                                        int expectedRoomId) implements HandleablePayload {
     public static final CustomPacketPayload.Type<BuildingPolymorphMessage> TYPE = new CustomPacketPayload.Type<>(MCA.locate("building_polymorph"));
 
-    private static final StreamCodec<FriendlyByteBuf, BlockPos> BLOCK_POS_CODEC = StreamCodec.of(
-            (buf, pos) -> buf.writeBlockPos(pos), buf -> buf.readBlockPos()
-    );
-
     public static final StreamCodec<FriendlyByteBuf, BuildingPolymorphMessage> STREAM_CODEC = StreamCodec.composite(
             ByteBufCodecs.collection(ArrayList::new, ByteBufCodecs.STRING_UTF8), BuildingPolymorphMessage::matchingTypes,
-            BLOCK_POS_CODEC, BuildingPolymorphMessage::scanPos,
-            ByteBufCodecs.idMapper(i -> ScanAction.values()[i], ScanAction::ordinal), BuildingPolymorphMessage::action,
+            BlockPos.STREAM_CODEC, BuildingPolymorphMessage::scanPos,
+            ByteBufCodecs.idMapper(i -> ReportBuildingMessage.Action.values()[i], ReportBuildingMessage.Action::ordinal), BuildingPolymorphMessage::action,
             ByteBufCodecs.VAR_INT, BuildingPolymorphMessage::expectedRoomId,
             BuildingPolymorphMessage::new
     );
-
-    public enum ScanAction {
-        BUILDING,
-        ADD_ROOM,
-        UPDATE_ROOM
-    }
 
     @Override
     public void handle(Player player) {
