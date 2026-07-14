@@ -39,4 +39,13 @@ neoForge {
     }
 }
 
+// ModDev applies the generated transformer in development, but a distributed
+// NeoForge jar must also contain it at the loader's conventional resource path.
+tasks.named('processResources', ProcessResources) {
+    dependsOn(project(':common').tasks.named('generateAccessTransformer'))
+    from(project(':common').layout.buildDirectory.file('generated/accesstransformer.cfg')) {
+        into 'META-INF'
+    }
+}
+
 sourceSets.main.resources { srcDir 'src/generated/resources' }
