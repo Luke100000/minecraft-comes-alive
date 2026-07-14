@@ -1,3 +1,8 @@
+# 7.7.22
+
+* Fixed Rare Crash
+* Fixed Library Preview rare corruption issue.
+
 # 7.7.21
 
 * Fixed Villagers not being able to get through doors cause of their width.

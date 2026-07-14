@@ -14,12 +14,10 @@ import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.client.renderer.texture.TextureManager;
 import net.minecraft.resources.ResourceLocation;
 import org.apache.commons.io.FileUtils;
-
 import java.io.*;
 import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.util.Base64;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -30,9 +28,9 @@ import static net.conczin.mca.client.gui.immersive_library.Api.request;
 public class SkinCache {
     static final Map<Integer, Boolean> requested = new ConcurrentHashMap<>();
     static final Map<Integer, Integer> cachedVersions = new ConcurrentHashMap<>();
-    static final Map<Integer, ResourceLocation> textureIdentifiers = new HashMap<>();
-    static final Map<Integer, NativeImage> images = new HashMap<>();
-    static final Map<Integer, SkinMeta> metas = new HashMap<>();
+    static final Map<Integer, ResourceLocation> textureIdentifiers = new ConcurrentHashMap<>();
+    static final Map<Integer, NativeImage> images = new ConcurrentHashMap<>();
+    static final Map<Integer, SkinMeta> metas = new ConcurrentHashMap<>();
     private static final ResourceLocation DEFAULT_SKIN = MCA.locate("skins/empty.png");
     private static final Gson gson = new Gson();
 
