@@ -9,7 +9,7 @@ import net.minecraft.entity.EntityType;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.ai.brain.LivingTargetCache;
 import net.minecraft.entity.ai.brain.MemoryModuleType;
-import net.minecraft.entity.ai.brain.sensor.Sensor;
+import net.minecraft.entity.ai.brain.sensor.NearestLivingEntitiesSensor;
 import net.minecraft.entity.mob.MobEntity;
 import net.minecraft.entity.mob.Monster;
 import net.minecraft.entity.player.PlayerEntity;
@@ -24,16 +24,17 @@ import java.util.Set;
 /**
  * Sensor to detect nearby enemies for guards or combat-active villagers.
  *
- * <p>To reduce server cost, non-guard villagers only scan while following a player or while
- * an attack target is already active.</p>
+ * <p>The shared nearby-entity scan also supplies other villager behaviors. Non-guard villagers
+ * skip only the guard-target prioritization unless they are following a player or already fighting.</p>
  */
-public class GuardEnemiesSensor extends Sensor<LivingEntity> {
+public class GuardEnemiesSensor extends NearestLivingEntitiesSensor<LivingEntity> {
     private static final double GUARD_ENEMY_RANGE = 48.0;
     private static final double GUARD_ENEMY_RANGE_SQUARED = GUARD_ENEMY_RANGE * GUARD_ENEMY_RANGE;
 
     @Override
     public Set<MemoryModuleType<?>> getOutputMemoryModules() {
         return ImmutableSet.of(
+                MemoryModuleType.MOBS,
                 MemoryModuleType.VISIBLE_MOBS,
                 MemoryModuleType.ATTACK_TARGET,
                 MemoryModuleTypeMCA.PLAYER_FOLLOWING.get(),
@@ -43,6 +44,8 @@ public class GuardEnemiesSensor extends Sensor<LivingEntity> {
 
     @Override
     protected void sense(ServerWorld world, LivingEntity entity) {
+        super.sense(world, entity);
+
         if (!(entity instanceof VillagerEntityMCA villager)) {
             return;
         }
