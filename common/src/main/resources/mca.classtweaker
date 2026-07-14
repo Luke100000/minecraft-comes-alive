@@ -16,3 +16,6 @@ mutable field net/minecraft/advancements/AdvancementRewards loot Ljava/util/List
 
 # Widen MoveControl.rotlerp for task usage
 accessible method net/minecraft/world/entity/ai/control/MoveControl rotlerp (FFF)F
+
+# Widen the vanilla action-bar renderer so BlueprintScreen can place it above its blur.
+accessible method net/minecraft/client/gui/Gui renderOverlayMessage (Lnet/minecraft/client/gui/GuiGraphics;Lnet/minecraft/client/DeltaTracker;)V

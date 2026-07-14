@@ -1,6 +1,7 @@
 package net.conczin.mca.server.world.data;
 
 import net.conczin.mca.Config;
+import net.conczin.mca.MCA;
 import net.conczin.mca.resources.BuildingTypes;
 import net.conczin.mca.resources.data.BuildingType;
 import net.conczin.mca.util.NbtHelper;
@@ -9,12 +10,14 @@ import net.minecraft.core.Direction;
 import net.minecraft.core.Vec3i;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.Tag;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.BedBlock;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.DoorBlock;
+import net.minecraft.world.level.block.TrapDoorBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BedPart;
 
@@ -23,11 +26,13 @@ import java.util.stream.Stream;
 
 public class Building {
     public static final long SCAN_COOLDOWN = 4800;
+    private static final int FLOOR_MATCH_TOLERANCE = BuildingFloorRegionDetector.FLOOR_CLUSTER_TOLERANCE;
     private static final Direction[] directions = {
             Direction.UP, Direction.DOWN, Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST
     };
 
     private final Map<ResourceLocation, List<BlockPos>> blocks = new HashMap<>();
+    private List<BuildingFloorRegion> floorRegions = List.of();
 
     private String type = "building";
     private boolean isTypeForced = false;
@@ -36,6 +41,9 @@ public class Building {
     private int pos0X, pos0Y, pos0Z;
     private int pos1X, pos1Y, pos1Z;
     private int posX, posY, posZ;
+    private int floorY;
+    private int structureId = -1;
+    private boolean structureRoot;
     private int id;
     private boolean strictScan;
     private long lastScan;
@@ -61,6 +69,7 @@ public class Building {
         posX = pos0X;
         posY = pos0Y;
         posZ = pos0Z;
+        floorY = pos0Y;
 
         this.strictScan = strictScan;
     }
@@ -84,6 +93,16 @@ public class Building {
             posY = center.getY();
             posZ = center.getZ();
         }
+
+        floorY = v.contains("floorY") ? v.getInt("floorY") : pos0Y + 1;
+        if (v.contains("floorRegions", Tag.TAG_LIST)) {
+            floorRegions = List.copyOf(NbtHelper.toList(
+                    v.getList("floorRegions", Tag.TAG_COMPOUND),
+                    tag -> BuildingFloorRegion.load((CompoundTag) tag)
+            ));
+        }
+        structureId = v.contains("structureId") ? v.getInt("structureId") : -1;
+        structureRoot = v.contains("structureRoot") && v.getBoolean("structureRoot");
 
         isTypeForced = v.getBoolean("isTypeForced");
         type = v.getString("type");
@@ -111,6 +130,10 @@ public class Building {
         v.putInt("posX", posX);
         v.putInt("posY", posY);
         v.putInt("posZ", posZ);
+        v.putInt("floorY", floorY);
+        v.put("floorRegions", NbtHelper.fromList(floorRegions, BuildingFloorRegion::save));
+        v.putInt("structureId", structureId);
+        v.putBoolean("structureRoot", structureRoot);
         v.putBoolean("isTypeForced", isTypeForced);
         v.putString("type", type);
         v.putBoolean("strictScan", strictScan);
@@ -155,6 +178,74 @@ public class Building {
         return new BlockPos(posX, posY, posZ);
     }
 
+    public int getFloorY() {
+        return floorY;
+    }
+
+    public List<BuildingFloorRegion> getFloorRegions() {
+        return floorRegions;
+    }
+
+    void retainFloorClosestTo(int y) {
+        if (floorRegions.size() <= 1) {
+            return;
+        }
+
+        BuildingFloorRegion closest = floorRegions.stream()
+                .min(Comparator.comparingInt(region -> Math.abs(region.anchorY() - y)))
+                .orElseThrow();
+        floorRegions = List.of(closest);
+        floorY = closest.anchorY();
+    }
+
+    public int getFloorDistanceTo(Vec3i pos) {
+        return floorRegions.stream()
+                .mapToInt(region -> Math.abs(region.anchorY() - pos.getY()))
+                .min()
+                .orElseGet(() -> Math.abs(floorY - pos.getY()));
+    }
+
+    public boolean containsFloorPosition(Vec3i pos) {
+        if (floorRegions.isEmpty()) {
+            return containsPos(pos);
+        }
+        return floorRegions.stream().anyMatch(region ->
+                Math.abs(region.anchorY() - pos.getY()) <= FLOOR_MATCH_TOLERANCE
+                        && region.containsHorizontally(pos.getX(), pos.getZ()));
+    }
+
+    public boolean sharesFloorBandWith(Building other) {
+        if (floorRegions.isEmpty() || other.floorRegions.isEmpty()) {
+            return Math.abs(floorY - other.floorY) <= FLOOR_MATCH_TOLERANCE;
+        }
+        return floorRegions.stream().anyMatch(region -> other.floorRegions.stream().anyMatch(otherRegion ->
+                Math.abs(region.anchorY() - otherRegion.anchorY()) <= FLOOR_MATCH_TOLERANCE));
+    }
+
+    public int getStructureId() {
+        return structureId;
+    }
+
+    public int getEffectiveStructureId() {
+        return structureId >= 0 ? structureId : id;
+    }
+
+    public boolean hasStructure() {
+        return structureId >= 0;
+    }
+
+    public void setStructureId(int structureId) {
+        this.structureId = structureId;
+    }
+
+    public boolean isStructureRoot() {
+        return structureRoot;
+    }
+
+    public void setStructureRoot(boolean structureRoot) {
+        this.structureRoot = structureRoot;
+    }
+
     public void validateBlocks(Level world) {
         setLastScan(world.getGameTime());
 
@@ -193,6 +284,10 @@ public class Building {
     }
 
     public validationResult validateBuilding(Level world, Set<BlockPos> blocked) {
+        return validateBuilding(world, blocked, false);
+    }
+
+    public validationResult validateBuilding(Level world, Set<BlockPos> blocked, boolean allowMissingEntrance) {
         //validate grouped buildings differently
         if (getBuildingType().grouped()) {
             validateBlocks(world);
@@ -208,11 +303,18 @@ public class Building {
         //temp data for flood fill
         Set<BlockPos> done = new HashSet<>();
         LinkedList<BlockPos> queue = new LinkedList<>();
+        Map<Long, Integer> lowestInteriorY = new HashMap<>();
+        Set<BuildingFloorRegionDetector.SupportedCell> supportedCells = new HashSet<>();
 
         //start point
         BlockPos center = getSourceBlock();
         queue.add(center);
         done.add(center);
+        BlockState centerState = world.getBlockState(center);
+        if (centerState.isAir() || !centerState.getFluidState().isEmpty()) {
+            recordInteriorColumn(lowestInteriorY, center);
+            recordSupportedInteriorCell(world, supportedCells, center);
+        }
 
         //const
         final int minSize = Config.getInstance().minBuildingSize;
@@ -269,13 +371,17 @@ public class Building {
                             if (roofCache.get(n)) {
                                 interiorSize++;
                                 queue.add(n);
+                                recordInteriorColumn(lowestInteriorY, n);
+                                recordSupportedInteriorCell(world, supportedCells, n);
                             }
                         } else if (!state.getFluidState().isEmpty()) {
                             //fluid blocks (water, lava, etc.) are treated as passable interior
                             interiorSize++;
                             queue.add(n);
-                        } else if (state.getBlock() instanceof DoorBlock) {
-                            //skip door and start a new room
+                            recordInteriorColumn(lowestInteriorY, n);
+                            recordSupportedInteriorCell(world, supportedCells, n);
+                        } else if (state.getBlock() instanceof DoorBlock || state.getBlock() instanceof TrapDoorBlock) {
+                            //doors and trapdoors are room boundaries and valid entrances
                             if (!strictScan) {
                                 queue.add(n);
                             }
@@ -295,7 +401,7 @@ public class Building {
             return validationResult.BLOCK_LIMIT;
         } else if (done.size() <= minSize) {
             return validationResult.TOO_SMALL;
-        } else if (!hasDoor) {
+        } else if (!hasDoor && !allowMissingEntrance) {
             return validationResult.NO_DOOR;
         } else {
             //dimensions
@@ -339,6 +445,37 @@ public class Building {
             pos1Z = ez;
 
             size = interiorSize;
+            int legacyFloorY = determineDominantFloorY(lowestInteriorY, pos0Y + 1);
+            BuildingFloorRegionDetector.DetectionResult floorDetection =
+                    BuildingFloorRegionDetector.analyze(supportedCells);
+            floorRegions = floorDetection.regions().stream()
+                    .map(BuildingFloorRegion::fromDetected)
+                    .toList();
+            floorY = floorRegions.stream()
+                    .max(Comparator.comparingInt(BuildingFloorRegion::area)
+                            .thenComparing(Comparator.comparingInt(BuildingFloorRegion::anchorY).reversed()))
+                    .map(BuildingFloorRegion::anchorY)
+                    .orElse(legacyFloorY);
+
+            MCA.LOGGER.info(
+                    "[BlueprintFloors] Scan source={} reachableInterior={} supportedCells={} floorRegions={}",
+                    center, interiorSize, supportedCells.size(), floorRegions.size());
+            for (BuildingFloorRegionDetector.SliceDecision slice : floorDetection.slices()) {
+                if (slice.promoted()) {
+                    MCA.LOGGER.info(
+                            "[BlueprintFloors] supportedSlice y={} area={} promoted=true",
+                            slice.y(), slice.area());
+                } else {
+                    MCA.LOGGER.info(
+                            "[BlueprintFloors] supportedSlice y={} area={} promoted=false reason={}",
+                            slice.y(), slice.area(), slice.reason());
+                }
+            }
+            for (BuildingFloorRegion region : floorRegions) {
+                MCA.LOGGER.info(
+                        "[BlueprintFloors] candidateBand y={} area={} components={}",
+                        region.anchorY(), region.area(), region.components().size());
+            }
 
             //determine type
             if (isTypeForced()) {
@@ -346,6 +483,60 @@ public class Building {
             }
             return determineType() ? validationResult.SUCCESS : validationResult.INVALID_TYPE;
         }
+    }
+
+    private static void recordSupportedInteriorCell(Level world,
+                                                    Set<BuildingFloorRegionDetector.SupportedCell> supportedCells,
+                                                    BlockPos interiorPos) {
+        BlockPos supportPos = interiorPos.below();
+        BlockState supportState = world.getBlockState(supportPos);
+        var collisionShape = supportState.getCollisionShape(world, supportPos);
+        if (collisionShape.isEmpty()) {
+            return;
+        }
+
+        double width = collisionShape.max(Direction.Axis.X) - collisionShape.min(Direction.Axis.X);
+        double depth = collisionShape.max(Direction.Axis.Z) - collisionShape.min(Direction.Axis.Z);
+        if (width * depth < 0.25D) {
+            return;
+        }
+
+        supportedCells.add(new BuildingFloorRegionDetector.SupportedCell(
+                interiorPos.getX(), interiorPos.getY(), interiorPos.getZ()));
+    }
+
+    private static void recordInteriorColumn(Map<Long, Integer> lowestInteriorY, BlockPos pos) {
+        long key = ((long) pos.getX() << 32) ^ (pos.getZ() & 0xffffffffL);
+        lowestInteriorY.merge(key, pos.getY(), Math::min);
+    }
+
+    /**
+     * Picks one structural floor plane for the room. Only the lowest reachable interior
+     * position in each X/Z column contributes, so tall rooms do not manufacture extra
+     * floors. The most common plane wins, which makes stairs, slabs and small raised
+     * platforms harmless unless they actually make up most of the room.
+     */
+    private static int determineDominantFloorY(Map<Long, Integer> lowestInteriorY, int fallbackY) {
+        if (lowestInteriorY.isEmpty()) {
+            return fallbackY;
+        }
+
+        Map<Integer, Integer> counts = new HashMap<>();
+        lowestInteriorY.values().forEach(y -> counts.merge(y, 1, Integer::sum));
+
+        int bestY = fallbackY;
+        int bestCount = -1;
+        for (Map.Entry<Integer, Integer> entry : counts.entrySet()) {
+            int y = entry.getKey();
+            int count = entry.getValue();
+            if (count > bestCount
+                    || (count == bestCount && Math.abs(y - fallbackY) < Math.abs(bestY - fallbackY))
+                    || (count == bestCount && Math.abs(y - fallbackY) == Math.abs(bestY - fallbackY) && y > bestY)) {
+                bestY = y;
+                bestCount = count;
+            }
+        }
+        return bestY;
     }
 
     public boolean matchesType(BuildingType bt) {
@@ -464,11 +655,114 @@ public class Building {
     }
 
     public boolean isIdentical(Building b) {
-        return pos0X == b.pos0X && pos1X == b.pos1X && pos0Y == b.pos0Y && pos1Y == b.pos1Y && pos0Z == b.pos0Z && pos1Z == b.pos1Z;
+        boolean sameBounds = pos0X == b.pos0X && pos1X == b.pos1X
+                && pos0Y == b.pos0Y && pos1Y == b.pos1Y
+                && pos0Z == b.pos0Z && pos1Z == b.pos1Z;
+        if (!sameBounds || strictScan != b.strictScan) {
+            return false;
+        }
+        return !strictScan || sharesFloorBandWith(b);
     }
 
     public int getSize() {
         return size;
+    }
+
+    public int getHorizontalArea() {
+        return Math.max(1, pos1X - pos0X + 1) * Math.max(1, pos1Z - pos0Z + 1);
+    }
+
+    public long getRawVolume() {
+        return (long) Math.max(1, pos1X - pos0X + 1)
+                * Math.max(1, pos1Y - pos0Y + 1)
+                * Math.max(1, pos1Z - pos0Z + 1);
+    }
+
+    public long getIntersectionVolume(Building other) {
+        int x = Math.min(pos1X, other.pos1X) - Math.max(pos0X, other.pos0X) + 1;
+        int y = Math.min(pos1Y, other.pos1Y) - Math.max(pos0Y, other.pos0Y) + 1;
+        int z = Math.min(pos1Z, other.pos1Z) - Math.max(pos0Z, other.pos0Z) + 1;
+        if (x <= 0 || y <= 0 || z <= 0) {
+            return 0L;
+        }
+        return (long) x * y * z;
+    }
+
+    public boolean containsRawPos(Vec3i pos) {
+        return pos.getX() >= pos0X && pos.getX() <= pos1X
+                && pos.getY() >= pos0Y && pos.getY() <= pos1Y
+                && pos.getZ() >= pos0Z && pos.getZ() <= pos1Z;
+    }
+
+    public boolean containsRawBounds(Building other) {
+        return other.pos0X >= pos0X && other.pos1X <= pos1X
+                && other.pos0Y >= pos0Y && other.pos1Y <= pos1Y
+                && other.pos0Z >= pos0Z && other.pos1Z <= pos1Z;
+    }
+
+    private static int axisGap(int minA, int maxA, int minB, int maxB) {
+        if (maxA < minB) {
+            return minB - maxA - 1;
+        }
+        if (maxB < minA) {
+            return minA - maxB - 1;
+        }
+        return 0;
+    }
+
+    /**
+     * Face/stack attachment, deliberately excluding diagonal corner contact.
+     */
+    public boolean isStructurallyAttachedTo(Building other, int maxVerticalGap) {
+        int gapX = axisGap(pos0X, pos1X, other.pos0X, other.pos1X);
+        int gapY = axisGap(pos0Y, pos1Y, other.pos0Y, other.pos1Y);
+        int gapZ = axisGap(pos0Z, pos1Z, other.pos0Z, other.pos1Z);
+
+        boolean verticalStack = gapX == 0 && gapZ == 0 && gapY <= maxVerticalGap;
+        boolean sideBySideX = gapY == 0 && gapZ == 0 && gapX <= 1;
+        boolean sideBySideZ = gapY == 0 && gapX == 0 && gapZ <= 1;
+        return verticalStack || sideBySideX || sideBySideZ;
+    }
+
+    public int getVerticalDistanceTo(Vec3i pos) {
+        if (pos.getY() < pos0Y) {
+            return pos0Y - pos.getY();
+        }
+        if (pos.getY() > pos1Y) {
+            return pos.getY() - pos1Y;
+        }
+        return 0;
+    }
+
+    /**
+     * Updates mutable scan geometry while preserving persistent room/structure identity.
+     * The old source anchor is retained only while it remains passable and inside the
+     * new room; otherwise the successful scan source becomes the new persistent anchor.
+     */
+    public void copyScannedGeometryFrom(Building scanned, Level world) {
+        BlockPos oldSource = getSourceBlock();
+
+        size = scanned.size;
+        pos0X = scanned.pos0X;
+        pos0Y = scanned.pos0Y;
+        pos0Z = scanned.pos0Z;
+        pos1X = scanned.pos1X;
+        pos1Y = scanned.pos1Y;
+        pos1Z = scanned.pos1Z;
+        floorY = scanned.floorY;
+        floorRegions = scanned.floorRegions;
+        lastScan = scanned.lastScan;
+
+        blocks.clear();
+        scanned.blocks.forEach((key, value) -> blocks.put(key, new ArrayList<>(value)));
+
+        BlockState oldSourceState = world.getBlockState(oldSource);
+        boolean oldSourceStillPassable = oldSourceState.isAir() || !oldSourceState.getFluidState().isEmpty();
+        if (!containsRawPos(oldSource) || !oldSourceStillPassable) {
+            posX = scanned.posX;
+            posY = scanned.posY;
+            posZ = scanned.posZ;
+        }
     }
 
     public long getLastScan() {
@@ -500,6 +794,8 @@ public class Building {
         TOO_SMALL,
         IDENTICAL,
         SUCCESS,
-        INVALID_TYPE
+        INVALID_TYPE,
+        NOT_IN_BUILDING,
+        AMBIGUOUS_STRUCTURE
     }
 }

@@ -392,8 +392,29 @@ public class Village implements Iterable<Building> {
         calculateDimensions();
     }
 
+    public int getStructureCount() {
+        long structural = getBuildings().values().stream()
+                .filter(building -> !building.getBuildingType().grouped())
+                .mapToInt(Building::getEffectiveStructureId)
+                .distinct()
+                .count();
+
+        long grouped = getBuildings().values().stream()
+                .filter(Building::isComplete)
+                .filter(building -> building.getBuildingType().grouped())
+                .count();
+
+        return Math.toIntExact(structural + grouped);
+    }
+
+    public boolean hasStructuralBuilding() {
+        return getBuildings().values().stream()
+                .filter(Building::isComplete)
+                .anyMatch(building -> !building.getBuildingType().grouped() && building.isStructureRoot());
+    }
+
     public boolean isVillage() {
-        return getBuildings().size() >= Config.getInstance().minimumBuildingsToBeConsideredAVillage;
+        return getStructureCount() >= Config.getInstance().minimumBuildingsToBeConsideredAVillage;
     }
 
     public void updateResident(VillagerEntityMCA e) {
