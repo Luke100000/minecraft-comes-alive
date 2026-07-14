@@ -4,7 +4,12 @@ import net.conczin.mca.MCA;
 import net.conczin.mca.network.HandleablePayload;
 import net.conczin.mca.network.Network;
 import net.conczin.mca.network.s2c.BuildingPolymorphMessage;
-import net.conczin.mca.server.world.data.*;
+import net.conczin.mca.server.world.data.Building;
+import net.conczin.mca.server.world.data.BuildingFloorRegion;
+import net.conczin.mca.server.world.data.BuildingScanResult;
+import net.conczin.mca.server.world.data.InitialStructureScan;
+import net.conczin.mca.server.world.data.Village;
+import net.conczin.mca.server.world.data.VillageManager;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.chat.Component;
@@ -21,7 +26,9 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
     public static final CustomPacketPayload.Type<ReportBuildingMessage> TYPE = new CustomPacketPayload.Type<>(MCA.locate("report_building"));
     public static final StreamCodec<FriendlyByteBuf, ReportBuildingMessage> STREAM_CODEC = StreamCodec.composite(
             ByteBufCodecs.idMapper(i -> Action.values()[i], Action::ordinal), ReportBuildingMessage::action,
-            ByteBufCodecs.optional(ByteBufCodecs.STRING_UTF8).map(o -> o.orElse(null), o -> o == null ? java.util.Optional.empty() : java.util.Optional.of(o)), ReportBuildingMessage::data,
+            ByteBufCodecs.optional(ByteBufCodecs.STRING_UTF8).map(
+                    optional -> optional.orElse(null), value -> value == null ? Optional.empty() : Optional.of(value)),
+            ReportBuildingMessage::data,
             ReportBuildingMessage::new
     );
 
@@ -46,13 +53,13 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
             case FORCE_TYPE, REMOVE, REMOVE_ROOM -> {
                 BlockPos playerPos = player.blockPosition();
                 Optional<Village> village = villages.findNearestVillage(player);
-                MCA.LOGGER.info("[BuildingRemove] stage=received action={} source={} villageId={}",
+                MCA.LOGGER.debug("[BuildingRemove] stage=received action={} source={} villageId={}",
                         action, playerPos, village.map(Village::getId).orElse(-1));
 
                 if (action == Action.REMOVE_ROOM
                         && village.flatMap(v -> v.getFunctionalRoomAt(playerPos)
                                 .filter(v::isStructuralGroundFloor)).isPresent()) {
-                    MCA.LOGGER.info("[BuildingRemove] stage=blocked-ground-floor source={}", playerPos);
+                    MCA.LOGGER.debug("[BuildingRemove] stage=blocked-ground-floor source={}", playerPos);
                     player.displayClientMessage(Component.translatable("blueprint.cannot_remove_ground_floor"), true);
                     return;
                 }
@@ -79,10 +86,6 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
                         }
                     } else {
                         for (Building b : v.getBuildings().values()) {
-                            if (action == Action.FORCE_TYPE && b.getBuildingType().grouped()) {
-                                continue;
-                            }
-
                             boolean exact = b.containsPos(playerPos);
                             boolean lenient = b.containsPositionWithMargin(
                                     playerPos,
@@ -125,7 +128,7 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
                 }
 
                 if (targetBuilding != null && targetVillage != null) {
-                    MCA.LOGGER.info(
+                    MCA.LOGGER.debug(
                             "[BuildingRemove] stage=target action={} source={} targetId={} structureId={} strict={} root={} exact={}",
                             action, playerPos, targetBuilding.getId(), targetBuilding.getEffectiveStructureId(),
                             targetBuilding.isStrictScan(), targetBuilding.isStructureRoot(), targetExact);
@@ -139,13 +142,12 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
                         }
                         targetVillage.markDirty();
                     } else if (action == Action.REMOVE_ROOM) {
-                        int structureId = targetBuilding.getEffectiveStructureId();
                         if (targetVillage.isStructuralGroundFloor(targetBuilding)) {
                             player.displayClientMessage(Component.translatable("blueprint.cannot_remove_ground_floor"), true);
                             return;
                         }
                         targetVillage.removeBuilding(targetBuilding.getId());
-                        MCA.LOGGER.info("[BuildingRemove] stage=room-removed source={} targetId={}",
+                        MCA.LOGGER.debug("[BuildingRemove] stage=room-removed source={} targetId={}",
                                 playerPos, targetBuilding.getId());
                         player.displayClientMessage(Component.translatable("blueprint.roomRemoved"), true);
                         if (targetVillage.getBuildings().isEmpty()) {
@@ -153,16 +155,16 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
                         }
                     } else if (targetBuilding.getBuildingType().grouped()) {
                         targetVillage.removeBuilding(targetBuilding.getId());
-                        MCA.LOGGER.info("[BuildingRemove] stage=building-removed source={} targetId={}",
+                        MCA.LOGGER.debug("[BuildingRemove] stage=building-removed source={} targetId={}",
                                 playerPos, targetBuilding.getId());
                     } else {
                         int structureId = targetBuilding.getEffectiveStructureId();
                         villages.removeStructure(targetVillage, structureId);
-                        MCA.LOGGER.info("[BuildingRemove] stage=structure-removed source={} structureId={}",
+                        MCA.LOGGER.debug("[BuildingRemove] stage=structure-removed source={} structureId={}",
                                 playerPos, structureId);
                     }
                 } else {
-                    MCA.LOGGER.info("[BuildingRemove] stage=no-target action={} source={} insideStructure={}",
+                    MCA.LOGGER.debug("[BuildingRemove] stage=no-target action={} source={} insideStructure={}",
                             action, playerPos,
                             village.map(v -> v.hasStructuralBuildingAt(playerPos)).orElse(false));
                     if (action == Action.REMOVE_ROOM
@@ -184,7 +186,7 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
         logAddScan("building-scan", scan.root());
         logAddScan("initial-room-scan", scan.room());
         if (scan.isRoomAmbiguous()) {
-            requestType(scan.room(), player, BuildingPolymorphMessage.ScanAction.BUILDING);
+            requestType(scan.room(), player, Action.ADD);
             return;
         }
         commitBuildingAndCurrentRoom(villages, player, scan, null);
@@ -238,7 +240,7 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
                                              InitialStructureScan scan,
                                              String forcedType) {
         Building.validationResult result = villages.commitInitialStructure(scan, forcedType);
-        MCA.LOGGER.info("[BuildingAdd] stage=building-commit result={} source={} existing={}",
+        MCA.LOGGER.debug("[BuildingAdd] stage=building-commit result={} source={} existing={}",
                 result, scan.root().source(), scan.root().existingBuildingId());
         if (result != Building.validationResult.SUCCESS) {
             displayScanResult(player, result);
@@ -252,7 +254,7 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
                            BuildingScanResult scan,
                            String forcedType,
                            boolean updating) {
-        MCA.LOGGER.info("[BuildingAdd] stage={} result={} source={} existing={}",
+        MCA.LOGGER.debug("[BuildingAdd] stage={} result={} source={} existing={}",
                 updating ? "update-room-commit" : "add-room-commit",
                 scan.result(), scan.source(), scan.existingBuildingId());
         if (!updating && scan.village() != null
@@ -267,15 +269,13 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
             return;
         }
         if (forcedType == null && scan.result() == Building.validationResult.SUCCESS && scan.isAmbiguous()) {
-            BuildingPolymorphMessage.ScanAction action = updating
-                    ? BuildingPolymorphMessage.ScanAction.UPDATE_ROOM
-                    : BuildingPolymorphMessage.ScanAction.ADD_ROOM;
+            Action action = updating ? Action.UPDATE_ROOM : Action.ADD_ROOM;
             requestType(scan, player, action, updating ? scan.existingBuildingId() : -1);
             return;
         }
 
         Building.validationResult result = villages.commitBuilding(scan, forcedType);
-        MCA.LOGGER.info("[BuildingAdd] stage={} result={} source={} existing={}",
+        MCA.LOGGER.debug("[BuildingAdd] stage={} result={} source={} existing={}",
                 updating ? "update-room-commit-result" : "add-room-commit-result",
                 result, scan.source(), scan.existingBuildingId());
         if (result == Building.validationResult.SUCCESS) {
@@ -287,7 +287,7 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
 
     private static void logAddScan(String stage, BuildingScanResult scan) {
         Building building = scan.building();
-        MCA.LOGGER.info(
+        MCA.LOGGER.debug(
                 "[BuildingAdd] stage={} result={} source={} strict={} ambiguous={} types={} existing={} merged={} floorY={} groundFloorY={} floorRegions={} bounds={}..{}",
                 stage, scan.result(), scan.source(), scan.strictScan(), scan.isAmbiguous(), scan.matchingTypes(),
                 scan.existingBuildingId(), scan.mergedBuildingIds(), building.getFloorY(), building.getGroundFloorY(),
@@ -297,13 +297,13 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
 
     private static void requestType(BuildingScanResult scan,
                                     ServerPlayer player,
-                                    BuildingPolymorphMessage.ScanAction action) {
+                                    Action action) {
         requestType(scan, player, action, -1);
     }
 
     private static void requestType(BuildingScanResult scan,
                                     ServerPlayer player,
-                                    BuildingPolymorphMessage.ScanAction action,
+                                    Action action,
                                     int expectedRoomId) {
         Network.sendToPlayer(new BuildingPolymorphMessage(
                 scan.matchingTypes(), scan.source(), action, expectedRoomId), player);

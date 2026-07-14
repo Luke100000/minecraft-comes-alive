@@ -4,7 +4,7 @@ import net.conczin.mca.MCA;
 import net.conczin.mca.client.gui.widget.WidgetUtils;
 import net.conczin.mca.network.Network;
 import net.conczin.mca.network.c2s.ConfirmBuildingPolymorphMessage;
-import net.conczin.mca.network.s2c.BuildingPolymorphMessage;
+import net.conczin.mca.network.c2s.ReportBuildingMessage;
 import net.conczin.mca.resources.BuildingTypes;
 import net.conczin.mca.resources.data.BuildingType;
 import net.conczin.mca.util.compat.ButtonWidget;
@@ -27,14 +27,14 @@ public class BuildingPolymorphScreen extends Screen {
 
     private final List<String> matchingTypes;
     private final BlockPos scanPos;
-    private final BuildingPolymorphMessage.ScanAction action;
+    private final ReportBuildingMessage.Action action;
     private final int expectedRoomId;
     private final Screen returnScreen;
     private int page;
 
     public BuildingPolymorphScreen(List<String> matchingTypes,
                                    BlockPos scanPos,
-                                   BuildingPolymorphMessage.ScanAction action,
+                                   ReportBuildingMessage.Action action,
                                    int expectedRoomId,
                                    Screen returnScreen) {
         super(Component.translatable("gui.building_polymorph.title"));

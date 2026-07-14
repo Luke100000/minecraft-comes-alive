@@ -104,8 +104,6 @@ final class BuildingFloorRegionDetector {
                 .thenComparingInt(DetectedComponent::maxZ));
         return List.copyOf(components);
     }
-
-
     private static List<DetectedSpan> buildSpans(List<HorizontalCell> cells) {
         Map<Integer, List<Integer>> xsByZ = new TreeMap<>();
         for (HorizontalCell cell : cells) {

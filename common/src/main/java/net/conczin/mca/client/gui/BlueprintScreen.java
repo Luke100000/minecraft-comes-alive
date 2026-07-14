@@ -219,14 +219,14 @@ public class BlueprintScreen extends ExtendedScreen {
                 bx = width / 2 + 180 - 64 - 16;
                 by = height / 2 - 56 + 22 * 3;
                 structureScanButton = addRenderableWidget(new TooltipButtonWidget(
-                        bx, by, 96, 20, getStructureScanTranslationKey(), b -> {
+                        bx, by, 96, 20, getStructureScanTranslationKey(getPlayerStructuralLookup().position()), b -> {
                     requestStructureScan();
                 }));
                 by += 22;
 
                 //remove only the room the player is currently standing in
                 removeRoomButton = addRenderableWidget(new TooltipButtonWidget(bx, by, 96, 20, "gui.blueprint.removeRoom", b -> {
-                    MCA.LOGGER.info("[BuildingRemove] stage=client-click action=REMOVE_ROOM");
+                    MCA.LOGGER.debug("[BuildingRemove] stage=client-click action=REMOVE_ROOM");
                     Network.sendToServer(new ReportBuildingMessage(ReportBuildingMessage.Action.REMOVE_ROOM));
                 }));
                 by += 22;
@@ -358,8 +358,9 @@ public class BlueprintScreen extends ExtendedScreen {
     public void render(GuiGraphics context, int sizeX, int sizeY, float offset) {
         if (village != null && ("map".equals(page) || "advanced".equals(page))) {
             updateFloorControls();
-            updateStructureScanControl();
-            updateRemoveRoomControl();
+            Village.StructuralLookup structuralLookup = getPlayerStructuralLookup();
+            updateStructureScanControl(structuralLookup);
+            updateRemoveRoomControl(structuralLookup);
         }
 
         super.render(context, sizeX, sizeY, offset);
@@ -395,8 +396,8 @@ public class BlueprintScreen extends ExtendedScreen {
         minecraft.gui.renderOverlayMessage(context, minecraft.getTimer());
     }
 
-    private ReportBuildingMessage.Action getStructureScanAction() {
-        return switch (getStructuralPosition()) {
+    private static ReportBuildingMessage.Action getStructureScanAction(Village.StructuralPosition structuralPosition) {
+        return switch (structuralPosition) {
             case OUTSIDE -> ReportBuildingMessage.Action.ADD;
             case ATTACHABLE_ROOM -> ReportBuildingMessage.Action.ADD_ROOM;
             case REGISTERED_ROOM -> ReportBuildingMessage.Action.UPDATE_ROOM;
@@ -404,7 +405,7 @@ public class BlueprintScreen extends ExtendedScreen {
     }
 
     private void requestStructureScan() {
-        ReportBuildingMessage.Action action = getStructureScanAction();
+        ReportBuildingMessage.Action action = getStructureScanAction(getPlayerStructuralLookup().position());
         selectPlayerFloorOnNextVillageResponse = action == ReportBuildingMessage.Action.ADD_ROOM
                 || action == ReportBuildingMessage.Action.UPDATE_ROOM;
         Network.sendToServer(new ReportBuildingMessage(action));
@@ -414,33 +415,33 @@ public class BlueprintScreen extends ExtendedScreen {
         selectPlayerFloorOnNextVillageResponse = false;
     }
 
-    private Village.StructuralPosition getStructuralPosition() {
+    private Village.StructuralLookup getPlayerStructuralLookup() {
         if (village == null || minecraft == null || minecraft.player == null) {
-            return Village.StructuralPosition.OUTSIDE;
+            return new Village.StructuralLookup(Village.StructuralPosition.OUTSIDE, Optional.empty());
         }
 
-        return village.getStructuralPosition(minecraft.player.blockPosition());
+        return village.getStructuralLookup(minecraft.player.blockPosition());
     }
 
-    private String getStructureScanTranslationKey() {
-        return switch (getStructuralPosition()) {
+    private static String getStructureScanTranslationKey(Village.StructuralPosition structuralPosition) {
+        return switch (structuralPosition) {
             case OUTSIDE -> "gui.blueprint.addBuilding";
             case ATTACHABLE_ROOM -> "gui.blueprint.addRoom";
             case REGISTERED_ROOM -> "gui.blueprint.updateRoom";
         };
     }
 
-    private void updateStructureScanControl() {
+    private void updateStructureScanControl(Village.StructuralLookup structuralLookup) {
         if (structureScanButton == null) {
             return;
         }
 
-        Village.StructuralPosition structuralPosition = getStructuralPosition();
+        Village.StructuralPosition structuralPosition = structuralLookup.position();
         boolean insideBuilding = structuralPosition != Village.StructuralPosition.OUTSIDE;
         boolean roomRegistered = structuralPosition == Village.StructuralPosition.REGISTERED_ROOM;
         int y = height / 2 - 56 + 22 * 3;
 
-        structureScanButton.setMessage(getStructureScanTranslationKey());
+        structureScanButton.setMessage(getStructureScanTranslationKey(structuralPosition));
         structureScanButton.active = true;
         structureScanButton.setY(y);
         y += 22;
@@ -467,13 +468,13 @@ public class BlueprintScreen extends ExtendedScreen {
         }
     }
 
-    private void updateRemoveRoomControl() {
+    private void updateRemoveRoomControl(Village.StructuralLookup structuralLookup) {
         if (removeRoomButton == null) {
             return;
         }
 
-        boolean onGroundFloor = minecraft != null && minecraft.player != null && village != null
-                && village.getFunctionalRoomAt(minecraft.player.blockPosition())
+        boolean onGroundFloor = village != null
+                && structuralLookup.functionalRoom()
                 .filter(village::isStructuralGroundFloor)
                 .isPresent();
         removeRoomButton.active = removeRoomButton.visible && !onGroundFloor;
@@ -517,7 +518,7 @@ public class BlueprintScreen extends ExtendedScreen {
         WidgetUtils.drawRectangle(context, width / 2 - mapSize, y - mapSize, width / 2 + mapSize, y + mapSize, 0xffffff88);
 
         //hint
-        if (!village.isAutoScan() && village.getBuildings().size() <= 1) {
+        if (!village.isAutoScan() && village.getStructureCount() <= 1) {
             int hintY = floorLayout.ordinals().size() > 1 ? height / 2 + 134 : height / 2 + 90;
             context.drawCenteredString(font, Component.translatable("gui.blueprint.autoScanDisabled"), width / 2, hintY, 0xaaffffff);
         }
@@ -530,15 +531,8 @@ public class BlueprintScreen extends ExtendedScreen {
         int mouseLocalX = (int) ((mouseX - width / 2.0) / sc + village.getCenter().getX());
         int mouseLocalY = (int) ((mouseY - y) / sc + village.getCenter().getZ());
         matrices.translate(width / 2.0, y, 0);
-        matrices.scale(sc, sc, 0.0f);
+        matrices.scale(sc, sc, 1.0f);
         matrices.translate(-village.getCenter().getX(), -village.getCenter().getZ(), 0);
-
-        //show the players location
-        assert minecraft != null;
-        LocalPlayer player = minecraft.player;
-        if (player != null && (selectedFloor == null || floorLayout.isPlayerVisible(player, selectedFloor, village))) {
-            WidgetUtils.drawRectangle(context, (int) player.getX() - 1, (int) player.getZ() - 1, (int) player.getX() + 1, (int) player.getZ() + 1, 0xffff00ff);
-        }
 
         //buildings
         Map<Integer, Building> hoverBuildings = new LinkedHashMap<>();
@@ -597,6 +591,19 @@ public class BlueprintScreen extends ExtendedScreen {
                             iconPosition.getX(), iconPosition.getZ(), bt.iconU(), bt.iconV());
                 }
             }
+        }
+
+        // The player is global map context, not part of a floor, and stays above every icon.
+        assert minecraft != null;
+        LocalPlayer player = minecraft.player;
+        if (player != null) {
+            matrices.pushPose();
+            matrices.translate(0.0f, 0.0f, 100.0f);
+            WidgetUtils.drawRectangle(context,
+                    (int) player.getX() - 1, (int) player.getZ() - 1,
+                    (int) player.getX() + 1, (int) player.getZ() + 1,
+                    0xffff00ff);
+            matrices.popPose();
         }
 
         matrices.popPose();
@@ -749,7 +756,7 @@ public class BlueprintScreen extends ExtendedScreen {
                 : List.of(hoverBuilding);
         if (selectedFloor == null
                 && !hoverBuilding.getBuildingType().grouped()
-                && floorLayout.ordinals().size() > 1) {
+                && (floorLayout.ordinals().size() > 1 || tooltipBuildings.size() > 1)) {
             return getAllFloorsTooltip(tooltipBuildings);
         }
 
@@ -979,17 +986,18 @@ public class BlueprintScreen extends ExtendedScreen {
     public void setVillage(Village village) {
         this.village = village;
         this.floorLayout = village == null ? BlueprintFloorLayout.empty() : BlueprintFloorLayout.build(village);
-        Village.StructuralPosition structuralPosition = getStructuralPosition();
+        Village.StructuralLookup structuralLookup = getPlayerStructuralLookup();
+        Village.StructuralPosition structuralPosition = structuralLookup.position();
         if (selectPlayerFloorOnNextVillageResponse
                 && structuralPosition == Village.StructuralPosition.REGISTERED_ROOM) {
-            selectPlayerFloor();
+            selectPlayerFloor(structuralLookup);
         }
         selectPlayerFloorOnNextVillageResponse = false;
         reconcileSelectedFloor();
         updateFloorControls();
         updateBuildingIconsControl();
-        updateStructureScanControl();
-        updateRemoveRoomControl();
+        updateStructureScanControl(structuralLookup);
+        updateRemoveRoomControl(structuralLookup);
 
         if (village == null) {
             setPage("empty");
@@ -998,17 +1006,12 @@ public class BlueprintScreen extends ExtendedScreen {
         }
     }
 
-    private void selectPlayerFloor() {
-        if (minecraft == null || minecraft.player == null || village == null) {
-            return;
-        }
-        floorLayout.ordinals().stream()
-                .filter(ordinal -> floorLayout.isPlayerVisible(minecraft.player, ordinal, village))
-                .findFirst()
-                .ifPresent(ordinal -> {
-                    selectedFloorOrdinal = ordinal;
-                    rememberedFloorOrdinal = ordinal;
-                });
+    private void selectPlayerFloor(Village.StructuralLookup structuralLookup) {
+        structuralLookup.functionalRoom()
+                .ifPresent(room -> floorLayout.floorOrdinalFor(room).ifPresent(ordinal -> {
+                        selectedFloorOrdinal = ordinal;
+                        rememberedFloorOrdinal = ordinal;
+                    }));
     }
 
     public void setVillageData(Rank rank, int reputation, boolean isVillage, Set<String> completedTasks, Map<Rank, List<Task>> tasks) {

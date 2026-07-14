@@ -186,7 +186,7 @@ final class BuildingStructureManager {
                 continue;
             }
 
-            Candidate candidate = scoreCandidate(scanned, existing, village, preferredBuildingId);
+            Candidate candidate = scoreCandidate(scanned, existing, preferredBuildingId);
             if (candidate != null) {
                 candidates.add(candidate);
             }
@@ -234,10 +234,9 @@ final class BuildingStructureManager {
 
     private static Candidate scoreCandidate(Building scanned,
                                             Building existing,
-                                            Village village,
                                             int preferredBuildingId) {
         boolean preferred = existing.getId() == preferredBuildingId;
-        if (scanned.isStrictScan() && !preferred && !sharesDetectedStructureFloor(scanned, existing, village)) {
+        if (scanned.isStrictScan() && !preferred && !sharesSemanticFloor(scanned, existing)) {
             return null;
         }
 
@@ -294,23 +293,9 @@ final class BuildingStructureManager {
         return new Candidate(existing, score, sourceAnchor);
     }
 
-    private static boolean sharesDetectedStructureFloor(Building scanned,
-                                                         Building existing,
-                                                         Village village) {
-        Building root = village.getBuildings().values().stream()
-                .filter(Building::isStructureContainer)
-                .filter(candidate -> candidate.getEffectiveStructureId() == existing.getEffectiveStructureId())
-                .findFirst()
-                .orElse(null);
-        if (root == null) {
-            return scanned.sharesFloorBandWith(existing);
-        }
-
-        OptionalInt scannedAnchor = root.getClosestFloorAnchorY(scanned.getFloorY());
-        OptionalInt existingAnchor = root.getClosestFloorAnchorY(existing.getFloorY());
-        return scannedAnchor.isPresent()
-                && existingAnchor.isPresent()
-                && scannedAnchor.getAsInt() == existingAnchor.getAsInt();
+    private static boolean sharesSemanticFloor(Building scanned, Building existing) {
+        return Math.abs(scanned.getFloorY() - existing.getFloorY())
+                <= Building.SEMANTIC_FLOOR_TOLERANCE;
     }
 
     /**
@@ -331,7 +316,7 @@ final class BuildingStructureManager {
             boolean validRoot = hasStructure && hasValidRoot(village, existing.getStructureId());
             boolean attached = complete && !grouped && validRoot
                     && room.isStructurallyAttachedTo(existing, ROOM_ATTACHMENT_VERTICAL_GAP);
-            MCA.LOGGER.info(
+            MCA.LOGGER.debug(
                     "[BuildingRoomAttach] roomSource={} roomBounds={}..{} existingId={} structure={} root={} complete={} grouped={} hasStructure={} validRoot={} bounds={}..{} attached={}",
                     room.getSourceBlock(), room.getPos0(), room.getPos1(), existing.getId(), existing.getStructureId(),
                     existing.isStructureRoot(), complete, grouped, hasStructure, validRoot,

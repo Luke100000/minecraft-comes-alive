@@ -18,8 +18,10 @@ import net.minecraft.world.level.block.*;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BedPart;
 import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
+import net.minecraft.world.level.levelgen.Heightmap;
 
 import java.util.*;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public class Building {
@@ -118,7 +120,9 @@ public class Building {
 
         blocks.putAll(NbtHelper.toMap(v.getCompound("blocks2"),
                 ResourceLocation::parse,
-                l -> NbtHelper.toList(l, Building::loadBlockPos)));
+                l -> NbtHelper.toStream(l, Building::loadBlockPos)
+                        .filter(Objects::nonNull)
+                        .collect(Collectors.toCollection(ArrayList::new))));
     }
 
     public CompoundTag save() {
@@ -218,21 +222,6 @@ public class Building {
                 .orElseGet(() -> Math.abs(floorY - pos.getY()));
     }
 
-    OptionalInt getClosestFloorAnchorY(int y) {
-        return floorRegions.stream()
-                .min(Comparator.comparingInt(region -> Math.abs(region.anchorY() - y)))
-                .stream()
-                .mapToInt(BuildingFloorRegion::anchorY)
-                .findFirst();
-    }
-
-    public int getLowestFloorY() {
-        return floorRegions.stream()
-                .mapToInt(BuildingFloorRegion::anchorY)
-                .min()
-                .orElse(floorY);
-    }
-
     public boolean isOnGroundFloorY(int y) {
         return Math.abs(groundFloorY - y) <= SEMANTIC_FLOOR_TOLERANCE;
     }
@@ -279,7 +268,9 @@ public class Building {
     }
 
     public boolean isFunctionalRoom() {
-        return strictScan && !structureRoot && !getBuildingType().grouped();
+        // Older automatic scans create a strict root directly. It is both the
+        // structure root and its only functional room until another room is added.
+        return strictScan && !getBuildingType().grouped();
     }
 
     public void setStructureRoot(boolean structureRoot) {
@@ -525,33 +516,47 @@ public class Building {
             EntranceCells normalDoors = classifyNormalDoorEntrances(world, doorBlocks, reachableInteriorCells);
             EntranceCells trapDoors = classifyTrapDoorEntrances(world, trapDoorBlocks, reachableInteriorCells);
             Collection<BlockPos> entranceInteriorCells;
+            Set<ExteriorEntrance> exteriorEntrances;
             String entranceSource;
             if (!normalDoors.exterior().isEmpty()) {
-                entranceInteriorCells = normalDoors.exterior();
+                entranceInteriorCells = normalDoors.exteriorInteriorCells();
+                exteriorEntrances = normalDoors.exterior();
                 entranceSource = "exterior-door";
             } else if (!trapDoors.exterior().isEmpty()) {
-                entranceInteriorCells = trapDoors.exterior();
+                entranceInteriorCells = trapDoors.exteriorInteriorCells();
+                exteriorEntrances = trapDoors.exterior();
                 entranceSource = "exterior-trapdoor";
             } else if (!normalDoors.all().isEmpty()) {
                 entranceInteriorCells = normalDoors.all();
+                exteriorEntrances = Set.of();
                 entranceSource = "door-fallback";
             } else if (!trapDoors.all().isEmpty()) {
                 entranceInteriorCells = trapDoors.all();
+                exteriorEntrances = Set.of();
                 entranceSource = "trapdoor-fallback";
             } else {
                 entranceInteriorCells = List.of();
+                exteriorEntrances = Set.of();
                 entranceSource = "floor-fallback";
             }
-            groundFloorY = determineGroundFloorY(
-                    entranceInteriorCells,
-                    floorRegions,
-                    floorY
+            List<TerrainEntranceSample> terrainSamples = sampleTerrainEntrances(
+                    world,
+                    exteriorEntrances
             );
+            GroundFloorSelection groundFloorSelection = determineGroundFloorY(
+                    entranceInteriorCells,
+                    terrainSamples,
+                    floorRegions,
+                    floorY,
+                    entranceSource
+            );
+            groundFloorY = groundFloorSelection.floorY();
             hasGroundFloorAnchor = true;
-            MCA.LOGGER.info(
-                    "[BuildingGroundFloor] source={} normalDoors={} exteriorNormalCells={} trapdoors={} exteriorTrapdoorCells={} selection={} floorY={} groundFloorY={}",
-                    center, doorBlocks.size(), normalDoors.exterior().size(), trapDoorBlocks.size(),
-                    trapDoors.exterior().size(), entranceSource, floorY, groundFloorY);
+            MCA.LOGGER.debug(
+                    "[BuildingGroundFloor] source={} normalDoors={} exteriorNormalCells={} trapdoors={} exteriorTrapdoorCells={} selection={} floorY={} groundFloorY={} terrainSamples={}",
+                    center, doorBlocks.size(), normalDoors.exteriorInteriorCells().size(), trapDoorBlocks.size(),
+                    trapDoors.exteriorInteriorCells().size(), groundFloorSelection.source(), floorY, groundFloorY,
+                    terrainSamples);
 
             //determine type
             if (isTypeForced()) {
@@ -565,7 +570,7 @@ public class Building {
                                                               Collection<BlockPos> doorBlocks,
                                                               Set<BlockPos> reachableInteriorCells) {
         Set<BlockPos> all = new HashSet<>();
-        Set<BlockPos> exterior = new HashSet<>();
+        Set<ExteriorEntrance> exterior = new HashSet<>();
 
         for (BlockPos doorPos : doorBlocks) {
             BlockState state = world.getBlockState(doorPos);
@@ -594,7 +599,7 @@ public class Building {
                                                             Collection<BlockPos> trapDoorBlocks,
                                                             Set<BlockPos> reachableInteriorCells) {
         Set<BlockPos> all = new HashSet<>();
-        Set<BlockPos> exterior = new HashSet<>();
+        Set<ExteriorEntrance> exterior = new HashSet<>();
 
         for (BlockPos trapDoorPos : trapDoorBlocks) {
             List<BlockPos> neighbours = Arrays.stream(directions)
@@ -609,7 +614,7 @@ public class Building {
                                               Collection<BlockPos> neighbours,
                                               Set<BlockPos> reachableInteriorCells,
                                               Set<BlockPos> allInteriorCells,
-                                              Set<BlockPos> exteriorInteriorCells) {
+                                              Set<ExteriorEntrance> exteriorEntrances) {
         List<BlockPos> interiorNeighbours = neighbours.stream()
                 .filter(reachableInteriorCells::contains)
                 .toList();
@@ -618,37 +623,83 @@ public class Building {
         }
 
         allInteriorCells.addAll(interiorNeighbours);
-        boolean hasPassableExterior = neighbours.stream()
+        List<BlockPos> exteriorNeighbours = neighbours.stream()
                 .filter(pos -> !reachableInteriorCells.contains(pos))
-                .map(world::getBlockState)
-                .anyMatch(state -> state.isAir() || !state.getFluidState().isEmpty());
-        if (hasPassableExterior) {
-            exteriorInteriorCells.addAll(interiorNeighbours);
+                .filter(pos -> {
+                    BlockState state = world.getBlockState(pos);
+                    return state.isAir() || !state.getFluidState().isEmpty();
+                })
+                .toList();
+        for (BlockPos interior : interiorNeighbours) {
+            for (BlockPos exterior : exteriorNeighbours) {
+                exteriorEntrances.add(new ExteriorEntrance(interior, exterior));
+            }
         }
     }
 
-    private record EntranceCells(Set<BlockPos> all, Set<BlockPos> exterior) {
+    private record EntranceCells(Set<BlockPos> all, Set<ExteriorEntrance> exterior) {
         private EntranceCells {
             all = Set.copyOf(all);
             exterior = Set.copyOf(exterior);
         }
+
+        private Set<BlockPos> exteriorInteriorCells() {
+            return exterior.stream().map(ExteriorEntrance::interior).collect(Collectors.toUnmodifiableSet());
+        }
     }
 
-    private static int determineGroundFloorY(Collection<BlockPos> entranceInteriorCells,
-                                             List<BuildingFloorRegion> regions,
-                                             int fallbackY) {
+    private record ExteriorEntrance(BlockPos interior, BlockPos exterior) {
+    }
+
+    private static GroundFloorSelection determineGroundFloorY(Collection<BlockPos> entranceInteriorCells,
+                                                               Collection<TerrainEntranceSample> terrainSamples,
+                                                               List<BuildingFloorRegion> regions,
+                                                               int fallbackY,
+                                                               String fallbackSource) {
+        OptionalInt terrainEntranceY = terrainSamples.stream()
+                .filter(sample -> Math.abs(sample.terrainY() - sample.interior().getY())
+                        <= SEMANTIC_FLOOR_TOLERANCE)
+                .mapToInt(sample -> sample.interior().getY())
+                .max();
+        if (terrainEntranceY.isPresent()) {
+            return new GroundFloorSelection(terrainEntranceY.getAsInt(), "terrain-" + fallbackSource);
+        }
         if (entranceInteriorCells.isEmpty() || regions.isEmpty()) {
-            return fallbackY;
+            return new GroundFloorSelection(fallbackY, fallbackSource);
         }
 
-        return regions.stream()
+        int entranceFloorY = regions.stream()
                 .min(Comparator
                         .comparingInt((BuildingFloorRegion region) -> minimumEntranceDistance(
-                                entranceInteriorCells, region, true))
-                        .thenComparingInt(region -> minimumEntranceDistance(entranceInteriorCells, region, false))
+                                entranceInteriorCells, region, false))
+                        .thenComparingInt(region -> minimumEntranceDistance(entranceInteriorCells, region, true))
                         .thenComparingInt(BuildingFloorRegion::anchorY))
                 .map(BuildingFloorRegion::anchorY)
                 .orElse(fallbackY);
+        return new GroundFloorSelection(entranceFloorY, fallbackSource);
+    }
+
+    /**
+     * Only terrain immediately outside a detected entrance can validate a ground
+     * floor. Sampling the whole building perimeter lets unrelated slopes and lower
+     * exposed walls redefine an otherwise unambiguous entrance floor.
+     */
+    private static List<TerrainEntranceSample> sampleTerrainEntrances(Level world,
+                                                                      Collection<ExteriorEntrance> exteriorEntrances) {
+        return exteriorEntrances.stream()
+                .map(entrance -> new TerrainEntranceSample(
+                        entrance.interior(),
+                        entrance.exterior(),
+                        world.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
+                                entrance.exterior().getX(), entrance.exterior().getZ())
+                ))
+                .toList();
+    }
+
+    private record GroundFloorSelection(int floorY, String source) {
+    }
+
+    private record TerrainEntranceSample(BlockPos interior, BlockPos exterior, int terrainY) {
     }
 
     private static int minimumEntranceDistance(Collection<BlockPos> entranceInteriorCells,
