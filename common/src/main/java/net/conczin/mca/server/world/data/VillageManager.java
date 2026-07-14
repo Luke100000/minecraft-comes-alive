@@ -66,6 +66,9 @@ public class VillageManager extends SavedData implements Iterable<Village> {
                 setDirty();
             } else {
                 villages.put(village.getId(), village);
+                if (BuildingStructureManager.ensureHierarchy(village)) {
+                    setDirty();
+                }
             }
         }
     }
@@ -263,25 +266,104 @@ public class VillageManager extends SavedData implements Iterable<Village> {
     }
 
     public BuildingScanResult analyzeBuilding(BlockPos pos, boolean strictScan) {
-        BuildingBlockedResult blockResult = getBlockedResult(pos);
-        Building building;
-        if (blockResult.existingBuilding() != null) {
-            building = new Building(blockResult.existingBuilding().getSourceBlock(), blockResult.existingBuilding().isStrictScan());
-        } else {
-            building = new Building(pos, strictScan);
+        return analyzeBuilding(pos, strictScan, false, null, -1);
+    }
+
+    public BuildingScanResult analyzeRoom(BlockPos pos) {
+        return analyzeBuilding(pos, true, true, null, -1);
+    }
+
+    private BuildingScanResult analyzeBuilding(BlockPos pos,
+                                               boolean strictScan,
+                                               boolean roomScan,
+                                               Village knownVillage,
+                                               int preferredBuildingId) {
+        BuildingBlockedResult blockResult = knownVillage == null ? getBlockedResult(pos) : null;
+        Village village = knownVillage != null ? knownVillage : blockResult.village();
+
+        ensureStructureHierarchy(village);
+
+        Building locatedExisting = blockResult == null ? null : blockResult.existingBuilding();
+        Building preferred = village == null
+                ? null
+                : preferredBuildingId >= 0
+                ? village.getBuilding(preferredBuildingId).orElse(null)
+                : locatedExisting;
+        int effectivePreferredId = preferred == null ? preferredBuildingId : preferred.getId();
+
+        Set<BlockPos> blocked = village == null
+                ? Set.of()
+                : new HashSet<>(getBlockedSet(village));
+
+        /*
+         * Room discovery must be able to cross the old source anchor so expansions,
+         * shrinks and splits can be identified after the new geometry is known.
+         * Cross-structure conflicts are rejected by the identity matcher.
+         */
+        if (roomScan) {
+            blocked.clear();
+        } else if (preferred != null && preferred.hasStructure()) {
+            int structureId = preferred.getEffectiveStructureId();
+            BuildingStructureManager.members(village, structureId)
+                    .forEach(member -> blocked.remove(member.getSourceBlock()));
         }
-        Building.validationResult result = building.validateBuilding(world, blockResult.blocked());
-        List<String> matchingTypes = new java.util.ArrayList<>();
+
+        boolean effectiveStrictScan = roomScan
+                || preferred == null
+                || preferredBuildingId >= 0
+                ? strictScan
+                : preferred.isStrictScan();
+        BlockPos scanSource = !roomScan && preferred != null && preferredBuildingId < 0
+                ? preferred.getSourceBlock()
+                : pos;
+        Building building = new Building(scanSource, effectiveStrictScan);
+
+        boolean allowMissingEntrance = roomScan
+                || (preferred != null && preferred.hasStructure() && !preferred.isStructureRoot());
+
+        Building.validationResult result = building.validateBuilding(world, blocked, allowMissingEntrance);
+        int existingBuildingId = -1;
+        List<Integer> mergedBuildingIds = List.of();
+
+        if (result == Building.validationResult.SUCCESS) {
+            if (roomScan) {
+                int detectedFloorCount = building.getFloorRegions().size();
+                building.retainFloorClosestTo(scanSource.getY());
+                MCA.LOGGER.info(
+                        "[BlueprintFloors] Room source={} selectedBandY={} detectedBands={} retainedBands={}",
+                        scanSource, building.getFloorY(), detectedFloorCount, building.getFloorRegions().size());
+            }
+
+            BuildingStructureManager.MatchResult match =
+                    BuildingStructureManager.matchExistingRoom(building, village, effectivePreferredId);
+
+            if (match.result() != Building.validationResult.SUCCESS) {
+                result = match.result();
+            } else if (match.hasMatch()) {
+                Building existing = match.primary();
+                building.setStructureId(existing.getStructureId());
+                building.setStructureRoot(existing.isStructureRoot());
+                existingBuildingId = existing.getId();
+                mergedBuildingIds = match.mergedBuildingIds();
+            } else if (roomScan) {
+                result = BuildingStructureManager.assignNewRoom(building, village);
+            }
+        }
+
+        List<String> matchingTypes = new ArrayList<>();
         if (result == Building.validationResult.SUCCESS) {
             building.getVisibleMatchingTypes().forEach(bt -> matchingTypes.add(bt.name()));
         }
+
         return new BuildingScanResult(
-            result,
-            building.getSourceBlock(),
-            building.isStrictScan(),
-            building,
-            matchingTypes,
-            blockResult.village()
+                result,
+                building.getSourceBlock(),
+                building.isStrictScan(),
+                building,
+                matchingTypes,
+                village,
+                existingBuildingId,
+                mergedBuildingIds
         );
     }
 
@@ -295,49 +377,68 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         if (forcedType == null && scan.isAmbiguous()) {
             return Building.validationResult.INVALID_TYPE;
         }
-        return commitBuilding(scan.building(), scan.village(), forcedType);
-    }
 
-    private Building.validationResult commitBuilding(Building building, Village village, String forcedType) {
-        Village targetVillage = village;
+        Building building = scan.building();
+        Village targetVillage = scan.village();
         if (targetVillage == null) {
             targetVillage = new Village(lastVillageId++, world);
+        } else {
+            ensureStructureHierarchy(targetVillage);
         }
-        Building existing = targetVillage.getBuildings().values().stream()
-                .filter(b -> b.getSourceBlock().equals(building.getSourceBlock()))
-                .findFirst().orElse(null);
+
+        Building existing = scan.hasExistingBuilding()
+                ? targetVillage.getBuilding(scan.existingBuildingId()).orElse(null)
+                : null;
+
         if (existing != null) {
-            existing.getBlocks().clear();
-            existing.getBlocks().putAll(building.getBlocks());
-            existing.setLastScan(world.getGameTime());
+            int structureId = existing.getEffectiveStructureId();
+            boolean mergedAcrossStructures = scan.mergedBuildingIds().stream()
+                    .map(targetVillage::getBuilding)
+                    .flatMap(Optional::stream)
+                    .anyMatch(candidate -> candidate.getEffectiveStructureId() != structureId);
+            if (mergedAcrossStructures) {
+                return Building.validationResult.AMBIGUOUS_STRUCTURE;
+            }
+
+            // The scanned object is already fully validated and already has a resolved
+            // type. Copy only after every rejectable condition above has passed.
+            existing.copyScannedGeometryFrom(building, world);
             if (forcedType != null) {
                 existing.setTypeForced(true);
                 existing.setType(forcedType);
             } else {
                 existing.setTypeForced(false);
-                existing.determineType();
+                existing.setType(building.getType());
             }
-            existing.validateBuilding(world, getBlockedSet(targetVillage));
+
+            for (int mergedId : scan.mergedBuildingIds()) {
+                if (mergedId != existing.getId()) {
+                    targetVillage.removeBuilding(mergedId);
+                }
+            }
         } else {
             if (forcedType != null) {
                 building.setTypeForced(true);
                 building.setType(forcedType);
             } else {
+                // validateBuilding already resolved a valid unambiguous type.
                 building.setTypeForced(false);
-                building.determineType();
             }
-            BuildingBlockedResult blockResult = getBlockedResult(building.getSourceBlock());
-            Building.validationResult result = building.validateBuilding(world, blockResult.blocked());
-            if (result != Building.validationResult.SUCCESS) {
-                return result;
-            }
+
             if (targetVillage.getBuildings().values().stream().anyMatch(b -> b.isIdentical(building))) {
                 return Building.validationResult.IDENTICAL;
             }
+
             villages.put(targetVillage.getId(), targetVillage);
             building.setId(lastBuildingId++);
+            if (!building.hasStructure()) {
+                building.setStructureId(building.getId());
+                building.setStructureRoot(true);
+            }
             targetVillage.getBuildings().put(building.getId(), building);
         }
+
+        BuildingStructureManager.ensureHierarchy(targetVillage);
         targetVillage.calculateDimensions();
         Village finalVillage = targetVillage;
         villages.values().stream()
@@ -355,6 +456,77 @@ public class VillageManager extends SavedData implements Iterable<Village> {
                 });
         setDirty();
         return Building.validationResult.SUCCESS;
+    }
+
+    public Building.validationResult processRoom(BlockPos pos, String forcedType) {
+        return commitBuilding(analyzeRoom(pos), forcedType);
+    }
+
+    public void ensureStructureHierarchy(Village village) {
+        if (BuildingStructureManager.ensureHierarchy(village)) {
+            setDirty();
+        }
+    }
+
+    public int getStructureMemberCount(Village village, int structureId) {
+        return BuildingStructureManager.memberCount(village, structureId);
+    }
+
+    public void removeStructure(Village village, int structureId) {
+        BuildingStructureManager.removeStructure(village, structureId);
+        if (village != null && village.getBuildings().isEmpty()) {
+            removeVillage(village.getId());
+        }
+        setDirty();
+    }
+
+    /**
+     * Rescans an existing room by persistent identity. Source anchor is tried first;
+     * center is only a fallback. Ambiguous scans are intentionally non-destructive.
+     */
+    public Building.validationResult rescanBuilding(Village village, int buildingId) {
+        ensureStructureHierarchy(village);
+
+        Building existing = village == null ? null : village.getBuilding(buildingId).orElse(null);
+        if (existing == null) {
+            return Building.validationResult.TOO_SMALL;
+        }
+        if (existing.getBuildingType().grouped()) {
+            return processBuilding(existing.getCenter(), true, existing.isStrictScan());
+        }
+
+        List<BlockPos> probes = new ArrayList<>();
+        probes.add(existing.getSourceBlock());
+        if (!existing.getCenter().equals(existing.getSourceBlock())) {
+            probes.add(existing.getCenter());
+        }
+
+        BuildingScanResult lastScan = null;
+        for (BlockPos probe : probes) {
+            BuildingScanResult scan = analyzeBuilding(
+                    probe,
+                    existing.isStrictScan(),
+                    !existing.isStructureRoot(),
+                    village,
+                    existing.getId()
+            );
+            lastScan = scan;
+
+            if (scan.result() == Building.validationResult.SUCCESS && scan.hasExistingBuilding()) {
+                return commitBuilding(scan, null);
+            }
+            if (scan.result() == Building.validationResult.AMBIGUOUS_STRUCTURE
+                    || scan.result() == Building.validationResult.OVERLAP) {
+                return scan.result();
+            }
+        }
+
+        // Refresh is deliberately non-destructive. A blocked source, removed door,
+        // open-floor remodel, or temporarily ambiguous scan must not erase persistent
+        // room identities or the entire Building -> Rooms structure hierarchy.
+        return lastScan == null
+                ? Building.validationResult.TOO_SMALL
+                : lastScan.result();
     }
 
     //processed a building at given position
@@ -398,11 +570,17 @@ public class VillageManager extends SavedData implements Iterable<Village> {
                 if (blockResult.existingBuilding() != null) {
                     Village village = blockResult.village();
                     if (village != null) {
-                        village.removeBuilding(blockResult.existingBuilding().getId());
-                        if (village.getBuildings().isEmpty()) {
-                            villages.remove(village.getId());
+                        ensureStructureHierarchy(village);
+                        Building existing = blockResult.existingBuilding();
+                        if (existing.isStructureRoot()) {
+                            removeStructure(village, existing.getEffectiveStructureId());
+                        } else {
+                            village.removeBuilding(existing.getId());
+                            if (village.getBuildings().isEmpty()) {
+                                villages.remove(village.getId());
+                            }
+                            setDirty();
                         }
-                        setDirty();
                     }
                 }
             }
