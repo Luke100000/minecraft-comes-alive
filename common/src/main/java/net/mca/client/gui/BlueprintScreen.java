@@ -147,12 +147,10 @@ public class BlueprintScreen extends ExtendedScreen {
                 addDrawableChild(new TooltipButtonWidget(bx - 50, by + 5, 96, 20, "gui.blueprint.addRoom", b -> {
                     NetworkHandler.sendToServer(new ReportBuildingMessage(ReportBuildingMessage.Action.ADD_ROOM));
                     NetworkHandler.sendToServer(new GetVillageRequest());
-                    close();
                 }));
                 addDrawableChild(new TooltipButtonWidget(bx + 50, by + 5, 96, 20, "gui.blueprint.addBuilding", b -> {
                     NetworkHandler.sendToServer(new ReportBuildingMessage(ReportBuildingMessage.Action.ADD));
                     NetworkHandler.sendToServer(new GetVillageRequest());
-                    close();
                 }));
                 break;
             case "refresh":
@@ -604,7 +602,7 @@ public class BlueprintScreen extends ExtendedScreen {
         if (Registries.BLOCK.containsId(id)) {
             return Text.translatable(Registries.BLOCK.get(id).getTranslationKey());
         } else {
-            return Text.translatable("tag." + id.toString());
+            return Text.translatable("tag.block." + id.getNamespace() + "." + id.getPath());
         }
     }
 

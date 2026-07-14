@@ -1,3 +1,9 @@
+# 7.6.28-beta.4
+> Always backup your world before updating!
+
+* Fix villagers not going through doors properly.
+* Fixed building structure selection polymorph, sorry! (This was a regression because of how 1.20.1 serialises packets.
+
 # 7.6.28-beta.3
 > Always backup your world before updating!
 

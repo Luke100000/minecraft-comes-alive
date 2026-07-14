@@ -15,12 +15,12 @@ public class BuildingPolymorphMessage implements Message {
     private static final long serialVersionUID = 3862107062560429644L;
 
     private final List<String> matchingTypes;
-    private final BlockPos scanPos;
+    private final long scanPos;
     private final boolean room;
 
     public BuildingPolymorphMessage(List<String> matchingTypes, BlockPos scanPos, boolean room) {
         this.matchingTypes = List.copyOf(matchingTypes);
-        this.scanPos = scanPos;
+        this.scanPos = scanPos.asLong();
         this.room = room;
     }
 
@@ -29,7 +29,7 @@ public class BuildingPolymorphMessage implements Message {
     }
 
     public BlockPos scanPos() {
-        return scanPos;
+        return BlockPos.fromLong(scanPos);
     }
 
     public boolean isRoom() {

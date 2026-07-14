@@ -17,12 +17,12 @@ public class ConfirmBuildingPolymorphMessage implements Message {
     @Serial
     private static final long serialVersionUID = 7603852075326624913L;
 
-    private final BlockPos source;
+    private final long source;
     private final boolean strictScan;
     private final String chosenType;
 
     public ConfirmBuildingPolymorphMessage(BlockPos source, boolean strictScan, String chosenType) {
-        this.source = source;
+        this.source = source.asLong();
         this.strictScan = strictScan;
         this.chosenType = chosenType;
     }
@@ -30,7 +30,7 @@ public class ConfirmBuildingPolymorphMessage implements Message {
     @Override
     public void receive(ServerPlayerEntity player) {
         VillageManager villages = VillageManager.get(player.getServerWorld());
-        Building.validationResult result = villages.processBuilding(source, true, strictScan, chosenType);
+        Building.validationResult result = villages.processBuilding(BlockPos.fromLong(source), true, strictScan, chosenType);
         player.sendMessage(Text.translatable("blueprint.scan." + result.name().toLowerCase(Locale.ENGLISH)), true);
     }
 }
