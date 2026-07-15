@@ -2,6 +2,7 @@
 
 * Fixed Rare Crash
 * Fixed Library Preview rare corruption issue.
+* Improved guard enemy reaction interval with no performance loss.
 
 # 7.7.21
 
