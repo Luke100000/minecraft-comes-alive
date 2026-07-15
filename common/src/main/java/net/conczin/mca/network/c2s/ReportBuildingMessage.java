@@ -185,6 +185,24 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
         InitialStructureScan scan = villages.analyzeInitialStructure(player.blockPosition());
         logAddScan("building-scan", scan.root());
         logAddScan("initial-room-scan", scan.room());
+        if (scan.root().result() == Building.validationResult.OVERLAP) {
+            /*
+             * The client decides between Add Building and Add Room from the last
+             * persisted village geometry. After a player opens a basement/stairwell,
+             * that cached structure can briefly classify the player as OUTSIDE even
+             * though a strict room scan can attach to exactly one existing structure.
+             * Recover only through the normal Add Room path; assignNewRoom still
+             * rejects no-structure, cross-structure, and ambiguous attachments.
+             */
+            BuildingScanResult roomScan = villages.analyzeRoom(player.blockPosition());
+            logAddScan("add-overlap-room-recovery-scan", roomScan);
+            MCA.LOGGER.info("[BuildingAdd] stage=add-overlap-room-recovery source={} roomResult={} existing={} merged={}",
+                    roomScan.source(), roomScan.result(), roomScan.existingBuildingId(), roomScan.mergedBuildingIds());
+            if (roomScan.result() == Building.validationResult.SUCCESS) {
+                commitRoom(villages, player, roomScan, null, false);
+                return;
+            }
+        }
         if (scan.isRoomAmbiguous()) {
             requestType(scan.room(), player, Action.ADD);
             return;

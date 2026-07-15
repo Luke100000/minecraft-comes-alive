@@ -527,13 +527,13 @@ public class Building {
                 exteriorEntrances = trapDoors.exterior();
                 entranceSource = "exterior-trapdoor";
             } else if (!normalDoors.all().isEmpty()) {
-                entranceInteriorCells = normalDoors.all();
+                entranceInteriorCells = List.of();
                 exteriorEntrances = Set.of();
-                entranceSource = "door-fallback";
+                entranceSource = "floor-fallback-internal-doors";
             } else if (!trapDoors.all().isEmpty()) {
-                entranceInteriorCells = trapDoors.all();
+                entranceInteriorCells = List.of();
                 exteriorEntrances = Set.of();
-                entranceSource = "trapdoor-fallback";
+                entranceSource = "floor-fallback-internal-trapdoors";
             } else {
                 entranceInteriorCells = List.of();
                 exteriorEntrances = Set.of();
@@ -595,18 +595,34 @@ public class Building {
         return new EntranceCells(all, exterior);
     }
 
-    private static EntranceCells classifyTrapDoorEntrances(Level world,
-                                                            Collection<BlockPos> trapDoorBlocks,
-                                                            Set<BlockPos> reachableInteriorCells) {
+    private static EntranceCells classifyTrapDoorEntrances(
+            Level world,
+            Collection<BlockPos> trapDoorBlocks,
+            Set<BlockPos> reachableInteriorCells
+    ) {
         Set<BlockPos> all = new HashSet<>();
         Set<ExteriorEntrance> exterior = new HashSet<>();
 
         for (BlockPos trapDoorPos : trapDoorBlocks) {
-            List<BlockPos> neighbours = Arrays.stream(directions)
-                    .map(trapDoorPos::relative)
-                    .toList();
-            classifyEntranceSides(world, neighbours, reachableInteriorCells, all, exterior);
+            BlockState state = world.getBlockState(trapDoorPos);
+            if (!(state.getBlock() instanceof TrapDoorBlock)) {
+                continue;
+            }
+
+            List<BlockPos> neighbours = List.of(
+                    trapDoorPos.above(),
+                    trapDoorPos.below()
+            );
+
+            classifyEntranceSides(
+                    world,
+                    neighbours,
+                    reachableInteriorCells,
+                    all,
+                    exterior
+            );
         }
+
         return new EntranceCells(all, exterior);
     }
 
