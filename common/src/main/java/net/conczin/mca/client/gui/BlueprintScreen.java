@@ -40,6 +40,10 @@ public class BlueprintScreen extends ExtendedScreen {
     private static final int POSITION_BIRTH = -10;
     private static final int POSITION_MARRIAGE = 40;
     private static final ResourceLocation ICON_TEXTURES = MCA.locate("textures/buildings.png");
+    private static final int ROOM_SHADOW_COLOR = 0x50000000;
+    private static final int ROOM_FILL_ALPHA_ALL_FLOORS = 0x18;
+    private static final int ROOM_FILL_ALPHA_SELECTED_FLOOR = 0x38;
+    private static final int ROOM_FILL_ALPHA_HOVERED = 0x58;
     private static Integer rememberedFloorOrdinal;
     // 1.19.3: This needs to be the MC type, DO NOT TOUCH !!!
     private final List<net.minecraft.client.gui.components.Button> catalogButtons = new LinkedList<>();
@@ -553,12 +557,13 @@ public class BlueprintScreen extends ExtendedScreen {
                 }
             } else {
                 List<BlueprintFloorLayout.RegionBounds> renderRegions = floorLayout.regionsFor(building, selectedFloor);
+                int margin = 1;
+                boolean hovering = renderRegions.stream().anyMatch(region ->
+                        mouseLocalX >= region.minX() - margin && mouseLocalX <= region.maxX() + margin
+                                && mouseLocalY >= region.minZ() - margin && mouseLocalY <= region.maxZ() + margin);
+
                 for (BlueprintFloorLayout.RegionBounds region : renderRegions) {
-                    WidgetUtils.drawRectangle(
-                            context,
-                            region.minX(), region.minZ(), region.maxX(), region.maxZ(),
-                            bt.getColor()
-                    );
+                    renderRoomRegion(context, region, bt.getColor(), selectedFloor != null, hovering);
                 }
 
                 if (bt.visible() && bt.hasIcon()) {
@@ -566,10 +571,6 @@ public class BlueprintScreen extends ExtendedScreen {
                 }
 
                 //tooltip
-                int margin = 1;
-                boolean hovering = renderRegions.stream().anyMatch(region ->
-                        mouseLocalX >= region.minX() - margin && mouseLocalX <= region.maxX() + margin
-                                && mouseLocalY >= region.minZ() - margin && mouseLocalY <= region.maxZ() + margin);
                 if (hovering) {
                     addHoveredBuilding(hoverBuildings, building, selectedFloor);
                 }
@@ -584,8 +585,9 @@ public class BlueprintScreen extends ExtendedScreen {
                 if (bt.isIcon()) {
                     BlockPos center = building.getCenter();
                     drawBuildingIcon(context, ICON_TEXTURES, center.getX(), center.getZ(), bt.iconU(), bt.iconV());
-                } else if (renderedStructureIcons.add(building.getEffectiveStructureId())) {
-                    BlockPos iconPosition = floorLayout.iconPositionFor(building);
+                } else if (selectedFloor != null
+                        || renderedStructureIcons.add(building.getEffectiveStructureId())) {
+                    BlockPos iconPosition = getBuildingIconPosition(building, selectedFloor);
                     drawBuildingIcon(context, ICON_TEXTURES,
                             iconPosition.getX(), iconPosition.getZ(), bt.iconU(), bt.iconV());
                 }
@@ -629,6 +631,65 @@ public class BlueprintScreen extends ExtendedScreen {
             context.renderComponentTooltip(font, b, mouseX, py);
             py += getTooltipHeight(b) + 9;
         }
+    }
+
+    private static void renderRoomRegion(GuiGraphics context,
+                                         BlueprintFloorLayout.RegionBounds region,
+                                         int baseColor,
+                                         boolean selectedFloor,
+                                         boolean hovered) {
+        int minX = region.minX();
+        int minZ = region.minZ();
+        int maxX = region.maxX();
+        int maxZ = region.maxZ();
+
+        // A one-block offset gives adjacent and overlapping room components enough depth
+        // to remain readable without changing their actual map footprint.
+        WidgetUtils.drawRectangle(context,
+                minX + 1, minZ + 1, maxX + 1, maxZ + 1,
+                ROOM_SHADOW_COLOR);
+
+        if (maxX - minX > 1 && maxZ - minZ > 1) {
+            int fillAlpha = hovered
+                    ? ROOM_FILL_ALPHA_HOVERED
+                    : selectedFloor ? ROOM_FILL_ALPHA_SELECTED_FLOOR : ROOM_FILL_ALPHA_ALL_FLOORS;
+            context.fill(minX + 1, minZ + 1, maxX, maxZ, withAlpha(baseColor, fillAlpha));
+        }
+
+        int outlineAlpha = hovered ? 0xff : selectedFloor ? 0xdd : 0xaa;
+        WidgetUtils.drawRectangle(context,
+                minX, minZ, maxX, maxZ,
+                withAlpha(baseColor, outlineAlpha));
+
+        if (hovered && maxX - minX > 2 && maxZ - minZ > 2) {
+            WidgetUtils.drawRectangle(context,
+                    minX + 1, minZ + 1, maxX - 1, maxZ - 1,
+                    withAlpha(baseColor, 0x88));
+        }
+    }
+
+    private BlockPos getBuildingIconPosition(Building building, Integer selectedFloor) {
+        if (selectedFloor == null) {
+            return floorLayout.iconPositionFor(building);
+        }
+
+        return floorLayout.regionsFor(building, selectedFloor).stream()
+                .max(Comparator.comparingLong(BlueprintScreen::getRegionArea))
+                .map(region -> new BlockPos(
+                        region.minX() + (region.maxX() - region.minX()) / 2,
+                        building.getCenter().getY(),
+                        region.minZ() + (region.maxZ() - region.minZ()) / 2
+                ))
+                .orElseGet(() -> floorLayout.iconPositionFor(building));
+    }
+
+    private static long getRegionArea(BlueprintFloorLayout.RegionBounds region) {
+        return (long) (region.maxX() - region.minX() + 1)
+                * (region.maxZ() - region.minZ() + 1);
+    }
+
+    private static int withAlpha(int color, int alpha) {
+        return (color & 0x00ffffff) | (alpha << 24);
     }
 
     private void changeSelectedFloor(int direction) {

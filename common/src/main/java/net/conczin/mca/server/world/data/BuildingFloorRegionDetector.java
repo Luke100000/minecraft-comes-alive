@@ -56,6 +56,29 @@ final class BuildingFloorRegionDetector {
         return bands.stream().map(MutableBand::freeze).toList();
     }
 
+    /**
+     * Builds one exact supported floor slice without the whole-building noise thresholds.
+     * Used only as a fallback for a successful strict room scan whose normal detection
+     * filtered every floor region.
+     */
+    static Optional<DetectedRegion> detectSingleFloor(Collection<SupportedCell> supportedCells, int anchorY) {
+        if (supportedCells == null || supportedCells.isEmpty()) {
+            return Optional.empty();
+        }
+
+        Set<HorizontalCell> slice = new HashSet<>();
+        for (SupportedCell cell : supportedCells) {
+            if (cell.y() == anchorY) {
+                slice.add(new HorizontalCell(cell.x(), cell.z()));
+            }
+        }
+        if (slice.isEmpty()) {
+            return Optional.empty();
+        }
+
+        return Optional.of(new DetectedRegion(anchorY, slice.size(), findComponents(slice)));
+    }
+
     private static boolean isUsableComponent(DetectedComponent component) {
         int width = component.maxX() - component.minX() + 1;
         int depth = component.maxZ() - component.minZ() + 1;
