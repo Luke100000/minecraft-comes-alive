@@ -168,7 +168,6 @@ public class BlueprintScreen extends ExtendedScreen {
                 by = height / 2;
                 addRenderableWidget(new TooltipButtonWidget(bx, by + 5, 96, 20, "gui.blueprint.addBuilding", b -> {
                     Network.sendToServer(new ReportBuildingMessage(ReportBuildingMessage.Action.ADD));
-                    onClose();
                 }));
                 break;
             case "refresh":
@@ -1001,7 +1000,7 @@ public class BlueprintScreen extends ExtendedScreen {
 
         if (village == null) {
             setPage("empty");
-        } else if (page.equals("waiting")) {
+        } else if (page.equals("waiting") || page.equals("empty")) {
             setPage("map");
         }
     }
