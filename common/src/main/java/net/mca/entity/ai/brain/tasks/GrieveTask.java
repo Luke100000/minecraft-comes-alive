@@ -3,6 +3,7 @@ package net.mca.entity.ai.brain.tasks;
 import com.google.common.collect.ImmutableMap;
 import net.mca.entity.VillagerEntityMCA;
 import net.mca.entity.ai.ActivityMCA;
+import net.mca.entity.ai.MemoryModuleTypeMCA;
 import net.minecraft.entity.ai.brain.Brain;
 import net.minecraft.entity.ai.brain.MemoryModuleType;
 import net.minecraft.entity.ai.brain.task.MultiTickTask;
@@ -15,7 +16,10 @@ public class GrieveTask extends MultiTickTask<VillagerEntityMCA> {
     }
 
     protected boolean shouldRun(ServerWorld world, VillagerEntityMCA entity) {
-        return entity.getVillagerBrain().shouldGrieve() && entity.getResidency().getHomeVillage().filter(v -> v.hasBuilding("graveyard")).isPresent();
+        boolean hasRememberedSite = entity.getBrain().getOptionalMemory(MemoryModuleTypeMCA.MOURNING_SITE.get()).isPresent();
+        boolean hasCompleteGraveyard = entity.getResidency().getHomeVillage().filter(v -> v.hasBuilding("graveyard")).isPresent();
+        return entity.getVillagerBrain().shouldGrieve()
+                && (hasRememberedSite || hasCompleteGraveyard);
     }
 
     @Override

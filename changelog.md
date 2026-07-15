@@ -1,3 +1,14 @@
+# 7.6.28-beta.5
+
+* General improvements.
+* Improved MCA mourning mechanisms.
+  * They should now find candidate gravestones and pathfind way better and not get stuck.
+  * Graveyards now properly work.
+* Fix guard enemy reaction delay (1s faster)
+* Fix armour layers on guards clipping with the guards legs.
+* Increased Armour Chestplate size of MCA Villagers.
+
+
 # 7.6.28-beta.4
 > Always backup your world before updating!
 

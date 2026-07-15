@@ -47,6 +47,7 @@ public class VillagerBrain<E extends MobEntity & VillagerLike<E>> {
     }
 
     private static final long GRIEVE_COOLDOWN = 24000 * 7;
+    private static final long GRIEVE_RETRY_DELAY = 1200L;
 
     private final Random random = new Random();
 
@@ -254,6 +255,10 @@ public class VillagerBrain<E extends MobEntity & VillagerLike<E>> {
 
     public void setGrieving() {
         entity.getBrain().remember(LAST_GRIEVE.get(), -GRIEVE_COOLDOWN);
+    }
+
+    public void retryGrievingLater() {
+        entity.getBrain().remember(LAST_GRIEVE.get(), entity.getWorld().getTime() - GRIEVE_COOLDOWN + GRIEVE_RETRY_DELAY);
     }
 
     public void justGrieved() {

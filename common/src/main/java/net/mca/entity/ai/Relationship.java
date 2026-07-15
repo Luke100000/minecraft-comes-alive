@@ -1,7 +1,9 @@
 package net.mca.entity.ai;
 
 import net.mca.Config;
+import net.mca.MCA;
 import net.mca.TagsMCA;
+import dev.architectury.platform.Platform;
 import net.mca.block.BlocksMCA;
 import net.mca.block.TombstoneBlock;
 import net.mca.entity.Status;
@@ -22,7 +24,6 @@ import net.minecraft.block.BlockState;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.ai.brain.BlockPosLookTarget;
 import net.minecraft.entity.ai.brain.MemoryModuleType;
-import net.minecraft.entity.ai.brain.WalkTarget;
 import net.minecraft.entity.damage.DamageSource;
 import net.minecraft.entity.damage.DamageTypes;
 import net.minecraft.entity.mob.MobEntity;
@@ -202,7 +203,12 @@ public class Relationship<T extends MobEntity & VillagerLike<T>> implements Enti
 
         if (burialSite != null && type != RelationshipType.STRANGER) {
             entity.getVillagerBrain().setGrieving();
-            entity.getBrain().remember(MemoryModuleType.WALK_TARGET, new WalkTarget(burialSite, 1, 1));
+            entity.getBrain().remember(MemoryModuleTypeMCA.MOURNING_SITE.get(), burialSite);
+            if (Platform.isDevelopmentEnvironment()) {
+                MCA.LOGGER.info("[MOURNING_TRACE_V3] assignment villager={} type={} grave={} position={}", entity.getName().getString(), type, burialSite, entity.getBlockPos());
+            }
+            entity.getBrain().forget(MemoryModuleType.PATH);
+            entity.getBrain().forget(MemoryModuleType.WALK_TARGET);
             entity.getBrain().remember(MemoryModuleType.LOOK_TARGET, new BlockPosLookTarget(burialSite));
             entity.getBrain().doExclusively(ActivityMCA.GRIEVE.get());
         }

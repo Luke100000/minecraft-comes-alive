@@ -10,6 +10,8 @@ import net.minecraft.entity.ai.brain.MemoryModuleType;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.registry.RegistryKeys;
 import net.minecraft.util.Identifier;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.GlobalPos;
 
 import java.util.Optional;
 
@@ -25,6 +27,8 @@ public interface MemoryModuleTypeMCA {
     RegistrySupplier<MemoryModuleType<Integer>> SMALL_BOUNTY = register("small_bounty", Optional.of(Codec.INT));
     RegistrySupplier<MemoryModuleType<LivingEntity>> HIT_BY_PLAYER = register("hit_by_player", Optional.empty());
     RegistrySupplier<MemoryModuleType<Long>> LAST_GRIEVE = register("last_grieve", Optional.of(Codec.LONG));
+    RegistrySupplier<MemoryModuleType<BlockPos>> MOURNING_SITE = register("mourning_site", Optional.of(BlockPos.CODEC));
+    RegistrySupplier<MemoryModuleType<GlobalPos>> MOURNING_POSITION = register("mourning_position", Optional.of(GlobalPos.CODEC));
     RegistrySupplier<MemoryModuleType<Boolean>> FORCED_HOME = register("forced_home", Optional.of(Codec.BOOL));
 
     static void bootstrap() {

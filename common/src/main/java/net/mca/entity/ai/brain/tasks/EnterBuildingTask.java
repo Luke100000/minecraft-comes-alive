@@ -28,7 +28,11 @@ public class EnterBuildingTask extends MultiTickTask<VillagerEntityMCA> {
 
     protected void run(ServerWorld serverWorld, VillagerEntityMCA villager, long l) {
         Optional<BlockPos> blockPos = getNextPosition(villager);
-        blockPos.ifPresent(pos -> LookTargetUtil.walkTowards(villager, pos, this.speed, 1));
+        blockPos.ifPresent(pos -> LookTargetUtil.walkTowards(villager, pos, this.speed, getCompletionRange()));
+    }
+
+    protected int getCompletionRange() {
+        return 1;
     }
 
     protected Optional<Building> getNearestBuilding(VillagerEntityMCA villager) {

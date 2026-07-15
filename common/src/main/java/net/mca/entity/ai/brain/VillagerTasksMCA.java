@@ -4,7 +4,9 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.mojang.datafixers.util.Pair;
+import dev.architectury.platform.Platform;
 import net.mca.Config;
+import net.mca.MCA;
 import net.mca.ProfessionsMCA;
 import net.mca.entity.EntitiesMCA;
 import net.mca.entity.EquipmentSet;
@@ -30,16 +32,17 @@ import net.minecraft.entity.ai.brain.sensor.SensorType;
 import net.minecraft.entity.ai.brain.task.*;
 import net.minecraft.entity.passive.VillagerEntity;
 import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
 import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.Hand;
 import net.minecraft.village.VillagerProfession;
 import net.minecraft.world.poi.PointOfInterestTypes;
 
 import java.util.Optional;
 
 public class VillagerTasksMCA {
+    private static final float GRIEVING_WALK_SPEED = 0.5F;
+    private static final int GRIEVING_PATH_TIMEOUT = 1200;
+
     public static final ImmutableList<MemoryModuleType<?>> MEMORY_TYPES = ImmutableList.of(
             MemoryModuleType.HOME,
             MemoryModuleType.JOB_SITE,
@@ -79,6 +82,8 @@ public class VillagerTasksMCA {
             MemoryModuleTypeMCA.SMALL_BOUNTY.get(),
             MemoryModuleTypeMCA.HIT_BY_PLAYER.get(),
             MemoryModuleTypeMCA.LAST_GRIEVE.get(),
+            MemoryModuleTypeMCA.MOURNING_SITE.get(),
+            MemoryModuleTypeMCA.MOURNING_POSITION.get(),
             MemoryModuleTypeMCA.FORCED_HOME.get()
     );
 
@@ -434,29 +439,47 @@ public class VillagerTasksMCA {
     }
 
     public static ImmutableList<Pair<Integer, ? extends Task<? super VillagerEntityMCA>>> getGrievingPackage() {
+        MournAtGraveTask mournAtGrave = new MournAtGraveTask();
         return ImmutableList.of(
+                Pair.of(2, ExtendedWalkTowardsTask.create(
+                        MemoryModuleTypeMCA.MOURNING_POSITION.get(),
+                        GRIEVING_WALK_SPEED,
+                        0,
+                        Config.getInstance().getVillagerPathfindingDistance(),
+                        GRIEVING_PATH_TIMEOUT,
+                        villager -> true,
+                        villager -> {
+                            if (Platform.isDevelopmentEnvironment()) {
+                                MCA.LOGGER.info("[MOURNING_TRACE_V3] path-timeout villager={} position={} grave={}",
+                                        villager.getName().getString(),
+                                        villager.getBlockPos(),
+                                        villager.getBrain().getOptionalMemory(MemoryModuleTypeMCA.MOURNING_SITE.get()).orElse(null));
+                            }
+                        }
+                )),
                 Pair.of(0, new SequenceTask<>(
                         ImmutableMap.of(MemoryModuleType.WALK_TARGET, MemoryModuleState.VALUE_ABSENT),
                         ImmutableList.of(
-                                new EnterBuildingTask("graveyard", 0.5f),
-                                new RandomTask<>(
-                                        ImmutableList.of(
-                                                Pair.of(new HoldItemTask(Hand.MAIN_HAND, Items.WHITE_TULIP), 1),
-                                                Pair.of(new HoldItemTask(Hand.MAIN_HAND, Items.RED_TULIP), 1),
-                                                Pair.of(new HoldItemTask(Hand.MAIN_HAND, Items.ORANGE_TULIP), 1),
-                                                Pair.of(new HoldItemTask(Hand.MAIN_HAND, Items.PINK_TULIP), 1)
-                                        )
-                                ),
-                                new WanderOrTeleportToTargetTask(),
-                                new WaitTask(100, 300),
-                                new SayTask("villager.grieving"),
-                                new WaitTask(100, 300),
-                                new SayTask("villager.grieving"),
-                                new WaitTask(100, 300),
-                                new SayTask("villager.grieving"),
-                                new HoldItemTask(Hand.MAIN_HAND, ItemStack.EMPTY),
+                                new EnterGraveyardTask(GRIEVING_WALK_SPEED),
+                                mournAtGrave,
                                 new LambdaTask<>((v) -> {
-                                    v.getVillagerBrain().justGrieved();
+                                    boolean completed = mournAtGrave.hasCompleted();
+                                    if (Platform.isDevelopmentEnvironment()) {
+                                        MCA.LOGGER.info("[MOURNING_TRACE_V3] session-finish villager={} completed={} position={} grave={} stand={} walkTarget={}",
+                                                v.getName().getString(),
+                                                completed,
+                                                v.getBlockPos(),
+                                                v.getBrain().getOptionalMemory(MemoryModuleTypeMCA.MOURNING_SITE.get()).orElse(null),
+                                                v.getBrain().getOptionalMemory(MemoryModuleTypeMCA.MOURNING_POSITION.get()).orElse(null),
+                                                v.getBrain().getOptionalMemory(MemoryModuleType.WALK_TARGET).orElse(null));
+                                    }
+                                    v.getBrain().forget(MemoryModuleTypeMCA.MOURNING_SITE.get());
+                                    v.getBrain().forget(MemoryModuleTypeMCA.MOURNING_POSITION.get());
+                                    if (completed) {
+                                        v.getVillagerBrain().justGrieved();
+                                    } else {
+                                        v.getVillagerBrain().retryGrievingLater();
+                                    }
                                     v.getBrain().refreshActivities(v.getWorld().getTimeOfDay(), v.getWorld().getTime());
                                 })
 
