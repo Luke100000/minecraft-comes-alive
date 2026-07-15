@@ -308,6 +308,11 @@ final class BuildingStructureManager {
 
         ensureHierarchy(village);
 
+        MCA.LOGGER.info("[FloorRoomDebug] side=server stage=assign-room-start villageId={} buildingCount={} roomSource={} roomFloorY={} roomRegions={} roomBounds={}..{}",
+                village.getId(), village.getBuildings().size(), room.getSourceBlock(), room.getFloorY(),
+                room.getFloorRegions().stream().map(BuildingFloorRegion::anchorY).toList(),
+                room.getPos0(), room.getPos1());
+
         Set<Integer> candidateStructures = new TreeSet<>();
         for (Building existing : village.getBuildings().values()) {
             boolean complete = existing.isComplete();
@@ -316,6 +321,11 @@ final class BuildingStructureManager {
             boolean validRoot = hasStructure && hasValidRoot(village, existing.getStructureId());
             boolean attached = complete && !grouped && validRoot
                     && room.isStructurallyAttachedTo(existing, ROOM_ATTACHMENT_VERTICAL_GAP);
+            MCA.LOGGER.info("[FloorRoomDebug] side=server stage=assign-room-candidate roomSource={} existingId={} structure={} root={} strict={} complete={} grouped={} hasStructure={} validRoot={} existingFloorY={} existingRegions={} existingBounds={}..{} attached={}",
+                    room.getSourceBlock(), existing.getId(), existing.getStructureId(), existing.isStructureRoot(),
+                    existing.isStrictScan(), complete, grouped, hasStructure, validRoot, existing.getFloorY(),
+                    existing.getFloorRegions().stream().map(BuildingFloorRegion::anchorY).toList(),
+                    existing.getPos0(), existing.getPos1(), attached);
             MCA.LOGGER.debug(
                     "[BuildingRoomAttach] roomSource={} roomBounds={}..{} existingId={} structure={} root={} complete={} grouped={} hasStructure={} validRoot={} bounds={}..{} attached={}",
                     room.getSourceBlock(), room.getPos0(), room.getPos1(), existing.getId(), existing.getStructureId(),
@@ -327,6 +337,9 @@ final class BuildingStructureManager {
 
             candidateStructures.add(existing.getStructureId());
         }
+
+        MCA.LOGGER.info("[FloorRoomDebug] side=server stage=assign-room-summary roomSource={} candidateStructures={}",
+                room.getSourceBlock(), candidateStructures);
 
         if (candidateStructures.isEmpty()) {
             return Building.validationResult.NOT_IN_BUILDING;

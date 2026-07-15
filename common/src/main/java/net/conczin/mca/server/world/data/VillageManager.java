@@ -308,6 +308,10 @@ public class VillageManager extends SavedData implements Iterable<Village> {
                 ? village.getBuilding(preferredBuildingId).orElse(null)
                 : locatedExisting;
         int effectivePreferredId = preferred == null ? preferredBuildingId : preferred.getId();
+        MCA.LOGGER.info("[FloorRoomDebug] side=server stage=analyze-start source={} strict={} roomScan={} assignRoom={} knownVillageId={} resolvedVillageId={} locatedExisting={} preferred={} preferredId={}",
+                pos, strictScan, roomScan, assignRoom,
+                knownVillage == null ? -1 : knownVillage.getId(), village == null ? -1 : village.getId(),
+                debugBuilding(locatedExisting), debugBuilding(preferred), effectivePreferredId);
 
         Set<BlockPos> blocked = village == null
                 ? new HashSet<>()
@@ -340,6 +344,8 @@ public class VillageManager extends SavedData implements Iterable<Village> {
                 || (preferred != null && preferred.hasStructure() && !preferred.isStructureRoot());
 
         Building.validationResult result = building.validateBuilding(world, blocked, allowMissingEntrance);
+        MCA.LOGGER.info("[FloorRoomDebug] side=server stage=validate-result source={} result={} roomScan={} allowMissingEntrance={} blockedCount={} candidate={}",
+                scanSource, result, roomScan, allowMissingEntrance, blocked.size(), debugBuilding(building));
         int existingBuildingId = -1;
         List<Integer> mergedBuildingIds = List.of();
 
@@ -350,6 +356,9 @@ public class VillageManager extends SavedData implements Iterable<Village> {
 
             BuildingStructureManager.MatchResult match =
                     BuildingStructureManager.matchExistingRoom(building, village, effectivePreferredId);
+            MCA.LOGGER.info("[FloorRoomDebug] side=server stage=match-existing-room source={} matchResult={} matched={} mergedIds={} candidateFloorY={} candidateRegions={}",
+                    scanSource, match.result(), debugBuilding(match.primary()), match.mergedBuildingIds(),
+                    building.getFloorY(), building.getFloorRegions().stream().map(BuildingFloorRegion::anchorY).toList());
             MCA.LOGGER.debug(
                     "[BuildingRoomScan] source={} roomScan={} matchResult={} matchedId={} mergedIds={} floorY={} groundFloorY={} floorRegions={}",
                     scanSource, roomScan, match.result(),
@@ -367,6 +376,8 @@ public class VillageManager extends SavedData implements Iterable<Village> {
                 mergedBuildingIds = match.mergedBuildingIds();
             } else if (roomScan && assignRoom) {
                 result = BuildingStructureManager.assignNewRoom(building, village);
+                MCA.LOGGER.info("[FloorRoomDebug] side=server stage=assign-new-room-result source={} result={} candidate={}",
+                        scanSource, result, debugBuilding(building));
                 MCA.LOGGER.debug("[BuildingRoomScan] source={} assignmentResult={} structureId={}",
                         scanSource, result, building.getStructureId());
             }
@@ -375,6 +386,9 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         List<String> matchingTypes = result == Building.validationResult.SUCCESS
                 ? building.getVisibleMatchingTypes().stream().map(BuildingType::name).toList()
                 : List.of();
+
+        MCA.LOGGER.info("[FloorRoomDebug] side=server stage=analyze-result source={} result={} existing={} merged={} matchingTypes={} candidate={}",
+                scanSource, result, existingBuildingId, mergedBuildingIds, matchingTypes, debugBuilding(building));
 
         return new BuildingScanResult(
                 result,
@@ -389,6 +403,9 @@ public class VillageManager extends SavedData implements Iterable<Village> {
     }
 
     public Building.validationResult commitBuilding(BuildingScanResult scan, String forcedType) {
+        MCA.LOGGER.info("[FloorRoomDebug] side=server stage=commit-building-start scanResult={} source={} scanVillageId={} existing={} merged={} forcedType={} candidate={}",
+                scan.result(), scan.source(), scan.village() == null ? -1 : scan.village().getId(),
+                scan.existingBuildingId(), scan.mergedBuildingIds(), forcedType, debugBuilding(scan.building()));
         if (scan.result() != Building.validationResult.SUCCESS) {
             return scan.result();
         }
@@ -473,6 +490,14 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         }
 
         finalizeVillageMutation(targetVillage);
+        Village committedVillage = targetVillage;
+        MCA.LOGGER.info("[FloorRoomDebug] side=server stage=commit-building-finished source={} villageId={} buildingCount={} candidateNow={}",
+                scan.source(), committedVillage.getId(), committedVillage.getBuildings().size(), debugBuilding(building));
+        committedVillage.getBuildings().values().stream()
+                .sorted(Comparator.comparingInt(Building::getId))
+                .forEach(persisted -> MCA.LOGGER.info(
+                        "[FloorRoomDebug] side=server stage=commit-building-state villageId={} {}",
+                        committedVillage.getId(), debugBuilding(persisted)));
         return Building.validationResult.SUCCESS;
     }
 
@@ -544,6 +569,22 @@ public class VillageManager extends SavedData implements Iterable<Village> {
                     }
                 });
         setDirty();
+    }
+
+    private static String debugBuilding(Building building) {
+        if (building == null) {
+            return "none";
+        }
+        return "id=" + building.getId()
+                + ",structure=" + building.getEffectiveStructureId()
+                + ",root=" + building.isStructureRoot()
+                + ",strict=" + building.isStrictScan()
+                + ",functional=" + building.isFunctionalRoom()
+                + ",floorY=" + building.getFloorY()
+                + ",groundFloorY=" + building.getGroundFloorY()
+                + ",floorRegions=" + building.getFloorRegions().stream().map(BuildingFloorRegion::anchorY).toList()
+                + ",source=" + building.getSourceBlock()
+                + ",bounds=" + building.getPos0() + ".." + building.getPos1();
     }
 
     public void ensureStructureHierarchy(Village village) {

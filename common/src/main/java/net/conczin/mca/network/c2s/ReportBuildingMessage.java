@@ -39,6 +39,17 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
     @Override
     public void handleServer(ServerPlayer player) {
         VillageManager villages = VillageManager.get(player.serverLevel());
+        if (action == Action.ADD || action == Action.ADD_ROOM || action == Action.UPDATE_ROOM) {
+            BlockPos playerPos = player.blockPosition();
+            Village nearestVillage = villages.findNearestVillage(player).orElse(null);
+            Village.StructuralLookup structuralLookup = nearestVillage == null
+                    ? null
+                    : nearestVillage.getStructuralLookup(playerPos);
+            MCA.LOGGER.info("[FloorRoomDebug] side=server stage=receive-request action={} pos={} villageId={} lookup={} lookupBuilding={}",
+                    action, playerPos, nearestVillage == null ? -1 : nearestVillage.getId(),
+                    structuralLookup == null ? Village.StructuralPosition.OUTSIDE : structuralLookup.position(),
+                    structuralLookup == null ? "none" : describeBuilding(structuralLookup.building().orElse(null)));
+        }
         try {
             switch (action) {
             case ADD -> addBuildingAndCurrentRoom(villages, player);
@@ -211,7 +222,17 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
     }
 
     private static void addRoom(VillageManager villages, ServerPlayer player) {
-        Village.StructuralPosition structuralPosition = getStructuralPosition(villages, player);
+        BlockPos source = player.blockPosition();
+        Village nearestVillage = villages.findNearestVillage(player).orElse(null);
+        Village.StructuralLookup structuralLookup = nearestVillage == null
+                ? null
+                : nearestVillage.getStructuralLookup(source);
+        Village.StructuralPosition structuralPosition = structuralLookup == null
+                ? Village.StructuralPosition.OUTSIDE
+                : structuralLookup.position();
+        MCA.LOGGER.info("[FloorRoomDebug] side=server stage=add-room-entry source={} villageId={} lookup={} lookupBuilding={}",
+                source, nearestVillage == null ? -1 : nearestVillage.getId(), structuralPosition,
+                structuralLookup == null ? "none" : describeBuilding(structuralLookup.building().orElse(null)));
         if (structuralPosition == Village.StructuralPosition.REGISTERED_ROOM) {
             player.displayClientMessage(Component.translatable("blueprint.roomAlreadyAdded"), true);
             return;
@@ -272,6 +293,10 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
                            BuildingScanResult scan,
                            String forcedType,
                            boolean updating) {
+        MCA.LOGGER.info("[FloorRoomDebug] side=server stage=room-commit-before updating={} source={} scanResult={} candidate={} scanVillageId={} existing={} merged={} forcedType={}",
+                updating, scan.source(), scan.result(), describeBuilding(scan.building()),
+                scan.village() == null ? -1 : scan.village().getId(), scan.existingBuildingId(),
+                scan.mergedBuildingIds(), forcedType);
         MCA.LOGGER.debug("[BuildingAdd] stage={} result={} source={} existing={}",
                 updating ? "update-room-commit" : "add-room-commit",
                 scan.result(), scan.source(), scan.existingBuildingId());
@@ -293,6 +318,21 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
         }
 
         Building.validationResult result = villages.commitBuilding(scan, forcedType);
+        Village persistedVillage = villages.findNearestVillage(scan.source(), Village.MERGE_MARGIN)
+                .orElse(scan.village());
+        Village.StructuralLookup persistedLookup = persistedVillage == null
+                ? null
+                : persistedVillage.getStructuralLookup(scan.source());
+        Building persistedRoom = persistedVillage == null
+                ? null
+                : persistedVillage.getFunctionalRoomAt(scan.source()).orElse(null);
+        MCA.LOGGER.info("[FloorRoomDebug] side=server stage=room-commit-after updating={} source={} result={} candidate={} persistedVillageId={} persistedLookup={} persistedLookupBuilding={} persistedRoom={} buildingCount={}",
+                updating, scan.source(), result, describeBuilding(scan.building()),
+                persistedVillage == null ? -1 : persistedVillage.getId(),
+                persistedLookup == null ? Village.StructuralPosition.OUTSIDE : persistedLookup.position(),
+                persistedLookup == null ? "none" : describeBuilding(persistedLookup.building().orElse(null)),
+                describeBuilding(persistedRoom), persistedVillage == null ? 0 : persistedVillage.getBuildings().size());
+        logVillageBuildings("room-commit-after", persistedVillage);
         MCA.LOGGER.debug("[BuildingAdd] stage={} result={} source={} existing={}",
                 updating ? "update-room-commit-result" : "add-room-commit-result",
                 result, scan.source(), scan.existingBuildingId());
@@ -311,6 +351,33 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
                 scan.existingBuildingId(), scan.mergedBuildingIds(), building.getFloorY(), building.getGroundFloorY(),
                 building.getFloorRegions().stream().map(BuildingFloorRegion::anchorY).toList(),
                 building.getPos0(), building.getPos1());
+    }
+
+    private static void logVillageBuildings(String stage, Village village) {
+        if (village == null) {
+            return;
+        }
+        village.getBuildings().values().stream()
+                .sorted(java.util.Comparator.comparingInt(Building::getId))
+                .forEach(building -> MCA.LOGGER.info(
+                        "[FloorRoomDebug] side=server stage={} villageId={} {}",
+                        stage, village.getId(), describeBuilding(building)));
+    }
+
+    private static String describeBuilding(Building building) {
+        if (building == null) {
+            return "none";
+        }
+        return "id=" + building.getId()
+                + ",structure=" + building.getEffectiveStructureId()
+                + ",root=" + building.isStructureRoot()
+                + ",strict=" + building.isStrictScan()
+                + ",functional=" + building.isFunctionalRoom()
+                + ",floorY=" + building.getFloorY()
+                + ",groundFloorY=" + building.getGroundFloorY()
+                + ",floorRegions=" + building.getFloorRegions().stream().map(BuildingFloorRegion::anchorY).toList()
+                + ",source=" + building.getSourceBlock()
+                + ",bounds=" + building.getPos0() + ".." + building.getPos1();
     }
 
     private static void requestType(BuildingScanResult scan,

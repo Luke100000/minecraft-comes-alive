@@ -40,11 +40,16 @@ public class BlueprintScreen extends ExtendedScreen {
     private static final int POSITION_BIRTH = -10;
     private static final int POSITION_MARRIAGE = 40;
     private static final ResourceLocation ICON_TEXTURES = MCA.locate("textures/buildings.png");
+    private static final int MAP_HALF_SIZE = 75;
+    private static final int MAP_INNER_MARGIN = 6;
+    private static final float MAP_MAX_FIT_SCALE = 2.0f;
+    private static final int ROOM_INNER_PADDING = 1;
     private static final int ROOM_SHADOW_COLOR = 0x50000000;
     private static final int ROOM_FILL_ALPHA_ALL_FLOORS = 0x18;
     private static final int ROOM_FILL_ALPHA_SELECTED_FLOOR = 0x38;
     private static final int ROOM_FILL_ALPHA_HOVERED = 0x58;
     private static Integer rememberedFloorOrdinal;
+    private static MapScaleMode rememberedMapScaleMode = MapScaleMode.FIT;
     // 1.19.3: This needs to be the MC type, DO NOT TOUCH !!!
     private final List<net.minecraft.client.gui.components.Button> catalogButtons = new LinkedList<>();
     private Village village;
@@ -62,11 +67,13 @@ public class BlueprintScreen extends ExtendedScreen {
     private ButtonWidget floorLabelButton;
     private ButtonWidget floorNextButton;
     private ButtonWidget buildingIconsButton;
+    private ButtonWidget mapScaleButton;
     private TooltipButtonWidget structureScanButton;
     private TooltipButtonWidget removeRoomButton;
     private ButtonWidget removeBuildingButton;
     private ButtonWidget advancedButton;
     private Integer selectedFloorOrdinal = rememberedFloorOrdinal;
+    private MapScaleMode mapScaleMode = rememberedMapScaleMode;
     private boolean selectPlayerFloorOnNextVillageResponse;
     private boolean showBuildingIcons = true;
     private BlueprintFloorLayout floorLayout = BlueprintFloorLayout.empty();
@@ -143,6 +150,7 @@ public class BlueprintScreen extends ExtendedScreen {
         floorLabelButton = null;
         floorNextButton = null;
         buildingIconsButton = null;
+        mapScaleButton = null;
         structureScanButton = null;
         removeRoomButton = null;
         removeBuildingButton = null;
@@ -216,6 +224,7 @@ public class BlueprintScreen extends ExtendedScreen {
                         setPage("rename");
                     }));
                 }
+                break;
             case "map":
                 // A grouped POI such as the town bell keeps the settlement alive, but
                 // rooms still need a complete structural root to attach to.
@@ -260,11 +269,14 @@ public class BlueprintScreen extends ExtendedScreen {
                 floorNextButton = addRenderableWidget(new ButtonWidget(floorControlX + 126, floorControlY, 24, 20,
                         Component.literal(">"), b -> changeSelectedFloor(1)));
                 buildingIconsButton = addRenderableWidget(new ButtonWidget(
-                        floorControlX + 26, floorControlY + 22, 98, 20,
+                        floorControlX, floorControlY + 22, 96, 20,
                         getBuildingIconsLabel(), b -> {
                     showBuildingIcons = !showBuildingIcons;
                     updateBuildingIconsControl();
                 }));
+                mapScaleButton = addRenderableWidget(new ButtonWidget(
+                        floorControlX + 98, floorControlY + 22, 52, 20,
+                        getMapScaleLabel(), b -> cycleMapScale(), getMapScaleTooltip()));
 
                 break;
             case "rank":
@@ -408,7 +420,14 @@ public class BlueprintScreen extends ExtendedScreen {
     }
 
     private void requestStructureScan() {
-        ReportBuildingMessage.Action action = getStructureScanAction(getPlayerStructuralLookup().position());
+        Village.StructuralLookup structuralLookup = getPlayerStructuralLookup();
+        ReportBuildingMessage.Action action = getStructureScanAction(structuralLookup.position());
+        BlockPos playerPos = minecraft != null && minecraft.player != null
+                ? minecraft.player.blockPosition()
+                : null;
+        MCA.LOGGER.info("[FloorRoomDebug] side=client stage=request-structure-scan pos={} lookup={} lookupBuilding={} action={} selectedFloor={} availableFloors={} pendingFloorSelectBefore={}",
+                playerPos, structuralLookup.position(), describeBuilding(structuralLookup.building().orElse(null)),
+                action, selectedFloorOrdinal, floorLayout.ordinals(), selectPlayerFloorOnNextVillageResponse);
         selectPlayerFloorOnNextVillageResponse = action == ReportBuildingMessage.Action.ADD_ROOM
                 || action == ReportBuildingMessage.Action.UPDATE_ROOM;
         Network.sendToServer(new ReportBuildingMessage(action));
@@ -515,10 +534,14 @@ public class BlueprintScreen extends ExtendedScreen {
 
     private void renderMap(GuiGraphics context) {
         final PoseStack matrices = context.pose();
-        int mapSize = 75;
-        int y = height / 2 + 8;
+        int centerX = width / 2;
+        int centerY = height / 2 + 8;
+        int left = centerX - MAP_HALF_SIZE;
+        int top = centerY - MAP_HALF_SIZE;
+        int right = centerX + MAP_HALF_SIZE;
+        int bottom = centerY + MAP_HALF_SIZE;
         Integer selectedFloor = selectedFloorOrdinal;
-        WidgetUtils.drawRectangle(context, width / 2 - mapSize, y - mapSize, width / 2 + mapSize, y + mapSize, 0xffffff88);
+        WidgetUtils.drawRectangle(context, left, top, right, bottom, 0xffffff88);
 
         //hint
         if (!village.isAutoScan() && village.getStructureCount() <= 1) {
@@ -526,54 +549,53 @@ public class BlueprintScreen extends ExtendedScreen {
             context.drawCenteredString(font, Component.translatable("gui.blueprint.autoScanDisabled"), width / 2, hintY, 0xaaffffff);
         }
 
-        matrices.pushPose();
+        double mapCenterX = (village.getBox().minX() + village.getBox().maxX() + 1) / 2.0D;
+        double mapCenterZ = (village.getBox().minZ() + village.getBox().maxZ() + 1) / 2.0D;
+        float scale = getMapScale();
+        int mouseLocalX = (int) Math.floor((mouseX - centerX) / scale + mapCenterX);
+        int mouseLocalZ = (int) Math.floor((mouseY - centerY) / scale + mapCenterZ);
 
-        //center and scale the map
-        int horizontalSpan = Math.max(village.getBox().getXSpan(), village.getBox().getZSpan());
-        float sc = Math.min((float) mapSize / (horizontalSpan + 3) * 2, 2.0f);
-        int mouseLocalX = (int) ((mouseX - width / 2.0) / sc + village.getCenter().getX());
-        int mouseLocalY = (int) ((mouseY - y) / sc + village.getCenter().getZ());
-        matrices.translate(width / 2.0, y, 0);
-        matrices.scale(sc, sc, 1.0f);
-        matrices.translate(-village.getCenter().getX(), -village.getCenter().getZ(), 0);
-
-        //buildings
         Map<Integer, Building> hoverBuildings = new LinkedHashMap<>();
         List<Building> iconBuildings = new ArrayList<>();
+
+        context.enableScissor(left + 1, top + 1, right - 1, bottom - 1);
+        matrices.pushPose();
+        matrices.translate(centerX, centerY, 0.0D);
+        matrices.scale(scale, scale, 1.0F);
+        matrices.translate(-mapCenterX, -mapCenterZ, 0.0D);
+
         for (Building building : village.getBuildings().values()) {
             if (!building.isComplete() || !floorLayout.isBuildingVisible(building, selectedFloor)) {
                 continue;
             }
 
-            BuildingType bt = building.getBuildingType();
-            if (bt.isIcon()) {
-                BlockPos c = building.getCenter();
+            BuildingType buildingType = building.getBuildingType();
+            if (buildingType.isIcon()) {
+                BlockPos center = building.getCenter();
                 iconBuildings.add(building);
 
-                //tooltip
-                int margin = 6;
-                if (c.distSqr(new Vec3i(mouseLocalX, c.getY(), mouseLocalY)) < margin * margin) {
+                int hoverMargin = 6;
+                if (center.distSqr(new Vec3i(mouseLocalX, center.getY(), mouseLocalZ)) < hoverMargin * hoverMargin) {
                     addHoveredBuilding(hoverBuildings, building, selectedFloor);
                 }
-            } else {
-                List<BlueprintFloorLayout.RegionBounds> renderRegions = floorLayout.regionsFor(building, selectedFloor);
-                int margin = 1;
-                boolean hovering = renderRegions.stream().anyMatch(region ->
-                        mouseLocalX >= region.minX() - margin && mouseLocalX <= region.maxX() + margin
-                                && mouseLocalY >= region.minZ() - margin && mouseLocalY <= region.maxZ() + margin);
+                continue;
+            }
 
-                for (BlueprintFloorLayout.RegionBounds region : renderRegions) {
-                    renderRoomRegion(context, region, bt.getColor(), selectedFloor != null, hovering);
-                }
+            List<BlueprintFloorLayout.RegionBounds> renderRegions = floorLayout.regionsFor(building, selectedFloor);
+            int hoverMargin = 1;
+            boolean hovering = renderRegions.stream().anyMatch(region ->
+                    mouseLocalX >= region.minX() - hoverMargin && mouseLocalX <= region.maxX() + hoverMargin
+                            && mouseLocalZ >= region.minZ() - hoverMargin && mouseLocalZ <= region.maxZ() + hoverMargin);
 
-                if (bt.visible() && bt.hasIcon()) {
-                    iconBuildings.add(building);
-                }
+            for (BlueprintFloorLayout.RegionBounds region : renderRegions) {
+                renderRoomRegion(context, region, buildingType.getColor(), selectedFloor != null, hovering);
+            }
 
-                //tooltip
-                if (hovering) {
-                    addHoveredBuilding(hoverBuildings, building, selectedFloor);
-                }
+            if (buildingType.visible() && buildingType.hasIcon()) {
+                iconBuildings.add(building);
+            }
+            if (hovering) {
+                addHoveredBuilding(hoverBuildings, building, selectedFloor);
             }
         }
 
@@ -581,33 +603,36 @@ public class BlueprintScreen extends ExtendedScreen {
         if (showBuildingIcons) {
             Set<Integer> renderedStructureIcons = new HashSet<>();
             for (Building building : iconBuildings) {
-                BuildingType bt = building.getBuildingType();
-                if (bt.isIcon()) {
+                BuildingType buildingType = building.getBuildingType();
+                if (buildingType.isIcon()) {
                     BlockPos center = building.getCenter();
-                    drawBuildingIcon(context, ICON_TEXTURES, center.getX(), center.getZ(), bt.iconU(), bt.iconV());
+                    drawBuildingIcon(context, ICON_TEXTURES,
+                            center.getX(), center.getZ(), buildingType.iconU(), buildingType.iconV());
                 } else if (selectedFloor != null
                         || renderedStructureIcons.add(building.getEffectiveStructureId())) {
                     BlockPos iconPosition = getBuildingIconPosition(building, selectedFloor);
                     drawBuildingIcon(context, ICON_TEXTURES,
-                            iconPosition.getX(), iconPosition.getZ(), bt.iconU(), bt.iconV());
+                            iconPosition.getX(), iconPosition.getZ(), buildingType.iconU(), buildingType.iconV());
                 }
             }
         }
 
         // The player is global map context, not part of a floor, and stays above every icon.
+        // Render it in screen space with a minimum 3x3 footprint so Fit mode cannot
+        // shrink a one-block marker below one physical GUI pixel.
+        matrices.popPose();
         assert minecraft != null;
         LocalPlayer player = minecraft.player;
         if (player != null) {
-            matrices.pushPose();
-            matrices.translate(0.0f, 0.0f, 100.0f);
-            WidgetUtils.drawRectangle(context,
-                    (int) player.getX() - 1, (int) player.getZ() - 1,
-                    (int) player.getX() + 1, (int) player.getZ() + 1,
-                    0xffff00ff);
-            matrices.popPose();
+            int playerScreenX = (int) Math.floor(centerX + (player.getX() - mapCenterX) * scale);
+            int playerScreenY = (int) Math.floor(centerY + (player.getZ() - mapCenterZ) * scale);
+            context.fill(
+                    playerScreenX - 1, playerScreenY - 1,
+                    playerScreenX + 2, playerScreenY + 2,
+                    0xffff00ff
+            );
         }
-
-        matrices.popPose();
+        context.disableScissor();
 
         //sort vertically
         List<Building> sortedHoverBuildings = new ArrayList<>(hoverBuildings.values());
@@ -640,20 +665,24 @@ public class BlueprintScreen extends ExtendedScreen {
                                          boolean hovered) {
         int minX = region.minX();
         int minZ = region.minZ();
-        int maxX = region.maxX();
-        int maxZ = region.maxZ();
+        // Region bounds are inclusive Minecraft block coordinates. Rendering uses
+        // half-open rectangles, so max + 1 makes one block occupy exactly one map unit.
+        int maxX = region.maxX() + 1;
+        int maxZ = region.maxZ() + 1;
 
-        // A one-block offset gives adjacent and overlapping room components enough depth
-        // to remain readable without changing their actual map footprint.
         WidgetUtils.drawRectangle(context,
                 minX + 1, minZ + 1, maxX + 1, maxZ + 1,
                 ROOM_SHADOW_COLOR);
 
-        if (maxX - minX > 1 && maxZ - minZ > 1) {
+        int innerMinX = minX + ROOM_INNER_PADDING;
+        int innerMinZ = minZ + ROOM_INNER_PADDING;
+        int innerMaxX = maxX - ROOM_INNER_PADDING;
+        int innerMaxZ = maxZ - ROOM_INNER_PADDING;
+        if (innerMinX < innerMaxX && innerMinZ < innerMaxZ) {
             int fillAlpha = hovered
                     ? ROOM_FILL_ALPHA_HOVERED
                     : selectedFloor ? ROOM_FILL_ALPHA_SELECTED_FLOOR : ROOM_FILL_ALPHA_ALL_FLOORS;
-            context.fill(minX + 1, minZ + 1, maxX, maxZ, withAlpha(baseColor, fillAlpha));
+            context.fill(innerMinX, innerMinZ, innerMaxX, innerMaxZ, withAlpha(baseColor, fillAlpha));
         }
 
         int outlineAlpha = hovered ? 0xff : selectedFloor ? 0xdd : 0xaa;
@@ -661,9 +690,9 @@ public class BlueprintScreen extends ExtendedScreen {
                 minX, minZ, maxX, maxZ,
                 withAlpha(baseColor, outlineAlpha));
 
-        if (hovered && maxX - minX > 2 && maxZ - minZ > 2) {
+        if (hovered && innerMinX + 1 < innerMaxX && innerMinZ + 1 < innerMaxZ) {
             WidgetUtils.drawRectangle(context,
-                    minX + 1, minZ + 1, maxX - 1, maxZ - 1,
+                    innerMinX, innerMinZ, innerMaxX, innerMaxZ,
                     withAlpha(baseColor, 0x88));
         }
     }
@@ -690,6 +719,72 @@ public class BlueprintScreen extends ExtendedScreen {
 
     private static int withAlpha(int color, int alpha) {
         return (color & 0x00ffffff) | (alpha << 24);
+    }
+
+    private float getMapScale() {
+        return switch (mapScaleMode) {
+            case FIT -> {
+                int horizontalSpan = Math.max(village.getBox().getXSpan(), village.getBox().getZSpan());
+                int usablePixels = (MAP_HALF_SIZE - MAP_INNER_MARGIN) * 2;
+                yield Math.min((float) usablePixels / Math.max(1, horizontalSpan), MAP_MAX_FIT_SCALE);
+            }
+            case ONE_TO_ONE -> 1.0F;
+            case TWO_TO_ONE -> 2.0F;
+            case THREE_TO_ONE -> 3.0F;
+            case FOUR_TO_ONE -> 4.0F;
+        };
+    }
+
+    private void cycleMapScale() {
+        mapScaleMode = mapScaleMode.next();
+        rememberedMapScaleMode = mapScaleMode;
+        updateMapScaleControl();
+        MCA.LOGGER.info("[FloorRoomDebug] side=client stage=map-scale-change mode={} effectiveScale={}",
+                mapScaleMode, village == null ? 0.0F : getMapScale());
+    }
+
+    private Component getMapScaleLabel() {
+        return Component.literal(mapScaleMode.label());
+    }
+
+    private Component getMapScaleTooltip() {
+        return Component.translatable(mapScaleMode.tooltipKey());
+    }
+
+    private void updateMapScaleControl() {
+        if (mapScaleButton != null) {
+            mapScaleButton.setMessage(getMapScaleLabel());
+            mapScaleButton.setTooltip(Tooltip.create(getMapScaleTooltip()));
+        }
+    }
+
+    private enum MapScaleMode {
+        FIT("Fit", "gui.blueprint.mapScale.fit.tooltip"),
+        ONE_TO_ONE("1:1", "gui.blueprint.mapScale.oneToOne.tooltip"),
+        TWO_TO_ONE("2:1", "gui.blueprint.mapScale.twoToOne.tooltip"),
+        THREE_TO_ONE("3:1", "gui.blueprint.mapScale.threeToOne.tooltip"),
+        FOUR_TO_ONE("4:1", "gui.blueprint.mapScale.fourToOne.tooltip");
+
+        private final String label;
+        private final String tooltipKey;
+
+        MapScaleMode(String label, String tooltipKey) {
+            this.label = label;
+            this.tooltipKey = tooltipKey;
+        }
+
+        String label() {
+            return label;
+        }
+
+        String tooltipKey() {
+            return tooltipKey;
+        }
+
+        MapScaleMode next() {
+            MapScaleMode[] values = values();
+            return values[(ordinal() + 1) % values.length];
+        }
     }
 
     private void changeSelectedFloor(int direction) {
@@ -733,9 +828,8 @@ public class BlueprintScreen extends ExtendedScreen {
         floorPreviousButton.active = canChangeFloors && selectedIndex > 0;
         floorNextButton.active = canChangeFloors && selectedIndex >= 0 && selectedIndex < floors.size() - 1;
         floorLabelButton.active = canChangeFloors && selectedFloorOrdinal != null;
-        floorPreviousButton.setTooltip(Tooltip.create(tooltip));
+        // Keep floor-navigation help on the central label only; the arrow buttons are self-explanatory.
         floorLabelButton.setTooltip(Tooltip.create(tooltip));
-        floorNextButton.setTooltip(Tooltip.create(tooltip));
 
         floorLabelButton.setMessage(getFloorLabel(selectedFloorOrdinal));
     }
@@ -1044,10 +1138,20 @@ public class BlueprintScreen extends ExtendedScreen {
     }
 
     public void setVillage(Village village) {
+        Integer selectedBefore = selectedFloorOrdinal;
+        boolean pendingFloorSelection = selectPlayerFloorOnNextVillageResponse;
         this.village = village;
         this.floorLayout = village == null ? BlueprintFloorLayout.empty() : BlueprintFloorLayout.build(village);
         Village.StructuralLookup structuralLookup = getPlayerStructuralLookup();
         Village.StructuralPosition structuralPosition = structuralLookup.position();
+        BlockPos playerPos = minecraft != null && minecraft.player != null
+                ? minecraft.player.blockPosition()
+                : null;
+        MCA.LOGGER.info("[FloorRoomDebug] side=client stage=village-response pos={} villageId={} buildingCount={} lookup={} lookupBuilding={} pendingFloorSelect={} selectedBefore={} availableFloors={}",
+                playerPos, village == null ? -1 : village.getId(), village == null ? 0 : village.getBuildings().size(),
+                structuralPosition, describeBuilding(structuralLookup.building().orElse(null)), pendingFloorSelection,
+                selectedBefore, floorLayout.ordinals());
+        logClientBuildings(village);
         if (selectPlayerFloorOnNextVillageResponse
                 && structuralPosition == Village.StructuralPosition.REGISTERED_ROOM) {
             selectPlayerFloor(structuralLookup);
@@ -1056,8 +1160,12 @@ public class BlueprintScreen extends ExtendedScreen {
         reconcileSelectedFloor();
         updateFloorControls();
         updateBuildingIconsControl();
+        updateMapScaleControl();
         updateStructureScanControl(structuralLookup);
         updateRemoveRoomControl(structuralLookup);
+
+        MCA.LOGGER.info("[FloorRoomDebug] side=client stage=village-response-applied pos={} lookup={} selectedAfter={} availableFloors={}",
+                playerPos, structuralPosition, selectedFloorOrdinal, floorLayout.ordinals());
 
         if (village == null) {
             setPage("empty");
@@ -1072,6 +1180,33 @@ public class BlueprintScreen extends ExtendedScreen {
                         selectedFloorOrdinal = ordinal;
                         rememberedFloorOrdinal = ordinal;
                     }));
+    }
+
+    private static void logClientBuildings(Village village) {
+        if (village == null) {
+            return;
+        }
+        village.getBuildings().values().stream()
+                .sorted(Comparator.comparingInt(Building::getId))
+                .forEach(building -> MCA.LOGGER.info(
+                        "[FloorRoomDebug] side=client stage=village-building villageId={} {}",
+                        village.getId(), describeBuilding(building)));
+    }
+
+    private static String describeBuilding(Building building) {
+        if (building == null) {
+            return "none";
+        }
+        return "id=" + building.getId()
+                + ",structure=" + building.getEffectiveStructureId()
+                + ",root=" + building.isStructureRoot()
+                + ",strict=" + building.isStrictScan()
+                + ",functional=" + building.isFunctionalRoom()
+                + ",floorY=" + building.getFloorY()
+                + ",groundFloorY=" + building.getGroundFloorY()
+                + ",floorRegions=" + building.getFloorRegions().stream().map(region -> region.anchorY()).toList()
+                + ",source=" + building.getSourceBlock()
+                + ",bounds=" + building.getPos0() + ".." + building.getPos1();
     }
 
     public void setVillageData(Rank rank, int reputation, boolean isVillage, Set<String> completedTasks, Map<Rank, List<Task>> tasks) {
