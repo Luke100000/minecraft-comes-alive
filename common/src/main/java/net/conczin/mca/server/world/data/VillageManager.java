@@ -310,7 +310,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         int effectivePreferredId = preferred == null ? preferredBuildingId : preferred.getId();
 
         Set<BlockPos> blocked = village == null
-                ? Set.of()
+                ? new HashSet<>()
                 : new HashSet<>(getBlockedSet(village));
 
         /*
