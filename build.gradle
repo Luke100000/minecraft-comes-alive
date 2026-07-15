@@ -1,33 +1,50 @@
 plugins {
     id 'java-library'
-    id 'architectury-plugin' version '3.5.167'
+    id 'architectury-plugin' version 'e3d53cc'
     id 'dev.architectury.loom' version '1.17.477' apply false
     id "io.github.pacifistmc.forgix" version "1.2.9"
 }
 
+def minecraftVersion = providers.gradleProperty('minecraft_version').get()
+def yarnMappings = providers.gradleProperty('yarn_mappings').get()
+def projectGroupId = providers.gradleProperty('groupId').get()
+def projectDisplayName = providers.gradleProperty('displayname').get()
+def projectName = name
+
+def mavenUsername = providers.environmentVariable('MAVEN_USERNAME')
+def mavenToken = providers.environmentVariable('MAVEN_TOKEN')
+
 architectury {
-    minecraft = rootProject.minecraft_version
+    minecraft = minecraftVersion
 }
 
 def getAppVersion = { ->
     try {
-        def version = providers.exec {
+        return providers.exec {
             commandLine 'git', 'describe', '--tags', '--abbrev=0'
         }.standardOutput.asText.get().trim()
-        return version
     } catch (Exception e) {
         println "Warning: ${e.message}, is git installed?"
         return "dev"
     }
 } as Object
 
+def appVersion = getAppVersion()
+def mergeJarsTask = tasks.named('mergeJars')
 
 subprojects {
     apply plugin: 'dev.architectury.loom'
 
+    loom {
+        runs.configureEach {
+            getPreferGradleTask().set(true)
+            vmArg "--enable-native-access=ALL-UNNAMED"
+        }
+    }
+
     dependencies {
-        minecraft "com.mojang:minecraft:${project.minecraft_version}"
-        mappings "net.fabricmc:yarn:${project.yarn_mappings}:v2"
+        minecraft "com.mojang:minecraft:${minecraftVersion}"
+        mappings "net.fabricmc:yarn:${yarnMappings}:v2"
     }
 }
 
@@ -35,13 +52,17 @@ allprojects {
     apply plugin: "maven-publish"
     apply plugin: 'architectury-plugin'
 
-    group = rootProject.groupId
-    description = rootProject.displayname
-    base.archivesName = rootProject.name
-    version = getAppVersion()
+    group = projectGroupId
+    description = projectDisplayName
+    base.archivesName = projectName
+    version = appVersion
 
-    build.finalizedBy(mergeJars)
-    assemble.finalizedBy(mergeJars)
+    tasks.named('build') {
+        finalizedBy mergeJarsTask
+    }
+    tasks.named('assemble') {
+        finalizedBy mergeJarsTask
+    }
 
     java {
         withSourcesJar()
@@ -50,20 +71,22 @@ allprojects {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    tasks.withType(JavaCompile).configureEach {
-        it.options.release = 17
-        it.options.deprecation = true
-        it.options.compilerArgs << "-Xmaxerrs" << "1000" << "-Xlint:deprecation" << "-Xlint:unchecked"
-    }
+    gradle.projectsEvaluated {
+        tasks.withType(JavaCompile).configureEach {
+            options.release = 17
+            options.deprecation = true
+            options.compilerArgs << "-Xmaxerrs" << "1000" << "-Xlint:deprecation" << "-Xlint:unchecked"
+        }
 
-    tasks.configureEach { task ->
-        if (task instanceof JavaForkOptions) {
-            if (task.maxHeapSize == null) {
-                task.maxHeapSize = '4G'
-            }
-            ['--enable-native-access=ALL-UNNAMED'].each { nativeAccessJvmArg ->
-                if (!task.jvmArgs.contains(nativeAccessJvmArg)) {
-                    task.jvmArgs(nativeAccessJvmArg)
+        tasks.configureEach { task ->
+            if (task instanceof JavaForkOptions) {
+                if (task.maxHeapSize == null) {
+                    task.maxHeapSize = '4G'
+                }
+                ['--enable-native-access=ALL-UNNAMED'].each { nativeAccessJvmArg ->
+                    if (!task.jvmArgs.contains(nativeAccessJvmArg)) {
+                        task.jvmArgs(nativeAccessJvmArg)
+                    }
                 }
             }
         }
@@ -75,8 +98,8 @@ allprojects {
                 name = "reposiliteRepository"
                 url = uri("https://maven.conczin.net/Artifacts")
                 credentials {
-                    username = System.getenv("MAVEN_USERNAME")
-                    password = System.getenv("MAVEN_TOKEN")
+                    username = mavenUsername.orNull
+                    password = mavenToken.orNull
                 }
             }
         }
@@ -84,20 +107,23 @@ allprojects {
 }
 
 forgix {
-    group = rootProject.groupId
-    mergedJarName = "${rootProject.name}-${rootProject.version}-universal.jar"
+    group = projectGroupId
+    mergedJarName = "${projectName}-${appVersion}-universal.jar"
     outputDir = "build/libs"
 
-    forge {
-        jarLocation = "build/libs/${rootProject.name}-${rootProject.version}.jar"
-        mixin "mca.mixin.json"
+    forge { container ->
+        container.jarLocation = "build/libs/${projectName}-${appVersion}.jar"
+        container.mixin "mca.mixin.json"
+        null
     }
 
-    fabric {
-        jarLocation = "build/libs/${rootProject.name}-${rootProject.version}.jar"
+    fabric { container ->
+        container.jarLocation = "build/libs/${projectName}-${appVersion}.jar"
+        null
     }
 
-    quilt {
-        jarLocation = "build/libs/${rootProject.name}-${rootProject.version}.jar"
+    quilt { container ->
+        container.jarLocation = "build/libs/${projectName}-${appVersion}.jar"
+        null
     }
 }

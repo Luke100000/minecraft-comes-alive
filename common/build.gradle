@@ -1,24 +1,30 @@
+def publicationArtifactId = providers.gradleProperty('artifactId').get()
+def publicationGroupId = providers.gradleProperty('groupId').get()
+def publicationVersion = version.toString()
+def enabledPlatforms = providers.gradleProperty('enabled_platforms').get()
+def loaderVersion = providers.gradleProperty('loader_version').get()
+def architecturyVersion = providers.gradleProperty('architectury_version').get()
+
 architectury {
-  common rootProject.enabled_platforms.split(',')
+  common enabledPlatforms.split(',')
 }
 
 dependencies {
   // We depend on Fabric Loader here to use the Fabric @Environment annotations,
   // which get remapped to the correct annotations on each platform.
   // Do NOT use other classes from Fabric Loader.
-  modImplementation "net.fabricmc:fabric-loader:$rootProject.loader_version"
+  modImplementation "net.fabricmc:fabric-loader:${loaderVersion}"
 
   // Architectury API. This is optional, and you can comment it out if you don't need it.
-  modImplementation "dev.architectury:architectury:$rootProject.architectury_version"
+  modImplementation "dev.architectury:architectury:${architecturyVersion}"
 }
-
 
 publishing {
   publications {
     mavenCommon(MavenPublication) {
-      artifactId = rootProject.artifactId
-      groupId = rootProject.groupId
-      version = version + "+common"
+      artifactId = publicationArtifactId
+      groupId = publicationGroupId
+      version = publicationVersion + "+common"
       from components.java
     }
   }

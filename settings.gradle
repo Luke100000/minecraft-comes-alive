@@ -1,6 +1,10 @@
 pluginManagement {
     repositories {
         maven {
+            name = 'JitPack'
+            url = 'https://jitpack.io'
+        }
+        maven {
             name = 'Fabric'
             url = 'https://maven.fabricmc.net/'
         }
@@ -13,6 +17,14 @@ pluginManagement {
             url = "https://files.minecraftforge.net/maven/"
         }
         gradlePluginPortal()
+    }
+
+    resolutionStrategy {
+        eachPlugin {
+            if (requested.id.id == 'architectury-plugin') {
+                useModule('com.github.Mikulasz12.architectury-plugin:architectury-plugin.gradle.plugin:e3d53cc')
+            }
+        }
     }
 }
 

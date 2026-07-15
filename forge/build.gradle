@@ -2,6 +2,13 @@ plugins {
     id "com.gradleup.shadow" version "9.3.0"
 }
 
+def projectVersion = version.toString()
+def publicationArtifactId = providers.gradleProperty('artifactId').get()
+def publicationGroupId = providers.gradleProperty('groupId').get()
+def forgeVersion = providers.gradleProperty('forge_version').get()
+def architecturyVersion = providers.gradleProperty('architectury_version').get()
+def updateJsonUrl = providers.gradleProperty('update_json_url').get()
+
 architectury {
     platformSetupLoomIde()
     forge()
@@ -21,45 +28,47 @@ configurations {
     developmentForge.extendsFrom common
 }
 
+def shadowCommonConfiguration = configurations.named('shadowCommon')
+def shadowRuntimeElementsConfiguration = configurations.named('shadowRuntimeElements')
+def shadowJarTask = tasks.named('shadowJar')
+def commonMainSources = project(':common').sourceSets.main.allSource
+
 dependencies {
-    forge "net.minecraftforge:forge:$rootProject.forge_version"
-    modApi "dev.architectury:architectury-forge:$rootProject.architectury_version"
+    forge "net.minecraftforge:forge:${forgeVersion}"
+    modApi "dev.architectury:architectury-forge:${architecturyVersion}"
 
     common(project(path: ':common', configuration: 'namedElements')) { transitive = false }
     shadowCommon project(path: ':common', configuration: 'transformProductionForge')
 }
 
-processResources {
-    def projectVersion = project.version.toString()
+tasks.named('processResources') {
     inputs.property 'version', projectVersion
-    inputs.property 'update_json_url', rootProject.update_json_url
+    inputs.property 'update_json_url', updateJsonUrl
 
     filesMatching('META-INF/mods.toml') {
-        expand version: projectVersion, update_json_url: rootProject.update_json_url
+        expand version: projectVersion, update_json_url: updateJsonUrl
     }
 }
 
-shadowJar {
+tasks.named('shadowJar') {
     exclude "fabric.mod.json"
     exclude "architectury.common.json"
 
-    configurations = [project.configurations.shadowCommon]
+    configurations = [shadowCommonConfiguration.get()]
     archiveClassifier = "dev-shadow"
 }
 
-remapJar {
-    input.set shadowJar.archiveFile
-    dependsOn shadowJar
+tasks.named('remapJar') {
+    input.set(shadowJarTask.flatMap { it.archiveFile })
+    dependsOn shadowJarTask
 }
 
-sourcesJar {
-    def commonSources = project(":common").sourcesJar
-    dependsOn commonSources
-    from commonSources.archiveFile.map { zipTree(it) }
+tasks.named('sourcesJar') {
+    from commonMainSources
 }
 
 components.java {
-    addVariantsFromConfiguration(project.configurations.shadowRuntimeElements) {
+    addVariantsFromConfiguration(shadowRuntimeElementsConfiguration.get()) {
         skip()
     }
 }
@@ -67,9 +76,9 @@ components.java {
 publishing {
     publications {
         mavenCommon(MavenPublication) {
-            artifactId = rootProject.artifactId
-            groupId = rootProject.groupId
-            version = version + "+forge"
+            artifactId = publicationArtifactId
+            groupId = publicationGroupId
+            version = projectVersion + "+forge"
             from components.java
         }
     }

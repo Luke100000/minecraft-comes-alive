@@ -2,12 +2,18 @@ plugins {
     id "com.gradleup.shadow" version "9.3.0"
 }
 
+def devUsername = providers.gradleProperty('mca_dev_username').orElse('Dev').get()
+def projectVersion = version.toString()
+def publicationArtifactId = providers.gradleProperty('artifactId').get()
+def publicationGroupId = providers.gradleProperty('groupId').get()
+def loaderVersion = providers.gradleProperty('loader_version').get()
+def fabricVersion = providers.gradleProperty('fabric_version').get()
+def architecturyVersion = providers.gradleProperty('architectury_version').get()
+
 architectury {
     platformSetupLoomIde()
     fabric()
 }
-
-def devUsername = providers.gradleProperty('mca_dev_username').orElse('Dev').get()
 
 loom {
     runs {
@@ -52,18 +58,19 @@ configurations {
     }
 }
 
+def shadowCommonConfiguration = configurations.named('shadowCommon')
+def shadowJarTask = tasks.named('shadowJar')
+
 dependencies {
-    modImplementation "net.fabricmc:fabric-loader:$rootProject.loader_version"
-    modImplementation "net.fabricmc.fabric-api:fabric-api:$rootProject.fabric_version"
-    modImplementation "dev.architectury:architectury-fabric:$rootProject.architectury_version"
+    modImplementation "net.fabricmc:fabric-loader:${loaderVersion}"
+    modImplementation "net.fabricmc.fabric-api:fabric-api:${fabricVersion}"
+    modImplementation "dev.architectury:architectury-fabric:${architecturyVersion}"
 
     common(project(path: ':common', configuration: 'namedElements')) { transitive = false }
     shadowCommon project(path: ':common', configuration: 'transformProductionFabric')
-
 }
 
-processResources {
-    def projectVersion = project.version.toString()
+tasks.named('processResources') {
     inputs.property 'version', projectVersion
 
     filesMatching('fabric.mod.json') {
@@ -73,13 +80,13 @@ processResources {
     from 'LICENSE'
 }
 
-shadowJar {
-    configurations = [project.configurations.shadowCommon]
+tasks.named('shadowJar') {
+    configurations = [shadowCommonConfiguration.get()]
     archiveClassifier = 'dev-shadow'
 }
 
-remapJar {
-    input.set shadowJar.archiveFile
+tasks.named('remapJar') {
+    input.set(shadowJarTask.flatMap { it.archiveFile })
 }
 
 /*
@@ -104,9 +111,9 @@ components.java {
 publishing {
     publications {
         mavenCommon(MavenPublication) {
-            artifactId = rootProject.artifactId
-            groupId = rootProject.groupId
-            version = version + "+fabric"
+            artifactId = publicationArtifactId
+            groupId = publicationGroupId
+            version = projectVersion + "+fabric"
             from components.java
         }
     }

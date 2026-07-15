@@ -22,6 +22,6 @@ jobs:
           cache-read-only: true
           cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
       - name: Build with Gradle - Forge
-        run: ./gradlew :forge:build --console=plain --non-interactive
+        run: ./gradlew :forge:build --build-cache --configuration-cache --console=plain --non-interactive
       - name: Build with Gradle - Fabric
-        run: ./gradlew :fabric:build --console=plain --non-interactive
+        run: ./gradlew :fabric:build --build-cache --configuration-cache --console=plain --non-interactive

@@ -2,6 +2,14 @@ plugins {
     id "com.gradleup.shadow" version "9.3.0"
 }
 
+def projectGroup = providers.gradleProperty('groupId').get()
+def projectVersion = version.toString()
+def publicationArtifactId = providers.gradleProperty('artifactId').get()
+def publicationGroupId = providers.gradleProperty('groupId').get()
+def quiltLoaderVersion = providers.gradleProperty('quilt_loader_version').get()
+def quiltedFabricApiVersion = providers.gradleProperty('quilted_fabric_api_version').get()
+def architecturyVersion = providers.gradleProperty('architectury_version').get()
+
 repositories {
     maven { url = "https://maven.quiltmc.org/repository/release/" }
 }
@@ -26,10 +34,13 @@ configurations {
     }
 }
 
+def shadowCommonConfiguration = configurations.named('shadowCommon')
+def shadowJarTask = tasks.named('shadowJar')
+
 dependencies {
-    modImplementation "org.quiltmc:quilt-loader:$rootProject.quilt_loader_version"
-    modImplementation "org.quiltmc.quilted-fabric-api:quilted-fabric-api:$rootProject.quilted_fabric_api_version"
-    modImplementation("dev.architectury:architectury-fabric:$rootProject.architectury_version") {
+    modImplementation "org.quiltmc:quilt-loader:${quiltLoaderVersion}"
+    modImplementation "org.quiltmc.quilted-fabric-api:quilted-fabric-api:${quiltedFabricApiVersion}"
+    modImplementation("dev.architectury:architectury-fabric:${architecturyVersion}") {
         exclude group: 'net.fabricmc'
         exclude group: 'net.fabricmc.fabric-api'
     }
@@ -38,11 +49,13 @@ dependencies {
     shadowCommon project(path: ':common', configuration: 'transformProductionQuilt')
 }
 
-processResources {
-    def projectGroup = project.groupId.toString()
-    def projectVersion = project.version.toString()
+tasks.named('processResources') {
     inputs.property 'group', projectGroup
     inputs.property 'version', projectVersion
+
+    // Quilt's runtime resource directory must include the shared descriptors
+    // referenced by quilt.mod.json.
+    from project(':common').sourceSets.main.resources
 
     filesMatching('quilt.mod.json') {
         expand group: projectGroup, version: projectVersion
@@ -51,13 +64,13 @@ processResources {
     from 'LICENSE'
 }
 
-shadowJar {
-    configurations = [project.configurations.shadowCommon]
+tasks.named('shadowJar') {
+    configurations = [shadowCommonConfiguration.get()]
     archiveClassifier = 'dev-shadow'
 }
 
-remapJar {
-    input.set shadowJar.archiveFile
+tasks.named('remapJar') {
+    input.set(shadowJarTask.flatMap { it.archiveFile })
 }
 
 /*
@@ -83,9 +96,9 @@ components.java {
 publishing {
     publications {
         mavenCommon(MavenPublication) {
-            artifactId = rootProject.artifactId
-            groupId = rootProject.groupId
-            version = version + "+quilt"
+            artifactId = publicationArtifactId
+            groupId = publicationGroupId
+            version = projectVersion + "+quilt"
             from components.java
         }
     }
