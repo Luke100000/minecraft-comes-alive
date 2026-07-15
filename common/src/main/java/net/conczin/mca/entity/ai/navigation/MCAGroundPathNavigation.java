@@ -20,13 +20,14 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
     private static final int LADDER_SEARCH_MARGIN = 8;
     private static final int MAX_LADDER_SEARCH_BLOCKS = 32_768;
     private static final int MIN_LADDER_ASCENT = 2;
-    private static final int MAX_EXIT_TARGET_HEIGHT_DIFFERENCE = 2;
     private static final double LADDER_TRANSITION_SPEED = 1.0D;
+    private static final int LADDER_SEARCH_COOLDOWN = 10;
     @Nullable
     private LadderRoute ladderRoute;
     @Nullable
     private BlockPos ladderRouteTarget;
     private int ladderRouteReachRange;
+    private long nextLadderSearchTick;
     private LadderRoutePhase ladderRoutePhase = LadderRoutePhase.APPROACH;
     public MCAGroundPathNavigation(Mob mob, Level level) {
         super(mob, level);
@@ -40,39 +41,59 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
         return new PathFinder(this.nodeEvaluator, maxVisitedNodes);
     }
 
-    @Override
-    public Path createPath(BlockPos target, int reachRange) {
+    public boolean moveToLadderTarget(BlockPos target, int reachRange, double speedModifier) {
         if (this.ladderRoute != null && this.ladderRouteTarget != null) {
-            if (this.ladderRoutePhase != LadderRoutePhase.APPROACH
+            if (this.ladderRoute.exit() == null) {
+                if (isTargetOnLadderColumn(this.ladderRoute, target)) {
+                    this.ladderRoute = this.ladderRoute.withClimbY(target.getY());
+                    this.ladderRouteTarget = target;
+                    this.ladderRouteReachRange = reachRange;
+                    this.speedModifier = speedModifier;
+                    return true;
+                }
+                cancelLadderRoute();
+            } else if (this.ladderRoutePhase != LadderRoutePhase.APPROACH
                     || target.getY() >= this.ladderRoute.exit().getY() - 1) {
                 this.ladderRouteTarget = target;
                 this.ladderRouteReachRange = reachRange;
-                return this.path == null ? this.ladderRoute.approachPath() : this.path;
+                this.speedModifier = speedModifier;
+                return true;
             }
-            clearLadderRoute();
+            cancelLadderRoute();
         }
+
+        if (this.level.getGameTime() < this.nextLadderSearchTick) {
+            return false;
+        }
+        if (this.level.getBlockState(target).is(BlockTags.CLIMBABLE)
+                && target.distManhattan(this.mob.blockPosition()) <= 1) {
+            return false;
+        }
+        this.nextLadderSearchTick = this.level.getGameTime() + LADDER_SEARCH_COOLDOWN;
 
         Path directPath = super.createPath(target, reachRange);
         if (reachesTargetHeight(directPath, target)) {
-            clearLadderRoute();
-            return directPath;
+            return false;
         }
 
         Optional<LadderRoute> route = findLadderRoute(target, reachRange);
         if (route.isEmpty()) {
             MCA.LOGGER.debug("[LadderRoute] villager={} target={} vanillaReachable=false result=no-route", this.mob.getUUID(), target);
-            clearLadderRoute();
-            return directPath;
+            return false;
         }
 
         this.ladderRoute = route.get();
         this.ladderRouteTarget = target;
         this.ladderRouteReachRange = reachRange;
         this.ladderRoutePhase = LadderRoutePhase.APPROACH;
-        MCA.LOGGER.info("[LadderRoute] villager={} target={} ladder={} exit={} approachNodes={}",
-                this.mob.getUUID(), target, this.ladderRoute.ladderBottom(), this.ladderRoute.exit(),
+        if (!super.moveTo(this.ladderRoute.approachPath(), speedModifier)) {
+            clearLadderRoute();
+            return false;
+        }
+        MCA.LOGGER.info("[LadderRoute] villager={} target={} ladder={} climbY={} exit={} approachNodes={}",
+                this.mob.getUUID(), target, this.ladderRoute.ladderBottom(), this.ladderRoute.climbY(), this.ladderRoute.exit(),
                 this.ladderRoute.approachPath().getNodeCount());
-        return this.ladderRoute.approachPath();
+        return true;
     }
 
     private boolean reachesTargetHeight(@Nullable Path path, BlockPos target) {
@@ -81,7 +102,7 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
         }
 
         Node end = path.getEndNode();
-        return end != null && Math.abs(end.y - target.getY()) <= MAX_EXIT_TARGET_HEIGHT_DIFFERENCE;
+        return end != null && end.y == target.getY();
     }
 
     @Override
@@ -92,6 +113,20 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
             return true;
         }
         return super.moveTo(path, speedModifier);
+    }
+
+    @Override
+    public void stop() {
+        if (this.ladderRoute == null) {
+            super.stop();
+        }
+    }
+
+    public void cancelLadderRoute() {
+        if (this.ladderRoute != null) {
+            clearLadderRoute();
+            super.stop();
+        }
     }
 
     @Override
@@ -139,21 +174,28 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
             }
 
             this.ladderRoutePhase = LadderRoutePhase.CLIMB;
-            MCA.LOGGER.info("[LadderRoute] villager={} ladder={} result=climb-start y={} exit={} climbAnchor={}",
-                    this.mob.getUUID(), ladder, this.mob.getY(), this.ladderRoute.exit(), climbAnchor);
+            MCA.LOGGER.info("[LadderRoute] villager={} ladder={} result=climb-start y={} climbY={} exit={} climbAnchor={}",
+                    this.mob.getUUID(), ladder, this.mob.getY(), this.ladderRoute.climbY(), this.ladderRoute.exit(), climbAnchor);
         }
 
         if (this.ladderRoutePhase == LadderRoutePhase.CLIMB) {
-            if (this.mob.getY() < this.ladderRoute.exit().getY() - 0.25D) {
+            if (this.mob.getY() < this.ladderRoute.climbY() - 0.25D) {
                 this.mob.getMoveControl().setWantedPosition(
                         climbAnchor.getX() + 0.5D,
-                        this.ladderRoute.exit().getY(),
+                        this.ladderRoute.climbY(),
                         climbAnchor.getZ() + 0.5D,
                         this.speedModifier
                 );
                 return;
             }
 
+            if (this.ladderRoute.exit() == null) {
+                MCA.LOGGER.info("[LadderRoute] villager={} ladder={} result=target-height-reached y={}",
+                        this.mob.getUUID(), ladder, this.mob.getY());
+                clearLadderRoute();
+                super.stop();
+                return;
+            }
             this.ladderRoutePhase = LadderRoutePhase.EXIT;
         }
 
@@ -179,7 +221,8 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
 
     private Optional<LadderRoute> findLadderRoute(BlockPos target, int reachRange) {
         BlockPos start = this.mob.blockPosition();
-        if (target.getY() - start.getY() < MIN_LADDER_ASCENT) {
+        boolean targetIsOnLadder = this.level.getBlockState(target).is(BlockTags.CLIMBABLE);
+        if (target.getY() <= start.getY() || !targetIsOnLadder && target.getY() - start.getY() < MIN_LADDER_ASCENT) {
             return Optional.empty();
         }
 
@@ -201,6 +244,9 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
                     || this.level.getBlockState(pos.below()).is(BlockTags.CLIMBABLE)) {
                 continue;
             }
+            if (targetIsOnLadder && (pos.getX() != target.getX() || pos.getZ() != target.getZ())) {
+                continue;
+            }
 
             Optional<LadderRoute> route = createLadderRoute(pos.immutable(), target, reachRange);
             if (route.isEmpty()) {
@@ -209,8 +255,8 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
 
             LadderRoute candidate = route.get();
             int cost = candidate.approachPath().getNodeCount()
-                    + candidate.exit().getY() - candidate.ladderBottom().getY()
-                    + candidate.exit().distManhattan(target);
+                    + candidate.climbY() - candidate.ladderBottom().getY()
+                    + (candidate.exit() == null ? 0 : candidate.exit().distManhattan(target));
             if (cost < bestCost) {
                 bestRoute = candidate;
                 bestCost = cost;
@@ -224,54 +270,67 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
         while (this.level.getBlockState(top.above()).is(BlockTags.CLIMBABLE)) {
             top = top.above();
         }
+
+        Optional<Path> approachPath = findLadderApproach(bottom);
+        if (approachPath.isEmpty()) {
+            return Optional.empty();
+        }
+        if (this.level.getBlockState(target).is(BlockTags.CLIMBABLE)
+                && target.getX() == bottom.getX() && target.getZ() == bottom.getZ()
+                && target.getY() >= bottom.getY() && target.getY() <= top.getY()) {
+            return Optional.of(new LadderRoute(bottom, top, target.getY(), null, approachPath.get()));
+        }
+
         Optional<BlockPos> exit = findLadderExit(bottom, top, target);
         if (exit.isEmpty()) {
             return Optional.empty();
         }
 
+        return Optional.of(new LadderRoute(bottom, top, exit.get().getY(), exit.get(), approachPath.get()));
+    }
+
+    private Optional<Path> findLadderApproach(BlockPos bottom) {
         Direction preferredApproach = getPreferredExitDirection(bottom);
         if (preferredApproach != null) {
             Path path = super.createPath(bottom.relative(preferredApproach), 0);
-            return path != null && path.canReach()
-                    ? Optional.of(new LadderRoute(bottom, exit.get(), path))
-                    : Optional.empty();
+            return path != null && path.canReach() ? Optional.of(path) : Optional.empty();
         }
 
         for (Direction direction : Direction.Plane.HORIZONTAL) {
             BlockPos approach = bottom.relative(direction);
             Path path = super.createPath(approach, 0);
             if (path != null && path.canReach()) {
-                return Optional.of(new LadderRoute(bottom, exit.get(), path));
+                return Optional.of(path);
             }
         }
         return Optional.empty();
     }
 
     private Optional<BlockPos> findLadderExit(BlockPos bottom, BlockPos top, BlockPos target) {
+        int exitY = target.getY();
+        if (exitY < bottom.getY() + MIN_LADDER_ASCENT || exitY > top.getY() + 1) {
+            return Optional.empty();
+        }
+
         BlockPos bestExit = null;
         int bestCost = Integer.MAX_VALUE;
         Direction preferredExitDirection = getPreferredExitDirection(bottom);
-        for (int y = bottom.getY() + MIN_LADDER_ASCENT; y <= top.getY() + 1; y++) {
-            if (Math.abs(y - target.getY()) > MAX_EXIT_TARGET_HEIGHT_DIFFERENCE) {
+        for (Direction direction : Direction.Plane.HORIZONTAL) {
+            if (preferredExitDirection != null && direction != preferredExitDirection) {
                 continue;
             }
-            for (Direction direction : Direction.Plane.HORIZONTAL) {
-                if (preferredExitDirection != null && direction != preferredExitDirection) {
-                    continue;
-                }
-                BlockPos exit = new BlockPos(bottom.getX(), y, bottom.getZ()).relative(direction);
-                BlockPos floor = exit.below();
-                if (!this.level.getBlockState(exit).isAir()
-                        || !this.level.getBlockState(exit.above()).isAir()
-                        || !this.level.getBlockState(floor).entityCanStandOn(this.level, floor, this.mob)) {
-                    continue;
-                }
+            BlockPos exit = new BlockPos(bottom.getX(), exitY, bottom.getZ()).relative(direction);
+            BlockPos floor = exit.below();
+            if (!this.level.getBlockState(exit).isAir()
+                    || !this.level.getBlockState(exit.above()).isAir()
+                    || !this.level.getBlockState(floor).entityCanStandOn(this.level, floor, this.mob)) {
+                continue;
+            }
 
-                int cost = Math.abs(exit.getY() - target.getY()) * 8 + exit.distManhattan(target);
-                if (cost < bestCost) {
-                    bestExit = exit;
-                    bestCost = cost;
-                }
+            int cost = exit.distManhattan(target);
+            if (cost < bestCost) {
+                bestExit = exit;
+                bestCost = cost;
             }
         }
         return Optional.ofNullable(bestExit);
@@ -309,13 +368,24 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
         return ladder.closerToCenterThan(this.mob.position(), 0.15D);
     }
 
+    private boolean isTargetOnLadderColumn(LadderRoute route, BlockPos target) {
+        return this.level.getBlockState(target).is(BlockTags.CLIMBABLE)
+                && target.getX() == route.ladderBottom().getX()
+                && target.getZ() == route.ladderBottom().getZ()
+                && target.getY() >= route.ladderBottom().getY()
+                && target.getY() <= route.ladderTop().getY();
+    }
+
     private void clearLadderRoute() {
         this.ladderRoute = null;
         this.ladderRouteTarget = null;
         this.ladderRoutePhase = LadderRoutePhase.APPROACH;
     }
 
-    private record LadderRoute(BlockPos ladderBottom, BlockPos exit, Path approachPath) {
+    private record LadderRoute(BlockPos ladderBottom, BlockPos ladderTop, int climbY, @Nullable BlockPos exit, Path approachPath) {
+        private LadderRoute withClimbY(int climbY) {
+            return new LadderRoute(this.ladderBottom, this.ladderTop, climbY, null, this.approachPath);
+        }
     }
 
     private enum LadderRoutePhase {

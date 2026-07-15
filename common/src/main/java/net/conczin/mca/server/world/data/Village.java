@@ -453,6 +453,11 @@ public class Village implements Iterable<Building> {
                 .filter(Building::isComplete)
                 .filter(Building::isFunctionalRoom)
                 .filter(building -> building.containsRawPos(pos))
+                /*
+                 * Raw bounds can span open stairs, atriums, and multi-floor interiors.
+                 * A player only belongs to a registered room on that room's semantic floor.
+                 */
+                .filter(building -> building.getFloorDistanceTo(pos) <= Building.SEMANTIC_FLOOR_TOLERANCE)
                 .min(Comparator.comparingInt((Building building) -> building.getFloorDistanceTo(pos))
                         .thenComparingInt(Building::getId));
     }
