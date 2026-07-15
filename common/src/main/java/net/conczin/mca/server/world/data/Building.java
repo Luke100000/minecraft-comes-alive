@@ -504,7 +504,15 @@ public class Building {
 
             size = interiorSize;
             int legacyFloorY = determineDominantFloorY(lowestInteriorY, pos0Y + 1);
-            floorRegions = BuildingFloorRegionDetector.detect(supportedCells).stream()
+            List<BuildingFloorRegionDetector.DetectedRegion> detectedFloorRegions =
+                    BuildingFloorRegionDetector.detect(supportedCells);
+            if (strictScan && detectedFloorRegions.isEmpty()) {
+                detectedFloorRegions = BuildingFloorRegionDetector
+                        .detectSingleFloor(supportedCells, legacyFloorY)
+                        .stream()
+                        .toList();
+            }
+            floorRegions = detectedFloorRegions.stream()
                     .map(BuildingFloorRegion::fromDetected)
                     .toList();
             floorY = floorRegions.stream()
