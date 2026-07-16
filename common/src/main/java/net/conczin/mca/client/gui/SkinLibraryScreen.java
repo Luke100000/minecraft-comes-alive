@@ -257,7 +257,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                             }
 
                             villagerVisualization.getGenetics().setGender(SkinCache.getMeta(c).map(SkinMeta::getGender).orElse(Gender.MALE).binary());
-                            InventoryScreen.renderEntityInInventoryFollowsMouse(context, cx - 25, cy - 50, cx + 25, cy + 30, hoveredContent == c ? 30 : 28, 0, mouseX, mouseY, villagerVisualization);
+                            PreviewEntityAnimation.renderEntityInInventoryFollowsMouse(context, cx - 25, cy - 50, cx + 25, cy + 30, hoveredContent == c ? 30 : 28, 0, mouseX, mouseY, villagerVisualization);
                             i++;
                         } else {
                             break;

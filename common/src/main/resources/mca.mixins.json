@@ -27,11 +27,13 @@
   ],
   "client": [
     "client.MixinClientLanguage",
+    "client.MixinDeltaTrackerTimer",
     "client.MixinEntity",
     "client.MixinGameRenderer",
     "client.MixinHumanoidArmorLayer",
     "client.MixinItemInHandLayer",
     "client.MixinLivingEntityRenderer",
+    "client.MixinModelPartAccessor",
     "client.MixinPlayerRenderer",
     "client.MixinSoundBufferLibrary"
   ],

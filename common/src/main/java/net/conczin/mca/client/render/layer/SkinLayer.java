@@ -1,11 +1,14 @@
 package net.conczin.mca.client.render.layer;
 
+import com.mojang.blaze3d.vertex.PoseStack;
 import net.conczin.mca.MCA;
+import net.conczin.mca.client.model.McaModelAnimationDriver;
 import net.conczin.mca.client.resources.ColorPalette;
 import net.conczin.mca.entity.ai.Genetics;
 import net.conczin.mca.entity.ai.Traits;
 import net.minecraft.client.model.HumanoidModel;
 import net.minecraft.client.renderer.entity.RenderLayerParent;
+import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.LivingEntity;
 
@@ -14,6 +17,11 @@ import static net.conczin.mca.client.model.CommonVillagerModel.getVillager;
 public class SkinLayer<T extends LivingEntity, M extends HumanoidModel<T>> extends VillagerLayer<T, M> {
     public SkinLayer(RenderLayerParent<T, M> renderer, M model) {
         super(renderer, model);
+    }
+
+    @Override
+    protected void prepareParentModel(PoseStack transform, int light) {
+        McaModelAnimationDriver.animate(getParentModel().head, transform, light, OverlayTexture.NO_OVERLAY);
     }
 
     @Override

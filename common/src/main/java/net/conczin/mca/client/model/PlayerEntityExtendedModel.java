@@ -39,17 +39,14 @@ public class PlayerEntityExtendedModel<T extends LivingEntity> extends PlayerMod
     }
 
     private void copyAttributes(PlayerEntityExtendedModel<T> target) {
-        target.leftPants.copyFrom(leftPants);
-        target.rightPants.copyFrom(rightPants);
-        target.leftSleeve.copyFrom(leftSleeve);
-        target.rightSleeve.copyFrom(rightSleeve);
-        target.jacket.copyFrom(jacket);
-        target.breastsWear.copyFrom(breastsWear);
-
         copyCommonAttributes(target);
 
         target.breasts.visible = breasts.visible;
         target.breasts.copyFrom(breasts);
+
+        // Rebuild wear parts from the canonical bones copied by HumanoidModel.
+        target.hat.copyFrom(target.head);
+        target.syncWearParts();
     }
 
     private void copyAttributes(PlayerArmorExtendedModel<T> target) {
@@ -60,8 +57,17 @@ public class PlayerEntityExtendedModel<T extends LivingEntity> extends PlayerMod
     }
 
     @Override
+    public void syncWearParts() {
+        leftPants.copyFrom(leftLeg);
+        rightPants.copyFrom(rightLeg);
+        leftSleeve.copyFrom(leftArm);
+        rightSleeve.copyFrom(rightArm);
+        jacket.copyFrom(body);
+        breastsWear.copyFrom(breasts);
+    }
+
+    @Override
     public void renderToBuffer(PoseStack matrices, VertexConsumer vertices, int light, int overlay, int color) {
-        // Idk anymore
         breastsWear.visible = jacket.visible;
 
         renderCommon(matrices, vertices, light, overlay, color);
@@ -109,14 +115,15 @@ public class PlayerEntityExtendedModel<T extends LivingEntity> extends PlayerMod
 
     @Override
     public void setupAnim(T villager, float limbAngle, float limbDistance, float animationProgress, float headYaw, float headPitch) {
-        if (CommonVillagerModel.getVillager(villager).getAgeState() == AgeState.BABY && !villager.isPassenger()) {
+        var villagerData = CommonVillagerModel.getVillager(villager);
+        if (villagerData.getAgeState() == AgeState.BABY && !villager.isPassenger()) {
             limbDistance = (float) Math.sin(villager.tickCount / 12F);
             limbAngle = (float) Math.cos(villager.tickCount / 9F) * 3;
             headYaw += (float) Math.sin(villager.tickCount / 2F);
         }
 
         super.setupAnim(villager, limbAngle, limbDistance, animationProgress, headYaw, headPitch);
-        applyVillagerDimensions(CommonVillagerModel.getVillager(villager), villager.isCrouching());
+        applyVillagerDimensions(villagerData);
     }
 
     public void copyVisibility(HumanoidModel<?> model) {

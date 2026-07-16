@@ -146,7 +146,7 @@ public class VillagerEntityBaseModelMCA<T extends LivingEntity & VillagerLike<T>
             this.rightArm.zRot = waveSideways;
         }
 
-        applyVillagerDimensions(villager, villager.isCrouching());
+        applyVillagerDimensions(villager);
     }
 
     @Override

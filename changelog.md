@@ -1,3 +1,7 @@
+# 7.7.23-beta.1
+
+* Added EMF compatibility, allowing supported player model animations to work with MCA villagers and player models.
+
 # 7.7.22
 
 * Fixed Rare Crash
