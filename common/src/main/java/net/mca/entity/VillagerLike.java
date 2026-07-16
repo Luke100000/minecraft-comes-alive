@@ -478,7 +478,6 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
         }
 
         setTrackedValue(AGE_STATE, state);
-        asEntity().calculateDimensions();
         updateAttributes();
 
         return old != AgeState.UNASSIGNED;

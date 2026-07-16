@@ -169,7 +169,11 @@ public class VillagerEditorSyncRequest extends NbtDataMessage implements Message
                     saveEntity(player, entity, getData().copy());
             case "profession" -> {
                 if (entity instanceof VillagerEntityMCA villager) {
-                    VillagerProfession profession = Registries.VILLAGER_PROFESSION.get(new Identifier(getData().getString("profession")));
+                    Identifier professionId = Identifier.tryParse(getData().getString("profession"));
+                    if (professionId == null) {
+                        return;
+                    }
+                    VillagerProfession profession = Registries.VILLAGER_PROFESSION.get(professionId);
                     if (profession != null) {
                         // Apply editor state (name, genetics, etc.) atomically with the profession change.
                         // This replaces the separate sync packet the client used to send first.

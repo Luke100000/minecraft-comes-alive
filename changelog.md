@@ -1,3 +1,9 @@
+# 7.6.28-beta.7
+
+* Fixed bug where VANILLA model set eye height to the villager model size.
+* Improved age-based voice pitch.
+* Backend improvements.
+
 # 7.6.28-beta.6
 
 * Brightened some eye colours, let us know if the irises look better in the Discord server!

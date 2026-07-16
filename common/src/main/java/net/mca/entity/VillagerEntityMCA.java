@@ -30,8 +30,6 @@ import net.minecraft.entity.ai.brain.BlockPosLookTarget;
 import net.minecraft.entity.ai.brain.Brain;
 import net.minecraft.entity.ai.brain.MemoryModuleType;
 import net.minecraft.entity.ai.brain.WalkTarget;
-import net.minecraft.entity.ai.goal.GoalSelector;
-import net.minecraft.entity.ai.goal.TrackTargetGoal;
 import net.minecraft.entity.ai.pathing.EntityNavigation;
 import net.minecraft.entity.ai.pathing.PathNodeType;
 import net.minecraft.entity.attribute.DefaultAttributeContainer;
@@ -92,7 +90,6 @@ import net.minecraft.world.World;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.lang.reflect.Field;
 import java.util.*;
 import java.util.function.Predicate;
 
@@ -646,18 +643,6 @@ public class VillagerEntityMCA extends VillagerEntity implements VillagerLike<Vi
         // Iron Golem got his revenge, now chill
         if (attacker instanceof IronGolemEntity golem) {
             golem.stopAnger();
-
-            //kill the damn tracker goals
-            try {
-                Field targetSelector = MobEntity.class.getDeclaredField("targetSelector");
-                ((GoalSelector) targetSelector.get(attacker)).getRunningGoals().forEach(g -> {
-                    if (g.getGoal() instanceof TrackTargetGoal) {
-                        g.getGoal().stop();
-                    }
-                });
-            } catch (NoSuchFieldException | IllegalAccessException e) {
-                //nop
-            }
 
             damageAmount *= 0.0f;
         }
@@ -1298,7 +1283,7 @@ public class VillagerEntityMCA extends VillagerEntity implements VillagerLike<Vi
     public float getSoundPitch() {
         float r = (random.nextFloat() - 0.5f) * 0.05f;
         float g = (genetics.getGene(Genetics.VOICE) - 0.5f) * 0.3f;
-        float a = MathHelper.lerp(AgeState.getDelta(age), getAgeState().getPitch(), getAgeState().getNext().getPitch());
+        float a = MathHelper.lerp(AgeState.getDelta(getTrackedValue(GROWTH_AMOUNT)), getAgeState().getPitch(), getAgeState().getNext().getPitch());
         return a + r + g;
     }
 

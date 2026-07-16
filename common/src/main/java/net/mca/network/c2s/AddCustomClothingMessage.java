@@ -31,6 +31,10 @@ public class AddCustomClothingMessage implements Message {
 
     @Override
     public void receive(ServerPlayerEntity player) {
+        if (!CustomClothingManager.canModifyGlobalContent(player)) {
+            return;
+        }
+
         JsonObject object = JsonParser.parseString(json).getAsJsonObject();
         if (hair) {
             CustomClothingManager.getHair().addEntry(identifier, new Hair(identifier, object));

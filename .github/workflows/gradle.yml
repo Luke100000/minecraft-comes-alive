@@ -44,7 +44,7 @@ jobs:
           separator: "+"
           msg: ${{steps.tag.outputs.tag}}
       - name: "Upload to Distributors"
-        uses: Kir-Antipov/mc-publish@v3.3.0
+        uses: Kir-Antipov/mc-publish@v3.3.1
         if: ${{ success() && startsWith(github.ref, 'refs/tags/') }}
         with:
           modrinth-id: 1W98a849
@@ -52,6 +52,7 @@ jobs:
           curseforge-id: 535291
           curseforge-token: ${{ env.CURSEFORGE_TOKEN }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
+          environment: client | server
 
           name: "[Universal ${{steps.split.outputs._1}}] MCA Reborn - ${{steps.split.outputs._0}}"
           changelog-file: changelog.md

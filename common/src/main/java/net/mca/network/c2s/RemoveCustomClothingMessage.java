@@ -21,6 +21,10 @@ public class RemoveCustomClothingMessage implements Message {
 
     @Override
     public void receive(ServerPlayerEntity player) {
+        if (!CustomClothingManager.canModifyGlobalContent(player)) {
+            return;
+        }
+
         if (type == Type.CLOTHING) {
             CustomClothingManager.getClothing().removeEntry(identifier);
         } else if (type == Type.HAIR) {
