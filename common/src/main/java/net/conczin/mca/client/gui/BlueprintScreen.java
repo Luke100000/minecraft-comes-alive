@@ -35,10 +35,14 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.levelgen.Heightmap;
+import net.minecraft.world.level.material.MapColor;
 
 import java.util.*;
 import java.util.function.Consumer;
 
+@SuppressWarnings("deprecation")
 public class BlueprintScreen extends ExtendedScreen {
     //gui element Y positions
     private static final int POSITION_TAXES = -60;
@@ -48,6 +52,20 @@ public class BlueprintScreen extends ExtendedScreen {
     private static final int MAP_HALF_SIZE = 75;
     private static final int MAP_INNER_MARGIN = 6;
     private static final float MAP_MAX_FIT_SCALE = 2.0f;
+    private static final int MAP_CONTROL_GAP = 2;
+    private static final int MAP_ICONS_BUTTON_WIDTH = 47;
+    private static final int MAP_TERRAIN_BUTTON_WIDTH = 52;
+    private static final int MAP_SCALE_BUTTON_WIDTH = 47;
+    private static final int TERRAIN_TARGET_CELL_PIXELS = 2;
+    private static final int TERRAIN_BACKGROUND_COLOR = 0xd0181c22;
+    private static final int TERRAIN_ALPHA = 0xff;
+    private static final int TERRAIN_FALLBACK_COLOR = 0x6f766f;
+    private static final int TERRAIN_CONTOUR_COLOR = 0x66000000;
+    private static final float TERRAIN_BASE_BRIGHTNESS = MapColor.Brightness.NORMAL.modifier / 255.0f;
+    private static final float TERRAIN_ELEVATION_BRIGHTNESS_RANGE = 0.12f;
+    private static final float TERRAIN_SLOPE_BRIGHTNESS_PER_BLOCK = 0.055f;
+    private static final float TERRAIN_MIN_BRIGHTNESS = 0.58f;
+    private static final float TERRAIN_MAX_BRIGHTNESS = 1.15f;
     private static final int ROOM_INNER_PADDING = 1;
     private static final int PLAYER_MARKER_SIZE = 6;
     private static final int PLAYER_MARKER_EDGE_PADDING = 2;
@@ -78,6 +96,7 @@ public class BlueprintScreen extends ExtendedScreen {
     private ButtonWidget floorLabelButton;
     private ButtonWidget floorNextButton;
     private ButtonWidget buildingIconsButton;
+    private ButtonWidget terrainButton;
     private ButtonWidget mapScaleButton;
     private ButtonWidget playerCenteredButton;
     private TooltipButtonWidget groundAnchorButton;
@@ -90,6 +109,7 @@ public class BlueprintScreen extends ExtendedScreen {
     private boolean playerCentered = rememberedPlayerCentered;
     private boolean selectPlayerFloorOnNextVillageResponse;
     private boolean showBuildingIcons = true;
+    private boolean showTerrain = true;
     private BlueprintFloorLayout floorLayout = BlueprintFloorLayout.empty();
     private BuildingType selectedBuilding;
     private UUID selectedVillager;
@@ -164,6 +184,7 @@ public class BlueprintScreen extends ExtendedScreen {
         floorLabelButton = null;
         floorNextButton = null;
         buildingIconsButton = null;
+        terrainButton = null;
         mapScaleButton = null;
         playerCenteredButton = null;
         groundAnchorButton = null;
@@ -219,14 +240,23 @@ public class BlueprintScreen extends ExtendedScreen {
                         Component.empty(), b -> selectFloor(null)));
                 floorNextButton = addRenderableWidget(new ButtonWidget(floorControlX + 126, floorControlY, 24, 20,
                         Component.literal(">"), b -> changeSelectedFloor(1)));
+                int mapControlY = floorControlY + 22;
                 buildingIconsButton = addRenderableWidget(new ButtonWidget(
-                        floorControlX, floorControlY + 22, 96, 20,
+                        floorControlX, mapControlY, MAP_ICONS_BUTTON_WIDTH, 20,
                         getBuildingIconsLabel(), b -> {
                     showBuildingIcons = !showBuildingIcons;
                     updateBuildingIconsControl();
-                }));
+                }, Component.translatable("gui.blueprint.buildingIcons")));
+                int terrainControlX = floorControlX + MAP_ICONS_BUTTON_WIDTH + MAP_CONTROL_GAP;
+                terrainButton = addRenderableWidget(new ButtonWidget(
+                        terrainControlX, mapControlY, MAP_TERRAIN_BUTTON_WIDTH, 20,
+                        getTerrainLabel(), b -> {
+                    showTerrain = !showTerrain;
+                    updateTerrainControl();
+                }, Component.translatable("gui.blueprint.terrain.tooltip")));
+                int scaleControlX = terrainControlX + MAP_TERRAIN_BUTTON_WIDTH + MAP_CONTROL_GAP;
                 mapScaleButton = addRenderableWidget(new ButtonWidget(
-                        floorControlX + 98, floorControlY + 22, 52, 20,
+                        scaleControlX, mapControlY, MAP_SCALE_BUTTON_WIDTH, 20,
                         getMapScaleLabel(), b -> cycleMapScale(), getMapScaleTooltip()));
 
                 playerCenteredButton = addRenderableWidget(new ButtonWidget(
@@ -399,6 +429,7 @@ public class BlueprintScreen extends ExtendedScreen {
             Village.StructuralLookup structuralLookup = getPlayerStructuralLookup();
             updateStructureScanControl(structuralLookup);
             updateRemoveRoomControl(structuralLookup);
+            updateGroundAnchorControl(structuralLookup);
         }
 
         super.render(context, sizeX, sizeY, offset);
@@ -561,6 +592,11 @@ public class BlueprintScreen extends ExtendedScreen {
         int right = centerX + MAP_HALF_SIZE;
         int bottom = centerY + MAP_HALF_SIZE;
         Integer selectedFloor = selectedFloorOrdinal;
+        if (showTerrain) {
+            // Give the topographic cells a stable backing instead of blending them into the
+            // blurred 3D world behind the screen. Keep one pixel free for the map border.
+            context.fill(left + 1, top + 1, right - 1, bottom - 1, TERRAIN_BACKGROUND_COLOR);
+        }
         WidgetUtils.drawRectangle(context, left, top, right, bottom, 0xffffff88);
 
         //hint
@@ -582,10 +618,15 @@ public class BlueprintScreen extends ExtendedScreen {
         List<Building> iconBuildings = new ArrayList<>();
 
         context.enableScissor(left + 1, top + 1, right - 1, bottom - 1);
+
         matrices.pushPose();
         matrices.translate(centerX, centerY, 0.0D);
         matrices.scale(scale, scale, 1.0F);
         matrices.translate(-mapCenterX, -mapCenterZ, 0.0D);
+
+        if (showTerrain) {
+            renderTerrain(context, mapCenterX, mapCenterZ, scale);
+        }
 
         for (Building building : village.getBuildings().values()) {
             if (!building.isComplete() || !floorLayout.isBuildingVisible(building, selectedFloor)) {
@@ -766,6 +807,150 @@ public class BlueprintScreen extends ExtendedScreen {
     }
 
     private record ScreenPoint(int x, int y) {
+    }
+
+    private record TerrainCell(int minX, int minZ, int maxX, int maxZ, int height, int baseColor) {
+    }
+
+    private void renderTerrain(GuiGraphics context, double mapCenterX, double mapCenterZ, float scale) {
+        if (minecraft == null || minecraft.level == null) {
+            return;
+        }
+
+        int centerBlockX = (int) Math.floor(mapCenterX);
+        int centerBlockZ = (int) Math.floor(mapCenterZ);
+        int radius = Math.max(1, (int) Math.ceil((MAP_HALF_SIZE - 1) / scale) + 1);
+        int sampleStep = Math.max(1, (int) Math.ceil((double) TERRAIN_TARGET_CELL_PIXELS / scale));
+        int minX = centerBlockX - radius;
+        int maxX = centerBlockX + radius;
+        int minZ = centerBlockZ - radius;
+        int maxZ = centerBlockZ + radius;
+        int minBuildHeight = minecraft.level.getMinBuildHeight();
+        int xCellCount = (maxX - minX) / sampleStep + 1;
+        int zCellCount = (maxZ - minZ) / sampleStep + 1;
+        TerrainCell[][] cells = new TerrainCell[xCellCount][zCellCount];
+        int minTerrainHeight = Integer.MAX_VALUE;
+        int maxTerrainHeight = Integer.MIN_VALUE;
+
+        BlockPos.MutableBlockPos surfacePos = new BlockPos.MutableBlockPos();
+        for (int cellX = 0; cellX < xCellCount; cellX++) {
+            int x = minX + cellX * sampleStep;
+            int cellMaxX = Math.min(x + sampleStep, maxX + 1);
+            int sampleX = Math.min(x + sampleStep / 2, maxX);
+            for (int cellZ = 0; cellZ < zCellCount; cellZ++) {
+                int z = minZ + cellZ * sampleStep;
+                int cellMaxZ = Math.min(z + sampleStep, maxZ + 1);
+                int sampleZ = Math.min(z + sampleStep / 2, maxZ);
+                if (!minecraft.level.hasChunkAt(sampleX, sampleZ)) {
+                    continue;
+                }
+
+                int surfaceHeight = minecraft.level.getHeight(
+                        Heightmap.Types.WORLD_SURFACE, sampleX, sampleZ);
+                if (surfaceHeight <= minBuildHeight) {
+                    continue;
+                }
+
+                // Match vanilla map sampling: start at WORLD_SURFACE and walk through
+                // colourless blocks (for example glass) until a visible map colour is found.
+                surfacePos.set(sampleX, surfaceHeight - 1, sampleZ);
+                BlockState surfaceState = minecraft.level.getBlockState(surfacePos);
+                MapColor mapColor = surfaceState.getMapColor(minecraft.level, surfacePos);
+                while (mapColor == MapColor.NONE && surfacePos.getY() > minBuildHeight) {
+                    surfacePos.move(0, -1, 0);
+                    surfaceState = minecraft.level.getBlockState(surfacePos);
+                    mapColor = surfaceState.getMapColor(minecraft.level, surfacePos);
+                }
+
+                // Keep visible surface colour and terrain relief separate. This prevents tree
+                // canopies from turning into fake hills while preserving vanilla map colours.
+                int terrainHeight = minecraft.level.getHeight(
+                        Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, sampleX, sampleZ);
+                if (terrainHeight <= minBuildHeight) {
+                    terrainHeight = surfacePos.getY() + 1;
+                }
+
+                int baseColor = mapColor == MapColor.NONE ? TERRAIN_FALLBACK_COLOR : mapColor.col;
+                cells[cellX][cellZ] = new TerrainCell(x, z, cellMaxX, cellMaxZ, terrainHeight, baseColor);
+                minTerrainHeight = Math.min(minTerrainHeight, terrainHeight);
+                maxTerrainHeight = Math.max(maxTerrainHeight, terrainHeight);
+            }
+        }
+
+        if (minTerrainHeight == Integer.MAX_VALUE) {
+            return;
+        }
+
+        int reliefRange = maxTerrainHeight - minTerrainHeight;
+        int contourInterval = getTerrainContourInterval(reliefRange);
+        for (int cellX = 0; cellX < xCellCount; cellX++) {
+            for (int cellZ = 0; cellZ < zCellCount; cellZ++) {
+                TerrainCell cell = cells[cellX][cellZ];
+                if (cell == null) {
+                    continue;
+                }
+
+                int northHeight = getTerrainCellHeight(cells, cellX, cellZ - 1, cell.height());
+                int southHeight = getTerrainCellHeight(cells, cellX, cellZ + 1, cell.height());
+                int westHeight = getTerrainCellHeight(cells, cellX - 1, cellZ, cell.height());
+                int eastHeight = getTerrainCellHeight(cells, cellX + 1, cellZ, cell.height());
+                float slopeDelta = ((westHeight - eastHeight) + (northHeight - southHeight)) * 0.25f;
+                float elevation = reliefRange == 0
+                        ? 0.5f
+                        : (cell.height() - minTerrainHeight) / (float) reliefRange;
+
+                int color = shadeTerrainColor(cell.baseColor(), slopeDelta, elevation);
+                context.fill(cell.minX(), cell.minZ(), cell.maxX(), cell.maxZ(), color);
+
+                boolean northContour = cellZ > 0
+                        && Math.floorDiv(cell.height(), contourInterval) != Math.floorDiv(northHeight, contourInterval);
+                boolean westContour = cellX > 0
+                        && Math.floorDiv(cell.height(), contourInterval) != Math.floorDiv(westHeight, contourInterval);
+                drawTerrainContourEdges(context, cell, northContour, westContour);
+            }
+        }
+    }
+
+    private static int getTerrainCellHeight(TerrainCell[][] cells, int x, int z, int fallbackHeight) {
+        if (x < 0 || z < 0 || x >= cells.length || z >= cells[x].length || cells[x][z] == null) {
+            return fallbackHeight;
+        }
+        return cells[x][z].height();
+    }
+
+    private static int getTerrainContourInterval(int reliefRange) {
+        if (reliefRange <= 2) {
+            return 1;
+        }
+        if (reliefRange <= 6) {
+            return 2;
+        }
+        return 4;
+    }
+
+    private static int shadeTerrainColor(int baseColor, float slopeDelta, float elevation) {
+        float elevationBrightness = (elevation - 0.5f) * 2.0f * TERRAIN_ELEVATION_BRIGHTNESS_RANGE;
+        float brightness = TERRAIN_BASE_BRIGHTNESS
+                + slopeDelta * TERRAIN_SLOPE_BRIGHTNESS_PER_BLOCK
+                + elevationBrightness;
+        brightness = Math.max(TERRAIN_MIN_BRIGHTNESS, Math.min(TERRAIN_MAX_BRIGHTNESS, brightness));
+
+        int red = Math.min(255, Math.round(((baseColor >> 16) & 0xff) * brightness));
+        int green = Math.min(255, Math.round(((baseColor >> 8) & 0xff) * brightness));
+        int blue = Math.min(255, Math.round((baseColor & 0xff) * brightness));
+        return (TERRAIN_ALPHA << 24) | (red << 16) | (green << 8) | blue;
+    }
+
+    private static void drawTerrainContourEdges(GuiGraphics context, TerrainCell cell,
+                                                boolean northContour, boolean westContour) {
+        if (northContour && cell.minZ() < cell.maxZ()) {
+            context.fill(cell.minX(), cell.minZ(), cell.maxX(), Math.min(cell.minZ() + 1, cell.maxZ()),
+                    TERRAIN_CONTOUR_COLOR);
+        }
+        if (westContour && cell.minX() < cell.maxX()) {
+            context.fill(cell.minX(), cell.minZ(), Math.min(cell.minX() + 1, cell.maxX()), cell.maxZ(),
+                    TERRAIN_CONTOUR_COLOR);
+        }
     }
 
     private static void renderRoomRegion(GuiGraphics context,
@@ -1017,7 +1202,7 @@ public class BlueprintScreen extends ExtendedScreen {
     }
 
     private Component getBuildingIconsLabel() {
-        MutableComponent label = Component.translatable("gui.blueprint.buildingIcons");
+        MutableComponent label = Component.translatable("gui.blueprint.buildingIcons.short");
         return showBuildingIcons
                 ? label.withStyle(ChatFormatting.GREEN)
                 : label.withStyle(ChatFormatting.GRAY, ChatFormatting.STRIKETHROUGH);
@@ -1026,6 +1211,19 @@ public class BlueprintScreen extends ExtendedScreen {
     private void updateBuildingIconsControl() {
         if (buildingIconsButton != null) {
             buildingIconsButton.setMessage(getBuildingIconsLabel());
+        }
+    }
+
+    private Component getTerrainLabel() {
+        MutableComponent label = Component.translatable("gui.blueprint.terrain");
+        return showTerrain
+                ? label.withStyle(ChatFormatting.GREEN)
+                : label.withStyle(ChatFormatting.GRAY, ChatFormatting.STRIKETHROUGH);
+    }
+
+    private void updateTerrainControl() {
+        if (terrainButton != null) {
+            terrainButton.setMessage(getTerrainLabel());
         }
     }
 
@@ -1317,6 +1515,7 @@ public class BlueprintScreen extends ExtendedScreen {
         reconcileSelectedFloor();
         updateFloorControls();
         updateBuildingIconsControl();
+        updateTerrainControl();
         updateMapScaleControl();
         updateStructureScanControl(structuralLookup);
         updateRemoveRoomControl(structuralLookup);

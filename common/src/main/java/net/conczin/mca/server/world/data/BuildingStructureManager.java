@@ -69,21 +69,14 @@ final class BuildingStructureManager {
                     room.setStructureId(structureId);
                     room.setStructureRoot(false);
                 }
-            } else {
-                Building root = chooseCanonicalRoot(component);
-                int structureId = root.getId();
-                for (Building room : component) {
-                    room.setStructureId(structureId);
-                    room.setStructureRoot(room.getId() == root.getId());
-                }
-
-                if (adjacentStructures.size() > 1) {
-                    MCA.LOGGER.warn(
-                            "[BuildingStructures] Legacy room component {} touched multiple structures {}; kept as its own structure {}",
-                            component.stream().map(Building::getId).toList(), adjacentStructures, structureId);
-                }
+                changed = true;
+            } else if (adjacentStructures.size() > 1) {
+                // Never guess between multiple parent structures, and never manufacture
+                // a strict functional room into a standalone structure root.
+                MCA.LOGGER.warn(
+                        "[BuildingStructures] Unassigned room component {} touches multiple structures {}; left unassigned",
+                        component.stream().map(Building::getId).toList(), adjacentStructures);
             }
-            changed = true;
         }
 
         changed |= repairRootInvariants(village);
