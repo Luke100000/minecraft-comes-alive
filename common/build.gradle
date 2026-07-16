@@ -73,6 +73,10 @@ dependencies {
     compileOnly 'org.spongepowered:mixin:0.8.5'
 }
 
+tasks.named('test') {
+    failOnNoDiscoveredTests = false
+}
+
 configurations {
     commonJava {
         canBeResolved = false
