@@ -41,9 +41,9 @@ jobs:
     env:
       GRADLE_OPTS: --enable-native-access=ALL-UNNAMED
       NO_COLOR: 1
-      # MODRINTH_ID: "1W98a849"
+      MODRINTH_ID: "1W98a849"
       CURSEFORGE_ID: "535291"
-      # MODRINTH_TOKEN: ${{ secrets.MR_API_TOKEN }}
+      MODRINTH_TOKEN: ${{ secrets.MR_API_TOKEN }}
       CURSEFORGE_TOKEN: ${{ secrets.CF_API_TOKEN }}
       MAVEN_USERNAME: ${{ secrets.MAVEN_USERNAME }}
       MAVEN_TOKEN: ${{ secrets.MAVEN_TOKEN }}
@@ -70,8 +70,8 @@ jobs:
       - name: "Upload Fabric"
         uses: Kir-Antipov/mc-publish@v3.3.1
         with:
-          # modrinth-id: ${{ env.MODRINTH_ID }}
-          # modrinth-token: ${{ env.MODRINTH_TOKEN }}
+          modrinth-id: ${{ env.MODRINTH_ID }}
+          modrinth-token: ${{ env.MODRINTH_TOKEN }}
           curseforge-id: ${{ env.CURSEFORGE_ID }}
           curseforge-token: ${{ env.CURSEFORGE_TOKEN }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -91,8 +91,8 @@ jobs:
       - name: "Upload NeoForge"
         uses: Kir-Antipov/mc-publish@v3.3.1
         with:
-          # modrinth-id: ${{ env.MODRINTH_ID }}
-          # modrinth-token: ${{ env.MODRINTH_TOKEN }}
+          modrinth-id: ${{ env.MODRINTH_ID }}
+          modrinth-token: ${{ env.MODRINTH_TOKEN }}
           curseforge-id: ${{ env.CURSEFORGE_ID }}
           curseforge-token: ${{ env.CURSEFORGE_TOKEN }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
