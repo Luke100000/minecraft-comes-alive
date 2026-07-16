@@ -1,9 +1,16 @@
-# 7.7.23-alpha.1
+# 7.7.23-alpha.2
 
 > [!WARNING]
-> This is an experimental beta release and most likely might contain bugs. Current building blueprint layout structures 
-> might not work properly, so you may have to press REMOVE BUILDING due to a new structure format, please make sure to BACKUP your world. 
+> This is an experimental beta release and most likely might contain bugs. Current building blueprint layout structures
+> might not work properly, so you may have to press REMOVE BUILDING due to a new structure format, please make sure to BACKUP your world.
 > For any issues report it on the Discord Server.
+
+* Simplified EMF rendering.
+* Fixed a bug where the VANILLA model selected in the MCA editor scaled the eye height wrong .
+* Villagers search for beds more thoroughly.
+
+
+# 7.7.23-alpha.1
 
 * Added EMF compatibility, allowing supported player model animations to work with MCA villagers and player models.
 * Added improved floor support for buildings, allowing MCA to better understand separate rooms on different floors of the same structure.
