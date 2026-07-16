@@ -535,18 +535,21 @@ public class Building {
                 entranceInteriorCells = normalDoors.exteriorInteriorCells();
                 exteriorEntrances = normalDoors.exterior();
                 entranceSource = "exterior-door";
-            } else if (!trapDoors.exterior().isEmpty()) {
-                entranceInteriorCells = trapDoors.exteriorInteriorCells();
-                exteriorEntrances = trapDoors.exterior();
-                entranceSource = "exterior-trapdoor";
             } else if (!normalDoors.all().isEmpty()) {
+                // Normal doors are stronger evidence of a building's intended entrance than trapdoors.
+                // If none of them can be proven exterior, fall back to the dominant floor instead of
+                // allowing decorative or secondary trapdoors to promote an upper floor to ground level.
                 entranceInteriorCells = List.of();
                 exteriorEntrances = Set.of();
                 entranceSource = "floor-fallback-internal-doors";
             } else if (!trapDoors.all().isEmpty()) {
+                // Trapdoors are vertical connectors, not reliable ground-floor evidence. Vanilla only
+                // stores their current OPEN/HALF/FACING state, so an open real hatch is indistinguishable
+                // from a vertically displayed decorative trapdoor. Keep trapdoors valid for building
+                // discovery, but use the dominant floor unless a normal exterior door anchors the structure.
                 entranceInteriorCells = List.of();
                 exteriorEntrances = Set.of();
-                entranceSource = "floor-fallback-internal-trapdoors";
+                entranceSource = "floor-fallback-trapdoors-only";
             } else {
                 entranceInteriorCells = List.of();
                 exteriorEntrances = Set.of();
