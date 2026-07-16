@@ -5,12 +5,13 @@ import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.conczin.mca.MCAClient;
 import net.conczin.mca.client.model.CommonVillagerModel;
 import net.conczin.mca.client.model.McaModelAnimationDriver;
-import net.conczin.mca.client.model.McaModelLayerBaker;
 import net.conczin.mca.client.model.PlayerEntityExtendedModel;
 import net.conczin.mca.client.model.VillagerEntityModelMCA;
 import net.conczin.mca.client.render.layer.*;
+import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.entity.ai.relationship.AgeState;
 import net.minecraft.client.model.PlayerModel;
+import net.minecraft.client.model.geom.ModelLayers;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.client.model.geom.builders.CubeDeformation;
 import net.minecraft.client.model.geom.builders.LayerDefinition;
@@ -37,7 +38,7 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<AbstractC
     @Unique
     private ClothingLayer<AbstractClientPlayer, PlayerModel<AbstractClientPlayer>> mca$clothingLayer;
     @Unique
-    private PlayerEntityExtendedModel<AbstractClientPlayer> mca$animationModel;
+    private PlayerEntityExtendedModel<AbstractClientPlayer> mca$villagerAnimationModel;
     @Unique
     private PlayerEntityExtendedModel<AbstractClientPlayer> mca$playerModel;
     @Unique
@@ -57,41 +58,43 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<AbstractC
     }
 
     @Unique
-    private static PlayerEntityExtendedModel<AbstractClientPlayer> mca$createPlayerModel(
-            MeshDefinition data,
-            boolean slim,
-            PlayerEntityExtendedModel<AbstractClientPlayer> animationSource
-    ) {
-        return new PlayerEntityExtendedModel<>(LayerDefinition.create(data, 64, 64).bakeRoot(), slim, animationSource);
-    }
-
-    @Unique
-    private static PlayerEntityExtendedModel<AbstractClientPlayer> mca$createAnimationModel(EntityRendererProvider.Context ctx) {
-        MeshDefinition data = VillagerEntityModelMCA.bodyData(CubeDeformation.NONE);
-        return new PlayerEntityExtendedModel<>(McaModelLayerBaker.bakeAnimationRoot(ctx, data));
+    private static PlayerEntityExtendedModel<AbstractClientPlayer> mca$createVillagerAnimationModel(EntityRendererProvider.Context ctx) {
+        return new PlayerEntityExtendedModel<>(ctx.bakeLayer(ModelLayers.PLAYER));
     }
 
     @Unique
     private void mca$selectModel(AbstractClientPlayer player) {
-        if (MCAClient.isPlayerRendererAllowed()) {
-            if (MCAClient.useVillagerRenderer(player.getUUID())) {
-                model = mca$animationModel;
-            } else if (MCAClient.useGeneticsRenderer(player.getUUID())) {
-                model = mca$playerModel;
-            } else {
-                model = mca$vanillaModel;
-            }
+        if (!MCAClient.isPlayerRendererAllowed()) {
+            return;
         }
+
+        VillagerLike.PlayerModel selectedModel = MCAClient.getPlayerData(player.getUUID())
+                .map(VillagerLike::getPlayerModel)
+                .orElse(VillagerLike.PlayerModel.VANILLA);
+        model = switch (selectedModel) {
+            case VILLAGER -> mca$villagerAnimationModel;
+            case PLAYER -> mca$playerModel;
+            case VANILLA -> mca$vanillaModel;
+        };
     }
 
     @Inject(method = "<init>(Lnet/minecraft/client/renderer/entity/EntityRendererProvider$Context;Z)V", at = @At("TAIL"))
     private void mca$injectInit(EntityRendererProvider.Context ctx, boolean slim, CallbackInfo ci) {
         if (MCAClient.isPlayerRendererAllowed()) {
-            mca$animationModel = mca$createAnimationModel(ctx);
-            mca$playerModel = mca$createPlayerModel(VillagerEntityModelMCA.bodyData(CubeDeformation.NONE, slim), slim, mca$animationModel);
             mca$vanillaModel = model;
+            mca$villagerAnimationModel = mca$createVillagerAnimationModel(ctx);
+            // PLAYER renders an EMF-interceptable vanilla root directly. MCA-only breast parts
+            // stay detached so they can be rendered by PlayerEntityExtendedModel without mutating that root.
+            ModelPart mcaPlayerParts = LayerDefinition.create(
+                    VillagerEntityModelMCA.bodyData(CubeDeformation.NONE), 64, 64
+            ).bakeRoot();
+            mca$playerModel = new PlayerEntityExtendedModel<>(
+                    ctx.bakeLayer(slim ? ModelLayers.PLAYER_SLIM : ModelLayers.PLAYER),
+                    slim,
+                    mcaPlayerParts
+            );
 
-            // The parent is an animation source only; visible layers keep MCA geometry and textures.
+            // The villager parent is animation-only; its visible appearance stays in MCA layers.
             mca$skinLayer = new SkinLayer<>(this, mca$createVisibleModel(VillagerEntityModelMCA.bodyData(CubeDeformation.NONE)));
             layers.add(0, mca$skinLayer);
             addLayer(new FaceLayer<>(this, mca$createVisibleModel(VillagerEntityModelMCA.bodyData(new CubeDeformation(0.01F))), "normal"));
@@ -156,20 +159,16 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<AbstractC
             )
     )
     private void mca$redirectFirstPersonArmRender(ModelPart originalArm, PoseStack matrices, VertexConsumer originalBuffer, int light, int overlay) {
-        if (model == mca$playerModel) {
-            mca$playerModel.applyExternalAnimation(matrices, light, overlay);
-        }
-
         if (mca$firstPersonPlayer == null || mca$firstPersonBuffers == null) {
             originalArm.render(matrices, originalBuffer, light, overlay);
             return;
         }
 
         boolean right = originalArm == model.rightArm;
-        ModelPart animatedArm = right ? mca$animationModel.rightArm : mca$animationModel.leftArm;
+        ModelPart animatedArm = right ? mca$villagerAnimationModel.rightArm : mca$villagerAnimationModel.leftArm;
 
-        if (model != mca$animationModel) {
-            model.copyPropertiesTo(mca$animationModel);
+        if (model != mca$villagerAnimationModel) {
+            model.copyPropertiesTo(mca$villagerAnimationModel);
         }
         animatedArm.xRot = 0.0F;
         McaModelAnimationDriver.animate(animatedArm, matrices, light, overlay);
@@ -192,6 +191,10 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<AbstractC
     )
     private void mca$redirectFirstPersonSleeveRender(ModelPart originalSleeve, PoseStack matrices, VertexConsumer originalBuffer, int light, int overlay) {
         if (mca$firstPersonPlayer == null || mca$firstPersonBuffers == null) {
+            if (model == mca$playerModel) {
+                ModelPart arm = originalSleeve == model.rightSleeve ? model.rightArm : model.leftArm;
+                originalSleeve.copyFrom(arm);
+            }
             originalSleeve.render(matrices, originalBuffer, light, overlay);
         }
         // Custom arm rendering above already rendered both MCA skin and clothing sleeves.

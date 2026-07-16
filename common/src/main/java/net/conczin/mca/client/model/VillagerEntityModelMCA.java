@@ -33,7 +33,7 @@ public class VillagerEntityModelMCA<T extends LivingEntity & VillagerLike<T>> ex
         leftLegwear = tree.getChild("left_pants");
         rightLegwear = tree.getChild("right_pants");
 
-        breastsWear = tree.getChild(BREASTPLATE);
+        breastsWear = getChildOrEmpty(tree, BREASTPLATE);
     }
 
     //

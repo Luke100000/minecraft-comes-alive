@@ -22,6 +22,9 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.UseAnim;
 
+import java.util.List;
+import java.util.Map;
+
 public class VillagerEntityBaseModelMCA<T extends LivingEntity & VillagerLike<T>> extends HumanoidModel<T> implements CommonVillagerModel<T> {
     protected static final String BREASTS = "breasts";
 
@@ -32,7 +35,12 @@ public class VillagerEntityBaseModelMCA<T extends LivingEntity & VillagerLike<T>
 
     public VillagerEntityBaseModelMCA(ModelPart root) {
         super(root);
-        this.breasts = root.getChild(BREASTS);
+        this.breasts = getChildOrEmpty(root, BREASTS);
+    }
+
+    /** Returns a model child or a detached empty part for vanilla animation roots. */
+    static ModelPart getChildOrEmpty(ModelPart root, String name) {
+        return root.hasChild(name) ? root.getChild(name) : new ModelPart(List.of(), Map.of());
     }
 
     public static MeshDefinition getModelData(CubeDeformation dilation) {
