@@ -189,7 +189,13 @@ public class Village implements Iterable<Building> {
 
     public List<String> getResidents(int building) {
         return getBuilding(building).map(value -> residentHomes.entrySet().stream().filter(e -> {
-            return value.containsPos(BlockPos.of(e.getValue()));
+            BlockPos homePos = BlockPos.of(e.getValue());
+            if (value.isFunctionalRoom()) {
+                return getFunctionalRoomAt(homePos)
+                        .map(room -> room.getId() == value.getId())
+                        .orElse(false);
+            }
+            return value.containsPos(homePos);
         }).map(k -> residentNames.getOrDefault(k.getKey(), "Unknown")).collect(Collectors.toList())).orElseGet(List::of);
     }
 
