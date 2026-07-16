@@ -33,7 +33,6 @@
     "client.MixinHumanoidArmorLayer",
     "client.MixinItemInHandLayer",
     "client.MixinLivingEntityRenderer",
-    "client.MixinModelPartAccessor",
     "client.MixinPlayerRenderer",
     "client.MixinSoundBufferLibrary"
   ],

@@ -1,6 +1,5 @@
 package net.conczin.mca.client.render;
 
-import net.conczin.mca.client.model.McaModelLayerBaker;
 import net.conczin.mca.client.model.VillagerEntityModelMCA;
 import net.conczin.mca.client.model.ZombieVillagerEntityModelMCA;
 import net.conczin.mca.client.render.layer.ClothingLayer;
@@ -8,6 +7,7 @@ import net.conczin.mca.client.render.layer.FaceLayer;
 import net.conczin.mca.client.render.layer.HairLayer;
 import net.conczin.mca.client.render.layer.SkinLayer;
 import net.conczin.mca.entity.ZombieVillagerEntityMCA;
+import net.minecraft.client.model.geom.ModelLayers;
 import net.minecraft.client.model.geom.builders.CubeDeformation;
 import net.minecraft.client.model.geom.builders.LayerDefinition;
 import net.minecraft.client.model.geom.builders.MeshDefinition;
@@ -24,8 +24,7 @@ public class ZombieVillagerEntityMCARenderer extends VillagerLikeEntityMCARender
     }
 
     private static VillagerEntityModelMCA<ZombieVillagerEntityMCA> createAnimationModel(EntityRendererProvider.Context ctx) {
-        MeshDefinition data = VillagerEntityModelMCA.bodyData(CubeDeformation.NONE);
-        return new ZombieVillagerEntityModelMCA<>(McaModelLayerBaker.bakeAnimationRoot(ctx, data));
+        return new ZombieVillagerEntityModelMCA<>(ctx.bakeLayer(ModelLayers.PLAYER));
     }
 
     private static VillagerEntityModelMCA<ZombieVillagerEntityMCA> createVisibleModel(MeshDefinition data) {

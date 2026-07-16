@@ -11,12 +11,13 @@ import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.world.entity.LivingEntity;
 
 import static net.conczin.mca.client.model.VillagerEntityBaseModelMCA.BREASTS;
+import static net.conczin.mca.client.model.VillagerEntityBaseModelMCA.getChildOrEmpty;
 import static net.conczin.mca.client.model.VillagerEntityModelMCA.BREASTPLATE;
 
 public class PlayerEntityExtendedModel<T extends LivingEntity> extends PlayerModel<T> implements CommonVillagerModel<T> {
     public final ModelPart breasts;
     public final ModelPart breastsWear;
-    private final PlayerEntityExtendedModel<T> animationSource;
+    private final PlayerModel<T> animationSource;
 
     final VillagerDimensions.Mutable dimensions = new VillagerDimensions.Mutable(AgeState.ADULT);
     float breastSize;
@@ -29,11 +30,11 @@ public class PlayerEntityExtendedModel<T extends LivingEntity> extends PlayerMod
         this(root, slim, null);
     }
 
-    public PlayerEntityExtendedModel(ModelPart root, boolean slim, PlayerEntityExtendedModel<T> animationSource) {
+    public PlayerEntityExtendedModel(ModelPart root, boolean slim, PlayerModel<T> animationSource) {
         super(root, slim);
         this.animationSource = animationSource;
-        this.breasts = root.getChild(BREASTS);
-        this.breastsWear = root.getChild(BREASTPLATE);
+        this.breasts = getChildOrEmpty(root, BREASTS);
+        this.breastsWear = getChildOrEmpty(root, BREASTPLATE);
     }
 
     @Override
@@ -140,9 +141,9 @@ public class PlayerEntityExtendedModel<T extends LivingEntity> extends PlayerMod
             headYaw += (float) Math.sin(villager.tickCount / 2F);
         }
 
+        applyVillagerDimensions(villagerData);
         if (animationSource == null) {
             super.setupAnim(villager, limbAngle, limbDistance, animationProgress, headYaw, headPitch);
-            applyVillagerDimensions(villagerData);
         } else {
             copyPropertiesTo(animationSource);
             animationSource.setupAnim(villager, limbAngle, limbDistance, animationProgress, headYaw, headPitch);

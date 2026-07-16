@@ -1,12 +1,12 @@
 package net.conczin.mca.client.render;
 
-import net.conczin.mca.client.model.McaModelLayerBaker;
 import net.conczin.mca.client.model.VillagerEntityModelMCA;
 import net.conczin.mca.client.render.layer.ClothingLayer;
 import net.conczin.mca.client.render.layer.FaceLayer;
 import net.conczin.mca.client.render.layer.HairLayer;
 import net.conczin.mca.client.render.layer.SkinLayer;
 import net.conczin.mca.entity.VillagerEntityMCA;
+import net.minecraft.client.model.geom.ModelLayers;
 import net.minecraft.client.model.geom.builders.CubeDeformation;
 import net.minecraft.client.model.geom.builders.LayerDefinition;
 import net.minecraft.client.model.geom.builders.MeshDefinition;
@@ -24,8 +24,7 @@ public class VillagerEntityMCARenderer extends VillagerLikeEntityMCARenderer<Vil
     }
 
     private static VillagerEntityModelMCA<VillagerEntityMCA> createAnimationModel(EntityRendererProvider.Context ctx) {
-        MeshDefinition data = VillagerEntityModelMCA.bodyData(CubeDeformation.NONE);
-        return new VillagerEntityModelMCA<>(McaModelLayerBaker.bakeAnimationRoot(ctx, data));
+        return new VillagerEntityModelMCA<>(ctx.bakeLayer(ModelLayers.PLAYER));
     }
 
     private static VillagerEntityModelMCA<VillagerEntityMCA> createVisibleModel(MeshDefinition data) {
