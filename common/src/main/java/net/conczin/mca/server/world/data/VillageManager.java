@@ -225,7 +225,50 @@ public class VillageManager extends SavedData implements Iterable<Village> {
     }
 
     public Building.validationResult processBuilding(BlockPos pos) {
-        return processBuilding(pos, false, true);
+        return processAutoScannedBuilding(pos);
+    }
+
+    private Building.validationResult processAutoScannedBuilding(BlockPos pos) {
+        // Grouped POIs (bells, grave markers, etc.) keep their existing aggregation path.
+        if (getGroupedBuildingType(pos) != null) {
+            return processBuilding(pos, false, true, null);
+        }
+
+        // Auto Scan first behaves like Add Room. This updates an existing room or assigns
+        // a genuinely new room to exactly one unambiguous rooted structure.
+        BuildingScanResult roomScan = analyzeRoom(pos);
+        MCA.LOGGER.info(
+                "[FloorRoomDebug] side=server stage=auto-scan-room-result source={} result={} existing={} merged={} candidate={}",
+                pos, roomScan.result(), roomScan.existingBuildingId(), roomScan.mergedBuildingIds(),
+                debugBuilding(roomScan.building()));
+
+        return switch (getAutoScanResolution(roomScan.result())) {
+            case COMMIT_ROOM -> commitBuilding(roomScan, null);
+            case CREATE_STRUCTURE -> {
+                // No existing structure owns this room. Fall back to the same canonical
+                // container + Ground Floor creation used by manual Add Building.
+                InitialStructureScan initialScan = analyzeInitialStructure(pos);
+                MCA.LOGGER.info(
+                        "[FloorRoomDebug] side=server stage=auto-scan-new-structure source={} rootResult={} roomResult={}",
+                        pos, initialScan.root().result(), initialScan.room().result());
+                yield commitInitialStructure(initialScan, null);
+            }
+            case REJECT -> roomScan.result();
+        };
+    }
+
+    static AutoScanResolution getAutoScanResolution(Building.validationResult roomResult) {
+        return switch (roomResult) {
+            case SUCCESS -> AutoScanResolution.COMMIT_ROOM;
+            case NOT_IN_BUILDING -> AutoScanResolution.CREATE_STRUCTURE;
+            default -> AutoScanResolution.REJECT;
+        };
+    }
+
+    enum AutoScanResolution {
+        COMMIT_ROOM,
+        CREATE_STRUCTURE,
+        REJECT
     }
 
     //checks weather the given block contains a grouped building block, e.g., a town bell or gravestone
@@ -474,6 +517,13 @@ public class VillageManager extends SavedData implements Iterable<Village> {
             } else {
                 // validateBuilding already resolved a valid unambiguous type.
                 building.setTypeForced(false);
+            }
+
+            // Strict scans are functional rooms, never structure roots. New standalone
+            // structures must be created through commitInitialStructure so they always
+            // receive a non-strict container root plus a strict Ground Floor room.
+            if (!building.hasStructure() && building.isStrictScan()) {
+                return Building.validationResult.NOT_IN_BUILDING;
             }
 
             if (targetVillage.getBuildings().values().stream().anyMatch(b -> b.isIdentical(building))) {

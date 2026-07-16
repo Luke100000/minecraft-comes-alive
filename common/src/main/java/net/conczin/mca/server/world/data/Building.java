@@ -273,9 +273,9 @@ public class Building {
     }
 
     public boolean isFunctionalRoom() {
-        // Older automatic scans create a strict root directly. It is both the
-        // structure root and its only functional room until another room is added.
-        return strictScan && !getBuildingType().grouped();
+        // Canonical structures always separate the hidden non-strict root container
+        // from strict functional room records. A root is never itself a room.
+        return strictScan && !structureRoot && !getBuildingType().grouped();
     }
 
     public void setStructureRoot(boolean structureRoot) {
