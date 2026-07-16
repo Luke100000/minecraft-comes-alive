@@ -239,19 +239,20 @@ public class SkinExporter {
         try {
             EyeTextureLayers.Bounds bounds = EyeTextureLayers.findBounds(face);
             int splitX = bounds.minX() + bounds.width() / 2;
-            compositeEyeLayer(base, face, true, EyeTextureLayers.Side.FULL, splitX, 0xFFFFFFFF);
+            compositeEyeLayer(base, face, EyeTextureLayers.Layer.SCLERA, EyeTextureLayers.Side.FULL, splitX, 0xFFFFFFFF);
+            compositeEyeLayer(base, face, EyeTextureLayers.Layer.DETAILS, EyeTextureLayers.Side.FULL, splitX, EyeTextureLayers.DETAILS_TINT);
             if (villager.getTraits().hasTrait(Traits.HETEROCHROMIA)) {
-                compositeEyeLayer(base, face, false, EyeTextureLayers.Side.LEFT, splitX, getEyeColor(villager, true));
-                compositeEyeLayer(base, face, false, EyeTextureLayers.Side.RIGHT, splitX, getEyeColor(villager, false));
+                compositeEyeLayer(base, face, EyeTextureLayers.Layer.IRIS, EyeTextureLayers.Side.LEFT, splitX, getEyeColor(villager, true));
+                compositeEyeLayer(base, face, EyeTextureLayers.Layer.IRIS, EyeTextureLayers.Side.RIGHT, splitX, getEyeColor(villager, false));
             } else {
-                compositeEyeLayer(base, face, false, EyeTextureLayers.Side.FULL, splitX, getEyeColor(villager, false));
+                compositeEyeLayer(base, face, EyeTextureLayers.Layer.IRIS, EyeTextureLayers.Side.FULL, splitX, getEyeColor(villager, false));
             }
         } finally {
             face.close();
         }
     }
 
-    public static void compositeEyeLayer(NativeImage base, NativeImage face, boolean sclera, EyeTextureLayers.Side side, int splitX, int tintColor) {
+    public static void compositeEyeLayer(NativeImage base, NativeImage face, EyeTextureLayers.Layer layer, EyeTextureLayers.Side side, int splitX, int tintColor) {
         int width = Math.min(base.getWidth(), face.getWidth());
         int height = Math.min(base.getHeight(), face.getHeight());
         for (int x = 0; x < width; x++) {
@@ -261,7 +262,9 @@ public class SkinExporter {
             for (int y = 0; y < height; y++) {
                 int pixel = face.getColor(x, y); // ABGR
                 int alpha = (pixel >> 24) & 0xFF;
-                if (alpha == 0 || sclera != EyeTextureLayers.isScleraPixel(alpha, pixel & 0xFF, (pixel >> 8) & 0xFF, (pixel >> 16) & 0xFF)) {
+                boolean includePixel = EyeTextureLayers.isPixelForLayer(
+                        layer, alpha, pixel & 0xFF, (pixel >> 8) & 0xFF, (pixel >> 16) & 0xFF);
+                if (!includePixel) {
                     continue;
                 }
                 compositePixel(base, x, y, pixel, tintColor);
@@ -270,33 +273,15 @@ public class SkinExporter {
     }
 
     public static int getEyeColor(VillagerLike<?> villager, boolean left) {
+        int color;
         if (villager.getTraits().hasTrait(Traits.RAINBOW_EYES)) {
             int offset = left && villager.getTraits().hasTrait(Traits.HETEROCHROMIA) ? (25 * DyeColor.values().length) / 2 : 0;
-            return getRainbow(villager, offset);
+            color = getRainbow(villager, offset);
+        } else {
+            color = EyeTextureLayers.getStaticEyeColor(villager, left);
         }
 
-        boolean heterochromia = villager.getTraits().hasTrait(Traits.HETEROCHROMIA);
-        int dye = left && heterochromia ? villager.getEyeLeftDye() : villager.getEyeDye();
-        if (dye != 0xFFFFFFFF) {
-            return dye;
-        }
-
-        if (villager.getTraits().hasTrait(Traits.ALBINISM)) {
-            return 0xFFE8A0A0; // ALBINISM_EYE_COLOR
-        }
-
-        float eyeColor = MathHelper.fractionalPart(villager.getGenetics().getGene(Genetics.FACE) + (left && heterochromia ? 0.43F : 0.0F));
-        int blueColor = 0xFF557FA6;
-        int greenColor = 0xFF5B8756;
-        int hazelColor = 0xFF8A6A35;
-        int brownColor = 0xFF4A2B18;
-        if (eyeColor < 0.35F) {
-            return ColorHelper.Argb.lerp(eyeColor / 0.35F, blueColor, greenColor);
-        }
-        if (eyeColor < 0.70F) {
-            return ColorHelper.Argb.lerp((eyeColor - 0.35F) / 0.35F, greenColor, hazelColor);
-        }
-        return ColorHelper.Argb.lerp((eyeColor - 0.70F) / 0.30F, hazelColor, brownColor);
+        return EyeTextureLayers.applyBrightness(color, villager.getGenetics().getGene(Genetics.EYE_BRIGHTNESS));
     }
 
     private static int getRainbow(VillagerLike<?> villager, int offset) {

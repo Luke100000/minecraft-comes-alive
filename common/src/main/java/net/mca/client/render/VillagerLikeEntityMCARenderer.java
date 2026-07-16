@@ -32,7 +32,7 @@ public class VillagerLikeEntityMCARenderer<T extends MobEntity & VillagerLike<T>
 
     public VillagerLikeEntityMCARenderer(EntityRendererFactory.Context ctx, VillagerEntityModelMCA<T> model) {
         super(ctx, model, 0.5F);
-        addFeature(new ArmorFeatureRenderer<>(this, createArmorModel(0.3f), createArmorModel(1.0f), ctx.getModelManager()));
+        addFeature(new ArmorFeatureRenderer<>(this, createArmorModel(0.3f), createArmorModel(0.9F), ctx.getModelManager()));
     }
 
     private VillagerEntityBaseModelMCA<T> createArmorModel(float modelSize) {

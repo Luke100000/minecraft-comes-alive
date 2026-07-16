@@ -26,7 +26,6 @@
     "license": "GPL-3.0-only",
     "icon": "mca.png",
     "intermediate_mappings": "net.fabricmc:intermediary",
-    "environment": "*",
     "entrypoints": {
       "init": [
         "net.mca.quilt.MCAQuilt"

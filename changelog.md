@@ -1,3 +1,15 @@
+# 7.6.28-beta.6
+
+* Brightened some eye colours, let us know if the irises look better in the Discord server!
+* Added an iris brightness control.
+* Stopped the defineId warning spam.
+* Fixed villagers going to empty graves due to beta.5
+* Fix packet crashes on selecting certain things in the UI Library.
+* Backend improvements
+* Improved mourning again - should work better.
+* Fixed breast model clipping out of the armour.
+* Reduced mod file size by a tiny bit.
+
 # 7.6.28-beta.5
 
 * General improvements.

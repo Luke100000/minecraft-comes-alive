@@ -1,6 +1,8 @@
 package net.mca.block;
 
 import net.mca.entity.Infectable;
+import net.mca.entity.VillagerEntityMCA;
+import net.mca.entity.ai.MemoryModuleTypeMCA;
 import net.mca.entity.ai.relationship.CompassionateEntity;
 import net.mca.entity.ai.relationship.EntityRelationship;
 import net.mca.entity.ai.relationship.Gender;
@@ -16,6 +18,7 @@ import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.LightningEntity;
 import net.minecraft.entity.LivingEntity;
+import net.minecraft.entity.ai.brain.MemoryModuleType;
 import net.minecraft.entity.mob.ZombieVillagerEntity;
 import net.minecraft.entity.passive.PassiveEntity;
 import net.minecraft.fluid.FluidState;
@@ -370,6 +373,16 @@ public class TombstoneBlock extends BlockWithEntity implements Waterloggable {
 
                         if (entity instanceof CompassionateEntity<?> compassionateEntity) {
                             compassionateEntity.getRelationships().getFamilyEntry().setDeceased(false);
+                        }
+
+                        if (entity instanceof VillagerEntityMCA villager) {
+                            villager.getBrain().forget(MemoryModuleTypeMCA.LAST_GRIEVE.get());
+                            villager.getBrain().forget(MemoryModuleTypeMCA.MOURNING_SITE.get());
+                            villager.getBrain().forget(MemoryModuleTypeMCA.MOURNING_POSITION.get());
+                            villager.getBrain().forget(MemoryModuleType.PATH);
+                            villager.getBrain().forget(MemoryModuleType.WALK_TARGET);
+                            villager.getBrain().forget(MemoryModuleType.LOOK_TARGET);
+                            villager.getBrain().forget(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE);
                         }
 
                         if (entity instanceof Infectable infectable) {

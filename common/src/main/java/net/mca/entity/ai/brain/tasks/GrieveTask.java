@@ -9,6 +9,9 @@ import net.minecraft.entity.ai.brain.MemoryModuleType;
 import net.minecraft.entity.ai.brain.task.MultiTickTask;
 import net.minecraft.entity.passive.VillagerEntity;
 import net.minecraft.server.world.ServerWorld;
+import net.minecraft.util.math.BlockPos;
+
+import java.util.Optional;
 
 public class GrieveTask extends MultiTickTask<VillagerEntityMCA> {
     public GrieveTask() {
@@ -16,10 +19,22 @@ public class GrieveTask extends MultiTickTask<VillagerEntityMCA> {
     }
 
     protected boolean shouldRun(ServerWorld world, VillagerEntityMCA entity) {
-        boolean hasRememberedSite = entity.getBrain().getOptionalMemory(MemoryModuleTypeMCA.MOURNING_SITE.get()).isPresent();
-        boolean hasCompleteGraveyard = entity.getResidency().getHomeVillage().filter(v -> v.hasBuilding("graveyard")).isPresent();
-        return entity.getVillagerBrain().shouldGrieve()
-                && (hasRememberedSite || hasCompleteGraveyard);
+        Optional<BlockPos> rememberedSite = entity.getBrain().getOptionalMemory(MemoryModuleTypeMCA.MOURNING_SITE.get());
+        if (rememberedSite.isPresent()) {
+            if (!EnterGraveyardTask.hasMournableSite(entity)) {
+                entity.getBrain().forget(MemoryModuleTypeMCA.MOURNING_SITE.get());
+                entity.getBrain().forget(MemoryModuleTypeMCA.MOURNING_POSITION.get());
+                entity.getVillagerBrain().justGrieved();
+                return false;
+            }
+            return entity.getVillagerBrain().shouldGrieve();
+        }
+
+        // Periodic remembrance only makes sense when a complete graveyard contains
+        // at least one occupied tombstone. Do this check before shouldGrieve() so an
+        // empty decorative graveyard cannot initialize or advance the grief schedule.
+        return EnterGraveyardTask.hasPeriodicMourningCandidate(entity)
+                && entity.getVillagerBrain().shouldGrieve();
     }
 
     @Override

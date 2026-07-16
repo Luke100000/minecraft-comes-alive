@@ -204,6 +204,7 @@ public class Relationship<T extends MobEntity & VillagerLike<T>> implements Enti
         if (burialSite != null && type != RelationshipType.STRANGER) {
             entity.getVillagerBrain().setGrieving();
             entity.getBrain().remember(MemoryModuleTypeMCA.MOURNING_SITE.get(), burialSite);
+            entity.getBrain().forget(MemoryModuleTypeMCA.MOURNING_POSITION.get());
             if (Platform.isDevelopmentEnvironment()) {
                 MCA.LOGGER.info("[MOURNING_TRACE_V3] assignment villager={} type={} grave={} position={}", entity.getName().getString(), type, burialSite, entity.getBlockPos());
             }

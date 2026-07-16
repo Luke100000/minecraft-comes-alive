@@ -1266,7 +1266,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                             NetworkHandler.sendToServer(new RemoveCustomClothingMessage(content.hasTag("clothing") ? RemoveCustomClothingMessage.Type.CLOTHING : RemoveCustomClothingMessage.Type.HAIR, new Identifier("immersive_library", String.valueOf(content.contentid()))));
                         } else {
                             toListEntry(content).ifPresent(e -> {
-                                NetworkHandler.sendToServer(new AddCustomClothingMessage(e));
+                                NetworkHandler.sendToServer(AddCustomClothingMessage.fromEntry(e));
                             });
                         }
                         ((ToggleableTooltipButtonWidget) v).toggle = !((ToggleableTooltipButtonWidget) v).toggle;

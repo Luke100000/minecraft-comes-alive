@@ -48,7 +48,7 @@ public interface CommonVillagerModel<T extends LivingEntity> {
 
             if (breastSize > 0) {
                 matrices.push();
-                matrices.scale(breastSize * 0.2f + 1.05f, breastSize * 0.75f + 0.75f, breastSize * 0.75f + 0.75f);
+                matrices.scale(breastSize * 0.2F + 1.05F, breastSize * 0.75F + 0.75F, breastSize * 0.45F + 0.75F);
                 for (ModelPart part : getBreastParts()) {
                     part.render(matrices, vertices, light, overlay, red, green, blue, alpha);
                 }

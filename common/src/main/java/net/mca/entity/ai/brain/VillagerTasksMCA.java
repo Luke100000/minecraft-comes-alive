@@ -455,7 +455,8 @@ public class VillagerTasksMCA {
                                         villager.getBlockPos(),
                                         villager.getBrain().getOptionalMemory(MemoryModuleTypeMCA.MOURNING_SITE.get()).orElse(null));
                             }
-                        }
+                        },
+                        villager -> !mournAtGrave.hasArrived()
                 )),
                 Pair.of(0, new SequenceTask<>(
                         ImmutableMap.of(MemoryModuleType.WALK_TARGET, MemoryModuleState.VALUE_ABSENT),
@@ -464,6 +465,10 @@ public class VillagerTasksMCA {
                                 mournAtGrave,
                                 new LambdaTask<>((v) -> {
                                     boolean completed = mournAtGrave.hasCompleted();
+                                    boolean hadAssignedSite = v.getBrain().getOptionalMemory(MemoryModuleTypeMCA.MOURNING_SITE.get()).isPresent();
+                                    boolean targetStillMournable = EnterGraveyardTask.hasMournableSite(v);
+                                    boolean periodicCandidateStillExists = !hadAssignedSite
+                                            && EnterGraveyardTask.hasPeriodicMourningCandidate(v);
                                     if (Platform.isDevelopmentEnvironment()) {
                                         MCA.LOGGER.info("[MOURNING_TRACE_V3] session-finish villager={} completed={} position={} grave={} stand={} walkTarget={}",
                                                 v.getName().getString(),
@@ -477,8 +482,12 @@ public class VillagerTasksMCA {
                                     v.getBrain().forget(MemoryModuleTypeMCA.MOURNING_POSITION.get());
                                     if (completed) {
                                         v.getVillagerBrain().justGrieved();
-                                    } else {
+                                    } else if (targetStillMournable || periodicCandidateStillExists) {
                                         v.getVillagerBrain().retryGrievingLater();
+                                    } else {
+                                        // The grave was emptied, removed, or entered resurrection.
+                                        // Cancel this mourning cycle instead of repeatedly retargeting it.
+                                        v.getVillagerBrain().justGrieved();
                                     }
                                     v.getBrain().refreshActivities(v.getWorld().getTimeOfDay(), v.getWorld().getTime());
                                 })

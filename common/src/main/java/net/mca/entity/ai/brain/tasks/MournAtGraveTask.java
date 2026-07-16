@@ -36,6 +36,10 @@ public class MournAtGraveTask extends MultiTickTask<VillagerEntityMCA> {
         return completed;
     }
 
+    public boolean hasArrived() {
+        return hasArrived;
+    }
+
     @Override
     protected boolean shouldRun(ServerWorld world, VillagerEntityMCA villager) {
         completed = false;
@@ -56,13 +60,10 @@ public class MournAtGraveTask extends MultiTickTask<VillagerEntityMCA> {
 
     @Override
     protected boolean shouldKeepRunning(ServerWorld world, VillagerEntityMCA villager, long time) {
-        if (!hasMourningTarget(villager)) {
-            return false;
-        }
         if (hasArrived) {
-            return remainingDialogues > 0 && EnterGraveyardTask.isAtMourningSite(villager);
+            return remainingDialogues > 0 && EnterGraveyardTask.isWithinMourningArea(villager);
         }
-        return true;
+        return hasMourningTarget(villager);
     }
 
     @Override
@@ -81,6 +82,8 @@ public class MournAtGraveTask extends MultiTickTask<VillagerEntityMCA> {
                 return;
             }
             hasArrived = true;
+            villager.getBrain().forget(MemoryModuleType.WALK_TARGET);
+            villager.getNavigation().stop();
             villager.sendChatToAllAround("villager.grieving");
             nextDialogueTime = time + getDialogueDelay(villager);
             if (Platform.isDevelopmentEnvironment()) {
@@ -93,7 +96,6 @@ public class MournAtGraveTask extends MultiTickTask<VillagerEntityMCA> {
         }
 
         lookAtGrave(villager);
-        villager.getNavigation().stop();
 
         if (time >= nextDialogueTime) {
             villager.sendChatToAllAround("villager.grieving");
@@ -104,7 +106,7 @@ public class MournAtGraveTask extends MultiTickTask<VillagerEntityMCA> {
 
     @Override
     protected void finishRunning(ServerWorld world, VillagerEntityMCA villager, long time) {
-        completed = hasArrived && remainingDialogues == 0 && EnterGraveyardTask.isAtMourningSite(villager);
+        completed = hasArrived && remainingDialogues == 0 && EnterGraveyardTask.isWithinMourningArea(villager);
         if (Platform.isDevelopmentEnvironment()) {
             MCA.LOGGER.info("[MOURNING_TRACE_V3] task-finish villager={} completed={} arrived={} linesLeft={} position={} walking={}",
                     villager.getName().getString(),

@@ -282,14 +282,17 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     }
 
     protected void setPage(String page) {
-        if (villager != null) {
+        String prevPage = this.page;
+        boolean keepSelectedPresetPreview = page.equals("presets")
+                && "presets".equals(prevPage)
+                && selectedPreset != null;
+        if (villager != null && !keepSelectedPresetPreview) {
             NbtCompound nbt = saveEntityData(villager);
             villagerVisualization.readAdditionalSaveDataForEditor(nbt);
             villagerVisualization.setBreedingAge(villager.getBreedingAge());
             villagerVisualization.calculateDimensions();
         }
 
-        String prevPage = this.page;
         // Backup / restore logic for presets page
         if (this.page != null && this.page.equals("presets") && presetsBackupNbt != null && !page.equals("presets")) {
             if (villagerData != null) {
@@ -621,6 +624,8 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                 }
 
                 y = geneChanger(y, Genetics.FACE, getFaceCount());
+                addGeneSlider(width / 2, y, DATA_WIDTH, Genetics.EYE_BRIGHTNESS);
+                y += 22;
 
                 if (hasHetero) {
                     addDrawableChild(new ButtonWidget(width / 2, y, DATA_WIDTH / 2, 20,
@@ -992,24 +997,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     }
 
     private int getEditableEyeColor(boolean targetLeftEye) {
-        int dye = targetLeftEye ? villager.getEyeLeftDye() : villager.getEyeDye();
-        if (dye != 0xFFFFFFFF) {
-            return dye;
-        }
-
-        boolean heterochromia = villager.getTraits().hasTrait(Traits.HETEROCHROMIA);
-        if (villager.getTraits().hasTrait(Traits.ALBINISM)) {
-            return 0xFFE8A0A0;
-        }
-
-        float eyeColor = MathHelper.fractionalPart(villager.getGenetics().getGene(Genetics.FACE) + (targetLeftEye && heterochromia ? 0.43F : 0.0F));
-        if (eyeColor < 0.35F) {
-            return ColorHelper.Argb.lerp(eyeColor / 0.35F, 0xFF557FA6, 0xFF5B8756);
-        }
-        if (eyeColor < 0.70F) {
-            return ColorHelper.Argb.lerp((eyeColor - 0.35F) / 0.35F, 0xFF5B8756, 0xFF8A6A35);
-        }
-        return ColorHelper.Argb.lerp((eyeColor - 0.70F) / 0.30F, 0xFF8A6A35, 0xFF4A2B18);
+        return EyeTextureLayers.getStaticEyeColor(villager, targetLeftEye);
     }
 
     private int addRgbColorSliders(int y, Runnable onChange) {
@@ -2269,6 +2257,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
 
     private void selectPreset(String name) {
         this.selectedPreset = name;
+        setPage("presets");
         if (name != null) {
             if (nameField != null) {
                 nameField.setText(name);
@@ -2308,7 +2297,6 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         } else {
             hasVisualChange = false;
         }
-        setPage("presets");
     }
 
     private void savePreset() {

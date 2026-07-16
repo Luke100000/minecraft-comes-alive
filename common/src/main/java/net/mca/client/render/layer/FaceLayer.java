@@ -19,6 +19,7 @@ import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.passive.SheepEntity;
 import net.minecraft.util.DyeColor;
 import net.minecraft.util.Identifier;
+import net.minecraft.util.math.ColorHelper;
 import net.minecraft.util.math.MathHelper;
 
 import java.io.InputStream;
@@ -28,12 +29,6 @@ import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class FaceLayer<T extends LivingEntity, M extends BipedEntityModel<T>> extends VillagerLayer<T, M> {
-    private static final int NATURAL_DYE = 0xFFFFFFFF;
-    private static final int ALBINISM_EYE_COLOR = 0xFFE8A0A0;
-    private static final int BLUE_EYE_COLOR = 0xFF557FA6;
-    private static final int GREEN_EYE_COLOR = 0xFF5B8756;
-    private static final int HAZEL_EYE_COLOR = 0xFF8A6A35;
-    private static final int BROWN_EYE_COLOR = 0xFF4A2B18;
     private static final Map<EyeLayerKey, Identifier> EYE_TEXTURE_CACHE = new ConcurrentHashMap<>();
 
     private final String variant;
@@ -70,13 +65,14 @@ public class FaceLayer<T extends LivingEntity, M extends BipedEntityModel<T>> ex
 
         VillagerLike<?> villagerLike = getVillager(villager);
         if (canUse(skin)) {
+            renderEyeLayer(transform, provider, light, villager, getOrGenerateEyeLayer(skin, EyeTextureLayers.Layer.SCLERA, EyeTextureLayers.Side.FULL), 0xFFFFFFFF, overlay, visible, glowing);
+            renderEyeLayer(transform, provider, light, villager, getOrGenerateEyeLayer(skin, EyeTextureLayers.Layer.DETAILS, EyeTextureLayers.Side.FULL), EyeTextureLayers.DETAILS_TINT, overlay, visible, glowing);
+
             if (villagerLike.getTraits().hasTrait(Traits.HETEROCHROMIA)) {
-                renderEyeLayer(transform, provider, light, villager, getOrGenerateEyeLayer(skin, true, EyeTextureLayers.Side.FULL), 0xFFFFFFFF, overlay, visible, glowing);
-                renderEyeLayer(transform, provider, light, villager, getOrGenerateEyeLayer(skin, false, EyeTextureLayers.Side.LEFT), getEyeColor(villager, tickDelta, true), overlay, visible, glowing);
-                renderEyeLayer(transform, provider, light, villager, getOrGenerateEyeLayer(skin, false, EyeTextureLayers.Side.RIGHT), getEyeColor(villager, tickDelta, false), overlay, visible, glowing);
+                renderEyeLayer(transform, provider, light, villager, getOrGenerateEyeLayer(skin, EyeTextureLayers.Layer.IRIS, EyeTextureLayers.Side.LEFT), getEyeColor(villager, tickDelta, true), overlay, visible, glowing);
+                renderEyeLayer(transform, provider, light, villager, getOrGenerateEyeLayer(skin, EyeTextureLayers.Layer.IRIS, EyeTextureLayers.Side.RIGHT), getEyeColor(villager, tickDelta, false), overlay, visible, glowing);
             } else {
-                renderEyeLayer(transform, provider, light, villager, getOrGenerateEyeLayer(skin, true, EyeTextureLayers.Side.FULL), 0xFFFFFFFF, overlay, visible, glowing);
-                renderEyeLayer(transform, provider, light, villager, getOrGenerateEyeLayer(skin, false, EyeTextureLayers.Side.FULL), getEyeColor(villager, tickDelta, false), overlay, visible, glowing);
+                renderEyeLayer(transform, provider, light, villager, getOrGenerateEyeLayer(skin, EyeTextureLayers.Layer.IRIS, EyeTextureLayers.Side.FULL), getEyeColor(villager, tickDelta, false), overlay, visible, glowing);
             }
         }
 
@@ -119,8 +115,8 @@ public class FaceLayer<T extends LivingEntity, M extends BipedEntityModel<T>> ex
         EYE_TEXTURE_CACHE.clear();
     }
 
-    private Identifier getOrGenerateEyeLayer(Identifier original, boolean isSclera, EyeTextureLayers.Side side) {
-        return EYE_TEXTURE_CACHE.computeIfAbsent(new EyeLayerKey(original, isSclera, side), key -> {
+    private Identifier getOrGenerateEyeLayer(Identifier original, EyeTextureLayers.Layer layer, EyeTextureLayers.Side side) {
+        return EYE_TEXTURE_CACHE.computeIfAbsent(new EyeLayerKey(original, layer, side), key -> {
             try {
                 var resource = MinecraftClient.getInstance().getResourceManager().getResource(key.texture());
                 if (resource.isEmpty()) {
@@ -146,20 +142,16 @@ public class FaceLayer<T extends LivingEntity, M extends BipedEntityModel<T>> ex
                                     continue;
                                 }
 
-                                boolean scleraPixel = EyeTextureLayers.isScleraPixel(
-                                        alpha,
-                                        abgrRed(pixel),
-                                        abgrGreen(pixel),
-                                        abgrBlue(pixel)
-                                );
-                                if (key.sclera() == scleraPixel) {
+                                boolean includePixel = EyeTextureLayers.isPixelForLayer(
+                                        key.layer(), alpha, abgrRed(pixel), abgrGreen(pixel), abgrBlue(pixel));
+                                if (includePixel) {
                                     newImage.setColor(x, y, pixel);
                                 }
                             }
                         }
 
                         Identifier newId = MCA.locate("dynamic/eye/" + key.side().name().toLowerCase(Locale.ROOT)
-                                + "/" + (key.sclera() ? "sclera" : "iris") + "/"
+                                + "/" + key.layer().name().toLowerCase(Locale.ROOT) + "/"
                                 + key.texture().getNamespace() + "_" + key.texture().getPath().replace('/', '_'));
                         MinecraftClient.getInstance().getTextureManager().registerTexture(newId, new NativeImageBackedTexture(newImage));
                         return newId;
@@ -177,34 +169,14 @@ public class FaceLayer<T extends LivingEntity, M extends BipedEntityModel<T>> ex
 
     private int getEyeColor(T villager, float tickDelta, boolean left) {
         VillagerLike<?> villagerLike = getVillager(villager);
+        int color;
         if (villagerLike.getTraits().hasTrait(Traits.RAINBOW_EYES)) {
             int offset = left && villagerLike.getTraits().hasTrait(Traits.HETEROCHROMIA) ? (25 * DyeColor.values().length) / 2 : 0;
-            return getRainbow(villager, tickDelta, offset);
+            color = getRainbow(villager, tickDelta, offset);
+        } else {
+            color = EyeTextureLayers.getStaticEyeColor(villagerLike, left);
         }
-        return getStaticEyeColor(villager, left);
-    }
-
-    private int getStaticEyeColor(T villager, boolean left) {
-        VillagerLike<?> villagerLike = getVillager(villager);
-        boolean heterochromia = villagerLike.getTraits().hasTrait(Traits.HETEROCHROMIA);
-        int dye = left && heterochromia ? villagerLike.getEyeLeftDye() : villagerLike.getEyeDye();
-        return dye != NATURAL_DYE ? dye : getGeneticEyeColor(villager, left && heterochromia);
-    }
-
-    private int getGeneticEyeColor(T villager, boolean shifted) {
-        VillagerLike<?> villagerLike = getVillager(villager);
-        if (villagerLike.getTraits().hasTrait(Traits.ALBINISM)) {
-            return ALBINISM_EYE_COLOR;
-        }
-
-        float eyeColor = MathHelper.fractionalPart(villagerLike.getGenetics().getGene(Genetics.FACE) + (shifted ? 0.43F : 0.0F));
-        if (eyeColor < 0.35F) {
-            return lerpColor(eyeColor / 0.35F, BLUE_EYE_COLOR, GREEN_EYE_COLOR);
-        }
-        if (eyeColor < 0.70F) {
-            return lerpColor((eyeColor - 0.35F) / 0.35F, GREEN_EYE_COLOR, HAZEL_EYE_COLOR);
-        }
-        return lerpColor((eyeColor - 0.70F) / 0.30F, HAZEL_EYE_COLOR, BROWN_EYE_COLOR);
+        return EyeTextureLayers.applyBrightness(color, villagerLike.getGenetics().getGene(Genetics.EYE_BRIGHTNESS));
     }
 
     private int getRainbow(T villager, float tickDelta, int offset) {
@@ -214,7 +186,7 @@ public class FaceLayer<T extends LivingEntity, M extends BipedEntityModel<T>> ex
         int first = block % count;
         int second = (block + 1) % count;
         float mix = ((float)(ticks % 25) + tickDelta) / 25.0F;
-        return lerpColor(mix, rgbToArgb(SheepEntity.getRgbColor(DyeColor.byId(first))), rgbToArgb(SheepEntity.getRgbColor(DyeColor.byId(second))));
+        return ColorHelper.Argb.lerp(mix, rgbToArgb(SheepEntity.getRgbColor(DyeColor.byId(first))), rgbToArgb(SheepEntity.getRgbColor(DyeColor.byId(second))));
     }
 
     private boolean isBlinking(T villager) {
@@ -241,15 +213,6 @@ public class FaceLayer<T extends LivingEntity, M extends BipedEntityModel<T>> ex
                 | MathHelper.clamp(Math.round(rgb[2] * 255.0F), 0, 255);
     }
 
-    private static int lerpColor(float delta, int from, int to) {
-        delta = MathHelper.clamp(delta, 0.0F, 1.0F);
-        int a = Math.round(MathHelper.lerp(delta, (from >>> 24) & 0xFF, (to >>> 24) & 0xFF));
-        int r = Math.round(MathHelper.lerp(delta, (from >>> 16) & 0xFF, (to >>> 16) & 0xFF));
-        int g = Math.round(MathHelper.lerp(delta, (from >>> 8) & 0xFF, (to >>> 8) & 0xFF));
-        int b = Math.round(MathHelper.lerp(delta, from & 0xFF, to & 0xFF));
-        return (a << 24) | (r << 16) | (g << 8) | b;
-    }
-
     private static int abgrAlpha(int color) {
         return (color >>> 24) & 0xFF;
     }
@@ -266,6 +229,6 @@ public class FaceLayer<T extends LivingEntity, M extends BipedEntityModel<T>> ex
         return (color >>> 16) & 0xFF;
     }
 
-    private record EyeLayerKey(Identifier texture, boolean sclera, EyeTextureLayers.Side side) {
+    private record EyeLayerKey(Identifier texture, EyeTextureLayers.Layer layer, EyeTextureLayers.Side side) {
     }
 }

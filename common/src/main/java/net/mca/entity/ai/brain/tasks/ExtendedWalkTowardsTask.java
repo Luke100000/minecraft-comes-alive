@@ -34,10 +34,18 @@ public class ExtendedWalkTowardsTask {
     }
 
     public static SingleTickTask<VillagerEntityMCA> create(MemoryModuleType<GlobalPos> destination, float speed, int completionRange, int maxDistance, int maxRunTime, Predicate<VillagerEntityMCA> canGiveUp, Consumer<VillagerEntityMCA> onGiveUp) {
-        return create(destination, speed, completionRange, maxDistance, maxRunTime, canGiveUp, onGiveUp, (world, entity, globalPos) -> Optional.empty());
+        return create(destination, speed, completionRange, maxDistance, maxRunTime, canGiveUp, onGiveUp, (world, entity, globalPos) -> Optional.empty(), entity -> true);
+    }
+
+    public static SingleTickTask<VillagerEntityMCA> create(MemoryModuleType<GlobalPos> destination, float speed, int completionRange, int maxDistance, int maxRunTime, Predicate<VillagerEntityMCA> canGiveUp, Consumer<VillagerEntityMCA> onGiveUp, Predicate<VillagerEntityMCA> shouldWalk) {
+        return create(destination, speed, completionRange, maxDistance, maxRunTime, canGiveUp, onGiveUp, (world, entity, globalPos) -> Optional.empty(), shouldWalk);
     }
 
     public static SingleTickTask<VillagerEntityMCA> create(MemoryModuleType<GlobalPos> destination, float speed, int completionRange, int maxDistance, int maxRunTime, Predicate<VillagerEntityMCA> canGiveUp, Consumer<VillagerEntityMCA> onGiveUp, WalkTargetResolver walkTargetResolver) {
+        return create(destination, speed, completionRange, maxDistance, maxRunTime, canGiveUp, onGiveUp, walkTargetResolver, entity -> true);
+    }
+
+    public static SingleTickTask<VillagerEntityMCA> create(MemoryModuleType<GlobalPos> destination, float speed, int completionRange, int maxDistance, int maxRunTime, Predicate<VillagerEntityMCA> canGiveUp, Consumer<VillagerEntityMCA> onGiveUp, WalkTargetResolver walkTargetResolver, Predicate<VillagerEntityMCA> shouldWalk) {
         return TaskTriggerer.task((context) -> {
             return context.group(
                     context.queryMemoryOptional(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE),
@@ -45,6 +53,10 @@ public class ExtendedWalkTowardsTask {
                     context.queryMemoryValue(destination)).apply(context,
                     (cantReachWalkTargetSince, walkTarget, destinationResult) -> {
                         return (world, entity, time) -> {
+                            if (!shouldWalk.test(entity)) {
+                                return true;
+                            }
+
                             GlobalPos globalPos = context.getValue(destinationResult);
                             Optional<Long> optional = context.getOptionalValue(cantReachWalkTargetSince);
                             if (optional.isPresent() && world.getTime() - optional.get() < RANDOM_POS_RETRY_COOLDOWN) {

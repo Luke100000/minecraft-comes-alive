@@ -1,5 +1,7 @@
 package net.mca.network.c2s;
 
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import net.mca.cobalt.network.Message;
 import net.mca.resources.data.skin.Clothing;
 import net.mca.resources.data.skin.Hair;
@@ -13,18 +15,27 @@ public class AddCustomClothingMessage implements Message {
     @Serial
     private static final long serialVersionUID = 4620788389788045910L;
 
-    final SkinListEntry entry;
+    private final String identifier;
+    private final boolean hair;
+    private final String json;
 
-    public AddCustomClothingMessage(SkinListEntry entry) {
-        this.entry = entry;
+    private AddCustomClothingMessage(String identifier, boolean hair, String json) {
+        this.identifier = identifier;
+        this.hair = hair;
+        this.json = json;
+    }
+
+    public static AddCustomClothingMessage fromEntry(SkinListEntry entry) {
+        return new AddCustomClothingMessage(entry.getIdentifier(), entry instanceof Hair, entry.toJson().toString());
     }
 
     @Override
     public void receive(ServerPlayerEntity player) {
-        if (entry instanceof Clothing clothing) {
-            CustomClothingManager.getClothing().addEntry(entry.getIdentifier(), clothing);
-        } else if (entry instanceof Hair hair) {
-            CustomClothingManager.getHair().addEntry(entry.getIdentifier(), hair);
+        JsonObject object = JsonParser.parseString(json).getAsJsonObject();
+        if (hair) {
+            CustomClothingManager.getHair().addEntry(identifier, new Hair(identifier, object));
+        } else {
+            CustomClothingManager.getClothing().addEntry(identifier, new Clothing(identifier, object));
         }
     }
 }

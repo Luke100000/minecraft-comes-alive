@@ -1,25 +1,31 @@
 package net.mca.mixin;
 
+import net.mca.util.network.datasync.CParameter;
 import net.minecraft.entity.data.DataTracker;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Redirect;
 
 /**
- * Suppresses vanilla's false-positive tracked-data warning for MCA's own entity classes.
- * MCA intentionally allocates tracked data through its CDataParameter abstraction.
+ * Suppresses vanilla's false-positive tracked-data warning for MCA's
+ * CParameter abstraction.
  */
 @Mixin(DataTracker.class)
 public class MixinSynchedEntityData {
     @Redirect(
             method = "registerData",
-            at = @At(value = "INVOKE", target = "Ljava/lang/Class;equals(Ljava/lang/Object;)Z"),
+            at = @At(
+                    value = "INVOKE",
+                    target = "Ljava/lang/Object;equals(Ljava/lang/Object;)Z"
+            ),
             require = 0
     )
-    private static boolean mca$bypassDefineIdWarning(Class<?> entityClass, Object callerClass) {
-        if (entityClass.getName().startsWith("net.mca.")) {
+    private static boolean mca$bypassDefineIdWarning(Object callerClass, Object entityClass) {
+        if (callerClass instanceof Class<?> clazz
+                && CParameter.class.isAssignableFrom(clazz)) {
             return true;
         }
-        return entityClass.equals(callerClass);
+
+        return callerClass.equals(entityClass);
     }
 }
