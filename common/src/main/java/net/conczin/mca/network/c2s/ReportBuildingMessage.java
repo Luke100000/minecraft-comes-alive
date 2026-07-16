@@ -39,7 +39,8 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
     @Override
     public void handleServer(ServerPlayer player) {
         VillageManager villages = VillageManager.get(player.serverLevel());
-        if (action == Action.ADD || action == Action.ADD_ROOM || action == Action.UPDATE_ROOM) {
+        if (action == Action.ADD || action == Action.ADD_ROOM || action == Action.UPDATE_ROOM
+                || action == Action.SET_GROUND_ANCHOR) {
             BlockPos playerPos = player.blockPosition();
             Village nearestVillage = villages.findNearestVillage(player).orElse(null);
             Village.StructuralLookup structuralLookup = nearestVillage == null
@@ -55,6 +56,7 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
             case ADD -> addBuildingAndCurrentRoom(villages, player);
             case ADD_ROOM -> addRoom(villages, player);
             case UPDATE_ROOM -> updateRoom(villages, player, player.blockPosition(), null);
+            case SET_GROUND_ANCHOR -> setGroundAnchor(villages, player);
             case AUTO_SCAN -> villages.findNearestVillage(player).ifPresent(Village::toggleAutoScan);
             case FULL_SCAN -> villages.findNearestVillage(player).ifPresent(village -> {
                 villages.ensureStructureHierarchy(village);
@@ -219,6 +221,34 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
             return;
         }
         commitBuildingAndCurrentRoom(villages, player, scan, null);
+    }
+
+    private static void setGroundAnchor(VillageManager villages, ServerPlayer player) {
+        BlockPos source = player.blockPosition();
+        Village village = villages.findNearestVillage(player).orElse(null);
+        if (village == null) {
+            player.displayClientMessage(Component.translatable("blueprint.noBuilding"), true);
+            return;
+        }
+
+        villages.ensureStructureHierarchy(village);
+        Building room = village.getFunctionalRoomAt(source).orElse(null);
+        if (room == null) {
+            player.displayClientMessage(Component.translatable("blueprint.noRoomOnFloor"), true);
+            return;
+        }
+        if (village.isStructuralGroundFloor(room)) {
+            player.displayClientMessage(Component.translatable("blueprint.groundAnchorAlreadySet"), true);
+            return;
+        }
+        if (!village.setStructureGroundFloorAnchor(room)) {
+            player.displayClientMessage(Component.translatable("blueprint.groundAnchorNoStructure"), true);
+            return;
+        }
+
+        MCA.LOGGER.info("[FloorRoomDebug] side=server stage=set-ground-anchor source={} villageId={} roomId={} structureId={} floorY={}",
+                source, village.getId(), room.getId(), room.getEffectiveStructureId(), room.getFloorY());
+        player.displayClientMessage(Component.translatable("blueprint.groundAnchorSet"), true);
     }
 
     private static void addRoom(VillageManager villages, ServerPlayer player) {
@@ -428,6 +458,7 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
         FORCE_TYPE,
         FULL_SCAN,
         REMOVE_ROOM,
-        UPDATE_ROOM
+        UPDATE_ROOM,
+        SET_GROUND_ANCHOR
     }
 }

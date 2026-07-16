@@ -468,6 +468,21 @@ public class Village implements Iterable<Building> {
                 .isPresent();
     }
 
+    public boolean setStructureGroundFloorAnchor(Building room) {
+        if (room == null) {
+            return false;
+        }
+
+        Building root = getStructureRoot(room).orElse(null);
+        if (root == null || root.isOnGroundFloorY(room.getFloorY())) {
+            return false;
+        }
+
+        root.setGroundFloorY(room.getFloorY());
+        markDirty();
+        return true;
+    }
+
     private Optional<Building> getStructureRoot(Building room) {
         return getBuildings().values().stream()
                 .filter(Building::isStructureRoot)

@@ -199,6 +199,11 @@ public class Building {
         return groundFloorY;
     }
 
+    void setGroundFloorY(int groundFloorY) {
+        this.groundFloorY = groundFloorY;
+        this.hasGroundFloorAnchor = true;
+    }
+
     public List<BuildingFloorRegion> getFloorRegions() {
         return floorRegions;
     }

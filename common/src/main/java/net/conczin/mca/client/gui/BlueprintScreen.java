@@ -2,9 +2,12 @@ package net.conczin.mca.client.gui;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.conczin.mca.MCA;
+import net.conczin.mca.MCAClient;
 import net.conczin.mca.client.gui.widget.LegacyImageButton;
 import net.conczin.mca.client.gui.widget.TooltipButtonWidget;
 import net.conczin.mca.client.gui.widget.WidgetUtils;
+import net.conczin.mca.client.render.JourneyMapIconBridge;
+import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.network.Network;
 import net.conczin.mca.network.c2s.GetVillageRequest;
 import net.conczin.mca.network.c2s.RenameVillageMessage;
@@ -22,8 +25,10 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.gui.components.PlayerFaceRenderer;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.client.resources.DefaultPlayerSkin;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Vec3i;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -44,12 +49,18 @@ public class BlueprintScreen extends ExtendedScreen {
     private static final int MAP_INNER_MARGIN = 6;
     private static final float MAP_MAX_FIT_SCALE = 2.0f;
     private static final int ROOM_INNER_PADDING = 1;
+    private static final int PLAYER_MARKER_SIZE = 6;
+    private static final int PLAYER_MARKER_EDGE_PADDING = 2;
     private static final int ROOM_SHADOW_COLOR = 0x50000000;
     private static final int ROOM_FILL_ALPHA_ALL_FLOORS = 0x18;
     private static final int ROOM_FILL_ALPHA_SELECTED_FLOOR = 0x38;
     private static final int ROOM_FILL_ALPHA_HOVERED = 0x58;
+    private static final int TOOLTIP_FLOOR_BASEMENT_COLOR = 0x9b8cff;
+    private static final int TOOLTIP_FLOOR_GROUND_COLOR = 0xf2c94c;
+    private static final int TOOLTIP_FLOOR_UPPER_COLOR = 0x6fd6a5;
     private static Integer rememberedFloorOrdinal;
     private static MapScaleMode rememberedMapScaleMode = MapScaleMode.FIT;
+    private static boolean rememberedPlayerCentered;
     // 1.19.3: This needs to be the MC type, DO NOT TOUCH !!!
     private final List<net.minecraft.client.gui.components.Button> catalogButtons = new LinkedList<>();
     private Village village;
@@ -68,12 +79,15 @@ public class BlueprintScreen extends ExtendedScreen {
     private ButtonWidget floorNextButton;
     private ButtonWidget buildingIconsButton;
     private ButtonWidget mapScaleButton;
+    private ButtonWidget playerCenteredButton;
+    private TooltipButtonWidget groundAnchorButton;
     private TooltipButtonWidget structureScanButton;
     private TooltipButtonWidget removeRoomButton;
     private ButtonWidget removeBuildingButton;
     private ButtonWidget advancedButton;
     private Integer selectedFloorOrdinal = rememberedFloorOrdinal;
     private MapScaleMode mapScaleMode = rememberedMapScaleMode;
+    private boolean playerCentered = rememberedPlayerCentered;
     private boolean selectPlayerFloorOnNextVillageResponse;
     private boolean showBuildingIcons = true;
     private BlueprintFloorLayout floorLayout = BlueprintFloorLayout.empty();
@@ -151,6 +165,8 @@ public class BlueprintScreen extends ExtendedScreen {
         floorNextButton = null;
         buildingIconsButton = null;
         mapScaleButton = null;
+        playerCenteredButton = null;
+        groundAnchorButton = null;
         structureScanButton = null;
         removeRoomButton = null;
         removeBuildingButton = null;
@@ -166,7 +182,7 @@ public class BlueprintScreen extends ExtendedScreen {
             for (String p : new String[]{"map", "rank", "catalog", "villagers", "rules", "refresh"}) {
                 ButtonWidget widget = new ButtonWidget(bx, by, 80, 20, Component.translatable("gui.blueprint." + p), b -> setPage(p));
                 addRenderableWidget(widget);
-                if (page.equals(p)) {
+                if (page.equals(p) || ("advanced".equals(page) && "map".equals(p))) {
                     widget.active = false;
                 }
                 by += 22;
@@ -189,83 +205,18 @@ public class BlueprintScreen extends ExtendedScreen {
                 minecraft.player.displayClientMessage(Component.translatable("blueprint.refreshed"), true);
                 setPage("map");
                 break;
-            case "advanced":
-                //auto-scan
+            case "map", "advanced": {
                 bx = width / 2 + 180 - 64 - 16;
-                by = height / 2 - 56;
-                MutableComponent text = Component.translatable("gui.blueprint.autoScan");
-                if (village.isAutoScan()) {
-                    text.withStyle(ChatFormatting.GREEN);
-                } else {
-                    text.withStyle(ChatFormatting.GRAY).withStyle(ChatFormatting.STRIKETHROUGH);
-                }
-                addRenderableWidget(new TooltipButtonWidget(bx, by, 96, 20, text, Component.translatable("gui.blueprint.autoScan.tooltip"), b -> {
-                    Network.sendToServer(new ReportBuildingMessage(ReportBuildingMessage.Action.AUTO_SCAN));
-                    village.toggleAutoScan();
-                    setPage(page);
-                }));
-                by += 22;
-
-                //restrict access
-                addRenderableWidget(new TooltipButtonWidget(bx, by, 96, 20, "gui.blueprint.restrictAccess", b -> {
-                    Network.sendToServer(new ReportBuildingMessage(ReportBuildingMessage.Action.FORCE_TYPE, "blocked"));
-                }));
-                by += 22;
-
-                //add whole building
-                addRenderableWidget(new TooltipButtonWidget(bx, by, 96, 20, "gui.blueprint.addBuilding", b -> {
-                    Network.sendToServer(new ReportBuildingMessage(ReportBuildingMessage.Action.ADD));
-                }));
-                by += 22 * 4;
-
-                //rename village
-                if (isVillage) {
-                    addRenderableWidget(new ButtonWidget(bx, by, 96, 20, Component.translatable("gui.blueprint.renameVillage"), b -> {
-                        setPage("rename");
-                    }));
-                }
-                break;
-            case "map":
-                // A grouped POI such as the town bell keeps the settlement alive, but
-                // rooms still need a complete structural root to attach to.
-                bx = width / 2 + 180 - 64 - 16;
-                by = height / 2 - 56 + 22 * 3;
-                structureScanButton = addRenderableWidget(new TooltipButtonWidget(
-                        bx, by, 96, 20, getStructureScanTranslationKey(getPlayerStructuralLookup().position()), b -> {
-                    requestStructureScan();
-                }));
-                by += 22;
-
-                //remove only the room the player is currently standing in
-                removeRoomButton = addRenderableWidget(new TooltipButtonWidget(bx, by, 96, 20, "gui.blueprint.removeRoom", b -> {
-                    MCA.LOGGER.debug("[BuildingRemove] stage=client-click action=REMOVE_ROOM");
-                    Network.sendToServer(new ReportBuildingMessage(ReportBuildingMessage.Action.REMOVE_ROOM));
-                }));
-                by += 22;
-
-                //remove building
-                removeBuildingButton = addRenderableWidget(new ButtonWidget(bx, by, 96, 20,
-                        Component.translatable("gui.blueprint.removeBuilding"), b -> {
-                    Network.sendToServer(new ReportBuildingMessage(ReportBuildingMessage.Action.REMOVE));
-                }));
-                by += 22;
-
-                //advanced
-                if (!page.equals("advanced")) {
-                    advancedButton = addRenderableWidget(new ButtonWidget(bx, by, 96, 20,
-                            Component.translatable("gui.blueprint.advanced"), b -> {
-                        setPage("advanced");
-                    }));
-                }
-
-                int floorControlX = width / 2 - 75;
                 int floorControlY = height / 2 + 87;
+
+                // Map and Advanced are two control modes over the same map view. Keep all
+                // display/navigation controls shared so Advanced cannot lose floor controls,
+                // building icons, scale selection, or player centering.
+                int floorControlX = width / 2 - 75;
                 floorPreviousButton = addRenderableWidget(new ButtonWidget(floorControlX, floorControlY, 24, 20,
                         Component.literal("<"), b -> changeSelectedFloor(-1)));
                 floorLabelButton = addRenderableWidget(new ButtonWidget(floorControlX + 26, floorControlY, 98, 20,
-                        Component.empty(), b -> {
-                    selectFloor(null);
-                }));
+                        Component.empty(), b -> selectFloor(null)));
                 floorNextButton = addRenderableWidget(new ButtonWidget(floorControlX + 126, floorControlY, 24, 20,
                         Component.literal(">"), b -> changeSelectedFloor(1)));
                 buildingIconsButton = addRenderableWidget(new ButtonWidget(
@@ -278,7 +229,79 @@ public class BlueprintScreen extends ExtendedScreen {
                         floorControlX + 98, floorControlY + 22, 52, 20,
                         getMapScaleLabel(), b -> cycleMapScale(), getMapScaleTooltip()));
 
+                playerCenteredButton = addRenderableWidget(new ButtonWidget(
+                        bx, floorControlY, 96, 20,
+                        getPlayerCenteredLabel(), b -> togglePlayerCentered(),
+                        Component.translatable("gui.blueprint.playerCentered.tooltip")));
+
+                if ("advanced".equals(page)) {
+                    // Advanced is a map sub-view: expose settlement-level settings while
+                    // preserving the shared map display controls above.
+                    by = height / 2 - 56;
+                    MutableComponent text = Component.translatable("gui.blueprint.autoScan");
+                    if (village.isAutoScan()) {
+                        text.withStyle(ChatFormatting.GREEN);
+                    } else {
+                        text.withStyle(ChatFormatting.GRAY).withStyle(ChatFormatting.STRIKETHROUGH);
+                    }
+                    addRenderableWidget(new TooltipButtonWidget(bx, by, 96, 20, text,
+                            Component.translatable("gui.blueprint.autoScan.tooltip"), b -> {
+                        Network.sendToServer(new ReportBuildingMessage(ReportBuildingMessage.Action.AUTO_SCAN));
+                        village.toggleAutoScan();
+                        setPage(page);
+                    }));
+                    by += 22;
+
+                    addRenderableWidget(new TooltipButtonWidget(bx, by, 96, 20,
+                            "gui.blueprint.restrictAccess", b -> {
+                        Network.sendToServer(new ReportBuildingMessage(ReportBuildingMessage.Action.FORCE_TYPE, "blocked"));
+                    }));
+                    by += 22;
+
+                    groundAnchorButton = addRenderableWidget(new TooltipButtonWidget(
+                            bx, by, 96, 20, "gui.blueprint.setGroundAnchor", b -> {
+                        selectPlayerFloorOnNextVillageResponse = true;
+                        Network.sendToServer(new ReportBuildingMessage(ReportBuildingMessage.Action.SET_GROUND_ANCHOR));
+                    }));
+                    updateGroundAnchorControl(getPlayerStructuralLookup());
+                    by += 22;
+
+                    if (isVillage) {
+                        addRenderableWidget(new ButtonWidget(bx, by, 96, 20,
+                                Component.translatable("gui.blueprint.renameVillage"), b -> setPage("rename")));
+                    }
+
+                    addRenderableWidget(new ButtonWidget(
+                            bx, floorControlY + 22, 96, 20,
+                            Component.translatable("gui.back"), b -> setPage("map")));
+                } else {
+                    // A grouped POI such as the town bell keeps the settlement alive, but
+                    // rooms still need a complete structural root to attach to.
+                    by = height / 2 - 56 + 22 * 3;
+                    structureScanButton = addRenderableWidget(new TooltipButtonWidget(
+                            bx, by, 96, 20,
+                            getStructureScanTranslationKey(getPlayerStructuralLookup().position()),
+                            b -> requestStructureScan()));
+                    by += 22;
+
+                    removeRoomButton = addRenderableWidget(new TooltipButtonWidget(
+                            bx, by, 96, 20, "gui.blueprint.removeRoom", b -> {
+                        MCA.LOGGER.debug("[BuildingRemove] stage=client-click action=REMOVE_ROOM");
+                        Network.sendToServer(new ReportBuildingMessage(ReportBuildingMessage.Action.REMOVE_ROOM));
+                    }));
+                    by += 22;
+
+                    removeBuildingButton = addRenderableWidget(new ButtonWidget(
+                            bx, by, 96, 20, Component.translatable("gui.blueprint.removeBuilding"), b -> {
+                        Network.sendToServer(new ReportBuildingMessage(ReportBuildingMessage.Action.REMOVE));
+                    }));
+
+                    advancedButton = addRenderableWidget(new ButtonWidget(
+                            bx, floorControlY + 22, 96, 20,
+                            Component.translatable("gui.blueprint.advanced"), b -> setPage("advanced")));
+                }
                 break;
+            }
             case "rank":
                 break;
             case "catalog":
@@ -485,9 +508,6 @@ public class BlueprintScreen extends ExtendedScreen {
             }
         }
 
-        if (advancedButton != null) {
-            advancedButton.setY(y);
-        }
     }
 
     private void updateRemoveRoomControl(Village.StructuralLookup structuralLookup) {
@@ -549,8 +569,11 @@ public class BlueprintScreen extends ExtendedScreen {
             context.drawCenteredString(font, Component.translatable("gui.blueprint.autoScanDisabled"), width / 2, hintY, 0xaaffffff);
         }
 
-        double mapCenterX = (village.getBox().minX() + village.getBox().maxX() + 1) / 2.0D;
-        double mapCenterZ = (village.getBox().minZ() + village.getBox().maxZ() + 1) / 2.0D;
+        LocalPlayer player = minecraft == null ? null : minecraft.player;
+        double villageCenterX = (village.getBox().minX() + village.getBox().maxX() + 1) / 2.0D;
+        double villageCenterZ = (village.getBox().minZ() + village.getBox().maxZ() + 1) / 2.0D;
+        double mapCenterX = playerCentered && player != null ? player.getX() : villageCenterX;
+        double mapCenterZ = playerCentered && player != null ? player.getZ() : villageCenterZ;
         float scale = getMapScale();
         int mouseLocalX = (int) Math.floor((mouseX - centerX) / scale + mapCenterX);
         int mouseLocalZ = (int) Math.floor((mouseY - centerY) / scale + mapCenterZ);
@@ -617,22 +640,15 @@ public class BlueprintScreen extends ExtendedScreen {
             }
         }
 
-        // The player is global map context, not part of a floor, and stays above every icon.
-        // Render it in screen space with a minimum 3x3 footprint so Fit mode cannot
-        // shrink a one-block marker below one physical GUI pixel.
         matrices.popPose();
-        assert minecraft != null;
-        LocalPlayer player = minecraft.player;
-        if (player != null) {
-            int playerScreenX = (int) Math.floor(centerX + (player.getX() - mapCenterX) * scale);
-            int playerScreenY = (int) Math.floor(centerY + (player.getZ() - mapCenterZ) * scale);
-            context.fill(
-                    playerScreenX - 1, playerScreenY - 1,
-                    playerScreenX + 2, playerScreenY + 2,
-                    0xffff00ff
-            );
-        }
         context.disableScissor();
+
+        // The player is global map context, not part of a floor, and stays above every icon.
+        // Use the player's actual skin face and clamp it to the map edge when the player
+        // is outside the current viewport instead of letting scissoring hide it.
+        renderPlayerMarker(context, player, centerX, centerY, left, top, right, bottom,
+                mapCenterX, mapCenterZ, scale);
+        renderPlayerCenteredButtonIcon(context);
 
         //sort vertically
         List<Building> sortedHoverBuildings = new ArrayList<>(hoverBuildings.values());
@@ -656,6 +672,100 @@ public class BlueprintScreen extends ExtendedScreen {
             context.renderComponentTooltip(font, b, mouseX, py);
             py += getTooltipHeight(b) + 9;
         }
+    }
+
+    private void renderPlayerMarker(GuiGraphics context,
+                                    LocalPlayer player,
+                                    int centerX,
+                                    int centerY,
+                                    int left,
+                                    int top,
+                                    int right,
+                                    int bottom,
+                                    double mapCenterX,
+                                    double mapCenterZ,
+                                    float scale) {
+        if (player == null) {
+            return;
+        }
+
+        double playerScreenX = centerX + (player.getX() - mapCenterX) * scale;
+        double playerScreenY = centerY + (player.getZ() - mapCenterZ) * scale;
+        ScreenPoint markerCenter = clampPlayerMarkerToMap(
+                playerScreenX, playerScreenY,
+                centerX, centerY, left, top, right, bottom
+        );
+        int markerX = markerCenter.x() - PLAYER_MARKER_SIZE / 2;
+        int markerY = markerCenter.y() - PLAYER_MARKER_SIZE / 2;
+
+        // Dark backing keeps pale and transparent skins readable over bright room colors.
+        context.fill(markerX - 1, markerY - 1,
+                markerX + PLAYER_MARKER_SIZE + 1, markerY + PLAYER_MARKER_SIZE + 1,
+                0xc0000000);
+
+        // Prefer the exact dynamic MCA face used by the JourneyMap compatibility bridge
+        // whenever this player is actually using an MCA-rendered player model. Fall back
+        // to the vanilla skin face while player data is unavailable or the vanilla model is selected.
+        ResourceLocation mcaFace = MCAClient.getPlayerData(player.getUUID())
+                .filter(data -> data.getPlayerModel() != VillagerLike.PlayerModel.VANILLA)
+                .map(JourneyMapIconBridge::getOrCreateFaceIcon)
+                .orElse(null);
+        if (mcaFace != null) {
+            // JourneyMapIconBridge returns a complete 24x24 cropped face texture.
+            // Sample the full source image and scale it down to the map marker size.
+            context.blit(mcaFace, markerX, markerY,
+                    PLAYER_MARKER_SIZE, PLAYER_MARKER_SIZE,
+                    0.0F, 0.0F, 24, 24, 24, 24);
+        } else {
+            PlayerFaceRenderer.draw(context, player.getSkin(), markerX, markerY, PLAYER_MARKER_SIZE);
+        }
+    }
+
+    private static ScreenPoint clampPlayerMarkerToMap(double playerScreenX,
+                                                       double playerScreenY,
+                                                       int centerX,
+                                                       int centerY,
+                                                       int left,
+                                                       int top,
+                                                       int right,
+                                                       int bottom) {
+        double halfMarker = PLAYER_MARKER_SIZE / 2.0D;
+        double minCenterX = left + PLAYER_MARKER_EDGE_PADDING + halfMarker;
+        double maxCenterX = right - PLAYER_MARKER_EDGE_PADDING - halfMarker;
+        double minCenterY = top + PLAYER_MARKER_EDGE_PADDING + halfMarker;
+        double maxCenterY = bottom - PLAYER_MARKER_EDGE_PADDING - halfMarker;
+
+        double dx = playerScreenX - centerX;
+        double dy = playerScreenY - centerY;
+        boolean outside = playerScreenX < minCenterX || playerScreenX > maxCenterX
+                || playerScreenY < minCenterY || playerScreenY > maxCenterY;
+        double factor = 1.0D;
+        if (outside) {
+            double maxDx = Math.min(centerX - minCenterX, maxCenterX - centerX);
+            double maxDy = Math.min(centerY - minCenterY, maxCenterY - centerY);
+            double xFactor = dx == 0.0D ? Double.POSITIVE_INFINITY : maxDx / Math.abs(dx);
+            double yFactor = dy == 0.0D ? Double.POSITIVE_INFINITY : maxDy / Math.abs(dy);
+            factor = Math.min(xFactor, yFactor);
+        }
+
+        int x = (int) Math.round(centerX + dx * factor);
+        int y = (int) Math.round(centerY + dy * factor);
+        x = Math.max((int) Math.ceil(minCenterX), Math.min((int) Math.floor(maxCenterX), x));
+        y = Math.max((int) Math.ceil(minCenterY), Math.min((int) Math.floor(maxCenterY), y));
+        return new ScreenPoint(x, y);
+    }
+
+    private void renderPlayerCenteredButtonIcon(GuiGraphics context) {
+        if (playerCenteredButton == null || !playerCenteredButton.visible) {
+            return;
+        }
+        int iconSize = 7;
+        int iconX = playerCenteredButton.getX() + 4;
+        int iconY = playerCenteredButton.getY() + (playerCenteredButton.getHeight() - iconSize) / 2;
+        PlayerFaceRenderer.draw(context, DefaultPlayerSkin.getDefaultTexture(), iconX, iconY, iconSize);
+    }
+
+    private record ScreenPoint(int x, int y) {
     }
 
     private static void renderRoomRegion(GuiGraphics context,
@@ -719,6 +829,30 @@ public class BlueprintScreen extends ExtendedScreen {
 
     private static int withAlpha(int color, int alpha) {
         return (color & 0x00ffffff) | (alpha << 24);
+    }
+
+    private void togglePlayerCentered() {
+        playerCentered = !playerCentered;
+        rememberedPlayerCentered = playerCentered;
+        updatePlayerCenteredControl();
+        MCA.LOGGER.info("[FloorRoomDebug] side=client stage=player-centered-change enabled={} mode={} effectiveScale={}",
+                playerCentered, mapScaleMode, village == null ? 0.0F : getMapScale());
+    }
+
+    private Component getPlayerCenteredLabel() {
+        // The button text is centered by vanilla. Reserve space on the left for the
+        // overlaid Steve icon so it never draws on top of the first letters.
+        MutableComponent label = Component.literal("   ")
+                .append(Component.translatable("gui.blueprint.playerCentered"));
+        return playerCentered
+                ? label.withStyle(ChatFormatting.GREEN)
+                : label.withStyle(ChatFormatting.GRAY);
+    }
+
+    private void updatePlayerCenteredControl() {
+        if (playerCenteredButton != null) {
+            playerCenteredButton.setMessage(getPlayerCenteredLabel());
+        }
     }
 
     private float getMapScale() {
@@ -895,6 +1029,16 @@ public class BlueprintScreen extends ExtendedScreen {
         }
     }
 
+    private void updateGroundAnchorControl(Village.StructuralLookup structuralLookup) {
+        if (groundAnchorButton == null) {
+            return;
+        }
+        groundAnchorButton.active = village != null
+                && structuralLookup.functionalRoom()
+                .filter(room -> !village.isStructuralGroundFloor(room))
+                .isPresent();
+    }
+
     private static void addHoveredBuilding(Map<Integer, Building> hoveredBuildings,
                                            Building building,
                                            Integer selectedFloor) {
@@ -919,9 +1063,9 @@ public class BlueprintScreen extends ExtendedScreen {
                 ? tooltipBuildings.stream().findFirst().orElse(hoverBuilding)
                 : hoverBuilding;
 
-        //name
+        // Match the tooltip header to the same configured color used by the building on the map.
         BuildingType bt = BuildingTypes.getInstance().getBuildingType(headerBuilding.getType());
-        lines.add(Component.translatable("buildingType." + bt.name()));
+        lines.add(getBuildingTypeTooltipLabel(bt));
 
         //residents
         LinkedHashSet<String> residents = new LinkedHashSet<>();
@@ -929,7 +1073,7 @@ public class BlueprintScreen extends ExtendedScreen {
             residents.addAll(village.getResidents(building.getId()));
         }
         for (String name : residents) {
-            lines.add(Component.literal(name));
+            lines.add(Component.literal(name).withStyle(ChatFormatting.GRAY));
         }
 
         lines.addAll(getBlockTooltipLines(tooltipBuildings, selectedFloor));
@@ -946,10 +1090,10 @@ public class BlueprintScreen extends ExtendedScreen {
                 continue;
             }
 
-            lines.add(getFloorLabel(floorOrdinal).copy().withStyle(ChatFormatting.GRAY));
+            lines.add(getTooltipFloorLabel(floorOrdinal));
             for (Building room : floorRooms) {
                 BuildingType roomType = BuildingTypes.getInstance().getBuildingType(room.getType());
-                lines.add(Component.literal("  ").append(Component.translatable("buildingType." + roomType.name())));
+                lines.add(Component.literal("  ").append(getBuildingTypeTooltipLabel(roomType)));
                 village.getResidents(room.getId()).forEach(name ->
                         lines.add(Component.literal("    ").append(Component.literal(name).withStyle(ChatFormatting.GRAY))));
                 getBlockTooltipLines(List.of(room), floorOrdinal).forEach(item ->
@@ -972,6 +1116,19 @@ public class BlueprintScreen extends ExtendedScreen {
                 .toList();
     }
 
+    private Component getBuildingTypeTooltipLabel(BuildingType buildingType) {
+        return Component.translatable("buildingType." + buildingType.name())
+                .withStyle(style -> style.withColor(buildingType.getColor() & 0x00ffffff));
+    }
+
+    private Component getTooltipFloorLabel(int floorOrdinal) {
+        int color = floorOrdinal < 0
+                ? TOOLTIP_FLOOR_BASEMENT_COLOR
+                : floorOrdinal == 0 ? TOOLTIP_FLOOR_GROUND_COLOR : TOOLTIP_FLOOR_UPPER_COLOR;
+        return getFloorLabel(floorOrdinal).copy()
+                .withStyle(style -> style.withColor(color).withBold(true));
+    }
+
     private List<Component> getBlockTooltipLines(Collection<Building> buildings, Integer selectedFloor) {
         List<Component> lines = new ArrayList<>();
         Map<ResourceLocation, Set<BlockPos>> positionsByBlock = new TreeMap<>(Comparator.comparing(ResourceLocation::toString));
@@ -987,7 +1144,7 @@ public class BlueprintScreen extends ExtendedScreen {
             if (!block.getValue().isEmpty()) {
                 lines.add(Component.literal(block.getValue().size() + " x ")
                         .append(getBlockName(block.getKey()))
-                        .withStyle(ChatFormatting.GRAY));
+                        .withStyle(ChatFormatting.DARK_GRAY));
             }
         }
         return lines;
@@ -1163,6 +1320,7 @@ public class BlueprintScreen extends ExtendedScreen {
         updateMapScaleControl();
         updateStructureScanControl(structuralLookup);
         updateRemoveRoomControl(structuralLookup);
+        updateGroundAnchorControl(structuralLookup);
 
         MCA.LOGGER.info("[FloorRoomDebug] side=client stage=village-response-applied pos={} lookup={} selectedAfter={} availableFloors={}",
                 playerPos, structuralPosition, selectedFloorOrdinal, floorLayout.ordinals());
