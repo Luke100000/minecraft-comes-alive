@@ -82,12 +82,7 @@ public class VillagerEntityModelMCA<T extends LivingEntity & VillagerLike<T>> ex
     @Override
     public void setupAnim(T villager, float limbAngle, float limbDistance, float animationProgress, float headYaw, float headPitch) {
         super.setupAnim(villager, limbAngle, limbDistance, animationProgress, headYaw, headPitch);
-        leftLegwear.copyFrom(leftLeg);
-        rightLegwear.copyFrom(rightLeg);
-        leftArmwear.copyFrom(leftArm);
-        rightArmwear.copyFrom(rightArm);
-        bodyWear.copyFrom(body);
-        breastsWear.copyFrom(breasts);
+        syncWearParts();
     }
 
     @Override
@@ -121,28 +116,36 @@ public class VillagerEntityModelMCA<T extends LivingEntity & VillagerLike<T>> ex
     }
 
     private void copyAttributes(VillagerEntityModelMCA<T> target) {
-        target.leftLegwear.copyFrom(leftLegwear);
-        target.rightLegwear.copyFrom(rightLegwear);
-        target.leftArmwear.copyFrom(leftArmwear);
-        target.rightArmwear.copyFrom(rightArmwear);
-        target.bodyWear.copyFrom(bodyWear);
-        target.breastsWear.copyFrom(breastsWear);
+        // Rebuild wear parts from the canonical bones copied by HumanoidModel.
+        target.hat.copyFrom(target.head);
+        target.syncWearParts();
+    }
+
+    @Override
+    public void syncWearParts() {
+        leftLegwear.copyFrom(leftLeg);
+        rightLegwear.copyFrom(rightLeg);
+        leftArmwear.copyFrom(leftArm);
+        rightArmwear.copyFrom(rightArm);
+        bodyWear.copyFrom(body);
+        breastsWear.copyFrom(breasts);
     }
 
     public void copyVisibility(HumanoidModel<?> model) {
+        boolean showWears = !wearsHidden;
         head.visible = model.head.visible;
         hat.visible = model.head.visible;
         body.visible = model.body.visible;
-        bodyWear.visible = model.body.visible;
+        bodyWear.visible = showWears && model.body.visible;
         breasts.visible = model.body.visible;
-        breastsWear.visible = model.body.visible;
+        breastsWear.visible = showWears && model.body.visible;
         leftArm.visible = model.leftArm.visible;
-        leftArmwear.visible = model.leftArm.visible;
+        leftArmwear.visible = showWears && model.leftArm.visible;
         rightArm.visible = model.rightArm.visible;
-        rightArmwear.visible = model.rightArm.visible;
+        rightArmwear.visible = showWears && model.rightArm.visible;
         leftLeg.visible = model.leftLeg.visible;
-        leftLegwear.visible = model.leftLeg.visible;
+        leftLegwear.visible = showWears && model.leftLeg.visible;
         rightLeg.visible = model.rightLeg.visible;
-        rightLegwear.visible = model.rightLeg.visible;
+        rightLegwear.visible = showWears && model.rightLeg.visible;
     }
 }

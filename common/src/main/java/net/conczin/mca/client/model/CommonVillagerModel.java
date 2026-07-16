@@ -44,7 +44,11 @@ public interface CommonVillagerModel<T extends LivingEntity> {
 
     float getBreastSize();
 
-    void setBreastSize(float getBreastSize);
+    void setBreastSize(float breastSize);
+
+    /** Synchronizes MCA wear parts that mirror the canonical humanoid bones. */
+    default void syncWearParts() {
+    }
 
     default void renderCommon(PoseStack matrices, VertexConsumer vertices, int light, int overlay, int color) {
         //head
@@ -55,6 +59,9 @@ public interface CommonVillagerModel<T extends LivingEntity> {
         getCommonHeadParts().forEach(a -> a.render(matrices, vertices, light, overlay, color));
         matrices.popPose();
 
+        // Keep root-level wear parts aligned with the final canonical pose.
+        syncWearParts();
+
         //body
         getCommonBodyParts().forEach(a -> a.render(matrices, vertices, light, overlay, color));
 
@@ -63,6 +70,10 @@ public interface CommonVillagerModel<T extends LivingEntity> {
 
             if (breastSize > 0) {
                 matrices.pushPose();
+                // The breast parts are stored at the model root, but are logically attached to
+                // the torso. Apply the current body transform first so EMF torso animation,
+                // crouching and scaling all carry the chest along without duplicating transforms.
+                getBodyPart().translateAndRotate(matrices);
                 matrices.scale(breastSize * 0.2f + 1.05f, breastSize * 0.75f + 0.75f, breastSize * 0.75f + 0.75f);
                 for (ModelPart part : getBreastParts()) {
                     part.render(matrices, vertices, light, overlay, color);
@@ -72,22 +83,15 @@ public interface CommonVillagerModel<T extends LivingEntity> {
         }
     }
 
-    default void applyVillagerDimensions(VillagerLike<?> villager, boolean isSneaking) {
+    default void applyVillagerDimensions(VillagerLike<?> villager) {
         getDimensions().set(villager.getVillagerDimensions());
         setBreastSize(villager.getGenetics().getBreastSize());
         getBreastPart().visible = villager.getGenetics().getGender() == Gender.FEMALE;
 
         for (ModelPart part : getBreastParts()) {
-            part.xRot = (float) Math.PI * 0.3f + getBodyPart().xRot;
-
-            float cy = 0.0f;
-            float cz = 0.0f;
-            if (isSneaking) {
-                cy = 3.0f;
-                cz = 1.5f;
-            }
-
-            part.setPos(0.25f, (float) (5.0f - Math.pow(getBreastSize(), 0.5) * 2.5f + cy), -1.5f + getBreastSize() * 0.25f + cz);
+            // Keep the breast transform body-local so renderCommon can compose it with the torso pose.
+            part.setRotation((float) Math.PI * 0.3f, 0.0f, 0.0f);
+            part.setPos(0.25f, (float) (5.0f - Math.pow(getBreastSize(), 0.5) * 2.5f), -1.5f + getBreastSize() * 0.25f);
         }
     }
 

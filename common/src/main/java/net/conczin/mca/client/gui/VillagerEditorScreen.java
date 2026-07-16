@@ -1867,8 +1867,9 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
             rotatePreview(-120.0F * frameSeconds);
         }
 
-        villager.tickCount = (int) (System.currentTimeMillis() / 50L);
-        villagerVisualization.tickCount = villager.tickCount;
+        // tick() already advances both preview entities. Do not replace their age with epoch time:
+        // EMF/CEM exposes entity age as a float, so huge wall-clock tick values lose per-tick precision
+        // and make time-based preview animations appear frozen for several seconds at a time.
 
         if (shouldDrawEntity()) {
             int x = width / 2 - DATA_WIDTH;
@@ -2019,7 +2020,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         float scale = Math.max(1.0F, size * previewZoom) / entity.getScale();
         Vector3f translate = new Vector3f(0.0F, entity.getBbHeight() / 2.0F, 0.0F);
         context.enableScissor(x0, y0, x1, y1);
-        InventoryScreen.renderEntityInInventory(context, centerX, centerY, scale, translate, pose, cameraOrientation, entity);
+        PreviewEntityAnimation.renderEntityInInventory(context, centerX, centerY, scale, translate, pose, cameraOrientation, entity);
         context.flush();
         context.disableScissor();
 

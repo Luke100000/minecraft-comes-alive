@@ -16,12 +16,22 @@ import static net.conczin.mca.client.model.VillagerEntityModelMCA.BREASTPLATE;
 public class PlayerEntityExtendedModel<T extends LivingEntity> extends PlayerModel<T> implements CommonVillagerModel<T> {
     public final ModelPart breasts;
     public final ModelPart breastsWear;
+    private final PlayerEntityExtendedModel<T> animationSource;
 
     final VillagerDimensions.Mutable dimensions = new VillagerDimensions.Mutable(AgeState.ADULT);
     float breastSize;
 
     public PlayerEntityExtendedModel(ModelPart root) {
-        super(root, false);
+        this(root, false, null);
+    }
+
+    public PlayerEntityExtendedModel(ModelPart root, boolean slim) {
+        this(root, slim, null);
+    }
+
+    public PlayerEntityExtendedModel(ModelPart root, boolean slim, PlayerEntityExtendedModel<T> animationSource) {
+        super(root, slim);
+        this.animationSource = animationSource;
         this.breasts = root.getChild(BREASTS);
         this.breastsWear = root.getChild(BREASTPLATE);
     }
@@ -39,17 +49,14 @@ public class PlayerEntityExtendedModel<T extends LivingEntity> extends PlayerMod
     }
 
     private void copyAttributes(PlayerEntityExtendedModel<T> target) {
-        target.leftPants.copyFrom(leftPants);
-        target.rightPants.copyFrom(rightPants);
-        target.leftSleeve.copyFrom(leftSleeve);
-        target.rightSleeve.copyFrom(rightSleeve);
-        target.jacket.copyFrom(jacket);
-        target.breastsWear.copyFrom(breastsWear);
-
         copyCommonAttributes(target);
 
         target.breasts.visible = breasts.visible;
         target.breasts.copyFrom(breasts);
+
+        // Rebuild wear parts from the canonical bones copied by HumanoidModel.
+        target.hat.copyFrom(target.head);
+        target.syncWearParts();
     }
 
     private void copyAttributes(PlayerArmorExtendedModel<T> target) {
@@ -60,11 +67,28 @@ public class PlayerEntityExtendedModel<T extends LivingEntity> extends PlayerMod
     }
 
     @Override
+    public void syncWearParts() {
+        leftPants.copyFrom(leftLeg);
+        rightPants.copyFrom(rightLeg);
+        leftSleeve.copyFrom(leftArm);
+        rightSleeve.copyFrom(rightArm);
+        jacket.copyFrom(body);
+        breastsWear.copyFrom(breasts);
+    }
+
+    @Override
     public void renderToBuffer(PoseStack matrices, VertexConsumer vertices, int light, int overlay, int color) {
-        // Idk anymore
+        applyExternalAnimation(matrices, light, overlay);
         breastsWear.visible = jacket.visible;
 
         renderCommon(matrices, vertices, light, overlay, color);
+    }
+
+    public void applyExternalAnimation(PoseStack matrices, int light, int overlay) {
+        if (animationSource != null) {
+            McaModelAnimationDriver.animate(animationSource.head, matrices, light, overlay);
+            animationSource.copyPropertiesTo(this);
+        }
     }
 
     @Override
@@ -109,14 +133,20 @@ public class PlayerEntityExtendedModel<T extends LivingEntity> extends PlayerMod
 
     @Override
     public void setupAnim(T villager, float limbAngle, float limbDistance, float animationProgress, float headYaw, float headPitch) {
-        if (CommonVillagerModel.getVillager(villager).getAgeState() == AgeState.BABY && !villager.isPassenger()) {
+        var villagerData = CommonVillagerModel.getVillager(villager);
+        if (villagerData.getAgeState() == AgeState.BABY && !villager.isPassenger()) {
             limbDistance = (float) Math.sin(villager.tickCount / 12F);
             limbAngle = (float) Math.cos(villager.tickCount / 9F) * 3;
             headYaw += (float) Math.sin(villager.tickCount / 2F);
         }
 
-        super.setupAnim(villager, limbAngle, limbDistance, animationProgress, headYaw, headPitch);
-        applyVillagerDimensions(CommonVillagerModel.getVillager(villager), villager.isCrouching());
+        if (animationSource == null) {
+            super.setupAnim(villager, limbAngle, limbDistance, animationProgress, headYaw, headPitch);
+            applyVillagerDimensions(villagerData);
+        } else {
+            copyPropertiesTo(animationSource);
+            animationSource.setupAnim(villager, limbAngle, limbDistance, animationProgress, headYaw, headPitch);
+        }
     }
 
     public void copyVisibility(HumanoidModel<?> model) {
