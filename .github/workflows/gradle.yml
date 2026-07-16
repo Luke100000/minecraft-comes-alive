@@ -41,9 +41,9 @@ jobs:
     env:
       GRADLE_OPTS: --enable-native-access=ALL-UNNAMED
       NO_COLOR: 1
-      MODRINTH_ID: "1W98a849"
+      # MODRINTH_ID: "1W98a849"
       CURSEFORGE_ID: "535291"
-      MODRINTH_TOKEN: ${{ secrets.MR_API_TOKEN }}
+      # MODRINTH_TOKEN: ${{ secrets.MR_API_TOKEN }}
       CURSEFORGE_TOKEN: ${{ secrets.CF_API_TOKEN }}
       MAVEN_USERNAME: ${{ secrets.MAVEN_USERNAME }}
       MAVEN_TOKEN: ${{ secrets.MAVEN_TOKEN }}
@@ -68,14 +68,14 @@ jobs:
       - name: Publish to Maven
         run: ./gradlew publish --console=plain --non-interactive
       - name: "Upload Fabric"
-        uses: Kir-Antipov/mc-publish@v3.3.0
+        uses: Kir-Antipov/mc-publish@v3.3.1
         with:
-          modrinth-id: ${{ env.MODRINTH_ID }}
-          modrinth-token: ${{ env.MODRINTH_TOKEN }}
+          # modrinth-id: ${{ env.MODRINTH_ID }}
+          # modrinth-token: ${{ env.MODRINTH_TOKEN }}
           curseforge-id: ${{ env.CURSEFORGE_ID }}
           curseforge-token: ${{ env.CURSEFORGE_TOKEN }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
-
+          environment: client | server
           name: "[Fabric ${{needs.validate-tag.outputs.minecraft_version}}] MCAR - ${{needs.validate-tag.outputs.version}}"
           changelog-file: changelog.md
           version-type: ${{ contains(needs.validate-tag.outputs.version, 'beta') && 'beta' || contains(needs.validate-tag.outputs.version, 'alpha') && 'alpha' || 'release' }}
@@ -89,13 +89,14 @@ jobs:
 
           fail-mode: skip
       - name: "Upload NeoForge"
-        uses: Kir-Antipov/mc-publish@v3.3.0
+        uses: Kir-Antipov/mc-publish@v3.3.1
         with:
-          modrinth-id: ${{ env.MODRINTH_ID }}
-          modrinth-token: ${{ env.MODRINTH_TOKEN }}
+          # modrinth-id: ${{ env.MODRINTH_ID }}
+          # modrinth-token: ${{ env.MODRINTH_TOKEN }}
           curseforge-id: ${{ env.CURSEFORGE_ID }}
           curseforge-token: ${{ env.CURSEFORGE_TOKEN }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
+          environment: client | server
 
           name: "[NeoForge ${{needs.validate-tag.outputs.minecraft_version}}] MCAR - ${{needs.validate-tag.outputs.version}}"
           changelog-file: changelog.md
