@@ -107,23 +107,20 @@ allprojects {
 }
 
 forgix {
-    group = projectGroupId
-    mergedJarName = "${projectName}-${appVersion}-universal.jar"
+    group = rootProject.groupId
+    mergedJarName = "${rootProject.name}-${rootProject.version}-universal.jar"
     outputDir = "build/libs"
 
-    forge { container ->
-        container.jarLocation = "build/libs/${projectName}-${appVersion}.jar"
-        container.mixin "mca.mixin.json"
-        null
+    forge {
+        jarLocation = "build/libs/${rootProject.name}-${rootProject.version}.jar"
+        mixin "mca.mixin.json"
     }
 
-    fabric { container ->
-        container.jarLocation = "build/libs/${projectName}-${appVersion}.jar"
-        null
+    fabric {
+        jarLocation = "build/libs/${rootProject.name}-${rootProject.version}.jar"
     }
 
-    quilt { container ->
-        container.jarLocation = "build/libs/${projectName}-${appVersion}.jar"
-        null
+    quilt {
+        jarLocation = "build/libs/${rootProject.name}-${rootProject.version}.jar"
     }
 }
