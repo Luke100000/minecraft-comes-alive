@@ -16,12 +16,22 @@ import static net.conczin.mca.client.model.VillagerEntityModelMCA.BREASTPLATE;
 public class PlayerEntityExtendedModel<T extends LivingEntity> extends PlayerModel<T> implements CommonVillagerModel<T> {
     public final ModelPart breasts;
     public final ModelPart breastsWear;
+    private final PlayerEntityExtendedModel<T> animationSource;
 
     final VillagerDimensions.Mutable dimensions = new VillagerDimensions.Mutable(AgeState.ADULT);
     float breastSize;
 
     public PlayerEntityExtendedModel(ModelPart root) {
-        super(root, false);
+        this(root, false, null);
+    }
+
+    public PlayerEntityExtendedModel(ModelPart root, boolean slim) {
+        this(root, slim, null);
+    }
+
+    public PlayerEntityExtendedModel(ModelPart root, boolean slim, PlayerEntityExtendedModel<T> animationSource) {
+        super(root, slim);
+        this.animationSource = animationSource;
         this.breasts = root.getChild(BREASTS);
         this.breastsWear = root.getChild(BREASTPLATE);
     }
@@ -68,9 +78,17 @@ public class PlayerEntityExtendedModel<T extends LivingEntity> extends PlayerMod
 
     @Override
     public void renderToBuffer(PoseStack matrices, VertexConsumer vertices, int light, int overlay, int color) {
+        applyExternalAnimation(matrices, light, overlay);
         breastsWear.visible = jacket.visible;
 
         renderCommon(matrices, vertices, light, overlay, color);
+    }
+
+    public void applyExternalAnimation(PoseStack matrices, int light, int overlay) {
+        if (animationSource != null) {
+            McaModelAnimationDriver.animate(animationSource.head, matrices, light, overlay);
+            animationSource.copyPropertiesTo(this);
+        }
     }
 
     @Override
@@ -122,8 +140,13 @@ public class PlayerEntityExtendedModel<T extends LivingEntity> extends PlayerMod
             headYaw += (float) Math.sin(villager.tickCount / 2F);
         }
 
-        super.setupAnim(villager, limbAngle, limbDistance, animationProgress, headYaw, headPitch);
-        applyVillagerDimensions(villagerData);
+        if (animationSource == null) {
+            super.setupAnim(villager, limbAngle, limbDistance, animationProgress, headYaw, headPitch);
+            applyVillagerDimensions(villagerData);
+        } else {
+            copyPropertiesTo(animationSource);
+            animationSource.setupAnim(villager, limbAngle, limbDistance, animationProgress, headYaw, headPitch);
+        }
     }
 
     public void copyVisibility(HumanoidModel<?> model) {

@@ -37,7 +37,9 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<AbstractC
     @Unique
     private ClothingLayer<AbstractClientPlayer, PlayerModel<AbstractClientPlayer>> mca$clothingLayer;
     @Unique
-    private PlayerModel<AbstractClientPlayer> mca$animationModel;
+    private PlayerEntityExtendedModel<AbstractClientPlayer> mca$animationModel;
+    @Unique
+    private PlayerEntityExtendedModel<AbstractClientPlayer> mca$playerModel;
     @Unique
     private PlayerModel<AbstractClientPlayer> mca$vanillaModel;
     @Unique
@@ -55,6 +57,15 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<AbstractC
     }
 
     @Unique
+    private static PlayerEntityExtendedModel<AbstractClientPlayer> mca$createPlayerModel(
+            MeshDefinition data,
+            boolean slim,
+            PlayerEntityExtendedModel<AbstractClientPlayer> animationSource
+    ) {
+        return new PlayerEntityExtendedModel<>(LayerDefinition.create(data, 64, 64).bakeRoot(), slim, animationSource);
+    }
+
+    @Unique
     private static PlayerEntityExtendedModel<AbstractClientPlayer> mca$createAnimationModel(EntityRendererProvider.Context ctx) {
         MeshDefinition data = VillagerEntityModelMCA.bodyData(CubeDeformation.NONE);
         return new PlayerEntityExtendedModel<>(McaModelLayerBaker.bakeAnimationRoot(ctx, data));
@@ -63,14 +74,21 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<AbstractC
     @Unique
     private void mca$selectModel(AbstractClientPlayer player) {
         if (MCAClient.isPlayerRendererAllowed()) {
-            model = MCAClient.useGeneticsRenderer(player.getUUID()) ? mca$animationModel : mca$vanillaModel;
+            if (MCAClient.useVillagerRenderer(player.getUUID())) {
+                model = mca$animationModel;
+            } else if (MCAClient.useGeneticsRenderer(player.getUUID())) {
+                model = mca$playerModel;
+            } else {
+                model = mca$vanillaModel;
+            }
         }
     }
 
     @Inject(method = "<init>(Lnet/minecraft/client/renderer/entity/EntityRendererProvider$Context;Z)V", at = @At("TAIL"))
-    private void mca$injectInit(EntityRendererProvider.Context ctx, boolean ignoredSlim, CallbackInfo ci) {
+    private void mca$injectInit(EntityRendererProvider.Context ctx, boolean slim, CallbackInfo ci) {
         if (MCAClient.isPlayerRendererAllowed()) {
             mca$animationModel = mca$createAnimationModel(ctx);
+            mca$playerModel = mca$createPlayerModel(VillagerEntityModelMCA.bodyData(CubeDeformation.NONE, slim), slim, mca$animationModel);
             mca$vanillaModel = model;
 
             // The parent is an animation source only; visible layers keep MCA geometry and textures.
@@ -138,6 +156,10 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<AbstractC
             )
     )
     private void mca$redirectFirstPersonArmRender(ModelPart originalArm, PoseStack matrices, VertexConsumer originalBuffer, int light, int overlay) {
+        if (model == mca$playerModel) {
+            mca$playerModel.applyExternalAnimation(matrices, light, overlay);
+        }
+
         if (mca$firstPersonPlayer == null || mca$firstPersonBuffers == null) {
             originalArm.render(matrices, originalBuffer, light, overlay);
             return;
