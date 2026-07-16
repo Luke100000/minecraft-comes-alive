@@ -83,13 +83,18 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<AbstractC
         if (MCAClient.isPlayerRendererAllowed()) {
             mca$vanillaModel = model;
             mca$villagerAnimationModel = mca$createVillagerAnimationModel(ctx);
+            // PLAYER renders an EMF-interceptable vanilla root directly. MCA-only breast parts
+            // stay detached so they can be rendered by PlayerEntityExtendedModel without mutating that root.
+            ModelPart mcaPlayerParts = LayerDefinition.create(
+                    VillagerEntityModelMCA.bodyData(CubeDeformation.NONE), 64, 64
+            ).bakeRoot();
             mca$playerModel = new PlayerEntityExtendedModel<>(
-                    LayerDefinition.create(VillagerEntityModelMCA.bodyData(CubeDeformation.NONE, slim), 64, 64).bakeRoot(),
+                    ctx.bakeLayer(slim ? ModelLayers.PLAYER_SLIM : ModelLayers.PLAYER),
                     slim,
-                    mca$vanillaModel
+                    mcaPlayerParts
             );
 
-            // The parent is an animation source only; visible layers keep MCA geometry and textures.
+            // The villager parent is animation-only; its visible appearance stays in MCA layers.
             mca$skinLayer = new SkinLayer<>(this, mca$createVisibleModel(VillagerEntityModelMCA.bodyData(CubeDeformation.NONE)));
             layers.add(0, mca$skinLayer);
             addLayer(new FaceLayer<>(this, mca$createVisibleModel(VillagerEntityModelMCA.bodyData(new CubeDeformation(0.01F))), "normal"));
@@ -154,10 +159,6 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<AbstractC
             )
     )
     private void mca$redirectFirstPersonArmRender(ModelPart originalArm, PoseStack matrices, VertexConsumer originalBuffer, int light, int overlay) {
-        if (model == mca$playerModel) {
-            mca$playerModel.applyExternalAnimation(matrices, light, overlay);
-        }
-
         if (mca$firstPersonPlayer == null || mca$firstPersonBuffers == null) {
             originalArm.render(matrices, originalBuffer, light, overlay);
             return;
@@ -190,6 +191,10 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<AbstractC
     )
     private void mca$redirectFirstPersonSleeveRender(ModelPart originalSleeve, PoseStack matrices, VertexConsumer originalBuffer, int light, int overlay) {
         if (mca$firstPersonPlayer == null || mca$firstPersonBuffers == null) {
+            if (model == mca$playerModel) {
+                ModelPart arm = originalSleeve == model.rightSleeve ? model.rightArm : model.leftArm;
+                originalSleeve.copyFrom(arm);
+            }
             originalSleeve.render(matrices, originalBuffer, light, overlay);
         }
         // Custom arm rendering above already rendered both MCA skin and clothing sleeves.
