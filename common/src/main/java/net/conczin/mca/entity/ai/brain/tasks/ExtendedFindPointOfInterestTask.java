@@ -34,7 +34,11 @@ import static net.minecraft.world.entity.ai.behavior.AcquirePoi.findPathToPois;
 public class ExtendedFindPointOfInterestTask extends Behavior<VillagerEntityMCA> {
     public static final int POI_SORTING_RADIUS = 48;
     private static final int MAX_POSITIONS_PER_RUN = 5;
-    private static final int POSITION_EXPIRE_INTERVAL = 200;
+    // Keep POI acquisition on the same 20-40 tick cadence as vanilla AcquirePoi.
+    // RetryMarker starts failed POIs at a 40+ tick delay, so the next scan must happen
+    // before they become eligible again or the nearest five unreachable POIs can starve farther candidates forever.
+    // Orig was 200.
+    private static final int POSITION_EXPIRE_INTERVAL = 20;
     private final Consumer<VillagerEntityMCA> onFinish;
     private final BiPredicate<VillagerEntityMCA, BlockPos> predicate;
 
