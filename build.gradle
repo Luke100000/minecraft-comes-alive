@@ -1,50 +1,32 @@
 plugins {
     id 'java-library'
-    id 'architectury-plugin' version 'e3d53cc'
+    id 'architectury-plugin' version '3.5.167'
     id 'dev.architectury.loom' version '1.17.477' apply false
     id "io.github.pacifistmc.forgix" version "1.2.9"
 }
 
-def minecraftVersion = providers.gradleProperty('minecraft_version').get()
-def yarnMappings = providers.gradleProperty('yarn_mappings').get()
-def projectGroupId = providers.gradleProperty('groupId').get()
-def projectDisplayName = providers.gradleProperty('displayname').get()
-def projectName = name
-
-def mavenUsername = providers.environmentVariable('MAVEN_USERNAME')
-def mavenToken = providers.environmentVariable('MAVEN_TOKEN')
-
 architectury {
-    minecraft = minecraftVersion
+    minecraft = rootProject.minecraft_version
 }
 
 def getAppVersion = { ->
     try {
-        return providers.exec {
+        def version = providers.exec {
             commandLine 'git', 'describe', '--tags', '--abbrev=0'
         }.standardOutput.asText.get().trim()
+        return version
     } catch (Exception e) {
         println "Warning: ${e.message}, is git installed?"
         return "dev"
     }
 } as Object
 
-def appVersion = getAppVersion()
-def mergeJarsTask = tasks.named('mergeJars')
-
 subprojects {
     apply plugin: 'dev.architectury.loom'
 
-    loom {
-        runs.configureEach {
-            getPreferGradleTask().set(true)
-            vmArg "--enable-native-access=ALL-UNNAMED"
-        }
-    }
-
     dependencies {
-        minecraft "com.mojang:minecraft:${minecraftVersion}"
-        mappings "net.fabricmc:yarn:${yarnMappings}:v2"
+        minecraft "com.mojang:minecraft:${project.minecraft_version}"
+        mappings "net.fabricmc:yarn:${project.yarn_mappings}:v2"
     }
 }
 
@@ -52,17 +34,13 @@ allprojects {
     apply plugin: "maven-publish"
     apply plugin: 'architectury-plugin'
 
-    group = projectGroupId
-    description = projectDisplayName
-    base.archivesName = projectName
-    version = appVersion
+    group = rootProject.groupId
+    description = rootProject.displayname
+    base.archivesName = rootProject.name
+    version = getAppVersion()
 
-    tasks.named('build') {
-        finalizedBy mergeJarsTask
-    }
-    tasks.named('assemble') {
-        finalizedBy mergeJarsTask
-    }
+    build.finalizedBy(mergeJars)
+    assemble.finalizedBy(mergeJars)
 
     java {
         withSourcesJar()
@@ -71,22 +49,20 @@ allprojects {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    gradle.projectsEvaluated {
-        tasks.withType(JavaCompile).configureEach {
-            options.release = 17
-            options.deprecation = true
-            options.compilerArgs << "-Xmaxerrs" << "1000" << "-Xlint:deprecation" << "-Xlint:unchecked"
-        }
+    tasks.withType(JavaCompile).configureEach {
+        it.options.release = 17
+        it.options.deprecation = true
+        it.options.compilerArgs << "-Xmaxerrs" << "1000" << "-Xlint:deprecation" << "-Xlint:unchecked"
+    }
 
-        tasks.configureEach { task ->
-            if (task instanceof JavaForkOptions) {
-                if (task.maxHeapSize == null) {
-                    task.maxHeapSize = '4G'
-                }
-                ['--enable-native-access=ALL-UNNAMED'].each { nativeAccessJvmArg ->
-                    if (!task.jvmArgs.contains(nativeAccessJvmArg)) {
-                        task.jvmArgs(nativeAccessJvmArg)
-                    }
+    tasks.configureEach { task ->
+        if (task instanceof JavaForkOptions) {
+            if (task.maxHeapSize == null) {
+                task.maxHeapSize = '4G'
+            }
+            ['--enable-native-access=ALL-UNNAMED'].each { nativeAccessJvmArg ->
+                if (!task.jvmArgs.contains(nativeAccessJvmArg)) {
+                    task.jvmArgs(nativeAccessJvmArg)
                 }
             }
         }
@@ -98,8 +74,8 @@ allprojects {
                 name = "reposiliteRepository"
                 url = uri("https://maven.conczin.net/Artifacts")
                 credentials {
-                    username = mavenUsername.orNull
-                    password = mavenToken.orNull
+                    username = System.getenv("MAVEN_USERNAME")
+                    password = System.getenv("MAVEN_TOKEN")
                 }
             }
         }
