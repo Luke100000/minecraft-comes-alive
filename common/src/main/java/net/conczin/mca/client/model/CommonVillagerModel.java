@@ -88,10 +88,13 @@ public interface CommonVillagerModel<T extends LivingEntity> {
         setBreastSize(villager.getGenetics().getBreastSize());
         getBreastPart().visible = villager.getGenetics().getGender() == Gender.FEMALE;
 
+        float breastSize = getBreastSize();
+        float breastY = (float) (5.0f - Math.pow(breastSize, 0.5) * 2.5f);
+        float breastZ = -1.5f + breastSize * 0.25f;
         for (ModelPart part : getBreastParts()) {
             // Keep the breast transform body-local so renderCommon can compose it with the torso pose.
             part.setRotation((float) Math.PI * 0.3f, 0.0f, 0.0f);
-            part.setPos(0.25f, (float) (5.0f - Math.pow(getBreastSize(), 0.5) * 2.5f), -1.5f + getBreastSize() * 0.25f);
+            part.setPos(0.25f, breastY, breastZ);
         }
     }
 

@@ -58,11 +58,6 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<AbstractC
     }
 
     @Unique
-    private static PlayerEntityExtendedModel<AbstractClientPlayer> mca$createVillagerAnimationModel(EntityRendererProvider.Context ctx) {
-        return new PlayerEntityExtendedModel<>(ctx.bakeLayer(ModelLayers.PLAYER));
-    }
-
-    @Unique
     private void mca$selectModel(AbstractClientPlayer player) {
         if (!MCAClient.isPlayerRendererAllowed()) {
             return;
@@ -82,7 +77,7 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<AbstractC
     private void mca$injectInit(EntityRendererProvider.Context ctx, boolean slim, CallbackInfo ci) {
         if (MCAClient.isPlayerRendererAllowed()) {
             mca$vanillaModel = model;
-            mca$villagerAnimationModel = mca$createVillagerAnimationModel(ctx);
+            mca$villagerAnimationModel = new PlayerEntityExtendedModel<>(ctx.bakeLayer(ModelLayers.PLAYER));
             // PLAYER renders an EMF-interceptable vanilla root directly. MCA-only breast parts
             // stay detached so they can be rendered by PlayerEntityExtendedModel without mutating that root.
             ModelPart mcaPlayerParts = LayerDefinition.create(
@@ -125,11 +120,8 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<AbstractC
     private void mca$injectScale(AbstractClientPlayer player, PoseStack matrices, float f, CallbackInfo ci) {
         if (MCAClient.useGeneticsRenderer(player.getUUID())) {
             var villager = CommonVillagerModel.getVillager(player);
-            matrices.scale(
-                    villager.getRawHorizontalScaleFactor(),
-                    villager.getRawVerticalScaleFactor(),
-                    villager.getRawHorizontalScaleFactor()
-            );
+            float width = villager.getRawHorizontalScaleFactor();
+            matrices.scale(width, villager.getRawVerticalScaleFactor(), width);
             if (villager.getAgeState() == AgeState.BABY && !player.isPassenger()) {
                 matrices.translate(0, 0.6F, 0);
             }
