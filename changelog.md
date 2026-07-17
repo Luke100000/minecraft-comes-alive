@@ -1,3 +1,15 @@
+# 7.7.24
+> This is a release of 7.7.24 unrelated to the 7.7.23-ALPHA version.
+
+* Bug fixes/Internal improvements
+* Port of 1.20.1 beta updates to 1.21.1
+  * Iris Brightness Colour
+  * Increased eye colour vividness
+  * Mourning system has been overhauled, should be way more reliable
+  * Fix Presets not rendering the correct comparison NPC visual snapshots.
+  * Improved Fishing Task
+  * Stopped defineId warning spam in logs
+
 # 7.7.23
 > This is a release of 7.7.23 unrelated to the ALPHA version.
 
