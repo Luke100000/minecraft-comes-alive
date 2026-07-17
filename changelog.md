@@ -1,11 +1,17 @@
+# 7.7.29
+> This is a release of 7.7.29 unrelated to the 7.7.23-ALPHA version.
+
+* Synced patreon supporters
+* Added modded villages support for Destiny Screens
+  * Any structure which contains the minecraft villages tag or contains the name village is present
+  * Hovering over the Destiny screen gives you the mod it's coming from! 
+
 # 7.7.28
-> This is a release of 7.7.28 unrelated to the 7.7.23-ALPHA version.
 
 * Fixed villagers crowding around occupied beds / behaving weird.
   * Existing affected villagers may need Locations -> Home set again, or the affected beds broken and replaced.
 
 # 7.7.27
-> This is a release of 7.7.27 unrelated to the 7.7.23-ALPHA version.
 
 * Villagers can now recognise ladder nodes and climb and descend them, even when they're following you!
   * Previously was only in the alpha version.
