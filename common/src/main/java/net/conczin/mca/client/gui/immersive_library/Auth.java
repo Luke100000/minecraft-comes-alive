@@ -3,7 +3,6 @@ package net.conczin.mca.client.gui.immersive_library;
 import com.google.gson.JsonObject;
 import net.conczin.mca.Config;
 import net.conczin.mca.MCA;
-import net.minecraft.Util;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -53,6 +52,7 @@ public class Auth {
     }
 
     public static void clearToken() {
+        currentToken = null;
         //noinspection ResultOfMethodCallIgnored
         Paths.get("./immersiveLibraryToken_v2").toFile().delete();
     }
@@ -80,12 +80,10 @@ public class Auth {
         return Base64.getEncoder().encodeToString(json.toString().getBytes());
     }
 
-    public static void authenticate(String username) {
+    public static String authenticate(String username) {
         // The unique, private token used to authenticate once authorized
         currentToken = newToken();
 
-        // Open the authorization URL in the user's default web browser
-        String url = Config.getInstance().immersiveLibraryUrl + "/v1/login?state=" + createDataState(username, currentToken);
-        Util.getPlatform().openUri(url);
+        return Config.getInstance().immersiveLibraryUrl + "/v1/login?state=" + createDataState(username, currentToken);
     }
 }
