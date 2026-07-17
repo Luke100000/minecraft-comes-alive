@@ -645,8 +645,9 @@ public class VillageManager extends SavedData implements Iterable<Village> {
 
     private GroundRoomScan scanGroundRoom(Building root) {
         Building.validationResult lastFailure = Building.validationResult.TOO_SMALL;
+        List<BlockPos> sources = getGroundRoomSources(root);
 
-        for (BlockPos source : getGroundRoomSources(root)) {
+        for (BlockPos source : sources) {
             Building candidate = new Building(source, true);
             Building.validationResult result = candidate.validateBuilding(world, Set.of(), true);
             if (result != Building.validationResult.SUCCESS) {
@@ -669,7 +670,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         MCA.LOGGER.warn(
                 "[GroundRoomInvariant] stage=ground-room-missing structure={} rootGroundFloorY={} rootBounds={}..{} candidates={} lastFailure={}",
                 root.getEffectiveStructureId(), root.getGroundFloorY(), root.getRawPos0(), root.getRawPos1(),
-                getGroundRoomSources(root).size(), lastFailure);
+                sources.size(), lastFailure);
         return new GroundRoomScan(lastFailure, null);
     }
 
@@ -719,15 +720,10 @@ public class VillageManager extends SavedData implements Iterable<Village> {
     }
 
     private static Optional<Building> findStructureRoot(Village village, int structureId) {
-        if (village == null) {
-            return Optional.empty();
-        }
-        return village.getBuildings().values().stream()
+        return BuildingStructureManager.members(village, structureId).stream()
                 .filter(Building::isStructureRoot)
                 .filter(Building::isComplete)
-                .filter(root -> !root.getBuildingType().grouped())
-                .filter(root -> root.getEffectiveStructureId() == structureId)
-                .min(Comparator.comparingInt(Building::getId));
+                .findFirst();
     }
 
     private static boolean hasRegisteredGroundRoom(Village village, Building root) {
