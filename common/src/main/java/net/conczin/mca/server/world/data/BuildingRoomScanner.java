@@ -13,6 +13,7 @@ import java.util.*;
 
 final class BuildingRoomScanner {
     private static final int MIN_INTERIOR_AREA = 4;
+    private static final int MAX_SEED_VERTICAL_SEARCH = 4;
     private static final Direction[] HORIZONTAL_DIRECTIONS = {
             Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST
     };
@@ -130,29 +131,51 @@ final class BuildingRoomScanner {
     }
 
     private static Optional<BlockPos> resolveInteriorSeed(Level world, BlockPos source) {
-        LinkedHashSet<BlockPos> candidates = new LinkedHashSet<>();
-        candidates.add(source);
-
-        // Prefer same-floor interior before considering air above furniture or a partial block.
-        for (Direction direction : HORIZONTAL_DIRECTIONS) {
-            candidates.add(source.relative(direction));
+        // A valid source cell is authoritative. This preserves intentional upper-floor
+        // scans when the player is actually standing inside that floor.
+        if (isTraversableFloorCell(world, source)) {
+            return Optional.of(source);
         }
 
-        BlockPos above = source.above();
-        candidates.add(above);
-        for (Direction direction : HORIZONTAL_DIRECTIONS) {
-            candidates.add(above.relative(direction));
+        // Otherwise prefer the nearest supported floor below the source before considering
+        // same-level neighbours or air above. This makes the lower floor the deterministic
+        // choice for stairs, jumps, edges and other ambiguous player positions.
+        Optional<BlockPos> lower = findInteriorSeedBelow(world, source);
+        if (lower.isPresent()) {
+            return lower;
         }
 
-        BlockPos below = source.below();
-        candidates.add(below);
-        for (Direction direction : HORIZONTAL_DIRECTIONS) {
-            candidates.add(below.relative(direction));
+        Optional<BlockPos> sameLevel = findInteriorSeedAtY(world, source, source.getY());
+        if (sameLevel.isPresent()) {
+            return sameLevel;
         }
 
-        return candidates.stream()
-                .filter(candidate -> isTraversableFloorCell(world, candidate))
-                .findFirst();
+        return findInteriorSeedAtY(world, source, source.getY() + 1);
+    }
+
+    private static Optional<BlockPos> findInteriorSeedBelow(Level world, BlockPos source) {
+        for (int drop = 1; drop <= MAX_SEED_VERTICAL_SEARCH; drop++) {
+            Optional<BlockPos> candidate = findInteriorSeedAtY(world, source, source.getY() - drop);
+            if (candidate.isPresent()) {
+                return candidate;
+            }
+        }
+        return Optional.empty();
+    }
+
+    private static Optional<BlockPos> findInteriorSeedAtY(Level world, BlockPos source, int y) {
+        BlockPos center = new BlockPos(source.getX(), y, source.getZ());
+        if (isTraversableFloorCell(world, center)) {
+            return Optional.of(center);
+        }
+
+        for (Direction direction : HORIZONTAL_DIRECTIONS) {
+            BlockPos candidate = center.relative(direction);
+            if (isTraversableFloorCell(world, candidate)) {
+                return Optional.of(candidate);
+            }
+        }
+        return Optional.empty();
     }
 
     private static boolean isTraversableFloorCell(Level world, BlockPos pos) {
