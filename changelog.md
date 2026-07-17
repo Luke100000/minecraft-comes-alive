@@ -2,7 +2,8 @@
 > This is a release of 7.7.31 unrelated to the 7.7.23-ALPHA version.
 
 * Improve Ladder performance.
-
+* Fixed library auth not working in sandboxed environments.
+* Improved Library Editor, should load faster and other internal improvements.
 # 7.7.30
 
 * Improved Ladder navigation.
