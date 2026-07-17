@@ -66,13 +66,39 @@ public final class PreviewEntityAnimation {
 
         int previousTickCount = entity.tickCount;
         Float previousPartialTick = ACTIVE_PARTIAL_TICK.get();
+        double previousXo = entity.xo;
+        double previousYo = entity.yo;
+        double previousZo = entity.zo;
+        double previousXOld = entity.xOld;
+        double previousYOld = entity.yOld;
+        double previousZOld = entity.zOld;
         entity.tickCount = (int) (wholeTicks % TICK_WRAP);
         ACTIVE_PARTIAL_TICK.set(partialTick);
+        // Preview dummies are never ticked, so their position interpolation history can hold a
+        // stale position (e.g. the spawn point from before NBT data teleported them). Mods that
+        // lerp the entity position from previous to current with the preview partial tick (EMF
+        // does, for CEM variables like pos_y) then see the position sweep that gap every frame,
+        // and animation packs read entities as perpetual falling/landing - the editor
+        // preview twitches or replays landing animations in a loop. Pin the history to the
+        // current position for the duration of the preview render.
+
+        entity.xo = entity.getX();
+        entity.yo = entity.getY();
+        entity.zo = entity.getZ();
+        entity.xOld = entity.getX();
+        entity.yOld = entity.getY();
+        entity.zOld = entity.getZ();
 
         try {
             render.run();
         } finally {
             entity.tickCount = previousTickCount;
+            entity.xo = previousXo;
+            entity.yo = previousYo;
+            entity.zo = previousZo;
+            entity.xOld = previousXOld;
+            entity.yOld = previousYOld;
+            entity.zOld = previousZOld;
             if (previousPartialTick == null) {
                 ACTIVE_PARTIAL_TICK.remove();
             } else {
