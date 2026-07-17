@@ -1,9 +1,15 @@
-# 7.7.23-alpha.2
+# 7.7.23-beta.3
 
 > [!WARNING]
 > This is an experimental beta release and most likely might contain bugs. Current building blueprint layout structures
 > might not work properly, so you may have to press REMOVE BUILDING due to a new structure format, please make sure to BACKUP your world.
 > For any issues report it on the Discord Server.
+
+* Fixed a bug which caused trapdoors to confuse the automatic ground anchor.
+* Improved Map performance
+* UI Layout Changes for Blueprint
+
+# 7.7.23-alpha.2
 
 * Simplified EMF rendering.
 * Fixed a bug where the VANILLA model selected in the MCA editor scaled the eye height wrong .
