@@ -16,25 +16,24 @@ import java.util.*;
  * inside each persistent {@code structureId}.</p>
  */
 final class BlueprintFloorLayout {
+    // Semantic floor identity has one source of truth. Physical floor-region detection may
+    // group scan samples more loosely, but that must not merge a basement room into Ground Floor.
     private static final int FLOOR_CLUSTER_TOLERANCE = Building.SEMANTIC_FLOOR_TOLERANCE;
 
     private final Map<Integer, List<AssignedRegion>> assignedRegions;
-    private final Map<Integer, BlockPos> structureIconPositions;
     private final List<Integer> ordinals;
     private final List<VerticalStack> stacks;
 
     private BlueprintFloorLayout(Map<Integer, List<AssignedRegion>> assignedRegions,
-                                 Map<Integer, BlockPos> structureIconPositions,
                                  List<Integer> ordinals,
                                  List<VerticalStack> stacks) {
         this.assignedRegions = assignedRegions;
-        this.structureIconPositions = structureIconPositions;
         this.ordinals = ordinals;
         this.stacks = stacks;
     }
 
     static BlueprintFloorLayout empty() {
-        return new BlueprintFloorLayout(Map.of(), Map.of(), List.of(), List.of());
+        return new BlueprintFloorLayout(Map.of(), List.of(), List.of());
     }
 
     static BlueprintFloorLayout build(Village village) {
@@ -52,19 +51,18 @@ final class BlueprintFloorLayout {
         }
 
         List<FloorCandidate> allCandidates = structuralBuildings.stream()
+                .filter(Building::isFunctionalRoom)
                 .flatMap(building -> candidatesFor(building).stream())
                 .sorted(Comparator.comparingInt(FloorCandidate::anchorY)
                         .thenComparingInt(FloorCandidate::buildingId))
                 .toList();
 
         Map<Integer, Integer> rootGroundAnchors = new HashMap<>();
-        Map<Integer, BlockPos> structureIconPositions = new HashMap<>();
         for (Building building : structuralBuildings) {
             if (!building.isStructureRoot()) {
                 continue;
             }
             rootGroundAnchors.put(building.getEffectiveStructureId(), building.getGroundFloorY());
-            structureIconPositions.putIfAbsent(building.getEffectiveStructureId(), building.getCenter());
         }
 
         Map<Integer, List<AssignedRegion>> mutableAssignedRegions = new HashMap<>();
@@ -73,21 +71,28 @@ final class BlueprintFloorLayout {
 
         for (Map.Entry<Integer, List<FloorCandidate>> entry : getVerticalStacks(allCandidates).entrySet()) {
             List<StackFloorLevel> levels = clusterStackFloorLevels(entry.getValue());
-            int groundY = rootGroundAnchors.getOrDefault(entry.getKey(), levels.getFirst().anchorY());
-            int groundLevelIndex = getClosestStackFloorIndexPreferLower(levels, groundY);
+            Integer groundY = rootGroundAnchors.get(entry.getKey());
+            if (groundY == null) {
+                continue;
+            }
+
+            OptionalInt groundLevelIndexResult = findRegisteredGroundFloorIndex(levels, groundY);
+            if (groundLevelIndexResult.isEmpty()) {
+                // Invalid legacy/regressed data is not reinterpreted by the client. The
+                // server invariant creates a real Ground Floor room for canonical structures.
+                continue;
+            }
+            int groundLevelIndex = groundLevelIndexResult.getAsInt();
 
             for (int levelIndex = 0; levelIndex < levels.size(); levelIndex++) {
                 StackFloorLevel level = levels.get(levelIndex);
                 int ordinal = levelIndex - groundLevelIndex;
-                boolean hasRegisteredRoom = level.candidates().stream().anyMatch(FloorCandidate::strictScan);
-                if (hasRegisteredRoom) {
+
+                if (!level.candidates().isEmpty()) {
                     availableOrdinals.add(ordinal);
                 }
 
                 for (FloorCandidate candidate : level.candidates()) {
-                    if (!candidate.strictScan()) {
-                        continue;
-                    }
                     List<AssignedRegion> regions = mutableAssignedRegions
                             .computeIfAbsent(candidate.buildingId(), ignored -> new ArrayList<>());
                     for (RegionBounds bounds : candidate.bounds()) {
@@ -101,7 +106,6 @@ final class BlueprintFloorLayout {
 
         return new BlueprintFloorLayout(
                 freezeRegionMap(mutableAssignedRegions),
-                Map.copyOf(structureIconPositions),
                 List.copyOf(availableOrdinals),
                 List.copyOf(stacks)
         );
@@ -109,6 +113,22 @@ final class BlueprintFloorLayout {
 
     List<Integer> ordinals() {
         return ordinals;
+    }
+
+    List<Integer> ordinalsFor(Building building) {
+        int structureId = building.getEffectiveStructureId();
+        for (VerticalStack stack : stacks) {
+            if (stack.structureId() != structureId) {
+                continue;
+            }
+
+            List<Integer> structureOrdinals = new ArrayList<>(stack.levels().size());
+            for (int levelIndex = 0; levelIndex < stack.levels().size(); levelIndex++) {
+                structureOrdinals.add(levelIndex - stack.groundLevelIndex());
+            }
+            return List.copyOf(structureOrdinals);
+        }
+        return List.of();
     }
 
     boolean isBlockOnFloor(Building building, BlockPos blockPos, int floorOrdinal) {
@@ -122,7 +142,7 @@ final class BlueprintFloorLayout {
             return Math.abs(level.anchorY() - blockPos.getY()) <= FLOOR_CLUSTER_TOLERANCE
                     && levelIndex - stack.groundLevelIndex() == floorOrdinal;
         }
-        return floorOrdinal == 0;
+        return false;
     }
 
     boolean isBuildingVisible(Building building, Integer selectedFloor) {
@@ -159,10 +179,6 @@ final class BlueprintFloorLayout {
         return List.copyOf(regions);
     }
 
-    BlockPos iconPositionFor(Building building) {
-        return structureIconPositions.getOrDefault(building.getEffectiveStructureId(), building.getCenter());
-    }
-
     OptionalInt floorOrdinalFor(Building building) {
         return assignedRegions.getOrDefault(building.getId(), List.of()).stream()
                 .mapToInt(AssignedRegion::ordinal)
@@ -177,8 +193,7 @@ final class BlueprintFloorLayout {
                     building.getEffectiveStructureId(),
                     building.getFloorY(),
                     Math.max(1, building.getHorizontalArea()),
-                    List.of(RegionBounds.fromBuilding(building)),
-                    building.isStrictScan()
+                    List.of(RegionBounds.fromBuilding(building))
             ));
         }
 
@@ -193,8 +208,7 @@ final class BlueprintFloorLayout {
                     building.getEffectiveStructureId(),
                     region.anchorY(),
                     Math.max(1, region.area()),
-                    bounds,
-                    building.isStrictScan()
+                    bounds
             ));
         }
         return List.copyOf(candidates);
@@ -234,6 +248,15 @@ final class BlueprintFloorLayout {
         return clusters.stream().map(MutableStackFloorLevel::freeze).toList();
     }
 
+    private static OptionalInt findRegisteredGroundFloorIndex(List<StackFloorLevel> levels, int groundY) {
+        for (int i = 0; i < levels.size(); i++) {
+            if (Math.abs(levels.get(i).anchorY() - groundY) <= FLOOR_CLUSTER_TOLERANCE) {
+                return OptionalInt.of(i);
+            }
+        }
+        return OptionalInt.empty();
+    }
+
     private static int getClosestStackFloorIndexPreferLower(List<StackFloorLevel> levels, int y) {
         int bestIndex = 0;
         int bestDistance = Math.abs(levels.getFirst().anchorY() - y);
@@ -260,8 +283,8 @@ final class BlueprintFloorLayout {
 
     record RegionBounds(int minX, int minZ, int maxX, int maxZ) {
         static RegionBounds fromBuilding(Building building) {
-            BlockPos min = building.getPos0();
-            BlockPos max = building.getPos1();
+            BlockPos min = building.getRawPos0();
+            BlockPos max = building.getRawPos1();
             return new RegionBounds(min.getX(), min.getZ(), max.getX(), max.getZ());
         }
 
@@ -284,8 +307,7 @@ final class BlueprintFloorLayout {
                                   int structureId,
                                   int anchorY,
                                   long weight,
-                                  List<RegionBounds> bounds,
-                                  boolean strictScan) {
+                                  List<RegionBounds> bounds) {
         private FloorCandidate {
             bounds = List.copyOf(bounds);
         }

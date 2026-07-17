@@ -164,14 +164,22 @@ public class Building {
         return NbtHelper.decodeBlockPos(tag);
     }
 
+    public BlockPos getRawPos0() {
+        return new BlockPos(pos0X, pos0Y, pos0Z);
+    }
+
+    public BlockPos getRawPos1() {
+        return new BlockPos(pos1X, pos1Y, pos1Z);
+    }
+
     public BlockPos getPos0() {
         int margin = getBuildingType().getMargin();
-        return new BlockPos(pos0X, pos0Y, pos0Z).subtract(new Vec3i(margin, margin, margin));
+        return getRawPos0().subtract(new Vec3i(margin, margin, margin));
     }
 
     public BlockPos getPos1() {
         int margin = getBuildingType().getMargin();
-        return new BlockPos(pos1X, pos1Y, pos1Z).offset(new Vec3i(margin, margin, margin));
+        return getRawPos1().offset(new Vec3i(margin, margin, margin));
     }
 
     public BlockPos getCenter() {
@@ -336,6 +344,10 @@ public class Building {
         if (getBuildingType().grouped()) {
             validateBlocks(world);
             return getBlockPosStream().findAny().isEmpty() ? validationResult.TOO_SMALL : validationResult.SUCCESS;
+        }
+
+        if (strictScan) {
+            return validateStrictRoom(world, blocked, allowMissingEntrance);
         }
 
         //clear old building
@@ -580,6 +592,85 @@ public class Building {
             }
             return determineType() ? validationResult.SUCCESS : validationResult.INVALID_TYPE;
         }
+    }
+
+
+    private validationResult validateStrictRoom(Level world,
+                                                Set<BlockPos> blocked,
+                                                boolean allowMissingEntrance) {
+        blocks.clear();
+        size = 0;
+        setLastScan(world.getGameTime());
+
+        BuildingRoomScanner.Result scan = BuildingRoomScanner.scan(
+                world,
+                getSourceBlock(),
+                blocked,
+                Config.getInstance().maxBuildingSize,
+                Config.getInstance().maxBuildingRadius
+        );
+
+        MCA.LOGGER.info(
+                "[RoomScanV3] source={} seed={} status={} floorY={} interior={} footprint={} inspected={} entrance={} bounds={}..{}",
+                getSourceBlock(), scan.seed(), scan.status(), scan.seed().getY(),
+                scan.interiorCells().size(), scan.footprintCells().size(), scan.poiCells().size(),
+                scan.hasEntrance(), scan.min(), scan.max());
+
+        validationResult failure = switch (scan.status()) {
+            case SUCCESS -> validationResult.SUCCESS;
+            case OVERLAP -> validationResult.OVERLAP;
+            case BLOCK_LIMIT -> validationResult.BLOCK_LIMIT;
+            case SIZE_LIMIT -> validationResult.SIZE_LIMIT;
+            case TOO_SMALL -> validationResult.TOO_SMALL;
+        };
+        if (failure != validationResult.SUCCESS) {
+            return failure;
+        }
+        if (!scan.hasEntrance() && !allowMissingEntrance) {
+            return validationResult.NO_DOOR;
+        }
+
+        for (BlockPos p : scan.poiCells()) {
+            BlockState blockState = world.getBlockState(p);
+            Block block = blockState.getBlock();
+            if (!isBuildingBlock(blockState)) {
+                continue;
+            }
+
+            if (block instanceof BedBlock) {
+                if (blockState.getValue(BedBlock.PART) == BedPart.HEAD) {
+                    addBlock(block, p);
+                }
+            } else {
+                addBlock(block, p);
+            }
+        }
+
+        BlockPos seed = scan.seed();
+        posX = seed.getX();
+        posY = seed.getY();
+        posZ = seed.getZ();
+
+        pos0X = scan.min().getX();
+        pos0Y = scan.min().getY();
+        pos0Z = scan.min().getZ();
+        pos1X = scan.max().getX();
+        pos1Y = scan.max().getY();
+        pos1Z = scan.max().getZ();
+
+        size = scan.interiorCells().size();
+        floorY = seed.getY();
+        floorRegions = List.of(BuildingFloorRegion.fromFootprint(floorY, scan.footprintCells()));
+
+        // Rooms retain a local anchor for save compatibility. The semantic structure
+        // ground floor is owned exclusively by the non-strict structure root.
+        groundFloorY = floorY;
+        hasGroundFloorAnchor = true;
+
+        if (isTypeForced()) {
+            return matchesType(getBuildingType()) ? validationResult.SUCCESS : validationResult.INVALID_TYPE;
+        }
+        return determineType() ? validationResult.SUCCESS : validationResult.INVALID_TYPE;
     }
 
     private static EntranceCells classifyNormalDoorEntrances(Level world,
@@ -941,7 +1032,14 @@ public class Building {
         if (!sameBounds || strictScan != b.strictScan) {
             return false;
         }
-        return !strictScan || sharesFloorBandWith(b);
+        if (!strictScan) {
+            return true;
+        }
+
+        long footprintArea = getFloorFootprintArea();
+        return sharesFloorBandWith(b)
+                && footprintArea == b.getFloorFootprintArea()
+                && getFloorFootprintIntersectionArea(b) == footprintArea;
     }
 
     public int getSize() {
@@ -950,6 +1048,35 @@ public class Building {
 
     public int getHorizontalArea() {
         return Math.max(1, pos1X - pos0X + 1) * Math.max(1, pos1Z - pos0Z + 1);
+    }
+
+    public long getFloorFootprintArea() {
+        long area = floorRegions.stream()
+                .filter(region -> Math.abs(region.anchorY() - floorY) <= SEMANTIC_FLOOR_TOLERANCE)
+                .mapToLong(BuildingFloorRegion::area)
+                .sum();
+        return area > 0L ? area : getHorizontalArea();
+    }
+
+    public long getFloorFootprintIntersectionArea(Building other) {
+        if (other == null) {
+            return 0L;
+        }
+        if (floorRegions.isEmpty() || other.floorRegions.isEmpty()) {
+            int x = Math.min(pos1X, other.pos1X) - Math.max(pos0X, other.pos0X) + 1;
+            int z = Math.min(pos1Z, other.pos1Z) - Math.max(pos0Z, other.pos0Z) + 1;
+            return x <= 0 || z <= 0 ? 0L : (long) x * z;
+        }
+
+        long intersection = 0L;
+        for (BuildingFloorRegion region : floorRegions) {
+            for (BuildingFloorRegion otherRegion : other.floorRegions) {
+                if (Math.abs(region.anchorY() - otherRegion.anchorY()) <= SEMANTIC_FLOOR_TOLERANCE) {
+                    intersection += region.intersectionArea(otherRegion);
+                }
+            }
+        }
+        return intersection;
     }
 
     public long getRawVolume() {
