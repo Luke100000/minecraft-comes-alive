@@ -18,6 +18,7 @@ import net.minecraft.loot.context.LootContextParameters;
 import net.minecraft.loot.context.LootContextTypes;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.Vec3d;
 
 import java.util.Comparator;
 import java.util.List;
@@ -27,7 +28,6 @@ public class FishingTask extends AbstractChoreTask {
     private BlockPos targetWater;
     private boolean hasCastRod;
     private int ticks;
-    private List<ItemStack> list;
 
     public FishingTask() {
         super(ImmutableMap.of(MemoryModuleType.LOOK_TARGET, MemoryModuleState.VALUE_ABSENT, MemoryModuleType.WALK_TARGET, MemoryModuleState.VALUE_ABSENT));
@@ -47,30 +47,15 @@ public class FishingTask extends AbstractChoreTask {
     @Override
     protected void run(ServerWorld world, VillagerEntityMCA villager, long time) {
         super.run(world, villager, time);
-        if (!villager.hasStackEquipped(villager.getDominantSlot())) {
-            int i = InventoryUtils.getFirstSlotContainingItem(villager.getInventory(), stack -> stack.getItem() instanceof FishingRodItem);
-            if (i == -1) {
-                abandonJobWithMessage("chore.fishing.norod");
-            } else {
-                villager.setStackInHand(villager.getDominantHand(), villager.getInventory().getStack(i));
-            }
-        }
-
-        LootTable loottable = world.getServer().getLootManager().getLootTable(LootTables.FISHING_GAMEPLAY);
-        LootContextParameterSet.Builder lootcontext$builder = (new LootContextParameterSet.Builder(world)).add(LootContextParameters.ORIGIN, villager.getPos()).add(LootContextParameters.TOOL, new ItemStack(Items.FISHING_ROD)).add(LootContextParameters.THIS_ENTITY, villager).luck(0F);
-        this.list = loottable.generateLoot(lootcontext$builder.build(LootContextTypes.FISHING));
+        equipFishingRod(villager);
     }
 
     @Override
     protected void keepRunning(ServerWorld world, VillagerEntityMCA villager, long time) {
         super.keepRunning(world, villager, time);
 
-        if (!InventoryUtils.contains(villager.getInventory(), FishingRodItem.class) && !villager.hasStackEquipped(villager.getDominantSlot())) {
-            abandonJobWithMessage("chore.fishing.norod");
-        } else if (!villager.hasStackEquipped(villager.getDominantSlot())) {
-            int i = InventoryUtils.getFirstSlotContainingItem(villager.getInventory(), stack -> stack.getItem() instanceof FishingRodItem);
-            ItemStack stack = villager.getInventory().getStack(i);
-            villager.setStackInHand(villager.getDominantHand(), stack);
+        if (!equipFishingRod(villager)) {
+            return;
         }
 
         if (targetWater == null) {
@@ -95,11 +80,11 @@ public class FishingTask extends AbstractChoreTask {
 
             if (ticks >= villager.getWorld().random.nextInt(200) + 200) {
                 if (villager.getWorld().random.nextFloat() >= 0.35F) {
-                    ItemStack stack = list.get(villager.getRandom().nextInt(list.size())).copy();
+                    ItemStack stack = getFishingLoot(world, villager);
 
                     villager.swingHand(villager.getDominantHand());
                     villager.getInventory().addStack(stack);
-                    villager.getMainHandStack().damage(1, villager, e -> e.sendEquipmentBreakStatus(e.getDominantSlot()));
+                    villager.getStackInHand(villager.getDominantHand()).damage(1, villager, e -> e.sendEquipmentBreakStatus(e.getDominantSlot()));
                 }
                 ticks = 0;
             }
@@ -107,6 +92,40 @@ public class FishingTask extends AbstractChoreTask {
             villager.moveTowards(targetWater);
         }
 
+    }
+
+    private boolean equipFishingRod(VillagerEntityMCA villager) {
+        ItemStack heldStack = villager.getStackInHand(villager.getDominantHand());
+        if (heldStack.getItem() instanceof FishingRodItem) {
+            return true;
+        }
+
+        int i = InventoryUtils.getFirstSlotContainingItem(villager.getInventory(), stack -> stack.getItem() instanceof FishingRodItem);
+        if (i == -1) {
+            abandonJobWithMessage("chore.fishing.norod");
+            return false;
+        }
+
+        villager.setStackInHand(villager.getDominantHand(), villager.getInventory().getStack(i));
+        return true;
+    }
+
+    private ItemStack getFishingLoot(ServerWorld world, VillagerEntityMCA villager) {
+        LootTable lootTable = world.getServer().getLootManager().getLootTable(LootTables.FISHING_GAMEPLAY);
+        Vec3d origin = new Vec3d(targetWater.getX() + 0.5D, targetWater.getY() + 0.5D, targetWater.getZ() + 0.5D);
+        ItemStack fishingRod = villager.getStackInHand(villager.getDominantHand());
+        LootContextParameterSet.Builder builder = new LootContextParameterSet.Builder(world)
+                .add(LootContextParameters.ORIGIN, origin)
+                .add(LootContextParameters.TOOL, fishingRod)
+                .add(LootContextParameters.THIS_ENTITY, villager)
+                .luck(0F);
+        List<ItemStack> loot = lootTable.generateLoot(builder.build(LootContextTypes.FISHING));
+
+        if (loot.isEmpty()) {
+            return new ItemStack(Items.COD);
+        }
+
+        return loot.get(villager.getRandom().nextInt(loot.size())).copy();
     }
 
     @Override
