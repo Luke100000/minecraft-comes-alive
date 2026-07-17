@@ -201,7 +201,10 @@ final class BuildingStructureManager {
         boolean overlapsAnotherStructure = village.getBuildings().values().stream()
                 .filter(existing -> !existing.getBuildingType().grouped())
                 .filter(existing -> existing.getEffectiveStructureId() != matchedStructureId)
-                .anyMatch(existing -> scanned.getIntersectionVolume(existing) > 0L);
+                .filter(existing -> !existing.isStructureRoot())
+                .anyMatch(existing -> scanned.isStrictScan() && existing.isStrictScan()
+                        ? scanned.getFloorFootprintIntersectionArea(existing) > 0L
+                        : scanned.getIntersectionVolume(existing) > 0L);
         if (overlapsAnotherStructure) {
             return MatchResult.failure(Building.validationResult.AMBIGUOUS_STRUCTURE);
         }
@@ -233,15 +236,29 @@ final class BuildingStructureManager {
             return null;
         }
 
-        long intersection = scanned.getIntersectionVolume(existing);
+        boolean exactRoomTopology = scanned.isStrictScan() && existing.isStrictScan();
+        long intersection = exactRoomTopology
+                ? scanned.getFloorFootprintIntersectionArea(existing)
+                : scanned.getIntersectionVolume(existing);
         if (intersection <= 0L) {
             return null;
         }
 
-        boolean sourceAnchor = scanned.containsRawPos(existing.getSourceBlock());
-        boolean scannedInsideExisting = existing.containsRawBounds(scanned);
-        double retainedOld = intersection / (double) Math.max(1L, existing.getRawVolume());
-        double coveredNew = intersection / (double) Math.max(1L, scanned.getRawVolume());
+        long existingMeasure = exactRoomTopology
+                ? existing.getFloorFootprintArea()
+                : existing.getRawVolume();
+        long scannedMeasure = exactRoomTopology
+                ? scanned.getFloorFootprintArea()
+                : scanned.getRawVolume();
+
+        boolean sourceAnchor = exactRoomTopology
+                ? scanned.containsFloorPosition(existing.getSourceBlock())
+                : scanned.containsRawPos(existing.getSourceBlock());
+        double retainedOld = intersection / (double) Math.max(1L, existingMeasure);
+        double coveredNew = intersection / (double) Math.max(1L, scannedMeasure);
+        boolean scannedInsideExisting = exactRoomTopology
+                ? coveredNew >= 0.999D
+                : existing.containsRawBounds(scanned);
 
         // Deterministic split handling: manual scans give the old identity only to
         // the side containing the old source anchor. An explicit refresh of a known
@@ -255,7 +272,7 @@ final class BuildingStructureManager {
                 || retainedOld >= SAME_ROOM_RETAINED_OVERLAP
                 || (preferred && retainedOld >= 0.65D)
                 || (coveredNew >= 0.90D
-                && scanned.getRawVolume() >= Math.round(existing.getRawVolume() * 0.75D));
+                && scannedMeasure >= Math.round(existingMeasure * 0.75D));
 
         if (!strongIdentity) {
             return null;
@@ -307,28 +324,28 @@ final class BuildingStructureManager {
                 room.getPos0(), room.getPos1());
 
         Set<Integer> candidateStructures = new TreeSet<>();
-        for (Building existing : village.getBuildings().values()) {
-            boolean complete = existing.isComplete();
-            boolean grouped = existing.getBuildingType().grouped();
-            boolean hasStructure = existing.hasStructure();
-            boolean validRoot = hasStructure && hasValidRoot(village, existing.getStructureId());
+        for (Building root : village.getBuildings().values()) {
+            boolean complete = root.isComplete();
+            boolean grouped = root.getBuildingType().grouped();
+            boolean validRoot = root.hasStructure()
+                    && root.isStructureRoot()
+                    && hasValidRoot(village, root.getStructureId());
+            boolean sourceInsideEnvelope = validRoot && root.containsRawPos(room.getSourceBlock());
             boolean attached = complete && !grouped && validRoot
-                    && room.isStructurallyAttachedTo(existing, ROOM_ATTACHMENT_VERTICAL_GAP);
-            MCA.LOGGER.info("[FloorRoomDebug] side=server stage=assign-room-candidate roomSource={} existingId={} structure={} root={} strict={} complete={} grouped={} hasStructure={} validRoot={} existingFloorY={} existingRegions={} existingBounds={}..{} attached={}",
-                    room.getSourceBlock(), existing.getId(), existing.getStructureId(), existing.isStructureRoot(),
-                    existing.isStrictScan(), complete, grouped, hasStructure, validRoot, existing.getFloorY(),
-                    existing.getFloorRegions().stream().map(BuildingFloorRegion::anchorY).toList(),
-                    existing.getPos0(), existing.getPos1(), attached);
-            MCA.LOGGER.debug(
-                    "[BuildingRoomAttach] roomSource={} roomBounds={}..{} existingId={} structure={} root={} complete={} grouped={} hasStructure={} validRoot={} bounds={}..{} attached={}",
-                    room.getSourceBlock(), room.getPos0(), room.getPos1(), existing.getId(), existing.getStructureId(),
-                    existing.isStructureRoot(), complete, grouped, hasStructure, validRoot,
-                    existing.getPos0(), existing.getPos1(), attached);
+                    && (sourceInsideEnvelope
+                    || room.isStructurallyAttachedTo(root, ROOM_ATTACHMENT_VERTICAL_GAP));
+
+            MCA.LOGGER.info(
+                    "[StructureAttachV3] roomSource={} floorY={} roomBounds={}..{} rootId={} structure={} rootGroundFloorY={} rootBounds={}..{} sourceInsideEnvelope={} attached={}",
+                    room.getSourceBlock(), room.getFloorY(), room.getRawPos0(), room.getRawPos1(),
+                    root.getId(), root.getStructureId(), root.getGroundFloorY(),
+                    root.getRawPos0(), root.getRawPos1(), sourceInsideEnvelope, attached);
+
             if (!attached) {
                 continue;
             }
 
-            candidateStructures.add(existing.getStructureId());
+            candidateStructures.add(root.getStructureId());
         }
 
         MCA.LOGGER.info("[FloorRoomDebug] side=server stage=assign-room-summary roomSource={} candidateStructures={}",

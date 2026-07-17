@@ -157,6 +157,18 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     }
 
     @Override
+    public Vec3 handleRelativeFrictionAndCalculateMovement(Vec3 input, float friction) {
+        Vec3 movement = super.handleRelativeFrictionAndCalculateMovement(input, friction);
+        if (getNavigation() instanceof MCAGroundPathNavigation navigation) {
+            double controlledY = navigation.getControlledLadderVelocity();
+            if (!Double.isNaN(controlledY)) {
+                return new Vec3(movement.x(), controlledY, movement.z());
+            }
+        }
+        return movement;
+    }
+
+    @Override
     protected void registerGoals() {
         super.registerGoals();
         this.goalSelector.addGoal(1, new OpenDoorGoal(this, true));
@@ -1084,8 +1096,10 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         float height = (useRawDimensions ? getRawVerticalScaleFactor() : getVerticalScaleFactor()) * 2.0F;
         float width = getHorizontalScaleFactor() * 0.6F;
 
-        return EntityDimensions.scalable(width, height).withAttachments(EntityAttachments.builder()
-                .attach(EntityAttachment.VEHICLE, 0.0F, getRawVerticalScaleFactor() * VEHICLE_ATTACHMENT_Y, 0.0F));
+        return EntityDimensions.scalable(width, height)
+                .withEyeHeight(getType().getDimensions().eyeHeight())
+                .withAttachments(EntityAttachments.builder()
+                        .attach(EntityAttachment.VEHICLE, 0.0F, getRawVerticalScaleFactor() * VEHICLE_ATTACHMENT_Y, 0.0F));
     }
 
     @Override

@@ -20,6 +20,7 @@
     "MixinScreenHandler",
     "MixinServerGamePacketListenerImpl",
     "MixinServerWorld",
+    "MixinSynchedEntityData",
     "MixinTranslatableContents",
     "MixinVillager",
     "MixinZombie",
