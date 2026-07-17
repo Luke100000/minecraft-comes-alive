@@ -1,6 +1,7 @@
 # TBD
 
 * Fixed library auth not working in sandboxed environments.
+* Fixed texture related crashes in library
 
 # 7.7.22
 
