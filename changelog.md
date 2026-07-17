@@ -2,6 +2,7 @@
 
 * Fixed library auth not working in sandboxed environments.
 * Fixed texture related crashes in library
+* Submitted and liked content are now paged (faster loading on many skins)
 
 # 7.7.22
 
