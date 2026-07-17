@@ -8,6 +8,7 @@ public interface MessagesMCA {
         c.register(AddCustomClothingMessage.TYPE, AddCustomClothingMessage.STREAM_CODEC, true);
         c.register(BabyNameRequest.TYPE, BabyNameRequest.STREAM_CODEC, true);
         c.register(BabyNamingVillagerMessage.TYPE, BabyNamingVillagerMessage.STREAM_CODEC, true);
+        c.register(ChatAIContextUpdateRequest.TYPE, ChatAIContextUpdateRequest.STREAM_CODEC, true);
         c.register(CallToPlayerMessage.TYPE, CallToPlayerMessage.STREAM_CODEC, true);
         c.register(CivilRegistryPageRequest.TYPE, CivilRegistryPageRequest.STREAM_CODEC, true);
         c.register(ConfigRequest.TYPE, ConfigRequest.STREAM_CODEC, true);
@@ -36,6 +37,7 @@ public interface MessagesMCA {
 
         c.register(AnalysisResults.TYPE, AnalysisResults.STREAM_CODEC, false);
         c.register(BabyNameResponse.TYPE, BabyNameResponse.STREAM_CODEC, false);
+        c.register(ChatAIContextResponse.TYPE, ChatAIContextResponse.STREAM_CODEC, false);
         c.register(CivilRegistryResponse.TYPE, CivilRegistryResponse.STREAM_CODEC, false);
         c.register(ConfigResponse.TYPE, ConfigResponse.STREAM_CODEC, false);
         c.register(CustomSkinsChangedMessage.TYPE, CustomSkinsChangedMessage.STREAM_CODEC, false);

@@ -432,6 +432,11 @@ public final class Config extends CommonConfig {
     public String villagerChatAISystemPrompt = "";
 
     /**
+     * Permission level required to edit ChatAI villager, player, village, and world context prompts.
+     */
+    public int villagerChatAIContextPermissionLevel = 3;
+
+    /**
      * If true, the system prompt is prepended to the user message instead of sent as a separate system message.
      * Use this for OpenAI-compatible endpoints that ignore the system role.
      */

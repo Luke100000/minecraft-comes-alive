@@ -11,6 +11,7 @@ import net.conczin.mca.entity.ai.Messenger;
 import net.conczin.mca.entity.ai.Relationship;
 import net.conczin.mca.entity.ai.chatAI.modules.*;
 import net.conczin.mca.entity.ai.relationship.AgeState;
+import net.conczin.mca.server.world.data.Village;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
@@ -209,6 +210,8 @@ public class OpenAIChatAI implements ChatAIStrategy {
                 sb.append("\n");
 
             }
+
+            ChatAIContext.appendPrompts(sb, player, villager, Village.findNearest(player).orElse(null));
 
             // fill in variables and add to system message
             for (String s : input) {

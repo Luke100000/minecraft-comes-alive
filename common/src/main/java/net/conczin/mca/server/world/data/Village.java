@@ -45,6 +45,7 @@ public class Village implements Iterable<Building> {
 
     public long lastMoveIn;
     private String name = API.getVillagePool().pickVillageName("village");
+    private String chatAIPrompt = "";
     private Map<UUID, Map<UUID, Integer>> reputation = new HashMap<>();
     private int beds;
     private long lastBedSync;
@@ -65,6 +66,7 @@ public class Village implements Iterable<Building> {
     public Village(CompoundTag v, ServerLevel world) {
         id = v.getInt("id");
         name = v.getString("name");
+        chatAIPrompt = v.getString("chatAIPrompt");
         taxes = v.getFloat("taxesFloat");
         beds = v.getInt("beds");
         reputation = NbtHelper.toMap(v.getCompound("reputation"), UUID::fromString, i ->
@@ -107,6 +109,15 @@ public class Village implements Iterable<Building> {
 
     public boolean isWithinBorder(Entity entity) {
         return isWithinBorder(entity.blockPosition(), entity instanceof Player ? PLAYER_BORDER_MARGIN : BORDER_MARGIN);
+    }
+
+    public String getChatAIPrompt() {
+        return chatAIPrompt;
+    }
+
+    public void setChatAIPrompt(String chatAIPrompt) {
+        this.chatAIPrompt = chatAIPrompt;
+        markDirty();
     }
 
     public boolean isWithinBorder(BlockPos pos, int margin) {
@@ -373,6 +384,7 @@ public class Village implements Iterable<Building> {
         CompoundTag v = new CompoundTag();
         v.putInt("id", id);
         v.putString("name", name);
+        v.putString("chatAIPrompt", chatAIPrompt);
         v.putFloat("taxesFloat", taxes);
         v.putInt("beds", beds);
         v.put("reputation", NbtHelper.fromMap(new CompoundTag(), reputation, UUID::toString, i ->
