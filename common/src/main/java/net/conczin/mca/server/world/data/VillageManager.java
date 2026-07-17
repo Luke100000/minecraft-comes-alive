@@ -476,6 +476,24 @@ public class VillageManager extends SavedData implements Iterable<Village> {
                 ? targetVillage.getBuilding(scan.existingBuildingId()).orElse(null)
                 : null;
 
+        Building pendingGroundRoom = null;
+        Building pendingGroundRoot = null;
+        if (existing == null && building.isFunctionalRoom() && building.hasStructure()) {
+            pendingGroundRoot = findStructureRoot(targetVillage, building.getStructureId()).orElse(null);
+            if (pendingGroundRoot == null) {
+                return Building.validationResult.NOT_IN_BUILDING;
+            }
+
+            if (!pendingGroundRoot.isOnGroundFloorY(building.getFloorY())
+                    && !hasRegisteredGroundRoom(targetVillage, pendingGroundRoot)) {
+                GroundRoomScan groundScan = scanGroundRoom(pendingGroundRoot);
+                if (groundScan.result() != Building.validationResult.SUCCESS) {
+                    return groundScan.result();
+                }
+                pendingGroundRoom = groundScan.room();
+            }
+        }
+
         if (existing != null) {
             int structureId = existing.getEffectiveStructureId();
             boolean mergedAcrossStructures = scan.mergedBuildingIds().stream()
@@ -537,6 +555,10 @@ public class VillageManager extends SavedData implements Iterable<Village> {
                 building.setStructureRoot(true);
             }
             targetVillage.getBuildings().put(building.getId(), building);
+
+            if (pendingGroundRoom != null) {
+                registerGroundRoom(targetVillage, pendingGroundRoot, pendingGroundRoom);
+            }
         }
 
         finalizeVillageMutation(targetVillage);
@@ -577,14 +599,35 @@ public class VillageManager extends SavedData implements Iterable<Village> {
 
         Building root = scan.root().building();
         Building room = scan.room().building();
+
+        // Golden rule: every canonical structure owns a real registered Ground Floor room.
+        // If Add Building was triggered upstairs or in a basement, the broad root's
+        // authoritative groundFloorY is used to locate and strictly scan that room now.
+        Building groundRoom = room;
+        if (!root.isOnGroundFloorY(room.getFloorY())) {
+            GroundRoomScan groundScan = scanGroundRoom(root);
+            if (groundScan.result() != Building.validationResult.SUCCESS) {
+                return groundScan.result();
+            }
+            groundRoom = groundScan.room();
+        }
+
+        Building finalGroundRoom = groundRoom;
         if (targetVillage.getBuildings().values().stream()
-                .anyMatch(existing -> existing.isIdentical(root) || existing.isIdentical(room))) {
+                .anyMatch(existing -> existing.isIdentical(root)
+                        || existing.isIdentical(room)
+                        || (finalGroundRoom != room && existing.isIdentical(finalGroundRoom)))) {
             return Building.validationResult.IDENTICAL;
         }
 
         root.setId(lastBuildingId++);
         root.setStructureId(root.getId());
         root.makeStructureContainer();
+        targetVillage.getBuildings().put(root.getId(), root);
+
+        if (groundRoom != room) {
+            registerGroundRoom(targetVillage, root, groundRoom);
+        }
 
         room.setId(lastBuildingId++);
         room.setStructureId(root.getId());
@@ -593,12 +636,119 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         if (forcedRoomType != null) {
             room.setType(forcedRoomType);
         }
-
-        targetVillage.getBuildings().put(root.getId(), root);
         targetVillage.getBuildings().put(room.getId(), room);
+
         villages.put(targetVillage.getId(), targetVillage);
         finalizeVillageMutation(targetVillage);
         return Building.validationResult.SUCCESS;
+    }
+
+    private GroundRoomScan scanGroundRoom(Building root) {
+        Building.validationResult lastFailure = Building.validationResult.TOO_SMALL;
+
+        for (BlockPos source : getGroundRoomSources(root)) {
+            Building candidate = new Building(source, true);
+            Building.validationResult result = candidate.validateBuilding(world, Set.of(), true);
+            if (result != Building.validationResult.SUCCESS) {
+                lastFailure = result;
+                continue;
+            }
+
+            if (!root.isOnGroundFloorY(candidate.getFloorY())
+                    || !root.containsRawPos(candidate.getSourceBlock())) {
+                continue;
+            }
+
+            MCA.LOGGER.info(
+                    "[GroundRoomInvariant] stage=ground-room-found structure={} rootGroundFloorY={} source={} roomFloorY={} roomBounds={}..{}",
+                    root.getEffectiveStructureId(), root.getGroundFloorY(), candidate.getSourceBlock(),
+                    candidate.getFloorY(), candidate.getRawPos0(), candidate.getRawPos1());
+            return new GroundRoomScan(Building.validationResult.SUCCESS, candidate);
+        }
+
+        MCA.LOGGER.warn(
+                "[GroundRoomInvariant] stage=ground-room-missing structure={} rootGroundFloorY={} rootBounds={}..{} candidates={} lastFailure={}",
+                root.getEffectiveStructureId(), root.getGroundFloorY(), root.getRawPos0(), root.getRawPos1(),
+                getGroundRoomSources(root).size(), lastFailure);
+        return new GroundRoomScan(lastFailure, null);
+    }
+
+    private static List<BlockPos> getGroundRoomSources(Building root) {
+        int groundY = root.getGroundFloorY();
+        LinkedHashSet<BlockPos> sources = new LinkedHashSet<>();
+
+        root.getFloorRegions().stream()
+                .filter(region -> root.isOnGroundFloorY(region.anchorY()))
+                .sorted(Comparator.comparingInt(BuildingFloorRegion::area).reversed())
+                .forEach(region -> region.components().stream()
+                        .sorted(Comparator.comparingInt(BuildingFloorRegion.Component::area).reversed())
+                        .forEach(component -> {
+                            if (component.spans().isEmpty()) {
+                                sources.add(new BlockPos(
+                                        component.minX() + (component.maxX() - component.minX()) / 2,
+                                        groundY,
+                                        component.minZ() + (component.maxZ() - component.minZ()) / 2
+                                ));
+                                return;
+                            }
+
+                            // Try cheap representative cells first.
+                            for (BuildingFloorRegion.Span span : component.spans()) {
+                                sources.add(new BlockPos(
+                                        span.minX() + (span.maxX() - span.minX()) / 2,
+                                        groundY,
+                                        span.z()
+                                ));
+                            }
+
+                            // Then retain every supported X/Z candidate as a deterministic
+                            // fallback. Initial structure creation is rare and stops on the
+                            // first successful strict room scan.
+                            for (BuildingFloorRegion.Span span : component.spans()) {
+                                for (int x = span.minX(); x <= span.maxX(); x++) {
+                                    sources.add(new BlockPos(x, groundY, span.z()));
+                                }
+                            }
+                        }));
+
+        BlockPos center = root.getCenter();
+        sources.add(new BlockPos(center.getX(), groundY, center.getZ()));
+        BlockPos originalSource = root.getSourceBlock();
+        sources.add(new BlockPos(originalSource.getX(), groundY, originalSource.getZ()));
+        return List.copyOf(sources);
+    }
+
+    private static Optional<Building> findStructureRoot(Village village, int structureId) {
+        if (village == null) {
+            return Optional.empty();
+        }
+        return village.getBuildings().values().stream()
+                .filter(Building::isStructureRoot)
+                .filter(Building::isComplete)
+                .filter(root -> !root.getBuildingType().grouped())
+                .filter(root -> root.getEffectiveStructureId() == structureId)
+                .min(Comparator.comparingInt(Building::getId));
+    }
+
+    private static boolean hasRegisteredGroundRoom(Village village, Building root) {
+        return BuildingStructureManager.members(village, root.getEffectiveStructureId()).stream()
+                .filter(Building::isFunctionalRoom)
+                .anyMatch(room -> root.isOnGroundFloorY(room.getFloorY()));
+    }
+
+    private void registerGroundRoom(Village village, Building root, Building groundRoom) {
+        groundRoom.setId(lastBuildingId++);
+        groundRoom.setStructureId(root.getEffectiveStructureId());
+        groundRoom.setStructureRoot(false);
+        groundRoom.setTypeForced(false);
+        village.getBuildings().put(groundRoom.getId(), groundRoom);
+        MCA.LOGGER.info(
+                "[GroundRoomInvariant] stage=ground-room-registered structure={} rootGroundFloorY={} roomId={} roomFloorY={} source={}",
+                root.getEffectiveStructureId(), root.getGroundFloorY(), groundRoom.getId(),
+                groundRoom.getFloorY(), groundRoom.getSourceBlock());
+    }
+
+    private record GroundRoomScan(Building.validationResult result, Building room) {
     }
 
     private void finalizeVillageMutation(Village targetVillage) {
@@ -639,6 +789,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
 
     public void ensureStructureHierarchy(Village village) {
         if (BuildingStructureManager.ensureHierarchy(village)) {
+            village.calculateDimensions();
             setDirty();
         }
     }
