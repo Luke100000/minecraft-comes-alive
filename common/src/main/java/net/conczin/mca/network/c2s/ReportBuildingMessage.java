@@ -160,6 +160,7 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
                             return;
                         }
                         targetVillage.removeBuilding(targetBuilding.getId());
+                        villages.ensureStructureHierarchy(targetVillage);
                         MCA.LOGGER.debug("[BuildingRemove] stage=room-removed source={} targetId={}",
                                 playerPos, targetBuilding.getId());
                         player.displayClientMessage(Component.translatable("blueprint.roomRemoved"), true);

@@ -513,6 +513,7 @@
   "gui.blueprint.terrain.tooltip": "Show vanilla surface colours with subtle height shading beneath the village map.",
   "gui.blueprint.playerCentered": "Player Centered",
   "gui.blueprint.playerCentered.tooltip": "Centers the map on your current position while keeping the selected scale. Turn it off to center on the village.",
+  "gui.blueprint.playerHead.tooltip": "Show or hide your player head on the village map.",
   "gui.blueprint.setGroundAnchor": "Set Ground Anchor",
   "gui.blueprint.setGroundAnchor.tooltip": "Sets the room you are standing in as this building's Ground Floor. Floors above and below will be renumbered, and this room cannot be removed individually.",
   "blueprint.groundAnchorSet": "This room is now the building's Ground Floor.",
