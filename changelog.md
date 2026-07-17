@@ -8,6 +8,8 @@
 * Fixed a bug which caused trapdoors to confuse the automatic ground anchor.
 * Improved Map performance
 * UI Layout Changes for Blueprint
+* Fixed library auth not working in sandboxed environments.
+* Fixed texture related crashes in library
 
 # 7.7.23-alpha.2
 

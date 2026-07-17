@@ -1,6 +1,7 @@
 package net.conczin.mca.client.render.layer;
 
 import com.mojang.blaze3d.vertex.PoseStack;
+import net.conczin.mca.MCA;
 import net.conczin.mca.client.gui.immersive_library.SkinCache;
 import net.conczin.mca.client.model.CommonVillagerModel;
 import net.conczin.mca.client.resources.ColorPalette;
@@ -72,6 +73,9 @@ public class HairLayer<T extends LivingEntity, M extends HumanoidModel<T>> exten
     }
 
     private ResourceLocation getTexture(String identifier) {
+        if (MCA.isBlankString(identifier)) {
+            return null;
+        }
         if (identifier.startsWith("immersive_library:")) {
             return SkinCache.getTextureIdentifier(Integer.parseInt(identifier.substring("immersive_library:".length())));
         }

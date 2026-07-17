@@ -30,13 +30,16 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.Util;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.CycleButton;
 import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.gui.screens.ConfirmLinkScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.chat.CommonComponents;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.ResourceLocation;
@@ -365,7 +368,11 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                     awaitingAuthentication = true;
                     CompletableFuture.runAsync(() -> {
                         try {
-                            Response response = Auth.hasToken() ? request(Api.HttpMethod.GET, IsAuthResponse.class, "auth") : null;
+                            String token = Auth.getToken();
+                            Response response = token == null ? null : request(Api.HttpMethod.GET, IsAuthResponse.class, "auth");
+                            if (page != Page.LOGIN || !Objects.equals(token, Auth.getToken())) {
+                                return;
+                            }
                             if (response instanceof IsAuthResponse(boolean success)) {
                                 if (success) {
                                     authenticated = true;
@@ -377,9 +384,9 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
 
                                     setPage(Page.LIBRARY);
                                 } else {
-                                    //token rejected, delete file
-                                    Auth.clearToken();
+                                    // A generated token may still be waiting for browser approval.
                                     if (!isBrowserOpen) {
+                                        Auth.clearToken();
                                         setPage(Page.LIBRARY);
                                         setError(Component.translatable("gui.skin_library.is_auth_failed"));
                                     }
@@ -390,8 +397,9 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                             Thread.sleep(2000);
                         } catch (Exception e) {
                             MCA.LOGGER.error(e);
+                        } finally {
+                            awaitingAuthentication = false;
                         }
-                        awaitingAuthentication = false;
                     });
                 }
 
@@ -926,9 +934,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
             case LOGIN -> {
                 addRenderableWidget(new ButtonWidget(width / 2 - 50, height / 2 + 25, 100, 20,
                         Component.translatable("gui.skin_library.cancel"),
-                        v -> {
-                            setPage(Page.LIBRARY);
-                        }));
+                        v -> cancelAuthentication()));
             }
             case DETAIL -> {
                 if (canModifyFocusedContent()) {
@@ -1401,11 +1407,12 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         }
 
         if (page == Page.LOGIN) {
-            if (Auth.loadToken() == null) {
+            if (!Auth.hasToken()) {
                 isBrowserOpen = true;
-                Auth.authenticate(getPlayerName());
+                String authUrl = Auth.authenticate(getPlayerName());
+                Minecraft.getInstance().setScreen(new AuthLinkScreen(authUrl));
             } else {
-                isBrowserOpen = false;
+                isBrowserOpen = Auth.loadToken() == null;
             }
         }
 
@@ -1431,6 +1438,52 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
             refreshContentList();
         } else {
             rebuild();
+        }
+    }
+
+    private void cancelAuthentication() {
+        Auth.clearToken();
+        authenticated = false;
+        isBrowserOpen = false;
+        setPage(Page.LIBRARY);
+    }
+
+    private class AuthLinkScreen extends ConfirmLinkScreen {
+        private final String authUrl;
+
+        private AuthLinkScreen(String authUrl) {
+            super(confirmed -> {}, Component.translatable("gui.skin_library.auth_link.title"),
+                    Component.translatable("gui.skin_library.auth_link.message"),
+                    authUrl,
+                    CommonComponents.GUI_CANCEL,
+                    true);
+            this.authUrl = authUrl;
+        }
+
+        @Override
+        protected void addButtons(int y) {
+            addRenderableWidget(Button.builder(Component.translatable("chat.link.open"), button -> {
+                Util.getPlatform().openUri(authUrl);
+                Minecraft.getInstance().setScreen(SkinLibraryScreen.this);
+            }).bounds(width / 2 - 50 - 105, y, 100, 20).build());
+            addRenderableWidget(Button.builder(Component.translatable("chat.copy"), button -> {
+                copyToClipboard();
+                Minecraft.getInstance().setScreen(SkinLibraryScreen.this);
+            }).bounds(width / 2 - 50, y, 100, 20).build());
+            addRenderableWidget(Button.builder(CommonComponents.GUI_CANCEL, button -> {
+                cancelAuthentication();
+                Minecraft.getInstance().setScreen(SkinLibraryScreen.this);
+            }).bounds(width / 2 - 50 + 105, y, 100, 20).build());
+        }
+
+        @Override
+        public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+            if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
+                cancelAuthentication();
+                Minecraft.getInstance().setScreen(SkinLibraryScreen.this);
+                return true;
+            }
+            return super.keyPressed(keyCode, scanCode, modifiers);
         }
     }
 
