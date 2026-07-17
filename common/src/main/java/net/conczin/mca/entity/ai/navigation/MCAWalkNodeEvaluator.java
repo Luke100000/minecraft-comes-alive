@@ -198,9 +198,9 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
 
     private static boolean shouldCheckBlockClearance(PathType type) {
         return type != PathType.WALKABLE_DOOR
-               && type != PathType.DOOR_OPEN
-               && type != PathType.TRAPDOOR
-               && type != PathType.DANGER_TRAPDOOR;
+                && type != PathType.DOOR_OPEN
+                && type != PathType.TRAPDOOR
+                && type != PathType.DANGER_TRAPDOOR;
     }
 
     private boolean hasBlockClearance(Node node) {
@@ -211,6 +211,7 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
         }
 
         long key = BlockPos.asLong(node.x, node.y, node.z);
+
         if (this.clearanceCache.containsKey(key)) {
             return this.clearanceCache.get(key);
         }
@@ -226,5 +227,4 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
                 node.x + 1.0D, node.y + 2.0D, node.z + 1.0D
         );
     }
-
 }
