@@ -198,12 +198,18 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         String requestedSearch = filteredString;
         long requestId = ++pageRequestId;
 
+        List<String> blacklistTerms = new LinkedList<>();
+        if (filterInvalidSkins) blacklistTerms.add("invalid");
+        if (filterHair) blacklistTerms.add("hair");
+        if (filterClothing) blacklistTerms.add("clothing");
+        String requestedBlacklist = String.join(",", blacklistTerms);
+
         CompletableFuture.runAsync(() -> {
             // fetch assets
             Response response = request(Api.HttpMethod.GET, ContentListResponse.class, "v2/content/mca", Map.of(
                     "track", requestedFilter.track(),
                     "whitelist", requestedSearch,
-                    "blacklist", (filterInvalidSkins ? "invalid" : "") + (filterHair ? ",hair" : "") + (filterClothing ? ",clothing" : ""),
+                    "blacklist", requestedBlacklist,
                     "order", sortingMode.order,
                     "descending", "true",
                     "offset", String.valueOf(requestedPage * CLOTHES_PER_PAGE),
