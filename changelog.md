@@ -1,3 +1,7 @@
+# TBD
+
+* Fixed library auth not working in sandboxed environments.
+
 # 7.7.22
 
 * Fixed Rare Crash
