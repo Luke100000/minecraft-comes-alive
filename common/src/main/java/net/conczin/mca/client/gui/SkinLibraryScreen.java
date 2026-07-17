@@ -470,6 +470,16 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         }
     }
 
+    private static MutableComponent getProfessionText(String profession) {
+        if (MCA.isBlankString(profession)) {
+            return Component.translatable("entity.minecraft.villager");
+        }
+
+        String fallback = profession.substring(profession.lastIndexOf('.') + 1);
+        fallback = Character.toUpperCase(fallback.charAt(0)) + fallback.substring(1);
+        return Component.translatableWithFallback("entity.minecraft.villager." + profession, fallback);
+    }
+
     private List<Component> getMetaDataText(LiteContent content) {
         Optional<SkinMeta> meta = SkinCache.getMeta(content);
         if (meta.isEmpty()) {
@@ -481,7 +491,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                     Component.translatable("gui.skin_library.meta.by", content.username()).withStyle(ChatFormatting.ITALIC),
                     Component.translatable("gui.skin_library.meta.likes", content.likes()).withStyle(ChatFormatting.GRAY),
                     Component.translatable("gui.skin_library.gender", meta.get().getGender() == Gender.MALE ? Component.translatable("gui.villager_editor.masculine") : (meta.get().getGender() == Gender.FEMALE ? Component.translatable("gui.villager_editor.feminine") : Component.translatable("gui.villager_editor.neutral"))),
-                    Component.translatable("gui.skin_library.profession", meta.get().getProfession() == null ? Component.translatable("entity.minecraft.villager") : Component.translatable("entity.minecraft.villager." + meta.get().getProfession())),
+                    Component.translatable("gui.skin_library.profession", getProfessionText(meta.get().getProfession())),
                     Component.translatable("gui.skin_library.temperature", Component.translatable("gui.skin_library.temperature." + (meta.get().getTemperature() + 2))),
                     Component.translatable("gui.skin_library.chance_val", (int) (meta.get().getChance() * 100)).withStyle(ChatFormatting.GRAY)
             ));
@@ -1093,7 +1103,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                     int oy = 0;
                     List<ItemButtonWidget> widgets = new LinkedList<>();
                     for (VillagerProfession profession : BuiltInRegistries.VILLAGER_PROFESSION) {
-                        MutableComponent text = Component.translatable("entity.minecraft.villager." + profession.name());
+                        MutableComponent text = getProfessionText(profession.name());
                         ItemButtonWidget widget = addRenderableWidget(new ItemButtonWidget(width / 2 - 200 + ox * 21, height / 2 - 30 + oy * 21, 20, text,
                                 ProfessionIcons.ICONS.getOrDefault(profession.name(), Items.OAK_SAPLING.getDefaultInstance()),
                                 v -> {
