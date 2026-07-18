@@ -340,6 +340,13 @@ public class Building {
     }
 
     public validationResult validateBuilding(Level world, Set<BlockPos> blocked, boolean allowMissingEntrance) {
+        return validateBuilding(world, blocked, allowMissingEntrance, null);
+    }
+
+    validationResult validateBuilding(Level world,
+                                      Set<BlockPos> blocked,
+                                      boolean allowMissingEntrance,
+                                      Building structureRoot) {
         //validate grouped buildings differently
         if (getBuildingType().grouped()) {
             validateBlocks(world);
@@ -347,7 +354,7 @@ public class Building {
         }
 
         if (strictScan) {
-            return validateStrictRoom(world, blocked, allowMissingEntrance);
+            return validateStrictRoom(world, blocked, allowMissingEntrance, structureRoot);
         }
 
         //clear old building
@@ -597,7 +604,8 @@ public class Building {
 
     private validationResult validateStrictRoom(Level world,
                                                 Set<BlockPos> blocked,
-                                                boolean allowMissingEntrance) {
+                                                boolean allowMissingEntrance,
+                                                Building structureRoot) {
         blocks.clear();
         size = 0;
         setLastScan(world.getGameTime());
@@ -607,7 +615,8 @@ public class Building {
                 getSourceBlock(),
                 blocked,
                 Config.getInstance().maxBuildingSize,
-                Config.getInstance().maxBuildingRadius
+                Config.getInstance().maxBuildingRadius,
+                structureRoot
         );
 
         MCA.LOGGER.info(

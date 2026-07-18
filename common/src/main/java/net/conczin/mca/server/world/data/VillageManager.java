@@ -318,7 +318,8 @@ public class VillageManager extends SavedData implements Iterable<Village> {
             return new InitialStructureScan(root, new BuildingScanResult(
                     root.result(), pos, true, emptyRoom, List.of(), root.village()));
         }
-        return new InitialStructureScan(root, analyzeBuilding(pos, true, true, root.village(), -1, false));
+        return new InitialStructureScan(root, analyzeBuilding(
+                pos, true, true, root.village(), -1, false, root.building()));
     }
 
     public BuildingScanResult analyzeRegisteredRoom(Village village, int buildingId, BlockPos pos) {
@@ -330,7 +331,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
                                                boolean roomScan,
                                                Village knownVillage,
                                                int preferredBuildingId) {
-        return analyzeBuilding(pos, strictScan, roomScan, knownVillage, preferredBuildingId, true);
+        return analyzeBuilding(pos, strictScan, roomScan, knownVillage, preferredBuildingId, true, null);
     }
 
     private BuildingScanResult analyzeBuilding(BlockPos pos,
@@ -339,6 +340,16 @@ public class VillageManager extends SavedData implements Iterable<Village> {
                                                Village knownVillage,
                                                int preferredBuildingId,
                                                boolean assignRoom) {
+        return analyzeBuilding(pos, strictScan, roomScan, knownVillage, preferredBuildingId, assignRoom, null);
+    }
+
+    private BuildingScanResult analyzeBuilding(BlockPos pos,
+                                               boolean strictScan,
+                                               boolean roomScan,
+                                               Village knownVillage,
+                                               int preferredBuildingId,
+                                               boolean assignRoom,
+                                               Building explicitStructureRoot) {
         BuildingBlockedResult blockResult = knownVillage == null ? getBlockedResult(pos) : null;
         Village village = knownVillage != null ? knownVillage : blockResult.village();
 
@@ -382,11 +393,15 @@ public class VillageManager extends SavedData implements Iterable<Village> {
                 ? preferred.getSourceBlock()
                 : pos;
         Building building = new Building(scanSource, effectiveStrictScan);
+        Building roomScanRoot = roomScan
+                ? resolveRoomScanRoot(village, preferred, scanSource, explicitStructureRoot)
+                : null;
 
         boolean allowMissingEntrance = roomScan
                 || (preferred != null && preferred.hasStructure() && !preferred.isStructureRoot());
 
-        Building.validationResult result = building.validateBuilding(world, blocked, allowMissingEntrance);
+        Building.validationResult result = building.validateBuilding(
+                world, blocked, allowMissingEntrance, roomScanRoot);
         MCA.LOGGER.info("[FloorRoomDebug] side=server stage=validate-result source={} result={} roomScan={} allowMissingEntrance={} blockedCount={} candidate={}",
                 scanSource, result, roomScan, allowMissingEntrance, blocked.size(), debugBuilding(building));
         int existingBuildingId = -1;
@@ -443,6 +458,40 @@ public class VillageManager extends SavedData implements Iterable<Village> {
                 existingBuildingId,
                 mergedBuildingIds
         );
+    }
+
+
+    private static Building resolveRoomScanRoot(Village village,
+                                                Building preferred,
+                                                BlockPos source,
+                                                Building explicitStructureRoot) {
+        if (explicitStructureRoot != null && !explicitStructureRoot.isStrictScan()) {
+            return explicitStructureRoot;
+        }
+
+        if (preferred != null) {
+            if (preferred.isStructureRoot()) {
+                return preferred;
+            }
+            if (preferred.hasStructure()) {
+                Optional<Building> root = findStructureRoot(village, preferred.getEffectiveStructureId());
+                if (root.isPresent()) {
+                    return root.get();
+                }
+            }
+        }
+
+        if (village == null) {
+            return null;
+        }
+
+        List<Building> containingRoots = village.getBuildings().values().stream()
+                .filter(Building::isStructureRoot)
+                .filter(Building::isComplete)
+                .filter(root -> !root.getBuildingType().grouped())
+                .filter(root -> root.containsRawPos(source))
+                .toList();
+        return containingRoots.size() == 1 ? containingRoots.getFirst() : null;
     }
 
     public Building.validationResult commitBuilding(BuildingScanResult scan, String forcedType) {
@@ -649,7 +698,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
 
         for (BlockPos source : sources) {
             Building candidate = new Building(source, true);
-            Building.validationResult result = candidate.validateBuilding(world, Set.of(), true);
+            Building.validationResult result = candidate.validateBuilding(world, Set.of(), true, root);
             if (result != Building.validationResult.SUCCESS) {
                 lastFailure = result;
                 continue;
