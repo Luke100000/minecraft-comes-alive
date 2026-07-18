@@ -395,9 +395,9 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         boolean requestedInsideOldFootprint =
                 requestedBuilding.getHorizontalFootprintIntersectionArea(expected) == requestedArea;
         if (requestedInsideOldFootprint
-                && !BuildingStructureManager.sameRoomGeometry(expected, requestedBuilding, village)) {
+                && !BuildingRoomIdentity.sameRoomGeometry(expected, requestedBuilding)) {
             List<BuildingScanResult> components = new ArrayList<>();
-            addDistinctSplitComponent(components, requestedRaw, village);
+            addDistinctSplitComponent(components, requestedRaw);
             discoverSplitComponents(village, expected, structureRoot, components);
 
             if (components.size() > 2) {
@@ -407,7 +407,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
             if (components.size() == 2) {
                 BuildingScanResult first = components.get(0);
                 BuildingScanResult second = components.get(1);
-                Building retainedBuilding = BuildingStructureManager.selectSplitRetainedSide(
+                Building retainedBuilding = BuildingRoomIdentity.selectSplitRetainedSide(
                         expected, first.building(), second.building()).orElse(null);
                 if (retainedBuilding == null) {
                     return RoomUpdatePlan.conflict(
@@ -416,7 +416,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
 
                 BuildingScanResult retained = retainedBuilding == first.building() ? first : second;
                 BuildingScanResult added = retained == first ? second : first;
-                Building.validationResult splitResult = BuildingStructureManager.validateRoomSplit(
+                Building.validationResult splitResult = BuildingRoomIdentity.validateRoomSplit(
                         expected, retained.building(), added.building(), village);
                 return splitResult == Building.validationResult.SUCCESS
                         ? RoomUpdatePlan.split(requestedRaw, retained, added, buildingId)
@@ -439,7 +439,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
                                          Building expected,
                                          Building structureRoot,
                                          List<BuildingScanResult> components) {
-        int canonicalFloorY = BuildingStructureManager.canonicalFloorY(village, expected);
+        int canonicalFloorY = expected.getFloorY();
         int probeY = canonicalFloorY + BuildingFloorRegionDetector.FLOOR_CLUSTER_TOLERANCE;
         BlockPos min = expected.getRawPos0();
         BlockPos max = expected.getRawPos1();
@@ -465,7 +465,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
                         village, expected, structureRoot,
                         new BlockPos(x, floor.physicalY(), z));
                 if (component != null) {
-                    addDistinctSplitComponent(components, component, village);
+                    addDistinctSplitComponent(components, component);
                 }
             }
         }
@@ -504,11 +504,10 @@ public class VillageManager extends SavedData implements Iterable<Village> {
     }
 
     private static void addDistinctSplitComponent(List<BuildingScanResult> components,
-                                                  BuildingScanResult candidate,
-                                                  Village village) {
+                                                  BuildingScanResult candidate) {
         boolean duplicate = components.stream().anyMatch(existing ->
-                BuildingStructureManager.sameRoomGeometry(
-                        existing.building(), candidate.building(), village));
+                BuildingRoomIdentity.sameRoomGeometry(
+                        existing.building(), candidate.building()));
         if (!duplicate) {
             components.add(candidate);
         }
@@ -761,7 +760,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
 
         Building retained = retainedScan.building();
         Building added = addedScan.building();
-        Building.validationResult validation = BuildingStructureManager.validateRoomSplit(
+        Building.validationResult validation = BuildingRoomIdentity.validateRoomSplit(
                 existing, retained, added, village);
         if (validation != Building.validationResult.SUCCESS) {
             return validation;

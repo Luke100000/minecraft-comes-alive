@@ -299,10 +299,6 @@ public class Building {
                 .orElseGet(() -> Math.abs(floorY - pos.getY()));
     }
 
-    public boolean isOnGroundFloorY(int y) {
-        return Math.abs(groundFloorY - y) <= SEMANTIC_FLOOR_TOLERANCE;
-    }
-
     public boolean containsFloorPosition(Vec3i pos) {
         if (floorRegions.isEmpty()) {
             return containsPos(pos);
