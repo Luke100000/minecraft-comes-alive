@@ -508,21 +508,9 @@ public class BlueprintScreen extends ExtendedScreen {
         minecraft.gui.renderOverlayMessage(context, minecraft.getTimer());
     }
 
-    private static ReportBuildingMessage.Action getStructureScanAction(Village.StructuralPosition structuralPosition) {
-        return switch (structuralPosition) {
-            case OUTSIDE -> ReportBuildingMessage.Action.ADD;
-            case ATTACHABLE_ROOM -> ReportBuildingMessage.Action.ADD_ROOM;
-            case REGISTERED_ROOM -> ReportBuildingMessage.Action.UPDATE_ROOM;
-        };
-    }
-
     private void requestStructureScan() {
-        Village.StructuralLookup structuralLookup = getPlayerStructuralLookup();
-        ReportBuildingMessage.Action action = getStructureScanAction(structuralLookup.position());
-        selectPlayerFloorOnNextVillageResponse = action == ReportBuildingMessage.Action.ADD
-                || action == ReportBuildingMessage.Action.ADD_ROOM
-                || action == ReportBuildingMessage.Action.UPDATE_ROOM;
-        Network.sendToServer(new ReportBuildingMessage(action));
+        selectPlayerFloorOnNextVillageResponse = true;
+        Network.sendToServer(new ReportBuildingMessage(ReportBuildingMessage.Action.STRUCTURE_SCAN));
     }
 
     void cancelPendingFloorSelection() {
@@ -1751,7 +1739,7 @@ public class BlueprintScreen extends ExtendedScreen {
             for (Map.Entry<ResourceLocation, List<BlockPos>> block : building.getBlocks().entrySet()) {
                 Set<BlockPos> positions = positionsByBlock.computeIfAbsent(block.getKey(), ignored -> new HashSet<>());
                 block.getValue().stream()
-                        .filter(pos -> selectedFloor == null || floorLayout.isBlockOnFloor(building, pos, selectedFloor))
+                        .filter(pos -> selectedFloor == null || floorLayout.isBuildingOnFloor(building, selectedFloor))
                         .forEach(positions::add);
             }
         }

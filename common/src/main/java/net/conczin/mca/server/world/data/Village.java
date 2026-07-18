@@ -522,7 +522,7 @@ public class Village implements Iterable<Building> {
         }
 
         Building root = getStructureRoot(room).orElse(null);
-        int floorY = BuildingStructureManager.canonicalFloorY(this, room);
+        int floorY = room.getFloorY();
         if (root == null || BuildingStructureManager.isGroundFloor(this, room)) {
             return false;
         }

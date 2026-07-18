@@ -40,6 +40,7 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
         VillageManager villages = VillageManager.get(player.serverLevel());
         try {
             switch (action) {
+            case STRUCTURE_SCAN -> scanStructureAtPlayer(villages, player);
             case ADD -> addBuildingAndCurrentRoom(villages, player);
             case ADD_ROOM -> addRoom(villages, player);
             case UPDATE_ROOM -> updateRoom(villages, player, player.blockPosition(), null);
@@ -62,16 +63,28 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
         }
     }
 
+    private static void scanStructureAtPlayer(VillageManager villages, ServerPlayer player) {
+        BlockPos source = player.blockPosition();
+        Village village = villages.findNearestVillage(source, Village.MERGE_MARGIN).orElse(null);
+        Village.StructuralPosition position = village == null
+                ? Village.StructuralPosition.OUTSIDE
+                : village.getStructuralPosition(player.serverLevel(), source);
+
+        switch (position) {
+            case REGISTERED_ROOM -> updateRoom(villages, player, source, null);
+            case ATTACHABLE_ROOM -> addRoom(villages, player);
+            case OUTSIDE -> addBuildingAndCurrentRoom(villages, player);
+        }
+    }
+
     private static void addBuildingAndCurrentRoom(VillageManager villages, ServerPlayer player) {
         InitialStructureScan scan = villages.analyzeInitialStructure(player.blockPosition());
         if (scan.root().result() == Building.validationResult.OVERLAP) {
             /*
-             * The client decides between Add Building and Add Room from the last
-             * persisted village geometry. After a player opens a basement/stairwell,
-             * that cached structure can briefly classify the player as OUTSIDE even
-             * though a strict room scan can attach to exactly one existing structure.
-             * Recover only through the normal Add Room path; assignNewRoom still
-             * rejects no-structure, cross-structure, and ambiguous attachments.
+             * Persisted structure geometry can briefly classify a remodelled basement or
+             * stairwell as OUTSIDE even though a strict room scan can attach to exactly one
+             * existing structure. In that case recover through the normal Add Room path;
+             * assignNewRoom still rejects no-structure, cross-structure, and ambiguous attachments.
              */
             BuildingScanResult roomScan = villages.analyzeRoom(player.blockPosition());
             if (roomScan.result() == Building.validationResult.SUCCESS) {
@@ -256,6 +269,7 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
         FULL_SCAN,
         REMOVE_ROOM,
         UPDATE_ROOM,
-        SET_GROUND_ANCHOR
+        SET_GROUND_ANCHOR,
+        STRUCTURE_SCAN
     }
 }
