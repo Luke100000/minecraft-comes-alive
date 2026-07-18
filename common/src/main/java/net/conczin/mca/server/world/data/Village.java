@@ -20,6 +20,7 @@ import net.minecraft.world.entity.ai.village.poi.PoiManager;
 import net.minecraft.world.entity.ai.village.poi.PoiTypes;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.Level;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -458,12 +459,29 @@ public class Village implements Iterable<Building> {
         return getStructuralPosition(pos) != StructuralPosition.OUTSIDE;
     }
 
+    public boolean hasStructuralBuildingAt(Level level, BlockPos pos) {
+        return getStructuralPosition(level, pos) != StructuralPosition.OUTSIDE;
+    }
+
     public StructuralPosition getStructuralPosition(Vec3i pos) {
         return getStructuralLookup(pos).position();
     }
 
+    public StructuralPosition getStructuralPosition(Level level, BlockPos pos) {
+        return getStructuralLookup(level, pos).position();
+    }
+
     public StructuralLookup getStructuralLookup(Vec3i pos) {
-        Optional<Building> functionalRoom = getFunctionalRoomAt(pos);
+        return getStructuralLookup(
+                pos, BuildingStructureManager.functionalRoomAt(this, pos));
+    }
+
+    public StructuralLookup getStructuralLookup(Level level, BlockPos pos) {
+        return getStructuralLookup(
+                pos, BuildingStructureManager.functionalRoomAt(this, level, pos));
+    }
+
+    private StructuralLookup getStructuralLookup(Vec3i pos, Optional<Building> functionalRoom) {
         if (functionalRoom.isPresent()) {
             return new StructuralLookup(StructuralPosition.REGISTERED_ROOM, functionalRoom);
         }
@@ -475,42 +493,15 @@ public class Village implements Iterable<Building> {
     }
 
     public Optional<Building> getFunctionalRoomAt(Vec3i pos) {
-        Building root = BuildingStructureManager.containingRoot(this, pos).orElse(null);
-        if (root != null) {
-            Building.FloorBand selectedBand = root.resolveFloorBand(pos.getY()).orElse(null);
-            if (selectedBand != null) {
-                Optional<Building> roomOnFloor = getBuildings().values().stream()
-                        .filter(Building::isComplete)
-                        .filter(Building::isFunctionalRoom)
-                        .filter(room -> room.getEffectiveStructureId() == root.getEffectiveStructureId())
-                        .filter(room -> root.resolvePhysicalFloorBand(room.getFloorY())
-                                .map(roomBand -> roomBand.anchorY() == selectedBand.anchorY())
-                                .orElse(false))
-                        .filter(room -> room.containsFloorColumn(pos.getX(), pos.getZ()))
-                        .min(Comparator.comparingInt(Building::getId));
-                if (roomOnFloor.isPresent()) {
-                    return roomOnFloor;
-                }
-            }
-        }
+        return BuildingStructureManager.functionalRoomAt(this, pos);
+    }
 
-        return getBuildings().values().stream()
-                .filter(Building::isComplete)
-                .filter(Building::isFunctionalRoom)
-                .filter(building -> building.containsRawPos(pos))
-                /*
-                 * Raw bounds can span open stairs, atriums, and multi-floor interiors.
-                 * A player only belongs to a registered room on that room's semantic floor.
-                 */
-                .filter(building -> building.getFloorDistanceTo(pos) <= Building.SEMANTIC_FLOOR_TOLERANCE)
-                .min(Comparator.comparingInt((Building building) -> building.getFloorDistanceTo(pos))
-                        .thenComparingInt(Building::getId));
+    public Optional<Building> getFunctionalRoomAt(Level level, BlockPos pos) {
+        return BuildingStructureManager.functionalRoomAt(this, level, pos);
     }
 
     public boolean isStructuralGroundFloor(Building room) {
-        return getStructureRoot(room)
-                .filter(root -> root.isOnGroundFloorY(room.getFloorY()))
-                .isPresent();
+        return BuildingStructureManager.isGroundFloor(this, room);
     }
 
     public boolean setStructureGroundFloorAnchor(Building room) {
@@ -519,11 +510,12 @@ public class Village implements Iterable<Building> {
         }
 
         Building root = getStructureRoot(room).orElse(null);
-        if (root == null || root.isOnGroundFloorY(room.getFloorY())) {
+        int floorY = BuildingStructureManager.canonicalFloorY(this, room);
+        if (root == null || BuildingStructureManager.isGroundFloor(this, room)) {
             return false;
         }
 
-        root.setGroundFloorY(room.getFloorY());
+        root.setGroundFloorY(floorY);
         markDirty();
         return true;
     }

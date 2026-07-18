@@ -534,7 +534,7 @@ public class BlueprintScreen extends ExtendedScreen {
             return new Village.StructuralLookup(Village.StructuralPosition.OUTSIDE, Optional.empty());
         }
 
-        return village.getStructuralLookup(minecraft.player.blockPosition());
+        return village.getStructuralLookup(minecraft.level, minecraft.player.blockPosition());
     }
 
     private static String getStructureScanTranslationKey(Village.StructuralPosition structuralPosition) {

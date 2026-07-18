@@ -1,7 +1,6 @@
 package net.conczin.mca.client.gui;
 
 import net.conczin.mca.server.world.data.Building;
-import net.conczin.mca.server.world.data.BuildingFloorRegion;
 import net.conczin.mca.server.world.data.Village;
 import net.minecraft.core.BlockPos;
 
@@ -164,26 +163,12 @@ final class BlueprintFloorLayout {
     }
 
     private static List<FloorCandidate> candidatesFor(Building building) {
-        List<BuildingFloorRegion> regions = building.getFloorRegions();
-        if (regions.isEmpty()) {
-            return List.of(new FloorCandidate(
-                    building.getId(),
-                    building.getEffectiveStructureId(),
-                    building.getFloorY(),
-                    Math.max(1, building.getHorizontalArea())
-            ));
-        }
-
-        List<FloorCandidate> candidates = new ArrayList<>();
-        for (BuildingFloorRegion region : regions) {
-            candidates.add(new FloorCandidate(
-                    building.getId(),
-                    building.getEffectiveStructureId(),
-                    region.anchorY(),
-                    Math.max(1, region.area())
-            ));
-        }
-        return List.copyOf(candidates);
+        return List.of(new FloorCandidate(
+                building.getId(),
+                building.getEffectiveStructureId(),
+                building.getFloorY(),
+                Math.max(1L, building.getFloorFootprintArea())
+        ));
     }
 
     private static Map<Integer, List<FloorCandidate>> getVerticalStacks(List<FloorCandidate> candidates) {

@@ -13,8 +13,6 @@ import java.util.*;
 
 final class BuildingRoomScanner {
     private static final int MIN_INTERIOR_AREA = 4;
-    private static final int MAX_SEED_VERTICAL_SEARCH = 4;
-    private static final int MAX_LOCAL_CEILING_SEARCH = 16;
     private static final Direction[] HORIZONTAL_DIRECTIONS = {
             Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST
     };
@@ -74,6 +72,9 @@ final class BuildingRoomScanner {
             int z = BlockPos.getZ(current);
             openColumns.add(packColumn(x, z));
 
+            cursor.set(x, y, z);
+            BlockState currentState = world.getBlockState(cursor);
+
             for (Direction direction : VOLUME_DIRECTIONS) {
                 int nextX = x + direction.getStepX();
                 int nextY = y + direction.getStepY();
@@ -87,7 +88,8 @@ final class BuildingRoomScanner {
                 if (direction.getAxis() != Direction.Axis.Y && isEntrance(state)) {
                     hasEntrance = true;
                 }
-                if (!isOpenVolumeCell(world, cursor, state)) {
+                if (blocksVerticalConnectorTraversal(direction, currentState, state)
+                        || !isOpenVolumeCell(world, cursor, state)) {
                     continue;
                 }
 
@@ -112,7 +114,7 @@ final class BuildingRoomScanner {
         for (long column : openColumns) {
             int x = unpackColumnX(column);
             int z = unpackColumnZ(column);
-            if (!isSupported(world, x, scanFloorY, z, supportCursor)) {
+            if (!BuildingFloorResolver.isSupported(world, x, scanFloorY, z, supportCursor)) {
                 continue;
             }
 
@@ -152,41 +154,14 @@ final class BuildingRoomScanner {
     private static Optional<ResolvedSeed> resolveInteriorSeed(Level world,
                                                               BlockPos source,
                                                               Building structureRoot) {
-        if (structureRoot != null && !structureRoot.getFloorRegions().isEmpty()) {
-            return resolveInteriorSeedInStructure(world, source, structureRoot);
+        BuildingFloorResolver.ResolvedFloor floor =
+                BuildingFloorResolver.resolve(world, source, structureRoot).orElse(null);
+        if (floor == null) {
+            return Optional.empty();
         }
-        return resolveInteriorSeedLocally(world, source);
-    }
 
-    private static Optional<ResolvedSeed> resolveInteriorSeedInStructure(Level world,
-                                                                         BlockPos source,
-                                                                         Building structureRoot) {
-        int minY = structureRoot.getRawPos0().getY();
-        for (int y = source.getY(); y >= minY; y--) {
-            Building.FloorBand band = structureRoot.resolvePhysicalFloorBand(y).orElse(null);
-            if (band == null) {
-                continue;
-            }
-
-            Optional<BlockPos> candidate = findInteriorSeedAtY(world, source, y, band.ceilingY());
-            if (candidate.isPresent()) {
-                return Optional.of(new ResolvedSeed(candidate.get(), band.anchorY(), band.ceilingY()));
-            }
-        }
-        return Optional.empty();
-    }
-
-    private static Optional<ResolvedSeed> resolveInteriorSeedLocally(Level world, BlockPos source) {
-        for (int drop = 0; drop <= MAX_SEED_VERTICAL_SEARCH; drop++) {
-            int y = source.getY() - drop;
-            int ceilingY = y + MAX_LOCAL_CEILING_SEARCH;
-            Optional<BlockPos> candidate = findInteriorSeedAtY(world, source, y, ceilingY);
-            if (candidate.isPresent()) {
-                BlockPos seed = candidate.get();
-                return Optional.of(new ResolvedSeed(seed, seed.getY(), ceilingY));
-            }
-        }
-        return Optional.empty();
+        return findInteriorSeedAtY(world, source, floor.physicalY(), floor.ceilingY())
+                .map(seed -> new ResolvedSeed(seed, floor.semanticY(), floor.ceilingY()));
     }
 
     private static Optional<BlockPos> findInteriorSeedAtY(Level world,
@@ -214,12 +189,19 @@ final class BuildingRoomScanner {
             return false;
         }
 
-        BlockPos.MutableBlockPos supportCursor = new BlockPos.MutableBlockPos();
-        return isSupported(world, pos.getX(), pos.getY(), pos.getZ(), supportCursor)
+        return BuildingFloorResolver.isSupported(world, pos.getX(), pos.getY(), pos.getZ())
                 && findOpenCellInColumn(
                 world, pos.getX(), pos.getZ(), pos.getY(), ceilingY).isPresent();
     }
 
+
+    static boolean hasOpenCellInColumn(Level world,
+                                       int x,
+                                       int z,
+                                       int floorY,
+                                       int ceilingY) {
+        return findOpenCellInColumn(world, x, z, floorY, ceilingY).isPresent();
+    }
 
     private static Optional<BlockPos> findOpenCellInColumn(Level world,
                                                             int x,
@@ -237,26 +219,12 @@ final class BuildingRoomScanner {
         return Optional.empty();
     }
 
-    private static boolean isSupported(Level world,
-                                       int x,
-                                       int floorY,
-                                       int z,
-                                       BlockPos.MutableBlockPos cursor) {
-        cursor.set(x, floorY - 1, z);
-        BlockState supportState = world.getBlockState(cursor);
-        var collisionShape = supportState.getCollisionShape(world, cursor);
-        if (collisionShape.isEmpty()) {
+    private static boolean isOpenVolumeCell(Level world, BlockPos pos, BlockState state) {
+        if (!state.getFluidState().isEmpty() || isBoundaryConnector(state)) {
             return false;
         }
-
-        double width = collisionShape.max(Direction.Axis.X) - collisionShape.min(Direction.Axis.X);
-        double depth = collisionShape.max(Direction.Axis.Z) - collisionShape.min(Direction.Axis.Z);
-        return width * depth >= 0.25D;
-    }
-
-    private static boolean isOpenVolumeCell(Level world, BlockPos pos, BlockState state) {
-        if (isBoundaryConnector(state) || !state.getFluidState().isEmpty()) {
-            return false;
+        if (isVerticalConnector(state)) {
+            return true;
         }
         return state.isAir() || state.canBeReplaced() || state.getCollisionShape(world, pos).isEmpty();
     }
@@ -303,14 +271,22 @@ final class BuildingRoomScanner {
     private static boolean isBoundaryConnector(BlockState state) {
         return state.getBlock() instanceof DoorBlock
                 || state.getBlock() instanceof TrapDoorBlock
-                || state.getBlock() instanceof FenceGateBlock
-                || state.getBlock() instanceof LadderBlock;
+                || state.getBlock() instanceof FenceGateBlock;
+    }
+
+    private static boolean isVerticalConnector(BlockState state) {
+        return state.getBlock() instanceof LadderBlock;
+    }
+
+    private static boolean blocksVerticalConnectorTraversal(Direction direction,
+                                                             BlockState currentState,
+                                                             BlockState nextState) {
+        return direction.getAxis() == Direction.Axis.Y
+                && (isVerticalConnector(currentState) || isVerticalConnector(nextState));
     }
 
     private static boolean isEntrance(BlockState state) {
-        return state.getBlock() instanceof DoorBlock
-                || state.getBlock() instanceof TrapDoorBlock
-                || state.getBlock() instanceof FenceGateBlock;
+        return isBoundaryConnector(state);
     }
 
     enum Status {
