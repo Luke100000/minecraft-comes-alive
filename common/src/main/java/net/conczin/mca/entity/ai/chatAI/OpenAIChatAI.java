@@ -31,7 +31,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 public class OpenAIChatAI implements ChatAIStrategy {
-    private static final int MAX_MEMORY = 500;
+    private static final int MAX_MEMORY = 768;
     private static final int MAX_MEMORY_TIME = 20 * 60 * 45;
 
     private static final Map<UUID, List<Tuple<String, String>>> memory = new HashMap<>();
