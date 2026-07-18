@@ -217,73 +217,17 @@ public class Building {
     }
 
     /**
-     * Resolves one canonical semantic floor band for a query Y. The anchor is
-     * persistent floor identity; min/maxFloorY only bound the physical support
-     * planes that the whole-building detector may have clustered into that band.
+     * Maps a known physical floor Y to the canonical semantic floor owned by this
+     * structure. Player-position resolution is deliberately handled elsewhere: this
+     * method never searches upward/downward and never decides which floor a player is on.
      */
-    Optional<FloorBand> resolveFloorBand(int y) {
-        if (floorRegions.isEmpty()) {
-            return Optional.empty();
-        }
-
-        int lowestAnchor = Integer.MAX_VALUE;
-        int anchorY = Integer.MIN_VALUE;
-        for (BuildingFloorRegion region : floorRegions) {
-            int candidateY = region.anchorY();
-            lowestAnchor = Math.min(lowestAnchor, candidateY);
-            if (candidateY <= y) {
-                anchorY = Math.max(anchorY, candidateY);
-            }
-        }
-
-        if (anchorY == Integer.MIN_VALUE) {
-            anchorY = lowestAnchor;
-            if (y < anchorY - BuildingFloorRegionDetector.FLOOR_CLUSTER_TOLERANCE) {
-                return Optional.empty();
-            }
-        }
-
-        int previousAnchor = Integer.MIN_VALUE;
-        int nextAnchor = Integer.MAX_VALUE;
-        for (BuildingFloorRegion region : floorRegions) {
-            int candidateY = region.anchorY();
-            if (candidateY < anchorY) {
-                previousAnchor = Math.max(previousAnchor, candidateY);
-            } else if (candidateY > anchorY) {
-                nextAnchor = Math.min(nextAnchor, candidateY);
-            }
-        }
-
-        int minFloorY = anchorY - BuildingFloorRegionDetector.FLOOR_CLUSTER_TOLERANCE;
-        if (previousAnchor != Integer.MIN_VALUE) {
-            int lowerBoundary = Math.floorDiv(previousAnchor + anchorY, 2) + 1;
-            minFloorY = Math.max(minFloorY, lowerBoundary);
-        }
-
-        int ceilingY = nextAnchor == Integer.MAX_VALUE
-                ? Math.max(anchorY + 1, pos1Y + 1)
-                : nextAnchor;
-        int maxFloorY = anchorY + BuildingFloorRegionDetector.FLOOR_CLUSTER_TOLERANCE;
-        if (nextAnchor != Integer.MAX_VALUE) {
-            int upperBoundary = Math.floorDiv(anchorY + nextAnchor, 2);
-            maxFloorY = Math.min(maxFloorY, upperBoundary);
-        }
-        maxFloorY = Math.min(maxFloorY, ceilingY - 1);
-        return minFloorY <= maxFloorY
-                ? Optional.of(new FloorBand(anchorY, minFloorY, maxFloorY, ceilingY))
-                : Optional.empty();
-    }
-
-    record FloorBand(int anchorY, int minFloorY, int maxFloorY, int ceilingY) {
-    }
-
-    Optional<FloorBand> resolvePhysicalFloorBand(int y) {
+    Optional<FloorBand> resolveFloorBand(int physicalY) {
         int bestAnchor = 0;
         int bestDistance = Integer.MAX_VALUE;
         boolean found = false;
         for (BuildingFloorRegion region : floorRegions) {
             int anchorY = region.anchorY();
-            int distance = Math.abs(anchorY - y);
+            int distance = Math.abs(anchorY - physicalY);
             if (distance < bestDistance
                     || (distance == bestDistance && (!found || anchorY < bestAnchor))) {
                 bestAnchor = anchorY;
@@ -294,7 +238,21 @@ public class Building {
         if (!found || bestDistance > BuildingFloorRegionDetector.FLOOR_CLUSTER_TOLERANCE) {
             return Optional.empty();
         }
-        return resolveFloorBand(bestAnchor);
+
+        int nextAnchor = Integer.MAX_VALUE;
+        for (BuildingFloorRegion region : floorRegions) {
+            int anchorY = region.anchorY();
+            if (anchorY > bestAnchor) {
+                nextAnchor = Math.min(nextAnchor, anchorY);
+            }
+        }
+        int ceilingY = nextAnchor == Integer.MAX_VALUE
+                ? Math.max(bestAnchor + 1, pos1Y + 1)
+                : nextAnchor;
+        return Optional.of(new FloorBand(bestAnchor, ceilingY));
+    }
+
+    record FloorBand(int anchorY, int ceilingY) {
     }
 
     void canonicalizeFloor(Building root) {
@@ -302,7 +260,7 @@ public class Building {
             return;
         }
 
-        FloorBand band = root.resolvePhysicalFloorBand(floorY).orElse(null);
+        FloorBand band = root.resolveFloorBand(floorY).orElse(null);
         if (band == null) {
             return;
         }

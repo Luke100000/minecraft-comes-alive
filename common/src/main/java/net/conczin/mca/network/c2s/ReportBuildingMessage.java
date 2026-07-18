@@ -95,7 +95,7 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
         }
 
         villages.ensureStructureHierarchy(village);
-        Building room = village.getFunctionalRoomAt(source).orElse(null);
+        Building room = village.getFunctionalRoomAt(player.serverLevel(), source).orElse(null);
         if (room == null) {
             player.displayClientMessage(Component.translatable("blueprint.noRoomOnFloor"), true);
             return;
@@ -117,7 +117,7 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
         Village nearestVillage = villages.findNearestVillage(player).orElse(null);
         Village.StructuralLookup structuralLookup = nearestVillage == null
                 ? null
-                : nearestVillage.getStructuralLookup(source);
+                : nearestVillage.getStructuralLookup(player.serverLevel(), source);
         Village.StructuralPosition structuralPosition = structuralLookup == null
                 ? Village.StructuralPosition.OUTSIDE
                 : structuralLookup.position();
@@ -139,7 +139,7 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
                            String forcedType,
                            int originalExpectedRoomId) {
         Village village = villages.findNearestVillage(source, Village.MERGE_MARGIN).orElse(null);
-        Building existing = village == null ? null : village.getFunctionalRoomAt(source).orElse(null);
+        Building existing = village == null ? null : village.getFunctionalRoomAt(player.serverLevel(), source).orElse(null);
         if (originalExpectedRoomId >= 0
                 && (existing == null || existing.getId() != originalExpectedRoomId)) {
             player.displayClientMessage(Component.translatable("blueprint.roomUpdateConflict"), true);
@@ -162,7 +162,7 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
             return;
         }
         if (forcedType == null && update.isAmbiguous()) {
-            requestType(update.requested(), player, Action.UPDATE_ROOM, expectedRoomId);
+            requestType(update.typeSelectionScan(), player, Action.UPDATE_ROOM, expectedRoomId);
             return;
         }
 
@@ -191,7 +191,8 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
                               BuildingScanResult scan,
                               String forcedType) {
         if (scan.village() != null
-                && scan.village().getStructuralPosition(scan.source()) == Village.StructuralPosition.REGISTERED_ROOM) {
+                && scan.village().getStructuralPosition(
+                player.serverLevel(), scan.source()) == Village.StructuralPosition.REGISTERED_ROOM) {
             player.displayClientMessage(Component.translatable("blueprint.roomAlreadyAdded"), true);
             return;
         }

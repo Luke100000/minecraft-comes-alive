@@ -1,7 +1,9 @@
 package net.conczin.mca.server.world.data;
 
 import net.conczin.mca.MCA;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.Vec3i;
+import net.minecraft.world.level.Level;
 
 import java.util.*;
 import java.util.stream.Stream;
@@ -175,6 +177,107 @@ final class BuildingStructureManager {
                 .toList();
     }
 
+    static Optional<Building> functionalRoomAt(Village village, Level world, BlockPos pos) {
+        if (village == null || world == null) {
+            return functionalRoomAt(village, pos);
+        }
+
+        Map<Integer, BuildingFloorResolver.ResolvedFloor> floorsByStructure = new HashMap<>();
+        Set<Integer> unresolvedStructures = new HashSet<>();
+        Building best = null;
+
+        for (Building room : village.getBuildings().values()) {
+            if (!room.isComplete() || !room.isFunctionalRoom()
+                    || !room.containsFloorColumn(pos.getX(), pos.getZ())) {
+                continue;
+            }
+
+            int structureId = room.getEffectiveStructureId();
+            Building structureRoot = root(village, structureId).orElse(null);
+            if (structureRoot == null || unresolvedStructures.contains(structureId)) {
+                continue;
+            }
+
+            BuildingFloorResolver.ResolvedFloor floor = floorsByStructure.get(structureId);
+            if (floor == null) {
+                floor = BuildingFloorResolver.resolve(world, pos, structureRoot).orElse(null);
+                if (floor == null) {
+                    unresolvedStructures.add(structureId);
+                    continue;
+                }
+                floorsByStructure.put(structureId, floor);
+            }
+
+            if (canonicalFloorY(structureRoot, room.getFloorY()) == floor.semanticY()
+                    && (best == null || room.getId() < best.getId())) {
+                best = room;
+            }
+        }
+
+        if (best != null) {
+            return Optional.of(best);
+        }
+
+        // Legacy strict rooms without a valid root have no canonical floor owner yet.
+        // Keep the old raw-Y lookup only for those migration cases; rooted rooms must
+        // never bypass the canonical resolver after it rejected their floor.
+        return village.getBuildings().values().stream()
+                .filter(Building::isComplete)
+                .filter(Building::isFunctionalRoom)
+                .filter(room -> !hasValidRoot(village, room.getEffectiveStructureId()))
+                .filter(room -> room.containsRawPos(pos))
+                .filter(room -> room.getFloorDistanceTo(pos) <= Building.SEMANTIC_FLOOR_TOLERANCE)
+                .min(Comparator.comparingInt((Building room) -> room.getFloorDistanceTo(pos))
+                        .thenComparingInt(Building::getId));
+    }
+
+    static Optional<Building> functionalRoomAt(Village village, Vec3i pos) {
+        if (village == null) {
+            return Optional.empty();
+        }
+        return village.getBuildings().values().stream()
+                .filter(Building::isComplete)
+                .filter(Building::isFunctionalRoom)
+                .filter(building -> building.containsRawPos(pos))
+                .filter(building -> building.getFloorDistanceTo(pos) <= Building.SEMANTIC_FLOOR_TOLERANCE)
+                .min(Comparator.comparingInt((Building building) -> building.getFloorDistanceTo(pos))
+                        .thenComparingInt(Building::getId));
+    }
+
+    static int canonicalFloorY(Village village, Building room) {
+        if (room == null) {
+            return Integer.MIN_VALUE;
+        }
+        return canonicalFloorY(village, room.getEffectiveStructureId(), room.getFloorY());
+    }
+
+    private static int canonicalFloorY(Village village, int structureId, int floorY) {
+        return root(village, structureId)
+                .map(structureRoot -> canonicalFloorY(structureRoot, floorY))
+                .orElse(floorY);
+    }
+
+    private static int canonicalFloorY(Building structureRoot, int floorY) {
+        return structureRoot.resolveFloorBand(floorY)
+                .map(Building.FloorBand::anchorY)
+                .orElse(floorY);
+    }
+
+    static boolean isGroundFloor(Village village, Building room) {
+        Building structureRoot = room == null
+                ? null
+                : root(village, room.getEffectiveStructureId()).orElse(null);
+        return structureRoot != null && isGroundFloor(structureRoot, room.getFloorY());
+    }
+
+    static boolean isGroundFloor(Building structureRoot, int floorY) {
+        if (structureRoot == null) {
+            return false;
+        }
+        return canonicalFloorY(structureRoot, floorY)
+                == canonicalFloorY(structureRoot, structureRoot.getGroundFloorY());
+    }
+
     static void removeStructure(Village village, int structureId) {
         if (village == null) {
             return;
@@ -183,12 +286,48 @@ final class BuildingStructureManager {
         village.removeBuildings(ids);
     }
 
+    static BuildingScanResult resolveScanIdentity(BuildingScanResult scan,
+                                                  int preferredBuildingId,
+                                                  boolean assignIfNew) {
+        if (scan.result() != Building.validationResult.SUCCESS) {
+            return scan;
+        }
+
+        Building building = scan.building();
+        MatchResult match = matchExistingRoom(building, scan.village(), preferredBuildingId);
+        Building.validationResult result = match.result();
+        int existingBuildingId = -1;
+        List<Integer> mergedBuildingIds = List.of();
+
+        if (result == Building.validationResult.SUCCESS && match.hasMatch()) {
+            Building existing = match.primary();
+            building.setStructureId(existing.getStructureId());
+            building.setStructureRoot(existing.isStructureRoot());
+            existingBuildingId = existing.getId();
+            mergedBuildingIds = match.mergedBuildingIds();
+        } else if (result == Building.validationResult.SUCCESS
+                && assignIfNew
+                && building.isStrictScan()) {
+            result = assignNewRoom(building, scan.village());
+        }
+
+        return new BuildingScanResult(
+                result,
+                scan.source(),
+                scan.strictScan(),
+                building,
+                scan.matchingTypes(),
+                scan.village(),
+                existingBuildingId,
+                mergedBuildingIds
+        );
+    }
+
     /**
      * Finds whether a freshly scanned shape is an existing room.
      *
-     * <p>Split rule: when a new room is wholly inside an old room but does not
-     * contain that old room's persistent source anchor, it is the new side of a
-     * split and never inherits the old room identity.</p>
+     * <p>Ordinary matching keeps persistent room identity stable. Split identity is
+     * resolved separately after all disconnected components have been discovered.</p>
      */
     static MatchResult matchExistingRoom(Building scanned, Village village, int preferredBuildingId) {
         if (village == null) {
@@ -284,9 +423,8 @@ final class BuildingStructureManager {
                 || added.getHorizontalFootprintIntersectionArea(expected) != addedArea) {
             return Building.validationResult.OVERLAP;
         }
-        if (!retained.containsFloorPosition(expected.getSourceBlock())
-                || added.containsFloorPosition(expected.getSourceBlock())
-                || retained.getHorizontalFootprintIntersectionArea(added) > 0L) {
+        if (retained.getHorizontalFootprintIntersectionArea(added) > 0L
+                || selectSplitRetainedSide(expected, retained, added).orElse(null) != retained) {
             return Building.validationResult.OVERLAP;
         }
 
@@ -306,29 +444,62 @@ final class BuildingStructureManager {
         return Building.validationResult.SUCCESS;
     }
 
+    static Optional<Building> selectSplitRetainedSide(Building expected,
+                                                       Building first,
+                                                       Building second) {
+        if (expected == null || first == null || second == null) {
+            return Optional.empty();
+        }
+
+        boolean firstHasAnchor = first.containsFloorPosition(expected.getSourceBlock());
+        boolean secondHasAnchor = second.containsFloorPosition(expected.getSourceBlock());
+        if (firstHasAnchor != secondHasAnchor) {
+            return Optional.of(firstHasAnchor ? first : second);
+        }
+        if (firstHasAnchor) {
+            return Optional.empty();
+        }
+
+        long firstOverlap = first.getHorizontalFootprintIntersectionArea(expected);
+        long secondOverlap = second.getHorizontalFootprintIntersectionArea(expected);
+        if (firstOverlap != secondOverlap) {
+            return Optional.of(firstOverlap > secondOverlap ? first : second);
+        }
+
+        double firstDistance = first.getCenter().distSqr(expected.getSourceBlock());
+        double secondDistance = second.getCenter().distSqr(expected.getSourceBlock());
+        int distanceComparison = Double.compare(firstDistance, secondDistance);
+        if (distanceComparison != 0) {
+            return Optional.of(distanceComparison < 0 ? first : second);
+        }
+
+        Comparator<Building> deterministic = Comparator
+                .comparingInt((Building building) -> building.getSourceBlock().getX())
+                .thenComparingInt(building -> building.getSourceBlock().getZ())
+                .thenComparingInt(building -> building.getSourceBlock().getY());
+        return Optional.of(deterministic.compare(first, second) <= 0 ? first : second);
+    }
+
+    static boolean sameRoomGeometry(Building first, Building second, Village village) {
+        if (first == null || second == null
+                || !sameCanonicalFloor(village, first.getEffectiveStructureId(), first, second)) {
+            return false;
+        }
+        long firstArea = first.getFloorFootprintArea();
+        long secondArea = second.getFloorFootprintArea();
+        return firstArea == secondArea
+                && first.getHorizontalFootprintIntersectionArea(second) == firstArea;
+    }
+
     private static boolean sameCanonicalFloor(Village village,
                                               int structureId,
                                               Building... rooms) {
-        Building structureRoot = root(village, structureId).orElse(null);
-        if (structureRoot == null) {
-            int floorY = rooms[0].getFloorY();
-            for (int i = 1; i < rooms.length; i++) {
-                if (rooms[i].getFloorY() != floorY) {
-                    return false;
-                }
-            }
+        if (rooms.length == 0) {
             return true;
         }
-
-        Integer anchorY = null;
-        for (Building room : rooms) {
-            Building.FloorBand band = structureRoot.resolvePhysicalFloorBand(room.getFloorY()).orElse(null);
-            if (band == null) {
-                return false;
-            }
-            if (anchorY == null) {
-                anchorY = band.anchorY();
-            } else if (anchorY != band.anchorY()) {
+        int floorY = canonicalFloorY(village, structureId, rooms[0].getFloorY());
+        for (int i = 1; i < rooms.length; i++) {
+            if (canonicalFloorY(village, structureId, rooms[i].getFloorY()) != floorY) {
                 return false;
             }
         }
@@ -413,16 +584,9 @@ final class BuildingStructureManager {
     }
 
     private static boolean sharesSemanticFloor(Building scanned, Building existing, Village village) {
-        Building structureRoot = root(village, existing.getEffectiveStructureId()).orElse(null);
-        if (structureRoot == null) {
-            return Math.abs(scanned.getFloorY() - existing.getFloorY())
-                    <= Building.SEMANTIC_FLOOR_TOLERANCE;
-        }
-
-        Building.FloorBand scannedBand = structureRoot.resolvePhysicalFloorBand(scanned.getFloorY()).orElse(null);
-        Building.FloorBand existingBand = structureRoot.resolvePhysicalFloorBand(existing.getFloorY()).orElse(null);
-        return scannedBand != null && existingBand != null
-                && scannedBand.anchorY() == existingBand.anchorY();
+        int structureId = existing.getEffectiveStructureId();
+        return canonicalFloorY(village, structureId, scanned.getFloorY())
+                == canonicalFloorY(village, structureId, existing.getFloorY());
     }
 
     private static boolean roomsOverlapOnSemanticFloor(Building first, Building second, Village village) {
