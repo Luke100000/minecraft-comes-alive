@@ -20,14 +20,14 @@ final class BlueprintFloorLayout {
     // group scan samples more loosely, but that must not merge a basement room into Ground Floor.
     private static final int FLOOR_CLUSTER_TOLERANCE = Building.SEMANTIC_FLOOR_TOLERANCE;
 
-    private final Map<Integer, List<AssignedRegion>> assignedRegions;
+    private final Map<Integer, List<AssignedFloor>> assignedFloors;
     private final List<Integer> ordinals;
     private final List<VerticalStack> stacks;
 
-    private BlueprintFloorLayout(Map<Integer, List<AssignedRegion>> assignedRegions,
+    private BlueprintFloorLayout(Map<Integer, List<AssignedFloor>> assignedFloors,
                                  List<Integer> ordinals,
                                  List<VerticalStack> stacks) {
-        this.assignedRegions = assignedRegions;
+        this.assignedFloors = assignedFloors;
         this.ordinals = ordinals;
         this.stacks = stacks;
     }
@@ -65,7 +65,7 @@ final class BlueprintFloorLayout {
             rootGroundAnchors.put(building.getEffectiveStructureId(), building.getGroundFloorY());
         }
 
-        Map<Integer, List<AssignedRegion>> mutableAssignedRegions = new HashMap<>();
+        Map<Integer, List<AssignedFloor>> mutableAssignedFloors = new HashMap<>();
         TreeSet<Integer> availableOrdinals = new TreeSet<>();
         List<VerticalStack> stacks = new ArrayList<>();
 
@@ -93,11 +93,9 @@ final class BlueprintFloorLayout {
                 }
 
                 for (FloorCandidate candidate : level.candidates()) {
-                    List<AssignedRegion> regions = mutableAssignedRegions
-                            .computeIfAbsent(candidate.buildingId(), ignored -> new ArrayList<>());
-                    for (RegionBounds bounds : candidate.bounds()) {
-                        regions.add(new AssignedRegion(ordinal, candidate.anchorY(), bounds));
-                    }
+                    mutableAssignedFloors
+                            .computeIfAbsent(candidate.buildingId(), ignored -> new ArrayList<>())
+                            .add(new AssignedFloor(ordinal));
                 }
             }
 
@@ -105,7 +103,7 @@ final class BlueprintFloorLayout {
         }
 
         return new BlueprintFloorLayout(
-                freezeRegionMap(mutableAssignedRegions),
+                freezeFloorMap(mutableAssignedFloors),
                 List.copyOf(availableOrdinals),
                 List.copyOf(stacks)
         );
@@ -154,34 +152,14 @@ final class BlueprintFloorLayout {
             return false;
         }
 
-        List<AssignedRegion> regions = assignedRegions.get(building.getId());
-        return regions != null && !regions.isEmpty()
-                && (selectedFloor == null || regions.stream().anyMatch(region -> region.ordinal() == selectedFloor));
-    }
-
-    List<RegionBounds> regionsFor(Building building, Integer selectedFloor) {
-        if (selectedFloor == null) {
-            return List.of(RegionBounds.fromBuilding(building));
-        }
-        if (!isBuildingVisible(building, selectedFloor)) {
-            return List.of();
-        }
-        if (building.getBuildingType().grouped()) {
-            return List.of(RegionBounds.fromBuilding(building));
-        }
-        LinkedHashSet<RegionBounds> regions = new LinkedHashSet<>();
-        for (AssignedRegion assigned : assignedRegions.getOrDefault(building.getId(), List.of())) {
-            if (assigned.ordinal() == selectedFloor) {
-                regions.add(assigned.bounds());
-            }
-        }
-
-        return List.copyOf(regions);
+        List<AssignedFloor> floors = assignedFloors.get(building.getId());
+        return floors != null && !floors.isEmpty()
+                && (selectedFloor == null || floors.stream().anyMatch(floor -> floor.ordinal() == selectedFloor));
     }
 
     OptionalInt floorOrdinalFor(Building building) {
-        return assignedRegions.getOrDefault(building.getId(), List.of()).stream()
-                .mapToInt(AssignedRegion::ordinal)
+        return assignedFloors.getOrDefault(building.getId(), List.of()).stream()
+                .mapToInt(AssignedFloor::ordinal)
                 .findFirst();
     }
 
@@ -192,34 +170,20 @@ final class BlueprintFloorLayout {
                     building.getId(),
                     building.getEffectiveStructureId(),
                     building.getFloorY(),
-                    Math.max(1, building.getHorizontalArea()),
-                    List.of(RegionBounds.fromBuilding(building))
+                    Math.max(1, building.getHorizontalArea())
             ));
         }
 
         List<FloorCandidate> candidates = new ArrayList<>();
         for (BuildingFloorRegion region : regions) {
-            List<RegionBounds> bounds = boundsFor(region);
-            if (bounds.isEmpty()) {
-                bounds = List.of(RegionBounds.fromBuilding(building));
-            }
             candidates.add(new FloorCandidate(
                     building.getId(),
                     building.getEffectiveStructureId(),
                     region.anchorY(),
-                    Math.max(1, region.area()),
-                    bounds
+                    Math.max(1, region.area())
             ));
         }
         return List.copyOf(candidates);
-    }
-
-
-    private static List<RegionBounds> boundsFor(BuildingFloorRegion region) {
-        return region.components().stream()
-                .map(RegionBounds::fromComponent)
-                .distinct()
-                .toList();
     }
 
     private static Map<Integer, List<FloorCandidate>> getVerticalStacks(List<FloorCandidate> candidates) {
@@ -271,49 +235,19 @@ final class BlueprintFloorLayout {
         return bestIndex;
     }
 
-    private static long square(long value) {
-        return value * value;
-    }
-
-    private static Map<Integer, List<AssignedRegion>> freezeRegionMap(Map<Integer, List<AssignedRegion>> source) {
-        Map<Integer, List<AssignedRegion>> frozen = new HashMap<>();
-        source.forEach((buildingId, regions) -> frozen.put(buildingId, List.copyOf(regions)));
+    private static Map<Integer, List<AssignedFloor>> freezeFloorMap(Map<Integer, List<AssignedFloor>> source) {
+        Map<Integer, List<AssignedFloor>> frozen = new HashMap<>();
+        source.forEach((buildingId, floors) -> frozen.put(buildingId, List.copyOf(floors)));
         return Map.copyOf(frozen);
-    }
-
-    record RegionBounds(int minX, int minZ, int maxX, int maxZ) {
-        static RegionBounds fromBuilding(Building building) {
-            BlockPos min = building.getRawPos0();
-            BlockPos max = building.getRawPos1();
-            return new RegionBounds(min.getX(), min.getZ(), max.getX(), max.getZ());
-        }
-
-        static RegionBounds fromComponent(BuildingFloorRegion.Component component) {
-            return new RegionBounds(component.minX(), component.minZ(), component.maxX(), component.maxZ());
-        }
-
-        boolean containsHorizontally(int x, int z) {
-            return x >= minX && x <= maxX && z >= minZ && z <= maxZ;
-        }
-
-        long horizontalDistanceSqr(int x, int z) {
-            long dx = x < minX ? (long) minX - x : x > maxX ? (long) x - maxX : 0L;
-            long dz = z < minZ ? (long) minZ - z : z > maxZ ? (long) z - maxZ : 0L;
-            return square(dx) + square(dz);
-        }
     }
 
     private record FloorCandidate(int buildingId,
                                   int structureId,
                                   int anchorY,
-                                  long weight,
-                                  List<RegionBounds> bounds) {
-        private FloorCandidate {
-            bounds = List.copyOf(bounds);
-        }
+                                  long weight) {
     }
 
-    private record AssignedRegion(int ordinal, int anchorY, RegionBounds bounds) {
+    private record AssignedFloor(int ordinal) {
     }
 
     private record VerticalStack(int structureId, List<StackFloorLevel> levels, int groundLevelIndex) {

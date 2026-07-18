@@ -218,7 +218,6 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
     @Override
     protected void followThePath() {
         if (this.path == null || this.path.isDone()) {
-            super.followThePath();
             return;
         }
 
@@ -370,7 +369,6 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
 
         if (path == null || path.isDone()) {
             resetMotionTrace();
-            stopStaleUpwardMotion();
             return;
         }
 
@@ -378,7 +376,6 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
 
         if (nextNodeIndex >= path.getNodeCount()) {
             resetMotionTrace();
-            stopStaleUpwardMotion();
             return;
         }
 
@@ -481,13 +478,6 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
                 0.0D,
                 movement.z()
         );
-    }
-
-    private void stopStaleUpwardMotion() {
-        Vec3 movement = this.mob.getDeltaMovement();
-        if (movement.y() > 0.0D) {
-            this.mob.setDeltaMovement(movement.x(), 0.0D, movement.z());
-        }
     }
 
     private boolean isClimbable(BlockPos pos) {

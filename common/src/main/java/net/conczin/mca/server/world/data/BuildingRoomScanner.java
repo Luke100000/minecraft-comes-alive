@@ -32,25 +32,27 @@ final class BuildingRoomScanner {
                        int maxSize,
                        int maxRadius,
                        Building structureRoot) {
-        Optional<BlockPos> resolvedSeed = resolveInteriorSeed(world, source, structureRoot);
+        Optional<ResolvedSeed> resolvedSeed = resolveInteriorSeed(world, source, structureRoot);
         if (resolvedSeed.isEmpty()) {
             return Result.failure(Status.TOO_SMALL, source);
         }
 
-        BlockPos seed = resolvedSeed.get();
-        int floorY = seed.getY();
-        int ceilingY = resolveCeilingY(structureRoot, floorY);
-        if (ceilingY <= floorY) {
+        ResolvedSeed resolved = resolvedSeed.get();
+        BlockPos seed = resolved.seed();
+        int scanFloorY = seed.getY();
+        int floorY = resolved.floorY();
+        int ceilingY = resolved.ceilingY();
+        if (ceilingY <= scanFloorY) {
             return Result.failure(Status.TOO_SMALL, seed);
         }
 
         Optional<BlockPos> openSeed = findOpenCellInColumn(
-                world, seed.getX(), seed.getZ(), floorY, ceilingY);
+                world, seed.getX(), seed.getZ(), scanFloorY, ceilingY);
         if (openSeed.isEmpty()) {
             return Result.failure(Status.TOO_SMALL, seed);
         }
 
-        int bandHeight = Math.max(1, ceilingY - floorY);
+        int bandHeight = Math.max(1, ceilingY - scanFloorY);
         long maxVolume = Math.max(1L, (long) maxSize * bandHeight);
         Set<BlockPos> blockedCells = blocked == null ? Set.of() : blocked;
 
@@ -76,7 +78,7 @@ final class BuildingRoomScanner {
                 int nextX = x + direction.getStepX();
                 int nextY = y + direction.getStepY();
                 int nextZ = z + direction.getStepZ();
-                if (nextY < floorY || nextY >= ceilingY) {
+                if (nextY < scanFloorY || nextY >= ceilingY) {
                     continue;
                 }
 
@@ -107,10 +109,10 @@ final class BuildingRoomScanner {
 
         LinkedHashSet<BlockPos> footprint = new LinkedHashSet<>();
         BlockPos.MutableBlockPos supportCursor = new BlockPos.MutableBlockPos();
-        for (long column : openColumns.stream().sorted().toList()) {
+        for (long column : openColumns) {
             int x = unpackColumnX(column);
             int z = unpackColumnZ(column);
-            if (!isSupported(world, x, floorY, z, supportCursor)) {
+            if (!isSupported(world, x, scanFloorY, z, supportCursor)) {
                 continue;
             }
 
@@ -128,7 +130,7 @@ final class BuildingRoomScanner {
             return Result.failure(Status.TOO_SMALL, seed);
         }
 
-        Set<BlockPos> poiCells = collectPoiCells(world, footprint, floorY, ceilingY);
+        Set<BlockPos> poiCells = collectPoiCells(world, footprint, scanFloorY, ceilingY);
 
         int minX = footprint.stream().mapToInt(BlockPos::getX).min().orElse(seed.getX());
         int minZ = footprint.stream().mapToInt(BlockPos::getZ).min().orElse(seed.getZ());
@@ -138,48 +140,50 @@ final class BuildingRoomScanner {
         return new Result(
                 Status.SUCCESS,
                 seed,
-                Set.copyOf(footprint),
+                floorY,
                 Set.copyOf(footprint),
                 poiCells,
                 hasEntrance,
-                new BlockPos(minX, floorY, minZ),
-                new BlockPos(maxX, Math.max(floorY, ceilingY - 1), maxZ)
+                new BlockPos(minX, scanFloorY, minZ),
+                new BlockPos(maxX, Math.max(scanFloorY, ceilingY - 1), maxZ)
         );
     }
 
-    private static Optional<BlockPos> resolveInteriorSeed(Level world,
-                                                           BlockPos source,
-                                                           Building structureRoot) {
-        // A valid source floor is authoritative. The column may contain furniture or other
-        // blocks at floorY as long as connected room space exists somewhere before the
-        // next structural floor/ceiling.
-        if (isFloorCandidate(world, source, structureRoot)) {
-            return Optional.of(source);
-        }
-
-        // Otherwise prefer the nearest supported floor below the source. This naturally
-        // handles stairs, jumps, ledges and other ambiguous player positions.
-        Optional<BlockPos> lower = findInteriorSeedBelow(world, source, structureRoot);
-        if (lower.isPresent()) {
-            return lower;
-        }
-
-        Optional<BlockPos> sameLevel = findInteriorSeedAtY(world, source, source.getY(), structureRoot);
-        if (sameLevel.isPresent()) {
-            return sameLevel;
-        }
-
-        return findInteriorSeedAtY(world, source, source.getY() + 1, structureRoot);
-    }
-
-    private static Optional<BlockPos> findInteriorSeedBelow(Level world,
+    private static Optional<ResolvedSeed> resolveInteriorSeed(Level world,
                                                               BlockPos source,
                                                               Building structureRoot) {
-        for (int drop = 1; drop <= MAX_SEED_VERTICAL_SEARCH; drop++) {
-            Optional<BlockPos> candidate = findInteriorSeedAtY(
-                    world, source, source.getY() - drop, structureRoot);
+        if (structureRoot != null && !structureRoot.getFloorRegions().isEmpty()) {
+            return resolveInteriorSeedInStructure(world, source, structureRoot);
+        }
+        return resolveInteriorSeedLocally(world, source);
+    }
+
+    private static Optional<ResolvedSeed> resolveInteriorSeedInStructure(Level world,
+                                                                         BlockPos source,
+                                                                         Building structureRoot) {
+        int minY = structureRoot.getRawPos0().getY();
+        for (int y = source.getY(); y >= minY; y--) {
+            Building.FloorBand band = structureRoot.resolvePhysicalFloorBand(y).orElse(null);
+            if (band == null) {
+                continue;
+            }
+
+            Optional<BlockPos> candidate = findInteriorSeedAtY(world, source, y, band.ceilingY());
             if (candidate.isPresent()) {
-                return candidate;
+                return Optional.of(new ResolvedSeed(candidate.get(), band.anchorY(), band.ceilingY()));
+            }
+        }
+        return Optional.empty();
+    }
+
+    private static Optional<ResolvedSeed> resolveInteriorSeedLocally(Level world, BlockPos source) {
+        for (int drop = 0; drop <= MAX_SEED_VERTICAL_SEARCH; drop++) {
+            int y = source.getY() - drop;
+            int ceilingY = y + MAX_LOCAL_CEILING_SEARCH;
+            Optional<BlockPos> candidate = findInteriorSeedAtY(world, source, y, ceilingY);
+            if (candidate.isPresent()) {
+                BlockPos seed = candidate.get();
+                return Optional.of(new ResolvedSeed(seed, seed.getY(), ceilingY));
             }
         }
         return Optional.empty();
@@ -188,15 +192,15 @@ final class BuildingRoomScanner {
     private static Optional<BlockPos> findInteriorSeedAtY(Level world,
                                                            BlockPos source,
                                                            int y,
-                                                           Building structureRoot) {
+                                                           int ceilingY) {
         BlockPos center = new BlockPos(source.getX(), y, source.getZ());
-        if (isFloorCandidate(world, center, structureRoot)) {
+        if (isFloorCandidate(world, center, ceilingY)) {
             return Optional.of(center);
         }
 
         for (Direction direction : HORIZONTAL_DIRECTIONS) {
             BlockPos candidate = center.relative(direction);
-            if (isFloorCandidate(world, candidate, structureRoot)) {
+            if (isFloorCandidate(world, candidate, ceilingY)) {
                 return Optional.of(candidate);
             }
         }
@@ -205,8 +209,7 @@ final class BuildingRoomScanner {
 
     private static boolean isFloorCandidate(Level world,
                                              BlockPos pos,
-                                             Building structureRoot) {
-        int ceilingY = resolveCeilingY(structureRoot, pos.getY());
+                                             int ceilingY) {
         if (ceilingY <= pos.getY()) {
             return false;
         }
@@ -217,19 +220,6 @@ final class BuildingRoomScanner {
                 world, pos.getX(), pos.getZ(), pos.getY(), ceilingY).isPresent();
     }
 
-    private static int resolveCeilingY(Building structureRoot, int floorY) {
-        if (structureRoot != null) {
-            OptionalInt nextStructuralFloor = structureRoot.getFloorRegions().stream()
-                    .mapToInt(BuildingFloorRegion::anchorY)
-                    .filter(y -> y > floorY + Building.SEMANTIC_FLOOR_TOLERANCE)
-                    .min();
-            if (nextStructuralFloor.isPresent()) {
-                return Math.max(floorY + 1, nextStructuralFloor.getAsInt());
-            }
-            return Math.max(floorY + 1, structureRoot.getRawPos1().getY() + 1);
-        }
-        return floorY + MAX_LOCAL_CEILING_SEARCH;
-    }
 
     private static Optional<BlockPos> findOpenCellInColumn(Level world,
                                                             int x,
@@ -331,16 +321,18 @@ final class BuildingRoomScanner {
         TOO_SMALL
     }
 
+    private record ResolvedSeed(BlockPos seed, int floorY, int ceilingY) {
+    }
+
     record Result(Status status,
                   BlockPos seed,
-                  Set<BlockPos> interiorCells,
+                  int floorY,
                   Set<BlockPos> footprintCells,
                   Set<BlockPos> poiCells,
                   boolean hasEntrance,
                   BlockPos min,
                   BlockPos max) {
         Result {
-            interiorCells = Set.copyOf(interiorCells);
             footprintCells = Set.copyOf(footprintCells);
             poiCells = Set.copyOf(poiCells);
         }
@@ -349,7 +341,7 @@ final class BuildingRoomScanner {
             return new Result(
                     status,
                     seed,
-                    Set.of(),
+                    seed.getY(),
                     Set.of(),
                     Set.of(),
                     false,

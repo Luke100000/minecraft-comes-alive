@@ -216,6 +216,112 @@ public class Building {
         return floorRegions;
     }
 
+    /**
+     * Resolves one canonical semantic floor band for a query Y. The anchor is
+     * persistent floor identity; min/maxFloorY only bound the physical support
+     * planes that the whole-building detector may have clustered into that band.
+     */
+    Optional<FloorBand> resolveFloorBand(int y) {
+        if (floorRegions.isEmpty()) {
+            return Optional.empty();
+        }
+
+        int lowestAnchor = Integer.MAX_VALUE;
+        int anchorY = Integer.MIN_VALUE;
+        for (BuildingFloorRegion region : floorRegions) {
+            int candidateY = region.anchorY();
+            lowestAnchor = Math.min(lowestAnchor, candidateY);
+            if (candidateY <= y) {
+                anchorY = Math.max(anchorY, candidateY);
+            }
+        }
+
+        if (anchorY == Integer.MIN_VALUE) {
+            anchorY = lowestAnchor;
+            if (y < anchorY - BuildingFloorRegionDetector.FLOOR_CLUSTER_TOLERANCE) {
+                return Optional.empty();
+            }
+        }
+
+        int previousAnchor = Integer.MIN_VALUE;
+        int nextAnchor = Integer.MAX_VALUE;
+        for (BuildingFloorRegion region : floorRegions) {
+            int candidateY = region.anchorY();
+            if (candidateY < anchorY) {
+                previousAnchor = Math.max(previousAnchor, candidateY);
+            } else if (candidateY > anchorY) {
+                nextAnchor = Math.min(nextAnchor, candidateY);
+            }
+        }
+
+        int minFloorY = anchorY - BuildingFloorRegionDetector.FLOOR_CLUSTER_TOLERANCE;
+        if (previousAnchor != Integer.MIN_VALUE) {
+            int lowerBoundary = Math.floorDiv(previousAnchor + anchorY, 2) + 1;
+            minFloorY = Math.max(minFloorY, lowerBoundary);
+        }
+
+        int ceilingY = nextAnchor == Integer.MAX_VALUE
+                ? Math.max(anchorY + 1, pos1Y + 1)
+                : nextAnchor;
+        int maxFloorY = anchorY + BuildingFloorRegionDetector.FLOOR_CLUSTER_TOLERANCE;
+        if (nextAnchor != Integer.MAX_VALUE) {
+            int upperBoundary = Math.floorDiv(anchorY + nextAnchor, 2);
+            maxFloorY = Math.min(maxFloorY, upperBoundary);
+        }
+        maxFloorY = Math.min(maxFloorY, ceilingY - 1);
+        return minFloorY <= maxFloorY
+                ? Optional.of(new FloorBand(anchorY, minFloorY, maxFloorY, ceilingY))
+                : Optional.empty();
+    }
+
+    record FloorBand(int anchorY, int minFloorY, int maxFloorY, int ceilingY) {
+    }
+
+    Optional<FloorBand> resolvePhysicalFloorBand(int y) {
+        int bestAnchor = 0;
+        int bestDistance = Integer.MAX_VALUE;
+        boolean found = false;
+        for (BuildingFloorRegion region : floorRegions) {
+            int anchorY = region.anchorY();
+            int distance = Math.abs(anchorY - y);
+            if (distance < bestDistance
+                    || (distance == bestDistance && (!found || anchorY < bestAnchor))) {
+                bestAnchor = anchorY;
+                bestDistance = distance;
+                found = true;
+            }
+        }
+        if (!found || bestDistance > BuildingFloorRegionDetector.FLOOR_CLUSTER_TOLERANCE) {
+            return Optional.empty();
+        }
+        return resolveFloorBand(bestAnchor);
+    }
+
+    void canonicalizeFloor(Building root) {
+        if (root == null || !strictScan || structureRoot) {
+            return;
+        }
+
+        FloorBand band = root.resolvePhysicalFloorBand(floorY).orElse(null);
+        if (band == null) {
+            return;
+        }
+
+        int canonicalFloorY = band.anchorY();
+        boolean regionsAlreadyCanonical = floorRegions.stream()
+                .allMatch(region -> region.anchorY() == canonicalFloorY);
+        if (floorY == canonicalFloorY && regionsAlreadyCanonical) {
+            return;
+        }
+
+        floorY = canonicalFloorY;
+        groundFloorY = canonicalFloorY;
+        hasGroundFloorAnchor = true;
+        floorRegions = floorRegions.stream()
+                .map(region -> region.withAnchorY(canonicalFloorY))
+                .toList();
+    }
+
     void retainFloorClosestTo(int y) {
         if (floorRegions.size() <= 1) {
             return;
@@ -246,6 +352,36 @@ public class Building {
         return floorRegions.stream().anyMatch(region ->
                 Math.abs(region.anchorY() - pos.getY()) <= FLOOR_MATCH_TOLERANCE
                         && region.containsHorizontally(pos.getX(), pos.getZ()));
+    }
+
+    boolean containsFloorColumn(int x, int z) {
+        if (floorRegions.isEmpty()) {
+            return x >= pos0X && x <= pos1X && z >= pos0Z && z <= pos1Z;
+        }
+        return floorRegions.stream().anyMatch(region -> region.containsHorizontally(x, z));
+    }
+
+    long getHorizontalFootprintIntersectionArea(Building other) {
+        if (other == null) {
+            return 0L;
+        }
+        if (floorRegions.isEmpty() || other.floorRegions.isEmpty()) {
+            return getHorizontalBoundsIntersectionArea(other);
+        }
+
+        long intersection = 0L;
+        for (BuildingFloorRegion region : floorRegions) {
+            for (BuildingFloorRegion otherRegion : other.floorRegions) {
+                intersection += region.intersectionArea(otherRegion);
+            }
+        }
+        return intersection;
+    }
+
+    private long getHorizontalBoundsIntersectionArea(Building other) {
+        int x = Math.min(pos1X, other.pos1X) - Math.max(pos0X, other.pos0X) + 1;
+        int z = Math.min(pos1Z, other.pos1Z) - Math.max(pos0Z, other.pos0Z) + 1;
+        return x <= 0 || z <= 0 ? 0L : (long) x * z;
     }
 
     public boolean sharesFloorBandWith(Building other) {
@@ -502,19 +638,7 @@ public class Building {
                 ey = Math.max(ey, p.getY());
                 ez = Math.max(ez, p.getZ());
 
-                //count block types using BlockState for live tag resolution
-                BlockState blockState = world.getBlockState(p);
-                Block block = blockState.getBlock();
-                if (isBuildingBlock(blockState)) {
-                    if (block instanceof BedBlock) {
-                        // TODO: look for better solution for 7.4.0
-                        if (blockState.getValue(BedBlock.PART) == BedPart.HEAD) {
-                            addBlock(block, p);
-                        }
-                    } else {
-                        addBlock(block, p);
-                    }
-                }
+                recordBuildingBlock(world, p);
             }
 
             //adjust building dimensions
@@ -528,17 +652,7 @@ public class Building {
 
             size = interiorSize;
             int legacyFloorY = determineDominantFloorY(lowestInteriorY, pos0Y + 1);
-            List<BuildingFloorRegionDetector.DetectedRegion> detectedFloorRegions =
-                    BuildingFloorRegionDetector.detect(supportedCells);
-            if (strictScan && detectedFloorRegions.isEmpty()) {
-                detectedFloorRegions = BuildingFloorRegionDetector
-                        .detectSingleFloor(supportedCells, legacyFloorY)
-                        .stream()
-                        .toList();
-            }
-            floorRegions = detectedFloorRegions.stream()
-                    .map(BuildingFloorRegion::fromDetected)
-                    .toList();
+            floorRegions = BuildingFloorRegionDetector.detect(supportedCells);
             floorY = floorRegions.stream()
                     .max(Comparator.comparingInt(BuildingFloorRegion::area)
                             .thenComparing(Comparator.comparingInt(BuildingFloorRegion::anchorY).reversed()))
@@ -619,12 +733,6 @@ public class Building {
                 structureRoot
         );
 
-        MCA.LOGGER.info(
-                "[RoomScanV3] source={} seed={} status={} floorY={} interior={} footprint={} inspected={} entrance={} bounds={}..{}",
-                getSourceBlock(), scan.seed(), scan.status(), scan.seed().getY(),
-                scan.interiorCells().size(), scan.footprintCells().size(), scan.poiCells().size(),
-                scan.hasEntrance(), scan.min(), scan.max());
-
         validationResult failure = switch (scan.status()) {
             case SUCCESS -> validationResult.SUCCESS;
             case OVERLAP -> validationResult.OVERLAP;
@@ -640,19 +748,7 @@ public class Building {
         }
 
         for (BlockPos p : scan.poiCells()) {
-            BlockState blockState = world.getBlockState(p);
-            Block block = blockState.getBlock();
-            if (!isBuildingBlock(blockState)) {
-                continue;
-            }
-
-            if (block instanceof BedBlock) {
-                if (blockState.getValue(BedBlock.PART) == BedPart.HEAD) {
-                    addBlock(block, p);
-                }
-            } else {
-                addBlock(block, p);
-            }
+            recordBuildingBlock(world, p);
         }
 
         BlockPos seed = scan.seed();
@@ -667,8 +763,8 @@ public class Building {
         pos1Y = scan.max().getY();
         pos1Z = scan.max().getZ();
 
-        size = scan.interiorCells().size();
-        floorY = seed.getY();
+        size = scan.footprintCells().size();
+        floorY = scan.floorY();
         floorRegions = List.of(BuildingFloorRegion.fromFootprint(floorY, scan.footprintCells()));
 
         // Rooms retain a local anchor for save compatibility. The semantic structure
@@ -942,6 +1038,19 @@ public class Building {
         return false;
     }
 
+    private void recordBuildingBlock(Level world, BlockPos pos) {
+        BlockState state = world.getBlockState(pos);
+        if (!isBuildingBlock(state)) {
+            return;
+        }
+
+        Block block = state.getBlock();
+        if (!(block instanceof BedBlock)
+                || state.getValue(BedBlock.PART) == BedPart.HEAD) {
+            addBlock(block, pos);
+        }
+    }
+
     public boolean determineType() {
         List<BuildingType> matches = getMatchingTypes();
         if (matches.isEmpty()) {
@@ -1011,6 +1120,13 @@ public class Building {
         return pos.getX() >= pos0X && pos.getX() <= pos1X
                && pos.getY() >= pos0Y && pos.getY() <= pos1Y
                && pos.getZ() >= pos0Z && pos.getZ() <= pos1Z;
+    }
+
+    boolean containsHorizontalPosition(Vec3i pos) {
+        return pos.getX() >= pos0X - PLAYER_POSITION_HORIZONTAL_MARGIN
+                && pos.getX() <= pos1X + PLAYER_POSITION_HORIZONTAL_MARGIN
+                && pos.getZ() >= pos0Z - PLAYER_POSITION_HORIZONTAL_MARGIN
+                && pos.getZ() <= pos1Z + PLAYER_POSITION_HORIZONTAL_MARGIN;
     }
 
     /**

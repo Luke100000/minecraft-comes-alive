@@ -119,7 +119,17 @@ public class Village implements Iterable<Building> {
     }
 
     public void removeBuilding(int id) {
-        buildings.remove(id);
+        removeBuildings(List.of(id));
+    }
+
+    void removeBuildings(Collection<Integer> ids) {
+        boolean changed = false;
+        for (int id : ids) {
+            changed |= buildings.remove(id) != null;
+        }
+        if (!changed) {
+            return;
+        }
         if (!buildings.isEmpty()) {
             calculateDimensions();
         }
@@ -144,6 +154,25 @@ public class Village implements Iterable<Building> {
                 .or(() -> getBuildings().values().stream()
                         .filter(building -> building.containsPos(pos))
                         .min(Comparator.comparingInt(Building::getId)));
+    }
+
+    Optional<Building> getBuildingTarget(Vec3i pos) {
+        Optional<Building> nearby = buildings.values().stream()
+                .filter(building -> building.containsPos(pos)
+                        || building.containsPositionWithMargin(
+                        pos, Building.PLAYER_POSITION_HORIZONTAL_MARGIN, Building.PLAYER_POSITION_VERTICAL_MARGIN))
+                .min(Comparator
+                        .comparing((Building building) -> !building.containsPos(pos))
+                        .thenComparingDouble(building -> building.getCenter().distSqr(pos)));
+        if (nearby.isPresent()) {
+            return nearby;
+        }
+
+        return buildings.values().stream()
+                .filter(building -> !building.getBuildingType().grouped())
+                .filter(building -> building.containsHorizontalPosition(pos))
+                .filter(building -> building.getVerticalDistanceTo(pos) <= 16)
+                .min(Comparator.comparingDouble(building -> building.getCenter().distSqr(pos)));
     }
 
     public void calculateDimensions() {
@@ -439,22 +468,32 @@ public class Village implements Iterable<Building> {
             return new StructuralLookup(StructuralPosition.REGISTERED_ROOM, functionalRoom);
         }
 
-        Optional<Building> structureRoot = getStructureRootContaining(pos);
+        Optional<Building> structureRoot = BuildingStructureManager.containingRoot(this, pos);
         return structureRoot.isPresent()
                 ? new StructuralLookup(StructuralPosition.ATTACHABLE_ROOM, structureRoot)
                 : new StructuralLookup(StructuralPosition.OUTSIDE, Optional.empty());
     }
 
-    private Optional<Building> getStructureRootContaining(Vec3i pos) {
-        return getBuildings().values().stream()
-                .filter(Building::isComplete)
-                .filter(Building::isStructureRoot)
-                .filter(building -> !building.getBuildingType().grouped())
-                .filter(building -> building.containsStructurePosition(pos))
-                .min(Comparator.comparingInt(Building::getId));
-    }
-
     public Optional<Building> getFunctionalRoomAt(Vec3i pos) {
+        Building root = BuildingStructureManager.containingRoot(this, pos).orElse(null);
+        if (root != null) {
+            Building.FloorBand selectedBand = root.resolveFloorBand(pos.getY()).orElse(null);
+            if (selectedBand != null) {
+                Optional<Building> roomOnFloor = getBuildings().values().stream()
+                        .filter(Building::isComplete)
+                        .filter(Building::isFunctionalRoom)
+                        .filter(room -> room.getEffectiveStructureId() == root.getEffectiveStructureId())
+                        .filter(room -> root.resolvePhysicalFloorBand(room.getFloorY())
+                                .map(roomBand -> roomBand.anchorY() == selectedBand.anchorY())
+                                .orElse(false))
+                        .filter(room -> room.containsFloorColumn(pos.getX(), pos.getZ()))
+                        .min(Comparator.comparingInt(Building::getId));
+                if (roomOnFloor.isPresent()) {
+                    return roomOnFloor;
+                }
+            }
+        }
+
         return getBuildings().values().stream()
                 .filter(Building::isComplete)
                 .filter(Building::isFunctionalRoom)
@@ -490,12 +529,7 @@ public class Village implements Iterable<Building> {
     }
 
     private Optional<Building> getStructureRoot(Building room) {
-        return getBuildings().values().stream()
-                .filter(Building::isStructureRoot)
-                .filter(Building::isComplete)
-                .filter(root -> !root.getBuildingType().grouped())
-                .filter(root -> root.getEffectiveStructureId() == room.getEffectiveStructureId())
-                .min(Comparator.comparingInt(Building::getId));
+        return BuildingStructureManager.root(this, room.getEffectiveStructureId());
     }
 
     public enum StructuralPosition {
