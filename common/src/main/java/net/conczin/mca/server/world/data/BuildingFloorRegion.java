@@ -20,14 +20,6 @@ public record BuildingFloorRegion(int anchorY, int area, List<Component> compone
         components = List.copyOf(components);
     }
 
-    static BuildingFloorRegion fromDetected(BuildingFloorRegionDetector.DetectedRegion region) {
-        return new BuildingFloorRegion(
-                region.anchorY(),
-                region.area(),
-                region.components().stream().map(Component::fromDetected).toList()
-        );
-    }
-
     static BuildingFloorRegion load(CompoundTag tag) {
         List<Component> components = NbtHelper.toList(
                 tag.getList("components", Tag.TAG_COMPOUND),
@@ -126,17 +118,6 @@ public record BuildingFloorRegion(int anchorY, int area, List<Component> compone
             spans = List.copyOf(spans);
         }
 
-        private static Component fromDetected(BuildingFloorRegionDetector.DetectedComponent component) {
-            return new Component(
-                    component.minX(),
-                    component.minZ(),
-                    component.maxX(),
-                    component.maxZ(),
-                    component.area(),
-                    component.spans().stream().map(Span::fromDetected).toList()
-            );
-        }
-
         private static Component load(CompoundTag tag) {
             List<Span> spans = NbtHelper.toList(
                     tag.getList("spans", Tag.TAG_COMPOUND),
@@ -204,10 +185,6 @@ public record BuildingFloorRegion(int anchorY, int area, List<Component> compone
     }
 
     public record Span(int z, int minX, int maxX) {
-        private static Span fromDetected(BuildingFloorRegionDetector.DetectedSpan span) {
-            return new Span(span.z(), span.minX(), span.maxX());
-        }
-
         private static Span load(CompoundTag tag) {
             return new Span(tag.getInt("z"), tag.getInt("minX"), tag.getInt("maxX"));
         }

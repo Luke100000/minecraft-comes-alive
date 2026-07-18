@@ -17,7 +17,7 @@ final class BuildingFloorRegionDetector {
     private BuildingFloorRegionDetector() {
     }
 
-    static List<DetectedRegion> detect(Collection<SupportedCell> supportedCells) {
+    static List<BuildingFloorRegion> detect(Collection<SupportedCell> supportedCells) {
         if (supportedCells == null || supportedCells.isEmpty()) {
             return List.of();
         }
@@ -36,7 +36,7 @@ final class BuildingFloorRegionDetector {
 
         List<HeightSlice> meaningfulSlices = new ArrayList<>();
         for (Map.Entry<Integer, Set<HorizontalCell>> entry : byY.entrySet()) {
-            List<DetectedComponent> components = findComponents(entry.getValue());
+            List<BuildingFloorRegion.Component> components = findComponents(entry.getValue());
             int area = entry.getValue().size();
             if (area >= minimumArea && components.stream().anyMatch(BuildingFloorRegionDetector::isUsableComponent)) {
                 meaningfulSlices.add(new HeightSlice(entry.getKey(), area, components));
@@ -56,38 +56,15 @@ final class BuildingFloorRegionDetector {
         return bands.stream().map(MutableBand::freeze).toList();
     }
 
-    /**
-     * Builds one exact supported floor slice without the whole-building noise thresholds.
-     * Used only as a fallback for a successful strict room scan whose normal detection
-     * filtered every floor region.
-     */
-    static Optional<DetectedRegion> detectSingleFloor(Collection<SupportedCell> supportedCells, int anchorY) {
-        if (supportedCells == null || supportedCells.isEmpty()) {
-            return Optional.empty();
-        }
-
-        Set<HorizontalCell> slice = new HashSet<>();
-        for (SupportedCell cell : supportedCells) {
-            if (cell.y() == anchorY) {
-                slice.add(new HorizontalCell(cell.x(), cell.z()));
-            }
-        }
-        if (slice.isEmpty()) {
-            return Optional.empty();
-        }
-
-        return Optional.of(new DetectedRegion(anchorY, slice.size(), findComponents(slice)));
-    }
-
-    private static boolean isUsableComponent(DetectedComponent component) {
+    private static boolean isUsableComponent(BuildingFloorRegion.Component component) {
         int width = component.maxX() - component.minX() + 1;
         int depth = component.maxZ() - component.minZ() + 1;
         return (width >= 2 && depth >= 2) || component.area() >= MIN_LONG_COMPONENT_AREA;
     }
 
-    private static List<DetectedComponent> findComponents(Set<HorizontalCell> cells) {
+    private static List<BuildingFloorRegion.Component> findComponents(Set<HorizontalCell> cells) {
         Set<HorizontalCell> unvisited = new HashSet<>(cells);
-        List<DetectedComponent> components = new ArrayList<>();
+        List<BuildingFloorRegion.Component> components = new ArrayList<>();
 
         while (!unvisited.isEmpty()) {
             HorizontalCell start = unvisited.iterator().next();
@@ -116,24 +93,25 @@ final class BuildingFloorRegionDetector {
                 enqueueIfPresent(unvisited, queue, new HorizontalCell(current.x(), current.z() - 1));
             }
 
-            components.add(new DetectedComponent(
+            components.add(new BuildingFloorRegion.Component(
                     minX, minZ, maxX, maxZ, componentCells.size(), buildSpans(componentCells)));
         }
 
         components.sort(Comparator
-                .comparingInt(DetectedComponent::minX)
-                .thenComparingInt(DetectedComponent::minZ)
-                .thenComparingInt(DetectedComponent::maxX)
-                .thenComparingInt(DetectedComponent::maxZ));
+                .comparingInt(BuildingFloorRegion.Component::minX)
+                .thenComparingInt(BuildingFloorRegion.Component::minZ)
+                .thenComparingInt(BuildingFloorRegion.Component::maxX)
+                .thenComparingInt(BuildingFloorRegion.Component::maxZ));
         return List.copyOf(components);
     }
-    private static List<DetectedSpan> buildSpans(List<HorizontalCell> cells) {
+
+    private static List<BuildingFloorRegion.Span> buildSpans(List<HorizontalCell> cells) {
         Map<Integer, List<Integer>> xsByZ = new TreeMap<>();
         for (HorizontalCell cell : cells) {
             xsByZ.computeIfAbsent(cell.z(), ignored -> new ArrayList<>()).add(cell.x());
         }
 
-        List<DetectedSpan> spans = new ArrayList<>();
+        List<BuildingFloorRegion.Span> spans = new ArrayList<>();
         for (Map.Entry<Integer, List<Integer>> entry : xsByZ.entrySet()) {
             List<Integer> xs = entry.getValue().stream().sorted().toList();
             if (xs.isEmpty()) {
@@ -145,12 +123,12 @@ final class BuildingFloorRegionDetector {
             for (int i = 1; i < xs.size(); i++) {
                 int current = xs.get(i);
                 if (current != previous + 1) {
-                    spans.add(new DetectedSpan(entry.getKey(), start, previous));
+                    spans.add(new BuildingFloorRegion.Span(entry.getKey(), start, previous));
                     start = current;
                 }
                 previous = current;
             }
-            spans.add(new DetectedSpan(entry.getKey(), start, previous));
+            spans.add(new BuildingFloorRegion.Span(entry.getKey(), start, previous));
         }
         return List.copyOf(spans);
     }
@@ -166,30 +144,10 @@ final class BuildingFloorRegionDetector {
     record SupportedCell(int x, int y, int z) {
     }
 
-    record DetectedComponent(int minX,
-                             int minZ,
-                             int maxX,
-                             int maxZ,
-                             int area,
-                             List<DetectedSpan> spans) {
-        DetectedComponent {
-            spans = List.copyOf(spans);
-        }
-    }
-
-    record DetectedSpan(int z, int minX, int maxX) {
-    }
-
-    record DetectedRegion(int anchorY, int area, List<DetectedComponent> components) {
-        DetectedRegion {
-            components = List.copyOf(components);
-        }
-    }
-
     private record HorizontalCell(int x, int z) {
     }
 
-    private record HeightSlice(int y, int area, List<DetectedComponent> components) {
+    private record HeightSlice(int y, int area, List<BuildingFloorRegion.Component> components) {
     }
 
     private static final class MutableBand {
@@ -204,23 +162,23 @@ final class BuildingFloorRegionDetector {
             slices.add(slice);
         }
 
-        private DetectedRegion freeze() {
+        private BuildingFloorRegion freeze() {
             HeightSlice anchor = slices.stream()
                     .max(Comparator.comparingInt(HeightSlice::area)
                             .thenComparing(Comparator.comparingInt(HeightSlice::y).reversed()))
                     .orElseThrow();
 
             int area = slices.stream().mapToInt(HeightSlice::area).sum();
-            List<DetectedComponent> components = slices.stream()
+            List<BuildingFloorRegion.Component> components = slices.stream()
                     .flatMap(slice -> slice.components().stream())
                     .sorted(Comparator
-                            .comparingInt(DetectedComponent::minX)
-                            .thenComparingInt(DetectedComponent::minZ)
-                            .thenComparingInt(DetectedComponent::maxX)
-                            .thenComparingInt(DetectedComponent::maxZ))
+                            .comparingInt(BuildingFloorRegion.Component::minX)
+                            .thenComparingInt(BuildingFloorRegion.Component::minZ)
+                            .thenComparingInt(BuildingFloorRegion.Component::maxX)
+                            .thenComparingInt(BuildingFloorRegion.Component::maxZ))
                     .toList();
 
-            return new DetectedRegion(anchor.y(), area, components);
+            return new BuildingFloorRegion(anchor.y(), area, components);
         }
     }
 }
