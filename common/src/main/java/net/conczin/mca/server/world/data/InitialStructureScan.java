@@ -1,8 +1,12 @@
 package net.conczin.mca.server.world.data;
 
-public record InitialStructureScan(BuildingScanResult root, BuildingScanResult room) {
+public record InitialStructureScan(StructureScanResult structure,
+                                   BuildingScanResult room,
+                                   BuildingScanResult rootRoom) {
     public Building.validationResult result() {
-        return root.result() != Building.validationResult.SUCCESS ? root.result() : room.result();
+        if (structure.result() != Building.validationResult.SUCCESS) return structure.result();
+        if (room.result() != Building.validationResult.SUCCESS) return room.result();
+        return rootRoom == null ? Building.validationResult.SUCCESS : rootRoom.result();
     }
 
     public boolean isRoomAmbiguous() {

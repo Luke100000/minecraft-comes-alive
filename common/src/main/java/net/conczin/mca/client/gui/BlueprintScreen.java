@@ -624,7 +624,8 @@ public class BlueprintScreen extends ExtendedScreen {
 
         List<List<Component>> tooltips = new ArrayList<>();
         for (BlueprintMapRenderer.HoverTarget target : hoverTargets) {
-            tooltips.add(getBuildingTooltip(target.building(), target.floorOrdinal()));
+            tooltips.add(getBuildingTooltip(
+                    target.building(), target.floorOrdinal(), target.structure()));
         }
 
         int tooltipHeight = 0;
@@ -872,24 +873,38 @@ public class BlueprintScreen extends ExtendedScreen {
     }
 
     private List<Component> getBuildingTooltip(Building hoverBuilding,
-                                               Integer floorOrdinal) {
-        if (hoverBuilding.isStructureRoot()) {
-            return getAllFloorsTooltip(hoverBuilding);
+                                               Integer floorOrdinal,
+                                               boolean structureHover) {
+        if (structureHover) {
+            return floorOrdinal == null
+                    ? getAllFloorsTooltip(hoverBuilding)
+                    : getStructureFloorTooltip(hoverBuilding, floorOrdinal);
         }
 
         List<Component> lines = new LinkedList<>();
         if (floorOrdinal != null) {
             lines.add(getTooltipFloorLabel(floorOrdinal));
         }
+        appendRoomTooltip(lines, hoverBuilding, floorOrdinal);
+        return lines;
+    }
 
-        BuildingType roomType = BuildingTypes.getInstance().getBuildingType(hoverBuilding.getType());
+    private void appendRoomTooltip(List<Component> lines, Building room, Integer floorOrdinal) {
+        BuildingType roomType = BuildingTypes.getInstance().getBuildingType(room.getType());
         lines.add(Component.literal("  ").append(getBuildingTypeTooltipLabel(roomType)));
-
-        village.getResidents(hoverBuilding.getId()).forEach(name ->
+        village.getResidents(room.getId()).forEach(name ->
                 lines.add(Component.literal("    ")
                         .append(Component.literal(name).withStyle(ChatFormatting.GRAY))));
-        getBlockTooltipLines(List.of(hoverBuilding), floorOrdinal).forEach(item ->
+        getBlockTooltipLines(List.of(room), floorOrdinal).forEach(item ->
                 lines.add(Component.literal("    ").append(item)));
+    }
+
+    private List<Component> getStructureFloorTooltip(Building structureBuilding, int floorOrdinal) {
+        List<Component> lines = new LinkedList<>();
+        lines.add(getTooltipFloorLabel(floorOrdinal));
+        getStructureTooltipBuildings(structureBuilding).stream()
+                .filter(room -> floorLayout.isBuildingVisible(room, floorOrdinal))
+                .forEach(room -> appendRoomTooltip(lines, room, floorOrdinal));
         return lines;
     }
 
@@ -908,13 +923,7 @@ public class BlueprintScreen extends ExtendedScreen {
                     .toList();
 
             for (Building room : floorRooms) {
-                BuildingType roomType = BuildingTypes.getInstance().getBuildingType(room.getType());
-                lines.add(Component.literal("  ").append(getBuildingTypeTooltipLabel(roomType)));
-                village.getResidents(room.getId()).forEach(name ->
-                        lines.add(Component.literal("    ")
-                                .append(Component.literal(name).withStyle(ChatFormatting.GRAY))));
-                getBlockTooltipLines(List.of(room), floorOrdinal).forEach(item ->
-                        lines.add(Component.literal("    ").append(item)));
+                appendRoomTooltip(lines, room, floorOrdinal);
             }
         }
         return lines;
@@ -934,15 +943,8 @@ public class BlueprintScreen extends ExtendedScreen {
     }
 
     private Optional<Building> getStructureRoot(Building building) {
-        if (building.isStructureRoot()) {
-            return Optional.of(building);
-        }
-        int structureId = building.getEffectiveStructureId();
-        return village.getBuildings().values().stream()
-                .filter(Building::isComplete)
-                .filter(Building::isStructureRoot)
-                .filter(candidate -> candidate.getEffectiveStructureId() == structureId)
-                .findFirst();
+        return village.getStructureFor(building)
+                .flatMap(structure -> village.getBuilding(structure.getRootRoomId()));
     }
 
     private Component getBuildingTypeTooltipLabel(BuildingType buildingType) {

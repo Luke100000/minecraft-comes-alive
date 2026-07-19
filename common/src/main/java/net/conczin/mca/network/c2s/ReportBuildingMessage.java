@@ -17,19 +17,18 @@ import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.server.level.ServerPlayer;
 
-import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 
 public record ReportBuildingMessage(Action action, String data) implements HandleablePayload {
-    public static final CustomPacketPayload.Type<ReportBuildingMessage> TYPE = new CustomPacketPayload.Type<>(MCA.locate("report_building"));
+    public static final CustomPacketPayload.Type<ReportBuildingMessage> TYPE =
+            new CustomPacketPayload.Type<>(MCA.locate("report_building"));
     public static final StreamCodec<FriendlyByteBuf, ReportBuildingMessage> STREAM_CODEC = StreamCodec.composite(
             ByteBufCodecs.idMapper(i -> Action.values()[i], Action::ordinal), ReportBuildingMessage::action,
             ByteBufCodecs.optional(ByteBufCodecs.STRING_UTF8).map(
                     optional -> optional.orElse(null), value -> value == null ? Optional.empty() : Optional.of(value)),
             ReportBuildingMessage::data,
-            ReportBuildingMessage::new
-    );
+            ReportBuildingMessage::new);
 
     public ReportBuildingMessage(Action action) {
         this(action, null);
@@ -37,68 +36,59 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
 
     @Override
     public void handleServer(ServerPlayer player) {
-        VillageManager villages = VillageManager.get(player.serverLevel());
+        VillageManager manager = VillageManager.get(player.serverLevel());
         try {
             switch (action) {
-            case ADD -> addBuildingAndCurrentRoom(villages, player);
-            case ADD_ROOM -> addRoom(villages, player);
-            case UPDATE_ROOM -> updateRoom(villages, player, player.blockPosition(), null);
-            case SET_GROUND_ANCHOR -> setGroundAnchor(villages, player);
-            case AUTO_SCAN -> villages.findNearestVillage(player).ifPresent(Village::toggleAutoScan);
-            case FULL_SCAN -> villages.findNearestVillage(player).ifPresent(village -> {
-                villages.ensureStructureHierarchy(village);
-                List<Integer> ids = village.getBuildings().keySet().stream().sorted().toList();
-                ids.forEach(id -> villages.rescanBuilding(village, id));
-            });
-            case FORCE_TYPE -> displayEditResult(player,
-                    villages.forceRoomType(player.blockPosition(), data), null);
-            case REMOVE_ROOM -> displayEditResult(player,
-                    villages.removeRoom(player.blockPosition()), "blueprint.roomRemoved");
-            case REMOVE -> displayEditResult(player,
-                    villages.removeBuilding(player.blockPosition()), null);
+                case ADD -> addBuildingAndCurrentRoom(manager, player);
+                case ADD_ROOM -> addRoom(manager, player);
+                case UPDATE_ROOM -> updateRoom(manager, player, player.blockPosition(), null);
+                case SET_GROUND_ANCHOR -> setGroundAnchor(manager, player);
+                case AUTO_SCAN -> manager.findNearestVillage(player).ifPresent(Village::toggleAutoScan);
+                case FULL_SCAN -> manager.findNearestVillage(player).ifPresent(manager::fullScan);
+                case FORCE_TYPE -> displayEditResult(player,
+                        manager.forceRoomType(player.blockPosition(), data), null);
+                case REMOVE_ROOM -> displayEditResult(player,
+                        manager.removeRoom(player.blockPosition()), "blueprint.roomRemoved");
+                case REMOVE -> displayEditResult(player,
+                        manager.removeBuilding(player.blockPosition()), null);
             }
         } finally {
             GetVillageRequest.sendResponse(player);
         }
     }
 
-    private static void addBuildingAndCurrentRoom(VillageManager villages, ServerPlayer player) {
-        InitialStructureScan scan = villages.analyzeInitialStructure(player.blockPosition());
-        if (scan.root().result() == Building.validationResult.OVERLAP) {
-            /*
-             * Persisted structure geometry can briefly classify a remodelled basement or
-             * stairwell as OUTSIDE even though a strict room scan can attach to exactly one
-             * existing structure. In that case recover through the normal Add Room path;
-             * assignNewRoom still rejects no-structure, cross-structure, and ambiguous attachments.
-             */
-            BuildingScanResult roomScan = villages.analyzeRoom(player.blockPosition());
-            if (roomScan.result() == Building.validationResult.SUCCESS) {
-                commitNewRoom(villages, player, roomScan, null);
-                return;
-            }
-        }
+    private static void addBuildingAndCurrentRoom(VillageManager manager, ServerPlayer player) {
+        InitialStructureScan scan = manager.analyzeInitialStructure(player.blockPosition());
         if (scan.isRoomAmbiguous()) {
             requestType(scan.room(), player, Action.ADD);
             return;
         }
-        commitBuildingAndCurrentRoom(villages, player, scan, null);
+        commitBuildingAndCurrentRoom(manager, player, scan, null);
     }
 
-    private static void setGroundAnchor(VillageManager villages, ServerPlayer player) {
-        BlockPos source = player.blockPosition();
-        Village village = villages.findNearestVillage(player).orElse(null);
+    private static void addRoom(VillageManager manager, ServerPlayer player) {
+        Village village = manager.findNearestVillage(player).orElse(null);
+        if (village != null
+                && village.getStructuralPosition(player.serverLevel(), player.blockPosition())
+                == Village.StructuralPosition.REGISTERED_ROOM) {
+            player.displayClientMessage(Component.translatable("blueprint.roomAlreadyAdded"), true);
+            return;
+        }
+        commitNewRoom(manager, player, manager.analyzeRoom(player.blockPosition()), null);
+    }
+
+    private static void setGroundAnchor(VillageManager manager, ServerPlayer player) {
+        Village village = manager.findNearestVillage(player).orElse(null);
         if (village == null) {
             player.displayClientMessage(Component.translatable("blueprint.noBuilding"), true);
             return;
         }
-
-        villages.ensureStructureHierarchy(village);
-        Building room = village.getFunctionalRoomAt(player.serverLevel(), source).orElse(null);
+        Building room = village.getFunctionalRoomAt(player.serverLevel(), player.blockPosition()).orElse(null);
         if (room == null) {
             player.displayClientMessage(Component.translatable("blueprint.noRoomOnFloor"), true);
             return;
         }
-        if (village.isStructuralGroundFloor(room)) {
+        if (village.isRootRoom(room)) {
             player.displayClientMessage(Component.translatable("blueprint.groundAnchorAlreadySet"), true);
             return;
         }
@@ -106,40 +96,22 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
             player.displayClientMessage(Component.translatable("blueprint.groundAnchorNoStructure"), true);
             return;
         }
-
         player.displayClientMessage(Component.translatable("blueprint.groundAnchorSet"), true);
     }
 
-    private static void addRoom(VillageManager villages, ServerPlayer player) {
-        BlockPos source = player.blockPosition();
-        Village nearestVillage = villages.findNearestVillage(player).orElse(null);
-        Village.StructuralLookup structuralLookup = nearestVillage == null
-                ? null
-                : nearestVillage.getStructuralLookup(player.serverLevel(), source);
-        Village.StructuralPosition structuralPosition = structuralLookup == null
-                ? Village.StructuralPosition.OUTSIDE
-                : structuralLookup.position();
-        if (structuralPosition == Village.StructuralPosition.REGISTERED_ROOM) {
-            player.displayClientMessage(Component.translatable("blueprint.roomAlreadyAdded"), true);
-            return;
-        }
-        BuildingScanResult scan = villages.analyzeRoom(player.blockPosition());
-        commitNewRoom(villages, player, scan, null);
+    static void updateRoom(VillageManager manager, ServerPlayer player, BlockPos source, String forcedType) {
+        updateRoom(manager, player, source, forcedType, -1);
     }
 
-    static void updateRoom(VillageManager villages, ServerPlayer player, BlockPos source, String forcedType) {
-        updateRoom(villages, player, source, forcedType, -1);
-    }
-
-    static void updateRoom(VillageManager villages,
+    static void updateRoom(VillageManager manager,
                            ServerPlayer player,
                            BlockPos source,
                            String forcedType,
                            int originalExpectedRoomId) {
-        Village village = villages.findNearestVillage(source, Village.MERGE_MARGIN).orElse(null);
-        Building existing = village == null ? null : village.getFunctionalRoomAt(player.serverLevel(), source).orElse(null);
-        if (originalExpectedRoomId >= 0
-                && (existing == null || existing.getId() != originalExpectedRoomId)) {
+        Village village = manager.findNearestVillage(source, Village.MERGE_MARGIN).orElse(null);
+        Building existing = village == null ? null
+                : village.getFunctionalRoomAt(player.serverLevel(), source).orElse(null);
+        if (originalExpectedRoomId >= 0 && (existing == null || existing.getId() != originalExpectedRoomId)) {
             player.displayClientMessage(Component.translatable("blueprint.roomUpdateConflict"), true);
             return;
         }
@@ -149,22 +121,16 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
         }
 
         int expectedRoomId = existing.getId();
-        VillageManager.RoomUpdatePlan update = villages.analyzeRegisteredRoomUpdate(
-                village, expectedRoomId, source);
-        if (update.kind() == VillageManager.RoomUpdatePlan.Kind.CONFLICT) {
-            player.displayClientMessage(Component.translatable("blueprint.roomUpdateConflict"), true);
+        BuildingScanResult scan = manager.analyzeRegisteredRoomUpdate(village, expectedRoomId, source);
+        if (scan.result() != Building.validationResult.SUCCESS) {
+            displayScanResult(player, scan.result());
             return;
         }
-        if (update.kind() == VillageManager.RoomUpdatePlan.Kind.FAILURE) {
-            displayScanResult(player, update.result());
+        if (forcedType == null && scan.isAmbiguous()) {
+            requestType(scan, player, Action.UPDATE_ROOM, expectedRoomId);
             return;
         }
-        if (forcedType == null && update.isAmbiguous()) {
-            requestType(update.typeSelectionScan(), player, Action.UPDATE_ROOM, expectedRoomId);
-            return;
-        }
-
-        Building.validationResult result = villages.commitRegisteredRoomUpdate(update, forcedType);
+        Building.validationResult result = manager.commitRegisteredRoomUpdate(scan, expectedRoomId, forcedType);
         if (result == Building.validationResult.SUCCESS) {
             player.displayClientMessage(Component.translatable("blueprint.roomUpdated"), true);
         } else {
@@ -172,34 +138,27 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
         }
     }
 
-    static void commitBuildingAndCurrentRoom(VillageManager villages,
-                                             ServerPlayer player,
-                                             InitialStructureScan scan,
-                                             String forcedType) {
-        Building.validationResult result = villages.commitInitialStructure(scan, forcedType);
-        if (result != Building.validationResult.SUCCESS) {
+    static void commitBuildingAndCurrentRoom(VillageManager manager,
+                                              ServerPlayer player,
+                                              InitialStructureScan scan,
+                                              String forcedType) {
+        Building.validationResult result = manager.commitInitialStructure(scan, forcedType);
+        if (result == Building.validationResult.SUCCESS) {
+            player.displayClientMessage(Component.translatable("blueprint.buildingAddedRoomAdded"), true);
+        } else {
             displayScanResult(player, result);
-            return;
         }
-        player.displayClientMessage(Component.translatable("blueprint.buildingAddedRoomAdded"), true);
     }
 
-    static void commitNewRoom(VillageManager villages,
+    static void commitNewRoom(VillageManager manager,
                               ServerPlayer player,
                               BuildingScanResult scan,
                               String forcedType) {
-        if (scan.village() != null
-                && scan.village().getStructuralPosition(
-                player.serverLevel(), scan.source()) == Village.StructuralPosition.REGISTERED_ROOM) {
-            player.displayClientMessage(Component.translatable("blueprint.roomAlreadyAdded"), true);
-            return;
-        }
         if (forcedType == null && scan.result() == Building.validationResult.SUCCESS && scan.isAmbiguous()) {
             requestType(scan, player, Action.ADD_ROOM);
             return;
         }
-
-        Building.validationResult result = villages.commitBuilding(scan, forcedType);
+        Building.validationResult result = manager.commitBuilding(scan, forcedType);
         if (result == Building.validationResult.SUCCESS) {
             player.displayClientMessage(Component.translatable("blueprint.roomAdded"), true);
         } else {
@@ -207,9 +166,7 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
         }
     }
 
-    private static void requestType(BuildingScanResult scan,
-                                    ServerPlayer player,
-                                    Action action) {
+    private static void requestType(BuildingScanResult scan, ServerPlayer player, Action action) {
         requestType(scan, player, action, -1);
     }
 
@@ -233,11 +190,9 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
             case SUCCESS -> successKey;
             case NO_BUILDING -> "blueprint.noBuilding";
             case NO_ROOM -> "blueprint.noRoomOnFloor";
-            case GROUND_FLOOR -> "blueprint.cannot_remove_ground_floor";
+            case ROOT_ROOM -> "blueprint.cannot_remove_ground_floor";
         };
-        if (key != null) {
-            player.displayClientMessage(Component.translatable(key), true);
-        }
+        if (key != null) player.displayClientMessage(Component.translatable(key), true);
     }
 
     @Override

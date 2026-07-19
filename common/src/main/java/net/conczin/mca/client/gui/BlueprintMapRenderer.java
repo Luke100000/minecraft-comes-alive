@@ -185,14 +185,13 @@ final class BlueprintMapRenderer implements AutoCloseable {
         // Room hover wins over the structure shade occupying the same map cells.
         for (MapStructureLayer layer : structureLayers) {
             boolean roomHovered = hoverTargets.stream().anyMatch(target ->
-                    !target.building().isStructureRoot()
-                            && !target.building().getBuildingType().grouped()
+                    !target.structure() && target.building().isFunctionalRoom()
                             && target.building().getEffectiveStructureId()
                             == layer.root().getEffectiveStructureId());
             boolean buildingHovered = layer.shadeCells().contains(hoveredMapCell)
                     || isOutlineHovered(layer.borderEdges(), mouseX, mouseY, viewport);
             if (!roomHovered && mouseInsideMap && buildingHovered) {
-                hoverTargets.add(new HoverTarget(layer.root(), null));
+                hoverTargets.add(new HoverTarget(layer.root(), layer.floorOrdinal(), true));
             }
         }
 
@@ -686,8 +685,8 @@ final class BlueprintMapRenderer implements AutoCloseable {
     private static void addRoomHover(List<HoverTarget> hoverTargets,
                                      Building building,
                                      Integer floorOrdinal) {
-        if (building.getBuildingType().grouped()) {
-            HoverTarget target = new HoverTarget(building, floorOrdinal);
+        if (!building.isFunctionalRoom()) {
+            HoverTarget target = new HoverTarget(building, floorOrdinal, false);
             if (!hoverTargets.contains(target)) {
                 hoverTargets.add(target);
             }
@@ -695,11 +694,13 @@ final class BlueprintMapRenderer implements AutoCloseable {
         }
 
         int structureId = building.getEffectiveStructureId();
-        boolean alreadyHasRoom = hoverTargets.stream().anyMatch(target ->
-                !target.building().getBuildingType().grouped()
-                        && target.building().getEffectiveStructureId() == structureId);
-        if (!alreadyHasRoom) {
-            hoverTargets.add(new HoverTarget(building, floorOrdinal));
+        // A concrete Room/icon hover always wins over the Structure shade beneath it.
+        hoverTargets.removeIf(target -> target.structure()
+                && target.building().isFunctionalRoom()
+                && target.building().getEffectiveStructureId() == structureId);
+        HoverTarget target = new HoverTarget(building, floorOrdinal, false);
+        if (!hoverTargets.contains(target)) {
+            hoverTargets.add(target);
         }
     }
 
@@ -741,6 +742,6 @@ final class BlueprintMapRenderer implements AutoCloseable {
         }
     }
 
-    record HoverTarget(Building building, Integer floorOrdinal) {
+    record HoverTarget(Building building, Integer floorOrdinal, boolean structure) {
     }
 }
