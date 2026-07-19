@@ -57,9 +57,7 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
                 : null;
         boolean exitingLadder = followingNode != null
                 && !isClimbable(followingNode.asBlockPos());
-        double targetY = exitingLadder
-                ? followingNode.y
-                : nextNode.y;
+        double targetY = exitingLadder ? followingNode.y : nextNode.y;
 
         double yDelta = targetY - this.mob.getY();
         boolean readyForExitHandoff = exitingLadder
@@ -90,7 +88,7 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
         }
 
         int nextNodeIndex = path.getNextNodeIndex();
-        if (nextNodeIndex >= path.getNodeCount()) {
+        if (nextNodeIndex < 0 || nextNodeIndex >= path.getNodeCount()) {
             return Double.NaN;
         }
 
@@ -100,10 +98,7 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
                     && nextNodeIndex > 0
                     && isClimbable(path.getNode(nextNodeIndex - 1).asBlockPos())) {
                 double yDelta = nextNode.y - this.mob.getY();
-                return Math.copySign(
-                        Math.min(LADDER_VERTICAL_SPEED, Math.abs(yDelta)),
-                        yDelta
-                );
+                return clampVerticalVelocity(yDelta);
             }
             return Double.NaN;
         }
@@ -118,14 +113,16 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
             return Double.NaN;
         }
 
-        double targetY = exitingLadder
-                ? followingNode.y
-                : nextNode.y;
+        double targetY = exitingLadder ? followingNode.y : nextNode.y;
         double yDelta = targetY - this.mob.getY();
         if (hasReachedLadderTarget(followingNode, exitingLadder, yDelta)) {
             return 0.0D;
         }
 
+        return clampVerticalVelocity(yDelta);
+    }
+
+    private static double clampVerticalVelocity(double yDelta) {
         return Math.copySign(
                 Math.min(LADDER_VERTICAL_SPEED, Math.abs(yDelta)),
                 yDelta
@@ -147,26 +144,12 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
 
     private void applyPathLadderMotion() {
         double controlledY = getLadderVerticalVelocity();
-        if (!Double.isNaN(controlledY)) {
-            Vec3 movement = this.mob.getDeltaMovement();
-            this.mob.setDeltaMovement(movement.x(), controlledY, movement.z());
-            return;
-        }
-
-        if (this.path == null || this.path.isDone()) {
-            stopStaleLadderUpwardMotion();
-        }
-    }
-
-    private void stopStaleLadderUpwardMotion() {
-        if (!this.mob.onClimbable()) {
+        if (Double.isNaN(controlledY)) {
             return;
         }
 
         Vec3 movement = this.mob.getDeltaMovement();
-        if (movement.y() > 0.0D) {
-            this.mob.setDeltaMovement(movement.x(), 0.0D, movement.z());
-        }
+        this.mob.setDeltaMovement(movement.x(), controlledY, movement.z());
     }
 
     private boolean isClimbable(BlockPos pos) {

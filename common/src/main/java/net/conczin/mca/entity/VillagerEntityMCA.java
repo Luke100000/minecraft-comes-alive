@@ -55,7 +55,6 @@ import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.ai.behavior.BlockPosTracker;
-import net.minecraft.world.entity.ai.control.BodyRotationControl;
 import net.minecraft.world.entity.ai.goal.OpenDoorGoal;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.WalkTarget;
@@ -153,13 +152,13 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     }
 
     @Override
-    protected BodyRotationControl createBodyControl() {
-        return new MCABodyRotationControl(this);
+    protected PathNavigation createNavigation(Level level) {
+        return new MCAGroundPathNavigation(this, level);
     }
 
     @Override
-    protected PathNavigation createNavigation(Level level) {
-        return new MCAGroundPathNavigation(this, level);
+    public void setJumping(boolean jumping) {
+        super.setJumping(jumping && !this.onClimbable());
     }
 
     @Override
