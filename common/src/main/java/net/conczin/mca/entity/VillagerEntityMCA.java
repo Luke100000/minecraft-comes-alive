@@ -55,6 +55,7 @@ import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.ai.behavior.BlockPosTracker;
+import net.minecraft.world.entity.ai.control.BodyRotationControl;
 import net.minecraft.world.entity.ai.goal.OpenDoorGoal;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.WalkTarget;
@@ -149,6 +150,11 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         return foodProperties != null
                && foodProperties.nutrition() > 0
                && foodProperties.effects().stream().noneMatch(e -> StatusEffectDangerSet.IS_DANGER.contains(e.effect().getEffect()));
+    }
+
+    @Override
+    protected BodyRotationControl createBodyControl() {
+        return new MCABodyRotationControl(this);
     }
 
     @Override

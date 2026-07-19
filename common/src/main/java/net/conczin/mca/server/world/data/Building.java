@@ -688,10 +688,7 @@ public class Building {
                                                 Set<BlockPos> blocked,
                                                 boolean allowMissingEntrance,
                                                 Building structureRoot) {
-        blocks.clear();
-        size = 0;
-        setLastScan(world.getGameTime());
-
+        prepareStrictRoomScan(world);
         BuildingRoomScanner.Result scan = BuildingRoomScanner.scan(
                 world,
                 getSourceBlock(),
@@ -700,7 +697,29 @@ public class Building {
                 Config.getInstance().maxBuildingRadius,
                 structureRoot
         );
+        return applyStrictRoomScanResult(world, scan, allowMissingEntrance);
+    }
 
+    /**
+     * Applies already-discovered strict-room geometry without scanning the world again.
+     * Split analysis uses this to materialize scanner-owned components exactly once.
+     */
+    validationResult applyStrictRoomScan(Level world,
+                                         BuildingRoomScanner.Result scan,
+                                         boolean allowMissingEntrance) {
+        prepareStrictRoomScan(world);
+        return applyStrictRoomScanResult(world, scan, allowMissingEntrance);
+    }
+
+    private void prepareStrictRoomScan(Level world) {
+        blocks.clear();
+        size = 0;
+        setLastScan(world.getGameTime());
+    }
+
+    private validationResult applyStrictRoomScanResult(Level world,
+                                                       BuildingRoomScanner.Result scan,
+                                                       boolean allowMissingEntrance) {
         validationResult failure = switch (scan.status()) {
             case SUCCESS -> validationResult.SUCCESS;
             case OVERLAP -> validationResult.OVERLAP;

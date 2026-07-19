@@ -28,40 +28,8 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
     }
 
     @Override
-    public Path createPath(BlockPos target, int reachRange) {
-        return isLadderNavigationLocked()
-                ? this.path
-                : super.createPath(target, reachRange);
-    }
-
-    @Override
     protected boolean canUpdatePath() {
         return super.canUpdatePath() || this.mob.onClimbable();
-    }
-
-    @Override
-    public void stop() {
-        if (!isLadderNavigationLocked()) {
-            super.stop();
-        }
-    }
-
-    @Override
-    public void recomputePath() {
-        if (!isLadderNavigationLocked()) {
-            super.recomputePath();
-        }
-    }
-
-    private boolean isLadderNavigationLocked() {
-        Path path = this.path;
-        if (path == null || path.isDone() || !this.mob.onClimbable()) {
-            return false;
-        }
-
-        int nextNodeIndex = path.getNextNodeIndex();
-        return nextNodeIndex < path.getNodeCount()
-                && isClimbable(path.getNode(nextNodeIndex).asBlockPos());
     }
 
     @Override
@@ -94,7 +62,11 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
                 : nextNode.y;
 
         double yDelta = targetY - this.mob.getY();
-        if (hasReachedLadderTarget(followingNode, exitingLadder, yDelta)
+        boolean readyForExitHandoff = exitingLadder
+                && yDelta < 0.0D
+                && Math.abs(yDelta) <= LADDER_VERTICAL_TOLERANCE;
+        if ((readyForExitHandoff
+                || hasReachedLadderTarget(followingNode, exitingLadder, yDelta))
                 && (exitingLadder || this.mob.onClimbable())) {
             this.path.advance();
         }
@@ -105,7 +77,7 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
     @Override
     protected double getGroundY(Vec3 position) {
         BlockPos targetPos = BlockPos.containing(position);
-        if (this.mob.onClimbable() || isClimbable(targetPos)) {
+        if (isClimbable(targetPos)) {
             return this.mob.getY();
         }
         return super.getGroundY(position);
