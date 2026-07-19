@@ -160,6 +160,11 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     }
 
     @Override
+    protected BodyRotationControl createBodyControl() {
+        return new MCABodyRotationControl(this);
+    }
+
+    @Override
     protected PathNavigation createNavigation(Level level) {
         return new MCAGroundPathNavigation(this, level);
     }

@@ -302,7 +302,9 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         }
     }
 
-    private record GeometryScan(BuildingScanResult scan, int preferredBuildingId) {
+    private record GeometryScan(BuildingScanResult scan,
+                                int preferredBuildingId,
+                                BuildingRoomScanner.Result roomGeometry) {
     }
 
     //checks weather the given block contains a grouped building block, e.g., a town bell or gravestone
@@ -388,40 +390,55 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         requestedBuilding.setStructureRoot(false);
         requestedBuilding.canonicalizeFloor(structureRoot);
 
-        // Detect a remodel split before ordinary identity matching. Otherwise a large
-        // anchor-side component (or a component retaining >80% of the old footprint)
-        // can look like a normal resize and silently discard the other room.
+        // Detect a remodel split before ordinary identity matching. Connectivity discovery
+        // is owned by BuildingRoomScanner; this layer only materializes the returned geometry
+        // and asks BuildingRoomIdentity how persistent identity should be assigned.
         long requestedArea = requestedBuilding.getFloorFootprintArea();
         boolean requestedInsideOldFootprint =
                 requestedBuilding.getHorizontalFootprintIntersectionArea(expected) == requestedArea;
         if (requestedInsideOldFootprint
                 && !BuildingRoomIdentity.sameRoomGeometry(
                         expected, requestedBuilding, structureRoot)) {
-            List<BuildingScanResult> components = new ArrayList<>();
-            addDistinctSplitComponent(components, requestedRaw);
-            discoverSplitComponents(village, expected, structureRoot, components);
-
-            if (components.size() > 2) {
+            BuildingRoomScanner.ComponentScan componentScan = BuildingRoomScanner.scanComponents(
+                    world,
+                    expected,
+                    structureRoot,
+                    requestedGeometry.roomGeometry(),
+                    Config.getInstance().maxBuildingSize,
+                    Config.getInstance().maxBuildingRadius,
+                    2
+            );
+            if (componentScan.tooMany()) {
                 return RoomUpdatePlan.conflict(
                         Building.validationResult.OVERLAP, requestedRaw, null, buildingId);
             }
+
+            List<BuildingScanResult> components = new ArrayList<>();
+            for (BuildingRoomScanner.Result component : componentScan.components()) {
+                BuildingScanResult scan = component == requestedGeometry.roomGeometry()
+                        ? requestedRaw
+                        : materializeRegisteredRoomComponent(village, expected, structureRoot, component);
+                if (scan != null) {
+                    components.add(scan);
+                }
+            }
+
             if (components.size() == 2) {
                 BuildingScanResult first = components.get(0);
                 BuildingScanResult second = components.get(1);
-                Building retainedBuilding = BuildingRoomIdentity.selectSplitRetainedSide(
-                        expected, first.building(), second.building()).orElse(null);
-                if (retainedBuilding == null) {
+                BuildingRoomIdentity.SplitPlan split = BuildingRoomIdentity.planSplit(
+                        expected, first.building(), second.building(), village);
+                if (!split.isSuccess()) {
+                    BuildingScanResult retained = split.retained() == first.building()
+                            ? first
+                            : split.retained() == second.building() ? second : null;
                     return RoomUpdatePlan.conflict(
-                            Building.validationResult.OVERLAP, requestedRaw, null, buildingId);
+                            split.result(), requestedRaw, retained, buildingId);
                 }
 
-                BuildingScanResult retained = retainedBuilding == first.building() ? first : second;
+                BuildingScanResult retained = split.retained() == first.building() ? first : second;
                 BuildingScanResult added = retained == first ? second : first;
-                Building.validationResult splitResult = BuildingRoomIdentity.validateRoomSplit(
-                        expected, retained.building(), added.building(), village);
-                return splitResult == Building.validationResult.SUCCESS
-                        ? RoomUpdatePlan.split(requestedRaw, retained, added, buildingId)
-                        : RoomUpdatePlan.conflict(splitResult, requestedRaw, retained, buildingId);
+                return RoomUpdatePlan.split(requestedRaw, retained, added, buildingId);
             }
         }
 
@@ -436,83 +453,33 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         return RoomUpdatePlan.conflict(Building.validationResult.OVERLAP, requested, null, buildingId);
     }
 
-    private void discoverSplitComponents(Village village,
-                                         Building expected,
-                                         Building structureRoot,
-                                         List<BuildingScanResult> components) {
-        int canonicalFloorY = BuildingStructureManager.canonicalFloorY(
-                structureRoot, expected.getFloorY());
-        int probeY = canonicalFloorY + BuildingFloorRegionDetector.FLOOR_CLUSTER_TOLERANCE;
-        BlockPos min = expected.getRawPos0();
-        BlockPos max = expected.getRawPos1();
-
-        for (int x = min.getX(); x <= max.getX() && components.size() <= 2; x++) {
-            for (int z = min.getZ(); z <= max.getZ() && components.size() <= 2; z++) {
-                if (!expected.containsFloorColumn(x, z)
-                        || containsSplitComponentColumn(components, x, z)) {
-                    continue;
-                }
-
-                BlockPos column = new BlockPos(x, probeY, z);
-                BuildingFloorResolver.ResolvedFloor floor =
-                        BuildingFloorResolver.resolve(world, column, structureRoot).orElse(null);
-                if (floor == null
-                        || floor.semanticY() != canonicalFloorY
-                        || !BuildingRoomScanner.hasOpenCellInColumn(
-                        world, x, z, floor.physicalY(), floor.ceilingY())) {
-                    continue;
-                }
-
-                BuildingScanResult component = scanRegisteredRoomGeometry(
-                        village, expected, structureRoot,
-                        new BlockPos(x, floor.physicalY(), z));
-                if (component != null) {
-                    addDistinctSplitComponent(components, component);
-                }
-            }
-        }
-    }
-
-    private static boolean containsSplitComponentColumn(List<BuildingScanResult> components,
-                                                        int x,
-                                                        int z) {
-        for (BuildingScanResult component : components) {
-            if (component.building().containsFloorColumn(x, z)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private BuildingScanResult scanRegisteredRoomGeometry(Village village,
-                                                          Building expected,
-                                                          Building structureRoot,
-                                                          BlockPos probe) {
-        GeometryScan geometry = scanBuildingGeometry(ScanRequest.room(
-                probe, village, expected.getId(), RoomAssignment.MATCH_ONLY, structureRoot));
-        BuildingScanResult scan = geometry.scan();
-        if (scan.result() != Building.validationResult.SUCCESS) {
+    private BuildingScanResult materializeRegisteredRoomComponent(
+            Village village,
+            Building expected,
+            Building structureRoot,
+            BuildingRoomScanner.Result component) {
+        Building room = new Building(component.seed(), true);
+        Building.validationResult result = room.applyStrictRoomScan(world, component, true);
+        if (result != Building.validationResult.SUCCESS) {
             return null;
         }
 
-        Building room = scan.building();
         room.setStructureId(expected.getEffectiveStructureId());
         room.setStructureRoot(false);
         room.canonicalizeFloor(structureRoot);
-        if (room.getHorizontalFootprintIntersectionArea(expected) != room.getFloorFootprintArea()) {
-            return null;
-        }
-        return scan;
-    }
-
-    private static void addDistinctSplitComponent(List<BuildingScanResult> components,
-                                                  BuildingScanResult candidate) {
-        boolean duplicate = components.stream().anyMatch(existing ->
-                BuildingRoomIdentity.sameRoomGeometry(
-                        existing.building(), candidate.building()));
-        if (!duplicate) {
-            components.add(candidate);
-        }
+        List<String> matchingTypes = room.getVisibleMatchingTypes().stream()
+                .map(BuildingType::name)
+                .toList();
+        return new BuildingScanResult(
+                result,
+                room.getSourceBlock(),
+                true,
+                room,
+                matchingTypes,
+                village,
+                -1,
+                List.of()
+        );
     }
 
     private BuildingScanResult analyzeBuilding(ScanRequest request) {
@@ -576,8 +543,21 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         boolean allowMissingEntrance = roomScan
                 || (preferred != null && preferred.hasStructure() && !preferred.isStructureRoot());
 
-        Building.validationResult result = building.validateBuilding(
-                world, blocked, allowMissingEntrance, roomScanRoot);
+        BuildingRoomScanner.Result roomGeometry = null;
+        Building.validationResult result;
+        if (roomScan) {
+            roomGeometry = BuildingRoomScanner.scan(
+                    world,
+                    scanSource,
+                    blocked,
+                    Config.getInstance().maxBuildingSize,
+                    Config.getInstance().maxBuildingRadius,
+                    roomScanRoot
+            );
+            result = building.applyStrictRoomScan(world, roomGeometry, allowMissingEntrance);
+        } else {
+            result = building.validateBuilding(world, blocked, allowMissingEntrance, null);
+        }
         List<String> matchingTypes = result == Building.validationResult.SUCCESS
                 ? building.getVisibleMatchingTypes().stream().map(BuildingType::name).toList()
                 : List.of();
@@ -592,7 +572,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
                 -1,
                 List.of()
         );
-        return new GeometryScan(geometry, effectivePreferredId);
+        return new GeometryScan(geometry, effectivePreferredId, roomGeometry);
     }
 
 

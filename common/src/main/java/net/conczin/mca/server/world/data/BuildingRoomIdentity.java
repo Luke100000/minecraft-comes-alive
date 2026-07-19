@@ -127,6 +127,20 @@ final class BuildingRoomIdentity {
         return Building.validationResult.SUCCESS;
     }
 
+    static SplitPlan planSplit(Building expected,
+                               Building first,
+                               Building second,
+                               Village village) {
+        Building retained = selectSplitRetainedSide(expected, first, second).orElse(null);
+        if (retained == null) {
+            return SplitPlan.failure(Building.validationResult.OVERLAP);
+        }
+
+        Building added = retained == first ? second : first;
+        Building.validationResult result = validateRoomSplit(expected, retained, added, village);
+        return new SplitPlan(result, retained, added);
+    }
+
     static Optional<Building> selectSplitRetainedSide(Building expected,
                                                        Building first,
                                                        Building second) {
@@ -298,6 +312,16 @@ final class BuildingRoomIdentity {
                                                         Village village) {
         return sameCanonicalFloor(village, first, second)
                 && first.getHorizontalFootprintIntersectionArea(second) > 0L;
+    }
+
+    record SplitPlan(Building.validationResult result, Building retained, Building added) {
+        static SplitPlan failure(Building.validationResult result) {
+            return new SplitPlan(result, null, null);
+        }
+
+        boolean isSuccess() {
+            return result == Building.validationResult.SUCCESS;
+        }
     }
 
     record MatchResult(Building.validationResult result, Building primary, List<Integer> mergedBuildingIds) {

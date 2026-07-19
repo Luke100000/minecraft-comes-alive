@@ -30,23 +30,48 @@ final class BuildingRoomScanner {
                        int maxSize,
                        int maxRadius,
                        Building structureRoot) {
-        Optional<ResolvedSeed> resolvedSeed = resolveInteriorSeed(world, source, structureRoot);
+        BuildingFloorResolver.ResolvedFloor floor = BuildingFloorResolver.resolve(
+                world, source, structureRoot).orElse(null);
+        if (floor == null) {
+            return Result.failure(Status.TOO_SMALL, source);
+        }
+        return scanResolved(world, source, blocked, maxSize, maxRadius, floor);
+    }
+
+    private static Result scanResolved(Level world,
+                                       BlockPos source,
+                                       Set<BlockPos> blocked,
+                                       int maxSize,
+                                       int maxRadius,
+                                       BuildingFloorResolver.ResolvedFloor floor) {
+        Optional<BlockPos> resolvedSeed = findInteriorSeedAtY(
+                world, source, floor.physicalY(), floor.ceilingY());
         if (resolvedSeed.isEmpty()) {
             return Result.failure(Status.TOO_SMALL, source);
         }
 
-        ResolvedSeed resolved = resolvedSeed.get();
-        BlockPos seed = resolved.seed();
-        int scanFloorY = seed.getY();
-        int floorY = resolved.floorY();
-        int ceilingY = resolved.ceilingY();
-        if (ceilingY <= scanFloorY) {
+        BlockPos seed = resolvedSeed.get();
+        int ceilingY = floor.ceilingY();
+        Optional<BlockPos> openSeed = findOpenCellInColumn(
+                world, seed.getX(), seed.getZ(), seed.getY(), ceilingY);
+        if (openSeed.isEmpty()) {
             return Result.failure(Status.TOO_SMALL, seed);
         }
+        return scanFromOpenSeed(
+                world, seed, openSeed.get(), floor.semanticY(), ceilingY,
+                blocked, maxSize, maxRadius);
+    }
 
-        Optional<BlockPos> openSeed = findOpenCellInColumn(
-                world, seed.getX(), seed.getZ(), scanFloorY, ceilingY);
-        if (openSeed.isEmpty()) {
+    private static Result scanFromOpenSeed(Level world,
+                                           BlockPos seed,
+                                           BlockPos openSeed,
+                                           int floorY,
+                                           int ceilingY,
+                                           Set<BlockPos> blocked,
+                                           int maxSize,
+                                           int maxRadius) {
+        int scanFloorY = seed.getY();
+        if (ceilingY <= scanFloorY) {
             return Result.failure(Status.TOO_SMALL, seed);
         }
 
@@ -59,7 +84,7 @@ final class BuildingRoomScanner {
         ArrayDeque<Long> queue = new ArrayDeque<>();
         BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
 
-        long start = openSeed.get().asLong();
+        long start = openSeed.asLong();
         visited.add(start);
         queue.add(start);
 
@@ -151,19 +176,6 @@ final class BuildingRoomScanner {
         );
     }
 
-    private static Optional<ResolvedSeed> resolveInteriorSeed(Level world,
-                                                              BlockPos source,
-                                                              Building structureRoot) {
-        BuildingFloorResolver.ResolvedFloor floor =
-                BuildingFloorResolver.resolve(world, source, structureRoot).orElse(null);
-        if (floor == null) {
-            return Optional.empty();
-        }
-
-        return findInteriorSeedAtY(world, source, floor.physicalY(), floor.ceilingY())
-                .map(seed -> new ResolvedSeed(seed, floor.semanticY(), floor.ceilingY()));
-    }
-
     private static Optional<BlockPos> findInteriorSeedAtY(Level world,
                                                            BlockPos source,
                                                            int y,
@@ -194,8 +206,114 @@ final class BuildingRoomScanner {
                 world, pos.getX(), pos.getZ(), pos.getY(), ceilingY).isPresent();
     }
 
+    /**
+     * Discovers the disconnected strict-room components still occupying the previous
+     * room footprint. Connectivity belongs here so callers never probe columns and
+     * repeatedly drive independent room scans themselves.
+     *
+     * <p>The already-scanned requested component is reused as the first result. Each
+     * additional connected component is flooded once, and scanning stops as soon as
+     * more than {@code maxComponents} valid components are found.</p>
+     */
+    static ComponentScan scanComponents(Level world,
+                                        Building previousRoom,
+                                        Building structureRoot,
+                                        Result requested,
+                                        int maxSize,
+                                        int maxRadius,
+                                        int maxComponents) {
+        if (previousRoom == null || structureRoot == null || requested == null
+                || requested.status() != Status.SUCCESS || maxComponents < 1) {
+            return new ComponentScan(List.of(), false);
+        }
 
-    static boolean hasOpenCellInColumn(Level world,
+        int canonicalFloorY = structureRoot.getCanonicalFloorY(previousRoom.getFloorY());
+        List<Result> components = new ArrayList<>();
+        Set<Long> coveredColumns = new HashSet<>();
+
+        coverColumns(coveredColumns, requested);
+        if (isComponentInsidePreviousRoom(requested, previousRoom, canonicalFloorY)) {
+            components.add(requested);
+        }
+
+        int probeY = canonicalFloorY + BuildingFloorRegionDetector.FLOOR_CLUSTER_TOLERANCE;
+        BlockPos min = previousRoom.getRawPos0();
+        BlockPos max = previousRoom.getRawPos1();
+
+        for (int x = min.getX(); x <= max.getX(); x++) {
+            for (int z = min.getZ(); z <= max.getZ(); z++) {
+                long columnKey = packColumn(x, z);
+                if (!previousRoom.containsFloorColumn(x, z) || coveredColumns.contains(columnKey)) {
+                    continue;
+                }
+
+                BuildingFloorResolver.ResolvedFloor floor = BuildingFloorResolver.resolve(
+                        world, new BlockPos(x, probeY, z), structureRoot).orElse(null);
+                if (floor == null || floor.semanticY() != canonicalFloorY) {
+                    continue;
+                }
+
+                Optional<BlockPos> openSeed = findOpenCellInColumn(
+                        world, x, z, floor.physicalY(), floor.ceilingY());
+                if (openSeed.isEmpty()) {
+                    continue;
+                }
+
+                Result component = scanFromOpenSeed(
+                        world,
+                        new BlockPos(x, floor.physicalY(), z),
+                        openSeed.get(),
+                        canonicalFloorY,
+                        floor.ceilingY(),
+                        Set.of(),
+                        maxSize,
+                        maxRadius
+                );
+                if (component.status() != Status.SUCCESS) {
+                    continue;
+                }
+
+                // A successful flood identifies the complete connected component. Mark its
+                // columns even when it extends outside the old room so another old-footprint
+                // cell cannot trigger the same expensive flood again.
+                coverColumns(coveredColumns, component);
+
+                if (!isComponentInsidePreviousRoom(component, previousRoom, canonicalFloorY)
+                        || containsSameComponent(components, component)) {
+                    continue;
+                }
+
+                components.add(component);
+                if (components.size() > maxComponents) {
+                    return new ComponentScan(components, true);
+                }
+            }
+        }
+
+        return new ComponentScan(components, false);
+    }
+
+    private static void coverColumns(Set<Long> coveredColumns, Result component) {
+        for (BlockPos cell : component.footprintCells()) {
+            coveredColumns.add(packColumn(cell.getX(), cell.getZ()));
+        }
+    }
+
+    private static boolean isComponentInsidePreviousRoom(Result component,
+                                                         Building previousRoom,
+                                                         int canonicalFloorY) {
+        return component.floorY() == canonicalFloorY
+                && component.footprintCells().stream().allMatch(cell ->
+                previousRoom.containsFloorColumn(cell.getX(), cell.getZ()));
+    }
+
+    private static boolean containsSameComponent(List<Result> components, Result candidate) {
+        return components.stream().anyMatch(existing ->
+                existing.floorY() == candidate.floorY()
+                        && existing.footprintCells().equals(candidate.footprintCells()));
+    }
+
+    private static boolean hasOpenCellInColumn(Level world,
                                        int x,
                                        int z,
                                        int floorY,
@@ -297,7 +415,10 @@ final class BuildingRoomScanner {
         TOO_SMALL
     }
 
-    private record ResolvedSeed(BlockPos seed, int floorY, int ceilingY) {
+    record ComponentScan(List<Result> components, boolean tooMany) {
+        ComponentScan {
+            components = List.copyOf(components);
+        }
     }
 
     record Result(Status status,
