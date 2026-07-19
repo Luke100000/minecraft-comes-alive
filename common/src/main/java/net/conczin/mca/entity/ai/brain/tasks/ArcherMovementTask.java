@@ -324,7 +324,7 @@ public class ArcherMovementTask<E extends PathfinderMob> extends Behavior<E> {
             this.strafingTime = 0;
         }
 
-        moveControl.strafe(0.0F, this.strafingClockwise ? 0.5F : -0.5F);
+        moveControl.strafeForArcher(0.0F, this.strafingClockwise ? 0.5F : -0.5F);
     }
 
     private boolean isStrafeBlocked(E entity) {
