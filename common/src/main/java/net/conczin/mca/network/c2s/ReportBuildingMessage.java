@@ -40,7 +40,6 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
         VillageManager villages = VillageManager.get(player.serverLevel());
         try {
             switch (action) {
-            case STRUCTURE_SCAN -> scanStructureAtPlayer(villages, player);
             case ADD -> addBuildingAndCurrentRoom(villages, player);
             case ADD_ROOM -> addRoom(villages, player);
             case UPDATE_ROOM -> updateRoom(villages, player, player.blockPosition(), null);
@@ -60,20 +59,6 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
             }
         } finally {
             GetVillageRequest.sendResponse(player);
-        }
-    }
-
-    private static void scanStructureAtPlayer(VillageManager villages, ServerPlayer player) {
-        BlockPos source = player.blockPosition();
-        Village village = villages.findNearestVillage(source, Village.MERGE_MARGIN).orElse(null);
-        Village.StructuralPosition position = village == null
-                ? Village.StructuralPosition.OUTSIDE
-                : village.getStructuralPosition(player.serverLevel(), source);
-
-        switch (position) {
-            case REGISTERED_ROOM -> updateRoom(villages, player, source, null);
-            case ATTACHABLE_ROOM -> addRoom(villages, player);
-            case OUTSIDE -> addBuildingAndCurrentRoom(villages, player);
         }
     }
 
@@ -269,7 +254,6 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
         FULL_SCAN,
         REMOVE_ROOM,
         UPDATE_ROOM,
-        SET_GROUND_ANCHOR,
-        STRUCTURE_SCAN
+        SET_GROUND_ANCHOR
     }
 }

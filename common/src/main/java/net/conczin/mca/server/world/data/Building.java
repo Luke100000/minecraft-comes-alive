@@ -217,6 +217,16 @@ public class Building {
     }
 
     /**
+     * Canonicalizes a persisted or sampled floor Y against this structure's detected
+     * floor regions without mutating either the structure or a room record.
+     */
+    public int getCanonicalFloorY(int floorY) {
+        return resolveFloorBand(floorY)
+                .map(FloorBand::anchorY)
+                .orElse(floorY);
+    }
+
+    /**
      * Maps a known physical floor Y to the canonical semantic floor owned by this
      * structure. Player-position resolution is deliberately handled elsewhere: this
      * method never searches upward/downward and never decides which floor a player is on.
@@ -646,9 +656,13 @@ public class Building {
                     world,
                     exteriorEntrances
             );
+            List<Integer> perimeterTerrainYs = entranceInteriorCells.isEmpty()
+                    ? sampleTerrainPerimeter(world, pos0X, pos0Z, pos1X, pos1Z)
+                    : List.of();
             GroundFloorSelection groundFloorSelection = determineGroundFloorY(
                     entranceInteriorCells,
                     terrainSamples,
+                    perimeterTerrainYs,
                     floorRegions,
                     floorY,
                     entranceSource
@@ -835,6 +849,7 @@ public class Building {
 
     private static GroundFloorSelection determineGroundFloorY(Collection<BlockPos> entranceInteriorCells,
                                                                Collection<TerrainEntranceSample> terrainSamples,
+                                                               Collection<Integer> perimeterTerrainYs,
                                                                List<BuildingFloorRegion> regions,
                                                                int fallbackY,
                                                                String fallbackSource) {
@@ -846,19 +861,32 @@ public class Building {
         if (terrainEntranceY.isPresent()) {
             return new GroundFloorSelection(terrainEntranceY.getAsInt(), "terrain-" + fallbackSource);
         }
-        if (entranceInteriorCells.isEmpty() || regions.isEmpty()) {
-            return new GroundFloorSelection(fallbackY, fallbackSource);
+        if (!entranceInteriorCells.isEmpty() && !regions.isEmpty()) {
+            int entranceFloorY = regions.stream()
+                    .min(Comparator
+                            .comparingInt((BuildingFloorRegion region) -> minimumEntranceDistance(
+                                    entranceInteriorCells, region, false))
+                            .thenComparingInt(region -> minimumEntranceDistance(entranceInteriorCells, region, true))
+                            .thenComparingInt(BuildingFloorRegion::anchorY))
+                    .map(BuildingFloorRegion::anchorY)
+                    .orElse(fallbackY);
+            return new GroundFloorSelection(entranceFloorY, fallbackSource);
         }
 
-        int entranceFloorY = regions.stream()
-                .min(Comparator
-                        .comparingInt((BuildingFloorRegion region) -> minimumEntranceDistance(
-                                entranceInteriorCells, region, false))
-                        .thenComparingInt(region -> minimumEntranceDistance(entranceInteriorCells, region, true))
-                        .thenComparingInt(BuildingFloorRegion::anchorY))
-                .map(BuildingFloorRegion::anchorY)
-                .orElse(fallbackY);
-        return new GroundFloorSelection(entranceFloorY, fallbackSource);
+        if (!regions.isEmpty() && !perimeterTerrainYs.isEmpty()) {
+            int terrainY = medianTerrainY(perimeterTerrainYs);
+            int terrainFloorY = regions.stream()
+                    .min(Comparator
+                            .comparingInt((BuildingFloorRegion region) -> Math.abs(region.anchorY() - terrainY))
+                            .thenComparing(Comparator.comparingInt(
+                                    BuildingFloorRegion::anchorY).reversed()))
+                    .map(BuildingFloorRegion::anchorY)
+                    .orElse(fallbackY);
+            return new GroundFloorSelection(
+                    terrainFloorY, "terrain-perimeter-" + fallbackSource);
+        }
+
+        return new GroundFloorSelection(fallbackY, fallbackSource);
     }
 
     /**
@@ -876,6 +904,52 @@ public class Building {
                                 entrance.exterior().getX(), entrance.exterior().getZ())
                 ))
                 .toList();
+    }
+
+    /**
+     * Samples the terrain immediately outside the scanned structure bounds. This is only
+     * used when no reliable exterior normal-door entrance exists, so slopes elsewhere on
+     * the perimeter cannot override explicit entrance evidence.
+     */
+    private static List<Integer> sampleTerrainPerimeter(Level world,
+                                                        int minX,
+                                                        int minZ,
+                                                        int maxX,
+                                                        int maxZ) {
+        int outerMinX = minX - 1;
+        int outerMaxX = maxX + 1;
+        int outerMinZ = minZ - 1;
+        int outerMaxZ = maxZ + 1;
+        List<Integer> terrainYs = new ArrayList<>();
+
+        for (int x = outerMinX; x <= outerMaxX; x++) {
+            terrainYs.add(world.getHeight(
+                    Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, outerMinZ));
+            if (outerMaxZ != outerMinZ) {
+                terrainYs.add(world.getHeight(
+                        Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, outerMaxZ));
+            }
+        }
+        for (int z = outerMinZ + 1; z < outerMaxZ; z++) {
+            terrainYs.add(world.getHeight(
+                    Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, outerMinX, z));
+            if (outerMaxX != outerMinX) {
+                terrainYs.add(world.getHeight(
+                        Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, outerMaxX, z));
+            }
+        }
+        return List.copyOf(terrainYs);
+    }
+
+    private static int medianTerrainY(Collection<Integer> terrainYs) {
+        int[] sorted = terrainYs.stream().mapToInt(Integer::intValue).sorted().toArray();
+        if (sorted.length == 0) {
+            throw new IllegalArgumentException("terrainYs must not be empty");
+        }
+        int middle = sorted.length / 2;
+        return sorted.length % 2 == 1
+                ? sorted[middle]
+                : Math.floorDiv(sorted[middle - 1] + sorted[middle], 2);
     }
 
     private record GroundFloorSelection(int floorY, String source) {

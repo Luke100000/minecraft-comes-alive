@@ -30,7 +30,7 @@ final class BuildingRoomIdentity {
                 continue;
             }
 
-            Candidate candidate = scoreCandidate(scanned, existing, preferredBuildingId);
+            Candidate candidate = scoreCandidate(scanned, existing, preferredBuildingId, village);
             if (candidate != null) {
                 candidates.add(candidate);
             }
@@ -53,7 +53,7 @@ final class BuildingRoomIdentity {
                 .filter(existing -> existing.getEffectiveStructureId() != matchedStructureId)
                 .filter(existing -> !existing.isStructureRoot())
                 .anyMatch(existing -> scanned.isStrictScan() && existing.isStrictScan()
-                        ? roomsOverlapOnSemanticFloor(scanned, existing)
+                        ? roomsOverlapOnSemanticFloor(scanned, existing, village)
                         : scanned.getIntersectionVolume(existing) > 0L);
         if (overlapsAnotherStructure) {
             return MatchResult.failure(Building.validationResult.AMBIGUOUS_STRUCTURE);
@@ -96,7 +96,7 @@ final class BuildingRoomIdentity {
                 || added.getEffectiveStructureId() != structureId) {
             return Building.validationResult.AMBIGUOUS_STRUCTURE;
         }
-        if (!sameCanonicalFloor(expected, retained, added)) {
+        if (!sameCanonicalFloor(village, expected, retained, added)) {
             return Building.validationResult.OVERLAP;
         }
 
@@ -116,8 +116,8 @@ final class BuildingRoomIdentity {
                 if (room.getId() == expected.getId() || !room.isFunctionalRoom()) {
                     continue;
                 }
-                if (roomsOverlapOnSemanticFloor(retained, room)
-                        || roomsOverlapOnSemanticFloor(added, room)) {
+                if (roomsOverlapOnSemanticFloor(retained, room, village)
+                        || roomsOverlapOnSemanticFloor(added, room, village)) {
                     return room.getEffectiveStructureId() == structureId
                             ? Building.validationResult.OVERLAP
                             : Building.validationResult.AMBIGUOUS_STRUCTURE;
@@ -164,7 +164,12 @@ final class BuildingRoomIdentity {
     }
 
     static boolean sameRoomGeometry(Building first, Building second) {
-        if (first == null || second == null || !sameCanonicalFloor(first, second)) {
+        return sameRoomGeometry(first, second, null);
+    }
+
+    static boolean sameRoomGeometry(Building first, Building second, Building structureRoot) {
+        if (first == null || second == null
+                || !sameCanonicalFloor(structureRoot, first, second)) {
             return false;
         }
         long firstArea = first.getFloorFootprintArea();
@@ -175,10 +180,12 @@ final class BuildingRoomIdentity {
 
     private static Candidate scoreCandidate(Building scanned,
                                             Building existing,
-                                            int preferredBuildingId) {
+                                            int preferredBuildingId,
+                                            Village village) {
         boolean preferred = existing.getId() == preferredBuildingId;
         boolean exactRoomTopology = scanned.isStrictScan() && existing.isStrictScan();
-        boolean sameSemanticFloor = !exactRoomTopology || sameCanonicalFloor(scanned, existing);
+        boolean sameSemanticFloor = !exactRoomTopology
+                || sameCanonicalFloor(village, scanned, existing);
         if (exactRoomTopology && !preferred && !sameSemanticFloor) {
             return null;
         }
@@ -243,21 +250,53 @@ final class BuildingRoomIdentity {
         return new Candidate(existing, score, sourceAnchor);
     }
 
-    private static boolean sameCanonicalFloor(Building... rooms) {
+    private static boolean sameCanonicalFloor(Building structureRoot, Building... rooms) {
         if (rooms.length == 0) {
             return true;
         }
-        int floorY = rooms[0].getFloorY();
+        int floorY = BuildingStructureManager.canonicalFloorY(
+                structureRoot, rooms[0].getFloorY());
         for (int i = 1; i < rooms.length; i++) {
-            if (rooms[i].getFloorY() != floorY) {
+            if (BuildingStructureManager.canonicalFloorY(
+                    structureRoot, rooms[i].getFloorY()) != floorY) {
                 return false;
             }
         }
         return true;
     }
 
-    private static boolean roomsOverlapOnSemanticFloor(Building first, Building second) {
-        return sameCanonicalFloor(first, second)
+    private static boolean sameCanonicalFloor(Village village, Building... rooms) {
+        if (rooms.length == 0) {
+            return true;
+        }
+
+        Building fallbackRoot = Arrays.stream(rooms)
+                .filter(Building::hasStructure)
+                .map(room -> BuildingStructureManager.root(
+                        village, room.getEffectiveStructureId()).orElse(null))
+                .filter(Objects::nonNull)
+                .findFirst()
+                .orElse(null);
+
+        Integer floorY = null;
+        for (Building room : rooms) {
+            Building root = room.hasStructure()
+                    ? BuildingStructureManager.root(
+                    village, room.getEffectiveStructureId()).orElse(fallbackRoot)
+                    : fallbackRoot;
+            int canonicalY = BuildingStructureManager.canonicalFloorY(root, room.getFloorY());
+            if (floorY != null && canonicalY != floorY) {
+                return false;
+            }
+            floorY = canonicalY;
+        }
+        return true;
+    }
+
+    private static boolean roomsOverlapOnSemanticFloor(Building first,
+                                                        Building second,
+                                                        Village village) {
+        return sameCanonicalFloor(village, first, second)
                 && first.getHorizontalFootprintIntersectionArea(second) > 0L;
     }
 

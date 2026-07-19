@@ -395,7 +395,8 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         boolean requestedInsideOldFootprint =
                 requestedBuilding.getHorizontalFootprintIntersectionArea(expected) == requestedArea;
         if (requestedInsideOldFootprint
-                && !BuildingRoomIdentity.sameRoomGeometry(expected, requestedBuilding)) {
+                && !BuildingRoomIdentity.sameRoomGeometry(
+                        expected, requestedBuilding, structureRoot)) {
             List<BuildingScanResult> components = new ArrayList<>();
             addDistinctSplitComponent(components, requestedRaw);
             discoverSplitComponents(village, expected, structureRoot, components);
@@ -439,7 +440,8 @@ public class VillageManager extends SavedData implements Iterable<Village> {
                                          Building expected,
                                          Building structureRoot,
                                          List<BuildingScanResult> components) {
-        int canonicalFloorY = expected.getFloorY();
+        int canonicalFloorY = BuildingStructureManager.canonicalFloorY(
+                structureRoot, expected.getFloorY());
         int probeY = canonicalFloorY + BuildingFloorRegionDetector.FLOOR_CLUSTER_TOLERANCE;
         BlockPos min = expected.getRawPos0();
         BlockPos max = expected.getRawPos1();
@@ -891,7 +893,8 @@ public class VillageManager extends SavedData implements Iterable<Village> {
     }
 
     private static List<BlockPos> getGroundRoomSources(Building root) {
-        int groundY = root.getGroundFloorY();
+        int groundY = BuildingStructureManager.canonicalFloorY(
+                root, root.getGroundFloorY());
         LinkedHashSet<BlockPos> sources = new LinkedHashSet<>();
 
         root.getFloorRegions().stream()

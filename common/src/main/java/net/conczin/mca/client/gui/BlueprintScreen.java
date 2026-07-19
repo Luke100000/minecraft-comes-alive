@@ -508,9 +508,19 @@ public class BlueprintScreen extends ExtendedScreen {
         minecraft.gui.renderOverlayMessage(context, minecraft.getTimer());
     }
 
+    private static ReportBuildingMessage.Action getStructureScanAction(Village.StructuralPosition structuralPosition) {
+        return switch (structuralPosition) {
+            case OUTSIDE -> ReportBuildingMessage.Action.ADD;
+            case ATTACHABLE_ROOM -> ReportBuildingMessage.Action.ADD_ROOM;
+            case REGISTERED_ROOM -> ReportBuildingMessage.Action.UPDATE_ROOM;
+        };
+    }
+
     private void requestStructureScan() {
+        Village.StructuralLookup structuralLookup = getPlayerStructuralLookup();
+        ReportBuildingMessage.Action action = getStructureScanAction(structuralLookup.position());
         selectPlayerFloorOnNextVillageResponse = true;
-        Network.sendToServer(new ReportBuildingMessage(ReportBuildingMessage.Action.STRUCTURE_SCAN));
+        Network.sendToServer(new ReportBuildingMessage(action));
     }
 
     void cancelPendingFloorSelection() {
