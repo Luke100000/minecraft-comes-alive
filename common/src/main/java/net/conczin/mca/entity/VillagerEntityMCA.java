@@ -160,13 +160,13 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     }
 
     @Override
-    protected BodyRotationControl createBodyControl() {
-        return new MCABodyRotationControl(this);
+    protected PathNavigation createNavigation(Level level) {
+        return new MCAGroundPathNavigation(this, level);
     }
 
     @Override
-    protected PathNavigation createNavigation(Level level) {
-        return new MCAGroundPathNavigation(this, level);
+    public void setJumping(boolean jumping) {
+        super.setJumping(jumping && !this.onClimbable());
     }
 
     @Override
