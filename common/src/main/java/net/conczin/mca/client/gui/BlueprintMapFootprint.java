@@ -52,10 +52,9 @@ final class BlueprintMapFootprint {
         }
 
         LinkedHashSet<Cell> expanded = new LinkedHashSet<>();
-        int safeWidth = Math.max(0, width);
         for (Cell cell : cells) {
-            for (int dz = -safeWidth; dz <= safeWidth; dz++) {
-                for (int dx = -safeWidth; dx <= safeWidth; dx++) {
+            for (int dz = -width; dz <= width; dz++) {
+                for (int dx = -width; dx <= width; dx++) {
                     expanded.add(new Cell(cell.x() + dx, cell.z() + dz));
                 }
             }
@@ -75,7 +74,7 @@ final class BlueprintMapFootprint {
 
         List<RowSpan> spans = new ArrayList<>();
         for (Map.Entry<Integer, List<Integer>> entry : xsByZ.entrySet()) {
-            List<Integer> xs = entry.getValue().stream().distinct().sorted().toList();
+            List<Integer> xs = entry.getValue().stream().sorted().toList();
             int start = xs.getFirst();
             int previous = start;
             for (int index = 1; index < xs.size(); index++) {
@@ -157,42 +156,6 @@ final class BlueprintMapFootprint {
             previous = z;
         }
         edges.add(new Edge(x, start, x, previous + 1));
-    }
-
-    static boolean containsWithMargin(Set<Cell> cells, int x, int z, int margin) {
-        if (cells.isEmpty()) {
-            return false;
-        }
-
-        int safeMargin = Math.max(0, margin);
-        for (int dz = -safeMargin; dz <= safeMargin; dz++) {
-            for (int dx = -safeMargin; dx <= safeMargin; dx++) {
-                if (cells.contains(new Cell(x + dx, z + dz))) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    static Cell centroidCell(Set<Cell> cells) {
-        if (cells.isEmpty()) {
-            throw new IllegalArgumentException("Cannot center an empty footprint");
-        }
-
-        double centerX = cells.stream().mapToInt(Cell::x).average().orElseThrow();
-        double centerZ = cells.stream().mapToInt(Cell::z).average().orElseThrow();
-        return cells.stream()
-                .min(Comparator
-                        .comparingDouble((Cell cell) ->
-                                square(cell.x() - centerX) + square(cell.z() - centerZ))
-                        .thenComparingInt(Cell::z)
-                        .thenComparingInt(Cell::x))
-                .orElseThrow();
-    }
-
-    private static double square(double value) {
-        return value * value;
     }
 
     record Cell(int x, int z) {

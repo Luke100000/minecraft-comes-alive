@@ -1,14 +1,9 @@
 package net.conczin.mca.client.gui;
 
-import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.conczin.mca.MCA;
-import net.conczin.mca.MCAClient;
 import net.conczin.mca.client.gui.widget.LegacyImageButton;
 import net.conczin.mca.client.gui.widget.TooltipButtonWidget;
-import net.conczin.mca.client.gui.widget.WidgetUtils;
-import net.conczin.mca.client.render.JourneyMapIconBridge;
-import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.network.Network;
 import net.conczin.mca.network.c2s.GetVillageRequest;
 import net.conczin.mca.network.c2s.RenameVillageMessage;
@@ -26,21 +21,14 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
-import net.minecraft.client.gui.components.PlayerFaceRenderer;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.player.LocalPlayer;
-import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Vec3i;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.util.FastColor;
 import net.minecraft.util.Mth;
-import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.levelgen.Heightmap;
-import net.minecraft.world.level.material.MapColor;
 
 import java.util.*;
 import java.util.function.Consumer;
@@ -59,39 +47,9 @@ public class BlueprintScreen extends ExtendedScreen {
     private static final int MAP_ICONS_BUTTON_WIDTH = 47;
     private static final int MAP_TERRAIN_BUTTON_WIDTH = 52;
     private static final int MAP_SCALE_BUTTON_WIDTH = 47;
-    private static final int TERRAIN_TARGET_CELL_PIXELS = 2;
-    private static final int TERRAIN_CACHE_MARGIN_BLOCKS = 64;
-    private static final int TERRAIN_BACKGROUND_COLOR = 0xd0181c22;
-    private static final int TERRAIN_ALPHA = 0xff;
-    private static final int TERRAIN_FALLBACK_COLOR = 0x6f766f;
-    private static final int TERRAIN_CONTOUR_COLOR = 0x66000000;
-    private static final float TERRAIN_BASE_BRIGHTNESS = MapColor.Brightness.NORMAL.modifier / 255.0f;
-    private static final float TERRAIN_ELEVATION_BRIGHTNESS_RANGE = 0.12f;
-    private static final float TERRAIN_SLOPE_BRIGHTNESS_PER_BLOCK = 0.055f;
-    private static final float TERRAIN_MIN_BRIGHTNESS = 0.58f;
-    private static final float TERRAIN_MAX_BRIGHTNESS = 1.15f;
-    private static final int ROOM_INNER_PADDING = 1;
-    private static final int PLAYER_MARKER_SIZE = 6;
-    private static final int PLAYER_MARKER_EDGE_PADDING = 2;
     private static final int PLAYER_CENTERED_BUTTON_WIDTH = 78;
     private static final int PLAYER_HEAD_BUTTON_SIZE = 16;
     private static final int PLAYER_HEAD_ICON_SIZE = 12;
-    private static final int ALL_FLOORS_GEOMETRY_KEY = Integer.MIN_VALUE;
-    private static final int ROOM_FILL_ALPHA_ALL_FLOORS = 0x60;
-    private static final int ROOM_FILL_ALPHA_SELECTED_FLOOR = 0x70;
-    private static final float ROOM_FILL_BRIGHTEN_FACTOR = 1.15f;
-    private static final int ROOM_BORDER_ALPHA_ALL_FLOORS = 0xd0;
-    private static final int ROOM_BORDER_ALPHA_SELECTED_FLOOR = 0xee;
-    private static final int ROOM_BORDER_ALPHA_HOVERED = 0xff;
-    private static final float ROOM_BORDER_BRIGHTEN_FACTOR = 1.35f;
-    private static final int BUILDING_OUTLINE_WIDTH = 1;
-    private static final int BUILDING_SHADE_ALPHA = 0x24;
-    private static final int BUILDING_BORDER_ALPHA = 0xc0;
-    private static final float BUILDING_BORDER_DARKEN_FACTOR = 0.58f;
-    private static final float ROOM_ICON_MIN_SCALE = 0.90f;
-    private static final float ROOM_ICON_MAX_SCALE = 1.35f;
-    private static final float ROOM_ICON_AREA_REFERENCE = 6.0f;
-    private static final int ROOM_FILL_ALPHA_HOVERED = 0x98;
     private static final int TOOLTIP_FLOOR_BASEMENT_COLOR = 0x9b8cff;
     private static final int TOOLTIP_FLOOR_GROUND_COLOR = 0xf2c94c;
     private static final int TOOLTIP_FLOOR_UPPER_COLOR = 0x6fd6a5;
@@ -133,14 +91,10 @@ public class BlueprintScreen extends ExtendedScreen {
     private boolean showBuildingIcons = true;
     private boolean showTerrain = true;
     private BlueprintFloorLayout floorLayout = BlueprintFloorLayout.empty();
-    private TerrainSnapshot terrainSnapshot;
-    private ResourceLocation terrainTextureLocation;
-    private final Map<Integer, MapGeometry> mapGeometryCache = new HashMap<>();
-    private List<MapStructureLayer> structureLayerCache;
-    private boolean logNextFloorRoomVillageResponse;
+    private BlueprintMapGeometry mapGeometry = BlueprintMapGeometry.empty();
+    private final BlueprintMapRenderer mapRenderer = new BlueprintMapRenderer();
     private BuildingType selectedBuilding;
     private UUID selectedVillager;
-    private static final int ROOM_SHADOW_COLOR = 0x50000000;
 
     private int mouseX;
     private int mouseY;
@@ -186,10 +140,6 @@ public class BlueprintScreen extends ExtendedScreen {
         ));
 
         return buttons;
-    }
-
-    protected void drawBuildingIcon(GuiGraphics context, ResourceLocation texture, int x, int y, int u, int v) {
-        WidgetUtils.drawBuildingIcon(context, texture, x, y, u, v);
     }
 
     @Override
@@ -525,18 +475,7 @@ public class BlueprintScreen extends ExtendedScreen {
     private void requestStructureScan() {
         Village.StructuralLookup structuralLookup = getPlayerStructuralLookup();
         ReportBuildingMessage.Action action = getStructureScanAction(structuralLookup.position());
-        BlockPos playerPos = minecraft != null && minecraft.player != null
-                ? minecraft.player.blockPosition()
-                : null;
-        MCA.LOGGER.info("[FloorRoomDebug] side=client stage=request-structure-scan pos={} lookup={} lookupBuilding={} action={} selectedFloor={} availableFloors={} pendingFloorSelectBefore={}",
-                playerPos, structuralLookup.position(), describeBuilding(structuralLookup.building().orElse(null)),
-                action, selectedFloorOrdinal, floorLayout.ordinals(), selectPlayerFloorOnNextVillageResponse);
-        selectPlayerFloorOnNextVillageResponse = action == ReportBuildingMessage.Action.ADD
-                || action == ReportBuildingMessage.Action.ADD_ROOM
-                || action == ReportBuildingMessage.Action.UPDATE_ROOM;
-        // Arm one response snapshot for this explicit user action. Passive village
-        // syncs must not periodically dump every building into the log.
-        logNextFloorRoomVillageResponse = true;
+        selectPlayerFloorOnNextVillageResponse = true;
         Network.sendToServer(new ReportBuildingMessage(action));
     }
 
@@ -549,7 +488,7 @@ public class BlueprintScreen extends ExtendedScreen {
             return new Village.StructuralLookup(Village.StructuralPosition.OUTSIDE, Optional.empty());
         }
 
-        return village.getStructuralLookup(minecraft.player.blockPosition());
+        return village.getStructuralLookup(minecraft.level, minecraft.player.blockPosition());
     }
 
     private static String getStructureScanTranslationKey(Village.StructuralPosition structuralPosition) {
@@ -637,25 +576,14 @@ public class BlueprintScreen extends ExtendedScreen {
     }
 
     private void renderMap(GuiGraphics context, float partialTick) {
-        final PoseStack matrices = context.pose();
         int centerX = width / 2;
         int centerY = height / 2 + 8;
-        int left = centerX - MAP_HALF_SIZE;
-        int top = centerY - MAP_HALF_SIZE;
-        int right = centerX + MAP_HALF_SIZE;
-        int bottom = centerY + MAP_HALF_SIZE;
         Integer selectedFloor = selectedFloorOrdinal;
-        if (showTerrain) {
-            // Give the topographic cells a stable backing instead of blending them into the
-            // blurred 3D world behind the screen. Keep one pixel free for the map border.
-            context.fill(left + 1, top + 1, right - 1, bottom - 1, TERRAIN_BACKGROUND_COLOR);
-        }
-        WidgetUtils.drawRectangle(context, left, top, right, bottom, 0xffffff88);
 
-        //hint
         if (!village.isAutoScan() && village.getStructureCount() <= 1) {
             int hintY = floorLayout.ordinals().size() > 1 ? height / 2 + 134 : height / 2 + 90;
-            context.drawCenteredString(font, Component.translatable("gui.blueprint.autoScanDisabled"), width / 2, hintY, 0xaaffffff);
+            context.drawCenteredString(font, Component.translatable("gui.blueprint.autoScanDisabled"),
+                    width / 2, hintY, 0xaaffffff);
         }
 
         LocalPlayer player = minecraft == null ? null : minecraft.player;
@@ -665,304 +593,50 @@ public class BlueprintScreen extends ExtendedScreen {
         double villageCenterZ = (village.getBox().minZ() + village.getBox().maxZ() + 1) / 2.0D;
         double requestedMapCenterX = playerCentered && player != null ? playerRenderX : villageCenterX;
         double requestedMapCenterZ = playerCentered && player != null ? playerRenderZ : villageCenterZ;
-        float scale = getMapScale();
 
-        // Pixel-lock one shared map origin for terrain, room fills, structure shade,
-        // outlines and icons. Player momentum now translates the complete map as one unit
-        // instead of independently re-rounding every screen-space edge each frame.
-        double mapOriginX = Math.rint(centerX - requestedMapCenterX * scale);
-        double mapOriginZ = Math.rint(centerY - requestedMapCenterZ * scale);
-        double mapCenterX = (centerX - mapOriginX) / scale;
-        double mapCenterZ = (centerY - mapOriginZ) / scale;
-
-        int mouseLocalX = (int) Math.floor((mouseX - centerX) / scale + mapCenterX);
-        int mouseLocalZ = (int) Math.floor((mouseY - centerY) / scale + mapCenterZ);
-        BlueprintMapFootprint.Cell hoveredMapCell =
-                new BlueprintMapFootprint.Cell(mouseLocalX, mouseLocalZ);
-        boolean mouseInsideMap = mouseX >= left + 1 && mouseX < right - 1
-                && mouseY >= top + 1 && mouseY < bottom - 1;
-
-        List<MapHoverTarget> hoverTargets = new ArrayList<>();
-        List<Building> groupedIconBuildings = new ArrayList<>();
-        MapGeometry geometry = getMapGeometry(selectedFloor);
-        List<MapFootprintLayer> footprintLayers = geometry.footprintLayers();
-        List<MapStructureLayer> structureLayers = geometry.structureLayers();
-        List<MapIconLayer> footprintIconLayers = geometry.iconLayers();
-
-        context.enableScissor(left + 1, top + 1, right - 1, bottom - 1);
-
-        matrices.pushPose();
-        matrices.translate(centerX, centerY, 0.0D);
-        matrices.scale(scale, scale, 1.0F);
-        matrices.translate(-mapCenterX, -mapCenterZ, 0.0D);
-
-        if (showTerrain) {
-            renderTerrain(context, mapCenterX, mapCenterZ, scale);
-        }
-
-        // Grouped POIs keep their legacy point/rectangle rendering. Persistent room
-        // structures are rendered from exact floor footprints below.
-        for (Building building : geometry.groupedBuildings()) {
-
-            BuildingType buildingType = building.getBuildingType();
-            if (buildingType.isIcon()) {
-                BlockPos center = building.getCenter();
-                groupedIconBuildings.add(building);
-
-                int hoverMargin = 6;
-                if (mouseInsideMap
-                        && center.distSqr(new Vec3i(mouseLocalX, center.getY(), mouseLocalZ)) < hoverMargin * hoverMargin) {
-                    addRoomHover(hoverTargets, building, selectedFloor);
-                }
-                continue;
-            }
-
-            List<BlueprintFloorLayout.RegionBounds> renderRegions = floorLayout.regionsFor(building, selectedFloor);
-            int hoverMargin = 1;
-            boolean hovering = mouseInsideMap && renderRegions.stream().anyMatch(region ->
-                    mouseLocalX >= region.minX() - hoverMargin && mouseLocalX <= region.maxX() + hoverMargin
-                            && mouseLocalZ >= region.minZ() - hoverMargin && mouseLocalZ <= region.maxZ() + hoverMargin);
-
-            for (BlueprintFloorLayout.RegionBounds region : renderRegions) {
-                renderRoomRegion(context, region, buildingType.getColor(), selectedFloor != null, hovering);
-            }
-
-            if (hovering) {
-                addRoomHover(hoverTargets, building, selectedFloor);
-            }
-        }
-
-        // The structure layer is the separate width-expanded ring around the exact room
-        // union. Hovering that ring resolves to the structure root, whose tooltip enumerates
-        // every registered room/floor in the structure.
-        matrices.popPose();
-        for (MapStructureLayer layer : structureLayers) {
-            renderStructureShade(context, layer.shadeSpans(),
-                    layer.root().getBuildingType().getColor(),
-                    centerX, centerY, mapCenterX, mapCenterZ, scale);
-        }
-
-        Set<MapFootprintLayer> hoveredFootprintLayers = new HashSet<>();
-        for (MapFootprintLayer layer : footprintLayers) {
-            boolean hovering = mouseInsideMap && isRoomHovered(
-                    layer,
-                    hoveredMapCell,
-                    mouseX, mouseY,
-                    centerX, centerY,
-                    mapCenterX, mapCenterZ,
-                    scale);
-            if (hovering) {
-                hoveredFootprintLayers.add(layer);
-            }
-            renderRoomFootprint(context, layer.fillSpans(),
-                    layer.building().getBuildingType().getColor(), selectedFloor != null, hovering,
-                    centerX, centerY, mapCenterX, mapCenterZ, scale);
-            if (hovering) {
-                addRoomHover(hoverTargets, layer.building(), layer.floorOrdinal());
-            }
-        }
-
-        // Room hover wins over the building shade occupying the same map cells.
-        for (MapStructureLayer layer : structureLayers) {
-            boolean roomHovered = hoverTargets.stream().anyMatch(target ->
-                    !target.building().isStructureRoot()
-                            && !target.building().getBuildingType().grouped()
-                            && target.building().getEffectiveStructureId()
-                            == layer.root().getEffectiveStructureId());
-            boolean buildingHovered = layer.shadeCells().contains(hoveredMapCell)
-                    || isOutlineHovered(layer.borderEdges(), mouseX, mouseY,
-                    centerX, centerY, mapCenterX, mapCenterZ, scale);
-            if (!roomHovered && mouseInsideMap && buildingHovered) {
-                hoverTargets.add(new MapHoverTarget(layer.root(), null));
-            }
-        }
-
-        // Building and room outlines are UI detail rather than world geometry. Render their
-        // exposed perimeter edges after leaving the scaled map pose so they remain one pixel.
-        for (MapStructureLayer layer : structureLayers) {
-            renderStructureOutlineScreenSpace(
-                    context,
-                    layer.borderEdges(),
-                    layer.root().getBuildingType().getColor(),
-                    centerX,
-                    centerY,
-                    mapCenterX,
-                    mapCenterZ,
-                    scale);
-        }
-        List<MapFootprintLayer> outlinedRooms = selectedFloor == null
-                ? getAllFloorsOutlineLayers(footprintLayers, hoverTargets)
-                : footprintLayers;
-        for (MapFootprintLayer layer : outlinedRooms) {
-            renderRoomOutlineScreenSpace(
-                    context,
-                    layer.outlineEdges(),
-                    layer.building().getBuildingType().getColor(),
-                    selectedFloor != null,
-                    hoveredFootprintLayers.contains(layer),
-                    centerX,
-                    centerY,
-                    mapCenterX,
-                    mapCenterZ,
-                    scale);
-        }
-
-        // Icons still render above room fills/outlines. Re-enter map coordinates only for
-        // their world positions; drawScaledBuildingIcon compensates their screen-space size.
-        matrices.pushPose();
-        matrices.translate(centerX, centerY, 0.0D);
-        matrices.scale(scale, scale, 1.0F);
-        matrices.translate(-mapCenterX, -mapCenterZ, 0.0D);
-
-        // Grouped POIs keep their legacy icons. Persistent structures render exactly one
-        // scaled icon per functional room, and icon hover resolves to that room/floor.
-        if (showBuildingIcons) {
-            for (Building building : groupedIconBuildings) {
-                BuildingType buildingType = building.getBuildingType();
-                BlockPos center = building.getCenter();
-                drawBuildingIcon(context, ICON_TEXTURES,
-                        center.getX(), center.getZ(), buildingType.iconU(), buildingType.iconV());
-            }
-            for (MapIconLayer iconLayer : footprintIconLayers) {
-                BuildingType buildingType = iconLayer.building().getBuildingType();
-                float iconScale = iconLayer.iconScale();
-                drawScaledBuildingIcon(context, ICON_TEXTURES,
-                        iconLayer.iconX(), iconLayer.iconZ(),
-                        buildingType.iconU(), buildingType.iconV(), iconScale / scale);
-
-                // Icons are screen-space UI. Compensate for the map zoom so changing
-                // 1:1/2:1/3:1/4:1 does not turn a room icon into a giant map-sized box.
-                double iconScreenX = mapCoordinateToScreen(
-                        iconLayer.iconX(), centerX, mapCenterX, scale);
-                double iconScreenY = mapCoordinateToScreen(
-                        iconLayer.iconZ(), centerY, mapCenterZ, scale);
-                double hoverRadius = 7.0D * iconScale;
-                double dx = mouseX + 0.5D - iconScreenX;
-                double dz = mouseY + 0.5D - iconScreenY;
-                if (mouseInsideMap && dx * dx + dz * dz < hoverRadius * hoverRadius) {
-                    addRoomHover(hoverTargets, iconLayer.building(), iconLayer.floorOrdinal());
-                }
-            }
-        }
-
-        matrices.popPose();
-        context.disableScissor();
-
-        // The player is global map context, not part of a floor, and stays above every icon.
-        // Use the player's actual skin face and clamp it to the map edge when the player
-        // is outside the current viewport instead of letting scissoring hide it.
-        renderPlayerMarker(context, player, playerRenderX, playerRenderZ,
-                centerX, centerY, left, top, right, bottom,
-                mapCenterX, mapCenterZ, scale);
+        BlueprintMapViewport viewport = BlueprintMapViewport.create(
+                centerX,
+                centerY,
+                MAP_HALF_SIZE,
+                requestedMapCenterX,
+                requestedMapCenterZ,
+                getMapScale()
+        );
+        BlueprintMapRenderer.RenderResult renderResult = mapRenderer.render(
+                context,
+                viewport,
+                mapGeometry.get(selectedFloor),
+                selectedFloor,
+                showTerrain,
+                showBuildingIcons,
+                showPlayerHead,
+                player,
+                playerRenderX,
+                playerRenderZ,
+                mouseX,
+                mouseY
+        );
         renderPlayerHeadButtonIcon(context, player);
 
-        //sort vertically
+        List<BlueprintMapRenderer.HoverTarget> hoverTargets = new ArrayList<>(renderResult.hoverTargets());
         hoverTargets.sort(Comparator.comparingInt(
-                (MapHoverTarget target) -> target.building().getCenter().getY()).reversed());
+                (BlueprintMapRenderer.HoverTarget target) -> target.building().getCenter().getY()).reversed());
 
-        //get tooltips
         List<List<Component>> tooltips = new ArrayList<>();
-        for (MapHoverTarget target : hoverTargets) {
+        for (BlueprintMapRenderer.HoverTarget target : hoverTargets) {
             tooltips.add(getBuildingTooltip(target.building(), target.floorOrdinal()));
         }
 
-        //get height
-        int h = 0;
-        for (List<Component> b : tooltips) {
-            h += getTooltipHeight(b) + 9;
+        int tooltipHeight = 0;
+        for (List<Component> tooltip : tooltips) {
+            tooltipHeight += getTooltipHeight(tooltip) + 9;
         }
 
-        //render
-        int py = mouseY - h / 2 + 12;
-        for (List<Component> b : tooltips) {
-            context.renderComponentTooltip(font, b, mouseX, py);
-            py += getTooltipHeight(b) + 9;
+        int tooltipY = mouseY - tooltipHeight / 2 + 12;
+        for (List<Component> tooltip : tooltips) {
+            context.renderComponentTooltip(font, tooltip, mouseX, tooltipY);
+            tooltipY += getTooltipHeight(tooltip) + 9;
         }
-    }
-
-    private void renderPlayerMarker(GuiGraphics context,
-                                    LocalPlayer player,
-                                    double playerRenderX,
-                                    double playerRenderZ,
-                                    int centerX,
-                                    int centerY,
-                                    int left,
-                                    int top,
-                                    int right,
-                                    int bottom,
-                                    double mapCenterX,
-                                    double mapCenterZ,
-                                    float scale) {
-        if (player == null || !showPlayerHead) {
-            return;
-        }
-
-        double playerScreenX = centerX + (playerRenderX - mapCenterX) * scale;
-        double playerScreenY = centerY + (playerRenderZ - mapCenterZ) * scale;
-        ScreenPoint markerCenter = clampPlayerMarkerToMap(
-                playerScreenX, playerScreenY,
-                centerX, centerY, left, top, right, bottom
-        );
-        int markerX = markerCenter.x() - PLAYER_MARKER_SIZE / 2;
-        int markerY = markerCenter.y() - PLAYER_MARKER_SIZE / 2;
-
-        // Dark backing keeps pale and transparent skins readable over bright room colors.
-        context.fill(markerX - 1, markerY - 1,
-                markerX + PLAYER_MARKER_SIZE + 1, markerY + PLAYER_MARKER_SIZE + 1,
-                0xc0000000);
-
-        renderCurrentPlayerFace(context, player, markerX, markerY, PLAYER_MARKER_SIZE);
-    }
-
-    private void renderCurrentPlayerFace(GuiGraphics context, LocalPlayer player, int x, int y, int size) {
-        // Prefer the exact dynamic MCA face used by the JourneyMap compatibility bridge
-        // whenever this player is actually using an MCA-rendered player model. Fall back
-        // to the player's current vanilla skin while player data is unavailable or vanilla is selected.
-        ResourceLocation mcaFace = MCAClient.getPlayerData(player.getUUID())
-                .filter(data -> data.getPlayerModel() != VillagerLike.PlayerModel.VANILLA)
-                .map(JourneyMapIconBridge::getOrCreateFaceIcon)
-                .orElse(null);
-        if (mcaFace != null) {
-            // JourneyMapIconBridge returns a complete 24x24 cropped face texture.
-            context.blit(mcaFace, x, y, size, size,
-                    0.0F, 0.0F, 24, 24, 24, 24);
-        } else {
-            PlayerFaceRenderer.draw(context, player.getSkin(), x, y, size);
-        }
-    }
-
-    private static ScreenPoint clampPlayerMarkerToMap(double playerScreenX,
-                                                      double playerScreenY,
-                                                      int centerX,
-                                                      int centerY,
-                                                      int left,
-                                                      int top,
-                                                      int right,
-                                                      int bottom) {
-        double halfMarker = PLAYER_MARKER_SIZE / 2.0D;
-        double minCenterX = left + PLAYER_MARKER_EDGE_PADDING + halfMarker;
-        double maxCenterX = right - PLAYER_MARKER_EDGE_PADDING - halfMarker;
-        double minCenterY = top + PLAYER_MARKER_EDGE_PADDING + halfMarker;
-        double maxCenterY = bottom - PLAYER_MARKER_EDGE_PADDING - halfMarker;
-
-        double dx = playerScreenX - centerX;
-        double dy = playerScreenY - centerY;
-        boolean outside = playerScreenX < minCenterX || playerScreenX > maxCenterX
-                || playerScreenY < minCenterY || playerScreenY > maxCenterY;
-        double factor = 1.0D;
-        if (outside) {
-            double maxDx = Math.min(centerX - minCenterX, maxCenterX - centerX);
-            double maxDy = Math.min(centerY - minCenterY, maxCenterY - centerY);
-            double xFactor = dx == 0.0D ? Double.POSITIVE_INFINITY : maxDx / Math.abs(dx);
-            double yFactor = dy == 0.0D ? Double.POSITIVE_INFINITY : maxDy / Math.abs(dy);
-            factor = Math.min(xFactor, yFactor);
-        }
-
-        int x = (int) Math.round(centerX + dx * factor);
-        int y = (int) Math.round(centerY + dy * factor);
-        x = Math.max((int) Math.ceil(minCenterX), Math.min((int) Math.floor(maxCenterX), x));
-        y = Math.max((int) Math.ceil(minCenterY), Math.min((int) Math.floor(maxCenterY), y));
-        return new ScreenPoint(x, y);
     }
 
     private void renderPlayerHeadButtonIcon(GuiGraphics context, LocalPlayer player) {
@@ -972,823 +646,16 @@ public class BlueprintScreen extends ExtendedScreen {
         int iconSize = PLAYER_HEAD_ICON_SIZE;
         int iconX = playerHeadButton.getX() + (PLAYER_HEAD_BUTTON_SIZE - iconSize) / 2;
         int iconY = playerHeadButton.getY() + (playerHeadButton.getHeight() - iconSize) / 2;
-        renderCurrentPlayerFace(context, player, iconX, iconY, iconSize);
+        BlueprintMapRenderer.renderCurrentPlayerFace(context, player, iconX, iconY, iconSize);
         if (!showPlayerHead) {
             context.fill(iconX, iconY, iconX + iconSize, iconY + iconSize, 0x88000000);
         }
-    }
-
-    private record ScreenPoint(int x, int y) {
-    }
-
-    private record TerrainCell(int minX, int minZ, int maxX, int maxZ, int height, int baseColor) {
-    }
-
-    private record TerrainSnapshot(int minX, int minZ, int maxX, int maxZ, int sampleStep,
-                                   int minTerrainHeight, int maxTerrainHeight, TerrainCell[][] cells) {
-        private boolean covers(int visibleMinX, int visibleMinZ, int visibleMaxX, int visibleMaxZ, int requiredSampleStep) {
-            return sampleStep == requiredSampleStep
-                    && visibleMinX >= minX
-                    && visibleMinZ >= minZ
-                    && visibleMaxX <= maxX
-                    && visibleMaxZ <= maxZ;
-        }
-    }
-
-    private void renderTerrain(GuiGraphics context, double mapCenterX, double mapCenterZ, float scale) {
-        if (minecraft == null || minecraft.level == null) {
-            return;
-        }
-
-        int centerBlockX = (int) Math.floor(mapCenterX);
-        int centerBlockZ = (int) Math.floor(mapCenterZ);
-        int radius = Math.max(1, (int) Math.ceil((MAP_HALF_SIZE - 1) / scale) + 1);
-        int sampleStep = Math.max(1, (int) Math.ceil((double) TERRAIN_TARGET_CELL_PIXELS / scale));
-        int visibleMinX = centerBlockX - radius;
-        int visibleMaxX = centerBlockX + radius;
-        int visibleMinZ = centerBlockZ - radius;
-        int visibleMaxZ = centerBlockZ + radius;
-
-        if (terrainSnapshot == null
-                || !terrainSnapshot.covers(visibleMinX, visibleMinZ, visibleMaxX, visibleMaxZ, sampleStep)) {
-            terrainSnapshot = createTerrainSnapshot(centerBlockX, centerBlockZ, radius, sampleStep);
-            releaseTerrainTexture();
-        }
-        if (terrainSnapshot == null) {
-            return;
-        }
-
-        renderTerrainTexture(context, terrainSnapshot);
-    }
-
-    private TerrainSnapshot createTerrainSnapshot(int centerBlockX, int centerBlockZ, int visibleRadius, int sampleStep) {
-        if (minecraft == null || minecraft.level == null) {
-            return null;
-        }
-
-        int cacheRadius = visibleRadius + TERRAIN_CACHE_MARGIN_BLOCKS;
-        int minX = centerBlockX - cacheRadius;
-        int maxX = centerBlockX + cacheRadius;
-        int minZ = centerBlockZ - cacheRadius;
-        int maxZ = centerBlockZ + cacheRadius;
-        int minBuildHeight = minecraft.level.getMinBuildHeight();
-        int xCellCount = (maxX - minX) / sampleStep + 1;
-        int zCellCount = (maxZ - minZ) / sampleStep + 1;
-        TerrainCell[][] cells = new TerrainCell[xCellCount][zCellCount];
-        int minTerrainHeight = Integer.MAX_VALUE;
-        int maxTerrainHeight = Integer.MIN_VALUE;
-
-        BlockPos.MutableBlockPos surfacePos = new BlockPos.MutableBlockPos();
-        for (int cellX = 0; cellX < xCellCount; cellX++) {
-            int x = minX + cellX * sampleStep;
-            int cellMaxX = Math.min(x + sampleStep, maxX + 1);
-            int sampleX = Math.min(x + sampleStep / 2, maxX);
-            for (int cellZ = 0; cellZ < zCellCount; cellZ++) {
-                int z = minZ + cellZ * sampleStep;
-                int cellMaxZ = Math.min(z + sampleStep, maxZ + 1);
-                int sampleZ = Math.min(z + sampleStep / 2, maxZ);
-                if (!minecraft.level.hasChunkAt(sampleX, sampleZ)) {
-                    continue;
-                }
-
-                int surfaceHeight = minecraft.level.getHeight(
-                        Heightmap.Types.WORLD_SURFACE, sampleX, sampleZ);
-                if (surfaceHeight <= minBuildHeight) {
-                    continue;
-                }
-
-                // Match vanilla map sampling: start at WORLD_SURFACE and walk through
-                // colourless blocks (for example glass) until a visible map colour is found.
-                surfacePos.set(sampleX, surfaceHeight - 1, sampleZ);
-                BlockState surfaceState = minecraft.level.getBlockState(surfacePos);
-                MapColor mapColor = surfaceState.getMapColor(minecraft.level, surfacePos);
-                while (mapColor == MapColor.NONE && surfacePos.getY() > minBuildHeight) {
-                    surfacePos.move(0, -1, 0);
-                    surfaceState = minecraft.level.getBlockState(surfacePos);
-                    mapColor = surfaceState.getMapColor(minecraft.level, surfacePos);
-                }
-
-                // Keep visible surface colour and terrain relief separate. This prevents tree
-                // canopies from turning into fake hills while preserving vanilla map colours.
-                int terrainHeight = minecraft.level.getHeight(
-                        Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, sampleX, sampleZ);
-                if (terrainHeight <= minBuildHeight) {
-                    terrainHeight = surfacePos.getY() + 1;
-                }
-
-                int baseColor = mapColor == MapColor.NONE ? TERRAIN_FALLBACK_COLOR : mapColor.col;
-                cells[cellX][cellZ] = new TerrainCell(x, z, cellMaxX, cellMaxZ, terrainHeight, baseColor);
-                minTerrainHeight = Math.min(minTerrainHeight, terrainHeight);
-                maxTerrainHeight = Math.max(maxTerrainHeight, terrainHeight);
-            }
-        }
-
-        // Cache an empty result as well, otherwise an unloaded/empty area would be re-sampled every frame.
-        if (minTerrainHeight == Integer.MAX_VALUE) {
-            minTerrainHeight = 0;
-            maxTerrainHeight = 0;
-        }
-
-        return new TerrainSnapshot(minX, minZ, maxX, maxZ, sampleStep,
-                minTerrainHeight, maxTerrainHeight, cells);
-    }
-
-    private void renderTerrainTexture(GuiGraphics context, TerrainSnapshot snapshot) {
-        if (terrainTextureLocation == null) {
-            terrainTextureLocation = createTerrainTexture(snapshot);
-        }
-        if (terrainTextureLocation == null) {
-            return;
-        }
-
-        int textureWidth = snapshot.maxX() - snapshot.minX() + 1;
-        int textureHeight = snapshot.maxZ() - snapshot.minZ() + 1;
-        context.blit(
-                terrainTextureLocation,
-                snapshot.minX(), snapshot.minZ(),
-                textureWidth, textureHeight,
-                0.0F, 0.0F,
-                textureWidth, textureHeight,
-                textureWidth, textureHeight
-        );
-    }
-
-    private ResourceLocation createTerrainTexture(TerrainSnapshot snapshot) {
-        if (minecraft == null) {
-            return null;
-        }
-
-        TerrainCell[][] cells = snapshot.cells();
-        if (cells.length == 0 || cells[0].length == 0) {
-            return null;
-        }
-
-        int textureWidth = snapshot.maxX() - snapshot.minX() + 1;
-        int textureHeight = snapshot.maxZ() - snapshot.minZ() + 1;
-        NativeImage image = new NativeImage(textureWidth, textureHeight, true);
-        int reliefRange = snapshot.maxTerrainHeight() - snapshot.minTerrainHeight();
-        int contourInterval = getTerrainContourInterval(reliefRange);
-
-        for (int cellX = 0; cellX < cells.length; cellX++) {
-            for (int cellZ = 0; cellZ < cells[cellX].length; cellZ++) {
-                TerrainCell cell = cells[cellX][cellZ];
-                if (cell == null) {
-                    continue;
-                }
-
-                int northHeight = getTerrainCellHeight(cells, cellX, cellZ - 1, cell.height());
-                int southHeight = getTerrainCellHeight(cells, cellX, cellZ + 1, cell.height());
-                int westHeight = getTerrainCellHeight(cells, cellX - 1, cellZ, cell.height());
-                int eastHeight = getTerrainCellHeight(cells, cellX + 1, cellZ, cell.height());
-                float slopeDelta = ((westHeight - eastHeight) + (northHeight - southHeight)) * 0.25f;
-                float elevation = reliefRange == 0
-                        ? 0.5f
-                        : (cell.height() - snapshot.minTerrainHeight()) / (float) reliefRange;
-
-                int color = shadeTerrainColor(cell.baseColor(), slopeDelta, elevation);
-                int nativeColor = FastColor.ABGR32.fromArgb32(color);
-                int minPixelX = cell.minX() - snapshot.minX();
-                int minPixelZ = cell.minZ() - snapshot.minZ();
-                int maxPixelX = cell.maxX() - snapshot.minX();
-                int maxPixelZ = cell.maxZ() - snapshot.minZ();
-
-                for (int pixelX = minPixelX; pixelX < maxPixelX; pixelX++) {
-                    for (int pixelZ = minPixelZ; pixelZ < maxPixelZ; pixelZ++) {
-                        image.setPixelRGBA(pixelX, pixelZ, nativeColor);
-                    }
-                }
-
-                boolean northContour = cellZ > 0
-                        && Math.floorDiv(cell.height(), contourInterval) != Math.floorDiv(northHeight, contourInterval);
-                boolean westContour = cellX > 0
-                        && Math.floorDiv(cell.height(), contourInterval) != Math.floorDiv(westHeight, contourInterval);
-                int contourColor = FastColor.ABGR32.fromArgb32(blendTerrainContour(color));
-
-                if (northContour && minPixelZ < maxPixelZ) {
-                    for (int pixelX = minPixelX; pixelX < maxPixelX; pixelX++) {
-                        image.setPixelRGBA(pixelX, minPixelZ, contourColor);
-                    }
-                }
-                if (westContour && minPixelX < maxPixelX) {
-                    for (int pixelZ = minPixelZ; pixelZ < maxPixelZ; pixelZ++) {
-                        image.setPixelRGBA(minPixelX, pixelZ, contourColor);
-                    }
-                }
-            }
-        }
-
-        DynamicTexture texture = new DynamicTexture(image);
-        texture.setFilter(false, false);
-        return minecraft.getTextureManager().register("mca_blueprint_terrain", texture);
-    }
-
-    private static int blendTerrainContour(int baseColor) {
-        int overlayAlpha = (TERRAIN_CONTOUR_COLOR >>> 24) & 0xff;
-        int inverseAlpha = 255 - overlayAlpha;
-        int red = ((((TERRAIN_CONTOUR_COLOR >> 16) & 0xff) * overlayAlpha)
-                + (((baseColor >> 16) & 0xff) * inverseAlpha)) / 255;
-        int green = ((((TERRAIN_CONTOUR_COLOR >> 8) & 0xff) * overlayAlpha)
-                + (((baseColor >> 8) & 0xff) * inverseAlpha)) / 255;
-        int blue = (((TERRAIN_CONTOUR_COLOR & 0xff) * overlayAlpha)
-                + ((baseColor & 0xff) * inverseAlpha)) / 255;
-        return 0xff000000 | (red << 16) | (green << 8) | blue;
-    }
-
-    private void releaseTerrainTexture() {
-        if (terrainTextureLocation != null && minecraft != null) {
-            minecraft.getTextureManager().release(terrainTextureLocation);
-        }
-        terrainTextureLocation = null;
-    }
-
-    private static int getTerrainCellHeight(TerrainCell[][] cells, int x, int z, int fallbackHeight) {
-        if (x < 0 || z < 0 || x >= cells.length || z >= cells[x].length || cells[x][z] == null) {
-            return fallbackHeight;
-        }
-        return cells[x][z].height();
-    }
-
-    private static int getTerrainContourInterval(int reliefRange) {
-        if (reliefRange <= 2) {
-            return 1;
-        }
-        if (reliefRange <= 6) {
-            return 2;
-        }
-        return 4;
-    }
-
-    private static int shadeTerrainColor(int baseColor, float slopeDelta, float elevation) {
-        float elevationBrightness = (elevation - 0.5f) * 2.0f * TERRAIN_ELEVATION_BRIGHTNESS_RANGE;
-        float brightness = TERRAIN_BASE_BRIGHTNESS
-                + slopeDelta * TERRAIN_SLOPE_BRIGHTNESS_PER_BLOCK
-                + elevationBrightness;
-        brightness = Math.max(TERRAIN_MIN_BRIGHTNESS, Math.min(TERRAIN_MAX_BRIGHTNESS, brightness));
-
-        int red = Math.min(255, Math.round(((baseColor >> 16) & 0xff) * brightness));
-        int green = Math.min(255, Math.round(((baseColor >> 8) & 0xff) * brightness));
-        int blue = Math.min(255, Math.round((baseColor & 0xff) * brightness));
-        return (TERRAIN_ALPHA << 24) | (red << 16) | (green << 8) | blue;
-    }
-
-    private static void drawTerrainContourEdges(GuiGraphics context, TerrainCell cell,
-                                                boolean northContour, boolean westContour) {
-        if (northContour && cell.minZ() < cell.maxZ()) {
-            context.fill(cell.minX(), cell.minZ(), cell.maxX(), Math.min(cell.minZ() + 1, cell.maxZ()),
-                    TERRAIN_CONTOUR_COLOR);
-        }
-        if (westContour && cell.minX() < cell.maxX()) {
-            context.fill(cell.minX(), cell.minZ(), Math.min(cell.minX() + 1, cell.maxX()), cell.maxZ(),
-                    TERRAIN_CONTOUR_COLOR);
-        }
-    }
-
-    private static void renderRoomRegion(GuiGraphics context,
-                                         BlueprintFloorLayout.RegionBounds region,
-                                         int baseColor,
-                                         boolean selectedFloor,
-                                         boolean hovered) {
-        int minX = region.minX();
-        int minZ = region.minZ();
-        // Region bounds are inclusive Minecraft block coordinates. Rendering uses
-        // half-open rectangles, so max + 1 makes one block occupy exactly one map unit.
-        int maxX = region.maxX() + 1;
-        int maxZ = region.maxZ() + 1;
-
-        WidgetUtils.drawRectangle(context,
-                minX + 1, minZ + 1, maxX + 1, maxZ + 1,
-                ROOM_SHADOW_COLOR);
-
-        int innerMinX = minX + ROOM_INNER_PADDING;
-        int innerMinZ = minZ + ROOM_INNER_PADDING;
-        int innerMaxX = maxX - ROOM_INNER_PADDING;
-        int innerMaxZ = maxZ - ROOM_INNER_PADDING;
-        if (innerMinX < innerMaxX && innerMinZ < innerMaxZ) {
-            int fillAlpha = hovered
-                    ? ROOM_FILL_ALPHA_HOVERED
-                    : selectedFloor ? ROOM_FILL_ALPHA_SELECTED_FLOOR : ROOM_FILL_ALPHA_ALL_FLOORS;
-            context.fill(innerMinX, innerMinZ, innerMaxX, innerMaxZ, withAlpha(baseColor, fillAlpha));
-        }
-
-        int outlineAlpha = hovered ? 0xff : selectedFloor ? 0xdd : 0xaa;
-        WidgetUtils.drawRectangle(context,
-                minX, minZ, maxX, maxZ,
-                withAlpha(baseColor, outlineAlpha));
-
-        if (hovered && innerMinX + 1 < innerMaxX && innerMinZ + 1 < innerMaxZ) {
-            WidgetUtils.drawRectangle(context,
-                    innerMinX, innerMinZ, innerMaxX, innerMaxZ,
-                    withAlpha(baseColor, 0x88));
-        }
-    }
-
-    private MapGeometry getMapGeometry(Integer selectedFloor) {
-        int cacheKey = selectedFloor == null ? ALL_FLOORS_GEOMETRY_KEY : selectedFloor;
-        return mapGeometryCache.computeIfAbsent(cacheKey, ignored -> {
-            List<MapFootprintLayer> footprintLayers = selectedFloor == null
-                    ? buildAllFloorsRoomFootprintLayers()
-                    : buildSelectedFloorFootprintLayers(selectedFloor);
-            List<MapStructureLayer> structureLayers = getStructureLayers();
-            List<MapIconLayer> iconLayers = buildRoomIconLayers(footprintLayers);
-            List<Building> groupedBuildings = village.getBuildings().values().stream()
-                    .filter(Building::isComplete)
-                    .filter(building -> building.getBuildingType().grouped())
-                    .filter(building -> floorLayout.isBuildingVisible(building, selectedFloor))
-                    .sorted(Comparator.comparingInt(Building::getId))
-                    .toList();
-            return new MapGeometry(
-                    footprintLayers, structureLayers, iconLayers, groupedBuildings);
-        });
-    }
-
-    private List<MapStructureLayer> getStructureLayers() {
-        if (structureLayerCache != null) {
-            return structureLayerCache;
-        }
-
-        // Every canonical structure has a real registered Ground Floor room. Structure
-        // outline geometry is therefore built exactly once from semantic floor 0 and is
-        // independent of whichever floor tab is currently selected.
-        structureLayerCache = List.copyOf(buildStructureLayers(buildSelectedFloorFootprintLayers(0)));
-        return structureLayerCache;
-    }
-
-    private List<MapFootprintLayer> buildSelectedFloorFootprintLayers(int selectedFloor) {
-        List<Building> rooms = village.getBuildings().values().stream()
-                .filter(Building::isComplete)
-                .filter(Building::isFunctionalRoom)
-                .filter(building -> floorLayout.isBuildingVisible(building, selectedFloor))
-                .sorted(Comparator.comparingInt(Building::getId))
-                .toList();
-
-        List<MapFootprintLayer> layers = new ArrayList<>();
-        for (Building room : rooms) {
-            Set<BlueprintMapFootprint.Cell> footprintCells = getRoomFootprintCells(room);
-            if (footprintCells.isEmpty()) {
-                continue;
-            }
-
-            layers.add(new MapFootprintLayer(
-                    room,
-                    footprintCells,
-                    BlueprintMapFootprint.rowSpans(footprintCells),
-                    BlueprintMapFootprint.outerEdges(footprintCells),
-                    selectedFloor));
-        }
-        return layers;
-    }
-
-    private List<MapFootprintLayer> buildAllFloorsRoomFootprintLayers() {
-        List<Integer> floorPriority = getAllFloorsPriority();
-
-        List<Building> rooms = village.getBuildings().values().stream()
-                .filter(Building::isComplete)
-                .filter(Building::isFunctionalRoom)
-                .sorted(Comparator
-                        .comparingInt(Building::getEffectiveStructureId)
-                        .thenComparingInt(Building::getId))
-                .toList();
-
-        List<MapFootprintLayer> layers = new ArrayList<>();
-        for (int floorOrdinal : floorPriority) {
-            for (Building room : rooms) {
-                if (!floorLayout.isBuildingVisible(room, floorOrdinal)) {
-                    continue;
-                }
-
-                Set<BlueprintMapFootprint.Cell> footprintCells = getRoomFootprintCells(room);
-                if (footprintCells.isEmpty()) {
-                    continue;
-                }
-
-                // All Floors shows the complete footprint of every semantic floor. Do not
-                // clip a basement/upper room merely because another floor overlaps in X/Z.
-                layers.add(new MapFootprintLayer(
-                        room,
-                        footprintCells,
-                        BlueprintMapFootprint.rowSpans(footprintCells),
-                        BlueprintMapFootprint.outerEdges(footprintCells),
-                        floorOrdinal));
-            }
-        }
-        return layers;
-    }
-
-    private List<Integer> getAllFloorsPriority() {
-        List<Integer> floorPriority = new ArrayList<>();
-        if (floorLayout.ordinals().contains(0)) {
-            floorPriority.add(0);
-        }
-        floorLayout.ordinals().stream()
-                .filter(ordinal -> ordinal != 0)
-                .sorted(Comparator
-                        .comparingInt((Integer ordinal) -> Math.abs(ordinal))
-                        .thenComparingInt(Integer::intValue))
-                .forEach(floorPriority::add);
-        return List.copyOf(floorPriority);
-    }
-
-    private List<MapStructureLayer> buildStructureLayers(List<MapFootprintLayer> visibleRoomLayers) {
-        Map<Integer, LinkedHashSet<BlueprintMapFootprint.Cell>> roomCellsByStructure = new HashMap<>();
-        for (MapFootprintLayer roomLayer : visibleRoomLayers) {
-            roomCellsByStructure
-                    .computeIfAbsent(roomLayer.building().getEffectiveStructureId(),
-                            ignored -> new LinkedHashSet<>())
-                    .addAll(roomLayer.footprintCells());
-        }
-
-        List<Building> roots = village.getBuildings().values().stream()
-                .filter(Building::isComplete)
-                .filter(Building::isStructureRoot)
-                .sorted(Comparator.comparingInt(Building::getId))
-                .toList();
-
-        List<MapStructureLayer> layers = new ArrayList<>();
-        for (Building root : roots) {
-            Set<BlueprintMapFootprint.Cell> roomCells =
-                    roomCellsByStructure.get(root.getEffectiveStructureId());
-            if (roomCells == null || roomCells.isEmpty()) {
-                continue;
-            }
-
-            // Grow the exact union of registered rooms by the configured building-outline
-            // width. This produces a visible structure area without reducing L/U shapes to
-            // one min/max rectangle.
-            Set<BlueprintMapFootprint.Cell> buildingCells =
-                    BlueprintMapFootprint.expand(roomCells, BUILDING_OUTLINE_WIDTH);
-            LinkedHashSet<BlueprintMapFootprint.Cell> outlineArea =
-                    new LinkedHashSet<>(buildingCells);
-            outlineArea.removeAll(roomCells);
-
-            layers.add(new MapStructureLayer(
-                    root,
-                    outlineArea,
-                    BlueprintMapFootprint.rowSpans(outlineArea),
-                    BlueprintMapFootprint.outerEdges(buildingCells)));
-        }
-        return layers;
-    }
-
-    private List<MapIconLayer> buildRoomIconLayers(List<MapFootprintLayer> roomLayers) {
-        TreeMap<Integer, List<MapFootprintLayer>> layersByRoom = new TreeMap<>();
-        for (MapFootprintLayer layer : roomLayers) {
-            if (hasRenderableBuildingIcon(layer.building())) {
-                layersByRoom.computeIfAbsent(layer.building().getId(), ignored -> new ArrayList<>())
-                        .add(layer);
-            }
-        }
-
-        List<MapIconLayer> icons = new ArrayList<>();
-        for (List<MapFootprintLayer> layers : layersByRoom.values()) {
-            Building room = layers.getFirst().building();
-            LinkedHashSet<BlueprintMapFootprint.Cell> cells = new LinkedHashSet<>();
-            for (MapFootprintLayer layer : layers) {
-                cells.addAll(layer.footprintCells());
-            }
-            FootprintCenter center = getFootprintCenter(cells);
-            icons.add(new MapIconLayer(
-                    room,
-                    layers.getFirst().floorOrdinal(),
-                    center.x(),
-                    center.z(),
-                    getRoomIconScale(cells)));
-        }
-        return icons;
-    }
-
-    private static List<MapFootprintLayer> getAllFloorsOutlineLayers(
-            List<MapFootprintLayer> roomLayers,
-            List<MapHoverTarget> hoverTargets) {
-        Map<Integer, MapFootprintLayer> outlinedByStructure = new LinkedHashMap<>();
-        for (MapFootprintLayer layer : roomLayers) {
-            outlinedByStructure.putIfAbsent(
-                    layer.building().getEffectiveStructureId(), layer);
-        }
-
-        for (MapHoverTarget hoverTarget : hoverTargets) {
-            Building hoveredRoom = hoverTarget.building();
-            if (!hoveredRoom.isFunctionalRoom()) {
-                continue;
-            }
-            roomLayers.stream()
-                    .filter(layer -> layer.building().getId() == hoveredRoom.getId())
-                    .filter(layer -> Objects.equals(layer.floorOrdinal(), hoverTarget.floorOrdinal()))
-                    .findFirst()
-                    .ifPresent(layer -> outlinedByStructure.put(
-                            hoveredRoom.getEffectiveStructureId(), layer));
-        }
-        return List.copyOf(outlinedByStructure.values());
-    }
-
-    private boolean hasRenderableBuildingIcon(Building building) {
-        BuildingType buildingType = building.getBuildingType();
-        return buildingType.visible() && buildingType.hasIcon();
-    }
-
-    private static Set<BlueprintMapFootprint.Cell> getRoomFootprintCells(Building building) {
-        Set<BlueprintMapFootprint.Cell> detectedCells =
-                BlueprintMapFootprint.fromFloorRegions(building.getFloorRegions());
-        if (!detectedCells.isEmpty()) {
-            return detectedCells;
-        }
-
-        BlockPos rawMin = building.getRawPos0();
-        BlockPos rawMax = building.getRawPos1();
-        return BlueprintMapFootprint.rectangle(
-                rawMin.getX(), rawMin.getZ(), rawMax.getX(), rawMax.getZ());
-    }
-
-    private static void renderRoomFootprint(
-            GuiGraphics context,
-            List<BlueprintMapFootprint.RowSpan> spans,
-            int baseColor,
-            boolean selectedFloor,
-            boolean hovered,
-            int centerX,
-            int centerY,
-            double mapCenterX,
-            double mapCenterZ,
-            float scale) {
-        // A room is the floor area itself, not another thick building outline. Drawing a
-        // one-block opaque ring becomes several screen pixels wide at higher map scales and
-        // visually duplicates the structure border. Keep the whole floor uniformly shaded.
-        int fillAlpha = hovered
-                ? ROOM_FILL_ALPHA_HOVERED
-                : selectedFloor ? ROOM_FILL_ALPHA_SELECTED_FLOOR : ROOM_FILL_ALPHA_ALL_FLOORS;
-        int color = withAlpha(brightenColor(baseColor, ROOM_FILL_BRIGHTEN_FACTOR), fillAlpha);
-        renderCellSpansScreenSpace(
-                context, spans, color, centerX, centerY, mapCenterX, mapCenterZ, scale);
-    }
-
-    private static void renderRoomOutlineScreenSpace(
-            GuiGraphics context,
-            List<BlueprintMapFootprint.Edge> edges,
-            int baseColor,
-            boolean selectedFloor,
-            boolean hovered,
-            int centerX,
-            int centerY,
-            double mapCenterX,
-            double mapCenterZ,
-            float scale) {
-        int outlineAlpha = hovered
-                ? ROOM_BORDER_ALPHA_HOVERED
-                : selectedFloor ? ROOM_BORDER_ALPHA_SELECTED_FLOOR : ROOM_BORDER_ALPHA_ALL_FLOORS;
-        int outlineColor = withAlpha(brightenColor(baseColor, ROOM_BORDER_BRIGHTEN_FACTOR), outlineAlpha);
-        renderOutlineScreenSpace(
-                context, edges, outlineColor, centerX, centerY, mapCenterX, mapCenterZ, scale);
-    }
-
-    private static void renderStructureOutlineScreenSpace(
-            GuiGraphics context,
-            List<BlueprintMapFootprint.Edge> edges,
-            int baseColor,
-            int centerX,
-            int centerY,
-            double mapCenterX,
-            double mapCenterZ,
-            float scale) {
-        int outlineColor = withAlpha(
-                darkenColor(baseColor, BUILDING_BORDER_DARKEN_FACTOR),
-                BUILDING_BORDER_ALPHA);
-        renderOutlineScreenSpace(
-                context, edges, outlineColor, centerX, centerY, mapCenterX, mapCenterZ, scale);
-    }
-
-    private static void renderOutlineScreenSpace(
-            GuiGraphics context,
-            List<BlueprintMapFootprint.Edge> edges,
-            int color,
-            int centerX,
-            int centerY,
-            double mapCenterX,
-            double mapCenterZ,
-            float scale) {
-        for (BlueprintMapFootprint.Edge edge : edges) {
-            int x0 = (int) Math.round(mapCoordinateToScreen(
-                    edge.x0(), centerX, mapCenterX, scale));
-            int z0 = (int) Math.round(mapCoordinateToScreen(
-                    edge.z0(), centerY, mapCenterZ, scale));
-            int x1 = (int) Math.round(mapCoordinateToScreen(
-                    edge.x1(), centerX, mapCenterX, scale));
-            int z1 = (int) Math.round(mapCoordinateToScreen(
-                    edge.z1(), centerY, mapCenterZ, scale));
-
-            if (edge.z0() == edge.z1()) {
-                int minX = Math.min(x0, x1);
-                int maxX = Math.max(x0, x1);
-                context.fill(minX, z0, Math.max(minX + 1, maxX + 1), z0 + 1, color);
-            } else {
-                int minZ = Math.min(z0, z1);
-                int maxZ = Math.max(z0, z1);
-                context.fill(x0, minZ, x0 + 1, Math.max(minZ + 1, maxZ + 1), color);
-            }
-        }
-    }
-
-    private static double mapCoordinateToScreen(
-            double coordinate,
-            int screenCenter,
-            double mapCenter,
-            float scale) {
-        return screenCenter + (coordinate - mapCenter) * scale;
-    }
-
-    private static boolean isRoomHovered(
-            MapFootprintLayer layer,
-            BlueprintMapFootprint.Cell hoveredMapCell,
-            int mouseScreenX,
-            int mouseScreenY,
-            int centerX,
-            int centerY,
-            double mapCenterX,
-            double mapCenterZ,
-            float scale) {
-        // footprintCells is a HashSet-backed immutable set, so ordinary room-fill hover is
-        // one exact world-cell lookup instead of scanning and transforming every room cell.
-        if (layer.footprintCells().contains(hoveredMapCell)) {
-            return true;
-        }
-
-        return isOutlineHovered(layer.outlineEdges(), mouseScreenX, mouseScreenY,
-                centerX, centerY, mapCenterX, mapCenterZ, scale);
-    }
-
-    private static boolean isOutlineHovered(
-            List<BlueprintMapFootprint.Edge> edges,
-            int mouseScreenX,
-            int mouseScreenY,
-            int centerX,
-            int centerY,
-            double mapCenterX,
-            double mapCenterZ,
-            float scale) {
-        for (BlueprintMapFootprint.Edge edge : edges) {
-            int x0 = (int) Math.round(mapCoordinateToScreen(
-                    edge.x0(), centerX, mapCenterX, scale));
-            int z0 = (int) Math.round(mapCoordinateToScreen(
-                    edge.z0(), centerY, mapCenterZ, scale));
-            int x1 = (int) Math.round(mapCoordinateToScreen(
-                    edge.x1(), centerX, mapCenterX, scale));
-            int z1 = (int) Math.round(mapCoordinateToScreen(
-                    edge.z1(), centerY, mapCenterZ, scale));
-            if (edge.z0() == edge.z1()) {
-                int minX = Math.min(x0, x1);
-                int maxX = Math.max(minX + 1, Math.max(x0, x1) + 1);
-                if (mouseScreenY == z0 && mouseScreenX >= minX && mouseScreenX < maxX) {
-                    return true;
-                }
-            } else {
-                int minZ = Math.min(z0, z1);
-                int maxZ = Math.max(minZ + 1, Math.max(z0, z1) + 1);
-                if (mouseScreenX == x0 && mouseScreenY >= minZ && mouseScreenY < maxZ) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    private static void renderStructureShade(
-            GuiGraphics context,
-            List<BlueprintMapFootprint.RowSpan> shadeSpans,
-            int baseColor,
-            int centerX,
-            int centerY,
-            double mapCenterX,
-            double mapCenterZ,
-            float scale) {
-        int color = withAlpha(baseColor, BUILDING_SHADE_ALPHA);
-        renderCellSpansScreenSpace(
-                context, shadeSpans, color, centerX, centerY, mapCenterX, mapCenterZ, scale);
-    }
-
-    private static void renderCellSpansScreenSpace(
-            GuiGraphics context,
-            List<BlueprintMapFootprint.RowSpan> spans,
-            int color,
-            int centerX,
-            int centerY,
-            double mapCenterX,
-            double mapCenterZ,
-            float scale) {
-        for (BlueprintMapFootprint.RowSpan span : spans) {
-            int x0 = (int) Math.round(mapCoordinateToScreen(
-                    span.minX(), centerX, mapCenterX, scale));
-            int z0 = (int) Math.round(mapCoordinateToScreen(
-                    span.z(), centerY, mapCenterZ, scale));
-            int x1 = (int) Math.round(mapCoordinateToScreen(
-                    span.maxX() + 1, centerX, mapCenterX, scale));
-            int z1 = (int) Math.round(mapCoordinateToScreen(
-                    span.z() + 1, centerY, mapCenterZ, scale));
-            context.fill(Math.min(x0, x1), Math.min(z0, z1),
-                    Math.max(Math.min(x0, x1) + 1, Math.max(x0, x1)),
-                    Math.max(Math.min(z0, z1) + 1, Math.max(z0, z1)), color);
-        }
-    }
-
-    private void drawScaledBuildingIcon(
-            GuiGraphics context,
-            ResourceLocation texture,
-            double x,
-            double y,
-            int u,
-            int v,
-            float scale) {
-        PoseStack matrices = context.pose();
-        matrices.pushPose();
-        matrices.translate(x, y, 0.0D);
-        matrices.scale(scale, scale, 1.0F);
-        matrices.translate(-6.6D, -6.6D, 0.0D);
-        matrices.scale(0.66F, 0.66F, 0.66F);
-        context.blit(texture, 0, 0, u, v, 20, 20);
-        matrices.popPose();
-    }
-
-    private static float getRoomIconScale(Set<BlueprintMapFootprint.Cell> cells) {
-        float scale = (float) Math.sqrt(Math.max(1, cells.size())) / ROOM_ICON_AREA_REFERENCE;
-        return Math.max(ROOM_ICON_MIN_SCALE, Math.min(ROOM_ICON_MAX_SCALE, scale));
-    }
-
-    private static int brightenColor(int color, float factor) {
-        int rgb = color & 0x00ffffff;
-        int red = Math.min(255, Math.round(((rgb >> 16) & 0xff) * factor));
-        int green = Math.min(255, Math.round(((rgb >> 8) & 0xff) * factor));
-        int blue = Math.min(255, Math.round((rgb & 0xff) * factor));
-        return red << 16 | green << 8 | blue;
-    }
-
-    private static int darkenColor(int color, float factor) {
-        int rgb = color & 0x00ffffff;
-        int red = Math.round(((rgb >> 16) & 0xff) * factor);
-        int green = Math.round(((rgb >> 8) & 0xff) * factor);
-        int blue = Math.round((rgb & 0xff) * factor);
-        return red << 16 | green << 8 | blue;
-    }
-
-    private static FootprintCenter getFootprintCenter(Set<BlueprintMapFootprint.Cell> cells) {
-        int minX = cells.stream().mapToInt(BlueprintMapFootprint.Cell::x).min().orElseThrow();
-        int maxX = cells.stream().mapToInt(BlueprintMapFootprint.Cell::x).max().orElseThrow();
-        int minZ = cells.stream().mapToInt(BlueprintMapFootprint.Cell::z).min().orElseThrow();
-        int maxZ = cells.stream().mapToInt(BlueprintMapFootprint.Cell::z).max().orElseThrow();
-        return new FootprintCenter((minX + maxX + 1) / 2.0D, (minZ + maxZ + 1) / 2.0D);
-    }
-
-    private record MapGeometry(List<MapFootprintLayer> footprintLayers,
-                               List<MapStructureLayer> structureLayers,
-                               List<MapIconLayer> iconLayers,
-                               List<Building> groupedBuildings) {
-        private MapGeometry {
-            footprintLayers = List.copyOf(footprintLayers);
-            structureLayers = List.copyOf(structureLayers);
-            iconLayers = List.copyOf(iconLayers);
-            groupedBuildings = List.copyOf(groupedBuildings);
-        }
-    }
-
-    private record MapFootprintLayer(Building building,
-                                     Set<BlueprintMapFootprint.Cell> footprintCells,
-                                     List<BlueprintMapFootprint.RowSpan> fillSpans,
-                                     List<BlueprintMapFootprint.Edge> outlineEdges,
-                                     Integer floorOrdinal) {
-        private MapFootprintLayer {
-            footprintCells = Set.copyOf(footprintCells);
-            fillSpans = List.copyOf(fillSpans);
-            outlineEdges = List.copyOf(outlineEdges);
-        }
-    }
-
-    private record MapStructureLayer(Building root,
-                                     Set<BlueprintMapFootprint.Cell> shadeCells,
-                                     List<BlueprintMapFootprint.RowSpan> shadeSpans,
-                                     List<BlueprintMapFootprint.Edge> borderEdges) {
-        private MapStructureLayer {
-            shadeCells = Set.copyOf(shadeCells);
-            shadeSpans = List.copyOf(shadeSpans);
-            borderEdges = List.copyOf(borderEdges);
-        }
-    }
-
-    private record MapIconLayer(Building building,
-                                Integer floorOrdinal,
-                                double iconX,
-                                double iconZ,
-                                float iconScale) {
-    }
-
-    private record MapHoverTarget(Building building, Integer floorOrdinal) {
-    }
-
-    private static int withAlpha(int color, int alpha) {
-        return (color & 0x00ffffff) | (alpha << 24);
     }
 
     private void togglePlayerCentered() {
         playerCentered = !playerCentered;
         rememberedPlayerCentered = playerCentered;
         updatePlayerCenteredControl();
-        MCA.LOGGER.info("[FloorRoomDebug] side=client stage=player-centered-change enabled={} mode={} effectiveScale={}",
-                playerCentered, mapScaleMode, village == null ? 0.0F : getMapScale());
     }
 
     private void togglePlayerHead() {
@@ -1827,8 +694,6 @@ public class BlueprintScreen extends ExtendedScreen {
         mapScaleMode = mapScaleMode.next();
         rememberedMapScaleMode = mapScaleMode;
         updateMapScaleControl();
-        MCA.LOGGER.info("[FloorRoomDebug] side=client stage=map-scale-change mode={} effectiveScale={}",
-                mapScaleMode, village == null ? 0.0F : getMapScale());
     }
 
     private Component getMapScaleLabel() {
@@ -2006,29 +871,6 @@ public class BlueprintScreen extends ExtendedScreen {
                 .isPresent();
     }
 
-    private static void addRoomHover(List<MapHoverTarget> hoverTargets,
-                                     Building building,
-                                     Integer floorOrdinal) {
-        if (building.getBuildingType().grouped()) {
-            MapHoverTarget target = new MapHoverTarget(building, floorOrdinal);
-            if (!hoverTargets.contains(target)) {
-                hoverTargets.add(target);
-            }
-            return;
-        }
-
-        int structureId = building.getEffectiveStructureId();
-
-        // All Floors can contain vertically overlapping rooms. Keep the first room in the
-        // established floor-priority order instead of stacking several tooltips at one pixel.
-        boolean alreadyHasRoom = hoverTargets.stream().anyMatch(target ->
-                !target.building().getBuildingType().grouped()
-                        && target.building().getEffectiveStructureId() == structureId);
-        if (!alreadyHasRoom) {
-            hoverTargets.add(new MapHoverTarget(building, floorOrdinal));
-        }
-    }
-
     private List<Component> getBuildingTooltip(Building hoverBuilding,
                                                Integer floorOrdinal) {
         if (hoverBuilding.isStructureRoot()) {
@@ -2123,7 +965,7 @@ public class BlueprintScreen extends ExtendedScreen {
             for (Map.Entry<ResourceLocation, List<BlockPos>> block : building.getBlocks().entrySet()) {
                 Set<BlockPos> positions = positionsByBlock.computeIfAbsent(block.getKey(), ignored -> new HashSet<>());
                 block.getValue().stream()
-                        .filter(pos -> selectedFloor == null || floorLayout.isBlockOnFloor(building, pos, selectedFloor))
+                        .filter(pos -> selectedFloor == null || floorLayout.isBuildingOnFloor(building, selectedFloor))
                         .forEach(positions::add);
             }
         }
@@ -2283,34 +1125,19 @@ public class BlueprintScreen extends ExtendedScreen {
 
     @Override
     public void removed() {
-        releaseTerrainTexture();
+        mapRenderer.close();
         super.removed();
     }
 
     public void setVillage(Village village) {
-        boolean logFloorRoomDebug = logNextFloorRoomVillageResponse;
-        logNextFloorRoomVillageResponse = false;
-        Integer selectedBefore = selectedFloorOrdinal;
-        boolean pendingFloorSelection = selectPlayerFloorOnNextVillageResponse;
         this.village = village;
         // Terrain is world-derived and independent of village sync packets. Keeping the
         // snapshot/texture alive here prevents ordinary Blueprint data refreshes from
         // forcing an expensive terrain re-sample and GPU upload.
-        this.mapGeometryCache.clear();
-        this.structureLayerCache = null;
         this.floorLayout = village == null ? BlueprintFloorLayout.empty() : BlueprintFloorLayout.build(village);
+        this.mapGeometry = BlueprintMapGeometry.build(village, floorLayout);
         Village.StructuralLookup structuralLookup = getPlayerStructuralLookup();
         Village.StructuralPosition structuralPosition = structuralLookup.position();
-        BlockPos playerPos = minecraft != null && minecraft.player != null
-                ? minecraft.player.blockPosition()
-                : null;
-        if (logFloorRoomDebug) {
-            MCA.LOGGER.info("[FloorRoomDebug] side=client stage=village-response pos={} villageId={} buildingCount={} lookup={} lookupBuilding={} pendingFloorSelect={} selectedBefore={} availableFloors={}",
-                    playerPos, village == null ? -1 : village.getId(), village == null ? 0 : village.getBuildings().size(),
-                    structuralPosition, describeBuilding(structuralLookup.building().orElse(null)), pendingFloorSelection,
-                    selectedBefore, floorLayout.ordinals());
-            logClientBuildings(village);
-        }
         if (selectPlayerFloorOnNextVillageResponse
                 && structuralPosition == Village.StructuralPosition.REGISTERED_ROOM) {
             selectPlayerFloor(structuralLookup);
@@ -2325,11 +1152,6 @@ public class BlueprintScreen extends ExtendedScreen {
         updateRemoveRoomControl(structuralLookup);
         updateGroundAnchorControl(structuralLookup);
 
-        if (logFloorRoomDebug) {
-            MCA.LOGGER.info("[FloorRoomDebug] side=client stage=village-response-applied pos={} lookup={} selectedAfter={} availableFloors={}",
-                    playerPos, structuralPosition, selectedFloorOrdinal, floorLayout.ordinals());
-        }
-
         if (village == null) {
             setPage("empty");
         } else if (page.equals("waiting") || page.equals("empty")) {
@@ -2343,33 +1165,6 @@ public class BlueprintScreen extends ExtendedScreen {
                     selectedFloorOrdinal = ordinal;
                     rememberedFloorOrdinal = ordinal;
                 }));
-    }
-
-    private static void logClientBuildings(Village village) {
-        if (village == null) {
-            return;
-        }
-        village.getBuildings().values().stream()
-                .sorted(Comparator.comparingInt(Building::getId))
-                .forEach(building -> MCA.LOGGER.info(
-                        "[FloorRoomDebug] side=client stage=village-building villageId={} {}",
-                        village.getId(), describeBuilding(building)));
-    }
-
-    private static String describeBuilding(Building building) {
-        if (building == null) {
-            return "none";
-        }
-        return "id=" + building.getId()
-                + ",structure=" + building.getEffectiveStructureId()
-                + ",root=" + building.isStructureRoot()
-                + ",strict=" + building.isStrictScan()
-                + ",functional=" + building.isFunctionalRoom()
-                + ",floorY=" + building.getFloorY()
-                + ",groundFloorY=" + building.getGroundFloorY()
-                + ",floorRegions=" + building.getFloorRegions().stream().map(region -> region.anchorY()).toList()
-                + ",source=" + building.getSourceBlock()
-                + ",bounds=" + building.getPos0() + ".." + building.getPos1();
     }
 
     public void setVillageData(Rank rank, int reputation, boolean isVillage, Set<String> completedTasks, Map<Rank, List<Task>> tasks) {

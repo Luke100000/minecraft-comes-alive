@@ -31,8 +31,8 @@ public record ConfirmBuildingPolymorphMessage(BlockPos source,
             switch (action) {
                 case ADD -> ReportBuildingMessage.commitBuildingAndCurrentRoom(
                         villages, player, villages.analyzeInitialStructure(source), chosenType);
-                case ADD_ROOM -> ReportBuildingMessage.commitRoom(
-                        villages, player, villages.analyzeRoom(source), chosenType, false);
+                case ADD_ROOM -> ReportBuildingMessage.commitNewRoom(
+                        villages, player, villages.analyzeRoom(source), chosenType);
                 case UPDATE_ROOM -> ReportBuildingMessage.updateRoom(
                         villages, player, source, chosenType, expectedRoomId);
                 default -> MCA.LOGGER.warn("Ignoring invalid building polymorph action {} from {}", action, player);

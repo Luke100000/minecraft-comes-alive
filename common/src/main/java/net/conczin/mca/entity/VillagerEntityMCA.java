@@ -157,15 +157,8 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     }
 
     @Override
-    public Vec3 handleRelativeFrictionAndCalculateMovement(Vec3 input, float friction) {
-        Vec3 movement = super.handleRelativeFrictionAndCalculateMovement(input, friction);
-        if (getNavigation() instanceof MCAGroundPathNavigation navigation) {
-            double controlledY = navigation.getControlledLadderVelocity();
-            if (!Double.isNaN(controlledY)) {
-                return new Vec3(movement.x(), controlledY, movement.z());
-            }
-        }
-        return movement;
+    public void setJumping(boolean jumping) {
+        super.setJumping(jumping && !this.onClimbable());
     }
 
     @Override

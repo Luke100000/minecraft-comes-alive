@@ -48,6 +48,9 @@ public class FollowTask extends Behavior<VillagerEntityMCA> {
                     villager.blockPosition().getY() - playerToFollow.blockPosition().getY()
             );
             int closeEnoughDistance = verticalDistance > 1 ? 0 : 2;
+            if (villager.onClimbable()) {
+                closeEnoughDistance = 1;
+            }
 
             BehaviorUtils.setWalkAndLookTargetMemories(
                     villager, playerToFollow, speedModifier, closeEnoughDistance

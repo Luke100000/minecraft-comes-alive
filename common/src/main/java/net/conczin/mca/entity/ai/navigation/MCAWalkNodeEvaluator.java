@@ -15,7 +15,7 @@ import org.jetbrains.annotations.Nullable;
 
 public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
     private static final double FLOOR_EPSILON = 0.001D;
-    private static final int MAX_LADDER_ENTRY_DROP = 2;
+    private static final int MAX_LADDER_EDGE_OFFSET = 2;
 
     private final Long2BooleanMap clearanceCache = new Long2BooleanOpenHashMap();
     private final Long2BooleanMap climbableCache = new Long2BooleanOpenHashMap();
@@ -47,7 +47,7 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
          * considered climbable.
          */
         if (this.mob.onClimbable()) {
-            for (int drop = 1; drop <= MAX_LADDER_ENTRY_DROP; drop++) {
+            for (int drop = 1; drop <= MAX_LADDER_EDGE_OFFSET; drop++) {
                 BlockPos candidate = pos.below(drop);
 
                 if (isClimbable(candidate)) {
@@ -117,7 +117,7 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
                  * The top ladder block may be one or two blocks below the
                  * walkable floor edge.
                  */
-                for (int drop = 1; drop <= MAX_LADDER_ENTRY_DROP; drop++) {
+                for (int drop = 1; drop <= MAX_LADDER_EDGE_OFFSET; drop++) {
                     BlockPos ladderEntry = edgePos.below(drop);
 
                     if (isClimbable(ladderEntry)) {
@@ -159,7 +159,7 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
 
     private int addUpperFloorExits(Node[] nodes, int nodeCount, BlockPos ladder) {
         for (Direction direction : Direction.Plane.HORIZONTAL) {
-            for (int rise = 1; rise <= MAX_LADDER_ENTRY_DROP; rise++) {
+            for (int rise = 1; rise <= MAX_LADDER_EDGE_OFFSET; rise++) {
                 BlockPos exit = ladder.relative(direction).above(rise);
                 Node node = getStartNode(exit);
 
@@ -212,7 +212,7 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
     }
 
     private boolean hasReachableClimbableBelow(BlockPos pos) {
-        for (int drop = 1; drop <= MAX_LADDER_ENTRY_DROP; drop++) {
+        for (int drop = 1; drop <= MAX_LADDER_EDGE_OFFSET; drop++) {
             BlockPos candidate = pos.below(drop);
 
             if (isClimbable(candidate)) {

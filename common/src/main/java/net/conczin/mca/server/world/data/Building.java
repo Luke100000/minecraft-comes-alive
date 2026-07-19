@@ -216,6 +216,80 @@ public class Building {
         return floorRegions;
     }
 
+    /**
+     * Canonicalizes a persisted or sampled floor Y against this structure's detected
+     * floor regions without mutating either the structure or a room record.
+     */
+    public int getCanonicalFloorY(int floorY) {
+        return resolveFloorBand(floorY)
+                .map(FloorBand::anchorY)
+                .orElse(floorY);
+    }
+
+    /**
+     * Maps a known physical floor Y to the canonical semantic floor owned by this
+     * structure. Player-position resolution is deliberately handled elsewhere: this
+     * method never searches upward/downward and never decides which floor a player is on.
+     */
+    Optional<FloorBand> resolveFloorBand(int physicalY) {
+        int bestAnchor = 0;
+        int bestDistance = Integer.MAX_VALUE;
+        boolean found = false;
+        for (BuildingFloorRegion region : floorRegions) {
+            int anchorY = region.anchorY();
+            int distance = Math.abs(anchorY - physicalY);
+            if (distance < bestDistance
+                    || (distance == bestDistance && (!found || anchorY < bestAnchor))) {
+                bestAnchor = anchorY;
+                bestDistance = distance;
+                found = true;
+            }
+        }
+        if (!found || bestDistance > BuildingFloorRegionDetector.FLOOR_CLUSTER_TOLERANCE) {
+            return Optional.empty();
+        }
+
+        int nextAnchor = Integer.MAX_VALUE;
+        for (BuildingFloorRegion region : floorRegions) {
+            int anchorY = region.anchorY();
+            if (anchorY > bestAnchor) {
+                nextAnchor = Math.min(nextAnchor, anchorY);
+            }
+        }
+        int ceilingY = nextAnchor == Integer.MAX_VALUE
+                ? Math.max(bestAnchor + 1, pos1Y + 1)
+                : nextAnchor;
+        return Optional.of(new FloorBand(bestAnchor, ceilingY));
+    }
+
+    record FloorBand(int anchorY, int ceilingY) {
+    }
+
+    void canonicalizeFloor(Building root) {
+        if (root == null || !strictScan || structureRoot) {
+            return;
+        }
+
+        FloorBand band = root.resolveFloorBand(floorY).orElse(null);
+        if (band == null) {
+            return;
+        }
+
+        int canonicalFloorY = band.anchorY();
+        boolean regionsAlreadyCanonical = floorRegions.stream()
+                .allMatch(region -> region.anchorY() == canonicalFloorY);
+        if (floorY == canonicalFloorY && regionsAlreadyCanonical) {
+            return;
+        }
+
+        floorY = canonicalFloorY;
+        groundFloorY = canonicalFloorY;
+        hasGroundFloorAnchor = true;
+        floorRegions = floorRegions.stream()
+                .map(region -> region.withAnchorY(canonicalFloorY))
+                .toList();
+    }
+
     void retainFloorClosestTo(int y) {
         if (floorRegions.size() <= 1) {
             return;
@@ -235,10 +309,6 @@ public class Building {
                 .orElseGet(() -> Math.abs(floorY - pos.getY()));
     }
 
-    public boolean isOnGroundFloorY(int y) {
-        return Math.abs(groundFloorY - y) <= SEMANTIC_FLOOR_TOLERANCE;
-    }
-
     public boolean containsFloorPosition(Vec3i pos) {
         if (floorRegions.isEmpty()) {
             return containsPos(pos);
@@ -246,6 +316,36 @@ public class Building {
         return floorRegions.stream().anyMatch(region ->
                 Math.abs(region.anchorY() - pos.getY()) <= FLOOR_MATCH_TOLERANCE
                         && region.containsHorizontally(pos.getX(), pos.getZ()));
+    }
+
+    boolean containsFloorColumn(int x, int z) {
+        if (floorRegions.isEmpty()) {
+            return x >= pos0X && x <= pos1X && z >= pos0Z && z <= pos1Z;
+        }
+        return floorRegions.stream().anyMatch(region -> region.containsHorizontally(x, z));
+    }
+
+    long getHorizontalFootprintIntersectionArea(Building other) {
+        if (other == null) {
+            return 0L;
+        }
+        if (floorRegions.isEmpty() || other.floorRegions.isEmpty()) {
+            return getHorizontalBoundsIntersectionArea(other);
+        }
+
+        long intersection = 0L;
+        for (BuildingFloorRegion region : floorRegions) {
+            for (BuildingFloorRegion otherRegion : other.floorRegions) {
+                intersection += region.intersectionArea(otherRegion);
+            }
+        }
+        return intersection;
+    }
+
+    private long getHorizontalBoundsIntersectionArea(Building other) {
+        int x = Math.min(pos1X, other.pos1X) - Math.max(pos0X, other.pos0X) + 1;
+        int z = Math.min(pos1Z, other.pos1Z) - Math.max(pos0Z, other.pos0Z) + 1;
+        return x <= 0 || z <= 0 ? 0L : (long) x * z;
     }
 
     public boolean sharesFloorBandWith(Building other) {
@@ -340,6 +440,13 @@ public class Building {
     }
 
     public validationResult validateBuilding(Level world, Set<BlockPos> blocked, boolean allowMissingEntrance) {
+        return validateBuilding(world, blocked, allowMissingEntrance, null);
+    }
+
+    validationResult validateBuilding(Level world,
+                                      Set<BlockPos> blocked,
+                                      boolean allowMissingEntrance,
+                                      Building structureRoot) {
         //validate grouped buildings differently
         if (getBuildingType().grouped()) {
             validateBlocks(world);
@@ -347,7 +454,7 @@ public class Building {
         }
 
         if (strictScan) {
-            return validateStrictRoom(world, blocked, allowMissingEntrance);
+            return validateStrictRoom(world, blocked, allowMissingEntrance, structureRoot);
         }
 
         //clear old building
@@ -495,19 +602,7 @@ public class Building {
                 ey = Math.max(ey, p.getY());
                 ez = Math.max(ez, p.getZ());
 
-                //count block types using BlockState for live tag resolution
-                BlockState blockState = world.getBlockState(p);
-                Block block = blockState.getBlock();
-                if (isBuildingBlock(blockState)) {
-                    if (block instanceof BedBlock) {
-                        // TODO: look for better solution for 7.4.0
-                        if (blockState.getValue(BedBlock.PART) == BedPart.HEAD) {
-                            addBlock(block, p);
-                        }
-                    } else {
-                        addBlock(block, p);
-                    }
-                }
+                recordBuildingBlock(world, p);
             }
 
             //adjust building dimensions
@@ -521,17 +616,7 @@ public class Building {
 
             size = interiorSize;
             int legacyFloorY = determineDominantFloorY(lowestInteriorY, pos0Y + 1);
-            List<BuildingFloorRegionDetector.DetectedRegion> detectedFloorRegions =
-                    BuildingFloorRegionDetector.detect(supportedCells);
-            if (strictScan && detectedFloorRegions.isEmpty()) {
-                detectedFloorRegions = BuildingFloorRegionDetector
-                        .detectSingleFloor(supportedCells, legacyFloorY)
-                        .stream()
-                        .toList();
-            }
-            floorRegions = detectedFloorRegions.stream()
-                    .map(BuildingFloorRegion::fromDetected)
-                    .toList();
+            floorRegions = BuildingFloorRegionDetector.detect(supportedCells);
             floorY = floorRegions.stream()
                     .max(Comparator.comparingInt(BuildingFloorRegion::area)
                             .thenComparing(Comparator.comparingInt(BuildingFloorRegion::anchorY).reversed()))
@@ -571,9 +656,13 @@ public class Building {
                     world,
                     exteriorEntrances
             );
+            List<Integer> perimeterTerrainYs = entranceInteriorCells.isEmpty()
+                    ? sampleTerrainPerimeter(world, pos0X, pos0Z, pos1X, pos1Z)
+                    : List.of();
             GroundFloorSelection groundFloorSelection = determineGroundFloorY(
                     entranceInteriorCells,
                     terrainSamples,
+                    perimeterTerrainYs,
                     floorRegions,
                     floorY,
                     entranceSource
@@ -597,25 +686,40 @@ public class Building {
 
     private validationResult validateStrictRoom(Level world,
                                                 Set<BlockPos> blocked,
-                                                boolean allowMissingEntrance) {
-        blocks.clear();
-        size = 0;
-        setLastScan(world.getGameTime());
-
+                                                boolean allowMissingEntrance,
+                                                Building structureRoot) {
+        prepareStrictRoomScan(world);
         BuildingRoomScanner.Result scan = BuildingRoomScanner.scan(
                 world,
                 getSourceBlock(),
                 blocked,
                 Config.getInstance().maxBuildingSize,
-                Config.getInstance().maxBuildingRadius
+                Config.getInstance().maxBuildingRadius,
+                structureRoot
         );
+        return applyStrictRoomScanResult(world, scan, allowMissingEntrance);
+    }
 
-        MCA.LOGGER.info(
-                "[RoomScanV3] source={} seed={} status={} floorY={} interior={} footprint={} inspected={} entrance={} bounds={}..{}",
-                getSourceBlock(), scan.seed(), scan.status(), scan.seed().getY(),
-                scan.interiorCells().size(), scan.footprintCells().size(), scan.poiCells().size(),
-                scan.hasEntrance(), scan.min(), scan.max());
+    /**
+     * Applies already-discovered strict-room geometry without scanning the world again.
+     * Split analysis uses this to materialize scanner-owned components exactly once.
+     */
+    validationResult applyStrictRoomScan(Level world,
+                                         BuildingRoomScanner.Result scan,
+                                         boolean allowMissingEntrance) {
+        prepareStrictRoomScan(world);
+        return applyStrictRoomScanResult(world, scan, allowMissingEntrance);
+    }
 
+    private void prepareStrictRoomScan(Level world) {
+        blocks.clear();
+        size = 0;
+        setLastScan(world.getGameTime());
+    }
+
+    private validationResult applyStrictRoomScanResult(Level world,
+                                                       BuildingRoomScanner.Result scan,
+                                                       boolean allowMissingEntrance) {
         validationResult failure = switch (scan.status()) {
             case SUCCESS -> validationResult.SUCCESS;
             case OVERLAP -> validationResult.OVERLAP;
@@ -631,19 +735,7 @@ public class Building {
         }
 
         for (BlockPos p : scan.poiCells()) {
-            BlockState blockState = world.getBlockState(p);
-            Block block = blockState.getBlock();
-            if (!isBuildingBlock(blockState)) {
-                continue;
-            }
-
-            if (block instanceof BedBlock) {
-                if (blockState.getValue(BedBlock.PART) == BedPart.HEAD) {
-                    addBlock(block, p);
-                }
-            } else {
-                addBlock(block, p);
-            }
+            recordBuildingBlock(world, p);
         }
 
         BlockPos seed = scan.seed();
@@ -658,8 +750,8 @@ public class Building {
         pos1Y = scan.max().getY();
         pos1Z = scan.max().getZ();
 
-        size = scan.interiorCells().size();
-        floorY = seed.getY();
+        size = scan.footprintCells().size();
+        floorY = scan.floorY();
         floorRegions = List.of(BuildingFloorRegion.fromFootprint(floorY, scan.footprintCells()));
 
         // Rooms retain a local anchor for save compatibility. The semantic structure
@@ -776,6 +868,7 @@ public class Building {
 
     private static GroundFloorSelection determineGroundFloorY(Collection<BlockPos> entranceInteriorCells,
                                                                Collection<TerrainEntranceSample> terrainSamples,
+                                                               Collection<Integer> perimeterTerrainYs,
                                                                List<BuildingFloorRegion> regions,
                                                                int fallbackY,
                                                                String fallbackSource) {
@@ -787,19 +880,32 @@ public class Building {
         if (terrainEntranceY.isPresent()) {
             return new GroundFloorSelection(terrainEntranceY.getAsInt(), "terrain-" + fallbackSource);
         }
-        if (entranceInteriorCells.isEmpty() || regions.isEmpty()) {
-            return new GroundFloorSelection(fallbackY, fallbackSource);
+        if (!entranceInteriorCells.isEmpty() && !regions.isEmpty()) {
+            int entranceFloorY = regions.stream()
+                    .min(Comparator
+                            .comparingInt((BuildingFloorRegion region) -> minimumEntranceDistance(
+                                    entranceInteriorCells, region, false))
+                            .thenComparingInt(region -> minimumEntranceDistance(entranceInteriorCells, region, true))
+                            .thenComparingInt(BuildingFloorRegion::anchorY))
+                    .map(BuildingFloorRegion::anchorY)
+                    .orElse(fallbackY);
+            return new GroundFloorSelection(entranceFloorY, fallbackSource);
         }
 
-        int entranceFloorY = regions.stream()
-                .min(Comparator
-                        .comparingInt((BuildingFloorRegion region) -> minimumEntranceDistance(
-                                entranceInteriorCells, region, false))
-                        .thenComparingInt(region -> minimumEntranceDistance(entranceInteriorCells, region, true))
-                        .thenComparingInt(BuildingFloorRegion::anchorY))
-                .map(BuildingFloorRegion::anchorY)
-                .orElse(fallbackY);
-        return new GroundFloorSelection(entranceFloorY, fallbackSource);
+        if (!regions.isEmpty() && !perimeterTerrainYs.isEmpty()) {
+            int terrainY = medianTerrainY(perimeterTerrainYs);
+            int terrainFloorY = regions.stream()
+                    .min(Comparator
+                            .comparingInt((BuildingFloorRegion region) -> Math.abs(region.anchorY() - terrainY))
+                            .thenComparing(Comparator.comparingInt(
+                                    BuildingFloorRegion::anchorY).reversed()))
+                    .map(BuildingFloorRegion::anchorY)
+                    .orElse(fallbackY);
+            return new GroundFloorSelection(
+                    terrainFloorY, "terrain-perimeter-" + fallbackSource);
+        }
+
+        return new GroundFloorSelection(fallbackY, fallbackSource);
     }
 
     /**
@@ -817,6 +923,52 @@ public class Building {
                                 entrance.exterior().getX(), entrance.exterior().getZ())
                 ))
                 .toList();
+    }
+
+    /**
+     * Samples the terrain immediately outside the scanned structure bounds. This is only
+     * used when no reliable exterior normal-door entrance exists, so slopes elsewhere on
+     * the perimeter cannot override explicit entrance evidence.
+     */
+    private static List<Integer> sampleTerrainPerimeter(Level world,
+                                                        int minX,
+                                                        int minZ,
+                                                        int maxX,
+                                                        int maxZ) {
+        int outerMinX = minX - 1;
+        int outerMaxX = maxX + 1;
+        int outerMinZ = minZ - 1;
+        int outerMaxZ = maxZ + 1;
+        List<Integer> terrainYs = new ArrayList<>();
+
+        for (int x = outerMinX; x <= outerMaxX; x++) {
+            terrainYs.add(world.getHeight(
+                    Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, outerMinZ));
+            if (outerMaxZ != outerMinZ) {
+                terrainYs.add(world.getHeight(
+                        Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, outerMaxZ));
+            }
+        }
+        for (int z = outerMinZ + 1; z < outerMaxZ; z++) {
+            terrainYs.add(world.getHeight(
+                    Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, outerMinX, z));
+            if (outerMaxX != outerMinX) {
+                terrainYs.add(world.getHeight(
+                        Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, outerMaxX, z));
+            }
+        }
+        return List.copyOf(terrainYs);
+    }
+
+    private static int medianTerrainY(Collection<Integer> terrainYs) {
+        int[] sorted = terrainYs.stream().mapToInt(Integer::intValue).sorted().toArray();
+        if (sorted.length == 0) {
+            throw new IllegalArgumentException("terrainYs must not be empty");
+        }
+        int middle = sorted.length / 2;
+        return sorted.length % 2 == 1
+                ? sorted[middle]
+                : Math.floorDiv(sorted[middle - 1] + sorted[middle], 2);
     }
 
     private record GroundFloorSelection(int floorY, String source) {
@@ -933,6 +1085,19 @@ public class Building {
         return false;
     }
 
+    private void recordBuildingBlock(Level world, BlockPos pos) {
+        BlockState state = world.getBlockState(pos);
+        if (!isBuildingBlock(state)) {
+            return;
+        }
+
+        Block block = state.getBlock();
+        if (!(block instanceof BedBlock)
+                || state.getValue(BedBlock.PART) == BedPart.HEAD) {
+            addBlock(block, pos);
+        }
+    }
+
     public boolean determineType() {
         List<BuildingType> matches = getMatchingTypes();
         if (matches.isEmpty()) {
@@ -1002,6 +1167,13 @@ public class Building {
         return pos.getX() >= pos0X && pos.getX() <= pos1X
                && pos.getY() >= pos0Y && pos.getY() <= pos1Y
                && pos.getZ() >= pos0Z && pos.getZ() <= pos1Z;
+    }
+
+    boolean containsHorizontalPosition(Vec3i pos) {
+        return pos.getX() >= pos0X - PLAYER_POSITION_HORIZONTAL_MARGIN
+                && pos.getX() <= pos1X + PLAYER_POSITION_HORIZONTAL_MARGIN
+                && pos.getZ() >= pos0Z - PLAYER_POSITION_HORIZONTAL_MARGIN
+                && pos.getZ() <= pos1Z + PLAYER_POSITION_HORIZONTAL_MARGIN;
     }
 
     /**

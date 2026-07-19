@@ -20,6 +20,7 @@ import net.minecraft.world.entity.ai.village.poi.PoiManager;
 import net.minecraft.world.entity.ai.village.poi.PoiTypes;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.Level;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -119,7 +120,17 @@ public class Village implements Iterable<Building> {
     }
 
     public void removeBuilding(int id) {
-        buildings.remove(id);
+        removeBuildings(List.of(id));
+    }
+
+    void removeBuildings(Collection<Integer> ids) {
+        boolean changed = false;
+        for (int id : ids) {
+            changed |= buildings.remove(id) != null;
+        }
+        if (!changed) {
+            return;
+        }
         if (!buildings.isEmpty()) {
             calculateDimensions();
         }
@@ -144,6 +155,25 @@ public class Village implements Iterable<Building> {
                 .or(() -> getBuildings().values().stream()
                         .filter(building -> building.containsPos(pos))
                         .min(Comparator.comparingInt(Building::getId)));
+    }
+
+    Optional<Building> getBuildingTarget(Vec3i pos) {
+        Optional<Building> nearby = buildings.values().stream()
+                .filter(building -> building.containsPos(pos)
+                        || building.containsPositionWithMargin(
+                        pos, Building.PLAYER_POSITION_HORIZONTAL_MARGIN, Building.PLAYER_POSITION_VERTICAL_MARGIN))
+                .min(Comparator
+                        .comparing((Building building) -> !building.containsPos(pos))
+                        .thenComparingDouble(building -> building.getCenter().distSqr(pos)));
+        if (nearby.isPresent()) {
+            return nearby;
+        }
+
+        return buildings.values().stream()
+                .filter(building -> !building.getBuildingType().grouped())
+                .filter(building -> building.containsHorizontalPosition(pos))
+                .filter(building -> building.getVerticalDistanceTo(pos) <= 16)
+                .min(Comparator.comparingDouble(building -> building.getCenter().distSqr(pos)));
     }
 
     public void calculateDimensions() {
@@ -429,49 +459,49 @@ public class Village implements Iterable<Building> {
         return getStructuralPosition(pos) != StructuralPosition.OUTSIDE;
     }
 
+    public boolean hasStructuralBuildingAt(Level level, BlockPos pos) {
+        return getStructuralPosition(level, pos) != StructuralPosition.OUTSIDE;
+    }
+
     public StructuralPosition getStructuralPosition(Vec3i pos) {
         return getStructuralLookup(pos).position();
     }
 
+    public StructuralPosition getStructuralPosition(Level level, BlockPos pos) {
+        return getStructuralLookup(level, pos).position();
+    }
+
     public StructuralLookup getStructuralLookup(Vec3i pos) {
-        Optional<Building> functionalRoom = getFunctionalRoomAt(pos);
+        return getStructuralLookup(
+                pos, BuildingStructureManager.functionalRoomAt(this, pos));
+    }
+
+    public StructuralLookup getStructuralLookup(Level level, BlockPos pos) {
+        return getStructuralLookup(
+                pos, BuildingStructureManager.functionalRoomAt(this, level, pos));
+    }
+
+    private StructuralLookup getStructuralLookup(Vec3i pos, Optional<Building> functionalRoom) {
         if (functionalRoom.isPresent()) {
             return new StructuralLookup(StructuralPosition.REGISTERED_ROOM, functionalRoom);
         }
 
-        Optional<Building> structureRoot = getStructureRootContaining(pos);
+        Optional<Building> structureRoot = BuildingStructureManager.containingRoot(this, pos);
         return structureRoot.isPresent()
                 ? new StructuralLookup(StructuralPosition.ATTACHABLE_ROOM, structureRoot)
                 : new StructuralLookup(StructuralPosition.OUTSIDE, Optional.empty());
     }
 
-    private Optional<Building> getStructureRootContaining(Vec3i pos) {
-        return getBuildings().values().stream()
-                .filter(Building::isComplete)
-                .filter(Building::isStructureRoot)
-                .filter(building -> !building.getBuildingType().grouped())
-                .filter(building -> building.containsStructurePosition(pos))
-                .min(Comparator.comparingInt(Building::getId));
+    public Optional<Building> getFunctionalRoomAt(Vec3i pos) {
+        return BuildingStructureManager.functionalRoomAt(this, pos);
     }
 
-    public Optional<Building> getFunctionalRoomAt(Vec3i pos) {
-        return getBuildings().values().stream()
-                .filter(Building::isComplete)
-                .filter(Building::isFunctionalRoom)
-                .filter(building -> building.containsRawPos(pos))
-                /*
-                 * Raw bounds can span open stairs, atriums, and multi-floor interiors.
-                 * A player only belongs to a registered room on that room's semantic floor.
-                 */
-                .filter(building -> building.getFloorDistanceTo(pos) <= Building.SEMANTIC_FLOOR_TOLERANCE)
-                .min(Comparator.comparingInt((Building building) -> building.getFloorDistanceTo(pos))
-                        .thenComparingInt(Building::getId));
+    public Optional<Building> getFunctionalRoomAt(Level level, BlockPos pos) {
+        return BuildingStructureManager.functionalRoomAt(this, level, pos);
     }
 
     public boolean isStructuralGroundFloor(Building room) {
-        return getStructureRoot(room)
-                .filter(root -> root.isOnGroundFloorY(room.getFloorY()))
-                .isPresent();
+        return BuildingStructureManager.isGroundFloor(this, room);
     }
 
     public boolean setStructureGroundFloorAnchor(Building room) {
@@ -480,22 +510,18 @@ public class Village implements Iterable<Building> {
         }
 
         Building root = getStructureRoot(room).orElse(null);
-        if (root == null || root.isOnGroundFloorY(room.getFloorY())) {
+        int floorY = BuildingStructureManager.canonicalFloorY(this, room);
+        if (root == null || BuildingStructureManager.isGroundFloor(this, room)) {
             return false;
         }
 
-        root.setGroundFloorY(room.getFloorY());
+        root.setGroundFloorY(floorY);
         markDirty();
         return true;
     }
 
     private Optional<Building> getStructureRoot(Building room) {
-        return getBuildings().values().stream()
-                .filter(Building::isStructureRoot)
-                .filter(Building::isComplete)
-                .filter(root -> !root.getBuildingType().grouped())
-                .filter(root -> root.getEffectiveStructureId() == room.getEffectiveStructureId())
-                .min(Comparator.comparingInt(Building::getId));
+        return BuildingStructureManager.root(this, room.getEffectiveStructureId());
     }
 
     public enum StructuralPosition {

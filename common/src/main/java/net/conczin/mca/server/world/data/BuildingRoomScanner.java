@@ -16,6 +16,10 @@ final class BuildingRoomScanner {
     private static final Direction[] HORIZONTAL_DIRECTIONS = {
             Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST
     };
+    private static final Direction[] VOLUME_DIRECTIONS = {
+            Direction.UP, Direction.DOWN,
+            Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST
+    };
 
     private BuildingRoomScanner() {
     }
@@ -24,93 +28,136 @@ final class BuildingRoomScanner {
                        BlockPos source,
                        Set<BlockPos> blocked,
                        int maxSize,
-                       int maxRadius) {
-        Optional<BlockPos> resolvedSeed = resolveInteriorSeed(world, source);
+                       int maxRadius,
+                       Building structureRoot) {
+        BuildingFloorResolver.ResolvedFloor floor = BuildingFloorResolver.resolve(
+                world, source, structureRoot).orElse(null);
+        if (floor == null) {
+            return Result.failure(Status.TOO_SMALL, source);
+        }
+        return scanResolved(world, source, blocked, maxSize, maxRadius, floor);
+    }
+
+    private static Result scanResolved(Level world,
+                                       BlockPos source,
+                                       Set<BlockPos> blocked,
+                                       int maxSize,
+                                       int maxRadius,
+                                       BuildingFloorResolver.ResolvedFloor floor) {
+        Optional<BlockPos> resolvedSeed = findInteriorSeedAtY(
+                world, source, floor.physicalY(), floor.ceilingY());
         if (resolvedSeed.isEmpty()) {
             return Result.failure(Status.TOO_SMALL, source);
         }
 
         BlockPos seed = resolvedSeed.get();
-        Set<BlockPos> blockedCells = blocked == null ? Set.of() : blocked;
-        LinkedHashSet<BlockPos> interior = new LinkedHashSet<>();
-        LinkedHashSet<BlockPos> raisedFloorCells = new LinkedHashSet<>();
-        LinkedHashSet<BlockPos> inspected = new LinkedHashSet<>();
-        HashSet<BlockPos> visited = new HashSet<>();
-        ArrayDeque<BlockPos> queue = new ArrayDeque<>();
+        int ceilingY = floor.ceilingY();
+        Optional<BlockPos> openSeed = findOpenCellInColumn(
+                world, seed.getX(), seed.getZ(), seed.getY(), ceilingY);
+        if (openSeed.isEmpty()) {
+            return Result.failure(Status.TOO_SMALL, seed);
+        }
+        return scanFromOpenSeed(
+                world, seed, openSeed.get(), floor.semanticY(), ceilingY,
+                blocked, maxSize, maxRadius);
+    }
 
-        interior.add(seed);
-        inspected.add(seed);
-        visited.add(seed);
-        queue.add(seed);
+    private static Result scanFromOpenSeed(Level world,
+                                           BlockPos seed,
+                                           BlockPos openSeed,
+                                           int floorY,
+                                           int ceilingY,
+                                           Set<BlockPos> blocked,
+                                           int maxSize,
+                                           int maxRadius) {
+        int scanFloorY = seed.getY();
+        if (ceilingY <= scanFloorY) {
+            return Result.failure(Status.TOO_SMALL, seed);
+        }
+
+        int bandHeight = Math.max(1, ceilingY - scanFloorY);
+        long maxVolume = Math.max(1L, (long) maxSize * bandHeight);
+        Set<BlockPos> blockedCells = blocked == null ? Set.of() : blocked;
+
+        HashSet<Long> visited = new HashSet<>();
+        HashSet<Long> openColumns = new HashSet<>();
+        ArrayDeque<Long> queue = new ArrayDeque<>();
+        BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
+
+        long start = openSeed.asLong();
+        visited.add(start);
+        queue.add(start);
 
         boolean hasEntrance = false;
 
         while (!queue.isEmpty()) {
-            BlockPos current = queue.removeFirst();
+            long current = queue.removeFirst();
+            int x = BlockPos.getX(current);
+            int y = BlockPos.getY(current);
+            int z = BlockPos.getZ(current);
+            openColumns.add(packColumn(x, z));
 
-            if (!current.equals(seed) && blockedCells.contains(current)) {
-                return Result.failure(Status.OVERLAP, seed, interior, Set.of(), inspected, hasEntrance);
-            }
+            cursor.set(x, y, z);
+            BlockState currentState = world.getBlockState(cursor);
 
-            for (Direction direction : HORIZONTAL_DIRECTIONS) {
-                BlockPos candidate = current.relative(direction);
-                if (!visited.add(candidate)) {
+            for (Direction direction : VOLUME_DIRECTIONS) {
+                int nextX = x + direction.getStepX();
+                int nextY = y + direction.getStepY();
+                int nextZ = z + direction.getStepZ();
+                if (nextY < scanFloorY || nextY >= ceilingY) {
                     continue;
                 }
 
-                BlockState state = world.getBlockState(candidate);
-                CellKind kind = classify(world, candidate, state);
-                inspected.add(candidate);
-
-                if (kind == CellKind.BARRIER) {
-                    if (isEntrance(state)) {
-                        hasEntrance = true;
-                    }
+                cursor.set(nextX, nextY, nextZ);
+                BlockState state = world.getBlockState(cursor);
+                if (direction.getAxis() != Direction.Axis.Y && isEntrance(state)) {
+                    hasEntrance = true;
+                }
+                if (blocksVerticalConnectorTraversal(direction, currentState, state)
+                        || !isOpenVolumeCell(world, cursor, state)) {
                     continue;
                 }
 
-                boolean ordinaryFloorCell =
-                        kind == CellKind.PASSABLE && isTraversableFloorCell(world, candidate);
-                boolean raisedFloorCell =
-                        kind == CellKind.OBSTACLE && isRaisedFloorCell(world, candidate, state);
-                if (!ordinaryFloorCell && !raisedFloorCell) {
+                int horizontalDistance = Math.abs(nextX - seed.getX()) + Math.abs(nextZ - seed.getZ());
+                if (horizontalDistance >= maxRadius) {
+                    return Result.failure(Status.SIZE_LIMIT, seed);
+                }
+
+                long packed = BlockPos.asLong(nextX, nextY, nextZ);
+                if (!visited.add(packed)) {
                     continue;
                 }
-
-                if (candidate.distManhattan(seed) >= maxRadius) {
-                    return Result.failure(Status.SIZE_LIMIT, seed, interior, Set.of(), inspected, hasEntrance);
+                if (visited.size() > maxVolume) {
+                    return Result.failure(Status.BLOCK_LIMIT, seed);
                 }
-                if (interior.size() + raisedFloorCells.size() >= maxSize) {
-                    return Result.failure(Status.BLOCK_LIMIT, seed, interior, Set.of(), inspected, hasEntrance);
-                }
-                if (blockedCells.contains(candidate)) {
-                    return Result.failure(Status.OVERLAP, seed, interior, Set.of(), inspected, hasEntrance);
-                }
-
-                if (raisedFloorCell) {
-                    // Keep semantic floorY fixed. A chest/slab-like obstacle is represented
-                    // by its X/Z cell on this floor instead of moving the room up to Y+1.
-                    raisedFloorCells.add(candidate);
-                } else {
-                    interior.add(candidate);
-                }
-                queue.addLast(candidate);
+                queue.addLast(packed);
             }
         }
 
-        if (interior.size() + raisedFloorCells.size() < MIN_INTERIOR_AREA) {
-            return Result.failure(Status.TOO_SMALL, seed, interior, raisedFloorCells, inspected, hasEntrance);
+        LinkedHashSet<BlockPos> footprint = new LinkedHashSet<>();
+        BlockPos.MutableBlockPos supportCursor = new BlockPos.MutableBlockPos();
+        for (long column : openColumns) {
+            int x = unpackColumnX(column);
+            int z = unpackColumnZ(column);
+            if (!BuildingFloorResolver.isSupported(world, x, scanFloorY, z, supportCursor)) {
+                continue;
+            }
+
+            BlockPos floorCell = new BlockPos(x, floorY, z);
+            if (blockedCells.contains(floorCell)) {
+                return Result.failure(Status.OVERLAP, seed);
+            }
+            if (footprint.size() >= maxSize) {
+                return Result.failure(Status.BLOCK_LIMIT, seed);
+            }
+            footprint.add(floorCell);
         }
 
-        LinkedHashSet<BlockPos> footprint = new LinkedHashSet<>(interior);
-        footprint.addAll(raisedFloorCells);
-        footprint.addAll(projectEnclosedObstacles(world, interior, raisedFloorCells, seed.getY()));
-
-        LinkedHashSet<BlockPos> poiCells = new LinkedHashSet<>(inspected);
-        poiCells.addAll(footprint);
-        for (BlockPos cell : interior) {
-            poiCells.add(cell.below());
+        if (footprint.size() < MIN_INTERIOR_AREA) {
+            return Result.failure(Status.TOO_SMALL, seed);
         }
+
+        Set<BlockPos> poiCells = collectPoiCells(world, footprint, scanFloorY, ceilingY);
 
         int minX = footprint.stream().mapToInt(BlockPos::getX).min().orElse(seed.getX());
         int minZ = footprint.stream().mapToInt(BlockPos::getZ).min().orElse(seed.getZ());
@@ -120,169 +167,244 @@ final class BuildingRoomScanner {
         return new Result(
                 Status.SUCCESS,
                 seed,
-                Set.copyOf(interior),
+                floorY,
                 Set.copyOf(footprint),
-                Set.copyOf(poiCells),
+                poiCells,
                 hasEntrance,
-                new BlockPos(minX, seed.getY(), minZ),
-                new BlockPos(maxX, seed.getY() + 1, maxZ)
+                new BlockPos(minX, scanFloorY, minZ),
+                new BlockPos(maxX, Math.max(scanFloorY, ceilingY - 1), maxZ)
         );
     }
 
-    private static Optional<BlockPos> resolveInteriorSeed(Level world, BlockPos source) {
-        LinkedHashSet<BlockPos> candidates = new LinkedHashSet<>();
-        candidates.add(source);
+    private static Optional<BlockPos> findInteriorSeedAtY(Level world,
+                                                           BlockPos source,
+                                                           int y,
+                                                           int ceilingY) {
+        BlockPos center = new BlockPos(source.getX(), y, source.getZ());
+        if (isFloorCandidate(world, center, ceilingY)) {
+            return Optional.of(center);
+        }
 
-        // Prefer same-floor interior before considering air above furniture or a partial block.
         for (Direction direction : HORIZONTAL_DIRECTIONS) {
-            candidates.add(source.relative(direction));
+            BlockPos candidate = center.relative(direction);
+            if (isFloorCandidate(world, candidate, ceilingY)) {
+                return Optional.of(candidate);
+            }
         }
-
-        BlockPos above = source.above();
-        candidates.add(above);
-        for (Direction direction : HORIZONTAL_DIRECTIONS) {
-            candidates.add(above.relative(direction));
-        }
-
-        BlockPos below = source.below();
-        candidates.add(below);
-        for (Direction direction : HORIZONTAL_DIRECTIONS) {
-            candidates.add(below.relative(direction));
-        }
-
-        return candidates.stream()
-                .filter(candidate -> isTraversableFloorCell(world, candidate))
-                .findFirst();
+        return Optional.empty();
     }
 
-    private static boolean isTraversableFloorCell(Level world, BlockPos pos) {
-        if (classify(world, pos, world.getBlockState(pos)) != CellKind.PASSABLE) {
+    private static boolean isFloorCandidate(Level world,
+                                             BlockPos pos,
+                                             int ceilingY) {
+        if (ceilingY <= pos.getY()) {
             return false;
         }
-        if (classify(world, pos.above(), world.getBlockState(pos.above())) != CellKind.PASSABLE) {
-            return false;
-        }
-        return isSupported(world, pos);
+
+        return BuildingFloorResolver.isSupported(world, pos.getX(), pos.getY(), pos.getZ())
+                && findOpenCellInColumn(
+                world, pos.getX(), pos.getZ(), pos.getY(), ceilingY).isPresent();
     }
 
-    private static boolean isSupported(Level world, BlockPos interiorPos) {
-        BlockPos supportPos = interiorPos.below();
-        BlockState supportState = world.getBlockState(supportPos);
-        var collisionShape = supportState.getCollisionShape(world, supportPos);
-        if (collisionShape.isEmpty()) {
-            return false;
+    /**
+     * Discovers the disconnected strict-room components still occupying the previous
+     * room footprint. Connectivity belongs here so callers never probe columns and
+     * repeatedly drive independent room scans themselves.
+     *
+     * <p>The already-scanned requested component is reused as the first result. Each
+     * additional connected component is flooded once, and scanning stops as soon as
+     * more than {@code maxComponents} valid components are found.</p>
+     */
+    static ComponentScan scanComponents(Level world,
+                                        Building previousRoom,
+                                        Building structureRoot,
+                                        Result requested,
+                                        int maxSize,
+                                        int maxRadius,
+                                        int maxComponents) {
+        if (previousRoom == null || structureRoot == null || requested == null
+                || requested.status() != Status.SUCCESS || maxComponents < 1) {
+            return new ComponentScan(List.of(), false);
         }
 
-        double width = collisionShape.max(Direction.Axis.X) - collisionShape.min(Direction.Axis.X);
-        double depth = collisionShape.max(Direction.Axis.Z) - collisionShape.min(Direction.Axis.Z);
-        return width * depth >= 0.25D;
-    }
+        int canonicalFloorY = structureRoot.getCanonicalFloorY(previousRoom.getFloorY());
+        List<Result> components = new ArrayList<>();
+        Set<Long> coveredColumns = new HashSet<>();
 
-    private static boolean isRaisedFloorCell(Level world, BlockPos pos, BlockState state) {
-        if (!state.getFluidState().isEmpty()) {
-            return false;
+        coverColumns(coveredColumns, requested);
+        if (isComponentInsidePreviousRoom(requested, previousRoom, canonicalFloorY)) {
+            components.add(requested);
         }
 
-        var collisionShape = state.getCollisionShape(world, pos);
-        if (collisionShape.isEmpty()) {
-            return false;
-        }
+        int probeY = canonicalFloorY + BuildingFloorRegionDetector.FLOOR_CLUSTER_TOLERANCE;
+        BlockPos min = previousRoom.getRawPos0();
+        BlockPos max = previousRoom.getRawPos1();
 
-        // Partial-height blocks such as vanilla chests (14/16 high) and slabs are usable
-        // as raised floor cells. Full-height walls/blocks remain hard room obstacles.
-        double height = collisionShape.max(Direction.Axis.Y) - collisionShape.min(Direction.Axis.Y);
-        double width = collisionShape.max(Direction.Axis.X) - collisionShape.min(Direction.Axis.X);
-        double depth = collisionShape.max(Direction.Axis.Z) - collisionShape.min(Direction.Axis.Z);
-        if (height >= 1.0D || width * depth < 0.25D) {
-            return false;
-        }
-
-        return classify(world, pos.above(), world.getBlockState(pos.above())) == CellKind.PASSABLE;
-    }
-
-    private static Set<BlockPos> projectEnclosedObstacles(Level world,
-                                                          Set<BlockPos> interior,
-                                                          Set<BlockPos> raisedFloorCells,
-                                                          int floorY) {
-        int minX = interior.stream().mapToInt(BlockPos::getX).min().orElse(0);
-        int minZ = interior.stream().mapToInt(BlockPos::getZ).min().orElse(0);
-        int maxX = interior.stream().mapToInt(BlockPos::getX).max().orElse(0);
-        int maxZ = interior.stream().mapToInt(BlockPos::getZ).max().orElse(0);
-
-        Set<BlockPos> candidates = new HashSet<>();
-        for (int z = minZ; z <= maxZ; z++) {
-            for (int x = minX; x <= maxX; x++) {
-                BlockPos candidate = new BlockPos(x, floorY, z);
-                if (interior.contains(candidate) || raisedFloorCells.contains(candidate)) {
+        for (int x = min.getX(); x <= max.getX(); x++) {
+            for (int z = min.getZ(); z <= max.getZ(); z++) {
+                long columnKey = packColumn(x, z);
+                if (!previousRoom.containsFloorColumn(x, z) || coveredColumns.contains(columnKey)) {
                     continue;
                 }
 
-                BlockState state = world.getBlockState(candidate);
-                if (classify(world, candidate, state) == CellKind.OBSTACLE
-                        && isSupported(world, candidate)) {
-                    candidates.add(candidate);
+                BuildingFloorResolver.ResolvedFloor floor = BuildingFloorResolver.resolve(
+                        world, new BlockPos(x, probeY, z), structureRoot).orElse(null);
+                if (floor == null || floor.semanticY() != canonicalFloorY) {
+                    continue;
+                }
+
+                Optional<BlockPos> openSeed = findOpenCellInColumn(
+                        world, x, z, floor.physicalY(), floor.ceilingY());
+                if (openSeed.isEmpty()) {
+                    continue;
+                }
+
+                Result component = scanFromOpenSeed(
+                        world,
+                        new BlockPos(x, floor.physicalY(), z),
+                        openSeed.get(),
+                        canonicalFloorY,
+                        floor.ceilingY(),
+                        Set.of(),
+                        maxSize,
+                        maxRadius
+                );
+                if (component.status() != Status.SUCCESS) {
+                    continue;
+                }
+
+                // A successful flood identifies the complete connected component. Mark its
+                // columns even when it extends outside the old room so another old-footprint
+                // cell cannot trigger the same expensive flood again.
+                coverColumns(coveredColumns, component);
+
+                if (!isComponentInsidePreviousRoom(component, previousRoom, canonicalFloorY)
+                        || containsSameComponent(components, component)) {
+                    continue;
+                }
+
+                components.add(component);
+                if (components.size() > maxComponents) {
+                    return new ComponentScan(components, true);
                 }
             }
         }
 
-        LinkedHashSet<BlockPos> projected = new LinkedHashSet<>();
-        HashSet<BlockPos> unvisited = new HashSet<>(candidates);
-        while (!unvisited.isEmpty()) {
-            BlockPos start = unvisited.iterator().next();
-            unvisited.remove(start);
-
-            ArrayDeque<BlockPos> queue = new ArrayDeque<>();
-            LinkedHashSet<BlockPos> component = new LinkedHashSet<>();
-            boolean touchesEnvelopeEdge = false;
-            queue.add(start);
-
-            while (!queue.isEmpty()) {
-                BlockPos current = queue.removeFirst();
-                component.add(current);
-                if (current.getX() == minX || current.getX() == maxX
-                        || current.getZ() == minZ || current.getZ() == maxZ) {
-                    touchesEnvelopeEdge = true;
-                }
-
-                for (Direction direction : HORIZONTAL_DIRECTIONS) {
-                    BlockPos neighbour = current.relative(direction);
-                    if (unvisited.remove(neighbour)) {
-                        queue.addLast(neighbour);
-                    }
-                }
-            }
-
-            // Furniture and other isolated interior obstructions become part of the room mask.
-            // Walls and exterior terrain remain connected to the scan envelope and are excluded.
-            if (!touchesEnvelopeEdge) {
-                projected.addAll(component);
-            }
-        }
-
-        return Set.copyOf(projected);
+        return new ComponentScan(components, false);
     }
 
-    private static CellKind classify(Level world, BlockPos pos, BlockState state) {
-        if (isBoundaryConnector(state)) {
-            return CellKind.BARRIER;
+    private static void coverColumns(Set<Long> coveredColumns, Result component) {
+        for (BlockPos cell : component.footprintCells()) {
+            coveredColumns.add(packColumn(cell.getX(), cell.getZ()));
         }
-        if (state.isAir() || state.canBeReplaced() || state.getCollisionShape(world, pos).isEmpty()) {
-            return state.getFluidState().isEmpty() ? CellKind.PASSABLE : CellKind.OBSTACLE;
+    }
+
+    private static boolean isComponentInsidePreviousRoom(Result component,
+                                                         Building previousRoom,
+                                                         int canonicalFloorY) {
+        return component.floorY() == canonicalFloorY
+                && component.footprintCells().stream().allMatch(cell ->
+                previousRoom.containsFloorColumn(cell.getX(), cell.getZ()));
+    }
+
+    private static boolean containsSameComponent(List<Result> components, Result candidate) {
+        return components.stream().anyMatch(existing ->
+                existing.floorY() == candidate.floorY()
+                        && existing.footprintCells().equals(candidate.footprintCells()));
+    }
+
+    private static boolean hasOpenCellInColumn(Level world,
+                                       int x,
+                                       int z,
+                                       int floorY,
+                                       int ceilingY) {
+        return findOpenCellInColumn(world, x, z, floorY, ceilingY).isPresent();
+    }
+
+    private static Optional<BlockPos> findOpenCellInColumn(Level world,
+                                                            int x,
+                                                            int z,
+                                                            int floorY,
+                                                            int ceilingY) {
+        BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos(x, floorY, z);
+        for (int y = floorY; y < ceilingY; y++) {
+            cursor.setY(y);
+            BlockState state = world.getBlockState(cursor);
+            if (isOpenVolumeCell(world, cursor, state)) {
+                return Optional.of(cursor.immutable());
+            }
         }
-        return CellKind.OBSTACLE;
+        return Optional.empty();
+    }
+
+    private static boolean isOpenVolumeCell(Level world, BlockPos pos, BlockState state) {
+        if (!state.getFluidState().isEmpty() || isBoundaryConnector(state)) {
+            return false;
+        }
+        if (isVerticalConnector(state)) {
+            return true;
+        }
+        return state.isAir() || state.canBeReplaced() || state.getCollisionShape(world, pos).isEmpty();
+    }
+
+    private static Set<BlockPos> collectPoiCells(Level world,
+                                                  Set<BlockPos> footprint,
+                                                  int floorY,
+                                                  int ceilingY) {
+        LinkedHashSet<BlockPos> poiCells = new LinkedHashSet<>();
+        BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
+
+        for (BlockPos floorCell : footprint) {
+            int x = floorCell.getX();
+            int z = floorCell.getZ();
+
+            cursor.set(x, floorY - 1, z);
+            if (!world.getBlockState(cursor).isAir()) {
+                poiCells.add(cursor.immutable());
+            }
+
+            cursor.set(x, floorY, z);
+            for (int y = floorY; y < ceilingY; y++) {
+                cursor.setY(y);
+                if (!world.getBlockState(cursor).isAir()) {
+                    poiCells.add(cursor.immutable());
+                }
+            }
+        }
+        return Set.copyOf(poiCells);
+    }
+
+    private static long packColumn(int x, int z) {
+        return ((long) x << 32) ^ (z & 0xFFFFFFFFL);
+    }
+
+    private static int unpackColumnX(long packed) {
+        return (int) (packed >> 32);
+    }
+
+    private static int unpackColumnZ(long packed) {
+        return (int) packed;
     }
 
     private static boolean isBoundaryConnector(BlockState state) {
         return state.getBlock() instanceof DoorBlock
                 || state.getBlock() instanceof TrapDoorBlock
-                || state.getBlock() instanceof FenceGateBlock
-                || state.getBlock() instanceof LadderBlock;
+                || state.getBlock() instanceof FenceGateBlock;
+    }
+
+    private static boolean isVerticalConnector(BlockState state) {
+        return state.getBlock() instanceof LadderBlock;
+    }
+
+    private static boolean blocksVerticalConnectorTraversal(Direction direction,
+                                                             BlockState currentState,
+                                                             BlockState nextState) {
+        return direction.getAxis() == Direction.Axis.Y
+                && (isVerticalConnector(currentState) || isVerticalConnector(nextState));
     }
 
     private static boolean isEntrance(BlockState state) {
-        return state.getBlock() instanceof DoorBlock
-                || state.getBlock() instanceof TrapDoorBlock
-                || state.getBlock() instanceof FenceGateBlock;
+        return isBoundaryConnector(state);
     }
 
     enum Status {
@@ -293,53 +415,35 @@ final class BuildingRoomScanner {
         TOO_SMALL
     }
 
-    private enum CellKind {
-        PASSABLE,
-        BARRIER,
-        OBSTACLE
+    record ComponentScan(List<Result> components, boolean tooMany) {
+        ComponentScan {
+            components = List.copyOf(components);
+        }
     }
 
     record Result(Status status,
                   BlockPos seed,
-                  Set<BlockPos> interiorCells,
+                  int floorY,
                   Set<BlockPos> footprintCells,
                   Set<BlockPos> poiCells,
                   boolean hasEntrance,
                   BlockPos min,
                   BlockPos max) {
         Result {
-            interiorCells = Set.copyOf(interiorCells);
             footprintCells = Set.copyOf(footprintCells);
             poiCells = Set.copyOf(poiCells);
         }
 
         private static Result failure(Status status, BlockPos seed) {
-            return failure(status, seed, Set.of(), Set.of(), Set.of(), false);
-        }
-
-        private static Result failure(Status status,
-                                      BlockPos seed,
-                                      Collection<BlockPos> interior,
-                                      Collection<BlockPos> footprint,
-                                      Collection<BlockPos> inspected,
-                                      boolean hasEntrance) {
-            LinkedHashSet<BlockPos> geometry = new LinkedHashSet<>(footprint);
-            geometry.addAll(interior);
-
-            int minX = geometry.stream().mapToInt(BlockPos::getX).min().orElse(seed.getX());
-            int minZ = geometry.stream().mapToInt(BlockPos::getZ).min().orElse(seed.getZ());
-            int maxX = geometry.stream().mapToInt(BlockPos::getX).max().orElse(seed.getX());
-            int maxZ = geometry.stream().mapToInt(BlockPos::getZ).max().orElse(seed.getZ());
-
             return new Result(
                     status,
                     seed,
-                    Set.copyOf(interior),
-                    Set.copyOf(geometry),
-                    Set.copyOf(inspected),
-                    hasEntrance,
-                    new BlockPos(minX, seed.getY(), minZ),
-                    new BlockPos(maxX, seed.getY() + 1, maxZ)
+                    seed.getY(),
+                    Set.of(),
+                    Set.of(),
+                    false,
+                    seed,
+                    seed
             );
         }
     }

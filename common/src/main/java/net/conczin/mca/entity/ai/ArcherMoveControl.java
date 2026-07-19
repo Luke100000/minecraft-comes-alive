@@ -9,9 +9,10 @@ import net.minecraft.world.entity.ai.navigation.PathNavigation;
 import net.minecraft.world.level.pathfinder.NodeEvaluator;
 import net.minecraft.world.level.pathfinder.PathType;
 
-public class ArcherMoveControl extends MoveControl {
+public class ArcherMoveControl extends MCAMoveControl {
     private boolean emergencyFleeing;
     private StrafeResult lastStrafeResult = StrafeResult.NONE;
+    private boolean archerStrafeRequested;
 
     public ArcherMoveControl(Mob mob) {
         super(mob);
@@ -34,19 +35,34 @@ public class ArcherMoveControl extends MoveControl {
     }
 
     @Override
+    public void strafe(float forwards, float right) {
+        this.archerStrafeRequested = false;
+        super.strafe(forwards, right);
+    }
+
+    public void strafeForArcher(float forwards, float right) {
+        super.strafe(forwards, right);
+        this.archerStrafeRequested = true;
+    }
+
+    @Override
     public void tick() {
-        if (this.operation == Operation.STRAFE) {
-            tickStrafe();
+        if (this.operation == Operation.STRAFE && this.archerStrafeRequested) {
+            tickArcherStrafe();
+            this.archerStrafeRequested = false;
             return;
         }
 
-        this.mob.setXxa(0.0F);
-        this.mob.setZza(0.0F);
-        this.lastStrafeResult = StrafeResult.NONE;
+        this.archerStrafeRequested = false;
+        if (this.lastStrafeResult != StrafeResult.NONE) {
+            this.mob.setXxa(0.0F);
+            this.mob.setZza(0.0F);
+            this.lastStrafeResult = StrafeResult.NONE;
+        }
         super.tick();
     }
 
-    private void tickStrafe() {
+    private void tickArcherStrafe() {
         float speed = (float)this.mob.getAttributeValue(Attributes.MOVEMENT_SPEED);
         float speedModified = (float)this.speedModifier * speed;
         float xa = this.strafeForwards;

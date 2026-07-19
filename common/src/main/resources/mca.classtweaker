@@ -19,6 +19,3 @@ accessible method net/minecraft/world/entity/ai/control/MoveControl rotlerp (FFF
 
 # Widen the vanilla action-bar renderer so BlueprintScreen can place it above its blur.
 accessible method net/minecraft/client/gui/Gui renderOverlayMessage (Lnet/minecraft/client/gui/GuiGraphics;Lnet/minecraft/client/DeltaTracker;)V
-
-# Ladders
-accessible method net/minecraft/world/level/pathfinder/WalkNodeEvaluator getNodeAndUpdateCostToMax (IIILnet/minecraft/world/level/pathfinder/PathType;F)Lnet/minecraft/world/level/pathfinder/Node;
