@@ -82,29 +82,6 @@ final class BuildingStructureManager {
         }
 
         changed |= repairRootInvariants(village);
-        changed |= canonicalizeRoomFloors(village);
-        return changed;
-    }
-
-    private static boolean canonicalizeRoomFloors(Village village) {
-        boolean changed = false;
-        for (Building room : village.getBuildings().values()) {
-            if (!room.isFunctionalRoom() || !room.hasStructure()) {
-                continue;
-            }
-
-            Building structureRoot = root(village, room.getEffectiveStructureId()).orElse(null);
-            if (structureRoot == null) {
-                continue;
-            }
-
-            int previousFloorY = room.getFloorY();
-            List<BuildingFloorRegion> previousRegions = room.getFloorRegions();
-            room.canonicalizeFloor(structureRoot);
-            if (room.getFloorY() != previousFloorY || !room.getFloorRegions().equals(previousRegions)) {
-                changed = true;
-            }
-        }
         return changed;
     }
 
@@ -229,7 +206,7 @@ final class BuildingStructureManager {
                 floorsByStructure.put(structureId, floor);
             }
 
-            if (room.getFloorY() == floor.semanticY()
+            if (canonicalFloorY(structureRoot, room.getFloorY()) == floor.semanticY()
                     && (best == null || room.getId() < best.getId())) {
                 best = room;
             }
@@ -265,17 +242,36 @@ final class BuildingStructureManager {
                         .thenComparingInt(Building::getId));
     }
 
-    static boolean isGroundFloor(Village village, Building room) {
+    static int canonicalFloorY(Village village, Building room) {
         if (room == null) {
-            return false;
+            return Integer.MIN_VALUE;
         }
-        return root(village, room.getEffectiveStructureId())
-                .map(structureRoot -> isGroundFloor(structureRoot, room.getFloorY()))
-                .orElse(false);
+        return canonicalFloorY(village, room.getEffectiveStructureId(), room.getFloorY());
+    }
+
+    private static int canonicalFloorY(Village village, int structureId, int floorY) {
+        return root(village, structureId)
+                .map(structureRoot -> canonicalFloorY(structureRoot, floorY))
+                .orElse(floorY);
+    }
+
+    static int canonicalFloorY(Building structureRoot, int floorY) {
+        return structureRoot == null ? floorY : structureRoot.getCanonicalFloorY(floorY);
+    }
+
+    static boolean isGroundFloor(Village village, Building room) {
+        Building structureRoot = room == null
+                ? null
+                : root(village, room.getEffectiveStructureId()).orElse(null);
+        return structureRoot != null && isGroundFloor(structureRoot, room.getFloorY());
     }
 
     static boolean isGroundFloor(Building structureRoot, int floorY) {
-        return structureRoot != null && floorY == structureRoot.getGroundFloorY();
+        if (structureRoot == null) {
+            return false;
+        }
+        return canonicalFloorY(structureRoot, floorY)
+                == canonicalFloorY(structureRoot, structureRoot.getGroundFloorY());
     }
 
     static void removeStructure(Village village, int structureId) {
@@ -349,8 +345,10 @@ final class BuildingStructureManager {
             return Building.validationResult.AMBIGUOUS_STRUCTURE;
         }
 
-        room.setStructureId(candidateStructures.iterator().next());
+        int structureId = candidateStructures.iterator().next();
+        room.setStructureId(structureId);
         room.setStructureRoot(false);
+        root(village, structureId).ifPresent(room::canonicalizeFloor);
         return Building.validationResult.SUCCESS;
     }
 

@@ -7,9 +7,9 @@ import java.util.*;
 /**
  * Maps server-owned canonical floor identities to Blueprint-local display ordinals.
  *
- * <p>The server already canonicalizes every functional room's {@link Building#getFloorY()}.
- * The client must never cluster or reinterpret those values: it only orders the distinct
- * persisted floors inside each structure relative to the root's Ground Floor.</p>
+ * <p>The structure root owns canonical floor identity through its persisted floor regions.
+ * The client never clusters floors independently: it maps persisted room and Ground Floor Y
+ * values through that root, then only assigns display ordinals.</p>
  */
 final class BlueprintFloorLayout {
     private final Map<Integer, Integer> ordinalByBuildingId;
@@ -62,11 +62,12 @@ final class BlueprintFloorLayout {
             }
 
             List<Integer> floorYs = entry.getValue().stream()
-                    .map(Building::getFloorY)
+                    .map(room -> root.getCanonicalFloorY(room.getFloorY()))
                     .distinct()
                     .sorted()
                     .toList();
-            int groundIndex = Collections.binarySearch(floorYs, root.getGroundFloorY());
+            int canonicalGroundFloorY = root.getCanonicalFloorY(root.getGroundFloorY());
+            int groundIndex = Collections.binarySearch(floorYs, canonicalGroundFloorY);
             if (groundIndex < 0) {
                 // Do not invent or tolerance-cluster a missing Ground Floor on the client.
                 continue;
@@ -79,7 +80,8 @@ final class BlueprintFloorLayout {
             ordinalsByStructure.put(structureId, List.copyOf(structureOrdinals));
 
             for (Building room : entry.getValue()) {
-                int floorIndex = Collections.binarySearch(floorYs, room.getFloorY());
+                int floorIndex = Collections.binarySearch(
+                        floorYs, root.getCanonicalFloorY(room.getFloorY()));
                 if (floorIndex < 0) {
                     continue;
                 }
