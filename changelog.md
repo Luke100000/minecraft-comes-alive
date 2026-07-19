@@ -1,15 +1,17 @@
-# 7.7.23-beta.3
+# 7.7.23-alpha.3
 
 > [!WARNING]
 > This is an experimental beta release and most likely might contain bugs. Current building blueprint layout structures
 > might not work properly, so you may have to press REMOVE BUILDING due to a new structure format, please make sure to BACKUP your world.
 > For any issues report it on the Discord Server.
+> The blueprint may not work as expected, this will be fixed in newer alpha versions.
 
 * Fixed a bug which caused trapdoors to confuse the automatic ground anchor.
 * Improved Map performance
 * UI Layout Changes for Blueprint
 * Fixed library auth not working in sandboxed environments.
 * Fixed texture related crashes in library
+* Villagers should be able to climb ladders.
 
 # 7.7.23-alpha.2
 
