@@ -34,7 +34,6 @@ import net.minecraft.world.level.saveddata.SavedData;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Predicate;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public class VillageManager extends SavedData implements Iterable<Village> {
@@ -56,34 +55,27 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         this.world = world;
         lastBuildingId = nbt.getInt("lastBuildingId");
         lastVillageId = nbt.getInt("lastVillageId");
-        reapers = nbt.contains("reapers", Tag.TAG_COMPOUND) ? new ReaperSpawner(this, nbt.getCompound("reapers")) : new ReaperSpawner(this);
-
+        reapers = nbt.contains("reapers", Tag.TAG_COMPOUND)
+                ? new ReaperSpawner(this, nbt.getCompound("reapers")) : new ReaperSpawner(this);
         ListTag villageList = nbt.getList("villages", Tag.TAG_COMPOUND);
         for (int i = 0; i < villageList.size(); i++) {
             Village village = new Village(villageList.getCompound(i), world);
-            if (village.getBuildings().isEmpty()) {
+            if (village.getBuildings().isEmpty() && village.getStructures().isEmpty()) {
                 MCA.LOGGER.warn("Empty village detected ({}), removing...", village.getName());
                 setDirty();
             } else {
                 villages.put(village.getId(), village);
-                if (BuildingStructureManager.ensureHierarchy(village)) {
-                    setDirty();
-                }
             }
         }
     }
 
     public static VillageManager get(ServerLevel world) {
-        return WorldUtils.loadData(world, (nbt, provider) -> new VillageManager(world, nbt), VillageManager::new, "mca_villages");
+        return WorldUtils.loadData(world, (nbt, provider) -> new VillageManager(world, nbt),
+                VillageManager::new, "mca_villages");
     }
 
-    public ReaperSpawner getReaperSpawner() {
-        return reapers;
-    }
-
-    public Optional<Village> getOrEmpty(int id) {
-        return Optional.ofNullable(villages.get(id));
-    }
+    public ReaperSpawner getReaperSpawner() { return reapers; }
+    public Optional<Village> getOrEmpty(int id) { return Optional.ofNullable(villages.get(id)); }
 
     public boolean removeVillage(int id) {
         if (villages.remove(id) != null) {
@@ -94,25 +86,22 @@ public class VillageManager extends SavedData implements Iterable<Village> {
     }
 
     @Override
-    public Iterator<Village> iterator() {
-        return villages.values().iterator();
-    }
-
-    public Stream<Village> findVillages(Predicate<Village> predicate) {
-        return villages.values().stream().filter(predicate);
-    }
+    public Iterator<Village> iterator() { return villages.values().iterator(); }
+    public Stream<Village> findVillages(Predicate<Village> predicate) { return villages.values().stream().filter(predicate); }
 
     public Optional<Village> findNearestVillage(Entity entity) {
-        BlockPos p = entity.blockPosition();
-        return findVillages(v -> v.isWithinBorder(entity)).min((a, b) -> (int) (a.getCenter().distSqr(p) - b.getCenter().distSqr(p)));
+        BlockPos pos = entity.blockPosition();
+        return findVillages(village -> village.isWithinBorder(entity))
+                .min(Comparator.comparingDouble(village -> village.getCenter().distSqr(pos)));
     }
 
-    public Optional<Village> findNearestVillage(BlockPos p, int margin) {
-        return findVillages(v -> v.isWithinBorder(p, margin)).min((a, b) -> (int) (a.getCenter().distSqr(p) - b.getCenter().distSqr(p)));
+    public Optional<Village> findNearestVillage(BlockPos pos, int margin) {
+        return findVillages(village -> village.isWithinBorder(pos, margin))
+                .min(Comparator.comparingDouble(village -> village.getCenter().distSqr(pos)));
     }
 
-    public boolean isWithinHorizontalBoundaries(BlockPos p) {
-        return villages.values().stream().anyMatch(v -> v.getBox().expand(0, 1000, 0).isInside(p));
+    public boolean isWithinHorizontalBoundaries(BlockPos pos) {
+        return villages.values().stream().anyMatch(village -> village.getBox().expand(0, 1000, 0).isInside(pos));
     }
 
     @Override
@@ -124,42 +113,28 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         return nbt;
     }
 
-    /**
-     * Updates all the villages in the world.
-     */
     public void tick() {
-        //keep track of where player are currently
         if (world.getDayTime() % 100 == 0) {
-            world.players().forEach(player ->
-                    PlayerSaveData.get(player).updateLastSeenVillage(this, player)
-            );
+            world.players().forEach(player -> PlayerSaveData.get(player).updateLastSeenVillage(this, player));
         }
-
-        //send bounty hunters
-        int bountyHunterInterval = Config.getInstance().bountyHunterInterval;
-        if (bountyHunterInterval > 0 && world.getDayTime() % Math.max(1, bountyHunterInterval / 10) == 0 && world.getDifficulty() != Difficulty.PEACEFUL) {
+        int interval = Config.getInstance().bountyHunterInterval;
+        if (interval > 0 && world.getDayTime() % Math.max(1, interval / 10) == 0
+                && world.getDifficulty() != Difficulty.PEACEFUL) {
             world.players().forEach(player -> {
                 if (world.random.nextInt(10) == 0 && !isWithinHorizontalBoundaries(player.blockPosition()) && !player.isCreative()) {
-                    villages.values().stream()
-                            .filter(v -> v.getPopulation() >= 3)
-                            .filter(v -> v.getReputation(player) < Config.getInstance().bountyHunterHearts)
-                            .min(Comparator.comparingInt(v -> v.getReputation(player)))
-                            .ifPresent(buildings -> startBountyHunterWave(player, buildings));
+                    villages.values().stream().filter(village -> village.getPopulation() >= 3)
+                            .filter(village -> village.getReputation(player) < Config.getInstance().bountyHunterHearts)
+                            .min(Comparator.comparingInt(village -> village.getReputation(player)))
+                            .ifPresent(village -> startBountyHunterWave(player, village));
                 }
             });
         }
 
         long time = world.getGameTime();
-
-        for (Village v : this) {
-            v.tick(world, time);
-        }
-
-        //process a single building
+        for (Village village : this) village.tick(world, time);
         if (time % buildingCooldown == 0 && !buildingQueue.isEmpty()) {
             processBuilding(buildingQueue.removeFirst());
         }
-
         reapers.tick(world);
         SpawnQueue.getInstance().tick();
     }
@@ -167,60 +142,42 @@ public class VillageManager extends SavedData implements Iterable<Village> {
     private void startBountyHunterWave(ServerPlayer player, Village sender) {
         int heartsPerHunter = 100;
         int count = Math.min(15, -sender.getReputation(player) / heartsPerHunter + 2);
-
         if (sender.getPopulation() == 0) {
-            //the village has been wiped out, lets send one last wave
             sender.cleanReputation();
-
             count *= 2;
         } else {
-            //slightly increase your reputation
             sender.pushHearts(player, count * heartsPerHunter / 2);
         }
-
-        //trigger advancement
         CriterionMCA.GENERIC_EVENT.trigger(player, "bounty_hunter");
-
-        //spawn the bois
-        for (int c = 0; c < count; c++) {
-            if (world.random.nextBoolean()) {
-                spawnBountyHunter(EntityType.PILLAGER, player);
-            } else {
-                spawnBountyHunter(EntityType.VINDICATOR, player);
-            }
+        for (int i = 0; i < count; i++) {
+            if (world.random.nextBoolean()) spawnBountyHunter(EntityType.PILLAGER, player);
+            else spawnBountyHunter(EntityType.VINDICATOR, player);
         }
-
-        //warn the player
-        player.displayClientMessage(Component.translatable(sender.getPopulation() == 0 ? "events.bountyHuntersFinal" : "events.bountyHunters", sender.getName()).withStyle(ChatFormatting.RED), false);
-
-        //civil entry
-        sender.getCivilRegistry().ifPresent(r -> r.addText(Component.translatable("civil_registry.bounty_hunters", player.getName())));
+        player.displayClientMessage(Component.translatable(sender.getPopulation() == 0
+                ? "events.bountyHuntersFinal" : "events.bountyHunters", sender.getName()).withStyle(ChatFormatting.RED), false);
+        sender.getCivilRegistry().ifPresent(registry -> registry.addText(Component.translatable("civil_registry.bounty_hunters", player.getName())));
     }
 
-    private <T extends AbstractIllager> void spawnBountyHunter(EntityType<T> t, ServerPlayer player) {
-        AbstractIllager pillager = t.create(world);
-        if (pillager != null) {
-            for (int attempt = 0; attempt < 32; attempt++) {
-                float f = this.world.random.nextFloat() * 6.2831855F;
-                int x = (int) (player.getX() + Mth.cos(f) * 32.0f);
-                int z = (int) (player.getZ() + Mth.sin(f) * 32.0f);
-                int y = world.getHeight(Heightmap.Types.WORLD_SURFACE, x, z);
-                BlockPos pos = new BlockPos(x, y, z);
-                if (SpawnPlacements.isSpawnPositionOk(t, world, pos)) {
-                    pillager.setPos(x, y, z);
-                    pillager.setTarget(player);
-                    WorldUtils.spawnEntity(world, pillager, MobSpawnType.EVENT);
-                    break;
-                }
+    private <T extends AbstractIllager> void spawnBountyHunter(EntityType<T> type, ServerPlayer player) {
+        T illager = type.create(world);
+        if (illager == null) return;
+        for (int attempt = 0; attempt < 32; attempt++) {
+            float angle = world.random.nextFloat() * 6.2831855F;
+            int x = (int) (player.getX() + Mth.cos(angle) * 32.0f);
+            int z = (int) (player.getZ() + Mth.sin(angle) * 32.0f);
+            int y = world.getHeight(Heightmap.Types.WORLD_SURFACE, x, z);
+            BlockPos pos = new BlockPos(x, y, z);
+            if (SpawnPlacements.isSpawnPositionOk(type, world, pos)) {
+                illager.setPos(x, y, z);
+                illager.setTarget(player);
+                WorldUtils.spawnEntity(world, illager, MobSpawnType.EVENT);
+                break;
             }
         }
     }
 
-    //adds a potential block to the processing queue
     public void reportBuilding(BlockPos pos) {
-        //mark in cache
         cache.add(pos);
-
         buildingQueue.add(pos);
     }
 
@@ -229,765 +186,381 @@ public class VillageManager extends SavedData implements Iterable<Village> {
     }
 
     private Building.validationResult processAutoScannedBuilding(BlockPos pos) {
-        // Grouped POIs (bells, grave markers, etc.) keep their existing aggregation path.
-        if (getGroupedBuildingType(pos) != null) {
-            return processBuilding(pos, false, true, null);
+        BuildingType externalType = getGroupedBuildingType(pos);
+        if (externalType != null) return processExternalBuilding(pos, externalType);
+
+        Village village = findNearestVillage(pos, Village.MERGE_MARGIN).orElse(null);
+        if (village != null && village.getStructureAt(pos).isPresent()) {
+            // Auto Scan never registers optional Rooms inside known Structures.
+            return Building.validationResult.SUCCESS;
         }
-
-        // Auto Scan first behaves like Add Room. This updates an existing room or assigns
-        // a genuinely new room to exactly one unambiguous rooted structure.
-        BuildingScanResult roomScan = analyzeRoom(pos);
-
-        return switch (getAutoScanResolution(roomScan.result())) {
-            case COMMIT_ROOM -> commitBuilding(roomScan, null);
-            case CREATE_STRUCTURE -> {
-                // No existing structure owns this room. Fall back to the same canonical
-                // container + Ground Floor creation used by manual Add Building.
-                InitialStructureScan initialScan = analyzeInitialStructure(pos);
-                yield commitInitialStructure(initialScan, null);
-            }
-            case REJECT -> roomScan.result();
-        };
+        InitialStructureScan scan = analyzeInitialStructure(pos);
+        if (scan.result() != Building.validationResult.SUCCESS || scan.isRoomAmbiguous()) return scan.result();
+        return commitInitialStructure(scan, null);
     }
 
-    static AutoScanResolution getAutoScanResolution(Building.validationResult roomResult) {
-        return switch (roomResult) {
-            case SUCCESS -> AutoScanResolution.COMMIT_ROOM;
-            case NOT_IN_BUILDING -> AutoScanResolution.CREATE_STRUCTURE;
-            default -> AutoScanResolution.REJECT;
-        };
-    }
-
-    enum AutoScanResolution {
-        COMMIT_ROOM,
-        CREATE_STRUCTURE,
-        REJECT
-    }
-
-    private enum ScanMode {
-        STRUCTURE,
-        ROOM
-    }
-
-    private enum RoomAssignment {
-        MATCH_ONLY,
-        ASSIGN_IF_NEW
-    }
-
-    private record ScanRequest(BlockPos pos,
-                               boolean strictScan,
-                               ScanMode mode,
-                               Village village,
-                               int preferredBuildingId,
-                               RoomAssignment assignment,
-                               Building explicitStructureRoot) {
-        private static ScanRequest structure(BlockPos pos, boolean strictScan) {
-            return new ScanRequest(pos, strictScan, ScanMode.STRUCTURE,
-                    null, -1, RoomAssignment.MATCH_ONLY, null);
-        }
-
-        private static ScanRequest room(BlockPos pos,
-                                        Village village,
-                                        int preferredBuildingId,
-                                        RoomAssignment assignment,
-                                        Building explicitStructureRoot) {
-            return new ScanRequest(pos, true, ScanMode.ROOM,
-                    village, preferredBuildingId, assignment, explicitStructureRoot);
-        }
-
-        private static ScanRequest rescan(BlockPos pos, Village village, Building existing) {
-            return new ScanRequest(pos, existing.isStrictScan(),
-                    existing.isStructureRoot() ? ScanMode.STRUCTURE : ScanMode.ROOM,
-                    village, existing.getId(), RoomAssignment.ASSIGN_IF_NEW, null);
-        }
-    }
-
-    private record GeometryScan(BuildingScanResult scan,
-                                int preferredBuildingId,
-                                BuildingRoomScanner.Result roomGeometry) {
-    }
-
-    //checks weather the given block contains a grouped building block, e.g., a town bell or gravestone
     private BuildingType getGroupedBuildingType(BlockPos pos) {
         Block block = world.getBlockState(pos).getBlock();
-        ResourceLocation blockId = BuiltInRegistries.BLOCK.getKey(block);
-        for (BuildingType bt : BuildingTypes.getInstance()) {
-            if (bt.grouped() && bt.matchesBlock(blockId)) {
-                return bt;
-            }
+        ResourceLocation id = BuiltInRegistries.BLOCK.getKey(block);
+        for (BuildingType type : BuildingTypes.getInstance()) {
+            if (type.grouped() && type.matchesBlock(id)) return type;
         }
         return null;
     }
 
-    //returns the scan-source blocks of all buildings, used to check for overlaps
-    public Set<BlockPos> getBlockedSet(Village village) {
-        return village.getBuildings().values().stream()
-                .filter(b -> !b.getBuildingType().grouped())
-                .map(Building::getSourceBlock)
-                .collect(Collectors.toSet());
-    }
-
-    public BuildingBlockedResult getBlockedResult(BlockPos pos) {
-        Optional<Village> optionalVillage = findNearestVillage(pos, Village.MERGE_MARGIN);
-        Set<BlockPos> blocked = new HashSet<>();
-        Building existingBuilding = null;
-        if (optionalVillage.isPresent()) {
-            Village village = optionalVillage.get();
-            blocked = getBlockedSet(village);
-            existingBuilding = village.getStructuralLookup(world, pos).building().orElse(null);
-        }
-        return new BuildingBlockedResult(blocked, existingBuilding, optionalVillage.orElse(null));
-    }
-
-    private BuildingScanResult analyzeStructure(BlockPos pos, boolean strictScan) {
-        return analyzeBuilding(ScanRequest.structure(pos, strictScan));
-    }
-
-    public BuildingScanResult analyzeRoom(BlockPos pos) {
-        return analyzeBuilding(ScanRequest.room(pos, null, -1, RoomAssignment.ASSIGN_IF_NEW, null));
-    }
-
-    public InitialStructureScan analyzeInitialStructure(BlockPos pos) {
-        BuildingScanResult root = analyzeStructure(pos, false);
-        if (root.result() != Building.validationResult.SUCCESS) {
-            Building emptyRoom = new Building(pos, true);
-            return new InitialStructureScan(root, new BuildingScanResult(
-                    root.result(), pos, true, emptyRoom, List.of(), root.village()));
-        }
-        return new InitialStructureScan(root, analyzeBuilding(ScanRequest.room(
-                pos, root.village(), -1, RoomAssignment.MATCH_ONLY, root.building())));
-    }
-
-    public BuildingScanResult analyzeRegisteredRoom(Village village, int buildingId, BlockPos pos) {
-        return analyzeBuilding(ScanRequest.room(
-                pos, village, buildingId, RoomAssignment.ASSIGN_IF_NEW, null));
-    }
-
-    public RoomUpdatePlan analyzeRegisteredRoomUpdate(Village village, int buildingId, BlockPos pos) {
-        if (village == null) {
-            return RoomUpdatePlan.failure(Building.validationResult.NOT_IN_BUILDING, null, buildingId);
-        }
-        Building expected = village.getBuilding(buildingId).orElse(null);
-        if (expected == null || !expected.isFunctionalRoom()) {
-            return RoomUpdatePlan.conflict(Building.validationResult.OVERLAP, null, null, buildingId);
-        }
-
-        GeometryScan requestedGeometry = scanBuildingGeometry(ScanRequest.room(
-                pos, village, buildingId, RoomAssignment.MATCH_ONLY, null));
-        BuildingScanResult requestedRaw = requestedGeometry.scan();
-        if (requestedRaw.result() != Building.validationResult.SUCCESS) {
-            return RoomUpdatePlan.failure(requestedRaw.result(), requestedRaw, buildingId);
-        }
-
-        Building structureRoot = BuildingStructureManager.root(
-                village, expected.getEffectiveStructureId()).orElse(null);
-        if (structureRoot == null) {
-            return RoomUpdatePlan.failure(Building.validationResult.NOT_IN_BUILDING, requestedRaw, buildingId);
-        }
-
-        Building requestedBuilding = requestedRaw.building();
-        requestedBuilding.setStructureId(expected.getEffectiveStructureId());
-        requestedBuilding.setStructureRoot(false);
-        requestedBuilding.canonicalizeFloor(structureRoot);
-
-        // Detect a remodel split before ordinary identity matching. Connectivity discovery
-        // is owned by BuildingRoomScanner; this layer only materializes the returned geometry
-        // and asks BuildingRoomIdentity how persistent identity should be assigned.
-        long requestedArea = requestedBuilding.getFloorFootprintArea();
-        boolean requestedInsideOldFootprint =
-                requestedBuilding.getHorizontalFootprintIntersectionArea(expected) == requestedArea;
-        if (requestedInsideOldFootprint
-                && !BuildingRoomIdentity.sameRoomGeometry(
-                        expected, requestedBuilding, structureRoot)) {
-            BuildingRoomScanner.ComponentScan componentScan = BuildingRoomScanner.scanComponents(
-                    world,
-                    expected,
-                    structureRoot,
-                    requestedGeometry.roomGeometry(),
-                    Config.getInstance().maxBuildingSize,
-                    Config.getInstance().maxBuildingRadius,
-                    2
-            );
-            if (componentScan.tooMany()) {
-                return RoomUpdatePlan.conflict(
-                        Building.validationResult.OVERLAP, requestedRaw, null, buildingId);
-            }
-
-            List<BuildingScanResult> components = new ArrayList<>();
-            for (BuildingRoomScanner.Result component : componentScan.components()) {
-                BuildingScanResult scan = component == requestedGeometry.roomGeometry()
-                        ? requestedRaw
-                        : materializeRegisteredRoomComponent(village, expected, structureRoot, component);
-                if (scan != null) {
-                    components.add(scan);
-                }
-            }
-
-            if (components.size() == 2) {
-                BuildingScanResult first = components.get(0);
-                BuildingScanResult second = components.get(1);
-                BuildingRoomIdentity.SplitPlan split = BuildingRoomIdentity.planSplit(
-                        expected, first.building(), second.building(), village);
-                if (!split.isSuccess()) {
-                    BuildingScanResult retained = split.retained() == first.building()
-                            ? first
-                            : split.retained() == second.building() ? second : null;
-                    return RoomUpdatePlan.conflict(
-                            split.result(), requestedRaw, retained, buildingId);
-                }
-
-                BuildingScanResult retained = split.retained() == first.building() ? first : second;
-                BuildingScanResult added = retained == first ? second : first;
-                return RoomUpdatePlan.split(requestedRaw, retained, added, buildingId);
+    private Building.validationResult processExternalBuilding(BlockPos pos, BuildingType type) {
+        Optional<Village> nearest = findNearestVillage(pos, Village.MERGE_MARGIN);
+        if (nearest.isPresent()) {
+            double range = type.mergeRange() * type.mergeRange();
+            ExternalBuilding existing = nearest.get().getExternalBuildings()
+                    .filter(building -> building.getType().equals(type.name()))
+                    .min(Comparator.comparingDouble(building -> building.getCenter().distSqr(pos)))
+                    .filter(building -> building.getCenter().distSqr(pos) < range).orElse(null);
+            if (existing != null) {
+                existing.addPOI(world, pos);
+                nearest.get().calculateDimensions();
+                setDirty();
+                return Building.validationResult.SUCCESS;
             }
         }
-
-        BuildingScanResult requested = BuildingStructureManager.resolveScanIdentity(
-                requestedRaw, requestedGeometry.preferredBuildingId(), false);
-        if (requested.result() != Building.validationResult.SUCCESS) {
-            return RoomUpdatePlan.failure(requested.result(), requested, buildingId);
-        }
-        if (requested.existingBuildingId() == buildingId && requested.mergedBuildingIds().isEmpty()) {
-            return RoomUpdatePlan.update(requested, buildingId);
-        }
-        return RoomUpdatePlan.conflict(Building.validationResult.OVERLAP, requested, null, buildingId);
-    }
-
-    private BuildingScanResult materializeRegisteredRoomComponent(
-            Village village,
-            Building expected,
-            Building structureRoot,
-            BuildingRoomScanner.Result component) {
-        Building room = new Building(component.seed(), true);
-        Building.validationResult result = room.applyStrictRoomScan(world, component, true);
-        if (result != Building.validationResult.SUCCESS) {
-            return null;
-        }
-
-        room.setStructureId(expected.getEffectiveStructureId());
-        room.setStructureRoot(false);
-        room.canonicalizeFloor(structureRoot);
-        List<String> matchingTypes = room.getVisibleMatchingTypes().stream()
-                .map(BuildingType::name)
-                .toList();
-        return new BuildingScanResult(
-                result,
-                room.getSourceBlock(),
-                true,
-                room,
-                matchingTypes,
-                village,
-                -1,
-                List.of()
-        );
-    }
-
-    private BuildingScanResult analyzeBuilding(ScanRequest request) {
-        GeometryScan geometry = scanBuildingGeometry(request);
-        return BuildingStructureManager.resolveScanIdentity(
-                geometry.scan(),
-                geometry.preferredBuildingId(),
-                request.mode() == ScanMode.ROOM
-                        && request.assignment() == RoomAssignment.ASSIGN_IF_NEW);
-    }
-
-    private GeometryScan scanBuildingGeometry(ScanRequest request) {
-        BlockPos pos = request.pos();
-        boolean roomScan = request.mode() == ScanMode.ROOM;
-        Village knownVillage = request.village();
-        int preferredBuildingId = request.preferredBuildingId();
-        Building explicitStructureRoot = request.explicitStructureRoot();
-        BuildingBlockedResult blockResult = knownVillage == null ? getBlockedResult(pos) : null;
-        Village village = knownVillage != null ? knownVillage : blockResult.village();
-
-        ensureStructureHierarchy(village);
-
-        Building locatedExisting = blockResult == null ? null : blockResult.existingBuilding();
-        Building preferred = village == null
-                ? null
-                : preferredBuildingId >= 0
-                ? village.getBuilding(preferredBuildingId).orElse(null)
-                : locatedExisting;
-        int effectivePreferredId = preferred == null ? preferredBuildingId : preferred.getId();
-
-        Set<BlockPos> blocked = village == null
-                ? new HashSet<>()
-                : new HashSet<>(getBlockedSet(village));
-
-        /*
-         * Room discovery must be able to cross the old source anchor so expansions,
-         * shrinks and splits can be identified after the new geometry is known.
-         * Cross-structure conflicts are rejected by the identity matcher.
-         */
-        if (roomScan) {
-            blocked.clear();
-        } else if (preferred != null && preferred.hasStructure()) {
-            int structureId = preferred.getEffectiveStructureId();
-            BuildingStructureManager.members(village, structureId)
-                    .forEach(member -> blocked.remove(member.getSourceBlock()));
-        }
-
-        boolean effectiveStrictScan = (roomScan
-                || preferred == null
-                || preferredBuildingId >= 0)
-                ? request.strictScan()
-                : preferred.isStrictScan();
-        BlockPos scanSource = !roomScan && preferred != null && preferredBuildingId < 0
-                ? preferred.getSourceBlock()
-                : pos;
-        Building building = new Building(scanSource, effectiveStrictScan);
-        Building roomScanRoot = roomScan
-                ? resolveRoomScanRoot(village, preferred, scanSource, explicitStructureRoot)
-                : null;
-
-        boolean allowMissingEntrance = roomScan
-                || (preferred != null && preferred.hasStructure() && !preferred.isStructureRoot());
-
-        BuildingRoomScanner.Result roomGeometry = null;
-        Building.validationResult result;
-        if (roomScan) {
-            roomGeometry = BuildingRoomScanner.scan(
-                    world,
-                    scanSource,
-                    blocked,
-                    Config.getInstance().maxBuildingSize,
-                    Config.getInstance().maxBuildingRadius,
-                    roomScanRoot
-            );
-            result = building.applyStrictRoomScan(world, roomGeometry, allowMissingEntrance);
-        } else {
-            result = building.validateBuilding(world, blocked, allowMissingEntrance, null);
-        }
-        List<String> matchingTypes = result == Building.validationResult.SUCCESS
-                ? building.getVisibleMatchingTypes().stream().map(BuildingType::name).toList()
-                : List.of();
-
-        BuildingScanResult geometry = new BuildingScanResult(
-                result,
-                building.getSourceBlock(),
-                building.isStrictScan(),
-                building,
-                matchingTypes,
-                village,
-                -1,
-                List.of()
-        );
-        return new GeometryScan(geometry, effectivePreferredId, roomGeometry);
-    }
-
-
-    private static Building resolveRoomScanRoot(Village village,
-                                                Building preferred,
-                                                BlockPos source,
-                                                Building explicitStructureRoot) {
-        if (explicitStructureRoot != null && !explicitStructureRoot.isStrictScan()) {
-            return explicitStructureRoot;
-        }
-
-        if (preferred != null) {
-            if (preferred.isStructureRoot()) {
-                return preferred;
-            }
-            if (preferred.hasStructure()) {
-                return BuildingStructureManager.root(village, preferred.getEffectiveStructureId()).orElse(null);
-            }
-        }
-        return BuildingStructureManager.containingRawRoot(village, source).orElse(null);
-    }
-
-    public Building.validationResult commitBuilding(BuildingScanResult scan, String forcedType) {
-        if (scan.result() != Building.validationResult.SUCCESS) {
-            return scan.result();
-        }
-        Building existingForValidation = scan.hasExistingBuilding() && scan.village() != null
-                ? scan.village().getBuilding(scan.existingBuildingId()).orElse(null)
-                : null;
-        boolean updatingStructureContainer = existingForValidation != null
-                && existingForValidation.isStructureContainer();
-        if (forcedType != null && !scan.matchesType(forcedType)) {
-            return Building.validationResult.INVALID_TYPE;
-        }
-        if (forcedType == null && scan.isAmbiguous() && !updatingStructureContainer) {
-            return Building.validationResult.INVALID_TYPE;
-        }
-
-        Building building = scan.building();
-        Village targetVillage = scan.village();
-        if (targetVillage == null) {
-            targetVillage = new Village(lastVillageId++, world);
-        } else {
-            ensureStructureHierarchy(targetVillage);
-        }
-
-        Building existing = scan.hasExistingBuilding()
-                ? targetVillage.getBuilding(scan.existingBuildingId()).orElse(null)
-                : null;
-
-        Building pendingGroundRoom = null;
-        Building pendingGroundRoot = null;
-        if (existing == null && building.isFunctionalRoom() && building.hasStructure()) {
-            pendingGroundRoot = BuildingStructureManager.root(targetVillage, building.getStructureId()).orElse(null);
-            if (pendingGroundRoot == null) {
-                return Building.validationResult.NOT_IN_BUILDING;
-            }
-
-            if (!BuildingStructureManager.isGroundFloor(pendingGroundRoot, building.getFloorY())
-                    && !hasRegisteredGroundRoom(targetVillage, pendingGroundRoot)) {
-                GroundRoomScan groundScan = scanGroundRoom(pendingGroundRoot);
-                if (groundScan.result() != Building.validationResult.SUCCESS) {
-                    return groundScan.result();
-                }
-                pendingGroundRoom = groundScan.room();
-            }
-        }
-
-        if (existing != null) {
-            int structureId = existing.getEffectiveStructureId();
-            boolean mergedAcrossStructures = scan.mergedBuildingIds().stream()
-                    .map(targetVillage::getBuilding)
-                    .flatMap(Optional::stream)
-                    .anyMatch(candidate -> candidate.getEffectiveStructureId() != structureId);
-            if (mergedAcrossStructures) {
-                return Building.validationResult.AMBIGUOUS_STRUCTURE;
-            }
-
-            // A strict non-root record is a registered room. Its floor is an assigned
-            // semantic identity, so every rescan (including Full Scan) refreshes its
-            // geometry without moving it between Basement, Ground Floor, and upper-floor
-            // groups. Moving floors requires remove/re-add or a future explicit operation.
-            existing.copyScannedGeometryFrom(
-                    building,
-                    world,
-                    existing.isStrictScan() && !existing.isStructureRoot()
-            );
-            if (existing.isFunctionalRoom()) {
-                BuildingStructureManager.root(targetVillage, structureId)
-                        .ifPresent(existing::canonicalizeFloor);
-            }
-            if (existing.isStructureContainer()) {
-                existing.makeStructureContainer();
-            } else if (forcedType != null) {
-                existing.setTypeForced(true);
-                existing.setType(forcedType);
-            } else {
-                existing.setTypeForced(false);
-                existing.setType(building.getType());
-            }
-
-            if (!scan.mergedBuildingIds().isEmpty()) {
-                targetVillage.removeBuildings(scan.mergedBuildingIds().stream()
-                        .filter(id -> id != existing.getId())
-                        .toList());
-            }
-        } else {
-            if (forcedType != null) {
-                building.setTypeForced(true);
-                building.setType(forcedType);
-            } else {
-                // validateBuilding already resolved a valid unambiguous type.
-                building.setTypeForced(false);
-            }
-
-            // Strict scans are functional rooms, never structure roots. New standalone
-            // structures must be created through commitInitialStructure so they always
-            // receive a non-strict container root plus a strict Ground Floor room.
-            if (!building.hasStructure() && building.isStrictScan()) {
-                return Building.validationResult.NOT_IN_BUILDING;
-            }
-
-            if (targetVillage.getBuildings().values().stream().anyMatch(b -> b.isIdentical(building))) {
-                return Building.validationResult.IDENTICAL;
-            }
-
-            villages.put(targetVillage.getId(), targetVillage);
-            building.setId(lastBuildingId++);
-            if (!building.hasStructure()) {
-                building.setStructureId(building.getId());
-                building.setStructureRoot(true);
-            }
-            targetVillage.getBuildings().put(building.getId(), building);
-
-            if (pendingGroundRoom != null) {
-                registerGroundRoom(targetVillage, pendingGroundRoot, pendingGroundRoom);
-            }
-        }
-
-        finalizeVillageMutation(targetVillage);
-        return Building.validationResult.SUCCESS;
-    }
-
-    public Building.validationResult commitRegisteredRoomUpdate(RoomUpdatePlan update, String forcedType) {
-        if (update == null) {
-            return Building.validationResult.TOO_SMALL;
-        }
-        return switch (update.kind()) {
-            case CONFLICT, FAILURE -> update.result();
-            case UPDATE -> commitBuilding(update.requested(), forcedType);
-            case SPLIT -> commitRoomSplit(update, forcedType);
-        };
-    }
-
-    private Building.validationResult commitRoomSplit(RoomUpdatePlan update, String forcedType) {
-        BuildingScanResult addedScan = update.added();
-        BuildingScanResult retainedScan = update.retained();
-        Village village = addedScan == null ? null : addedScan.village();
-        if (village == null || retainedScan == null || retainedScan.village() != village) {
-            return Building.validationResult.NOT_IN_BUILDING;
-        }
-
-        Building existing = village.getBuilding(update.expectedRoomId()).orElse(null);
-        if (existing == null || !existing.isFunctionalRoom()) {
-            return Building.validationResult.TOO_SMALL;
-        }
-
-        Building retained = retainedScan.building();
-        Building added = addedScan.building();
-        Building.validationResult validation = BuildingRoomIdentity.validateRoomSplit(
-                existing, retained, added, village);
-        if (validation != Building.validationResult.SUCCESS) {
-            return validation;
-        }
-        if (forcedType != null && !addedScan.matchesType(forcedType)) {
-            return Building.validationResult.INVALID_TYPE;
-        }
-        if (forcedType == null && addedScan.isAmbiguous()) {
-            return Building.validationResult.INVALID_TYPE;
-        }
-
-        int structureId = existing.getEffectiveStructureId();
-        Building structureRoot = BuildingStructureManager.root(village, structureId).orElse(null);
-        if (structureRoot == null) {
-            return Building.validationResult.NOT_IN_BUILDING;
-        }
-
-        existing.copyScannedGeometryFrom(retained, world, true);
-        existing.canonicalizeFloor(structureRoot);
-
-        added.setId(lastBuildingId++);
-        added.setStructureId(structureId);
-        added.setStructureRoot(false);
-        added.setTypeForced(forcedType != null);
-        if (forcedType != null) {
-            added.setType(forcedType);
-        }
-        village.getBuildings().put(added.getId(), added);
-
+        Village village = nearest.orElseGet(() -> new Village(lastVillageId++, world));
+        ExternalBuilding building = new ExternalBuilding(pos);
+        building.setId(lastBuildingId++);
+        building.setType(type.name());
+        building.addPOI(world, pos);
+        village.getExternalBuildingMap().put(building.getId(), building);
+        villages.put(village.getId(), village);
         finalizeVillageMutation(village);
         return Building.validationResult.SUCCESS;
     }
 
-    public Building.validationResult commitInitialStructure(InitialStructureScan scan, String forcedRoomType) {
-        if (scan.result() != Building.validationResult.SUCCESS) {
-            return scan.result();
-        }
-        if (scan.root().hasExistingBuilding() || scan.room().hasExistingBuilding()) {
-            return Building.validationResult.IDENTICAL;
-        }
-        if (forcedRoomType != null && !scan.room().matchesType(forcedRoomType)) {
-            return Building.validationResult.INVALID_TYPE;
-        }
-        if (forcedRoomType == null && scan.room().isAmbiguous()) {
-            return Building.validationResult.INVALID_TYPE;
+    public InitialStructureScan analyzeInitialStructure(BlockPos pos) {
+        Village village = findNearestVillage(pos, Village.MERGE_MARGIN).orElse(null);
+        Collection<Structure> existing = village == null ? List.of() : village.getStructures().values();
+        if (village != null && village.getStructureAt(pos).isPresent()) {
+            StructureScanner.Result failure = StructureScanner.Result.failure(Building.validationResult.IDENTICAL, pos);
+            return new InitialStructureScan(new StructureScanResult(failure.result(), failure, village, -1),
+                    failedRoom(failure.result(), pos, village), null);
         }
 
-        Village targetVillage = scan.root().village();
-        if (targetVillage != null) {
-            ensureStructureHierarchy(targetVillage);
-            if (targetVillage.getStructuralPosition(world, scan.root().source()) != Village.StructuralPosition.OUTSIDE) {
-                return Building.validationResult.IDENTICAL;
-            }
+        StructureScanner.Result structureScan = StructureScanner.scan(world, pos, existing, -1);
+        StructureScanResult structureResult = new StructureScanResult(structureScan.result(), structureScan, village, -1);
+        if (structureScan.result() != Building.validationResult.SUCCESS) {
+            return new InitialStructureScan(structureResult, failedRoom(structureScan.result(), pos, village), null);
+        }
+
+        Structure candidate = structureScan.toStructure(-1);
+        // Initial Structure creation already proved physical ownership. The mandatory first Room
+        // must not be rejected merely because this floor has no local doorway (for example a basement
+        // reached by stairs); explicit Add Room keeps the normal entrance requirement.
+        BuildingScanResult room = scanRoom(village, candidate, pos, -1, true);
+        if (room.result() != Building.validationResult.SUCCESS) {
+            return new InitialStructureScan(structureResult, room, null);
+        }
+        // Root Room identity is physical-room identity, not merely Floor identity. A player may
+        // start in a different Room on the Ground Floor, so always scan the Ground Floor candidate
+        // and deduplicate only when the two Room footprints are actually identical.
+        BuildingScanResult root = scanRoom(village, candidate, structureScan.groundSeed(), -1, true);
+        if (root.result() != Building.validationResult.SUCCESS) {
+            return new InitialStructureScan(structureResult, room, root);
+        }
+        if (root.building().isIdentical(room.building())) {
+            root = null;
+        }
+        return new InitialStructureScan(structureResult, room, root);
+    }
+
+    public BuildingScanResult analyzeRoom(BlockPos pos) {
+        Village village = findNearestVillage(pos, Village.MERGE_MARGIN).orElse(null);
+        Structure structure = village == null ? null : village.getStructureAt(pos).orElse(null);
+        if (structure == null) return failedRoom(Building.validationResult.NOT_IN_BUILDING, pos, village);
+        if (village.getFunctionalRoomAt(world, pos).isPresent()) {
+            return failedRoom(Building.validationResult.IDENTICAL, pos, village);
+        }
+        return scanRoom(village, structure, pos, -1, false);
+    }
+
+    public BuildingScanResult analyzeRegisteredRoom(Village village, int buildingId, BlockPos pos) {
+        Building expected = village == null ? null : village.getBuilding(buildingId).orElse(null);
+        if (expected == null || !expected.isFunctionalRoom()) {
+            return failedRoom(Building.validationResult.NOT_IN_BUILDING, pos, village);
+        }
+        Structure structure = village.getStructure(expected.getStructureId()).orElse(null);
+        if (structure == null) return failedRoom(Building.validationResult.NOT_IN_BUILDING, pos, village);
+        return scanRoom(village, structure, pos, buildingId, true);
+    }
+
+    public BuildingScanResult analyzeRegisteredRoomUpdate(Village village, int buildingId, BlockPos pos) {
+        Building expected = village == null ? null : village.getBuilding(buildingId).orElse(null);
+        if (expected == null || !expected.isFunctionalRoom()) {
+            return failedRoom(Building.validationResult.NOT_IN_BUILDING, pos, village);
+        }
+        Structure structure = village.getStructure(expected.getStructureId()).orElse(null);
+        if (structure == null) return failedRoom(Building.validationResult.NOT_IN_BUILDING, pos, village);
+
+        // Update Room refreshes physical Structure/Floor truth first, but only in a detached copy.
+        // This keeps analysis/type-selection non-destructive and lets a remodel expand or shrink the
+        // current Room without the stale Room footprint blocking the Floor rescan.
+        StructureScanner.Result physical = StructureScanner.scan(
+                world, structure.getSource(), village.getStructures().values(), structure.getId());
+        if (physical.result() != Building.validationResult.SUCCESS) {
+            return failedRoom(physical.result(), pos, village);
+        }
+        Structure refreshed = new Structure(structure.save());
+        List<Building> rooms = village.getRooms()
+                .filter(room -> room.getStructureId() == structure.getId())
+                .toList();
+        if (!refreshed.applyScanForRoomUpdate(physical, rooms, buildingId)) {
+            return failedRoom(Building.validationResult.OVERLAP, pos, village);
+        }
+        if (refreshed.getFloor(expected.getFloorId()).isEmpty()) {
+            return failedRoom(Building.validationResult.OVERLAP, pos, village);
+        }
+        return scanRoom(village, refreshed, pos, buildingId, true, refreshed);
+    }
+
+    private BuildingScanResult scanRoom(Village village,
+                                        Structure structure,
+                                        BlockPos pos,
+                                        int existingRoomId,
+                                        boolean allowMissingEntrance) {
+        return scanRoom(village, structure, pos, existingRoomId, allowMissingEntrance, null);
+    }
+
+    private BuildingScanResult scanRoom(Village village,
+                                        Structure structure,
+                                        BlockPos pos,
+                                        int existingRoomId,
+                                        boolean allowMissingEntrance,
+                                        Structure structureUpdate) {
+        StructureFloor floor = existingRoomId >= 0 && village != null
+                ? village.getBuilding(existingRoomId).flatMap(room -> structure.getFloor(room.getFloorId())).orElse(null)
+                : structure.resolveFloor(world, pos).orElse(null);
+        if (floor == null) return failedRoom(Building.validationResult.TOO_SMALL, pos, village);
+
+        Set<BlockPos> blocked = new HashSet<>();
+        // New Rooms may not consume registered Room space. Updates deliberately scan through
+        // other registered Rooms so the commit phase can prove a physical merge and delete
+        // only fully-covered stale duplicates; partial overlap remains a conflict.
+        if (village != null && existingRoomId < 0) {
+            village.getRooms().filter(room -> room.getStructureId() == structure.getId())
+                    .filter(room -> room.getFloorId() == floor.id())
+                    .flatMap(room -> room.getFloorRegions().stream())
+                    .flatMap(region -> region.components().stream())
+                    .flatMap(component -> component.spans().stream())
+                    .forEach(span -> {
+                        for (int x = span.minX(); x <= span.maxX(); x++) blocked.add(new BlockPos(x, floor.anchorY(), span.z()));
+                    });
+        }
+
+        BuildingRoomScanner.Result geometry = BuildingRoomScanner.scan(world, pos, blocked,
+                Config.getInstance().maxBuildingSize, Config.getInstance().maxBuildingRadius, structure, floor);
+        Building room = new Building(pos);
+        Building.validationResult result = room.applyRoomScan(world, geometry, allowMissingEntrance);
+        if (result != Building.validationResult.SUCCESS) return failedRoom(result, pos, village);
+        room.setStructureId(structure.getId());
+        room.setFloorId(floor.id());
+        if (existingRoomId >= 0) room.setId(existingRoomId);
+
+        List<String> types;
+        if (village == null) {
+            types = room.getVisibleMatchingTypes().stream().map(BuildingType::name).toList();
         } else {
-            targetVillage = new Village(lastVillageId++, world);
+            types = village.getMatchingRoomTypes(structure.getId(), room).stream().map(BuildingType::name).toList();
+            if (types.isEmpty()) {
+                Building root = village.getBuilding(structure.getRootRoomId()).orElse(null);
+                if (root != null && !root.getType().equals("building")) types = List.of(root.getType());
+            }
         }
+        return new BuildingScanResult(Building.validationResult.SUCCESS, room.getSourceBlock(), room,
+                types, village, existingRoomId, structure.getId(), floor.id(), structureUpdate);
+    }
 
-        Building root = scan.root().building();
-        Building room = scan.room().building();
+    private static BuildingScanResult failedRoom(Building.validationResult result, BlockPos pos, Village village) {
+        return new BuildingScanResult(result, pos, new Building(pos), List.of(), village, -1, -1, -1);
+    }
 
-        GroundRoomScan groundScan = resolveGroundRoom(root, room);
-        if (groundScan.result() != Building.validationResult.SUCCESS) {
-            return groundScan.result();
+    public Building.validationResult commitInitialStructure(InitialStructureScan scan, String forcedRoomType) {
+        if (scan == null || scan.result() != Building.validationResult.SUCCESS) return scan == null
+                ? Building.validationResult.TOO_SMALL : scan.result();
+        if (forcedRoomType != null && !scan.room().matchesType(forcedRoomType)) return Building.validationResult.INVALID_TYPE;
+        if (forcedRoomType == null && scan.room().isAmbiguous()) return Building.validationResult.INVALID_TYPE;
+
+        Village village = scan.structure().village();
+        if (village == null) village = new Village(lastVillageId++, world);
+        if (village.getStructureAt(scan.structure().scan().source()).isPresent()) return Building.validationResult.IDENTICAL;
+
+        int structureId = lastBuildingId++;
+        Structure structure = scan.structure().scan().toStructure(structureId);
+        Building playerRoom = scan.room().building();
+        String category = chooseCategory(scan.room(), forcedRoomType, null);
+        if (category == null) return Building.validationResult.INVALID_TYPE;
+
+        Building rootRoom = scan.rootRoom() == null ? playerRoom : scan.rootRoom().building();
+        rootRoom.setId(lastBuildingId++);
+        rootRoom.setStructureId(structureId);
+        rootRoom.setFloorId(scan.rootRoom() == null ? playerRoom.getFloorId() : scan.rootRoom().floorId());
+        rootRoom.setType(category);
+        rootRoom.setTypeForced(forcedRoomType != null);
+        structure.setRootRoomId(rootRoom.getId());
+        village.getBuildings().put(rootRoom.getId(), rootRoom);
+
+        if (rootRoom != playerRoom) {
+            playerRoom.setId(lastBuildingId++);
+            playerRoom.setStructureId(structureId);
+            playerRoom.setFloorId(scan.room().floorId());
+            playerRoom.setType(category);
+            playerRoom.setTypeForced(forcedRoomType != null);
+            village.getBuildings().put(playerRoom.getId(), playerRoom);
         }
-        Building groundRoom = groundScan.room();
-
-        Building finalGroundRoom = groundRoom;
-        if (targetVillage.getBuildings().values().stream()
-                .anyMatch(existing -> existing.isIdentical(root)
-                        || existing.isIdentical(room)
-                        || (finalGroundRoom != room && existing.isIdentical(finalGroundRoom)))) {
-            return Building.validationResult.IDENTICAL;
-        }
-
-        root.setId(lastBuildingId++);
-        root.setStructureId(root.getId());
-        root.makeStructureContainer();
-        targetVillage.getBuildings().put(root.getId(), root);
-
-        if (groundRoom != room) {
-            registerGroundRoom(targetVillage, root, groundRoom);
-        }
-
-        room.setId(lastBuildingId++);
-        room.setStructureId(root.getId());
-        room.setStructureRoot(false);
-        room.setTypeForced(forcedRoomType != null);
-        if (forcedRoomType != null) {
-            room.setType(forcedRoomType);
-        }
-        targetVillage.getBuildings().put(room.getId(), room);
-
-        villages.put(targetVillage.getId(), targetVillage);
-        finalizeVillageMutation(targetVillage);
+        village.getStructures().put(structureId, structure);
+        villages.put(village.getId(), village);
+        finalizeVillageMutation(village);
         return Building.validationResult.SUCCESS;
     }
 
-    private GroundRoomScan resolveGroundRoom(Building root, Building room) {
-        return BuildingStructureManager.isGroundFloor(root, room.getFloorY())
-                ? new GroundRoomScan(Building.validationResult.SUCCESS, room)
-                : scanGroundRoom(root);
+    public Building.validationResult commitBuilding(BuildingScanResult scan, String forcedType) {
+        if (scan == null || scan.result() != Building.validationResult.SUCCESS) return scan == null
+                ? Building.validationResult.TOO_SMALL : scan.result();
+        if (scan.hasExistingBuilding()) return commitRegisteredRoomUpdate(scan, scan.existingBuildingId(), forcedType);
+        if (forcedType != null && !scan.matchesType(forcedType)) return Building.validationResult.INVALID_TYPE;
+        if (forcedType == null && scan.isAmbiguous()) return Building.validationResult.INVALID_TYPE;
+        Village village = scan.village();
+        Structure structure = village == null ? null : village.getStructure(scan.structureId()).orElse(null);
+        if (village == null || structure == null) return Building.validationResult.NOT_IN_BUILDING;
+
+        Building room = scan.building();
+        String inherited = village.getBuilding(structure.getRootRoomId()).map(Building::getType).orElse(null);
+        String category = chooseCategory(scan, forcedType, inherited);
+        if (category == null) return Building.validationResult.INVALID_TYPE;
+        room.setId(lastBuildingId++);
+        room.setStructureId(structure.getId());
+        room.setFloorId(scan.floorId());
+        room.setType(category);
+        room.setTypeForced(forcedType != null);
+        village.getBuildings().put(room.getId(), room);
+        finalizeVillageMutation(village);
+        return Building.validationResult.SUCCESS;
     }
 
-    private GroundRoomScan scanGroundRoom(Building root) {
-        Building.validationResult lastFailure = Building.validationResult.TOO_SMALL;
-        List<BlockPos> sources = getGroundRoomSources(root);
+    public Building.validationResult commitRegisteredRoomUpdate(BuildingScanResult scan,
+                                                                  int expectedRoomId,
+                                                                  String forcedType) {
+        if (scan == null || scan.result() != Building.validationResult.SUCCESS) return scan == null
+                ? Building.validationResult.TOO_SMALL : scan.result();
+        Village village = scan.village();
+        Building existing = village == null ? null : village.getBuilding(expectedRoomId).orElse(null);
+        if (existing == null || scan.existingBuildingId() != expectedRoomId) return Building.validationResult.OVERLAP;
+        if (forcedType != null && !scan.matchesType(forcedType)) return Building.validationResult.INVALID_TYPE;
+        if (forcedType == null && scan.isAmbiguous()) return Building.validationResult.INVALID_TYPE;
 
-        for (BlockPos source : sources) {
-            Building candidate = new Building(source, true);
-            Building.validationResult result = candidate.validateBuilding(world, Set.of(), true, root);
-            if (result != Building.validationResult.SUCCESS) {
-                lastFailure = result;
-                continue;
-            }
-
-            if (!BuildingStructureManager.isGroundFloor(root, candidate.getFloorY())
-                    || !root.containsRawPos(candidate.getSourceBlock())) {
-                continue;
-            }
-            return new GroundRoomScan(Building.validationResult.SUCCESS, candidate);
+        Structure structure = village.getStructure(existing.getStructureId()).orElse(null);
+        if (structure == null) return Building.validationResult.NOT_IN_BUILDING;
+        Structure preparedStructure = scan.structureUpdate();
+        if (preparedStructure != null
+                && (preparedStructure.getId() != structure.getId()
+                || preparedStructure.getFloor(existing.getFloorId()).isEmpty())) {
+            return Building.validationResult.OVERLAP;
         }
 
-        MCA.LOGGER.warn(
-                "[GroundRoomInvariant] stage=ground-room-missing structure={} rootGroundFloorY={} rootBounds={}..{} candidates={} lastFailure={}",
-                root.getEffectiveStructureId(), root.getGroundFloorY(), root.getRawPos0(), root.getRawPos1(),
-                sources.size(), lastFailure);
-        return new GroundRoomScan(lastFailure, null);
-    }
-
-    private static List<BlockPos> getGroundRoomSources(Building root) {
-        int groundY = BuildingStructureManager.canonicalFloorY(
-                root, root.getGroundFloorY());
-        LinkedHashSet<BlockPos> sources = new LinkedHashSet<>();
-
-        root.getFloorRegions().stream()
-                .filter(region -> BuildingStructureManager.isGroundFloor(root, region.anchorY()))
-                .sorted(Comparator.comparingInt(BuildingFloorRegion::area).reversed())
-                .forEach(region -> region.components().stream()
-                        .sorted(Comparator.comparingInt(BuildingFloorRegion.Component::area).reversed()
-                                .thenComparingInt(BuildingFloorRegion.Component::minX)
-                                .thenComparingInt(BuildingFloorRegion.Component::minZ)
-                                .thenComparingInt(BuildingFloorRegion.Component::maxX)
-                                .thenComparingInt(BuildingFloorRegion.Component::maxZ))
-                        .map(component -> getGroundRoomSource(component, groundY))
-                        .forEach(sources::add));
-
-        BlockPos center = root.getCenter();
-        sources.add(new BlockPos(center.getX(), groundY, center.getZ()));
-        BlockPos originalSource = root.getSourceBlock();
-        sources.add(new BlockPos(originalSource.getX(), groundY, originalSource.getZ()));
-        return List.copyOf(sources);
-    }
-
-    private static BlockPos getGroundRoomSource(BuildingFloorRegion.Component component, int groundY) {
-        int centerX = component.minX() + (component.maxX() - component.minX()) / 2;
-        int centerZ = component.minZ() + (component.maxZ() - component.minZ()) / 2;
-
-        return component.spans().stream()
-                .min(Comparator
-                        .comparingInt((BuildingFloorRegion.Span span) -> Math.abs(span.z() - centerZ))
-                        .thenComparingInt(span -> horizontalDistance(centerX, span))
-                        .thenComparingInt(BuildingFloorRegion.Span::z)
-                        .thenComparingInt(BuildingFloorRegion.Span::minX)
-                        .thenComparingInt(BuildingFloorRegion.Span::maxX))
-                .map(span -> new BlockPos(
-                        Math.max(span.minX(), Math.min(centerX, span.maxX())),
-                        groundY,
-                        span.z()
-                ))
-                .orElseGet(() -> new BlockPos(centerX, groundY, centerZ));
-    }
-
-    private static int horizontalDistance(int x, BuildingFloorRegion.Span span) {
-        if (x < span.minX()) {
-            return span.minX() - x;
+        Building scanned = scan.building();
+        List<Building> stale = new ArrayList<>();
+        for (Building other : village.getRooms().filter(room -> room.getId() != expectedRoomId)
+                .filter(room -> room.getStructureId() == existing.getStructureId())
+                .filter(room -> room.getFloorId() == existing.getFloorId()).toList()) {
+            long intersection = scanned.getFloorFootprintIntersectionArea(other);
+            if (intersection == 0) continue;
+            if (intersection != other.getFloorFootprintArea()) return Building.validationResult.OVERLAP;
+            stale.add(other);
         }
-        if (x > span.maxX()) {
-            return x - span.maxX();
+
+        // All validation is complete: commit physical Structure/Floor geometry and Room geometry together.
+        if (preparedStructure != null) {
+            structure.copyPhysicalGeometryFrom(preparedStructure);
         }
-        return 0;
+        existing.copyScannedGeometryFrom(scanned, world, true);
+        if (forcedType != null) {
+            existing.setType(forcedType);
+            existing.setTypeForced(true);
+        } else if (scan.matchingTypes().size() == 1) {
+            existing.setType(scan.matchingTypes().getFirst());
+            existing.setTypeForced(false);
+        }
+
+        if (stale.stream().anyMatch(room -> structure.isRootRoom(room.getId()))) {
+            structure.setRootRoomId(existing.getId());
+        }
+        village.removeBuildings(stale.stream().map(Building::getId).toList());
+        finalizeVillageMutation(village);
+        return Building.validationResult.SUCCESS;
     }
 
-    private static boolean hasRegisteredGroundRoom(Village village, Building root) {
-        return BuildingStructureManager.members(village, root.getEffectiveStructureId()).stream()
-                .filter(Building::isFunctionalRoom)
-                .anyMatch(room -> BuildingStructureManager.isGroundFloor(root, room.getFloorY()));
+
+    private static String chooseCategory(BuildingScanResult scan, String forcedType, String inherited) {
+        if (forcedType != null) return forcedType;
+        if (scan.matchingTypes().size() == 1) return scan.matchingTypes().getFirst();
+        // A new Room with no special match inherits the Root Room category. During initial
+        // Structure creation there is no Root Room yet, so use MCA's generic functional house
+        // category rather than resurrecting the old fake structural "building" type.
+        if (scan.matchingTypes().isEmpty()) return inherited == null ? "house" : inherited;
+        return null;
     }
 
-    private void registerGroundRoom(Village village, Building root, Building groundRoom) {
-        groundRoom.setId(lastBuildingId++);
-        groundRoom.setStructureId(root.getEffectiveStructureId());
-        groundRoom.setStructureRoot(false);
-        groundRoom.setTypeForced(false);
-        village.getBuildings().put(groundRoom.getId(), groundRoom);
+    public void fullScan(Village village) {
+        if (village == null) return;
+        List<Integer> ids = village.getStructures().keySet().stream().sorted().toList();
+        ids.forEach(id -> rescanStructure(village, id));
     }
 
-    private record GroundRoomScan(Building.validationResult result, Building room) {
+    public Building.validationResult rescanStructure(Village village, int structureId) {
+        Structure structure = village == null ? null : village.getStructure(structureId).orElse(null);
+        if (structure == null) return Building.validationResult.NOT_IN_BUILDING;
+        StructureScanner.Result scan = StructureScanner.scan(world, structure.getSource(),
+                village.getStructures().values(), structureId);
+        if (scan.result() != Building.validationResult.SUCCESS) return scan.result();
+        List<Building> rooms = village.getRooms().filter(room -> room.getStructureId() == structureId).toList();
+
+        // Rescan into a detached copy first. Structure geometry and zero-Room recovery commit
+        // together, so a failed recovery cannot leave a half-updated Structure behind.
+        Structure updated = new Structure(structure.save());
+        if (!updated.applyScan(scan, rooms)) return Building.validationResult.OVERLAP;
+
+        Building recovered = null;
+        if (rooms.isEmpty()) {
+            StructureFloor ground = updated.resolveFloor(world, scan.groundSeed()).orElse(null);
+            if (ground == null) return Building.validationResult.TOO_SMALL;
+            BuildingScanResult recovery = scanRoom(village, updated, StructureScanner.bestSeed(ground), -1, true);
+            if (recovery.result() != Building.validationResult.SUCCESS) return recovery.result();
+            recovered = recovery.building();
+            recovered.setId(lastBuildingId++);
+            recovered.setStructureId(structureId);
+            recovered.setFloorId(ground.id());
+            if (!recovered.determineType()) recovered.setType("house");
+            updated.setRootRoomId(recovered.getId());
+        }
+
+        village.getStructures().put(structureId, updated);
+        if (recovered != null) village.getBuildings().put(recovered.getId(), recovered);
+        finalizeVillageMutation(village);
+        return Building.validationResult.SUCCESS;
     }
 
-    private void finalizeVillageMutation(Village targetVillage) {
-        BuildingStructureManager.ensureHierarchy(targetVillage);
-        targetVillage.calculateDimensions();
-        Village finalVillage = targetVillage;
-        villages.values().stream()
-                .filter(v -> v != finalVillage)
-                .filter(v -> v.getBox().inflatedBy(Village.MERGE_MARGIN).intersects(finalVillage.getBox()))
-                .findAny()
-                .ifPresent(v -> {
-                    if (v.getPopulation() > finalVillage.getPopulation()) {
-                        merge(v, finalVillage);
-                        villages.remove(finalVillage.getId());
-                    } else {
-                        merge(finalVillage, v);
-                        villages.remove(v.getId());
-                    }
-                });
-        setDirty();
-    }
-
-    public void ensureStructureHierarchy(Village village) {
-        if (BuildingStructureManager.ensureHierarchy(village)) {
-            village.calculateDimensions();
+    public Building.validationResult rescanBuilding(Village village, int buildingId) {
+        Building building = village == null ? null : village.getBuilding(buildingId).orElse(null);
+        if (building == null) return Building.validationResult.TOO_SMALL;
+        if (building instanceof ExternalBuilding external) {
+            external.validateBlocks(world);
             setDirty();
+            return Building.validationResult.SUCCESS;
         }
-    }
-
-    public void removeStructure(Village village, int structureId) {
-        BuildingStructureManager.removeStructure(village, structureId);
-        if (village != null && village.getBuildings().isEmpty()) {
-            removeVillage(village.getId());
-        }
-        setDirty();
+        BuildingScanResult scan = analyzeRegisteredRoom(village, buildingId, building.getSourceBlock());
+        return commitRegisteredRoomUpdate(scan, buildingId, null);
     }
 
     public BuildingEditResult forceRoomType(BlockPos pos, String type) {
         Village village = findNearestVillage(pos, Village.PLAYER_BORDER_MARGIN).orElse(null);
-        if (village == null) {
-            return BuildingEditResult.NO_BUILDING;
-        }
-        ensureStructureHierarchy(village);
-        Building room = village.getFunctionalRoomAt(world, pos).orElse(null);
-        if (room == null) {
-            return BuildingEditResult.NO_BUILDING;
-        }
-
+        Building room = village == null ? null : village.getFunctionalRoomAt(world, pos).orElse(null);
+        if (room == null) return BuildingEditResult.NO_BUILDING;
         if (room.getType().equals(type)) {
             room.setTypeForced(false);
             room.determineType();
@@ -1001,217 +574,94 @@ public class VillageManager extends SavedData implements Iterable<Village> {
 
     public BuildingEditResult removeRoom(BlockPos pos) {
         Village village = findNearestVillage(pos, Village.PLAYER_BORDER_MARGIN).orElse(null);
-        if (village == null) {
-            return BuildingEditResult.NO_BUILDING;
-        }
-        ensureStructureHierarchy(village);
+        if (village == null) return BuildingEditResult.NO_BUILDING;
         Building room = village.getFunctionalRoomAt(world, pos).orElse(null);
-        if (room == null) {
-            return village.hasStructuralBuildingAt(world, pos)
-                    ? BuildingEditResult.NO_ROOM
-                    : BuildingEditResult.NO_BUILDING;
-        }
-        if (village.isStructuralGroundFloor(room)) {
-            return BuildingEditResult.GROUND_FLOOR;
-        }
-
+        if (room == null) return village.hasStructuralBuildingAt(world, pos)
+                ? BuildingEditResult.NO_ROOM : BuildingEditResult.NO_BUILDING;
+        if (village.isRootRoom(room)) return BuildingEditResult.ROOT_ROOM;
         village.removeBuilding(room.getId());
-        ensureStructureHierarchy(village);
-        if (village.getBuildings().isEmpty()) {
-            removeVillage(village.getId());
-            setDirty();
-        }
         return BuildingEditResult.SUCCESS;
     }
 
     public BuildingEditResult removeBuilding(BlockPos pos) {
         Village village = findNearestVillage(pos, Village.PLAYER_BORDER_MARGIN).orElse(null);
-        if (village == null) {
-            return BuildingEditResult.NO_BUILDING;
+        if (village == null) return BuildingEditResult.NO_BUILDING;
+        Building target = village.getBuildingTarget(pos).orElse(null);
+        if (target instanceof ExternalBuilding) {
+            village.removeBuilding(target.getId());
+            return BuildingEditResult.SUCCESS;
         }
-        ensureStructureHierarchy(village);
-        Building building = village.getBuildingTarget(pos).orElse(null);
-        if (building == null) {
-            return BuildingEditResult.NO_BUILDING;
-        }
-        if (building.getBuildingType().grouped()) {
-            village.removeBuilding(building.getId());
-        } else {
-            removeStructure(village, building.getEffectiveStructureId());
-        }
+        Structure structure = target != null && target.isFunctionalRoom()
+                ? village.getStructure(target.getStructureId()).orElse(null)
+                : village.getStructureAt(pos).orElse(null);
+        if (structure == null) return BuildingEditResult.NO_BUILDING;
+        removeStructure(village, structure.getId());
         return BuildingEditResult.SUCCESS;
     }
 
-    public enum BuildingEditResult {
-        SUCCESS,
-        NO_BUILDING,
-        NO_ROOM,
-        GROUND_FLOOR
+    public void removeStructure(Village village, int structureId) {
+        if (village == null) return;
+        village.removeStructure(structureId);
+        if (village.getBuildings().isEmpty() && village.getExternalBuildingMap().isEmpty()
+                && village.getStructures().isEmpty()) removeVillage(village.getId());
+        setDirty();
     }
 
-    public record RoomUpdatePlan(
-            Kind kind,
-            Building.validationResult result,
-            BuildingScanResult requested,
-            BuildingScanResult retained,
-            BuildingScanResult added,
-            int expectedRoomId
-    ) {
-        public enum Kind {
-            UPDATE,
-            SPLIT,
-            CONFLICT,
-            FAILURE
-        }
-
-        static RoomUpdatePlan update(BuildingScanResult requested, int expectedRoomId) {
-            return new RoomUpdatePlan(
-                    Kind.UPDATE, Building.validationResult.SUCCESS,
-                    requested, null, null, expectedRoomId);
-        }
-
-        static RoomUpdatePlan split(BuildingScanResult requested,
-                                    BuildingScanResult retained,
-                                    BuildingScanResult added,
-                                    int expectedRoomId) {
-            return new RoomUpdatePlan(
-                    Kind.SPLIT, Building.validationResult.SUCCESS,
-                    requested, retained, added, expectedRoomId);
-        }
-
-        static RoomUpdatePlan conflict(Building.validationResult result,
-                                       BuildingScanResult requested,
-                                       BuildingScanResult retained,
-                                       int expectedRoomId) {
-            return new RoomUpdatePlan(
-                    Kind.CONFLICT, result, requested, retained, null, expectedRoomId);
-        }
-
-        static RoomUpdatePlan failure(Building.validationResult result,
-                                      BuildingScanResult requested,
-                                      int expectedRoomId) {
-            return new RoomUpdatePlan(
-                    Kind.FAILURE, result, requested, null, null, expectedRoomId);
-        }
-
-        public BuildingScanResult typeSelectionScan() {
-            return kind == Kind.SPLIT ? added : requested;
-        }
-
-        public boolean isAmbiguous() {
-            BuildingScanResult scan = typeSelectionScan();
-            return scan != null && scan.isAmbiguous();
-        }
+    public Set<BlockPos> getBlockedSet(Village village) {
+        Set<BlockPos> blocked = new HashSet<>();
+        if (village != null) village.getRooms().forEach(room -> blocked.add(room.getSourceBlock()));
+        return blocked;
     }
 
-    /**
-     * Rescans an existing room by persistent identity. Source anchor is tried first;
-     * center is only a fallback. Ambiguous scans are intentionally non-destructive.
-     */
-    public Building.validationResult rescanBuilding(Village village, int buildingId) {
-        ensureStructureHierarchy(village);
-
-        Building existing = village == null ? null : village.getBuilding(buildingId).orElse(null);
-        if (existing == null) {
-            return Building.validationResult.TOO_SMALL;
-        }
-        if (existing.getBuildingType().grouped()) {
-            return processBuilding(existing.getCenter(), true, existing.isStrictScan());
-        }
-
-        List<BlockPos> probes = new ArrayList<>();
-        probes.add(existing.getSourceBlock());
-        if (!existing.getCenter().equals(existing.getSourceBlock())) {
-            probes.add(existing.getCenter());
-        }
-
-        BuildingScanResult lastScan = null;
-        for (BlockPos probe : probes) {
-            BuildingScanResult scan = analyzeBuilding(ScanRequest.rescan(probe, village, existing));
-            lastScan = scan;
-
-            if (scan.result() == Building.validationResult.SUCCESS && scan.hasExistingBuilding()) {
-                return commitBuilding(scan, null);
-            }
-            if (scan.result() == Building.validationResult.AMBIGUOUS_STRUCTURE
-                    || scan.result() == Building.validationResult.OVERLAP) {
-                return scan.result();
-            }
-        }
-
-        // Refresh is deliberately non-destructive. A blocked source, removed door,
-        // open-floor remodel, or temporarily ambiguous scan must not erase persistent
-        // room identities or the entire Building -> Rooms structure hierarchy.
-        return lastScan == null
-                ? Building.validationResult.TOO_SMALL
-                : lastScan.result();
+    public BuildingBlockedResult getBlockedResult(BlockPos pos) {
+        Village village = findNearestVillage(pos, Village.MERGE_MARGIN).orElse(null);
+        Building existing = village == null ? null : village.getBuildingAt(pos).orElse(null);
+        return new BuildingBlockedResult(village == null ? Set.of() : getBlockedSet(village), existing, village);
     }
 
-    //processed a building at given position
     public Building.validationResult processBuilding(BlockPos pos, boolean enforce, boolean strictScan) {
         return processBuilding(pos, enforce, strictScan, null);
     }
 
     public Building.validationResult processBuilding(BlockPos pos, boolean enforce, boolean strictScan, String forcedType) {
-        BuildingType groupedBuildingType = getGroupedBuildingType(pos);
-        if (groupedBuildingType != null) {
-            Optional<Village> optionalVillage = findNearestVillage(pos, Village.MERGE_MARGIN);
-            if (optionalVillage.isPresent()) {
-                Village village = optionalVillage.get();
-                String name = groupedBuildingType.name();
-                double range = groupedBuildingType.mergeRange() * groupedBuildingType.mergeRange();
-                Optional<Building> building = village.getBuildings().values().stream()
-                        .filter(b -> b.getType().equals(name))
-                        .min((a, b) -> (int) (a.getCenter().distSqr(pos) - b.getCenter().distSqr(pos)))
-                        .filter(b -> b.getCenter().distSqr(pos) < range);
-                if (building.isPresent()) {
-                    building.get().addPOI(world, pos);
-                    setDirty();
-                    return Building.validationResult.SUCCESS;
-                }
-            }
-            Village village = optionalVillage.orElse(new Village(lastVillageId++, world));
-            Building building = new Building(pos, strictScan);
-            building.setType(groupedBuildingType.name());
-            building.addPOI(world, pos);
-            villages.put(village.getId(), village);
-            building.setId(lastBuildingId++);
-            village.getBuildings().put(building.getId(), building);
-            village.calculateDimensions();
-            setDirty();
-            return Building.validationResult.SUCCESS;
-        }
-        BuildingScanResult scan = analyzeStructure(pos, strictScan);
+        BuildingType external = getGroupedBuildingType(pos);
+        if (external != null) return processExternalBuilding(pos, external);
+        InitialStructureScan scan = analyzeInitialStructure(pos);
         if (scan.result() != Building.validationResult.SUCCESS) {
             if (enforce) {
-                BuildingBlockedResult blockResult = getBlockedResult(pos);
-                if (blockResult.existingBuilding() != null) {
-                    Village village = blockResult.village();
-                    if (village != null) {
-                        ensureStructureHierarchy(village);
-                        Building existing = blockResult.existingBuilding();
-                        if (existing.isStructureRoot()) {
-                            removeStructure(village, existing.getEffectiveStructureId());
-                        } else {
-                            village.removeBuilding(existing.getId());
-                            if (village.getBuildings().isEmpty()) {
-                                villages.remove(village.getId());
-                            }
-                            setDirty();
-                        }
-                    }
-                }
+                Village village = findNearestVillage(pos, Village.PLAYER_BORDER_MARGIN).orElse(null);
+                if (village != null) village.getStructureAt(pos).ifPresent(structure -> removeStructure(village, structure.getId()));
             }
             return scan.result();
         }
-        return commitBuilding(scan, forcedType);
+        return commitInitialStructure(scan, forcedType);
     }
 
-    public void setBuildingCooldown(int buildingCooldown) {
-        this.buildingCooldown = buildingCooldown;
+    private void finalizeVillageMutation(Village target) {
+        target.calculateDimensions();
+        Village finalVillage = target;
+        villages.values().stream().filter(village -> village != finalVillage)
+                .filter(village -> village.getBox().inflatedBy(Village.MERGE_MARGIN).intersects(finalVillage.getBox()))
+                .findAny().ifPresent(village -> {
+                    if (village.getPopulation() > finalVillage.getPopulation()) {
+                        merge(village, finalVillage);
+                        villages.remove(finalVillage.getId());
+                    } else {
+                        merge(finalVillage, village);
+                        villages.remove(village.getId());
+                    }
+                });
+        setDirty();
     }
 
-    public void merge(Village into, Village from) {
-        into.merge(from);
+
+    public enum BuildingEditResult {
+        SUCCESS,
+        NO_BUILDING,
+        NO_ROOM,
+        ROOT_ROOM
     }
+
+    public void setBuildingCooldown(int buildingCooldown) { this.buildingCooldown = buildingCooldown; }
+    public void merge(Village into, Village from) { into.merge(from); }
 }

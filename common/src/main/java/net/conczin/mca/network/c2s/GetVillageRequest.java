@@ -9,7 +9,6 @@ import net.conczin.mca.resources.Rank;
 import net.conczin.mca.resources.Tasks;
 import net.conczin.mca.server.world.data.GraveyardManager;
 import net.conczin.mca.server.world.data.Village;
-import net.conczin.mca.server.world.data.VillageManager;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
@@ -19,8 +18,10 @@ import java.util.Optional;
 import java.util.Set;
 
 public record GetVillageRequest() implements HandleablePayload {
-    public static final CustomPacketPayload.Type<GetVillageRequest> TYPE = new CustomPacketPayload.Type<>(MCA.locate("get_village_request"));
-    public static final StreamCodec<FriendlyByteBuf, GetVillageRequest> STREAM_CODEC = StreamCodec.unit(new GetVillageRequest());
+    public static final CustomPacketPayload.Type<GetVillageRequest> TYPE =
+            new CustomPacketPayload.Type<>(MCA.locate("get_village_request"));
+    public static final StreamCodec<FriendlyByteBuf, GetVillageRequest> STREAM_CODEC =
+            StreamCodec.unit(new GetVillageRequest());
 
     @Override
     public void handleServer(ServerPlayer player) {
@@ -31,7 +32,6 @@ public record GetVillageRequest() implements HandleablePayload {
         Optional<Village> village = Village.findNearest(player);
         if (village.isPresent()) {
             GraveyardManager.get(player.serverLevel()).reportToVillageManager(player);
-            VillageManager.get(player.serverLevel()).ensureStructureHierarchy(village.get());
             village.get().updateMaxPopulation();
             int reputation = village.get().getReputation(player);
             boolean isVillage = village.get().isVillage();

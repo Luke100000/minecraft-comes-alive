@@ -1,109 +1,85 @@
 package net.conczin.mca.client.gui;
 
 import net.conczin.mca.server.world.data.Building;
+import net.conczin.mca.server.world.data.ExternalBuilding;
+import net.conczin.mca.server.world.data.Structure;
+import net.conczin.mca.server.world.data.StructureFloor;
 import net.conczin.mca.server.world.data.Village;
+
 import java.util.*;
 
-/**
- * Maps server-owned canonical floor identities to Blueprint-local display ordinals.
- *
- * <p>The structure root owns canonical floor identity through its persisted floor regions.
- * The client never clusters floors independently: it maps persisted room and Ground Floor Y
- * values through that root, then only assigns display ordinals.</p>
- */
+/** Maps persistent Structure Floor IDs to Blueprint-local display ordinals. */
 final class BlueprintFloorLayout {
     private final Map<Integer, Integer> ordinalByBuildingId;
+    private final Map<Long, Integer> ordinalByFloorId;
     private final Map<Integer, List<Integer>> ordinalsByStructureId;
     private final List<Integer> ordinals;
 
     private BlueprintFloorLayout(Map<Integer, Integer> ordinalByBuildingId,
+                                 Map<Long, Integer> ordinalByFloorId,
                                  Map<Integer, List<Integer>> ordinalsByStructureId,
                                  List<Integer> ordinals) {
         this.ordinalByBuildingId = ordinalByBuildingId;
+        this.ordinalByFloorId = ordinalByFloorId;
         this.ordinalsByStructureId = ordinalsByStructureId;
         this.ordinals = ordinals;
     }
 
     static BlueprintFloorLayout empty() {
-        return new BlueprintFloorLayout(Map.of(), Map.of(), List.of());
+        return new BlueprintFloorLayout(Map.of(), Map.of(), Map.of(), List.of());
     }
 
     static BlueprintFloorLayout build(Village village) {
-        if (village == null) {
-            return empty();
-        }
+        if (village == null) return empty();
+        Map<Integer, Integer> byBuilding = new HashMap<>();
+        Map<Long, Integer> byFloor = new HashMap<>();
+        Map<Integer, List<Integer>> byStructure = new HashMap<>();
+        TreeSet<Integer> available = new TreeSet<>();
 
-        Map<Integer, Building> rootsByStructure = new HashMap<>();
-        Map<Integer, List<Building>> roomsByStructure = new HashMap<>();
-
-        for (Building building : village.getBuildings().values()) {
-            if (!building.isComplete() || building.getBuildingType().grouped()) {
-                continue;
-            }
-            int structureId = building.getEffectiveStructureId();
-            if (building.isStructureRoot()) {
-                rootsByStructure.merge(structureId, building,
-                        (first, second) -> first.getId() <= second.getId() ? first : second);
-            }
-            if (building.isFunctionalRoom()) {
-                roomsByStructure.computeIfAbsent(structureId, ignored -> new ArrayList<>()).add(building);
-            }
-        }
-
-        Map<Integer, Integer> ordinalByBuilding = new HashMap<>();
-        Map<Integer, List<Integer>> ordinalsByStructure = new HashMap<>();
-        TreeSet<Integer> availableOrdinals = new TreeSet<>();
-
-        for (Map.Entry<Integer, List<Building>> entry : roomsByStructure.entrySet()) {
-            int structureId = entry.getKey();
-            Building root = rootsByStructure.get(structureId);
-            if (root == null) {
-                continue;
-            }
-
-            List<Integer> floorYs = entry.getValue().stream()
-                    .map(room -> root.getCanonicalFloorY(room.getFloorY()))
-                    .distinct()
-                    .sorted()
-                    .toList();
-            int canonicalGroundFloorY = root.getCanonicalFloorY(root.getGroundFloorY());
-            int groundIndex = Collections.binarySearch(floorYs, canonicalGroundFloorY);
-            if (groundIndex < 0) {
-                // Do not invent or tolerance-cluster a missing Ground Floor on the client.
-                continue;
-            }
-
-            List<Integer> structureOrdinals = new ArrayList<>(floorYs.size());
-            for (int index = 0; index < floorYs.size(); index++) {
-                structureOrdinals.add(index - groundIndex);
-            }
-            ordinalsByStructure.put(structureId, List.copyOf(structureOrdinals));
-
-            for (Building room : entry.getValue()) {
-                int floorIndex = Collections.binarySearch(
-                        floorYs, root.getCanonicalFloorY(room.getFloorY()));
-                if (floorIndex < 0) {
-                    continue;
+        for (Structure structure : village.getStructures().values()) {
+            Building root = village.getBuilding(structure.getRootRoomId()).orElse(null);
+            if (root == null) continue;
+            List<StructureFloor> floors = structure.getFloors();
+            int groundIndex = -1;
+            for (int i = 0; i < floors.size(); i++) {
+                if (floors.get(i).id() == root.getFloorId()) {
+                    groundIndex = i;
+                    break;
                 }
-                int ordinal = floorIndex - groundIndex;
-                ordinalByBuilding.put(room.getId(), ordinal);
-                availableOrdinals.add(ordinal);
             }
+            if (groundIndex < 0) continue;
+
+            List<Integer> structureOrdinals = new ArrayList<>();
+            for (int i = 0; i < floors.size(); i++) {
+                int ordinal = i - groundIndex;
+                StructureFloor floor = floors.get(i);
+                byFloor.put(floorKey(structure.getId(), floor.id()), ordinal);
+                structureOrdinals.add(ordinal);
+                available.add(ordinal);
+            }
+            byStructure.put(structure.getId(), List.copyOf(structureOrdinals));
+            village.getRooms().filter(room -> room.getStructureId() == structure.getId()).forEach(room -> {
+                Integer ordinal = byFloor.get(floorKey(structure.getId(), room.getFloorId()));
+                if (ordinal != null) byBuilding.put(room.getId(), ordinal);
+            });
         }
-
-        return new BlueprintFloorLayout(
-                Map.copyOf(ordinalByBuilding),
-                Map.copyOf(ordinalsByStructure),
-                List.copyOf(availableOrdinals)
-        );
+        return new BlueprintFloorLayout(Map.copyOf(byBuilding), Map.copyOf(byFloor),
+                Map.copyOf(byStructure), List.copyOf(available));
     }
 
-    List<Integer> ordinals() {
-        return ordinals;
+    private static long floorKey(int structureId, int floorId) {
+        return ((long) structureId << 32) ^ (floorId & 0xffffffffL);
     }
+
+    List<Integer> ordinals() { return ordinals; }
 
     List<Integer> ordinalsFor(Building building) {
         return ordinalsByStructureId.getOrDefault(building.getEffectiveStructureId(), List.of());
+    }
+
+    OptionalInt ordinalForFloor(int structureId, int floorId) {
+        Integer ordinal = ordinalByFloorId.get(floorKey(structureId, floorId));
+        return ordinal == null ? OptionalInt.empty() : OptionalInt.of(ordinal);
     }
 
     boolean isBuildingOnFloor(Building building, int floorOrdinal) {
@@ -112,13 +88,9 @@ final class BlueprintFloorLayout {
     }
 
     boolean isBuildingVisible(Building building, Integer selectedFloor) {
-        if (building.getBuildingType().grouped()) {
+        if (building instanceof ExternalBuilding || building.getBuildingType().grouped()) {
             return selectedFloor == null || selectedFloor == 0;
         }
-        if (!building.isFunctionalRoom()) {
-            return false;
-        }
-
         Integer ordinal = ordinalByBuildingId.get(building.getId());
         return ordinal != null && (selectedFloor == null || ordinal.equals(selectedFloor));
     }
@@ -127,5 +99,4 @@ final class BlueprintFloorLayout {
         Integer ordinal = ordinalByBuildingId.get(building.getId());
         return ordinal == null ? OptionalInt.empty() : OptionalInt.of(ordinal);
     }
-
 }
