@@ -55,6 +55,7 @@ final class BlueprintMapRenderer implements AutoCloseable {
     private static final int ROOM_BORDER_ALPHA_SELECTED_FLOOR = 0xee;
     private static final int ROOM_BORDER_ALPHA_HOVERED = 0xff;
     private static final float ROOM_BORDER_BRIGHTEN_FACTOR = 1.35f;
+    private static final int STRUCTURE_BASE_COLOR = 0x00a0a0a0;
     private static final int BUILDING_SHADE_ALPHA = 0x24;
     private static final int BUILDING_BORDER_ALPHA = 0xc0;
     private static final float BUILDING_BORDER_DARKEN_FACTOR = 0.58f;
@@ -157,18 +158,35 @@ final class BlueprintMapRenderer implements AutoCloseable {
             renderStructureShade(
                     context,
                     layer.shadeSpans(),
-                    layer.root().getBuildingType().getColor(),
+                    STRUCTURE_BASE_COLOR,
                     viewport
             );
         }
 
+        List<MapFootprintLayer> roomRenderLayers = footprintLayers;
+        List<MapFootprintLayer> roomHitTestLayers = selectedFloor == null
+                ? BlueprintMapLayering.frontToBack(roomRenderLayers)
+                : roomRenderLayers;
         Set<MapFootprintLayer> hoveredFootprintLayers = new HashSet<>();
-        for (MapFootprintLayer layer : footprintLayers) {
+        for (MapFootprintLayer layer : roomHitTestLayers) {
             boolean hovering = mouseInsideMap
-                    && isRoomHovered(layer, hoveredMapCell, mouseX, mouseY, viewport);
+                    && isRoomHovered(layer, hoveredMapCell, mouseX, mouseY, viewport, selectedFloor == null);
             if (hovering) {
-                hoveredFootprintLayers.add(layer);
+                // Match HEAD's stable hover semantics: retain every vertically overlapping Room
+                // for tooltip stacking, while only the frontmost Room in a Structure gets the
+                // visual hover highlight.
+                int structureId = layer.building().getEffectiveStructureId();
+                if (!hasRoomHoverForStructure(hoverTargets, structureId)) {
+                    hoveredFootprintLayers.add(layer);
+                }
+                addRoomHover(hoverTargets, layer.building(), layer.floorOrdinal());
             }
+        }
+
+        // Paint every Room back-to-front. The matching reverse hit-test order above ensures
+        // tooltip ownership follows the Room that is actually visible on top.
+        for (MapFootprintLayer layer : roomRenderLayers) {
+            boolean hovering = hoveredFootprintLayers.contains(layer);
             renderRoomFootprint(
                     context,
                     layer.fillSpans(),
@@ -177,42 +195,34 @@ final class BlueprintMapRenderer implements AutoCloseable {
                     hovering,
                     viewport
             );
-            if (hovering) {
-                addRoomHover(hoverTargets, layer.building(), layer.floorOrdinal());
-            }
-        }
-
-        // Room hover wins over the structure shade occupying the same map cells.
-        for (MapStructureLayer layer : structureLayers) {
-            boolean roomHovered = hoverTargets.stream().anyMatch(target ->
-                    !target.structure() && target.building().isFunctionalRoom()
-                            && target.building().getEffectiveStructureId()
-                            == layer.root().getEffectiveStructureId());
-            boolean buildingHovered = layer.shadeCells().contains(hoveredMapCell)
-                    || isOutlineHovered(layer.borderEdges(), mouseX, mouseY, viewport);
-            if (!roomHovered && mouseInsideMap && buildingHovered) {
-                hoverTargets.add(new HoverTarget(layer.root(), layer.floorOrdinal(), true));
-            }
-        }
-
-        for (MapStructureLayer layer : structureLayers) {
-            renderStructureOutlineScreenSpace(
-                    context,
-                    layer.borderEdges(),
-                    layer.root().getBuildingType().getColor(),
-                    viewport
-            );
-        }
-        List<MapFootprintLayer> outlinedRooms = selectedFloor == null
-                ? getAllFloorsOutlineLayers(footprintLayers, hoverTargets)
-                : footprintLayers;
-        for (MapFootprintLayer layer : outlinedRooms) {
             renderRoomOutlineScreenSpace(
                     context,
                     layer.outlineEdges(),
                     layer.building().getBuildingType().getColor(),
                     selectedFloor != null,
-                    hoveredFootprintLayers.contains(layer),
+                    hovering,
+                    viewport
+            );
+        }
+
+        // Structure shade/outline is an authoritative whole-Structure hit region. Collect the hit
+        // now, then resolve it after Room/icon hit testing so basement/upper Room geometry cannot
+        // steal the aggregate tooltip from the canonical Structure shell.
+        Set<MapStructureLayer> hoveredStructureLayers = new LinkedHashSet<>();
+        for (MapStructureLayer layer : structureLayers) {
+            boolean buildingHovered = layer.shadeCells().contains(hoveredMapCell)
+                    || isOutlineHovered(layer.borderEdges(), mouseX, mouseY, viewport);
+            if (mouseInsideMap && buildingHovered) {
+                hoveredStructureLayers.add(layer);
+            }
+        }
+
+        // The canonical Structure shell is stable across Ground/Basement/upper selected views.
+        for (MapStructureLayer layer : structureLayers) {
+            renderStructureOutlineScreenSpace(
+                    context,
+                    layer.borderEdges(),
+                    STRUCTURE_BASE_COLOR,
                     viewport
             );
         }
@@ -251,6 +261,12 @@ final class BlueprintMapRenderer implements AutoCloseable {
             }
         }
         matrices.popPose();
+
+        // Resolve canonical Structure hits last. On the shell/shade, the user's intent is the whole
+        // building, so replace any same-Structure Room/icon targets with one aggregate Structure target.
+        for (MapStructureLayer layer : hoveredStructureLayers) {
+            addStructureHover(hoverTargets, layer.root());
+        }
 
         context.disableScissor();
         renderPlayerMarker(
@@ -475,29 +491,6 @@ final class BlueprintMapRenderer implements AutoCloseable {
         }
     }
 
-    private static List<MapFootprintLayer> getAllFloorsOutlineLayers(
-            List<MapFootprintLayer> roomLayers,
-            List<HoverTarget> hoverTargets) {
-        Map<Integer, MapFootprintLayer> outlinedByStructure = new LinkedHashMap<>();
-        for (MapFootprintLayer layer : roomLayers) {
-            outlinedByStructure.putIfAbsent(layer.building().getEffectiveStructureId(), layer);
-        }
-
-        for (HoverTarget hoverTarget : hoverTargets) {
-            Building hoveredRoom = hoverTarget.building();
-            if (!hoveredRoom.isFunctionalRoom()) {
-                continue;
-            }
-            roomLayers.stream()
-                    .filter(layer -> layer.building().getId() == hoveredRoom.getId())
-                    .filter(layer -> Objects.equals(layer.floorOrdinal(), hoverTarget.floorOrdinal()))
-                    .findFirst()
-                    .ifPresent(layer -> outlinedByStructure.put(
-                            hoveredRoom.getEffectiveStructureId(), layer));
-        }
-        return List.copyOf(outlinedByStructure.values());
-    }
-
     private static void renderRoomFootprint(GuiGraphics context,
                                             List<BlueprintMapFootprint.RowSpan> spans,
                                             int baseColor,
@@ -561,11 +554,14 @@ final class BlueprintMapRenderer implements AutoCloseable {
                                          BlueprintMapFootprint.Cell hoveredMapCell,
                                          int mouseScreenX,
                                          int mouseScreenY,
-                                         BlueprintMapViewport viewport) {
-        if (layer.footprintCells().contains(hoveredMapCell)) {
+                                         BlueprintMapViewport viewport,
+                                         boolean allFloors) {
+        if (layer.visibleCells().contains(hoveredMapCell)) {
             return true;
         }
-        return isOutlineHovered(layer.outlineEdges(), mouseScreenX, mouseScreenY, viewport);
+        // Canonical outlines from a lower floor can cross cells owned by a higher-priority
+        // floor. All Floors hover therefore follows visible cells only.
+        return !allFloors && isOutlineHovered(layer.outlineEdges(), mouseScreenX, mouseScreenY, viewport);
     }
 
     private static boolean isOutlineHovered(List<BlueprintMapFootprint.Edge> edges,
@@ -679,6 +675,23 @@ final class BlueprintMapRenderer implements AutoCloseable {
                     0.0F, 0.0F, 24, 24, 24, 24);
         } else {
             PlayerFaceRenderer.draw(context, player.getSkin(), x, y, size);
+        }
+    }
+
+    private static boolean hasRoomHoverForStructure(List<HoverTarget> hoverTargets, int structureId) {
+        return hoverTargets.stream().anyMatch(target -> !target.structure()
+                && target.building().isFunctionalRoom()
+                && target.building().getEffectiveStructureId() == structureId);
+    }
+
+    private static void addStructureHover(List<HoverTarget> hoverTargets, Building root) {
+        int structureId = root.getEffectiveStructureId();
+        hoverTargets.removeIf(target -> !target.structure()
+                && target.building().isFunctionalRoom()
+                && target.building().getEffectiveStructureId() == structureId);
+        HoverTarget target = new HoverTarget(root, null, true);
+        if (!hoverTargets.contains(target)) {
+            hoverTargets.add(target);
         }
     }
 

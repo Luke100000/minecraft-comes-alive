@@ -244,6 +244,9 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         }
 
         StructureScanner.Result structureScan = StructureScanner.scan(world, pos, existing, -1);
+        MCA.LOGGER.info("[BlueprintStructureDebug] stage=initial-analysis-structure source={} result={} floors={} groundFloorId={} groundSeed={} bounds={}..{}",
+                pos, structureScan.result(), debugFloors(structureScan.floors()), structureScan.groundFloorId(),
+                structureScan.groundSeed(), structureScan.min(), structureScan.max());
         StructureScanResult structureResult = new StructureScanResult(structureScan.result(), structureScan, village, -1);
         if (structureScan.result() != Building.validationResult.SUCCESS) {
             return new InitialStructureScan(structureResult, failedRoom(structureScan.result(), pos, village), null);
@@ -264,7 +267,10 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         if (root.result() != Building.validationResult.SUCCESS) {
             return new InitialStructureScan(structureResult, room, root);
         }
-        if (root.building().isIdentical(room.building())) {
+        boolean identicalRooms = root.building().isIdentical(room.building());
+        MCA.LOGGER.info("[BlueprintStructureDebug] stage=initial-analysis-rooms source={} playerRoom={} rootCandidate={} identical={}",
+                pos, debugRoom(room.building()), debugRoom(root.building()), identicalRooms);
+        if (identicalRooms) {
             root = null;
         }
         return new InitialStructureScan(structureResult, room, root);
@@ -372,8 +378,24 @@ public class VillageManager extends SavedData implements Iterable<Village> {
                 if (root != null && !root.getType().equals("building")) types = List.of(root.getType());
             }
         }
+        MCA.LOGGER.info("[BlueprintStructureDebug] stage=room-scan source={} structureId={} existingRoomId={} floorId={} floorY={} geometryArea={} geometryBounds={}..{} room={} matchingTypes={}",
+                pos, structure.getId(), existingRoomId, floor.id(), floor.anchorY(), geometry.footprintCells().size(),
+                geometry.min(), geometry.max(), debugRoom(room), types);
         return new BuildingScanResult(Building.validationResult.SUCCESS, room.getSourceBlock(), room,
                 types, village, existingRoomId, structure.getId(), floor.id(), structureUpdate);
+    }
+
+    private static String debugRoom(Building room) {
+        if (room == null) return "null";
+        return "id=" + room.getId() + ":structure=" + room.getStructureId() + ":floor=" + room.getFloorId()
+                + ":source=" + room.getSourceBlock() + ":area=" + room.getFloorFootprintArea()
+                + ":bounds=" + room.getRawPos0() + ".." + room.getRawPos1() + ":type=" + room.getType();
+    }
+
+    private static List<String> debugFloors(Collection<StructureFloor> floors) {
+        return floors.stream().map(floor -> "id=" + floor.id() + ":y=" + floor.anchorY()
+                + ":ceiling=" + floor.ceilingY() + ":area=" + floor.area()
+                + ":components=" + floor.region().components().size()).toList();
     }
 
     private static BuildingScanResult failedRoom(Building.validationResult result, BlockPos pos, Village village) {
@@ -393,6 +415,9 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         int structureId = lastBuildingId++;
         Structure structure = scan.structure().scan().toStructure(structureId);
         Building playerRoom = scan.room().building();
+        MCA.LOGGER.info("[BlueprintStructureDebug] stage=initial-commit-before structureId={} structureFloors={} playerRoom={} rootCandidate={} forcedRoomType={}",
+                structureId, debugFloors(structure.getFloors()), debugRoom(playerRoom),
+                scan.rootRoom() == null ? "SAME_AS_PLAYER" : debugRoom(scan.rootRoom().building()), forcedRoomType);
         String category = chooseCategory(scan.room(), forcedRoomType, null);
         if (category == null) return Building.validationResult.INVALID_TYPE;
 
@@ -414,6 +439,10 @@ public class VillageManager extends SavedData implements Iterable<Village> {
             village.getBuildings().put(playerRoom.getId(), playerRoom);
         }
         village.getStructures().put(structureId, structure);
+        MCA.LOGGER.info("[BlueprintStructureDebug] stage=initial-commit-after structureId={} rootRoomId={} rootAndPlayerSame={} persistedRooms={}",
+                structureId, structure.getRootRoomId(), rootRoom == playerRoom,
+                village.getRooms().filter(candidate -> candidate.getStructureId() == structureId)
+                        .map(VillageManager::debugRoom).toList());
         villages.put(village.getId(), village);
         finalizeVillageMutation(village);
         return Building.validationResult.SUCCESS;

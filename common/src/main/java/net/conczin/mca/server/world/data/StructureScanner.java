@@ -1,6 +1,7 @@
 package net.conczin.mca.server.world.data;
 
 import net.conczin.mca.Config;
+import net.conczin.mca.MCA;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.tags.BlockTags;
@@ -38,8 +39,12 @@ final class StructureScanner {
 
         BlockPos seed = resolveScanSeed(world, source, roof).orElse(null);
         if (seed == null) {
+            MCA.LOGGER.info("[BlueprintStructureDebug] stage=scan-seed-failed source={} ignoredStructureId={} existingStructures={}",
+                    source, ignoredStructureId, existing.size());
             return Result.failure(Building.validationResult.TOO_SMALL, source);
         }
+        MCA.LOGGER.info("[BlueprintStructureDebug] stage=scan-start source={} resolvedSeed={} ignoredStructureId={} existingStructures={} maxSize={} maxRadius={}",
+                source, seed, ignoredStructureId, existing.size(), maxSize, maxRadius);
 
         queue.add(seed);
         visited.add(seed);
@@ -115,13 +120,31 @@ final class StructureScanner {
         }
 
         List<BuildingFloorRegion> regions = BuildingFloorRegionDetector.detect(supported);
-        if (regions.isEmpty() || volume.size() <= minSize) {
+        List<BlockPos> exteriorLikeSupported = supported.stream()
+                .map(cell -> new BlockPos(cell.x(), cell.y(), cell.z()))
+                .filter(cell -> canReachUncoveredSupportedSpace(world, cell, null, roof))
+                .sorted(Comparator.comparingInt((BlockPos cell) -> cell.getY())
+                        .thenComparingInt(cell -> cell.getX())
+                        .thenComparingInt(cell -> cell.getZ()))
+                .toList();
+        int scannedEnvelopeSize = scannedEnvelopeSize(volume);
+        MCA.LOGGER.info("[BlueprintStructureDebug] stage=scan-supported source={} seed={} supportedCount={} supportedSlices={} exteriorLikeSupportedCount={} exteriorLikeSupportedSample={} volumeCount={} scannedEnvelopeCount={} normalDoors={}",
+                source, seed, supported.size(), summarizeSupported(supported), exteriorLikeSupported.size(),
+                exteriorLikeSupported.stream().limit(32).toList(), volume.size(), scannedEnvelopeSize, normalDoors);
+        if (regions.isEmpty() || scannedEnvelopeSize <= minSize) {
+            MCA.LOGGER.info("[BlueprintStructureDebug] stage=scan-rejected source={} reason={} regions={} volumeCount={} scannedEnvelopeCount={} minSize={}",
+                    source, regions.isEmpty() ? "NO_FLOORS" : "TOO_SMALL", summarizeRegions(regions),
+                    volume.size(), scannedEnvelopeSize, minSize);
             return Result.failure(Building.validationResult.TOO_SMALL, source);
         }
 
         List<StructureFloor> floors = toFloors(world, regions);
         List<BuildingFloorRegion> volumeSlices = toVolumeSlices(volume);
-        GroundChoice groundChoice = chooseGroundFloor(world, floors, normalDoors, volume);
+        Set<ExteriorEntrance> exteriorEntrances = normalDoors.stream()
+                .map(door -> findExteriorEntrance(world, door, volume, roof).orElse(null))
+                .filter(Objects::nonNull)
+                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+        GroundChoice groundChoice = chooseGroundFloor(world, floors, exteriorEntrances, volume);
         StructureFloor ground = floors.stream()
                 .min(Comparator.comparingInt((StructureFloor floor) -> Math.abs(floor.anchorY() - groundChoice.floorY()))
                         .thenComparingInt(StructureFloor::anchorY))
@@ -136,6 +159,10 @@ final class StructureScanner {
                 volume.stream().mapToInt(BlockPos::getX).max().orElse(seed.getX()),
                 volume.stream().mapToInt(BlockPos::getY).max().orElse(seed.getY()),
                 volume.stream().mapToInt(BlockPos::getZ).max().orElse(seed.getZ()));
+
+        MCA.LOGGER.info("[BlueprintStructureDebug] stage=scan-result source={} seed={} floors={} groundFloorId={} groundAnchorY={} groundSeed={} volumeSlices={} bounds={}..{}",
+                source, seed, summarizeFloors(floors), ground.id(), ground.anchorY(), groundSeed,
+                summarizeRegions(volumeSlices), min, max);
 
         Structure candidate = new Structure(ignoredStructureId, seed, min, max, floors, volumeSlices);
         for (Structure other : existing) {
@@ -158,7 +185,13 @@ final class StructureScanner {
                     for (int dz = -radius; dz <= radius; dz++) {
                         if (Math.abs(dx) + Math.abs(dz) != radius) continue;
                         BlockPos candidate = new BlockPos(source.getX() + dx, y, source.getZ() + dz);
-                        if (isEnclosedInterior(world, candidate, roof)) {
+                        if (!isWalkableAnchor(world, candidate, world.getBlockState(candidate), roof)) {
+                            continue;
+                        }
+                        boolean exteriorLike = canReachUncoveredSupportedSpace(world, candidate, null, roof);
+                        MCA.LOGGER.info("[BlueprintStructureDebug] stage=seed-candidate source={} candidate={} exteriorLike={}",
+                                source, candidate, exteriorLike);
+                        if (!exteriorLike) {
                             return Optional.of(candidate);
                         }
                     }
@@ -309,14 +342,48 @@ final class StructureScanner {
                 || !isSupported(world, side.getX(), side.getY(), side.getZ())) {
             return false;
         }
-        return !hasRoof(world, side, roof)
-                || canReachUncoveredSupportedSpace(world, side, door, roof);
+        boolean roofed = hasRoof(world, side, roof);
+        boolean reachesUncovered = roofed && canReachUncoveredSupportedSpace(world, side, door, roof);
+        boolean exterior = !roofed || reachesUncovered;
+        MCA.LOGGER.info("[BlueprintStructureDebug] stage=door-side door={} side={} roofed={} reachesUncovered={} exterior={}",
+                door, side, roofed, reachesUncovered, exterior);
+        return exterior;
+    }
+
+    private static Optional<ExteriorEntrance> findExteriorEntrance(Level world,
+                                                                     BlockPos door,
+                                                                     Set<BlockPos> interior,
+                                                                     Map<BlockPos, Boolean> roof) {
+        BlockState doorState = world.getBlockState(door);
+        if (!(doorState.getBlock() instanceof DoorBlock)) {
+            return Optional.empty();
+        }
+        Direction facing = doorState.getValue(DoorBlock.FACING);
+        BlockPos first = door.relative(facing);
+        BlockPos second = door.relative(facing.getOpposite());
+        boolean firstExterior = isExteriorDoorSide(world, door, first, roof);
+        boolean secondExterior = isExteriorDoorSide(world, door, second, roof);
+        if (firstExterior == secondExterior) {
+            return Optional.empty();
+        }
+        BlockPos outside = firstExterior ? first : second;
+        BlockPos inside = firstExterior ? second : first;
+        if (!interior.contains(inside) || interior.contains(outside)) {
+            return Optional.empty();
+        }
+        BlockState insideState = world.getBlockState(inside);
+        if (!isOpen(world, inside, insideState)
+                || !isSupported(world, inside.getX(), inside.getY(), inside.getZ())) {
+            return Optional.empty();
+        }
+        return Optional.of(new ExteriorEntrance(inside, outside));
     }
 
     /**
-     * Follows supported open terrain horizontally until roof cover ends. Boundary connectors are
-     * treated as barriers, so an enclosed Room cannot be classified as exterior merely because a
-     * different door elsewhere in the building eventually leads outdoors.
+     * Follows the same one-block walkable transitions used by Structure traversal until roof cover
+     * ends. Boundary connectors are barriers. This is deliberately step-aware: exterior terrain
+     * is often one block below a doorway or porch, and a same-Y-only flood misclassifies that side
+     * as enclosed before the main scanner immediately walks down onto it.
      */
     private static boolean canReachUncoveredSupportedSpace(Level world,
                                                             BlockPos start,
@@ -332,20 +399,32 @@ final class StructureScanner {
             if (horizontalDistance(current, start) >= ROOF_SEARCH) {
                 continue;
             }
+            double currentFloor = floorSurface(world, current);
             for (Direction direction : HORIZONTAL) {
-                BlockPos next = current.relative(direction);
-                if ((blockedBoundary != null && next.equals(blockedBoundary)) || !visited.add(next)) {
-                    continue;
+                BlockPos horizontal = current.relative(direction);
+                for (int dy : new int[]{0, 1, -1}) {
+                    BlockPos next = horizontal.offset(0, dy, 0);
+                    if ((blockedBoundary != null && next.equals(blockedBoundary)) || visited.contains(next)) {
+                        continue;
+                    }
+                    BlockState nextState = world.getBlockState(next);
+                    if (isConnector(nextState) || !isOpen(world, next, nextState)
+                            || !isSupported(world, next.getX(), next.getY(), next.getZ())) {
+                        continue;
+                    }
+                    if (dy != 0 && !isOpen(world, next.above(), world.getBlockState(next.above()))) {
+                        continue;
+                    }
+                    double delta = floorSurface(world, next) - currentFloor;
+                    if (delta > 1.125D || delta < -1.125D) {
+                        continue;
+                    }
+                    visited.add(next);
+                    if (!hasRoof(world, next, roof)) {
+                        return true;
+                    }
+                    queue.addLast(next);
                 }
-                BlockState nextState = world.getBlockState(next);
-                if (isConnector(nextState) || !isOpen(world, next, nextState)
-                        || !isSupported(world, next.getX(), next.getY(), next.getZ())) {
-                    continue;
-                }
-                if (!hasRoof(world, next, roof)) {
-                    return true;
-                }
-                queue.addLast(next);
             }
         }
         return false;
@@ -504,21 +583,15 @@ final class StructureScanner {
 
     private static GroundChoice chooseGroundFloor(Level world,
                                                    List<StructureFloor> floors,
-                                                   Set<BlockPos> doors,
+                                                   Set<ExteriorEntrance> entrances,
                                                    Set<BlockPos> interior) {
         List<EntranceCandidate> candidates = new ArrayList<>();
-        for (BlockPos door : doors) {
-            for (Direction direction : HORIZONTAL) {
-                BlockPos inside = door.relative(direction);
-                if (!interior.contains(inside)) continue;
-                BlockPos outside = door.relative(direction.getOpposite());
-                if (interior.contains(outside)) continue;
-                int terrainY = world.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
-                        outside.getX(), outside.getZ());
-                int terrainDelta = Math.abs(inside.getY() - terrainY);
-                if (terrainDelta <= BuildingFloorRegionDetector.FLOOR_CLUSTER_TOLERANCE) {
-                    candidates.add(new EntranceCandidate(inside, terrainDelta));
-                }
+        for (ExteriorEntrance entrance : entrances) {
+            int terrainY = world.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
+                    entrance.outside().getX(), entrance.outside().getZ());
+            int terrainDelta = Math.abs(entrance.inside().getY() - terrainY);
+            if (terrainDelta <= BuildingFloorRegionDetector.FLOOR_CLUSTER_TOLERANCE) {
+                candidates.add(new EntranceCandidate(entrance.inside(), terrainDelta));
             }
         }
         if (!candidates.isEmpty()) {
@@ -605,8 +678,53 @@ final class StructureScanner {
         return 0;
     }
 
+    private static List<String> summarizeSupported(Collection<BuildingFloorRegionDetector.SupportedCell> cells) {
+        Map<Integer, List<BuildingFloorRegionDetector.SupportedCell>> byY = new TreeMap<>();
+        for (BuildingFloorRegionDetector.SupportedCell cell : cells) {
+            byY.computeIfAbsent(cell.y(), ignored -> new ArrayList<>()).add(cell);
+        }
+        return byY.entrySet().stream().map(entry -> {
+            int minX = entry.getValue().stream().mapToInt(BuildingFloorRegionDetector.SupportedCell::x).min().orElse(0);
+            int maxX = entry.getValue().stream().mapToInt(BuildingFloorRegionDetector.SupportedCell::x).max().orElse(0);
+            int minZ = entry.getValue().stream().mapToInt(BuildingFloorRegionDetector.SupportedCell::z).min().orElse(0);
+            int maxZ = entry.getValue().stream().mapToInt(BuildingFloorRegionDetector.SupportedCell::z).max().orElse(0);
+            return "y=" + entry.getKey() + ":area=" + entry.getValue().size()
+                    + ":bounds=[" + minX + "," + minZ + "->" + maxX + "," + maxZ + "]";
+        }).toList();
+    }
+
+    private static List<String> summarizeFloors(Collection<StructureFloor> floors) {
+        return floors.stream().map(floor -> "id=" + floor.id() + ":y=" + floor.anchorY()
+                + ":ceiling=" + floor.ceilingY() + ":area=" + floor.area()
+                + ":components=" + floor.region().components().size()).toList();
+    }
+
+    private static List<String> summarizeRegions(Collection<BuildingFloorRegion> regions) {
+        return regions.stream().map(region -> "y=" + region.anchorY() + ":area=" + region.area()
+                + ":components=" + region.components().size()).toList();
+    }
+
+    /**
+     * Preserves the legacy meaning of minBuildingSize. The original building flood counted the
+     * examined scan envelope, including the immediate enclosing boundary, rather than only the
+     * reachable interior-air volume. Using volume.size() here makes valid compact buildings fail
+     * as soon as exterior false positives are removed.
+     */
+    private static int scannedEnvelopeSize(Collection<BlockPos> volume) {
+        Set<BlockPos> examined = new HashSet<>(volume);
+        for (BlockPos cell : volume) {
+            for (Direction direction : Direction.values()) {
+                examined.add(cell.relative(direction));
+            }
+        }
+        return examined.size();
+    }
+
     private static int horizontalDistance(BlockPos a, BlockPos b) {
         return Math.abs(a.getX() - b.getX()) + Math.abs(a.getZ() - b.getZ());
+    }
+
+    private record ExteriorEntrance(BlockPos inside, BlockPos outside) {
     }
 
     private record GroundChoice(int floorY, BlockPos entranceInterior) {
