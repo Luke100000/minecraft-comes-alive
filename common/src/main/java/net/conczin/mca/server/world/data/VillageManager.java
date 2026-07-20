@@ -60,7 +60,8 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         ListTag villageList = nbt.getList("villages", Tag.TAG_COMPOUND);
         for (int i = 0; i < villageList.size(); i++) {
             Village village = new Village(villageList.getCompound(i), world);
-            if (village.getBuildings().isEmpty() && village.getStructures().isEmpty()) {
+            if (village.getBuildings().isEmpty() && village.getStructures().isEmpty()
+                    && village.getExternalBuildingMap().isEmpty()) {
                 MCA.LOGGER.warn("Empty village detected ({}), removing...", village.getName());
                 setDirty();
             } else {
@@ -244,33 +245,28 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         }
 
         StructureScanner.Result structureScan = StructureScanner.scan(world, pos, existing, -1);
-        MCA.LOGGER.info("[BlueprintStructureDebug] stage=initial-analysis-structure source={} result={} floors={} groundFloorId={} groundSeed={} bounds={}..{}",
-                pos, structureScan.result(), debugFloors(structureScan.floors()), structureScan.groundFloorId(),
-                structureScan.groundSeed(), structureScan.min(), structureScan.max());
         StructureScanResult structureResult = new StructureScanResult(structureScan.result(), structureScan, village, -1);
         if (structureScan.result() != Building.validationResult.SUCCESS) {
             return new InitialStructureScan(structureResult, failedRoom(structureScan.result(), pos, village), null);
         }
 
         Structure candidate = structureScan.toStructure(-1);
-        // Initial Structure creation already proved physical ownership. The mandatory first Room
-        // must not be rejected merely because this floor has no local doorway (for example a basement
-        // reached by stairs); explicit Add Room keeps the normal entrance requirement.
-        BuildingScanResult room = scanRoom(village, candidate, pos, -1, true);
-        if (room.result() != Building.validationResult.SUCCESS) {
-            return new InitialStructureScan(structureResult, room, null);
-        }
-        // Root Room identity is physical-room identity, not merely Floor identity. A player may
-        // start in a different Room on the Ground Floor, so always scan the Ground Floor candidate
-        // and deduplicate only when the two Room footprints are actually identical.
+        // The Ground-anchor Room is mandatory and always becomes the Structure Root. Establish it
+        // before considering the player's current Room so an upstairs/basement scan can never stand
+        // in for a missing Ground Room.
         BuildingScanResult root = scanRoom(village, candidate, structureScan.groundSeed(), -1, true);
         if (root.result() != Building.validationResult.SUCCESS) {
+            return new InitialStructureScan(structureResult, root, null);
+        }
+
+        // Add Building also registers the Room the player is actually standing in. If that is the
+        // same bounded physical Room as the Ground Root, keep only the Root; otherwise both Rooms are
+        // committed and all other detected Floors remain physical-only until Add Room is used.
+        BuildingScanResult room = scanRoom(village, candidate, pos, -1, true);
+        if (room.result() != Building.validationResult.SUCCESS) {
             return new InitialStructureScan(structureResult, room, root);
         }
-        boolean identicalRooms = root.building().isIdentical(room.building());
-        MCA.LOGGER.info("[BlueprintStructureDebug] stage=initial-analysis-rooms source={} playerRoom={} rootCandidate={} identical={}",
-                pos, debugRoom(room.building()), debugRoom(root.building()), identicalRooms);
-        if (identicalRooms) {
+        if (root.building().isIdentical(room.building())) {
             root = null;
         }
         return new InitialStructureScan(structureResult, room, root);
@@ -373,29 +369,9 @@ public class VillageManager extends SavedData implements Iterable<Village> {
             types = room.getVisibleMatchingTypes().stream().map(BuildingType::name).toList();
         } else {
             types = village.getMatchingRoomTypes(structure.getId(), room).stream().map(BuildingType::name).toList();
-            if (types.isEmpty()) {
-                Building root = village.getBuilding(structure.getRootRoomId()).orElse(null);
-                if (root != null && !root.getType().equals("building")) types = List.of(root.getType());
-            }
         }
-        MCA.LOGGER.info("[BlueprintStructureDebug] stage=room-scan source={} structureId={} existingRoomId={} floorId={} floorY={} geometryArea={} geometryBounds={}..{} room={} matchingTypes={}",
-                pos, structure.getId(), existingRoomId, floor.id(), floor.anchorY(), geometry.footprintCells().size(),
-                geometry.min(), geometry.max(), debugRoom(room), types);
         return new BuildingScanResult(Building.validationResult.SUCCESS, room.getSourceBlock(), room,
                 types, village, existingRoomId, structure.getId(), floor.id(), structureUpdate);
-    }
-
-    private static String debugRoom(Building room) {
-        if (room == null) return "null";
-        return "id=" + room.getId() + ":structure=" + room.getStructureId() + ":floor=" + room.getFloorId()
-                + ":source=" + room.getSourceBlock() + ":area=" + room.getFloorFootprintArea()
-                + ":bounds=" + room.getRawPos0() + ".." + room.getRawPos1() + ":type=" + room.getType();
-    }
-
-    private static List<String> debugFloors(Collection<StructureFloor> floors) {
-        return floors.stream().map(floor -> "id=" + floor.id() + ":y=" + floor.anchorY()
-                + ":ceiling=" + floor.ceilingY() + ":area=" + floor.area()
-                + ":components=" + floor.region().components().size()).toList();
     }
 
     private static BuildingScanResult failedRoom(Building.validationResult result, BlockPos pos, Village village) {
@@ -415,18 +391,19 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         int structureId = lastBuildingId++;
         Structure structure = scan.structure().scan().toStructure(structureId);
         Building playerRoom = scan.room().building();
-        MCA.LOGGER.info("[BlueprintStructureDebug] stage=initial-commit-before structureId={} structureFloors={} playerRoom={} rootCandidate={} forcedRoomType={}",
-                structureId, debugFloors(structure.getFloors()), debugRoom(playerRoom),
-                scan.rootRoom() == null ? "SAME_AS_PLAYER" : debugRoom(scan.rootRoom().building()), forcedRoomType);
-        String category = chooseCategory(scan.room(), forcedRoomType, null);
-        if (category == null) return Building.validationResult.INVALID_TYPE;
+        BuildingScanResult rootScan = scan.rootRoom() == null ? scan.room() : scan.rootRoom();
+        String rootCategory = chooseRootCategory(rootScan, scan.rootRoom() == null ? forcedRoomType : null);
+        String playerCategory = scan.rootRoom() == null
+                ? rootCategory
+                : chooseCategory(scan.room(), forcedRoomType, rootCategory, village.isRoomInheritance());
+        if (rootCategory == null || playerCategory == null) return Building.validationResult.INVALID_TYPE;
 
         Building rootRoom = scan.rootRoom() == null ? playerRoom : scan.rootRoom().building();
         rootRoom.setId(lastBuildingId++);
         rootRoom.setStructureId(structureId);
         rootRoom.setFloorId(scan.rootRoom() == null ? playerRoom.getFloorId() : scan.rootRoom().floorId());
-        rootRoom.setType(category);
-        rootRoom.setTypeForced(forcedRoomType != null);
+        rootRoom.setType(rootCategory);
+        rootRoom.setTypeForced(scan.rootRoom() == null && forcedRoomType != null);
         structure.setRootRoomId(rootRoom.getId());
         village.getBuildings().put(rootRoom.getId(), rootRoom);
 
@@ -434,15 +411,11 @@ public class VillageManager extends SavedData implements Iterable<Village> {
             playerRoom.setId(lastBuildingId++);
             playerRoom.setStructureId(structureId);
             playerRoom.setFloorId(scan.room().floorId());
-            playerRoom.setType(category);
+            playerRoom.setType(playerCategory);
             playerRoom.setTypeForced(forcedRoomType != null);
             village.getBuildings().put(playerRoom.getId(), playerRoom);
         }
         village.getStructures().put(structureId, structure);
-        MCA.LOGGER.info("[BlueprintStructureDebug] stage=initial-commit-after structureId={} rootRoomId={} rootAndPlayerSame={} persistedRooms={}",
-                structureId, structure.getRootRoomId(), rootRoom == playerRoom,
-                village.getRooms().filter(candidate -> candidate.getStructureId() == structureId)
-                        .map(VillageManager::debugRoom).toList());
         villages.put(village.getId(), village);
         finalizeVillageMutation(village);
         return Building.validationResult.SUCCESS;
@@ -460,7 +433,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
 
         Building room = scan.building();
         String inherited = village.getBuilding(structure.getRootRoomId()).map(Building::getType).orElse(null);
-        String category = chooseCategory(scan, forcedType, inherited);
+        String category = chooseCategory(scan, forcedType, inherited, village.isRoomInheritance());
         if (category == null) return Building.validationResult.INVALID_TYPE;
         room.setId(lastBuildingId++);
         room.setStructureId(structure.getId());
@@ -525,14 +498,22 @@ public class VillageManager extends SavedData implements Iterable<Village> {
     }
 
 
-    private static String chooseCategory(BuildingScanResult scan, String forcedType, String inherited) {
+    private static String chooseCategory(BuildingScanResult scan, String forcedType, String inherited, boolean roomInheritance) {
         if (forcedType != null) return forcedType;
         if (scan.matchingTypes().size() == 1) return scan.matchingTypes().getFirst();
-        // A new Room with no special match inherits the Root Room category. During initial
-        // Structure creation there is no Root Room yet, so use MCA's generic functional house
-        // category rather than resurrecting the old fake structural "building" type.
-        if (scan.matchingTypes().isEmpty()) return inherited == null ? "house" : inherited;
-        return null;
+        if (!scan.matchingTypes().isEmpty()) return null;
+        if (inherited != null && roomInheritance) return inherited;
+        // A category-less Room stays functional but unclassified; the old hidden `building`
+        // definition is reused only as a neutral no-icon category, never as physical Structure state.
+        return inherited == null ? "house" : "building";
+    }
+
+    private static String chooseRootCategory(BuildingScanResult scan, String forcedType) {
+        if (forcedType != null) return forcedType;
+        if (scan.matchingTypes().isEmpty()) return "house";
+        // Root creation has no separate picker. Matching types are already priority-sorted, so
+        // choose the strongest local match deterministically rather than inheriting another Room.
+        return scan.matchingTypes().getFirst();
     }
 
     public void fullScan(Village village) {

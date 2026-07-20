@@ -1,6 +1,5 @@
 package net.conczin.mca.client.gui;
 
-import net.conczin.mca.MCA;
 import net.conczin.mca.server.world.data.Building;
 import net.conczin.mca.server.world.data.Structure;
 import net.conczin.mca.server.world.data.StructureFloor;
@@ -44,15 +43,6 @@ final class BlueprintMapGeometry {
             List<Building> grouped = village.getExternalBuildings().filter(Building::isComplete)
                     .filter(building -> floorLayout.isBuildingVisible(building, selectedFloor))
                     .sorted(Comparator.comparingInt(Building::getId)).map(Building.class::cast).toList();
-            MCA.LOGGER.info("[BlueprintStructureDebug] stage=map-geometry selectedFloor={} roomLayers={} roomSummaries={} structureLayers={} iconRoomIds={} groupedIds={}",
-                    selectedFloor, rooms.size(), rooms.stream().map(layer -> "id=" + layer.building().getId()
-                            + ":structure=" + layer.building().getStructureId()
-                            + ":floorOrdinal=" + layer.floorOrdinal()
-                            + ":area=" + layer.footprintCells().size()
-                            + ":visible=" + layer.visibleCells().size()
-                            + ":bounds=" + bounds(layer.footprintCells())).toList(),
-                    structures.size(), icons.stream().map(layer -> layer.building().getId()).toList(),
-                    grouped.stream().map(Building::getId).toList());
             return new MapGeometry(rooms, structures, icons, grouped);
         });
     }
@@ -71,13 +61,10 @@ final class BlueprintMapGeometry {
                 Set<BlueprintMapFootprint.Cell> footprintCells = roomFootprint(room);
                 if (footprintCells.isEmpty()) continue;
 
-                Set<BlueprintMapFootprint.Cell> visibleCells = footprintCells;
-
                 layers.add(new MapFootprintLayer(
                         room,
                         footprintCells,
-                        visibleCells,
-                        BlueprintMapFootprint.rowSpans(visibleCells),
+                        BlueprintMapFootprint.rowSpans(footprintCells),
                         BlueprintMapFootprint.outerEdges(footprintCells),
                         floor));
             }
@@ -93,7 +80,7 @@ final class BlueprintMapGeometry {
             Building rootRoom = village.getBuilding(structure.getRootRoomId()).orElse(null);
             if (rootRoom == null) continue;
 
-            LinkedHashSet<BlueprintMapFootprint.Cell> physicalCells = new LinkedHashSet<>();
+            boolean hasVisibleFloor = selectedFloor == null;
             LinkedHashSet<BlueprintMapFootprint.Cell> canonicalOutlineBaseCells = new LinkedHashSet<>();
             for (StructureFloor floor : structure.getFloors()) {
                 OptionalInt ordinal = floorLayout.ordinalForFloor(structure.getId(), floor.id());
@@ -103,61 +90,47 @@ final class BlueprintMapGeometry {
                 // The outer Structure shell is stable across floor selection. Basements never
                 // enlarge that shell, but their own physical footprint remains visible separately.
                 if (ordinal.isPresent()
-                        && BlueprintMapLayering.contributesToAllFloorsOutline(ordinal.getAsInt())) {
+                        && BlueprintMapLayering.contributesToStructureOutline(ordinal.getAsInt())) {
                     canonicalOutlineBaseCells.addAll(floorCells);
                 }
 
-                if (selectedFloor != null && (ordinal.isEmpty() || ordinal.getAsInt() != selectedFloor)) {
-                    continue;
+                if (selectedFloor != null && ordinal.isPresent() && ordinal.getAsInt() == selectedFloor) {
+                    hasVisibleFloor = true;
                 }
-                physicalCells.addAll(floorCells);
             }
-            if (physicalCells.isEmpty() || canonicalOutlineBaseCells.isEmpty()) continue;
+            if (!hasVisibleFloor || canonicalOutlineBaseCells.isEmpty()) continue;
 
-            LinkedHashSet<BlueprintMapFootprint.Cell> registeredRoomCells = new LinkedHashSet<>();
-            for (MapFootprintLayer roomLayer : roomLayers) {
-                if (roomLayer.building().getStructureId() == structure.getId()) {
-                    registeredRoomCells.addAll(roomLayer.footprintCells());
-                }
-            }
-            StructureShape shape = structureShape(
-                    physicalCells, canonicalOutlineBaseCells, registeredRoomCells, selectedFloor == null);
-            List<Integer> roomLayerIds = roomLayers.stream()
+            // Shade removal is view-local: selected Floor subtracts only Rooms on that Floor;
+            // All Floors subtracts every rendered Room. A Ground Room must never erase Floor 1
+            // shade merely because the two Rooms overlap in X/Z.
+            LinkedHashSet<BlueprintMapFootprint.Cell> relevantRoomCells = new LinkedHashSet<>();
+            roomLayers.stream()
                     .filter(layer -> layer.building().getStructureId() == structure.getId())
-                    .map(layer -> layer.building().getId()).toList();
-            MCA.LOGGER.info("[BlueprintStructureDebug] stage=map-structure-layer structureId={} rootRoomId={} selectedFloor={} floors={} physicalCells={} physicalBounds={} canonicalOutlineBaseCells={} canonicalOutlineBaseBounds={} roomLayerIds={} registeredRoomCells={} outlineCells={} shadeCells={} wallShadeCells={}",
-                    structure.getId(), structure.getRootRoomId(), selectedFloor,
-                    structure.getFloors().stream().map(floor -> "id=" + floor.id() + ":y=" + floor.anchorY()
-                            + ":area=" + floor.area()).toList(),
-                    physicalCells.size(), bounds(physicalCells), canonicalOutlineBaseCells.size(),
-                    bounds(canonicalOutlineBaseCells), roomLayerIds, registeredRoomCells.size(),
-                    shape.outlineCells().size(), shape.shadeCells().size(),
-                    shape.shadeCells().stream().filter(cell -> !physicalCells.contains(cell)).count());
+                    .forEach(layer -> relevantRoomCells.addAll(layer.footprintCells()));
+
+            StructureShape shape = structureShape(canonicalOutlineBaseCells, relevantRoomCells);
             layers.add(new MapStructureLayer(
                     rootRoom,
                     shape.shadeCells(),
                     BlueprintMapFootprint.rowSpans(shape.shadeCells()),
-                    BlueprintMapFootprint.outerEdges(shape.outlineCells()),
-                    selectedFloor));
+                    BlueprintMapFootprint.outerEdges(shape.outlineCells())));
         }
         return List.copyOf(layers);
     }
 
-    static StructureShape structureShape(Set<BlueprintMapFootprint.Cell> physicalCells,
-                                         Set<BlueprintMapFootprint.Cell> outlineBaseCells,
-                                         Set<BlueprintMapFootprint.Cell> registeredRoomCells,
-                                         boolean allFloors) {
+    static StructureShape structureShape(Set<BlueprintMapFootprint.Cell> outlineBaseCells,
+                                         Set<BlueprintMapFootprint.Cell> relevantRoomCells) {
         Set<BlueprintMapFootprint.Cell> outlineCells = BlueprintMapFootprint.expand(
                 outlineBaseCells, BUILDING_OUTLINE_WIDTH);
         Set<BlueprintMapFootprint.Cell> shadeCells = BlueprintMapLayering.structureShade(
-                physicalCells, outlineBaseCells, outlineCells, registeredRoomCells, allFloors);
+                outlineCells, relevantRoomCells);
         return new StructureShape(Set.copyOf(outlineCells), shadeCells);
     }
 
     private static List<MapIconLayer> buildIconLayers(List<MapFootprintLayer> roomLayers) {
         TreeMap<Integer, List<MapFootprintLayer>> byRoom = new TreeMap<>();
         for (MapFootprintLayer layer : roomLayers) {
-            if (!layer.visibleCells().isEmpty()
+            if (!layer.footprintCells().isEmpty()
                     && layer.building().getBuildingType().visible()
                     && layer.building().getBuildingType().hasIcon()) {
                 byRoom.computeIfAbsent(layer.building().getId(), ignored -> new ArrayList<>()).add(layer);
@@ -166,13 +139,34 @@ final class BlueprintMapGeometry {
         List<MapIconLayer> icons = new ArrayList<>();
         for (List<MapFootprintLayer> layers : byRoom.values()) {
             LinkedHashSet<BlueprintMapFootprint.Cell> cells = new LinkedHashSet<>();
-            layers.forEach(layer -> cells.addAll(layer.visibleCells()));
+            layers.forEach(layer -> cells.addAll(layer.footprintCells()));
             if (cells.isEmpty()) continue;
             Center center = centerInside(cells);
             icons.add(new MapIconLayer(layers.getFirst().building(), layers.getFirst().floorOrdinal(),
                     center.x(), center.z(), iconScale(cells)));
         }
-        return List.copyOf(icons);
+        return offsetOverlappingIcons(icons);
+    }
+
+    private static List<MapIconLayer> offsetOverlappingIcons(List<MapIconLayer> icons) {
+        Map<IconAnchor, List<MapIconLayer>> byAnchor = new LinkedHashMap<>();
+        for (MapIconLayer icon : icons) {
+            byAnchor.computeIfAbsent(new IconAnchor(icon.iconX(), icon.iconZ()), ignored -> new ArrayList<>())
+                    .add(icon);
+        }
+
+        List<MapIconLayer> result = new ArrayList<>(icons.size());
+        for (List<MapIconLayer> group : byAnchor.values()) {
+            group.sort(Comparator
+                    .comparingInt((MapIconLayer icon) -> icon.floorOrdinal() == null ? 0 : icon.floorOrdinal())
+                    .thenComparingInt(icon -> icon.building().getId()));
+            List<BlueprintIconLayout.Offset> offsets = BlueprintIconLayout.offsets(group.size());
+            for (int index = 0; index < group.size(); index++) {
+                BlueprintIconLayout.Offset offset = offsets.get(index);
+                result.add(group.get(index).withScreenOffset(offset.x(), offset.y()));
+            }
+        }
+        return List.copyOf(result);
     }
 
     private static Set<BlueprintMapFootprint.Cell> roomFootprint(Building building) {
@@ -197,15 +191,6 @@ final class BlueprintMapGeometry {
         return new Center(best.x() + 0.5D, best.z() + 0.5D);
     }
 
-    private static String bounds(Set<BlueprintMapFootprint.Cell> cells) {
-        if (cells.isEmpty()) return "empty";
-        int minX = cells.stream().mapToInt(BlueprintMapFootprint.Cell::x).min().orElse(0);
-        int maxX = cells.stream().mapToInt(BlueprintMapFootprint.Cell::x).max().orElse(0);
-        int minZ = cells.stream().mapToInt(BlueprintMapFootprint.Cell::z).min().orElse(0);
-        int maxZ = cells.stream().mapToInt(BlueprintMapFootprint.Cell::z).max().orElse(0);
-        return "[" + minX + "," + minZ + "->" + maxX + "," + maxZ + "]";
-    }
-
     private static float iconScale(Set<BlueprintMapFootprint.Cell> cells) {
         float scale = (float) Math.sqrt(Math.max(1, cells.size())) / ROOM_ICON_AREA_REFERENCE;
         return Math.max(ROOM_ICON_MIN_SCALE, Math.min(ROOM_ICON_MAX_SCALE, scale));
@@ -227,13 +212,11 @@ final class BlueprintMapGeometry {
 
     record MapFootprintLayer(Building building,
                              Set<BlueprintMapFootprint.Cell> footprintCells,
-                             Set<BlueprintMapFootprint.Cell> visibleCells,
                              List<BlueprintMapFootprint.RowSpan> fillSpans,
                              List<BlueprintMapFootprint.Edge> outlineEdges,
                              Integer floorOrdinal) {
         MapFootprintLayer {
             footprintCells = Set.copyOf(footprintCells);
-            visibleCells = Set.copyOf(visibleCells);
             fillSpans = List.copyOf(fillSpans);
             outlineEdges = List.copyOf(outlineEdges);
         }
@@ -241,8 +224,7 @@ final class BlueprintMapGeometry {
 
     record MapStructureLayer(Building root, Set<BlueprintMapFootprint.Cell> shadeCells,
                              List<BlueprintMapFootprint.RowSpan> shadeSpans,
-                             List<BlueprintMapFootprint.Edge> borderEdges,
-                             Integer floorOrdinal) {
+                             List<BlueprintMapFootprint.Edge> borderEdges) {
         MapStructureLayer {
             shadeCells = Set.copyOf(shadeCells);
             shadeSpans = List.copyOf(shadeSpans);
@@ -250,7 +232,15 @@ final class BlueprintMapGeometry {
         }
     }
 
-    record MapIconLayer(Building building, Integer floorOrdinal, double iconX, double iconZ, float iconScale) {
+    record MapIconLayer(Building building, Integer floorOrdinal, double iconX, double iconZ,
+                        float iconScale, double screenOffsetX, double screenOffsetY) {
+        MapIconLayer(Building building, Integer floorOrdinal, double iconX, double iconZ, float iconScale) {
+            this(building, floorOrdinal, iconX, iconZ, iconScale, 0.0D, 0.0D);
+        }
+
+        MapIconLayer withScreenOffset(double x, double y) {
+            return new MapIconLayer(building, floorOrdinal, iconX, iconZ, iconScale, x, y);
+        }
     }
 
 
@@ -260,6 +250,9 @@ final class BlueprintMapGeometry {
             outlineCells = Set.copyOf(outlineCells);
             shadeCells = Set.copyOf(shadeCells);
         }
+    }
+
+    private record IconAnchor(double x, double z) {
     }
 
     private record Center(double x, double z) {
