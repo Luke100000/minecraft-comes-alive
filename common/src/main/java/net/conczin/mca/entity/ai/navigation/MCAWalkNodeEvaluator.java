@@ -6,10 +6,8 @@ import net.conczin.mca.Config;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.tags.FluidTags;
-import net.minecraft.util.Mth;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.pathfinder.Node;
-import net.minecraft.world.level.pathfinder.PathComputationType;
 import net.minecraft.world.level.pathfinder.PathType;
 import net.minecraft.world.level.pathfinder.WalkNodeEvaluator;
 import net.minecraft.world.phys.AABB;
@@ -30,33 +28,20 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
         int y = this.mob.getBlockY();
         BlockState state = this.currentContext.getBlockState(pos.set(this.mob.getX(), y, this.mob.getZ()));
 
-        if (!this.mob.canStandOnFluid(state.getFluidState())) {
-            if (this.canFloat() && this.mob.isInWater()) {
-                while (state.getFluidState().is(FluidTags.WATER)) {
-                    state = this.currentContext.getBlockState(pos.set(this.mob.getX(), ++y, this.mob.getZ()));
-                }
-                y--;
-            } else if (this.mob.onGround()) {
-                y = Mth.floor(this.mob.getY() + 0.5D);
-            } else {
-                pos.set(this.mob.getX(), this.mob.getY() + 1.0D, this.mob.getZ());
-
-                while (pos.getY() > this.currentContext.level().getMinBuildHeight()) {
-                    y = pos.getY();
-                    pos.setY(pos.getY() - 1);
-                    BlockState below = this.currentContext.getBlockState(pos);
-                    if (!below.isAir() && !below.isPathfindable(PathComputationType.LAND)) {
-                        break;
-                    }
-                }
-            }
-        } else {
-            while (this.mob.canStandOnFluid(state.getFluidState())) {
+        if (!this.mob.canStandOnFluid(state.getFluidState())
+            && this.canFloat()
+            && this.mob.isInWater()
+            && state.getFluidState().is(FluidTags.WATER)) {
+            while (state.getFluidState().is(FluidTags.WATER)) {
                 state = this.currentContext.getBlockState(pos.set(this.mob.getX(), ++y, this.mob.getZ()));
             }
-            y--;
+            return this.getStartNodeAtY(pos, y - 1);
         }
 
+        return super.getStart();
+    }
+
+    private Node getStartNodeAtY(BlockPos.MutableBlockPos pos, int y) {
         BlockPos mobPos = this.mob.blockPosition();
         if (!this.canStartAt(pos.set(mobPos.getX(), y, mobPos.getZ()))) {
             AABB box = this.mob.getBoundingBox();

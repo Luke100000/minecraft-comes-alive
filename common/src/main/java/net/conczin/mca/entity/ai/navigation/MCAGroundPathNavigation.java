@@ -7,7 +7,6 @@ import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.navigation.GroundPathNavigation;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.pathfinder.PathFinder;
-import net.minecraft.world.phys.Vec3;
 
 public class MCAGroundPathNavigation extends GroundPathNavigation {
     public MCAGroundPathNavigation(Mob mob, Level level) {
@@ -23,11 +22,7 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
     }
 
     @Override
-    protected Vec3 getTempMobPos() {
-        return new Vec3(this.mob.getX(), this.getWaterAwareSurfaceY(), this.mob.getZ());
-    }
-
-    private int getWaterAwareSurfaceY() {
+    public int getSurfaceY() {
         if (this.mob.isInWater() && this.canFloat()) {
             int surfaceY = this.mob.getBlockY();
             BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos(this.mob.getX(), surfaceY, this.mob.getZ());
