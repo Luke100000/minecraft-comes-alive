@@ -281,6 +281,22 @@ public class BlueprintScreen extends ExtendedScreen {
                     }));
                     by += 22;
 
+                    MutableComponent inheritanceText = Component.literal("Room Inheritance");
+                    if (village.isRoomInheritance()) {
+                        inheritanceText.withStyle(ChatFormatting.GREEN);
+                    } else {
+                        inheritanceText.withStyle(ChatFormatting.GRAY).withStyle(ChatFormatting.STRIKETHROUGH);
+                    }
+                    addRenderableWidget(new TooltipButtonWidget(
+                            bx, by, 96, 20, inheritanceText,
+                            Component.literal("New Rooms with no local category match inherit the Root Room category. POIs remain Room-local."),
+                            b -> {
+                                village.toggleRoomInheritance();
+                                saveVillage();
+                                setPage(page);
+                            }));
+                    by += 22;
+
                     addRenderableWidget(new TooltipButtonWidget(bx, by, 96, 20,
                             "gui.blueprint.restrictAccess", b -> {
                         Network.sendToServer(new ReportBuildingMessage(ReportBuildingMessage.Action.FORCE_TYPE, "blocked"));

@@ -24,22 +24,19 @@ final class BlueprintMapLayering {
     }
 
     /**
-     * Structure shade is one stable canonical shell ring on every floor view. Floor selection
-     * changes Room/Floor content, never the Structure presentation itself. This preserves HEAD's
-     * one-region-per-building behavior and prevents selected floors from becoming artificially darker.
+     * Structure shade starts from one stable physical building region. Rooms remove only the cells
+     * relevant to the active view: one selected Floor or every Room in All Floors. Connector cells
+     * remain shaded because connectors are physical Floor nodes but not ordinary Room interior cells.
      */
-    static <T> Set<T> structureShade(Collection<T> physicalCells,
-                                     Collection<T> outlineBaseCells,
-                                     Collection<T> outlineCells,
-                                     Collection<T> registeredRoomCells,
-                                     boolean allFloors) {
-        LinkedHashSet<T> shade = new LinkedHashSet<>(outlineCells);
-        shade.removeAll(outlineBaseCells);
+    static <T> Set<T> structureShade(Collection<T> shadeBaseCells,
+                                     Collection<T> relevantRoomCells) {
+        LinkedHashSet<T> shade = new LinkedHashSet<>(shadeBaseCells);
+        shade.removeAll(relevantRoomCells);
         return Set.copyOf(shade);
     }
 
     /** Basements remain visible as Room geometry, but never enlarge the All Floors building outline. */
-    static boolean contributesToAllFloorsOutline(int floorOrdinal) {
+    static boolean contributesToStructureOutline(int floorOrdinal) {
         return floorOrdinal >= 0;
     }
 

@@ -3,10 +3,6 @@ package net.conczin.mca.server.world.data;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.block.DoorBlock;
-import net.minecraft.world.level.block.FenceGateBlock;
-import net.minecraft.world.level.block.LadderBlock;
-import net.minecraft.world.level.block.TrapDoorBlock;
 import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.*;
@@ -69,7 +65,7 @@ final class BuildingRoomScanner {
 
             cursor.set(x, y, z);
             BlockState currentState = world.getBlockState(cursor);
-            collectVerticalConnectorCandidates(world, cursor, verticalConnectors);
+            StructureConnector.collectNearbyVertical(world, cursor, verticalConnectors);
             for (Direction direction : Direction.values()) {
                 int nx = x + direction.getStepX();
                 int ny = y + direction.getStepY();
@@ -77,7 +73,7 @@ final class BuildingRoomScanner {
 
                 cursor.set(nx, ny, nz);
                 BlockState state = world.getBlockState(cursor);
-                if (direction.getAxis() != Direction.Axis.Y && isBoundary(state)) {
+                if (direction.getAxis() != Direction.Axis.Y && StructureConnector.isHorizontalBoundary(state)) {
                     boundaryConnectors.add(cursor.immutable());
                 }
                 if (ny < floor.anchorY() || ny >= floor.ceilingY()) continue;
@@ -85,12 +81,6 @@ final class BuildingRoomScanner {
                     return Result.failure(Status.SIZE_LIMIT, source);
                 }
 
-                // Ladders connect Structure Floors but remain Room boundaries vertically.
-                if (direction.getAxis() == Direction.Axis.Y
-                        && (currentState.getBlock() instanceof LadderBlock
-                        || state.getBlock() instanceof LadderBlock)) {
-                    continue;
-                }
                 if (!structure.containsPos(cursor) || !isOpen(world, cursor, state)) continue;
                 long next = BlockPos.asLong(nx, ny, nz);
                 if (!visited.add(next)) continue;
@@ -157,46 +147,11 @@ final class BuildingRoomScanner {
     }
 
     private static boolean isOpen(Level world, BlockPos pos, BlockState state) {
-        if (isBoundary(state)) return false;
-        if (state.getBlock() instanceof LadderBlock) return true;
+        if (StructureConnector.isConnector(state)) return false;
         return !state.getFluidState().isEmpty()
                 || state.isAir()
                 || state.canBeReplaced()
                 || state.getCollisionShape(world, pos).isEmpty();
-    }
-
-    private static boolean isBoundary(BlockState state) {
-        return state.getBlock() instanceof DoorBlock
-                || state.getBlock() instanceof TrapDoorBlock
-                || state.getBlock() instanceof FenceGateBlock;
-    }
-
-    /**
-     * Mirrors the Structure scanner's connector handoff neighborhood. A ladder/trapdoor column can
-     * sit on a Room wall and end one block above or below the supported Floor cell, so looking only
-     * at same-Y horizontal neighbours misses valid upper/basement entrances.
-     */
-    private static void collectVerticalConnectorCandidates(Level world,
-                                                           BlockPos current,
-                                                           Set<BlockPos> verticalConnectors) {
-        if (isVerticalConnector(world.getBlockState(current))) {
-            verticalConnectors.add(current.immutable());
-        }
-        for (Direction direction : List.of(Direction.UP, Direction.DOWN)) {
-            BlockPos candidate = current.relative(direction);
-            if (isVerticalConnector(world.getBlockState(candidate))) {
-                verticalConnectors.add(candidate);
-            }
-        }
-        for (Direction direction : HORIZONTAL) {
-            BlockPos horizontal = current.relative(direction);
-            for (int dy : new int[]{-1, 0, 1}) {
-                BlockPos candidate = horizontal.offset(0, dy, 0);
-                if (isVerticalConnector(world.getBlockState(candidate))) {
-                    verticalConnectors.add(candidate);
-                }
-            }
-        }
     }
 
     private static boolean hasValidEntrance(Level world,
@@ -212,8 +167,8 @@ final class BuildingRoomScanner {
         }
         for (BlockPos connector : verticalConnectors) {
             BlockState state = world.getBlockState(connector);
-            if (isVerticalConnector(state)
-                    && verticalConnectorConnectsDifferentFloor(world, structure, floor, connector)) {
+            if (StructureConnector.isVertical(state)
+                    && StructureConnector.connectsDifferentFloor(world, structure, floor, connector)) {
                 return true;
             }
         }
@@ -224,17 +179,8 @@ final class BuildingRoomScanner {
                                                            BlockPos connector,
                                                            Set<Long> visited) {
         BlockState state = world.getBlockState(connector);
-        Direction facing;
-        if (state.getBlock() instanceof DoorBlock) {
-            facing = state.getValue(DoorBlock.FACING);
-        } else if (state.getBlock() instanceof FenceGateBlock) {
-            facing = state.getValue(FenceGateBlock.FACING);
-        } else if (state.getBlock() instanceof TrapDoorBlock
-                && state.getValue(TrapDoorBlock.OPEN)) {
-            facing = state.getValue(TrapDoorBlock.FACING);
-        } else {
-            return false;
-        }
+        Direction facing = StructureConnector.horizontalFacing(state).orElse(null);
+        if (facing == null) return false;
 
         BlockPos first = connector.relative(facing);
         BlockPos second = connector.relative(facing.getOpposite());
@@ -244,100 +190,7 @@ final class BuildingRoomScanner {
             return false;
         }
         BlockPos outside = firstInside ? second : first;
-        return isPassageCell(world, outside);
-    }
-
-    /**
-     * Treats ladders and trapdoors as one vertical connector path. A common valid entrance is
-     * Room -> wall-adjacent ladder -> trapdoor -> landing on another persistent Floor. Validating
-     * ladders and trapdoors independently makes that path fall between both checks.
-     */
-    private static boolean verticalConnectorConnectsDifferentFloor(Level world,
-                                                                   Structure structure,
-                                                                   StructureFloor floor,
-                                                                   BlockPos connector) {
-        if (!isVerticalConnector(world.getBlockState(connector))) {
-            return false;
-        }
-        return scanVerticalConnectorDirection(world, structure, floor, connector, Direction.UP)
-                || scanVerticalConnectorDirection(world, structure, floor, connector, Direction.DOWN);
-    }
-
-    private static boolean scanVerticalConnectorDirection(Level world,
-                                                          Structure structure,
-                                                          StructureFloor floor,
-                                                          BlockPos connector,
-                                                          Direction direction) {
-        int minY = structure.getFloors().stream()
-                .mapToInt(StructureFloor::anchorY).min().orElse(floor.anchorY()) - 1;
-        int maxY = structure.getFloors().stream()
-                .mapToInt(StructureFloor::ceilingY).max().orElse(floor.ceilingY()) + 1;
-        BlockPos cursor = connector;
-        while (cursor.getY() >= minY && cursor.getY() <= maxY) {
-            if (touchesDifferentFloorLanding(world, structure, floor, cursor)) {
-                return true;
-            }
-
-            BlockState state = world.getBlockState(cursor);
-            if (isVerticalConnector(state)) {
-                // Connector blocks inside persisted Structure volume can themselves resolve to the
-                // destination Floor. Wall-mounted connectors usually sit outside that volume, so
-                // the landing-neighbour check above is the authoritative fallback for those.
-                if (structure.resolveFloor(cursor)
-                        .filter(candidate -> candidate.id() != floor.id())
-                        .isPresent()) {
-                    return true;
-                }
-                cursor = cursor.relative(direction);
-                continue;
-            }
-            return isDifferentFloorLanding(world, structure, floor, cursor);
-        }
-        return false;
-    }
-
-    /** Uses the same same-level/one-block-diagonal handoff shape as Structure traversal. */
-    private static boolean touchesDifferentFloorLanding(Level world,
-                                                        Structure structure,
-                                                        StructureFloor floor,
-                                                        BlockPos connector) {
-        for (Direction direction : HORIZONTAL) {
-            BlockPos horizontal = connector.relative(direction);
-            for (int dy : new int[]{-1, 0, 1}) {
-                if (isDifferentFloorLanding(world, structure, floor, horizontal.offset(0, dy, 0))) {
-                    return true;
-                }
-            }
-        }
-        return isDifferentFloorLanding(world, structure, floor, connector.above())
-                || isDifferentFloorLanding(world, structure, floor, connector.below());
-    }
-
-    private static boolean isDifferentFloorLanding(Level world,
-                                                   Structure structure,
-                                                   StructureFloor floor,
-                                                   BlockPos candidate) {
-        return structure.containsPos(candidate)
-                && isPassageCell(world, candidate)
-                && structure.resolveFloor(candidate)
-                .filter(candidateFloor -> candidateFloor.id() != floor.id())
-                .isPresent();
-    }
-
-    private static boolean isPassageCell(Level world, BlockPos pos) {
-        BlockState state = world.getBlockState(pos);
-        if (isBoundary(state)) {
-            return false;
-        }
-        return state.getBlock() instanceof LadderBlock
-                || state.isAir()
-                || state.canBeReplaced()
-                || state.getCollisionShape(world, pos).isEmpty();
-    }
-
-    private static boolean isVerticalConnector(BlockState state) {
-        return state.getBlock() instanceof LadderBlock
-                || state.getBlock() instanceof TrapDoorBlock;
+        return StructureConnector.isPassageCell(world, outside);
     }
 
     private static Set<BlockPos> collectPoiCells(Level world,

@@ -75,60 +75,6 @@ public final class Structure implements VillageBuilding {
         return tag;
     }
 
-    public static Structure fromLegacyBuilding(Building room) {
-        room.ensureFallbackFloorRegion(room.getFloorY());
-        BuildingFloorRegion region = room.getFloorRegions().getFirst();
-        StructureFloor floor = new StructureFloor(0, region.anchorY(), room.getRawPos1().getY() + 1, region);
-        Structure structure = new Structure(room.getId(), room.getSourceBlock(), room.getRawPos0(), room.getRawPos1(),
-                List.of(floor), legacyVolume(room, floor));
-        structure.rootRoomId = room.getId();
-        structure.nextFloorId = 1;
-        room.setStructureId(structure.id);
-        room.setFloorId(floor.id());
-        return structure;
-    }
-
-    private static List<BuildingFloorRegion> legacyVolume(Building room, StructureFloor floor) {
-        List<BuildingFloorRegion> slices = new ArrayList<>();
-        BlockPos min = room.getRawPos0();
-        BlockPos max = room.getRawPos1();
-        int minY = Math.min(floor.anchorY(), min.getY());
-        int maxY = Math.max(floor.anchorY() + 1, max.getY());
-        List<BlockPos> footprint = new ArrayList<>();
-        if (floor.region() != null && !floor.region().components().isEmpty()) {
-            for (BuildingFloorRegion.Component component : floor.region().components()) {
-                if (component.spans().isEmpty()) {
-                    for (int z = component.minZ(); z <= component.maxZ(); z++) {
-                        for (int x = component.minX(); x <= component.maxX(); x++) {
-                            footprint.add(new BlockPos(x, floor.anchorY(), z));
-                        }
-                    }
-                } else {
-                    for (BuildingFloorRegion.Span span : component.spans()) {
-                        for (int x = span.minX(); x <= span.maxX(); x++) {
-                            footprint.add(new BlockPos(x, floor.anchorY(), span.z()));
-                        }
-                    }
-                }
-            }
-        }
-        if (footprint.isEmpty()) {
-            for (int z = min.getZ(); z <= max.getZ(); z++) {
-                for (int x = min.getX(); x <= max.getX(); x++) {
-                    footprint.add(new BlockPos(x, floor.anchorY(), z));
-                }
-            }
-        }
-        for (int y = minY; y <= maxY; y++) {
-            int sliceY = y;
-            List<BlockPos> cells = footprint.stream()
-                    .map(cell -> new BlockPos(cell.getX(), sliceY, cell.getZ()))
-                    .toList();
-            slices.add(BuildingFloorRegion.fromFootprint(y, cells));
-        }
-        return List.copyOf(slices);
-    }
-
     public Optional<StructureFloor> getFloor(int floorId) {
         return Optional.ofNullable(floors.get(floorId));
     }
@@ -204,116 +150,20 @@ public final class Structure implements VillageBuilding {
     private boolean applyScan(StructureScanner.Result scan,
                               Collection<Building> rooms,
                               int updatingRoomId) {
-        List<StructureFloor> detected = scan.floors();
-        Map<Integer, StructureFloor> assigned = new HashMap<>();
-        Set<Integer> usedDetected = new HashSet<>();
-        int candidateNextFloorId = nextFloorId;
-
-        Building updatingRoom = rooms.stream()
-                .filter(room -> room.getId() == updatingRoomId)
-                .findFirst().orElse(null);
-        int updatingFloorId = updatingRoom == null ? -1 : updatingRoom.getFloorId();
-
-        for (StructureFloor oldFloor : getFloors()) {
-            List<Building> floorRooms = rooms.stream()
-                    .filter(room -> room.getId() != updatingRoomId)
-                    .filter(room -> room.getFloorId() == oldFloor.id())
-                    .toList();
-            int match = bestFloorMatch(oldFloor, floorRooms, detected, usedDetected);
-            if (match < 0 && oldFloor.id() == updatingFloorId) {
-                match = bestUpdatingFloorMatch(oldFloor, detected, usedDetected);
-            }
-            if (match < 0) {
-                if (!floorRooms.isEmpty()) {
-                    return false;
-                }
-                continue;
-            }
-            StructureFloor geometry = detected.get(match);
-            assigned.put(oldFloor.id(), oldFloor.withGeometry(
-                    geometry.anchorY(), geometry.ceilingY(), geometry.region()));
-            usedDetected.add(match);
-        }
-
-        for (int i = 0; i < detected.size(); i++) {
-            if (usedDetected.contains(i)) continue;
-            StructureFloor geometry = detected.get(i);
-            int floorId = candidateNextFloorId++;
-            assigned.put(floorId, new StructureFloor(floorId,
-                    geometry.anchorY(), geometry.ceilingY(), geometry.region()));
-        }
-
-        if (updatingFloorId >= 0 && !assigned.containsKey(updatingFloorId)) {
+        StructureFloorMatcher.Result match = StructureFloorMatcher.match(
+                getFloors(), nextFloorId, scan.floors(), rooms, updatingRoomId).orElse(null);
+        if (match == null) {
             return false;
         }
 
-        for (Building room : rooms) {
-            if (room.getId() == updatingRoomId) continue;
-            StructureFloor floor = assigned.get(room.getFloorId());
-            if (floor == null || !roomFootprintInside(room, floor)) {
-                return false;
-            }
-        }
-
         floors.clear();
-        floors.putAll(assigned);
-        nextFloorId = candidateNextFloorId;
+        floors.putAll(match.floors());
+        nextFloorId = match.nextFloorId();
         source = scan.source();
         min = scan.min();
         max = scan.max();
         volumeSlices = scan.volumeSlices();
         return true;
-    }
-
-    private static int bestFloorMatch(StructureFloor oldFloor,
-                                      List<Building> rooms,
-                                      List<StructureFloor> detected,
-                                      Set<Integer> used) {
-        int best = -1;
-        long bestScore = Long.MIN_VALUE;
-        for (int i = 0; i < detected.size(); i++) {
-            if (used.contains(i)) continue;
-            StructureFloor candidate = detected.get(i);
-            long roomScore = 0L;
-            for (Building room : rooms) {
-                if (!roomFootprintInside(room, candidate)) {
-                    roomScore = Long.MIN_VALUE / 4;
-                    break;
-                }
-                roomScore += 1_000_000L;
-            }
-            if (roomScore < 0) continue;
-            long overlap = oldFloor.region() == null || candidate.region() == null
-                    ? 0L : oldFloor.region().intersectionArea(candidate.region());
-            if (rooms.isEmpty() && overlap == 0L) continue;
-            long score = roomScore + overlap * 100L - Math.abs(oldFloor.anchorY() - candidate.anchorY());
-            if (score > bestScore) {
-                bestScore = score;
-                best = i;
-            }
-        }
-        return best;
-    }
-
-    private static int bestUpdatingFloorMatch(StructureFloor oldFloor,
-                                              List<StructureFloor> detected,
-                                              Set<Integer> used) {
-        int best = -1;
-        long bestScore = Long.MIN_VALUE;
-        for (int i = 0; i < detected.size(); i++) {
-            if (used.contains(i)) continue;
-            StructureFloor candidate = detected.get(i);
-            int heightDelta = Math.abs(oldFloor.anchorY() - candidate.anchorY());
-            if (heightDelta > BuildingFloorRegionDetector.FLOOR_CLUSTER_TOLERANCE) continue;
-            long overlap = oldFloor.region() == null || candidate.region() == null
-                    ? 0L : oldFloor.region().intersectionArea(candidate.region());
-            long score = overlap * 100L - heightDelta;
-            if (score > bestScore) {
-                bestScore = score;
-                best = i;
-            }
-        }
-        return best;
     }
 
     void copyPhysicalGeometryFrom(Structure other) {

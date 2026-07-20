@@ -163,6 +163,16 @@ final class BlueprintMapRenderer implements AutoCloseable {
             );
         }
 
+        // Match HEAD-style z-order: the neutral building shell is behind Room presentation.
+        for (MapStructureLayer layer : structureLayers) {
+            renderStructureOutlineScreenSpace(
+                    context,
+                    layer.borderEdges(),
+                    STRUCTURE_BASE_COLOR,
+                    viewport
+            );
+        }
+
         List<MapFootprintLayer> roomRenderLayers = footprintLayers;
         List<MapFootprintLayer> roomHitTestLayers = selectedFloor == null
                 ? BlueprintMapLayering.frontToBack(roomRenderLayers)
@@ -217,16 +227,6 @@ final class BlueprintMapRenderer implements AutoCloseable {
             }
         }
 
-        // The canonical Structure shell is stable across Ground/Basement/upper selected views.
-        for (MapStructureLayer layer : structureLayers) {
-            renderStructureOutlineScreenSpace(
-                    context,
-                    layer.borderEdges(),
-                    STRUCTURE_BASE_COLOR,
-                    viewport
-            );
-        }
-
         pushWorldTransform(matrices, viewport);
         if (showBuildingIcons) {
             for (Building building : groupedIconBuildings) {
@@ -245,13 +245,14 @@ final class BlueprintMapRenderer implements AutoCloseable {
                 drawScaledBuildingIcon(
                         context,
                         ICON_TEXTURES,
-                        iconLayer.iconX(), iconLayer.iconZ(),
+                        iconLayer.iconX() + iconLayer.screenOffsetX() / viewport.scale(),
+                        iconLayer.iconZ() + iconLayer.screenOffsetY() / viewport.scale(),
                         buildingType.iconU(), buildingType.iconV(),
                         iconScale / viewport.scale()
                 );
 
-                double iconScreenX = viewport.screenX(iconLayer.iconX());
-                double iconScreenY = viewport.screenY(iconLayer.iconZ());
+                double iconScreenX = viewport.screenX(iconLayer.iconX()) + iconLayer.screenOffsetX();
+                double iconScreenY = viewport.screenY(iconLayer.iconZ()) + iconLayer.screenOffsetY();
                 double hoverRadius = 7.0D * iconScale;
                 double dx = mouseX + 0.5D - iconScreenX;
                 double dz = mouseY + 0.5D - iconScreenY;
@@ -556,7 +557,7 @@ final class BlueprintMapRenderer implements AutoCloseable {
                                          int mouseScreenY,
                                          BlueprintMapViewport viewport,
                                          boolean allFloors) {
-        if (layer.visibleCells().contains(hoveredMapCell)) {
+        if (layer.footprintCells().contains(hoveredMapCell)) {
             return true;
         }
         // Canonical outlines from a lower floor can cross cells owned by a higher-priority
