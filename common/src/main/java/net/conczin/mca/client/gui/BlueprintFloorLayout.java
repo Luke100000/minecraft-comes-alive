@@ -1,5 +1,6 @@
 package net.conczin.mca.client.gui;
 
+import net.conczin.mca.MCA;
 import net.conczin.mca.server.world.data.Building;
 import net.conczin.mca.server.world.data.ExternalBuilding;
 import net.conczin.mca.server.world.data.Structure;
@@ -58,6 +59,11 @@ final class BlueprintFloorLayout {
                 available.add(ordinal);
             }
             byStructure.put(structure.getId(), List.copyOf(structureOrdinals));
+            MCA.LOGGER.info("[BlueprintStructureDebug] stage=floor-layout structureId={} rootRoomId={} rootFloorId={} floors={} ordinals={}",
+                    structure.getId(), structure.getRootRoomId(), root.getFloorId(),
+                    floors.stream().map(floor -> "id=" + floor.id() + ":y=" + floor.anchorY()
+                            + ":ceiling=" + floor.ceilingY() + ":area=" + floor.area()).toList(),
+                    structureOrdinals);
             village.getRooms().filter(room -> room.getStructureId() == structure.getId()).forEach(room -> {
                 Integer ordinal = byFloor.get(floorKey(structure.getId(), room.getFloorId()));
                 if (ordinal != null) byBuilding.put(room.getId(), ordinal);

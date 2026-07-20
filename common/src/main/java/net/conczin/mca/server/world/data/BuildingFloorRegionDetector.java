@@ -28,23 +28,16 @@ final class BuildingFloorRegionDetector {
                     .add(new HorizontalCell(cell.x(), cell.z()));
         }
 
-        int largestSliceArea = byY.values().stream().mapToInt(Set::size).max().orElse(0);
-        int minimumArea = Math.max(
-                MIN_MEANINGFUL_AREA,
-                (int) Math.ceil(largestSliceArea * MIN_RELATIVE_AREA)
-        );
+        List<HeightSlice> slices = byY.entrySet().stream()
+                .map(entry -> new HeightSlice(entry.getKey(), Set.copyOf(entry.getValue())))
+                .toList();
 
-        List<HeightSlice> meaningfulSlices = new ArrayList<>();
-        for (Map.Entry<Integer, Set<HorizontalCell>> entry : byY.entrySet()) {
-            List<BuildingFloorRegion.Component> components = findComponents(entry.getValue());
-            int area = entry.getValue().size();
-            if (area >= minimumArea && components.stream().anyMatch(BuildingFloorRegionDetector::isUsableComponent)) {
-                meaningfulSlices.add(new HeightSlice(entry.getKey(), area, components));
-            }
-        }
-
+        // Nearby support heights belong to one physical storey. Cluster first, then decide
+        // whether the projected X/Z footprint is meaningful. Filtering individual Y slices first
+        // drops small rooms whenever furniture, slabs, or raised blocks split one storey across
+        // several support heights (for example 6 cells at Y and 5 at Y+1 for one 3x3 room).
         List<MutableBand> bands = new ArrayList<>();
-        for (HeightSlice slice : meaningfulSlices) {
+        for (HeightSlice slice : slices) {
             MutableBand band = bands.isEmpty() ? null : bands.getLast();
             if (band == null || slice.y() - band.minY > FLOOR_CLUSTER_TOLERANCE) {
                 band = new MutableBand(slice.y());
@@ -53,7 +46,16 @@ final class BuildingFloorRegionDetector {
             band.add(slice);
         }
 
-        return bands.stream().map(MutableBand::freeze).toList();
+        int largestBandArea = bands.stream().mapToInt(MutableBand::projectedArea).max().orElse(0);
+        int minimumArea = Math.max(
+                MIN_MEANINGFUL_AREA,
+                (int) Math.ceil(largestBandArea * MIN_RELATIVE_AREA)
+        );
+
+        return bands.stream()
+                .filter(band -> band.isMeaningful(minimumArea))
+                .map(MutableBand::freeze)
+                .toList();
     }
 
     private static boolean isUsableComponent(BuildingFloorRegion.Component component) {
@@ -147,7 +149,14 @@ final class BuildingFloorRegionDetector {
     private record HorizontalCell(int x, int z) {
     }
 
-    private record HeightSlice(int y, int area, List<BuildingFloorRegion.Component> components) {
+    private record HeightSlice(int y, Set<HorizontalCell> cells) {
+        private HeightSlice {
+            cells = Set.copyOf(cells);
+        }
+
+        private int area() {
+            return cells.size();
+        }
     }
 
     private static final class MutableBand {
@@ -162,23 +171,30 @@ final class BuildingFloorRegionDetector {
             slices.add(slice);
         }
 
+        private Set<HorizontalCell> projectedCells() {
+            LinkedHashSet<HorizontalCell> cells = new LinkedHashSet<>();
+            slices.forEach(slice -> cells.addAll(slice.cells()));
+            return cells;
+        }
+
+        private int projectedArea() {
+            return projectedCells().size();
+        }
+
+        private boolean isMeaningful(int minimumArea) {
+            Set<HorizontalCell> cells = projectedCells();
+            return cells.size() >= minimumArea
+                    && findComponents(cells).stream().anyMatch(BuildingFloorRegionDetector::isUsableComponent);
+        }
+
         private BuildingFloorRegion freeze() {
             HeightSlice anchor = slices.stream()
                     .max(Comparator.comparingInt(HeightSlice::area)
                             .thenComparing(Comparator.comparingInt(HeightSlice::y).reversed()))
                     .orElseThrow();
 
-            int area = slices.stream().mapToInt(HeightSlice::area).sum();
-            List<BuildingFloorRegion.Component> components = slices.stream()
-                    .flatMap(slice -> slice.components().stream())
-                    .sorted(Comparator
-                            .comparingInt(BuildingFloorRegion.Component::minX)
-                            .thenComparingInt(BuildingFloorRegion.Component::minZ)
-                            .thenComparingInt(BuildingFloorRegion.Component::maxX)
-                            .thenComparingInt(BuildingFloorRegion.Component::maxZ))
-                    .toList();
-
-            return new BuildingFloorRegion(anchor.y(), area, components);
+            Set<HorizontalCell> cells = projectedCells();
+            return new BuildingFloorRegion(anchor.y(), cells.size(), findComponents(cells));
         }
     }
 }
