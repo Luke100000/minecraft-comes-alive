@@ -3,9 +3,9 @@ package net.conczin.mca.server.world.data;
 import java.util.*;
 
 /**
- * Pure geometry classifier that turns supported reachable interior cells into
- * meaningful horizontal floor regions. Minecraft-specific support detection is
- * intentionally kept in {@link Building}; this class only reasons about cells.
+ * Pure geometry classifier that turns canonical reachable Floor cells into
+ * meaningful horizontal floor regions. Minecraft-specific membership detection stays
+ * in {@link StructureScanner}; this class only reasons about cells.
  */
 final class BuildingFloorRegionDetector {
     static final int FLOOR_CLUSTER_TOLERANCE = 2;
@@ -17,13 +17,13 @@ final class BuildingFloorRegionDetector {
     private BuildingFloorRegionDetector() {
     }
 
-    static List<BuildingFloorRegion> detect(Collection<SupportedCell> supportedCells) {
-        if (supportedCells == null || supportedCells.isEmpty()) {
+    static List<BuildingFloorRegion> detect(Collection<FloorCell> floorCells) {
+        if (floorCells == null || floorCells.isEmpty()) {
             return List.of();
         }
 
         Map<Integer, Set<HorizontalCell>> byY = new TreeMap<>();
-        for (SupportedCell cell : new LinkedHashSet<>(supportedCells)) {
+        for (FloorCell cell : new LinkedHashSet<>(floorCells)) {
             byY.computeIfAbsent(cell.y(), ignored -> new HashSet<>())
                     .add(new HorizontalCell(cell.x(), cell.z()));
         }
@@ -143,7 +143,7 @@ final class BuildingFloorRegionDetector {
         }
     }
 
-    record SupportedCell(int x, int y, int z) {
+    record FloorCell(int x, int y, int z) {
     }
 
     private record HorizontalCell(int x, int z) {

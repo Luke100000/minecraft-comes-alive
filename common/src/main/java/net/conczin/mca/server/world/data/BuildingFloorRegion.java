@@ -40,6 +40,26 @@ public record BuildingFloorRegion(int anchorY, int area, List<Component> compone
         return components.stream().anyMatch(component -> component.containsHorizontally(x, z));
     }
 
+    public Set<BlockPos> cells() {
+        LinkedHashSet<BlockPos> cells = new LinkedHashSet<>();
+        for (Component component : components) {
+            if (component.spans().isEmpty()) {
+                for (int z = component.minZ(); z <= component.maxZ(); z++) {
+                    for (int x = component.minX(); x <= component.maxX(); x++) {
+                        cells.add(new BlockPos(x, anchorY, z));
+                    }
+                }
+                continue;
+            }
+            for (Span span : component.spans()) {
+                for (int x = span.minX(); x <= span.maxX(); x++) {
+                    cells.add(new BlockPos(x, anchorY, span.z()));
+                }
+            }
+        }
+        return Set.copyOf(cells);
+    }
+
     /**
      * Keeps newly scanned floor geometry attached to an already-assigned semantic floor.
      */

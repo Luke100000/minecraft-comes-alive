@@ -13,7 +13,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import java.util.*;
 import java.util.function.Predicate;
 
-/** Single source of truth for connector ownership, Room boundaries and Floor interaction handoffs. */
+/** Connector mechanics: classification, Floor-cell projection, vertical chains and Structure attachment. */
 final class StructureConnector {
     private static final Direction[] HORIZONTAL = {
             Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST
@@ -31,6 +31,15 @@ final class StructureConnector {
 
     static boolean isVertical(BlockState state) {
         return state.getBlock() instanceof LadderBlock || state.getBlock() instanceof TrapDoorBlock;
+    }
+
+    static boolean isAssociatedWithFloor(Structure structure, BlockState state, BlockPos connector, StructureFloor floor) {
+        if (!isConnector(state)) return false;
+        boolean sameFloor = structure.resolveFloor(connector.getY())
+                .map(candidate -> candidate.id() == floor.id()).orElse(false);
+        if (sameFloor) return true;
+        return isVertical(state) && structure.resolveFloor(connector.getY() + 1)
+                .map(candidate -> candidate.id() == floor.id()).orElse(false);
     }
 
     static boolean isHorizontalBoundary(BlockState state) {
@@ -52,71 +61,54 @@ final class StructureConnector {
         return Optional.empty();
     }
 
-    /** A decorative connector is Room-owned when its two sides already connect around it. */
-    static boolean isRoomBoundary(Level world, Structure structure, StructureFloor floor, BlockPos connector) {
-        BlockState state = world.getBlockState(connector);
-        if (!isConnector(state)) return false;
-        if (state.getBlock() instanceof LadderBlock) return true;
-        Direction facing = horizontalFacing(state).orElse(null);
-        if (facing == null) return true;
-        BlockPos a = passageInColumn(world, structure, floor, connector.relative(facing));
-        BlockPos b = passageInColumn(world, structure, floor, connector.relative(facing.getOpposite()));
-        return a == null || b == null || !reachableWithoutConnectors(world, structure, floor, a, b);
-    }
+    /** Projects connector columns onto the ordinary Floor Y levels they attach to before Floor detection. */
+    static Set<BuildingFloorRegionDetector.FloorCell> associatedFloorCells(
+            Level world,
+            Collection<BlockPos> connectors,
+            Collection<BuildingFloorRegionDetector.FloorCell> ordinaryFloorCells) {
+        if (connectors.isEmpty() || ordinaryFloorCells.isEmpty()) return Set.of();
 
-    private static boolean reachableWithoutConnectors(Level world, Structure structure, StructureFloor floor,
-                                                      BlockPos start, BlockPos target) {
-        Set<BlockPos> seen = new HashSet<>();
-        ArrayDeque<BlockPos> queue = new ArrayDeque<>();
-        seen.add(start);
-        queue.add(start);
-        while (!queue.isEmpty()) {
-            BlockPos pos = queue.removeFirst();
-            if (pos.equals(target)) return true;
-            for (Direction direction : Direction.values()) {
-                BlockPos next = pos.relative(direction);
-                if (next.getY() < floor.anchorY() || next.getY() >= floor.ceilingY()
-                        || !seen.add(next) || !structure.containsPos(next)) continue;
-                if (!isConnector(world.getBlockState(next)) && isPassageCell(world, next)) queue.addLast(next);
+        Set<BlockPos> ordinary = ordinaryFloorCells.stream()
+                .map(cell -> new BlockPos(cell.x(), cell.y(), cell.z()))
+                .collect(java.util.stream.Collectors.toSet());
+        LinkedHashSet<BuildingFloorRegionDetector.FloorCell> result = new LinkedHashSet<>();
+
+        for (BlockPos connector : connectors) {
+            BlockState state = world.getBlockState(connector);
+            if (!isConnector(state)) continue;
+
+            if (!isVertical(state)) {
+                for (Direction direction : HORIZONTAL) {
+                    BlockPos side = connector.relative(direction);
+                    for (int dy = -1; dy <= 1; dy++) {
+                        BlockPos landing = side.offset(0, dy, 0);
+                        if (ordinary.contains(landing)) {
+                            result.add(new BuildingFloorRegionDetector.FloorCell(
+                                    connector.getX(), landing.getY(), connector.getZ()));
+                        }
+                    }
+                }
+                continue;
+            }
+
+            for (BlockPos handoff : handoffs(connector)) {
+                if (ordinary.contains(handoff)) {
+                    result.add(new BuildingFloorRegionDetector.FloorCell(
+                            connector.getX(), handoff.getY(), connector.getZ()));
+                }
             }
         }
-        return false;
+
+        return Set.copyOf(result);
     }
 
-    private static BlockPos passageInColumn(Level world, Structure structure, StructureFloor floor, BlockPos pos) {
-        BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
-        for (int y = floor.anchorY(); y < floor.ceilingY(); y++) {
-            cursor.set(pos.getX(), y, pos.getZ());
-            if (structure.containsPos(cursor) && !isConnector(world.getBlockState(cursor))
-                    && isPassageCell(world, cursor)) return cursor.immutable();
-        }
-        return null;
-    }
-
-    static void collectNearbyVertical(Level world, BlockPos pos, Set<BlockPos> result) {
-        for (BlockPos candidate : handoffs(pos)) {
-            if (isVertical(world.getBlockState(candidate))) result.add(candidate.immutable());
-        }
-        if (isVertical(world.getBlockState(pos))) result.add(pos.immutable());
-    }
-
-    static Optional<StructureFloor> resolveInteractionFloor(Level world, Structure structure, BlockPos pos) {
-        return resolveInteraction(world, structure, pos).map(Interaction::floor).or(() -> structure.resolveFloor(pos));
-    }
-
-    static Optional<Interaction> resolveInteraction(Level world, Structure structure, BlockPos pos) {
-        BlockState state = world.getBlockState(pos);
-        if (isHorizontalBoundary(state)) {
-            StructureFloor floor = structure.resolveFloor(pos).orElse(null);
-            if (floor != null) return Optional.of(new Interaction(floor, horizontalLandings(world, structure, floor, pos)));
-        }
-
+    static boolean attachesToStructure(Level world, Structure structure, BlockPos pos) {
+        if (structure.containsPos(pos)) return true;
         BlockPos seed = verticalSeed(world, structure, pos);
-        if (seed == null) return Optional.empty();
-        Map<StructureFloor, Set<BlockPos>> landings = verticalLandings(
-                world, structure, floodWorldChain(world, structure, seed));
-        StructureFloor floor = floorAtOrBelow(landings.keySet(), pos.getY());
-        return floor == null ? Optional.empty() : Optional.of(new Interaction(floor, landings.get(floor)));
+        if (seed == null) return false;
+        return floodWorldChain(world, structure, seed).stream()
+                .flatMap(connector -> handoffs(connector).stream())
+                .anyMatch(structure::containsPos);
     }
 
     /** Gravity-like lookup: current Y first, then downward only. */
@@ -163,32 +155,6 @@ final class StructureConnector {
         return Set.copyOf(chain);
     }
 
-    private static Map<StructureFloor, Set<BlockPos>> verticalLandings(Level world, Structure structure,
-                                                                       Collection<BlockPos> chain) {
-        Map<StructureFloor, Set<BlockPos>> result = new LinkedHashMap<>();
-        for (BlockPos connector : chain) {
-            for (BlockPos candidate : handoffs(connector)) {
-                StructureFloor floor = structure.resolveFloor(candidate).orElse(null);
-                if (floor != null && !isVertical(world.getBlockState(candidate)) && isPassageCell(world, candidate)) {
-                    result.computeIfAbsent(floor, ignored -> new LinkedHashSet<>()).add(candidate.immutable());
-                }
-            }
-        }
-        return result;
-    }
-
-    private static Set<BlockPos> horizontalLandings(Level world, Structure structure, StructureFloor floor,
-                                                     BlockPos connector) {
-        Direction facing = horizontalFacing(world.getBlockState(connector)).orElse(null);
-        if (facing == null) return Set.of();
-        LinkedHashSet<BlockPos> result = new LinkedHashSet<>();
-        for (Direction side : List.of(facing, facing.getOpposite())) {
-            BlockPos passage = passageInColumn(world, structure, floor, connector.relative(side));
-            if (passage != null) result.add(passage);
-        }
-        return Set.copyOf(result);
-    }
-
     private static List<BlockPos> handoffs(BlockPos pos) {
         List<BlockPos> result = new ArrayList<>();
         result.add(pos.above());
@@ -202,17 +168,12 @@ final class StructureConnector {
         return result;
     }
 
-    private static StructureFloor floorAtOrBelow(Collection<StructureFloor> floors, int y) {
-        return floors.stream()
-                .filter(floor -> floor.anchorY() <= y)
-                .sorted(Comparator.comparingInt(StructureFloor::anchorY).reversed()
-                        .thenComparingInt(StructureFloor::id))
-                .findFirst().orElse(null);
-    }
-
     static boolean connectsDifferentFloor(Level world, Structure structure, StructureFloor floor, BlockPos connector) {
         if (!isVertical(world.getBlockState(connector))) return false;
-        return verticalLandings(world, structure, floodWorldChain(world, structure, connector)).keySet().stream()
+        return floodWorldChain(world, structure, connector).stream()
+                .flatMap(cell -> handoffs(cell).stream())
+                .map(structure::resolvePhysicalFloor)
+                .flatMap(optional -> optional.stream())
                 .anyMatch(candidate -> candidate.id() != floor.id());
     }
 
@@ -221,42 +182,6 @@ final class StructureConnector {
         if (isHorizontalBoundary(state)) return false;
         return state.getBlock() instanceof LadderBlock || state.isAir() || state.canBeReplaced()
                 || state.getCollisionShape(world, pos).isEmpty();
-    }
-
-    /** Adds connector X/Z cells directly to the physical Floor band that owns them. */
-    static List<StructureFloor> withOwnedFloorCells(Collection<BlockPos> connectorCells, List<StructureFloor> floors) {
-        if (connectorCells.isEmpty()) return floors;
-        List<StructureFloor> result = new ArrayList<>(floors.size());
-        for (StructureFloor floor : floors) {
-            Set<BlockPos> base = footprintCells(floor.region());
-            LinkedHashSet<BlockPos> cells = new LinkedHashSet<>(base);
-            for (BlockPos connector : connectorCells) {
-                BlockPos cell = new BlockPos(connector.getX(), floor.anchorY(), connector.getZ());
-                if (connector.getY() >= floor.anchorY() && connector.getY() < floor.ceilingY()
-                        && (base.contains(cell) || Arrays.stream(HORIZONTAL)
-                        .anyMatch(direction -> base.contains(cell.relative(direction))))) cells.add(cell);
-            }
-            result.add(floor.withGeometry(floor.anchorY(), floor.ceilingY(),
-                    BuildingFloorRegion.fromFootprint(floor.anchorY(), List.copyOf(cells))));
-        }
-        return List.copyOf(result);
-    }
-
-    private static Set<BlockPos> footprintCells(BuildingFloorRegion region) {
-        if (region == null) return Set.of();
-        LinkedHashSet<BlockPos> cells = new LinkedHashSet<>();
-        for (BuildingFloorRegion.Component component : region.components()) {
-            if (component.spans().isEmpty()) {
-                for (int z = component.minZ(); z <= component.maxZ(); z++)
-                    for (int x = component.minX(); x <= component.maxX(); x++)
-                        cells.add(new BlockPos(x, region.anchorY(), z));
-            } else {
-                for (BuildingFloorRegion.Span span : component.spans())
-                    for (int x = span.minX(); x <= span.maxX(); x++)
-                        cells.add(new BlockPos(x, region.anchorY(), span.z()));
-            }
-        }
-        return cells;
     }
 
     /** Returns actual Structure landings for vertical chains that also touch exterior supported space. */
@@ -271,7 +196,11 @@ final class StructureConnector {
             BlockPos seed = remaining.iterator().next();
             remaining.remove(seed);
             Set<BlockPos> chain = floodKnownChain(seed, remaining);
-            Map<StructureFloor, Set<BlockPos>> inside = verticalLandings(world, structure, chain);
+            List<BlockPos> inside = chain.stream().flatMap(pos -> handoffs(pos).stream())
+                    .filter(interior::contains)
+                    .filter(pos -> isPassageCell(world, pos))
+                    .distinct()
+                    .toList();
             List<BlockPos> outside = chain.stream().flatMap(pos -> handoffs(pos).stream())
                     .filter(pos -> !interior.contains(pos) && isPassageCell(world, pos))
                     .filter(pos -> StructureScanner.isSupported(world, pos.getX(), pos.getY(), pos.getZ()))
@@ -282,19 +211,25 @@ final class StructureConnector {
                     .toList();
             if (inside.isEmpty() || outside.isEmpty()) continue;
             BlockPos out = outside.getFirst();
-            StructureFloor floor = floorAtOrBelow(inside.keySet(), out.getY());
+            Set<StructureFloor> insideFloors = inside.stream()
+                    .map(structure::resolvePhysicalFloor)
+                    .flatMap(optional -> optional.stream())
+                    .collect(java.util.stream.Collectors.toSet());
+            StructureFloor floor = insideFloors.stream()
+                    .filter(candidate -> candidate.anchorY() <= out.getY())
+                    .max(Comparator.comparingInt(StructureFloor::anchorY))
+                    .orElse(null);
             if (floor == null) continue;
-            BlockPos in = inside.get(floor).stream().min(Comparator
-                    .comparingInt((BlockPos pos) -> Math.abs(pos.getY() - out.getY()))
-                    .thenComparingInt(Vec3i::getY).thenComparingInt(Vec3i::getX)
-                    .thenComparingInt(Vec3i::getZ)).orElseThrow();
-            result.add(new ExteriorLanding(in, out));
+            BlockPos in = inside.stream()
+                    .filter(pos -> structure.resolvePhysicalFloor(pos)
+                            .map(candidate -> candidate.id() == floor.id()).orElse(false))
+                    .min(Comparator.comparingInt((BlockPos pos) -> Math.abs(pos.getY() - out.getY()))
+                            .thenComparingInt(Vec3i::getY).thenComparingInt(Vec3i::getX)
+                            .thenComparingInt(Vec3i::getZ))
+                    .orElse(null);
+            if (in != null) result.add(new ExteriorLanding(in, out));
         }
         return Set.copyOf(result);
-    }
-
-    record Interaction(StructureFloor floor, Set<BlockPos> landingCells) {
-        Interaction { landingCells = Set.copyOf(landingCells); }
     }
 
     record ExteriorLanding(BlockPos inside, BlockPos outside) {

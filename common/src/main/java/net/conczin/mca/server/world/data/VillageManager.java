@@ -337,7 +337,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
                                         Structure structureUpdate) {
         StructureFloor floor = existingRoomId >= 0 && village != null
                 ? village.getBuilding(existingRoomId).flatMap(room -> structure.getFloor(room.getFloorId())).orElse(null)
-                : StructureConnector.resolveInteractionFloor(world, structure, pos).orElse(null);
+                : structure.resolveFloor(pos.getY()).orElse(null);
         if (floor == null) return failedRoom(Building.validationResult.TOO_SMALL, pos, village);
 
         Set<BlockPos> blocked = new HashSet<>();
@@ -348,11 +348,8 @@ public class VillageManager extends SavedData implements Iterable<Village> {
             village.getRooms().filter(room -> room.getStructureId() == structure.getId())
                     .filter(room -> room.getFloorId() == floor.id())
                     .flatMap(room -> room.getFloorRegions().stream())
-                    .flatMap(region -> region.components().stream())
-                    .flatMap(component -> component.spans().stream())
-                    .forEach(span -> {
-                        for (int x = span.minX(); x <= span.maxX(); x++) blocked.add(new BlockPos(x, floor.anchorY(), span.z()));
-                    });
+                    .flatMap(region -> region.cells().stream())
+                    .forEach(blocked::add);
         }
 
         BuildingRoomScanner.Result geometry = BuildingRoomScanner.scan(world, pos, blocked,
@@ -537,7 +534,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
 
         Building recovered = null;
         if (rooms.isEmpty()) {
-            StructureFloor ground = updated.resolveFloor(world, scan.groundSeed()).orElse(null);
+            StructureFloor ground = updated.resolveFloor(scan.groundSeed().getY()).orElse(null);
             if (ground == null) return Building.validationResult.TOO_SMALL;
             BuildingScanResult recovery = scanRoom(village, updated, StructureScanner.bestSeed(ground), -1, true);
             if (recovery.result() != Building.validationResult.SUCCESS) return recovery.result();

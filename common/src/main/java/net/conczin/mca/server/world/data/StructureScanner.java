@@ -29,7 +29,7 @@ final class StructureScanner {
         Set<BlockPos> visited = new HashSet<>();
         Set<BlockPos> volume = new HashSet<>();
         Set<BlockPos> connectorCells = new HashSet<>();
-        Set<BuildingFloorRegionDetector.SupportedCell> supported = new HashSet<>();
+        Set<BuildingFloorRegionDetector.FloorCell> floorCells = new HashSet<>();
         Set<BlockPos> horizontalEntrances = new HashSet<>();
         ArrayDeque<BlockPos> queue = new ArrayDeque<>();
         Map<BlockPos, Boolean> roof = new HashMap<>();
@@ -54,7 +54,7 @@ final class StructureScanner {
                 volume.add(current);
                 connectorCells.add(current);
             } else if (isWalkableAnchor(world, current, currentState, roof)) {
-                recordSupported(world, supported, current);
+                recordFloorCell(world, floorCells, current);
                 addVerticalInteriorColumn(world, current, volume, roof, maxSize);
             } else {
                 continue;
@@ -71,7 +71,7 @@ final class StructureScanner {
                 }
 
                 if (!connector && isFloorOccupyingObstacle(world, next, nextState, roof)) {
-                    recordSupported(world, supported, next);
+                    recordFloorCell(world, floorCells, next);
                     addObstacleInteriorColumn(world, next, volume, roof, maxSize);
                 }
 
@@ -113,13 +113,14 @@ final class StructureScanner {
             }
         }
 
-        List<BuildingFloorRegion> regions = BuildingFloorRegionDetector.detect(supported);
+        floorCells.addAll(StructureConnector.associatedFloorCells(world, connectorCells, floorCells));
+        List<BuildingFloorRegion> regions = BuildingFloorRegionDetector.detect(floorCells);
         int scannedEnvelopeSize = scannedEnvelopeSize(volume);
         if (regions.isEmpty() || scannedEnvelopeSize <= minSize) {
             return Result.failure(Building.validationResult.TOO_SMALL, source);
         }
 
-        List<StructureFloor> floors = StructureConnector.withOwnedFloorCells(connectorCells, toFloors(world, regions));
+        List<StructureFloor> floors = toFloors(world, regions);
         List<BuildingFloorRegion> volumeSlices = toVolumeSlices(volume);
         BlockPos min = new BlockPos(
                 volume.stream().mapToInt(BlockPos::getX).min().orElse(seed.getX()),
@@ -254,7 +255,7 @@ final class StructureScanner {
 
     private static int resolveTopFloorCeiling(Level world, BuildingFloorRegion region) {
         int ceiling = region.anchorY() + 2;
-        for (BlockPos cell : floorFootprintCells(region)) {
+        for (BlockPos cell : region.cells()) {
             for (int rise = 1; rise <= ROOF_SEARCH; rise++) {
                 BlockPos probe = new BlockPos(cell.getX(), region.anchorY() + rise, cell.getZ());
                 BlockState state = world.getBlockState(probe);
@@ -269,26 +270,6 @@ final class StructureScanner {
         return ceiling;
     }
 
-    private static Set<BlockPos> floorFootprintCells(BuildingFloorRegion region) {
-        if (region == null) return Set.of();
-        LinkedHashSet<BlockPos> cells = new LinkedHashSet<>();
-        for (BuildingFloorRegion.Component component : region.components()) {
-            if (component.spans().isEmpty()) {
-                for (int z = component.minZ(); z <= component.maxZ(); z++) {
-                    for (int x = component.minX(); x <= component.maxX(); x++) {
-                        cells.add(new BlockPos(x, region.anchorY(), z));
-                    }
-                }
-                continue;
-            }
-            for (BuildingFloorRegion.Span span : component.spans()) {
-                for (int x = span.minX(); x <= span.maxX(); x++) {
-                    cells.add(new BlockPos(x, region.anchorY(), span.z()));
-                }
-            }
-        }
-        return cells;
-    }
 
     private static List<BuildingFloorRegion> toVolumeSlices(Collection<BlockPos> structuralCells) {
         Map<Integer, List<BlockPos>> byY = new TreeMap<>();
@@ -523,11 +504,11 @@ final class StructureScanner {
         return support.getY() + (shape.isEmpty() ? 0.0D : shape.max(Direction.Axis.Y));
     }
 
-    private static void recordSupported(Level world,
-                                        Set<BuildingFloorRegionDetector.SupportedCell> supported,
+    private static void recordFloorCell(Level world,
+                                        Set<BuildingFloorRegionDetector.FloorCell> floorCells,
                                         BlockPos pos) {
         if (isSupported(world, pos.getX(), pos.getY(), pos.getZ())) {
-            supported.add(new BuildingFloorRegionDetector.SupportedCell(pos.getX(), pos.getY(), pos.getZ()));
+            floorCells.add(new BuildingFloorRegionDetector.FloorCell(pos.getX(), pos.getY(), pos.getZ()));
         }
     }
 
