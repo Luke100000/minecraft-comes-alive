@@ -20,6 +20,7 @@ final class StructureScanner {
     };
     private static final int ROOF_SEARCH = 16;
     private static final int SOURCE_HORIZONTAL_SEARCH = 2;
+    private static final int TERRAIN_SAMPLE_MARGIN = 3;
 
     private StructureScanner() {
     }
@@ -131,7 +132,9 @@ final class StructureScanner {
 
         floorCells.addAll(StructureConnector.associatedFloorCells(world, connectorCells, floorCells));
         List<BuildingFloorRegion> regions = BuildingFloorRegionDetector.detect(floorCells);
-        MCA.LOGGER.info("[FloorDebug][Detect] source={} seed={} floorCellsByY={} detected={}", source, seed,
+        MCA.LOGGER.info("[FloorDebug][Detect] source={} seed={} connectors={} verticalConnectors={} floorCellsByY={} detected={}",
+                source, seed, connectorCells.size(),
+                connectorCells.stream().filter(pos -> StructureConnector.isVertical(world.getBlockState(pos))).count(),
                 floorCells.stream().collect(java.util.stream.Collectors.groupingBy(
                         BuildingFloorRegionDetector.FloorCell::y, TreeMap::new, java.util.stream.Collectors.counting())),
                 regions.stream().map(region -> region.anchorY() + ":" + region.area()).toList());
@@ -212,6 +215,16 @@ final class StructureScanner {
         return isOpen(world, pos, state)
                 && isSupported(world, pos.getX(), pos.getY(), pos.getZ())
                 && hasRoof(world, pos, roof);
+    }
+
+    /** Explains the exact walkable-anchor predicate used by connector handoffs without changing traversal. */
+    static String explainWalkableAnchor(Level world, BlockPos pos) {
+        BlockState state = world.getBlockState(pos);
+        Map<BlockPos, Boolean> roof = new HashMap<>();
+        if (!isOpen(world, pos, state)) return "BLOCKED";
+        if (!isSupported(world, pos.getX(), pos.getY(), pos.getZ())) return "UNSUPPORTED";
+        if (!hasRoof(world, pos, roof)) return "NO_ROOF";
+        return "ACCEPTED";
     }
 
     private static void enqueueTraversal(BlockPos source,
@@ -578,6 +591,7 @@ final class StructureScanner {
     private static void recordFloorCell(Level world,
                                         Set<BuildingFloorRegionDetector.FloorCell> floorCells,
                                         BlockPos pos) {
+        if (world.getBlockState(pos.below()).is(BlockTags.STAIRS)) return;
         if (isSupported(world, pos.getX(), pos.getY(), pos.getZ())) {
             floorCells.add(new BuildingFloorRegionDetector.FloorCell(pos.getX(), pos.getY(), pos.getZ()));
         }
@@ -587,47 +601,64 @@ final class StructureScanner {
                                                    List<StructureFloor> floors,
                                                    Set<ExteriorEntrance> entrances,
                                                    Set<BlockPos> interior) {
-        List<EntranceCandidate> candidates = new ArrayList<>();
-        for (ExteriorEntrance entrance : entrances) {
-            int terrainY = world.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
-                    entrance.outside().getX(), entrance.outside().getZ());
-            int terrainDelta = Math.abs(entrance.inside().getY() - terrainY);
-            if (terrainDelta <= BuildingFloorRegionDetector.FLOOR_CLUSTER_TOLERANCE) {
-                candidates.add(new EntranceCandidate(entrance.inside(), terrainDelta));
+        List<Integer> terrainSamples = sampleTerrainPerimeter(world, interior);
+        int terrainY = medianTerrainY(terrainSamples);
+
+        // Exterior entrances are already proven to connect enclosed Structure volume to exterior
+        // supported space. Do not reject that evidence with a heightmap probe beside the doorway:
+        // roofs, overhangs and hills can make MOTION_BLOCKING_NO_LEAVES report an upper storey.
+        // The Floor with the most confirmed exterior entrances is Ground; terrain only breaks ties.
+        if (!entrances.isEmpty()) {
+            Map<Integer, List<ExteriorEntrance>> entrancesByFloor = new LinkedHashMap<>();
+            for (ExteriorEntrance entrance : entrances) {
+                StructureFloor entranceFloor = floors.stream().min(Comparator
+                        .comparingInt((StructureFloor candidate) ->
+                                Math.abs(candidate.anchorY() - entrance.inside().getY()))
+                        .thenComparingInt(StructureFloor::anchorY))
+                        .orElse(floors.getFirst());
+                entrancesByFloor.computeIfAbsent(entranceFloor.id(), ignored -> new ArrayList<>())
+                        .add(entrance);
             }
-        }
-        if (!candidates.isEmpty()) {
-            EntranceCandidate strongest = candidates.stream().min(Comparator
-                    .comparingInt(EntranceCandidate::terrainDelta)
-                    .thenComparing(Comparator.comparingInt((EntranceCandidate candidate) -> candidate.inside().getY()).reversed())
-                    .thenComparingInt(candidate -> candidate.inside().getX())
-                    .thenComparingInt(candidate -> candidate.inside().getZ())).orElseThrow();
-            StructureFloor floor = floors.stream().min(Comparator
-                    .comparingInt((StructureFloor candidate) -> Math.abs(candidate.anchorY() - strongest.inside().getY()))
-                    .thenComparingInt(StructureFloor::anchorY)).orElse(floors.getFirst());
-            MCA.LOGGER.info("[FloorDebug][GroundChoice] mode=entrance entrances={} validCandidates={} strongest={} selectedFloor={}@{}",
-                    entrances, candidates, strongest, floor.id(), floor.anchorY());
-            return new GroundChoice(floor.anchorY(), strongest.inside());
+
+            StructureFloor floor = floors.stream()
+                    .filter(candidate -> entrancesByFloor.containsKey(candidate.id()))
+                    .max(Comparator
+                            .comparingInt((StructureFloor candidate) -> entrancesByFloor.get(candidate.id()).size())
+                            .thenComparingInt(candidate -> -Math.abs(candidate.anchorY() - terrainY))
+                            .thenComparingInt(StructureFloor::anchorY))
+                    .orElse(floors.getFirst());
+            ExteriorEntrance representative = entrancesByFloor.get(floor.id()).stream().min(Comparator
+                    .comparingInt((ExteriorEntrance entrance) ->
+                            Math.abs(entrance.inside().getY() - floor.anchorY()))
+                    .thenComparingInt(entrance -> entrance.inside().getX())
+                    .thenComparingInt(entrance -> entrance.inside().getZ()))
+                    .orElseThrow();
+            MCA.LOGGER.info("[FloorDebug][GroundChoice] mode=entrance-evidence terrainY={} samples={} "
+                            + "entranceCounts={} selectedFloor={}@{} representative={}",
+                    terrainY, terrainSamples,
+                    entrancesByFloor.entrySet().stream()
+                            .map(entry -> entry.getKey() + ":" + entry.getValue().size()).toList(),
+                    floor.id(), floor.anchorY(), representative);
+            return new GroundChoice(floor.anchorY(), representative.inside());
         }
 
-        // No reliable exterior connector: use surrounding terrain to distinguish an underground
-        // basement from the surface storey. Door/gate and vertical connector landings are preferred.
-        int terrainY = medianTerrainY(sampleTerrainPerimeter(world, interior));
+        // No exterior connector: fall back to terrain sampled several blocks outside the scanned
+        // Structure envelope so roof edges and shallow overhangs do not masquerade as ground level.
         StructureFloor terrainFloor = floors.stream().min(Comparator
                 .comparingInt((StructureFloor floor) -> Math.abs(floor.anchorY() - terrainY))
                 .thenComparing(Comparator.comparingInt(StructureFloor::anchorY).reversed()))
                 .orElse(floors.getFirst());
         MCA.LOGGER.info("[FloorDebug][GroundChoice] mode=terrain terrainY={} samples={} selectedFloor={}@{} floors={}",
-                terrainY, sampleTerrainPerimeter(world, interior), terrainFloor.id(), terrainFloor.anchorY(),
+                terrainY, terrainSamples, terrainFloor.id(), terrainFloor.anchorY(),
                 floors.stream().map(floor -> floor.id() + "@" + floor.anchorY()).toList());
         return new GroundChoice(terrainFloor.anchorY(), null);
     }
 
     private static List<Integer> sampleTerrainPerimeter(Level world, Collection<BlockPos> interior) {
-        int minX = interior.stream().mapToInt(BlockPos::getX).min().orElse(0) - 1;
-        int maxX = interior.stream().mapToInt(BlockPos::getX).max().orElse(0) + 1;
-        int minZ = interior.stream().mapToInt(BlockPos::getZ).min().orElse(0) - 1;
-        int maxZ = interior.stream().mapToInt(BlockPos::getZ).max().orElse(0) + 1;
+        int minX = interior.stream().mapToInt(BlockPos::getX).min().orElse(0) - TERRAIN_SAMPLE_MARGIN;
+        int maxX = interior.stream().mapToInt(BlockPos::getX).max().orElse(0) + TERRAIN_SAMPLE_MARGIN;
+        int minZ = interior.stream().mapToInt(BlockPos::getZ).min().orElse(0) - TERRAIN_SAMPLE_MARGIN;
+        int maxZ = interior.stream().mapToInt(BlockPos::getZ).max().orElse(0) + TERRAIN_SAMPLE_MARGIN;
         List<Integer> terrain = new ArrayList<>();
         for (int x = minX; x <= maxX; x++) {
             terrain.add(world.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, minZ));
@@ -707,9 +738,6 @@ final class StructureScanner {
     }
 
     private record GroundChoice(int floorY, BlockPos entranceInterior) {
-    }
-
-    private record EntranceCandidate(BlockPos inside, int terrainDelta) {
     }
 
     record Result(Building.validationResult result,
