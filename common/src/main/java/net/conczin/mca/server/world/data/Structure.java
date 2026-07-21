@@ -85,26 +85,19 @@ public final class Structure implements VillageBuilding {
                 .toList();
     }
 
-    public Optional<StructureFloor> resolveFloor(Level world, BlockPos pos) {
-        return resolveFloor(pos);
+    /** Logical Floor selection is gravity-like: choose the highest Floor at or below the query Y. */
+    public Optional<StructureFloor> resolveFloor(int queryY) {
+        return getFloors().stream()
+                .filter(floor -> floor.anchorY() <= queryY)
+                .max(Comparator.comparingInt(StructureFloor::anchorY));
     }
 
-    /** Resolves a persisted Structure position to its physical Floor without querying world state. */
-    public Optional<StructureFloor> resolveFloor(Vec3i pos) {
-        if (!containsPos(pos)) {
-            return Optional.empty();
-        }
-        List<StructureFloor> verticalBand = getFloors().stream()
-                .filter(floor -> pos.getY() >= floor.anchorY() && pos.getY() < floor.ceilingY())
-                .toList();
-        if (verticalBand.isEmpty()) {
-            return Optional.empty();
-        }
-        return verticalBand.stream()
-                .filter(floor -> floor.contains(pos.getX(), pos.getZ()))
-                .min(Comparator.comparingInt(floor -> Math.abs(pos.getY() - floor.anchorY())))
-                .or(() -> verticalBand.stream()
-                        .min(Comparator.comparingInt(floor -> Math.abs(pos.getY() - floor.anchorY()))));
+    /** Resolves exact persisted physical volume membership without broadening connector interaction geometry. */
+    Optional<StructureFloor> resolvePhysicalFloor(Vec3i pos) {
+        if (!containsPos(pos)) return Optional.empty();
+        return resolveFloor(pos.getY())
+                .filter(floor -> pos.getY() < floor.ceilingY())
+                .filter(floor -> floor.contains(pos.getX(), pos.getZ()));
     }
 
     /**
@@ -119,27 +112,12 @@ public final class Structure implements VillageBuilding {
                 .filter(room -> room.getStructureId() == id)
                 .toList();
 
-        Optional<StructureConnector.Interaction> connector = StructureConnector.resolveInteraction(world, this, pos);
-        if (connector.isPresent()) {
-            StructureFloor floor = connector.get().floor();
-            Building direct = roomAtColumn(structureRooms, floor, pos.getX(), pos.getZ());
-            if (direct != null) {
-                return Optional.of(new InteractionPosition(floor, direct));
-            }
-            List<Building> landingRooms = structureRooms.stream()
-                    .filter(room -> room.getFloorId() == floor.id())
-                    .filter(room -> connector.get().landingCells().stream()
-                            .anyMatch(cell -> room.containsFloorColumn(cell.getX(), cell.getZ())))
-                    .distinct()
-                    .toList();
-            return Optional.of(new InteractionPosition(
-                    floor, landingRooms.size() == 1 ? landingRooms.getFirst() : null));
-        }
+        boolean attached = containsPos(pos) || StructureConnector.attachesToStructure(world, this, pos);
+        if (!attached) return Optional.empty();
 
-        StructureFloor floor = resolveFloor(pos).orElse(null);
-        if (floor == null) {
-            return Optional.empty();
-        }
+        StructureFloor floor = resolveFloor(pos.getY()).orElse(null);
+        if (floor == null) return Optional.empty();
+
         return Optional.of(new InteractionPosition(
                 floor, roomAtColumn(structureRooms, floor, pos.getX(), pos.getZ())));
     }

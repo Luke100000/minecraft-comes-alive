@@ -492,7 +492,7 @@ public class Village implements Iterable<Building> {
             return getRooms().filter(room -> room.containsFloorPosition(pos))
                     .min(Comparator.comparingInt(Building::getId));
         }
-        StructureFloor floor = structure.get().resolveFloor(pos).orElse(null);
+        StructureFloor floor = structure.get().resolvePhysicalFloor(pos).orElse(null);
         if (floor == null) return Optional.empty();
         return getRooms().filter(room -> room.getStructureId() == structure.get().getId())
                 .filter(room -> room.getFloorId() == floor.id())
