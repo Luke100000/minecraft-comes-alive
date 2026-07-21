@@ -10,6 +10,7 @@ import java.util.*;
 
 /** Builds immutable Blueprint geometry from persistent Structures, Floors and registered Rooms. */
 final class BlueprintMapGeometry {
+    private static final double COLLISION_RADIUS_PIXELS = 10.0D;
     private static final int ALL_FLOORS_KEY = Integer.MIN_VALUE;
     private static final int BUILDING_OUTLINE_WIDTH = 1;
     private static final float ROOM_ICON_MIN_SCALE = 0.90f;
@@ -160,10 +161,15 @@ final class BlueprintMapGeometry {
             group.sort(Comparator
                     .comparingInt((MapIconLayer icon) -> icon.floorOrdinal() == null ? 0 : icon.floorOrdinal())
                     .thenComparingInt(icon -> icon.building().getId()));
-            List<BlueprintIconLayout.Offset> offsets = BlueprintIconLayout.offsets(group.size());
             for (int index = 0; index < group.size(); index++) {
-                BlueprintIconLayout.Offset offset = offsets.get(index);
-                result.add(group.get(index).withScreenOffset(offset.x(), offset.y()));
+                if (group.size() == 1) {
+                    result.add(group.get(index));
+                    continue;
+                }
+                double angle = -Math.PI / 2.0D + Math.PI * 2.0D * index / group.size();
+                result.add(group.get(index).withScreenOffset(
+                        Math.cos(angle) * COLLISION_RADIUS_PIXELS,
+                        Math.sin(angle) * COLLISION_RADIUS_PIXELS));
             }
         }
         return List.copyOf(result);

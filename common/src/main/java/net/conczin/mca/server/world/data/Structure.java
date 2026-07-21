@@ -107,6 +107,54 @@ public final class Structure implements VillageBuilding {
                         .min(Comparator.comparingInt(floor -> Math.abs(pos.getY() - floor.anchorY()))));
     }
 
+    /**
+     * Resolves a player/query position to one logical Structure Floor/Room. Exact physical volume
+     * remains authoritative for geometry; connector chains add interaction ownership without
+     * broadening {@link #containsPos(Vec3i)}.
+     */
+    Optional<InteractionPosition> resolveInteractionPosition(Level world,
+                                                             BlockPos pos,
+                                                             Collection<Building> rooms) {
+        List<Building> structureRooms = rooms == null ? List.of() : rooms.stream()
+                .filter(room -> room.getStructureId() == id)
+                .toList();
+
+        Optional<StructureConnector.Interaction> connector = StructureConnector.resolveInteraction(world, this, pos);
+        if (connector.isPresent()) {
+            StructureFloor floor = connector.get().floor();
+            Building direct = roomAtColumn(structureRooms, floor, pos.getX(), pos.getZ());
+            if (direct != null) {
+                return Optional.of(new InteractionPosition(floor, direct));
+            }
+            List<Building> landingRooms = structureRooms.stream()
+                    .filter(room -> room.getFloorId() == floor.id())
+                    .filter(room -> connector.get().landingCells().stream()
+                            .anyMatch(cell -> room.containsFloorColumn(cell.getX(), cell.getZ())))
+                    .distinct()
+                    .toList();
+            return Optional.of(new InteractionPosition(
+                    floor, landingRooms.size() == 1 ? landingRooms.getFirst() : null));
+        }
+
+        StructureFloor floor = resolveFloor(pos).orElse(null);
+        if (floor == null) {
+            return Optional.empty();
+        }
+        return Optional.of(new InteractionPosition(
+                floor, roomAtColumn(structureRooms, floor, pos.getX(), pos.getZ())));
+    }
+
+    private static Building roomAtColumn(Collection<Building> rooms, StructureFloor floor, int x, int z) {
+        return rooms.stream()
+                .filter(room -> room.getFloorId() == floor.id())
+                .filter(room -> room.containsFloorColumn(x, z))
+                .min(Comparator.comparingInt(Building::getId))
+                .orElse(null);
+    }
+
+    record InteractionPosition(StructureFloor floor, Building room) {
+    }
+
     public Optional<StructureFloor> getGroundFloor(Village village) {
         Building root = village == null ? null : village.getBuilding(rootRoomId).orElse(null);
         return root == null ? Optional.empty() : getFloor(root.getFloorId());
@@ -177,14 +225,6 @@ public final class Structure implements VillageBuilding {
         floors.clear();
         floors.putAll(other.floors);
         volumeSlices = other.volumeSlices;
-    }
-
-    private static boolean roomFootprintInside(Building room, StructureFloor floor) {
-        if (room.getFloorRegions().isEmpty() || floor.region() == null) {
-            return floor.contains(room.getSourceBlock().getX(), room.getSourceBlock().getZ());
-        }
-        BuildingFloorRegion region = room.getFloorRegions().getFirst();
-        return region.intersectionArea(floor.region()) == region.area();
     }
 
     @Override

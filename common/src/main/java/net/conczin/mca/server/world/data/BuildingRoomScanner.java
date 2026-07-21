@@ -40,7 +40,8 @@ final class BuildingRoomScanner {
         if (structure == null || floor == null) {
             return Result.failure(Status.TOO_SMALL, source);
         }
-        Optional<BlockPos> seed = findSeed(world, source, structure, floor);
+        Map<BlockPos, Boolean> boundaryCache = new HashMap<>();
+        Optional<BlockPos> seed = findSeed(world, source, structure, floor, boundaryCache);
         if (seed.isEmpty()) {
             return Result.failure(Status.TOO_SMALL, source);
         }
@@ -73,7 +74,10 @@ final class BuildingRoomScanner {
 
                 cursor.set(nx, ny, nz);
                 BlockState state = world.getBlockState(cursor);
-                if (direction.getAxis() != Direction.Axis.Y && StructureConnector.isHorizontalBoundary(state)) {
+                if (direction.getAxis() != Direction.Axis.Y
+                        && StructureConnector.isHorizontalBoundary(state)
+                        && boundaryCache.computeIfAbsent(cursor.immutable(),
+                        connector -> StructureConnector.isRoomBoundary(world, structure, floor, connector))) {
                     boundaryConnectors.add(cursor.immutable());
                 }
                 if (ny < floor.anchorY() || ny >= floor.ceilingY()) continue;
@@ -81,7 +85,8 @@ final class BuildingRoomScanner {
                     return Result.failure(Status.SIZE_LIMIT, source);
                 }
 
-                if (!structure.containsPos(cursor) || !isOpen(world, cursor, state)) continue;
+                if (!structure.containsPos(cursor)
+                        || !isOpen(world, structure, floor, cursor, state, boundaryCache)) continue;
                 long next = BlockPos.asLong(nx, ny, nz);
                 if (!visited.add(next)) continue;
                 if (visited.size() > maxVolume) return Result.failure(Status.BLOCK_LIMIT, source);
@@ -120,34 +125,52 @@ final class BuildingRoomScanner {
                 new BlockPos(maxX, Math.max(floor.anchorY(), floor.ceilingY() - 1), maxZ));
     }
 
-    private static Optional<BlockPos> findSeed(Level world, BlockPos source, Structure structure, StructureFloor floor) {
+    private static Optional<BlockPos> findSeed(Level world,
+                                               BlockPos source,
+                                               Structure structure,
+                                               StructureFloor floor,
+                                               Map<BlockPos, Boolean> boundaryCache) {
         List<BlockPos> candidates = new ArrayList<>();
         candidates.add(new BlockPos(source.getX(), floor.anchorY(), source.getZ()));
         for (Direction direction : HORIZONTAL) {
             candidates.add(candidates.getFirst().relative(direction));
         }
         for (BlockPos candidate : candidates) {
-            Optional<BlockPos> open = findOpenCell(world, structure, candidate.getX(), candidate.getZ(),
-                    floor.anchorY(), floor.ceilingY());
+            Optional<BlockPos> open = findOpenCell(world, structure, floor, candidate.getX(), candidate.getZ(),
+                    boundaryCache);
             if (open.isPresent()) return open;
         }
         return Optional.empty();
     }
 
-    private static Optional<BlockPos> findOpenCell(Level world, Structure structure, int x, int z, int floorY, int ceilingY) {
+    private static Optional<BlockPos> findOpenCell(Level world,
+                                                   Structure structure,
+                                                   StructureFloor floor,
+                                                   int x,
+                                                   int z,
+                                                   Map<BlockPos, Boolean> boundaryCache) {
         BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
-        for (int y = floorY; y < ceilingY; y++) {
+        for (int y = floor.anchorY(); y < floor.ceilingY(); y++) {
             cursor.set(x, y, z);
             BlockState state = world.getBlockState(cursor);
-            if (structure.containsPos(cursor) && isOpen(world, cursor, state)) {
+            if (structure.containsPos(cursor)
+                    && isOpen(world, structure, floor, cursor, state, boundaryCache)) {
                 return Optional.of(cursor.immutable());
             }
         }
         return Optional.empty();
     }
 
-    private static boolean isOpen(Level world, BlockPos pos, BlockState state) {
-        if (StructureConnector.isConnector(state)) return false;
+    private static boolean isOpen(Level world,
+                                  Structure structure,
+                                  StructureFloor floor,
+                                  BlockPos pos,
+                                  BlockState state,
+                                  Map<BlockPos, Boolean> boundaryCache) {
+        if (StructureConnector.isConnector(state)) {
+            return !boundaryCache.computeIfAbsent(pos.immutable(),
+                    connector -> StructureConnector.isRoomBoundary(world, structure, floor, connector));
+        }
         return !state.getFluidState().isEmpty()
                 || state.isAir()
                 || state.canBeReplaced()

@@ -457,12 +457,33 @@ public class Village implements Iterable<Building> {
     }
 
     public StructuralLookup getStructuralLookup(Level level, BlockPos pos) {
-        Optional<Building> room = getFunctionalRoomAt(level, pos);
-        if (room.isPresent()) return new StructuralLookup(StructuralPosition.REGISTERED_ROOM, room);
-        Optional<Structure> structure = getStructureAt(pos);
-        return structure.map(value -> new StructuralLookup(StructuralPosition.ATTACHABLE_ROOM,
-                        getBuilding(value.getRootRoomId())))
-                .orElseGet(() -> new StructuralLookup(StructuralPosition.OUTSIDE, Optional.empty()));
+        Optional<ResolvedInteraction> resolved = resolveInteractionPosition(level, pos);
+        if (resolved.isEmpty()) {
+            return new StructuralLookup(StructuralPosition.OUTSIDE, Optional.empty());
+        }
+        Building room = resolved.get().position().room();
+        if (room != null) {
+            return new StructuralLookup(StructuralPosition.REGISTERED_ROOM, Optional.of(room));
+        }
+        return new StructuralLookup(StructuralPosition.ATTACHABLE_ROOM,
+                getBuilding(resolved.get().structure().getRootRoomId()));
+    }
+
+    Optional<Structure> getInteractionStructureAt(Level level, BlockPos pos) {
+        return resolveInteractionPosition(level, pos).map(ResolvedInteraction::structure);
+    }
+
+    private Optional<ResolvedInteraction> resolveInteractionPosition(Level level, BlockPos pos) {
+        return structures.values().stream()
+                .sorted(Comparator.comparingInt(Structure::getId))
+                .map(structure -> new ResolvedInteraction(structure, structure.resolveInteractionPosition(
+                        level, pos, getRooms()
+                                .filter(room -> room.getStructureId() == structure.getId())
+                                .toList()).orElse(null)))
+                .filter(resolved -> resolved.position() != null)
+                .min(Comparator
+                        .comparing((ResolvedInteraction resolved) -> resolved.position().room() == null)
+                        .thenComparingInt(resolved -> resolved.structure().getId()));
     }
 
     public Optional<Building> getFunctionalRoomAt(Vec3i pos) {
@@ -480,7 +501,13 @@ public class Village implements Iterable<Building> {
     }
 
     public Optional<Building> getFunctionalRoomAt(Level level, BlockPos pos) {
-        return getFunctionalRoomAt(pos);
+        return resolveInteractionPosition(level, pos)
+                .map(ResolvedInteraction::position)
+                .map(Structure.InteractionPosition::room)
+                .or(() -> getFunctionalRoomAt(pos));
+    }
+
+    private record ResolvedInteraction(Structure structure, Structure.InteractionPosition position) {
     }
 
     /** Legacy UI hook: only the Root Room Anchor is protected from individual removal. */
