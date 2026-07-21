@@ -39,9 +39,6 @@ allprojects {
     base.archivesName = rootProject.name
     version = getAppVersion()
 
-    build.finalizedBy(mergeJars)
-    assemble.finalizedBy(mergeJars)
-
     java {
         withSourcesJar()
 
@@ -84,19 +81,21 @@ allprojects {
 
 forgix {
     group = rootProject.groupId
-    mergedJarName = "${rootProject.name}-${rootProject.version}-universal.jar"
-    outputDir = "build/libs"
+    autoRun = true
+
+    archiveClassifier = "universal"
+    archiveVersion = rootProject.version.toString()
+    destinationDirectory = layout.projectDirectory.dir("build/libs")
 
     forge {
-        jarLocation = "build/libs/${rootProject.name}-${rootProject.version}.jar"
-        mixin "mca.mixin.json"
+        inputJar = project(":forge").tasks.remapJar.archiveFile
     }
 
     fabric {
-        jarLocation = "build/libs/${rootProject.name}-${rootProject.version}.jar"
+        inputJar = project(":fabric").tasks.remapJar.archiveFile
     }
 
     quilt {
-        jarLocation = "build/libs/${rootProject.name}-${rootProject.version}.jar"
+        inputJar = project(":quilt").tasks.remapJar.archiveFile
     }
 }
