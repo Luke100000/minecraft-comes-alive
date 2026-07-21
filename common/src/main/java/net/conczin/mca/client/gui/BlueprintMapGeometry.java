@@ -109,7 +109,10 @@ final class BlueprintMapGeometry {
                     .filter(layer -> layer.building().getStructureId() == structure.getId())
                     .forEach(layer -> relevantRoomCells.addAll(layer.footprintCells()));
 
-            StructureShape shape = structureShape(canonicalOutlineBaseCells, relevantRoomCells);
+            Set<BlueprintMapFootprint.Cell> outlineBaseCells =
+                    outlineBaseWithoutEntranceProtrusions(canonicalOutlineBaseCells);
+
+            StructureShape shape = structureShape(outlineBaseCells, relevantRoomCells);
             layers.add(new MapStructureLayer(
                     rootRoom,
                     shape.shadeCells(),
@@ -117,6 +120,28 @@ final class BlueprintMapGeometry {
                     BlueprintMapFootprint.outerEdges(shape.outlineCells())));
         }
         return List.copyOf(layers);
+    }
+
+    /**
+     * Connector cells remain valid Floor/Room/shade cells, but a one-cell exterior entrance must
+     * not push the stable Structure border one block farther out. Room ownership is deliberately
+     * irrelevant here: Blueprint outline geometry belongs to the Structure, not to registered Rooms.
+     */
+    static Set<BlueprintMapFootprint.Cell> outlineBaseWithoutEntranceProtrusions(
+            Set<BlueprintMapFootprint.Cell> physicalCells) {
+        return physicalCells.stream()
+                .filter(cell -> cardinalNeighborCount(physicalCells, cell) != 1)
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+    }
+
+    private static int cardinalNeighborCount(Set<BlueprintMapFootprint.Cell> cells,
+                                             BlueprintMapFootprint.Cell cell) {
+        int count = 0;
+        if (cells.contains(new BlueprintMapFootprint.Cell(cell.x() + 1, cell.z()))) count++;
+        if (cells.contains(new BlueprintMapFootprint.Cell(cell.x() - 1, cell.z()))) count++;
+        if (cells.contains(new BlueprintMapFootprint.Cell(cell.x(), cell.z() + 1))) count++;
+        if (cells.contains(new BlueprintMapFootprint.Cell(cell.x(), cell.z() - 1))) count++;
+        return count;
     }
 
     static StructureShape structureShape(Set<BlueprintMapFootprint.Cell> outlineBaseCells,
