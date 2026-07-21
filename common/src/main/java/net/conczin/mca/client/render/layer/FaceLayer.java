@@ -30,12 +30,6 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class FaceLayer<T extends LivingEntity, M extends HumanoidModel<T>> extends VillagerLayer<T, M> {
     private static final int OPAQUE_WHITE = 0xFFFFFFFF;
-    private static final int NATURAL_DYE = 0xFFFFFFFF;
-    private static final int ALBINISM_EYE_COLOR = 0xFFE8A0A0;
-    private static final int BLUE_EYE_COLOR = 0xFF557FA6;
-    private static final int GREEN_EYE_COLOR = 0xFF5B8756;
-    private static final int HAZEL_EYE_COLOR = 0xFF8A6A35;
-    private static final int BROWN_EYE_COLOR = 0xFF4A2B18;
     private static final Map<EyeLayerKey, ResourceLocation> EYE_TEXTURE_CACHE = new ConcurrentHashMap<>();
 
     private final String variant;
@@ -73,13 +67,14 @@ public class FaceLayer<T extends LivingEntity, M extends HumanoidModel<T>> exten
 
         VillagerLike<?> villagerLike = getVillager(villager);
         if (canUse(skin)) {
+            renderModel(transform, provider, light, model, OPAQUE_WHITE, getOrGenerateEyeLayer(skin, EyeTextureLayers.Layer.SCLERA, EyeTextureLayers.Side.FULL), overlay, visible, glowing);
+            renderModel(transform, provider, light, model, EyeTextureLayers.DETAILS_TINT, getOrGenerateEyeLayer(skin, EyeTextureLayers.Layer.DETAILS, EyeTextureLayers.Side.FULL), overlay, visible, glowing);
+
             if (villagerLike.getTraits().hasTrait(Traits.HETEROCHROMIA)) {
-                renderModel(transform, provider, light, model, OPAQUE_WHITE, getOrGenerateEyeLayer(skin, true, EyeTextureLayers.Side.FULL), overlay, visible, glowing);
-                renderModel(transform, provider, light, model, getEyeColor(villager, tickDelta, true), getOrGenerateEyeLayer(skin, false, EyeTextureLayers.Side.LEFT), overlay, visible, glowing);
-                renderModel(transform, provider, light, model, getEyeColor(villager, tickDelta, false), getOrGenerateEyeLayer(skin, false, EyeTextureLayers.Side.RIGHT), overlay, visible, glowing);
+                renderModel(transform, provider, light, model, getEyeColor(villager, tickDelta, true), getOrGenerateEyeLayer(skin, EyeTextureLayers.Layer.IRIS, EyeTextureLayers.Side.LEFT), overlay, visible, glowing);
+                renderModel(transform, provider, light, model, getEyeColor(villager, tickDelta, false), getOrGenerateEyeLayer(skin, EyeTextureLayers.Layer.IRIS, EyeTextureLayers.Side.RIGHT), overlay, visible, glowing);
             } else {
-                renderModel(transform, provider, light, model, OPAQUE_WHITE, getOrGenerateEyeLayer(skin, true, EyeTextureLayers.Side.FULL), overlay, visible, glowing);
-                renderModel(transform, provider, light, model, getEyeColor(villager, tickDelta, false), getOrGenerateEyeLayer(skin, false, EyeTextureLayers.Side.FULL), overlay, visible, glowing);
+                renderModel(transform, provider, light, model, getEyeColor(villager, tickDelta, false), getOrGenerateEyeLayer(skin, EyeTextureLayers.Layer.IRIS, EyeTextureLayers.Side.FULL), overlay, visible, glowing);
             }
         }
 
@@ -117,8 +112,8 @@ public class FaceLayer<T extends LivingEntity, M extends HumanoidModel<T>> exten
         EYE_TEXTURE_CACHE.clear();
     }
 
-    private ResourceLocation getOrGenerateEyeLayer(ResourceLocation original, boolean isSclera, EyeTextureLayers.Side side) {
-        return EYE_TEXTURE_CACHE.computeIfAbsent(new EyeLayerKey(original, isSclera, side), key -> {
+    private ResourceLocation getOrGenerateEyeLayer(ResourceLocation original, EyeTextureLayers.Layer layer, EyeTextureLayers.Side side) {
+        return EYE_TEXTURE_CACHE.computeIfAbsent(new EyeLayerKey(original, layer, side), key -> {
             try {
                 ResourceLocation id = key.texture();
                 var resource = Minecraft.getInstance().getResourceManager().getResource(id);
@@ -148,13 +143,8 @@ public class FaceLayer<T extends LivingEntity, M extends HumanoidModel<T>> exten
                                     continue;
                                 }
 
-                                boolean isPixelSclera = EyeTextureLayers.isScleraPixel(
-                                        alpha,
-                                        FastColor.ABGR32.red(pixel),
-                                        FastColor.ABGR32.green(pixel),
-                                        FastColor.ABGR32.blue(pixel)
-                                );
-                                if (key.sclera() == isPixelSclera) {
+                                if (EyeTextureLayers.isPixelForLayer(key.layer(), alpha,
+                                        FastColor.ABGR32.red(pixel), FastColor.ABGR32.green(pixel), FastColor.ABGR32.blue(pixel))) {
                                     newImage.setPixelRGBA(x, y, pixel);
                                 }
                             }
@@ -162,7 +152,7 @@ public class FaceLayer<T extends LivingEntity, M extends HumanoidModel<T>> exten
 
                         ResourceLocation newId = ResourceLocation.fromNamespaceAndPath(
                                 MCA.MOD_ID,
-                                "dynamic/eye/" + key.side().name().toLowerCase(Locale.ROOT) + "/" + (key.sclera() ? "sclera" : "iris") + "/" + id.getNamespace() + "_" + id.getPath().replace("/", "_")
+                                "dynamic/eye/" + key.side().name().toLowerCase(Locale.ROOT) + "/" + key.layer().name().toLowerCase(Locale.ROOT) + "/" + id.getNamespace() + "_" + id.getPath().replace("/", "_")
                         );
                         Minecraft.getInstance().getTextureManager().register(newId, new DynamicTexture(newImage));
                         return newId;
@@ -180,34 +170,14 @@ public class FaceLayer<T extends LivingEntity, M extends HumanoidModel<T>> exten
 
     private int getEyeColor(T villager, float tickDelta, boolean left) {
         VillagerLike<?> villagerLike = getVillager(villager);
+        int color;
         if (villagerLike.getTraits().hasTrait(Traits.RAINBOW_EYES)) {
             int offset = left && villagerLike.getTraits().hasTrait(Traits.HETEROCHROMIA) ? (25 * DyeColor.values().length) / 2 : 0;
-            return getRainbow(villager, tickDelta, offset);
+            color = getRainbow(villager, tickDelta, offset);
+        } else {
+            color = EyeTextureLayers.getStaticEyeColor(villagerLike, left);
         }
-        return getStaticEyeColor(villager, left);
-    }
-
-    private int getStaticEyeColor(T villager, boolean left) {
-        VillagerLike<?> villagerLike = getVillager(villager);
-        boolean heterochromia = villagerLike.getTraits().hasTrait(Traits.HETEROCHROMIA);
-        int dye = left && heterochromia ? villagerLike.getEyeLeftDye() : villagerLike.getEyeDye();
-        return dye != NATURAL_DYE ? dye : getGeneticEyeColor(villager, left && heterochromia);
-    }
-
-    private int getGeneticEyeColor(T villager, boolean shifted) {
-        VillagerLike<?> villagerLike = getVillager(villager);
-        if (villagerLike.getTraits().hasTrait(Traits.ALBINISM)) {
-            return ALBINISM_EYE_COLOR;
-        }
-
-        float eyeColor = Mth.frac(villagerLike.getGenetics().getGene(Genetics.FACE) + (shifted ? 0.43F : 0.0F));
-        if (eyeColor < 0.35F) {
-            return FastColor.ARGB32.lerp(eyeColor / 0.35F, BLUE_EYE_COLOR, GREEN_EYE_COLOR);
-        }
-        if (eyeColor < 0.70F) {
-            return FastColor.ARGB32.lerp((eyeColor - 0.35F) / 0.35F, GREEN_EYE_COLOR, HAZEL_EYE_COLOR);
-        }
-        return FastColor.ARGB32.lerp((eyeColor - 0.70F) / 0.30F, HAZEL_EYE_COLOR, BROWN_EYE_COLOR);
+        return EyeTextureLayers.applyBrightness(color, villagerLike.getGenetics().getGene(Genetics.EYE_BRIGHTNESS));
     }
 
     private int getRainbow(T villager, float tickDelta, int offset) {
@@ -229,6 +199,6 @@ public class FaceLayer<T extends LivingEntity, M extends HumanoidModel<T>> exten
         return CommonVillagerModel.getVillager(villager);
     }
 
-    private record EyeLayerKey(ResourceLocation texture, boolean sclera, EyeTextureLayers.Side side) {
+    private record EyeLayerKey(ResourceLocation texture, EyeTextureLayers.Layer layer, EyeTextureLayers.Side side) {
     }
 }

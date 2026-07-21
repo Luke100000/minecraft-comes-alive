@@ -28,6 +28,7 @@ public class Genetics implements Iterable<Genetics.Gene> {
     public static final GeneType PHEOMELANIN = new GeneType("Pheomelanin");
     public static final GeneType SKIN = new GeneType("Skin");
     public static final GeneType FACE = new GeneType("Face");
+    public static final GeneType EYE_BRIGHTNESS = new GeneType("EyeBrightness");
     public static final GeneType VOICE = new GeneType("Voice");
     public static final GeneType VOICE_TONE = new GeneType("VoiceTone");
 
