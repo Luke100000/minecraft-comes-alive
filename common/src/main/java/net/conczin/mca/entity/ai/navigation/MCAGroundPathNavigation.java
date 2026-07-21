@@ -1,5 +1,8 @@
 package net.conczin.mca.entity.ai.navigation;
 
+import net.minecraft.core.BlockPos;
+import net.minecraft.tags.FluidTags;
+import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.navigation.GroundPathNavigation;
 import net.minecraft.world.level.Level;
@@ -16,5 +19,25 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
         this.nodeEvaluator.setCanPassDoors(true);
         this.nodeEvaluator.setCanOpenDoors(true);
         return new PathFinder(this.nodeEvaluator, maxVisitedNodes);
+    }
+
+    @Override
+    public int getSurfaceY() {
+        if (this.mob.isInWater() && this.canFloat()) {
+            int surfaceY = this.mob.getBlockY();
+            BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos(this.mob.getX(), surfaceY, this.mob.getZ());
+            int steps = 0;
+
+            while (this.level.getFluidState(pos).is(FluidTags.WATER)) {
+                pos.setY(++surfaceY);
+                if (++steps > 16) {
+                    return this.mob.getBlockY();
+                }
+            }
+
+            return surfaceY;
+        }
+
+        return Mth.floor(this.mob.getY() + 0.5D);
     }
 }

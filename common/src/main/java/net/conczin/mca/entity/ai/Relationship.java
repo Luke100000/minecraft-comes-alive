@@ -195,7 +195,10 @@ public class Relationship<T extends Mob & VillagerLike<T>> implements EntityRela
 
         if (burialSite != null && type != RelationshipType.STRANGER) {
             entity.getVillagerBrain().setGrieving();
-            entity.getBrain().setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(burialSite, 1, 1));
+            entity.getBrain().setMemory(MemoryModuleTypeMCA.MOURNING_SITE, burialSite);
+            entity.getBrain().eraseMemory(MemoryModuleTypeMCA.MOURNING_POSITION);
+            entity.getBrain().eraseMemory(MemoryModuleType.PATH);
+            entity.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
             entity.getBrain().setMemory(MemoryModuleType.LOOK_TARGET, new BlockPosTracker(burialSite));
             entity.getBrain().setActiveActivityIfPossible(ActivitiesMCA.GRIEVE);
         }

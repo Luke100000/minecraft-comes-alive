@@ -43,6 +43,7 @@ public class VillagerBrain<E extends Mob & VillagerLike<E>> {
     private static final CDataParameter<Boolean> WEAR_ARMOR = CParameter.create("WearArmor", false);
 
     private static final long GRIEVE_COOLDOWN = 24000 * 7;
+    private static final long GRIEVE_RETRY_DELAY = 1200L;
     private final Random random = new Random();
     private final E entity;
 
@@ -254,6 +255,10 @@ public class VillagerBrain<E extends Mob & VillagerLike<E>> {
 
     public void setGrieving() {
         entity.getBrain().setMemory(LAST_GRIEVE, -GRIEVE_COOLDOWN);
+    }
+
+    public void retryGrievingLater() {
+        entity.getBrain().setMemory(LAST_GRIEVE, entity.level().getGameTime() - GRIEVE_COOLDOWN + GRIEVE_RETRY_DELAY);
     }
 
     public void justGrieved() {

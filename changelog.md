@@ -1,8 +1,16 @@
 # TBD
 
 * Fixed library auth not working in sandboxed environments.
-* Fixed texture related crashes in library
 * Submitted and liked content are now paged (faster loading on many skins)
+
+# 7.7.23
+> This is a release of 7.7.23 unrelated to the ALPHA version.
+
+* Properly fixed Library preview corrupted model issue - This was a result of having Advanced Hair.
+* Fixed a very specific crash in the Library.
+* Added support for modded water, which broke pathfinding
+* Entities properly avoid specially collision shaped blocks such as lanterns
+* Entities shouldn't get stuck in doors and open them repeatedly.
 
 # 7.7.22
 

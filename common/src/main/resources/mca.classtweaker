@@ -16,3 +16,6 @@ mutable field net/minecraft/advancements/AdvancementRewards loot Ljava/util/List
 
 # Widen MoveControl.rotlerp for task usage
 accessible method net/minecraft/world/entity/ai/control/MoveControl rotlerp (FFF)F
+
+# Widen GroundPathNavigation.getSurfaceY so MCA can make water-tag-aware navigation without replacing getTempMobPos.
+extendable method net/minecraft/world/entity/ai/navigation/GroundPathNavigation getSurfaceY ()I

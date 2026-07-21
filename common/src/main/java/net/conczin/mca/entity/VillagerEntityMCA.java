@@ -55,7 +55,6 @@ import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.ai.behavior.BlockPosTracker;
-import net.minecraft.world.entity.ai.goal.OpenDoorGoal;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.WalkTarget;
 import net.minecraft.world.entity.animal.IronGolem;
@@ -154,12 +153,6 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     @Override
     protected PathNavigation createNavigation(Level level) {
         return new MCAGroundPathNavigation(this, level);
-    }
-
-    @Override
-    protected void registerGoals() {
-        super.registerGoals();
-        this.goalSelector.addGoal(1, new OpenDoorGoal(this, true));
     }
 
     public static AttributeSupplier.Builder createAttributes() {

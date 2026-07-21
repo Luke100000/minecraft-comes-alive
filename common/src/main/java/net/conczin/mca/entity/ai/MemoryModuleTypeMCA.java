@@ -3,6 +3,8 @@ package net.conczin.mca.entity.ai;
 import com.mojang.serialization.Codec;
 import net.conczin.mca.MCA;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.GlobalPos;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.player.Player;
@@ -22,6 +24,8 @@ public interface MemoryModuleTypeMCA {
     MemoryModuleType<Integer> SMALL_BOUNTY = register("small_bounty", Optional.of(Codec.INT));
     MemoryModuleType<LivingEntity> HIT_BY_PLAYER = register("hit_by_player", Optional.empty());
     MemoryModuleType<Long> LAST_GRIEVE = register("last_grieve", Optional.of(Codec.LONG));
+    MemoryModuleType<BlockPos> MOURNING_SITE = register("mourning_site", Optional.of(BlockPos.CODEC));
+    MemoryModuleType<GlobalPos> MOURNING_POSITION = register("mourning_position", Optional.of(GlobalPos.CODEC));
     MemoryModuleType<Boolean> FORCED_HOME = register("forced_home", Optional.of(Codec.BOOL));
 
     static <U> MemoryModuleType<U> register(String name, Optional<Codec<U>> codec) {
