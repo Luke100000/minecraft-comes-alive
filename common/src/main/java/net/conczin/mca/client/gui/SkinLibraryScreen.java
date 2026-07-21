@@ -34,7 +34,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.CycleButton;
 import net.minecraft.client.gui.components.EditBox;
-import net.minecraft.client.gui.screens.ConfirmLinkScreen;
+import net.minecraft.client.gui.screens.ConfirmScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 import net.minecraft.client.renderer.GameRenderer;
@@ -70,11 +70,9 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
     private static final float CANVAS_SCALE = 2.35f;
     protected final VillagerEntityMCA villagerVisualization = Objects.requireNonNull(EntitiesMCA.MALE_VILLAGER.create(Objects.requireNonNull(Minecraft.getInstance().level)));
     private final List<LiteContent> serverContent = new ArrayList<>();
-    private final Set<Integer> likedContentIds = new HashSet<>();
-    private final Set<Integer> submittedContentIds = new HashSet<>();
     private final ColorSelector color = new ColorSelector();
     private final VillagerEditorScreen previousScreen;
-    private final List<LiteContent> contents = new LinkedList<>();
+    private final List<LiteContent> contents = new ArrayList<>();
     private String filteredString = "";
     private SortingMode sortingMode = SortingMode.RECOMMENDATIONS;
     private boolean filterInvalidSkins = true;
@@ -89,10 +87,8 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
     private LiteContent deleteConfirmationContent;
     private LiteContent reportConfirmationContent;
     private Page page;
-    private String lastFilteredString = "";
-    private int lastLoadedPage = -1;
-    private SubscriptionFilter lastLoadedSubscriptionFilter;
-    private long pageRequestId;
+    private ContentQuery loadedQuery;
+    private ContentQuery pendingQuery;
     private ButtonWidget pageWidget;
     private Workspace workspace;
     private int activeMouseButton;
@@ -112,7 +108,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
     private Thread thread;
     private EditBox textFieldWidget;
     private boolean skipHairWarning;
-    private List<LiteContent> remoteContents = new LinkedList<>();
+    private final List<LiteContent> remoteContents = new ArrayList<>();
     private final CompoundTag basePreviewData;
 
     public SkinLibraryScreen() {
@@ -149,6 +145,36 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         return nbt;
     }
 
+    private record ContentQuery(
+            SubscriptionFilter filter,
+            int page,
+            String search,
+            SortingMode sorting,
+            boolean filterInvalid,
+            boolean filterHair,
+            boolean filterClothing,
+            boolean moderatorMode
+    ) {
+        private Map<String, String> parameters() {
+            List<String> blacklist = new ArrayList<>(3);
+            if (filterInvalid) blacklist.add("invalid");
+            if (filterHair) blacklist.add("hair");
+            if (filterClothing) blacklist.add("clothing");
+
+            return Map.of(
+                    "track", filter.track(),
+                    "whitelist", search,
+                    "blacklist", String.join(",", blacklist),
+                    "order", sorting.order,
+                    "descending", "true",
+                    "offset", Integer.toString(page * CLOTHES_PER_PAGE),
+                    "limit", Integer.toString(CLOTHES_PER_PAGE),
+                    "filter_banned", Boolean.toString(!moderatorMode),
+                    "filter_reported", Boolean.toString(!moderatorMode)
+            );
+        }
+    }
+
     @Override
     public void onClose() {
         if (previousScreen == null) {
@@ -177,76 +203,57 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         }
     }
 
-    private void loadPage() {
-        loadPage(false);
+    private ContentQuery createQuery() {
+        return new ContentQuery(
+                subscriptionFilter,
+                selectionPage,
+                filteredString,
+                sortingMode,
+                filterInvalidSkins,
+                filterHair,
+                filterClothing,
+                moderatorMode
+        );
     }
 
-    private void loadPage(boolean force) {
+    private void loadPage() {
         if (!subscriptionFilter.isRemote()) {
             return;
         }
-        if (lastLoadedPage == selectionPage && lastFilteredString.equals(filteredString)
-            && lastLoadedSubscriptionFilter == subscriptionFilter && !force) {
+
+        ContentQuery query = createQuery();
+        if (query.equals(loadedQuery) || query.equals(pendingQuery)) {
             return;
         }
-        lastFilteredString = filteredString;
-        lastLoadedPage = selectionPage;
-        lastLoadedSubscriptionFilter = subscriptionFilter;
 
-        SubscriptionFilter requestedFilter = subscriptionFilter;
-        int requestedPage = selectionPage;
-        String requestedSearch = filteredString;
-        long requestId = ++pageRequestId;
+        loadedQuery = null;
+        remoteContents.clear();
+        pendingQuery = query;
 
-        List<String> blacklistTerms = new LinkedList<>();
-        if (filterInvalidSkins) blacklistTerms.add("invalid");
-        if (filterHair) blacklistTerms.add("hair");
-        if (filterClothing) blacklistTerms.add("clothing");
-        String requestedBlacklist = String.join(",", blacklistTerms);
+        CompletableFuture
+                .supplyAsync(() -> request(Api.HttpMethod.GET, ContentListResponse.class, "v3/content/mca", query.parameters()))
+                .thenAccept(response -> Minecraft.getInstance().executeIfPossible(() -> acceptContents(query, response)));
+    }
 
-        CompletableFuture.runAsync(() -> {
-            // fetch assets
-            Response response = request(Api.HttpMethod.GET, ContentListResponse.class, "v2/content/mca", Map.of(
-                    "track", requestedFilter.track(),
-                    "whitelist", requestedSearch,
-                    "blacklist", requestedBlacklist,
-                    "order", sortingMode.order,
-                    "descending", "true",
-                    "offset", String.valueOf(requestedPage * CLOTHES_PER_PAGE),
-                    "limit", String.valueOf(CLOTHES_PER_PAGE),
-                    "filter_banned", String.valueOf(!moderatorMode),
-                    "filter_reported", String.valueOf(!moderatorMode)
-            ));
+    private void acceptContents(ContentQuery query, Response response) {
+        if (!query.equals(pendingQuery)) {
+            return;
+        }
 
-            if (response instanceof ContentListResponse(LiteContent[] contents1)) {
-                User requestedUser = null;
-                if (requestedFilter == SubscriptionFilter.SUBMISSIONS && currentUser == null && contents1.length > 0) {
-                    Response userResponse = request(Api.HttpMethod.GET, UserResponse.class, "v2/user/mca/" + contents1[0].userid());
-                    if (userResponse instanceof UserResponse(User user)) {
-                        requestedUser = user;
-                    }
-                }
+        pendingQuery = null;
+        if (!query.equals(createQuery())) {
+            return;
+        }
 
-                User finalRequestedUser = requestedUser;
-                Minecraft.getInstance().executeIfPossible(() -> {
-                    if (pageRequestId == requestId && subscriptionFilter == requestedFilter
-                        && selectionPage == requestedPage && filteredString.equals(requestedSearch)) {
-                        remoteContents = new ArrayList<>(Arrays.asList(contents1));
-                        if (requestedFilter == SubscriptionFilter.LIKED) {
-                            Arrays.stream(contents1).map(LiteContent::contentid).forEach(likedContentIds::add);
-                        } else if (requestedFilter == SubscriptionFilter.SUBMISSIONS) {
-                            Arrays.stream(contents1).map(LiteContent::contentid).forEach(submittedContentIds::add);
-                            if (finalRequestedUser != null) {
-                                currentUser = finalRequestedUser;
-                            }
-                        }
-                        refreshContentList();
-                    }
-                });
-            } else {
-                setError(Component.translatable("gui.skin_library.list_fetch_failed"));
-            }
-        });
+        if (response instanceof ContentListResponse(LiteContent[] loadedContents)) {
+            loadedQuery = query;
+            remoteContents.clear();
+            remoteContents.addAll(List.of(loadedContents));
+            clearError();
+            refreshContentList();
+        } else {
+            setError(Component.translatable("gui.skin_library.list_fetch_failed"));
+        }
     }
 
     @Override
@@ -385,44 +392,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
             }
             case LOGIN -> {
                 // check user authentication
-                if (!awaitingAuthentication) {
-                    awaitingAuthentication = true;
-                    CompletableFuture.runAsync(() -> {
-                        try {
-                            String token = Auth.getToken();
-                            Response response = token == null ? null : request(Api.HttpMethod.GET, IsAuthResponse.class, "auth");
-                            if (page != Page.LOGIN || !Objects.equals(token, Auth.getToken())) {
-                                return;
-                            }
-                            if (response instanceof IsAuthResponse(boolean success)) {
-                                if (success) {
-                                    authenticated = true;
-                                    clearError();
-                                    invalidateRemotePage();
-
-                                    //token accepted, save
-                                    Auth.saveToken();
-
-                                    setPage(Page.LIBRARY);
-                                } else {
-                                    // A generated token may still be waiting for browser approval.
-                                    if (!isBrowserOpen) {
-                                        Auth.clearToken();
-                                        setPage(Page.LIBRARY);
-                                        setError(Component.translatable("gui.skin_library.is_auth_failed"));
-                                    }
-                                }
-                            } else {
-                                setError(Component.translatable("gui.skin_library.is_auth_failed"));
-                            }
-                            Thread.sleep(2000);
-                        } catch (Exception e) {
-                            MCA.LOGGER.error(e);
-                        } finally {
-                            awaitingAuthentication = false;
-                        }
-                    });
-                }
+                pollAuthentication();
 
                 // auth hint
                 if (isBrowserOpen) {
@@ -810,21 +780,21 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                         Component.translatable("gui.skin_library.sort_likes"),
                         v -> {
                             sortingMode = SortingMode.LIKES;
-                            loadPage(true);
+                            refreshContentList();
                         }));
                 addRenderableWidget(new ToggleableTooltipIconButtonWidget(iconX + 22, height / 2 + 82, 7 * 16, 3 * 16,
                         sortingMode == SortingMode.NEWEST,
                         Component.translatable("gui.skin_library.sort_newest"),
                         v -> {
                             sortingMode = SortingMode.NEWEST;
-                            loadPage(true);
+                            refreshContentList();
                         }));
                 addRenderableWidget(new ToggleableTooltipIconButtonWidget(iconX + 22 * 2, height / 2 + 82, 14 * 16, 3 * 16,
                         sortingMode == SortingMode.RECOMMENDATIONS,
                         Component.translatable("gui.skin_library.sort_recommendations"),
                         v -> {
                             sortingMode = SortingMode.RECOMMENDATIONS;
-                            loadPage(true);
+                            refreshContentList();
                         }));
 
                 iconX = width / 2 + 50;
@@ -835,7 +805,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                             Component.translatable("gui.skin_library.filter_invalid"),
                             v -> {
                                 filterInvalidSkins = !filterInvalidSkins;
-                                loadPage(true);
+                                refreshContentList();
                             }));
 
                     //filter clothing
@@ -844,7 +814,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                             Component.translatable("gui.skin_library.filter_clothing"),
                             v -> {
                                 filterClothing = !filterClothing;
-                                loadPage(true);
+                                refreshContentList();
                             }));
 
                     //filter hair
@@ -853,7 +823,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                             Component.translatable("gui.skin_library.filter_hair"),
                             v -> {
                                 filterHair = !filterHair;
-                                loadPage(true);
+                                refreshContentList();
                             }));
 
                     //moderator search
@@ -863,7 +833,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                                 Component.translatable("gui.skin_library.filter_moderator"),
                                 v -> {
                                     moderatorMode = !moderatorMode;
-                                    loadPage(true);
+                                    refreshContentList();
                                 }));
                     }
                 }
@@ -893,7 +863,6 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                         .create(width / 2 - 200, height / 2 - 110, 60, 20, Component.literal(""), (button, filter) -> {
                             this.subscriptionFilter = filter;
                             selectionPage = 0;
-                            invalidateRemotePage();
                             refreshContentList();
                         }));
 
@@ -1304,8 +1273,12 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                     isLiked(content),
                     Component.translatable("gui.skin_library.like"),
                     v -> {
-                        ((ToggleableTooltipButtonWidget) v).toggle = !((ToggleableTooltipButtonWidget) v).toggle;
-                        setLike(content.contentid(), ((ToggleableTooltipButtonWidget) v).toggle);
+                        ToggleableTooltipButtonWidget button = (ToggleableTooltipButtonWidget) v;
+                        boolean liked = !button.toggle;
+                        if (setLike(content.contentid(), liked)) {
+                            button.toggle = liked;
+                            refreshContentList();
+                        }
                     }));
         }
 
@@ -1409,8 +1382,8 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
     }
 
     private boolean canModifyContent(LiteContent content) {
-        return submittedContentIds.contains(content.contentid())
-               || currentUser != null && (currentUser.moderator() || currentUser.userid() == content.userid());
+        return currentUser != null
+               && (currentUser.moderator() || currentUser.userid() == content.userid());
     }
 
     private boolean isModerator() {
@@ -1418,7 +1391,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
     }
 
     private boolean isLiked(LiteContent content) {
-        return likedContentIds.contains(content.contentid());
+        return content.is_liked();
     }
 
     public void setPage(Page page) {
@@ -1442,9 +1415,16 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
 
         if (page == Page.LOGIN) {
             if (!Auth.hasToken()) {
-                isBrowserOpen = true;
-                String authUrl = Auth.authenticate(getPlayerName());
-                Minecraft.getInstance().setScreen(new AuthLinkScreen(authUrl));
+                isBrowserOpen = false;
+                Auth.AuthenticationRequest authRequest = Auth.authenticate(getPlayerName());
+                if (authRequest == null) {
+                    isBrowserOpen = false;
+                    setPage(Page.LIBRARY);
+                    setError(Component.translatable("gui.skin_library.is_auth_failed"));
+                    return;
+                }
+                Minecraft.getInstance().setScreen(new AuthLinkScreen(
+                        authRequest.loginUrl(), authRequest.verificationCode()));
             } else {
                 isBrowserOpen = Auth.loadToken() == null;
             }
@@ -1453,10 +1433,8 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         if (page == Page.LOGOUT) {
             authenticated = false;
             currentUser = null;
-            likedContentIds.clear();
-            submittedContentIds.clear();
             invalidateRemotePage();
-            Auth.clearToken();
+            Auth.logout();
             refreshPage();
             return;
         }
@@ -1478,50 +1456,116 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         }
     }
 
+    private void pollAuthentication() {
+        if (awaitingAuthentication) {
+            return;
+        }
+        awaitingAuthentication = true;
+        CompletableFuture.runAsync(() -> {
+            try {
+                String token = Auth.getToken();
+                Response response = token == null ? null : request(Api.HttpMethod.GET, IsAuthResponse.class, "auth");
+                if (page != Page.LOGIN || !Objects.equals(token, Auth.getToken())) {
+                    return;
+                }
+                if (response instanceof IsAuthResponse(boolean success)) {
+                    if (success) {
+                        Response userResponse = request(Api.HttpMethod.GET, UserResponse.class, "v2/user/mca/me");
+
+                        Minecraft.getInstance().executeIfPossible(() -> {
+                            if (page != Page.LOGIN || !Objects.equals(token, Auth.getToken())) {
+                                return;
+                            }
+
+                            if (userResponse instanceof UserResponse(User user)) {
+                                authenticated = true;
+                                currentUser = user;
+                                isBrowserOpen = false;
+                                clearError();
+                                invalidateRemotePage();
+
+                                //token accepted, save
+                                Auth.saveToken();
+
+                                setPage(Page.LIBRARY);
+                            } else {
+                                isBrowserOpen = false;
+                                setError(Component.translatable("gui.skin_library.list_fetch_failed"));
+                            }
+                        });
+                    } else {
+                        // A generated token may still be waiting for browser approval.
+                        if (!isBrowserOpen) {
+                            Auth.clearToken();
+                            setPage(Page.LIBRARY);
+                            setError(Component.translatable("gui.skin_library.is_auth_failed"));
+                        }
+                    }
+                } else {
+                    setError(Component.translatable("gui.skin_library.is_auth_failed"));
+                }
+                Thread.sleep(2000);
+            } catch (Exception e) {
+                MCA.LOGGER.error(e);
+            } finally {
+                awaitingAuthentication = false;
+            }
+        });
+    }
+
     private void cancelAuthentication() {
         Auth.clearToken();
         authenticated = false;
+        currentUser = null;
         isBrowserOpen = false;
-        setPage(Page.LIBRARY);
+        invalidateRemotePage();
+        page = Page.LIBRARY;
+        Minecraft.getInstance().setScreen(this);
     }
 
-    private class AuthLinkScreen extends ConfirmLinkScreen {
+    private class AuthLinkScreen extends ConfirmScreen {
         private final String authUrl;
+        private boolean polling;
+        private int statusY;
 
-        private AuthLinkScreen(String authUrl) {
-            super(confirmed -> {
-                    }, Component.translatable("gui.skin_library.auth_link.title"),
-                    Component.translatable("gui.skin_library.auth_link.message"),
-                    authUrl,
-                    CommonComponents.GUI_CANCEL,
-                    true);
+        private AuthLinkScreen(String authUrl, String verificationCode) {
+            super(ignored -> SkinLibraryScreen.this.cancelAuthentication(),
+                    Component.translatable("gui.skin_library.auth_link.title"),
+                    Component.translatable("gui.skin_library.auth_link.message")
+                            .append(Component.literal("\n\nCode: " + verificationCode)
+                                    .withStyle(ChatFormatting.YELLOW)));
             this.authUrl = authUrl;
         }
 
         @Override
         protected void addButtons(int y) {
-            addRenderableWidget(Button.builder(Component.translatable("chat.link.open"), button -> {
+            statusY = y - 12;
+            addExitButton(Button.builder(Component.translatable("chat.link.open"), button -> {
+                isBrowserOpen = true;
+                polling = true;
                 Util.getPlatform().openUri(authUrl);
-                Minecraft.getInstance().setScreen(SkinLibraryScreen.this);
-            }).bounds(width / 2 - 50 - 105, y, 100, 20).build());
-            addRenderableWidget(Button.builder(Component.translatable("chat.copy"), button -> {
-                copyToClipboard();
-                Minecraft.getInstance().setScreen(SkinLibraryScreen.this);
-            }).bounds(width / 2 - 50, y, 100, 20).build());
-            addRenderableWidget(Button.builder(CommonComponents.GUI_CANCEL, button -> {
-                cancelAuthentication();
-                Minecraft.getInstance().setScreen(SkinLibraryScreen.this);
-            }).bounds(width / 2 - 50 + 105, y, 100, 20).build());
+            }).bounds(width / 2 - 155, y, 150, 20).build());
+            addExitButton(Button.builder(CommonComponents.GUI_CANCEL, button -> cancelAuthentication())
+                    .bounds(width / 2 + 5, y, 150, 20).build());
         }
 
         @Override
-        public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-            if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
-                cancelAuthentication();
-                Minecraft.getInstance().setScreen(SkinLibraryScreen.this);
-                return true;
+        public void render(GuiGraphics context, int mouseX, int mouseY, float delta) {
+            super.render(context, mouseX, mouseY, delta);
+            if (polling) {
+                context.drawCenteredString(font, Component.literal("Polling..."), width / 2, statusY, 0xFFFFFF);
             }
-            return super.keyPressed(keyCode, scanCode, modifiers);
+        }
+
+        @Override
+        public void tick() {
+            super.tick();
+            if (polling) {
+                pollAuthentication();
+            }
+            if (page != Page.LOGIN) {
+                Minecraft.getInstance().setScreen(SkinLibraryScreen.this);
+            }
         }
     }
 
@@ -1534,10 +1578,9 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
     }
 
     private void invalidateRemotePage() {
-        lastLoadedSubscriptionFilter = null;
-        lastLoadedPage = -1;
-        remoteContents = new LinkedList<>();
-        pageRequestId++;
+        loadedQuery = null;
+        pendingQuery = null;
+        remoteContents.clear();
     }
 
     private void refreshContentList() {
@@ -1572,7 +1615,8 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         contents.addAll(newList);
 
         // last page reached, go one back
-        if (contents.isEmpty() && selectionPage > 0) {
+        if (contents.isEmpty() && selectionPage > 0
+            && (!subscriptionFilter.isRemote() || pendingQuery == null)) {
             selectionPage--;
             if (subscriptionFilter.isRemote()) {
                 loadPage();
@@ -1690,10 +1734,10 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                             setTag(contentid, workspace.profession.replace("mca.", ""), true);
                         }
 
-                        submittedContentIds.add(contentid);
                         Response contentResponse = request(Api.HttpMethod.GET, ContentResponse.class, "content/mca/" + contentid);
                         if (contentResponse instanceof ContentResponse(Content content)) {
-                            focusedContent = new LiteContent(content.contentid(), content.userid(), content.username(), content.likes(), content.tags(), content.title(), content.version());
+                            boolean liked = getContentById(contentid).map(LiteContent::is_liked).orElse(false);
+                            focusedContent = new LiteContent(content.contentid(), content.userid(), content.username(), content.likes(), content.tags(), content.title(), content.version(), liked);
                             setPage(Page.DETAIL);
                         } else {
                             setPage(Page.LIBRARY);
@@ -1725,21 +1769,10 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         return serverContent.stream().filter(v -> v.contentid() == contentid).findAny();
     }
 
-    private Optional<LiteContent> getSubmittedContent(int contentid) {
-        return submittedContentIds.contains(contentid) ? getContentById(contentid) : Optional.empty();
-    }
-
     private void setTag(int contentid, String tag, boolean add) {
         if (Auth.hasToken()) {
             request(add ? Api.HttpMethod.POST : Api.HttpMethod.DELETE, SuccessResponse.class, "tag/mca/" + contentid + "/" + tag);
             getContentById(contentid).ifPresent(c -> {
-                if (add) {
-                    c.tags().add(tag);
-                } else {
-                    c.tags().remove(tag);
-                }
-            });
-            getSubmittedContent(contentid).ifPresent(c -> {
                 if (add) {
                     c.tags().add(tag);
                 } else {
@@ -1759,8 +1792,6 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
     private void removeContentLocally(int contentId) {
         remoteContents.removeIf(v -> v.contentid() == contentId);
 
-        likedContentIds.remove(contentId);
-        submittedContentIds.remove(contentId);
     }
 
     private void reportContent(int contentId, String reason) {
@@ -1775,14 +1806,36 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         }
     }
 
-    private void setLike(int contentid, boolean add) {
-        if (Auth.hasToken()) {
-            request(add ? Api.HttpMethod.POST : Api.HttpMethod.DELETE, SuccessResponse.class, "like/mca/" + contentid);
+    private boolean setLike(int contentid, boolean add) {
+        if (!Auth.hasToken()) {
+            return false;
+        }
 
-            if (add) {
-                likedContentIds.add(contentid);
-            } else {
-                likedContentIds.remove(contentid);
+        Response response = request(add ? Api.HttpMethod.POST : Api.HttpMethod.DELETE, SuccessResponse.class, "like/mca/" + contentid);
+        if (!(response instanceof SuccessResponse)) {
+            return false;
+        }
+
+        updateLikedState(contentid, add);
+        if (subscriptionFilter == SubscriptionFilter.LIKED && !add) {
+            invalidateRemotePage();
+        }
+        return true;
+    }
+
+    private void updateLikedState(int contentid, boolean liked) {
+        replaceLikedState(remoteContents, contentid, liked);
+        replaceLikedState(serverContent, contentid, liked);
+        if (focusedContent != null && focusedContent.contentid() == contentid) {
+            focusedContent = focusedContent.withLiked(liked);
+        }
+    }
+
+    private static void replaceLikedState(List<LiteContent> list, int contentid, boolean liked) {
+        for (int i = 0; i < list.size(); i++) {
+            LiteContent content = list.get(i);
+            if (content.contentid() == contentid) {
+                list.set(i, content.withLiked(liked));
             }
         }
     }
@@ -1813,7 +1866,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                 try {
                     int contentid = Integer.parseInt(entry.getKey().substring(18));
                     serverContent.add(getContentById(contentid).orElse(new LiteContent(
-                            contentid, -1, "unknown", -1, Set.of(type), "unknown", -1
+                            contentid, -1, "unknown", -1, Set.of(type), "unknown", -1, false
                     )));
                 } catch (NumberFormatException ignored) {
                     //nop
