@@ -10,10 +10,11 @@ public record BuildingScanResult(
         Building building,
         List<String> matchingTypes,
         Village village,
-        RoomUpdatePlan roomUpdatePlan
+        List<Integer> absorbedRoomIds
 ) {
     public BuildingScanResult {
         matchingTypes = List.copyOf(matchingTypes);
+        absorbedRoomIds = List.copyOf(absorbedRoomIds);
     }
 
     public boolean isAmbiguous() {
@@ -22,11 +23,5 @@ public record BuildingScanResult(
 
     public boolean matchesType(String type) {
         return matchingTypes.contains(type);
-    }
-
-    public record RoomUpdatePlan(Structure refreshedStructure, List<Integer> absorbedRoomIds) {
-        public RoomUpdatePlan {
-            absorbedRoomIds = List.copyOf(absorbedRoomIds);
-        }
     }
 }

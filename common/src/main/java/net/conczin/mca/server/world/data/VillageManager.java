@@ -309,33 +309,22 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         }
         Structure structure = village.getStructureFor(expected).orElse(null);
         if (structure == null) return failedRoom(Building.validationResult.NOT_IN_BUILDING, pos, village);
-
-        StructureScanner.Result physical = StructureScanner.scan(
-                world, structure.getSource(), village.getStructures().values(), structure.getId());
-        if (physical.result() != Building.validationResult.SUCCESS) {
-            return failedRoom(physical.result(), pos, village);
-        }
-
-        List<Building> rooms = village.getRooms()
-                .filter(room -> room.getStructureId() == structure.getId())
-                .toList();
-        Structure refreshed = new Structure(structure.save());
-        if (!refreshed.applyScan(physical, rooms)) {
-            return failedRoom(Building.validationResult.OVERLAP, pos, village);
-        }
-        StructureFloor floor = refreshed.getFloor(expected.getFloorId()).orElse(null);
+        StructureFloor floor = structure.getFloor(expected.getFloorId()).orElse(null);
         if (floor == null) return failedRoom(Building.validationResult.OVERLAP, pos, village);
 
+        // Room updates partition the already-known physical Floor. Structure/Floor geometry is
+        // refreshed only by Full Scan; otherwise an internal wall edit accidentally becomes a
+        // second physical Structure scan with its own failure and identity semantics.
         BuildingScanResult scan = scanResolvedRoom(
-                village, refreshed, pos, buildingId, true, floor, Set.of());
+                village, structure, pos, buildingId, true, floor, Set.of());
         if (scan.result() != Building.validationResult.SUCCESS) return scan;
 
         Optional<List<Integer>> absorbed = findAbsorbedRooms(village, expected, scan.building());
         if (absorbed.isEmpty()) {
             return failedRoom(Building.validationResult.OVERLAP, pos, village);
         }
-        return new BuildingScanResult(scan.result(), scan.source(), scan.building(), scan.matchingTypes(), scan.village(),
-                new BuildingScanResult.RoomUpdatePlan(refreshed, absorbed.get()));
+        return new BuildingScanResult(scan.result(), scan.source(), scan.building(), scan.matchingTypes(),
+                scan.village(), absorbed.get());
     }
 
     private BuildingScanResult scanRoom(Village village,
@@ -397,7 +386,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
                 ? room.getVisibleMatchingTypes().stream().map(BuildingType::name).toList()
                 : village.getMatchingRoomTypes(room).stream().map(BuildingType::name).toList();
         return new BuildingScanResult(Building.validationResult.SUCCESS, room.getSourceBlock(), room,
-                types, village, null);
+                types, village, List.of());
     }
 
     private static Optional<List<Integer>> findAbsorbedRooms(Village village,
@@ -419,7 +408,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
     }
 
     private static BuildingScanResult failedRoom(Building.validationResult result, BlockPos pos, Village village) {
-        return new BuildingScanResult(result, pos, new Building(pos), List.of(), village, null);
+        return new BuildingScanResult(result, pos, new Building(pos), List.of(), village, List.of());
     }
 
     public Building.validationResult commitInitialStructure(InitialStructureScan scan, String forcedRoomType) {
@@ -499,25 +488,21 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         Structure currentStructure = village.getStructureFor(existing).orElse(null);
         if (currentStructure == null) return Building.validationResult.NOT_IN_BUILDING;
 
-        BuildingScanResult.RoomUpdatePlan updatePlan = scan.roomUpdatePlan();
-        if (updatePlan != null) {
-            Structure refreshed = updatePlan.refreshedStructure();
-            if (refreshed.getId() != currentStructure.getId()
-                    || refreshed.getFloor(existing.getFloorId()).isEmpty()) {
-                return Building.validationResult.OVERLAP;
-            }
-
-            Optional<List<Integer>> absorbed = findAbsorbedRooms(village, existing, scan.building());
-            if (absorbed.isEmpty() || !absorbed.get().equals(updatePlan.absorbedRoomIds())) {
-                return Building.validationResult.OVERLAP;
-            }
-            int currentRootRoomId = currentStructure.getRootRoomId();
-            refreshed.setRootRoomId(absorbed.get().contains(currentRootRoomId)
-                    ? existing.getId()
-                    : currentRootRoomId);
-            village.getStructures().put(currentStructure.getId(), refreshed);
-            village.removeBuildings(absorbed.get());
+        if (scan.building().getStructureId() != existing.getStructureId()
+                || scan.building().getFloorId() != existing.getFloorId()
+                || currentStructure.getFloor(existing.getFloorId()).isEmpty()) {
+            return Building.validationResult.OVERLAP;
         }
+
+        Optional<List<Integer>> absorbed = findAbsorbedRooms(village, existing, scan.building());
+        if (absorbed.isEmpty() || !absorbed.get().equals(scan.absorbedRoomIds())) {
+            return Building.validationResult.OVERLAP;
+        }
+        int currentRootRoomId = currentStructure.getRootRoomId();
+        if (absorbed.get().contains(currentRootRoomId)) {
+            currentStructure.setRootRoomId(existing.getId());
+        }
+        village.removeBuildings(absorbed.get());
 
         existing.copyScannedGeometryFrom(scan.building(), world, true);
         if (forcedType != null) {
