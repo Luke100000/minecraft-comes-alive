@@ -1,8 +1,9 @@
 package net.conczin.mca.client.gui.immersive_library;
 
-import com.google.gson.JsonObject;
 import net.conczin.mca.Config;
 import net.conczin.mca.MCA;
+import net.conczin.mca.client.gui.immersive_library.responses.Response;
+import net.conczin.mca.client.gui.immersive_library.responses.SuccessResponse;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -12,16 +13,18 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.util.Base64;
+import java.util.HexFormat;
+import java.util.Map;
 
 public class Auth {
-    static final SecureRandom random = new SecureRandom();
+    private static final SecureRandom RANDOM = new SecureRandom();
 
-    static String currentToken;
+    private static String currentToken;
 
     private static String newToken() {
-        byte[] bytes = new byte[64];
-        random.nextBytes(bytes);
-        return sha256(new String(bytes));
+        byte[] bytes = new byte[32];
+        RANDOM.nextBytes(bytes);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
     }
 
     public static String loadToken() {
@@ -57,33 +60,46 @@ public class Auth {
         Paths.get("./immersiveLibraryToken_v2").toFile().delete();
     }
 
-    public static String sha256(String input) {
+    public static void logout() {
+        if (hasToken()) {
+            Api.request(Api.HttpMethod.DELETE, SuccessResponse.class, "v2/auth/token");
+        }
+        clearToken();
+    }
+
+    private static String sha256(String input) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] hash = digest.digest(input.getBytes(StandardCharsets.UTF_8));
-            StringBuilder hexString = new StringBuilder();
-            for (byte b : hash) {
-                String hex = Integer.toHexString(0xff & b);
-                if (hex.length() == 1) hexString.append('0');
-                hexString.append(hex);
-            }
-            return hexString.toString();
+            return HexFormat.of().formatHex(digest.digest(input.getBytes(StandardCharsets.UTF_8)));
         } catch (NoSuchAlgorithmException e) {
             throw new RuntimeException(e);
         }
     }
 
-    public static String createDataState(String username, String token) {
-        JsonObject json = new JsonObject();
-        json.addProperty("username", Base64.getEncoder().encodeToString(username.getBytes()));
-        json.addProperty("token", Base64.getEncoder().encodeToString(sha256(token).getBytes()));
-        return Base64.getEncoder().encodeToString(json.toString().getBytes());
+    public static AuthenticationRequest authenticate(String username) {
+        currentToken = newToken();
+        Response response = Api.request(
+                Api.HttpMethod.POST,
+                AuthenticationRequest.class,
+                "v2/auth/start",
+                Map.of(),
+                Map.of("username", username, "token_hash", sha256(currentToken))
+        );
+        if (response instanceof AuthenticationRequest request) {
+            return request;
+        }
+        clearToken();
+        return null;
     }
 
-    public static String authenticate(String username) {
-        // The unique, private token used to authenticate once authorized
-        currentToken = newToken();
+    public record AuthenticationRequest(String login_url, String verification_code, int expires_in) implements Response {
+        public String loginUrl() {
+            String baseUrl = Config.getInstance().immersiveLibraryUrl.replaceAll("/+$", "");
+            return login_url.startsWith("/") ? baseUrl + login_url : login_url;
+        }
 
-        return Config.getInstance().immersiveLibraryUrl + "/v1/login?state=" + createDataState(username, currentToken);
+        public String verificationCode() {
+            return verification_code;
+        }
     }
 }
