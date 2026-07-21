@@ -312,7 +312,7 @@ public class Village implements Iterable<Building> {
         return structures.keySet().stream().anyMatch(structureId -> roomCategoryMatches(structureId, type, null));
     }
 
-    List<BuildingType> getMatchingRoomTypes(int structureId, Building candidate) {
+    List<BuildingType> getMatchingRoomTypes(Building candidate) {
         if (candidate == null) return List.of();
 
         List<BuildingType> matches = new ArrayList<>(candidate.getVisibleMatchingTypes());

@@ -258,14 +258,24 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         if (root.result() != Building.validationResult.SUCCESS) {
             return new InitialStructureScan(structureResult, root, null);
         }
+        MCA.LOGGER.info("[FloorDebug][InitialRoot] input={} groundSeed={} scanGroundFloorId={} rootRoomFloorId={} rootSource={}",
+                pos, structureScan.groundSeed(), structureScan.groundFloorId(),
+                root.building().getFloorId(), root.building().getSourceBlock());
 
-        // Add Building also registers the Room the player is actually standing in. If that is the
-        // same bounded physical Room as the Ground Root, keep only the Root; otherwise both Rooms are
-        // committed and all other detected Floors remain physical-only until Add Room is used.
+        // Avoid scanning the same Ground Room twice in the common one-storey case.
+        if (root.building().containsFloorPosition(pos)) {
+            MCA.LOGGER.info("[FloorDebug][InitialRoom] input={} reusedRoot=true rootFloorId={}",
+                    pos, root.building().getFloorId());
+            return new InitialStructureScan(structureResult, root, null);
+        }
+
+        // If the player is on another Room/Floor, register that Room alongside the Ground Root.
         BuildingScanResult room = scanRoom(village, candidate, pos, -1, true);
         if (room.result() != Building.validationResult.SUCCESS) {
             return new InitialStructureScan(structureResult, room, root);
         }
+        MCA.LOGGER.info("[FloorDebug][InitialRoom] input={} reusedRoot=false playerRoomFloorId={} playerRoomSource={} rootFloorId={}",
+                pos, room.building().getFloorId(), room.building().getSourceBlock(), root.building().getFloorId());
         if (root.building().isIdentical(room.building())) {
             root = null;
         }
@@ -293,32 +303,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
     }
 
     public BuildingScanResult analyzeRegisteredRoomUpdate(Village village, int buildingId, BlockPos pos) {
-        Building expected = village == null ? null : village.getBuilding(buildingId).orElse(null);
-        if (expected == null || !expected.isFunctionalRoom()) {
-            return failedRoom(Building.validationResult.NOT_IN_BUILDING, pos, village);
-        }
-        Structure structure = village.getStructure(expected.getStructureId()).orElse(null);
-        if (structure == null) return failedRoom(Building.validationResult.NOT_IN_BUILDING, pos, village);
-
-        // Update Room refreshes physical Structure/Floor truth first, but only in a detached copy.
-        // This keeps analysis/type-selection non-destructive and lets a remodel expand or shrink the
-        // current Room without the stale Room footprint blocking the Floor rescan.
-        StructureScanner.Result physical = StructureScanner.scan(
-                world, structure.getSource(), village.getStructures().values(), structure.getId());
-        if (physical.result() != Building.validationResult.SUCCESS) {
-            return failedRoom(physical.result(), pos, village);
-        }
-        Structure refreshed = new Structure(structure.save());
-        List<Building> rooms = village.getRooms()
-                .filter(room -> room.getStructureId() == structure.getId())
-                .toList();
-        if (!refreshed.applyScanForRoomUpdate(physical, rooms, buildingId)) {
-            return failedRoom(Building.validationResult.OVERLAP, pos, village);
-        }
-        if (refreshed.getFloor(expected.getFloorId()).isEmpty()) {
-            return failedRoom(Building.validationResult.OVERLAP, pos, village);
-        }
-        return scanRoom(village, refreshed, pos, buildingId, true, refreshed);
+        return analyzeRegisteredRoom(village, buildingId, pos);
     }
 
     private BuildingScanResult scanRoom(Village village,
@@ -326,26 +311,22 @@ public class VillageManager extends SavedData implements Iterable<Village> {
                                         BlockPos pos,
                                         int existingRoomId,
                                         boolean allowMissingEntrance) {
-        return scanRoom(village, structure, pos, existingRoomId, allowMissingEntrance, null);
-    }
-
-    private BuildingScanResult scanRoom(Village village,
-                                        Structure structure,
-                                        BlockPos pos,
-                                        int existingRoomId,
-                                        boolean allowMissingEntrance,
-                                        Structure structureUpdate) {
         StructureFloor floor = existingRoomId >= 0 && village != null
                 ? village.getBuilding(existingRoomId).flatMap(room -> structure.getFloor(room.getFloorId())).orElse(null)
                 : structure.resolveFloor(pos.getY()).orElse(null);
         if (floor == null) return failedRoom(Building.validationResult.TOO_SMALL, pos, village);
+        MCA.LOGGER.info("[FloorDebug][RoomResolve] source={} sourceY={} existingRoomId={} structureId={} selectedFloorId={} "
+                        + "anchorY={} ceilingY={} availableFloors={}",
+                pos, pos.getY(), existingRoomId, structure.getId(), floor.id(), floor.anchorY(), floor.ceilingY(),
+                structure.getFloors().stream().map(candidate -> candidate.id() + "@" + candidate.anchorY()
+                        + ".." + candidate.ceilingY()).toList());
 
         Set<BlockPos> blocked = new HashSet<>();
-        // New Rooms may not consume registered Room space. Updates deliberately scan through
-        // other registered Rooms so the commit phase can prove a physical merge and delete
-        // only fully-covered stale duplicates; partial overlap remains a conflict.
-        if (village != null && existingRoomId < 0) {
-            village.getRooms().filter(room -> room.getStructureId() == structure.getId())
+        // Room scans never rewrite Structure/Floor truth and never consume another registered Room.
+        // Updating a Room ignores only its own old footprint; every other Room remains a hard boundary.
+        if (village != null) {
+            village.getRooms().filter(room -> room.getId() != existingRoomId)
+                    .filter(room -> room.getStructureId() == structure.getId())
                     .filter(room -> room.getFloorId() == floor.id())
                     .flatMap(room -> room.getFloorRegions().stream())
                     .flatMap(region -> region.cells().stream())
@@ -365,10 +346,10 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         if (village == null) {
             types = room.getVisibleMatchingTypes().stream().map(BuildingType::name).toList();
         } else {
-            types = village.getMatchingRoomTypes(structure.getId(), room).stream().map(BuildingType::name).toList();
+            types = village.getMatchingRoomTypes(room).stream().map(BuildingType::name).toList();
         }
         return new BuildingScanResult(Building.validationResult.SUCCESS, room.getSourceBlock(), room,
-                types, village, existingRoomId, structure.getId(), floor.id(), structureUpdate);
+                types, village, existingRoomId, structure.getId(), floor.id());
     }
 
     private static BuildingScanResult failedRoom(Building.validationResult result, BlockPos pos, Village village) {
@@ -452,32 +433,9 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         if (existing == null || scan.existingBuildingId() != expectedRoomId) return Building.validationResult.OVERLAP;
         if (forcedType != null && !scan.matchesType(forcedType)) return Building.validationResult.INVALID_TYPE;
         if (forcedType == null && scan.isAmbiguous()) return Building.validationResult.INVALID_TYPE;
+        if (village.getStructure(existing.getStructureId()).isEmpty()) return Building.validationResult.NOT_IN_BUILDING;
 
-        Structure structure = village.getStructure(existing.getStructureId()).orElse(null);
-        if (structure == null) return Building.validationResult.NOT_IN_BUILDING;
-        Structure preparedStructure = scan.structureUpdate();
-        if (preparedStructure != null
-                && (preparedStructure.getId() != structure.getId()
-                || preparedStructure.getFloor(existing.getFloorId()).isEmpty())) {
-            return Building.validationResult.OVERLAP;
-        }
-
-        Building scanned = scan.building();
-        List<Building> stale = new ArrayList<>();
-        for (Building other : village.getRooms().filter(room -> room.getId() != expectedRoomId)
-                .filter(room -> room.getStructureId() == existing.getStructureId())
-                .filter(room -> room.getFloorId() == existing.getFloorId()).toList()) {
-            long intersection = scanned.getFloorFootprintIntersectionArea(other);
-            if (intersection == 0) continue;
-            if (intersection != other.getFloorFootprintArea()) return Building.validationResult.OVERLAP;
-            stale.add(other);
-        }
-
-        // All validation is complete: commit physical Structure/Floor geometry and Room geometry together.
-        if (preparedStructure != null) {
-            structure.copyPhysicalGeometryFrom(preparedStructure);
-        }
-        existing.copyScannedGeometryFrom(scanned, world, true);
+        existing.copyScannedGeometryFrom(scan.building(), world, true);
         if (forcedType != null) {
             existing.setType(forcedType);
             existing.setTypeForced(true);
@@ -486,14 +444,9 @@ public class VillageManager extends SavedData implements Iterable<Village> {
             existing.setTypeForced(false);
         }
 
-        if (stale.stream().anyMatch(room -> structure.isRootRoom(room.getId()))) {
-            structure.setRootRoomId(existing.getId());
-        }
-        village.removeBuildings(stale.stream().map(Building::getId).toList());
         finalizeVillageMutation(village);
         return Building.validationResult.SUCCESS;
     }
-
 
     private static String chooseCategory(BuildingScanResult scan, String forcedType, String inherited, boolean roomInheritance) {
         if (forcedType != null) return forcedType;
