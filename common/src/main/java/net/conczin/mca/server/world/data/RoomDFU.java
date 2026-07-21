@@ -162,8 +162,7 @@ final class RoomDFU {
                 container.room().getSourceBlock(),
                 min,
                 max,
-                floors,
-                volumeSlices(floors));
+                floors);
         structure.setRootRoomId(root.getId());
         return Optional.of(new MigratedStructure(structure, List.copyOf(rooms)));
     }
@@ -177,7 +176,7 @@ final class RoomDFU {
         StructureFloor floor = new StructureFloor(0, region.anchorY(),
                 Math.max(region.anchorY() + 1, room.getRawPos1().getY() + 1), region);
         Structure structure = new Structure(room.getId(), room.getSourceBlock(), room.getRawPos0(), room.getRawPos1(),
-                List.of(floor), volumeSlices(List.of(floor)));
+                List.of(floor));
         structure.setRootRoomId(room.getId());
         room.setStructureId(structure.getId());
         room.setFloorId(floor.id());
@@ -220,17 +219,6 @@ final class RoomDFU {
                 .comparingInt((StructureFloor floor) -> Math.abs(floor.anchorY() - y))
                 .thenComparingInt(StructureFloor::anchorY)
                 .thenComparingInt(StructureFloor::id)).orElse(null);
-    }
-
-    private static List<BuildingFloorRegion> volumeSlices(List<StructureFloor> floors) {
-        List<BuildingFloorRegion> slices = new ArrayList<>();
-        for (StructureFloor floor : floors) {
-            if (floor.region() == null) continue;
-            for (int y = floor.anchorY(); y < floor.ceilingY(); y++) {
-                slices.add(floor.region().withAnchorY(y));
-            }
-        }
-        return List.copyOf(slices);
     }
 
     private record LegacyFloorRoom(

@@ -3,12 +3,14 @@ package net.conczin.mca.server.world.data;
 import net.conczin.mca.Config;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.Vec3i;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.Heightmap;
 
 import java.util.*;
+import java.util.function.Predicate;
 
 /** Discovers only physical Structure geometry. It never creates or classifies Rooms. */
 final class StructureScanner {
@@ -121,7 +123,6 @@ final class StructureScanner {
         }
 
         List<StructureFloor> floors = toFloors(world, regions);
-        List<BuildingFloorRegion> volumeSlices = toVolumeSlices(volume);
         BlockPos min = new BlockPos(
                 volume.stream().mapToInt(BlockPos::getX).min().orElse(seed.getX()),
                 volume.stream().mapToInt(BlockPos::getY).min().orElse(seed.getY()),
@@ -130,18 +131,16 @@ final class StructureScanner {
                 volume.stream().mapToInt(BlockPos::getX).max().orElse(seed.getX()),
                 volume.stream().mapToInt(BlockPos::getY).max().orElse(seed.getY()),
                 volume.stream().mapToInt(BlockPos::getZ).max().orElse(seed.getZ()));
-        Structure candidate = new Structure(ignoredStructureId, seed, min, max, floors, volumeSlices);
+        Structure candidate = new Structure(ignoredStructureId, seed, min, max, floors);
 
         Set<ExteriorEntrance> exteriorEntrances = horizontalEntrances.stream()
                 .map(entrance -> findExteriorEntrance(world, entrance, volume, roof).orElse(null))
                 .filter(Objects::nonNull)
                 .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
-        StructureConnector.findVerticalExteriorEntrances(
-                        world, connectorCells, candidate, volume,
-                        outside -> !hasRoof(world, outside, roof)
-                                || canReachUncoveredSupportedSpace(world, outside, null, roof))
-                .forEach(entrance -> exteriorEntrances.add(
-                        new ExteriorEntrance(entrance.inside(), entrance.outside())));
+        exteriorEntrances.addAll(findVerticalExteriorEntrances(
+                world, connectorCells, candidate, volume,
+                outside -> !hasRoof(world, outside, roof)
+                        || canReachUncoveredSupportedSpace(world, outside, null, roof)));
         GroundChoice groundChoice = chooseGroundFloor(world, floors, exteriorEntrances, volume);
         StructureFloor ground = floors.stream()
                 .min(Comparator.comparingInt((StructureFloor floor) -> Math.abs(floor.anchorY() - groundChoice.floorY()))
@@ -155,7 +154,7 @@ final class StructureScanner {
             }
         }
         return new Result(Building.validationResult.SUCCESS, seed, min, max,
-                floors, volumeSlices, ground.id(), groundSeed);
+                floors, ground.id(), groundSeed);
     }
 
     /** Resolves a query point such as a flying player or roof position to nearby enclosed interior. */
@@ -271,18 +270,6 @@ final class StructureScanner {
     }
 
 
-    private static List<BuildingFloorRegion> toVolumeSlices(Collection<BlockPos> structuralCells) {
-        Map<Integer, List<BlockPos>> byY = new TreeMap<>();
-        for (BlockPos cell : structuralCells) {
-            byY.computeIfAbsent(cell.getY(), ignored -> new ArrayList<>()).add(cell);
-        }
-        List<BuildingFloorRegion> slices = new ArrayList<>(byY.size());
-        for (Map.Entry<Integer, List<BlockPos>> entry : byY.entrySet()) {
-            slices.add(BuildingFloorRegion.fromFootprint(entry.getKey(), entry.getValue()));
-        }
-        return List.copyOf(slices);
-    }
-
     /**
      * Normal doors may connect internal Rooms or open to the exterior. A roof overhang can make
      * exterior terrain look like a roofed walkable Floor, so do not cross a door into a side that
@@ -329,6 +316,64 @@ final class StructureScanner {
             return Optional.empty();
         }
         return Optional.of(new ExteriorEntrance(inside, outside));
+    }
+
+    /** Returns actual Structure landings for vertical chains that also touch exterior supported space. */
+    private static Set<ExteriorEntrance> findVerticalExteriorEntrances(
+            Level world, Collection<BlockPos> connectorCells, Structure structure,
+            Set<BlockPos> interior, Predicate<BlockPos> exteriorLike) {
+        Set<BlockPos> remaining = connectorCells.stream()
+                .filter(pos -> StructureConnector.isVertical(world.getBlockState(pos)))
+                .map(BlockPos::immutable)
+                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+        LinkedHashSet<ExteriorEntrance> result = new LinkedHashSet<>();
+        while (!remaining.isEmpty()) {
+            BlockPos seed = remaining.iterator().next();
+            remaining.remove(seed);
+            Set<BlockPos> chain = takeKnownChain(seed, remaining);
+            List<BlockPos> inside = chain.stream().flatMap(pos -> StructureConnector.handoffs(pos).stream())
+                    .filter(interior::contains).filter(pos -> StructureConnector.isPassageCell(world, pos))
+                    .distinct().toList();
+            List<BlockPos> outside = chain.stream().flatMap(pos -> StructureConnector.handoffs(pos).stream())
+                    .filter(pos -> !interior.contains(pos) && StructureConnector.isPassageCell(world, pos))
+                    .filter(pos -> isSupported(world, pos.getX(), pos.getY(), pos.getZ()))
+                    .filter(exteriorLike)
+                    .sorted(Comparator.comparingInt((BlockPos pos) -> pos.getY())
+                            .thenComparingInt(Vec3i::getX).thenComparingInt(Vec3i::getZ))
+                    .toList();
+            if (inside.isEmpty() || outside.isEmpty()) continue;
+            BlockPos out = outside.getFirst();
+            StructureFloor floor = inside.stream().map(structure::physicalFloorAt)
+                    .flatMap(optional -> optional.stream()).filter(candidate -> candidate.anchorY() <= out.getY())
+                    .max(Comparator.comparingInt(StructureFloor::anchorY)).orElse(null);
+            if (floor == null) continue;
+            BlockPos in = inside.stream()
+                    .filter(pos -> structure.physicalFloorAt(pos)
+                            .map(candidate -> candidate.id() == floor.id()).orElse(false))
+                    .min(Comparator.comparingInt((BlockPos pos) -> Math.abs(pos.getY() - out.getY()))
+                            .thenComparingInt(Vec3i::getY).thenComparingInt(Vec3i::getX)
+                            .thenComparingInt(Vec3i::getZ)).orElse(null);
+            if (in != null) result.add(new ExteriorEntrance(in, out));
+        }
+        return Set.copyOf(result);
+    }
+
+    private static Set<BlockPos> takeKnownChain(BlockPos seed, Set<BlockPos> remaining) {
+        LinkedHashSet<BlockPos> chain = new LinkedHashSet<>();
+        ArrayDeque<BlockPos> queue = new ArrayDeque<>();
+        chain.add(seed);
+        queue.add(seed);
+        while (!queue.isEmpty()) {
+            BlockPos current = queue.removeFirst();
+            for (Direction direction : Direction.values()) {
+                BlockPos next = current.relative(direction);
+                if (remaining.remove(next)) {
+                    chain.add(next);
+                    queue.addLast(next);
+                }
+            }
+        }
+        return Set.copyOf(chain);
     }
 
     /**
@@ -641,16 +686,14 @@ final class StructureScanner {
                   BlockPos min,
                   BlockPos max,
                   List<StructureFloor> floors,
-                  List<BuildingFloorRegion> volumeSlices,
                   int groundFloorId,
                   BlockPos groundSeed) {
         Result {
             floors = List.copyOf(floors);
-            volumeSlices = List.copyOf(volumeSlices);
         }
 
         static Result failure(Building.validationResult result, BlockPos source) {
-            return new Result(result, source, source, source, List.of(), List.of(), -1, source);
+            return new Result(result, source, source, source, List.of(), -1, source);
         }
 
         Structure toStructure(int id) {
@@ -659,7 +702,7 @@ final class StructureScanner {
                 StructureFloor floor = floors.get(i);
                 assigned.add(new StructureFloor(i, floor.anchorY(), floor.ceilingY(), floor.region()));
             }
-            return new Structure(id, source, min, max, assigned, volumeSlices);
+            return new Structure(id, source, min, max, assigned);
         }
     }
 }
