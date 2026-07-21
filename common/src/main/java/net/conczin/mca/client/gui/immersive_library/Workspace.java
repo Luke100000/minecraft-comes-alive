@@ -36,6 +36,12 @@ public final class Workspace {
         return FastColor.ABGR32.color(alpha, red, green, blue);
     }
 
+    private static NativeImage copyImage(NativeImage image) {
+        NativeImage copy = new NativeImage(image.format(), image.getWidth(), image.getHeight(), false);
+        copy.copyFrom(image);
+        return copy;
+    }
+
     public Workspace(NativeImage image) {
         this.currentImage = image;
         this.backendTexture = new DynamicTexture(currentImage);
@@ -43,7 +49,7 @@ public final class Workspace {
     }
 
     public Workspace(NativeImage image, SkinMeta meta, LiteContent content) {
-        this(image);
+        this(copyImage(image));
 
         this.contentid = content.contentid();
         this.title = content.title();
