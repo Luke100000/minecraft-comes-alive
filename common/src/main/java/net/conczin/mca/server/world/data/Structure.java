@@ -18,24 +18,12 @@ public final class Structure implements VillageBuilding {
     private BlockPos min;
     private BlockPos max;
     private final Map<Integer, StructureFloor> floors = new HashMap<>();
-    /** Exact reachable Structure volume, compressed into one horizontal region per Y slice. */
-    private List<BuildingFloorRegion> volumeSlices = List.of();
 
     public Structure(int id, BlockPos source, BlockPos min, BlockPos max, Collection<StructureFloor> floors) {
-        this(id, source, min, max, floors, List.of());
-    }
-
-    Structure(int id,
-              BlockPos source,
-              BlockPos min,
-              BlockPos max,
-              Collection<StructureFloor> floors,
-              Collection<BuildingFloorRegion> volumeSlices) {
         this.id = id;
         this.source = source.immutable();
         this.min = min.immutable();
         this.max = max.immutable();
-        this.volumeSlices = List.copyOf(volumeSlices);
         for (StructureFloor floor : floors) {
             this.floors.put(floor.id(), floor);
             nextFloorId = Math.max(nextFloorId, floor.id() + 1);
@@ -54,10 +42,6 @@ public final class Structure implements VillageBuilding {
             floors.put(floor.id(), floor);
             nextFloorId = Math.max(nextFloorId, floor.id() + 1);
         }
-        if (tag.contains("volume", Tag.TAG_LIST)) {
-            volumeSlices = List.copyOf(NbtHelper.toList(tag.getList("volume", Tag.TAG_COMPOUND),
-                    value -> BuildingFloorRegion.load((CompoundTag) value)));
-        }
     }
 
     public CompoundTag save() {
@@ -69,9 +53,6 @@ public final class Structure implements VillageBuilding {
         tag.put("min", NbtHelper.encodeBlockPos(min));
         tag.put("max", NbtHelper.encodeBlockPos(max));
         tag.put("floors", NbtHelper.fromList(getFloors(), StructureFloor::save));
-        if (!volumeSlices.isEmpty()) {
-            tag.put("volume", NbtHelper.fromList(volumeSlices, BuildingFloorRegion::save));
-        }
         return tag;
     }
 
@@ -92,34 +73,28 @@ public final class Structure implements VillageBuilding {
                 .max(Comparator.comparingInt(StructureFloor::anchorY));
     }
 
-    /** Resolves exact persisted physical volume membership without broadening connector interaction geometry. */
-    Optional<StructureFloor> resolvePhysicalFloor(Vec3i pos) {
-        if (!containsPos(pos)) return Optional.empty();
+    /** Exact physical membership is the canonical Floor footprint extruded through its vertical band. */
+    Optional<StructureFloor> physicalFloorAt(Vec3i pos) {
+        if (pos.getX() < min.getX() || pos.getX() > max.getX()
+                || pos.getY() < min.getY() || pos.getY() > max.getY()
+                || pos.getZ() < min.getZ() || pos.getZ() > max.getZ()) {
+            return Optional.empty();
+        }
         return resolveFloor(pos.getY())
                 .filter(floor -> pos.getY() < floor.ceilingY())
                 .filter(floor -> floor.contains(pos.getX(), pos.getZ()));
     }
 
-    /**
-     * Resolves a player/query position to one logical Structure Floor/Room. Exact physical volume
-     * remains authoritative for geometry; connector chains add interaction ownership without
-     * broadening {@link #containsPos(Vec3i)}.
-     */
-    Optional<InteractionPosition> resolveInteractionPosition(Level world,
-                                                             BlockPos pos,
-                                                             Collection<Building> rooms) {
+    Optional<InteractionPosition> resolveInteractionPosition(Level world, BlockPos pos, Collection<Building> rooms) {
         List<Building> structureRooms = rooms == null ? List.of() : rooms.stream()
                 .filter(room -> room.getStructureId() == id)
                 .toList();
-
-        boolean attached = containsPos(pos) || StructureConnector.attachesToStructure(world, this, pos);
-        if (!attached) return Optional.empty();
+        if (!containsPos(pos) && !StructureConnector.attachesToStructure(world, this, pos)) return Optional.empty();
 
         StructureFloor floor = resolveFloor(pos.getY()).orElse(null);
         if (floor == null) return Optional.empty();
-
-        return Optional.of(new InteractionPosition(
-                floor, roomAtColumn(structureRooms, floor, pos.getX(), pos.getZ())));
+        return Optional.of(new InteractionPosition(floor,
+                roomAtColumn(structureRooms, floor, pos.getX(), pos.getZ())));
     }
 
     private static Building roomAtColumn(Collection<Building> rooms, StructureFloor floor, int x, int z) {
@@ -154,33 +129,18 @@ public final class Structure implements VillageBuilding {
         return nextFloorId++;
     }
 
-    /**
-     * Replaces physical geometry while preserving stable Floor IDs. Rooms are the strongest
-     * identity anchors; a rescan is rejected when any registered Room loses its Floor.
-     */
     boolean applyScan(StructureScanner.Result scan, Collection<Building> rooms) {
         return applyScan(scan, rooms, -1);
     }
 
-    /**
-     * Refreshes physical Structure/Floor geometry for Update Room without requiring the Room's
-     * stale pre-update footprint to fit the new Floor. Other registered Rooms remain hard anchors,
-     * and the updated Room's existing Floor ID is preserved instead of silently jumping storeys.
-     */
-    boolean applyScanForRoomUpdate(StructureScanner.Result scan,
-                                   Collection<Building> rooms,
-                                   int updatingRoomId) {
+    boolean applyScanForRoomUpdate(StructureScanner.Result scan, Collection<Building> rooms, int updatingRoomId) {
         return applyScan(scan, rooms, updatingRoomId);
     }
 
-    private boolean applyScan(StructureScanner.Result scan,
-                              Collection<Building> rooms,
-                              int updatingRoomId) {
+    private boolean applyScan(StructureScanner.Result scan, Collection<Building> rooms, int updatingRoomId) {
         StructureFloorMatcher.Result match = StructureFloorMatcher.match(
                 getFloors(), nextFloorId, scan.floors(), rooms, updatingRoomId).orElse(null);
-        if (match == null) {
-            return false;
-        }
+        if (match == null) return false;
 
         floors.clear();
         floors.putAll(match.floors());
@@ -188,21 +148,17 @@ public final class Structure implements VillageBuilding {
         source = scan.source();
         min = scan.min();
         max = scan.max();
-        volumeSlices = scan.volumeSlices();
         return true;
     }
 
     void copyPhysicalGeometryFrom(Structure other) {
-        if (other == null || other.id != id) {
-            throw new IllegalArgumentException("Structure identity mismatch");
-        }
+        if (other == null || other.id != id) throw new IllegalArgumentException("Structure identity mismatch");
         nextFloorId = other.nextFloorId;
         source = other.source;
         min = other.min;
         max = other.max;
         floors.clear();
         floors.putAll(other.floors);
-        volumeSlices = other.volumeSlices;
     }
 
     @Override
@@ -243,19 +199,9 @@ public final class Structure implements VillageBuilding {
                 (min.getZ() + max.getZ()) / 2);
     }
 
-    public List<BuildingFloorRegion> getVolumeSlices() {
-        return volumeSlices;
-    }
-
     @Override
     public boolean containsPos(Vec3i pos) {
-        if (pos.getX() < min.getX() || pos.getX() > max.getX()
-                || pos.getY() < min.getY() || pos.getY() > max.getY()
-                || pos.getZ() < min.getZ() || pos.getZ() > max.getZ()) {
-            return false;
-        }
-        return volumeSlices.stream().anyMatch(slice -> slice.anchorY() == pos.getY()
-                && slice.containsHorizontally(pos.getX(), pos.getZ()));
+        return physicalFloorAt(pos).isPresent();
     }
 
     public boolean intersects(Structure other) {
@@ -265,17 +211,16 @@ public final class Structure implements VillageBuilding {
                 || max.getZ() < other.min.getZ() || min.getZ() > other.max.getZ()) {
             return false;
         }
-        Map<Integer, BuildingFloorRegion> otherByY = new HashMap<>();
-        for (BuildingFloorRegion slice : other.volumeSlices) {
-            otherByY.put(slice.anchorY(), slice);
-        }
-        for (BuildingFloorRegion slice : volumeSlices) {
-            BuildingFloorRegion candidate = otherByY.get(slice.anchorY());
-            if (candidate != null && slice.intersectionArea(candidate) > 0) {
-                return true;
+        for (StructureFloor floor : getFloors()) {
+            for (StructureFloor candidate : other.getFloors()) {
+                boolean verticalOverlap = floor.anchorY() < candidate.ceilingY()
+                        && candidate.anchorY() < floor.ceilingY();
+                if (verticalOverlap && floor.region() != null && candidate.region() != null
+                        && floor.region().intersectionArea(candidate.region()) > 0) {
+                    return true;
+                }
             }
         }
         return false;
     }
-
 }

@@ -6,26 +6,18 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
-/**
- * Compact persistent metadata for one semantic walkable floor band inside a
- * connected building interior. A fresh scan starts with a physically detected
- * {@code anchorY}; registered rooms may retain that value as their semantic floor
- * assignment while replacing the component geometry from a newer scan. Components
- * preserve disconnected balconies or platforms, while row spans preserve atrium
- * voids without storing every cell.
- */
+/** Compact persistent X/Z footprint for one semantic Floor band. */
 public record BuildingFloorRegion(int anchorY, int area, List<Component> components) {
     public BuildingFloorRegion {
         components = List.copyOf(components);
     }
 
     static BuildingFloorRegion load(CompoundTag tag) {
-        List<Component> components = NbtHelper.toList(
-                tag.getList("components", Tag.TAG_COMPOUND),
-                value -> Component.load((CompoundTag) value)
-        );
-        return new BuildingFloorRegion(tag.getInt("anchorY"), tag.getInt("area"), components);
+        return new BuildingFloorRegion(tag.getInt("anchorY"), tag.getInt("area"),
+                NbtHelper.toList(tag.getList("components", Tag.TAG_COMPOUND),
+                        value -> Component.load((CompoundTag) value)));
     }
 
     CompoundTag save() {
@@ -41,28 +33,11 @@ public record BuildingFloorRegion(int anchorY, int area, List<Component> compone
     }
 
     public Set<BlockPos> cells() {
-        LinkedHashSet<BlockPos> cells = new LinkedHashSet<>();
-        for (Component component : components) {
-            if (component.spans().isEmpty()) {
-                for (int z = component.minZ(); z <= component.maxZ(); z++) {
-                    for (int x = component.minX(); x <= component.maxX(); x++) {
-                        cells.add(new BlockPos(x, anchorY, z));
-                    }
-                }
-                continue;
-            }
-            for (Span span : component.spans()) {
-                for (int x = span.minX(); x <= span.maxX(); x++) {
-                    cells.add(new BlockPos(x, anchorY, span.z()));
-                }
-            }
-        }
-        return Set.copyOf(cells);
+        return components.stream()
+                .flatMap(component -> component.cells(anchorY).stream())
+                .collect(Collectors.toUnmodifiableSet());
     }
 
-    /**
-     * Keeps newly scanned floor geometry attached to an already-assigned semantic floor.
-     */
     BuildingFloorRegion withAnchorY(int anchorY) {
         return this.anchorY == anchorY ? this : new BuildingFloorRegion(anchorY, area, components);
     }
@@ -71,86 +46,94 @@ public record BuildingFloorRegion(int anchorY, int area, List<Component> compone
         if (footprintCells == null || footprintCells.isEmpty()) {
             return new BuildingFloorRegion(anchorY, 0, List.of());
         }
+        Set<Cell> cells = footprintCells.stream()
+                .map(pos -> new Cell(pos.getX(), pos.getZ()))
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        List<Component> components = splitComponents(cells);
+        return new BuildingFloorRegion(anchorY,
+                components.stream().mapToInt(Component::area).sum(), components);
+    }
 
-        Map<Integer, TreeSet<Integer>> xsByZ = new TreeMap<>();
-        for (BlockPos cell : footprintCells) {
-            xsByZ.computeIfAbsent(cell.getZ(), ignored -> new TreeSet<>()).add(cell.getX());
-        }
-
-        int minX = Integer.MAX_VALUE;
-        int minZ = Integer.MAX_VALUE;
-        int maxX = Integer.MIN_VALUE;
-        int maxZ = Integer.MIN_VALUE;
-        int area = 0;
-        List<Span> spans = new ArrayList<>();
-
-        for (Map.Entry<Integer, TreeSet<Integer>> entry : xsByZ.entrySet()) {
-            TreeSet<Integer> xs = entry.getValue();
-            if (xs.isEmpty()) {
-                continue;
+    private static List<Component> splitComponents(Set<Cell> cells) {
+        Set<Cell> remaining = new HashSet<>(cells);
+        List<Component> components = new ArrayList<>();
+        while (!remaining.isEmpty()) {
+            Cell seed = remaining.stream().min(Comparator.comparingInt(Cell::x).thenComparingInt(Cell::z)).orElseThrow();
+            remaining.remove(seed);
+            ArrayDeque<Cell> queue = new ArrayDeque<>();
+            List<Cell> connected = new ArrayList<>();
+            queue.add(seed);
+            while (!queue.isEmpty()) {
+                Cell current = queue.removeFirst();
+                connected.add(current);
+                for (Cell next : List.of(
+                        new Cell(current.x() + 1, current.z()), new Cell(current.x() - 1, current.z()),
+                        new Cell(current.x(), current.z() + 1), new Cell(current.x(), current.z() - 1))) {
+                    if (remaining.remove(next)) queue.addLast(next);
+                }
             }
+            components.add(componentFromCells(connected));
+        }
+        components.sort(Comparator.comparingInt(Component::minX).thenComparingInt(Component::minZ)
+                .thenComparingInt(Component::maxX).thenComparingInt(Component::maxZ));
+        return List.copyOf(components);
+    }
 
+    private static Component componentFromCells(Collection<Cell> cells) {
+        Map<Integer, TreeSet<Integer>> xsByZ = new TreeMap<>();
+        for (Cell cell : cells) xsByZ.computeIfAbsent(cell.z(), ignored -> new TreeSet<>()).add(cell.x());
+        List<Span> spans = new ArrayList<>();
+        int minX = Integer.MAX_VALUE, minZ = Integer.MAX_VALUE;
+        int maxX = Integer.MIN_VALUE, maxZ = Integer.MIN_VALUE;
+        int area = 0;
+        for (Map.Entry<Integer, TreeSet<Integer>> entry : xsByZ.entrySet()) {
             int z = entry.getKey();
+            Iterator<Integer> xs = entry.getValue().iterator();
+            if (!xs.hasNext()) continue;
             minZ = Math.min(minZ, z);
             maxZ = Math.max(maxZ, z);
-            area += xs.size();
-
-            Iterator<Integer> iterator = xs.iterator();
-            int start = iterator.next();
-            int previous = start;
+            int start = xs.next(), previous = start;
             minX = Math.min(minX, start);
             maxX = Math.max(maxX, start);
-
-            while (iterator.hasNext()) {
-                int current = iterator.next();
-                minX = Math.min(minX, current);
-                maxX = Math.max(maxX, current);
-                if (current != previous + 1) {
+            area++;
+            while (xs.hasNext()) {
+                int x = xs.next();
+                minX = Math.min(minX, x);
+                maxX = Math.max(maxX, x);
+                area++;
+                if (x != previous + 1) {
                     spans.add(new Span(z, start, previous));
-                    start = current;
+                    start = x;
                 }
-                previous = current;
+                previous = x;
             }
             spans.add(new Span(z, start, previous));
         }
-
-        Component component = new Component(minX, minZ, maxX, maxZ, area, spans);
-        return new BuildingFloorRegion(anchorY, area, List.of(component));
+        return new Component(minX, minZ, maxX, maxZ, area, spans);
     }
 
     public int intersectionArea(BuildingFloorRegion other) {
         int intersection = 0;
         for (Component component : components) {
-            for (Component otherComponent : other.components) {
-                intersection += component.intersectionArea(otherComponent);
-            }
+            for (Component candidate : other.components) intersection += component.intersectionArea(candidate);
         }
         return intersection;
     }
 
-    public record Component(int minX,
-                            int minZ,
-                            int maxX,
-                            int maxZ,
-                            int area,
-                            List<Span> spans) {
+    private record Cell(int x, int z) {
+    }
+
+    public record Component(int minX, int minZ, int maxX, int maxZ, int area, List<Span> spans) {
         public Component {
-            spans = List.copyOf(spans);
+            spans = spans == null || spans.isEmpty()
+                    ? rectangleSpans(minX, minZ, maxX, maxZ)
+                    : List.copyOf(spans);
         }
 
         private static Component load(CompoundTag tag) {
-            List<Span> spans = NbtHelper.toList(
-                    tag.getList("spans", Tag.TAG_COMPOUND),
-                    value -> Span.load((CompoundTag) value)
-            );
-            return new Component(
-                    tag.getInt("minX"),
-                    tag.getInt("minZ"),
-                    tag.getInt("maxX"),
-                    tag.getInt("maxZ"),
-                    tag.getInt("area"),
-                    spans
-            );
+            return new Component(tag.getInt("minX"), tag.getInt("minZ"), tag.getInt("maxX"), tag.getInt("maxZ"),
+                    tag.getInt("area"), NbtHelper.toList(tag.getList("spans", Tag.TAG_COMPOUND),
+                    value -> Span.load((CompoundTag) value)));
         }
 
         private CompoundTag save() {
@@ -165,28 +148,27 @@ public record BuildingFloorRegion(int anchorY, int area, List<Component> compone
         }
 
         public boolean containsHorizontally(int x, int z) {
-            if (spans.isEmpty()) {
-                return x >= minX && x <= maxX && z >= minZ && z <= maxZ;
-            }
             return spans.stream().anyMatch(span -> span.containsHorizontally(x, z));
         }
 
+        Set<BlockPos> cells(int anchorY) {
+            LinkedHashSet<BlockPos> cells = new LinkedHashSet<>();
+            for (Span span : spans) {
+                for (int x = span.minX(); x <= span.maxX(); x++) cells.add(new BlockPos(x, anchorY, span.z()));
+            }
+            return Set.copyOf(cells);
+        }
+
         private int intersectionArea(Component other) {
+            int intersection = 0;
             int minSharedZ = Math.max(minZ, other.minZ);
             int maxSharedZ = Math.min(maxZ, other.maxZ);
-            if (minSharedZ > maxSharedZ) {
-                return 0;
-            }
-
-            int intersection = 0;
             for (int z = minSharedZ; z <= maxSharedZ; z++) {
                 for (Span own : spansAt(z)) {
                     for (Span candidate : other.spansAt(z)) {
                         int minSharedX = Math.max(own.minX(), candidate.minX());
                         int maxSharedX = Math.min(own.maxX(), candidate.maxX());
-                        if (minSharedX <= maxSharedX) {
-                            intersection += maxSharedX - minSharedX + 1;
-                        }
+                        if (minSharedX <= maxSharedX) intersection += maxSharedX - minSharedX + 1;
                     }
                 }
             }
@@ -194,13 +176,13 @@ public record BuildingFloorRegion(int anchorY, int area, List<Component> compone
         }
 
         private List<Span> spansAt(int z) {
-            if (z < minZ || z > maxZ) {
-                return List.of();
-            }
-            if (spans.isEmpty()) {
-                return List.of(new Span(z, minX, maxX));
-            }
-            return spans.stream().filter(span -> span.z() == z).toList();
+            return z < minZ || z > maxZ ? List.of() : spans.stream().filter(span -> span.z() == z).toList();
+        }
+
+        private static List<Span> rectangleSpans(int minX, int minZ, int maxX, int maxZ) {
+            List<Span> spans = new ArrayList<>();
+            for (int z = minZ; z <= maxZ; z++) spans.add(new Span(z, minX, maxX));
+            return List.copyOf(spans);
         }
     }
 
