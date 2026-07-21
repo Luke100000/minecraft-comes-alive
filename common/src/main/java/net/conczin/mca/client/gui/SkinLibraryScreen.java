@@ -1537,16 +1537,24 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
             this.authUrl = authUrl;
         }
 
+        private void startPolling() {
+            isBrowserOpen = true;
+            polling = true;
+        }
+
         @Override
         protected void addButtons(int y) {
             statusY = y - 12;
             addExitButton(Button.builder(Component.translatable("chat.link.open"), button -> {
-                isBrowserOpen = true;
-                polling = true;
+                startPolling();
                 Util.getPlatform().openUri(authUrl);
-            }).bounds(width / 2 - 155, y, 150, 20).build());
+            }).bounds(width / 2 - 155, y, 100, 20).build());
+            addExitButton(Button.builder(Component.translatable("chat.copy"), button -> {
+                startPolling();
+                minecraft.keyboardHandler.setClipboard(authUrl);
+            }).bounds(width / 2 - 50, y, 100, 20).build());
             addExitButton(Button.builder(CommonComponents.GUI_CANCEL, button -> cancelAuthentication())
-                    .bounds(width / 2 + 5, y, 150, 20).build());
+                    .bounds(width / 2 + 55, y, 100, 20).build());
         }
 
         @Override
