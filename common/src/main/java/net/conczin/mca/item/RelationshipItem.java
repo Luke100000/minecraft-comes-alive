@@ -13,8 +13,7 @@ public abstract class RelationshipItem extends TooltippedItem implements Special
 
     abstract int getHeartsRequired();
 
-    @Override
-    public boolean handle(ServerPlayer player, VillagerEntityMCA villager) {
+    protected Result validate(ServerPlayer player, VillagerEntityMCA villager) {
         PlayerSaveData playerData = PlayerSaveData.get(player);
         Memories memory = villager.getVillagerBrain().getMemoriesForPlayer(player);
         String response;
@@ -36,10 +35,10 @@ public abstract class RelationshipItem extends TooltippedItem implements Special
         } else if (!villager.canBeAttractedTo(playerData)) {
             response = "interaction.relationship.fail.incompatible";
         } else {
-            return false;
+            return Result.PASS;
         }
 
         villager.sendChatMessage(player, response);
-        return true;
+        return Result.HANDLED;
     }
 }
