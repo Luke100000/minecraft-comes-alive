@@ -1,6 +1,7 @@
 package net.conczin.mca.server.world.data;
 
 import net.conczin.mca.Config;
+import net.conczin.mca.MCA;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.Vec3i;
@@ -52,12 +53,21 @@ final class StructureScanner {
 
             BlockState currentState = world.getBlockState(current);
             boolean connector = StructureConnector.isConnector(currentState);
+            boolean walkable = !connector && isWalkableAnchor(world, current, currentState, roof);
+            boolean floorObstacle = !connector && !walkable
+                    && isFloorOccupyingObstacle(world, current, currentState, roof);
             if (connector) {
                 volume.add(current);
                 connectorCells.add(current);
-            } else if (isWalkableAnchor(world, current, currentState, roof)) {
+            } else if (walkable) {
                 recordFloorCell(world, floorCells, current);
                 addVerticalInteriorColumn(world, current, volume, roof, maxSize);
+            } else if (floorObstacle) {
+                // Furniture is part of the Floor footprint, even when several occupied cells are
+                // adjacent. Traverse the obstacle chain horizontally without promoting its top
+                // surface into a separate Floor.
+                recordFloorCell(world, floorCells, current);
+                addObstacleInteriorColumn(world, current, volume, roof, maxSize);
             } else {
                 continue;
             }
@@ -72,7 +82,9 @@ final class StructureScanner {
                     horizontalEntrances.add(next);
                 }
 
-                if (!connector && isFloorOccupyingObstacle(world, next, nextState, roof)) {
+                boolean nextFloorObstacle = !connector
+                        && isFloorOccupyingObstacle(world, next, nextState, roof);
+                if (nextFloorObstacle) {
                     recordFloorCell(world, floorCells, next);
                     addObstacleInteriorColumn(world, next, volume, roof, maxSize);
                 }
@@ -82,7 +94,9 @@ final class StructureScanner {
                     continue;
                 }
 
-                if (StructureConnector.isConnector(nextState) || isWalkableAnchor(world, next, nextState, roof)) {
+                if (StructureConnector.isConnector(nextState)
+                        || isWalkableAnchor(world, next, nextState, roof)
+                        || nextFloorObstacle) {
                     enqueueTraversal(seed, next, visited, queue, maxRadius);
                 }
             }
@@ -93,7 +107,7 @@ final class StructureScanner {
             // the connector column and an adjacent supported cell one block up/down.
             enqueueConnectorHandoffs(world, seed, current, currentState, visited, queue, roof, maxRadius);
 
-            if (!connector) {
+            if (walkable) {
                 // Collision-aware one-block diagonal transitions connect stair/slab-like geometry
                 // without making individual stair steps into physical Floors.
                 for (Direction direction : HORIZONTAL) {
@@ -117,6 +131,10 @@ final class StructureScanner {
 
         floorCells.addAll(StructureConnector.associatedFloorCells(world, connectorCells, floorCells));
         List<BuildingFloorRegion> regions = BuildingFloorRegionDetector.detect(floorCells);
+        MCA.LOGGER.info("[FloorDebug][Detect] source={} seed={} floorCellsByY={} detected={}", source, seed,
+                floorCells.stream().collect(java.util.stream.Collectors.groupingBy(
+                        BuildingFloorRegionDetector.FloorCell::y, TreeMap::new, java.util.stream.Collectors.counting())),
+                regions.stream().map(region -> region.anchorY() + ":" + region.area()).toList());
         int scannedEnvelopeSize = scannedEnvelopeSize(volume);
         if (regions.isEmpty() || scannedEnvelopeSize <= minSize) {
             return Result.failure(Building.validationResult.TOO_SMALL, source);
@@ -147,6 +165,11 @@ final class StructureScanner {
                         .thenComparingInt(StructureFloor::anchorY))
                 .orElse(floors.getFirst());
         BlockPos groundSeed = bestSeed(ground, groundChoice.entranceInterior());
+        MCA.LOGGER.info("[FloorDebug][Ground] source={} scanSeed={} entrances={} choiceY={} choiceEntrance={} "
+                        + "selectedFloorId={} selectedAnchorY={} selectedCeilingY={} groundSeed={} floors={}",
+                source, seed, exteriorEntrances, groundChoice.floorY(), groundChoice.entranceInterior(),
+                ground.id(), ground.anchorY(), ground.ceilingY(), groundSeed,
+                floors.stream().map(floor -> floor.id() + "@" + floor.anchorY() + ".." + floor.ceilingY()).toList());
 
         for (Structure other : existing) {
             if (other.getId() != ignoredStructureId && candidate.intersects(other)) {
@@ -468,9 +491,12 @@ final class StructureScanner {
             if (!isOpen(world, candidate, world.getBlockState(candidate))
                     || !isOpen(world, candidate.above(), world.getBlockState(candidate.above()))) continue;
             if (!isSupported(world, candidate.getX(), candidate.getY(), candidate.getZ())) continue;
-            double delta = floorSurface(world, candidate) - fromFloor;
+            double toFloor = floorSurface(world, candidate);
+            double delta = toFloor - fromFloor;
             if (delta > 1.125D || delta < -1.125D) continue;
             if (!hasRoof(world, candidate, roof)) continue;
+            MCA.LOGGER.debug("[StructureStep] from={} to={} direction={} dy={} fromSurface={} toSurface={} delta={}",
+                    current, candidate, direction, dy, fromFloor, toFloor, delta);
             visited.add(candidate);
             queue.addLast(candidate);
             return;
@@ -579,6 +605,8 @@ final class StructureScanner {
             StructureFloor floor = floors.stream().min(Comparator
                     .comparingInt((StructureFloor candidate) -> Math.abs(candidate.anchorY() - strongest.inside().getY()))
                     .thenComparingInt(StructureFloor::anchorY)).orElse(floors.getFirst());
+            MCA.LOGGER.info("[FloorDebug][GroundChoice] mode=entrance entrances={} validCandidates={} strongest={} selectedFloor={}@{}",
+                    entrances, candidates, strongest, floor.id(), floor.anchorY());
             return new GroundChoice(floor.anchorY(), strongest.inside());
         }
 
@@ -589,6 +617,9 @@ final class StructureScanner {
                 .comparingInt((StructureFloor floor) -> Math.abs(floor.anchorY() - terrainY))
                 .thenComparing(Comparator.comparingInt(StructureFloor::anchorY).reversed()))
                 .orElse(floors.getFirst());
+        MCA.LOGGER.info("[FloorDebug][GroundChoice] mode=terrain terrainY={} samples={} selectedFloor={}@{} floors={}",
+                terrainY, sampleTerrainPerimeter(world, interior), terrainFloor.id(), terrainFloor.anchorY(),
+                floors.stream().map(floor -> floor.id() + "@" + floor.anchorY()).toList());
         return new GroundChoice(terrainFloor.anchorY(), null);
     }
 

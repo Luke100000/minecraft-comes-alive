@@ -1,5 +1,6 @@
 package net.conczin.mca.client.gui;
 
+import net.conczin.mca.MCA;
 import net.conczin.mca.server.world.data.Building;
 import net.conczin.mca.server.world.data.ExternalBuilding;
 import net.conczin.mca.server.world.data.Structure;
@@ -7,6 +8,7 @@ import net.conczin.mca.server.world.data.StructureFloor;
 import net.conczin.mca.server.world.data.Village;
 
 import java.util.*;
+import java.util.stream.IntStream;
 
 /** Maps persistent Structure Floor IDs to Blueprint-local display ordinals. */
 final class BlueprintFloorLayout {
@@ -40,13 +42,7 @@ final class BlueprintFloorLayout {
             Building root = village.getBuilding(structure.getRootRoomId()).orElse(null);
             if (root == null) continue;
             List<StructureFloor> floors = structure.getFloors();
-            int groundIndex = -1;
-            for (int i = 0; i < floors.size(); i++) {
-                if (floors.get(i).id() == root.getFloorId()) {
-                    groundIndex = i;
-                    break;
-                }
-            }
+            int groundIndex = IntStream.range(0, floors.size()).filter(i -> floors.get(i).id() == root.getFloorId()).findFirst().orElse(-1);
             if (groundIndex < 0) continue;
 
             // Keep an ordinal mapping for every physical Floor so Structure geometry can still
@@ -56,6 +52,11 @@ final class BlueprintFloorLayout {
                 StructureFloor floor = floors.get(i);
                 byFloor.put(floorKey(structure.getId(), floor.id()), i - groundIndex);
             }
+            MCA.LOGGER.info("[FloorDebug][Blueprint] structureId={} rootRoomId={} rootFloorId={} groundIndex={} floors={}",
+                    structure.getId(), root.getId(), root.getFloorId(), groundIndex,
+                    java.util.stream.IntStream.range(0, floors.size())
+                            .mapToObj(i -> floors.get(i).id() + "@" + floors.get(i).anchorY()
+                                    + "=>" + (i - groundIndex)).toList());
 
             TreeSet<Integer> registeredOrdinals = new TreeSet<>();
             registeredOrdinals.add(0);

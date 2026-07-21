@@ -130,16 +130,8 @@ public final class Structure implements VillageBuilding {
     }
 
     boolean applyScan(StructureScanner.Result scan, Collection<Building> rooms) {
-        return applyScan(scan, rooms, -1);
-    }
-
-    boolean applyScanForRoomUpdate(StructureScanner.Result scan, Collection<Building> rooms, int updatingRoomId) {
-        return applyScan(scan, rooms, updatingRoomId);
-    }
-
-    private boolean applyScan(StructureScanner.Result scan, Collection<Building> rooms, int updatingRoomId) {
         StructureFloorMatcher.Result match = StructureFloorMatcher.match(
-                getFloors(), nextFloorId, scan.floors(), rooms, updatingRoomId).orElse(null);
+                getFloors(), nextFloorId, scan.floors(), rooms).orElse(null);
         if (match == null) return false;
 
         floors.clear();
@@ -149,16 +141,6 @@ public final class Structure implements VillageBuilding {
         min = scan.min();
         max = scan.max();
         return true;
-    }
-
-    void copyPhysicalGeometryFrom(Structure other) {
-        if (other == null || other.id != id) throw new IllegalArgumentException("Structure identity mismatch");
-        nextFloorId = other.nextFloorId;
-        source = other.source;
-        min = other.min;
-        max = other.max;
-        floors.clear();
-        floors.putAll(other.floors);
     }
 
     @Override

@@ -1,5 +1,6 @@
 package net.conczin.mca.server.world.data;
 
+import net.conczin.mca.MCA;
 import net.minecraft.core.BlockPos;
 
 import java.util.*;
@@ -23,9 +24,22 @@ final class BuildingFloorRegionDetector {
                     .add(new BlockPos(cell.x(), cell.y(), cell.z()));
         }
 
-        List<MutableBand> bands = new ArrayList<>();
+        int largestSliceArea = byY.values().stream().mapToInt(Set::size).max().orElse(0);
+        int minimumArea = Math.max(MIN_MEANINGFUL_AREA,
+                (int) Math.ceil(largestSliceArea * MIN_RELATIVE_AREA));
+
+        List<HeightSlice> meaningfulSlices = new ArrayList<>();
         for (Map.Entry<Integer, Set<BlockPos>> entry : byY.entrySet()) {
             HeightSlice slice = new HeightSlice(entry.getKey(), Set.copyOf(entry.getValue()));
+            BuildingFloorRegion region = BuildingFloorRegion.fromFootprint(slice.y(), slice.cells());
+            if (slice.area() >= minimumArea
+                    && region.components().stream().anyMatch(BuildingFloorRegionDetector::isUsableComponent)) {
+                meaningfulSlices.add(slice);
+            }
+        }
+
+        List<MutableBand> bands = new ArrayList<>();
+        for (HeightSlice slice : meaningfulSlices) {
             MutableBand band = bands.isEmpty() ? null : bands.getLast();
             if (band == null || slice.y() - band.minY > FLOOR_CLUSTER_TOLERANCE) {
                 band = new MutableBand(slice.y());
@@ -33,14 +47,13 @@ final class BuildingFloorRegionDetector {
             }
             band.slices.add(slice);
         }
-
         List<BuildingFloorRegion> regions = bands.stream().map(MutableBand::freeze).toList();
-        int largestArea = regions.stream().mapToInt(BuildingFloorRegion::area).max().orElse(0);
-        int minimumArea = Math.max(MIN_MEANINGFUL_AREA, (int) Math.ceil(largestArea * MIN_RELATIVE_AREA));
-        return regions.stream()
-                .filter(region -> region.area() >= minimumArea)
-                .filter(region -> region.components().stream().anyMatch(BuildingFloorRegionDetector::isUsableComponent))
-                .toList();
+        MCA.LOGGER.info("[FloorDebug][Slices] raw={} largestSlice={} minimumArea={} meaningful={} regions={}",
+                byY.entrySet().stream().map(entry -> entry.getKey() + ":" + entry.getValue().size()).toList(),
+                largestSliceArea, minimumArea,
+                meaningfulSlices.stream().map(slice -> slice.y() + ":" + slice.area()).toList(),
+                regions.stream().map(region -> region.anchorY() + ":" + region.area()).toList());
+        return regions;
     }
 
     private static boolean isUsableComponent(BuildingFloorRegion.Component component) {
