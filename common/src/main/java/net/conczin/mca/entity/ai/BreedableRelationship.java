@@ -6,6 +6,7 @@ import net.conczin.mca.entity.Status;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.interaction.gifts.GiftType;
 import net.conczin.mca.entity.interaction.gifts.Response;
+import net.conczin.mca.item.BouquetItem;
 import net.conczin.mca.item.SpecialCaseGift;
 import net.conczin.mca.network.Network;
 import net.conczin.mca.network.s2c.AnalysisResults;
@@ -210,7 +211,11 @@ public class BreedableRelationship extends Relationship<VillagerEntityMCA> {
 
         if (item instanceof SpecialCaseGift) {
             if (((SpecialCaseGift) item).handle(player, entity)) {
-                stack.shrink(1);
+                if ((item instanceof BouquetItem) && (Relationship.IS_MARRIED.test(entity, player) || Relationship.IS_ROMANTIC_PARTNER.test(entity, player))) {
+                    return false;
+                } else {
+                    stack.shrink(1);
+                }
             }
             return true;
         }

@@ -12,6 +12,7 @@
     "best": "gift.flowers.best"
   },
   "items": {
-    "#minecraft:flowers": 5
+    "#minecraft:flowers": 5,
+    "mca:bouquet": 30
   }
 }
