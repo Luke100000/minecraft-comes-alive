@@ -49,19 +49,25 @@ final class BlueprintFloorLayout {
             }
             if (groundIndex < 0) continue;
 
-            List<Integer> structureOrdinals = new ArrayList<>();
+            // Keep an ordinal mapping for every physical Floor so Structure geometry can still
+            // resolve unregistered storeys. The Blueprint floor selector itself remains HEAD-like:
+            // Ground is always visible, while other Floors appear only after a Room is registered.
             for (int i = 0; i < floors.size(); i++) {
-                int ordinal = i - groundIndex;
                 StructureFloor floor = floors.get(i);
-                byFloor.put(floorKey(structure.getId(), floor.id()), ordinal);
-                structureOrdinals.add(ordinal);
-                available.add(ordinal);
+                byFloor.put(floorKey(structure.getId(), floor.id()), i - groundIndex);
             }
-            byStructure.put(structure.getId(), List.copyOf(structureOrdinals));
+
+            TreeSet<Integer> registeredOrdinals = new TreeSet<>();
+            registeredOrdinals.add(0);
             village.getRooms().filter(room -> room.getStructureId() == structure.getId()).forEach(room -> {
                 Integer ordinal = byFloor.get(floorKey(structure.getId(), room.getFloorId()));
-                if (ordinal != null) byBuilding.put(room.getId(), ordinal);
+                if (ordinal != null) {
+                    byBuilding.put(room.getId(), ordinal);
+                    registeredOrdinals.add(ordinal);
+                }
             });
+            byStructure.put(structure.getId(), List.copyOf(registeredOrdinals));
+            available.addAll(registeredOrdinals);
         }
         return new BlueprintFloorLayout(Map.copyOf(byBuilding), Map.copyOf(byFloor),
                 Map.copyOf(byStructure), List.copyOf(available));

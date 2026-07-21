@@ -238,7 +238,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
     public InitialStructureScan analyzeInitialStructure(BlockPos pos) {
         Village village = findNearestVillage(pos, Village.MERGE_MARGIN).orElse(null);
         Collection<Structure> existing = village == null ? List.of() : village.getStructures().values();
-        if (village != null && village.getStructureAt(pos).isPresent()) {
+        if (village != null && village.getInteractionStructureAt(world, pos).isPresent()) {
             StructureScanner.Result failure = StructureScanner.Result.failure(Building.validationResult.IDENTICAL, pos);
             return new InitialStructureScan(new StructureScanResult(failure.result(), failure, village, -1),
                     failedRoom(failure.result(), pos, village), null);
@@ -274,7 +274,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
 
     public BuildingScanResult analyzeRoom(BlockPos pos) {
         Village village = findNearestVillage(pos, Village.MERGE_MARGIN).orElse(null);
-        Structure structure = village == null ? null : village.getStructureAt(pos).orElse(null);
+        Structure structure = village == null ? null : village.getInteractionStructureAt(world, pos).orElse(null);
         if (structure == null) return failedRoom(Building.validationResult.NOT_IN_BUILDING, pos, village);
         if (village.getFunctionalRoomAt(world, pos).isPresent()) {
             return failedRoom(Building.validationResult.IDENTICAL, pos, village);
@@ -337,7 +337,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
                                         Structure structureUpdate) {
         StructureFloor floor = existingRoomId >= 0 && village != null
                 ? village.getBuilding(existingRoomId).flatMap(room -> structure.getFloor(room.getFloorId())).orElse(null)
-                : structure.resolveFloor(world, pos).orElse(null);
+                : StructureConnector.resolveInteractionFloor(world, structure, pos).orElse(null);
         if (floor == null) return failedRoom(Building.validationResult.TOO_SMALL, pos, village);
 
         Set<BlockPos> blocked = new HashSet<>();
@@ -603,7 +603,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         }
         Structure structure = target != null && target.isFunctionalRoom()
                 ? village.getStructure(target.getStructureId()).orElse(null)
-                : village.getStructureAt(pos).orElse(null);
+                : village.getInteractionStructureAt(world, pos).orElse(null);
         if (structure == null) return BuildingEditResult.NO_BUILDING;
         removeStructure(village, structure.getId());
         return BuildingEditResult.SUCCESS;

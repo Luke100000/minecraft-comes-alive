@@ -21,23 +21,20 @@ final class StructureFloorMatcher {
         Map<Integer, StructureFloor> assigned = new HashMap<>();
         Set<Integer> usedDetected = new HashSet<>();
         int candidateNextFloorId = nextFloorId;
-
-        Building updatingRoom = rooms.stream()
+        int updatingFloorId = rooms.stream()
                 .filter(room -> room.getId() == updatingRoomId)
-                .findFirst().orElse(null);
-        int updatingFloorId = updatingRoom == null ? -1 : updatingRoom.getFloorId();
+                .mapToInt(Building::getFloorId)
+                .findFirst().orElse(-1);
 
         for (StructureFloor oldFloor : existingFloors) {
-            List<Building> floorRooms = rooms.stream()
+            List<Building> anchors = rooms.stream()
                     .filter(room -> room.getId() != updatingRoomId)
                     .filter(room -> room.getFloorId() == oldFloor.id())
                     .toList();
-            int match = bestFloorMatch(oldFloor, floorRooms, detected, usedDetected);
-            if (match < 0 && oldFloor.id() == updatingFloorId) {
-                match = bestUpdatingFloorMatch(oldFloor, detected, usedDetected);
-            }
+            boolean updatingFallback = anchors.isEmpty() && oldFloor.id() == updatingFloorId;
+            int match = bestMatch(oldFloor, anchors, detected, usedDetected, updatingFallback);
             if (match < 0) {
-                if (!floorRooms.isEmpty()) {
+                if (!anchors.isEmpty() || oldFloor.id() == updatingFloorId) {
                     return Optional.empty();
                 }
                 continue;
@@ -56,10 +53,6 @@ final class StructureFloorMatcher {
                     geometry.anchorY(), geometry.ceilingY(), geometry.region()));
         }
 
-        if (updatingFloorId >= 0 && !assigned.containsKey(updatingFloorId)) {
-            return Optional.empty();
-        }
-
         for (Building room : rooms) {
             if (room.getId() == updatingRoomId) continue;
             StructureFloor floor = assigned.get(room.getFloorId());
@@ -70,49 +63,29 @@ final class StructureFloorMatcher {
         return Optional.of(new Result(Map.copyOf(assigned), candidateNextFloorId));
     }
 
-    private static int bestFloorMatch(StructureFloor oldFloor,
-                                      List<Building> rooms,
-                                      List<StructureFloor> detected,
-                                      Set<Integer> used) {
-        int best = -1;
-        long bestScore = Long.MIN_VALUE;
-        for (int i = 0; i < detected.size(); i++) {
-            if (used.contains(i)) continue;
-            StructureFloor candidate = detected.get(i);
-            long roomScore = 0L;
-            for (Building room : rooms) {
-                if (!roomFootprintInside(room, candidate)) {
-                    roomScore = Long.MIN_VALUE / 4;
-                    break;
-                }
-                roomScore += 1_000_000L;
-            }
-            if (roomScore < 0) continue;
-            long overlap = oldFloor.region() == null || candidate.region() == null
-                    ? 0L : oldFloor.region().intersectionArea(candidate.region());
-            if (rooms.isEmpty() && overlap == 0L) continue;
-            long score = roomScore + overlap * 100L - Math.abs(oldFloor.anchorY() - candidate.anchorY());
-            if (score > bestScore) {
-                bestScore = score;
-                best = i;
-            }
-        }
-        return best;
-    }
-
-    private static int bestUpdatingFloorMatch(StructureFloor oldFloor,
-                                              List<StructureFloor> detected,
-                                              Set<Integer> used) {
+    private static int bestMatch(StructureFloor oldFloor,
+                                 List<Building> anchors,
+                                 List<StructureFloor> detected,
+                                 Set<Integer> used,
+                                 boolean updatingFallback) {
         int best = -1;
         long bestScore = Long.MIN_VALUE;
         for (int i = 0; i < detected.size(); i++) {
             if (used.contains(i)) continue;
             StructureFloor candidate = detected.get(i);
             int heightDelta = Math.abs(oldFloor.anchorY() - candidate.anchorY());
-            if (heightDelta > BuildingFloorRegionDetector.FLOOR_CLUSTER_TOLERANCE) continue;
+            if (updatingFallback && heightDelta > BuildingFloorRegionDetector.FLOOR_CLUSTER_TOLERANCE) {
+                continue;
+            }
+            if (anchors.stream().anyMatch(room -> !roomFootprintInside(room, candidate))) {
+                continue;
+            }
             long overlap = oldFloor.region() == null || candidate.region() == null
                     ? 0L : oldFloor.region().intersectionArea(candidate.region());
-            long score = overlap * 100L - heightDelta;
+            if (anchors.isEmpty() && !updatingFallback && overlap == 0L) {
+                continue;
+            }
+            long score = anchors.size() * 1_000_000L + overlap * 100L - heightDelta;
             if (score > bestScore) {
                 bestScore = score;
                 best = i;

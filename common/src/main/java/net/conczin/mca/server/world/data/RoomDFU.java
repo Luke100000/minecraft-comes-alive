@@ -19,24 +19,8 @@ final class RoomDFU {
     }
 
     static Result load(CompoundTag villageTag) {
-        Map<Integer, Building> buildings = new HashMap<>();
-        Map<Integer, ExternalBuilding> externalBuildings = new HashMap<>();
-        Map<Integer, Structure> structures = new HashMap<>();
-
         if (villageTag.contains("structures", Tag.TAG_LIST)) {
-            for (Tag value : villageTag.getList("buildings", Tag.TAG_COMPOUND)) {
-                Building room = new Building((CompoundTag) value);
-                buildings.put(room.getId(), room);
-            }
-            for (Tag value : villageTag.getList("externalBuildings", Tag.TAG_COMPOUND)) {
-                ExternalBuilding external = new ExternalBuilding((CompoundTag) value);
-                externalBuildings.put(external.getId(), external);
-            }
-            for (Tag value : villageTag.getList("structures", Tag.TAG_COMPOUND)) {
-                Structure structure = new Structure((CompoundTag) value);
-                structures.put(structure.getId(), structure);
-            }
-            return new Result(buildings, externalBuildings, structures);
+            return loadCurrent(villageTag);
         }
 
         ListTag legacy = villageTag.getList("buildings", Tag.TAG_COMPOUND);
@@ -47,64 +31,87 @@ final class RoomDFU {
                         || tag.contains("strictScan")
                         || tag.contains("groundFloorY")
                         || tag.contains("floorRegions"));
-        if (floorSystemFormat) {
-            return migrateFloorSystem(legacy);
-        }
+        return floorSystemFormat ? migrateFloorSystem(legacy) : migrateOrigin(legacy);
+    }
 
+    private static Result loadCurrent(CompoundTag villageTag) {
+        Map<Integer, Building> rooms = new HashMap<>();
+        Map<Integer, ExternalBuilding> external = new HashMap<>();
+        Map<Integer, Structure> structures = new HashMap<>();
+        for (Tag value : villageTag.getList("buildings", Tag.TAG_COMPOUND)) {
+            Building room = new Building((CompoundTag) value);
+            rooms.put(room.getId(), room);
+        }
+        for (Tag value : villageTag.getList("externalBuildings", Tag.TAG_COMPOUND)) {
+            ExternalBuilding building = new ExternalBuilding((CompoundTag) value);
+            external.put(building.getId(), building);
+        }
+        for (Tag value : villageTag.getList("structures", Tag.TAG_COMPOUND)) {
+            Structure structure = new Structure((CompoundTag) value);
+            structures.put(structure.getId(), structure);
+        }
+        return new Result(rooms, external, structures);
+    }
+
+    private static Result migrateOrigin(ListTag legacy) {
+        Map<Integer, Building> rooms = new HashMap<>();
+        Map<Integer, ExternalBuilding> external = new HashMap<>();
+        Map<Integer, Structure> structures = new HashMap<>();
         for (Tag value : legacy) {
             CompoundTag tag = (CompoundTag) value;
             Building room = new Building(tag);
             if (room.getBuildingType().grouped()) {
-                ExternalBuilding external = new ExternalBuilding(tag);
-                externalBuildings.put(external.getId(), external);
+                ExternalBuilding building = new ExternalBuilding(tag);
+                external.put(building.getId(), building);
                 continue;
             }
-            migrateOriginBuilding(room).ifPresent(migrated -> {
-                buildings.put(room.getId(), room);
-                structures.put(migrated.getId(), migrated);
+            migrateOriginBuilding(room).ifPresent(structure -> {
+                rooms.put(room.getId(), room);
+                structures.put(structure.getId(), structure);
             });
         }
-        return new Result(buildings, externalBuildings, structures);
+        return new Result(rooms, external, structures);
     }
 
     private static Result migrateFloorSystem(ListTag legacy) {
-        Map<Integer, Building> buildings = new HashMap<>();
-        Map<Integer, ExternalBuilding> externalBuildings = new HashMap<>();
+        Map<Integer, ExternalBuilding> external = new HashMap<>();
         Map<Integer, List<LegacyFloorRoom>> byStructure = new TreeMap<>();
-
         for (Tag value : legacy) {
             CompoundTag tag = (CompoundTag) value;
-            Building probe = new Building(tag);
-            if (probe.getBuildingType().grouped()) {
-                ExternalBuilding external = new ExternalBuilding(tag);
-                externalBuildings.put(external.getId(), external);
+            Building room = new Building(tag);
+            if (room.getBuildingType().grouped()) {
+                ExternalBuilding building = new ExternalBuilding(tag);
+                external.put(building.getId(), building);
                 continue;
             }
-
-            int persistedStructureId = tag.contains("structureId") ? tag.getInt("structureId") : -1;
-            int structureId = persistedStructureId >= 0 ? persistedStructureId : probe.getId();
-            boolean structureRoot = tag.contains("structureRoot") && tag.getBoolean("structureRoot");
-            boolean strictScan = tag.contains("strictScan") && tag.getBoolean("strictScan");
-            int floorY = tag.contains("floorY") ? tag.getInt("floorY") : probe.getFloorY();
-            int groundFloorY = tag.contains("groundFloorY") ? tag.getInt("groundFloorY") : floorY;
-            byStructure.computeIfAbsent(structureId, ignored -> new ArrayList<>())
-                    .add(new LegacyFloorRoom(tag, probe, structureId, structureRoot, strictScan, floorY, groundFloorY));
+            int structureId = tag.contains("structureId") && tag.getInt("structureId") >= 0
+                    ? tag.getInt("structureId") : room.getId();
+            byStructure.computeIfAbsent(structureId, ignored -> new ArrayList<>()).add(new LegacyFloorRoom(
+                    tag,
+                    room,
+                    tag.contains("structureRoot") && tag.getBoolean("structureRoot"),
+                    tag.contains("strictScan") && tag.getBoolean("strictScan"),
+                    tag.contains("floorY") ? tag.getInt("floorY") : room.getFloorY(),
+                    tag.contains("groundFloorY") ? tag.getInt("groundFloorY") : room.getFloorY()));
         }
 
+        Map<Integer, Building> rooms = new HashMap<>();
         Map<Integer, Structure> structures = new HashMap<>();
-        for (Map.Entry<Integer, List<LegacyFloorRoom>> entry : byStructure.entrySet()) {
-            migrateFloorSystemStructure(entry.getKey(), entry.getValue()).ifPresent(migrated -> {
-                migrated.rooms().forEach(room -> buildings.put(room.getId(), room));
-                structures.put(migrated.structure().getId(), migrated.structure());
-            });
-        }
-        return new Result(buildings, externalBuildings, structures);
+        byStructure.forEach((structureId, records) -> migrateFloorSystemStructure(structureId, records)
+                .ifPresent(migrated -> {
+                    migrated.rooms().forEach(room -> rooms.put(room.getId(), room));
+                    structures.put(structureId, migrated.structure());
+                }));
+        return new Result(rooms, external, structures);
     }
 
+    /**
+     * Migrates only deterministic persisted geometry. Development Structures that require invented
+     * Floors or a manufactured Root Room are discarded individually and can be rescanned in-game.
+     */
     private static Optional<MigratedStructure> migrateFloorSystemStructure(
-            int legacyStructureId,
-            List<LegacyFloorRoom> records
-    ) {
+            int structureId,
+            List<LegacyFloorRoom> records) {
         LegacyFloorRoom container = records.stream()
                 .filter(record -> record.structureRoot() && !record.strictScan())
                 .min(Comparator.comparingInt(record -> record.room().getId()))
@@ -112,73 +119,52 @@ final class RoomDFU {
                         .filter(record -> !record.strictScan())
                         .min(Comparator.comparingInt(record -> record.room().getId())))
                 .orElse(null);
+        if (container == null) {
+            return Optional.empty();
+        }
 
         List<LegacyFloorRoom> functional = records.stream()
                 .filter(LegacyFloorRoom::strictScan)
                 .filter(record -> !record.structureRoot())
+                .filter(record -> !record.room().getFloorRegions().isEmpty())
                 .sorted(Comparator.comparingInt(record -> record.room().getId()))
                 .toList();
-
         List<BuildingFloorRegion> regions = collectFloorRegions(container, functional);
-        if (regions.isEmpty()) {
-            return Optional.empty();
-        }
+        if (regions.isEmpty()) return Optional.empty();
 
-        Bounds bounds = bounds(container, functional, regions);
-        if (bounds == null) {
-            return Optional.empty();
-        }
-
-        List<StructureFloor> floors = createFloors(regions, bounds.max().getY() + 1);
-        if (floors.isEmpty()) {
+        BlockPos min = container.room().getRawPos0();
+        BlockPos max = container.room().getRawPos1();
+        List<StructureFloor> floors = createFloors(regions, max.getY() + 1);
+        StructureFloor ground = nearestFloor(floors, container.groundFloorY());
+        if (ground == null) {
             return Optional.empty();
         }
 
         List<Building> rooms = new ArrayList<>();
         for (LegacyFloorRoom legacyRoom : functional) {
             StructureFloor floor = nearestFloor(floors, legacyRoom.floorY());
-            if (floor == null) {
-                continue;
-            }
+            if (floor == null) continue;
             Building room = new Building(legacyRoom.tag());
-            room.setStructureId(legacyStructureId);
+            room.setStructureId(structureId);
             room.setFloorId(floor.id());
             rooms.add(room);
         }
-
-        int groundY = container == null
-                ? floors.getFirst().anchorY()
-                : container.groundFloorY();
-        StructureFloor groundFloor = nearestFloor(floors, groundY);
-        if (groundFloor == null) {
+        Building root = rooms.stream()
+                .filter(room -> room.getFloorId() == ground.id())
+                .min(Comparator.comparingInt(Building::getId))
+                .orElse(null);
+        if (root == null) {
             return Optional.empty();
         }
 
-        Building rootRoom = rooms.stream()
-                .filter(room -> room.getFloorId() == groundFloor.id())
-                .min(Comparator.comparingInt(Building::getId))
-                .orElse(null);
-        if (rootRoom == null) {
-            if (container == null || rooms.stream().anyMatch(room -> room.getId() == container.room().getId())) {
-                return Optional.empty();
-            }
-            rootRoom = createFallbackRootRoom(container.room().getId(), legacyStructureId, groundFloor);
-            if (rootRoom == null) {
-                return Optional.empty();
-            }
-            rooms.add(rootRoom);
-        }
-
-        BlockPos source = container == null ? rootRoom.getSourceBlock() : container.room().getSourceBlock();
         Structure structure = new Structure(
-                legacyStructureId,
-                source,
-                bounds.min(),
-                bounds.max(),
+                structureId,
+                container.room().getSourceBlock(),
+                min,
+                max,
                 floors,
-                volumeSlices(floors)
-        );
-        structure.setRootRoomId(rootRoom.getId());
+                volumeSlices(floors));
+        structure.setRootRoomId(root.getId());
         return Optional.of(new MigratedStructure(structure, List.copyOf(rooms)));
     }
 
@@ -200,30 +186,21 @@ final class RoomDFU {
 
     private static List<BuildingFloorRegion> collectFloorRegions(
             LegacyFloorRoom container,
-            List<LegacyFloorRoom> functional
-    ) {
+            List<LegacyFloorRoom> functional) {
         Map<Integer, BuildingFloorRegion> byY = new TreeMap<>();
-        if (container != null) {
-            for (BuildingFloorRegion region : container.room().getFloorRegions()) {
-                byY.merge(region.anchorY(), region,
-                        (first, second) -> first.area() >= second.area() ? first : second);
-            }
+        for (BuildingFloorRegion region : container.room().getFloorRegions()) {
+            byY.merge(region.anchorY(), region, RoomDFU::largerRegion);
         }
         for (LegacyFloorRoom room : functional) {
             for (BuildingFloorRegion region : room.room().getFloorRegions()) {
-                BuildingFloorRegion anchored = region.withAnchorY(room.floorY());
-                byY.merge(room.floorY(), anchored,
-                        (first, second) -> first.area() >= second.area() ? first : second);
-            }
-            if (!byY.containsKey(room.floorY())) {
-                Building fallback = room.room();
-                List<BlockPos> cells = rectangleFootprint(fallback.getRawPos0(), fallback.getRawPos1(), room.floorY());
-                if (!cells.isEmpty()) {
-                    byY.put(room.floorY(), BuildingFloorRegion.fromFootprint(room.floorY(), cells));
-                }
+                byY.merge(room.floorY(), region.withAnchorY(room.floorY()), RoomDFU::largerRegion);
             }
         }
         return List.copyOf(byY.values());
+    }
+
+    private static BuildingFloorRegion largerRegion(BuildingFloorRegion first, BuildingFloorRegion second) {
+        return first.area() >= second.area() ? first : second;
     }
 
     private static List<StructureFloor> createFloors(List<BuildingFloorRegion> regions, int topExclusive) {
@@ -236,51 +213,6 @@ final class RoomDFU {
             floors.add(new StructureFloor(i, region.anchorY(), ceiling, region));
         }
         return List.copyOf(floors);
-    }
-
-    private static Building createFallbackRootRoom(int id, int structureId, StructureFloor floor) {
-        if (floor.region() == null || floor.region().components().isEmpty()) {
-            return null;
-        }
-        BuildingFloorRegion.Component component = floor.region().components().stream()
-                .max(Comparator.comparingInt(BuildingFloorRegion.Component::area))
-                .orElse(null);
-        if (component == null) {
-            return null;
-        }
-        BlockPos min = new BlockPos(component.minX(), floor.anchorY(), component.minZ());
-        BlockPos max = new BlockPos(component.maxX(), Math.max(floor.anchorY(), floor.ceilingY() - 1), component.maxZ());
-        BlockPos source = new BlockPos((component.minX() + component.maxX()) / 2,
-                floor.anchorY(), (component.minZ() + component.maxZ()) / 2);
-        Building root = new Building(source);
-        root.setId(id);
-        root.setStructureId(structureId);
-        root.setFloorId(floor.id());
-        root.setGeometry(min, max, floor.area(), floor.region());
-        return root;
-    }
-
-    private static Bounds bounds(
-            LegacyFloorRoom container,
-            List<LegacyFloorRoom> functional,
-            List<BuildingFloorRegion> regions
-    ) {
-        List<Building> sources = new ArrayList<>();
-        if (container != null) sources.add(container.room());
-        functional.forEach(record -> sources.add(record.room()));
-        if (sources.isEmpty()) return null;
-
-        int minX = sources.stream().map(Building::getRawPos0).mapToInt(BlockPos::getX).min().orElse(0);
-        int minY = Math.min(
-                sources.stream().map(Building::getRawPos0).mapToInt(BlockPos::getY).min().orElse(0),
-                regions.stream().mapToInt(BuildingFloorRegion::anchorY).min().orElse(0));
-        int minZ = sources.stream().map(Building::getRawPos0).mapToInt(BlockPos::getZ).min().orElse(0);
-        int maxX = sources.stream().map(Building::getRawPos1).mapToInt(BlockPos::getX).max().orElse(0);
-        int maxY = Math.max(
-                sources.stream().map(Building::getRawPos1).mapToInt(BlockPos::getY).max().orElse(0),
-                regions.stream().mapToInt(BuildingFloorRegion::anchorY).max().orElse(0));
-        int maxZ = sources.stream().map(Building::getRawPos1).mapToInt(BlockPos::getZ).max().orElse(0);
-        return new Bounds(new BlockPos(minX, minY, minZ), new BlockPos(maxX, maxY, maxZ));
     }
 
     private static StructureFloor nearestFloor(List<StructureFloor> floors, int y) {
@@ -301,37 +233,21 @@ final class RoomDFU {
         return List.copyOf(slices);
     }
 
-    private static List<BlockPos> rectangleFootprint(BlockPos min, BlockPos max, int y) {
-        List<BlockPos> cells = new ArrayList<>();
-        for (int z = min.getZ(); z <= max.getZ(); z++) {
-            for (int x = min.getX(); x <= max.getX(); x++) {
-                cells.add(new BlockPos(x, y, z));
-            }
-        }
-        return cells;
-    }
-
     private record LegacyFloorRoom(
             CompoundTag tag,
             Building room,
-            int legacyStructureId,
             boolean structureRoot,
             boolean strictScan,
             int floorY,
-            int groundFloorY
-    ) {
+            int groundFloorY) {
     }
 
     private record MigratedStructure(Structure structure, List<Building> rooms) {
     }
 
-    private record Bounds(BlockPos min, BlockPos max) {
-    }
-
     record Result(
             Map<Integer, Building> buildings,
             Map<Integer, ExternalBuilding> externalBuildings,
-            Map<Integer, Structure> structures
-    ) {
+            Map<Integer, Structure> structures) {
     }
 }

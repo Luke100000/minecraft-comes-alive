@@ -121,17 +121,6 @@ final class StructureScanner {
 
         List<StructureFloor> floors = StructureConnector.withOwnedFloorCells(connectorCells, toFloors(world, regions));
         List<BuildingFloorRegion> volumeSlices = toVolumeSlices(volume);
-        Set<ExteriorEntrance> exteriorEntrances = horizontalEntrances.stream()
-                .map(entrance -> findExteriorEntrance(world, entrance, volume, roof).orElse(null))
-                .filter(Objects::nonNull)
-                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
-        GroundChoice groundChoice = chooseGroundFloor(world, floors, exteriorEntrances, volume);
-        StructureFloor ground = floors.stream()
-                .min(Comparator.comparingInt((StructureFloor floor) -> Math.abs(floor.anchorY() - groundChoice.floorY()))
-                        .thenComparingInt(StructureFloor::anchorY))
-                .orElse(floors.getFirst());
-        BlockPos groundSeed = bestSeed(ground, groundChoice.entranceInterior());
-
         BlockPos min = new BlockPos(
                 volume.stream().mapToInt(BlockPos::getX).min().orElse(seed.getX()),
                 volume.stream().mapToInt(BlockPos::getY).min().orElse(seed.getY()),
@@ -140,8 +129,25 @@ final class StructureScanner {
                 volume.stream().mapToInt(BlockPos::getX).max().orElse(seed.getX()),
                 volume.stream().mapToInt(BlockPos::getY).max().orElse(seed.getY()),
                 volume.stream().mapToInt(BlockPos::getZ).max().orElse(seed.getZ()));
-
         Structure candidate = new Structure(ignoredStructureId, seed, min, max, floors, volumeSlices);
+
+        Set<ExteriorEntrance> exteriorEntrances = horizontalEntrances.stream()
+                .map(entrance -> findExteriorEntrance(world, entrance, volume, roof).orElse(null))
+                .filter(Objects::nonNull)
+                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+        StructureConnector.findVerticalExteriorEntrances(
+                        world, connectorCells, candidate, volume,
+                        outside -> !hasRoof(world, outside, roof)
+                                || canReachUncoveredSupportedSpace(world, outside, null, roof))
+                .forEach(entrance -> exteriorEntrances.add(
+                        new ExteriorEntrance(entrance.inside(), entrance.outside())));
+        GroundChoice groundChoice = chooseGroundFloor(world, floors, exteriorEntrances, volume);
+        StructureFloor ground = floors.stream()
+                .min(Comparator.comparingInt((StructureFloor floor) -> Math.abs(floor.anchorY() - groundChoice.floorY()))
+                        .thenComparingInt(StructureFloor::anchorY))
+                .orElse(floors.getFirst());
+        BlockPos groundSeed = bestSeed(ground, groundChoice.entranceInterior());
+
         for (Structure other : existing) {
             if (other.getId() != ignoredStructureId && candidate.intersects(other)) {
                 return Result.failure(Building.validationResult.OVERLAP, source);
@@ -174,13 +180,6 @@ final class StructureScanner {
             }
         }
         return Optional.empty();
-    }
-
-    private static boolean isEnclosedInterior(Level world,
-                                              BlockPos pos,
-                                              Map<BlockPos, Boolean> roof) {
-        return isWalkableAnchor(world, pos, world.getBlockState(pos), roof)
-                && !canReachUncoveredSupportedSpace(world, pos, null, roof);
     }
 
     private static boolean isWalkableAnchor(Level world,
@@ -452,17 +451,6 @@ final class StructureScanner {
         }
     }
 
-    private static boolean canTraverseVolume(Level world,
-                                             BlockPos next,
-                                             BlockState nextState,
-                                             Map<BlockPos, Boolean> roof) {
-        if (StructureConnector.isConnector(nextState)) {
-            return true;
-        }
-        return isOpen(world, next, nextState) && hasRoof(world, next, roof);
-    }
-
-
     private static boolean isOpen(Level world, BlockPos pos, BlockState state) {
         return !state.getFluidState().isEmpty()
                 || state.isAir()
@@ -568,9 +556,8 @@ final class StructureScanner {
             return new GroundChoice(floor.anchorY(), strongest.inside());
         }
 
-        // No reliable normal exterior door: recover the mature floor-system behaviour and use
-        // surrounding terrain to distinguish an underground basement from the surface storey.
-        // Trapdoors remain connectors only and are never promoted to Ground Floor evidence.
+        // No reliable exterior connector: use surrounding terrain to distinguish an underground
+        // basement from the surface storey. Door/gate and vertical connector landings are preferred.
         int terrainY = medianTerrainY(sampleTerrainPerimeter(world, interior));
         StructureFloor terrainFloor = floors.stream().min(Comparator
                 .comparingInt((StructureFloor floor) -> Math.abs(floor.anchorY() - terrainY))
