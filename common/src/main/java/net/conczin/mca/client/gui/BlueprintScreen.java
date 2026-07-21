@@ -236,7 +236,7 @@ public class BlueprintScreen extends ExtendedScreen {
                 int scaleControlX = terrainControlX + MAP_TERRAIN_BUTTON_WIDTH + MAP_CONTROL_GAP;
                 mapScaleButton = addRenderableWidget(new ButtonWidget(
                         scaleControlX, mapControlY, MAP_SCALE_BUTTON_WIDTH, 20,
-                        getMapScaleLabel(), b -> cycleMapScale(), getMapScaleTooltip()));
+                        getMapScaleLabel(), b -> cycleMapScale(1), getMapScaleTooltip()));
 
                 playerCenteredButton = addRenderableWidget(new ButtonWidget(
                         bx, floorControlY, PLAYER_CENTERED_BUTTON_WIDTH, 20,
@@ -700,6 +700,8 @@ public class BlueprintScreen extends ExtendedScreen {
                 int usablePixels = (MAP_HALF_SIZE - MAP_INNER_MARGIN) * 2;
                 yield Math.min((float) usablePixels / Math.max(1, horizontalSpan), MAP_MAX_FIT_SCALE);
             }
+            case QUARTER_TO_ONE -> 0.25F;
+            case HALF_TO_ONE -> 0.5F;
             case ONE_TO_ONE -> 1.0F;
             case TWO_TO_ONE -> 2.0F;
             case THREE_TO_ONE -> 3.0F;
@@ -707,8 +709,8 @@ public class BlueprintScreen extends ExtendedScreen {
         };
     }
 
-    private void cycleMapScale() {
-        mapScaleMode = mapScaleMode.next();
+    private void cycleMapScale(int direction) {
+        mapScaleMode = mapScaleMode.step(direction);
         rememberedMapScaleMode = mapScaleMode;
         updateMapScaleControl();
     }
@@ -718,7 +720,9 @@ public class BlueprintScreen extends ExtendedScreen {
     }
 
     private Component getMapScaleTooltip() {
-        return Component.translatable(mapScaleMode.tooltipKey());
+        return mapScaleMode.tooltipKey() == null
+                ? Component.literal("Map scale: " + mapScaleMode.label())
+                : Component.translatable(mapScaleMode.tooltipKey());
     }
 
     private void updateMapScaleControl() {
@@ -730,6 +734,8 @@ public class BlueprintScreen extends ExtendedScreen {
 
     private enum MapScaleMode {
         FIT("Fit", "gui.blueprint.mapScale.fit.tooltip"),
+        QUARTER_TO_ONE("0.25:1", null),
+        HALF_TO_ONE("0.5:1", null),
         ONE_TO_ONE("1:1", "gui.blueprint.mapScale.oneToOne.tooltip"),
         TWO_TO_ONE("2:1", "gui.blueprint.mapScale.twoToOne.tooltip"),
         THREE_TO_ONE("3:1", "gui.blueprint.mapScale.threeToOne.tooltip"),
@@ -751,9 +757,9 @@ public class BlueprintScreen extends ExtendedScreen {
             return tooltipKey;
         }
 
-        MapScaleMode next() {
+        MapScaleMode step(int direction) {
             MapScaleMode[] values = values();
-            return values[(ordinal() + 1) % values.length];
+            return values[Math.floorMod(ordinal() + direction, values.length)];
         }
     }
 
@@ -1129,6 +1135,12 @@ public class BlueprintScreen extends ExtendedScreen {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (button == 1 && mapScaleButton != null && mapScaleButton.visible && mapScaleButton.active
+                && mapScaleButton.isMouseOver(mouseX, mouseY)) {
+            cycleMapScale(-1);
+            return true;
+        }
+
         if (page.equals("villagers") && selectedVillager != null) {
             assert minecraft != null;
             minecraft.setScreen(new FamilyTreeScreen(selectedVillager));
