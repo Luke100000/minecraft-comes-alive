@@ -5,12 +5,11 @@ import net.minecraft.core.BlockPos;
 
 import java.util.*;
 
-/** Clusters canonical Floor cells into nearby vertical storey bands. */
+/** Groups reachable horizontal Floor anchors into storeys. Heights within two blocks stay in the
+ * current storey; the next higher band becomes the next Floor and therefore the previous Floor's upper bound. */
 final class BuildingFloorRegionDetector {
     static final int FLOOR_CLUSTER_TOLERANCE = 2;
-    private static final int MIN_MEANINGFUL_AREA = 8;
-    private static final double MIN_RELATIVE_AREA = 0.12D;
-    private static final int MIN_LONG_COMPONENT_AREA = 8;
+    private static final int MIN_FLOOR_AREA = 4;
 
     private BuildingFloorRegionDetector() {
     }
@@ -24,16 +23,11 @@ final class BuildingFloorRegionDetector {
                     .add(new BlockPos(cell.x(), cell.y(), cell.z()));
         }
 
-        int largestSliceArea = byY.values().stream().mapToInt(Set::size).max().orElse(0);
-        int minimumArea = Math.max(MIN_MEANINGFUL_AREA,
-                (int) Math.ceil(largestSliceArea * MIN_RELATIVE_AREA));
-
         List<HeightSlice> meaningfulSlices = new ArrayList<>();
         for (Map.Entry<Integer, Set<BlockPos>> entry : byY.entrySet()) {
             HeightSlice slice = new HeightSlice(entry.getKey(), Set.copyOf(entry.getValue()));
             BuildingFloorRegion region = BuildingFloorRegion.fromFootprint(slice.y(), slice.cells());
-            if (slice.area() >= minimumArea
-                    && region.components().stream().anyMatch(BuildingFloorRegionDetector::isUsableComponent)) {
+            if (region.components().stream().anyMatch(component -> component.area() >= MIN_FLOOR_AREA)) {
                 meaningfulSlices.add(slice);
             }
         }
@@ -48,18 +42,12 @@ final class BuildingFloorRegionDetector {
             band.slices.add(slice);
         }
         List<BuildingFloorRegion> regions = bands.stream().map(MutableBand::freeze).toList();
-        MCA.LOGGER.info("[FloorDebug][Slices] raw={} largestSlice={} minimumArea={} meaningful={} regions={}",
+        MCA.LOGGER.info("[FloorDebug][Slices] raw={} minFloorArea={} meaningful={} regions={}",
                 byY.entrySet().stream().map(entry -> entry.getKey() + ":" + entry.getValue().size()).toList(),
-                largestSliceArea, minimumArea,
+                MIN_FLOOR_AREA,
                 meaningfulSlices.stream().map(slice -> slice.y() + ":" + slice.area()).toList(),
                 regions.stream().map(region -> region.anchorY() + ":" + region.area()).toList());
         return regions;
-    }
-
-    private static boolean isUsableComponent(BuildingFloorRegion.Component component) {
-        int width = component.maxX() - component.minX() + 1;
-        int depth = component.maxZ() - component.minZ() + 1;
-        return (width >= 2 && depth >= 2) || component.area() >= MIN_LONG_COMPONENT_AREA;
     }
 
     record FloorCell(int x, int y, int z) {
