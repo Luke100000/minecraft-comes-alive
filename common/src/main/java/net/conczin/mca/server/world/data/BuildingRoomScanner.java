@@ -29,16 +29,20 @@ final class BuildingRoomScanner {
             return Result.failure(Status.TOO_SMALL, source);
         }
 
-        Map<BlockPos, BlockPos> floorConnectors = floorConnectors(world, floor);
+        Set<BlockPos> partitionCells = partitionCells(world, floor);
+        Map<BlockPos, BlockPos> floorConnectors = floorConnectors(world, floor, partitionCells);
         BuildingFloorRegion ordinary = BuildingFloorRegion.fromFootprint(floor.anchorY(),
-                floor.region().cells().stream().filter(cell -> !floorConnectors.containsKey(cell)).toList());
+                partitionCells.stream()
+                        .filter(cell -> !floorConnectors.containsKey(cell))
+                        .filter(cell -> isRoomPassageColumn(world, floor, cell))
+                        .toList());
         BuildingFloorRegion.Component selected = selectComponent(source, floor, floorConnectors.keySet(), ordinary.components());
         if (selected == null) return Result.failure(Status.TOO_SMALL, source);
 
         LinkedHashSet<BlockPos> footprint = new LinkedHashSet<>(selected.cells(floor.anchorY()));
         for (BlockPos connectorCell : floorConnectors.keySet()) {
             List<BuildingFloorRegion.Component> adjacent = adjacentComponents(connectorCell, ordinary.components());
-            if (adjacent.size() == 1 && adjacent.getFirst().equals(selected)) footprint.add(connectorCell);
+            if (selected.equals(connectorOwner(adjacent))) footprint.add(connectorCell);
         }
 
         if (footprint.stream().anyMatch(cell ->
@@ -63,17 +67,53 @@ final class BuildingRoomScanner {
                 new BlockPos(maxX, Math.max(floor.anchorY(), floor.ceilingY() - 1), maxZ));
     }
 
-    private static Map<BlockPos, BlockPos> floorConnectors(Level world, StructureFloor floor) {
-        LinkedHashMap<BlockPos, BlockPos> result = new LinkedHashMap<>();
-        int minY = floor.anchorY() - BuildingFloorRegionDetector.FLOOR_CLUSTER_TOLERANCE;
-        for (BlockPos floorCell : floor.region().cells()) {
-            for (int y = minY; y < floor.ceilingY(); y++) {
-                BlockPos pos = new BlockPos(floorCell.getX(), y, floorCell.getZ());
-                if (StructureConnector.isConnector(world.getBlockState(pos))) {
-                    result.put(floorCell, pos);
-                    break;
+    /** Re-partitions a persisted physical Floor from current walls/doors without enlarging the Structure. */
+    private static Set<BlockPos> partitionCells(Level world, StructureFloor floor) {
+        Set<BlockPos> canonical = floor.region().cells();
+        LinkedHashSet<BlockPos> result = new LinkedHashSet<>(canonical);
+        for (BlockPos cell : canonical) {
+            for (Direction direction : HORIZONTAL) {
+                BlockPos candidate = cell.relative(direction);
+                if (canonical.contains(candidate)) continue;
+                boolean bridge = canonical.contains(candidate.relative(Direction.NORTH))
+                        && canonical.contains(candidate.relative(Direction.SOUTH))
+                        || canonical.contains(candidate.relative(Direction.EAST))
+                        && canonical.contains(candidate.relative(Direction.WEST));
+                if (bridge && (connectorInColumn(world, floor, candidate) != null
+                        || isRoomPassageColumn(world, floor, candidate))) {
+                    result.add(candidate);
                 }
             }
+        }
+        return Set.copyOf(result);
+    }
+
+    /** Low furniture stays inside a Room; a two-block solid wall remains a partition boundary. */
+    private static boolean isRoomPassageColumn(Level world, StructureFloor floor, BlockPos floorCell) {
+        BlockPos base = new BlockPos(floorCell.getX(), floor.anchorY(), floorCell.getZ());
+        if (StructureConnector.isPassageCell(world, base)) return true;
+        if (base.getY() + 1 >= floor.ceilingY()
+                || !StructureConnector.isPassageCell(world, base.above())) return false;
+        var shape = world.getBlockState(base).getCollisionShape(world, base);
+        return shape.isEmpty() || shape.max(Direction.Axis.Y) <= 1.0D;
+    }
+
+    private static BlockPos connectorInColumn(Level world, StructureFloor floor, BlockPos floorCell) {
+        int minY = floor.anchorY() - BuildingFloorRegionDetector.FLOOR_CLUSTER_TOLERANCE;
+        for (int y = minY; y < floor.ceilingY(); y++) {
+            BlockPos pos = new BlockPos(floorCell.getX(), y, floorCell.getZ());
+            if (StructureConnector.isConnector(world.getBlockState(pos))) return pos;
+        }
+        return null;
+    }
+
+    private static Map<BlockPos, BlockPos> floorConnectors(Level world,
+                                                            StructureFloor floor,
+                                                            Collection<BlockPos> floorCells) {
+        LinkedHashMap<BlockPos, BlockPos> result = new LinkedHashMap<>();
+        for (BlockPos floorCell : floorCells) {
+            BlockPos connector = connectorInColumn(world, floor, floorCell);
+            if (connector != null) result.put(floorCell, connector);
         }
         return Map.copyOf(result);
     }
@@ -98,6 +138,14 @@ final class BuildingRoomScanner {
         return components.stream().filter(component -> Arrays.stream(HORIZONTAL).anyMatch(direction ->
                 component.containsHorizontally(cell.getX() + direction.getStepX(),
                         cell.getZ() + direction.getStepZ()))).toList();
+    }
+
+    /** Every connector Floor cell has at most one Room owner so Room footprints stay disjoint. */
+    private static BuildingFloorRegion.Component connectorOwner(List<BuildingFloorRegion.Component> adjacent) {
+        return adjacent.stream().min(Comparator.comparingInt(BuildingFloorRegion.Component::minX)
+                .thenComparingInt(BuildingFloorRegion.Component::minZ)
+                .thenComparingInt(BuildingFloorRegion.Component::maxX)
+                .thenComparingInt(BuildingFloorRegion.Component::maxZ)).orElse(null);
     }
 
     private static BlockPos nearestCell(BlockPos source, Collection<BlockPos> cells) {

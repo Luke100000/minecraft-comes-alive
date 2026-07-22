@@ -89,12 +89,35 @@ public final class Structure implements VillageBuilding {
         List<Building> structureRooms = rooms == null ? List.of() : rooms.stream()
                 .filter(room -> room.getStructureId() == id)
                 .toList();
-        if (!containsPos(pos) && !StructureConnector.attachesToStructure(world, this, pos)) return Optional.empty();
-
-        StructureFloor floor = resolveFloor(pos.getY()).orElse(null);
-        if (floor == null) return Optional.empty();
+        StructureFloor floor = physicalFloorAt(pos).orElse(null);
+        int roomX = pos.getX();
+        int roomZ = pos.getZ();
+        if (floor == null) {
+            floor = resolveFloor(pos.getY()).filter(candidate -> pos.getY() < candidate.ceilingY()).orElse(null);
+            if (floor == null) return Optional.empty();
+            if (!StructureConnector.attachesToStructure(world, this, pos)) {
+                BlockPos adjacent = adjacentOverhangFloorCell(world, pos, floor);
+                if (adjacent == null) return Optional.empty();
+                roomX = adjacent.getX();
+                roomZ = adjacent.getZ();
+            }
+        }
         return Optional.of(new InteractionPosition(floor,
-                roomAtColumn(structureRooms, floor, pos.getX(), pos.getZ())));
+                roomAtColumn(structureRooms, floor, roomX, roomZ)));
+    }
+
+    private static BlockPos adjacentOverhangFloorCell(Level world, BlockPos pos, StructureFloor floor) {
+        if (!StructureConnector.isPassageCell(world, pos)
+                || StructureScanner.isSupported(world, pos.getX(), pos.getY(), pos.getZ())) return null;
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dz = -1; dz <= 1; dz++) {
+                if (Math.abs(dx) + Math.abs(dz) != 1) continue;
+                int x = pos.getX() + dx;
+                int z = pos.getZ() + dz;
+                if (floor.contains(x, z)) return new BlockPos(x, floor.anchorY(), z);
+            }
+        }
+        return null;
     }
 
     private static Building roomAtColumn(Collection<Building> rooms, StructureFloor floor, int x, int z) {

@@ -312,9 +312,8 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         StructureFloor floor = structure.getFloor(expected.getFloorId()).orElse(null);
         if (floor == null) return failedRoom(Building.validationResult.OVERLAP, pos, village);
 
-        // Room updates partition the already-known physical Floor. Structure/Floor geometry is
-        // refreshed only by Full Scan; otherwise an internal wall edit accidentally becomes a
-        // second physical Structure scan with its own failure and identity semantics.
+        // UPDATE_ROOM re-partitions the canonical physical Floor against current world blocks.
+        // It must not refresh or replace Structure geometry; physical footprint changes use Full Scan.
         BuildingScanResult scan = scanResolvedRoom(
                 village, structure, pos, buildingId, true, floor, Set.of());
         if (scan.result() != Building.validationResult.SUCCESS) return scan;
