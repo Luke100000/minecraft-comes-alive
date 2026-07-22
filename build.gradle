@@ -84,28 +84,19 @@ allprojects {
 
 forgix {
     group = rootProject.groupId
-    autoRun = true
-
-    archiveClassifier = "universal"
-    archiveVersion = rootProject.version.toString()
-    destinationDirectory = layout.projectDirectory.dir("build/libs")
     mergedJarName = "${rootProject.name}-${rootProject.version}-universal.jar"
     outputDir = "build/libs"
 
     forge {
-        inputJar = project(":forge").tasks.remapJar.archiveFile
         jarLocation = "build/libs/${rootProject.name}-${rootProject.version}.jar"
         mixin "mca.mixin.json"
     }
 
     fabric {
-        inputJar = project(":fabric").tasks.remapJar.archiveFile
         jarLocation = "build/libs/${rootProject.name}-${rootProject.version}.jar"
     }
 
     quilt {
-        inputJar = project(":quilt").tasks.remapJar.archiveFile
         jarLocation = "build/libs/${rootProject.name}-${rootProject.version}.jar"
     }
 }
-
