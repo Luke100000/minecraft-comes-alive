@@ -312,18 +312,56 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         StructureFloor floor = structure.getFloor(expected.getFloorId()).orElse(null);
         if (floor == null) return failedRoom(Building.validationResult.OVERLAP, pos, village);
 
-        // UPDATE_ROOM re-partitions the canonical physical Floor against current world blocks.
-        // It must not refresh or replace Structure geometry; physical footprint changes use Full Scan.
-        BuildingScanResult scan = scanResolvedRoom(
-                village, structure, pos, buildingId, true, floor, Set.of());
-        if (scan.result() != Building.validationResult.SUCCESS) return scan;
+        BuildingRoomScanner.FloorPartition partition = BuildingRoomScanner.partition(
+                world, expected.getSourceBlock(), Config.getInstance().maxBuildingSize,
+                Config.getInstance().maxBuildingRadius, structure, floor);
+        List<BuildingScanResult> components = partition.components().stream()
+                .map(geometry -> roomResultFromGeometry(village, structure, floor, geometry, -1, true))
+                .filter(scan -> scan.result() == Building.validationResult.SUCCESS)
+                .filter(scan -> scan.building().getFloorFootprintIntersectionArea(expected) > 0)
+                .toList();
+        if (components.isEmpty()) return failedRoom(Building.validationResult.TOO_SMALL, pos, village);
 
-        Optional<List<Integer>> absorbed = findAbsorbedRooms(village, expected, scan.building());
-        if (absorbed.isEmpty()) {
-            return failedRoom(Building.validationResult.OVERLAP, pos, village);
+        BuildingScanResult retained = selectRetainedRoom(expected, components);
+        retained.building().setId(buildingId);
+        List<Building> created = new ArrayList<>();
+        for (BuildingScanResult component : components) {
+            if (component == retained) continue;
+            Building room = component.building();
+            long overlap = room.getFloorFootprintIntersectionArea(expected);
+            if (overlap != room.getFloorFootprintArea()) {
+                return failedRoom(Building.validationResult.OVERLAP, pos, village);
+            }
+            if (overlapsRegisteredRoom(village, expected, room)) {
+                return failedRoom(Building.validationResult.OVERLAP, pos, village);
+            }
+            created.add(room);
         }
-        return new BuildingScanResult(scan.result(), scan.source(), scan.building(), scan.matchingTypes(),
-                scan.village(), absorbed.get());
+
+        Optional<List<Integer>> absorbed = findAbsorbedRooms(village, expected, retained.building());
+        if (absorbed.isEmpty()) return failedRoom(Building.validationResult.OVERLAP, pos, village);
+        return new BuildingScanResult(retained.result(), retained.source(), retained.building(), retained.matchingTypes(),
+                retained.village(), absorbed.get(), created);
+    }
+
+    private static BuildingScanResult selectRetainedRoom(Building expected, List<BuildingScanResult> components) {
+        Comparator<BuildingScanResult> preference = Comparator
+                .comparing((BuildingScanResult scan) -> !scan.building().containsFloorPosition(expected.getSourceBlock()))
+                .thenComparing(Comparator.comparingLong((BuildingScanResult scan) ->
+                        scan.building().getFloorFootprintIntersectionArea(expected)).reversed())
+                .thenComparing(Comparator.comparingLong((BuildingScanResult scan) ->
+                        scan.building().getFloorFootprintArea()).reversed())
+                .thenComparingInt(scan -> scan.building().getRawPos0().getX())
+                .thenComparingInt(scan -> scan.building().getRawPos0().getZ());
+        return components.stream().min(preference).orElseThrow();
+    }
+
+    private static boolean overlapsRegisteredRoom(Village village, Building expected, Building candidate) {
+        return village.getRooms()
+                .filter(room -> room.getId() != expected.getId())
+                .filter(room -> room.getStructureId() == expected.getStructureId())
+                .filter(room -> room.getFloorId() == expected.getFloorId())
+                .anyMatch(room -> candidate.getFloorFootprintIntersectionArea(room) > 0);
     }
 
     private BuildingScanResult scanRoom(Village village,
@@ -374,9 +412,15 @@ public class VillageManager extends SavedData implements Iterable<Village> {
 
         BuildingRoomScanner.Result geometry = BuildingRoomScanner.scan(world, pos, blocked,
                 Config.getInstance().maxBuildingSize, Config.getInstance().maxBuildingRadius, structure, floor);
-        Building room = new Building(pos);
+        return roomResultFromGeometry(village, structure, floor, geometry, existingRoomId, allowMissingEntrance);
+    }
+
+    private BuildingScanResult roomResultFromGeometry(Village village, Structure structure, StructureFloor floor,
+                                                      BuildingRoomScanner.Result geometry, int existingRoomId,
+                                                      boolean allowMissingEntrance) {
+        Building room = new Building(geometry.seed());
         Building.validationResult result = room.applyRoomScan(world, geometry, allowMissingEntrance);
-        if (result != Building.validationResult.SUCCESS) return failedRoom(result, pos, village);
+        if (result != Building.validationResult.SUCCESS) return failedRoom(result, geometry.seed(), village);
         room.setStructureId(structure.getId());
         room.setFloorId(floor.id());
         if (existingRoomId >= 0) room.setId(existingRoomId);
@@ -386,6 +430,30 @@ public class VillageManager extends SavedData implements Iterable<Village> {
                 : village.getMatchingRoomTypes(room).stream().map(BuildingType::name).toList();
         return new BuildingScanResult(Building.validationResult.SUCCESS, room.getSourceBlock(), room,
                 types, village, List.of());
+    }
+
+    private static boolean validCreatedRooms(Village village, Building existing, Building retained,
+                                             List<Building> createdRooms) {
+        for (int i = 0; i < createdRooms.size(); i++) {
+            Building created = createdRooms.get(i);
+            if (created.getId() >= 0
+                    || created.getStructureId() != existing.getStructureId()
+                    || created.getFloorId() != existing.getFloorId()
+                    || created.getFloorFootprintIntersectionArea(existing) != created.getFloorFootprintArea()
+                    || created.getFloorFootprintIntersectionArea(retained) > 0) {
+                return false;
+            }
+            for (int j = i + 1; j < createdRooms.size(); j++) {
+                if (created.getFloorFootprintIntersectionArea(createdRooms.get(j)) > 0) return false;
+            }
+            boolean overlapsRegistered = village.getRooms()
+                    .filter(room -> room.getId() != existing.getId())
+                    .filter(room -> room.getStructureId() == existing.getStructureId())
+                    .filter(room -> room.getFloorId() == existing.getFloorId())
+                    .anyMatch(room -> created.getFloorFootprintIntersectionArea(room) > 0);
+            if (overlapsRegistered) return false;
+        }
+        return true;
     }
 
     private static Optional<List<Integer>> findAbsorbedRooms(Village village,
@@ -493,15 +561,18 @@ public class VillageManager extends SavedData implements Iterable<Village> {
             return Building.validationResult.OVERLAP;
         }
 
+        BuildingScanResult.RoomTopologyPlan topology = scan.roomTopologyPlan();
         Optional<List<Integer>> absorbed = findAbsorbedRooms(village, existing, scan.building());
-        if (absorbed.isEmpty() || !absorbed.get().equals(scan.absorbedRoomIds())) {
+        if (absorbed.isEmpty() || !absorbed.get().equals(topology.absorbedRoomIds())
+                || !validCreatedRooms(village, existing, scan.building(), topology.createdRooms())) {
             return Building.validationResult.OVERLAP;
         }
         int currentRootRoomId = currentStructure.getRootRoomId();
         if (absorbed.get().contains(currentRootRoomId)) {
             currentStructure.setRootRoomId(existing.getId());
         }
-        village.removeBuildings(absorbed.get());
+        String splitType = existing.getType();
+        boolean splitTypeForced = existing.isTypeForced();
 
         existing.copyScannedGeometryFrom(scan.building(), world, true);
         if (forcedType != null) {
@@ -510,6 +581,16 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         } else if (scan.matchingTypes().size() == 1) {
             existing.setType(scan.matchingTypes().getFirst());
             existing.setTypeForced(false);
+        }
+
+        village.removeBuildings(absorbed.get());
+        for (Building created : topology.createdRooms()) {
+            created.setId(lastBuildingId++);
+            created.setStructureId(existing.getStructureId());
+            created.setFloorId(existing.getFloorId());
+            created.setType(splitType);
+            created.setTypeForced(splitTypeForced);
+            village.getBuildings().put(created.getId(), created);
         }
 
         finalizeVillageMutation(village);

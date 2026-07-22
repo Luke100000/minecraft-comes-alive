@@ -29,6 +29,29 @@ final class BuildingRoomScanner {
             return Result.failure(Status.TOO_SMALL, source);
         }
 
+        PartitionData partition = partitionData(world, floor);
+        BuildingFloorRegion.Component selected = selectComponent(
+                source, floor, partition.floorConnectors().keySet(), partition.components());
+        return selected == null ? Result.failure(Status.TOO_SMALL, source)
+                : materializeComponent(world, source, blocked, maxSize, maxRadius, structure, floor, partition, selected);
+    }
+
+    /** Returns every valid current Room component on one persisted physical Floor using one partition pass. */
+    static FloorPartition partition(Level world, BlockPos source, int maxSize, int maxRadius,
+                                    Structure structure, StructureFloor floor) {
+        if (structure == null || floor == null || floor.region() == null) return new FloorPartition(List.of());
+        PartitionData partition = partitionData(world, floor);
+        List<Result> components = partition.components().stream()
+                .map(component -> materializeComponent(world, source, Set.of(), maxSize, maxRadius,
+                        structure, floor, partition, component))
+                .filter(result -> result.status() == Status.SUCCESS)
+                .sorted(Comparator.comparingInt((Result result) -> result.min().getX())
+                        .thenComparingInt(result -> result.min().getZ()))
+                .toList();
+        return new FloorPartition(components);
+    }
+
+    private static PartitionData partitionData(Level world, StructureFloor floor) {
         Set<BlockPos> partitionCells = partitionCells(world, floor);
         Map<BlockPos, BlockPos> floorConnectors = floorConnectors(world, floor, partitionCells);
         BuildingFloorRegion ordinary = BuildingFloorRegion.fromFootprint(floor.anchorY(),
@@ -36,13 +59,16 @@ final class BuildingRoomScanner {
                         .filter(cell -> !floorConnectors.containsKey(cell))
                         .filter(cell -> isRoomPassageColumn(world, floor, cell))
                         .toList());
-        BuildingFloorRegion.Component selected = selectComponent(source, floor, floorConnectors.keySet(), ordinary.components());
-        if (selected == null) return Result.failure(Status.TOO_SMALL, source);
+        return new PartitionData(floorConnectors, ordinary.components());
+    }
 
-        LinkedHashSet<BlockPos> footprint = new LinkedHashSet<>(selected.cells(floor.anchorY()));
-        for (BlockPos connectorCell : floorConnectors.keySet()) {
-            List<BuildingFloorRegion.Component> adjacent = adjacentComponents(connectorCell, ordinary.components());
-            if (selected.equals(connectorOwner(adjacent))) footprint.add(connectorCell);
+    private static Result materializeComponent(Level world, BlockPos source, Set<BlockPos> blocked,
+                                               int maxSize, int maxRadius, Structure structure, StructureFloor floor,
+                                               PartitionData partition, BuildingFloorRegion.Component component) {
+        LinkedHashSet<BlockPos> footprint = new LinkedHashSet<>(component.cells(floor.anchorY()));
+        for (BlockPos connectorCell : partition.floorConnectors().keySet()) {
+            List<BuildingFloorRegion.Component> adjacent = adjacentComponents(connectorCell, partition.components());
+            if (component.equals(connectorOwner(adjacent))) footprint.add(connectorCell);
         }
 
         if (footprint.stream().anyMatch(cell ->
@@ -54,9 +80,9 @@ final class BuildingRoomScanner {
         if (footprint.stream().anyMatch(blockedCells::contains)) return Result.failure(Status.OVERLAP, source);
         if (footprint.size() < MIN_INTERIOR_AREA) return Result.failure(Status.TOO_SMALL, source);
 
-        boolean hasEntrance = hasHorizontalEntrance(world, floorConnectors, selected)
-                || hasVerticalEntrance(world, structure, floor, floorConnectors, selected);
-        BlockPos seed = nearestCell(source, selected.cells(floor.anchorY()));
+        boolean hasEntrance = hasHorizontalEntrance(world, partition.floorConnectors(), component)
+                || hasVerticalEntrance(world, structure, floor, partition.floorConnectors(), component);
+        BlockPos seed = nearestCell(source, component.cells(floor.anchorY()));
         Set<BlockPos> poi = collectPoiCells(world, footprint, floor.anchorY(), floor.ceilingY());
         int minX = footprint.stream().mapToInt(BlockPos::getX).min().orElse(source.getX());
         int minZ = footprint.stream().mapToInt(BlockPos::getZ).min().orElse(source.getZ());
@@ -193,6 +219,16 @@ final class BuildingRoomScanner {
             }
         }
         return Set.copyOf(poi);
+    }
+
+    record FloorPartition(List<Result> components) {
+        FloorPartition {
+            components = List.copyOf(components);
+        }
+    }
+
+    private record PartitionData(Map<BlockPos, BlockPos> floorConnectors,
+                                 List<BuildingFloorRegion.Component> components) {
     }
 
     enum Status { SUCCESS, OVERLAP, BLOCK_LIMIT, SIZE_LIMIT, TOO_SMALL }

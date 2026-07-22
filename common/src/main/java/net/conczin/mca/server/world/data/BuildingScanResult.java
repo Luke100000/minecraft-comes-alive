@@ -10,11 +10,22 @@ public record BuildingScanResult(
         Building building,
         List<String> matchingTypes,
         Village village,
-        List<Integer> absorbedRoomIds
+        List<Integer> absorbedRoomIds,
+        List<Building> createdRooms
 ) {
     public BuildingScanResult {
         matchingTypes = List.copyOf(matchingTypes);
         absorbedRoomIds = List.copyOf(absorbedRoomIds);
+        createdRooms = List.copyOf(createdRooms);
+    }
+
+    public BuildingScanResult(Building.validationResult result, BlockPos source, Building building,
+                              List<String> matchingTypes, Village village, List<Integer> absorbedRoomIds) {
+        this(result, source, building, matchingTypes, village, absorbedRoomIds, List.of());
+    }
+
+    public RoomTopologyPlan roomTopologyPlan() {
+        return new RoomTopologyPlan(createdRooms, absorbedRoomIds);
     }
 
     public boolean isAmbiguous() {
@@ -23,5 +34,12 @@ public record BuildingScanResult(
 
     public boolean matchesType(String type) {
         return matchingTypes.contains(type);
+    }
+
+    public record RoomTopologyPlan(List<Building> createdRooms, List<Integer> absorbedRoomIds) {
+        public RoomTopologyPlan {
+            createdRooms = List.copyOf(createdRooms);
+            absorbedRoomIds = List.copyOf(absorbedRoomIds);
+        }
     }
 }
