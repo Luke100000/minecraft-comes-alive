@@ -1,10 +1,6 @@
 package net.conczin.mca.client.gui;
 
-import net.conczin.mca.server.world.data.Building;
-import net.conczin.mca.server.world.data.ExternalBuilding;
-import net.conczin.mca.server.world.data.Structure;
-import net.conczin.mca.server.world.data.StructureFloor;
-import net.conczin.mca.server.world.data.Village;
+import net.conczin.mca.server.world.data.*;
 
 import java.util.*;
 
