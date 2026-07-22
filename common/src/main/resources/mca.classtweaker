@@ -9,3 +9,6 @@ accessible method net/minecraft/world/entity/schedule/Activity <init> (Ljava/lan
 # Widen MoveControl.rotlerp for task usage
 accessible method net/minecraft/world/entity/ai/control/MoveControl rotlerp (FFF)F
 
+# Widen GroundPathNavigation.getSurfaceY so MCA can make water-tag-aware navigation.
+extendable method net/minecraft/world/entity/ai/navigation/GroundPathNavigation getSurfaceY ()I
+
