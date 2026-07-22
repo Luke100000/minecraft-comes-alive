@@ -212,6 +212,10 @@ final class StructureScanner {
                                             BlockPos pos,
                                             BlockState state,
                                             Map<BlockPos, Boolean> roof) {
+        // A bed is Room furniture, not a new physical walking storey. Without this guard the air
+        // above a bed is supported by the bed collision shape and gets emitted as an elevated Floor
+        // sample, so merely furnishing a Room can reshape StructureFloor geometry.
+        if (world.getBlockState(pos.below()).is(BlockTags.BEDS)) return false;
         return isOpen(world, pos, state)
                 && isSupported(world, pos.getX(), pos.getY(), pos.getZ())
                 && hasRoof(world, pos, roof);
