@@ -1,3 +1,9 @@
+# 7.7.25
+> This is a release of 7.7.25 unrelated to the 7.7.23-ALPHA version.
+
+* Bouquets (flowers) can now be treated as gifts to your partner! (Thanks tranthienlong675!)
+* EMF support has been added
+
 # 7.7.24
 > This is a release of 7.7.24 unrelated to the 7.7.23-ALPHA version.
 
