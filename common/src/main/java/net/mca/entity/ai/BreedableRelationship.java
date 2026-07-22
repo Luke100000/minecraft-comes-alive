@@ -18,6 +18,7 @@ import net.minecraft.entity.Entity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.*;
 import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.util.ActionResult;
 import net.minecraft.util.math.MathHelper;
 
 import java.util.Optional;
@@ -202,11 +203,11 @@ public class BreedableRelationship extends Relationship<VillagerEntityMCA> {
         Item item = stack.getItem();
 
         if (item instanceof SpecialCaseGift specialCaseGift) {
-            SpecialCaseGift.Result result = specialCaseGift.handle(player, entity);
-            if (result == SpecialCaseGift.Result.CONSUME) {
+            ActionResult result = specialCaseGift.handle(player, entity);
+            if (result == ActionResult.CONSUME) {
                 stack.decrement(1);
             }
-            return result != SpecialCaseGift.Result.PASS;
+            return result != ActionResult.PASS;
         }
 
         if (item == Items.CAKE && !entity.isBaby()) {

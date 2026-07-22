@@ -5,6 +5,7 @@ import net.mca.entity.VillagerEntityMCA;
 import net.mca.server.world.data.PlayerSaveData;
 import net.minecraft.item.Item;
 import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.util.ActionResult;
 
 public class WeddingRingItem extends RelationshipItem {
     public WeddingRingItem(Item.Settings properties) {
@@ -17,9 +18,9 @@ public class WeddingRingItem extends RelationshipItem {
     }
 
     @Override
-    public Result handle(ServerPlayerEntity player, VillagerEntityMCA villager) {
-        Result result = validate(player, villager);
-        if (result != Result.PASS) {
+    public ActionResult handle(ServerPlayerEntity player, VillagerEntityMCA villager) {
+        ActionResult result = validate(player, villager);
+        if (result != ActionResult.PASS) {
             return result;
         }
 
@@ -28,6 +29,6 @@ public class WeddingRingItem extends RelationshipItem {
         villager.getRelationships().marry(player);
         villager.getVillagerBrain().modifyMoodValue(15);
         villager.sendChatMessage(player, "interaction.marry.success");
-        return Result.CONSUME;
+        return ActionResult.CONSUME;
     }
 }

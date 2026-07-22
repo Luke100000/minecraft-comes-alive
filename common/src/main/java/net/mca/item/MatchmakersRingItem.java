@@ -6,6 +6,7 @@ import net.mca.entity.ai.relationship.AgeState;
 import net.mca.util.WorldUtils;
 import net.minecraft.item.Item;
 import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.util.ActionResult;
 
 import java.util.Comparator;
 import java.util.Optional;
@@ -16,17 +17,17 @@ public class MatchmakersRingItem extends Item implements SpecialCaseGift {
     }
 
     @Override
-    public Result handle(ServerPlayerEntity player, VillagerEntityMCA villager) {
+    public ActionResult handle(ServerPlayerEntity player, VillagerEntityMCA villager) {
         // ensure two rings are in the inventory
         if (player.getMainHandStack().getCount() < 2) {
             villager.sendChatMessage(player, "interaction.matchmaker.fail.needtwo");
-            return Result.HANDLED;
+            return ActionResult.FAIL;
         }
 
         // ensure our target isn't married already or young
         if (villager.getRelationships().isMarried() || villager.getAgeState() != AgeState.ADULT) {
             villager.sendChatMessage(player, "interaction.matchmaker.fail.married");
-            return Result.HANDLED;
+            return ActionResult.FAIL;
         }
 
         // look for partner
@@ -41,7 +42,7 @@ public class MatchmakersRingItem extends Item implements SpecialCaseGift {
         // ensure we found a nearby villager
         if (target.isEmpty()) {
             villager.sendChatMessage(player, "interaction.matchmaker.fail.novillagers");
-            return Result.HANDLED;
+            return ActionResult.FAIL;
         }
 
         // set up the marriage by assigning spouse UUIDs
@@ -57,6 +58,6 @@ public class MatchmakersRingItem extends Item implements SpecialCaseGift {
             player.getMainHandStack().decrement(1);
         }
 
-        return Result.CONSUME;
+        return ActionResult.CONSUME;
     }
 }
