@@ -2,12 +2,28 @@ package net.conczin.mca.client.resources;
 
 import com.mojang.blaze3d.platform.NativeImage;
 import net.minecraft.util.ARGB;
+import net.minecraft.util.Mth;
 
 public final class EyeTextureLayers {
     private static final int SCLERA_MIN_CHANNEL = 160;
     private static final int SCLERA_MAX_CHANNEL_SPREAD = 32;
+    private static final int IRIS_MIN_CHANNEL = 32;
+    public static final int DETAILS_TINT = 0xFF808080;
 
     private EyeTextureLayers() {
+    }
+
+    public static int applyBrightness(int argb, float brightness) {
+        float factor = 0.5F + Mth.clamp(brightness, 0.0F, 1.0F);
+        int alpha = ARGB.alpha(argb);
+        int red = scaleChannel(ARGB.red(argb), factor);
+        int green = scaleChannel(ARGB.green(argb), factor);
+        int blue = scaleChannel(ARGB.blue(argb), factor);
+        return ARGB.color(alpha, red, green, blue);
+    }
+
+    private static int scaleChannel(int channel, float factor) {
+        return Mth.clamp(Math.round(channel * factor), 0, 255);
     }
 
     public static Bounds findBounds(NativeImage image) {
@@ -55,10 +71,30 @@ public final class EyeTextureLayers {
         return min >= SCLERA_MIN_CHANNEL && max - min <= SCLERA_MAX_CHANNEL_SPREAD;
     }
 
+    public static boolean isPixelForLayer(Layer layer, int alpha, int red, int green, int blue) {
+        if (alpha == 0) {
+            return false;
+        }
+
+        boolean sclera = isScleraPixel(alpha, red, green, blue);
+        int max = Math.max(red, Math.max(green, blue));
+        return switch (layer) {
+            case SCLERA -> sclera;
+            case IRIS -> !sclera && max >= IRIS_MIN_CHANNEL;
+            case DETAILS -> !sclera && max < IRIS_MIN_CHANNEL;
+        };
+    }
+
     public enum Side {
         FULL,
         LEFT,
         RIGHT
+    }
+
+    public enum Layer {
+        SCLERA,
+        IRIS,
+        DETAILS
     }
 
     public record Bounds(int minX, int minY, int maxX, int maxY) {

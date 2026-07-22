@@ -1,5 +1,6 @@
 package net.conczin.mca.client.render;
 
+import net.conczin.mca.client.resources.EyeTextureLayers;
 import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.entity.ai.Genetics;
 import net.conczin.mca.entity.ai.Traits;
@@ -30,7 +31,7 @@ public record VillagerVisuals(
         float faceGene,
         float eumelaninGene,
         float pheomelaninGene,
-        float eyeColorGene,
+        float eyeBrightnessGene,
         String skin,
         String hairBase,
         String hairBangs,
@@ -113,7 +114,7 @@ public record VillagerVisuals(
                 genetics.getGene(Genetics.FACE),
                 genetics.getGene(Genetics.EUMELANIN),
                 genetics.getGene(Genetics.PHEOMELANIN),
-                genetics.getGene(Genetics.EYE_COLOR),
+                genetics.getGene(Genetics.EYE_BRIGHTNESS),
                 villager.getSkin(),
                 getHairLayer(villager, LayeredHair.Category.BASE),
                 getHairLayer(villager, LayeredHair.Category.BANGS),
@@ -188,12 +189,15 @@ public record VillagerVisuals(
     }
 
     public int eyeColor(float tickDelta, boolean left) {
+        int color;
         if (rainbowEyes) {
             int offset = left && heterochromia ? RainbowColor.CYCLE_DURATION / 2 : 0;
-            return RainbowColor.sheep(tickCount + tickDelta + offset);
+            color = RainbowColor.sheep(tickCount + tickDelta + offset);
+        } else {
+            color = staticEyeColor(left);
         }
 
-        return staticEyeColor(left);
+        return EyeTextureLayers.applyBrightness(color, eyeBrightnessGene);
     }
 
     public int staticEyeColor(boolean left) {
@@ -206,7 +210,7 @@ public record VillagerVisuals(
             return ALBINISM_EYE_COLOR;
         }
 
-        float eyeColor = Mth.frac(eyeColorGene + (shifted ? 0.43F : 0.0F));
+        float eyeColor = Mth.frac(faceGene + (shifted ? 0.43F : 0.0F));
 
         if (eyeColor < 0.35F) {
             return ARGB.srgbLerp(eyeColor / 0.35F, BLUE_EYE_COLOR, GREEN_EYE_COLOR);

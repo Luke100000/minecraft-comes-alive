@@ -9,7 +9,7 @@
     "MixinAdvancementRewards",
     "MixinAdvancementRewardsAccessor",
     "MixinEntity",
-    "MixinFlintAndSteelItem",
+    "MixinItemStack",
     "MixinGoat",
     "MixinInventory",
     "MixinIronGolem",

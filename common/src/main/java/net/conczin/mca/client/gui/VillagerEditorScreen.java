@@ -310,6 +310,15 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
 
     protected void setPage(String page) {
         String prevPage = this.page;
+        boolean keepSelectedPresetPreview = page.equals("presets")
+                && "presets".equals(prevPage)
+                && selectedPreset != null;
+        if (villager != null && !keepSelectedPresetPreview) {
+            CompoundTag nbt = saveEntityData(villager);
+            villagerVisualization.load(TagValueInput.create(ProblemReporter.DISCARDING, villagerVisualization.registryAccess(), nbt));
+            villagerVisualization.setAge(villager.getAge());
+            villagerVisualization.refreshDimensions();
+        }
         if (page.equals("presets") && prevPage != null && !prevPage.equals("presets") && !prevPage.equals("loading")) {
             presetsReturnPage = prevPage;
         }
@@ -592,8 +601,8 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                 }
 
                 y = geneChanger(y, Genetics.FACE, getFaceCount());
-                addGeneSlider(width / 2, y, DATA_WIDTH, Genetics.EYE_COLOR);
-                y += 24;
+                addGeneSlider(width / 2, y, DATA_WIDTH, Genetics.EYE_BRIGHTNESS);
+                y += 22;
 
                 if (hasHetero) {
                     addRenderableWidget(new ButtonWidget(width / 2, y, DATA_WIDTH / 2, 20,
@@ -2149,6 +2158,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
             return;
         }
         this.selectedPreset = name;
+        setPage("presets");
         if (name != null) {
             if (nameField != null) {
                 nameField.setValue(name);
@@ -2188,7 +2198,6 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         } else {
             hasVisualChange = false;
         }
-        setPage("presets");
     }
 
     private void performPresetAction() {

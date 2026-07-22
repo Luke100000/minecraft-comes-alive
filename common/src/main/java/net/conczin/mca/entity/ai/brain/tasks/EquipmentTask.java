@@ -3,6 +3,7 @@ package net.conczin.mca.entity.ai.brain.tasks;
 import com.google.common.collect.ImmutableMap;
 import net.conczin.mca.entity.EquipmentSet;
 import net.conczin.mca.entity.VillagerEntityMCA;
+import net.conczin.mca.entity.ai.ActivitiesMCA;
 import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
 import net.conczin.mca.util.InventoryUtils;
 import net.minecraft.server.level.ServerLevel;
@@ -55,10 +56,11 @@ public class EquipmentTask extends Behavior<VillagerEntityMCA> {
             return false;
         }
 
+        boolean preserveMourningHands = isPeacefullyGrieving(villager);
         boolean present = villager.getBrain().getMemoryInternal(MemoryModuleTypeMCA.WEARS_ARMOR).isPresent();
         if (cachedConditionResult) {
             lastEquipTime = villager.tickCount;
-            return !present || set != null && isMissingRequestedHandItem(villager, set);
+            return !present || set != null && !preserveMourningHands && isMissingRequestedHandItem(villager, set);
         } else if (villager.tickCount - lastEquipTime > COOLDOWN) {
             return present;
         } else {
@@ -105,19 +107,22 @@ public class EquipmentTask extends Behavior<VillagerEntityMCA> {
             villager.getBrain().eraseMemory(MemoryModuleTypeMCA.WEARS_ARMOR);
         }
 
-        //weapon
-        if (wear) {
-            if (isRequestedItem(set.getMainHand()) && set.getMainHand() instanceof ProjectileWeaponItem) {
-                equipBestRanged(villager, set.getMainHand());
-            } else if (isRequestedItem(set.getMainHand())) {
-                equipBestWeapon(villager, set.getMainHand());
+        // Peaceful grieving owns both hand slots so routine equipment refreshes
+        // cannot remove or replace the flower. Combat still takes priority.
+        if (!isPeacefullyGrieving(villager)) {
+            if (wear) {
+                if (isRequestedItem(set.getMainHand()) && set.getMainHand() instanceof ProjectileWeaponItem) {
+                    equipBestRanged(villager, set.getMainHand());
+                } else if (isRequestedItem(set.getMainHand())) {
+                    equipBestWeapon(villager, set.getMainHand());
+                } else {
+                    villager.setItemSlot(villager.getDominantSlot(), ItemStack.EMPTY);
+                }
+                villager.setItemSlot(villager.getOpposingSlot(), new ItemStack(set.getGetOffHand()));
             } else {
-                villager.setItemSlot(villager.getDominantSlot(), ItemStack.EMPTY);
+                villager.setItemInHand(villager.getDominantHand(), ItemStack.EMPTY);
+                villager.setItemInHand(villager.getOpposingHand(), ItemStack.EMPTY);
             }
-            villager.setItemSlot(villager.getOpposingSlot(), new ItemStack(set.getGetOffHand()));
-        } else {
-            villager.setItemInHand(villager.getDominantHand(), ItemStack.EMPTY);
-            villager.setItemInHand(villager.getOpposingHand(), ItemStack.EMPTY);
         }
 
         //armor
@@ -156,6 +161,12 @@ public class EquipmentTask extends Behavior<VillagerEntityMCA> {
             return EquipmentSet.ARCHER_2_LEFT;
         }
         return set;
+    }
+
+    private static boolean isPeacefullyGrieving(VillagerEntityMCA villager) {
+        return villager.getBrain().isActive(ActivitiesMCA.GRIEVE)
+               && villager.getBrain().getMemoryInternal(MemoryModuleType.ATTACK_TARGET).isEmpty()
+               && !villager.getVillagerBrain().isPanicking();
     }
 
     private static boolean isMissingRequestedHandItem(VillagerEntityMCA villager, EquipmentSet set) {

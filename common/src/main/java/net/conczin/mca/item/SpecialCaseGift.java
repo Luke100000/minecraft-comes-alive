@@ -4,5 +4,11 @@ import net.conczin.mca.entity.VillagerEntityMCA;
 import net.minecraft.server.level.ServerPlayer;
 
 public interface SpecialCaseGift {
-    boolean handle(ServerPlayer player, VillagerEntityMCA villager);
+    enum Result {
+        PASS,
+        HANDLED,
+        CONSUME
+    }
+
+    Result handle(ServerPlayer player, VillagerEntityMCA villager);
 }

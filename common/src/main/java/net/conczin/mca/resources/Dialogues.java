@@ -85,7 +85,16 @@ public class Dialogues extends SimpleJsonResourceReloadListener<JsonElement> {
     //selects a specific answer while being in given question
     public void selectAnswer(VillagerEntityMCA villager, ServerPlayer player, String questionId, String answerId) {
         Question question = getQuestion(questionId);
+        if (question == null) {
+            MCA.LOGGER.warn("Player {} tried to select an unknown dialogue question '{}'", player.getGameProfile().name(), questionId);
+            return;
+        }
+
         Answer answer = question.getAnswer(answerId);
+        if (answer == null) {
+            MCA.LOGGER.warn("Player {} tried to select unknown answer '{}' for dialogue question '{}'", player.getGameProfile().name(), answerId, questionId);
+            return;
+        }
 
         //fetch chances for each result
         int total = 0;

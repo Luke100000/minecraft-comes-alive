@@ -7,6 +7,7 @@ import net.conczin.mca.MCAClient;
 import net.conczin.mca.entity.ai.*;
 import net.conczin.mca.entity.ai.brain.VillagerBrain;
 import net.conczin.mca.entity.ai.brain.VillagerTasksMCA;
+import net.conczin.mca.entity.ai.navigation.MCAGroundPathNavigation;
 import net.conczin.mca.entity.ai.relationship.*;
 import net.conczin.mca.entity.interaction.VillagerCommandHandler;
 import net.conczin.mca.registry.*;
@@ -149,6 +150,11 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         this.setPathfindingMalus(PathType.TRAPDOOR, 8.0F);
         this.setPathfindingMalus(PathType.ON_TOP_OF_TRAPDOOR, 8.0F);
         this.getNavigation().setRequiredPathLength((float) Config.getInstance().getVillagerPathfindingDistance());
+    }
+
+    @Override
+    protected PathNavigation createNavigation(Level level) {
+        return new MCAGroundPathNavigation(this, level);
     }
 
     public static <E extends Entity> CDataManager.Builder<E> createTrackedData(CDataManager.Builder<E> builder) {

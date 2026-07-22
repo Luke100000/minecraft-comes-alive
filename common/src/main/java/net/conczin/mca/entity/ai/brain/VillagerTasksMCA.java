@@ -45,6 +45,9 @@ import net.minecraft.world.item.Items;
 import java.util.Optional;
 
 public class VillagerTasksMCA {
+    private static final float GRIEVING_WALK_SPEED = 0.5F;
+    private static final int GRIEVING_PATH_TIMEOUT = 1200;
+
     public static final ImmutableList<MemoryModuleType<?>> MEMORY_TYPES = ImmutableList.of(
             MemoryModuleType.HOME,
             MemoryModuleType.JOB_SITE,
@@ -84,11 +87,12 @@ public class VillagerTasksMCA {
             MemoryModuleTypeMCA.SMALL_BOUNTY,
             MemoryModuleTypeMCA.HIT_BY_PLAYER,
             MemoryModuleTypeMCA.LAST_GRIEVE,
+            MemoryModuleTypeMCA.MOURNING_SITE,
+            MemoryModuleTypeMCA.MOURNING_POSITION,
             MemoryModuleTypeMCA.FORCED_HOME
     );
 
     public static final ImmutableList<SensorType<? extends Sensor<? super Villager>>> SENSOR_TYPES = ImmutableList.of(
-            SensorType.NEAREST_LIVING_ENTITIES,
             SensorType.NEAREST_PLAYERS,
             SensorType.NEAREST_ITEMS,
             SensorType.NEAREST_BED,
@@ -425,29 +429,35 @@ public class VillagerTasksMCA {
     }
 
     public static ImmutableList<Pair<Integer, ? extends BehaviorControl<? super VillagerEntityMCA>>> getGrievingPackage() {
+        MournAtGraveTask mournAtGrave = new MournAtGraveTask();
         return ImmutableList.of(
+                Pair.of(2, ExtendedWalkTowardsTask.create(
+                        MemoryModuleTypeMCA.MOURNING_POSITION,
+                        GRIEVING_WALK_SPEED,
+                        0,
+                        Config.getInstance().getVillagerPathfindingDistance(),
+                        GRIEVING_PATH_TIMEOUT,
+                        villager -> true,
+                        villager -> { },
+                        villager -> !mournAtGrave.hasArrived()
+                )),
                 Pair.of(0, new SequenceTask<>(
                         ImmutableMap.of(MemoryModuleType.WALK_TARGET, MemoryStatus.VALUE_ABSENT),
                         ImmutableList.of(
-                                new EnterBuildingTask("graveyard", 0.5f),
-                                new RunOne<>(
-                                        ImmutableList.of(
-                                                Pair.of(new HoldItemTask(InteractionHand.MAIN_HAND, Items.WHITE_TULIP), 1),
-                                                Pair.of(new HoldItemTask(InteractionHand.MAIN_HAND, Items.RED_TULIP), 1),
-                                                Pair.of(new HoldItemTask(InteractionHand.MAIN_HAND, Items.ORANGE_TULIP), 1),
-                                                Pair.of(new HoldItemTask(InteractionHand.MAIN_HAND, Items.PINK_TULIP), 1)
-                                        )
-                                ),
-                                new WanderOrTeleportToTargetTask(),
-                                new DoNothing(100, 300),
-                                new SayTask("villager.grieving"),
-                                new DoNothing(100, 300),
-                                new SayTask("villager.grieving"),
-                                new DoNothing(100, 300),
-                                new SayTask("villager.grieving"),
-                                new HoldItemTask(InteractionHand.MAIN_HAND, ItemStack.EMPTY),
+                                new EnterGraveyardTask(GRIEVING_WALK_SPEED),
+                                mournAtGrave,
                                 new LambdaTask<>((v) -> {
-                                    v.getVillagerBrain().justGrieved();
+                                    boolean completed = mournAtGrave.hasCompleted();
+                                    boolean hadAssignedSite = v.getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_SITE).isPresent();
+                                    boolean targetStillMournable = EnterGraveyardTask.hasMournableSite(v);
+                                    boolean periodicCandidateStillExists = !hadAssignedSite && EnterGraveyardTask.hasPeriodicMourningCandidate(v);
+                                    v.getBrain().eraseMemory(MemoryModuleTypeMCA.MOURNING_SITE);
+                                    v.getBrain().eraseMemory(MemoryModuleTypeMCA.MOURNING_POSITION);
+                                    if (completed || (!targetStillMournable && !periodicCandidateStillExists)) {
+                                        v.getVillagerBrain().justGrieved();
+                                    } else {
+                                        v.getVillagerBrain().retryGrievingLater();
+                                    }
                                     v.getBrain().updateActivityFromSchedule(v.level().environmentAttributes(), v.level().getGameTime(), v.position());
                                 })
 

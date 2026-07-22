@@ -47,6 +47,7 @@ public class Relationship<T extends Mob & VillagerLike<T>> implements EntityRela
     public static final Predicate IS_ENGAGED = (villager, player) -> villager.getRelationships().isEngagedWith(player);
     public static final Predicate IS_PROMISED = (villager, player) -> villager.getRelationships().isPromisedTo(player);
     public static final Predicate IS_RELATIVE = (villager, player) -> villager.getRelationships().getFamilyEntry().isRelative(player);
+    public static final Predicate IS_ROMANTIC_PARTNER = IS_MARRIED.or(IS_ENGAGED).or(IS_PROMISED);
     public static final Predicate IS_FAMILY = IS_MARRIED.or(IS_RELATIVE);
     public static final Predicate IS_PARENT = (villager, player) -> villager.getRelationships().getFamilyEntry().isParent(player);
     public static final Predicate IS_KID = (villager, player) -> FamilyTree.get(villager.getRelationships().getWorld()).getOrEmpty(player).filter(n -> n.isParent(villager.getRelationships().getUUID())).isPresent();
@@ -191,7 +192,10 @@ public class Relationship<T extends Mob & VillagerLike<T>> implements EntityRela
 
         if (burialSite != null && type != RelationshipType.STRANGER) {
             entity.getVillagerBrain().setGrieving();
-            entity.getBrain().setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(burialSite, 1, 1));
+            entity.getBrain().setMemory(MemoryModuleTypeMCA.MOURNING_SITE, burialSite);
+            entity.getBrain().eraseMemory(MemoryModuleTypeMCA.MOURNING_POSITION);
+            entity.getBrain().eraseMemory(MemoryModuleType.PATH);
+            entity.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
             entity.getBrain().setMemory(MemoryModuleType.LOOK_TARGET, new BlockPosTracker(burialSite));
             entity.getBrain().setActiveActivityIfPossible(ActivitiesMCA.GRIEVE);
         }

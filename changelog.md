@@ -1,8 +1,22 @@
+# 8.1.4
+
+* Port of 1.21.1 and 1.20.1 beta
+* Removed Eye Colour Slider (Use RGB colours instead), replaced with Iris Brightness
+* Improved fishing behavior and compatibility with modded fishing loot.
+* Improved mourning and tombstone recovery behavior.
+* Improved villager pathing around collision-shaped blocks and modded water.
+* Updated face and eye texture assets.
+* Fixed compatibility ritual spawning and several editor/library edge cases.
+* Bouquets are now handled consistently as gifts for romantic partners.
+
+# 8.1.3
+
+* Fixed Rumours not working and throwing an error.
+
 # 8.1.2
 
 * Fixed MCA Debug Editor breaking when editing a character while it is sitting down.
 * Fixed crash on Neoforge .10 beta, this is now the minimum NeoForge requirement.
-
 
 # 8.1.1
 
@@ -94,7 +108,6 @@
 * Villagers should be able to ride any entity that is rideable, including modded entities.
 * Fix Mood, Infection Progress and hearts not being editable due to recent modifications.
 
-
 # 8.0.4
 
 * Fixed nameless villagers being saved as their profession label after opening the Villager Editor.
@@ -125,13 +138,17 @@
 * Initial 26.2 port.
 * This is a beta release, recommended to backup your world.
 * Any bugs, please report them!
+
+# 7.9.9
+
+* Fixed nameless villagers being saved as their profession label after opening the Villager Editor.
+
 # 7.9.8
 
 * Fixed vilagers sometimes losing their trades.
 * Improved performance
 * Villagers shouldn't drown anymore.
 * Fixed RGB eye slider.
-* Fixed nameless villagers being saved as their profession label after opening the Villager Editor.
 
 # 7.9.7
 
