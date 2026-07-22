@@ -70,7 +70,8 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
     private static boolean shouldCheckBlockClearance(PathType type) {
         return type != PathType.WALKABLE_DOOR
                 && type != PathType.DOOR_OPEN
-                && type != PathType.TRAPDOOR;
+                && type != PathType.TRAPDOOR
+                && type != PathType.ON_TOP_OF_TRAPDOOR;
     }
 
     private boolean hasBlockClearance(Node node) {
