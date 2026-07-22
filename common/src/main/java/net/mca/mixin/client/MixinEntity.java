@@ -25,8 +25,7 @@ public abstract class MixinEntity {
         }
 
         PlayerEntity player = (PlayerEntity) (Object) this;
-        if (!MCAClient.useGeneticsRenderer(player.getUuid())) return;
-        MCAClient.getPlayerData(player.getUuid()).ifPresent(data ->
+        MCAClient.getGeneticsPlayerData(player.getUuid()).ifPresent(data ->
                 cir.setReturnValue(cir.getReturnValueF() * data.getRawVerticalScaleFactor()));
     }
 }

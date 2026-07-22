@@ -1,3 +1,7 @@
+# 7.6.28-beta.9
+
+* Fixed bugs with some compatibility mods (like Epic Fight)
+
 # 7.6.28-beta.8
 
 * Fixed villager pathfinding through modded water and around lantern-sized collision blocks.

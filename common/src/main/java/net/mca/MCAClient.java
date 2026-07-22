@@ -36,16 +36,15 @@ public class MCAClient {
     }
 
     public static Optional<VillagerLike<?>> getPlayerData(UUID uuid) {
-        if (isPlayerRendererAllowed() || needsPlayerDataForDimensions()) {
-            if (!MCAClient.playerDataRequests.contains(uuid) && MinecraftClient.getInstance().getNetworkHandler() != null) {
-                MCAClient.playerDataRequests.add(uuid);
-                NetworkHandler.sendToServer(new PlayerDataRequest(uuid));
-            }
-            if (MCAClient.playerData.containsKey(uuid)) {
-                return Optional.of(MCAClient.playerData.get(uuid));
-            }
+        if (!isPlayerRendererAllowed() && !needsPlayerDataForDimensions()) {
+            return Optional.empty();
         }
-        return Optional.empty();
+
+        if (!playerDataRequests.contains(uuid) && MinecraftClient.getInstance().getNetworkHandler() != null) {
+            playerDataRequests.add(uuid);
+            NetworkHandler.sendToServer(new PlayerDataRequest(uuid));
+        }
+        return Optional.ofNullable(playerData.get(uuid));
     }
 
     public static boolean useExpandedPersonalityTranslations() {
@@ -56,16 +55,23 @@ public class MCAClient {
         return !isTTSPackActive && (language.equals("en_us") || language.equals("ru_ru")) && !Config.getInstance().enableOnlineTTS;
     }
 
+    public static Optional<VillagerLike<?>> getGeneticsPlayerData(UUID uuid) {
+        return getPlayerData(uuid)
+                .filter(data -> data.getPlayerModel() != VillagerLike.PlayerModel.VANILLA);
+    }
+
     public static boolean useGeneticsRenderer(UUID uuid) {
-        return getPlayerData(uuid).filter(f -> f.getPlayerModel() != VillagerLike.PlayerModel.VANILLA).isPresent();
+        return isPlayerRendererAllowed() && getGeneticsPlayerData(uuid).isPresent();
     }
 
     public static boolean useVillagerRenderer(UUID uuid) {
-        return useGeneticsRenderer(uuid) && MCAClient.playerData.get(uuid).getPlayerModel() == VillagerLike.PlayerModel.VILLAGER;
+        return isPlayerRendererAllowed() && getGeneticsPlayerData(uuid)
+                .filter(data -> data.getPlayerModel() == VillagerLike.PlayerModel.VILLAGER)
+                .isPresent();
     }
 
     public static boolean renderArms(UUID uuid, String key) {
-        return isPlayerRendererAllowed() && useVillagerRenderer(uuid) &&
+        return useVillagerRenderer(uuid) &&
                 Config.getInstance().playerRendererBlacklist.entrySet().stream()
                         .filter(entry -> entry.getValue().equals("arms") || entry.getValue().equals(key))
                         .noneMatch(entry -> MCA.doesModExist(entry.getKey()));
