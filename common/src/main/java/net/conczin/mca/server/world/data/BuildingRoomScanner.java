@@ -20,12 +20,12 @@ final class BuildingRoomScanner {
                        int maxSize, int maxRadius, Structure structure) {
         StructureFloor floor = structure == null ? null : structure.resolveFloor(source.getY()).orElse(null);
         return floor == null ? Result.failure(Status.TOO_SMALL, source)
-                : scan(world, source, blocked, maxSize, maxRadius, structure, floor);
+                : scan(world, source, blocked, maxSize, maxRadius, floor);
     }
 
     static Result scan(Level world, BlockPos source, Set<BlockPos> blocked,
-                       int maxSize, int maxRadius, Structure structure, StructureFloor floor) {
-        if (structure == null || floor == null || floor.region() == null) {
+                       int maxSize, int maxRadius, StructureFloor floor) {
+        if (floor == null || floor.region() == null) {
             return Result.failure(Status.TOO_SMALL, source);
         }
 
@@ -33,22 +33,21 @@ final class BuildingRoomScanner {
         BuildingFloorRegion.Component selected = selectComponent(
                 source, floor, partition.floorConnectors().keySet(), partition.components());
         return selected == null ? Result.failure(Status.TOO_SMALL, source)
-                : materializeComponent(world, source, blocked, maxSize, maxRadius, structure, floor, partition, selected);
+                : materializeComponent(world, source, blocked, maxSize, maxRadius, floor, partition, selected);
     }
 
     /** Returns every valid current Room component on one persisted physical Floor using one partition pass. */
-    static FloorPartition partition(Level world, BlockPos source, int maxSize, int maxRadius,
-                                    Structure structure, StructureFloor floor) {
-        if (structure == null || floor == null || floor.region() == null) return new FloorPartition(List.of());
+    static List<Result> partition(Level world, BlockPos source, int maxSize, int maxRadius, StructureFloor floor) {
+        if (floor == null || floor.region() == null) return List.of();
         PartitionData partition = partitionData(world, floor);
         List<Result> components = partition.components().stream()
                 .map(component -> materializeComponent(world, source, Set.of(), maxSize, maxRadius,
-                        structure, floor, partition, component))
+                        floor, partition, component))
                 .filter(result -> result.status() == Status.SUCCESS)
                 .sorted(Comparator.comparingInt((Result result) -> result.min().getX())
                         .thenComparingInt(result -> result.min().getZ()))
                 .toList();
-        return new FloorPartition(components);
+        return components;
     }
 
     private static PartitionData partitionData(Level world, StructureFloor floor) {
@@ -63,7 +62,7 @@ final class BuildingRoomScanner {
     }
 
     private static Result materializeComponent(Level world, BlockPos source, Set<BlockPos> blocked,
-                                               int maxSize, int maxRadius, Structure structure, StructureFloor floor,
+                                               int maxSize, int maxRadius, StructureFloor floor,
                                                PartitionData partition, BuildingFloorRegion.Component component) {
         LinkedHashSet<BlockPos> footprint = new LinkedHashSet<>(component.cells(floor.anchorY()));
         for (BlockPos connectorCell : partition.floorConnectors().keySet()) {
@@ -80,8 +79,6 @@ final class BuildingRoomScanner {
         if (footprint.stream().anyMatch(blockedCells::contains)) return Result.failure(Status.OVERLAP, source);
         if (footprint.size() < MIN_INTERIOR_AREA) return Result.failure(Status.TOO_SMALL, source);
 
-        boolean hasEntrance = hasHorizontalEntrance(world, partition.floorConnectors(), component)
-                || hasVerticalEntrance(world, structure, floor, partition.floorConnectors(), component);
         BlockPos seed = nearestCell(source, component.cells(floor.anchorY()));
         Set<BlockPos> poi = collectPoiCells(world, footprint, floor.anchorY(), floor.ceilingY());
         int minX = footprint.stream().mapToInt(BlockPos::getX).min().orElse(source.getX());
@@ -89,7 +86,7 @@ final class BuildingRoomScanner {
         int maxX = footprint.stream().mapToInt(BlockPos::getX).max().orElse(source.getX());
         int maxZ = footprint.stream().mapToInt(BlockPos::getZ).max().orElse(source.getZ());
         return new Result(Status.SUCCESS, seed, floor.id(), floor.anchorY(), Set.copyOf(footprint), poi,
-                hasEntrance, new BlockPos(minX, floor.anchorY(), minZ),
+                new BlockPos(minX, floor.anchorY(), minZ),
                 new BlockPos(maxX, Math.max(floor.anchorY(), floor.ceilingY() - 1), maxZ));
     }
 
@@ -181,32 +178,6 @@ final class BuildingRoomScanner {
                 .orElse(source);
     }
 
-    private static boolean hasHorizontalEntrance(Level world, Map<BlockPos, BlockPos> floorConnectors,
-                                                 BuildingFloorRegion.Component selected) {
-        for (Map.Entry<BlockPos, BlockPos> entry : floorConnectors.entrySet()) {
-            Direction facing = StructureConnector.horizontalFacing(world.getBlockState(entry.getValue())).orElse(null);
-            if (facing == null) continue;
-            BlockPos cell = entry.getKey();
-            boolean first = selected.containsHorizontally(
-                    cell.getX() + facing.getStepX(), cell.getZ() + facing.getStepZ());
-            boolean second = selected.containsHorizontally(
-                    cell.getX() - facing.getStepX(), cell.getZ() - facing.getStepZ());
-            if (first != second) return true;
-        }
-        return false;
-    }
-
-    private static boolean hasVerticalEntrance(Level world, Structure structure, StructureFloor floor,
-                                               Map<BlockPos, BlockPos> floorConnectors,
-                                               BuildingFloorRegion.Component selected) {
-        for (Map.Entry<BlockPos, BlockPos> entry : floorConnectors.entrySet()) {
-            if (!StructureConnector.isVertical(world.getBlockState(entry.getValue()))) continue;
-            if (adjacentComponents(entry.getKey(), List.of(selected)).isEmpty()) continue;
-            if (StructureConnector.connectsDifferentFloor(world, structure, floor, entry.getValue())) return true;
-        }
-        return false;
-    }
-
     private static Set<BlockPos> collectPoiCells(Level world, Set<BlockPos> footprint, int floorY, int ceilingY) {
         LinkedHashSet<BlockPos> poi = new LinkedHashSet<>();
         BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
@@ -221,12 +192,6 @@ final class BuildingRoomScanner {
         return Set.copyOf(poi);
     }
 
-    record FloorPartition(List<Result> components) {
-        FloorPartition {
-            components = List.copyOf(components);
-        }
-    }
-
     private record PartitionData(Map<BlockPos, BlockPos> floorConnectors,
                                  List<BuildingFloorRegion.Component> components) {
     }
@@ -234,15 +199,14 @@ final class BuildingRoomScanner {
     enum Status { SUCCESS, OVERLAP, BLOCK_LIMIT, SIZE_LIMIT, TOO_SMALL }
 
     record Result(Status status, BlockPos seed, int floorId, int floorY,
-                  Set<BlockPos> footprintCells, Set<BlockPos> poiCells,
-                  boolean hasEntrance, BlockPos min, BlockPos max) {
+                  Set<BlockPos> footprintCells, Set<BlockPos> poiCells, BlockPos min, BlockPos max) {
         Result {
             footprintCells = Set.copyOf(footprintCells);
             poiCells = Set.copyOf(poiCells);
         }
 
         static Result failure(Status status, BlockPos seed) {
-            return new Result(status, seed, -1, seed.getY(), Set.of(), Set.of(), false, seed, seed);
+            return new Result(status, seed, -1, seed.getY(), Set.of(), Set.of(), seed, seed);
         }
     }
 }

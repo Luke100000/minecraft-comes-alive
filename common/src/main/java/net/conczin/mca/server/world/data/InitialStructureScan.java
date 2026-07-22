@@ -1,6 +1,7 @@
 package net.conczin.mca.server.world.data;
 
-public record InitialStructureScan(StructureScanResult structure,
+public record InitialStructureScan(StructureScanner.Result structure,
+                                   Village village,
                                    BuildingScanResult room,
                                    BuildingScanResult rootRoom) {
     public Building.validationResult result() {

@@ -1,7 +1,5 @@
 package net.conczin.mca.server.world.data;
 
-import net.conczin.mca.MCA;
-
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -45,12 +43,10 @@ final class StructureFloorMatcher {
             assigned.put(floorId, new StructureFloor(floorId,
                     geometry.anchorY(), geometry.ceilingY(), geometry.region()));
         }
-        MCA.LOGGER.info("[FloorDebug][FloorMatch] requiredFloorIds={} old={} detected={} assigned={}",
-                requiredFloorIds,
-                existingFloors.stream().map(floor -> floor.id() + "@" + floor.anchorY()).toList(),
-                detected.stream().map(floor -> floor.id() + "@" + floor.anchorY()).toList(),
-                assigned.values().stream().sorted(java.util.Comparator.comparingInt(StructureFloor::anchorY))
-                        .map(floor -> floor.id() + "@" + floor.anchorY()).toList());
+        for (Building room : rooms) {
+            StructureFloor floor = assigned.get(room.getFloorId());
+            if (floor == null || !roomFootprintInside(room, floor)) return Optional.empty();
+        }
         return Optional.of(new Result(Map.copyOf(assigned), candidateNextFloorId));
     }
 
@@ -75,6 +71,14 @@ final class StructureFloorMatcher {
             }
         }
         return best;
+    }
+
+    private static boolean roomFootprintInside(Building room, StructureFloor floor) {
+        if (room.getFloorRegions().isEmpty() || floor.region() == null) {
+            return floor.contains(room.getSourceBlock().getX(), room.getSourceBlock().getZ());
+        }
+        BuildingFloorRegion region = room.getFloorRegions().getFirst();
+        return region.intersectionArea(floor.region()) == region.area();
     }
 
     record Result(Map<Integer, StructureFloor> floors, int nextFloorId) {

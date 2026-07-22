@@ -240,46 +240,39 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         Collection<Structure> existing = village == null ? List.of() : village.getStructures().values();
         if (village != null && village.getInteractionStructureAt(world, pos).isPresent()) {
             StructureScanner.Result failure = StructureScanner.Result.failure(Building.validationResult.IDENTICAL, pos);
-            return new InitialStructureScan(new StructureScanResult(failure.result(), failure, village, -1),
+            return new InitialStructureScan(failure, village,
                     failedRoom(failure.result(), pos, village), null);
         }
 
         StructureScanner.Result structureScan = StructureScanner.scan(world, pos, existing, -1);
-        StructureScanResult structureResult = new StructureScanResult(structureScan.result(), structureScan, village, -1);
         if (structureScan.result() != Building.validationResult.SUCCESS) {
-            return new InitialStructureScan(structureResult, failedRoom(structureScan.result(), pos, village), null);
+            return new InitialStructureScan(structureScan, village,
+                    failedRoom(structureScan.result(), pos, village), null);
         }
 
         Structure candidate = structureScan.toStructure(-1);
         // The Ground-anchor Room is mandatory and always becomes the Structure Root. Establish it
         // before considering the player's current Room so an upstairs/basement scan can never stand
         // in for a missing Ground Room.
-        BuildingScanResult root = scanRoom(village, candidate, structureScan.groundSeed(), -1, true);
+        BuildingScanResult root = scanRoom(village, candidate, structureScan.groundSeed(), -1);
         if (root.result() != Building.validationResult.SUCCESS) {
-            return new InitialStructureScan(structureResult, root, null);
+            return new InitialStructureScan(structureScan, village, root, null);
         }
-        MCA.LOGGER.info("[FloorDebug][InitialRoot] input={} groundSeed={} scanGroundFloorId={} rootRoomFloorId={} rootSource={}",
-                pos, structureScan.groundSeed(), structureScan.groundFloorId(),
-                root.building().getFloorId(), root.building().getSourceBlock());
 
         // Avoid scanning the same Ground Room twice in the common one-storey case.
         if (root.building().containsFloorPosition(pos)) {
-            MCA.LOGGER.info("[FloorDebug][InitialRoom] input={} reusedRoot=true rootFloorId={}",
-                    pos, root.building().getFloorId());
-            return new InitialStructureScan(structureResult, root, null);
+            return new InitialStructureScan(structureScan, village, root, null);
         }
 
         // If the player is on another Room/Floor, register that Room alongside the Ground Root.
-        BuildingScanResult room = scanRoom(village, candidate, pos, -1, true);
+        BuildingScanResult room = scanRoom(village, candidate, pos, -1);
         if (room.result() != Building.validationResult.SUCCESS) {
-            return new InitialStructureScan(structureResult, room, root);
+            return new InitialStructureScan(structureScan, village, room, root);
         }
-        MCA.LOGGER.info("[FloorDebug][InitialRoom] input={} reusedRoot=false playerRoomFloorId={} playerRoomSource={} rootFloorId={}",
-                pos, room.building().getFloorId(), room.building().getSourceBlock(), root.building().getFloorId());
         if (root.building().isIdentical(room.building())) {
             root = null;
         }
-        return new InitialStructureScan(structureResult, room, root);
+        return new InitialStructureScan(structureScan, village, room, root);
     }
 
     public BuildingScanResult analyzeRoom(BlockPos pos) {
@@ -289,7 +282,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         if (village.getFunctionalRoomAt(world, pos).isPresent()) {
             return failedRoom(Building.validationResult.IDENTICAL, pos, village);
         }
-        return scanRoom(village, structure, pos, -1, true);
+        return scanRoom(village, structure, pos, -1);
     }
 
     public BuildingScanResult analyzeRegisteredRoom(Village village, int buildingId, BlockPos pos) {
@@ -299,7 +292,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         }
         Structure structure = village.getStructureFor(expected).orElse(null);
         if (structure == null) return failedRoom(Building.validationResult.NOT_IN_BUILDING, pos, village);
-        return scanRoom(village, structure, pos, buildingId, true);
+        return scanRoom(village, structure, pos, buildingId);
     }
 
     public BuildingScanResult analyzeRegisteredRoomUpdate(Village village, int buildingId, BlockPos pos) {
@@ -312,11 +305,10 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         StructureFloor floor = structure.getFloor(expected.getFloorId()).orElse(null);
         if (floor == null) return failedRoom(Building.validationResult.OVERLAP, pos, village);
 
-        BuildingRoomScanner.FloorPartition partition = BuildingRoomScanner.partition(
-                world, expected.getSourceBlock(), Config.getInstance().maxBuildingSize,
-                Config.getInstance().maxBuildingRadius, structure, floor);
-        List<BuildingScanResult> components = partition.components().stream()
-                .map(geometry -> roomResultFromGeometry(village, structure, floor, geometry, -1, true))
+        List<BuildingScanResult> components = BuildingRoomScanner.partition(
+                        world, expected.getSourceBlock(), Config.getInstance().maxBuildingSize,
+                        Config.getInstance().maxBuildingRadius, floor).stream()
+                .map(geometry -> roomResultFromGeometry(village, structure, floor, geometry, -1))
                 .filter(scan -> scan.result() == Building.validationResult.SUCCESS)
                 .filter(scan -> scan.building().getFloorFootprintIntersectionArea(expected) > 0)
                 .toList();
@@ -367,11 +359,10 @@ public class VillageManager extends SavedData implements Iterable<Village> {
     private BuildingScanResult scanRoom(Village village,
                                         Structure structure,
                                         BlockPos pos,
-                                        int existingRoomId,
-                                        boolean allowMissingEntrance) {
+                                        int existingRoomId) {
         StructureFloor floor = resolveRoomFloor(village, structure, pos, existingRoomId);
         if (floor == null) return failedRoom(Building.validationResult.TOO_SMALL, pos, village);
-        return scanResolvedRoom(village, structure, pos, existingRoomId, allowMissingEntrance, floor,
+        return scanResolvedRoom(village, structure, pos, existingRoomId, floor,
                 registeredRoomCells(village, structure.getId(), floor.id(), existingRoomId));
     }
 
@@ -401,25 +392,17 @@ public class VillageManager extends SavedData implements Iterable<Village> {
                                                 Structure structure,
                                                 BlockPos pos,
                                                 int existingRoomId,
-                                                boolean allowMissingEntrance,
                                                 StructureFloor floor,
                                                 Set<BlockPos> blocked) {
-        MCA.LOGGER.info("[FloorDebug][RoomResolve] source={} sourceY={} existingRoomId={} structureId={} selectedFloorId={} "
-                        + "anchorY={} ceilingY={} availableFloors={}",
-                pos, pos.getY(), existingRoomId, structure.getId(), floor.id(), floor.anchorY(), floor.ceilingY(),
-                structure.getFloors().stream().map(candidate -> candidate.id() + "@" + candidate.anchorY()
-                        + ".." + candidate.ceilingY()).toList());
-
         BuildingRoomScanner.Result geometry = BuildingRoomScanner.scan(world, pos, blocked,
-                Config.getInstance().maxBuildingSize, Config.getInstance().maxBuildingRadius, structure, floor);
-        return roomResultFromGeometry(village, structure, floor, geometry, existingRoomId, allowMissingEntrance);
+                Config.getInstance().maxBuildingSize, Config.getInstance().maxBuildingRadius, floor);
+        return roomResultFromGeometry(village, structure, floor, geometry, existingRoomId);
     }
 
     private BuildingScanResult roomResultFromGeometry(Village village, Structure structure, StructureFloor floor,
-                                                      BuildingRoomScanner.Result geometry, int existingRoomId,
-                                                      boolean allowMissingEntrance) {
+                                                      BuildingRoomScanner.Result geometry, int existingRoomId) {
         Building room = new Building(geometry.seed());
-        Building.validationResult result = room.applyRoomScan(world, geometry, allowMissingEntrance);
+        Building.validationResult result = room.applyRoomScan(world, geometry);
         if (result != Building.validationResult.SUCCESS) return failedRoom(result, geometry.seed(), village);
         room.setStructureId(structure.getId());
         room.setFloorId(floor.id());
@@ -484,12 +467,12 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         if (forcedRoomType != null && !scan.room().matchesType(forcedRoomType)) return Building.validationResult.INVALID_TYPE;
         if (forcedRoomType == null && scan.room().isAmbiguous()) return Building.validationResult.INVALID_TYPE;
 
-        Village village = scan.structure().village();
+        Village village = scan.village();
         if (village == null) village = new Village(lastVillageId++, world);
-        if (village.getStructureAt(scan.structure().scan().source()).isPresent()) return Building.validationResult.IDENTICAL;
+        if (village.getStructureAt(scan.structure().source()).isPresent()) return Building.validationResult.IDENTICAL;
 
         int structureId = lastBuildingId++;
-        Structure structure = scan.structure().scan().toStructure(structureId);
+        Structure structure = scan.structure().toStructure(structureId);
         Building playerRoom = scan.room().building();
         BuildingScanResult rootScan = scan.rootRoom() == null ? scan.room() : scan.rootRoom();
         String rootCategory = chooseRootCategory(rootScan, scan.rootRoom() == null ? forcedRoomType : null);
@@ -561,10 +544,9 @@ public class VillageManager extends SavedData implements Iterable<Village> {
             return Building.validationResult.OVERLAP;
         }
 
-        BuildingScanResult.RoomTopologyPlan topology = scan.roomTopologyPlan();
         Optional<List<Integer>> absorbed = findAbsorbedRooms(village, existing, scan.building());
-        if (absorbed.isEmpty() || !absorbed.get().equals(topology.absorbedRoomIds())
-                || !validCreatedRooms(village, existing, scan.building(), topology.createdRooms())) {
+        if (absorbed.isEmpty() || !absorbed.get().equals(scan.absorbedRoomIds())
+                || !validCreatedRooms(village, existing, scan.building(), scan.createdRooms())) {
             return Building.validationResult.OVERLAP;
         }
         int currentRootRoomId = currentStructure.getRootRoomId();
@@ -584,7 +566,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         }
 
         village.removeBuildings(absorbed.get());
-        for (Building created : topology.createdRooms()) {
+        for (Building created : scan.createdRooms()) {
             created.setId(lastBuildingId++);
             created.setStructureId(existing.getStructureId());
             created.setFloorId(existing.getFloorId());
@@ -638,7 +620,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         if (rooms.isEmpty()) {
             StructureFloor ground = updated.resolveFloor(scan.groundSeed().getY()).orElse(null);
             if (ground == null) return Building.validationResult.TOO_SMALL;
-            BuildingScanResult recovery = scanRoom(village, updated, StructureScanner.bestSeed(ground), -1, true);
+            BuildingScanResult recovery = scanRoom(village, updated, StructureScanner.bestSeed(ground), -1);
             if (recovery.result() != Building.validationResult.SUCCESS) return recovery.result();
             recovered = recovery.building();
             recovered.setId(lastBuildingId++);

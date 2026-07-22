@@ -128,8 +128,7 @@ public class Building implements VillageBuilding {
     }
 
     Building.validationResult applyRoomScan(Level world,
-                                             BuildingRoomScanner.Result scan,
-                                             boolean allowMissingEntrance) {
+                                             BuildingRoomScanner.Result scan) {
         validationResult failure = switch (scan.status()) {
             case SUCCESS -> validationResult.SUCCESS;
             case OVERLAP -> validationResult.OVERLAP;
@@ -139,9 +138,6 @@ public class Building implements VillageBuilding {
         };
         if (failure != validationResult.SUCCESS) {
             return failure;
-        }
-        if (!scan.hasEntrance() && !allowMissingEntrance) {
-            return validationResult.NO_DOOR;
         }
 
         blocks.clear();
