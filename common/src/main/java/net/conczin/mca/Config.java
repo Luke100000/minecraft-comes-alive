@@ -824,6 +824,20 @@ public final class Config extends CommonConfig {
     );
 
     /**
+     * Blocks or tags that should trigger exact villager body clearance checks during pathfinding.
+     * Use this for small decorative blocks with awkward collision shapes, such as lanterns.
+     */
+    public List<String> villagerPathfindingCollisionCheckBlocks = List.of(
+            "#mca:villager_pathfinding_collision_checks"
+    );
+
+    /**
+     * If enabled, villagers run exact body clearance checks for every accepted path node.
+     * This can help with unusual modded collision issues, but is more expensive in busy villages.
+     */
+    public boolean villagerPathfindingCheckAllNodeCollisions = false;
+
+    /**
      * Structures that can be mentioned in Rumors conversation options.
      */
     public List<String> structuresInRumors = List.of(
