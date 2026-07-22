@@ -1,12 +1,8 @@
 package net.conczin.mca.resources;
 
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParseException;
-import com.google.gson.JsonPrimitive;
-import com.google.gson.JsonParser;
-import net.conczin.mca.entity.ai.relationship.Gender;
+import com.google.gson.*;
 import net.conczin.mca.MCA;
+import net.conczin.mca.entity.ai.relationship.Gender;
 import net.minecraft.resources.FileToIdConverter;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.resources.Resource;

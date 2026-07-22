@@ -1,6 +1,5 @@
 package net.conczin.mca.server.world.data;
 
-import net.conczin.mca.util.NbtHelper;
 import net.minecraft.nbt.CompoundTag;
 
 /** Stable persistent identity for one physical storey in a Structure. */

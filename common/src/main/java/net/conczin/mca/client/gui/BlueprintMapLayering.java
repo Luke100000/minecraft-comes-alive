@@ -1,10 +1,6 @@
 package net.conczin.mca.client.gui;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 
 /** Pure ordering and display rules for Blueprint floor layers. */
 final class BlueprintMapLayering {
