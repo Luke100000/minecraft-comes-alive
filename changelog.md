@@ -1,3 +1,11 @@
+# 8.1.4
+
+* Improved fishing behavior and compatibility with modded fishing loot.
+* Improved mourning and tombstone recovery behavior.
+* Improved villager pathing around collision-shaped blocks and modded water.
+* Updated face and eye texture assets.
+* Fixed compatibility ritual spawning and several editor/library edge cases.
+
 # 8.1.3
 
 * Fixed Rumours not working and throwing an error.

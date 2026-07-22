@@ -2,6 +2,8 @@ package net.conczin.mca.block;
 
 import com.mojang.serialization.MapCodec;
 import net.conczin.mca.entity.Infectable;
+import net.conczin.mca.entity.VillagerEntityMCA;
+import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
 import net.conczin.mca.entity.ai.relationship.CompassionateEntity;
 import net.conczin.mca.entity.ai.relationship.EntityRelationship;
 import net.conczin.mca.entity.ai.relationship.Gender;
@@ -25,6 +27,7 @@ import net.minecraft.util.Mth;
 import net.minecraft.util.ProblemReporter;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.*;
+import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.monster.zombie.ZombieVillager;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -376,6 +379,16 @@ public class TombstoneBlock extends BaseEntityBlock implements SimpleWaterlogged
 
                         if (entity instanceof CompassionateEntity<?> compassionateEntity) {
                             compassionateEntity.getRelationships().getFamilyEntry().setDeceased(false);
+                        }
+
+                        if (entity instanceof VillagerEntityMCA villager) {
+                            villager.getBrain().eraseMemory(MemoryModuleTypeMCA.LAST_GRIEVE);
+                            villager.getBrain().eraseMemory(MemoryModuleTypeMCA.MOURNING_SITE);
+                            villager.getBrain().eraseMemory(MemoryModuleTypeMCA.MOURNING_POSITION);
+                            villager.getBrain().eraseMemory(MemoryModuleType.PATH);
+                            villager.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
+                            villager.getBrain().eraseMemory(MemoryModuleType.LOOK_TARGET);
+                            villager.getBrain().eraseMemory(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE);
                         }
 
                         if (entity instanceof Infectable infectable) {

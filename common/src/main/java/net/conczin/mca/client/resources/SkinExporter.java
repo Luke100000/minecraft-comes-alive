@@ -221,12 +221,13 @@ public class SkinExporter {
         try {
             EyeTextureLayers.Bounds bounds = EyeTextureLayers.findBounds(face);
             int splitX = bounds.minX() + bounds.width() / 2;
-            compositeEyeLayer(base, face, true, EyeTextureLayers.Side.FULL, splitX, 0xFFFFFFFF);
+            compositeEyeLayer(base, face, EyeTextureLayers.Layer.SCLERA, EyeTextureLayers.Side.FULL, splitX, 0xFFFFFFFF);
+            compositeEyeLayer(base, face, EyeTextureLayers.Layer.DETAILS, EyeTextureLayers.Side.FULL, splitX, EyeTextureLayers.DETAILS_TINT);
             if (visuals.heterochromia()) {
-                compositeEyeLayer(base, face, false, EyeTextureLayers.Side.LEFT, splitX, getEyeColor(visuals, true));
-                compositeEyeLayer(base, face, false, EyeTextureLayers.Side.RIGHT, splitX, getEyeColor(visuals, false));
+                compositeEyeLayer(base, face, EyeTextureLayers.Layer.IRIS, EyeTextureLayers.Side.LEFT, splitX, getEyeColor(visuals, true));
+                compositeEyeLayer(base, face, EyeTextureLayers.Layer.IRIS, EyeTextureLayers.Side.RIGHT, splitX, getEyeColor(visuals, false));
             } else {
-                compositeEyeLayer(base, face, false, EyeTextureLayers.Side.FULL, splitX, getEyeColor(visuals, false));
+                compositeEyeLayer(base, face, EyeTextureLayers.Layer.IRIS, EyeTextureLayers.Side.FULL, splitX, getEyeColor(visuals, false));
             }
         } finally {
             face.close();
@@ -237,7 +238,7 @@ public class SkinExporter {
         return visuals.eyeColor(0.0f, left);
     }
 
-    public static void compositeEyeLayer(NativeImage base, NativeImage face, boolean sclera, EyeTextureLayers.Side side, int splitX, int tintColor) {
+    public static void compositeEyeLayer(NativeImage base, NativeImage face, EyeTextureLayers.Layer layer, EyeTextureLayers.Side side, int splitX, int tintColor) {
         int width = Math.min(base.getWidth(), face.getWidth());
         int height = Math.min(base.getHeight(), face.getHeight());
         for (int x = 0; x < width; x++) {
@@ -247,7 +248,7 @@ public class SkinExporter {
             for (int y = 0; y < height; y++) {
                 int pixel = face.getPixel(x, y);
                 int alpha = ARGB.alpha(pixel);
-                if (alpha == 0 || sclera != EyeTextureLayers.isScleraPixel(alpha, ARGB.red(pixel), ARGB.green(pixel), ARGB.blue(pixel))) {
+                if (!EyeTextureLayers.isPixelForLayer(layer, alpha, ARGB.red(pixel), ARGB.green(pixel), ARGB.blue(pixel))) {
                     continue;
                 }
                 compositePixel(base, x, y, pixel, tintColor);

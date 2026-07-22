@@ -6,6 +6,8 @@ import net.minecraft.util.ARGB;
 public final class EyeTextureLayers {
     private static final int SCLERA_MIN_CHANNEL = 160;
     private static final int SCLERA_MAX_CHANNEL_SPREAD = 32;
+    private static final int IRIS_MIN_CHANNEL = 32;
+    public static final int DETAILS_TINT = 0xFF808080;
 
     private EyeTextureLayers() {
     }
@@ -55,10 +57,30 @@ public final class EyeTextureLayers {
         return min >= SCLERA_MIN_CHANNEL && max - min <= SCLERA_MAX_CHANNEL_SPREAD;
     }
 
+    public static boolean isPixelForLayer(Layer layer, int alpha, int red, int green, int blue) {
+        if (alpha == 0) {
+            return false;
+        }
+
+        boolean sclera = isScleraPixel(alpha, red, green, blue);
+        int max = Math.max(red, Math.max(green, blue));
+        return switch (layer) {
+            case SCLERA -> sclera;
+            case IRIS -> !sclera && max >= IRIS_MIN_CHANNEL;
+            case DETAILS -> !sclera && max < IRIS_MIN_CHANNEL;
+        };
+    }
+
     public enum Side {
         FULL,
         LEFT,
         RIGHT
+    }
+
+    public enum Layer {
+        SCLERA,
+        IRIS,
+        DETAILS
     }
 
     public record Bounds(int minX, int minY, int maxX, int maxY) {

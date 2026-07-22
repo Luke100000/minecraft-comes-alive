@@ -28,7 +28,7 @@ public class EnterBuildingTask extends Behavior<VillagerEntityMCA> {
 
     protected void start(ServerLevel serverWorld, VillagerEntityMCA villager, long l) {
         Optional<BlockPos> blockPos = getNextPosition(villager);
-        blockPos.ifPresent(pos -> BehaviorUtils.setWalkAndLookTargetMemories(villager, pos, this.speed, 1));
+        blockPos.ifPresent(pos -> BehaviorUtils.setWalkAndLookTargetMemories(villager, pos, this.speed, getCompletionRange()));
     }
 
     protected Optional<Building> getNearestBuilding(VillagerEntityMCA villager) {
@@ -79,6 +79,10 @@ public class EnterBuildingTask extends Behavior<VillagerEntityMCA> {
             return getRandomPositionIn(b.get(), villager.level(), villager);
         }
         return Optional.empty();
+    }
+
+    protected int getCompletionRange() {
+        return 1;
     }
 
     public String getBuilding(VillagerEntityMCA villager) {

@@ -60,12 +60,14 @@ public class FaceLayer<S extends HumanoidRenderState, M extends HumanoidModel<S>
             if (visuals.isBlinking()) {
                 renderModel(poseStack, submitNodeCollector, lightCoords, this.model, OPAQUE_WHITE, renderedSkin, tint, visible, glowing, state);
             } else if (visuals.heterochromia()) {
-                renderModel(poseStack, submitNodeCollector, lightCoords, this.model, OPAQUE_WHITE, getOrGenerateEyeLayer(skin, true, EyeTextureLayers.Side.FULL), tint, visible, glowing, state);
-                renderModel(poseStack, submitNodeCollector, lightCoords, this.model, getEyeColor(visuals, tickDelta, true), getOrGenerateEyeLayer(skin, false, EyeTextureLayers.Side.LEFT), tint, visible, glowing, state);
-                renderModel(poseStack, submitNodeCollector, lightCoords, this.model, getEyeColor(visuals, tickDelta, false), getOrGenerateEyeLayer(skin, false, EyeTextureLayers.Side.RIGHT), tint, visible, glowing, state);
+                renderModel(poseStack, submitNodeCollector, lightCoords, this.model, OPAQUE_WHITE, getOrGenerateEyeLayer(skin, EyeTextureLayers.Layer.SCLERA, EyeTextureLayers.Side.FULL), tint, visible, glowing, state);
+                renderModel(poseStack, submitNodeCollector, lightCoords, this.model, EyeTextureLayers.DETAILS_TINT, getOrGenerateEyeLayer(skin, EyeTextureLayers.Layer.DETAILS, EyeTextureLayers.Side.FULL), tint, visible, glowing, state);
+                renderModel(poseStack, submitNodeCollector, lightCoords, this.model, getEyeColor(visuals, tickDelta, true), getOrGenerateEyeLayer(skin, EyeTextureLayers.Layer.IRIS, EyeTextureLayers.Side.LEFT), tint, visible, glowing, state);
+                renderModel(poseStack, submitNodeCollector, lightCoords, this.model, getEyeColor(visuals, tickDelta, false), getOrGenerateEyeLayer(skin, EyeTextureLayers.Layer.IRIS, EyeTextureLayers.Side.RIGHT), tint, visible, glowing, state);
             } else {
-                renderModel(poseStack, submitNodeCollector, lightCoords, this.model, OPAQUE_WHITE, getOrGenerateEyeLayer(skin, true, EyeTextureLayers.Side.FULL), tint, visible, glowing, state);
-                renderModel(poseStack, submitNodeCollector, lightCoords, this.model, getEyeColor(visuals, tickDelta, false), getOrGenerateEyeLayer(skin, false, EyeTextureLayers.Side.FULL), tint, visible, glowing, state);
+                renderModel(poseStack, submitNodeCollector, lightCoords, this.model, OPAQUE_WHITE, getOrGenerateEyeLayer(skin, EyeTextureLayers.Layer.SCLERA, EyeTextureLayers.Side.FULL), tint, visible, glowing, state);
+                renderModel(poseStack, submitNodeCollector, lightCoords, this.model, EyeTextureLayers.DETAILS_TINT, getOrGenerateEyeLayer(skin, EyeTextureLayers.Layer.DETAILS, EyeTextureLayers.Side.FULL), tint, visible, glowing, state);
+                renderModel(poseStack, submitNodeCollector, lightCoords, this.model, getEyeColor(visuals, tickDelta, false), getOrGenerateEyeLayer(skin, EyeTextureLayers.Layer.IRIS, EyeTextureLayers.Side.FULL), tint, visible, glowing, state);
             }
         }
 
@@ -98,15 +100,15 @@ public class FaceLayer<S extends HumanoidRenderState, M extends HumanoidModel<S>
         EYE_TEXTURE_CACHE.clear();
     }
 
-    private record EyeLayerKey(Identifier texture, boolean sclera, EyeTextureLayers.Side side) {
+    private record EyeLayerKey(Identifier texture, EyeTextureLayers.Layer layer, EyeTextureLayers.Side side) {
     }
 
     private static int getEyeColor(VillagerVisuals visuals, float tickDelta, boolean left) {
         return visuals.eyeColor(tickDelta, left);
     }
 
-    private Identifier getOrGenerateEyeLayer(Identifier original, boolean isSclera, EyeTextureLayers.Side side) {
-        return EYE_TEXTURE_CACHE.computeIfAbsent(new EyeLayerKey(original, isSclera, side), key -> {
+    private Identifier getOrGenerateEyeLayer(Identifier original, EyeTextureLayers.Layer layer, EyeTextureLayers.Side side) {
+        return EYE_TEXTURE_CACHE.computeIfAbsent(new EyeLayerKey(original, layer, side), key -> {
             try {
                 Identifier id = key.texture();
                 var resource = Minecraft.getInstance().getResourceManager().getResource(id);
@@ -130,15 +132,13 @@ public class FaceLayer<S extends HumanoidRenderState, M extends HumanoidModel<S>
                                 if (a == 0) continue;
                                 if (!EyeTextureLayers.isInSide(x, splitX, key.side())) continue;
 
-                                boolean isPixelSclera = EyeTextureLayers.isScleraPixel(a, ARGB.red(pixel), ARGB.green(pixel), ARGB.blue(pixel));
-
-                                if (key.sclera() == isPixelSclera) {
+                                if (EyeTextureLayers.isPixelForLayer(key.layer(), a, ARGB.red(pixel), ARGB.green(pixel), ARGB.blue(pixel))) {
                                     newImage.setPixel(x, y, pixel);
                                 }
                             }
                         }
 
-                        Identifier newId = Identifier.fromNamespaceAndPath("mca", "dynamic/eye/" + key.side().name().toLowerCase(Locale.ROOT) + "/" + (key.sclera() ? "sclera" : "iris") + "/" + id.getNamespace() + "_" + id.getPath().replace("/", "_"));
+                        Identifier newId = Identifier.fromNamespaceAndPath("mca", "dynamic/eye/" + key.side().name().toLowerCase(Locale.ROOT) + "/" + key.layer().name().toLowerCase(Locale.ROOT) + "/" + id.getNamespace() + "_" + id.getPath().replace("/", "_"));
                         Minecraft.getInstance().getTextureManager().register(newId, new DynamicTexture(newId::toString, newImage));
                         return newId;
                     } catch (Exception exception) {

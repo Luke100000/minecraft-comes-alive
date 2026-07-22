@@ -43,6 +43,7 @@ public class VillagerBrain<E extends Mob & VillagerLike<E>> {
     private static final int PANIC_ANIMATION_HOLD_TICKS = 20;
     private static final float PANIC_ANIMATION_STEP = 0.25F;
     private static final long GRIEVE_COOLDOWN = 24000 * 7;
+    private static final long GRIEVE_RETRY_DELAY = 1200L;
     private final Random random = new Random();
     private final E entity;
     private int panicAnimationHoldTicks;
@@ -262,6 +263,10 @@ public class VillagerBrain<E extends Mob & VillagerLike<E>> {
 
     public void setGrieving() {
         entity.getBrain().setMemory(LAST_GRIEVE, -GRIEVE_COOLDOWN);
+    }
+
+    public void retryGrievingLater() {
+        entity.getBrain().setMemory(LAST_GRIEVE, entity.level().getGameTime() - GRIEVE_COOLDOWN + GRIEVE_RETRY_DELAY);
     }
 
     public void justGrieved() {
