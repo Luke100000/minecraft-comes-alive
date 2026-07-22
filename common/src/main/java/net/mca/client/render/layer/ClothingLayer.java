@@ -1,5 +1,6 @@
 package net.mca.client.render.layer;
 
+import net.mca.MCA;
 import net.mca.client.gui.immersive_library.SkinCache;
 import net.minecraft.client.render.entity.feature.FeatureRendererContext;
 import net.minecraft.client.render.entity.model.BipedEntityModel;
@@ -20,6 +21,9 @@ public class ClothingLayer<T extends LivingEntity, M extends BipedEntityModel<T>
     public Identifier getSkin(T villager) {
         String v = getVillager(villager).isBurned() ? "burnt" : variant;
         String identifier = getVillager(villager).getClothes();
+        if (MCA.isBlankString(identifier)) {
+            return null;
+        }
         if (identifier.startsWith("immersive_library:")) {
             return SkinCache.getTextureIdentifier(Integer.parseInt(identifier.substring(18)));
         }

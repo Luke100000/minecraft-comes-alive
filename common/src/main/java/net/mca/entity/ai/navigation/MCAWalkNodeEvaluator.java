@@ -6,6 +6,8 @@ import net.mca.Config;
 import net.minecraft.entity.ai.pathing.LandPathNodeMaker;
 import net.minecraft.entity.ai.pathing.PathNode;
 import net.minecraft.entity.ai.pathing.PathNodeType;
+import net.minecraft.fluid.FluidState;
+import net.minecraft.registry.tag.FluidTags;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Box;
 
@@ -21,6 +23,37 @@ public class MCAWalkNodeEvaluator extends LandPathNodeMaker {
     public void clear() {
         clearanceCache.clear();
         super.clear();
+    }
+
+    @Override
+    public PathNode getStart() {
+        BlockPos.Mutable pos = new BlockPos.Mutable();
+        int y = entity.getBlockY();
+        FluidState fluid = cachedWorld.getFluidState(pos.set(entity.getX(), y, entity.getZ()));
+
+        if (canSwim() && entity.isTouchingWater() && fluid.isIn(FluidTags.WATER)) {
+            while (fluid.isIn(FluidTags.WATER)) {
+                fluid = cachedWorld.getFluidState(pos.set(entity.getX(), ++y, entity.getZ()));
+            }
+            return getStartAtY(pos, y - 1);
+        }
+
+        return super.getStart();
+    }
+
+    private PathNode getStartAtY(BlockPos.Mutable pos, int y) {
+        BlockPos entityPos = entity.getBlockPos();
+        if (!canPathThrough(pos.set(entityPos.getX(), y, entityPos.getZ()))) {
+            Box box = entity.getBoundingBox();
+            if (canPathThrough(pos.set(box.minX, y, box.minZ))
+                    || canPathThrough(pos.set(box.minX, y, box.maxZ))
+                    || canPathThrough(pos.set(box.maxX, y, box.minZ))
+                    || canPathThrough(pos.set(box.maxX, y, box.maxZ))) {
+                return getStart(pos);
+            }
+        }
+
+        return getStart(new BlockPos(entityPos.getX(), y, entityPos.getZ()));
     }
 
     @Override
@@ -60,9 +93,9 @@ public class MCAWalkNodeEvaluator extends LandPathNodeMaker {
             return true;
         }
 
-        Box box = getMobBoxAt(node);
+        Box clearanceBox = getNodeClearanceBox(node);
         if (!Config.getInstance().villagerPathfindingCheckAllNodeCollisions
-                && !PathfindingBlacklist.overlapsSpecialCollisionBlock(cachedWorld, box)) {
+                && !PathfindingBlacklist.overlapsSpecialCollisionBlock(cachedWorld, clearanceBox)) {
             return true;
         }
 
@@ -71,7 +104,7 @@ public class MCAWalkNodeEvaluator extends LandPathNodeMaker {
             return clearanceCache.get(key);
         }
 
-        boolean hasClearance = cachedWorld.isSpaceEmpty(entity, box);
+        boolean hasClearance = !cachedWorld.getBlockCollisions(entity, clearanceBox).iterator().hasNext();
         clearanceCache.put(key, hasClearance);
         return hasClearance;
     }
@@ -82,14 +115,10 @@ public class MCAWalkNodeEvaluator extends LandPathNodeMaker {
                 && type != PathNodeType.TRAPDOOR;
     }
 
-    private Box getMobBoxAt(PathNode node) {
-        Box box = entity.getBoundingBox();
-        BlockPos pos = new BlockPos(node.x, node.y, node.z);
-        double floorY = getFeetY(pos);
-        return box.offset(
-                node.x + 0.5D - entity.getX(),
-                floorY + 0.001D - entity.getY(),
-                node.z + 0.5D - entity.getZ()
+    private static Box getNodeClearanceBox(PathNode node) {
+        return new Box(
+                node.x, node.y, node.z,
+                node.x + 1.0D, node.y + 2.0D, node.z + 1.0D
         );
     }
 }

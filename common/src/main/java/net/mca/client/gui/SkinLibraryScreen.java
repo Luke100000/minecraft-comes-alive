@@ -445,7 +445,9 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
     private void setDummyTexture(VillagerEntityMCA preview, LiteContent content) {
         applyBasePreview(preview);
         if (content.hasTag("clothing")) {
-            preview.setHair(EMPTY_IDENTIFIER);
+            preview.setHair("");
+            preview.setHairStyleId("");
+            preview.clearLayeredHair();
             preview.setClothes(SkinCache.getTextureIdentifier(content));
         } else {
             preview.setHairStyle(HairStyle.singleLayer(SkinCache.getTextureIdentifier(content).toString(),

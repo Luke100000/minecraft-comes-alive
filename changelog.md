@@ -1,3 +1,10 @@
+# 7.6.28-beta.8
+
+* Fixed villager pathfinding through modded water and around lantern-sized collision blocks.
+  * To use this feature turn on `villagerPathfindingCheckAllNodeCollisions` 
+* Fixed skin-library purple model/texture corruption.
+* Bouquets can now be given as gifts to an existing romantic partner.
+
 # 7.6.28-beta.7
 
 * Fixed bug where VANILLA model set eye height to the villager model size.

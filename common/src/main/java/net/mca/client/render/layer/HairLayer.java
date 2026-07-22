@@ -68,6 +68,9 @@ public class HairLayer<T extends LivingEntity, M extends BipedEntityModel<T>> ex
     }
 
     private Identifier getTexture(String identifier) {
+        if (MCA.isBlankString(identifier)) {
+            return null;
+        }
         if (identifier.startsWith("immersive_library:")) {
             return SkinCache.getTextureIdentifier(Integer.parseInt(identifier.substring("immersive_library:".length())));
         }

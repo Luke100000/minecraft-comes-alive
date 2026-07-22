@@ -17,20 +17,17 @@ public class WeddingRingItem extends RelationshipItem {
     }
 
     @Override
-    public boolean handle(ServerPlayerEntity player, VillagerEntityMCA villager) {
-        PlayerSaveData playerData = PlayerSaveData.get(player);
-        String response;
-
-        if (super.handle(player, villager)) {
-            return false;
-        } else {
-            response = "interaction.marry.success";
-            playerData.marry(villager);
-            villager.getRelationships().marry(player);
-            villager.getVillagerBrain().modifyMoodValue(15);
+    public Result handle(ServerPlayerEntity player, VillagerEntityMCA villager) {
+        Result result = validate(player, villager);
+        if (result != Result.PASS) {
+            return result;
         }
 
-        villager.sendChatMessage(player, response);
-        return true;
+        PlayerSaveData playerData = PlayerSaveData.get(player);
+        playerData.marry(villager);
+        villager.getRelationships().marry(player);
+        villager.getVillagerBrain().modifyMoodValue(15);
+        villager.sendChatMessage(player, "interaction.marry.success");
+        return Result.CONSUME;
     }
 }

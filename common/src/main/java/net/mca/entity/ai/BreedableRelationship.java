@@ -201,11 +201,12 @@ public class BreedableRelationship extends Relationship<VillagerEntityMCA> {
     private boolean handleSpecialCaseGift(ServerPlayerEntity player, ItemStack stack) {
         Item item = stack.getItem();
 
-        if (item instanceof SpecialCaseGift) {
-            if (((SpecialCaseGift) item).handle(player, entity)) {
+        if (item instanceof SpecialCaseGift specialCaseGift) {
+            SpecialCaseGift.Result result = specialCaseGift.handle(player, entity);
+            if (result == SpecialCaseGift.Result.CONSUME) {
                 stack.decrement(1);
             }
-            return true;
+            return result != SpecialCaseGift.Result.PASS;
         }
 
         if (item == Items.CAKE && !entity.isBaby()) {

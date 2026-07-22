@@ -17,24 +17,22 @@ public class EngagementRingItem extends RelationshipItem {
     }
 
     @Override
-    public boolean handle(ServerPlayerEntity player, VillagerEntityMCA villager) {
-        PlayerSaveData playerData = PlayerSaveData.get(player);
-        String response;
-        boolean consume = false;
-
-        if (super.handle(player, villager)) {
-            return false;
-        } else if (Relationship.IS_ENGAGED.test(villager, player)) {
-            response = "interaction.engage.fail.engaged";
-        } else {
-            response = "interaction.engage.success";
-            playerData.engage(villager);
-            villager.getRelationships().engage(player);
-            villager.getVillagerBrain().modifyMoodValue(10);
-            consume = true;
+    public Result handle(ServerPlayerEntity player, VillagerEntityMCA villager) {
+        Result result = validate(player, villager);
+        if (result != Result.PASS) {
+            return result;
         }
 
-        villager.sendChatMessage(player, response);
-        return consume;
+        if (Relationship.IS_ENGAGED.test(villager, player)) {
+            villager.sendChatMessage(player, "interaction.engage.fail.engaged");
+            return Result.HANDLED;
+        }
+
+        PlayerSaveData playerData = PlayerSaveData.get(player);
+        playerData.engage(villager);
+        villager.getRelationships().engage(player);
+        villager.getVillagerBrain().modifyMoodValue(10);
+        villager.sendChatMessage(player, "interaction.engage.success");
+        return Result.CONSUME;
     }
 }
