@@ -1,6 +1,5 @@
 package net.conczin.mca.client.gui;
 
-import net.conczin.mca.MCA;
 import net.conczin.mca.server.world.data.Building;
 import net.conczin.mca.server.world.data.ExternalBuilding;
 import net.conczin.mca.server.world.data.Structure;
@@ -8,7 +7,6 @@ import net.conczin.mca.server.world.data.StructureFloor;
 import net.conczin.mca.server.world.data.Village;
 
 import java.util.*;
-import java.util.stream.IntStream;
 
 /** Maps persistent Structure Floor IDs to Blueprint-local display ordinals. */
 final class BlueprintFloorLayout {
@@ -39,10 +37,10 @@ final class BlueprintFloorLayout {
         TreeSet<Integer> available = new TreeSet<>();
 
         for (Structure structure : village.getStructures().values()) {
-            Building root = village.getBuilding(structure.getRootRoomId()).orElse(null);
-            if (root == null) continue;
+            StructureFloor ground = structure.getGroundFloor(village).orElse(null);
+            if (ground == null) continue;
             List<StructureFloor> floors = structure.getFloors();
-            int groundIndex = IntStream.range(0, floors.size()).filter(i -> floors.get(i).id() == root.getFloorId()).findFirst().orElse(-1);
+            int groundIndex = floors.indexOf(ground);
             if (groundIndex < 0) continue;
 
             // Keep an ordinal mapping for every physical Floor so Structure geometry can still
@@ -52,12 +50,6 @@ final class BlueprintFloorLayout {
                 StructureFloor floor = floors.get(i);
                 byFloor.put(floorKey(structure.getId(), floor.id()), i - groundIndex);
             }
-            MCA.LOGGER.info("[FloorDebug][Blueprint] structureId={} rootRoomId={} rootFloorId={} groundIndex={} floors={}",
-                    structure.getId(), root.getId(), root.getFloorId(), groundIndex,
-                    java.util.stream.IntStream.range(0, floors.size())
-                            .mapToObj(i -> floors.get(i).id() + "@" + floors.get(i).anchorY()
-                                    + "=>" + (i - groundIndex)).toList());
-
             TreeSet<Integer> registeredOrdinals = new TreeSet<>();
             registeredOrdinals.add(0);
             village.getRooms().filter(room -> room.getStructureId() == structure.getId()).forEach(room -> {

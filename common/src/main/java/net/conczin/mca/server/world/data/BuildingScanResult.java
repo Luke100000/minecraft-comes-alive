@@ -24,10 +24,6 @@ public record BuildingScanResult(
         this(result, source, building, matchingTypes, village, absorbedRoomIds, List.of());
     }
 
-    public RoomTopologyPlan roomTopologyPlan() {
-        return new RoomTopologyPlan(createdRooms, absorbedRoomIds);
-    }
-
     public boolean isAmbiguous() {
         return matchingTypes.size() > 1;
     }
@@ -36,10 +32,4 @@ public record BuildingScanResult(
         return matchingTypes.contains(type);
     }
 
-    public record RoomTopologyPlan(List<Building> createdRooms, List<Integer> absorbedRoomIds) {
-        public RoomTopologyPlan {
-            createdRooms = List.copyOf(createdRooms);
-            absorbedRoomIds = List.copyOf(absorbedRoomIds);
-        }
-    }
 }
