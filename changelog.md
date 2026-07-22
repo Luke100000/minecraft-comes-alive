@@ -5,6 +5,7 @@
 * Improved villager pathing around collision-shaped blocks and modded water.
 * Updated face and eye texture assets.
 * Fixed compatibility ritual spawning and several editor/library edge cases.
+* Bouquets are now handled consistently as gifts for romantic partners.
 
 # 8.1.3
 
