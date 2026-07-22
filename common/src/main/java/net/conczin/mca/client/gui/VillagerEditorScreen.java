@@ -598,8 +598,8 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                 }
 
                 y = geneChanger(y, Genetics.FACE, getFaceCount());
-                addGeneSlider(width / 2, y, DATA_WIDTH, Genetics.EYE_COLOR);
-                y += 24;
+                addGeneSlider(width / 2, y, DATA_WIDTH, Genetics.EYE_BRIGHTNESS);
+                y += 22;
 
                 if (hasHetero) {
                     addRenderableWidget(new ButtonWidget(width / 2, y, DATA_WIDTH / 2, 20,

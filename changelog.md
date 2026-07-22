@@ -1,5 +1,7 @@
 # 8.1.4
 
+* Port of 1.21.1 and 1.20.1 beta
+* Removed Eye Colour Slider (Use RGB colours instead), replaced with Iris Brightness
 * Improved fishing behavior and compatibility with modded fishing loot.
 * Improved mourning and tombstone recovery behavior.
 * Improved villager pathing around collision-shaped blocks and modded water.

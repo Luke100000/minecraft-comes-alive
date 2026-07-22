@@ -2,6 +2,7 @@ package net.conczin.mca.client.resources;
 
 import com.mojang.blaze3d.platform.NativeImage;
 import net.minecraft.util.ARGB;
+import net.minecraft.util.Mth;
 
 public final class EyeTextureLayers {
     private static final int SCLERA_MIN_CHANNEL = 160;
@@ -10,6 +11,19 @@ public final class EyeTextureLayers {
     public static final int DETAILS_TINT = 0xFF808080;
 
     private EyeTextureLayers() {
+    }
+
+    public static int applyBrightness(int argb, float brightness) {
+        float factor = 0.5F + Mth.clamp(brightness, 0.0F, 1.0F);
+        int alpha = ARGB.alpha(argb);
+        int red = scaleChannel(ARGB.red(argb), factor);
+        int green = scaleChannel(ARGB.green(argb), factor);
+        int blue = scaleChannel(ARGB.blue(argb), factor);
+        return ARGB.color(alpha, red, green, blue);
+    }
+
+    private static int scaleChannel(int channel, float factor) {
+        return Mth.clamp(Math.round(channel * factor), 0, 255);
     }
 
     public static Bounds findBounds(NativeImage image) {

@@ -31,7 +31,7 @@ public final class DynamicSkinCache {
         float faceGene,
         float eumelaninGene,
         float pheomelaninGene,
-        float eyeColorGene,
+        float eyeBrightnessGene,
         String skin,
         String hairBase,
         String hairBangs,
@@ -58,7 +58,7 @@ public final class DynamicSkinCache {
                 visuals.faceGene(),
                 visuals.eumelaninGene(),
                 visuals.pheomelaninGene(),
-                visuals.eyeColorGene(),
+                visuals.eyeBrightnessGene(),
                 visuals.skin(),
                 visuals.hairBase(),
                 visuals.hairBangs(),
@@ -85,7 +85,7 @@ public final class DynamicSkinCache {
                    faceGene + "_" +
                    eumelaninGene + "_" +
                    pheomelaninGene + "_" +
-                   eyeColorGene + "_" +
+                   eyeBrightnessGene + "_" +
                    skin + "_" +
                    hairBase + "_" +
                    hairBangs + "_" +
