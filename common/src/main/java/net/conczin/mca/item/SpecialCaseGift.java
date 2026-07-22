@@ -2,13 +2,8 @@ package net.conczin.mca.item;
 
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.InteractionResult;
 
 public interface SpecialCaseGift {
-    enum Result {
-        PASS,
-        HANDLED,
-        CONSUME
-    }
-
-    Result handle(ServerPlayer player, VillagerEntityMCA villager);
+    InteractionResult handle(ServerPlayer player, VillagerEntityMCA villager);
 }

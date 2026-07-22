@@ -5,6 +5,7 @@ import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.Relationship;
 import net.conczin.mca.server.world.data.PlayerSaveData;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.InteractionResult;
 
 public class EngagementRingItem extends RelationshipItem {
     public EngagementRingItem(Properties properties) {
@@ -17,15 +18,15 @@ public class EngagementRingItem extends RelationshipItem {
     }
 
     @Override
-    public Result handle(ServerPlayer player, VillagerEntityMCA villager) {
-        Result result = validate(player, villager);
-        if (result != Result.PASS) {
+    public InteractionResult handle(ServerPlayer player, VillagerEntityMCA villager) {
+        InteractionResult result = validate(player, villager);
+        if (result != InteractionResult.PASS) {
             return result;
         }
 
         if (Relationship.IS_ENGAGED.test(villager, player)) {
             villager.sendChatMessage(player, "interaction.engage.fail.engaged");
-            return Result.HANDLED;
+            return InteractionResult.FAIL;
         }
 
         PlayerSaveData playerData = PlayerSaveData.get(player);
@@ -33,6 +34,6 @@ public class EngagementRingItem extends RelationshipItem {
         villager.getRelationships().engage(player);
         villager.getVillagerBrain().modifyMoodValue(10);
         villager.sendChatMessage(player, "interaction.engage.success");
-        return Result.CONSUME;
+        return InteractionResult.CONSUME;
     }
 }
