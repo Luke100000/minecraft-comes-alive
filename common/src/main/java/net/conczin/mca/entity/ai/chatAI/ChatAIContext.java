@@ -1,8 +1,11 @@
 package net.conczin.mca.entity.ai.chatAI;
 
+import net.conczin.mca.Config;
 import net.conczin.mca.entity.VillagerEntityMCA;
+import net.conczin.mca.server.world.data.ChatAIContextData;
 import net.conczin.mca.server.world.data.PlayerSaveData;
 import net.conczin.mca.server.world.data.Village;
+import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.server.level.ServerPlayer;
 
 import java.util.ArrayList;
@@ -121,6 +124,16 @@ public final class ChatAIContext {
             "You believe promises made during difficult times matter the most."
     };
 
+    public static boolean canEdit(ServerPlayer player) {
+        return player.hasPermissions(Config.getInstance().villagerChatAIContextPermissionLevel)
+               || player.serverLevel().getServer().isSingleplayerOwner(player.getGameProfile());
+    }
+
+    public static boolean canEdit(CommandSourceStack source) {
+        ServerPlayer player = source.getPlayer();
+        return player != null && canEdit(player);
+    }
+
     public static String createVillagerPrompt() {
         ThreadLocalRandom random = ThreadLocalRandom.current();
 
@@ -143,6 +156,7 @@ public final class ChatAIContext {
             VillagerEntityMCA villager,
             Village village
     ) {
+        append(prompt, "World context", ChatAIContextData.get(player.serverLevel().getServer()).getWorldPrompt());
         append(prompt, "Villager background", villager.getChatAIPrompt());
         append(prompt, "Player context", PlayerSaveData.get(player).getChatAIPrompt());
 

@@ -211,7 +211,7 @@ public class OpenAIChatAI implements ChatAIStrategy {
 
             }
 
-            ChatAIContext.appendPrompts(sb, player, villager, Village.findNearest(player).orElse(null));
+            ChatAIContext.appendPrompts(sb, player, villager, Village.findNearest(villager).orElse(null));
 
             // fill in variables and add to system message
             for (String s : input) {
