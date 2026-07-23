@@ -186,8 +186,16 @@ public class Village implements Iterable<Building> {
     }
 
     public Stream<Building> getBuildingsOfType(String type) {
-        return Stream.concat(buildings.values().stream(), externalBuildings.values().stream().map(Building.class::cast))
-                .filter(building -> building.getType().equals(type));
+        BuildingType definition = BuildingTypes.getInstance().getBuildingType(type);
+        if (definition.grouped()) {
+            return getExternalBuildings().filter(building -> building.getType().equals(type)).map(Building.class::cast);
+        }
+        StructureLayout.Layout layout = StructureLayout.build(this);
+        List<Building> rooms = getRooms().toList();
+        return rooms.stream().filter(room -> {
+            BuildingType effective = RoomTypeResolver.resolve(this, layout, room, rooms).effectiveType();
+            return effective != null && effective.name().equals(type);
+        });
     }
 
     public Optional<Building> getBuildingAt(Vec3i pos) {
@@ -309,7 +317,7 @@ public class Village implements Iterable<Building> {
         if (definition.grouped()) {
             return getExternalBuildings().anyMatch(building -> building.getType().equals(type) && building.isComplete());
         }
-        return structures.keySet().stream().anyMatch(structureId -> roomCategoryMatches(structureId, type, null));
+        return getBuildingsOfType(type).findAny().isPresent();
     }
 
     List<BuildingType> getMatchingRoomTypes(Building candidate) {
@@ -439,7 +447,8 @@ public class Village implements Iterable<Building> {
     }
 
     public int getStructureCount() {
-        return structures.size() + (int) externalBuildings.values().stream().filter(Building::isComplete).count();
+        return StructureLayout.build(this).buildings().size()
+                + (int) externalBuildings.values().stream().filter(Building::isComplete).count();
     }
 
     public boolean hasStructuralBuildingAt(Vec3i pos) { return getStructuralPosition(pos) != StructuralPosition.OUTSIDE; }

@@ -478,7 +478,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         String rootCategory = chooseRootCategory(rootScan, scan.rootRoom() == null ? forcedRoomType : null);
         String playerCategory = scan.rootRoom() == null
                 ? rootCategory
-                : chooseCategory(scan.room(), forcedRoomType, rootCategory, village.isRoomInheritance());
+                : chooseCategory(scan.room(), forcedRoomType, false);
         if (rootCategory == null || playerCategory == null) return Building.validationResult.INVALID_TYPE;
 
         Building rootRoom = scan.rootRoom() == null ? playerRoom : scan.rootRoom().building();
@@ -513,8 +513,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         if (village == null || structure == null) return Building.validationResult.NOT_IN_BUILDING;
 
         Building room = scan.building();
-        String inherited = village.getBuilding(structure.getRootRoomId()).map(Building::getType).orElse(null);
-        String category = chooseCategory(scan, forcedType, inherited, village.isRoomInheritance());
+        String category = chooseCategory(scan, forcedType, false);
         if (category == null) return Building.validationResult.INVALID_TYPE;
         room.setId(lastBuildingId++);
         room.setType(category);
@@ -532,9 +531,6 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         Village village = scan.village();
         Building existing = village == null ? null : village.getBuilding(expectedRoomId).orElse(null);
         if (existing == null || scan.building().getId() != expectedRoomId) return Building.validationResult.OVERLAP;
-        if (forcedType != null && !scan.matchesType(forcedType)) return Building.validationResult.INVALID_TYPE;
-        if (forcedType == null && scan.isAmbiguous()) return Building.validationResult.INVALID_TYPE;
-
         Structure currentStructure = village.getStructureFor(existing).orElse(null);
         if (currentStructure == null) return Building.validationResult.NOT_IN_BUILDING;
 
@@ -549,29 +545,63 @@ public class VillageManager extends SavedData implements Iterable<Village> {
                 || !validCreatedRooms(village, existing, scan.building(), scan.createdRooms())) {
             return Building.validationResult.OVERLAP;
         }
-        int currentRootRoomId = currentStructure.getRootRoomId();
-        if (absorbed.get().contains(currentRootRoomId)) {
-            currentStructure.setRootRoomId(existing.getId());
+        List<Integer> absorbedRoomIds = absorbed.get();
+        List<Building> prospectiveRooms = village.getRooms()
+                .filter(room -> room.getId() != existing.getId() && !absorbedRoomIds.contains(room.getId()))
+                .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
+        prospectiveRooms.add(scan.building());
+        prospectiveRooms.addAll(scan.createdRooms());
+
+        StructureLayout.Layout layout = StructureLayout.build(village);
+        Building currentMain = layout.buildingFor(existing.getStructureId())
+                .map(StructureLayout.LogicalBuilding::mainRoomId)
+                .flatMap(village::getBuilding)
+                .filter(Building::isFunctionalRoom)
+                .orElse(null);
+        Building prospectiveMain = currentMain;
+        if (currentMain != null && (currentMain.getId() == existing.getId()
+                || absorbedRoomIds.contains(currentMain.getId()))) {
+            prospectiveMain = scan.building();
         }
-        String splitType = existing.getType();
-        boolean splitTypeForced = existing.isTypeForced();
+
+        String requestedForcedType = forcedType != null ? forcedType
+                : existing.isTypeForced() ? existing.getType() : null;
+        RoomTypeResolver.Context retainedContext = RoomTypeResolver.resolve(
+                village, layout, scan.building(), prospectiveRooms, prospectiveMain);
+        String retainedType = classifyUpdatedRoom(retainedContext, requestedForcedType);
+        if (retainedType == null) return Building.validationResult.INVALID_TYPE;
+
+        Map<Building, String> createdTypes = new IdentityHashMap<>();
+        for (Building created : scan.createdRooms()) {
+            String type = classifyUpdatedRoom(RoomTypeResolver.resolve(
+                    village, layout, created, prospectiveRooms, prospectiveMain), null);
+            if (type == null) return Building.validationResult.INVALID_TYPE;
+            createdTypes.put(created, type);
+        }
+
+        String updatedMainType = null;
+        if (prospectiveMain != null && prospectiveMain.getId() != existing.getId()) {
+            RoomTypeResolver.Context mainContext = RoomTypeResolver.resolve(
+                    village, layout, prospectiveMain, prospectiveRooms, prospectiveMain);
+            String mainForcedType = prospectiveMain.isTypeForced() ? prospectiveMain.getType() : null;
+            updatedMainType = classifyUpdatedRoom(mainContext, mainForcedType);
+            if (updatedMainType == null) return Building.validationResult.INVALID_TYPE;
+        }
+
+        int currentRootRoomId = currentStructure.getRootRoomId();
+        if (absorbedRoomIds.contains(currentRootRoomId)) currentStructure.setRootRoomId(existing.getId());
 
         existing.copyScannedGeometryFrom(scan.building(), world, true);
-        if (forcedType != null) {
-            existing.setType(forcedType);
-            existing.setTypeForced(true);
-        } else if (scan.matchingTypes().size() == 1) {
-            existing.setType(scan.matchingTypes().getFirst());
-            existing.setTypeForced(false);
-        }
+        existing.setType(retainedType);
+        existing.setTypeForced(requestedForcedType != null);
 
-        village.removeBuildings(absorbed.get());
+        village.removeBuildings(absorbedRoomIds);
         for (Building created : scan.createdRooms()) {
             created.setId(lastBuildingId++);
             created.setStructureId(existing.getStructureId());
             created.setFloorId(existing.getFloorId());
-            created.setType(splitType);
-            created.setTypeForced(splitTypeForced);
+            created.setType(createdTypes.get(created));
+            created.setTypeForced(false);
             village.getBuildings().put(created.getId(), created);
         }
 
@@ -579,22 +609,28 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         return Building.validationResult.SUCCESS;
     }
 
-    private static String chooseCategory(BuildingScanResult scan, String forcedType, String inherited, boolean roomInheritance) {
+    private static String chooseCategory(BuildingScanResult scan, String forcedType, boolean root) {
         if (forcedType != null) return forcedType;
         if (scan.matchingTypes().size() == 1) return scan.matchingTypes().getFirst();
         if (!scan.matchingTypes().isEmpty()) return null;
-        if (inherited != null && roomInheritance) return inherited;
-        // A category-less Room stays functional but unclassified; the old hidden `building`
-        // definition is reused only as a neutral no-icon category, never as physical Structure state.
-        return inherited == null ? "house" : "building";
+        return root ? "house" : "building";
     }
 
     private static String chooseRootCategory(BuildingScanResult scan, String forcedType) {
         if (forcedType != null) return forcedType;
         if (scan.matchingTypes().isEmpty()) return "house";
-        // Root creation has no separate picker. Matching types are already priority-sorted, so
-        // choose the strongest local match deterministically rather than inheriting another Room.
         return scan.matchingTypes().getFirst();
+    }
+
+    private static String classifyUpdatedRoom(RoomTypeResolver.Context context, String forcedType) {
+        if (context == null || context.room() == null) return null;
+        Map<ResourceLocation, List<BlockPos>> poi = context.classificationPoi();
+        if (forcedType != null) {
+            BuildingType type = BuildingTypes.getInstance().getBuildingType(forcedType);
+            return Building.matchesType(type, poi) ? forcedType : null;
+        }
+        List<BuildingType> matches = context.visibleMatchingTypes();
+        return matches.isEmpty() ? (context.isMainRoom() ? "house" : "building") : matches.getFirst().name();
     }
 
     public void fullScan(Village village) {
@@ -654,7 +690,8 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         if (room == null) return BuildingEditResult.NO_BUILDING;
         if (room.getType().equals(type)) {
             room.setTypeForced(false);
-            room.determineType();
+            StructureLayout.Layout layout = StructureLayout.build(village);
+            room.setType(classifyUpdatedRoom(RoomTypeResolver.resolve(village, layout, room), null));
         } else {
             room.setTypeForced(true);
             room.setType(type);

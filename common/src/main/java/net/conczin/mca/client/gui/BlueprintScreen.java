@@ -14,6 +14,8 @@ import net.conczin.mca.resources.Rank;
 import net.conczin.mca.resources.data.BuildingType;
 import net.conczin.mca.resources.data.tasks.Task;
 import net.conczin.mca.server.world.data.Building;
+import net.conczin.mca.server.world.data.RoomTypeResolver;
+import net.conczin.mca.server.world.data.StructureLayout;
 import net.conczin.mca.server.world.data.Village;
 import net.conczin.mca.util.compat.ButtonWidget;
 import net.conczin.mca.util.localization.FlowingText;
@@ -90,6 +92,7 @@ public class BlueprintScreen extends ExtendedScreen {
     private boolean selectPlayerFloorOnNextVillageResponse;
     private boolean showBuildingIcons = true;
     private boolean showTerrain = true;
+    private StructureLayout.Layout structureLayout = StructureLayout.build(null);
     private BlueprintFloorLayout floorLayout = BlueprintFloorLayout.empty();
     private BlueprintMapGeometry mapGeometry = BlueprintMapGeometry.empty();
     private final BlueprintMapRenderer mapRenderer = new BlueprintMapRenderer();
@@ -289,7 +292,7 @@ public class BlueprintScreen extends ExtendedScreen {
                     }
                     addRenderableWidget(new TooltipButtonWidget(
                             bx, by, 96, 20, inheritanceText,
-                            Component.literal("New Rooms with no local category match inherit the Root Room category. POIs remain Room-local."),
+                            Component.translatable("gui.blueprint.roomInheritance.tooltip"),
                             b -> {
                                 village.toggleRoomInheritance();
                                 saveVillage();
@@ -912,13 +915,28 @@ public class BlueprintScreen extends ExtendedScreen {
     }
 
     private void appendRoomTooltip(List<Component> lines, Building room, Integer floorOrdinal) {
-        BuildingType roomType = BuildingTypes.getInstance().getBuildingType(room.getType());
-        lines.add(Component.literal("  ").append(getBuildingTypeTooltipLabel(roomType)));
+        RoomTypeResolver.Context resolved = RoomTypeResolver.resolve(village, structureLayout, room);
+        lines.add(Component.literal("  ").append(getBuildingTypeTooltipLabel(resolved.effectiveType())));
+        if (village.isRoomInheritance() && resolved.mainRoom() != null && resolved.mainRoom().getId() != room.getId()) {
+            BuildingType mainType = RoomTypeResolver.resolve(village, structureLayout, resolved.mainRoom()).effectiveType();
+            lines.add(Component.literal("    ").append(Component.translatable(
+                    "gui.blueprint.roomInheritance.contributesTo", getBuildingTypeTooltipLabel(mainType))));
+        }
         village.getResidents(room.getId()).forEach(name ->
                 lines.add(Component.literal("    ")
                         .append(Component.literal(name).withStyle(ChatFormatting.GRAY))));
-        getBlockTooltipLines(List.of(room), floorOrdinal).forEach(item ->
+        getPoiTooltipLines(resolved.ownPoi()).forEach(item ->
                 lines.add(Component.literal("    ").append(item)));
+        if (!resolved.inheritedPoi().isEmpty()) {
+            lines.add(Component.literal("    ").append(Component.translatable(
+                    "gui.blueprint.roomInheritance.inheritedPoi").withStyle(ChatFormatting.GRAY)));
+            getPoiTooltipLines(resolved.inheritedPoi()).forEach(item ->
+                    lines.add(Component.literal("      ").append(item)));
+            resolved.contributors().forEach(contributor -> lines.add(Component.literal("      ").append(
+                    Component.translatable("gui.blueprint.roomInheritance.from",
+                            getBuildingTypeTooltipLabel(contributor.getBuildingType()), contributor.getId())
+                            .withStyle(ChatFormatting.DARK_GRAY))));
+        }
     }
 
     private List<Component> getStructureFloorTooltip(Building structureBuilding, int floorOrdinal) {
@@ -956,10 +974,12 @@ public class BlueprintScreen extends ExtendedScreen {
             return List.of(building);
         }
         int structureId = building.getEffectiveStructureId();
+        List<Integer> structureIds = structureLayout.buildingFor(structureId)
+                .map(StructureLayout.LogicalBuilding::structureIds).orElse(List.of(structureId));
         return village.getBuildings().values().stream()
                 .filter(Building::isComplete)
                 .filter(Building::isFunctionalRoom)
-                .filter(candidate -> candidate.getEffectiveStructureId() == structureId)
+                .filter(candidate -> structureIds.contains(candidate.getEffectiveStructureId()))
                 .sorted(Comparator.comparingInt(Building::getId))
                 .toList();
     }
@@ -1000,6 +1020,15 @@ public class BlueprintScreen extends ExtendedScreen {
                         .withStyle(ChatFormatting.DARK_GRAY));
             }
         }
+        return lines;
+    }
+
+    private List<Component> getPoiTooltipLines(Map<ResourceLocation, List<BlockPos>> poi) {
+        List<Component> lines = new ArrayList<>();
+        poi.forEach((block, positions) -> {
+            if (!positions.isEmpty()) lines.add(Component.literal(positions.size() + " x ")
+                    .append(getBlockName(block)).withStyle(ChatFormatting.DARK_GRAY));
+        });
         return lines;
     }
 
@@ -1164,7 +1193,8 @@ public class BlueprintScreen extends ExtendedScreen {
         // Terrain is world-derived and independent of village sync packets. Keeping the
         // snapshot/texture alive here prevents ordinary Blueprint data refreshes from
         // forcing an expensive terrain re-sample and GPU upload.
-        this.floorLayout = village == null ? BlueprintFloorLayout.empty() : BlueprintFloorLayout.build(village);
+        this.structureLayout = StructureLayout.build(village);
+        this.floorLayout = village == null ? BlueprintFloorLayout.empty() : BlueprintFloorLayout.build(village, structureLayout);
         this.mapGeometry = BlueprintMapGeometry.build(village, floorLayout);
         Village.StructuralLookup structuralLookup = getPlayerStructuralLookup();
         Village.StructuralPosition structuralPosition = structuralLookup.position();
