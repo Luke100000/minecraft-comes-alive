@@ -1446,11 +1446,12 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     @Override
     @Nullable
     public <T extends Mob> T convertTo(EntityType<T> type, boolean keepInventory) {
-        residency.leaveHome();
-
         T mob;
         if (!isRemoved() && type == EntityType.ZOMBIE_VILLAGER) {
-            mob = (T) super.convertTo(getGenetics().getGender().getZombieType(), keepInventory);
+            residency.leaveHome();
+            mob = keepInventory
+                    ? (T) super.convertTo(getGenetics().getGender().getZombieType(), true)
+                    : (T) VillagerLike.convertPreservingUuid(this, getGenetics().getGender().getZombieType());
         } else {
             mob = super.convertTo(type, keepInventory);
         }
@@ -1460,23 +1461,26 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         }
 
         if (mob instanceof ZombieVillager zombie) {
-            zombie.finalizeSpawn((ServerLevel) level(), level().getCurrentDifficultyAt(zombie.blockPosition()), MobSpawnType.CONVERSION, new Zombie.ZombieGroupData(false, true));
-            zombie.setVillagerData(getVillagerData());
-            zombie.setGossips(getGossips().store(NbtOps.INSTANCE));
-            zombie.setTradeOffers(getOffers().copy());
-            zombie.setVillagerXp(getVillagerXp());
-            zombie.setUUID(getUUID());
             zombie.setPersistenceRequired();
-
-            level().levelEvent(null, 1026, this.blockPosition(), 0);
         }
 
         if (mob instanceof ZombieVillagerEntityMCA zombie) {
             zombie.setInventory(inventory);
-            zombie.setChatAIPrompt(chatAIPrompt);
         }
 
         return mob;
+    }
+
+    @Override
+    public void writeAdditionalConversionData(CompoundTag output) {
+        if (chatAIPrompt != null) {
+            output.putString(CHAT_AI_PROMPT_KEY, chatAIPrompt);
+        }
+    }
+
+    @Override
+    public void readAdditionalConversionData(CompoundTag input) {
+        chatAIPrompt = input.contains(CHAT_AI_PROMPT_KEY) ? input.getString(CHAT_AI_PROMPT_KEY) : null;
     }
 
     @Override
