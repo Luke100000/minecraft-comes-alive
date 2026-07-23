@@ -1,8 +1,11 @@
 package net.conczin.mca.server.world.data;
 
+import net.conczin.mca.resources.BuildingTypes;
+import net.conczin.mca.resources.data.BuildingType;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.*;
 
@@ -115,10 +118,36 @@ final class BuildingRoomScanner {
     private static boolean isRoomPassageColumn(Level world, StructureFloor floor, BlockPos floorCell) {
         BlockPos base = new BlockPos(floorCell.getX(), floor.anchorY(), floorCell.getZ());
         if (StructureConnector.isPassageCell(world, base)) return true;
+        if (hasFunctionalPoiObstacle(world, base, floor.ceilingY())) return true;
         if (base.getY() + 1 >= floor.ceilingY()
                 || !StructureConnector.isPassageCell(world, base.above())) return false;
         var shape = world.getBlockState(base).getCollisionShape(world, base);
         return shape.isEmpty() || shape.max(Direction.Axis.Y) <= 1.0D;
+    }
+
+    /**
+     * A StructureFloor already owns this X/Z column as physical storey space. Keep a solid
+     * obstruction inside the Room when the obstruction contains a functional building POI;
+     * otherwise the existing two-block-wall rule remains authoritative.
+     *
+     * <p>This restores the old volume/POI semantics without making arbitrary two-block stone
+     * walls passable. Example: bookshelf + chiseled bookshelf remains Room furniture because the
+     * bookshelf is a library POI, while stone + stone still partitions Rooms.</p>
+     */
+    private static boolean hasFunctionalPoiObstacle(Level world, BlockPos base, int ceilingY) {
+        for (int y = base.getY(); y < ceilingY; y++) {
+            BlockPos pos = new BlockPos(base.getX(), y, base.getZ());
+            if (StructureConnector.isPassageCell(world, pos)) break;
+            if (isFunctionalRoomPoi(world.getBlockState(pos), BuildingTypes.getInstance())) return true;
+        }
+        return false;
+    }
+
+    static boolean isFunctionalRoomPoi(BlockState state, Iterable<BuildingType> types) {
+        for (BuildingType type : types) {
+            if (!type.grouped() && type.matchesBlock(state)) return true;
+        }
+        return false;
     }
 
     private static BlockPos connectorInColumn(Level world, StructureFloor floor, BlockPos floorCell) {
