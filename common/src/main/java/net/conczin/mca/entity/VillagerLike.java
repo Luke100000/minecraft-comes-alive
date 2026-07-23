@@ -29,6 +29,7 @@ import net.minecraft.util.FastColor;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.MobSpawnType;
@@ -602,16 +603,57 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
         return false;
     }
 
+    @Nullable
+    static <T extends Mob> T convertPreservingUuid(Mob source, EntityType<T> type) {
+        if (source.isRemoved()) {
+            return null;
+        }
+
+        T converted = type.create(source.level());
+        if (converted == null) {
+            return null;
+        }
+
+        Entity vehicle = source.getVehicle();
+        converted.copyPosition(source);
+        converted.setBaby(source.isBaby());
+        converted.setNoAi(source.isNoAi());
+        if (source.hasCustomName()) {
+            converted.setCustomName(source.getCustomName());
+            converted.setCustomNameVisible(source.isCustomNameVisible());
+        }
+        if (source.isPersistenceRequired()) {
+            converted.setPersistenceRequired();
+        }
+        converted.setInvulnerable(source.isInvulnerable());
+        converted.setUUID(source.getUUID());
+
+        source.discard();
+        source.level().addFreshEntity(converted);
+        if (vehicle != null) {
+            converted.startRiding(vehicle, true);
+        }
+        return converted;
+    }
+
     @SuppressWarnings({"unchecked", "RedundantSuppression"})
     default CompoundTag toNbtForConversion() {
         CompoundTag output = new CompoundTag();
         this.getTypeDataManager().save((E) asEntity(), output);
+        writeAdditionalConversionData(output);
         return output;
     }
 
     @SuppressWarnings({"unchecked", "RedundantSuppression"})
     default void readNbtForConversion(CompoundTag input) {
         this.getTypeDataManager().load((E) asEntity(), input);
+        readAdditionalConversionData(input);
+    }
+
+    default void writeAdditionalConversionData(CompoundTag output) {
+    }
+
+    default void readAdditionalConversionData(CompoundTag input) {
     }
 
     void readAdditionalSaveDataForEditor(CompoundTag nbt);

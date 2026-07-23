@@ -216,17 +216,15 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
         InventoryUtils.readFromNBT(this.registryAccess(), this.inventory, nbt);
     }
 
-    void setChatAIPrompt(@Nullable String chatAIPrompt) {
-        this.chatAIPrompt = chatAIPrompt;
-    }
-
     @SuppressWarnings({"unchecked", "RedundantSuppression"})
     @Override
     @Nullable
     public <T extends Mob> T convertTo(EntityType<T> type, boolean keepInventory) {
         T mob;
         if (!isRemoved() && type == EntityType.VILLAGER) {
-            mob = (T) super.convertTo(getGenetics().getGender().getVillagerType(), keepInventory);
+            mob = keepInventory
+                    ? (T) super.convertTo(getGenetics().getGender().getVillagerType(), true)
+                    : (T) VillagerLike.convertPreservingUuid(this, getGenetics().getGender().getVillagerType());
         } else {
             mob = super.convertTo(type, keepInventory);
         }
@@ -237,15 +235,25 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
         }
 
         if (mob instanceof VillagerEntityMCA villager) {
-            villager.setUUID(getUUID());
             villager.setInventory(inventory);
             villager.setAge(getAgeState().toAge());
-            if (chatAIPrompt != null) {
-                villager.setChatAIPrompt(chatAIPrompt);
-            }
         }
 
         return mob;
+    }
+
+    @Override
+    public void writeAdditionalConversionData(CompoundTag output) {
+        if (chatAIPrompt != null) {
+            output.putString(VillagerEntityMCA.CHAT_AI_PROMPT_KEY, chatAIPrompt);
+        }
+    }
+
+    @Override
+    public void readAdditionalConversionData(CompoundTag input) {
+        chatAIPrompt = input.contains(VillagerEntityMCA.CHAT_AI_PROMPT_KEY)
+                ? input.getString(VillagerEntityMCA.CHAT_AI_PROMPT_KEY)
+                : null;
     }
 
     @Override
