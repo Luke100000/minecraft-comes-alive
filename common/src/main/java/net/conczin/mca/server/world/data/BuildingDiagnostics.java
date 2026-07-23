@@ -81,6 +81,11 @@ public final class BuildingDiagnostics {
                         resolved.effectivePoi().values().stream().mapToInt(List::size).sum(), sameColumn, elevatedWithinBand);
             }
 
+            StructureFloor diagnosticFloor = physicalFloor != null ? physicalFloor : logicalFloor;
+            if (diagnosticFloor != null) {
+                logRoomColumnDiagnostic(world, village, inspected, diagnosticFloor, room, pos, traceId);
+            }
+
             logVerticalConnectors(world, inspected, traceId);
 
             StructureScanner.Result scan = StructureScanner.scan(
@@ -184,6 +189,97 @@ public final class BuildingDiagnostics {
                 found, Math.min(found, MAX_CONNECTORS_TO_LOG), found > MAX_CONNECTORS_TO_LOG);
     }
 
+    /**
+     * Explains the exact StructureFloor -> BuildingRoomScanner handoff for the queried X/Z column.
+     * This is deliberately read-only: it reproduces the current Room passage predicate for each
+     * possible base Y in the Floor band so diagnostics can prove whether flattening to anchorY is
+     * what turns an otherwise valid interior/furniture column into a Room boundary.
+     */
+    private static void logRoomColumnDiagnostic(ServerLevel world,
+                                                Village village,
+                                                Structure structure,
+                                                StructureFloor floor,
+                                                Building lookupRoom,
+                                                BlockPos pos,
+                                                long traceId) {
+        int x = pos.getX();
+        int z = pos.getZ();
+        List<Building> sameFloorRooms = village.getRooms()
+                .filter(candidate -> candidate.getStructureId() == structure.getId())
+                .filter(candidate -> candidate.getFloorId() == floor.id())
+                .sorted(Comparator.comparingInt(Building::getId))
+                .toList();
+        List<Integer> owningRooms = sameFloorRooms.stream()
+                .filter(candidate -> candidate.containsFloorColumn(x, z))
+                .map(Building::getId)
+                .toList();
+        List<Integer> poiRooms = sameFloorRooms.stream()
+                .filter(candidate -> candidate.getBlocks().values().stream()
+                        .flatMap(Collection::stream)
+                        .anyMatch(block -> block.getX() == x && block.getZ() == z))
+                .map(Building::getId)
+                .toList();
+
+        Map<Direction, List<Integer>> adjacentOwners = new LinkedHashMap<>();
+        for (Direction direction : HORIZONTAL) {
+            int adjacentX = x + direction.getStepX();
+            int adjacentZ = z + direction.getStepZ();
+            List<Integer> owners = sameFloorRooms.stream()
+                    .filter(candidate -> candidate.containsFloorColumn(adjacentX, adjacentZ))
+                    .map(Building::getId)
+                    .toList();
+            if (!owners.isEmpty()) adjacentOwners.put(direction, owners);
+        }
+
+        int minY = floor.anchorY() - BuildingFloorRegionDetector.FLOOR_CLUSTER_TOLERANCE;
+        int maxY = floor.ceilingY() - 1;
+        List<String> slices = new ArrayList<>();
+        List<Integer> alternatePassageBases = new ArrayList<>();
+        for (int y = minY; y <= maxY; y++) {
+            BlockPos probe = new BlockPos(x, y, z);
+            BlockState state = world.getBlockState(probe);
+            boolean passageCell = StructureConnector.isPassageCell(world, probe);
+            String roomDecision = roomPassageDecision(world, floor, probe);
+            if (isRoomPassageDecision(roomDecision)) alternatePassageBases.add(y);
+            var shape = state.getCollisionShape(world, probe);
+            String collisionTop = shape.isEmpty()
+                    ? "empty"
+                    : String.format(Locale.ROOT, "%.3f", shape.max(Direction.Axis.Y));
+            slices.add(y + "{state=" + state
+                    + ", passage=" + passageCell
+                    + ", walkable=" + StructureScanner.explainWalkableAnchor(world, probe)
+                    + ", roomDecision=" + roomDecision
+                    + ", collisionTop=" + collisionTop + "}");
+        }
+
+        BlockPos anchorBase = new BlockPos(x, floor.anchorY(), z);
+        log(traceId, "columnDiagnostic xz={},{} queryY={} structure={} floor={} floorContainsColumn={} "
+                        + "lookupRoom={} owningRooms={} poiRooms={} adjacentRoomOwners={}",
+                x, z, pos.getY(), structure.getId(), floor(floor), floor.contains(x, z),
+                lookupRoom == null ? "none" : lookupRoom.getId(), owningRooms, poiRooms, adjacentOwners);
+        log(traceId, "columnDiagnostic roomScanner anchorBaseY={} anchorDecision={} alternatePassageBaseYs={} slices={}",
+                floor.anchorY(), roomPassageDecision(world, floor, anchorBase), alternatePassageBases, slices);
+    }
+
+    /**
+     * Mirrors BuildingRoomScanner.isRoomPassageColumn for one candidate base Y. Keeping this copy
+     * inside diagnostics lets us compare the current anchorY decision with alternate Y positions
+     * without changing StructureScanner, StructureFloor, or Room partition behaviour.
+     */
+    private static String roomPassageDecision(ServerLevel world, StructureFloor floor, BlockPos base) {
+        if (StructureConnector.isPassageCell(world, base)) return "PASSAGE";
+        if (base.getY() + 1 >= floor.ceilingY()) return "BLOCKED_AT_CEILING";
+        if (!StructureConnector.isPassageCell(world, base.above())) return "BLOCKED_TWO_HIGH";
+        var shape = world.getBlockState(base).getCollisionShape(world, base);
+        return shape.isEmpty() || shape.max(Direction.Axis.Y) <= 1.0D
+                ? "LOW_OBSTACLE"
+                : "BLOCKED_COLLISION";
+    }
+
+    private static boolean isRoomPassageDecision(String decision) {
+        return decision.equals("PASSAGE") || decision.equals("LOW_OBSTACLE");
+    }
+
     private static void logFloorDifference(long traceId,
                                            List<StructureFloor> persistent,
                                            List<StructureFloor> fresh) {
@@ -191,9 +287,41 @@ public final class BuildingDiagnostics {
         List<Integer> freshAnchors = fresh.stream().map(StructureFloor::anchorY).toList();
         if (!persistentAnchors.equals(freshAnchors)) {
             log(traceId, "floorMismatch persistentAnchors={} freshAnchors={}", persistentAnchors, freshAnchors);
-        } else {
+        }
+
+        boolean geometryMismatch = false;
+        for (StructureFloor persistentFloor : persistent) {
+            StructureFloor freshFloor = fresh.stream()
+                    .filter(candidate -> candidate.anchorY() == persistentFloor.anchorY())
+                    .findFirst().orElse(null);
+            if (freshFloor == null || persistentFloor.region() == null || freshFloor.region() == null) continue;
+
+            Set<BlockPos> persistentCells = persistentFloor.region().cells();
+            Set<BlockPos> freshCells = freshFloor.region().cells();
+            if (persistentCells.equals(freshCells)) continue;
+
+            geometryMismatch = true;
+            LinkedHashSet<BlockPos> added = new LinkedHashSet<>(freshCells);
+            added.removeAll(persistentCells);
+            LinkedHashSet<BlockPos> removed = new LinkedHashSet<>(persistentCells);
+            removed.removeAll(freshCells);
+            log(traceId, "floorGeometryMismatch anchorY={} persistentArea={} freshArea={} "
+                            + "addedColumns={} removedColumns={} addedSample={} removedSample={}",
+                    persistentFloor.anchorY(), persistentFloor.area(), freshFloor.area(),
+                    added.size(), removed.size(), sampleColumns(added), sampleColumns(removed));
+        }
+        if (persistentAnchors.equals(freshAnchors) && !geometryMismatch) {
             log(traceId, "floorMismatch none anchors={}", persistentAnchors);
         }
+    }
+
+    private static List<BlockPos> sampleColumns(Collection<BlockPos> cells) {
+        return cells.stream()
+                .sorted(Comparator.comparingInt((BlockPos p) -> p.getX())
+                        .thenComparingInt(p -> p.getZ())
+                        .thenComparingInt(p -> p.getY()))
+                .limit(16)
+                .toList();
     }
 
     private static Structure nearestStructure(Village village, BlockPos pos) {
