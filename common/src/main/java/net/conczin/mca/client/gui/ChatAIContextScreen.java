@@ -82,8 +82,13 @@ public class ChatAIContextScreen extends Screen {
     private void saveCurrent() {
         if (promptField != null && selectedTab.available(context)) {
             String prompt = promptField.getValue();
+            if (prompt.equals(prompts.get(selectedTab))) {
+                return;
+            }
             prompts.put(selectedTab, prompt);
-            Network.sendToServer(new ChatAIContextUpdateRequest(selectedTab.target, prompt));
+            Network.sendToServer(new ChatAIContextUpdateRequest(
+                    selectedTab.target, context.dimension(), context.villagerUuid(), context.villageId(), prompt
+            ));
         }
     }
 

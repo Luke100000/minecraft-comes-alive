@@ -46,6 +46,8 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
     private final ZombieCommandHandler interactions = new ZombieCommandHandler(this);
     private final UpdatableInventory inventory = new UpdatableInventory(27);
 
+    @Nullable
+    private String chatAIPrompt;
     private int burned;
 
     public ZombieVillagerEntityMCA(EntityType<? extends ZombieVillager> type, Level world, Gender gender) {
@@ -214,6 +216,10 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
         InventoryUtils.readFromNBT(this.registryAccess(), this.inventory, nbt);
     }
 
+    void setChatAIPrompt(@Nullable String chatAIPrompt) {
+        this.chatAIPrompt = chatAIPrompt;
+    }
+
     @SuppressWarnings({"unchecked", "RedundantSuppression"})
     @Override
     @Nullable
@@ -234,6 +240,9 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
             villager.setUUID(getUUID());
             villager.setInventory(inventory);
             villager.setAge(getAgeState().toAge());
+            if (chatAIPrompt != null) {
+                villager.setChatAIPrompt(chatAIPrompt);
+            }
         }
 
         return mob;
@@ -244,6 +253,9 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
         super.readAdditionalSaveData(nbt);
         getTypeDataManager().load(this, nbt);
         relations.readFromNbt(nbt);
+        chatAIPrompt = nbt.contains(VillagerEntityMCA.CHAT_AI_PROMPT_KEY)
+                ? nbt.getString(VillagerEntityMCA.CHAT_AI_PROMPT_KEY)
+                : null;
 
         updateAttributes();
 
@@ -271,6 +283,9 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
         getTypeDataManager().save(this, nbt);
         relations.writeToNbt(nbt);
         InventoryUtils.saveToNBT(this.registryAccess(), inventory, nbt);
+        if (chatAIPrompt != null) {
+            nbt.putString(VillagerEntityMCA.CHAT_AI_PROMPT_KEY, chatAIPrompt);
+        }
     }
 
     @Override

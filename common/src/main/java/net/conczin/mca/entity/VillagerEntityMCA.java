@@ -100,11 +100,12 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     private static final CDataParameter<Integer> GROWTH_AMOUNT = CParameter.create("GrowthAmount", -AgeState.getMaxAge());
     private static final float VEHICLE_ATTACHMENT_Y = 0.6F;
     public static final String MCA_DATA_KEY = "MCAData";
-    private static final String CHAT_AI_PROMPT_KEY = "ChatAIPrompt";
+    static final String CHAT_AI_PROMPT_KEY = "ChatAIPrompt";
     private static final CDataManager<VillagerEntityMCA> DATA = createTrackedData(VillagerEntityMCA.class).build();
     private static final int RECALCULATE_DIMENSIONS_EVERY_N_TICKS = 100;
     public final ConversationManager conversationManager = new ConversationManager(this);
-    private String chatAIPrompt = "";
+    @Nullable
+    private String chatAIPrompt;
     final ResourceLocation EXTRA_HEALTH_EFFECT_ID = MCA.locate("trait_health");
     private final VillagerBrain<VillagerEntityMCA> mcaBrain = new VillagerBrain<>(this);
     private final LongTermMemory longTermMemory = new LongTermMemory(this);
@@ -1466,6 +1467,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
         if (mob instanceof ZombieVillagerEntityMCA zombie) {
             zombie.setInventory(inventory);
+            zombie.setChatAIPrompt(chatAIPrompt);
         }
 
         return mob;
@@ -1479,7 +1481,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         getTypeDataManager().load(this, data);
         relations.readFromNbt(data);
         longTermMemory.readFromNbt(data);
-        chatAIPrompt = data.getString(CHAT_AI_PROMPT_KEY);
+        chatAIPrompt = data.contains(CHAT_AI_PROMPT_KEY) ? data.getString(CHAT_AI_PROMPT_KEY) : null;
 
         playerModel = PlayerModel.byId(data.getInt("PlayerModel"));
 
@@ -1522,7 +1524,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     }
 
     public String getChatAIPrompt() {
-        if (chatAIPrompt.isBlank()) {
+        if (chatAIPrompt == null) {
             chatAIPrompt = ChatAIContext.createVillagerPrompt();
         }
         return chatAIPrompt;
@@ -1542,7 +1544,9 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         getTypeDataManager().save(this, nbt);
         InventoryUtils.saveToNBT(this.registryAccess(), inventory, nbt);
 
-        nbt.putString(CHAT_AI_PROMPT_KEY, getChatAIPrompt());
+        if (chatAIPrompt != null) {
+            nbt.putString(CHAT_AI_PROMPT_KEY, chatAIPrompt);
+        }
         nbt.putInt("DespawnDelay", this.despawnDelay);
         nbt.putBoolean("InteractedWith", this.interactedWith);
 

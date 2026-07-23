@@ -9,15 +9,18 @@ import net.conczin.mca.Config;
 import net.conczin.mca.MCA;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.chatAI.ChatAI;
+import net.conczin.mca.entity.ai.chatAI.ChatAIContext;
 import net.conczin.mca.entity.ai.chatAI.OpenAIChatAI;
 import net.conczin.mca.network.Network;
 import net.conczin.mca.network.s2c.ChatAIContextResponse;
 import net.conczin.mca.network.s2c.OpenGuiRequest;
 import net.conczin.mca.server.ServerInteractionManager;
+import net.conczin.mca.server.world.data.ChatAIContextData;
 import net.conczin.mca.server.world.data.PlayerSaveData;
 import net.conczin.mca.server.world.data.Village;
 import net.conczin.mca.server.world.data.VillageManager;
 import net.minecraft.ChatFormatting;
+import net.minecraft.Util;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.EntityArgument;
@@ -49,7 +52,7 @@ public class Command {
                 .then(register("chatAI")
                         .executes(Command::chatAIHelp)
                         .then(Commands.literal("context")
-                                .requires(p -> p.hasPermission(Config.getInstance().villagerChatAIContextPermissionLevel) || p.getServer().isSingleplayer())
+                                .requires(ChatAIContext::canEdit)
                                 .executes(Command::openChatAIContext))
                         .then(Commands.literal("disable")
                                 .requires(Command::hasChatAIAdminPermission)
@@ -97,18 +100,25 @@ public class Command {
     private static int openChatAIContext(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
         ServerPlayer player = ctx.getSource().getPlayerOrException();
         Optional<VillagerEntityMCA> villager = ChatAI.findClosestVillager(player);
-        Optional<Village> village = VillageManager.get(player.serverLevel()).findNearestVillage(player);
+        Optional<Village> village = villager.flatMap(Village::findNearest);
+        if (village.isEmpty()) {
+            village = VillageManager.get(player.serverLevel()).findNearestVillage(player);
+        }
+        ChatAIContextData contextData = ChatAIContextData.get(player.serverLevel().getServer());
 
         Network.sendToPlayer(new ChatAIContextResponse(
+                player.serverLevel().dimension(),
                 villager.isPresent(),
+                villager.map(VillagerEntityMCA::getUUID).orElse(Util.NIL_UUID),
                 villager.map(v -> v.getName().getString()).orElse(""),
                 villager.map(VillagerEntityMCA::getChatAIPrompt).orElse(""),
                 player.getName().getString(),
                 PlayerSaveData.get(player).getChatAIPrompt(),
                 village.isPresent(),
+                village.map(Village::getId).orElse(-1),
                 village.map(Village::getName).orElse(""),
                 village.map(Village::getChatAIPrompt).orElse(""),
-                Config.getInstance().villagerChatAISystemPrompt
+                contextData.getWorldPrompt()
         ), player);
         return 1;
     }
