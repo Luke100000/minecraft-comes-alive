@@ -1217,5 +1217,10 @@
   "blueprint.validation.out_of_world": "Position is outside of build height.",
   "blueprint.validation.unloaded_chunk": "Target area chunks are not fully loaded.",
   "blueprint.validation.overlap_building": "Overlap detected with existing building.",
-  "blueprint.validation.overlap_project": "Overlap detected with an active project."
+  "blueprint.validation.overlap_project": "Overlap detected with an active project.",
+
+  "gui.blueprint.roomInheritance.tooltip": "The logical Main Room derives effective POIs from Rooms in the same logical building. Room POIs and direct types remain local.",
+  "gui.blueprint.roomInheritance.contributesTo": "Contributes to: %s",
+  "gui.blueprint.roomInheritance.inheritedPoi": "Inherited POIs",
+  "gui.blueprint.roomInheritance.from": "From %s #%s"
 }

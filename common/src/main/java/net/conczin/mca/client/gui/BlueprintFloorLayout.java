@@ -26,37 +26,32 @@ final class BlueprintFloorLayout {
     }
 
     static BlueprintFloorLayout build(Village village) {
-        if (village == null) return empty();
+        return village == null ? empty() : build(village, StructureLayout.build(village));
+    }
+
+    static BlueprintFloorLayout build(Village village, StructureLayout.Layout layout) {
         Map<Integer, Integer> byBuilding = new HashMap<>();
         Map<Long, Integer> byFloor = new HashMap<>();
         Map<Integer, List<Integer>> byStructure = new HashMap<>();
         TreeSet<Integer> available = new TreeSet<>();
 
         for (Structure structure : village.getStructures().values()) {
-            StructureFloor ground = structure.getGroundFloor(village).orElse(null);
-            if (ground == null) continue;
-            List<StructureFloor> floors = structure.getFloors();
-            int groundIndex = floors.indexOf(ground);
-            if (groundIndex < 0) continue;
-
-            // Keep an ordinal mapping for every physical Floor so Structure geometry can still
-            // resolve unregistered storeys. The Blueprint floor selector itself remains HEAD-like:
-            // Ground is always visible, while other Floors appear only after a Room is registered.
-            for (int i = 0; i < floors.size(); i++) {
-                StructureFloor floor = floors.get(i);
-                byFloor.put(floorKey(structure.getId(), floor.id()), i - groundIndex);
+            for (StructureFloor floor : structure.getFloors()) {
+                layout.ordinal(structure.getId(), floor.id()).ifPresent(ordinal ->
+                        byFloor.put(floorKey(structure.getId(), floor.id()), ordinal));
             }
-            TreeSet<Integer> registeredOrdinals = new TreeSet<>();
-            registeredOrdinals.add(0);
-            village.getRooms().filter(room -> room.getStructureId() == structure.getId()).forEach(room -> {
-                Integer ordinal = byFloor.get(floorKey(structure.getId(), room.getFloorId()));
-                if (ordinal != null) {
-                    byBuilding.put(room.getId(), ordinal);
-                    registeredOrdinals.add(ordinal);
-                }
-            });
-            byStructure.put(structure.getId(), List.copyOf(registeredOrdinals));
-            available.addAll(registeredOrdinals);
+        }
+        for (StructureLayout.LogicalBuilding building : layout.buildings()) {
+            TreeSet<Integer> registered = new TreeSet<>();
+            registered.add(0);
+            village.getRooms().filter(room -> building.structureIds().contains(room.getStructureId())).forEach(room ->
+                    layout.ordinal(room.getStructureId(), room.getFloorId()).ifPresent(ordinal -> {
+                        byBuilding.put(room.getId(), ordinal);
+                        registered.add(ordinal);
+                    }));
+            List<Integer> ordinals = List.copyOf(registered);
+            building.structureIds().forEach(id -> byStructure.put(id, ordinals));
+            available.addAll(registered);
         }
         return new BlueprintFloorLayout(Map.copyOf(byBuilding), Map.copyOf(byFloor),
                 Map.copyOf(byStructure), List.copyOf(available));

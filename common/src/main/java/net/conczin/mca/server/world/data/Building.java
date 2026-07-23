@@ -257,19 +257,27 @@ public class Building implements VillageBuilding {
     }
 
     public List<BuildingType> getMatchingTypes() {
+        return new ArrayList<>(matchingTypes(blocks));
+    }
+
+    static List<BuildingType> matchingTypes(Map<ResourceLocation, List<BlockPos>> availableBlocks) {
         List<BuildingType> matches = new ArrayList<>();
         for (BuildingType type : BuildingTypes.getInstance()) {
-            if (!type.grouped() && matchesType(type)) {
+            if (!type.grouped() && matchesType(type, availableBlocks)) {
                 matches.add(type);
             }
         }
         matches.sort(Comparator.comparingInt(BuildingType::priority).reversed()
                 .thenComparing(BuildingType::name));
-        return matches;
+        return List.copyOf(matches);
     }
 
     public List<BuildingType> getVisibleMatchingTypes() {
-        List<BuildingType> matches = new ArrayList<>(getMatchingTypes().stream()
+        return new ArrayList<>(visibleMatchingTypes(blocks));
+    }
+
+    static List<BuildingType> visibleMatchingTypes(Map<ResourceLocation, List<BlockPos>> availableBlocks) {
+        List<BuildingType> matches = new ArrayList<>(matchingTypes(availableBlocks).stream()
                 .filter(type -> type.visible() || type.name().equals("house"))
                 .filter(type -> !type.name().equals("blocked") && !type.name().equals("building"))
                 .toList());
