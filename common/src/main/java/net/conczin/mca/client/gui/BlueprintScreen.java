@@ -52,9 +52,6 @@ public class BlueprintScreen extends ExtendedScreen {
     private static final int PLAYER_CENTERED_BUTTON_WIDTH = 78;
     private static final int PLAYER_HEAD_BUTTON_SIZE = 16;
     private static final int PLAYER_HEAD_ICON_SIZE = 12;
-    private static final int TOOLTIP_FLOOR_BASEMENT_COLOR = 0x9b8cff;
-    private static final int TOOLTIP_FLOOR_GROUND_COLOR = 0xf2c94c;
-    private static final int TOOLTIP_FLOOR_UPPER_COLOR = 0x6fd6a5;
     private static Integer rememberedFloorOrdinal;
     private static MapScaleMode rememberedMapScaleMode = MapScaleMode.FIT;
     private static boolean rememberedPlayerCentered;
@@ -95,6 +92,7 @@ public class BlueprintScreen extends ExtendedScreen {
     private StructureLayout.Layout structureLayout = StructureLayout.build(null);
     private RoomTypeResolver roomTypeResolver = RoomTypeResolver.create(null, structureLayout);
     private BlueprintFloorLayout floorLayout = BlueprintFloorLayout.empty();
+    private BlueprintTooltipFactory tooltipFactory = BlueprintTooltipFactory.empty();
     private BlueprintMapGeometry mapGeometry = BlueprintMapGeometry.empty();
     private final BlueprintMapRenderer mapRenderer = new BlueprintMapRenderer();
     private BuildingType selectedBuilding;
@@ -644,7 +642,7 @@ public class BlueprintScreen extends ExtendedScreen {
 
         List<List<Component>> tooltips = new ArrayList<>();
         for (BlueprintMapRenderer.HoverTarget target : hoverTargets) {
-            tooltips.add(getBuildingTooltip(
+            tooltips.add(tooltipFactory.tooltip(
                     target.building(), target.floorOrdinal(), target.structure()));
         }
 
@@ -898,109 +896,12 @@ public class BlueprintScreen extends ExtendedScreen {
                 .isPresent();
     }
 
-    private List<Component> getBuildingTooltip(Building hoverBuilding,
-                                               Integer floorOrdinal,
-                                               boolean structureHover) {
-        if (structureHover) {
-            return floorOrdinal == null
-                    ? getAllFloorsTooltip(hoverBuilding)
-                    : getStructureFloorTooltip(hoverBuilding, floorOrdinal);
-        }
-
-        List<Component> lines = new LinkedList<>();
-        if (floorOrdinal != null) {
-            lines.add(getTooltipFloorLabel(floorOrdinal));
-        }
-        appendRoomTooltip(lines, hoverBuilding, floorOrdinal);
-        return lines;
-    }
-
-    private void appendRoomTooltip(List<Component> lines, Building room, Integer floorOrdinal) {
-        RoomTypeResolver.Context resolved = roomTypeResolver.resolve(room);
-        lines.add(Component.literal("  ").append(getBuildingTypeTooltipLabel(resolved.effectiveType())));
-        if (village.isRoomInheritance() && resolved.mainRoom() != null && resolved.mainRoom().getId() != room.getId()) {
-            BuildingType mainType = roomTypeResolver.resolve(resolved.mainRoom()).effectiveType();
-            lines.add(Component.literal("    ").append(Component.translatable(
-                    "gui.blueprint.roomInheritance.contributesTo", getBuildingTypeTooltipLabel(mainType))));
-        }
-        village.getResidents(room.getId()).forEach(name ->
-                lines.add(Component.literal("    ")
-                        .append(Component.literal(name).withStyle(ChatFormatting.GRAY))));
-        getPoiTooltipLines(resolved.ownPoi()).forEach(item ->
-                lines.add(Component.literal("    ").append(item)));
-        if (!resolved.inheritedPoi().isEmpty()) {
-            lines.add(Component.literal("    ").append(Component.translatable(
-                    "gui.blueprint.roomInheritance.inheritedPoi").withStyle(ChatFormatting.GRAY)));
-            getPoiTooltipLines(resolved.inheritedPoi()).forEach(item ->
-                    lines.add(Component.literal("      ").append(item)));
-            resolved.contributors().forEach(contributor -> lines.add(Component.literal("      ").append(
-                    Component.translatable("gui.blueprint.roomInheritance.from",
-                            getBuildingTypeTooltipLabel(contributor.getBuildingType()), contributor.getId())
-                            .withStyle(ChatFormatting.DARK_GRAY))));
-        }
-    }
-
-    private List<Component> getStructureFloorTooltip(Building structureBuilding, int floorOrdinal) {
-        List<Component> lines = new LinkedList<>();
-        lines.add(getTooltipFloorLabel(floorOrdinal));
-        getStructureTooltipBuildings(structureBuilding).stream()
-                .filter(room -> floorLayout.isBuildingVisible(room, floorOrdinal))
-                .forEach(room -> appendRoomTooltip(lines, room, floorOrdinal));
-        return lines;
-    }
-
     private record FootprintCenter(double x, double z) {
-    }
-
-    private List<Component> getAllFloorsTooltip(Building structureBuilding) {
-        List<Building> structureRooms = getStructureTooltipBuildings(structureBuilding);
-        List<Component> lines = new LinkedList<>();
-
-        for (int floorOrdinal : floorLayout.ordinalsFor(structureBuilding)) {
-            lines.add(getTooltipFloorLabel(floorOrdinal));
-
-            List<Building> floorRooms = structureRooms.stream()
-                    .filter(building -> floorLayout.isBuildingVisible(building, floorOrdinal))
-                    .toList();
-
-            for (Building room : floorRooms) {
-                appendRoomTooltip(lines, room, floorOrdinal);
-            }
-        }
-        return lines;
-    }
-
-    private List<Building> getStructureTooltipBuildings(Building building) {
-        if (building.getBuildingType().grouped()) {
-            return List.of(building);
-        }
-        int structureId = building.getEffectiveStructureId();
-        List<Integer> structureIds = structureLayout.buildingFor(structureId)
-                .map(StructureLayout.LogicalBuilding::structureIds).orElse(List.of(structureId));
-        return village.getBuildings().values().stream()
-                .filter(Building::isComplete)
-                .filter(Building::isFunctionalRoom)
-                .filter(candidate -> structureIds.contains(candidate.getEffectiveStructureId()))
-                .sorted(Comparator.comparingInt(Building::getId))
-                .toList();
     }
 
     private Optional<Building> getStructureRoot(Building building) {
         return village.getStructureFor(building)
                 .flatMap(structure -> village.getBuilding(structure.getRootRoomId()));
-    }
-
-    private Component getBuildingTypeTooltipLabel(BuildingType buildingType) {
-        return Component.translatable("buildingType." + buildingType.name())
-                .withStyle(style -> style.withColor(buildingType.getColor() & 0x00ffffff));
-    }
-
-    private Component getTooltipFloorLabel(int floorOrdinal) {
-        int color = floorOrdinal < 0
-                ? TOOLTIP_FLOOR_BASEMENT_COLOR
-                : floorOrdinal == 0 ? TOOLTIP_FLOOR_GROUND_COLOR : TOOLTIP_FLOOR_UPPER_COLOR;
-        return getFloorLabel(floorOrdinal).copy()
-                .withStyle(style -> style.withColor(color).withBold(true));
     }
 
     private List<Component> getBlockTooltipLines(Collection<Building> buildings, Integer selectedFloor) {
@@ -1021,15 +922,6 @@ public class BlueprintScreen extends ExtendedScreen {
                         .withStyle(ChatFormatting.DARK_GRAY));
             }
         }
-        return lines;
-    }
-
-    private List<Component> getPoiTooltipLines(Map<ResourceLocation, List<BlockPos>> poi) {
-        List<Component> lines = new ArrayList<>();
-        poi.forEach((block, positions) -> {
-            if (!positions.isEmpty()) lines.add(Component.literal(positions.size() + " x ")
-                    .append(getBlockName(block)).withStyle(ChatFormatting.DARK_GRAY));
-        });
         return lines;
     }
 
@@ -1197,7 +1089,8 @@ public class BlueprintScreen extends ExtendedScreen {
         this.structureLayout = StructureLayout.build(village);
         this.roomTypeResolver = RoomTypeResolver.create(village, structureLayout);
         this.floorLayout = village == null ? BlueprintFloorLayout.empty() : BlueprintFloorLayout.build(village, structureLayout);
-        this.mapGeometry = BlueprintMapGeometry.build(village, floorLayout);
+        this.tooltipFactory = BlueprintTooltipFactory.create(village, floorLayout, structureLayout, roomTypeResolver);
+        this.mapGeometry = BlueprintMapGeometry.build(village, floorLayout, roomTypeResolver);
         Village.StructuralLookup structuralLookup = getPlayerStructuralLookup();
         Village.StructuralPosition structuralPosition = structuralLookup.position();
         if (selectPlayerFloorOnNextVillageResponse

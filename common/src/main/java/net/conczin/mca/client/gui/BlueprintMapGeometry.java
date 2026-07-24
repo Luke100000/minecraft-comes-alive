@@ -1,6 +1,8 @@
 package net.conczin.mca.client.gui;
 
+import net.conczin.mca.resources.data.BuildingType;
 import net.conczin.mca.server.world.data.Building;
+import net.conczin.mca.server.world.data.RoomTypeResolver;
 import net.conczin.mca.server.world.data.Structure;
 import net.conczin.mca.server.world.data.StructureFloor;
 import net.conczin.mca.server.world.data.Village;
@@ -19,19 +21,25 @@ final class BlueprintMapGeometry {
 
     private final Village village;
     private final BlueprintFloorLayout floorLayout;
+    private final RoomTypeResolver roomTypeResolver;
     private final Map<Integer, MapGeometry> cache = new HashMap<>();
 
-    private BlueprintMapGeometry(Village village, BlueprintFloorLayout floorLayout) {
+    private BlueprintMapGeometry(Village village,
+                                 BlueprintFloorLayout floorLayout,
+                                 RoomTypeResolver roomTypeResolver) {
         this.village = village;
         this.floorLayout = floorLayout;
+        this.roomTypeResolver = roomTypeResolver;
     }
 
     static BlueprintMapGeometry empty() {
-        return new BlueprintMapGeometry(null, BlueprintFloorLayout.empty());
+        return new BlueprintMapGeometry(null, BlueprintFloorLayout.empty(), null);
     }
 
-    static BlueprintMapGeometry build(Village village, BlueprintFloorLayout floorLayout) {
-        return village == null ? empty() : new BlueprintMapGeometry(village, floorLayout);
+    static BlueprintMapGeometry build(Village village,
+                                      BlueprintFloorLayout floorLayout,
+                                      RoomTypeResolver roomTypeResolver) {
+        return village == null ? empty() : new BlueprintMapGeometry(village, floorLayout, roomTypeResolver);
     }
 
     MapGeometry get(Integer selectedFloor) {
@@ -64,6 +72,7 @@ final class BlueprintMapGeometry {
 
                 layers.add(new MapFootprintLayer(
                         room,
+                        presentationType(room),
                         footprintCells,
                         BlueprintMapFootprint.rowSpans(footprintCells),
                         BlueprintMapFootprint.outerEdges(footprintCells),
@@ -71,6 +80,11 @@ final class BlueprintMapGeometry {
             }
         }
         return List.copyOf(layers);
+    }
+
+    private BuildingType presentationType(Building room) {
+        BuildingType resolved = roomTypeResolver == null ? null : roomTypeResolver.presentationType(room);
+        return resolved == null ? room.getBuildingType() : resolved;
     }
 
     private List<MapStructureLayer> buildStructureLayers(Integer selectedFloor,
@@ -157,8 +171,8 @@ final class BlueprintMapGeometry {
         TreeMap<Integer, List<MapFootprintLayer>> byRoom = new TreeMap<>();
         for (MapFootprintLayer layer : roomLayers) {
             if (!layer.footprintCells().isEmpty()
-                    && layer.building().getBuildingType().visible()
-                    && layer.building().getBuildingType().hasIcon()) {
+                    && layer.presentationType().visible()
+                    && layer.presentationType().hasIcon()) {
                 byRoom.computeIfAbsent(layer.building().getId(), ignored -> new ArrayList<>()).add(layer);
             }
         }
@@ -168,8 +182,8 @@ final class BlueprintMapGeometry {
             layers.forEach(layer -> cells.addAll(layer.footprintCells()));
             if (cells.isEmpty()) continue;
             Center center = centerInside(cells);
-            icons.add(new MapIconLayer(layers.getFirst().building(), layers.getFirst().floorOrdinal(),
-                    center.x(), center.z(), iconScale(cells)));
+            icons.add(new MapIconLayer(layers.getFirst().building(), layers.getFirst().presentationType(),
+                    layers.getFirst().floorOrdinal(), center.x(), center.z(), iconScale(cells)));
         }
         return offsetOverlappingIcons(icons);
     }
@@ -242,6 +256,7 @@ final class BlueprintMapGeometry {
     }
 
     record MapFootprintLayer(Building building,
+                             BuildingType presentationType,
                              Set<BlueprintMapFootprint.Cell> footprintCells,
                              List<BlueprintMapFootprint.RowSpan> fillSpans,
                              List<BlueprintMapFootprint.Edge> outlineEdges,
@@ -263,14 +278,17 @@ final class BlueprintMapGeometry {
         }
     }
 
-    record MapIconLayer(Building building, Integer floorOrdinal, double iconX, double iconZ,
-                        float iconScale, double screenOffsetX, double screenOffsetY) {
-        MapIconLayer(Building building, Integer floorOrdinal, double iconX, double iconZ, float iconScale) {
-            this(building, floorOrdinal, iconX, iconZ, iconScale, 0.0D, 0.0D);
+    record MapIconLayer(Building building, BuildingType presentationType, Integer floorOrdinal,
+                        double iconX, double iconZ, float iconScale,
+                        double screenOffsetX, double screenOffsetY) {
+        MapIconLayer(Building building, BuildingType presentationType, Integer floorOrdinal,
+                     double iconX, double iconZ, float iconScale) {
+            this(building, presentationType, floorOrdinal, iconX, iconZ, iconScale, 0.0D, 0.0D);
         }
 
         MapIconLayer withScreenOffset(double x, double y) {
-            return new MapIconLayer(building, floorOrdinal, iconX, iconZ, iconScale, x, y);
+            return new MapIconLayer(building, presentationType, floorOrdinal,
+                    iconX, iconZ, iconScale, x, y);
         }
     }
 

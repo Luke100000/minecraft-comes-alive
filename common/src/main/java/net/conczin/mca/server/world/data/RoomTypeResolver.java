@@ -46,6 +46,18 @@ public final class RoomTypeResolver {
         return resolve(room, findMainRoom(room));
     }
 
+    /**
+     * Client-facing Room presentation. Inherited Rooms share the logical Main Room's effective
+     * type for colour/icon rendering without changing their persisted direct type.
+     */
+    public BuildingType presentationType(Building room) {
+        if (room == null) return null;
+        if (village == null || !village.isRoomInheritance()) return room.getBuildingType();
+        Context context = resolve(room);
+        if (context.isMainRoom() || context.mainRoom() == null) return context.effectiveType();
+        return resolve(context.mainRoom()).effectiveType();
+    }
+
     Context resolve(Building room, Building mainRoom) {
         Map<ResourceLocation, List<BlockPos>> own = snapshot(room == null ? Map.of() : room.getBlocks());
         if (village == null || room == null || !room.isFunctionalRoom()
