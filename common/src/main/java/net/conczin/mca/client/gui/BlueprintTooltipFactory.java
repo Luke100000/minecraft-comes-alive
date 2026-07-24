@@ -24,32 +24,28 @@ final class BlueprintTooltipFactory {
     private static final int FLOOR_UPPER_COLOR = 0x6fd6a5;
 
     private final Village village;
-    private final BlueprintFloorLayout floorLayout;
     private final StructureLayout.Layout structureLayout;
     private final RoomTypeResolver roomTypeResolver;
 
     private BlueprintTooltipFactory(Village village,
-                                    BlueprintFloorLayout floorLayout,
                                     StructureLayout.Layout structureLayout,
                                     RoomTypeResolver roomTypeResolver) {
         this.village = village;
-        this.floorLayout = floorLayout;
         this.structureLayout = structureLayout;
         this.roomTypeResolver = roomTypeResolver;
     }
 
     static BlueprintTooltipFactory empty() {
         StructureLayout.Layout layout = StructureLayout.build(null);
-        return new BlueprintTooltipFactory(null, BlueprintFloorLayout.empty(), layout,
+        return new BlueprintTooltipFactory(null, layout,
                 RoomTypeResolver.create(null, layout));
     }
 
     static BlueprintTooltipFactory create(Village village,
-                                          BlueprintFloorLayout floorLayout,
                                           StructureLayout.Layout structureLayout,
                                           RoomTypeResolver roomTypeResolver) {
         return village == null ? empty()
-                : new BlueprintTooltipFactory(village, floorLayout, structureLayout, roomTypeResolver);
+                : new BlueprintTooltipFactory(village, structureLayout, roomTypeResolver);
     }
 
     List<Component> tooltip(Building hovered, Integer floorOrdinal, boolean structureHover) {
@@ -113,7 +109,7 @@ final class BlueprintTooltipFactory {
         List<Component> lines = new LinkedList<>();
         lines.add(floorLabel(floorOrdinal));
         appendAggregateRooms(lines, structureTooltipBuildings(structureBuilding).stream()
-                .filter(room -> floorLayout.isBuildingVisible(room, floorOrdinal))
+                .filter(room -> structureLayout.isBuildingOnFloor(room.getId(), floorOrdinal))
                 .toList());
         return List.copyOf(lines);
     }
@@ -122,10 +118,10 @@ final class BlueprintTooltipFactory {
         List<Building> structureRooms = structureTooltipBuildings(structureBuilding);
         List<Component> lines = new LinkedList<>();
 
-        for (int floorOrdinal : floorLayout.ordinalsFor(structureBuilding)) {
+        for (int floorOrdinal : structureLayout.ordinalsForStructure(structureBuilding.getEffectiveStructureId())) {
             lines.add(floorLabel(floorOrdinal));
             appendAggregateRooms(lines, structureRooms.stream()
-                    .filter(room -> floorLayout.isBuildingVisible(room, floorOrdinal))
+                    .filter(room -> structureLayout.isBuildingOnFloor(room.getId(), floorOrdinal))
                     .toList());
         }
         return List.copyOf(lines);

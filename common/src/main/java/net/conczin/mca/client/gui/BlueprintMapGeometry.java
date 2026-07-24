@@ -5,6 +5,7 @@ import net.conczin.mca.server.world.data.Building;
 import net.conczin.mca.server.world.data.RoomTypeResolver;
 import net.conczin.mca.server.world.data.Structure;
 import net.conczin.mca.server.world.data.StructureFloor;
+import net.conczin.mca.server.world.data.StructureLayout;
 import net.conczin.mca.server.world.data.Village;
 import net.minecraft.core.BlockPos;
 
@@ -20,26 +21,26 @@ final class BlueprintMapGeometry {
     private static final float ROOM_ICON_AREA_REFERENCE = 6.0f;
 
     private final Village village;
-    private final BlueprintFloorLayout floorLayout;
+    private final StructureLayout.Layout layout;
     private final RoomTypeResolver roomTypeResolver;
     private final Map<Integer, MapGeometry> cache = new HashMap<>();
 
     private BlueprintMapGeometry(Village village,
-                                 BlueprintFloorLayout floorLayout,
+                                 StructureLayout.Layout layout,
                                  RoomTypeResolver roomTypeResolver) {
         this.village = village;
-        this.floorLayout = floorLayout;
+        this.layout = layout;
         this.roomTypeResolver = roomTypeResolver;
     }
 
     static BlueprintMapGeometry empty() {
-        return new BlueprintMapGeometry(null, BlueprintFloorLayout.empty(), null);
+        return new BlueprintMapGeometry(null, StructureLayout.build(null), null);
     }
 
     static BlueprintMapGeometry build(Village village,
-                                      BlueprintFloorLayout floorLayout,
+                                      StructureLayout.Layout layout,
                                       RoomTypeResolver roomTypeResolver) {
-        return village == null ? empty() : new BlueprintMapGeometry(village, floorLayout, roomTypeResolver);
+        return village == null ? empty() : new BlueprintMapGeometry(village, layout, roomTypeResolver);
     }
 
     MapGeometry get(Integer selectedFloor) {
@@ -50,7 +51,8 @@ final class BlueprintMapGeometry {
             List<MapStructureLayer> structures = buildStructureLayers(selectedFloor, rooms);
             List<MapIconLayer> icons = buildIconLayers(rooms);
             List<Building> grouped = village.getExternalBuildings().filter(Building::isComplete)
-                    .filter(building -> floorLayout.isBuildingVisible(building, selectedFloor))
+                    .filter(building -> layout.ordinalForBuilding(building.getId()).isPresent()
+                            && (selectedFloor == null || layout.isBuildingOnFloor(building.getId(), selectedFloor)))
                     .sorted(Comparator.comparingInt(Building::getId)).map(Building.class::cast).toList();
             return new MapGeometry(rooms, structures, icons, grouped);
         });
@@ -61,12 +63,12 @@ final class BlueprintMapGeometry {
                 .sorted(Comparator.comparingInt(Building::getEffectiveStructureId).thenComparingInt(Building::getId))
                 .toList();
         List<Integer> floors = selectedFloor == null
-                ? BlueprintMapLayering.floorRenderOrder(floorLayout.ordinals())
+                ? BlueprintMapLayering.floorRenderOrder(layout.ordinals())
                 : List.of(selectedFloor);
         List<MapFootprintLayer> layers = new ArrayList<>();
         for (int floor : floors) {
             for (Building room : rooms) {
-                if (!floorLayout.isBuildingVisible(room, floor)) continue;
+                if (!layout.isBuildingOnFloor(room.getId(), floor)) continue;
                 Set<BlueprintMapFootprint.Cell> footprintCells = roomFootprint(room);
                 if (footprintCells.isEmpty()) continue;
 
@@ -92,14 +94,14 @@ final class BlueprintMapGeometry {
         List<MapStructureLayer> layers = new ArrayList<>();
         for (Structure structure : village.getStructures().values().stream()
                 .sorted(Comparator.comparingInt(Structure::getId)).toList()) {
-            OptionalInt rootRoomId = floorLayout.rootRoomIdForStructure(structure.getId());
+            OptionalInt rootRoomId = layout.rootRoomIdForStructure(structure.getId());
             Building rootRoom = rootRoomId.isPresent()
                     ? village.getBuilding(rootRoomId.getAsInt()).orElse(null) : null;
 
             boolean hasVisibleFloor = selectedFloor == null;
             LinkedHashSet<BlueprintMapFootprint.Cell> canonicalOutlineBaseCells = new LinkedHashSet<>();
             for (StructureFloor floor : structure.getFloors()) {
-                OptionalInt ordinal = floorLayout.ordinalForFloor(structure.getId(), floor.id());
+                OptionalInt ordinal = layout.ordinal(structure.getId(), floor.id());
                 Set<BlueprintMapFootprint.Cell> floorCells =
                         BlueprintMapFootprint.fromFloorRegions(List.of(floor.region()));
 

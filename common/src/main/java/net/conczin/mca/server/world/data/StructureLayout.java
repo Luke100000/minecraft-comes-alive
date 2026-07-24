@@ -25,7 +25,7 @@ public final class StructureLayout {
                 Structure member = members.get(i);
                 for (Iterator<Structure> iterator = remaining.iterator(); iterator.hasNext();) {
                     Structure candidate = iterator.next();
-                    if (!sameHorizontalZone(member, candidate)) continue;
+                    if (!overlapsHorizontally(member, candidate)) continue;
                     members.add(candidate);
                     iterator.remove();
                 }
@@ -201,7 +201,7 @@ public final class StructureLayout {
         return -1;
     }
 
-    private static boolean sameHorizontalZone(Structure first, Structure second) {
+    private static boolean overlapsHorizontally(Structure first, Structure second) {
         for (StructureFloor firstFloor : first.getFloors()) {
             if (firstFloor.region() == null) continue;
             for (StructureFloor secondFloor : second.getFloors()) {
@@ -254,6 +254,10 @@ public final class StructureLayout {
         public OptionalInt ordinalForBuilding(int buildingId) {
             Placement placement = placementByBuilding.get(buildingId);
             return placement == null ? OptionalInt.empty() : OptionalInt.of(placement.ordinal());
+        }
+
+        public boolean isBuildingOnFloor(int buildingId, int floorOrdinal) {
+            return ordinalForBuilding(buildingId).orElse(Integer.MIN_VALUE) == floorOrdinal;
         }
 
         public List<Integer> ordinals() {
