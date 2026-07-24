@@ -412,6 +412,7 @@ public class Village implements Iterable<Building> {
         externalBuildings.putAll(village.externalBuildings);
         structures.putAll(village.structures);
         calculateDimensions();
+        normalizeLayoutOverrides();
     }
 
     public int getStructureCount() {
@@ -429,7 +430,7 @@ public class Village implements Iterable<Building> {
         if (room.isPresent()) return new StructuralLookup(StructuralPosition.REGISTERED_ROOM, room);
         Optional<Structure> structure = getStructureAt(pos);
         return structure.map(value -> new StructuralLookup(StructuralPosition.ATTACHABLE_ROOM,
-                        getBuilding(value.getRootRoomId())))
+                        getRootRoomForStructure(value.getId())))
                 .orElseGet(() -> new StructuralLookup(StructuralPosition.OUTSIDE, Optional.empty()));
     }
 
@@ -443,7 +444,7 @@ public class Village implements Iterable<Building> {
             return new StructuralLookup(StructuralPosition.REGISTERED_ROOM, Optional.of(room));
         }
         return new StructuralLookup(StructuralPosition.ATTACHABLE_ROOM,
-                getBuilding(resolved.get().structure().getRootRoomId()));
+                getRootRoomForStructure(resolved.get().structure().getId()));
     }
 
     Optional<Structure> getInteractionStructureAt(Level level, BlockPos pos) {
@@ -460,6 +461,12 @@ public class Village implements Iterable<Building> {
                 .min(Comparator
                         .comparing((ResolvedInteraction resolved) -> resolved.position().room() == null)
                         .thenComparingInt(resolved -> resolved.structure().getId()));
+    }
+
+    private Optional<Building> getRootRoomForStructure(int structureId) {
+        StructureLayout.Layout layout = StructureLayout.build(this);
+        OptionalInt rootRoomId = layout.rootRoomIdForStructure(structureId);
+        return rootRoomId.isPresent() ? getBuilding(rootRoomId.getAsInt()) : Optional.empty();
     }
 
     public Optional<Building> getFunctionalRoomAt(Vec3i pos) {
@@ -492,19 +499,55 @@ public class Village implements Iterable<Building> {
     }
 
     public boolean isRootRoom(Building room) {
-        return room != null && getStructureFor(room).map(structure -> structure.isRootRoom(room.getId())).orElse(false);
+        if (room == null || !room.isFunctionalRoom()) return false;
+        return StructureLayout.build(this).buildingFor(room.getStructureId())
+                .map(logical -> logical.rootRoomId() == room.getId())
+                .orElse(false);
     }
 
-    public boolean setStructureGroundFloorAnchor(Building room) {
+    public boolean toggleLayoutOverride(Building room) {
         Structure structure = getStructureFor(room).orElse(null);
-        if (structure == null || (structure.isRootRoom(room.getId()) && structure.isGroundAnchorExplicit())) return false;
-        StructureLayout.build(this).buildingFor(structure.getId()).ifPresent(logical ->
-                logical.structureIds().forEach(id -> getStructure(id)
-                        .ifPresent(member -> member.setGroundAnchorExplicit(false))));
-        structure.setRootRoomId(room.getId());
-        structure.setGroundAnchorExplicit(true);
+        StructureLayout.LogicalBuilding logical = structure == null ? null
+                : StructureLayout.build(this).buildingFor(structure.getId()).orElse(null);
+        if (logical == null) return false;
+
+        Set<Integer> structureIds = Set.copyOf(logical.structureIds());
+        boolean useAutomatic = room.isLayoutOverride();
+        boolean changed = false;
+        for (Building candidate : getRooms()
+                .filter(value -> structureIds.contains(value.getStructureId()))
+                .toList()) {
+            boolean selected = !useAutomatic && candidate.getId() == room.getId();
+            if (candidate.isLayoutOverride() == selected) continue;
+            candidate.setLayoutOverride(selected);
+            changed = true;
+        }
+        if (!changed) return false;
         markDirty();
         return true;
+    }
+
+    void normalizeLayoutOverrides() {
+        StructureLayout.Layout layout = StructureLayout.build(this);
+        boolean changed = false;
+        for (Building room : getRooms().filter(Building::isLayoutOverride).toList()) {
+            if (layout.placementFor(room.getId()).isPresent()) continue;
+            room.setLayoutOverride(false);
+            changed = true;
+        }
+        for (StructureLayout.LogicalBuilding logical : layout.buildings()) {
+            Set<Integer> structureIds = Set.copyOf(logical.structureIds());
+            List<Building> overrides = getRooms()
+                    .filter(room -> structureIds.contains(room.getStructureId()))
+                    .filter(Building::isLayoutOverride)
+                    .sorted(Comparator.comparingInt(Building::getId))
+                    .toList();
+            for (int i = 1; i < overrides.size(); i++) {
+                overrides.get(i).setLayoutOverride(false);
+                changed = true;
+            }
+        }
+        if (changed) markDirty();
     }
 
     public enum StructuralPosition { OUTSIDE, REGISTERED_ROOM, ATTACHABLE_ROOM }

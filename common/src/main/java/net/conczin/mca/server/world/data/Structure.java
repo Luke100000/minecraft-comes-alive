@@ -12,8 +12,9 @@ import java.util.*;
 /** Persistent physical building geometry. Functional semantics live exclusively on Rooms. */
 public final class Structure implements VillageBuilding {
     private int id;
-    private int rootRoomId = -1;
-    private boolean groundAnchorExplicit;
+    private int automaticGroundFloorId = -1;
+    private int groundReferenceY;
+    private int groundEntranceCount;
     private int nextFloorId;
     private BlockPos source;
     private BlockPos min;
@@ -33,8 +34,10 @@ public final class Structure implements VillageBuilding {
 
     public Structure(CompoundTag tag) {
         id = tag.getInt("id");
-        rootRoomId = tag.contains("rootRoomId") ? tag.getInt("rootRoomId") : -1;
-        groundAnchorExplicit = tag.getBoolean("groundAnchorExplicit");
+        automaticGroundFloorId = tag.contains("automaticGroundFloorId")
+                ? tag.getInt("automaticGroundFloorId") : -1;
+        groundReferenceY = tag.getInt("groundReferenceY");
+        groundEntranceCount = tag.getInt("groundEntranceCount");
         nextFloorId = tag.getInt("nextFloorId");
         source = NbtHelper.decodeBlockPos(tag.get("source"));
         min = NbtHelper.decodeBlockPos(tag.get("min"));
@@ -49,8 +52,9 @@ public final class Structure implements VillageBuilding {
     public CompoundTag save() {
         CompoundTag tag = new CompoundTag();
         tag.putInt("id", id);
-        tag.putInt("rootRoomId", rootRoomId);
-        tag.putBoolean("groundAnchorExplicit", groundAnchorExplicit);
+        tag.putInt("automaticGroundFloorId", automaticGroundFloorId);
+        tag.putInt("groundReferenceY", groundReferenceY);
+        tag.putInt("groundEntranceCount", groundEntranceCount);
         tag.putInt("nextFloorId", nextFloorId);
         tag.put("source", NbtHelper.encodeBlockPos(source));
         tag.put("min", NbtHelper.encodeBlockPos(min));
@@ -142,29 +146,26 @@ public final class Structure implements VillageBuilding {
     record InteractionPosition(StructureFloor floor, Building room) {
     }
 
-    public Optional<StructureFloor> getGroundFloor(Village village) {
-        Building root = village == null ? null : village.getBuilding(rootRoomId).orElse(null);
-        return root == null ? Optional.empty() : getFloor(root.getFloorId());
+    public Optional<StructureFloor> getAutomaticGroundFloor() {
+        return getFloor(automaticGroundFloorId);
     }
 
-    public boolean isRootRoom(int roomId) {
-        return rootRoomId == roomId;
+    public int getAutomaticGroundFloorId() {
+        return automaticGroundFloorId;
     }
 
-    public int getRootRoomId() {
-        return rootRoomId;
+    public int getGroundReferenceY() {
+        return groundReferenceY;
     }
 
-    public void setRootRoomId(int rootRoomId) {
-        this.rootRoomId = rootRoomId;
+    public int getGroundEntranceCount() {
+        return groundEntranceCount;
     }
 
-    boolean isGroundAnchorExplicit() {
-        return groundAnchorExplicit;
-    }
-
-    void setGroundAnchorExplicit(boolean groundAnchorExplicit) {
-        this.groundAnchorExplicit = groundAnchorExplicit;
+    void setGroundEvidence(int floorId, int referenceY, int entranceCount) {
+        automaticGroundFloorId = floorId;
+        groundReferenceY = referenceY;
+        groundEntranceCount = Math.max(0, entranceCount);
     }
 
     int allocateFloorId() {
@@ -175,6 +176,8 @@ public final class Structure implements VillageBuilding {
         StructureFloorMatcher.Result match = StructureFloorMatcher.match(
                 getFloors(), nextFloorId, scan.floors(), rooms).orElse(null);
         if (match == null) return false;
+        Integer persistentGroundId = match.persistentIdByDetectedId().get(scan.groundFloorId());
+        if (persistentGroundId == null) return false;
 
         floors.clear();
         floors.putAll(match.floors());
@@ -182,6 +185,7 @@ public final class Structure implements VillageBuilding {
         source = scan.source();
         min = scan.min();
         max = scan.max();
+        setGroundEvidence(persistentGroundId, scan.groundReferenceY(), scan.groundEntranceCount());
         return true;
     }
 

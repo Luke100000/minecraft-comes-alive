@@ -68,10 +68,13 @@ public final class BuildingDiagnostics {
             log(traceId, "structure id={} source={} bounds={}..{} containsPos={} connectorAttaches={} logicalFloor={} physicalFloor={}",
                     inspected.getId(), inspected.getSource(), inspected.getRawPos0(), inspected.getRawPos1(),
                     contains, attaches, floor(logicalFloor), floor(physicalFloor));
-            log(traceId, "persistentFloors={}", floors(inspected.getFloors()));
+            log(traceId, "persistentFloors={} automaticGroundFloor={} groundReferenceY={} groundEntranceCount={}",
+                    floors(inspected.getFloors()), floor(inspected.getAutomaticGroundFloor().orElse(null)),
+                    inspected.getGroundReferenceY(), inspected.getGroundEntranceCount());
             layout.buildingFor(inspected.getId()).ifPresent(logical ->
-                    log(traceId, "logicalBuilding={} structures={} storeys={} mainRoom={}",
-                            logical.id(), logical.structureIds(), logical.storeys(), logical.mainRoomId()));
+                    log(traceId, "logicalBuilding={} structures={} storeys={} groundStoreyIndex={} rootMainRoom={}",
+                            logical.id(), logical.structureIds(), logical.storeys(),
+                            logical.groundStoreyIndex(), logical.rootRoomId()));
 
             if (room != null) {
                 StructureFloor roomFloor = inspected.getFloor(room.getFloorId()).orElse(null);
@@ -103,9 +106,10 @@ public final class BuildingDiagnostics {
                     .filter(candidate -> candidate.id() == scan.groundFloorId())
                     .findFirst().orElse(null);
             log(traceId, "freshStructureScan result={} scanSeed={} bounds={}..{} floors={} "
-                            + "groundFloor={} groundSeed={} playerFloor={}",
+                            + "groundFloor={} groundSeed={} groundReferenceY={} groundEntranceCount={} playerFloor={}",
                     scan.result(), scan.source(), scan.min(), scan.max(), floors(scan.floors()),
-                    floor(freshGroundFloor), scan.groundSeed(), floor(freshPlayerFloor));
+                    floor(freshGroundFloor), scan.groundSeed(), scan.groundReferenceY(),
+                    scan.groundEntranceCount(), floor(freshPlayerFloor));
             logFloorDifference(traceId, inspected.getFloors(), scan.floors(), verbose);
         }
 

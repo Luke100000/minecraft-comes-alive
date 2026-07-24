@@ -92,8 +92,9 @@ final class BlueprintMapGeometry {
         List<MapStructureLayer> layers = new ArrayList<>();
         for (Structure structure : village.getStructures().values().stream()
                 .sorted(Comparator.comparingInt(Structure::getId)).toList()) {
-            Building rootRoom = village.getBuilding(structure.getRootRoomId()).orElse(null);
-            if (rootRoom == null) continue;
+            OptionalInt rootRoomId = floorLayout.rootRoomIdForStructure(structure.getId());
+            Building rootRoom = rootRoomId.isPresent()
+                    ? village.getBuilding(rootRoomId.getAsInt()).orElse(null) : null;
 
             boolean hasVisibleFloor = selectedFloor == null;
             LinkedHashSet<BlueprintMapFootprint.Cell> canonicalOutlineBaseCells = new LinkedHashSet<>();

@@ -168,7 +168,8 @@ final class StructureScanner {
             }
         }
         return new Result(Building.validationResult.SUCCESS, seed, min, max,
-                floors, ground.id(), groundSeed);
+                floors, ground.id(), groundSeed,
+                groundChoice.referenceY(), groundChoice.entranceCount());
     }
 
     /** Resolves a query point such as a flying player or roof position to nearby enclosed interior. */
@@ -634,7 +635,8 @@ final class StructureScanner {
                     .thenComparingInt(entrance -> entrance.inside().getX())
                     .thenComparingInt(entrance -> entrance.inside().getZ()))
                     .orElseThrow();
-            return new GroundChoice(floor.anchorY(), representative.inside());
+            return new GroundChoice(floor.anchorY(), representative.inside(), terrainY,
+                    entrancesByFloor.get(floor.id()).size());
         }
 
         // No exterior connector: fall back to terrain sampled several blocks outside the scanned
@@ -643,7 +645,7 @@ final class StructureScanner {
                 .comparingInt((StructureFloor floor) -> Math.abs(floor.anchorY() - terrainY))
                 .thenComparing(Comparator.comparingInt(StructureFloor::anchorY).reversed()))
                 .orElse(floors.getFirst());
-        return new GroundChoice(terrainFloor.anchorY(), null);
+        return new GroundChoice(terrainFloor.anchorY(), null, terrainY, 0);
     }
 
     private static List<Integer> sampleTerrainPerimeter(Level world, Collection<BlockPos> interior) {
@@ -729,7 +731,10 @@ final class StructureScanner {
     private record ExteriorEntrance(BlockPos inside, BlockPos outside) {
     }
 
-    private record GroundChoice(int floorY, BlockPos entranceInterior) {
+    private record GroundChoice(int floorY,
+                                BlockPos entranceInterior,
+                                int referenceY,
+                                int entranceCount) {
     }
 
     record Result(Building.validationResult result,
@@ -738,22 +743,28 @@ final class StructureScanner {
                   BlockPos max,
                   List<StructureFloor> floors,
                   int groundFloorId,
-                  BlockPos groundSeed) {
+                  BlockPos groundSeed,
+                  int groundReferenceY,
+                  int groundEntranceCount) {
         Result {
             floors = List.copyOf(floors);
         }
 
         static Result failure(Building.validationResult result, BlockPos source) {
-            return new Result(result, source, source, source, List.of(), -1, source);
+            return new Result(result, source, source, source, List.of(), -1, source, source.getY(), 0);
         }
 
         Structure toStructure(int id) {
             List<StructureFloor> assigned = new ArrayList<>();
+            int persistentGroundId = -1;
             for (int i = 0; i < floors.size(); i++) {
                 StructureFloor floor = floors.get(i);
                 assigned.add(new StructureFloor(i, floor.anchorY(), floor.ceilingY(), floor.region()));
+                if (floor.id() == groundFloorId) persistentGroundId = i;
             }
-            return new Structure(id, source, min, max, assigned);
+            Structure structure = new Structure(id, source, min, max, assigned);
+            structure.setGroundEvidence(persistentGroundId, groundReferenceY, groundEntranceCount);
+            return structure;
         }
     }
 }

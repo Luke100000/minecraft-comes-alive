@@ -266,7 +266,9 @@ final class BlueprintMapRenderer implements AutoCloseable {
         // Resolve canonical Structure hits last. On the shell/shade, the user's intent is the whole
         // building, so replace any same-Structure Room/icon targets with one aggregate Structure target.
         for (MapStructureLayer layer : hoveredStructureLayers) {
-            addStructureHover(hoverTargets, layer.root());
+            if (layer.root() != null) {
+                addStructureHover(hoverTargets, layer.root());
+            }
         }
 
         context.disableScissor();

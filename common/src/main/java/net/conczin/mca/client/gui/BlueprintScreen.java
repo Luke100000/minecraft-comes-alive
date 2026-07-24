@@ -202,9 +202,6 @@ public class BlueprintScreen extends ExtendedScreen {
                 break;
             case "refresh":
                 Network.sendToServer(new ReportBuildingMessage(ReportBuildingMessage.Action.FULL_SCAN));
-                assert minecraft != null;
-                assert minecraft.player != null;
-                minecraft.player.displayClientMessage(Component.translatable("blueprint.refreshed"), true);
                 setPage("map");
                 break;
             case "map", "advanced": {
@@ -283,19 +280,31 @@ public class BlueprintScreen extends ExtendedScreen {
                     }));
                     by += 22;
 
-                    Building inheritanceRoom = getPlayerStructuralLookup().functionalRoom()
-                            .filter(room -> !roomTypeResolver.resolve(room).isMainRoom())
-                            .orElse(null);
+                    int roomControlX = bx - 36;
+                    int roomControlWidth = 132;
+                    Building inheritanceRoom = getPlayerStructuralLookup().functionalRoom().orElse(null);
                     if (inheritanceRoom != null) {
+                        boolean mainRoom = roomTypeResolver.resolve(inheritanceRoom).isMainRoom();
                         boolean enableInheritance = !inheritanceRoom.isInheritanceEnabled();
-                        Component inheritanceText = Component.translatable(enableInheritance
+                        String textKey = enableInheritance
                                 ? "gui.blueprint.roomInheritance.enable"
-                                : "gui.blueprint.roomInheritance.remove");
-                        Component inheritanceTooltip = Component.translatable(enableInheritance
-                                ? "gui.blueprint.roomInheritance.enable.tooltip"
-                                : "gui.blueprint.roomInheritance.remove.tooltip");
+                                : mainRoom
+                                ? "gui.blueprint.roomInheritance.disable"
+                                : "gui.blueprint.roomInheritance.remove";
+                        String tooltipKey;
+                        if (mainRoom) {
+                            tooltipKey = enableInheritance
+                                    ? "gui.blueprint.roomInheritance.enableMain.tooltip"
+                                    : "gui.blueprint.roomInheritance.disable.tooltip";
+                        } else {
+                            tooltipKey = enableInheritance
+                                    ? "gui.blueprint.roomInheritance.enable.tooltip"
+                                    : "gui.blueprint.roomInheritance.remove.tooltip";
+                        }
+                        Component inheritanceText = Component.translatable(textKey);
+                        Component inheritanceTooltip = Component.translatable(tooltipKey);
                         addRenderableWidget(new TooltipButtonWidget(
-                                bx, by, 96, 20, inheritanceText, inheritanceTooltip,
+                                roomControlX, by, roomControlWidth, 20, inheritanceText, inheritanceTooltip,
                                 b -> {
                                     inheritanceRoom.setInheritanceEnabled(enableInheritance);
                                     Network.sendToServer(new ReportBuildingMessage(
@@ -313,7 +322,7 @@ public class BlueprintScreen extends ExtendedScreen {
                     by += 22;
 
                     groundAnchorButton = addRenderableWidget(new TooltipButtonWidget(
-                            bx, by, 96, 20, "gui.blueprint.setGroundAnchor", b -> {
+                            roomControlX, by, roomControlWidth, 20, "gui.blueprint.setGroundAnchor", b -> {
                         selectPlayerFloorOnNextVillageResponse = true;
                         Network.sendToServer(new ReportBuildingMessage(ReportBuildingMessage.Action.SET_GROUND_ANCHOR));
                     }));
@@ -897,18 +906,21 @@ public class BlueprintScreen extends ExtendedScreen {
         if (groundAnchorButton == null) {
             return;
         }
-        groundAnchorButton.active = village != null
-                && structuralLookup.functionalRoom()
-                .filter(room -> !village.isStructuralGroundFloor(room))
-                .isPresent();
+        Optional<Building> room = village == null ? Optional.empty() : structuralLookup.functionalRoom();
+        groundAnchorButton.active = room.isPresent();
+        groundAnchorButton.setMessage(Component.translatable(room.filter(Building::isLayoutOverride).isPresent()
+                ? "gui.blueprint.useAutomaticLayout"
+                : "gui.blueprint.setMainGround"));
     }
 
     private record FootprintCenter(double x, double z) {
     }
 
     private Optional<Building> getStructureRoot(Building building) {
-        return village.getStructureFor(building)
-                .flatMap(structure -> village.getBuilding(structure.getRootRoomId()));
+        return structureLayout.buildingFor(building.getStructureId())
+                .map(StructureLayout.LogicalBuilding::rootRoomId)
+                .filter(id -> id >= 0)
+                .flatMap(village::getBuilding);
     }
 
     private List<Component> getBlockTooltipLines(Collection<Building> buildings, Integer selectedFloor) {
