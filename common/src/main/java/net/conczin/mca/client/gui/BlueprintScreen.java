@@ -93,6 +93,7 @@ public class BlueprintScreen extends ExtendedScreen {
     private boolean showBuildingIcons = true;
     private boolean showTerrain = true;
     private StructureLayout.Layout structureLayout = StructureLayout.build(null);
+    private RoomTypeResolver roomTypeResolver = RoomTypeResolver.create(null, structureLayout);
     private BlueprintFloorLayout floorLayout = BlueprintFloorLayout.empty();
     private BlueprintMapGeometry mapGeometry = BlueprintMapGeometry.empty();
     private final BlueprintMapRenderer mapRenderer = new BlueprintMapRenderer();
@@ -915,10 +916,10 @@ public class BlueprintScreen extends ExtendedScreen {
     }
 
     private void appendRoomTooltip(List<Component> lines, Building room, Integer floorOrdinal) {
-        RoomTypeResolver.Context resolved = RoomTypeResolver.resolve(village, structureLayout, room);
+        RoomTypeResolver.Context resolved = roomTypeResolver.resolve(room);
         lines.add(Component.literal("  ").append(getBuildingTypeTooltipLabel(resolved.effectiveType())));
         if (village.isRoomInheritance() && resolved.mainRoom() != null && resolved.mainRoom().getId() != room.getId()) {
-            BuildingType mainType = RoomTypeResolver.resolve(village, structureLayout, resolved.mainRoom()).effectiveType();
+            BuildingType mainType = roomTypeResolver.resolve(resolved.mainRoom()).effectiveType();
             lines.add(Component.literal("    ").append(Component.translatable(
                     "gui.blueprint.roomInheritance.contributesTo", getBuildingTypeTooltipLabel(mainType))));
         }
@@ -1194,6 +1195,7 @@ public class BlueprintScreen extends ExtendedScreen {
         // snapshot/texture alive here prevents ordinary Blueprint data refreshes from
         // forcing an expensive terrain re-sample and GPU upload.
         this.structureLayout = StructureLayout.build(village);
+        this.roomTypeResolver = RoomTypeResolver.create(village, structureLayout);
         this.floorLayout = village == null ? BlueprintFloorLayout.empty() : BlueprintFloorLayout.build(village, structureLayout);
         this.mapGeometry = BlueprintMapGeometry.build(village, floorLayout);
         Village.StructuralLookup structuralLookup = getPlayerStructuralLookup();

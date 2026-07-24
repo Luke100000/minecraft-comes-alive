@@ -202,9 +202,9 @@ public class Village implements Iterable<Building> {
             return getExternalBuildings().filter(building -> building.getType().equals(type)).map(Building.class::cast);
         }
         StructureLayout.Layout layout = StructureLayout.build(this);
-        List<Building> rooms = getRooms().toList();
-        return rooms.stream().filter(room -> {
-            BuildingType effective = RoomTypeResolver.resolve(this, layout, room, rooms).effectiveType();
+        RoomTypeResolver resolver = RoomTypeResolver.create(this, layout);
+        return getRooms().filter(room -> {
+            BuildingType effective = resolver.resolve(room).effectiveType();
             return effective != null && effective.name().equals(type);
         });
     }
@@ -332,30 +332,7 @@ public class Village implements Iterable<Building> {
     }
 
     List<BuildingType> getMatchingRoomTypes(Building candidate) {
-        if (candidate == null) return List.of();
-
-        List<BuildingType> matches = new ArrayList<>(candidate.getVisibleMatchingTypes());
-        matches.removeIf(type -> type.grouped() || type.name().equals("blocked") || type.name().equals("building"));
-        matches.sort(Comparator.comparingInt(BuildingType::priority).reversed().thenComparing(BuildingType::name));
-        if (matches.stream().anyMatch(type -> type.name().equals("big_house"))) {
-            matches.removeIf(type -> type.name().equals("house"));
-        }
-        return List.copyOf(matches);
-    }
-
-    private boolean roomCategoryMatches(int structureId, String typeName, Building candidate) {
-        BuildingType type = BuildingTypes.getInstance().getBuildingType(typeName);
-        Map<ResourceLocation, List<BlockPos>> combined = new HashMap<>();
-        getRooms().filter(room -> room.getStructureId() == structureId && room.getType().equals(typeName))
-                .filter(room -> candidate == null || room.getId() != candidate.getId())
-                .forEach(room -> mergeBlocks(combined, room.getBlocks()));
-        if (candidate != null) mergeBlocks(combined, candidate.getBlocks());
-        return !combined.isEmpty() && Building.matchesType(type, combined);
-    }
-
-    private static void mergeBlocks(Map<ResourceLocation, List<BlockPos>> target,
-                                    Map<ResourceLocation, List<BlockPos>> source) {
-        source.forEach((key, value) -> target.computeIfAbsent(key, ignored -> new ArrayList<>()).addAll(value));
+        return candidate == null ? List.of() : List.copyOf(candidate.getVisibleMatchingTypes());
     }
 
     public void tick(ServerLevel world, long time) {

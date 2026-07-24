@@ -4,25 +4,25 @@ import net.conczin.mca.server.world.data.*;
 
 import java.util.*;
 
-/** Maps persistent Structure Floor IDs to Blueprint-local display ordinals. */
+/** Maps registered Rooms onto logical floor ordinals derived by {@link StructureLayout}. */
 final class BlueprintFloorLayout {
+    private final StructureLayout.Layout structureLayout;
     private final Map<Integer, Integer> ordinalByBuildingId;
-    private final Map<Long, Integer> ordinalByFloorId;
     private final Map<Integer, List<Integer>> ordinalsByStructureId;
     private final List<Integer> ordinals;
 
-    private BlueprintFloorLayout(Map<Integer, Integer> ordinalByBuildingId,
-                                 Map<Long, Integer> ordinalByFloorId,
+    private BlueprintFloorLayout(StructureLayout.Layout structureLayout,
+                                 Map<Integer, Integer> ordinalByBuildingId,
                                  Map<Integer, List<Integer>> ordinalsByStructureId,
                                  List<Integer> ordinals) {
+        this.structureLayout = structureLayout;
         this.ordinalByBuildingId = ordinalByBuildingId;
-        this.ordinalByFloorId = ordinalByFloorId;
         this.ordinalsByStructureId = ordinalsByStructureId;
         this.ordinals = ordinals;
     }
 
     static BlueprintFloorLayout empty() {
-        return new BlueprintFloorLayout(Map.of(), Map.of(), Map.of(), List.of());
+        return new BlueprintFloorLayout(StructureLayout.build(null), Map.of(), Map.of(), List.of());
     }
 
     static BlueprintFloorLayout build(Village village) {
@@ -31,16 +31,9 @@ final class BlueprintFloorLayout {
 
     static BlueprintFloorLayout build(Village village, StructureLayout.Layout layout) {
         Map<Integer, Integer> byBuilding = new HashMap<>();
-        Map<Long, Integer> byFloor = new HashMap<>();
         Map<Integer, List<Integer>> byStructure = new HashMap<>();
         TreeSet<Integer> available = new TreeSet<>();
 
-        for (Structure structure : village.getStructures().values()) {
-            for (StructureFloor floor : structure.getFloors()) {
-                layout.ordinal(structure.getId(), floor.id()).ifPresent(ordinal ->
-                        byFloor.put(floorKey(structure.getId(), floor.id()), ordinal));
-            }
-        }
         for (StructureLayout.LogicalBuilding building : layout.buildings()) {
             TreeSet<Integer> registered = new TreeSet<>();
             registered.add(0);
@@ -53,12 +46,8 @@ final class BlueprintFloorLayout {
             building.structureIds().forEach(id -> byStructure.put(id, ordinals));
             available.addAll(registered);
         }
-        return new BlueprintFloorLayout(Map.copyOf(byBuilding), Map.copyOf(byFloor),
+        return new BlueprintFloorLayout(layout, Map.copyOf(byBuilding),
                 Map.copyOf(byStructure), List.copyOf(available));
-    }
-
-    private static long floorKey(int structureId, int floorId) {
-        return ((long) structureId << 32) ^ (floorId & 0xffffffffL);
     }
 
     List<Integer> ordinals() { return ordinals; }
@@ -68,8 +57,7 @@ final class BlueprintFloorLayout {
     }
 
     OptionalInt ordinalForFloor(int structureId, int floorId) {
-        Integer ordinal = ordinalByFloorId.get(floorKey(structureId, floorId));
-        return ordinal == null ? OptionalInt.empty() : OptionalInt.of(ordinal);
+        return structureLayout.ordinal(structureId, floorId);
     }
 
     boolean isBuildingOnFloor(Building building, int floorOrdinal) {
