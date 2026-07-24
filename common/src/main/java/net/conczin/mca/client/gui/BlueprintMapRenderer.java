@@ -200,7 +200,7 @@ final class BlueprintMapRenderer implements AutoCloseable {
             renderRoomFootprint(
                     context,
                     layer.fillSpans(),
-                    layer.building().getBuildingType().getColor(),
+                    layer.presentationType().getColor(),
                     selectedFloor != null,
                     hovering,
                     viewport
@@ -208,7 +208,7 @@ final class BlueprintMapRenderer implements AutoCloseable {
             renderRoomOutlineScreenSpace(
                     context,
                     layer.outlineEdges(),
-                    layer.building().getBuildingType().getColor(),
+                    layer.presentationType().getColor(),
                     selectedFloor != null,
                     hovering,
                     viewport
@@ -240,7 +240,7 @@ final class BlueprintMapRenderer implements AutoCloseable {
                 );
             }
             for (MapIconLayer iconLayer : footprintIconLayers) {
-                BuildingType buildingType = iconLayer.building().getBuildingType();
+                BuildingType buildingType = iconLayer.presentationType();
                 float iconScale = iconLayer.iconScale();
                 drawScaledBuildingIcon(
                         context,
