@@ -66,7 +66,7 @@ public final class RoomTypeResolver {
     }
 
     Context resolve(Building room, Building mainRoom) {
-        Map<ResourceLocation, List<BlockPos>> own = snapshot(room == null ? Map.of() : room.getBlocks());
+        Map<ResourceLocation, List<BlockPos>> own = room == null ? Map.of() : room.getBlocks();
         if (village == null || room == null || !room.isFunctionalRoom()
                 || mainRoom == null || !sameRoom(mainRoom, room) || !mainRoom.isInheritanceEnabled()) {
             return new Context(room, mainRoom == null ? room : mainRoom, own, Map.of(), own, List.of());
@@ -87,11 +87,11 @@ public final class RoomTypeResolver {
 
         Map<ResourceLocation, LinkedHashSet<BlockPos>> inherited = new TreeMap<>(Comparator.comparing(ResourceLocation::toString));
         contributors.forEach(contributor -> merge(inherited, contributor.getBlocks()));
-        Map<ResourceLocation, List<BlockPos>> inheritedPoi = freeze(inherited);
+        Map<ResourceLocation, List<BlockPos>> inheritedPoi = toLists(inherited);
 
         Map<ResourceLocation, LinkedHashSet<BlockPos>> effective = mutable(own);
         merge(effective, inheritedPoi);
-        return new Context(room, mainRoom, own, inheritedPoi, freeze(effective), contributors);
+        return new Context(room, mainRoom, own, inheritedPoi, toLists(effective), contributors);
     }
 
     private static boolean sameRoom(Building first, Building second) {
@@ -126,10 +126,10 @@ public final class RoomTypeResolver {
         source.forEach((key, positions) -> target.computeIfAbsent(key, ignored -> new LinkedHashSet<>()).addAll(positions));
     }
 
-    private static Map<ResourceLocation, List<BlockPos>> freeze(Map<ResourceLocation, LinkedHashSet<BlockPos>> source) {
+    private static Map<ResourceLocation, List<BlockPos>> toLists(Map<ResourceLocation, LinkedHashSet<BlockPos>> source) {
         Map<ResourceLocation, List<BlockPos>> result = new TreeMap<>(Comparator.comparing(ResourceLocation::toString));
         source.forEach((key, positions) -> result.put(key, List.copyOf(positions)));
-        return Collections.unmodifiableMap(result);
+        return result;
     }
 
     public record Context(Building room,
@@ -139,9 +139,10 @@ public final class RoomTypeResolver {
                           Map<ResourceLocation, List<BlockPos>> effectivePoi,
                           List<Building> contributors) {
         public Context {
+            boolean effectiveIsOwn = effectivePoi == ownPoi;
             ownPoi = snapshot(ownPoi);
             inheritedPoi = snapshot(inheritedPoi);
-            effectivePoi = snapshot(effectivePoi);
+            effectivePoi = effectiveIsOwn ? ownPoi : snapshot(effectivePoi);
             contributors = List.copyOf(contributors);
         }
 

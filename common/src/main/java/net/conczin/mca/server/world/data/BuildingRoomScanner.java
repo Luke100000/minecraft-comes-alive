@@ -18,13 +18,6 @@ final class BuildingRoomScanner {
     }
 
     static Result scan(Level world, BlockPos source, Set<BlockPos> blocked,
-                       int maxSize, int maxRadius, Structure structure) {
-        StructureFloor floor = structure == null ? null : structure.floorAtHeight(source.getY()).orElse(null);
-        return floor == null ? Result.failure(Status.TOO_SMALL, source)
-                : scan(world, source, blocked, maxSize, maxRadius, floor);
-    }
-
-    static Result scan(Level world, BlockPos source, Set<BlockPos> blocked,
                        int maxSize, int maxRadius, StructureFloor floor) {
         if (floor == null || floor.region() == null) {
             return Result.failure(Status.TOO_SMALL, source);
@@ -65,7 +58,8 @@ final class BuildingRoomScanner {
     private static Result materializeComponent(Level world, BlockPos source, Set<BlockPos> blocked,
                                                int maxSize, int maxRadius, StructureFloor floor,
                                                PartitionData partition, BuildingFloorRegion.Component component) {
-        LinkedHashSet<BlockPos> footprint = new LinkedHashSet<>(component.cells(floor.anchorY()));
+        Set<BlockPos> componentCells = component.cells(floor.anchorY());
+        LinkedHashSet<BlockPos> footprint = new LinkedHashSet<>(componentCells);
         for (BlockPos connectorCell : partition.floorConnectors().keySet()) {
             List<BuildingFloorRegion.Component> adjacent = adjacentComponents(connectorCell, partition.components());
             if (component.equals(connectorOwner(adjacent))) footprint.add(connectorCell);
@@ -80,7 +74,7 @@ final class BuildingRoomScanner {
         if (footprint.stream().anyMatch(blockedCells::contains)) return Result.failure(Status.OVERLAP, source);
         if (footprint.size() < MIN_INTERIOR_AREA) return Result.failure(Status.TOO_SMALL, source);
 
-        BlockPos seed = nearestCell(source, component.cells(floor.anchorY()));
+        BlockPos seed = nearestCell(source, componentCells);
         Set<BlockPos> poi = collectPoiCells(world, footprint, floor.anchorY(), floor.ceilingY());
         int minX = footprint.stream().mapToInt(BlockPos::getX).min().orElse(source.getX());
         int minZ = footprint.stream().mapToInt(BlockPos::getZ).min().orElse(source.getZ());

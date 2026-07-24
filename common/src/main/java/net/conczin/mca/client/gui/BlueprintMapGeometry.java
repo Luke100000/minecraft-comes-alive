@@ -49,7 +49,7 @@ final class BlueprintMapGeometry {
         return cache.computeIfAbsent(key, ignored -> {
             List<MapFootprintLayer> rooms = buildRoomLayers(selectedFloor);
             List<MapStructureLayer> structures = buildStructureLayers(selectedFloor, rooms);
-            List<MapIconLayer> icons = buildIconLayers(rooms);
+            List<MapIconLayer> icons = buildIconLayers(rooms, selectedFloor);
             List<Building> grouped = village.getExternalBuildings().filter(Building::isComplete)
                     .filter(building -> layout.ordinalForBuilding(building.getId()).isPresent()
                             && (selectedFloor == null || layout.isBuildingOnFloor(building.getId(), selectedFloor)))
@@ -170,9 +170,12 @@ final class BlueprintMapGeometry {
         return new StructureShape(Set.copyOf(outlineCells), shadeCells);
     }
 
-    private static List<MapIconLayer> buildIconLayers(List<MapFootprintLayer> roomLayers) {
+    private List<MapIconLayer> buildIconLayers(List<MapFootprintLayer> roomLayers, Integer selectedFloor) {
         TreeMap<Integer, List<MapFootprintLayer>> byRoom = new TreeMap<>();
         for (MapFootprintLayer layer : roomLayers) {
+            boolean contributesToMain = roomTypeResolver != null
+                    && roomTypeResolver.resolve(layer.building()).contributesToMain();
+            if (!shouldShowRoomIcon(selectedFloor, contributesToMain)) continue;
             if (!layer.footprintCells().isEmpty()
                     && layer.presentationType().visible()
                     && layer.presentationType().hasIcon()) {
@@ -189,6 +192,10 @@ final class BlueprintMapGeometry {
                     layers.getFirst().floorOrdinal(), center.x(), center.z(), iconScale(cells)));
         }
         return offsetOverlappingIcons(icons);
+    }
+
+    static boolean shouldShowRoomIcon(Integer selectedFloor, boolean contributesToMain) {
+        return selectedFloor != null || !contributesToMain;
     }
 
     private static List<MapIconLayer> offsetOverlappingIcons(List<MapIconLayer> icons) {

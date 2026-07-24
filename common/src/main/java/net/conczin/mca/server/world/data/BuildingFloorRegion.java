@@ -127,7 +127,9 @@ public record BuildingFloorRegion(int anchorY, int area, List<Component> compone
         public Component {
             spans = spans == null || spans.isEmpty()
                     ? rectangleSpans(minX, minZ, maxX, maxZ)
-                    : List.copyOf(spans);
+                    : spans.stream()
+                            .sorted(Comparator.comparingInt(Span::z).thenComparingInt(Span::minX))
+                            .toList();
         }
 
         private static Component load(CompoundTag tag) {
@@ -161,22 +163,42 @@ public record BuildingFloorRegion(int anchorY, int area, List<Component> compone
 
         private int intersectionArea(Component other) {
             int intersection = 0;
-            int minSharedZ = Math.max(minZ, other.minZ);
-            int maxSharedZ = Math.min(maxZ, other.maxZ);
-            for (int z = minSharedZ; z <= maxSharedZ; z++) {
-                for (Span own : spansAt(z)) {
-                    for (Span candidate : other.spansAt(z)) {
+            int ownIndex = 0;
+            int otherIndex = 0;
+            while (ownIndex < spans.size() && otherIndex < other.spans.size()) {
+                int ownZ = spans.get(ownIndex).z();
+                int otherZ = other.spans.get(otherIndex).z();
+                if (ownZ < otherZ) {
+                    ownIndex = rowEnd(spans, ownIndex);
+                    continue;
+                }
+                if (otherZ < ownZ) {
+                    otherIndex = rowEnd(other.spans, otherIndex);
+                    continue;
+                }
+
+                int ownEnd = rowEnd(spans, ownIndex);
+                int otherEnd = rowEnd(other.spans, otherIndex);
+                for (int i = ownIndex; i < ownEnd; i++) {
+                    Span own = spans.get(i);
+                    for (int j = otherIndex; j < otherEnd; j++) {
+                        Span candidate = other.spans.get(j);
                         int minSharedX = Math.max(own.minX(), candidate.minX());
                         int maxSharedX = Math.min(own.maxX(), candidate.maxX());
                         if (minSharedX <= maxSharedX) intersection += maxSharedX - minSharedX + 1;
                     }
                 }
+                ownIndex = ownEnd;
+                otherIndex = otherEnd;
             }
             return intersection;
         }
 
-        private List<Span> spansAt(int z) {
-            return z < minZ || z > maxZ ? List.of() : spans.stream().filter(span -> span.z() == z).toList();
+        private static int rowEnd(List<Span> spans, int start) {
+            int end = start + 1;
+            int z = spans.get(start).z();
+            while (end < spans.size() && spans.get(end).z() == z) end++;
+            return end;
         }
 
         private static List<Span> rectangleSpans(int minX, int minZ, int maxX, int maxZ) {

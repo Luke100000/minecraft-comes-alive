@@ -92,6 +92,8 @@ public class BlueprintScreen extends ExtendedScreen {
     private boolean showBuildingIcons = true;
     private boolean showTerrain = true;
     private StructureLayout.Layout structureLayout = StructureLayout.build(null);
+    private List<Integer> floorOrdinals = List.of();
+    private int structureCount;
     private RoomTypeResolver roomTypeResolver = RoomTypeResolver.create(null, structureLayout);
     private BlueprintTooltipFactory tooltipFactory = BlueprintTooltipFactory.empty();
     private BlueprintMapGeometry mapGeometry = BlueprintMapGeometry.empty();
@@ -556,7 +558,7 @@ public class BlueprintScreen extends ExtendedScreen {
 
         context.drawString(font, Component.translatable("gui.blueprint.currentRank", rankStr), x, y, rankColor);
         context.drawString(font, Component.translatable("gui.blueprint.reputation", String.valueOf(reputation)), x, y + 11, rank.ordinal() == 0 ? 0xffff0000 : 0xffffffff);
-        context.drawString(font, Component.translatable("gui.blueprint.buildings", village.getStructureCount()), x, y + 22, 0xffffffff);
+        context.drawString(font, Component.translatable("gui.blueprint.buildings", structureCount), x, y + 22, 0xffffffff);
         context.drawString(font, Component.translatable("gui.blueprint.population", village.getPopulation(), village.getMaxPopulation()), x, y + 33, 0xffffffff);
     }
 
@@ -565,8 +567,8 @@ public class BlueprintScreen extends ExtendedScreen {
         int centerY = height / 2 + 8;
         Integer selectedFloor = selectedFloorOrdinal;
 
-        if (!village.isAutoScan() && village.getStructureCount() <= 1) {
-            int hintY = structureLayout.ordinals().size() > 1 ? height / 2 + 134 : height / 2 + 90;
+        if (!village.isAutoScan() && structureCount <= 1) {
+            int hintY = floorOrdinals.size() > 1 ? height / 2 + 134 : height / 2 + 90;
             context.drawCenteredString(font, Component.translatable("gui.blueprint.autoScanDisabled"),
                     width / 2, hintY, 0xaaffffff);
         }
@@ -669,7 +671,6 @@ public class BlueprintScreen extends ExtendedScreen {
                 int usablePixels = (MAP_HALF_SIZE - MAP_INNER_MARGIN) * 2;
                 yield Math.min((float) usablePixels / Math.max(1, horizontalSpan), MAP_MAX_FIT_SCALE);
             }
-            case QUARTER_TO_ONE -> 0.25F;
             case HALF_TO_ONE -> 0.5F;
             case ONE_TO_ONE -> 1.0F;
             case TWO_TO_ONE -> 2.0F;
@@ -703,7 +704,6 @@ public class BlueprintScreen extends ExtendedScreen {
 
     private enum MapScaleMode {
         FIT("Fit", "gui.blueprint.mapScale.fit.tooltip"),
-        QUARTER_TO_ONE("0.25:1", null),
         HALF_TO_ONE("0.5:1", null),
         ONE_TO_ONE("1:1", "gui.blueprint.mapScale.oneToOne.tooltip"),
         TWO_TO_ONE("2:1", "gui.blueprint.mapScale.twoToOne.tooltip"),
@@ -733,7 +733,7 @@ public class BlueprintScreen extends ExtendedScreen {
     }
 
     private void changeSelectedFloor(int direction) {
-        List<Integer> ordinals = structureLayout.ordinals();
+        List<Integer> ordinals = floorOrdinals;
         List<Integer> floors = getFloorNavigationOrder(ordinals);
         if (ordinals.size() <= 1) {
             updateFloorControls();
@@ -762,7 +762,7 @@ public class BlueprintScreen extends ExtendedScreen {
     }
 
     private void updateFloorControls() {
-        List<Integer> ordinals = structureLayout.ordinals();
+        List<Integer> ordinals = floorOrdinals;
         reconcileSelectedFloor(ordinals);
         if (floorPreviousButton == null || floorLabelButton == null || floorNextButton == null) {
             return;
@@ -1090,6 +1090,9 @@ public class BlueprintScreen extends ExtendedScreen {
         // snapshot/texture alive here prevents ordinary Blueprint data refreshes from
         // forcing an expensive terrain re-sample and GPU upload.
         this.structureLayout = StructureLayout.build(village);
+        this.floorOrdinals = structureLayout.ordinals();
+        this.structureCount = village == null ? 0 : structureLayout.buildings().size()
+                + (int) village.getExternalBuildings().filter(Building::isComplete).count();
         this.roomTypeResolver = RoomTypeResolver.create(village, structureLayout);
         this.tooltipFactory = BlueprintTooltipFactory.create(village, structureLayout, roomTypeResolver);
         this.mapGeometry = BlueprintMapGeometry.build(village, structureLayout, roomTypeResolver);
