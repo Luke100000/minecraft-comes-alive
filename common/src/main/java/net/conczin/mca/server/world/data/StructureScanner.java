@@ -52,16 +52,17 @@ final class StructureScanner {
             }
 
             BlockState currentState = world.getBlockState(current);
-            InteriorCellType currentType = classifyInteriorCell(world, current, currentState, roof);
-            boolean connector = currentType == InteriorCellType.CONNECTOR;
-            boolean walkable = currentType == InteriorCellType.WALKABLE;
+            boolean connector = StructureConnector.isConnector(currentState);
+            boolean walkable = !connector && isWalkableAnchor(world, current, currentState, roof);
+            boolean floorObstacle = !connector && !walkable
+                    && isFloorOccupyingObstacle(world, current, currentState, roof);
             if (connector) {
                 volume.add(current);
                 connectorCells.add(current);
             } else if (walkable) {
                 recordFloorCell(world, floorCells, current);
                 addVerticalInteriorColumn(world, current, volume, roof, maxSize);
-            } else if (currentType == InteriorCellType.FLOOR_OBSTACLE) {
+            } else if (floorObstacle) {
                 // Furniture is part of the Floor footprint, even when several occupied cells are
                 // adjacent. Traverse the obstacle chain horizontally without promoting its top
                 // surface into a separate Floor.
@@ -81,8 +82,8 @@ final class StructureScanner {
                     horizontalEntrances.add(next);
                 }
 
-                InteriorCellType nextType = classifyInteriorCell(world, next, nextState, roof);
-                boolean nextFloorObstacle = !connector && nextType == InteriorCellType.FLOOR_OBSTACLE;
+                boolean nextFloorObstacle = !connector
+                        && isFloorOccupyingObstacle(world, next, nextState, roof);
                 if (nextFloorObstacle) {
                     recordFloorCell(world, floorCells, next);
                     addObstacleInteriorColumn(world, next, volume, roof, maxSize);
@@ -93,8 +94,8 @@ final class StructureScanner {
                     continue;
                 }
 
-                if (nextType == InteriorCellType.CONNECTOR
-                        || nextType == InteriorCellType.WALKABLE
+                if (StructureConnector.isConnector(nextState)
+                        || isWalkableAnchor(world, next, nextState, roof)
                         || nextFloorObstacle) {
                     enqueueTraversal(seed, next, visited, queue, maxRadius);
                 }
@@ -195,19 +196,6 @@ final class StructureScanner {
         return Optional.empty();
     }
 
-    private static InteriorCellType classifyInteriorCell(Level world,
-                                                         BlockPos pos,
-                                                         BlockState state,
-                                                         Map<BlockPos, Boolean> roof) {
-        if (StructureConnector.isConnector(state)) return InteriorCellType.CONNECTOR;
-        if (walkableAnchorDecision(world, pos, state, roof) == WalkableAnchorDecision.ACCEPTED) {
-            return InteriorCellType.WALKABLE;
-        }
-        return isFloorOccupyingObstacle(world, pos, state, roof)
-                ? InteriorCellType.FLOOR_OBSTACLE
-                : InteriorCellType.BLOCKED;
-    }
-
     private static boolean isWalkableAnchor(Level world,
                                             BlockPos pos,
                                             BlockState state,
@@ -236,10 +224,6 @@ final class StructureScanner {
     /** Explains the exact walkable-anchor predicate used by connector handoffs without changing traversal. */
     static String explainWalkableAnchor(Level world, BlockPos pos) {
         return walkableAnchorDecision(world, pos).name();
-    }
-
-    private enum InteriorCellType {
-        CONNECTOR, WALKABLE, FLOOR_OBSTACLE, BLOCKED
     }
 
     enum WalkableAnchorDecision {
