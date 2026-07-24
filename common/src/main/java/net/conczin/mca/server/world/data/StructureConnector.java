@@ -114,13 +114,6 @@ final class StructureConnector {
         return result;
     }
 
-    static boolean connectsDifferentFloor(Level world, Structure structure, StructureFloor floor, BlockPos connector) {
-        if (!isVertical(world.getBlockState(connector))) return false;
-        return structure.getFloors().stream()
-                .filter(candidate -> candidate.id() != floor.id())
-                .anyMatch(candidate -> candidate.contains(connector.getX(), connector.getZ()));
-    }
-
     static boolean isPassageCell(Level world, BlockPos pos) {
         BlockState state = world.getBlockState(pos);
         if (state.getBlock() instanceof DoorBlock || state.getBlock() instanceof FenceGateBlock
