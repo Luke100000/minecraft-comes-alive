@@ -1,5 +1,10 @@
+# 7.7.27
+> This is a release of 7.7.27 unrelated to the 7.7.23-ALPHA version.
+
+* Villagers can now recognise ladder nodes and climb and descend them, even when they're following you!
+  * Previously was only in the alpha version.
+
 # 7.7.26
-> This is a release of 7.7.26 unrelated to the 7.7.23-ALPHA version.
 
 * Minor changes to gifts
 
