@@ -1231,5 +1231,12 @@
   "gui.blueprint.roomInheritance.tooltip": "The logical Main Room derives effective POIs from Rooms in the same logical building. Room POIs and direct types remain local.",
   "gui.blueprint.roomInheritance.contributesTo": "Contributes to: %s",
   "gui.blueprint.roomInheritance.inheritedPoi": "Inherited POIs",
-  "gui.blueprint.roomInheritance.from": "From %s #%s"
+  "gui.blueprint.roomInheritance.from": "From %s #%s",
+  "gui.blueprint.useAutomaticLayout": "Use Automatic Layout",
+  "gui.blueprint.setMainGround": "Set Main & Ground",
+  "blueprint.groundAnchorAutomatic": "Building layout returned to automatic mode.",
+  "gui.blueprint.roomInheritance.disable": "Disable Inheritance",
+  "gui.blueprint.roomInheritance.disable.tooltip": "Disables shared Room inheritance for this entire logical building. Member Room settings are preserved.",
+  "gui.blueprint.roomInheritance.enableMain.tooltip": "Allows enabled Rooms in this logical building to contribute POIs and visually inherit from this Main Room."
+
 }

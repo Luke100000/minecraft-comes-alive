@@ -7,12 +7,13 @@ import net.minecraft.resources.ResourceLocation;
 
 import java.util.*;
 
-/** Single derived view for Room-local and logical-Main inherited POIs/type matching. */
+/** Single derived view for Room-local and logical Root/Main inherited POIs/type matching. */
 public final class RoomTypeResolver {
     private final Village village;
     private final StructureLayout.Layout layout;
     private final Map<Integer, Building> roomsById;
     private final Map<Integer, List<Building>> roomsByStructure;
+    private final Map<Integer, Context> contextByRoomId = new HashMap<>();
 
     private RoomTypeResolver(Village village,
                              StructureLayout.Layout layout,
@@ -43,11 +44,15 @@ public final class RoomTypeResolver {
     }
 
     public Context resolve(Building room) {
-        return resolve(room, findMainRoom(room));
+        if (room == null || room.getId() < 0 || roomsById.get(room.getId()) != room) {
+            return resolve(room, findRootRoom(room));
+        }
+        return contextByRoomId.computeIfAbsent(room.getId(), ignored ->
+                resolve(room, findRootRoom(room)));
     }
 
     /**
-     * Client-facing Room presentation. Inherited Rooms share the logical Main Room's effective
+     * Client-facing Room presentation. Inherited Rooms share the logical Root/Main Room's effective
      * type for colour/icon rendering without changing their persisted direct type.
      */
     public BuildingType presentationType(Building room) {
@@ -63,7 +68,7 @@ public final class RoomTypeResolver {
     Context resolve(Building room, Building mainRoom) {
         Map<ResourceLocation, List<BlockPos>> own = snapshot(room == null ? Map.of() : room.getBlocks());
         if (village == null || room == null || !room.isFunctionalRoom()
-                || mainRoom == null || !sameRoom(mainRoom, room)) {
+                || mainRoom == null || !sameRoom(mainRoom, room) || !mainRoom.isInheritanceEnabled()) {
             return new Context(room, mainRoom == null ? room : mainRoom, own, Map.of(), own, List.of());
         }
 
@@ -94,14 +99,14 @@ public final class RoomTypeResolver {
                 && first.getId() >= 0 && first.getId() == second.getId();
     }
 
-    private Building findMainRoom(Building room) {
+    private Building findRootRoom(Building room) {
         if (village == null || room == null) return room;
-        int mainRoomId = layout.buildingFor(room.getStructureId())
-                .map(StructureLayout.LogicalBuilding::mainRoomId).orElse(room.getId());
-        if (room.getId() == mainRoomId) return room;
-        Building snapshotRoom = roomsById.get(mainRoomId);
+        int rootRoomId = layout.buildingFor(room.getStructureId())
+                .map(StructureLayout.LogicalBuilding::rootRoomId).orElse(room.getId());
+        if (room.getId() == rootRoomId) return room;
+        Building snapshotRoom = roomsById.get(rootRoomId);
         if (snapshotRoom != null) return snapshotRoom;
-        return village.getBuilding(mainRoomId).filter(Building::isFunctionalRoom).orElse(room);
+        return village.getBuilding(rootRoomId).filter(Building::isFunctionalRoom).orElse(room);
     }
 
     private static Map<ResourceLocation, List<BlockPos>> snapshot(Map<ResourceLocation, List<BlockPos>> source) {
@@ -146,7 +151,7 @@ public final class RoomTypeResolver {
 
         public boolean contributesToMain() {
             return room != null && room.isFunctionalRoom() && room.isInheritanceEnabled()
-                    && mainRoom != null && !isMainRoom();
+                    && mainRoom != null && mainRoom.isInheritanceEnabled() && !isMainRoom();
         }
 
         public Map<ResourceLocation, List<BlockPos>> classificationPoi() {

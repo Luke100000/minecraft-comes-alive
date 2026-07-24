@@ -45,7 +45,19 @@ final class RoomDFU {
             external.put(building.getId(), building);
         }
         for (Tag value : villageTag.getList("structures", Tag.TAG_COMPOUND)) {
-            Structure structure = new Structure((CompoundTag) value);
+            CompoundTag tag = (CompoundTag) value;
+            Structure structure = new Structure(tag);
+            if (!tag.contains("automaticGroundFloorId")) {
+                Building oldRoot = tag.contains("rootRoomId") ? rooms.get(tag.getInt("rootRoomId")) : null;
+                StructureFloor ground = oldRoot == null ? null : structure.getFloor(oldRoot.getFloorId()).orElse(null);
+                if (ground == null) ground = structure.getFloors().stream().findFirst().orElse(null);
+                if (ground != null) {
+                    structure.setGroundEvidence(ground.id(), ground.anchorY(), 0);
+                    if (oldRoot != null && tag.getBoolean("groundAnchorExplicit")) {
+                        oldRoot.setLayoutOverride(true);
+                    }
+                }
+            }
             structures.put(structure.getId(), structure);
         }
         return new Result(rooms, external, structures);
@@ -111,7 +123,7 @@ final class RoomDFU {
 
     /**
      * Migrates only deterministic persisted geometry. Development Structures that require invented
-     * Floors or a manufactured Root Room are discarded individually and can be rescanned in-game.
+     * Floors are discarded individually and can be rescanned in-game.
      */
     private static Optional<MigratedStructure> migrateFloorSystemStructure(
             int structureId,
@@ -153,21 +165,13 @@ final class RoomDFU {
             room.setFloorId(floor.id());
             rooms.add(room);
         }
-        Building root = rooms.stream()
-                .filter(room -> room.getFloorId() == ground.id())
-                .min(Comparator.comparingInt(Building::getId))
-                .orElse(null);
-        if (root == null) {
-            return Optional.empty();
-        }
-
         Structure structure = new Structure(
                 structureId,
                 container.room().getSourceBlock(),
                 min,
                 max,
                 floors);
-        structure.setRootRoomId(root.getId());
+        structure.setGroundEvidence(ground.id(), container.groundFloorY(), 0);
         return Optional.of(new MigratedStructure(structure, List.copyOf(rooms)));
     }
 
@@ -181,7 +185,7 @@ final class RoomDFU {
                 Math.max(region.anchorY() + 1, room.getRawPos1().getY() + 1), region);
         Structure structure = new Structure(room.getId(), room.getSourceBlock(), room.getRawPos0(), room.getRawPos1(),
                 List.of(floor));
-        structure.setRootRoomId(room.getId());
+        structure.setGroundEvidence(floor.id(), floor.anchorY(), 0);
         room.setStructureId(structure.getId());
         room.setFloorId(floor.id());
         return Optional.of(structure);

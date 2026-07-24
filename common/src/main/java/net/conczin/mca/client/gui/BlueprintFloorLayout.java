@@ -1,81 +1,61 @@
 package net.conczin.mca.client.gui;
 
-import net.conczin.mca.server.world.data.*;
+import net.conczin.mca.server.world.data.Building;
+import net.conczin.mca.server.world.data.StructureLayout;
+import net.conczin.mca.server.world.data.Village;
 
-import java.util.*;
+import java.util.List;
+import java.util.OptionalInt;
 
-/** Maps registered Rooms onto logical floor ordinals derived by {@link StructureLayout}. */
+/** Blueprint-facing names for the canonical floor placement held by {@link StructureLayout}. */
 final class BlueprintFloorLayout {
-    private final StructureLayout.Layout structureLayout;
-    private final Map<Integer, Integer> ordinalByBuildingId;
-    private final Map<Integer, List<Integer>> ordinalsByStructureId;
-    private final List<Integer> ordinals;
+    private final StructureLayout.Layout layout;
 
-    private BlueprintFloorLayout(StructureLayout.Layout structureLayout,
-                                 Map<Integer, Integer> ordinalByBuildingId,
-                                 Map<Integer, List<Integer>> ordinalsByStructureId,
-                                 List<Integer> ordinals) {
-        this.structureLayout = structureLayout;
-        this.ordinalByBuildingId = ordinalByBuildingId;
-        this.ordinalsByStructureId = ordinalsByStructureId;
-        this.ordinals = ordinals;
+    private BlueprintFloorLayout(StructureLayout.Layout layout) {
+        this.layout = layout;
     }
 
     static BlueprintFloorLayout empty() {
-        return new BlueprintFloorLayout(StructureLayout.build(null), Map.of(), Map.of(), List.of());
+        return new BlueprintFloorLayout(StructureLayout.build(null));
     }
 
     static BlueprintFloorLayout build(Village village) {
-        return village == null ? empty() : build(village, StructureLayout.build(village));
+        return new BlueprintFloorLayout(StructureLayout.build(village));
     }
 
     static BlueprintFloorLayout build(Village village, StructureLayout.Layout layout) {
-        Map<Integer, Integer> byBuilding = new HashMap<>();
-        Map<Integer, List<Integer>> byStructure = new HashMap<>();
-        TreeSet<Integer> available = new TreeSet<>();
-
-        for (StructureLayout.LogicalBuilding building : layout.buildings()) {
-            Set<Integer> structureIds = Set.copyOf(building.structureIds());
-            TreeSet<Integer> registered = new TreeSet<>();
-            registered.add(0);
-            village.getRooms().filter(room -> structureIds.contains(room.getStructureId())).forEach(room ->
-                    layout.ordinal(room.getStructureId(), room.getFloorId()).ifPresent(ordinal -> {
-                        byBuilding.put(room.getId(), ordinal);
-                        registered.add(ordinal);
-                    }));
-            List<Integer> ordinals = List.copyOf(registered);
-            building.structureIds().forEach(id -> byStructure.put(id, ordinals));
-            available.addAll(registered);
-        }
-        return new BlueprintFloorLayout(layout, Map.copyOf(byBuilding),
-                Map.copyOf(byStructure), List.copyOf(available));
+        return village == null ? empty() : new BlueprintFloorLayout(layout);
     }
 
-    List<Integer> ordinals() { return ordinals; }
+    List<Integer> ordinals() {
+        return layout.ordinals();
+    }
 
     List<Integer> ordinalsFor(Building building) {
-        return ordinalsByStructureId.getOrDefault(building.getEffectiveStructureId(), List.of());
+        List<Integer> structural = layout.ordinalsForStructure(building.getEffectiveStructureId());
+        if (!structural.isEmpty()) return structural;
+        OptionalInt ordinal = layout.ordinalForBuilding(building.getId());
+        return ordinal.isPresent() ? List.of(ordinal.getAsInt()) : List.of();
     }
 
     OptionalInt ordinalForFloor(int structureId, int floorId) {
-        return structureLayout.ordinal(structureId, floorId);
+        return layout.ordinal(structureId, floorId);
+    }
+
+    OptionalInt rootRoomIdForStructure(int structureId) {
+        return layout.rootRoomIdForStructure(structureId);
     }
 
     boolean isBuildingOnFloor(Building building, int floorOrdinal) {
-        Integer ordinal = ordinalByBuildingId.get(building.getId());
-        return ordinal != null && ordinal == floorOrdinal;
+        return layout.ordinalForBuilding(building.getId()).orElse(Integer.MIN_VALUE) == floorOrdinal;
     }
 
     boolean isBuildingVisible(Building building, Integer selectedFloor) {
-        if (building instanceof ExternalBuilding || building.getBuildingType().grouped()) {
-            return selectedFloor == null || selectedFloor == 0;
-        }
-        Integer ordinal = ordinalByBuildingId.get(building.getId());
-        return ordinal != null && (selectedFloor == null || ordinal.equals(selectedFloor));
+        OptionalInt ordinal = layout.ordinalForBuilding(building.getId());
+        return ordinal.isPresent() && (selectedFloor == null || ordinal.getAsInt() == selectedFloor);
     }
 
     OptionalInt floorOrdinalFor(Building building) {
-        Integer ordinal = ordinalByBuildingId.get(building.getId());
-        return ordinal == null ? OptionalInt.empty() : OptionalInt.of(ordinal);
+        return layout.ordinalForBuilding(building.getId());
     }
 }

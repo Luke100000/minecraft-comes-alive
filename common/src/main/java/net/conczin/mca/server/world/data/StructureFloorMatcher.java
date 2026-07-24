@@ -12,6 +12,7 @@ final class StructureFloorMatcher {
                                   List<StructureFloor> detected,
                                   Collection<Building> rooms) {
         Map<Integer, StructureFloor> assigned = new HashMap<>();
+        Map<Integer, Integer> persistentIdByDetectedId = new HashMap<>();
         Set<Integer> usedDetected = new HashSet<>();
         Set<Integer> requiredFloorIds = rooms.stream()
                 .map(Building::getFloorId)
@@ -27,6 +28,7 @@ final class StructureFloorMatcher {
             StructureFloor geometry = detected.get(match);
             assigned.put(oldFloor.id(), oldFloor.withGeometry(
                     geometry.anchorY(), geometry.ceilingY(), geometry.region()));
+            persistentIdByDetectedId.put(geometry.id(), oldFloor.id());
             usedDetected.add(match);
         }
 
@@ -36,12 +38,14 @@ final class StructureFloorMatcher {
             int floorId = candidateNextFloorId++;
             assigned.put(floorId, new StructureFloor(floorId,
                     geometry.anchorY(), geometry.ceilingY(), geometry.region()));
+            persistentIdByDetectedId.put(geometry.id(), floorId);
         }
         for (Building room : rooms) {
             StructureFloor floor = assigned.get(room.getFloorId());
             if (floor == null || !roomFootprintInside(room, floor)) return Optional.empty();
         }
-        return Optional.of(new Result(Map.copyOf(assigned), candidateNextFloorId));
+        return Optional.of(new Result(Map.copyOf(assigned), candidateNextFloorId,
+                Map.copyOf(persistentIdByDetectedId)));
     }
 
     private static int bestMatch(StructureFloor oldFloor,
@@ -75,6 +79,8 @@ final class StructureFloorMatcher {
         return region.intersectionArea(floor.region()) == region.area();
     }
 
-    record Result(Map<Integer, StructureFloor> floors, int nextFloorId) {
+    record Result(Map<Integer, StructureFloor> floors,
+                  int nextFloorId,
+                  Map<Integer, Integer> persistentIdByDetectedId) {
     }
 }

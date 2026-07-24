@@ -40,7 +40,7 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
                 case UPDATE_ROOM -> updateRoom(manager, player, player.blockPosition(), null);
                 case SET_GROUND_ANCHOR -> setGroundAnchor(manager, player);
                 case AUTO_SCAN -> manager.findNearestVillage(player).ifPresent(Village::toggleAutoScan);
-                case FULL_SCAN -> manager.findNearestVillage(player).ifPresent(manager::fullScan);
+                case FULL_SCAN -> fullScan(manager, player);
                 case FORCE_TYPE -> displayEditResult(player,
                         manager.forceRoomType(player.blockPosition(), data), null);
                 case REMOVE_ROOM -> displayEditResult(player,
@@ -74,6 +74,20 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
         commitNewRoom(manager, player, manager.analyzeRoom(player.blockPosition()), null);
     }
 
+    private static void fullScan(VillageManager manager, ServerPlayer player) {
+        Village village = manager.findNearestVillage(player).orElse(null);
+        if (village == null) {
+            player.displayClientMessage(Component.translatable("blueprint.noBuilding"), true);
+            return;
+        }
+        Building.validationResult result = manager.fullScan(village);
+        if (result == Building.validationResult.SUCCESS) {
+            player.displayClientMessage(Component.translatable("blueprint.refreshed"), true);
+        } else {
+            displayScanResult(player, result);
+        }
+    }
+
     private static void setGroundAnchor(VillageManager manager, ServerPlayer player) {
         Village village = manager.findNearestVillage(player).orElse(null);
         if (village == null) {
@@ -85,15 +99,13 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
             player.displayClientMessage(Component.translatable("blueprint.noRoomOnFloor"), true);
             return;
         }
-        if (village.isRootRoom(room)) {
-            player.displayClientMessage(Component.translatable("blueprint.groundAnchorAlreadySet"), true);
-            return;
-        }
-        if (!village.setStructureGroundFloorAnchor(room)) {
+        boolean useAutomatic = room.isLayoutOverride();
+        if (!village.toggleLayoutOverride(room)) {
             player.displayClientMessage(Component.translatable("blueprint.groundAnchorNoStructure"), true);
             return;
         }
-        player.displayClientMessage(Component.translatable("blueprint.groundAnchorSet"), true);
+        player.displayClientMessage(Component.translatable(useAutomatic
+                ? "blueprint.groundAnchorAutomatic" : "blueprint.groundAnchorSet"), true);
     }
 
     private static void setRoomInheritance(VillageManager manager, ServerPlayer player, String data) {
@@ -103,8 +115,7 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
         if (village == null) return;
         Building room = village.getFunctionalRoomAt(player.serverLevel(), player.blockPosition()).orElse(null);
         if (room == null) return;
-        RoomTypeResolver.Context context = RoomTypeResolver.create(village, StructureLayout.build(village)).resolve(room);
-        if (context.isMainRoom() || room.isInheritanceEnabled() == enabled) return;
+        if (room.isInheritanceEnabled() == enabled) return;
         room.setInheritanceEnabled(enabled);
         village.markDirty();
     }
