@@ -1,11 +1,9 @@
 package net.conczin.mca.server.world.data;
 
 import net.conczin.mca.resources.BuildingTypes;
-import net.conczin.mca.resources.data.BuildingType;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.*;
 
@@ -114,38 +112,35 @@ final class BuildingRoomScanner {
         return Set.copyOf(result);
     }
 
-    /** Low furniture stays inside a Room; a two-block solid wall remains a partition boundary. */
+    /** Low furniture and functional POI stacks stay inside a Room; ordinary two-block solids remain walls. */
     private static boolean isRoomPassageColumn(Level world, StructureFloor floor, BlockPos floorCell) {
         BlockPos base = new BlockPos(floorCell.getX(), floor.anchorY(), floorCell.getZ());
-        if (StructureConnector.isPassageCell(world, base)) return true;
-        if (hasFunctionalPoiObstacle(world, base, floor.ceilingY())) return true;
-        if (base.getY() + 1 >= floor.ceilingY()
-                || !StructureConnector.isPassageCell(world, base.above())) return false;
-        var shape = world.getBlockState(base).getCollisionShape(world, base);
-        return shape.isEmpty() || shape.max(Direction.Axis.Y) <= 1.0D;
+        return roomPassageDecision(world, floor, base).passable();
     }
 
-    /**
-     * A StructureFloor already owns this X/Z column as physical storey space. Keep a solid
-     * obstruction inside the Room when the obstruction contains a functional building POI;
-     * otherwise the existing two-block-wall rule remains authoritative.
-     *
-     * <p>This restores the old volume/POI semantics without making arbitrary two-block stone
-     * walls passable. Example: bookshelf + chiseled bookshelf remains Room furniture because the
-     * bookshelf is a library POI, while stone + stone still partitions Rooms.</p>
-     */
+    static PassageDecision roomPassageDecision(Level world, StructureFloor floor, BlockPos base) {
+        if (StructureConnector.isPassageCell(world, base)) return PassageDecision.PASSAGE;
+        if (base.getY() + 1 < floor.ceilingY()
+                && StructureConnector.isPassageCell(world, base.above())) {
+            var shape = world.getBlockState(base).getCollisionShape(world, base);
+            if (shape.isEmpty() || shape.max(Direction.Axis.Y) <= 1.0D) {
+                return PassageDecision.LOW_OBSTACLE;
+            }
+        }
+        if (hasFunctionalPoiObstacle(world, base, floor.ceilingY())) return PassageDecision.FUNCTIONAL_POI;
+        if (base.getY() + 1 >= floor.ceilingY()) return PassageDecision.BLOCKED_AT_CEILING;
+        if (!StructureConnector.isPassageCell(world, base.above())) return PassageDecision.BLOCKED_TWO_HIGH;
+        return PassageDecision.BLOCKED_COLLISION;
+    }
+
     private static boolean hasFunctionalPoiObstacle(Level world, BlockPos base, int ceilingY) {
         for (int y = base.getY(); y < ceilingY; y++) {
             BlockPos pos = new BlockPos(base.getX(), y, base.getZ());
             if (StructureConnector.isPassageCell(world, pos)) break;
-            if (isFunctionalRoomPoi(world.getBlockState(pos), BuildingTypes.getInstance())) return true;
-        }
-        return false;
-    }
-
-    static boolean isFunctionalRoomPoi(BlockState state, Iterable<BuildingType> types) {
-        for (BuildingType type : types) {
-            if (!type.grouped() && type.matchesBlock(state)) return true;
+            var state = world.getBlockState(pos);
+            for (var type : BuildingTypes.getInstance()) {
+                if (!type.grouped() && type.matchesBlock(state)) return true;
+            }
         }
         return false;
     }
@@ -223,6 +218,14 @@ final class BuildingRoomScanner {
 
     private record PartitionData(Map<BlockPos, BlockPos> floorConnectors,
                                  List<BuildingFloorRegion.Component> components) {
+    }
+
+    enum PassageDecision {
+        PASSAGE, FUNCTIONAL_POI, LOW_OBSTACLE, BLOCKED_AT_CEILING, BLOCKED_TWO_HIGH, BLOCKED_COLLISION;
+
+        boolean passable() {
+            return this == PASSAGE || this == FUNCTIONAL_POI || this == LOW_OBSTACLE;
+        }
     }
 
     enum Status { SUCCESS, OVERLAP, BLOCK_LIMIT, SIZE_LIMIT, TOO_SMALL }

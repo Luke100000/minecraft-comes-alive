@@ -46,7 +46,9 @@ public class AdminCommand {
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(Commands.literal("mca-admin")
                 .then(register("help", AdminCommand::displayHelp))
-                .then(register("diagnose", AdminCommand::diagnoseBuilding))
+                .then(register("diagnose", AdminCommand::diagnoseBuilding)
+                        .then(Commands.argument("verbose", BoolArgumentType.bool())
+                                .executes(AdminCommand::diagnoseBuildingVerbose)))
                 .then(register("clearLoadedVillagers", AdminCommand::clearLoadedVillagers))
                 .then(register("restoreClearedVillagers", AdminCommand::restoreClearedVillagers))
                 .then(register("forceBuildingType").then(Commands.argument("type", StringArgumentType.string()).executes(AdminCommand::forceBuildingType)).executes(AdminCommand::clearForcedBuildingType))
@@ -213,6 +215,14 @@ public class AdminCommand {
     }
 
     private static int diagnoseBuilding(CommandContext<CommandSourceStack> ctx) {
+        return diagnoseBuilding(ctx, false);
+    }
+
+    private static int diagnoseBuildingVerbose(CommandContext<CommandSourceStack> ctx) {
+        return diagnoseBuilding(ctx, BoolArgumentType.getBool(ctx, "verbose"));
+    }
+
+    private static int diagnoseBuilding(CommandContext<CommandSourceStack> ctx, boolean verbose) {
         ServerPlayer player = ctx.getSource().getPlayer();
         if (player == null) {
             fail("This command must be run by a player standing at the position to diagnose.", ctx);
@@ -220,7 +230,7 @@ public class AdminCommand {
         }
 
         BuildingDiagnostics.Result result = BuildingDiagnostics.diagnose(
-                ctx.getSource().getLevel(), player.blockPosition());
+                ctx.getSource().getLevel(), player.blockPosition(), verbose);
         success("Building diagnose trace " + result.traceId() + ": " + result.position()
                 + " -> " + result.uiAction() + " | " + result.verdict(), ctx);
         return 0;
