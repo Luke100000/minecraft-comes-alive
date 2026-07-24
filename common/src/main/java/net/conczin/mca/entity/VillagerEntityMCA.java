@@ -155,6 +155,11 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         return new MCAGroundPathNavigation(this, level);
     }
 
+    @Override
+    public void setJumping(boolean jumping) {
+        super.setJumping(jumping && !this.onClimbable());
+    }
+
     public static AttributeSupplier.Builder createAttributes() {
         return Villager.createAttributes()
                 .add(Attributes.ATTACK_DAMAGE, 3.0f)
