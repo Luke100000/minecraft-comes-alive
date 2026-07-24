@@ -96,7 +96,7 @@ public final class Structure implements VillageBuilding {
             floor = resolveFloor(pos.getY()).filter(candidate -> pos.getY() < candidate.ceilingY()).orElse(null);
             if (floor == null) return Optional.empty();
             if (!StructureConnector.attachesToStructure(world, this, pos)) {
-                BlockPos adjacent = adjacentOverhangFloorCell(world, pos, floor);
+                BlockPos adjacent = adjacentInteractionFloorCell(world, pos, floor);
                 if (adjacent == null) return Optional.empty();
                 roomX = adjacent.getX();
                 roomZ = adjacent.getZ();
@@ -106,9 +106,15 @@ public final class Structure implements VillageBuilding {
                 roomAtColumn(structureRooms, floor, roomX, roomZ)));
     }
 
-    private static BlockPos adjacentOverhangFloorCell(Level world, BlockPos pos, StructureFloor floor) {
-        if (!StructureConnector.isPassageCell(world, pos)
-                || StructureScanner.isSupported(world, pos.getX(), pos.getY(), pos.getZ())) return null;
+    private BlockPos adjacentInteractionFloorCell(Level world, BlockPos pos, StructureFloor floor) {
+        if (!StructureConnector.isPassageCell(world, pos)) return null;
+
+        boolean supported = StructureScanner.isSupported(world, pos.getX(), pos.getY(), pos.getZ());
+        boolean insideEnvelope = pos.getX() >= min.getX() && pos.getX() <= max.getX()
+                && pos.getY() >= min.getY() && pos.getY() <= max.getY()
+                && pos.getZ() >= min.getZ() && pos.getZ() <= max.getZ();
+        if (supported && (!insideEnvelope || !StructureScanner.isWalkableAnchor(world, pos))) return null;
+
         for (int dx = -1; dx <= 1; dx++) {
             for (int dz = -1; dz <= 1; dz++) {
                 if (Math.abs(dx) + Math.abs(dz) != 1) continue;

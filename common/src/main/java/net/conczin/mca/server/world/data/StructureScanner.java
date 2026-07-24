@@ -200,23 +200,38 @@ final class StructureScanner {
                                             BlockPos pos,
                                             BlockState state,
                                             Map<BlockPos, Boolean> roof) {
+        return walkableAnchorDecision(world, pos, state, roof) == WalkableAnchorDecision.ACCEPTED;
+    }
+
+    static boolean isWalkableAnchor(Level world, BlockPos pos) {
+        return walkableAnchorDecision(world, pos) == WalkableAnchorDecision.ACCEPTED;
+    }
+
+    static WalkableAnchorDecision walkableAnchorDecision(Level world, BlockPos pos) {
+        return walkableAnchorDecision(world, pos, world.getBlockState(pos), new HashMap<>());
+    }
+
+    private static WalkableAnchorDecision walkableAnchorDecision(Level world,
+                                                                 BlockPos pos,
+                                                                 BlockState state,
+                                                                 Map<BlockPos, Boolean> roof) {
         // A bed is Room furniture, not a new physical walking storey. Without this guard the air
         // above a bed is supported by the bed collision shape and gets emitted as an elevated Floor
         // sample, so merely furnishing a Room can reshape StructureFloor geometry.
-        if (world.getBlockState(pos.below()).is(BlockTags.BEDS)) return false;
-        return isOpen(world, pos, state)
-                && isSupported(world, pos.getX(), pos.getY(), pos.getZ())
-                && hasRoof(world, pos, roof);
+        if (world.getBlockState(pos.below()).is(BlockTags.BEDS)) return WalkableAnchorDecision.BED;
+        if (!isOpen(world, pos, state)) return WalkableAnchorDecision.BLOCKED;
+        if (!isSupported(world, pos.getX(), pos.getY(), pos.getZ())) return WalkableAnchorDecision.UNSUPPORTED;
+        if (!hasRoof(world, pos, roof)) return WalkableAnchorDecision.NO_ROOF;
+        return WalkableAnchorDecision.ACCEPTED;
     }
 
     /** Explains the exact walkable-anchor predicate used by connector handoffs without changing traversal. */
     static String explainWalkableAnchor(Level world, BlockPos pos) {
-        BlockState state = world.getBlockState(pos);
-        Map<BlockPos, Boolean> roof = new HashMap<>();
-        if (!isOpen(world, pos, state)) return "BLOCKED";
-        if (!isSupported(world, pos.getX(), pos.getY(), pos.getZ())) return "UNSUPPORTED";
-        if (!hasRoof(world, pos, roof)) return "NO_ROOF";
-        return "ACCEPTED";
+        return walkableAnchorDecision(world, pos).name();
+    }
+
+    enum WalkableAnchorDecision {
+        ACCEPTED, BED, BLOCKED, UNSUPPORTED, NO_ROOF
     }
 
     private static void enqueueTraversal(BlockPos source,
