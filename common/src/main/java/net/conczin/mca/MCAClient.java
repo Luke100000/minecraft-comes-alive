@@ -33,16 +33,15 @@ public class MCAClient {
     }
 
     public static Optional<VillagerLike<?>> getPlayerData(UUID uuid) {
-        if (isPlayerRendererAllowed() || Config.getServerConfig().scalePlayerHitboxWithSizeAndWidth) {
-            if (!MCAClient.playerDataRequests.contains(uuid) && Minecraft.getInstance().getConnection() != null) {
-                MCAClient.playerDataRequests.add(uuid);
-                Network.sendToServer(new PlayerDataRequest(uuid));
-            }
-            if (MCAClient.playerData.containsKey(uuid)) {
-                return Optional.of(MCAClient.playerData.get(uuid));
-            }
+        if (!isPlayerRendererAllowed() && !needsPlayerDataForDimensions()) {
+            return Optional.empty();
         }
-        return Optional.empty();
+
+        if (!playerDataRequests.contains(uuid) && Minecraft.getInstance().getConnection() != null) {
+            playerDataRequests.add(uuid);
+            Network.sendToServer(new PlayerDataRequest(uuid));
+        }
+        return Optional.ofNullable(playerData.get(uuid));
     }
 
     public static boolean useExpandedPersonalityTranslations() {
@@ -52,12 +51,19 @@ public class MCAClient {
         return !isTTSPackActive && Minecraft.getInstance().options.languageCode.equals("en_us") && !Config.getInstance().enableOnlineTTS;
     }
 
+    public static Optional<VillagerLike<?>> getGeneticsPlayerData(UUID uuid) {
+        return getPlayerData(uuid)
+                .filter(data -> data.getPlayerModel() != VillagerLike.PlayerModel.VANILLA);
+    }
+
     public static boolean useGeneticsRenderer(UUID uuid) {
-        return getPlayerData(uuid).filter(f -> f.getPlayerModel() != VillagerLike.PlayerModel.VANILLA).isPresent();
+        return isPlayerRendererAllowed() && getGeneticsPlayerData(uuid).isPresent();
     }
 
     public static boolean useVillagerRenderer(UUID uuid) {
-        return useGeneticsRenderer(uuid) && MCAClient.playerData.get(uuid).getPlayerModel() == VillagerLike.PlayerModel.VILLAGER;
+        return isPlayerRendererAllowed() && getGeneticsPlayerData(uuid)
+                .filter(data -> data.getPlayerModel() == VillagerLike.PlayerModel.VILLAGER)
+                .isPresent();
     }
 
     public static boolean renderArms(UUID uuid, String key) {
@@ -96,7 +102,7 @@ public class MCAClient {
         }
 
         for (Player player : client.level.players()) {
-            if (Config.getServerConfig().scalePlayerHitboxWithSizeAndWidth) {
+            if (needsPlayerDataForDimensions()) {
                 getPlayerData(player.getUUID());
             }
             refreshPlayerDimensions(player, "client config refresh");
@@ -107,6 +113,11 @@ public class MCAClient {
         PlayerDimensions.debugRefresh(player, "before " + reason);
         player.refreshDimensions();
         PlayerDimensions.debugRefresh(player, "after " + reason);
+    }
+
+    private static boolean needsPlayerDataForDimensions() {
+        return Config.getServerConfig().scalePlayerHitboxWithSizeAndWidth
+                || Config.getInstance().scaleEyeHeightWithPlayerHeight;
     }
 
     public static boolean isPlayerRendererAllowed() {
