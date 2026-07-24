@@ -1,7 +1,6 @@
 package net.conczin.mca.server.world.data;
 
 import net.conczin.mca.Config;
-import net.conczin.mca.MCA;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.Vec3i;
@@ -132,12 +131,6 @@ final class StructureScanner {
 
         floorCells.addAll(StructureConnector.associatedFloorCells(world, connectorCells, floorCells));
         List<BuildingFloorRegion> regions = BuildingFloorRegionDetector.detect(floorCells);
-        MCA.LOGGER.info("[FloorDebug][Detect] source={} seed={} connectors={} verticalConnectors={} floorCellsByY={} detected={}",
-                source, seed, connectorCells.size(),
-                connectorCells.stream().filter(pos -> StructureConnector.isVertical(world.getBlockState(pos))).count(),
-                floorCells.stream().collect(java.util.stream.Collectors.groupingBy(
-                        BuildingFloorRegionDetector.FloorCell::y, TreeMap::new, java.util.stream.Collectors.counting())),
-                regions.stream().map(region -> region.anchorY() + ":" + region.area()).toList());
         int scannedEnvelopeSize = scannedEnvelopeSize(volume);
         if (regions.isEmpty() || scannedEnvelopeSize <= minSize) {
             return Result.failure(Building.validationResult.TOO_SMALL, source);
@@ -168,11 +161,6 @@ final class StructureScanner {
                         .thenComparingInt(StructureFloor::anchorY))
                 .orElse(floors.getFirst());
         BlockPos groundSeed = bestSeed(ground, groundChoice.entranceInterior());
-        MCA.LOGGER.info("[FloorDebug][Ground] source={} scanSeed={} entrances={} choiceY={} choiceEntrance={} "
-                        + "selectedFloorId={} selectedAnchorY={} selectedCeilingY={} groundSeed={} floors={}",
-                source, seed, exteriorEntrances, groundChoice.floorY(), groundChoice.entranceInterior(),
-                ground.id(), ground.anchorY(), ground.ceilingY(), groundSeed,
-                floors.stream().map(floor -> floor.id() + "@" + floor.anchorY() + ".." + floor.ceilingY()).toList());
 
         for (Structure other : existing) {
             if (other.getId() != ignoredStructureId && candidate.intersects(other)) {
@@ -512,8 +500,6 @@ final class StructureScanner {
             double delta = toFloor - fromFloor;
             if (delta > 1.125D || delta < -1.125D) continue;
             if (!hasRoof(world, candidate, roof)) continue;
-            MCA.LOGGER.debug("[StructureStep] from={} to={} direction={} dy={} fromSurface={} toSurface={} delta={}",
-                    current, candidate, direction, dy, fromFloor, toFloor, delta);
             visited.add(candidate);
             queue.addLast(candidate);
             return;
@@ -637,12 +623,6 @@ final class StructureScanner {
                     .thenComparingInt(entrance -> entrance.inside().getX())
                     .thenComparingInt(entrance -> entrance.inside().getZ()))
                     .orElseThrow();
-            MCA.LOGGER.info("[FloorDebug][GroundChoice] mode=entrance-evidence terrainY={} samples={} "
-                            + "entranceCounts={} selectedFloor={}@{} representative={}",
-                    terrainY, terrainSamples,
-                    entrancesByFloor.entrySet().stream()
-                            .map(entry -> entry.getKey() + ":" + entry.getValue().size()).toList(),
-                    floor.id(), floor.anchorY(), representative);
             return new GroundChoice(floor.anchorY(), representative.inside());
         }
 
@@ -652,9 +632,6 @@ final class StructureScanner {
                 .comparingInt((StructureFloor floor) -> Math.abs(floor.anchorY() - terrainY))
                 .thenComparing(Comparator.comparingInt(StructureFloor::anchorY).reversed()))
                 .orElse(floors.getFirst());
-        MCA.LOGGER.info("[FloorDebug][GroundChoice] mode=terrain terrainY={} samples={} selectedFloor={}@{} floors={}",
-                terrainY, terrainSamples, terrainFloor.id(), terrainFloor.anchorY(),
-                floors.stream().map(floor -> floor.id() + "@" + floor.anchorY()).toList());
         return new GroundChoice(terrainFloor.anchorY(), null);
     }
 

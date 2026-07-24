@@ -21,6 +21,10 @@ public final class BuildingDiagnostics {
     }
 
     public static Result diagnose(ServerLevel world, BlockPos pos) {
+        return diagnose(world, pos, false);
+    }
+
+    public static Result diagnose(ServerLevel world, BlockPos pos, boolean verbose) {
         long traceId = NEXT_TRACE_ID.incrementAndGet();
         VillageManager manager = VillageManager.get(world);
         Village village = manager.findNearestVillage(pos, Village.MERGE_MARGIN).orElse(null);
@@ -29,9 +33,9 @@ public final class BuildingDiagnostics {
                 : village.getStructuralLookup(world, pos);
         String uiAction = uiAction(lookup.position());
 
-        log(traceId, "start position={} dimension={} village={} structuralPosition={} uiAction={}",
+        log(traceId, "start position={} dimension={} village={} structuralPosition={} uiAction={} verbose={}",
                 pos, world.dimension().location(), village == null ? "none" : village.getId(),
-                lookup.position(), uiAction);
+                lookup.position(), uiAction, verbose);
 
         if (village == null) {
             Building.validationResult analysis = manager.analyzeInitialStructure(pos).result();
@@ -54,7 +58,7 @@ public final class BuildingDiagnostics {
                 id(structureAt), id(interactionStructure), id(nearestStructure),
                 room == null ? "none" : room.getId(), room == null ? "none" : room.getFloorId());
 
-        FreshScan fresh = null;
+        StructureFloor freshPlayerFloor = null;
         if (inspected != null) {
             boolean contains = inspected.containsPos(pos);
             boolean attaches = StructureConnector.attachesToStructure(world, inspected, pos);
@@ -81,22 +85,27 @@ public final class BuildingDiagnostics {
                         resolved.effectivePoi().values().stream().mapToInt(List::size).sum(), sameColumn, elevatedWithinBand);
             }
 
-            StructureFloor diagnosticFloor = physicalFloor != null ? physicalFloor : logicalFloor;
-            if (diagnosticFloor != null) {
-                logRoomColumnDiagnostic(world, village, inspected, diagnosticFloor, room, pos, traceId);
+            if (verbose) {
+                StructureFloor diagnosticFloor = physicalFloor != null ? physicalFloor : logicalFloor;
+                if (diagnosticFloor != null) {
+                    logRoomColumnDiagnostic(world, village, inspected, diagnosticFloor, room, pos, traceId);
+                }
+                logVerticalConnectors(world, inspected, traceId);
             }
-
-            logVerticalConnectors(world, inspected, traceId);
 
             StructureScanner.Result scan = StructureScanner.scan(
                     world, inspected.getSource(), village.getStructures().values(), inspected.getId());
-            StructureFloor freshPlayerFloor = scan.result() == Building.validationResult.SUCCESS
+            freshPlayerFloor = scan.result() == Building.validationResult.SUCCESS
                     ? floorAt(scan.floors(), pos)
                     : null;
-            fresh = new FreshScan(scan.result(), scan.floors(), freshPlayerFloor);
-            log(traceId, "freshStructureScan result={} floors={} playerFloor={}",
-                    scan.result(), floors(scan.floors()), floor(freshPlayerFloor));
-            logFloorDifference(traceId, inspected.getFloors(), scan.floors());
+            StructureFloor freshGroundFloor = scan.floors().stream()
+                    .filter(candidate -> candidate.id() == scan.groundFloorId())
+                    .findFirst().orElse(null);
+            log(traceId, "freshStructureScan result={} scanSeed={} bounds={}..{} floors={} "
+                            + "groundFloor={} groundSeed={} playerFloor={}",
+                    scan.result(), scan.source(), scan.min(), scan.max(), floors(scan.floors()),
+                    floor(freshGroundFloor), scan.groundSeed(), floor(freshPlayerFloor));
+            logFloorDifference(traceId, inspected.getFloors(), scan.floors(), verbose);
         }
 
         Building.validationResult analysis = switch (lookup.position()) {
@@ -108,7 +117,7 @@ public final class BuildingDiagnostics {
         };
         log(traceId, "analysis action={} result={}", uiAction, analysis);
 
-        String verdict = verdict(lookup.position(), analysis, inspected, room, fresh, pos, world);
+        String verdict = verdict(lookup.position(), analysis, inspected, room, freshPlayerFloor, pos, world);
         log(traceId, "verdict={}", verdict);
         return new Result(traceId, lookup.position(), uiAction, verdict);
     }
@@ -117,7 +126,7 @@ public final class BuildingDiagnostics {
                                   Building.validationResult analysis,
                                   Structure structure,
                                   Building room,
-                                  FreshScan fresh,
+                                  StructureFloor freshPlayerFloor,
                                   BlockPos pos,
                                   ServerLevel world) {
         if (structure == null) {
@@ -134,7 +143,6 @@ public final class BuildingDiagnostics {
         }
         if (room != null) {
             StructureFloor persistentRoomFloor = structure.getFloor(room.getFloorId()).orElse(null);
-            StructureFloor freshPlayerFloor = fresh == null ? null : fresh.playerFloor();
             if (persistentRoomFloor != null && freshPlayerFloor != null
                     && freshPlayerFloor.anchorY() > persistentRoomFloor.anchorY()) {
                 return "FRESH_SCAN_SEPARATES_UPPER_FLOOR: persisted Room is Floor " + room.getFloorId()
@@ -234,13 +242,10 @@ public final class BuildingDiagnostics {
         int minY = floor.anchorY() - BuildingFloorRegionDetector.FLOOR_CLUSTER_TOLERANCE;
         int maxY = floor.ceilingY() - 1;
         List<String> slices = new ArrayList<>();
-        List<Integer> alternatePassageBases = new ArrayList<>();
         for (int y = minY; y <= maxY; y++) {
             BlockPos probe = new BlockPos(x, y, z);
             BlockState state = world.getBlockState(probe);
             boolean passageCell = StructureConnector.isPassageCell(world, probe);
-            String roomDecision = roomPassageDecision(world, floor, probe);
-            if (isRoomPassageDecision(roomDecision)) alternatePassageBases.add(y);
             var shape = state.getCollisionShape(world, probe);
             String collisionTop = shape.isEmpty()
                     ? "empty"
@@ -248,7 +253,6 @@ public final class BuildingDiagnostics {
             slices.add(y + "{state=" + state
                     + ", passage=" + passageCell
                     + ", walkable=" + StructureScanner.explainWalkableAnchor(world, probe)
-                    + ", roomDecision=" + roomDecision
                     + ", collisionTop=" + collisionTop + "}");
         }
 
@@ -257,32 +261,14 @@ public final class BuildingDiagnostics {
                         + "lookupRoom={} owningRooms={} poiRooms={} adjacentRoomOwners={}",
                 x, z, pos.getY(), structure.getId(), floor(floor), floor.contains(x, z),
                 lookupRoom == null ? "none" : lookupRoom.getId(), owningRooms, poiRooms, adjacentOwners);
-        log(traceId, "columnDiagnostic roomScanner anchorBaseY={} anchorDecision={} alternatePassageBaseYs={} slices={}",
-                floor.anchorY(), roomPassageDecision(world, floor, anchorBase), alternatePassageBases, slices);
-    }
-
-    /**
-     * Mirrors BuildingRoomScanner.isRoomPassageColumn for one candidate base Y. Keeping this copy
-     * inside diagnostics lets us compare the current anchorY decision with alternate Y positions
-     * without changing StructureScanner, StructureFloor, or Room partition behaviour.
-     */
-    private static String roomPassageDecision(ServerLevel world, StructureFloor floor, BlockPos base) {
-        if (StructureConnector.isPassageCell(world, base)) return "PASSAGE";
-        if (base.getY() + 1 >= floor.ceilingY()) return "BLOCKED_AT_CEILING";
-        if (!StructureConnector.isPassageCell(world, base.above())) return "BLOCKED_TWO_HIGH";
-        var shape = world.getBlockState(base).getCollisionShape(world, base);
-        return shape.isEmpty() || shape.max(Direction.Axis.Y) <= 1.0D
-                ? "LOW_OBSTACLE"
-                : "BLOCKED_COLLISION";
-    }
-
-    private static boolean isRoomPassageDecision(String decision) {
-        return decision.equals("PASSAGE") || decision.equals("LOW_OBSTACLE");
+        log(traceId, "columnDiagnostic roomScanner anchorBaseY={} anchorDecision={} slices={}",
+                floor.anchorY(), BuildingRoomScanner.roomPassageDecision(world, floor, anchorBase), slices);
     }
 
     private static void logFloorDifference(long traceId,
                                            List<StructureFloor> persistent,
-                                           List<StructureFloor> fresh) {
+                                           List<StructureFloor> fresh,
+                                           boolean verbose) {
         List<Integer> persistentAnchors = persistent.stream().map(StructureFloor::anchorY).toList();
         List<Integer> freshAnchors = fresh.stream().map(StructureFloor::anchorY).toList();
         if (!persistentAnchors.equals(freshAnchors)) {
@@ -305,10 +291,17 @@ public final class BuildingDiagnostics {
             added.removeAll(persistentCells);
             LinkedHashSet<BlockPos> removed = new LinkedHashSet<>(persistentCells);
             removed.removeAll(freshCells);
-            log(traceId, "floorGeometryMismatch anchorY={} persistentArea={} freshArea={} "
-                            + "addedColumns={} removedColumns={} addedSample={} removedSample={}",
-                    persistentFloor.anchorY(), persistentFloor.area(), freshFloor.area(),
-                    added.size(), removed.size(), sampleColumns(added), sampleColumns(removed));
+            if (verbose) {
+                log(traceId, "floorGeometryMismatch anchorY={} persistentArea={} freshArea={} "
+                                + "addedColumns={} removedColumns={} addedSample={} removedSample={}",
+                        persistentFloor.anchorY(), persistentFloor.area(), freshFloor.area(),
+                        added.size(), removed.size(), sampleColumns(added), sampleColumns(removed));
+            } else {
+                log(traceId, "floorGeometryMismatch anchorY={} persistentArea={} freshArea={} "
+                                + "addedColumns={} removedColumns={}",
+                        persistentFloor.anchorY(), persistentFloor.area(), freshFloor.area(),
+                        added.size(), removed.size());
+            }
         }
         if (persistentAnchors.equals(freshAnchors) && !geometryMismatch) {
             log(traceId, "floorMismatch none anchors={}", persistentAnchors);
@@ -371,14 +364,6 @@ public final class BuildingDiagnostics {
         prefixed[0] = traceId;
         System.arraycopy(args, 0, prefixed, 1, args.length);
         MCA.LOGGER.info("[MCA-Diagnose][{}] " + message, prefixed);
-    }
-
-    private record FreshScan(Building.validationResult result,
-                             List<StructureFloor> floors,
-                             StructureFloor playerFloor) {
-        private FreshScan {
-            floors = List.copyOf(floors);
-        }
     }
 
     public record Result(long traceId,

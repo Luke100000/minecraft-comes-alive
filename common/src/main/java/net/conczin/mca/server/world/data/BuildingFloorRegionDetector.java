@@ -1,6 +1,5 @@
 package net.conczin.mca.server.world.data;
 
-import net.conczin.mca.MCA;
 import net.minecraft.core.BlockPos;
 
 import java.util.*;
@@ -41,13 +40,7 @@ final class BuildingFloorRegionDetector {
             }
             band.slices.add(slice);
         }
-        List<BuildingFloorRegion> regions = bands.stream().map(MutableBand::freeze).toList();
-        MCA.LOGGER.info("[FloorDebug][Slices] raw={} minFloorArea={} meaningful={} regions={}",
-                byY.entrySet().stream().map(entry -> entry.getKey() + ":" + entry.getValue().size()).toList(),
-                MIN_FLOOR_AREA,
-                meaningfulSlices.stream().map(slice -> slice.y() + ":" + slice.area()).toList(),
-                regions.stream().map(region -> region.anchorY() + ":" + region.area()).toList());
-        return regions;
+        return bands.stream().map(MutableBand::freeze).toList();
     }
 
     record FloorCell(int x, int y, int z) {
