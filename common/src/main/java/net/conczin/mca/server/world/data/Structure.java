@@ -73,6 +73,11 @@ public final class Structure implements VillageBuilding {
                 .max(Comparator.comparingInt(StructureFloor::anchorY));
     }
 
+    /** Exact vertical-band membership; unlike resolveFloor, this never falls through above a Floor ceiling. */
+    public Optional<StructureFloor> floorAtHeight(int queryY) {
+        return resolveFloor(queryY).filter(floor -> queryY < floor.ceilingY());
+    }
+
     /** Exact physical membership is the canonical Floor footprint extruded through its vertical band. */
     Optional<StructureFloor> physicalFloorAt(Vec3i pos) {
         if (pos.getX() < min.getX() || pos.getX() > max.getX()
@@ -80,20 +85,17 @@ public final class Structure implements VillageBuilding {
                 || pos.getZ() < min.getZ() || pos.getZ() > max.getZ()) {
             return Optional.empty();
         }
-        return resolveFloor(pos.getY())
-                .filter(floor -> pos.getY() < floor.ceilingY())
+        return floorAtHeight(pos.getY())
                 .filter(floor -> floor.contains(pos.getX(), pos.getZ()));
     }
 
-    Optional<InteractionPosition> resolveInteractionPosition(Level world, BlockPos pos, Collection<Building> rooms) {
-        List<Building> structureRooms = rooms == null ? List.of() : rooms.stream()
-                .filter(room -> room.getStructureId() == id)
-                .toList();
+    Optional<InteractionPosition> resolveInteractionPosition(Level world, BlockPos pos, Collection<Building> structureRooms) {
+        Collection<Building> localRooms = structureRooms == null ? List.of() : structureRooms;
         StructureFloor floor = physicalFloorAt(pos).orElse(null);
         int roomX = pos.getX();
         int roomZ = pos.getZ();
         if (floor == null) {
-            floor = resolveFloor(pos.getY()).filter(candidate -> pos.getY() < candidate.ceilingY()).orElse(null);
+            floor = floorAtHeight(pos.getY()).orElse(null);
             if (floor == null) return Optional.empty();
             if (!StructureConnector.attachesToStructure(world, this, pos)) {
                 BlockPos adjacent = adjacentInteractionFloorCell(world, pos, floor);
@@ -103,7 +105,7 @@ public final class Structure implements VillageBuilding {
             }
         }
         return Optional.of(new InteractionPosition(floor,
-                roomAtColumn(structureRooms, floor, roomX, roomZ)));
+                roomAtColumn(localRooms, floor, roomX, roomZ)));
     }
 
     private BlockPos adjacentInteractionFloorCell(Level world, BlockPos pos, StructureFloor floor) {

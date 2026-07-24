@@ -472,12 +472,11 @@ public class Village implements Iterable<Building> {
     }
 
     private Optional<ResolvedInteraction> resolveInteractionPosition(Level level, BlockPos pos) {
+        Map<Integer, List<Building>> roomsByStructure = getRooms()
+                .collect(Collectors.groupingBy(Building::getStructureId));
         return structures.values().stream()
-                .sorted(Comparator.comparingInt(Structure::getId))
                 .map(structure -> new ResolvedInteraction(structure, structure.resolveInteractionPosition(
-                        level, pos, getRooms()
-                                .filter(room -> room.getStructureId() == structure.getId())
-                                .toList()).orElse(null)))
+                        level, pos, roomsByStructure.getOrDefault(structure.getId(), List.of())).orElse(null)))
                 .filter(resolved -> resolved.position() != null)
                 .min(Comparator
                         .comparing((ResolvedInteraction resolved) -> resolved.position().room() == null)

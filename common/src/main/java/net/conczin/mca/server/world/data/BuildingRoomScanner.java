@@ -19,7 +19,7 @@ final class BuildingRoomScanner {
 
     static Result scan(Level world, BlockPos source, Set<BlockPos> blocked,
                        int maxSize, int maxRadius, Structure structure) {
-        StructureFloor floor = structure == null ? null : structure.resolveFloor(source.getY()).orElse(null);
+        StructureFloor floor = structure == null ? null : structure.floorAtHeight(source.getY()).orElse(null);
         return floor == null ? Result.failure(Status.TOO_SMALL, source)
                 : scan(world, source, blocked, maxSize, maxRadius, floor);
     }

@@ -11,18 +11,24 @@ import java.util.*;
 public final class RoomTypeResolver {
     private final Village village;
     private final StructureLayout.Layout layout;
-    private final List<Building> rooms;
     private final Map<Integer, Building> roomsById;
+    private final Map<Integer, List<Building>> roomsByStructure;
 
     private RoomTypeResolver(Village village,
                              StructureLayout.Layout layout,
                              Collection<Building> rooms) {
         this.village = village;
         this.layout = layout == null ? StructureLayout.build(village) : layout;
-        this.rooms = rooms == null ? List.of() : List.copyOf(rooms);
+        List<Building> snapshot = rooms == null ? List.of() : List.copyOf(rooms);
         Map<Integer, Building> byId = new HashMap<>();
-        this.rooms.stream().filter(room -> room.getId() >= 0).forEach(room -> byId.put(room.getId(), room));
+        Map<Integer, List<Building>> byStructure = new HashMap<>();
+        for (Building room : snapshot) {
+            if (room.getId() >= 0) byId.put(room.getId(), room);
+            byStructure.computeIfAbsent(room.getStructureId(), ignored -> new ArrayList<>()).add(room);
+        }
+        byStructure.replaceAll((ignored, grouped) -> List.copyOf(grouped));
         this.roomsById = Map.copyOf(byId);
+        this.roomsByStructure = Map.copyOf(byStructure);
     }
 
     public static RoomTypeResolver create(Village village, StructureLayout.Layout layout) {
@@ -47,12 +53,14 @@ public final class RoomTypeResolver {
             return new Context(room, mainRoom == null ? room : mainRoom, own, Map.of(), own, List.of());
         }
 
-        Set<Integer> structureIds = new HashSet<>(layout.buildingFor(room.getStructureId())
-                .map(StructureLayout.LogicalBuilding::structureIds).orElse(List.of(room.getStructureId())));
-        List<Building> contributors = rooms.stream()
+        List<Building> logicalRooms = layout.buildingFor(room.getStructureId())
+                .map(logical -> logical.structureIds().stream()
+                        .flatMap(structureId -> roomsByStructure.getOrDefault(structureId, List.of()).stream())
+                        .toList())
+                .orElseGet(() -> roomsByStructure.getOrDefault(room.getStructureId(), List.of()));
+        List<Building> contributors = logicalRooms.stream()
                 .filter(Building::isFunctionalRoom)
                 .filter(candidate -> !sameRoom(candidate, room))
-                .filter(candidate -> structureIds.contains(candidate.getStructureId()))
                 .filter(candidate -> !candidate.getBlocks().isEmpty())
                 .sorted(Comparator.comparingInt(Building::getId))
                 .toList();

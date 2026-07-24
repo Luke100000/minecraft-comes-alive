@@ -372,7 +372,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
                                                    int existingRoomId) {
         return existingRoomId >= 0 && village != null
                 ? village.getBuilding(existingRoomId).flatMap(room -> structure.getFloor(room.getFloorId())).orElse(null)
-                : structure.resolveFloor(pos.getY()).orElse(null);
+                : structure.floorAtHeight(pos.getY()).orElse(null);
     }
     private static Set<BlockPos> registeredRoomCells(Village village,
                                                      int structureId,
