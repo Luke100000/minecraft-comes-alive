@@ -51,8 +51,11 @@ public final class RoomTypeResolver {
      * type for colour/icon rendering without changing their persisted direct type.
      */
     public BuildingType presentationType(Building room) {
-        if (room == null) return null;
-        Context context = resolve(room);
+        return room == null ? null : presentationType(resolve(room));
+    }
+
+    public BuildingType presentationType(Context context) {
+        if (context == null) return null;
         if (!context.contributesToMain()) return context.effectiveType();
         return resolve(context.mainRoom()).effectiveType();
     }

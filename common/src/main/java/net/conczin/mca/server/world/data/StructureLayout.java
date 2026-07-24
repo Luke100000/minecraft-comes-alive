@@ -62,29 +62,18 @@ public final class StructureLayout {
             band.add(floor);
         }
 
-        Set<Long> groundFloors = new HashSet<>();
-        for (Structure structure : structures) {
-            structure.getGroundFloor(village).ifPresent(floor -> groundFloors.add(floorKey(structure.getId(), floor.id())));
-        }
-        int groundIndex = 0;
-        for (int i = 0; i < bands.size(); i++) {
-            if (bands.get(i).stream().anyMatch(floor -> groundFloors.contains(floor.key()))) {
-                groundIndex = i;
-                break;
-            }
-        }
-
-        Set<Long> logicalGround = bands.isEmpty() ? Set.of() : bands.get(groundIndex).stream()
-                .map(PhysicalFloor::key).collect(java.util.stream.Collectors.toSet());
-        int mainRoomId = structures.stream()
-                .filter(structure -> structure.getGroundFloor(village)
-                        .map(floor -> logicalGround.contains(floorKey(structure.getId(), floor.id())))
-                        .orElse(false))
-                .mapToInt(Structure::getRootRoomId)
-                .filter(id -> id >= 0)
+        Structure groundStructure = structures.stream()
+                .filter(Structure::isGroundAnchorExplicit)
                 .findFirst()
-                .orElseGet(() -> structures.stream().mapToInt(Structure::getRootRoomId)
-                        .filter(id -> id >= 0).findFirst().orElse(-1));
+                .orElse(floors.getFirst().structure());
+        int groundIndex = floorBandIndex(village, groundStructure, bands);
+        if (groundIndex < 0) groundIndex = 0;
+
+        int mainRoomId = groundStructure.getRootRoomId();
+        if (mainRoomId < 0) {
+            mainRoomId = structures.stream().mapToInt(Structure::getRootRoomId)
+                    .filter(id -> id >= 0).findFirst().orElse(-1);
+        }
 
         List<Storey> storeys = new ArrayList<>();
         for (int i = 0; i < bands.size(); i++) {
@@ -94,6 +83,18 @@ public final class StructureLayout {
         }
         return new LogicalBuilding(structures.getFirst().getId(),
                 structures.stream().map(Structure::getId).toList(), storeys, groundIndex, mainRoomId);
+    }
+
+    private static int floorBandIndex(Village village,
+                                      Structure structure,
+                                      List<List<PhysicalFloor>> bands) {
+        StructureFloor ground = structure.getGroundFloor(village).orElse(null);
+        if (ground == null) return -1;
+        long key = floorKey(structure.getId(), ground.id());
+        for (int i = 0; i < bands.size(); i++) {
+            if (bands.get(i).stream().anyMatch(floor -> floor.key() == key)) return i;
+        }
+        return -1;
     }
 
     private static boolean stacked(Structure first, Structure second) {

@@ -13,6 +13,7 @@ import java.util.*;
 public final class Structure implements VillageBuilding {
     private int id;
     private int rootRoomId = -1;
+    private boolean groundAnchorExplicit;
     private int nextFloorId;
     private BlockPos source;
     private BlockPos min;
@@ -33,6 +34,7 @@ public final class Structure implements VillageBuilding {
     public Structure(CompoundTag tag) {
         id = tag.getInt("id");
         rootRoomId = tag.contains("rootRoomId") ? tag.getInt("rootRoomId") : -1;
+        groundAnchorExplicit = tag.getBoolean("groundAnchorExplicit");
         nextFloorId = tag.getInt("nextFloorId");
         source = NbtHelper.decodeBlockPos(tag.get("source"));
         min = NbtHelper.decodeBlockPos(tag.get("min"));
@@ -48,6 +50,7 @@ public final class Structure implements VillageBuilding {
         CompoundTag tag = new CompoundTag();
         tag.putInt("id", id);
         tag.putInt("rootRoomId", rootRoomId);
+        tag.putBoolean("groundAnchorExplicit", groundAnchorExplicit);
         tag.putInt("nextFloorId", nextFloorId);
         tag.put("source", NbtHelper.encodeBlockPos(source));
         tag.put("min", NbtHelper.encodeBlockPos(min));
@@ -154,6 +157,14 @@ public final class Structure implements VillageBuilding {
 
     public void setRootRoomId(int rootRoomId) {
         this.rootRoomId = rootRoomId;
+    }
+
+    boolean isGroundAnchorExplicit() {
+        return groundAnchorExplicit;
+    }
+
+    void setGroundAnchorExplicit(boolean groundAnchorExplicit) {
+        this.groundAnchorExplicit = groundAnchorExplicit;
     }
 
     int allocateFloorId() {

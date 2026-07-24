@@ -497,8 +497,12 @@ public class Village implements Iterable<Building> {
 
     public boolean setStructureGroundFloorAnchor(Building room) {
         Structure structure = getStructureFor(room).orElse(null);
-        if (structure == null || structure.isRootRoom(room.getId())) return false;
+        if (structure == null || (structure.isRootRoom(room.getId()) && structure.isGroundAnchorExplicit())) return false;
+        StructureLayout.build(this).buildingFor(structure.getId()).ifPresent(logical ->
+                logical.structureIds().forEach(id -> getStructure(id)
+                        .ifPresent(member -> member.setGroundAnchorExplicit(false))));
         structure.setRootRoomId(room.getId());
+        structure.setGroundAnchorExplicit(true);
         markDirty();
         return true;
     }

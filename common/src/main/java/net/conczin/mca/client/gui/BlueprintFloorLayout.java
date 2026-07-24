@@ -35,9 +35,10 @@ final class BlueprintFloorLayout {
         TreeSet<Integer> available = new TreeSet<>();
 
         for (StructureLayout.LogicalBuilding building : layout.buildings()) {
+            Set<Integer> structureIds = Set.copyOf(building.structureIds());
             TreeSet<Integer> registered = new TreeSet<>();
             registered.add(0);
-            village.getRooms().filter(room -> building.structureIds().contains(room.getStructureId())).forEach(room ->
+            village.getRooms().filter(room -> structureIds.contains(room.getStructureId())).forEach(room ->
                     layout.ordinal(room.getStructureId(), room.getFloorId()).ifPresent(ordinal -> {
                         byBuilding.put(room.getId(), ordinal);
                         registered.add(ordinal);
