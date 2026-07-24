@@ -67,8 +67,13 @@ final class BlueprintTooltipFactory {
     }
 
     private void appendRoom(List<Component> lines, Building room) {
-        RoomTypeResolver.Context resolved = roomTypeResolver.resolve(room);
-        BuildingType presentationType = roomTypeResolver.presentationType(room);
+        appendRoom(lines, room, roomTypeResolver.resolve(room));
+    }
+
+    private void appendRoom(List<Component> lines,
+                            Building room,
+                            RoomTypeResolver.Context resolved) {
+        BuildingType presentationType = roomTypeResolver.presentationType(resolved);
         if (presentationType == null) presentationType = room.getBuildingType();
 
         lines.add(Component.literal("  ").append(typeLabel(presentationType)));
@@ -128,13 +133,13 @@ final class BlueprintTooltipFactory {
 
     /** Main already lists inherited POIs, so avoid a duplicate inherited type section in aggregate hover. */
     private void appendAggregateRooms(List<Component> lines, List<Building> rooms) {
-        boolean mainVisible = rooms.stream()
+        List<RoomTypeResolver.Context> resolvedRooms = rooms.stream()
                 .map(roomTypeResolver::resolve)
-                .anyMatch(RoomTypeResolver.Context::isMainRoom);
-        for (Building room : rooms) {
-            RoomTypeResolver.Context resolved = roomTypeResolver.resolve(room);
+                .toList();
+        boolean mainVisible = resolvedRooms.stream().anyMatch(RoomTypeResolver.Context::isMainRoom);
+        for (RoomTypeResolver.Context resolved : resolvedRooms) {
             if (mainVisible && resolved.contributesToMain()) continue;
-            appendRoom(lines, room);
+            appendRoom(lines, resolved.room(), resolved);
         }
     }
 
