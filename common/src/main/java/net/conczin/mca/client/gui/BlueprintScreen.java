@@ -52,6 +52,8 @@ public class BlueprintScreen extends ExtendedScreen {
     private static final int PLAYER_CENTERED_BUTTON_WIDTH = 78;
     private static final int PLAYER_HEAD_BUTTON_SIZE = 16;
     private static final int PLAYER_HEAD_ICON_SIZE = 12;
+    private static final int MAP_SIDE_CONTROL_GUTTER = 14;
+    private static final int MAP_SIDE_CONTROL_WIDTH = 132;
     private static Integer rememberedFloorOrdinal;
     private static MapScaleMode rememberedMapScaleMode = MapScaleMode.FIT;
     private static boolean rememberedPlayerCentered;
@@ -91,7 +93,6 @@ public class BlueprintScreen extends ExtendedScreen {
     private boolean showTerrain = true;
     private StructureLayout.Layout structureLayout = StructureLayout.build(null);
     private RoomTypeResolver roomTypeResolver = RoomTypeResolver.create(null, structureLayout);
-    private BlueprintFloorLayout floorLayout = BlueprintFloorLayout.empty();
     private BlueprintTooltipFactory tooltipFactory = BlueprintTooltipFactory.empty();
     private BlueprintMapGeometry mapGeometry = BlueprintMapGeometry.empty();
     private final BlueprintMapRenderer mapRenderer = new BlueprintMapRenderer();
@@ -205,7 +206,7 @@ public class BlueprintScreen extends ExtendedScreen {
                 setPage("map");
                 break;
             case "map", "advanced": {
-                bx = width / 2 + 180 - 64 - 16;
+                bx = width / 2 + MAP_HALF_SIZE + MAP_SIDE_CONTROL_GUTTER;
                 int floorControlY = height / 2 + 87;
 
                 // Map and Advanced are two control modes over the same map view. Keep all
@@ -272,7 +273,7 @@ public class BlueprintScreen extends ExtendedScreen {
                     } else {
                         text.withStyle(ChatFormatting.GRAY).withStyle(ChatFormatting.STRIKETHROUGH);
                     }
-                    addRenderableWidget(new TooltipButtonWidget(bx, by, 96, 20, text,
+                    addRenderableWidget(new TooltipButtonWidget(bx, by, MAP_SIDE_CONTROL_WIDTH, 20, text,
                             Component.translatable("gui.blueprint.autoScan.tooltip"), b -> {
                         Network.sendToServer(new ReportBuildingMessage(ReportBuildingMessage.Action.AUTO_SCAN));
                         village.toggleAutoScan();
@@ -280,49 +281,16 @@ public class BlueprintScreen extends ExtendedScreen {
                     }));
                     by += 22;
 
-                    int roomControlX = bx - 36;
-                    int roomControlWidth = 132;
-                    Building inheritanceRoom = getPlayerStructuralLookup().functionalRoom().orElse(null);
-                    if (inheritanceRoom != null) {
-                        boolean mainRoom = roomTypeResolver.resolve(inheritanceRoom).isMainRoom();
-                        boolean enableInheritance = !inheritanceRoom.isInheritanceEnabled();
-                        String textKey = enableInheritance
-                                ? "gui.blueprint.roomInheritance.enable"
-                                : mainRoom
-                                ? "gui.blueprint.roomInheritance.disable"
-                                : "gui.blueprint.roomInheritance.remove";
-                        String tooltipKey;
-                        if (mainRoom) {
-                            tooltipKey = enableInheritance
-                                    ? "gui.blueprint.roomInheritance.enableMain.tooltip"
-                                    : "gui.blueprint.roomInheritance.disable.tooltip";
-                        } else {
-                            tooltipKey = enableInheritance
-                                    ? "gui.blueprint.roomInheritance.enable.tooltip"
-                                    : "gui.blueprint.roomInheritance.remove.tooltip";
-                        }
-                        Component inheritanceText = Component.translatable(textKey);
-                        Component inheritanceTooltip = Component.translatable(tooltipKey);
-                        addRenderableWidget(new TooltipButtonWidget(
-                                roomControlX, by, roomControlWidth, 20, inheritanceText, inheritanceTooltip,
-                                b -> {
-                                    inheritanceRoom.setInheritanceEnabled(enableInheritance);
-                                    Network.sendToServer(new ReportBuildingMessage(
-                                            ReportBuildingMessage.Action.SET_ROOM_INHERITANCE,
-                                            Boolean.toString(enableInheritance)));
-                                    setPage(page);
-                                }));
-                        by += 22;
-                    }
+                    by = addInheritanceControl(bx, by, MAP_SIDE_CONTROL_WIDTH);
 
-                    addRenderableWidget(new TooltipButtonWidget(bx, by, 96, 20,
+                    addRenderableWidget(new TooltipButtonWidget(bx, by, MAP_SIDE_CONTROL_WIDTH, 20,
                             "gui.blueprint.restrictAccess", b -> {
                         Network.sendToServer(new ReportBuildingMessage(ReportBuildingMessage.Action.FORCE_TYPE, "blocked"));
                     }));
                     by += 22;
 
                     groundAnchorButton = addRenderableWidget(new TooltipButtonWidget(
-                            roomControlX, by, roomControlWidth, 20, "gui.blueprint.setGroundAnchor", b -> {
+                            bx, by, MAP_SIDE_CONTROL_WIDTH, 20, "gui.blueprint.setGroundAnchor", b -> {
                         selectPlayerFloorOnNextVillageResponse = true;
                         Network.sendToServer(new ReportBuildingMessage(ReportBuildingMessage.Action.SET_GROUND_ANCHOR));
                     }));
@@ -330,37 +298,37 @@ public class BlueprintScreen extends ExtendedScreen {
                     by += 22;
 
                     if (isVillage) {
-                        addRenderableWidget(new ButtonWidget(bx, by, 96, 20,
+                        addRenderableWidget(new ButtonWidget(bx, by, MAP_SIDE_CONTROL_WIDTH, 20,
                                 Component.translatable("gui.blueprint.renameVillage"), b -> setPage("rename")));
                     }
 
                     addRenderableWidget(new ButtonWidget(
-                            bx, floorControlY + 22, 96, 20,
+                            bx, floorControlY + 22, MAP_SIDE_CONTROL_WIDTH, 20,
                             Component.translatable("gui.back"), b -> setPage("map")));
                 } else {
                     // A grouped POI such as the town bell keeps the settlement alive, but
                     // rooms still need a complete structural root to attach to.
                     by = height / 2 - 56 + 22 * 3;
                     structureScanButton = addRenderableWidget(new TooltipButtonWidget(
-                            bx, by, 96, 20,
+                            bx, by, MAP_SIDE_CONTROL_WIDTH, 20,
                             getStructureScanTranslationKey(getPlayerStructuralLookup().position()),
                             b -> requestStructureScan()));
                     by += 22;
 
                     removeRoomButton = addRenderableWidget(new TooltipButtonWidget(
-                            bx, by, 96, 20, "gui.blueprint.removeRoom", b -> {
+                            bx, by, MAP_SIDE_CONTROL_WIDTH, 20, "gui.blueprint.removeRoom", b -> {
                         MCA.LOGGER.debug("[BuildingRemove] stage=client-click action=REMOVE_ROOM");
                         Network.sendToServer(new ReportBuildingMessage(ReportBuildingMessage.Action.REMOVE_ROOM));
                     }));
                     by += 22;
 
                     removeBuildingButton = addRenderableWidget(new ButtonWidget(
-                            bx, by, 96, 20, Component.translatable("gui.blueprint.removeBuilding"), b -> {
+                            bx, by, MAP_SIDE_CONTROL_WIDTH, 20, Component.translatable("gui.blueprint.removeBuilding"), b -> {
                         Network.sendToServer(new ReportBuildingMessage(ReportBuildingMessage.Action.REMOVE));
                     }));
 
                     advancedButton = addRenderableWidget(new ButtonWidget(
-                            bx, floorControlY + 22, 96, 20,
+                            bx, floorControlY + 22, MAP_SIDE_CONTROL_WIDTH, 20,
                             Component.translatable("gui.blueprint.advanced"), b -> setPage("advanced")));
                 }
                 break;
@@ -615,7 +583,7 @@ public class BlueprintScreen extends ExtendedScreen {
         Integer selectedFloor = selectedFloorOrdinal;
 
         if (!village.isAutoScan() && village.getStructureCount() <= 1) {
-            int hintY = floorLayout.ordinals().size() > 1 ? height / 2 + 134 : height / 2 + 90;
+            int hintY = structureLayout.ordinals().size() > 1 ? height / 2 + 134 : height / 2 + 90;
             context.drawCenteredString(font, Component.translatable("gui.blueprint.autoScanDisabled"),
                     width / 2, hintY, 0xaaffffff);
         }
@@ -783,7 +751,7 @@ public class BlueprintScreen extends ExtendedScreen {
 
     private void changeSelectedFloor(int direction) {
         List<Integer> floors = getFloorNavigationOrder();
-        if (floorLayout.ordinals().size() <= 1) {
+        if (structureLayout.ordinals().size() <= 1) {
             updateFloorControls();
             return;
         }
@@ -816,7 +784,7 @@ public class BlueprintScreen extends ExtendedScreen {
         }
 
         List<Integer> floors = getFloorNavigationOrder();
-        boolean canChangeFloors = floorLayout.ordinals().size() > 1;
+        boolean canChangeFloors = structureLayout.ordinals().size() > 1;
         int selectedIndex = floors.isEmpty() ? -1 : floors.indexOf(selectedFloorOrdinal);
         Component tooltip = getFloorControlTooltip();
         floorPreviousButton.active = canChangeFloors && selectedIndex > 0;
@@ -829,7 +797,7 @@ public class BlueprintScreen extends ExtendedScreen {
     }
 
     private List<Integer> getFloorNavigationOrder() {
-        List<Integer> ordinals = floorLayout.ordinals();
+        List<Integer> ordinals = structureLayout.ordinals();
         if (ordinals.isEmpty()) {
             return List.of();
         }
@@ -842,10 +810,10 @@ public class BlueprintScreen extends ExtendedScreen {
     }
 
     private Component getFloorControlTooltip() {
-        if (floorLayout.ordinals().isEmpty()) {
+        if (structureLayout.ordinals().isEmpty()) {
             return Component.translatable("gui.blueprint.floor.disabled.noBuilding");
         }
-        return floorLayout.ordinals().size() == 1
+        return structureLayout.ordinals().size() == 1
                 ? Component.translatable("gui.blueprint.floor.disabled.single")
                 : Component.translatable("gui.blueprint.floor.tooltip");
     }
@@ -863,7 +831,7 @@ public class BlueprintScreen extends ExtendedScreen {
     }
 
     private void reconcileSelectedFloor() {
-        List<Integer> ordinals = floorLayout.ordinals();
+        List<Integer> ordinals = structureLayout.ordinals();
         if (ordinals.isEmpty()) {
             selectedFloorOrdinal = null;
             rememberedFloorOrdinal = null;
@@ -902,6 +870,38 @@ public class BlueprintScreen extends ExtendedScreen {
         }
     }
 
+    private int addInheritanceControl(int x, int y, int width) {
+        Building room = getPlayerStructuralLookup().functionalRoom().orElse(null);
+        if (room == null) return y;
+
+        boolean mainRoom = roomTypeResolver.resolve(room).isMainRoom();
+        boolean enable = !room.isInheritanceEnabled();
+        String labelKey;
+        String tooltipKey;
+        if (enable) {
+            labelKey = "gui.blueprint.roomInheritance.enable";
+            tooltipKey = mainRoom
+                    ? "gui.blueprint.roomInheritance.enableMain.tooltip"
+                    : "gui.blueprint.roomInheritance.enable.tooltip";
+        } else if (mainRoom) {
+            labelKey = "gui.blueprint.roomInheritance.disable";
+            tooltipKey = "gui.blueprint.roomInheritance.disable.tooltip";
+        } else {
+            labelKey = "gui.blueprint.roomInheritance.remove";
+            tooltipKey = "gui.blueprint.roomInheritance.remove.tooltip";
+        }
+
+        addRenderableWidget(new TooltipButtonWidget(
+                x, y, width, 20,
+                Component.translatable(labelKey), Component.translatable(tooltipKey), button -> {
+            room.setInheritanceEnabled(enable);
+            Network.sendToServer(new ReportBuildingMessage(
+                    ReportBuildingMessage.Action.SET_ROOM_INHERITANCE, Boolean.toString(enable)));
+            setPage(page);
+        }));
+        return y + 22;
+    }
+
     private void updateGroundAnchorControl(Village.StructuralLookup structuralLookup) {
         if (groundAnchorButton == null) {
             return;
@@ -911,37 +911,6 @@ public class BlueprintScreen extends ExtendedScreen {
         groundAnchorButton.setMessage(Component.translatable(room.filter(Building::isLayoutOverride).isPresent()
                 ? "gui.blueprint.useAutomaticLayout"
                 : "gui.blueprint.setMainGround"));
-    }
-
-    private record FootprintCenter(double x, double z) {
-    }
-
-    private Optional<Building> getStructureRoot(Building building) {
-        return structureLayout.buildingFor(building.getStructureId())
-                .map(StructureLayout.LogicalBuilding::rootRoomId)
-                .filter(id -> id >= 0)
-                .flatMap(village::getBuilding);
-    }
-
-    private List<Component> getBlockTooltipLines(Collection<Building> buildings, Integer selectedFloor) {
-        List<Component> lines = new ArrayList<>();
-        Map<ResourceLocation, Set<BlockPos>> positionsByBlock = new TreeMap<>(Comparator.comparing(ResourceLocation::toString));
-        for (Building building : buildings) {
-            for (Map.Entry<ResourceLocation, List<BlockPos>> block : building.getBlocks().entrySet()) {
-                Set<BlockPos> positions = positionsByBlock.computeIfAbsent(block.getKey(), ignored -> new HashSet<>());
-                block.getValue().stream()
-                        .filter(pos -> selectedFloor == null || floorLayout.isBuildingOnFloor(building, selectedFloor))
-                        .forEach(positions::add);
-            }
-        }
-        for (Map.Entry<ResourceLocation, Set<BlockPos>> block : positionsByBlock.entrySet()) {
-            if (!block.getValue().isEmpty()) {
-                lines.add(Component.literal(block.getValue().size() + " x ")
-                        .append(getBlockName(block.getKey()))
-                        .withStyle(ChatFormatting.DARK_GRAY));
-            }
-        }
-        return lines;
     }
 
     private void renderTasks(GuiGraphics context) {
@@ -1107,9 +1076,8 @@ public class BlueprintScreen extends ExtendedScreen {
         // forcing an expensive terrain re-sample and GPU upload.
         this.structureLayout = StructureLayout.build(village);
         this.roomTypeResolver = RoomTypeResolver.create(village, structureLayout);
-        this.floorLayout = village == null ? BlueprintFloorLayout.empty() : BlueprintFloorLayout.build(village, structureLayout);
-        this.tooltipFactory = BlueprintTooltipFactory.create(village, floorLayout, structureLayout, roomTypeResolver);
-        this.mapGeometry = BlueprintMapGeometry.build(village, floorLayout, roomTypeResolver);
+        this.tooltipFactory = BlueprintTooltipFactory.create(village, structureLayout, roomTypeResolver);
+        this.mapGeometry = BlueprintMapGeometry.build(village, structureLayout, roomTypeResolver);
         Village.StructuralLookup structuralLookup = getPlayerStructuralLookup();
         Village.StructuralPosition structuralPosition = structuralLookup.position();
         if (selectPlayerFloorOnNextVillageResponse
@@ -1135,7 +1103,7 @@ public class BlueprintScreen extends ExtendedScreen {
 
     private void selectPlayerFloor(Village.StructuralLookup structuralLookup) {
         structuralLookup.functionalRoom()
-                .ifPresent(room -> floorLayout.floorOrdinalFor(room).ifPresent(ordinal -> {
+                .ifPresent(room -> structureLayout.ordinalForBuilding(room.getId()).ifPresent(ordinal -> {
                     selectedFloorOrdinal = ordinal;
                     rememberedFloorOrdinal = ordinal;
                 }));
