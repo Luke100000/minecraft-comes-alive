@@ -52,17 +52,16 @@ final class StructureScanner {
             }
 
             BlockState currentState = world.getBlockState(current);
-            boolean connector = StructureConnector.isConnector(currentState);
-            boolean walkable = !connector && isWalkableAnchor(world, current, currentState, roof);
-            boolean floorObstacle = !connector && !walkable
-                    && isFloorOccupyingObstacle(world, current, currentState, roof);
+            InteriorCellType currentType = classifyInteriorCell(world, current, currentState, roof);
+            boolean connector = currentType == InteriorCellType.CONNECTOR;
+            boolean walkable = currentType == InteriorCellType.WALKABLE;
             if (connector) {
                 volume.add(current);
                 connectorCells.add(current);
             } else if (walkable) {
                 recordFloorCell(world, floorCells, current);
                 addVerticalInteriorColumn(world, current, volume, roof, maxSize);
-            } else if (floorObstacle) {
+            } else if (currentType == InteriorCellType.FLOOR_OBSTACLE) {
                 // Furniture is part of the Floor footprint, even when several occupied cells are
                 // adjacent. Traverse the obstacle chain horizontally without promoting its top
                 // surface into a separate Floor.
@@ -82,8 +81,8 @@ final class StructureScanner {
                     horizontalEntrances.add(next);
                 }
 
-                boolean nextFloorObstacle = !connector
-                        && isFloorOccupyingObstacle(world, next, nextState, roof);
+                InteriorCellType nextType = classifyInteriorCell(world, next, nextState, roof);
+                boolean nextFloorObstacle = !connector && nextType == InteriorCellType.FLOOR_OBSTACLE;
                 if (nextFloorObstacle) {
                     recordFloorCell(world, floorCells, next);
                     addObstacleInteriorColumn(world, next, volume, roof, maxSize);
@@ -94,8 +93,8 @@ final class StructureScanner {
                     continue;
                 }
 
-                if (StructureConnector.isConnector(nextState)
-                        || isWalkableAnchor(world, next, nextState, roof)
+                if (nextType == InteriorCellType.CONNECTOR
+                        || nextType == InteriorCellType.WALKABLE
                         || nextFloorObstacle) {
                     enqueueTraversal(seed, next, visited, queue, maxRadius);
                 }
@@ -196,6 +195,19 @@ final class StructureScanner {
         return Optional.empty();
     }
 
+    private static InteriorCellType classifyInteriorCell(Level world,
+                                                         BlockPos pos,
+                                                         BlockState state,
+                                                         Map<BlockPos, Boolean> roof) {
+        if (StructureConnector.isConnector(state)) return InteriorCellType.CONNECTOR;
+        if (walkableAnchorDecision(world, pos, state, roof) == WalkableAnchorDecision.ACCEPTED) {
+            return InteriorCellType.WALKABLE;
+        }
+        return isFloorOccupyingObstacle(world, pos, state, roof)
+                ? InteriorCellType.FLOOR_OBSTACLE
+                : InteriorCellType.BLOCKED;
+    }
+
     private static boolean isWalkableAnchor(Level world,
                                             BlockPos pos,
                                             BlockState state,
@@ -215,10 +227,6 @@ final class StructureScanner {
                                                                  BlockPos pos,
                                                                  BlockState state,
                                                                  Map<BlockPos, Boolean> roof) {
-        // A bed is Room furniture, not a new physical walking storey. Without this guard the air
-        // above a bed is supported by the bed collision shape and gets emitted as an elevated Floor
-        // sample, so merely furnishing a Room can reshape StructureFloor geometry.
-        if (world.getBlockState(pos.below()).is(BlockTags.BEDS)) return WalkableAnchorDecision.BED;
         if (!isOpen(world, pos, state)) return WalkableAnchorDecision.BLOCKED;
         if (!isSupported(world, pos.getX(), pos.getY(), pos.getZ())) return WalkableAnchorDecision.UNSUPPORTED;
         if (!hasRoof(world, pos, roof)) return WalkableAnchorDecision.NO_ROOF;
@@ -230,8 +238,12 @@ final class StructureScanner {
         return walkableAnchorDecision(world, pos).name();
     }
 
+    private enum InteriorCellType {
+        CONNECTOR, WALKABLE, FLOOR_OBSTACLE, BLOCKED
+    }
+
     enum WalkableAnchorDecision {
-        ACCEPTED, BED, BLOCKED, UNSUPPORTED, NO_ROOF
+        ACCEPTED, BLOCKED, UNSUPPORTED, NO_ROOF
     }
 
     private static void enqueueTraversal(BlockPos source,

@@ -564,28 +564,24 @@ public class VillageManager extends SavedData implements Iterable<Village> {
             prospectiveMain = scan.building();
         }
 
+        RoomTypeResolver resolver = RoomTypeResolver.create(village, layout, prospectiveRooms);
         String requestedForcedType = forcedType != null ? forcedType
                 : existing.isTypeForced() ? existing.getType() : null;
-        RoomTypeResolver.Context retainedContext = RoomTypeResolver.resolve(
-                village, layout, scan.building(), prospectiveRooms, prospectiveMain);
-        String retainedType = classifyUpdatedRoom(retainedContext, requestedForcedType);
+        RoomTypeResolver.Context retainedContext = resolver.resolve(scan.building(), prospectiveMain);
+        String retainedType = retainedContext.updatedType(requestedForcedType);
         if (retainedType == null) return Building.validationResult.INVALID_TYPE;
 
         Map<Building, String> createdTypes = new IdentityHashMap<>();
         for (Building created : scan.createdRooms()) {
-            String type = classifyUpdatedRoom(RoomTypeResolver.resolve(
-                    village, layout, created, prospectiveRooms, prospectiveMain), null);
+            String type = resolver.resolve(created, prospectiveMain).updatedType(null);
             if (type == null) return Building.validationResult.INVALID_TYPE;
             createdTypes.put(created, type);
         }
 
-        String updatedMainType = null;
-        if (prospectiveMain != null && prospectiveMain.getId() != existing.getId()) {
-            RoomTypeResolver.Context mainContext = RoomTypeResolver.resolve(
-                    village, layout, prospectiveMain, prospectiveRooms, prospectiveMain);
-            String mainForcedType = prospectiveMain.isTypeForced() ? prospectiveMain.getType() : null;
-            updatedMainType = classifyUpdatedRoom(mainContext, mainForcedType);
-            if (updatedMainType == null) return Building.validationResult.INVALID_TYPE;
+        if (prospectiveMain != null && prospectiveMain.getId() != existing.getId()
+                && prospectiveMain.isTypeForced()
+                && !resolver.resolve(prospectiveMain, prospectiveMain).matchesForcedType(prospectiveMain.getType())) {
+            return Building.validationResult.INVALID_TYPE;
         }
 
         int currentRootRoomId = currentStructure.getRootRoomId();
@@ -620,17 +616,6 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         if (forcedType != null) return forcedType;
         if (scan.matchingTypes().isEmpty()) return "house";
         return scan.matchingTypes().getFirst();
-    }
-
-    private static String classifyUpdatedRoom(RoomTypeResolver.Context context, String forcedType) {
-        if (context == null || context.room() == null) return null;
-        Map<ResourceLocation, List<BlockPos>> poi = context.classificationPoi();
-        if (forcedType != null) {
-            BuildingType type = BuildingTypes.getInstance().getBuildingType(forcedType);
-            return Building.matchesType(type, poi) ? forcedType : null;
-        }
-        List<BuildingType> matches = context.visibleMatchingTypes();
-        return matches.isEmpty() ? (context.isMainRoom() ? "house" : "building") : matches.getFirst().name();
     }
 
     public void fullScan(Village village) {
@@ -691,7 +676,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         if (room.getType().equals(type)) {
             room.setTypeForced(false);
             StructureLayout.Layout layout = StructureLayout.build(village);
-            room.setType(classifyUpdatedRoom(RoomTypeResolver.resolve(village, layout, room), null));
+            room.setType(RoomTypeResolver.create(village, layout).resolve(room).updatedType(null));
         } else {
             room.setTypeForced(true);
             room.setType(type);

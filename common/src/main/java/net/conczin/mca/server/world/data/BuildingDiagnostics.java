@@ -53,6 +53,7 @@ public final class BuildingDiagnostics {
                 : structureAt != null ? structureAt : nearestStructure;
         Building room = lookup.functionalRoom().orElse(null);
         StructureLayout.Layout layout = StructureLayout.build(village);
+        RoomTypeResolver roomTypeResolver = RoomTypeResolver.create(village, layout);
 
         log(traceId, "lookup structureAt={} interactionStructure={} nearestStructure={} lookupBuilding={} lookupBuildingFloor={}",
                 id(structureAt), id(interactionStructure), id(nearestStructure),
@@ -78,7 +79,7 @@ public final class BuildingDiagnostics {
                 boolean elevatedWithinBand = roomFloor != null
                         && pos.getY() > roomFloor.anchorY() + BuildingFloorRegionDetector.FLOOR_CLUSTER_TOLERANCE
                         && pos.getY() < roomFloor.ceilingY();
-                RoomTypeResolver.Context resolved = RoomTypeResolver.resolve(village, layout, room);
+                RoomTypeResolver.Context resolved = roomTypeResolver.resolve(room);
                 log(traceId, "room id={} directType={} effectiveType={} structureId={} floorId={} floor={} footprintArea={} ownPoi={} effectivePoi={} containsColumn={} elevatedWithinSameFloorBand={}",
                         room.getId(), room.getType(), resolved.effectiveType().name(), room.getStructureId(), room.getFloorId(), floor(roomFloor),
                         room.getFloorFootprintArea(), room.getBlockCount(),

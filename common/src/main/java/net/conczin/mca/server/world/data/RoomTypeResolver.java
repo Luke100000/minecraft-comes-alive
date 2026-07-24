@@ -1,5 +1,6 @@
 package net.conczin.mca.server.world.data;
 
+import net.conczin.mca.resources.BuildingTypes;
 import net.conczin.mca.resources.data.BuildingType;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
@@ -8,29 +9,41 @@ import java.util.*;
 
 /** Single derived view for Room-local and logical-Main inherited POIs/type matching. */
 public final class RoomTypeResolver {
-    private RoomTypeResolver() {
+    private final Village village;
+    private final StructureLayout.Layout layout;
+    private final List<Building> rooms;
+    private final Map<Integer, Building> roomsById;
+
+    private RoomTypeResolver(Village village,
+                             StructureLayout.Layout layout,
+                             Collection<Building> rooms) {
+        this.village = village;
+        this.layout = layout == null ? StructureLayout.build(village) : layout;
+        this.rooms = rooms == null ? List.of() : List.copyOf(rooms);
+        Map<Integer, Building> byId = new HashMap<>();
+        this.rooms.stream().filter(room -> room.getId() >= 0).forEach(room -> byId.put(room.getId(), room));
+        this.roomsById = Map.copyOf(byId);
     }
 
-    public static Context resolve(Village village, StructureLayout.Layout layout, Building room) {
-        Collection<Building> rooms = village == null ? List.of() : village.getRooms().toList();
-        return resolve(village, layout, room, rooms, findMainRoom(village, layout, room, rooms));
+    public static RoomTypeResolver create(Village village, StructureLayout.Layout layout) {
+        return new RoomTypeResolver(village, layout,
+                village == null ? List.of() : village.getRooms().toList());
     }
 
-    static Context resolve(Village village,
-                           StructureLayout.Layout layout,
-                           Building room,
-                           Collection<Building> rooms) {
-        return resolve(village, layout, room, rooms, findMainRoom(village, layout, room, rooms));
+    static RoomTypeResolver create(Village village,
+                                   StructureLayout.Layout layout,
+                                   Collection<Building> rooms) {
+        return new RoomTypeResolver(village, layout, rooms);
     }
 
-    static Context resolve(Village village,
-                           StructureLayout.Layout layout,
-                           Building room,
-                           Collection<Building> rooms,
-                           Building mainRoom) {
+    public Context resolve(Building room) {
+        return resolve(room, findMainRoom(room));
+    }
+
+    Context resolve(Building room, Building mainRoom) {
         Map<ResourceLocation, List<BlockPos>> own = snapshot(room == null ? Map.of() : room.getBlocks());
-        if (village == null || layout == null || room == null || !room.isFunctionalRoom()
-                || mainRoom == null || !village.isRoomInheritance() || mainRoom.getId() != room.getId()) {
+        if (village == null || room == null || !room.isFunctionalRoom()
+                || mainRoom == null || !village.isRoomInheritance() || !sameRoom(mainRoom, room)) {
             return new Context(room, mainRoom == null ? room : mainRoom, own, Map.of(), own, List.of());
         }
 
@@ -38,7 +51,7 @@ public final class RoomTypeResolver {
                 .map(StructureLayout.LogicalBuilding::structureIds).orElse(List.of(room.getStructureId())));
         List<Building> contributors = rooms.stream()
                 .filter(Building::isFunctionalRoom)
-                .filter(candidate -> candidate.getId() != room.getId())
+                .filter(candidate -> !sameRoom(candidate, room))
                 .filter(candidate -> structureIds.contains(candidate.getStructureId()))
                 .filter(candidate -> !candidate.getBlocks().isEmpty())
                 .sorted(Comparator.comparingInt(Building::getId))
@@ -50,20 +63,22 @@ public final class RoomTypeResolver {
 
         Map<ResourceLocation, LinkedHashSet<BlockPos>> effective = mutable(own);
         merge(effective, inheritedPoi);
-        Map<ResourceLocation, List<BlockPos>> effectivePoi = freeze(effective);
-        return new Context(room, mainRoom, own, inheritedPoi, effectivePoi, contributors);
+        return new Context(room, mainRoom, own, inheritedPoi, freeze(effective), contributors);
     }
 
-    private static Building findMainRoom(Village village,
-                                         StructureLayout.Layout layout,
-                                         Building room,
-                                         Collection<Building> rooms) {
-        if (village == null || layout == null || room == null) return room;
+    private static boolean sameRoom(Building first, Building second) {
+        return first == second || first != null && second != null
+                && first.getId() >= 0 && first.getId() == second.getId();
+    }
+
+    private Building findMainRoom(Building room) {
+        if (village == null || room == null) return room;
         int mainRoomId = layout.buildingFor(room.getStructureId())
                 .map(StructureLayout.LogicalBuilding::mainRoomId).orElse(room.getId());
         if (room.getId() == mainRoomId) return room;
-        return rooms.stream().filter(candidate -> candidate.getId() == mainRoomId).findFirst()
-                .orElseGet(() -> village.getBuilding(mainRoomId).orElse(room));
+        Building snapshotRoom = roomsById.get(mainRoomId);
+        if (snapshotRoom != null) return snapshotRoom;
+        return village.getBuilding(mainRoomId).filter(Building::isFunctionalRoom).orElse(room);
     }
 
     private static Map<ResourceLocation, List<BlockPos>> snapshot(Map<ResourceLocation, List<BlockPos>> source) {
@@ -103,19 +118,39 @@ public final class RoomTypeResolver {
         }
 
         public boolean isMainRoom() {
-            return room != null && mainRoom != null && room.getId() == mainRoom.getId();
+            return sameRoom(room, mainRoom);
         }
 
         public Map<ResourceLocation, List<BlockPos>> classificationPoi() {
             return isMainRoom() ? effectivePoi : ownPoi;
         }
 
+        public List<BuildingType> directMatchingTypes() {
+            return Building.visibleMatchingTypes(ownPoi);
+        }
+
         public List<BuildingType> visibleMatchingTypes() {
             return Building.visibleMatchingTypes(classificationPoi());
         }
 
+        public boolean matchesForcedType(String typeName) {
+            if (room == null || typeName == null) return false;
+            BuildingType type = BuildingTypes.getInstance().getBuildingType(typeName);
+            return Building.matchesType(type, classificationPoi());
+        }
+
+        /** Returns the direct type to persist after an update, or null when a forced type is invalid. */
+        public String updatedType(String forcedType) {
+            if (room == null) return null;
+            if (forcedType != null) return matchesForcedType(forcedType) ? forcedType : null;
+            List<BuildingType> matches = directMatchingTypes();
+            return matches.isEmpty() ? (isMainRoom() ? "house" : "building") : matches.getFirst().name();
+        }
+
         public BuildingType effectiveType() {
-            if (room == null || room.isTypeForced() || inheritedPoi.isEmpty()) return room == null ? null : room.getBuildingType();
+            if (room == null || room.isTypeForced() || !isMainRoom() || inheritedPoi.isEmpty()) {
+                return room == null ? null : room.getBuildingType();
+            }
             List<BuildingType> visible = visibleMatchingTypes();
             return visible.isEmpty() ? room.getBuildingType() : visible.getFirst();
         }
