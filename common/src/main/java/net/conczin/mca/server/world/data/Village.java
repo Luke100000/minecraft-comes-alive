@@ -61,7 +61,6 @@ public class Village implements Iterable<Building> {
     private float populationThreshold = 0.75f;
     private float marriageThreshold = 0.5f;
     private boolean autoScan = Config.getInstance().enableAutoScanByDefault;
-    private boolean roomInheritance;
     private BlockBoxExtended box = new BlockBoxExtended(0, 0, 0, 0, 0, 0);
 
     public Village(int id, ServerLevel world) {
@@ -82,7 +81,6 @@ public class Village implements Iterable<Building> {
         if (tag.contains("populationThresholdFloat")) populationThreshold = tag.getFloat("populationThresholdFloat");
         if (tag.contains("marriageThresholdFloat")) marriageThreshold = tag.getFloat("marriageThresholdFloat");
         autoScan = tag.contains("autoScan") ? tag.getBoolean("autoScan") : true;
-        roomInheritance = tag.contains("roomInheritance") && tag.getBoolean("roomInheritance");
         this.world = world;
 
         RoomDFU.Result data = RoomDFU.load(tag);
@@ -281,12 +279,6 @@ public class Village implements Iterable<Building> {
     public boolean isAutoScan() { return autoScan; }
     public void setAutoScan(boolean autoScan) { this.autoScan = autoScan; }
     public void toggleAutoScan() { setAutoScan(!isAutoScan()); }
-    public boolean isRoomInheritance() { return roomInheritance; }
-    public void setRoomInheritance(boolean roomInheritance) {
-        this.roomInheritance = roomInheritance;
-        markDirty();
-    }
-    public void toggleRoomInheritance() { setRoomInheritance(!isRoomInheritance()); }
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }
     public int getId() { return id; }
@@ -424,7 +416,6 @@ public class Village implements Iterable<Building> {
         tag.put("externalBuildings", NbtHelper.fromList(externalBuildings.values(), Building::save));
         tag.put("structures", NbtHelper.fromList(structures.values(), Structure::save));
         tag.putBoolean("autoScan", autoScan);
-        tag.putBoolean("roomInheritance", roomInheritance);
         return tag;
     }
 

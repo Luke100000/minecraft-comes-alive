@@ -76,8 +76,7 @@ final class BlueprintTooltipFactory {
         if (room.isFunctionalRoom() && resolved.isMainRoom()) {
             lines.add(Component.literal("    ").append(Component.translatable(
                     "gui.blueprint.roomTooltip.mainRoom").withStyle(ChatFormatting.GOLD)));
-        } else if (room.isFunctionalRoom() && village.isRoomInheritance()
-                && resolved.mainRoom() != null && !resolved.isMainRoom()) {
+        } else if (resolved.contributesToMain()) {
             lines.add(Component.literal("    ").append(Component.translatable(
                     "gui.blueprint.roomTooltip.contributesToMain").withStyle(ChatFormatting.DARK_AQUA)));
         }
@@ -108,9 +107,9 @@ final class BlueprintTooltipFactory {
     private List<Component> structureFloorTooltip(Building structureBuilding, int floorOrdinal) {
         List<Component> lines = new LinkedList<>();
         lines.add(floorLabel(floorOrdinal));
-        structureTooltipBuildings(structureBuilding).stream()
+        appendAggregateRooms(lines, structureTooltipBuildings(structureBuilding).stream()
                 .filter(room -> floorLayout.isBuildingVisible(room, floorOrdinal))
-                .forEach(room -> appendRoom(lines, room));
+                .toList());
         return List.copyOf(lines);
     }
 
@@ -120,11 +119,23 @@ final class BlueprintTooltipFactory {
 
         for (int floorOrdinal : floorLayout.ordinalsFor(structureBuilding)) {
             lines.add(floorLabel(floorOrdinal));
-            structureRooms.stream()
+            appendAggregateRooms(lines, structureRooms.stream()
                     .filter(room -> floorLayout.isBuildingVisible(room, floorOrdinal))
-                    .forEach(room -> appendRoom(lines, room));
+                    .toList());
         }
         return List.copyOf(lines);
+    }
+
+    /** Main already lists inherited POIs, so avoid a duplicate inherited type section in aggregate hover. */
+    private void appendAggregateRooms(List<Component> lines, List<Building> rooms) {
+        boolean mainVisible = rooms.stream()
+                .map(roomTypeResolver::resolve)
+                .anyMatch(RoomTypeResolver.Context::isMainRoom);
+        for (Building room : rooms) {
+            RoomTypeResolver.Context resolved = roomTypeResolver.resolve(room);
+            if (mainVisible && resolved.contributesToMain()) continue;
+            appendRoom(lines, room);
+        }
     }
 
     private List<Building> structureTooltipBuildings(Building building) {

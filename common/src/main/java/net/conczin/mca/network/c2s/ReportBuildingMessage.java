@@ -47,6 +47,7 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
                         manager.removeRoom(player.blockPosition()), "blueprint.roomRemoved");
                 case REMOVE -> displayEditResult(player,
                         manager.removeBuilding(player.blockPosition()), null);
+                case SET_ROOM_INHERITANCE -> setRoomInheritance(manager, player, data);
             }
         } finally {
             GetVillageRequest.sendResponse(player);
@@ -93,6 +94,19 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
             return;
         }
         player.displayClientMessage(Component.translatable("blueprint.groundAnchorSet"), true);
+    }
+
+    private static void setRoomInheritance(VillageManager manager, ServerPlayer player, String data) {
+        if (!"true".equals(data) && !"false".equals(data)) return;
+        boolean enabled = Boolean.parseBoolean(data);
+        Village village = manager.findNearestVillage(player).orElse(null);
+        if (village == null) return;
+        Building room = village.getFunctionalRoomAt(player.serverLevel(), player.blockPosition()).orElse(null);
+        if (room == null) return;
+        RoomTypeResolver.Context context = RoomTypeResolver.create(village, StructureLayout.build(village)).resolve(room);
+        if (context.isMainRoom() || room.isInheritanceEnabled() == enabled) return;
+        room.setInheritanceEnabled(enabled);
+        village.markDirty();
     }
 
     static void updateRoom(VillageManager manager, ServerPlayer player, BlockPos source, String forcedType) {
@@ -205,6 +219,7 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
         FULL_SCAN,
         REMOVE_ROOM,
         UPDATE_ROOM,
-        SET_GROUND_ANCHOR
+        SET_GROUND_ANCHOR,
+        SET_ROOM_INHERITANCE
     }
 }

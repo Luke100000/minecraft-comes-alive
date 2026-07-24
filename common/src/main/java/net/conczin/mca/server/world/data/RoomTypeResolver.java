@@ -52,16 +52,15 @@ public final class RoomTypeResolver {
      */
     public BuildingType presentationType(Building room) {
         if (room == null) return null;
-        if (village == null || !village.isRoomInheritance()) return room.getBuildingType();
         Context context = resolve(room);
-        if (context.isMainRoom() || context.mainRoom() == null) return context.effectiveType();
+        if (!context.contributesToMain()) return context.effectiveType();
         return resolve(context.mainRoom()).effectiveType();
     }
 
     Context resolve(Building room, Building mainRoom) {
         Map<ResourceLocation, List<BlockPos>> own = snapshot(room == null ? Map.of() : room.getBlocks());
         if (village == null || room == null || !room.isFunctionalRoom()
-                || mainRoom == null || !village.isRoomInheritance() || !sameRoom(mainRoom, room)) {
+                || mainRoom == null || !sameRoom(mainRoom, room)) {
             return new Context(room, mainRoom == null ? room : mainRoom, own, Map.of(), own, List.of());
         }
 
@@ -73,6 +72,7 @@ public final class RoomTypeResolver {
         List<Building> contributors = logicalRooms.stream()
                 .filter(Building::isFunctionalRoom)
                 .filter(candidate -> !sameRoom(candidate, room))
+                .filter(Building::isInheritanceEnabled)
                 .filter(candidate -> !candidate.getBlocks().isEmpty())
                 .sorted(Comparator.comparingInt(Building::getId))
                 .toList();
@@ -139,6 +139,11 @@ public final class RoomTypeResolver {
 
         public boolean isMainRoom() {
             return sameRoom(room, mainRoom);
+        }
+
+        public boolean contributesToMain() {
+            return room != null && room.isFunctionalRoom() && room.isInheritanceEnabled()
+                    && mainRoom != null && !isMainRoom();
         }
 
         public Map<ResourceLocation, List<BlockPos>> classificationPoi() {

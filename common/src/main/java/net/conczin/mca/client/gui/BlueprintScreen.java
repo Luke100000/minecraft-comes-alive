@@ -283,21 +283,28 @@ public class BlueprintScreen extends ExtendedScreen {
                     }));
                     by += 22;
 
-                    MutableComponent inheritanceText = Component.literal("Room Inheritance");
-                    if (village.isRoomInheritance()) {
-                        inheritanceText.withStyle(ChatFormatting.GREEN);
-                    } else {
-                        inheritanceText.withStyle(ChatFormatting.GRAY).withStyle(ChatFormatting.STRIKETHROUGH);
+                    Building inheritanceRoom = getPlayerStructuralLookup().functionalRoom()
+                            .filter(room -> !roomTypeResolver.resolve(room).isMainRoom())
+                            .orElse(null);
+                    if (inheritanceRoom != null) {
+                        boolean enableInheritance = !inheritanceRoom.isInheritanceEnabled();
+                        Component inheritanceText = Component.translatable(enableInheritance
+                                ? "gui.blueprint.roomInheritance.enable"
+                                : "gui.blueprint.roomInheritance.remove");
+                        Component inheritanceTooltip = Component.translatable(enableInheritance
+                                ? "gui.blueprint.roomInheritance.enable.tooltip"
+                                : "gui.blueprint.roomInheritance.remove.tooltip");
+                        addRenderableWidget(new TooltipButtonWidget(
+                                bx, by, 96, 20, inheritanceText, inheritanceTooltip,
+                                b -> {
+                                    inheritanceRoom.setInheritanceEnabled(enableInheritance);
+                                    Network.sendToServer(new ReportBuildingMessage(
+                                            ReportBuildingMessage.Action.SET_ROOM_INHERITANCE,
+                                            Boolean.toString(enableInheritance)));
+                                    setPage(page);
+                                }));
+                        by += 22;
                     }
-                    addRenderableWidget(new TooltipButtonWidget(
-                            bx, by, 96, 20, inheritanceText,
-                            Component.translatable("gui.blueprint.roomInheritance.tooltip"),
-                            b -> {
-                                village.toggleRoomInheritance();
-                                saveVillage();
-                                setPage(page);
-                            }));
-                    by += 22;
 
                     addRenderableWidget(new TooltipButtonWidget(bx, by, 96, 20,
                             "gui.blueprint.restrictAccess", b -> {
