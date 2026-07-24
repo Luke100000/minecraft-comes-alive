@@ -58,27 +58,29 @@ public abstract class VillagerLayer<T extends LivingEntity, M extends HumanoidMo
         return false;
     }
 
+    protected void prepareParentModel(PoseStack transform, int light) {
+    }
+
     @Override
     public void render(PoseStack transform, MultiBufferSource provider, int light, T villager, float limbAngle, float limbDistance, float tickDelta, float animationProgress, float headYaw, float headPitch) {
-        Minecraft client = Minecraft.getInstance();
-        boolean visible = !villager.isInvisible();
-        boolean glowing = client.shouldEntityAppearGlowing(villager);
-
         if (villager instanceof Player && !MCAClient.useVillagerRenderer(villager.getUUID())) {
             return;
         }
 
+        prepareParentModel(transform, light);
+
         // Primarily restores compatibility with Armourers Workshop.
         if (model instanceof VillagerEntityModelMCA<?> layer) {
             layer.copyVisibility(getParentModel());
-        }
-        if (model instanceof PlayerEntityExtendedModel<?> layer) {
+        } else if (model instanceof PlayerEntityExtendedModel<?> layer) {
             layer.copyVisibility(getParentModel());
         }
 
-        //copy the animation to this layers model
         getParentModel().copyPropertiesTo(model);
 
+        Minecraft client = Minecraft.getInstance();
+        boolean visible = !villager.isInvisible();
+        boolean glowing = client.shouldEntityAppearGlowing(villager);
         renderFinal(transform, provider, light, villager, tickDelta, visible, glowing);
     }
 

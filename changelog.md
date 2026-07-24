@@ -1,5 +1,25 @@
+# 7.7.26
+> This is a release of 7.7.26 unrelated to the 7.7.23-ALPHA version.
+
+* Minor changes to gifts
+
+# 7.7.25
+
+* Bouquets (flowers) can now be treated as gifts to your partner! (Thanks tranthienlong675!)
+* EMF support has been added
+
+# 7.7.24
+
+* Bug fixes/Internal improvements
+* Port of 1.20.1 beta updates to 1.21.1
+  * Iris Brightness Colour
+  * Increased eye colour vividness
+  * Mourning system has been overhauled, should be way more reliable
+  * Fix Presets not rendering the correct comparison NPC visual snapshots.
+  * Improved Fishing Task
+  * Stopped defineId warning spam in logs
+
 # 7.7.23
-> This is a release of 7.7.23 unrelated to the ALPHA version.
 
 * Properly fixed Library preview corrupted model issue - This was a result of having Advanced Hair.
 * Fixed a very specific crash in the Library.

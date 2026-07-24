@@ -5,6 +5,7 @@ import net.conczin.mca.entity.ai.Memories;
 import net.conczin.mca.entity.ai.Relationship;
 import net.conczin.mca.server.world.data.PlayerSaveData;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.InteractionResult;
 
 public abstract class RelationshipItem extends TooltippedItem implements SpecialCaseGift {
     public RelationshipItem(Properties properties) {
@@ -13,8 +14,7 @@ public abstract class RelationshipItem extends TooltippedItem implements Special
 
     abstract int getHeartsRequired();
 
-    @Override
-    public boolean handle(ServerPlayer player, VillagerEntityMCA villager) {
+    protected InteractionResult validate(ServerPlayer player, VillagerEntityMCA villager) {
         PlayerSaveData playerData = PlayerSaveData.get(player);
         Memories memory = villager.getVillagerBrain().getMemoriesForPlayer(player);
         String response;
@@ -36,10 +36,10 @@ public abstract class RelationshipItem extends TooltippedItem implements Special
         } else if (!villager.canBeAttractedTo(playerData)) {
             response = "interaction.relationship.fail.incompatible";
         } else {
-            return false;
+            return InteractionResult.PASS;
         }
 
         villager.sendChatMessage(player, response);
-        return true;
+        return InteractionResult.FAIL;
     }
 }

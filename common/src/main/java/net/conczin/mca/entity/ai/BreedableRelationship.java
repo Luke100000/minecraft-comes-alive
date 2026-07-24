@@ -18,6 +18,7 @@ import net.conczin.mca.util.network.datasync.CParameter;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.Mth;
+import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.food.FoodProperties;
@@ -208,11 +209,12 @@ public class BreedableRelationship extends Relationship<VillagerEntityMCA> {
     private boolean handleSpecialCaseGift(ServerPlayer player, ItemStack stack) {
         Item item = stack.getItem();
 
-        if (item instanceof SpecialCaseGift) {
-            if (((SpecialCaseGift) item).handle(player, entity)) {
+        if (item instanceof SpecialCaseGift specialCaseGift) {
+            InteractionResult result = specialCaseGift.handle(player, entity);
+            if (result == InteractionResult.CONSUME) {
                 stack.shrink(1);
             }
-            return true;
+            return result != InteractionResult.PASS;
         }
 
         if (item == Items.CAKE && !entity.isBaby()) {

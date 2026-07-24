@@ -92,6 +92,6 @@ public class PlayerArmorExtendedModel<T extends LivingEntity> extends HumanoidMo
         }
 
         super.setupAnim(villager, limbAngle, limbDistance, animationProgress, headYaw, headPitch);
-        applyVillagerDimensions(CommonVillagerModel.getVillager(villager), villager.isCrouching());
+        applyVillagerDimensions(CommonVillagerModel.getVillager(villager));
     }
 }
