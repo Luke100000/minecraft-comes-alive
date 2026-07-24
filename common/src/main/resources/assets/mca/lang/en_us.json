@@ -1233,10 +1233,10 @@
   "gui.blueprint.roomInheritance.inheritedPoi": "Inherited POIs",
   "gui.blueprint.roomInheritance.from": "From %s #%s",
   "gui.blueprint.useAutomaticLayout": "Use Automatic Layout",
-  "gui.blueprint.setMainGround": "Set Main & Ground",
+  "gui.blueprint.useAutomaticLayout.tooltip": "Remove the manual Main Room / Surface Anchor selection and recalculate the Building layout automatically.",
+  "gui.blueprint.setMainGround": "Main / Surface Anchor",
+  "gui.blueprint.setMainGround.tooltip": "Set this Room as the Building's Main Room and use its storey as the Surface Anchor storey.",
   "blueprint.groundAnchorAutomatic": "Building layout returned to automatic mode.",
   "gui.blueprint.roomInheritance.disable": "Disable Inheritance",
-  "gui.blueprint.roomInheritance.disable.tooltip": "Disables shared Room inheritance for this entire logical building. Member Room settings are preserved.",
-  "gui.blueprint.roomInheritance.enableMain.tooltip": "Allows enabled Rooms in this logical building to contribute POIs and visually inherit from this Main Room."
-
+  "gui.blueprint.roomInheritance.disable.tooltip": "Disables shared Room inheritance for this entire logical building. Member Room settings are preserved."
 }

@@ -1,6 +1,5 @@
 package net.conczin.mca.client.gui;
 
-import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.conczin.mca.MCA;
 import net.conczin.mca.MCAClient;
@@ -17,12 +16,9 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.PlayerFaceRenderer;
 import net.minecraft.client.player.LocalPlayer;
-import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Vec3i;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.util.FastColor;
-import net.minecraft.world.level.material.MapColor;
 
 import java.util.*;
 
@@ -30,20 +26,11 @@ import java.util.*;
  * Owns Blueprint map drawing and hit testing.
  *
  * <p>The screen supplies one immutable {@link BlueprintMapViewport} per frame and keeps
- * UI state/tooltips. This renderer owns the complete visual pipeline plus the world-derived
- * terrain texture lifecycle.</p>
+ * UI state/tooltips. This renderer owns non-terrain map drawing and hover testing.</p>
  */
 final class BlueprintMapRenderer implements AutoCloseable {
     private static final ResourceLocation ICON_TEXTURES = MCA.locate("textures/buildings.png");
-    private static final int TERRAIN_TARGET_CELL_PIXELS = 2;
     private static final int TERRAIN_BACKGROUND_COLOR = 0xd0181c22;
-    private static final int TERRAIN_ALPHA = 0xff;
-    private static final int TERRAIN_CONTOUR_COLOR = 0x66000000;
-    private static final float TERRAIN_BASE_BRIGHTNESS = MapColor.Brightness.NORMAL.modifier / 255.0f;
-    private static final float TERRAIN_ELEVATION_BRIGHTNESS_RANGE = 0.12f;
-    private static final float TERRAIN_SLOPE_BRIGHTNESS_PER_BLOCK = 0.055f;
-    private static final float TERRAIN_MIN_BRIGHTNESS = 0.58f;
-    private static final float TERRAIN_MAX_BRIGHTNESS = 1.15f;
     private static final int ROOM_INNER_PADDING = 1;
     private static final int ROOM_SHADOW_COLOR = 0x50000000;
     private static final int PLAYER_MARKER_SIZE = 6;
@@ -61,8 +48,7 @@ final class BlueprintMapRenderer implements AutoCloseable {
     private static final float BUILDING_BORDER_DARKEN_FACTOR = 0.58f;
     private static final int ROOM_FILL_ALPHA_HOVERED = 0x98;
 
-    private BlueprintTerrainSnapshot terrainSnapshot;
-    private ResourceLocation terrainTextureLocation;
+    private final BlueprintTerrainRenderer terrainRenderer = new BlueprintTerrainRenderer();
 
     RenderResult render(GuiGraphics context,
                         BlueprintMapViewport viewport,
@@ -113,7 +99,7 @@ final class BlueprintMapRenderer implements AutoCloseable {
         pushWorldTransform(matrices, viewport);
 
         if (showTerrain) {
-            renderTerrain(context, viewport);
+            terrainRenderer.render(context, viewport);
         }
 
         // Grouped POIs retain their legacy rectangle/icon presentation. Structural rooms
@@ -289,162 +275,6 @@ final class BlueprintMapRenderer implements AutoCloseable {
         matrices.translate(viewport.centerX(), viewport.centerY(), 0.0D);
         matrices.scale(viewport.scale(), viewport.scale(), 1.0F);
         matrices.translate(-viewport.mapCenterX(), -viewport.mapCenterZ(), 0.0D);
-    }
-
-    private void renderTerrain(GuiGraphics context, BlueprintMapViewport viewport) {
-        Minecraft minecraft = Minecraft.getInstance();
-        if (minecraft.level == null) {
-            return;
-        }
-
-        int centerBlockX = (int) Math.floor(viewport.mapCenterX());
-        int centerBlockZ = (int) Math.floor(viewport.mapCenterZ());
-        int radius = Math.max(1, (int) Math.ceil((viewport.halfSize() - 1) / viewport.scale()) + 1);
-        int sampleStep = Math.max(
-                1,
-                (int) Math.ceil((double) TERRAIN_TARGET_CELL_PIXELS / viewport.scale())
-        );
-        int visibleMinX = centerBlockX - radius;
-        int visibleMaxX = centerBlockX + radius;
-        int visibleMinZ = centerBlockZ - radius;
-        int visibleMaxZ = centerBlockZ + radius;
-
-        if (terrainSnapshot == null
-                || !terrainSnapshot.covers(
-                visibleMinX, visibleMinZ, visibleMaxX, visibleMaxZ, sampleStep)) {
-            terrainSnapshot = BlueprintTerrainSnapshot.sample(
-                    minecraft.level,
-                    centerBlockX,
-                    centerBlockZ,
-                    radius,
-                    sampleStep
-            );
-            releaseTerrainTexture();
-        }
-        renderTerrainTexture(context, terrainSnapshot);
-    }
-
-    private void renderTerrainTexture(GuiGraphics context, BlueprintTerrainSnapshot snapshot) {
-        if (terrainTextureLocation == null) {
-            terrainTextureLocation = createTerrainTexture(snapshot);
-        }
-        if (terrainTextureLocation == null) {
-            return;
-        }
-
-        int textureWidth = snapshot.maxX() - snapshot.minX() + 1;
-        int textureHeight = snapshot.maxZ() - snapshot.minZ() + 1;
-        context.blit(
-                terrainTextureLocation,
-                snapshot.minX(), snapshot.minZ(),
-                textureWidth, textureHeight,
-                0.0F, 0.0F,
-                textureWidth, textureHeight,
-                textureWidth, textureHeight
-        );
-    }
-
-    private ResourceLocation createTerrainTexture(BlueprintTerrainSnapshot snapshot) {
-        Minecraft minecraft = Minecraft.getInstance();
-        BlueprintTerrainSnapshot.Cell[][] cells = snapshot.cells();
-        if (cells.length == 0 || cells[0].length == 0) {
-            return null;
-        }
-
-        int textureWidth = snapshot.maxX() - snapshot.minX() + 1;
-        int textureHeight = snapshot.maxZ() - snapshot.minZ() + 1;
-        NativeImage image = new NativeImage(textureWidth, textureHeight, true);
-        int reliefRange = snapshot.maxTerrainHeight() - snapshot.minTerrainHeight();
-        int contourInterval = getTerrainContourInterval(reliefRange);
-
-        for (int cellX = 0; cellX < cells.length; cellX++) {
-            for (int cellZ = 0; cellZ < cells[cellX].length; cellZ++) {
-                BlueprintTerrainSnapshot.Cell cell = cells[cellX][cellZ];
-                if (cell == null) {
-                    continue;
-                }
-
-                int northHeight = snapshot.heightAt(cellX, cellZ - 1, cell.height());
-                int southHeight = snapshot.heightAt(cellX, cellZ + 1, cell.height());
-                int westHeight = snapshot.heightAt(cellX - 1, cellZ, cell.height());
-                int eastHeight = snapshot.heightAt(cellX + 1, cellZ, cell.height());
-                float slopeDelta = ((westHeight - eastHeight) + (northHeight - southHeight)) * 0.25f;
-                float elevation = reliefRange == 0
-                        ? 0.5f
-                        : (cell.height() - snapshot.minTerrainHeight()) / (float) reliefRange;
-
-                int color = shadeTerrainColor(cell.baseColor(), slopeDelta, elevation);
-                int nativeColor = FastColor.ABGR32.fromArgb32(color);
-                int minPixelX = cell.minX() - snapshot.minX();
-                int minPixelZ = cell.minZ() - snapshot.minZ();
-                int maxPixelX = cell.maxX() - snapshot.minX();
-                int maxPixelZ = cell.maxZ() - snapshot.minZ();
-
-                for (int pixelX = minPixelX; pixelX < maxPixelX; pixelX++) {
-                    for (int pixelZ = minPixelZ; pixelZ < maxPixelZ; pixelZ++) {
-                        image.setPixelRGBA(pixelX, pixelZ, nativeColor);
-                    }
-                }
-
-                boolean northContour = cellZ > 0
-                        && Math.floorDiv(cell.height(), contourInterval)
-                        != Math.floorDiv(northHeight, contourInterval);
-                boolean westContour = cellX > 0
-                        && Math.floorDiv(cell.height(), contourInterval)
-                        != Math.floorDiv(westHeight, contourInterval);
-                int contourColor = FastColor.ABGR32.fromArgb32(blendTerrainContour(color));
-
-                if (northContour && minPixelZ < maxPixelZ) {
-                    for (int pixelX = minPixelX; pixelX < maxPixelX; pixelX++) {
-                        image.setPixelRGBA(pixelX, minPixelZ, contourColor);
-                    }
-                }
-                if (westContour && minPixelX < maxPixelX) {
-                    for (int pixelZ = minPixelZ; pixelZ < maxPixelZ; pixelZ++) {
-                        image.setPixelRGBA(minPixelX, pixelZ, contourColor);
-                    }
-                }
-            }
-        }
-
-        DynamicTexture texture = new DynamicTexture(image);
-        texture.setFilter(false, false);
-        return minecraft.getTextureManager().register("mca_blueprint_terrain", texture);
-    }
-
-    private static int blendTerrainContour(int baseColor) {
-        int overlayAlpha = (TERRAIN_CONTOUR_COLOR >>> 24) & 0xff;
-        int inverseAlpha = 255 - overlayAlpha;
-        int red = ((((TERRAIN_CONTOUR_COLOR >> 16) & 0xff) * overlayAlpha)
-                + (((baseColor >> 16) & 0xff) * inverseAlpha)) / 255;
-        int green = ((((TERRAIN_CONTOUR_COLOR >> 8) & 0xff) * overlayAlpha)
-                + (((baseColor >> 8) & 0xff) * inverseAlpha)) / 255;
-        int blue = (((TERRAIN_CONTOUR_COLOR & 0xff) * overlayAlpha)
-                + ((baseColor & 0xff) * inverseAlpha)) / 255;
-        return 0xff000000 | (red << 16) | (green << 8) | blue;
-    }
-
-    private static int getTerrainContourInterval(int reliefRange) {
-        if (reliefRange <= 2) {
-            return 1;
-        }
-        if (reliefRange <= 6) {
-            return 2;
-        }
-        return 4;
-    }
-
-    private static int shadeTerrainColor(int baseColor, float slopeDelta, float elevation) {
-        float elevationBrightness = (elevation - 0.5f) * 2.0f * TERRAIN_ELEVATION_BRIGHTNESS_RANGE;
-        float brightness = TERRAIN_BASE_BRIGHTNESS
-                + slopeDelta * TERRAIN_SLOPE_BRIGHTNESS_PER_BLOCK
-                + elevationBrightness;
-        brightness = Math.max(TERRAIN_MIN_BRIGHTNESS, Math.min(TERRAIN_MAX_BRIGHTNESS, brightness));
-
-        int red = Math.min(255, Math.round(((baseColor >> 16) & 0xff) * brightness));
-        int green = Math.min(255, Math.round(((baseColor >> 8) & 0xff) * brightness));
-        int blue = Math.min(255, Math.round((baseColor & 0xff) * brightness));
-        return (TERRAIN_ALPHA << 24) | (red << 16) | (green << 8) | blue;
     }
 
     private static void renderRoomRegion(GuiGraphics context,
@@ -740,16 +570,9 @@ final class BlueprintMapRenderer implements AutoCloseable {
         return (color & 0x00ffffff) | (alpha << 24);
     }
 
-    private void releaseTerrainTexture() {
-        if (terrainTextureLocation != null) {
-            Minecraft.getInstance().getTextureManager().release(terrainTextureLocation);
-        }
-        terrainTextureLocation = null;
-    }
-
     @Override
     public void close() {
-        releaseTerrainTexture();
+        terrainRenderer.close();
     }
 
     record RenderResult(List<HoverTarget> hoverTargets) {

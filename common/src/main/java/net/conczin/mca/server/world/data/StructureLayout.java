@@ -151,26 +151,37 @@ public final class StructureLayout {
         List<? extends Vec3i> samples = positions.isEmpty() ? List.of(external.getCenter()) : positions;
         int margin = Math.max(1, external.getBuildingType().getMargin());
         long maximumDistance = (long) margin * margin;
-        LogicalBuilding owner = buildings.stream()
-                .map(building -> new ExternalOwner(building,
-                        building.structureIds().stream()
-                                .map(village::getStructure)
-                                .flatMap(Optional::stream)
-                                .mapToLong(structure -> samples.stream()
-                                        .mapToLong(position -> horizontalDistanceSquared(structure, position))
-                                        .min().orElse(Long.MAX_VALUE))
-                                .min().orElse(Long.MAX_VALUE)))
-                .filter(candidate -> candidate.distanceSquared() <= maximumDistance)
-                .min(Comparator.comparingLong(ExternalOwner::distanceSquared)
-                        .thenComparingInt(candidate -> candidate.building().id()))
-                .map(ExternalOwner::building)
-                .orElse(null);
+        LogicalBuilding owner = null;
+        long bestDistance = Long.MAX_VALUE;
+        for (LogicalBuilding building : buildings) {
+            long distance = minimumHorizontalDistanceSquared(village, building, samples);
+            if (distance > maximumDistance) continue;
+            if (owner == null || distance < bestDistance
+                    || distance == bestDistance && building.id() < owner.id()) {
+                owner = building;
+                bestDistance = distance;
+            }
+        }
         if (owner == null || owner.storeys().isEmpty()) return new Placement(-1, 0);
 
         int representativeY = medianY(samples);
         int index = StructureLayoutRules.nearestStoreyIndex(
                 owner.storeys().stream().map(Storey::anchorY).toList(), representativeY);
         return new Placement(owner.id(), owner.storeys().get(index).ordinal());
+    }
+
+    private static long minimumHorizontalDistanceSquared(Village village,
+                                                         LogicalBuilding building,
+                                                         List<? extends Vec3i> samples) {
+        long minimum = Long.MAX_VALUE;
+        for (int structureId : building.structureIds()) {
+            Structure structure = village.getStructure(structureId).orElse(null);
+            if (structure == null) continue;
+            for (Vec3i sample : samples) {
+                minimum = Math.min(minimum, horizontalDistanceSquared(structure, sample));
+            }
+        }
+        return minimum;
     }
 
     private static int medianY(List<? extends Vec3i> positions) {
@@ -222,9 +233,6 @@ public final class StructureLayout {
         long key() { return floorKey(structure.getId(), floor.id()); }
     }
 
-    private record ExternalOwner(LogicalBuilding building, long distanceSquared) {
-    }
-
     public record Layout(List<LogicalBuilding> buildings,
                          Map<Integer, LogicalBuilding> byStructure,
                          Map<Long, Integer> ordinalByFloor,
@@ -271,8 +279,6 @@ public final class StructureLayout {
             LogicalBuilding building = byStructure.get(structureId);
             return building == null ? List.of() : building.storeys().stream()
                     .map(Storey::ordinal)
-                    .distinct()
-                    .sorted()
                     .toList();
         }
 
