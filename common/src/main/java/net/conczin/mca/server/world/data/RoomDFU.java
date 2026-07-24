@@ -13,8 +13,10 @@ final class RoomDFU {
     }
 
     static Result load(CompoundTag villageTag) {
+        boolean legacyInheritance = villageTag.contains("roomInheritance")
+                && villageTag.getBoolean("roomInheritance");
         if (villageTag.contains("structures", Tag.TAG_LIST)) {
-            return loadCurrent(villageTag);
+            return loadCurrent(villageTag, legacyInheritance);
         }
 
         ListTag legacy = villageTag.getList("buildings", Tag.TAG_COMPOUND);
@@ -25,15 +27,17 @@ final class RoomDFU {
                         || tag.contains("strictScan")
                         || tag.contains("groundFloorY")
                         || tag.contains("floorRegions"));
-        return floorSystemFormat ? migrateFloorSystem(legacy) : migrateOrigin(legacy);
+        return floorSystemFormat
+                ? migrateFloorSystem(legacy, legacyInheritance)
+                : migrateOrigin(legacy, legacyInheritance);
     }
 
-    private static Result loadCurrent(CompoundTag villageTag) {
+    private static Result loadCurrent(CompoundTag villageTag, boolean legacyInheritance) {
         Map<Integer, Building> rooms = new HashMap<>();
         Map<Integer, ExternalBuilding> external = new HashMap<>();
         Map<Integer, Structure> structures = new HashMap<>();
         for (Tag value : villageTag.getList("buildings", Tag.TAG_COMPOUND)) {
-            Building room = new Building((CompoundTag) value);
+            Building room = loadRoom((CompoundTag) value, legacyInheritance);
             rooms.put(room.getId(), room);
         }
         for (Tag value : villageTag.getList("externalBuildings", Tag.TAG_COMPOUND)) {
@@ -47,13 +51,19 @@ final class RoomDFU {
         return new Result(rooms, external, structures);
     }
 
-    private static Result migrateOrigin(ListTag legacy) {
+    private static Building loadRoom(CompoundTag tag, boolean legacyInheritance) {
+        Building room = new Building(tag);
+        if (!tag.contains("inheritanceEnabled")) room.setInheritanceEnabled(legacyInheritance);
+        return room;
+    }
+
+    private static Result migrateOrigin(ListTag legacy, boolean legacyInheritance) {
         Map<Integer, Building> rooms = new HashMap<>();
         Map<Integer, ExternalBuilding> external = new HashMap<>();
         Map<Integer, Structure> structures = new HashMap<>();
         for (Tag value : legacy) {
             CompoundTag tag = (CompoundTag) value;
-            Building room = new Building(tag);
+            Building room = loadRoom(tag, legacyInheritance);
             if (room.getBuildingType().grouped()) {
                 ExternalBuilding building = new ExternalBuilding(tag);
                 external.put(building.getId(), building);
@@ -67,12 +77,12 @@ final class RoomDFU {
         return new Result(rooms, external, structures);
     }
 
-    private static Result migrateFloorSystem(ListTag legacy) {
+    private static Result migrateFloorSystem(ListTag legacy, boolean legacyInheritance) {
         Map<Integer, ExternalBuilding> external = new HashMap<>();
         Map<Integer, List<LegacyFloorRoom>> byStructure = new TreeMap<>();
         for (Tag value : legacy) {
             CompoundTag tag = (CompoundTag) value;
-            Building room = new Building(tag);
+            Building room = loadRoom(tag, legacyInheritance);
             if (room.getBuildingType().grouped()) {
                 ExternalBuilding building = new ExternalBuilding(tag);
                 external.put(building.getId(), building);
@@ -138,7 +148,7 @@ final class RoomDFU {
         for (LegacyFloorRoom legacyRoom : functional) {
             StructureFloor floor = nearestFloor(floors, legacyRoom.floorY());
             if (floor == null) continue;
-            Building room = new Building(legacyRoom.tag());
+            Building room = legacyRoom.room();
             room.setStructureId(structureId);
             room.setFloorId(floor.id());
             rooms.add(room);

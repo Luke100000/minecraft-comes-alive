@@ -546,6 +546,10 @@ public class VillageManager extends SavedData implements Iterable<Village> {
             return Building.validationResult.OVERLAP;
         }
         List<Integer> absorbedRoomIds = absorbed.get();
+        boolean inheritanceEnabled = existing.isInheritanceEnabled();
+        scan.building().setInheritanceEnabled(inheritanceEnabled);
+        scan.createdRooms().forEach(room -> room.setInheritanceEnabled(inheritanceEnabled));
+
         List<Building> prospectiveRooms = village.getRooms()
                 .filter(room -> room.getId() != existing.getId() && !absorbedRoomIds.contains(room.getId()))
                 .collect(java.util.stream.Collectors.toCollection(ArrayList::new));

@@ -34,6 +34,8 @@ public class Building implements VillageBuilding {
     private List<BuildingFloorRegion> floorRegions = List.of();
     private String type = "house";
     private boolean typeForced;
+    /** Whether this Room contributes to and visually inherits from its logical Main Room. */
+    private boolean inheritanceEnabled = true;
     private int size;
     private int pos0X, pos0Y, pos0Z;
     private int pos1X, pos1Y, pos1Z;
@@ -85,6 +87,7 @@ public class Building implements VillageBuilding {
         floorId = tag.contains("floorId") ? tag.getInt("floorId") : -1;
         typeForced = tag.getBoolean("isTypeForced");
         type = tag.getString("type");
+        if (tag.contains("inheritanceEnabled")) inheritanceEnabled = tag.getBoolean("inheritanceEnabled");
         blocks.putAll(NbtHelper.toMap(tag.getCompound("blocks2"),
                 ResourceLocation::parse,
                 value -> NbtHelper.toStream(value, Building::loadBlockPos)
@@ -112,6 +115,7 @@ public class Building implements VillageBuilding {
         tag.putInt("floorId", floorId);
         tag.putBoolean("isTypeForced", typeForced);
         tag.putString("type", type);
+        tag.putBoolean("inheritanceEnabled", inheritanceEnabled);
         tag.put("floorRegions", NbtHelper.fromList(floorRegions, BuildingFloorRegion::save));
         CompoundTag blockTag = new CompoundTag();
         NbtHelper.fromMap(blockTag, blocks, ResourceLocation::toString,
@@ -359,6 +363,14 @@ public class Building implements VillageBuilding {
 
     public void setTypeForced(boolean forced) {
         typeForced = forced;
+    }
+
+    public boolean isInheritanceEnabled() {
+        return inheritanceEnabled;
+    }
+
+    public void setInheritanceEnabled(boolean enabled) {
+        inheritanceEnabled = enabled;
     }
 
     public BuildingType getBuildingType() {

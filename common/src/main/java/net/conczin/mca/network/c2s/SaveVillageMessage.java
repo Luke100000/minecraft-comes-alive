@@ -14,8 +14,7 @@ public record SaveVillageMessage(
         int id,
         float taxes,
         float populationThreshold,
-        float marriageThreshold,
-        boolean roomInheritance
+        float marriageThreshold
 ) implements HandleablePayload {
     public static final CustomPacketPayload.Type<SaveVillageMessage> TYPE = new CustomPacketPayload.Type<>(MCA.locate("save_village"));
     public static final StreamCodec<FriendlyByteBuf, SaveVillageMessage> STREAM_CODEC = StreamCodec.composite(
@@ -23,13 +22,11 @@ public record SaveVillageMessage(
             ByteBufCodecs.FLOAT, SaveVillageMessage::taxes,
             ByteBufCodecs.FLOAT, SaveVillageMessage::populationThreshold,
             ByteBufCodecs.FLOAT, SaveVillageMessage::marriageThreshold,
-            ByteBufCodecs.BOOL, SaveVillageMessage::roomInheritance,
             SaveVillageMessage::new
     );
 
     public SaveVillageMessage(Village village) {
-        this(village.getId(), village.getTaxes(), village.getPopulationThreshold(), village.getMarriageThreshold(),
-                village.isRoomInheritance());
+        this(village.getId(), village.getTaxes(), village.getPopulationThreshold(), village.getMarriageThreshold());
     }
 
     @Override
@@ -38,7 +35,6 @@ public record SaveVillageMessage(
             village.setTaxes(taxes);
             village.setPopulationThreshold(populationThreshold);
             village.setMarriageThreshold(marriageThreshold);
-            village.setRoomInheritance(roomInheritance);
         });
     }
 
