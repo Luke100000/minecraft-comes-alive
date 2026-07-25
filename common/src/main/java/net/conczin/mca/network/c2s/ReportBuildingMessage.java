@@ -38,7 +38,7 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
                 case ADD -> addBuildingAndCurrentRoom(manager, player);
                 case ADD_ROOM -> addRoom(manager, player);
                 case UPDATE_ROOM -> updateRoom(manager, player, player.blockPosition(), null);
-                case SET_GROUND_ANCHOR -> setGroundAnchor(manager, player);
+                case SET_MAIN_ROOM -> updateMainRoom(manager, player);
                 case AUTO_SCAN -> manager.findNearestVillage(player).ifPresent(Village::toggleAutoScan);
                 case FULL_SCAN -> fullScan(manager, player);
                 case FORCE_TYPE -> displayEditResult(player,
@@ -88,7 +88,7 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
         }
     }
 
-    private static void setGroundAnchor(VillageManager manager, ServerPlayer player) {
+    private static void updateMainRoom(VillageManager manager, ServerPlayer player) {
         Village village = manager.findNearestVillage(player).orElse(null);
         if (village == null) {
             player.displayClientMessage(Component.translatable("blueprint.noBuilding"), true);
@@ -99,13 +99,19 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
             player.displayClientMessage(Component.translatable("blueprint.noRoomOnFloor"), true);
             return;
         }
-        boolean useAutomatic = room.isLayoutOverride();
-        if (!village.toggleLayoutOverride(room)) {
-            player.displayClientMessage(Component.translatable("blueprint.groundAnchorNoStructure"), true);
+        Structure structure = village.getStructureFor(room).orElse(null);
+        if (structure == null) {
+            player.displayClientMessage(Component.translatable("blueprint.mainRoomNoStructure"), true);
             return;
         }
-        player.displayClientMessage(Component.translatable(useAutomatic
-                ? "blueprint.groundAnchorAutomatic" : "blueprint.groundAnchorSet"), true);
+        boolean changeToAutomatic = !structure.isMainRoomAutomatic();
+        boolean changed = changeToAutomatic
+                ? village.useAutomaticMainRoom(structure)
+                : village.setMainRoom(room);
+        if (changed) {
+            player.displayClientMessage(Component.translatable(changeToAutomatic
+                    ? "blueprint.mainRoomAutomatic" : "blueprint.mainRoomSet"), true);
+        }
     }
 
     private static void setRoomInheritance(VillageManager manager, ServerPlayer player, String data) {
@@ -142,16 +148,16 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
         }
 
         int expectedRoomId = existing.getId();
-        BuildingScanResult scan = manager.analyzeRegisteredRoomUpdate(village, expectedRoomId, source);
-        if (scan.result() != Building.validationResult.SUCCESS) {
-            displayScanResult(player, scan.result());
+        RegisteredRoomUpdate update = manager.analyzeRegisteredRoomUpdate(village, expectedRoomId, source);
+        if (update.result() != Building.validationResult.SUCCESS) {
+            displayScanResult(player, update.result());
             return;
         }
-        if (forcedType == null && scan.isAmbiguous()) {
-            requestType(scan, player, Action.UPDATE_ROOM, expectedRoomId);
+        if (forcedType == null && update.isAmbiguous()) {
+            requestType(update, player, Action.UPDATE_ROOM, expectedRoomId);
             return;
         }
-        Building.validationResult result = manager.commitRegisteredRoomUpdate(scan, expectedRoomId, forcedType);
+        Building.validationResult result = manager.commitRegisteredRoomUpdate(update, forcedType);
         if (result == Building.validationResult.SUCCESS) {
             player.displayClientMessage(Component.translatable("blueprint.roomUpdated"), true);
         } else {
@@ -199,6 +205,14 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
                 scan.matchingTypes(), scan.source(), action, expectedRoomId), player);
     }
 
+    private static void requestType(RegisteredRoomUpdate update,
+                                    ServerPlayer player,
+                                    Action action,
+                                    int expectedRoomId) {
+        Network.sendToPlayer(new BuildingPolymorphMessage(
+                update.playerMatchingTypes(), update.source(), action, expectedRoomId), player);
+    }
+
     private static void displayScanResult(ServerPlayer player, Building.validationResult result) {
         player.displayClientMessage(Component.translatable(
                 "blueprint.scan." + result.name().toLowerCase(Locale.ENGLISH)), true);
@@ -211,7 +225,7 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
             case SUCCESS -> successKey;
             case NO_BUILDING -> "blueprint.noBuilding";
             case NO_ROOM -> "blueprint.noRoomOnFloor";
-            case ROOT_ROOM -> "blueprint.cannot_remove_ground_floor";
+            case MAIN_ROOM -> "blueprint.cannotRemoveMainRoom";
         };
         if (key != null) player.displayClientMessage(Component.translatable(key), true);
     }
@@ -230,7 +244,7 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
         FULL_SCAN,
         REMOVE_ROOM,
         UPDATE_ROOM,
-        SET_GROUND_ANCHOR,
+        SET_MAIN_ROOM,
         SET_ROOM_INHERITANCE
     }
 }

@@ -275,65 +275,66 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         return scanRoom(village, structure, pos, buildingId);
     }
 
-    public BuildingScanResult analyzeRegisteredRoomUpdate(Village village, int buildingId, BlockPos pos) {
+    public RegisteredRoomUpdate analyzeRegisteredRoomUpdate(Village village, int buildingId, BlockPos pos) {
         Building expected = village == null ? null : village.getBuilding(buildingId).orElse(null);
         if (expected == null || !expected.isFunctionalRoom()) {
-            return failedRoom(Building.validationResult.NOT_IN_BUILDING, pos, village);
+            return RegisteredRoomUpdate.failure(Building.validationResult.NOT_IN_BUILDING, pos, village);
         }
         Structure structure = village.getStructureFor(expected).orElse(null);
-        if (structure == null) return failedRoom(Building.validationResult.NOT_IN_BUILDING, pos, village);
+        if (structure == null) {
+            return RegisteredRoomUpdate.failure(Building.validationResult.NOT_IN_BUILDING, pos, village);
+        }
+        return analyzeRegisteredFloor(village, structure, expected, pos);
+    }
+
+    private RegisteredRoomUpdate analyzeRegisteredFloor(Village village,
+                                                        Structure structure,
+                                                        Building expected,
+                                                        BlockPos pos) {
         StructureFloor floor = structure.getFloor(expected.getFloorId()).orElse(null);
-        if (floor == null) return failedRoom(Building.validationResult.OVERLAP, pos, village);
-
-        List<BuildingScanResult> components = BuildingRoomScanner.partition(
-                        world, expected.getSourceBlock(), Config.getInstance().maxBuildingSize,
-                        Config.getInstance().maxBuildingRadius, floor).stream()
-                .map(geometry -> roomResultFromGeometry(village, structure, floor, geometry, -1))
-                .filter(scan -> scan.result() == Building.validationResult.SUCCESS)
-                .filter(scan -> scan.building().getFloorFootprintIntersectionArea(expected) > 0)
-                .toList();
-        if (components.isEmpty()) return failedRoom(Building.validationResult.TOO_SMALL, pos, village);
-
-        BuildingScanResult retained = selectRetainedRoom(expected, components);
-        retained.building().setId(buildingId);
-        List<Building> created = new ArrayList<>();
-        for (BuildingScanResult component : components) {
-            if (component == retained) continue;
-            Building room = component.building();
-            long overlap = room.getFloorFootprintIntersectionArea(expected);
-            if (overlap != room.getFloorFootprintArea()) {
-                return failedRoom(Building.validationResult.OVERLAP, pos, village);
-            }
-            if (overlapsRegisteredRoom(village, expected, room)) {
-                return failedRoom(Building.validationResult.OVERLAP, pos, village);
-            }
-            created.add(room);
+        if (floor == null) {
+            return RegisteredRoomUpdate.failure(Building.validationResult.OVERLAP, pos, village);
         }
 
-        Optional<List<Integer>> absorbed = findAbsorbedRooms(village, expected, retained.building());
-        if (absorbed.isEmpty()) return failedRoom(Building.validationResult.OVERLAP, pos, village);
-        return new BuildingScanResult(retained.result(), retained.source(), retained.building(), retained.matchingTypes(),
-                retained.village(), absorbed.get(), created);
-    }
+        List<Building> previousRooms = village.getRooms()
+                .filter(room -> room.getStructureId() == structure.getId())
+                .filter(room -> room.getFloorId() == floor.id())
+                .sorted(Comparator.comparingInt(Building::getId))
+                .toList();
+        Set<BlockPos> registeredCells = previousRooms.stream()
+                .flatMap(room -> room.getFloorRegions().stream())
+                .flatMap(region -> region.cells().stream())
+                .collect(java.util.stream.Collectors.toSet());
+        List<BuildingScanResult> scanned = BuildingRoomScanner.partitionRegistered(
+                        world, pos, Config.getInstance().maxBuildingSize,
+                        Config.getInstance().maxBuildingRadius, floor, registeredCells).stream()
+                .map(geometry -> roomResultFromGeometry(village, structure, floor, geometry, -1))
+                .toList();
+        if (scanned.isEmpty()) {
+            return RegisteredRoomUpdate.failure(Building.validationResult.TOO_SMALL, pos, village);
+        }
+        BuildingScanResult failure = scanned.stream()
+                .filter(scan -> scan.result() != Building.validationResult.SUCCESS)
+                .findFirst().orElse(null);
+        if (failure != null) return RegisteredRoomUpdate.failure(failure.result(), pos, village);
 
-    private static BuildingScanResult selectRetainedRoom(Building expected, List<BuildingScanResult> components) {
-        Comparator<BuildingScanResult> preference = Comparator
-                .comparing((BuildingScanResult scan) -> !scan.building().containsFloorPosition(expected.getSourceBlock()))
-                .thenComparing(Comparator.comparingLong((BuildingScanResult scan) ->
-                        scan.building().getFloorFootprintIntersectionArea(expected)).reversed())
-                .thenComparing(Comparator.comparingLong((BuildingScanResult scan) ->
-                        scan.building().getFloorFootprintArea()).reversed())
-                .thenComparingInt(scan -> scan.building().getRawPos0().getX())
-                .thenComparingInt(scan -> scan.building().getRawPos0().getZ());
-        return components.stream().min(preference).orElseThrow();
-    }
-
-    private static boolean overlapsRegisteredRoom(Village village, Building expected, Building candidate) {
-        return village.getRooms()
-                .filter(room -> room.getId() != expected.getId())
-                .filter(room -> room.getStructureId() == expected.getStructureId())
-                .filter(room -> room.getFloorId() == expected.getFloorId())
-                .anyMatch(room -> candidate.getFloorFootprintIntersectionArea(room) > 0);
+        RegisteredRoomReconciler.Result reconciled = RegisteredRoomReconciler.reconcile(
+                pos, expected.getId(), previousRooms,
+                scanned.stream().map(BuildingScanResult::building).toList()).orElse(null);
+        if (reconciled == null) {
+            return RegisteredRoomUpdate.failure(Building.validationResult.OVERLAP, pos, village);
+        }
+        Building playerComponent = reconciled.assignments().stream()
+                .filter(assignment -> assignment.roomId() == expected.getId())
+                .map(RegisteredRoomReconciler.Assignment::component)
+                .findFirst().orElseThrow();
+        List<String> matchingTypes = village.getMatchingRoomTypes(playerComponent).stream()
+                .map(BuildingType::name)
+                .toList();
+        return new RegisteredRoomUpdate(Building.validationResult.SUCCESS, pos, village,
+                structure.getId(), floor.id(), expected.getId(),
+                previousRooms.stream().map(Building::getId).toList(),
+                reconciled.assignments(), matchingTypes);
     }
 
     private BuildingScanResult scanRoom(Village village,
@@ -392,53 +393,11 @@ public class VillageManager extends SavedData implements Iterable<Village> {
                 ? room.getVisibleMatchingTypes().stream().map(BuildingType::name).toList()
                 : village.getMatchingRoomTypes(room).stream().map(BuildingType::name).toList();
         return new BuildingScanResult(Building.validationResult.SUCCESS, room.getSourceBlock(), room,
-                types, village, List.of());
-    }
-
-    private static boolean validCreatedRooms(Village village, Building existing, Building retained,
-                                             List<Building> createdRooms) {
-        for (int i = 0; i < createdRooms.size(); i++) {
-            Building created = createdRooms.get(i);
-            if (created.getId() >= 0
-                    || created.getStructureId() != existing.getStructureId()
-                    || created.getFloorId() != existing.getFloorId()
-                    || created.getFloorFootprintIntersectionArea(existing) != created.getFloorFootprintArea()
-                    || created.getFloorFootprintIntersectionArea(retained) > 0) {
-                return false;
-            }
-            for (int j = i + 1; j < createdRooms.size(); j++) {
-                if (created.getFloorFootprintIntersectionArea(createdRooms.get(j)) > 0) return false;
-            }
-            boolean overlapsRegistered = village.getRooms()
-                    .filter(room -> room.getId() != existing.getId())
-                    .filter(room -> room.getStructureId() == existing.getStructureId())
-                    .filter(room -> room.getFloorId() == existing.getFloorId())
-                    .anyMatch(room -> created.getFloorFootprintIntersectionArea(room) > 0);
-            if (overlapsRegistered) return false;
-        }
-        return true;
-    }
-
-    private static Optional<List<Integer>> findAbsorbedRooms(Village village,
-                                                             Building existing,
-                                                             Building scanned) {
-        List<Integer> absorbed = new ArrayList<>();
-        for (Building other : village.getRooms()
-                .filter(room -> room.getId() != existing.getId())
-                .filter(room -> room.getStructureId() == existing.getStructureId())
-                .filter(room -> room.getFloorId() == existing.getFloorId())
-                .sorted(Comparator.comparingInt(Building::getId))
-                .toList()) {
-            long intersection = scanned.getFloorFootprintIntersectionArea(other);
-            if (intersection == 0) continue;
-            if (intersection != other.getFloorFootprintArea()) return Optional.empty();
-            absorbed.add(other.getId());
-        }
-        return Optional.of(List.copyOf(absorbed));
+                types, village);
     }
 
     private static BuildingScanResult failedRoom(Building.validationResult result, BlockPos pos, Village village) {
-        return new BuildingScanResult(result, pos, new Building(pos), List.of(), village, List.of());
+        return new BuildingScanResult(result, pos, new Building(pos), List.of(), village);
     }
 
     public Building.validationResult commitInitialStructure(InitialStructureScan scan, String forcedRoomType) {
@@ -454,13 +413,13 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         int structureId = lastBuildingId++;
         Structure structure = scan.structure().toStructure(structureId);
         Building room = scan.room().building();
-        String category = chooseRootCategory(scan.room(), forcedRoomType);
+        String category = chooseInitialRoomCategory(scan.room(), forcedRoomType);
         if (category == null) return Building.validationResult.INVALID_TYPE;
         room.setId(lastBuildingId++);
         room.setStructureId(structureId);
         room.setType(category);
         room.setTypeForced(forcedRoomType != null);
-        room.setLayoutOverride(false);
+        structure.setAutomaticMainRoom(room.getId());
         village.getBuildings().put(room.getId(), room);
         village.getStructures().put(structureId, structure);
         villages.put(village.getId(), village);
@@ -471,7 +430,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
     public Building.validationResult commitBuilding(BuildingScanResult scan, String forcedType) {
         if (scan == null || scan.result() != Building.validationResult.SUCCESS) return scan == null
                 ? Building.validationResult.TOO_SMALL : scan.result();
-        if (scan.building().getId() >= 0) return commitRegisteredRoomUpdate(scan, scan.building().getId(), forcedType);
+        if (scan.building().getId() >= 0) return Building.validationResult.OVERLAP;
         if (forcedType != null && !scan.matchesType(forcedType)) return Building.validationResult.INVALID_TYPE;
         if (forcedType == null && scan.isAmbiguous()) return Building.validationResult.INVALID_TYPE;
         Village village = scan.village();
@@ -479,7 +438,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         if (village == null || structure == null) return Building.validationResult.NOT_IN_BUILDING;
 
         Building room = scan.building();
-        String category = chooseCategory(scan, forcedType, false);
+        String category = chooseRoomCategory(scan, forcedType);
         if (category == null) return Building.validationResult.INVALID_TYPE;
         room.setId(lastBuildingId++);
         room.setType(category);
@@ -489,106 +448,141 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         return Building.validationResult.SUCCESS;
     }
 
-    public Building.validationResult commitRegisteredRoomUpdate(BuildingScanResult scan,
-                                                                  int expectedRoomId,
-                                                                  String forcedType) {
-        if (scan == null || scan.result() != Building.validationResult.SUCCESS) return scan == null
-                ? Building.validationResult.TOO_SMALL : scan.result();
-        Village village = scan.village();
-        Building existing = village == null ? null : village.getBuilding(expectedRoomId).orElse(null);
-        if (existing == null || scan.building().getId() != expectedRoomId) return Building.validationResult.OVERLAP;
-        Structure currentStructure = village.getStructureFor(existing).orElse(null);
-        if (currentStructure == null) return Building.validationResult.NOT_IN_BUILDING;
+    public Building.validationResult commitRegisteredRoomUpdate(RegisteredRoomUpdate update,
+                                                                 String forcedType) {
+        return commitRegisteredRoomUpdate(update, forcedType, true);
+    }
 
-        if (scan.building().getStructureId() != existing.getStructureId()
-                || scan.building().getFloorId() != existing.getFloorId()
-                || currentStructure.getFloor(existing.getFloorId()).isEmpty()) {
-            return Building.validationResult.OVERLAP;
+    private Building.validationResult commitRegisteredRoomUpdate(RegisteredRoomUpdate update,
+                                                                  String forcedType,
+                                                                  boolean requireTypeChoice) {
+        if (update == null || update.result() != Building.validationResult.SUCCESS) {
+            return update == null ? Building.validationResult.TOO_SMALL : update.result();
         }
-
-        Optional<List<Integer>> absorbed = findAbsorbedRooms(village, existing, scan.building());
-        if (absorbed.isEmpty() || !absorbed.get().equals(scan.absorbedRoomIds())
-                || !validCreatedRooms(village, existing, scan.building(), scan.createdRooms())) {
-            return Building.validationResult.OVERLAP;
+        if (forcedType != null && !update.matchesType(forcedType)) {
+            return Building.validationResult.INVALID_TYPE;
         }
-        List<Integer> absorbedRoomIds = absorbed.get();
-        boolean inheritanceEnabled = existing.isInheritanceEnabled();
-        boolean layoutOverride = existing.isLayoutOverride() || absorbedRoomIds.stream()
-                .map(village::getBuilding)
-                .flatMap(Optional::stream)
-                .anyMatch(Building::isLayoutOverride);
-        scan.building().setInheritanceEnabled(inheritanceEnabled);
-        scan.building().setLayoutOverride(layoutOverride);
-        scan.createdRooms().forEach(room -> {
-            room.setInheritanceEnabled(inheritanceEnabled);
-            room.setLayoutOverride(false);
-        });
-
-        List<Building> prospectiveRooms = village.getRooms()
-                .filter(room -> room.getId() != existing.getId() && !absorbedRoomIds.contains(room.getId()))
-                .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
-        prospectiveRooms.add(scan.building());
-        prospectiveRooms.addAll(scan.createdRooms());
-
-        StructureLayout.Layout layout = StructureLayout.build(village);
-        Building currentMain = layout.buildingFor(existing.getStructureId())
-                .map(StructureLayout.LogicalBuilding::rootRoomId)
-                .flatMap(village::getBuilding)
-                .filter(Building::isFunctionalRoom)
-                .orElse(null);
-        Building prospectiveMain = currentMain;
-        if (currentMain != null && (currentMain.getId() == existing.getId()
-                || absorbedRoomIds.contains(currentMain.getId()))) {
-            prospectiveMain = scan.building();
-        }
-
-        RoomTypeResolver resolver = RoomTypeResolver.create(village, layout, prospectiveRooms);
-        String requestedForcedType = forcedType != null ? forcedType
-                : existing.isTypeForced() ? existing.getType() : null;
-        RoomTypeResolver.Context retainedContext = resolver.resolve(scan.building(), prospectiveMain);
-        String retainedType = retainedContext.updatedType(requestedForcedType);
-        if (retainedType == null) return Building.validationResult.INVALID_TYPE;
-
-        Map<Building, String> createdTypes = new IdentityHashMap<>();
-        for (Building created : scan.createdRooms()) {
-            String type = resolver.resolve(created, prospectiveMain).updatedType(null);
-            if (type == null) return Building.validationResult.INVALID_TYPE;
-            createdTypes.put(created, type);
-        }
-
-        if (prospectiveMain != null && prospectiveMain.getId() != existing.getId()
-                && prospectiveMain.isTypeForced()
-                && !resolver.resolve(prospectiveMain, prospectiveMain).matchesForcedType(prospectiveMain.getType())) {
+        if (requireTypeChoice && forcedType == null && update.isAmbiguous()) {
             return Building.validationResult.INVALID_TYPE;
         }
 
-        existing.copyScannedGeometryFrom(scan.building(), world, true);
-        existing.setType(retainedType);
-        existing.setTypeForced(requestedForcedType != null);
-        existing.setLayoutOverride(layoutOverride);
-
-        village.removeBuildings(absorbedRoomIds);
-        for (Building created : scan.createdRooms()) {
-            created.setId(lastBuildingId++);
-            created.setStructureId(existing.getStructureId());
-            created.setFloorId(existing.getFloorId());
-            created.setType(createdTypes.get(created));
-            created.setTypeForced(false);
-            village.getBuildings().put(created.getId(), created);
+        Village village = update.village();
+        Structure structure = village == null
+                ? null : village.getStructure(update.structureId()).orElse(null);
+        if (structure == null || structure.getFloor(update.floorId()).isEmpty()) {
+            return Building.validationResult.NOT_IN_BUILDING;
+        }
+        List<Building> currentFloorRooms = village.getRooms()
+                .filter(room -> room.getStructureId() == update.structureId())
+                .filter(room -> room.getFloorId() == update.floorId())
+                .sorted(Comparator.comparingInt(Building::getId))
+                .toList();
+        if (!currentFloorRooms.stream().map(Building::getId).toList().equals(update.previousRoomIds())) {
+            return Building.validationResult.OVERLAP;
+        }
+        Building playerRoom = village.getBuilding(update.expectedPlayerRoomId()).orElse(null);
+        if (playerRoom == null || !currentFloorRooms.contains(playerRoom)) {
+            return Building.validationResult.OVERLAP;
         }
 
+        Map<RegisteredRoomReconciler.Assignment, Integer> assignedIds = new LinkedHashMap<>();
+        int nextRoomId = lastBuildingId;
+        for (RegisteredRoomReconciler.Assignment assignment : update.assignments()) {
+            Building component = assignment.component();
+            if (component.getStructureId() != update.structureId()
+                    || component.getFloorId() != update.floorId()
+                    || component.getFloorFootprintArea() <= 0) {
+                return Building.validationResult.OVERLAP;
+            }
+            int roomId = assignment.createsRoom() ? nextRoomId++ : assignment.roomId();
+            Building previous = assignment.previous();
+            if (previous != null && village.getBuilding(roomId).orElse(null) != previous) {
+                return Building.validationResult.OVERLAP;
+            }
+            component.setId(roomId);
+            component.setStructureId(update.structureId());
+            component.setFloorId(update.floorId());
+            if (previous != null) {
+                component.setType(previous.getType());
+                component.setTypeForced(previous.isTypeForced());
+                component.setInheritanceEnabled(previous.isInheritanceEnabled());
+            } else {
+                component.setInheritanceEnabled(playerRoom.isInheritanceEnabled());
+            }
+            assignedIds.put(assignment, roomId);
+        }
+        List<Building> components = update.assignments().stream()
+                .map(RegisteredRoomReconciler.Assignment::component)
+                .toList();
+        for (int i = 0; i < components.size(); i++) {
+            for (int j = i + 1; j < components.size(); j++) {
+                if (components.get(i).getFloorFootprintIntersectionArea(components.get(j)) > 0) {
+                    return Building.validationResult.OVERLAP;
+                }
+            }
+        }
+
+        Set<Integer> removedRoomIds = update.removedRoomIds();
+        int prospectiveMainRoomId = removedRoomIds.contains(structure.getMainRoomId())
+                ? update.expectedPlayerRoomId() : structure.getMainRoomId();
+        List<Building> prospectiveRooms = village.getRooms()
+                .filter(room -> !update.previousRoomIds().contains(room.getId()))
+                .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
+        prospectiveRooms.addAll(components);
+        Building prospectiveMain = prospectiveRooms.stream()
+                .filter(room -> room.getId() == prospectiveMainRoomId)
+                .findFirst().orElse(null);
+        RoomTypeResolver resolver = RoomTypeResolver.create(
+                village, StructureLayout.build(village), prospectiveRooms);
+
+        Building playerComponent = update.playerComponent();
+        if (playerComponent == null) return Building.validationResult.OVERLAP;
+        if (forcedType != null) {
+            String selectedType = resolver.resolve(playerComponent, prospectiveMain).updatedType(forcedType);
+            if (selectedType == null) return Building.validationResult.INVALID_TYPE;
+            playerComponent.setType(selectedType);
+            playerComponent.setTypeForced(true);
+        }
+        for (RegisteredRoomReconciler.Assignment assignment : update.assignments()) {
+            if (!assignment.createsRoom()) continue;
+            Building component = assignment.component();
+            String type = resolver.resolve(component, prospectiveMain).updatedType(null);
+            if (type == null) return Building.validationResult.INVALID_TYPE;
+            component.setType(type);
+            component.setTypeForced(false);
+        }
+
+        for (RegisteredRoomReconciler.Assignment assignment : update.assignments()) {
+            Building component = assignment.component();
+            if (assignment.previous() == null) continue;
+            Building existing = assignment.previous();
+            existing.copyScannedGeometryFrom(component, world, true);
+            existing.setType(component.getType());
+            existing.setTypeForced(component.isTypeForced());
+            existing.setInheritanceEnabled(component.isInheritanceEnabled());
+        }
+        for (int removedRoomId : removedRoomIds) {
+            village.getBuildings().remove(removedRoomId);
+            structure.transferMainRoom(removedRoomId, update.expectedPlayerRoomId());
+        }
+        for (RegisteredRoomReconciler.Assignment assignment : update.assignments()) {
+            if (!assignment.createsRoom()) continue;
+            Building created = assignment.component();
+            village.getBuildings().put(assignedIds.get(assignment), created);
+        }
+        lastBuildingId = nextRoomId;
         finalizeVillageMutation(village);
         return Building.validationResult.SUCCESS;
     }
 
-    private static String chooseCategory(BuildingScanResult scan, String forcedType, boolean root) {
+    private static String chooseRoomCategory(BuildingScanResult scan, String forcedType) {
         if (forcedType != null) return forcedType;
         if (scan.matchingTypes().size() == 1) return scan.matchingTypes().getFirst();
         if (!scan.matchingTypes().isEmpty()) return null;
-        return root ? "house" : "building";
+        return "building";
     }
 
-    private static String chooseRootCategory(BuildingScanResult scan, String forcedType) {
+    private static String chooseInitialRoomCategory(BuildingScanResult scan, String forcedType) {
         if (forcedType != null) return forcedType;
         if (scan.matchingTypes().isEmpty()) return "house";
         return scan.matchingTypes().getFirst();
@@ -620,8 +614,38 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         Structure updated = new Structure(structure.save());
         if (!updated.applyScan(scan, rooms)) return Building.validationResult.OVERLAP;
 
+        List<RegisteredRoomUpdate> roomUpdates = new ArrayList<>();
+        Map<Integer, List<Building>> roomsByFloor = rooms.stream()
+                .collect(java.util.stream.Collectors.groupingBy(Building::getFloorId));
+        for (Map.Entry<Integer, List<Building>> entry : roomsByFloor.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey()).toList()) {
+            Building expected = entry.getValue().stream()
+                    .min(Comparator.comparingInt(Building::getId))
+                    .orElseThrow();
+            RegisteredRoomUpdate update = analyzeRegisteredFloor(
+                    village, updated, expected, expected.getSourceBlock());
+            if (update.result() != Building.validationResult.SUCCESS) return update.result();
+            roomUpdates.add(update);
+        }
+
+        List<Building> roomSnapshots = rooms.stream()
+                .map(room -> new Building(room.save()))
+                .toList();
+        int previousLastBuildingId = lastBuildingId;
         village.getStructures().put(structureId, updated);
-        finalizeVillageMutation(village);
+        for (RegisteredRoomUpdate update : roomUpdates) {
+            Building.validationResult result = commitRegisteredRoomUpdate(update, null, false);
+            if (result == Building.validationResult.SUCCESS) continue;
+
+            village.getBuildings().values().removeIf(
+                    room -> room.isFunctionalRoom() && room.getStructureId() == structureId);
+            roomSnapshots.forEach(room -> village.getBuildings().put(room.getId(), room));
+            village.getStructures().put(structureId, structure);
+            lastBuildingId = previousLastBuildingId;
+            finalizeVillageMutation(village);
+            return result;
+        }
+        if (roomUpdates.isEmpty()) finalizeVillageMutation(village);
         return Building.validationResult.SUCCESS;
     }
 
@@ -633,8 +657,9 @@ public class VillageManager extends SavedData implements Iterable<Village> {
             setDirty();
             return Building.validationResult.SUCCESS;
         }
-        BuildingScanResult scan = analyzeRegisteredRoom(village, buildingId, building.getSourceBlock());
-        return commitRegisteredRoomUpdate(scan, buildingId, null);
+        RegisteredRoomUpdate update = analyzeRegisteredRoomUpdate(
+                village, buildingId, building.getSourceBlock());
+        return commitRegisteredRoomUpdate(update, null);
     }
 
     public BuildingEditResult forceRoomType(BlockPos pos, String type) {
@@ -659,7 +684,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         Building room = village.getFunctionalRoomAt(world, pos).orElse(null);
         if (room == null) return village.hasStructuralBuildingAt(world, pos)
                 ? BuildingEditResult.NO_ROOM : BuildingEditResult.NO_BUILDING;
-        if (village.isRootRoom(room)) return BuildingEditResult.ROOT_ROOM;
+        if (village.isMainRoom(room)) return BuildingEditResult.MAIN_ROOM;
         village.removeBuilding(room.getId());
         return BuildingEditResult.SUCCESS;
     }
@@ -720,7 +745,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
 
     private void finalizeVillageMutation(Village target) {
         target.calculateDimensions();
-        target.normalizeLayoutOverrides();
+        target.ensureMainRooms();
         Village finalVillage = target;
         villages.values().stream().filter(village -> village != finalVillage)
                 .filter(village -> village.getBox().inflatedBy(Village.MERGE_MARGIN).intersects(finalVillage.getBox()))
@@ -741,7 +766,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         SUCCESS,
         NO_BUILDING,
         NO_ROOM,
-        ROOT_ROOM
+        MAIN_ROOM
     }
 
     public void setBuildingCooldown(int buildingCooldown) { this.buildingCooldown = buildingCooldown; }

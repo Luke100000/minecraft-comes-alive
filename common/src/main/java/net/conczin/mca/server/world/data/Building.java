@@ -23,7 +23,7 @@ import java.util.stream.Stream;
  * A registered functional Room.
  *
  * <p>Physical building ownership lives in {@link Structure}; this class intentionally has
- * no structure-root mode, Ground Floor state, or hierarchy-repair state.</p>
+ * no Main Room mode, Ground Floor state, or hierarchy-repair state.</p>
  */
 public class Building implements VillageBuilding {
     public static final long SCAN_COOLDOWN = 4800;
@@ -34,10 +34,8 @@ public class Building implements VillageBuilding {
     private List<BuildingFloorRegion> floorRegions = List.of();
     private String type = "house";
     private boolean typeForced;
-    /** Whether this Room contributes to and visually inherits from its logical Main Room. */
+    /** Whether this Room contributes to and visually inherits from its Main Room. */
     private boolean inheritanceEnabled = true;
-    /** Optional player-selected Root/Main and Ground-storey override for the logical building. */
-    private boolean layoutOverride;
     private int size;
     private int pos0X, pos0Y, pos0Z;
     private int pos1X, pos1Y, pos1Z;
@@ -70,35 +68,22 @@ public class Building implements VillageBuilding {
         pos1X = tag.getInt("pos1X");
         pos1Y = tag.getInt("pos1Y");
         pos1Z = tag.getInt("pos1Z");
-        if (tag.contains("posX")) {
-            posX = tag.getInt("posX");
-            posY = tag.getInt("posY");
-            posZ = tag.getInt("posZ");
-        } else {
-            BlockPos center = getCenter();
-            posX = center.getX();
-            posY = center.getY();
-            posZ = center.getZ();
-        }
-        if (tag.contains("floorRegions", Tag.TAG_LIST)) {
-            floorRegions = List.copyOf(NbtHelper.toList(
-                    tag.getList("floorRegions", Tag.TAG_COMPOUND),
-                    value -> BuildingFloorRegion.load((CompoundTag) value)));
-        }
-        structureId = tag.contains("structureId") ? tag.getInt("structureId") : -1;
-        floorId = tag.contains("floorId") ? tag.getInt("floorId") : -1;
+        posX = tag.getInt("posX");
+        posY = tag.getInt("posY");
+        posZ = tag.getInt("posZ");
+        floorRegions = List.copyOf(NbtHelper.toList(
+                tag.getList("floorRegions", Tag.TAG_COMPOUND),
+                value -> BuildingFloorRegion.load((CompoundTag) value)));
+        structureId = tag.getInt("structureId");
+        floorId = tag.getInt("floorId");
         typeForced = tag.getBoolean("isTypeForced");
         type = tag.getString("type");
-        if (tag.contains("inheritanceEnabled")) inheritanceEnabled = tag.getBoolean("inheritanceEnabled");
-        layoutOverride = tag.getBoolean("layoutOverride");
+        inheritanceEnabled = tag.getBoolean("inheritanceEnabled");
         blocks.putAll(NbtHelper.toMap(tag.getCompound("blocks2"),
                 ResourceLocation::parse,
                 value -> NbtHelper.toStream(value, Building::loadBlockPos)
                         .filter(Objects::nonNull)
                         .collect(Collectors.toCollection(ArrayList::new))));
-        if (floorRegions.isEmpty()) {
-            ensureFallbackFloorRegion(tag.contains("floorY") ? tag.getInt("floorY") : pos0Y + 1);
-        }
     }
 
     public CompoundTag save() {
@@ -119,7 +104,6 @@ public class Building implements VillageBuilding {
         tag.putBoolean("isTypeForced", typeForced);
         tag.putString("type", type);
         tag.putBoolean("inheritanceEnabled", inheritanceEnabled);
-        tag.putBoolean("layoutOverride", layoutOverride);
         tag.put("floorRegions", NbtHelper.fromList(floorRegions, BuildingFloorRegion::save));
         CompoundTag blockTag = new CompoundTag();
         NbtHelper.fromMap(blockTag, blocks, ResourceLocation::toString,
@@ -129,9 +113,6 @@ public class Building implements VillageBuilding {
     }
 
     private static BlockPos loadBlockPos(Tag tag) {
-        if (tag instanceof CompoundTag legacy && legacy.contains("x")) {
-            return new BlockPos(legacy.getInt("x"), legacy.getInt("y"), legacy.getInt("z"));
-        }
         return NbtHelper.decodeBlockPos(tag);
     }
 
@@ -171,19 +152,6 @@ public class Building implements VillageBuilding {
         pos1Z = max.getZ();
         this.size = size;
         floorRegions = footprint == null ? List.of() : List.of(footprint);
-    }
-
-    void ensureFallbackFloorRegion(int anchorY) {
-        if (!floorRegions.isEmpty()) {
-            return;
-        }
-        List<BlockPos> cells = new ArrayList<>();
-        for (int x = pos0X; x <= pos1X; x++) {
-            for (int z = pos0Z; z <= pos1Z; z++) {
-                cells.add(new BlockPos(x, anchorY, z));
-            }
-        }
-        floorRegions = List.of(BuildingFloorRegion.fromFootprint(anchorY, cells));
     }
 
     public List<BuildingFloorRegion> getFloorRegions() {
@@ -375,14 +343,6 @@ public class Building implements VillageBuilding {
 
     public void setInheritanceEnabled(boolean enabled) {
         inheritanceEnabled = enabled;
-    }
-
-    public boolean isLayoutOverride() {
-        return layoutOverride;
-    }
-
-    public void setLayoutOverride(boolean layoutOverride) {
-        this.layoutOverride = layoutOverride;
     }
 
     public BuildingType getBuildingType() {

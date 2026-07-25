@@ -424,7 +424,7 @@ public class Village implements Iterable<Building> {
         externalBuildings.putAll(village.externalBuildings);
         structures.putAll(village.structures);
         calculateDimensions();
-        normalizeLayoutOverrides();
+        ensureMainRooms();
     }
 
     public int getStructureCount() {
@@ -442,7 +442,7 @@ public class Village implements Iterable<Building> {
         if (room.isPresent()) return new StructuralLookup(StructuralPosition.REGISTERED_ROOM, room);
         Optional<Structure> structure = getStructureAt(pos);
         return structure.map(value -> new StructuralLookup(StructuralPosition.ATTACHABLE_ROOM,
-                        getRootRoomForStructure(value.getId())))
+                        getMainRoomForStructure(value.getId())))
                 .orElseGet(() -> new StructuralLookup(StructuralPosition.OUTSIDE, Optional.empty()));
     }
 
@@ -456,7 +456,7 @@ public class Village implements Iterable<Building> {
             return new StructuralLookup(StructuralPosition.REGISTERED_ROOM, Optional.of(room));
         }
         return new StructuralLookup(StructuralPosition.ATTACHABLE_ROOM,
-                getRootRoomForStructure(resolved.get().structure().getId()));
+                getMainRoomForStructure(resolved.get().structure().getId()));
     }
 
     Optional<Structure> getInteractionStructureAt(Level level, BlockPos pos) {
@@ -475,10 +475,15 @@ public class Village implements Iterable<Building> {
                         .thenComparingInt(resolved -> resolved.structure().getId()));
     }
 
-    private Optional<Building> getRootRoomForStructure(int structureId) {
-        StructureLayout.Layout layout = StructureLayout.build(this);
-        OptionalInt rootRoomId = layout.rootRoomIdForStructure(structureId);
-        return rootRoomId.isPresent() ? getBuilding(rootRoomId.getAsInt()) : Optional.empty();
+    private Optional<Building> getMainRoomForStructure(int structureId) {
+        return getStructure(structureId).flatMap(this::getMainRoom);
+    }
+
+    public Optional<Building> getMainRoom(Structure structure) {
+        if (structure == null) return Optional.empty();
+        return getBuilding(structure.getMainRoomId())
+                .filter(Building::isFunctionalRoom)
+                .filter(room -> room.getStructureId() == structure.getId());
     }
 
     public Optional<Building> getFunctionalRoomAt(Vec3i pos) {
@@ -505,59 +510,41 @@ public class Village implements Iterable<Building> {
     private record ResolvedInteraction(Structure structure, Structure.InteractionPosition position) {
     }
 
-    /** Legacy UI hook: only the Root Room Anchor is protected from individual removal. */
-    public boolean isStructuralGroundFloor(Building room) {
-        return isRootRoom(room);
-    }
-
-    public boolean isRootRoom(Building room) {
+    public boolean isMainRoom(Building room) {
         if (room == null || !room.isFunctionalRoom()) return false;
-        return StructureLayout.build(this).buildingFor(room.getStructureId())
-                .map(logical -> logical.rootRoomId() == room.getId())
+        return getStructureFor(room)
+                .map(structure -> structure.getMainRoomId() == room.getId())
                 .orElse(false);
     }
 
-    public boolean toggleLayoutOverride(Building room) {
+    public boolean setMainRoom(Building room) {
         Structure structure = getStructureFor(room).orElse(null);
-        StructureLayout.LogicalBuilding logical = structure == null ? null
-                : StructureLayout.build(this).buildingFor(structure.getId()).orElse(null);
-        if (logical == null) return false;
-
-        Set<Integer> structureIds = Set.copyOf(logical.structureIds());
-        boolean useAutomatic = room.isLayoutOverride();
-        boolean changed = false;
-        for (Building candidate : getRooms()
-                .filter(value -> structureIds.contains(value.getStructureId()))
-                .toList()) {
-            boolean selected = !useAutomatic && candidate.getId() == room.getId();
-            if (candidate.isLayoutOverride() == selected) continue;
-            candidate.setLayoutOverride(selected);
-            changed = true;
-        }
-        if (!changed) return false;
+        if (structure == null) return false;
+        if (structure.getMainRoomId() == room.getId() && !structure.isMainRoomAutomatic()) return false;
+        structure.setManualMainRoom(room.getId());
         markDirty();
         return true;
     }
 
-    void normalizeLayoutOverrides() {
-        StructureLayout.Layout layout = StructureLayout.build(this);
+    public boolean useAutomaticMainRoom(Structure structure) {
+        if (structure == null || !structures.containsKey(structure.getId())) return false;
+        int selected = MainRoomSelector.select(structure,
+                getRooms().filter(room -> room.getStructureId() == structure.getId()).toList())
+                .orElse(-1);
+        if (selected < 0) return false;
+        if (structure.isMainRoomAutomatic() && structure.getMainRoomId() == selected) return false;
+        structure.setAutomaticMainRoom(selected);
+        markDirty();
+        return true;
+    }
+
+    void ensureMainRooms() {
         boolean changed = false;
-        for (Building room : getRooms().filter(Building::isLayoutOverride).toList()) {
-            if (layout.placementFor(room.getId()).isPresent()) continue;
-            room.setLayoutOverride(false);
-            changed = true;
-        }
-        for (StructureLayout.LogicalBuilding logical : layout.buildings()) {
-            Set<Integer> structureIds = Set.copyOf(logical.structureIds());
-            List<Building> overrides = getRooms()
-                    .filter(room -> structureIds.contains(room.getStructureId()))
-                    .filter(Building::isLayoutOverride)
-                    .sorted(Comparator.comparingInt(Building::getId))
+        for (Structure structure : structures.values()) {
+            List<Building> rooms = getRooms()
+                    .filter(room -> room.getStructureId() == structure.getId())
                     .toList();
-            for (int i = 1; i < overrides.size(); i++) {
-                overrides.get(i).setLayoutOverride(false);
-                changed = true;
-            }
+            changed |= MainRoomSelector.ensureValid(structure, rooms);
         }
         if (changed) markDirty();
     }

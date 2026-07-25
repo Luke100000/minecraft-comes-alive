@@ -252,8 +252,8 @@ final class BlueprintMapRenderer implements AutoCloseable {
         // Resolve canonical Structure hits last. On the shell/shade, the user's intent is the whole
         // building, so replace any same-Structure Room/icon targets with one aggregate Structure target.
         for (MapStructureLayer layer : hoveredStructureLayers) {
-            if (layer.root() != null) {
-                addStructureHover(hoverTargets, layer.root());
+            if (layer.mainRoom() != null) {
+                addStructureHover(hoverTargets, layer.mainRoom());
             }
         }
 
@@ -517,12 +517,12 @@ final class BlueprintMapRenderer implements AutoCloseable {
                 && target.building().getEffectiveStructureId() == structureId);
     }
 
-    private static void addStructureHover(List<HoverTarget> hoverTargets, Building root) {
-        int structureId = root.getEffectiveStructureId();
+    private static void addStructureHover(List<HoverTarget> hoverTargets, Building mainRoom) {
+        int structureId = mainRoom.getEffectiveStructureId();
         hoverTargets.removeIf(target -> !target.structure()
                 && target.building().isFunctionalRoom()
                 && target.building().getEffectiveStructureId() == structureId);
-        HoverTarget target = new HoverTarget(root, null, true);
+        HoverTarget target = new HoverTarget(mainRoom, null, true);
         if (!hoverTargets.contains(target)) {
             hoverTargets.add(target);
         }

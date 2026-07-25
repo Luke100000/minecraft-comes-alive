@@ -68,13 +68,14 @@ public final class BuildingDiagnostics {
             log(traceId, "structure id={} source={} bounds={}..{} containsPos={} connectorAttaches={} logicalFloor={} physicalFloor={}",
                     inspected.getId(), inspected.getSource(), inspected.getRawPos0(), inspected.getRawPos1(),
                     contains, attaches, floor(logicalFloor), floor(physicalFloor));
-            log(traceId, "persistentFloors={} automaticGroundFloor={} groundReferenceY={} groundEntranceCount={}",
+            log(traceId, "persistentFloors={} automaticGroundFloor={} groundReferenceY={} groundEntranceCount={} mainRoomId={} mainRoomMode={}",
                     floors(inspected.getFloors()), floor(inspected.getAutomaticGroundFloor().orElse(null)),
-                    inspected.getGroundReferenceY(), inspected.getGroundEntranceCount());
+                    inspected.getGroundReferenceY(), inspected.getGroundEntranceCount(),
+                    inspected.getMainRoomId(), inspected.isMainRoomAutomatic() ? "AUTOMATIC" : "MANUAL");
             layout.buildingFor(inspected.getId()).ifPresent(logical ->
-                    log(traceId, "logicalBuilding={} structures={} storeys={} groundStoreyIndex={} rootMainRoom={}",
-                            logical.id(), logical.structureIds(), logical.storeys(),
-                            logical.groundStoreyIndex(), logical.rootRoomId()));
+                    log(traceId, "structureLayout={} storeys={} groundStoreyIndex={} mainRoom={}",
+                            logical.structureId(), logical.storeys(),
+                            logical.groundStoreyIndex(), logical.mainRoomId()));
 
             if (room != null) {
                 StructureFloor roomFloor = inspected.getFloor(room.getFloorId()).orElse(null);
