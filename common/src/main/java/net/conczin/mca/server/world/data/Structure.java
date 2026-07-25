@@ -12,6 +12,8 @@ import java.util.*;
 /** Persistent physical building geometry. Functional semantics live exclusively on Rooms. */
 public final class Structure implements VillageBuilding {
     private int id;
+    private int mainRoomId = -1;
+    private boolean mainRoomAutomatic = true;
     private int automaticGroundFloorId = -1;
     private int groundReferenceY;
     private int groundEntranceCount;
@@ -34,8 +36,9 @@ public final class Structure implements VillageBuilding {
 
     public Structure(CompoundTag tag) {
         id = tag.getInt("id");
-        automaticGroundFloorId = tag.contains("automaticGroundFloorId")
-                ? tag.getInt("automaticGroundFloorId") : -1;
+        mainRoomId = tag.getInt("mainRoomId");
+        mainRoomAutomatic = tag.getBoolean("mainRoomAutomatic");
+        automaticGroundFloorId = tag.getInt("automaticGroundFloorId");
         groundReferenceY = tag.getInt("groundReferenceY");
         groundEntranceCount = tag.getInt("groundEntranceCount");
         nextFloorId = tag.getInt("nextFloorId");
@@ -52,6 +55,8 @@ public final class Structure implements VillageBuilding {
     public CompoundTag save() {
         CompoundTag tag = new CompoundTag();
         tag.putInt("id", id);
+        tag.putInt("mainRoomId", mainRoomId);
+        tag.putBoolean("mainRoomAutomatic", mainRoomAutomatic);
         tag.putInt("automaticGroundFloorId", automaticGroundFloorId);
         tag.putInt("groundReferenceY", groundReferenceY);
         tag.putInt("groundEntranceCount", groundEntranceCount);
@@ -148,6 +153,28 @@ public final class Structure implements VillageBuilding {
 
     public Optional<StructureFloor> getAutomaticGroundFloor() {
         return getFloor(automaticGroundFloorId);
+    }
+
+    public int getMainRoomId() {
+        return mainRoomId;
+    }
+
+    public boolean isMainRoomAutomatic() {
+        return mainRoomAutomatic;
+    }
+
+    public void setManualMainRoom(int roomId) {
+        mainRoomId = roomId;
+        mainRoomAutomatic = false;
+    }
+
+    public void setAutomaticMainRoom(int roomId) {
+        mainRoomId = roomId;
+        mainRoomAutomatic = true;
+    }
+
+    public void transferMainRoom(int removedRoomId, int survivorRoomId) {
+        if (mainRoomId == removedRoomId) mainRoomId = survivorRoomId;
     }
 
     public int getAutomaticGroundFloorId() {

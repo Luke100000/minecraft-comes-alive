@@ -9,19 +9,10 @@ public record BuildingScanResult(
         BlockPos source,
         Building building,
         List<String> matchingTypes,
-        Village village,
-        List<Integer> absorbedRoomIds,
-        List<Building> createdRooms
+        Village village
 ) {
     public BuildingScanResult {
         matchingTypes = List.copyOf(matchingTypes);
-        absorbedRoomIds = List.copyOf(absorbedRoomIds);
-        createdRooms = List.copyOf(createdRooms);
-    }
-
-    public BuildingScanResult(Building.validationResult result, BlockPos source, Building building,
-                              List<String> matchingTypes, Village village, List<Integer> absorbedRoomIds) {
-        this(result, source, building, matchingTypes, village, absorbedRoomIds, List.of());
     }
 
     public boolean isAmbiguous() {

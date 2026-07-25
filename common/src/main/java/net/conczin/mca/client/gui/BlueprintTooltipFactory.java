@@ -143,13 +143,10 @@ final class BlueprintTooltipFactory {
         if (building.getBuildingType().grouped()) return List.of(building);
 
         int structureId = building.getEffectiveStructureId();
-        List<Integer> structureIds = structureLayout.buildingFor(structureId)
-                .map(StructureLayout.LogicalBuilding::structureIds)
-                .orElse(List.of(structureId));
         return village.getBuildings().values().stream()
                 .filter(Building::isComplete)
                 .filter(Building::isFunctionalRoom)
-                .filter(candidate -> structureIds.contains(candidate.getEffectiveStructureId()))
+                .filter(candidate -> candidate.getEffectiveStructureId() == structureId)
                 .sorted(Comparator.comparingInt(Building::getId))
                 .toList();
     }

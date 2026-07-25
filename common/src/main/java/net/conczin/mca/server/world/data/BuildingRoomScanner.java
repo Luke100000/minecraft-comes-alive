@@ -34,18 +34,48 @@ final class BuildingRoomScanner {
     static List<Result> partition(Level world, BlockPos source, int maxSize, int maxRadius, StructureFloor floor) {
         if (floor == null || floor.region() == null) return List.of();
         PartitionData partition = partitionData(world, floor);
-        List<Result> components = partition.components().stream()
+        return materializePartition(world, source, maxSize, maxRadius, floor, partition, false);
+    }
+
+    /** Re-partitions only previously registered cells and new bridge cells connecting them. */
+    static List<Result> partitionRegistered(Level world, BlockPos source, int maxSize, int maxRadius,
+                                            StructureFloor floor, Set<BlockPos> registeredCells) {
+        if (floor == null || floor.region() == null || registeredCells == null || registeredCells.isEmpty()) {
+            return List.of();
+        }
+        Set<BlockPos> available = partitionCells(world, floor);
+        LinkedHashSet<BlockPos> scope = registeredCells.stream()
+                .filter(available::contains)
+                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+        for (BlockPos candidate : available) {
+            if (scope.contains(candidate)) continue;
+            boolean connectsRegistered = scope.contains(candidate.relative(Direction.NORTH))
+                    && scope.contains(candidate.relative(Direction.SOUTH))
+                    || scope.contains(candidate.relative(Direction.EAST))
+                    && scope.contains(candidate.relative(Direction.WEST));
+            if (connectsRegistered) scope.add(candidate);
+        }
+        return materializePartition(world, source, maxSize, maxRadius, floor,
+                partitionData(world, floor, Set.copyOf(scope)), true);
+    }
+
+    private static List<Result> materializePartition(Level world, BlockPos source, int maxSize, int maxRadius,
+                                                     StructureFloor floor, PartitionData partition,
+                                                     boolean includeFailures) {
+        return partition.components().stream()
                 .map(component -> materializeComponent(world, source, Set.of(), maxSize, maxRadius,
                         floor, partition, component))
-                .filter(result -> result.status() == Status.SUCCESS)
+                .filter(result -> includeFailures || result.status() == Status.SUCCESS)
                 .sorted(Comparator.comparingInt((Result result) -> result.min().getX())
                         .thenComparingInt(result -> result.min().getZ()))
                 .toList();
-        return components;
     }
 
     private static PartitionData partitionData(Level world, StructureFloor floor) {
-        Set<BlockPos> partitionCells = partitionCells(world, floor);
+        return partitionData(world, floor, partitionCells(world, floor));
+    }
+
+    private static PartitionData partitionData(Level world, StructureFloor floor, Set<BlockPos> partitionCells) {
         Map<BlockPos, BlockPos> floorConnectors = floorConnectors(world, floor, partitionCells);
         BuildingFloorRegion ordinary = BuildingFloorRegion.fromFootprint(floor.anchorY(),
                 partitionCells.stream()

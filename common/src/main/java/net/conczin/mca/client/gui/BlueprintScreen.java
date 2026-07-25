@@ -15,6 +15,7 @@ import net.conczin.mca.resources.data.BuildingType;
 import net.conczin.mca.resources.data.tasks.Task;
 import net.conczin.mca.server.world.data.Building;
 import net.conczin.mca.server.world.data.RoomTypeResolver;
+import net.conczin.mca.server.world.data.Structure;
 import net.conczin.mca.server.world.data.StructureLayout;
 import net.conczin.mca.server.world.data.Village;
 import net.conczin.mca.util.compat.ButtonWidget;
@@ -79,7 +80,7 @@ public class BlueprintScreen extends ExtendedScreen {
     private ButtonWidget mapScaleButton;
     private ButtonWidget playerCenteredButton;
     private ButtonWidget playerHeadButton;
-    private TooltipButtonWidget groundAnchorButton;
+    private TooltipButtonWidget mainRoomButton;
     private TooltipButtonWidget structureScanButton;
     private TooltipButtonWidget removeRoomButton;
     private ButtonWidget removeBuildingButton;
@@ -171,7 +172,7 @@ public class BlueprintScreen extends ExtendedScreen {
         mapScaleButton = null;
         playerCenteredButton = null;
         playerHeadButton = null;
-        groundAnchorButton = null;
+        mainRoomButton = null;
         structureScanButton = null;
         removeRoomButton = null;
         removeBuildingButton = null;
@@ -196,7 +197,7 @@ public class BlueprintScreen extends ExtendedScreen {
 
         switch (page) {
             case "empty":
-                // A room cannot exist before its root building.
+                // A room cannot exist before its physical building.
                 bx = width / 2 - 48;
                 by = height / 2;
                 addRenderableWidget(new TooltipButtonWidget(bx, by + 5, 96, 20, "gui.blueprint.addBuilding", b -> {
@@ -284,11 +285,11 @@ public class BlueprintScreen extends ExtendedScreen {
                     column.addTooltip("gui.blueprint.restrictAccess", b ->
                             Network.sendToServer(new ReportBuildingMessage(
                                     ReportBuildingMessage.Action.FORCE_TYPE, "blocked")));
-                    groundAnchorButton = column.addTooltip("gui.blueprint.setGroundAnchor", b -> {
+                    mainRoomButton = column.addTooltip("gui.blueprint.setMainRoom", b -> {
                         selectPlayerFloorOnNextVillageResponse = true;
-                        Network.sendToServer(new ReportBuildingMessage(ReportBuildingMessage.Action.SET_GROUND_ANCHOR));
+                        Network.sendToServer(new ReportBuildingMessage(ReportBuildingMessage.Action.SET_MAIN_ROOM));
                     });
-                    updateGroundAnchorControl(getPlayerStructuralLookup());
+                    updateMainRoomControl(getPlayerStructuralLookup());
                     if (isVillage) {
                         column.addButton(Component.translatable("gui.blueprint.renameVillage"), b -> setPage("rename"));
                     }
@@ -298,7 +299,7 @@ public class BlueprintScreen extends ExtendedScreen {
                             Component.translatable("gui.back"), b -> setPage("map")));
                 } else {
                     // A grouped POI such as the town bell keeps the settlement alive, but
-                    // rooms still need a complete structural root to attach to.
+                    // rooms still need a complete physical Structure to attach to.
                     SideControlColumn column = new SideControlColumn(bx, height / 2 - 56 + 22 * 3);
                     structureScanButton = column.addTooltip(
                             getStructureScanTranslationKey(getPlayerStructuralLookup().position()),
@@ -415,7 +416,7 @@ public class BlueprintScreen extends ExtendedScreen {
             Village.StructuralLookup structuralLookup = getPlayerStructuralLookup();
             updateStructureScanControl(structuralLookup);
             updateRemoveRoomControl(structuralLookup);
-            updateGroundAnchorControl(structuralLookup);
+            updateMainRoomControl(structuralLookup);
         }
 
         super.render(context, sizeX, sizeY, offset);
@@ -525,13 +526,13 @@ public class BlueprintScreen extends ExtendedScreen {
             return;
         }
 
-        boolean onGroundFloor = village != null
+        boolean onMainRoom = village != null
                 && structuralLookup.functionalRoom()
-                .filter(village::isStructuralGroundFloor)
+                .filter(village::isMainRoom)
                 .isPresent();
-        removeRoomButton.active = removeRoomButton.visible && !onGroundFloor;
-        removeRoomButton.setTooltip(Tooltip.create(Component.translatable(onGroundFloor
-                ? "gui.blueprint.removeRoom.disabled.groundFloor"
+        removeRoomButton.active = removeRoomButton.visible && !onMainRoom;
+        removeRoomButton.setTooltip(Tooltip.create(Component.translatable(onMainRoom
+                ? "gui.blueprint.removeRoom.disabled.mainRoom"
                 : "gui.blueprint.removeRoom.tooltip")));
     }
 
@@ -913,19 +914,20 @@ public class BlueprintScreen extends ExtendedScreen {
         }
     }
 
-    private void updateGroundAnchorControl(Village.StructuralLookup structuralLookup) {
-        if (groundAnchorButton == null) {
+    private void updateMainRoomControl(Village.StructuralLookup structuralLookup) {
+        if (mainRoomButton == null) {
             return;
         }
         Optional<Building> room = village == null ? Optional.empty() : structuralLookup.functionalRoom();
-        boolean useAutomatic = room.filter(Building::isLayoutOverride).isPresent();
-        groundAnchorButton.active = room.isPresent();
-        groundAnchorButton.setMessage(Component.translatable(useAutomatic
-                ? "gui.blueprint.useAutomaticLayout"
-                : "gui.blueprint.setMainGround"));
-        groundAnchorButton.setTooltip(Tooltip.create(Component.translatable(useAutomatic
-                ? "gui.blueprint.useAutomaticLayout.tooltip"
-                : "gui.blueprint.setMainGround.tooltip")));
+        Structure structure = room.flatMap(village::getStructureFor).orElse(null);
+        boolean changeToAutomatic = structure != null && !structure.isMainRoomAutomatic();
+        mainRoomButton.active = room.isPresent() && structure != null;
+        mainRoomButton.setMessage(Component.translatable(changeToAutomatic
+                ? "gui.blueprint.useAutomaticMainRoom"
+                : "gui.blueprint.setMainRoom"));
+        mainRoomButton.setTooltip(Tooltip.create(Component.translatable(changeToAutomatic
+                ? "gui.blueprint.useAutomaticMainRoom.tooltip"
+                : "gui.blueprint.setMainRoom.tooltip")));
     }
 
     private void renderTasks(GuiGraphics context) {
@@ -1109,7 +1111,7 @@ public class BlueprintScreen extends ExtendedScreen {
         updateMapScaleControl();
         updateStructureScanControl(structuralLookup);
         updateRemoveRoomControl(structuralLookup);
-        updateGroundAnchorControl(structuralLookup);
+        updateMainRoomControl(structuralLookup);
 
         if (village == null) {
             setPage("empty");

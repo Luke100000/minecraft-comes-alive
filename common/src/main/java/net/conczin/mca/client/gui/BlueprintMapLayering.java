@@ -19,11 +19,7 @@ final class BlueprintMapLayering {
         return List.copyOf(hitOrder);
     }
 
-    /**
-     * Structure shade starts from one stable physical building region. Rooms remove only the cells
-     * relevant to the active view: one selected Floor or every Room in All Floors. Connector cells
-     * remain shaded because connectors are physical Floor nodes but not ordinary Room interior cells.
-     */
+    /** Structure border shade is derived from the visible registered Room union. */
     static <T> Set<T> structureShade(Collection<T> shadeBaseCells,
                                      Collection<T> relevantRoomCells) {
         LinkedHashSet<T> shade = new LinkedHashSet<>(shadeBaseCells);
@@ -31,9 +27,9 @@ final class BlueprintMapLayering {
         return Set.copyOf(shade);
     }
 
-    /** Basements remain visible as Room geometry, but never enlarge the All Floors building outline. */
-    static boolean contributesToStructureOutline(int floorOrdinal) {
-        return floorOrdinal >= 0;
+    /** Outdoor sites are associated with the whole building, not with an indoor Floor ordinal. */
+    static boolean isOutdoorVisible(Integer selectedFloor) {
+        return selectedFloor == null || selectedFloor == 0;
     }
 
 }
