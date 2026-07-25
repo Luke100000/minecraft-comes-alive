@@ -12,7 +12,6 @@ final class StructureFloorMatcher {
                                   List<StructureFloor> detected,
                                   Collection<Building> rooms) {
         Map<Integer, StructureFloor> assigned = new HashMap<>();
-        Map<Integer, Integer> persistentIdByDetectedId = new HashMap<>();
         Set<Integer> usedDetected = new HashSet<>();
         Set<Integer> requiredFloorIds = rooms.stream()
                 .map(Building::getFloorId)
@@ -33,7 +32,7 @@ final class StructureFloorMatcher {
         }
         for (StructureFloor oldFloor : requiredFloors) {
             int match = requiredMatches.get(oldFloor.id());
-            assign(oldFloor, detected.get(match), assigned, persistentIdByDetectedId);
+            assign(oldFloor, detected.get(match), assigned);
         }
 
         for (StructureFloor oldFloor : existingFloors) {
@@ -43,7 +42,7 @@ final class StructureFloorMatcher {
                 continue;
             }
             StructureFloor geometry = detected.get(match);
-            assign(oldFloor, geometry, assigned, persistentIdByDetectedId);
+            assign(oldFloor, geometry, assigned);
             usedDetected.add(match);
         }
 
@@ -53,14 +52,12 @@ final class StructureFloorMatcher {
             int floorId = candidateNextFloorId++;
             assigned.put(floorId, new StructureFloor(floorId,
                     geometry.anchorY(), geometry.ceilingY(), geometry.region()));
-            persistentIdByDetectedId.put(geometry.id(), floorId);
         }
         for (Building room : rooms) {
             StructureFloor floor = assigned.get(room.getFloorId());
             if (floor == null || !roomFootprintInside(room, floor)) return Optional.empty();
         }
-        return Optional.of(new Result(Map.copyOf(assigned), candidateNextFloorId,
-                Map.copyOf(persistentIdByDetectedId)));
+        return Optional.of(new Result(Map.copyOf(assigned), candidateNextFloorId));
     }
 
     private static boolean assignRequired(int index,
@@ -135,11 +132,9 @@ final class StructureFloorMatcher {
 
     private static void assign(StructureFloor oldFloor,
                                StructureFloor geometry,
-                               Map<Integer, StructureFloor> assigned,
-                               Map<Integer, Integer> persistentIdByDetectedId) {
+                               Map<Integer, StructureFloor> assigned) {
         assigned.put(oldFloor.id(), oldFloor.withGeometry(
                 geometry.anchorY(), geometry.ceilingY(), geometry.region()));
-        persistentIdByDetectedId.put(geometry.id(), oldFloor.id());
     }
 
     private static boolean roomFootprintInside(Building room, StructureFloor floor) {
@@ -151,7 +146,6 @@ final class StructureFloorMatcher {
     }
 
     record Result(Map<Integer, StructureFloor> floors,
-                  int nextFloorId,
-                  Map<Integer, Integer> persistentIdByDetectedId) {
+                  int nextFloorId) {
     }
 }

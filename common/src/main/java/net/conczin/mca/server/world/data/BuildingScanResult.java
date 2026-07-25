@@ -9,8 +9,17 @@ public record BuildingScanResult(
         BlockPos source,
         Building building,
         List<String> matchingTypes,
-        Village village
+        Village village,
+        Structure pendingStructure
 ) {
+    public BuildingScanResult(Building.validationResult result,
+                              BlockPos source,
+                              Building building,
+                              List<String> matchingTypes,
+                              Village village) {
+        this(result, source, building, matchingTypes, village, null);
+    }
+
     public BuildingScanResult {
         matchingTypes = List.copyOf(matchingTypes);
     }
@@ -23,4 +32,7 @@ public record BuildingScanResult(
         return matchingTypes.contains(type);
     }
 
+    BuildingScanResult withPendingStructure(Structure structure) {
+        return new BuildingScanResult(result, source, building, matchingTypes, village, structure);
+    }
 }

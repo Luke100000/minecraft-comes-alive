@@ -38,10 +38,12 @@ final class BlueprintMapRenderer implements AutoCloseable {
     private static final int ROOM_FILL_ALPHA_ALL_FLOORS = 0x60;
     private static final int ROOM_FILL_ALPHA_SELECTED_FLOOR = 0x70;
     private static final float ROOM_FILL_BRIGHTEN_FACTOR = 1.15f;
+    private static final int ROOM_BORDER_ALPHA_ALL_FLOORS = 0xd0;
     private static final int ROOM_BORDER_ALPHA_SELECTED_FLOOR = 0xee;
     private static final int ROOM_BORDER_ALPHA_HOVERED = 0xff;
     private static final float ROOM_BORDER_BRIGHTEN_FACTOR = 1.35f;
     private static final int STRUCTURE_BASE_COLOR = 0x00a0a0a0;
+    private static final int BUILDING_SHADE_ALPHA = 0x24;
     private static final int BUILDING_BORDER_ALPHA = 0xc0;
     private static final float BUILDING_BORDER_DARKEN_FACTOR = 0.58f;
     private static final int ROOM_FILL_ALPHA_HOVERED = 0x98;
@@ -138,6 +140,15 @@ final class BlueprintMapRenderer implements AutoCloseable {
 
         matrices.popPose();
 
+        for (MapStructureLayer layer : structureLayers) {
+            renderStructureShade(
+                    context,
+                    layer.shellSpans(),
+                    STRUCTURE_BASE_COLOR,
+                    viewport
+            );
+        }
+
         // The one neutral Building border stays behind the selected Room presentation.
         for (MapStructureLayer layer : structureLayers) {
             renderStructureOutlineScreenSpace(
@@ -180,15 +191,14 @@ final class BlueprintMapRenderer implements AutoCloseable {
                     hovering,
                     viewport
             );
-            if (selectedFloor != null) {
-                renderRoomOutlineScreenSpace(
-                        context,
-                        layer.outlineEdges(),
-                        layer.presentationType().getColor(),
-                        hovering,
-                        viewport
-                );
-            }
+            renderRoomOutlineScreenSpace(
+                    context,
+                    layer.outlineEdges(),
+                    layer.presentationType().getColor(),
+                    selectedFloor != null,
+                    hovering,
+                    viewport
+            );
         }
 
         // The shell/outline is an authoritative whole-Building hit region. Collect the hit
@@ -243,7 +253,7 @@ final class BlueprintMapRenderer implements AutoCloseable {
         // building, so replace its Room/icon targets with one aggregate target.
         for (MapStructureLayer layer : hoveredStructureLayers) {
             if (layer.mainRoom() != null) {
-                addStructureHover(hoverTargets, layer.mainRoom(), layer.structureIds(), selectedFloor);
+                addStructureHover(hoverTargets, layer.mainRoom(), layer.structureIds());
             }
         }
 
@@ -330,9 +340,12 @@ final class BlueprintMapRenderer implements AutoCloseable {
     private static void renderRoomOutlineScreenSpace(GuiGraphics context,
                                                      List<BlueprintMapFootprint.Edge> edges,
                                                      int baseColor,
+                                                     boolean selectedFloor,
                                                      boolean hovered,
                                                      BlueprintMapViewport viewport) {
-        int outlineAlpha = hovered ? ROOM_BORDER_ALPHA_HOVERED : ROOM_BORDER_ALPHA_SELECTED_FLOOR;
+        int outlineAlpha = hovered
+                ? ROOM_BORDER_ALPHA_HOVERED
+                : selectedFloor ? ROOM_BORDER_ALPHA_SELECTED_FLOOR : ROOM_BORDER_ALPHA_ALL_FLOORS;
         int outlineColor = withAlpha(brightenColor(baseColor, ROOM_BORDER_BRIGHTEN_FACTOR), outlineAlpha);
         renderOutlineScreenSpace(context, edges, outlineColor, viewport);
     }
@@ -346,6 +359,14 @@ final class BlueprintMapRenderer implements AutoCloseable {
                 BUILDING_BORDER_ALPHA
         );
         renderOutlineScreenSpace(context, edges, outlineColor, viewport);
+    }
+
+    private static void renderStructureShade(GuiGraphics context,
+                                             List<BlueprintMapFootprint.RowSpan> shadeSpans,
+                                             int baseColor,
+                                             BlueprintMapViewport viewport) {
+        int color = withAlpha(baseColor, BUILDING_SHADE_ALPHA);
+        renderCellSpansScreenSpace(context, shadeSpans, color, viewport);
     }
 
     private static void renderOutlineScreenSpace(GuiGraphics context,
@@ -498,12 +519,11 @@ final class BlueprintMapRenderer implements AutoCloseable {
 
     private static void addStructureHover(List<HoverTarget> hoverTargets,
                                           Building mainRoom,
-                                          Set<Integer> structureIds,
-                                          Integer floorOrdinal) {
+                                          Set<Integer> structureIds) {
         hoverTargets.removeIf(target -> !target.structure()
                 && target.building().isFunctionalRoom()
                 && structureIds.contains(target.building().getEffectiveStructureId()));
-        HoverTarget target = new HoverTarget(mainRoom, floorOrdinal, true);
+        HoverTarget target = new HoverTarget(mainRoom, null, true);
         if (!hoverTargets.contains(target)) {
             hoverTargets.add(target);
         }

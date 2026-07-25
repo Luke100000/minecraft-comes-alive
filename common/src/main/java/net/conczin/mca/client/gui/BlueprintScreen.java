@@ -197,11 +197,10 @@ public class BlueprintScreen extends ExtendedScreen {
 
         switch (page) {
             case "empty":
-                // A room cannot exist before its physical building.
                 bx = width / 2 - 48;
                 by = height / 2;
                 addRenderableWidget(new TooltipButtonWidget(bx, by + 5, 96, 20, "gui.blueprint.addBuilding", b -> {
-                    Network.sendToServer(new ReportBuildingMessage(ReportBuildingMessage.Action.ADD));
+                    Network.sendToServer(new ReportBuildingMessage(ReportBuildingMessage.Action.ADD_ROOM));
                 }));
                 break;
             case "refresh":
@@ -454,8 +453,7 @@ public class BlueprintScreen extends ExtendedScreen {
 
     private static ReportBuildingMessage.Action getStructureScanAction(Village.StructuralPosition structuralPosition) {
         return switch (structuralPosition) {
-            case OUTSIDE -> ReportBuildingMessage.Action.ADD;
-            case ATTACHABLE_ROOM -> ReportBuildingMessage.Action.ADD_ROOM;
+            case OUTSIDE, ATTACHABLE_ROOM -> ReportBuildingMessage.Action.ADD_ROOM;
             case REGISTERED_ROOM -> ReportBuildingMessage.Action.UPDATE_ROOM;
         };
     }

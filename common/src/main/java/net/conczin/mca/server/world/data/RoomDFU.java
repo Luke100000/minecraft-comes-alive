@@ -64,22 +64,6 @@ final class RoomDFU {
                 tag.putBoolean("mainRoomAutomatic", manualMain == null
                         && !tag.getBoolean("groundAnchorExplicit"));
             }
-            if (!tag.contains("automaticGroundFloorId")) {
-                ListTag floorTags = tag.getList("floors", Tag.TAG_COMPOUND);
-                CompoundTag ground = floorTags.stream()
-                        .filter(CompoundTag.class::isInstance)
-                        .map(CompoundTag.class::cast)
-                        .filter(floorTag -> oldRoot != null
-                                && floorTag.getInt("id") == oldRoot.getFloorId())
-                        .findFirst()
-                        .orElseGet(() -> floorTags.isEmpty()
-                                ? null : floorTags.getCompound(0));
-                if (ground != null) {
-                    tag.putInt("automaticGroundFloorId", ground.getInt("id"));
-                    tag.putInt("groundReferenceY", ground.getInt("anchorY"));
-                    tag.putInt("groundEntranceCount", 0);
-                }
-            }
             Structure structure = new Structure(tag);
             structures.put(structure.getId(), structure);
         }
@@ -232,12 +216,16 @@ final class RoomDFU {
         BlockPos min = container.room().getRawPos0();
         BlockPos max = container.room().getRawPos1();
         List<StructureFloor> floors = createFloors(regions, max.getY() + 1);
-        StructureFloor ground = nearestFloor(floors, container.groundFloorY());
-        if (ground == null) {
-            return Optional.empty();
-        }
+        Structure structure = new Structure(
+                structureId,
+                container.room().getSourceBlock(),
+                min,
+                max,
+                floors);
 
         List<Building> rooms = new ArrayList<>();
+        Building mainRoom = null;
+        int mainRoomDistance = Integer.MAX_VALUE;
         for (LegacyFloorRoom legacyRoom : functional) {
             StructureFloor floor = nearestFloor(floors, legacyRoom.floorY());
             if (floor == null) continue;
@@ -245,14 +233,15 @@ final class RoomDFU {
             room.setStructureId(structureId);
             room.setFloorId(floor.id());
             rooms.add(room);
+            int distance = Math.abs(floor.anchorY() - container.groundFloorY());
+            if (distance < mainRoomDistance
+                    || (distance == mainRoomDistance
+                    && (mainRoom == null || room.getId() < mainRoom.getId()))) {
+                mainRoom = room;
+                mainRoomDistance = distance;
+            }
         }
-        Structure structure = new Structure(
-                structureId,
-                container.room().getSourceBlock(),
-                min,
-                max,
-                floors);
-        structure.setGroundEvidence(ground.id(), container.groundFloorY(), 0);
+        if (mainRoom != null) structure.setAutomaticMainRoom(mainRoom.getId());
         return Optional.of(new MigratedStructure(structure, List.copyOf(rooms)));
     }
 
@@ -265,9 +254,9 @@ final class RoomDFU {
                 Math.max(region.anchorY() + 1, room.getRawPos1().getY() + 1), region);
         Structure structure = new Structure(room.getId(), room.getSourceBlock(), room.getRawPos0(), room.getRawPos1(),
                 List.of(floor));
-        structure.setGroundEvidence(floor.id(), floor.anchorY(), 0);
         room.setStructureId(structure.getId());
         room.setFloorId(floor.id());
+        structure.setAutomaticMainRoom(room.getId());
         return Optional.of(structure);
     }
 

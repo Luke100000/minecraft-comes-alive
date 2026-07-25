@@ -29,7 +29,7 @@ final class MainRoomSelector {
                 .min(Comparator.comparingInt(Selection::structureId)
                         .thenComparingInt(Selection::roomId))
                 .orElse(null);
-        return manual != null ? manual : automaticSelection(structures, eligible.values());
+        return manual != null ? manual : automaticSelection(eligible.values());
     }
 
     static boolean ensureValid(List<Structure> structures, Collection<Building> rooms) {
@@ -51,7 +51,7 @@ final class MainRoomSelector {
     }
 
     static boolean useAutomatic(List<Structure> structures, Collection<Building> rooms) {
-        Selection selection = automaticSelection(structures, eligibleRooms(structures, rooms).values());
+        Selection selection = automaticSelection(eligibleRooms(structures, rooms).values());
         if (selection == null || isNormalized(structures, selection)) return false;
         apply(structures, selection);
         return true;
@@ -71,29 +71,10 @@ final class MainRoomSelector {
                 survivorRoomId, survivorStructureId, -1, automatic));
     }
 
-    private static Selection automaticSelection(List<Structure> structures,
-                                                Collection<Building> eligibleRooms) {
-        Map<Integer, Structure> structuresById = new HashMap<>();
-        structures.forEach(structure -> structuresById.put(structure.getId(), structure));
+    private static Selection automaticSelection(Collection<Building> eligibleRooms) {
         return eligibleRooms.stream()
-                .map(room -> {
-                    Structure structure = structuresById.get(room.getStructureId());
-                    StructureFloor floor = structure == null
-                            ? null : structure.getFloor(room.getFloorId()).orElse(null);
-                    return floor == null ? null : new Candidate(room, structure, floor);
-                })
-                .filter(Objects::nonNull)
-                .min(Comparator
-                        .comparingInt((Candidate candidate) -> candidate.automaticGround() ? 0 : 1)
-                        .thenComparingInt(candidate -> candidate.automaticGround()
-                                ? -candidate.structure().getGroundEntranceCount() : 0)
-                        .thenComparingInt(candidate -> Math.abs(candidate.floor().anchorY()
-                                - candidate.structure().getGroundReferenceY()))
-                        .thenComparingInt(candidate -> -candidate.floor().anchorY())
-                        .thenComparingInt(candidate -> candidate.structure().getId())
-                        .thenComparingInt(candidate -> candidate.floor().id())
-                        .thenComparingInt(candidate -> candidate.room().getId()))
-                .map(candidate -> selection(candidate.room(), true))
+                .min(Comparator.comparingInt(Building::getId))
+                .map(room -> selection(room, true))
                 .orElse(null);
     }
 
@@ -145,11 +126,5 @@ final class MainRoomSelector {
     }
 
     record Selection(int roomId, int structureId, int floorId, boolean automatic) {
-    }
-
-    private record Candidate(Building room, Structure structure, StructureFloor floor) {
-        boolean automaticGround() {
-            return floor.id() == structure.getAutomaticGroundFloorId();
-        }
     }
 }

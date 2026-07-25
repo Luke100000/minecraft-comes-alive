@@ -31,17 +31,8 @@ final class StructureConnector {
         return state.getBlock() instanceof LadderBlock || state.getBlock() instanceof TrapDoorBlock;
     }
 
-    static boolean isGroundEntrance(BlockState state) {
+    static boolean isHorizontalBoundary(BlockState state) {
         return state.getBlock() instanceof DoorBlock || state.getBlock() instanceof FenceGateBlock;
-    }
-
-    static Optional<Direction> horizontalFacing(BlockState state) {
-        if (state.getBlock() instanceof DoorBlock) return Optional.of(state.getValue(DoorBlock.FACING));
-        if (state.getBlock() instanceof FenceGateBlock) return Optional.of(state.getValue(FenceGateBlock.FACING));
-        if (state.getBlock() instanceof TrapDoorBlock && state.getValue(TrapDoorBlock.OPEN)) {
-            return Optional.of(state.getValue(TrapDoorBlock.FACING));
-        }
-        return Optional.empty();
     }
 
     /** Projects connector columns onto ordinary Floor Y levels before storey detection. */
