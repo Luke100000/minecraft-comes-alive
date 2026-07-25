@@ -15,9 +15,6 @@ public final class Structure implements VillageBuilding {
     /** Set only when this physical component contains its logical Building's Main Room. */
     private int mainRoomId = -1;
     private boolean mainRoomAutomatic = true;
-    private int automaticGroundFloorId = -1;
-    private int groundReferenceY;
-    private int groundEntranceCount;
     private int nextFloorId;
     private BlockPos source;
     private BlockPos min;
@@ -39,9 +36,6 @@ public final class Structure implements VillageBuilding {
         id = tag.getInt("id");
         mainRoomId = tag.getInt("mainRoomId");
         mainRoomAutomatic = tag.getBoolean("mainRoomAutomatic");
-        automaticGroundFloorId = tag.getInt("automaticGroundFloorId");
-        groundReferenceY = tag.getInt("groundReferenceY");
-        groundEntranceCount = tag.getInt("groundEntranceCount");
         nextFloorId = tag.getInt("nextFloorId");
         source = NbtHelper.decodeBlockPos(tag.get("source"));
         min = NbtHelper.decodeBlockPos(tag.get("min"));
@@ -58,9 +52,6 @@ public final class Structure implements VillageBuilding {
         tag.putInt("id", id);
         tag.putInt("mainRoomId", mainRoomId);
         tag.putBoolean("mainRoomAutomatic", mainRoomAutomatic);
-        tag.putInt("automaticGroundFloorId", automaticGroundFloorId);
-        tag.putInt("groundReferenceY", groundReferenceY);
-        tag.putInt("groundEntranceCount", groundEntranceCount);
         tag.putInt("nextFloorId", nextFloorId);
         tag.put("source", NbtHelper.encodeBlockPos(source));
         tag.put("min", NbtHelper.encodeBlockPos(min));
@@ -124,11 +115,10 @@ public final class Structure implements VillageBuilding {
     private BlockPos adjacentInteractionFloorCell(Level world, BlockPos pos, StructureFloor floor) {
         if (!StructureConnector.isPassageCell(world, pos)) return null;
 
-        boolean supported = StructureScanner.isSupported(world, pos.getX(), pos.getY(), pos.getZ());
         boolean insideEnvelope = pos.getX() >= min.getX() && pos.getX() <= max.getX()
                 && pos.getY() >= min.getY() && pos.getY() <= max.getY()
                 && pos.getZ() >= min.getZ() && pos.getZ() <= max.getZ();
-        if (supported && (!insideEnvelope || !StructureScanner.isWalkableAnchor(world, pos))) return null;
+        if (!insideEnvelope || !StructureScanner.isWalkableAnchor(world, pos)) return null;
 
         for (int dx = -1; dx <= 1; dx++) {
             for (int dz = -1; dz <= 1; dz++) {
@@ -150,10 +140,6 @@ public final class Structure implements VillageBuilding {
     }
 
     record InteractionPosition(StructureFloor floor, Building room) {
-    }
-
-    public Optional<StructureFloor> getAutomaticGroundFloor() {
-        return getFloor(automaticGroundFloorId);
     }
 
     int getMainRoomId() {
@@ -179,24 +165,6 @@ public final class Structure implements VillageBuilding {
         mainRoomAutomatic = true;
     }
 
-    public int getAutomaticGroundFloorId() {
-        return automaticGroundFloorId;
-    }
-
-    public int getGroundReferenceY() {
-        return groundReferenceY;
-    }
-
-    public int getGroundEntranceCount() {
-        return groundEntranceCount;
-    }
-
-    void setGroundEvidence(int floorId, int referenceY, int entranceCount) {
-        automaticGroundFloorId = floorId;
-        groundReferenceY = referenceY;
-        groundEntranceCount = Math.max(0, entranceCount);
-    }
-
     int allocateFloorId() {
         return nextFloorId++;
     }
@@ -205,8 +173,6 @@ public final class Structure implements VillageBuilding {
         StructureFloorMatcher.Result match = StructureFloorMatcher.match(
                 getFloors(), nextFloorId, scan.floors(), rooms).orElse(null);
         if (match == null) return false;
-        Integer persistentGroundId = match.persistentIdByDetectedId().get(scan.groundFloorId());
-        if (persistentGroundId == null) return false;
 
         floors.clear();
         floors.putAll(match.floors());
@@ -214,7 +180,6 @@ public final class Structure implements VillageBuilding {
         source = scan.source();
         min = scan.min();
         max = scan.max();
-        setGroundEvidence(persistentGroundId, scan.groundReferenceY(), scan.groundEntranceCount());
         return true;
     }
 

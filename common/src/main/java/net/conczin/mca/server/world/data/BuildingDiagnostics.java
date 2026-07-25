@@ -38,8 +38,8 @@ public final class BuildingDiagnostics {
                 lookup.position(), uiAction, verbose);
 
         if (village == null) {
-            Building.validationResult analysis = manager.analyzeInitialStructure(pos).result();
-            String verdict = "NO_NEARBY_VILLAGE: UI uses ADD; initial structure analysis=" + analysis;
+            Building.validationResult analysis = manager.analyzeRoomAddition(pos).result();
+            String verdict = "NO_NEARBY_VILLAGE: UI uses ADD_ROOM; initial structure analysis=" + analysis;
             log(traceId, "analysis action={} result={}", uiAction, analysis);
             log(traceId, "verdict={}", verdict);
             return new Result(traceId, lookup.position(), uiAction, verdict);
@@ -68,9 +68,8 @@ public final class BuildingDiagnostics {
             log(traceId, "structure id={} source={} bounds={}..{} containsPos={} connectorAttaches={} logicalFloor={} physicalFloor={}",
                     inspected.getId(), inspected.getSource(), inspected.getRawPos0(), inspected.getRawPos1(),
                     contains, attaches, floor(logicalFloor), floor(physicalFloor));
-            log(traceId, "persistentFloors={} automaticGroundFloor={} groundReferenceY={} groundEntranceCount={} storedMainRoomId={} storedMainRoomMode={}",
-                    floors(inspected.getFloors()), floor(inspected.getAutomaticGroundFloor().orElse(null)),
-                    inspected.getGroundReferenceY(), inspected.getGroundEntranceCount(),
+            log(traceId, "persistentFloors={} storedMainRoomId={} storedMainRoomMode={}",
+                    floors(inspected.getFloors()),
                     inspected.getMainRoomId(), inspected.isMainRoomAutomatic() ? "AUTOMATIC" : "MANUAL");
             layout.buildingFor(inspected.getId()).ifPresent(logical ->
                     log(traceId, "buildingLayout={} structures={} storeys={} mainRoom={} mainRoomMode={}",
@@ -103,19 +102,14 @@ public final class BuildingDiagnostics {
             freshPlayerFloor = scan.result() == Building.validationResult.SUCCESS
                     ? floorAt(scan.floors(), pos)
                     : null;
-            StructureFloor freshGroundFloor = scan.floors().stream()
-                    .filter(candidate -> candidate.id() == scan.groundFloorId())
-                    .findFirst().orElse(null);
-            log(traceId, "freshStructureScan result={} scanSeed={} bounds={}..{} floors={} "
-                            + "groundFloor={} groundSeed={} groundReferenceY={} groundEntranceCount={} playerFloor={}",
+            log(traceId, "freshStructureScan result={} scanSeed={} bounds={}..{} floors={} playerFloor={}",
                     scan.result(), scan.source(), scan.min(), scan.max(), floors(scan.floors()),
-                    floor(freshGroundFloor), scan.groundSeed(), scan.groundReferenceY(),
-                    scan.groundEntranceCount(), floor(freshPlayerFloor));
+                    floor(freshPlayerFloor));
             logFloorDifference(traceId, inspected.getFloors(), scan.floors(), verbose);
         }
 
         Building.validationResult analysis = switch (lookup.position()) {
-            case OUTSIDE -> manager.analyzeInitialStructure(pos).result();
+            case OUTSIDE -> manager.analyzeRoomAddition(pos).result();
             case ATTACHABLE_ROOM -> manager.analyzeRoom(pos).result();
             case REGISTERED_ROOM -> room == null
                     ? Building.validationResult.NOT_IN_BUILDING
@@ -141,7 +135,7 @@ public final class BuildingDiagnostics {
         if (position == Village.StructuralPosition.OUTSIDE) {
             boolean contains = structure.containsPos(pos);
             boolean attaches = StructureConnector.attachesToStructure(world, structure, pos);
-            return "NO_INTERACTION_STRUCTURE: UI uses ADD; containsPos=" + contains
+            return "NO_INTERACTION_STRUCTURE: UI uses ADD_ROOM; containsPos=" + contains
                     + ", verticalConnectorAttachment=" + attaches + ", analysis=" + analysis;
         }
         if (analysis != Building.validationResult.SUCCESS) {
@@ -359,8 +353,7 @@ public final class BuildingDiagnostics {
 
     private static String uiAction(Village.StructuralPosition position) {
         return switch (position) {
-            case OUTSIDE -> "ADD";
-            case ATTACHABLE_ROOM -> "ADD_ROOM";
+            case OUTSIDE, ATTACHABLE_ROOM -> "ADD_ROOM";
             case REGISTERED_ROOM -> "UPDATE_ROOM";
         };
     }

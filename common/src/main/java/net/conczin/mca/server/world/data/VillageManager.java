@@ -191,13 +191,13 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         if (externalType != null) return processExternalBuilding(pos, externalType);
 
         Village village = findNearestVillage(pos, Village.MERGE_MARGIN).orElse(null);
-        if (village != null && village.getStructureAt(pos).isPresent()) {
+        if (village != null && village.getInteractionStructureAt(world, pos).isPresent()) {
             // Auto Scan never registers optional Rooms inside known Structures.
             return Building.validationResult.SUCCESS;
         }
-        InitialStructureScan scan = analyzeInitialStructure(pos);
-        if (scan.result() != Building.validationResult.SUCCESS || scan.isRoomAmbiguous()) return scan.result();
-        return commitInitialStructure(scan, null);
+        BuildingScanResult scan = analyzeRoomAddition(pos);
+        if (scan.result() != Building.validationResult.SUCCESS || scan.isAmbiguous()) return scan.result();
+        return commitRoomAddition(scan, null);
     }
 
     private BuildingType getGroupedBuildingType(BlockPos pos) {
@@ -235,24 +235,27 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         return Building.validationResult.SUCCESS;
     }
 
-    public InitialStructureScan analyzeInitialStructure(BlockPos pos) {
+    public BuildingScanResult analyzeRoomAddition(BlockPos pos) {
+        BuildingScanResult existingRoom = analyzeRoom(pos);
+        return existingRoom.result() == Building.validationResult.NOT_IN_BUILDING
+                ? analyzeInitialRoom(pos)
+                : existingRoom;
+    }
+
+    private BuildingScanResult analyzeInitialRoom(BlockPos pos) {
         Village village = findNearestVillage(pos, Village.MERGE_MARGIN).orElse(null);
         Collection<Structure> existing = village == null ? List.of() : village.getStructures().values();
         if (village != null && village.getInteractionStructureAt(world, pos).isPresent()) {
-            StructureScanner.Result failure = StructureScanner.Result.failure(Building.validationResult.IDENTICAL, pos);
-            return new InitialStructureScan(failure, village,
-                    failedRoom(failure.result(), pos, village));
+            return failedRoom(Building.validationResult.IDENTICAL, pos, village);
         }
 
         StructureScanner.Result structureScan = StructureScanner.scan(world, pos, existing, -1);
         if (structureScan.result() != Building.validationResult.SUCCESS) {
-            return new InitialStructureScan(structureScan, village,
-                    failedRoom(structureScan.result(), pos, village));
+            return failedRoom(structureScan.result(), pos, village);
         }
 
         Structure candidate = structureScan.toStructure(-1);
-        BuildingScanResult room = scanRoom(village, candidate, pos, -1);
-        return new InitialStructureScan(structureScan, village, room);
+        return scanRoom(village, candidate, pos, -1).withPendingStructure(candidate);
     }
 
     public BuildingScanResult analyzeRoom(BlockPos pos) {
@@ -400,39 +403,14 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         return new BuildingScanResult(result, pos, new Building(pos), List.of(), village);
     }
 
-    public Building.validationResult commitInitialStructure(InitialStructureScan scan, String forcedRoomType) {
+    public Building.validationResult commitRoomAddition(BuildingScanResult scan, String forcedType) {
         if (scan == null || scan.result() != Building.validationResult.SUCCESS) return scan == null
                 ? Building.validationResult.TOO_SMALL : scan.result();
-        if (forcedRoomType != null && !scan.room().matchesType(forcedRoomType)) return Building.validationResult.INVALID_TYPE;
-        if (forcedRoomType == null && scan.room().isAmbiguous()) return Building.validationResult.INVALID_TYPE;
-
-        Village village = scan.village();
-        if (village == null) village = new Village(lastVillageId++, world);
-        if (village.getStructureAt(scan.structure().source()).isPresent()) return Building.validationResult.IDENTICAL;
-
-        int structureId = lastBuildingId++;
-        Structure structure = scan.structure().toStructure(structureId);
-        Building room = scan.room().building();
-        String category = chooseInitialRoomCategory(scan.room(), forcedRoomType);
-        if (category == null) return Building.validationResult.INVALID_TYPE;
-        room.setId(lastBuildingId++);
-        room.setStructureId(structureId);
-        room.setType(category);
-        room.setTypeForced(forcedRoomType != null);
-        structure.setAutomaticMainRoom(room.getId());
-        village.getBuildings().put(room.getId(), room);
-        village.getStructures().put(structureId, structure);
-        villages.put(village.getId(), village);
-        finalizeVillageMutation(village);
-        return Building.validationResult.SUCCESS;
-    }
-
-    public Building.validationResult commitBuilding(BuildingScanResult scan, String forcedType) {
-        if (scan == null || scan.result() != Building.validationResult.SUCCESS) return scan == null
-                ? Building.validationResult.TOO_SMALL : scan.result();
-        if (scan.building().getId() >= 0) return Building.validationResult.OVERLAP;
         if (forcedType != null && !scan.matchesType(forcedType)) return Building.validationResult.INVALID_TYPE;
         if (forcedType == null && scan.isAmbiguous()) return Building.validationResult.INVALID_TYPE;
+        if (scan.pendingStructure() != null) return commitInitialRoom(scan, forcedType);
+        if (scan.building().getId() >= 0) return Building.validationResult.OVERLAP;
+
         Village village = scan.village();
         Structure structure = village == null ? null : village.getStructureFor(scan.building()).orElse(null);
         if (village == null || structure == null) return Building.validationResult.NOT_IN_BUILDING;
@@ -444,6 +422,33 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         room.setType(category);
         room.setTypeForced(forcedType != null);
         village.getBuildings().put(room.getId(), room);
+        finalizeVillageMutation(village);
+        return Building.validationResult.SUCCESS;
+    }
+
+    private Building.validationResult commitInitialRoom(BuildingScanResult scan, String forcedType) {
+        Village village = scan.village();
+        if (village == null) village = new Village(lastVillageId++, world);
+
+        Structure structure = scan.pendingStructure();
+        if (village.getStructureAt(structure.getSource()).isPresent()) {
+            return Building.validationResult.IDENTICAL;
+        }
+
+        Building room = scan.building();
+        String category = chooseInitialRoomCategory(scan, forcedType);
+        if (category == null) return Building.validationResult.INVALID_TYPE;
+
+        int structureId = lastBuildingId++;
+        structure.setId(structureId);
+        room.setId(lastBuildingId++);
+        room.setStructureId(structureId);
+        room.setType(category);
+        room.setTypeForced(forcedType != null);
+        structure.setAutomaticMainRoom(room.getId());
+        village.getBuildings().put(room.getId(), room);
+        village.getStructures().put(structureId, structure);
+        villages.put(village.getId(), village);
         finalizeVillageMutation(village);
         return Building.validationResult.SUCCESS;
     }
@@ -748,7 +753,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
     public Building.validationResult processBuilding(BlockPos pos, boolean enforce, String forcedType) {
         BuildingType external = getGroupedBuildingType(pos);
         if (external != null) return processExternalBuilding(pos, external);
-        InitialStructureScan scan = analyzeInitialStructure(pos);
+        BuildingScanResult scan = analyzeRoomAddition(pos);
         if (scan.result() != Building.validationResult.SUCCESS) {
             if (enforce) {
                 Village village = findNearestVillage(pos, Village.PLAYER_BORDER_MARGIN).orElse(null);
@@ -756,7 +761,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
             }
             return scan.result();
         }
-        return commitInitialStructure(scan, forcedType);
+        return commitRoomAddition(scan, forcedType);
     }
 
     private void finalizeVillageMutation(Village target) {

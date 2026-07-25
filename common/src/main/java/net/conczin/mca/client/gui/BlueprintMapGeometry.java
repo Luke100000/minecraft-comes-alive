@@ -126,6 +126,7 @@ final class BlueprintMapGeometry {
                     mainRoom,
                     structureIds,
                     shellCells,
+                    BlueprintMapFootprint.rowSpans(shellCells),
                     BlueprintMapFootprint.outerEdges(outlineCells)));
         }
         return List.copyOf(layers);
@@ -241,10 +242,12 @@ final class BlueprintMapGeometry {
 
     record MapStructureLayer(Building mainRoom, Set<Integer> structureIds,
                              Set<BlueprintMapFootprint.Cell> shellCells,
+                             List<BlueprintMapFootprint.RowSpan> shellSpans,
                              List<BlueprintMapFootprint.Edge> borderEdges) {
         MapStructureLayer {
             structureIds = Set.copyOf(structureIds);
             shellCells = Set.copyOf(shellCells);
+            shellSpans = List.copyOf(shellSpans);
             borderEdges = List.copyOf(borderEdges);
         }
     }

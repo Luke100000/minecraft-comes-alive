@@ -35,8 +35,7 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
         VillageManager manager = VillageManager.get(player.serverLevel());
         try {
             switch (action) {
-                case ADD -> addBuildingAndCurrentRoom(manager, player);
-                case ADD_ROOM -> addRoom(manager, player);
+                case ADD_ROOM -> addRoom(manager, player, player.blockPosition(), null);
                 case UPDATE_ROOM -> updateRoom(manager, player, player.blockPosition(), null);
                 case SET_MAIN_ROOM -> updateMainRoom(manager, player);
                 case AUTO_SCAN -> manager.findNearestVillage(player).ifPresent(Village::toggleAutoScan);
@@ -54,24 +53,19 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
         }
     }
 
-    private static void addBuildingAndCurrentRoom(VillageManager manager, ServerPlayer player) {
-        InitialStructureScan scan = manager.analyzeInitialStructure(player.blockPosition());
-        if (scan.isRoomAmbiguous()) {
-            requestType(scan.room(), player, Action.ADD);
-            return;
-        }
-        commitBuildingAndCurrentRoom(manager, player, scan, null);
-    }
-
-    private static void addRoom(VillageManager manager, ServerPlayer player) {
-        Village village = manager.findNearestVillage(player).orElse(null);
+    static void addRoom(VillageManager manager,
+                        ServerPlayer player,
+                        BlockPos source,
+                        String forcedType) {
+        Village village = manager.findNearestVillage(source, Village.MERGE_MARGIN).orElse(null);
         if (village != null
-                && village.getStructuralPosition(player.serverLevel(), player.blockPosition())
+                && village.getStructuralPosition(player.serverLevel(), source)
                 == Village.StructuralPosition.REGISTERED_ROOM) {
             player.displayClientMessage(Component.translatable("blueprint.roomAlreadyAdded"), true);
             return;
         }
-        commitNewRoom(manager, player, manager.analyzeRoom(player.blockPosition()), null);
+
+        commitRoomAddition(manager, player, manager.analyzeRoomAddition(source), forcedType);
     }
 
     private static void fullScan(VillageManager manager, ServerPlayer player) {
@@ -165,27 +159,15 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
         }
     }
 
-    static void commitBuildingAndCurrentRoom(VillageManager manager,
-                                              ServerPlayer player,
-                                              InitialStructureScan scan,
-                                              String forcedType) {
-        Building.validationResult result = manager.commitInitialStructure(scan, forcedType);
-        if (result == Building.validationResult.SUCCESS) {
-            player.displayClientMessage(Component.translatable("blueprint.buildingAddedRoomAdded"), true);
-        } else {
-            displayScanResult(player, result);
-        }
-    }
-
-    static void commitNewRoom(VillageManager manager,
-                              ServerPlayer player,
-                              BuildingScanResult scan,
-                              String forcedType) {
+    private static void commitRoomAddition(VillageManager manager,
+                                           ServerPlayer player,
+                                           BuildingScanResult scan,
+                                           String forcedType) {
         if (forcedType == null && scan.result() == Building.validationResult.SUCCESS && scan.isAmbiguous()) {
             requestType(scan, player, Action.ADD_ROOM);
             return;
         }
-        Building.validationResult result = manager.commitBuilding(scan, forcedType);
+        Building.validationResult result = manager.commitRoomAddition(scan, forcedType);
         if (result == Building.validationResult.SUCCESS) {
             player.displayClientMessage(Component.translatable("blueprint.roomAdded"), true);
         } else {
@@ -238,7 +220,6 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
     public enum Action {
         AUTO_SCAN,
         ADD_ROOM,
-        ADD,
         REMOVE,
         FORCE_TYPE,
         FULL_SCAN,
