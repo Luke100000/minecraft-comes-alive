@@ -92,34 +92,43 @@ final class BlueprintMapGeometry {
         for (StructureLayout.BuildingLayout building : layout.buildings()) {
             Set<Integer> structureIds = Set.copyOf(building.structureIds());
             Building mainRoom = village.getBuilding(building.mainRoomId()).orElse(null);
-            LinkedHashSet<BlueprintMapFootprint.Cell> groundFloorCells = new LinkedHashSet<>();
+            LinkedHashSet<BlueprintMapFootprint.Cell> outlineBaseCells = new LinkedHashSet<>();
+            for (StructureLayout.Storey storey : building.storeys()) {
+                if (storey.ordinal() < 0) continue;
+                for (StructureLayout.FloorRef floorRef : storey.floors()) {
+                    village.getStructure(floorRef.structureId())
+                            .flatMap(structure -> structure.getFloor(floorRef.floorId()))
+                            .map(floor -> floor.region())
+                            .filter(Objects::nonNull)
+                            .ifPresent(region -> outlineBaseCells.addAll(
+                                    BlueprintMapFootprint.fromFloorRegions(List.of(region))));
+                }
+            }
+
+            LinkedHashSet<BlueprintMapFootprint.Cell> roomCells = new LinkedHashSet<>();
             village.getRooms()
                     .filter(room -> structureIds.contains(room.getStructureId()))
-                    .filter(room -> layout.isRoomOnFloor(room.getId(), 0))
-                    .forEach(room -> groundFloorCells.addAll(roomFootprint(room)));
-            if (groundFloorCells.isEmpty() && mainRoom != null) {
-                groundFloorCells.addAll(roomFootprint(mainRoom));
+                    .filter(room -> layout.ordinalForRoom(room.getId()).orElse(-1) >= 0)
+                    .forEach(room -> roomCells.addAll(roomFootprint(room)));
+            if (outlineBaseCells.isEmpty()) {
+                outlineBaseCells.addAll(roomCells);
             }
-            if (groundFloorCells.isEmpty()) continue;
+            if (outlineBaseCells.isEmpty() && mainRoom != null) {
+                outlineBaseCells.addAll(roomFootprint(mainRoom));
+            }
+            if (outlineBaseCells.isEmpty()) continue;
 
-            StructureShape shape = structureShape(groundFloorCells, groundFloorCells);
+            Set<BlueprintMapFootprint.Cell> outlineCells = BlueprintMapFootprint.expand(
+                    outlineBaseCells, BUILDING_OUTLINE_WIDTH);
+            LinkedHashSet<BlueprintMapFootprint.Cell> shellCells = new LinkedHashSet<>(outlineCells);
+            shellCells.removeAll(roomCells);
             layers.add(new MapStructureLayer(
                     mainRoom,
                     structureIds,
-                    shape.shadeCells(),
-                    BlueprintMapFootprint.rowSpans(shape.shadeCells()),
-                    BlueprintMapFootprint.outerEdges(shape.outlineCells())));
+                    shellCells,
+                    BlueprintMapFootprint.outerEdges(outlineCells)));
         }
         return List.copyOf(layers);
-    }
-
-    static StructureShape structureShape(Set<BlueprintMapFootprint.Cell> outlineBaseCells,
-                                         Set<BlueprintMapFootprint.Cell> relevantRoomCells) {
-        Set<BlueprintMapFootprint.Cell> outlineCells = BlueprintMapFootprint.expand(
-                outlineBaseCells, BUILDING_OUTLINE_WIDTH);
-        Set<BlueprintMapFootprint.Cell> shadeCells = BlueprintMapLayering.structureShade(
-                outlineCells, relevantRoomCells);
-        return new StructureShape(Set.copyOf(outlineCells), shadeCells);
     }
 
     private List<MapIconLayer> buildIconLayers(List<MapFootprintLayer> roomLayers, Integer selectedFloor) {
@@ -231,13 +240,11 @@ final class BlueprintMapGeometry {
     }
 
     record MapStructureLayer(Building mainRoom, Set<Integer> structureIds,
-                             Set<BlueprintMapFootprint.Cell> shadeCells,
-                             List<BlueprintMapFootprint.RowSpan> shadeSpans,
+                             Set<BlueprintMapFootprint.Cell> shellCells,
                              List<BlueprintMapFootprint.Edge> borderEdges) {
         MapStructureLayer {
             structureIds = Set.copyOf(structureIds);
-            shadeCells = Set.copyOf(shadeCells);
-            shadeSpans = List.copyOf(shadeSpans);
+            shellCells = Set.copyOf(shellCells);
             borderEdges = List.copyOf(borderEdges);
         }
     }
@@ -255,16 +262,6 @@ final class BlueprintMapGeometry {
                     iconX, iconZ, iconScale, x, y);
         }
     }
-
-
-    record StructureShape(Set<BlueprintMapFootprint.Cell> outlineCells,
-                          Set<BlueprintMapFootprint.Cell> shadeCells) {
-        StructureShape {
-            outlineCells = Set.copyOf(outlineCells);
-            shadeCells = Set.copyOf(shadeCells);
-        }
-    }
-
     private record IconAnchor(double x, double z) {
     }
 
