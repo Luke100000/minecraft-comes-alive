@@ -1,3 +1,9 @@
+# 7.7.28
+> This is a release of 7.7.28 unrelated to the 7.7.23-ALPHA version.
+
+* Fixed villagers crowding around occupied beds / behaving weird.
+  * Existing affected villagers may need Locations -> Home set again, or the affected beds broken and replaced.
+
 # 7.7.27
 > This is a release of 7.7.27 unrelated to the 7.7.23-ALPHA version.
 
