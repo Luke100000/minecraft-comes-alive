@@ -21,7 +21,7 @@ final class BlueprintMapGeometry {
     private final Village village;
     private final StructureLayout.Layout layout;
     private final RoomTypeResolver roomTypeResolver;
-    private final List<MapStructureLayer> structureLayers;
+    private final List<CanonicalStructureLayer> canonicalStructureLayers;
     private final Map<Integer, MapGeometry> cache = new HashMap<>();
 
     private BlueprintMapGeometry(Village village,
@@ -30,7 +30,7 @@ final class BlueprintMapGeometry {
         this.village = village;
         this.layout = layout;
         this.roomTypeResolver = roomTypeResolver;
-        this.structureLayers = village == null ? List.of() : buildStructureLayers();
+        this.canonicalStructureLayers = village == null ? List.of() : buildCanonicalStructureLayers();
     }
 
     static BlueprintMapGeometry empty() {
@@ -48,11 +48,12 @@ final class BlueprintMapGeometry {
         int key = selectedFloor == null ? ALL_FLOORS_KEY : selectedFloor;
         return cache.computeIfAbsent(key, ignored -> {
             List<MapFootprintLayer> rooms = buildRoomLayers(selectedFloor);
+            List<MapStructureLayer> structures = buildStructureLayers(selectedFloor, rooms);
             List<MapIconLayer> icons = buildIconLayers(rooms, selectedFloor);
             List<Building> grouped = village.getExternalBuildings().filter(Building::isComplete)
                     .filter(building -> BlueprintMapLayering.isOutdoorVisible(selectedFloor))
                     .sorted(Comparator.comparingInt(Building::getId)).map(Building.class::cast).toList();
-            return new MapGeometry(rooms, structureLayers, icons, grouped);
+            return new MapGeometry(rooms, structures, icons, grouped);
         });
     }
 
@@ -87,8 +88,8 @@ final class BlueprintMapGeometry {
         return resolved == null ? room.getBuildingType() : resolved;
     }
 
-    private List<MapStructureLayer> buildStructureLayers() {
-        List<MapStructureLayer> layers = new ArrayList<>();
+    private List<CanonicalStructureLayer> buildCanonicalStructureLayers() {
+        List<CanonicalStructureLayer> layers = new ArrayList<>();
         for (StructureLayout.BuildingLayout building : layout.buildings()) {
             Set<Integer> structureIds = Set.copyOf(building.structureIds());
             Building mainRoom = village.getBuilding(building.mainRoomId()).orElse(null);
@@ -118,18 +119,61 @@ final class BlueprintMapGeometry {
             }
             if (outlineBaseCells.isEmpty()) continue;
 
+            Set<BlueprintMapFootprint.Cell> filteredBase =
+                    outlineBaseWithoutEntranceProtrusions(outlineBaseCells);
+            if (filteredBase.isEmpty()) filteredBase = Set.copyOf(outlineBaseCells);
             Set<BlueprintMapFootprint.Cell> outlineCells = BlueprintMapFootprint.expand(
-                    outlineBaseCells, BUILDING_OUTLINE_WIDTH);
-            LinkedHashSet<BlueprintMapFootprint.Cell> shellCells = new LinkedHashSet<>(outlineCells);
-            shellCells.removeAll(roomCells);
-            layers.add(new MapStructureLayer(
+                    filteredBase, BUILDING_OUTLINE_WIDTH);
+            Set<Integer> floorOrdinals = building.storeys().stream()
+                    .map(StructureLayout.Storey::ordinal)
+                    .collect(java.util.stream.Collectors.toUnmodifiableSet());
+            layers.add(new CanonicalStructureLayer(
                     mainRoom,
                     structureIds,
-                    shellCells,
-                    BlueprintMapFootprint.rowSpans(shellCells),
-                    BlueprintMapFootprint.outerEdges(outlineCells)));
+                    outlineCells,
+                    BlueprintMapFootprint.outerEdges(outlineCells),
+                    floorOrdinals));
         }
         return List.copyOf(layers);
+    }
+
+    private List<MapStructureLayer> buildStructureLayers(Integer selectedFloor,
+                                                         List<MapFootprintLayer> roomLayers) {
+        List<MapStructureLayer> layers = new ArrayList<>();
+        for (CanonicalStructureLayer canonical : canonicalStructureLayers) {
+            if (selectedFloor != null && !canonical.floorOrdinals().contains(selectedFloor)) continue;
+            LinkedHashSet<BlueprintMapFootprint.Cell> visibleRoomCells = new LinkedHashSet<>();
+            roomLayers.stream()
+                    .filter(layer -> canonical.structureIds().contains(layer.building().getStructureId()))
+                    .forEach(layer -> visibleRoomCells.addAll(layer.footprintCells()));
+            LinkedHashSet<BlueprintMapFootprint.Cell> shellCells =
+                    new LinkedHashSet<>(canonical.outlineCells());
+            shellCells.removeAll(visibleRoomCells);
+            layers.add(new MapStructureLayer(
+                    canonical.mainRoom(),
+                    canonical.structureIds(),
+                    shellCells,
+                    BlueprintMapFootprint.rowSpans(shellCells),
+                    canonical.borderEdges()));
+        }
+        return List.copyOf(layers);
+    }
+
+    private static Set<BlueprintMapFootprint.Cell> outlineBaseWithoutEntranceProtrusions(
+            Set<BlueprintMapFootprint.Cell> physicalCells) {
+        return physicalCells.stream()
+                .filter(cell -> cardinalNeighborCount(physicalCells, cell) != 1)
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+    }
+
+    private static int cardinalNeighborCount(Set<BlueprintMapFootprint.Cell> cells,
+                                             BlueprintMapFootprint.Cell cell) {
+        int count = 0;
+        if (cells.contains(new BlueprintMapFootprint.Cell(cell.x() + 1, cell.z()))) count++;
+        if (cells.contains(new BlueprintMapFootprint.Cell(cell.x() - 1, cell.z()))) count++;
+        if (cells.contains(new BlueprintMapFootprint.Cell(cell.x(), cell.z() + 1))) count++;
+        if (cells.contains(new BlueprintMapFootprint.Cell(cell.x(), cell.z() - 1))) count++;
+        return count;
     }
 
     private List<MapIconLayer> buildIconLayers(List<MapFootprintLayer> roomLayers, Integer selectedFloor) {
@@ -249,6 +293,19 @@ final class BlueprintMapGeometry {
             shellCells = Set.copyOf(shellCells);
             shellSpans = List.copyOf(shellSpans);
             borderEdges = List.copyOf(borderEdges);
+        }
+    }
+
+    private record CanonicalStructureLayer(Building mainRoom,
+                                           Set<Integer> structureIds,
+                                           Set<BlueprintMapFootprint.Cell> outlineCells,
+                                           List<BlueprintMapFootprint.Edge> borderEdges,
+                                           Set<Integer> floorOrdinals) {
+        CanonicalStructureLayer {
+            structureIds = Set.copyOf(structureIds);
+            outlineCells = Set.copyOf(outlineCells);
+            borderEdges = List.copyOf(borderEdges);
+            floorOrdinals = Set.copyOf(floorOrdinals);
         }
     }
 

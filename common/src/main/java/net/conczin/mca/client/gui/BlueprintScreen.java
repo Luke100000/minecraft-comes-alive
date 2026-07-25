@@ -477,9 +477,10 @@ public class BlueprintScreen extends ExtendedScreen {
         return village.getStructuralLookup(minecraft.level, minecraft.player.blockPosition());
     }
 
-    private static String getStructureScanTranslationKey(Village.StructuralPosition structuralPosition) {
+    private String getStructureScanTranslationKey(Village.StructuralPosition structuralPosition) {
         return switch (structuralPosition) {
-            case OUTSIDE -> "gui.blueprint.addBuilding";
+            case OUTSIDE -> village == null || village.getRooms().findAny().isEmpty()
+                    ? "gui.blueprint.addBuilding" : "gui.blueprint.addRoom";
             case ATTACHABLE_ROOM -> "gui.blueprint.addRoom";
             case REGISTERED_ROOM -> "gui.blueprint.updateRoom";
         };

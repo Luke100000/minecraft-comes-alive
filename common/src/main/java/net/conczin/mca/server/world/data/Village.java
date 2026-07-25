@@ -529,6 +529,13 @@ public class Village implements Iterable<Building> {
         return true;
     }
 
+    void refreshAutomaticMainRoom(Structure structure) {
+        if (structure == null || !isMainRoomAutomatic(structure)) return;
+        if (MainRoomSelector.useAutomatic(getBuildingStructures(structure), getRooms().toList())) {
+            markDirty();
+        }
+    }
+
     public boolean isMainRoomAutomatic(Structure structure) {
         return structure != null && StructureLayout.build(this).buildingFor(structure.getId())
                 .map(StructureLayout.BuildingLayout::mainRoomAutomatic)

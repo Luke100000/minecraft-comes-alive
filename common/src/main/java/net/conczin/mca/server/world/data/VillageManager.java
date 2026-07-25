@@ -422,6 +422,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         room.setType(category);
         room.setTypeForced(forcedType != null);
         village.getBuildings().put(room.getId(), room);
+        village.refreshAutomaticMainRoom(structure);
         finalizeVillageMutation(village);
         return Building.validationResult.SUCCESS;
     }
