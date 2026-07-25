@@ -12,7 +12,7 @@ public final class RoomTypeResolver {
     private final Village village;
     private final StructureLayout.Layout layout;
     private final Map<Integer, Building> roomsById;
-    private final Map<Integer, List<Building>> roomsByStructure;
+    private final Map<Integer, List<Building>> roomsByBuilding;
     private final Map<Integer, Context> contextByRoomId = new HashMap<>();
 
     private RoomTypeResolver(Village village,
@@ -22,14 +22,14 @@ public final class RoomTypeResolver {
         this.layout = layout == null ? StructureLayout.build(village) : layout;
         List<Building> snapshot = rooms == null ? List.of() : List.copyOf(rooms);
         Map<Integer, Building> byId = new HashMap<>();
-        Map<Integer, List<Building>> byStructure = new HashMap<>();
+        Map<Integer, List<Building>> byBuilding = new HashMap<>();
         for (Building room : snapshot) {
             if (room.getId() >= 0) byId.put(room.getId(), room);
-            byStructure.computeIfAbsent(room.getStructureId(), ignored -> new ArrayList<>()).add(room);
+            byBuilding.computeIfAbsent(buildingId(room.getStructureId()), ignored -> new ArrayList<>()).add(room);
         }
-        byStructure.replaceAll((ignored, grouped) -> List.copyOf(grouped));
+        byBuilding.replaceAll((ignored, grouped) -> List.copyOf(grouped));
         this.roomsById = Map.copyOf(byId);
-        this.roomsByStructure = Map.copyOf(byStructure);
+        this.roomsByBuilding = Map.copyOf(byBuilding);
     }
 
     public static RoomTypeResolver create(Village village, StructureLayout.Layout layout) {
@@ -72,7 +72,8 @@ public final class RoomTypeResolver {
             return new Context(room, mainRoom == null ? room : mainRoom, own, Map.of(), own, List.of());
         }
 
-        List<Building> contributors = roomsByStructure.getOrDefault(room.getStructureId(), List.of()).stream()
+        List<Building> contributors = roomsByBuilding.getOrDefault(
+                        buildingId(room.getStructureId()), List.of()).stream()
                 .filter(Building::isFunctionalRoom)
                 .filter(candidate -> !sameRoom(candidate, room))
                 .filter(Building::isInheritanceEnabled)
@@ -101,6 +102,12 @@ public final class RoomTypeResolver {
         Building snapshotRoom = roomsById.get(mainRoomId);
         if (snapshotRoom != null) return snapshotRoom;
         return village.getBuilding(mainRoomId).filter(Building::isFunctionalRoom).orElse(room);
+    }
+
+    private int buildingId(int structureId) {
+        return layout.buildingFor(structureId)
+                .map(StructureLayout.BuildingLayout::id)
+                .orElse(structureId);
     }
 
     private static Map<ResourceLocation, List<BlockPos>> snapshot(Map<ResourceLocation, List<BlockPos>> source) {

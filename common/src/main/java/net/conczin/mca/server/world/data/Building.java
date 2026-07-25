@@ -22,8 +22,8 @@ import java.util.stream.Stream;
 /**
  * A registered functional Room.
  *
- * <p>Physical building ownership lives in {@link Structure}; this class intentionally has
- * no Main Room mode, Ground Floor state, or hierarchy-repair state.</p>
+ * <p>Physical membership lives in {@link Structure} and logical grouping in
+ * {@link StructureLayout}; this class has no Main Room or Ground Floor state.</p>
  */
 public class Building implements VillageBuilding {
     public static final long SCAN_COOLDOWN = 4800;

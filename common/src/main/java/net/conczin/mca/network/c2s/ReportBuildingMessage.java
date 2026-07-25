@@ -104,7 +104,7 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
             player.displayClientMessage(Component.translatable("blueprint.mainRoomNoStructure"), true);
             return;
         }
-        boolean changeToAutomatic = !structure.isMainRoomAutomatic();
+        boolean changeToAutomatic = !village.isMainRoomAutomatic(structure);
         boolean changed = changeToAutomatic
                 ? village.useAutomaticMainRoom(structure)
                 : village.setMainRoom(room);

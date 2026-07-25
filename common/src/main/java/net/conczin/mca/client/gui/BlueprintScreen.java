@@ -920,7 +920,7 @@ public class BlueprintScreen extends ExtendedScreen {
         }
         Optional<Building> room = village == null ? Optional.empty() : structuralLookup.functionalRoom();
         Structure structure = room.flatMap(village::getStructureFor).orElse(null);
-        boolean changeToAutomatic = structure != null && !structure.isMainRoomAutomatic();
+        boolean changeToAutomatic = structure != null && !village.isMainRoomAutomatic(structure);
         mainRoomButton.active = room.isPresent() && structure != null;
         mainRoomButton.setMessage(Component.translatable(changeToAutomatic
                 ? "gui.blueprint.useAutomaticMainRoom"
@@ -1122,7 +1122,7 @@ public class BlueprintScreen extends ExtendedScreen {
 
     private void selectPlayerFloor(Village.StructuralLookup structuralLookup) {
         structuralLookup.functionalRoom()
-                .ifPresent(room -> structureLayout.ordinalForBuilding(room.getId()).ifPresent(ordinal -> {
+                .ifPresent(room -> structureLayout.ordinalForRoom(room.getId()).ifPresent(ordinal -> {
                     selectedFloorOrdinal = ordinal;
                     rememberedFloorOrdinal = ordinal;
                 }));

@@ -9,9 +9,10 @@ import net.minecraft.world.level.Level;
 
 import java.util.*;
 
-/** Persistent physical building geometry. Functional semantics live exclusively on Rooms. */
+/** One persistent, independently rescannable physical component of a logical Building. */
 public final class Structure implements VillageBuilding {
     private int id;
+    /** Set only when this physical component contains its logical Building's Main Room. */
     private int mainRoomId = -1;
     private boolean mainRoomAutomatic = true;
     private int automaticGroundFloorId = -1;
@@ -155,26 +156,27 @@ public final class Structure implements VillageBuilding {
         return getFloor(automaticGroundFloorId);
     }
 
-    public int getMainRoomId() {
+    int getMainRoomId() {
         return mainRoomId;
     }
 
-    public boolean isMainRoomAutomatic() {
+    boolean isMainRoomAutomatic() {
         return mainRoomAutomatic;
     }
 
-    public void setManualMainRoom(int roomId) {
+    void setManualMainRoom(int roomId) {
         mainRoomId = roomId;
         mainRoomAutomatic = false;
     }
 
-    public void setAutomaticMainRoom(int roomId) {
+    void setAutomaticMainRoom(int roomId) {
         mainRoomId = roomId;
         mainRoomAutomatic = true;
     }
 
-    public void transferMainRoom(int removedRoomId, int survivorRoomId) {
-        if (mainRoomId == removedRoomId) mainRoomId = survivorRoomId;
+    void clearMainRoom() {
+        mainRoomId = -1;
+        mainRoomAutomatic = true;
     }
 
     public int getAutomaticGroundFloorId() {

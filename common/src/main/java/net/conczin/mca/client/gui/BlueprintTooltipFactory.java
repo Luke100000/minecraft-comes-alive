@@ -16,6 +16,7 @@ import java.util.Comparator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /** Single owner for Blueprint Room/Structure tooltip hierarchy and styling. */
 final class BlueprintTooltipFactory {
@@ -109,7 +110,7 @@ final class BlueprintTooltipFactory {
         List<Component> lines = new LinkedList<>();
         lines.add(floorLabel(floorOrdinal));
         appendAggregateRooms(lines, structureTooltipBuildings(structureBuilding).stream()
-                .filter(room -> structureLayout.isBuildingOnFloor(room.getId(), floorOrdinal))
+                .filter(room -> structureLayout.isRoomOnFloor(room.getId(), floorOrdinal))
                 .toList());
         return List.copyOf(lines);
     }
@@ -121,7 +122,7 @@ final class BlueprintTooltipFactory {
         for (int floorOrdinal : structureLayout.ordinalsForStructure(structureBuilding.getEffectiveStructureId())) {
             lines.add(floorLabel(floorOrdinal));
             appendAggregateRooms(lines, structureRooms.stream()
-                    .filter(room -> structureLayout.isBuildingOnFloor(room.getId(), floorOrdinal))
+                    .filter(room -> structureLayout.isRoomOnFloor(room.getId(), floorOrdinal))
                     .toList());
         }
         return List.copyOf(lines);
@@ -143,10 +144,13 @@ final class BlueprintTooltipFactory {
         if (building.getBuildingType().grouped()) return List.of(building);
 
         int structureId = building.getEffectiveStructureId();
+        Set<Integer> structureIds = structureLayout.buildingFor(structureId)
+                .map(layout -> Set.copyOf(layout.structureIds()))
+                .orElse(Set.of(structureId));
         return village.getBuildings().values().stream()
                 .filter(Building::isComplete)
                 .filter(Building::isFunctionalRoom)
-                .filter(candidate -> candidate.getEffectiveStructureId() == structureId)
+                .filter(candidate -> structureIds.contains(candidate.getEffectiveStructureId()))
                 .sorted(Comparator.comparingInt(Building::getId))
                 .toList();
     }

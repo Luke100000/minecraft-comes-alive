@@ -173,23 +173,18 @@ public class Village implements Iterable<Building> {
     }
 
     public void removeBuilding(int id) {
-        if (buildings.remove(id) != null || externalBuildings.remove(id) != null) {
-            calculateDimensions();
-            markDirty();
-        }
-    }
-
-    void removeBuildings(Collection<Integer> ids) {
-        boolean changed = ids.stream().map(buildings::remove).anyMatch(Objects::nonNull);
-        if (changed) {
-            calculateDimensions();
-            markDirty();
-        }
+        boolean roomRemoved = buildings.remove(id) != null;
+        boolean externalRemoved = externalBuildings.remove(id) != null;
+        if (!roomRemoved && !externalRemoved) return;
+        if (roomRemoved) ensureMainRooms();
+        calculateDimensions();
+        markDirty();
     }
 
     public void removeStructure(int structureId) {
         if (structures.remove(structureId) == null) return;
         buildings.values().removeIf(building -> building.isFunctionalRoom() && building.getStructureId() == structureId);
+        ensureMainRooms();
         calculateDimensions();
         markDirty();
     }
@@ -476,14 +471,13 @@ public class Village implements Iterable<Building> {
     }
 
     private Optional<Building> getMainRoomForStructure(int structureId) {
-        return getStructure(structureId).flatMap(this::getMainRoom);
+        OptionalInt mainRoomId = StructureLayout.build(this).mainRoomIdForStructure(structureId);
+        return mainRoomId.isPresent() ? getBuilding(mainRoomId.getAsInt()) : Optional.empty();
     }
 
     public Optional<Building> getMainRoom(Structure structure) {
         if (structure == null) return Optional.empty();
-        return getBuilding(structure.getMainRoomId())
-                .filter(Building::isFunctionalRoom)
-                .filter(room -> room.getStructureId() == structure.getId());
+        return getMainRoomForStructure(structure.getId()).filter(Building::isFunctionalRoom);
     }
 
     public Optional<Building> getFunctionalRoomAt(Vec3i pos) {
@@ -512,39 +506,58 @@ public class Village implements Iterable<Building> {
 
     public boolean isMainRoom(Building room) {
         if (room == null || !room.isFunctionalRoom()) return false;
-        return getStructureFor(room)
-                .map(structure -> structure.getMainRoomId() == room.getId())
-                .orElse(false);
+        return StructureLayout.build(this).mainRoomIdForStructure(room.getStructureId())
+                .orElse(-1) == room.getId();
     }
 
     public boolean setMainRoom(Building room) {
         Structure structure = getStructureFor(room).orElse(null);
         if (structure == null) return false;
-        if (structure.getMainRoomId() == room.getId() && !structure.isMainRoomAutomatic()) return false;
-        structure.setManualMainRoom(room.getId());
+        boolean changed = MainRoomSelector.setManual(
+                getBuildingStructures(structure), getRooms().toList(), room.getId());
+        if (!changed) return false;
         markDirty();
         return true;
     }
 
     public boolean useAutomaticMainRoom(Structure structure) {
         if (structure == null || !structures.containsKey(structure.getId())) return false;
-        int selected = MainRoomSelector.select(structure,
-                getRooms().filter(room -> room.getStructureId() == structure.getId()).toList())
-                .orElse(-1);
-        if (selected < 0) return false;
-        if (structure.isMainRoomAutomatic() && structure.getMainRoomId() == selected) return false;
-        structure.setAutomaticMainRoom(selected);
+        boolean changed = MainRoomSelector.useAutomatic(
+                getBuildingStructures(structure), getRooms().toList());
+        if (!changed) return false;
         markDirty();
         return true;
     }
 
+    public boolean isMainRoomAutomatic(Structure structure) {
+        return structure != null && StructureLayout.build(this).buildingFor(structure.getId())
+                .map(StructureLayout.BuildingLayout::mainRoomAutomatic)
+                .orElse(true);
+    }
+
+    List<Structure> getBuildingStructures(Structure structure) {
+        if (structure == null) return List.of();
+        return StructureLayout.build(this).buildingFor(structure.getId())
+                .map(building -> building.structureIds().stream()
+                        .map(structures::get)
+                        .filter(Objects::nonNull)
+                        .toList())
+                .orElse(List.of(structure));
+    }
+
+    void transferMainRoom(Structure structure,
+                          int removedRoomId,
+                          int survivorRoomId,
+                          int survivorStructureId) {
+        MainRoomSelector.transfer(getBuildingStructures(structure),
+                removedRoomId, survivorRoomId, survivorStructureId);
+    }
+
     void ensureMainRooms() {
         boolean changed = false;
-        for (Structure structure : structures.values()) {
-            List<Building> rooms = getRooms()
-                    .filter(room -> room.getStructureId() == structure.getId())
-                    .toList();
-            changed |= MainRoomSelector.ensureValid(structure, rooms);
+        List<Building> rooms = getRooms().toList();
+        for (List<Structure> group : StructureLayout.groups(structures.values())) {
+            changed |= MainRoomSelector.ensureValid(group, rooms);
         }
         if (changed) markDirty();
     }

@@ -201,9 +201,9 @@ final class BlueprintMapRenderer implements AutoCloseable {
             );
         }
 
-        // Structure shade/outline is an authoritative whole-Structure hit region. Collect the hit
+        // The shade/outline is an authoritative whole-Building hit region. Collect the hit
         // now, then resolve it after Room/icon hit testing so basement/upper Room geometry cannot
-        // steal the aggregate tooltip from the canonical Structure shell.
+        // steal the aggregate tooltip from the Building shell.
         Set<MapStructureLayer> hoveredStructureLayers = new LinkedHashSet<>();
         for (MapStructureLayer layer : structureLayers) {
             boolean buildingHovered = layer.shadeCells().contains(hoveredMapCell)
@@ -249,11 +249,11 @@ final class BlueprintMapRenderer implements AutoCloseable {
         }
         matrices.popPose();
 
-        // Resolve canonical Structure hits last. On the shell/shade, the user's intent is the whole
-        // building, so replace any same-Structure Room/icon targets with one aggregate Structure target.
+        // Resolve canonical Building hits last. On the shell/shade, the user's intent is the whole
+        // building, so replace its Room/icon targets with one aggregate target.
         for (MapStructureLayer layer : hoveredStructureLayers) {
             if (layer.mainRoom() != null) {
-                addStructureHover(hoverTargets, layer.mainRoom());
+                addStructureHover(hoverTargets, layer.mainRoom(), layer.structureIds());
             }
         }
 
@@ -517,11 +517,12 @@ final class BlueprintMapRenderer implements AutoCloseable {
                 && target.building().getEffectiveStructureId() == structureId);
     }
 
-    private static void addStructureHover(List<HoverTarget> hoverTargets, Building mainRoom) {
-        int structureId = mainRoom.getEffectiveStructureId();
+    private static void addStructureHover(List<HoverTarget> hoverTargets,
+                                          Building mainRoom,
+                                          Set<Integer> structureIds) {
         hoverTargets.removeIf(target -> !target.structure()
                 && target.building().isFunctionalRoom()
-                && target.building().getEffectiveStructureId() == structureId);
+                && structureIds.contains(target.building().getEffectiveStructureId()));
         HoverTarget target = new HoverTarget(mainRoom, null, true);
         if (!hoverTargets.contains(target)) {
             hoverTargets.add(target);
