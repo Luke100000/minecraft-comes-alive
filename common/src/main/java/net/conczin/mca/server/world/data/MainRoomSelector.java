@@ -29,7 +29,7 @@ final class MainRoomSelector {
                 .min(Comparator.comparingInt(Selection::structureId)
                         .thenComparingInt(Selection::roomId))
                 .orElse(null);
-        return manual != null ? manual : automaticSelection(eligible.values());
+        return manual != null ? manual : automaticSelection(structures, eligible.values());
     }
 
     static boolean ensureValid(List<Structure> structures, Collection<Building> rooms) {
@@ -51,7 +51,7 @@ final class MainRoomSelector {
     }
 
     static boolean useAutomatic(List<Structure> structures, Collection<Building> rooms) {
-        Selection selection = automaticSelection(eligibleRooms(structures, rooms).values());
+        Selection selection = automaticSelection(structures, eligibleRooms(structures, rooms).values());
         if (selection == null || isNormalized(structures, selection)) return false;
         apply(structures, selection);
         return true;
@@ -71,11 +71,32 @@ final class MainRoomSelector {
                 survivorRoomId, survivorStructureId, -1, automatic));
     }
 
-    private static Selection automaticSelection(Collection<Building> eligibleRooms) {
+    private static Selection automaticSelection(List<Structure> structures,
+                                                Collection<Building> eligibleRooms) {
+        Map<Integer, Structure> structuresById = new HashMap<>();
+        structures.forEach(structure -> structuresById.put(structure.getId(), structure));
         return eligibleRooms.stream()
-                .min(Comparator.comparingInt(Building::getId))
+                .min(Comparator
+                        .comparingInt((Building room) -> surfaceDistance(room, structuresById))
+                        .thenComparing(Comparator.comparingInt(
+                                (Building room) -> floorAnchor(room, structuresById)).reversed())
+                        .thenComparingInt(Building::getId))
                 .map(room -> selection(room, true))
                 .orElse(null);
+    }
+
+    private static int surfaceDistance(Building room, Map<Integer, Structure> structures) {
+        Structure structure = structures.get(room.getStructureId());
+        int floorY = floorAnchor(room, structures);
+        return structure == null ? Integer.MAX_VALUE
+                : Math.abs(floorY - structure.getSurfaceReferenceY());
+    }
+
+    private static int floorAnchor(Building room, Map<Integer, Structure> structures) {
+        Structure structure = structures.get(room.getStructureId());
+        return structure == null ? Integer.MIN_VALUE
+                : structure.getFloor(room.getFloorId()).map(StructureFloor::anchorY)
+                .orElse(Integer.MIN_VALUE);
     }
 
     private static Map<Integer, Building> eligibleRooms(List<Structure> structures,

@@ -15,6 +15,7 @@ public final class Structure implements VillageBuilding {
     /** Set only when this physical component contains its logical Building's Main Room. */
     private int mainRoomId = -1;
     private boolean mainRoomAutomatic = true;
+    private int surfaceReferenceY;
     private int nextFloorId;
     private BlockPos source;
     private BlockPos min;
@@ -26,6 +27,7 @@ public final class Structure implements VillageBuilding {
         this.source = source.immutable();
         this.min = min.immutable();
         this.max = max.immutable();
+        surfaceReferenceY = source.getY();
         for (StructureFloor floor : floors) {
             this.floors.put(floor.id(), floor);
             nextFloorId = Math.max(nextFloorId, floor.id() + 1);
@@ -36,6 +38,7 @@ public final class Structure implements VillageBuilding {
         id = tag.getInt("id");
         mainRoomId = tag.getInt("mainRoomId");
         mainRoomAutomatic = tag.getBoolean("mainRoomAutomatic");
+        surfaceReferenceY = tag.getInt("surfaceReferenceY");
         nextFloorId = tag.getInt("nextFloorId");
         source = NbtHelper.decodeBlockPos(tag.get("source"));
         min = NbtHelper.decodeBlockPos(tag.get("min"));
@@ -52,6 +55,7 @@ public final class Structure implements VillageBuilding {
         tag.putInt("id", id);
         tag.putInt("mainRoomId", mainRoomId);
         tag.putBoolean("mainRoomAutomatic", mainRoomAutomatic);
+        tag.putInt("surfaceReferenceY", surfaceReferenceY);
         tag.putInt("nextFloorId", nextFloorId);
         tag.put("source", NbtHelper.encodeBlockPos(source));
         tag.put("min", NbtHelper.encodeBlockPos(min));
@@ -165,6 +169,14 @@ public final class Structure implements VillageBuilding {
         mainRoomAutomatic = true;
     }
 
+    int getSurfaceReferenceY() {
+        return surfaceReferenceY;
+    }
+
+    void setSurfaceReferenceY(int surfaceReferenceY) {
+        this.surfaceReferenceY = surfaceReferenceY;
+    }
+
     int allocateFloorId() {
         return nextFloorId++;
     }
@@ -180,6 +192,7 @@ public final class Structure implements VillageBuilding {
         source = scan.source();
         min = scan.min();
         max = scan.max();
+        surfaceReferenceY = scan.surfaceReferenceY();
         return true;
     }
 

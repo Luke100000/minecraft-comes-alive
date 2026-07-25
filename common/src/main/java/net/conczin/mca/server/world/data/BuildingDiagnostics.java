@@ -68,8 +68,9 @@ public final class BuildingDiagnostics {
             log(traceId, "structure id={} source={} bounds={}..{} containsPos={} connectorAttaches={} logicalFloor={} physicalFloor={}",
                     inspected.getId(), inspected.getSource(), inspected.getRawPos0(), inspected.getRawPos1(),
                     contains, attaches, floor(logicalFloor), floor(physicalFloor));
-            log(traceId, "persistentFloors={} storedMainRoomId={} storedMainRoomMode={}",
+            log(traceId, "persistentFloors={} surfaceReferenceY={} storedMainRoomId={} storedMainRoomMode={}",
                     floors(inspected.getFloors()),
+                    inspected.getSurfaceReferenceY(),
                     inspected.getMainRoomId(), inspected.isMainRoomAutomatic() ? "AUTOMATIC" : "MANUAL");
             layout.buildingFor(inspected.getId()).ifPresent(logical ->
                     log(traceId, "buildingLayout={} structures={} storeys={} mainRoom={} mainRoomMode={}",
@@ -102,9 +103,9 @@ public final class BuildingDiagnostics {
             freshPlayerFloor = scan.result() == Building.validationResult.SUCCESS
                     ? floorAt(scan.floors(), pos)
                     : null;
-            log(traceId, "freshStructureScan result={} scanSeed={} bounds={}..{} floors={} playerFloor={}",
+            log(traceId, "freshStructureScan result={} scanSeed={} bounds={}..{} floors={} surfaceReferenceY={} playerFloor={}",
                     scan.result(), scan.source(), scan.min(), scan.max(), floors(scan.floors()),
-                    floor(freshPlayerFloor));
+                    scan.surfaceReferenceY(), floor(freshPlayerFloor));
             logFloorDifference(traceId, inspected.getFloors(), scan.floors(), verbose);
         }
 

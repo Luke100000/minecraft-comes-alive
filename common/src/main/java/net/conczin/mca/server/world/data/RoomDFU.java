@@ -64,6 +64,12 @@ final class RoomDFU {
                 tag.putBoolean("mainRoomAutomatic", manualMain == null
                         && !tag.getBoolean("groundAnchorExplicit"));
             }
+            if (!tag.contains("surfaceReferenceY")) {
+                int referenceY = tag.contains("groundReferenceY")
+                        ? tag.getInt("groundReferenceY")
+                        : NbtHelper.decodeBlockPos(tag.get("source")).getY();
+                tag.putInt("surfaceReferenceY", referenceY);
+            }
             Structure structure = new Structure(tag);
             structures.put(structure.getId(), structure);
         }
