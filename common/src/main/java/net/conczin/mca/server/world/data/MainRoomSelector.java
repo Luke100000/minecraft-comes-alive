@@ -2,65 +2,154 @@ package net.conczin.mca.server.world.data;
 
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
-import java.util.OptionalInt;
+import java.util.Map;
+import java.util.Objects;
 
-/** Deterministic Main Room selection for one physical Structure. */
+/** Maintains one deterministic, saved Main Room for a logical Building. */
 final class MainRoomSelector {
     private MainRoomSelector() {
     }
 
-    static OptionalInt select(Structure structure, Collection<Building> rooms) {
-        if (structure == null || rooms == null) return OptionalInt.empty();
-
-        List<Building> eligible = rooms.stream()
-                .filter(Building::isFunctionalRoom)
-                .filter(room -> room.getStructureId() == structure.getId())
-                .filter(room -> structure.getFloor(room.getFloorId()).isPresent())
-                .sorted(Comparator.comparingInt(Building::getId))
+    static Selection resolve(List<Structure> structures, Collection<Building> rooms) {
+        if (structures == null || structures.isEmpty()) return null;
+        Map<Integer, Building> eligible = eligibleRooms(structures, rooms);
+        List<Selection> saved = structures.stream()
+                .map(structure -> {
+                    Building room = eligible.get(structure.getMainRoomId());
+                    return room == null ? null : selection(room, structure.isMainRoomAutomatic());
+                })
+                .filter(Objects::nonNull)
                 .toList();
-        if (eligible.isEmpty()) return OptionalInt.empty();
+        if (saved.size() == 1) return saved.getFirst();
 
-        int preferredFloorId = structure.getAutomaticGroundFloorId();
-        int automaticFloorId = preferredFloorId;
-        boolean preferredFloorHasRoom = eligible.stream()
-                .anyMatch(room -> room.getFloorId() == automaticFloorId);
-        if (!preferredFloorHasRoom) {
-            preferredFloorId = eligible.stream()
-                    .map(room -> structure.getFloor(room.getFloorId()).orElseThrow())
-                    .distinct()
-                    .min(Comparator
-                            .comparingInt((StructureFloor floor) ->
-                                    Math.abs(floor.anchorY() - structure.getGroundReferenceY()))
-                            .thenComparingInt(StructureFloor::anchorY)
-                            .thenComparingInt(StructureFloor::id))
-                    .orElseThrow()
-                    .id();
+        Selection manual = saved.stream()
+                .filter(selection -> !selection.automatic())
+                .min(Comparator.comparingInt(Selection::structureId)
+                        .thenComparingInt(Selection::roomId))
+                .orElse(null);
+        return manual != null ? manual : automaticSelection(structures, eligible.values());
+    }
+
+    static boolean ensureValid(List<Structure> structures, Collection<Building> rooms) {
+        Selection selection = resolve(structures, rooms);
+        if (isNormalized(structures, selection)) return false;
+        apply(structures, selection);
+        return true;
+    }
+
+    static boolean setManual(List<Structure> structures,
+                             Collection<Building> rooms,
+                             int roomId) {
+        Building room = eligibleRooms(structures, rooms).get(roomId);
+        if (room == null) return false;
+        Selection selection = selection(room, false);
+        if (isNormalized(structures, selection)) return false;
+        apply(structures, selection);
+        return true;
+    }
+
+    static boolean useAutomatic(List<Structure> structures, Collection<Building> rooms) {
+        Selection selection = automaticSelection(structures, eligibleRooms(structures, rooms).values());
+        if (selection == null || isNormalized(structures, selection)) return false;
+        apply(structures, selection);
+        return true;
+    }
+
+    static void transfer(List<Structure> structures,
+                         int removedRoomId,
+                         int survivorRoomId,
+                         int survivorStructureId) {
+        Structure holder = structures.stream()
+                .filter(structure -> structure.getMainRoomId() == removedRoomId)
+                .findFirst()
+                .orElse(null);
+        if (holder == null) return;
+        boolean automatic = holder.isMainRoomAutomatic();
+        apply(structures, new Selection(
+                survivorRoomId, survivorStructureId, -1, automatic));
+    }
+
+    private static Selection automaticSelection(List<Structure> structures,
+                                                Collection<Building> eligibleRooms) {
+        Map<Integer, Structure> structuresById = new HashMap<>();
+        structures.forEach(structure -> structuresById.put(structure.getId(), structure));
+        return eligibleRooms.stream()
+                .map(room -> {
+                    Structure structure = structuresById.get(room.getStructureId());
+                    StructureFloor floor = structure == null
+                            ? null : structure.getFloor(room.getFloorId()).orElse(null);
+                    return floor == null ? null : new Candidate(room, structure, floor);
+                })
+                .filter(Objects::nonNull)
+                .min(Comparator
+                        .comparingInt((Candidate candidate) -> candidate.automaticGround() ? 0 : 1)
+                        .thenComparingInt(candidate -> candidate.automaticGround()
+                                ? -candidate.structure().getGroundEntranceCount() : 0)
+                        .thenComparingInt(candidate -> Math.abs(candidate.floor().anchorY()
+                                - candidate.structure().getGroundReferenceY()))
+                        .thenComparingInt(candidate -> -candidate.floor().anchorY())
+                        .thenComparingInt(candidate -> candidate.structure().getId())
+                        .thenComparingInt(candidate -> candidate.floor().id())
+                        .thenComparingInt(candidate -> candidate.room().getId()))
+                .map(candidate -> selection(candidate.room(), true))
+                .orElse(null);
+    }
+
+    private static Map<Integer, Building> eligibleRooms(List<Structure> structures,
+                                                        Collection<Building> rooms) {
+        if (structures == null || rooms == null) return Map.of();
+        Map<Integer, Structure> structuresById = new HashMap<>();
+        structures.forEach(structure -> structuresById.put(structure.getId(), structure));
+        Map<Integer, Building> eligible = new HashMap<>();
+        for (Building room : rooms) {
+            Structure structure = structuresById.get(room.getStructureId());
+            if (room.getId() >= 0 && room.isFunctionalRoom() && structure != null
+                    && structure.getFloor(room.getFloorId()).isPresent()) {
+                eligible.put(room.getId(), room);
+            }
         }
-
-        int selectedFloorId = preferredFloorId;
-        return eligible.stream()
-                .filter(room -> room.getFloorId() == selectedFloorId)
-                .mapToInt(Building::getId)
-                .min();
+        return eligible;
     }
 
-    static boolean ensureValid(Structure structure, Collection<Building> rooms) {
-        if (structure == null) return false;
-        if (isValid(structure, rooms, structure.getMainRoomId())) return false;
-
-        int replacement = select(structure, rooms).orElse(-1);
-        boolean changed = structure.getMainRoomId() != replacement
-                || !structure.isMainRoomAutomatic();
-        structure.setAutomaticMainRoom(replacement);
-        return changed;
+    private static Selection selection(Building room, boolean automatic) {
+        return new Selection(room.getId(), room.getStructureId(), room.getFloorId(), automatic);
     }
 
-    static boolean isValid(Structure structure, Collection<Building> rooms, int roomId) {
-        return structure != null && rooms != null && rooms.stream()
-                .anyMatch(room -> room.getId() == roomId
-                        && room.isFunctionalRoom()
-                        && room.getStructureId() == structure.getId()
-                        && structure.getFloor(room.getFloorId()).isPresent());
+    private static boolean isNormalized(List<Structure> structures, Selection selection) {
+        for (Structure structure : structures) {
+            boolean holder = selection != null && structure.getId() == selection.structureId();
+            if (holder) {
+                if (structure.getMainRoomId() != selection.roomId()
+                        || structure.isMainRoomAutomatic() != selection.automatic()) return false;
+            } else if (structure.getMainRoomId() >= 0 || !structure.isMainRoomAutomatic()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static void apply(List<Structure> structures, Selection selection) {
+        Structure holder = selection == null ? null : structures.stream()
+                .filter(structure -> structure.getId() == selection.structureId())
+                .findFirst()
+                .orElse(null);
+        if (selection != null && holder == null) return;
+        for (Structure structure : structures) {
+            structure.clearMainRoom();
+        }
+        if (holder == null) return;
+        if (selection.automatic()) holder.setAutomaticMainRoom(selection.roomId());
+        else holder.setManualMainRoom(selection.roomId());
+    }
+
+    record Selection(int roomId, int structureId, int floorId, boolean automatic) {
+    }
+
+    private record Candidate(Building room, Structure structure, StructureFloor floor) {
+        boolean automaticGround() {
+            return floor.id() == structure.getAutomaticGroundFloorId();
+        }
     }
 }

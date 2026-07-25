@@ -3,7 +3,6 @@ package net.conczin.mca.client.gui;
 import net.conczin.mca.resources.data.BuildingType;
 import net.conczin.mca.server.world.data.Building;
 import net.conczin.mca.server.world.data.RoomTypeResolver;
-import net.conczin.mca.server.world.data.Structure;
 import net.conczin.mca.server.world.data.StructureLayout;
 import net.conczin.mca.server.world.data.Village;
 import net.minecraft.core.BlockPos;
@@ -66,7 +65,7 @@ final class BlueprintMapGeometry {
         List<MapFootprintLayer> layers = new ArrayList<>();
         for (int floor : floors) {
             for (Building room : rooms) {
-                if (!layout.isBuildingOnFloor(room.getId(), floor)) continue;
+                if (!layout.isRoomOnFloor(room.getId(), floor)) continue;
                 Set<BlueprintMapFootprint.Cell> footprintCells = roomFootprint(room);
                 if (footprintCells.isEmpty()) continue;
 
@@ -89,21 +88,19 @@ final class BlueprintMapGeometry {
 
     private List<MapStructureLayer> buildStructureLayers(List<MapFootprintLayer> roomLayers) {
         List<MapStructureLayer> layers = new ArrayList<>();
-        for (Structure structure : village.getStructures().values().stream()
-                .sorted(Comparator.comparingInt(Structure::getId)).toList()) {
-            OptionalInt mainRoomId = layout.mainRoomIdForStructure(structure.getId());
-            Building mainRoom = mainRoomId.isPresent()
-                    ? village.getBuilding(mainRoomId.getAsInt()).orElse(null) : null;
-
+        for (StructureLayout.BuildingLayout building : layout.buildings()) {
+            Set<Integer> structureIds = Set.copyOf(building.structureIds());
+            Building mainRoom = village.getBuilding(building.mainRoomId()).orElse(null);
             LinkedHashSet<BlueprintMapFootprint.Cell> registeredRoomCells = new LinkedHashSet<>();
             roomLayers.stream()
-                    .filter(layer -> layer.building().getStructureId() == structure.getId())
+                    .filter(layer -> structureIds.contains(layer.building().getStructureId()))
                     .forEach(layer -> registeredRoomCells.addAll(layer.footprintCells()));
             if (registeredRoomCells.isEmpty()) continue;
 
             StructureShape shape = structureShape(registeredRoomCells, registeredRoomCells);
             layers.add(new MapStructureLayer(
                     mainRoom,
+                    structureIds,
                     shape.shadeCells(),
                     BlueprintMapFootprint.rowSpans(shape.shadeCells()),
                     BlueprintMapFootprint.outerEdges(shape.outlineCells())));
@@ -228,10 +225,12 @@ final class BlueprintMapGeometry {
         }
     }
 
-    record MapStructureLayer(Building mainRoom, Set<BlueprintMapFootprint.Cell> shadeCells,
+    record MapStructureLayer(Building mainRoom, Set<Integer> structureIds,
+                             Set<BlueprintMapFootprint.Cell> shadeCells,
                              List<BlueprintMapFootprint.RowSpan> shadeSpans,
                              List<BlueprintMapFootprint.Edge> borderEdges) {
         MapStructureLayer {
+            structureIds = Set.copyOf(structureIds);
             shadeCells = Set.copyOf(shadeCells);
             shadeSpans = List.copyOf(shadeSpans);
             borderEdges = List.copyOf(borderEdges);

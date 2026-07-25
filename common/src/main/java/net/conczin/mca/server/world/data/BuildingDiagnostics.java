@@ -68,14 +68,14 @@ public final class BuildingDiagnostics {
             log(traceId, "structure id={} source={} bounds={}..{} containsPos={} connectorAttaches={} logicalFloor={} physicalFloor={}",
                     inspected.getId(), inspected.getSource(), inspected.getRawPos0(), inspected.getRawPos1(),
                     contains, attaches, floor(logicalFloor), floor(physicalFloor));
-            log(traceId, "persistentFloors={} automaticGroundFloor={} groundReferenceY={} groundEntranceCount={} mainRoomId={} mainRoomMode={}",
+            log(traceId, "persistentFloors={} automaticGroundFloor={} groundReferenceY={} groundEntranceCount={} storedMainRoomId={} storedMainRoomMode={}",
                     floors(inspected.getFloors()), floor(inspected.getAutomaticGroundFloor().orElse(null)),
                     inspected.getGroundReferenceY(), inspected.getGroundEntranceCount(),
                     inspected.getMainRoomId(), inspected.isMainRoomAutomatic() ? "AUTOMATIC" : "MANUAL");
             layout.buildingFor(inspected.getId()).ifPresent(logical ->
-                    log(traceId, "structureLayout={} storeys={} groundStoreyIndex={} mainRoom={}",
-                            logical.structureId(), logical.storeys(),
-                            logical.groundStoreyIndex(), logical.mainRoomId()));
+                    log(traceId, "buildingLayout={} structures={} storeys={} mainRoom={} mainRoomMode={}",
+                            logical.id(), logical.structureIds(), logical.storeys(),
+                            logical.mainRoomId(), logical.mainRoomAutomatic() ? "AUTOMATIC" : "MANUAL"));
 
             if (room != null) {
                 StructureFloor roomFloor = inspected.getFloor(room.getFloorId()).orElse(null);

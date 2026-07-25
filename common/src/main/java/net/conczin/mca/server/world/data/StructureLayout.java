@@ -1,15 +1,17 @@
 package net.conczin.mca.server.world.data;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.TreeSet;
 
-/** Pure derived floor view: one layout entry for one persistent physical Structure. */
+/** Pure derived view that groups vertically adjacent physical Structures into logical Buildings. */
 public final class StructureLayout {
     private StructureLayout() {
     }
@@ -17,16 +19,15 @@ public final class StructureLayout {
     public static Layout build(Village village) {
         if (village == null) return Layout.EMPTY;
 
-        List<BuildingLayout> buildings = village.getStructures().values().stream()
-                .filter(structure -> !structure.getFloors().isEmpty())
-                .sorted(Comparator.comparingInt(Structure::getId))
-                .map(structure -> buildStructure(village, structure))
+        List<Building> rooms = village.getRooms().toList();
+        List<BuildingLayout> buildings = groups(village.getStructures().values()).stream()
+                .map(structures -> buildBuilding(structures, rooms))
                 .toList();
         Map<Integer, BuildingLayout> byStructure = new HashMap<>();
         Map<Long, Integer> ordinalByFloor = new HashMap<>();
-        Map<Integer, Placement> placementByRoom = new HashMap<>();
+        Map<Integer, Integer> ordinalByRoom = new HashMap<>();
         for (BuildingLayout building : buildings) {
-            byStructure.put(building.structureId(), building);
+            building.structureIds().forEach(id -> byStructure.put(id, building));
             for (Storey storey : building.storeys()) {
                 for (FloorRef floor : storey.floors()) {
                     ordinalByFloor.put(floorKey(floor.structureId(), floor.floorId()), storey.ordinal());
@@ -34,79 +35,152 @@ public final class StructureLayout {
             }
         }
 
-        village.getRooms().forEach(room -> {
+        for (Building room : rooms) {
             Integer ordinal = ordinalByFloor.get(floorKey(room.getStructureId(), room.getFloorId()));
-            if (ordinal != null && byStructure.containsKey(room.getStructureId())) {
-                placementByRoom.put(room.getId(), new Placement(room.getStructureId(), ordinal));
+            BuildingLayout building = byStructure.get(room.getStructureId());
+            if (ordinal != null && building != null) {
+                ordinalByRoom.put(room.getId(), ordinal);
             }
-        });
-        return new Layout(buildings, byStructure, ordinalByFloor, placementByRoom);
+        }
+        return new Layout(buildings, byStructure, ordinalByRoom);
     }
 
-    private static BuildingLayout buildStructure(Village village, Structure structure) {
-        List<StructureFloor> floors = structure.getFloors();
-        Building mainRoom = village.getBuilding(structure.getMainRoomId())
-                .filter(Building::isFunctionalRoom)
-                .filter(room -> room.getStructureId() == structure.getId())
-                .filter(room -> structure.getFloor(room.getFloorId()).isPresent())
-                .orElse(null);
-        int groundFloorId = mainRoom == null
-                ? structure.getAutomaticGroundFloorId() : mainRoom.getFloorId();
-        int groundIndex = 0;
-        for (int i = 0; i < floors.size(); i++) {
-            if (floors.get(i).id() == groundFloorId) {
-                groundIndex = i;
-                break;
+    static List<List<Structure>> groups(Collection<Structure> structures) {
+        List<Structure> remaining = structures == null ? new ArrayList<>() : structures.stream()
+                .filter(structure -> !structure.getFloors().isEmpty())
+                .sorted(Comparator.comparingInt(Structure::getId))
+                .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
+        List<List<Structure>> groups = new ArrayList<>();
+        while (!remaining.isEmpty()) {
+            List<Structure> members = new ArrayList<>();
+            members.add(remaining.removeFirst());
+            for (int i = 0; i < members.size(); i++) {
+                Structure member = members.get(i);
+                for (Iterator<Structure> iterator = remaining.iterator(); iterator.hasNext();) {
+                    Structure candidate = iterator.next();
+                    if (!hasAdjacentOverlappingFloor(member, candidate)) continue;
+                    members.add(candidate);
+                    iterator.remove();
+                }
+            }
+            members.sort(Comparator.comparingInt(Structure::getId));
+            groups.add(List.copyOf(members));
+        }
+        return List.copyOf(groups);
+    }
+
+    private static boolean hasAdjacentOverlappingFloor(Structure first, Structure second) {
+        for (StructureFloor firstFloor : first.getFloors()) {
+            if (firstFloor.region() == null) continue;
+            for (StructureFloor secondFloor : second.getFloors()) {
+                if (secondFloor.region() == null
+                        || firstFloor.region().intersectionArea(secondFloor.region()) == 0) continue;
+                StructureFloor lower = firstFloor.anchorY() < secondFloor.anchorY() ? firstFloor : secondFloor;
+                StructureFloor upper = lower == firstFloor ? secondFloor : firstFloor;
+                if (lower.anchorY() == upper.anchorY()) continue;
+                int verticalGap = upper.anchorY() - lower.ceilingY();
+                if (verticalGap >= 0
+                        && verticalGap <= BuildingFloorRegionDetector.FLOOR_CLUSTER_TOLERANCE) {
+                    return true;
+                }
             }
         }
+        return false;
+    }
+
+    private static BuildingLayout buildBuilding(List<Structure> structures, List<Building> rooms) {
+        List<PhysicalFloor> floors = structures.stream()
+                .flatMap(structure -> structure.getFloors().stream()
+                        .map(floor -> new PhysicalFloor(structure.getId(), floor)))
+                .sorted(Comparator.comparingInt(PhysicalFloor::anchorY)
+                        .thenComparingInt(PhysicalFloor::structureId)
+                        .thenComparingInt(PhysicalFloor::floorId))
+                .toList();
+        List<List<PhysicalFloor>> bands = clusterBands(floors);
+        MainRoomSelector.Selection selection = MainRoomSelector.resolve(structures, rooms);
+        int groundIndex = selection == null ? 0
+                : floorBandIndex(selection.structureId(), selection.floorId(), bands);
+        if (groundIndex < 0) groundIndex = 0;
 
         List<Storey> storeys = new ArrayList<>();
-        for (int i = 0; i < floors.size(); i++) {
-            StructureFloor floor = floors.get(i);
-            storeys.add(new Storey(floor.anchorY(), i - groundIndex,
-                    List.of(new FloorRef(structure.getId(), floor.id()))));
+        for (int i = 0; i < bands.size(); i++) {
+            List<PhysicalFloor> band = bands.get(i);
+            storeys.add(new Storey(band.getFirst().anchorY(), i - groundIndex, band.stream()
+                    .map(floor -> new FloorRef(floor.structureId(), floor.floorId()))
+                    .toList()));
         }
-        return new BuildingLayout(structure.getId(), storeys, groundIndex,
-                mainRoom == null ? -1 : mainRoom.getId());
+        return new BuildingLayout(
+                structures.getFirst().getId(),
+                structures.stream().map(Structure::getId).toList(),
+                storeys,
+                selection == null ? -1 : selection.roomId(),
+                selection == null || selection.automatic());
+    }
+
+    private static List<List<PhysicalFloor>> clusterBands(List<PhysicalFloor> floors) {
+        List<List<PhysicalFloor>> bands = new ArrayList<>();
+        for (PhysicalFloor floor : floors) {
+            List<PhysicalFloor> band = bands.isEmpty() ? null : bands.getLast();
+            if (band == null || floor.anchorY() - band.getFirst().anchorY()
+                    > BuildingFloorRegionDetector.FLOOR_CLUSTER_TOLERANCE) {
+                band = new ArrayList<>();
+                bands.add(band);
+            }
+            band.add(floor);
+        }
+        return bands;
+    }
+
+    private static int floorBandIndex(int structureId,
+                                      int floorId,
+                                      List<List<PhysicalFloor>> bands) {
+        long key = floorKey(structureId, floorId);
+        for (int i = 0; i < bands.size(); i++) {
+            if (bands.get(i).stream().anyMatch(floor -> floor.key() == key)) return i;
+        }
+        return -1;
     }
 
     private static long floorKey(int structureId, int floorId) {
         return ((long) structureId << 32) ^ (floorId & 0xffffffffL);
     }
 
+    private record PhysicalFloor(int structureId, StructureFloor floor) {
+        int floorId() {
+            return floor.id();
+        }
+
+        int anchorY() {
+            return floor.anchorY();
+        }
+
+        long key() {
+            return floorKey(structureId, floor.id());
+        }
+    }
+
     public record Layout(List<BuildingLayout> buildings,
                          Map<Integer, BuildingLayout> byStructure,
-                         Map<Long, Integer> ordinalByFloor,
-                         Map<Integer, Placement> placementByRoom) {
-        private static final Layout EMPTY = new Layout(List.of(), Map.of(), Map.of(), Map.of());
+                         Map<Integer, Integer> ordinalByRoom) {
+        private static final Layout EMPTY = new Layout(List.of(), Map.of(), Map.of());
 
         public Layout {
             buildings = List.copyOf(buildings);
             byStructure = Map.copyOf(byStructure);
-            ordinalByFloor = Map.copyOf(ordinalByFloor);
-            placementByRoom = Map.copyOf(placementByRoom);
+            ordinalByRoom = Map.copyOf(ordinalByRoom);
         }
 
         public Optional<BuildingLayout> buildingFor(int structureId) {
             return Optional.ofNullable(byStructure.get(structureId));
         }
 
-        public OptionalInt ordinal(int structureId, int floorId) {
-            Integer ordinal = ordinalByFloor.get(floorKey(structureId, floorId));
+        public OptionalInt ordinalForRoom(int roomId) {
+            Integer ordinal = ordinalByRoom.get(roomId);
             return ordinal == null ? OptionalInt.empty() : OptionalInt.of(ordinal);
         }
 
-        public Optional<Placement> placementFor(int roomId) {
-            return Optional.ofNullable(placementByRoom.get(roomId));
-        }
-
-        public OptionalInt ordinalForBuilding(int roomId) {
-            Placement placement = placementByRoom.get(roomId);
-            return placement == null ? OptionalInt.empty() : OptionalInt.of(placement.ordinal());
-        }
-
-        public boolean isBuildingOnFloor(int roomId, int floorOrdinal) {
-            return ordinalForBuilding(roomId).orElse(Integer.MIN_VALUE) == floorOrdinal;
+        public boolean isRoomOnFloor(int roomId, int floorOrdinal) {
+            return ordinalForRoom(roomId).orElse(Integer.MIN_VALUE) == floorOrdinal;
         }
 
         public List<Integer> ordinals() {
@@ -130,11 +204,13 @@ public final class StructureLayout {
         }
     }
 
-    public record BuildingLayout(int structureId,
+    public record BuildingLayout(int id,
+                                 List<Integer> structureIds,
                                  List<Storey> storeys,
-                                 int groundStoreyIndex,
-                                 int mainRoomId) {
+                                 int mainRoomId,
+                                 boolean mainRoomAutomatic) {
         public BuildingLayout {
+            structureIds = List.copyOf(structureIds);
             storeys = List.copyOf(storeys);
         }
     }
@@ -146,8 +222,5 @@ public final class StructureLayout {
     }
 
     public record FloorRef(int structureId, int floorId) {
-    }
-
-    public record Placement(int structureId, int ordinal) {
     }
 }

@@ -11,7 +11,7 @@ import java.util.Optional;
 import java.util.Set;
 
 /** Matches one complete registered-Floor partition back to stable Room identities. */
-public final class RegisteredRoomReconciler {
+final class RegisteredRoomReconciler {
     private RegisteredRoomReconciler() {
     }
 
@@ -87,7 +87,7 @@ public final class RegisteredRoomReconciler {
             .thenComparingInt(room -> room.getRawPos1().getX())
             .thenComparingInt(room -> room.getRawPos1().getZ());
 
-    public record Assignment(Building component, Building previous) {
+    record Assignment(Building component, Building previous) {
         int roomId() {
             return previous == null ? -1 : previous.getId();
         }
