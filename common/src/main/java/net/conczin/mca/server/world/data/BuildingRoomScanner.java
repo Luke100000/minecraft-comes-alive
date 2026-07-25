@@ -77,14 +77,23 @@ final class BuildingRoomScanner {
 
     private static PartitionData partitionData(Level world, StructureFloor floor, Set<BlockPos> partitionCells) {
         Map<BlockPos, BlockPos> floorConnectors = floorConnectors(world, floor, partitionCells);
-        BuildingFloorRegion ordinary = BuildingFloorRegion.fromFootprint(floor.anchorY(),
-                partitionCells.stream()
-                        .filter(cell -> !floorConnectors.containsKey(cell))
-                        .filter(cell -> isRoomPassageColumn(world, floor, cell))
-                        .toList());
+        List<BlockPos> passageCells = new ArrayList<>();
+        List<BlockPos> functionalPoiCells = new ArrayList<>();
+        for (BlockPos cell : partitionCells) {
+            if (floorConnectors.containsKey(cell)) continue;
+            PassageDecision decision = roomPassageDecision(world, floor,
+                    new BlockPos(cell.getX(), floor.anchorY(), cell.getZ()));
+            if (decision == PassageDecision.FUNCTIONAL_POI) {
+                functionalPoiCells.add(cell);
+            } else if (decision.passable()) {
+                passageCells.add(cell);
+            }
+        }
+
+        BuildingFloorRegion ordinary = BuildingFloorRegion.fromFootprint(floor.anchorY(), passageCells);
         List<BuildingFloorRegion.Component> components = ordinary.components();
         return new PartitionData(floorConnectors,
-                attachFunctionalPoiCells(world, floor, partitionCells, components),
+                attachFunctionalPoiCells(floor.anchorY(), functionalPoiCells, components),
                 components);
     }
 
@@ -178,26 +187,19 @@ final class BuildingRoomScanner {
      * to connect otherwise separate Room components.
      */
     private static Map<BuildingFloorRegion.Component, Set<BlockPos>> attachFunctionalPoiCells(
-            Level world,
-            StructureFloor floor,
-            Set<BlockPos> partitionCells,
+            int floorY,
+            Collection<BlockPos> poiCells,
             List<BuildingFloorRegion.Component> roomComponents) {
-        List<BlockPos> poiCells = partitionCells.stream()
-                .filter(cell -> roomPassageDecision(world, floor,
-                        new BlockPos(cell.getX(), floor.anchorY(), cell.getZ()))
-                        == PassageDecision.FUNCTIONAL_POI)
-                .toList();
-        BuildingFloorRegion poiRegion = BuildingFloorRegion.fromFootprint(floor.anchorY(), poiCells);
+        if (poiCells.isEmpty() || roomComponents.isEmpty()) return Map.of();
+
+        BuildingFloorRegion poiRegion = BuildingFloorRegion.fromFootprint(floorY, poiCells);
         Map<BuildingFloorRegion.Component, LinkedHashSet<BlockPos>> attached = new LinkedHashMap<>();
         for (BuildingFloorRegion.Component poiComponent : poiRegion.components()) {
-            Set<BlockPos> cells = poiComponent.cells(floor.anchorY());
-            List<BuildingFloorRegion.Component> adjacentRooms = roomComponents.stream()
-                    .filter(room -> cells.stream().anyMatch(cell ->
-                            Arrays.stream(HORIZONTAL).anyMatch(direction ->
-                                    room.containsHorizontally(
-                                            cell.getX() + direction.getStepX(),
-                                            cell.getZ() + direction.getStepZ()))))
-                    .toList();
+            Set<BlockPos> cells = poiComponent.cells(floorY);
+            Set<BuildingFloorRegion.Component> adjacentRooms = new LinkedHashSet<>();
+            for (BlockPos cell : cells) {
+                adjacentRooms.addAll(adjacentComponents(cell, roomComponents));
+            }
             BuildingFloorRegion.Component owner = connectorOwner(adjacentRooms);
             if (owner != null) {
                 attached.computeIfAbsent(owner, ignored -> new LinkedHashSet<>()).addAll(cells);
@@ -251,7 +253,7 @@ final class BuildingRoomScanner {
     }
 
     /** Every connector Floor cell has at most one Room owner so Room footprints stay disjoint. */
-    private static BuildingFloorRegion.Component connectorOwner(List<BuildingFloorRegion.Component> adjacent) {
+    private static BuildingFloorRegion.Component connectorOwner(Collection<BuildingFloorRegion.Component> adjacent) {
         return adjacent.stream().min(Comparator.comparingInt(BuildingFloorRegion.Component::minX)
                 .thenComparingInt(BuildingFloorRegion.Component::minZ)
                 .thenComparingInt(BuildingFloorRegion.Component::maxX)

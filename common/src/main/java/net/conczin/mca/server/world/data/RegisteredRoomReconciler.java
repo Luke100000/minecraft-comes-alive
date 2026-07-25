@@ -11,6 +11,8 @@ import java.util.Optional;
 
 /** Matches one complete registered-Floor partition back to stable Room identities. */
 final class RegisteredRoomReconciler {
+    private static final long ASSIGNMENT_INFINITY = Long.MAX_VALUE / 4L;
+
     private RegisteredRoomReconciler() {
     }
 
@@ -63,8 +65,8 @@ final class RegisteredRoomReconciler {
         long totalArea = 0L;
         for (Building component : components) {
             long area = Math.max(0L, component.getFloorFootprintArea());
-            totalArea = area > Long.MAX_VALUE / 4L - totalArea
-                    ? Long.MAX_VALUE / 4L : totalArea + area;
+            totalArea = area > ASSIGNMENT_INFINITY - totalArea
+                    ? ASSIGNMENT_INFINITY : totalArea + area;
         }
         long roomReuseBonus = totalArea + 1L;
         long[][] scores = new long[components.size()][roomColumns + components.size()];
@@ -78,10 +80,10 @@ final class RegisteredRoomReconciler {
             }
         }
 
-        int[] columns = maximumAssignment(scores);
+        int[] assignedColumns = maximumWeightAssignment(scores);
         List<Assignment> assignments = new ArrayList<>(components.size());
         for (int componentIndex = 0; componentIndex < components.size(); componentIndex++) {
-            int roomIndex = columns[componentIndex];
+            int roomIndex = assignedColumns[componentIndex];
             Building room = roomIndex >= 0
                     && roomIndex < roomColumns
                     && scores[componentIndex][roomIndex] > 0L
@@ -92,12 +94,15 @@ final class RegisteredRoomReconciler {
     }
 
     /** Rectangular Hungarian assignment; rows never outnumber columns because each has a dummy. */
-    private static int[] maximumAssignment(long[][] scores) {
+    private static int[] maximumWeightAssignment(long[][] scores) {
         int rowCount = scores.length;
         int columnCount = scores[0].length;
-        long maximumScore = Arrays.stream(scores)
-                .flatMapToLong(Arrays::stream)
-                .max().orElse(0L);
+        long maximumScore = 0L;
+        for (long[] row : scores) {
+            for (long score : row) {
+                maximumScore = Math.max(maximumScore, score);
+            }
+        }
         long[] rowPotential = new long[rowCount + 1];
         long[] columnPotential = new long[columnCount + 1];
         int[] matchedRow = new int[columnCount + 1];
@@ -106,13 +111,13 @@ final class RegisteredRoomReconciler {
         for (int row = 1; row <= rowCount; row++) {
             matchedRow[0] = row;
             long[] minimum = new long[columnCount + 1];
-            Arrays.fill(minimum, Long.MAX_VALUE / 4L);
+            Arrays.fill(minimum, ASSIGNMENT_INFINITY);
             boolean[] used = new boolean[columnCount + 1];
             int column = 0;
             do {
                 used[column] = true;
                 int currentRow = matchedRow[column];
-                long delta = Long.MAX_VALUE / 4L;
+                long delta = ASSIGNMENT_INFINITY;
                 int nextColumn = 0;
                 for (int candidate = 1; candidate <= columnCount; candidate++) {
                     if (used[candidate]) continue;

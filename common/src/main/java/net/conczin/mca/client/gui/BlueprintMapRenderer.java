@@ -38,7 +38,6 @@ final class BlueprintMapRenderer implements AutoCloseable {
     private static final int ROOM_FILL_ALPHA_ALL_FLOORS = 0x60;
     private static final int ROOM_FILL_ALPHA_SELECTED_FLOOR = 0x70;
     private static final float ROOM_FILL_BRIGHTEN_FACTOR = 1.15f;
-    private static final int ROOM_BORDER_ALPHA_ALL_FLOORS = 0xd0;
     private static final int ROOM_BORDER_ALPHA_SELECTED_FLOOR = 0xee;
     private static final int ROOM_BORDER_ALPHA_HOVERED = 0xff;
     private static final float ROOM_BORDER_BRIGHTEN_FACTOR = 1.35f;
@@ -196,7 +195,6 @@ final class BlueprintMapRenderer implements AutoCloseable {
                         context,
                         layer.outlineEdges(),
                         layer.presentationType().getColor(),
-                        true,
                         hovering,
                         viewport
                 );
@@ -342,12 +340,9 @@ final class BlueprintMapRenderer implements AutoCloseable {
     private static void renderRoomOutlineScreenSpace(GuiGraphics context,
                                                      List<BlueprintMapFootprint.Edge> edges,
                                                      int baseColor,
-                                                     boolean selectedFloor,
                                                      boolean hovered,
                                                      BlueprintMapViewport viewport) {
-        int outlineAlpha = hovered
-                ? ROOM_BORDER_ALPHA_HOVERED
-                : selectedFloor ? ROOM_BORDER_ALPHA_SELECTED_FLOOR : ROOM_BORDER_ALPHA_ALL_FLOORS;
+        int outlineAlpha = hovered ? ROOM_BORDER_ALPHA_HOVERED : ROOM_BORDER_ALPHA_SELECTED_FLOOR;
         int outlineColor = withAlpha(brightenColor(baseColor, ROOM_BORDER_BRIGHTEN_FACTOR), outlineAlpha);
         renderOutlineScreenSpace(context, edges, outlineColor, viewport);
     }

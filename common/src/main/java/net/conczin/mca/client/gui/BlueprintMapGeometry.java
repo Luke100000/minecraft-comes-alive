@@ -21,6 +21,7 @@ final class BlueprintMapGeometry {
     private final Village village;
     private final StructureLayout.Layout layout;
     private final RoomTypeResolver roomTypeResolver;
+    private final List<MapStructureLayer> structureLayers;
     private final Map<Integer, MapGeometry> cache = new HashMap<>();
 
     private BlueprintMapGeometry(Village village,
@@ -29,6 +30,7 @@ final class BlueprintMapGeometry {
         this.village = village;
         this.layout = layout;
         this.roomTypeResolver = roomTypeResolver;
+        this.structureLayers = village == null ? List.of() : buildStructureLayers();
     }
 
     static BlueprintMapGeometry empty() {
@@ -46,12 +48,11 @@ final class BlueprintMapGeometry {
         int key = selectedFloor == null ? ALL_FLOORS_KEY : selectedFloor;
         return cache.computeIfAbsent(key, ignored -> {
             List<MapFootprintLayer> rooms = buildRoomLayers(selectedFloor);
-            List<MapStructureLayer> structures = buildStructureLayers();
             List<MapIconLayer> icons = buildIconLayers(rooms, selectedFloor);
             List<Building> grouped = village.getExternalBuildings().filter(Building::isComplete)
                     .filter(building -> BlueprintMapLayering.isOutdoorVisible(selectedFloor))
                     .sorted(Comparator.comparingInt(Building::getId)).map(Building.class::cast).toList();
-            return new MapGeometry(rooms, structures, icons, grouped);
+            return new MapGeometry(rooms, structureLayers, icons, grouped);
         });
     }
 
