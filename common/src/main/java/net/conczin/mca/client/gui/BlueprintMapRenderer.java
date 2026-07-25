@@ -191,14 +191,16 @@ final class BlueprintMapRenderer implements AutoCloseable {
                     hovering,
                     viewport
             );
-            renderRoomOutlineScreenSpace(
-                    context,
-                    layer.outlineEdges(),
-                    layer.presentationType().getColor(),
-                    selectedFloor != null,
-                    hovering,
-                    viewport
-            );
+            if (selectedFloor != null) {
+                renderRoomOutlineScreenSpace(
+                        context,
+                        layer.outlineEdges(),
+                        layer.presentationType().getColor(),
+                        true,
+                        hovering,
+                        viewport
+                );
+            }
         }
 
         // The shade/outline is an authoritative whole-Building hit region. Collect the hit

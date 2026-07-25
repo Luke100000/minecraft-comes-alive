@@ -46,7 +46,7 @@ final class BlueprintMapGeometry {
         int key = selectedFloor == null ? ALL_FLOORS_KEY : selectedFloor;
         return cache.computeIfAbsent(key, ignored -> {
             List<MapFootprintLayer> rooms = buildRoomLayers(selectedFloor);
-            List<MapStructureLayer> structures = buildStructureLayers(rooms);
+            List<MapStructureLayer> structures = buildStructureLayers();
             List<MapIconLayer> icons = buildIconLayers(rooms, selectedFloor);
             List<Building> grouped = village.getExternalBuildings().filter(Building::isComplete)
                     .filter(building -> BlueprintMapLayering.isOutdoorVisible(selectedFloor))
@@ -86,18 +86,22 @@ final class BlueprintMapGeometry {
         return resolved == null ? room.getBuildingType() : resolved;
     }
 
-    private List<MapStructureLayer> buildStructureLayers(List<MapFootprintLayer> roomLayers) {
+    private List<MapStructureLayer> buildStructureLayers() {
         List<MapStructureLayer> layers = new ArrayList<>();
         for (StructureLayout.BuildingLayout building : layout.buildings()) {
             Set<Integer> structureIds = Set.copyOf(building.structureIds());
             Building mainRoom = village.getBuilding(building.mainRoomId()).orElse(null);
-            LinkedHashSet<BlueprintMapFootprint.Cell> registeredRoomCells = new LinkedHashSet<>();
-            roomLayers.stream()
-                    .filter(layer -> structureIds.contains(layer.building().getStructureId()))
-                    .forEach(layer -> registeredRoomCells.addAll(layer.footprintCells()));
-            if (registeredRoomCells.isEmpty()) continue;
+            LinkedHashSet<BlueprintMapFootprint.Cell> groundFloorCells = new LinkedHashSet<>();
+            village.getRooms()
+                    .filter(room -> structureIds.contains(room.getStructureId()))
+                    .filter(room -> layout.isRoomOnFloor(room.getId(), 0))
+                    .forEach(room -> groundFloorCells.addAll(roomFootprint(room)));
+            if (groundFloorCells.isEmpty() && mainRoom != null) {
+                groundFloorCells.addAll(roomFootprint(mainRoom));
+            }
+            if (groundFloorCells.isEmpty()) continue;
 
-            StructureShape shape = structureShape(registeredRoomCells, registeredRoomCells);
+            StructureShape shape = structureShape(groundFloorCells, groundFloorCells);
             layers.add(new MapStructureLayer(
                     mainRoom,
                     structureIds,
