@@ -19,14 +19,6 @@ final class BlueprintMapLayering {
         return List.copyOf(hitOrder);
     }
 
-    /** Structure border shade is derived from the visible registered Room union. */
-    static <T> Set<T> structureShade(Collection<T> shadeBaseCells,
-                                     Collection<T> relevantRoomCells) {
-        LinkedHashSet<T> shade = new LinkedHashSet<>(shadeBaseCells);
-        shade.removeAll(relevantRoomCells);
-        return Set.copyOf(shade);
-    }
-
     /** Outdoor sites are associated with the whole building, not with an indoor Floor ordinal. */
     static boolean isOutdoorVisible(Integer selectedFloor) {
         return selectedFloor == null || selectedFloor == 0;
