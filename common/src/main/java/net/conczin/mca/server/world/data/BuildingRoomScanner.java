@@ -82,7 +82,10 @@ final class BuildingRoomScanner {
                         .filter(cell -> !floorConnectors.containsKey(cell))
                         .filter(cell -> isRoomPassageColumn(world, floor, cell))
                         .toList());
-        return new PartitionData(floorConnectors, ordinary.components());
+        List<BuildingFloorRegion.Component> components = ordinary.components();
+        return new PartitionData(floorConnectors,
+                attachFunctionalPoiCells(world, floor, partitionCells, components),
+                components);
     }
 
     private static Result materializeComponent(Level world, BlockPos source, Set<BlockPos> blocked,
@@ -90,6 +93,7 @@ final class BuildingRoomScanner {
                                                PartitionData partition, BuildingFloorRegion.Component component) {
         Set<BlockPos> componentCells = component.cells(floor.anchorY());
         LinkedHashSet<BlockPos> footprint = new LinkedHashSet<>(componentCells);
+        footprint.addAll(partition.functionalPoiCells().getOrDefault(component, Set.of()));
         for (BlockPos connectorCell : partition.floorConnectors().keySet()) {
             List<BuildingFloorRegion.Component> adjacent = adjacentComponents(connectorCell, partition.components());
             if (component.equals(connectorOwner(adjacent))) footprint.add(connectorCell);
@@ -136,7 +140,7 @@ final class BuildingRoomScanner {
         return Set.copyOf(result);
     }
 
-    /** Low furniture and functional POI stacks stay inside a Room; ordinary two-block solids remain walls. */
+    /** Low furniture remains traversable for topology; functional POIs are attached afterwards. */
     private static boolean isRoomPassageColumn(Level world, StructureFloor floor, BlockPos floorCell) {
         BlockPos base = new BlockPos(floorCell.getX(), floor.anchorY(), floorCell.getZ());
         return roomPassageDecision(world, floor, base).passable();
@@ -167,6 +171,41 @@ final class BuildingRoomScanner {
             }
         }
         return false;
+    }
+
+    /**
+     * Keeps solid furniture/POI columns in one adjacent Room without allowing those columns
+     * to connect otherwise separate Room components.
+     */
+    private static Map<BuildingFloorRegion.Component, Set<BlockPos>> attachFunctionalPoiCells(
+            Level world,
+            StructureFloor floor,
+            Set<BlockPos> partitionCells,
+            List<BuildingFloorRegion.Component> roomComponents) {
+        List<BlockPos> poiCells = partitionCells.stream()
+                .filter(cell -> roomPassageDecision(world, floor,
+                        new BlockPos(cell.getX(), floor.anchorY(), cell.getZ()))
+                        == PassageDecision.FUNCTIONAL_POI)
+                .toList();
+        BuildingFloorRegion poiRegion = BuildingFloorRegion.fromFootprint(floor.anchorY(), poiCells);
+        Map<BuildingFloorRegion.Component, LinkedHashSet<BlockPos>> attached = new LinkedHashMap<>();
+        for (BuildingFloorRegion.Component poiComponent : poiRegion.components()) {
+            Set<BlockPos> cells = poiComponent.cells(floor.anchorY());
+            List<BuildingFloorRegion.Component> adjacentRooms = roomComponents.stream()
+                    .filter(room -> cells.stream().anyMatch(cell ->
+                            Arrays.stream(HORIZONTAL).anyMatch(direction ->
+                                    room.containsHorizontally(
+                                            cell.getX() + direction.getStepX(),
+                                            cell.getZ() + direction.getStepZ()))))
+                    .toList();
+            BuildingFloorRegion.Component owner = connectorOwner(adjacentRooms);
+            if (owner != null) {
+                attached.computeIfAbsent(owner, ignored -> new LinkedHashSet<>()).addAll(cells);
+            }
+        }
+        return attached.entrySet().stream().collect(java.util.stream.Collectors.toUnmodifiableMap(
+                Map.Entry::getKey,
+                entry -> Set.copyOf(entry.getValue())));
     }
 
     private static BlockPos connectorInColumn(Level world, StructureFloor floor, BlockPos floorCell) {
@@ -241,6 +280,7 @@ final class BuildingRoomScanner {
     }
 
     private record PartitionData(Map<BlockPos, BlockPos> floorConnectors,
+                                 Map<BuildingFloorRegion.Component, Set<BlockPos>> functionalPoiCells,
                                  List<BuildingFloorRegion.Component> components) {
     }
 
@@ -248,7 +288,7 @@ final class BuildingRoomScanner {
         PASSAGE, FUNCTIONAL_POI, LOW_OBSTACLE, BLOCKED_AT_CEILING, BLOCKED_TWO_HIGH, BLOCKED_COLLISION;
 
         boolean passable() {
-            return this == PASSAGE || this == FUNCTIONAL_POI || this == LOW_OBSTACLE;
+            return this == PASSAGE || this == LOW_OBSTACLE;
         }
     }
 

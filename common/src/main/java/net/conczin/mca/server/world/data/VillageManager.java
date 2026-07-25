@@ -450,12 +450,16 @@ public class VillageManager extends SavedData implements Iterable<Village> {
 
     public Building.validationResult commitRegisteredRoomUpdate(RegisteredRoomUpdate update,
                                                                  String forcedType) {
-        return commitRegisteredRoomUpdate(update, forcedType, true);
+        Building.validationResult result = applyRegisteredRoomUpdate(update, forcedType, true);
+        if (result == Building.validationResult.SUCCESS) {
+            finalizeVillageMutation(update.village());
+        }
+        return result;
     }
 
-    private Building.validationResult commitRegisteredRoomUpdate(RegisteredRoomUpdate update,
-                                                                  String forcedType,
-                                                                  boolean requireTypeChoice) {
+    private Building.validationResult applyRegisteredRoomUpdate(RegisteredRoomUpdate update,
+                                                                 String forcedType,
+                                                                 boolean requireTypeChoice) {
         if (update == null || update.result() != Building.validationResult.SUCCESS) {
             return update == null ? Building.validationResult.TOO_SMALL : update.result();
         }
@@ -575,7 +579,6 @@ public class VillageManager extends SavedData implements Iterable<Village> {
             village.getBuildings().put(assignedIds.get(assignment), created);
         }
         lastBuildingId = nextRoomId;
-        finalizeVillageMutation(village);
         return Building.validationResult.SUCCESS;
     }
 
@@ -635,21 +638,24 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         List<Building> roomSnapshots = rooms.stream()
                 .map(room -> new Building(room.save()))
                 .toList();
+        Map<Integer, Structure> structureSnapshots = village.getStructures().values().stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        Structure::getId,
+                        value -> new Structure(value.save())));
         int previousLastBuildingId = lastBuildingId;
         village.getStructures().put(structureId, updated);
         for (RegisteredRoomUpdate update : roomUpdates) {
-            Building.validationResult result = commitRegisteredRoomUpdate(update, null, false);
+            Building.validationResult result = applyRegisteredRoomUpdate(update, null, false);
             if (result == Building.validationResult.SUCCESS) continue;
 
             village.getBuildings().values().removeIf(
                     room -> room.isFunctionalRoom() && room.getStructureId() == structureId);
             roomSnapshots.forEach(room -> village.getBuildings().put(room.getId(), room));
-            village.getStructures().put(structureId, structure);
+            structureSnapshots.forEach((id, snapshot) -> village.getStructures().put(id, snapshot));
             lastBuildingId = previousLastBuildingId;
-            finalizeVillageMutation(village);
             return result;
         }
-        if (roomUpdates.isEmpty()) finalizeVillageMutation(village);
+        finalizeVillageMutation(village);
         return Building.validationResult.SUCCESS;
     }
 

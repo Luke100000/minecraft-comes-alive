@@ -104,7 +104,8 @@ final class RoomDFU {
             tag.putInt("posY", Math.floorDiv(tag.getInt("pos0Y") + tag.getInt("pos1Y"), 2));
             tag.putInt("posZ", Math.floorDiv(tag.getInt("pos0Z") + tag.getInt("pos1Z"), 2));
         }
-        if (!tag.contains("floorRegions", Tag.TAG_LIST)) {
+        if (!tag.contains("floorRegions", Tag.TAG_LIST)
+                || tag.getList("floorRegions", Tag.TAG_COMPOUND).isEmpty()) {
             int anchorY = tag.contains("floorY") ? tag.getInt("floorY") : tag.getInt("pos0Y") + 1;
             List<BlockPos> cells = new ArrayList<>();
             for (int x = tag.getInt("pos0X"); x <= tag.getInt("pos1X"); x++) {
