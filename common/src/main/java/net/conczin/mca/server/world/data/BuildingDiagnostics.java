@@ -2,9 +2,7 @@ package net.conczin.mca.server.world.data;
 
 import net.conczin.mca.MCA;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.*;
 import java.util.concurrent.atomic.AtomicLong;
@@ -12,11 +10,6 @@ import java.util.concurrent.atomic.AtomicLong;
 /** Read-only diagnostics for Structure/Floor/Room lookup and traversal decisions. */
 public final class BuildingDiagnostics {
     private static final AtomicLong NEXT_TRACE_ID = new AtomicLong();
-    private static final Direction[] HORIZONTAL = {
-            Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST
-    };
-    private static final int MAX_CONNECTORS_TO_LOG = 128;
-
     private BuildingDiagnostics() {
     }
 
@@ -90,14 +83,6 @@ public final class BuildingDiagnostics {
                         resolved.effectivePoi().values().stream().mapToInt(List::size).sum(), sameColumn, elevatedWithinBand);
             }
 
-            if (verbose) {
-                StructureFloor diagnosticFloor = physicalFloor != null ? physicalFloor : logicalFloor;
-                if (diagnosticFloor != null) {
-                    logRoomColumnDiagnostic(world, village, inspected, diagnosticFloor, room, pos, traceId);
-                }
-                logVerticalConnectors(world, inspected, traceId);
-            }
-
             StructureScanner.Result scan = StructureScanner.scan(
                     world, inspected.getSource(), village.getStructures().values(), inspected.getId());
             freshPlayerFloor = scan.result() == Building.validationResult.SUCCESS
@@ -162,108 +147,6 @@ public final class BuildingDiagnostics {
             case REGISTERED_ROOM -> "REGISTERED_ROOM: Structure, Floor and Room lookup all resolved successfully";
             case OUTSIDE -> "OUTSIDE";
         };
-    }
-
-    private static void logVerticalConnectors(ServerLevel world, Structure structure, long traceId) {
-        BlockPos min = structure.getRawPos0().offset(-1, -2, -1);
-        BlockPos max = structure.getRawPos1().offset(1, 2, 1);
-        int found = 0;
-        for (BlockPos cursor : BlockPos.betweenClosed(min, max)) {
-            BlockPos connector = cursor.immutable();
-            if (!StructureConnector.isVertical(world.getBlockState(connector))) continue;
-            found++;
-            if (found > MAX_CONNECTORS_TO_LOG) continue;
-
-            Set<String> candidates = new LinkedHashSet<>();
-            for (Direction direction : List.of(Direction.UP, Direction.DOWN)) {
-                BlockPos candidate = connector.relative(direction);
-                BlockState state = world.getBlockState(candidate);
-                String result = StructureConnector.isVertical(state)
-                        ? "VERTICAL_CHAIN"
-                        : StructureScanner.explainWalkableAnchor(world, candidate);
-                candidates.add(candidate + "=" + result);
-            }
-            for (Direction direction : HORIZONTAL) {
-                BlockPos horizontal = connector.relative(direction);
-                for (int dy : new int[]{-1, 1}) {
-                    BlockPos candidate = horizontal.offset(0, dy, 0);
-                    candidates.add(candidate + "=" + StructureScanner.explainWalkableAnchor(world, candidate));
-                }
-            }
-            log(traceId, "verticalConnector pos={} state={} resolvedFloor={} candidates={}",
-                    connector, world.getBlockState(connector), floor(structure.resolveFloor(connector.getY()).orElse(null)),
-                    candidates);
-        }
-        log(traceId, "verticalConnectorSummary count={} logged={} truncated={}",
-                found, Math.min(found, MAX_CONNECTORS_TO_LOG), found > MAX_CONNECTORS_TO_LOG);
-    }
-
-    /**
-     * Explains the exact StructureFloor -> BuildingRoomScanner handoff for the queried X/Z column.
-     * This is deliberately read-only: it reproduces the current Room passage predicate for each
-     * possible base Y in the Floor band so diagnostics can prove whether flattening to anchorY is
-     * what turns an otherwise valid interior/furniture column into a Room boundary.
-     */
-    private static void logRoomColumnDiagnostic(ServerLevel world,
-                                                Village village,
-                                                Structure structure,
-                                                StructureFloor floor,
-                                                Building lookupRoom,
-                                                BlockPos pos,
-                                                long traceId) {
-        int x = pos.getX();
-        int z = pos.getZ();
-        List<Building> sameFloorRooms = village.getRooms()
-                .filter(candidate -> candidate.getStructureId() == structure.getId())
-                .filter(candidate -> candidate.getFloorId() == floor.id())
-                .sorted(Comparator.comparingInt(Building::getId))
-                .toList();
-        List<Integer> owningRooms = sameFloorRooms.stream()
-                .filter(candidate -> candidate.containsFloorColumn(x, z))
-                .map(Building::getId)
-                .toList();
-        List<Integer> poiRooms = sameFloorRooms.stream()
-                .filter(candidate -> candidate.getBlocks().values().stream()
-                        .flatMap(Collection::stream)
-                        .anyMatch(block -> block.getX() == x && block.getZ() == z))
-                .map(Building::getId)
-                .toList();
-
-        Map<Direction, List<Integer>> adjacentOwners = new LinkedHashMap<>();
-        for (Direction direction : HORIZONTAL) {
-            int adjacentX = x + direction.getStepX();
-            int adjacentZ = z + direction.getStepZ();
-            List<Integer> owners = sameFloorRooms.stream()
-                    .filter(candidate -> candidate.containsFloorColumn(adjacentX, adjacentZ))
-                    .map(Building::getId)
-                    .toList();
-            if (!owners.isEmpty()) adjacentOwners.put(direction, owners);
-        }
-
-        int minY = floor.anchorY() - BuildingFloorRegionDetector.FLOOR_CLUSTER_TOLERANCE;
-        int maxY = floor.ceilingY() - 1;
-        List<String> slices = new ArrayList<>();
-        for (int y = minY; y <= maxY; y++) {
-            BlockPos probe = new BlockPos(x, y, z);
-            BlockState state = world.getBlockState(probe);
-            boolean passageCell = StructureConnector.isPassageCell(world, probe);
-            var shape = state.getCollisionShape(world, probe);
-            String collisionTop = shape.isEmpty()
-                    ? "empty"
-                    : String.format(Locale.ROOT, "%.3f", shape.max(Direction.Axis.Y));
-            slices.add(y + "{state=" + state
-                    + ", passage=" + passageCell
-                    + ", walkable=" + StructureScanner.explainWalkableAnchor(world, probe)
-                    + ", collisionTop=" + collisionTop + "}");
-        }
-
-        BlockPos anchorBase = new BlockPos(x, floor.anchorY(), z);
-        log(traceId, "columnDiagnostic xz={},{} queryY={} structure={} floor={} floorContainsColumn={} "
-                        + "lookupRoom={} owningRooms={} poiRooms={} adjacentRoomOwners={}",
-                x, z, pos.getY(), structure.getId(), floor(floor), floor.contains(x, z),
-                lookupRoom == null ? "none" : lookupRoom.getId(), owningRooms, poiRooms, adjacentOwners);
-        log(traceId, "columnDiagnostic roomScanner anchorBaseY={} anchorDecision={} slices={}",
-                floor.anchorY(), BuildingRoomScanner.roomPassageDecision(world, floor, anchorBase), slices);
     }
 
     private static void logFloorDifference(long traceId,
