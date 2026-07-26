@@ -439,6 +439,8 @@ public class VillageManager extends SavedData implements Iterable<Village> {
 
         int structureId = lastBuildingId++;
         structure.setId(structureId);
+        int groupId = StructureGrouping.resolveStructureGroupId(village, structure);
+        structure.setStructureGroupId(groupId);
         room.setId(lastBuildingId++);
         room.setStructureId(structureId);
         room.setType(category);
@@ -446,6 +448,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         structure.setAutomaticMainRoom(room.getId());
         village.getBuildings().put(room.getId(), room);
         village.getStructures().put(structureId, structure);
+        StructureGrouping.renumberStructureGroup(village, groupId);
         villages.put(village.getId(), village);
         finalizeVillageMutation(village);
         return Building.validationResult.SUCCESS;
@@ -541,7 +544,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
                 .filter(room -> room.getId() == prospectiveMainRoomId)
                 .findFirst().orElse(null);
         RoomTypeResolver resolver = RoomTypeResolver.create(
-                village, StructureLayout.build(village), prospectiveRooms);
+                village, prospectiveRooms);
 
         Building playerComponent = update.playerComponent();
         if (playerComponent == null) return Building.validationResult.OVERLAP;
@@ -656,6 +659,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
             lastBuildingId = previousLastBuildingId;
             return result;
         }
+        StructureGrouping.renumberStructureGroup(village, updated.getStructureGroupId());
         finalizeVillageMutation(village);
         return Building.validationResult.SUCCESS;
     }
@@ -679,8 +683,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         if (room == null) return BuildingEditResult.NO_BUILDING;
         if (room.getType().equals(type)) {
             room.setTypeForced(false);
-            StructureLayout.Layout layout = StructureLayout.build(village);
-            room.setType(RoomTypeResolver.create(village, layout).resolve(room).updatedType(null));
+            room.setType(RoomTypeResolver.create(village).resolve(room).updatedType(null));
         } else {
             room.setTypeForced(true);
             room.setType(type);
@@ -712,10 +715,8 @@ public class VillageManager extends SavedData implements Iterable<Village> {
                 ? village.getStructure(target.getStructureId()).orElse(null)
                 : village.getInteractionStructureAt(world, pos).orElse(null);
         if (structure == null) return BuildingEditResult.NO_BUILDING;
-        List<Integer> structureIds = StructureLayout.build(village).buildingFor(structure.getId())
-                .map(StructureLayout.BuildingLayout::structureIds)
-                .orElse(List.of(structure.getId()));
-        structureIds.forEach(village::removeStructure);
+        List<Structure> groupStructures = village.getBuildingStructures(structure);
+        groupStructures.forEach(s -> village.removeStructure(s.getId()));
         if (village.getBuildings().isEmpty() && village.getExternalBuildingMap().isEmpty()
                 && village.getStructures().isEmpty()) removeVillage(village.getId());
         setDirty();

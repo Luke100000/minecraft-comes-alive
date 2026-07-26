@@ -16,6 +16,7 @@ public final class Structure implements VillageBuilding {
     private int mainRoomId = -1;
     private boolean mainRoomAutomatic = true;
     private int surfaceReferenceY;
+    private int structureGroupId = -1;
     private int nextFloorId;
     private BlockPos source;
     private BlockPos min;
@@ -24,6 +25,7 @@ public final class Structure implements VillageBuilding {
 
     public Structure(int id, BlockPos source, BlockPos min, BlockPos max, Collection<StructureFloor> floors) {
         this.id = id;
+        this.structureGroupId = id;
         this.source = source.immutable();
         this.min = min.immutable();
         this.max = max.immutable();
@@ -36,6 +38,7 @@ public final class Structure implements VillageBuilding {
 
     public Structure(CompoundTag tag) {
         id = tag.getInt("id");
+        structureGroupId = tag.contains("structureGroupId") ? tag.getInt("structureGroupId") : id;
         mainRoomId = tag.getInt("mainRoomId");
         mainRoomAutomatic = tag.getBoolean("mainRoomAutomatic");
         surfaceReferenceY = tag.getInt("surfaceReferenceY");
@@ -53,6 +56,7 @@ public final class Structure implements VillageBuilding {
     public CompoundTag save() {
         CompoundTag tag = new CompoundTag();
         tag.putInt("id", id);
+        tag.putInt("structureGroupId", structureGroupId < 0 ? id : structureGroupId);
         tag.putInt("mainRoomId", mainRoomId);
         tag.putBoolean("mainRoomAutomatic", mainRoomAutomatic);
         tag.putInt("surfaceReferenceY", surfaceReferenceY);
@@ -64,8 +68,22 @@ public final class Structure implements VillageBuilding {
         return tag;
     }
 
+    public int getStructureGroupId() {
+        return structureGroupId < 0 ? id : structureGroupId;
+    }
+
+    public void setStructureGroupId(int structureGroupId) {
+        this.structureGroupId = structureGroupId;
+    }
+
     public Optional<StructureFloor> getFloor(int floorId) {
         return Optional.ofNullable(floors.get(floorId));
+    }
+
+    public void updateFloor(StructureFloor floor) {
+        if (floor != null) {
+            floors.put(floor.id(), floor);
+        }
     }
 
     public List<StructureFloor> getFloors() {
@@ -237,6 +255,11 @@ public final class Structure implements VillageBuilding {
     @Override
     public boolean containsPos(Vec3i pos) {
         return physicalFloorAt(pos).isPresent();
+    }
+
+    public boolean containsPosHorizontally(Vec3i pos) {
+        return pos != null && pos.getX() >= min.getX() && pos.getX() <= max.getX()
+                && pos.getZ() >= min.getZ() && pos.getZ() <= max.getZ();
     }
 
     public boolean intersects(Structure other) {

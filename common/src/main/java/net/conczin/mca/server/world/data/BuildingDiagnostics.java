@@ -45,8 +45,7 @@ public final class BuildingDiagnostics {
                 ? interactionStructure
                 : structureAt != null ? structureAt : nearestStructure;
         Building room = lookup.functionalRoom().orElse(null);
-        StructureLayout.Layout layout = StructureLayout.build(village);
-        RoomTypeResolver roomTypeResolver = RoomTypeResolver.create(village, layout);
+        RoomTypeResolver roomTypeResolver = RoomTypeResolver.create(village);
 
         log(traceId, "lookup structureAt={} interactionStructure={} nearestStructure={} lookupBuilding={} lookupBuildingFloor={}",
                 id(structureAt), id(interactionStructure), id(nearestStructure),
@@ -61,14 +60,11 @@ public final class BuildingDiagnostics {
             log(traceId, "structure id={} source={} bounds={}..{} containsPos={} connectorAttaches={} logicalFloor={} physicalFloor={}",
                     inspected.getId(), inspected.getSource(), inspected.getRawPos0(), inspected.getRawPos1(),
                     contains, attaches, floor(logicalFloor), floor(physicalFloor));
-            log(traceId, "persistentFloors={} surfaceReferenceY={} storedMainRoomId={} storedMainRoomMode={}",
+            log(traceId, "persistentFloors={} surfaceReferenceY={} storedMainRoomId={} storedMainRoomMode={} structureGroupId={}",
                     floors(inspected.getFloors()),
                     inspected.getSurfaceReferenceY(),
-                    inspected.getMainRoomId(), inspected.isMainRoomAutomatic() ? "AUTOMATIC" : "MANUAL");
-            layout.buildingFor(inspected.getId()).ifPresent(logical ->
-                    log(traceId, "buildingLayout={} structures={} storeys={} mainRoom={} mainRoomMode={}",
-                            logical.id(), logical.structureIds(), logical.storeys(),
-                            logical.mainRoomId(), logical.mainRoomAutomatic() ? "AUTOMATIC" : "MANUAL"));
+                    inspected.getMainRoomId(), inspected.isMainRoomAutomatic() ? "AUTOMATIC" : "MANUAL",
+                    inspected.getStructureGroupId());
 
             if (room != null) {
                 StructureFloor roomFloor = inspected.getFloor(room.getFloorId()).orElse(null);

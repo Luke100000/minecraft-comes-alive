@@ -16,7 +16,7 @@ import net.conczin.mca.resources.data.tasks.Task;
 import net.conczin.mca.server.world.data.Building;
 import net.conczin.mca.server.world.data.RoomTypeResolver;
 import net.conczin.mca.server.world.data.Structure;
-import net.conczin.mca.server.world.data.StructureLayout;
+import net.conczin.mca.server.world.data.StructureFloor;
 import net.conczin.mca.server.world.data.Village;
 import net.conczin.mca.util.compat.ButtonWidget;
 import net.conczin.mca.util.localization.FlowingText;
@@ -92,10 +92,9 @@ public class BlueprintScreen extends ExtendedScreen {
     private boolean selectPlayerFloorOnNextVillageResponse;
     private boolean showBuildingIcons = true;
     private boolean showTerrain = true;
-    private StructureLayout.Layout structureLayout = StructureLayout.build(null);
     private List<Integer> floorOrdinals = List.of();
     private int structureCount;
-    private RoomTypeResolver roomTypeResolver = RoomTypeResolver.create(null, structureLayout);
+    private RoomTypeResolver roomTypeResolver = RoomTypeResolver.create(null);
     private BlueprintTooltipFactory tooltipFactory = BlueprintTooltipFactory.empty();
     private BlueprintMapGeometry mapGeometry = BlueprintMapGeometry.empty();
     private final BlueprintMapRenderer mapRenderer = new BlueprintMapRenderer();
@@ -479,8 +478,7 @@ public class BlueprintScreen extends ExtendedScreen {
 
     private String getStructureScanTranslationKey(Village.StructuralPosition structuralPosition) {
         return switch (structuralPosition) {
-            case OUTSIDE -> village == null || village.getRooms().findAny().isEmpty()
-                    ? "gui.blueprint.addBuilding" : "gui.blueprint.addRoom";
+            case OUTSIDE -> "gui.blueprint.addBuilding";
             case ATTACHABLE_ROOM -> "gui.blueprint.addRoom";
             case REGISTERED_ROOM -> "gui.blueprint.updateRoom";
         };
@@ -1088,16 +1086,20 @@ public class BlueprintScreen extends ExtendedScreen {
 
     public void setVillage(Village village) {
         this.village = village;
-        // Terrain is world-derived and independent of village sync packets. Keeping the
-        // snapshot/texture alive here prevents ordinary Blueprint data refreshes from
-        // forcing an expensive terrain re-sample and GPU upload.
-        this.structureLayout = StructureLayout.build(village);
-        this.floorOrdinals = structureLayout.ordinals();
-        this.structureCount = village == null ? 0 : structureLayout.buildings().size()
+        TreeSet<Integer> availableFloors = new TreeSet<>();
+        if (village != null) {
+            for (Structure s : village.getStructures().values()) {
+                for (StructureFloor f : s.getFloors()) {
+                    availableFloors.add(f.floorNumber());
+                }
+            }
+        }
+        this.floorOrdinals = List.copyOf(availableFloors);
+        this.structureCount = village == null ? 0 : village.getStructures().size()
                 + (int) village.getExternalBuildings().filter(Building::isComplete).count();
-        this.roomTypeResolver = RoomTypeResolver.create(village, structureLayout);
-        this.tooltipFactory = BlueprintTooltipFactory.create(village, structureLayout, roomTypeResolver);
-        this.mapGeometry = BlueprintMapGeometry.build(village, structureLayout, roomTypeResolver);
+        this.roomTypeResolver = RoomTypeResolver.create(village);
+        this.tooltipFactory = BlueprintTooltipFactory.create(village, roomTypeResolver);
+        this.mapGeometry = BlueprintMapGeometry.build(village, roomTypeResolver);
         Village.StructuralLookup structuralLookup = getPlayerStructuralLookup();
         Village.StructuralPosition structuralPosition = structuralLookup.position();
         if (selectPlayerFloorOnNextVillageResponse
@@ -1122,10 +1124,11 @@ public class BlueprintScreen extends ExtendedScreen {
 
     private void selectPlayerFloor(Village.StructuralLookup structuralLookup) {
         structuralLookup.functionalRoom()
-                .ifPresent(room -> structureLayout.ordinalForRoom(room.getId()).ifPresent(ordinal -> {
+                .ifPresent(room -> {
+                    int ordinal = room.getFloorNumber(village);
                     selectedFloorOrdinal = ordinal;
                     rememberedFloorOrdinal = ordinal;
-                }));
+                });
     }
 
     public void setVillageData(Rank rank, int reputation, boolean isVillage, Set<String> completedTasks, Map<Rank, List<Task>> tasks) {

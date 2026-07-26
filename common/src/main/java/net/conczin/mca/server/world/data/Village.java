@@ -194,8 +194,7 @@ public class Village implements Iterable<Building> {
         if (definition.grouped()) {
             return getExternalBuildings().filter(building -> building.getType().equals(type)).map(Building.class::cast);
         }
-        StructureLayout.Layout layout = StructureLayout.build(this);
-        RoomTypeResolver resolver = RoomTypeResolver.create(this, layout);
+        RoomTypeResolver resolver = RoomTypeResolver.create(this);
         return getRooms().filter(room -> {
             BuildingType effective = resolver.resolve(room).effectiveType();
             return effective != null && effective.name().equals(type);
@@ -423,7 +422,7 @@ public class Village implements Iterable<Building> {
     }
 
     public int getStructureCount() {
-        return StructureLayout.build(this).buildings().size()
+        return (int) structures.values().stream().mapToInt(Structure::getStructureGroupId).distinct().count()
                 + (int) externalBuildings.values().stream().filter(Building::isComplete).count();
     }
 
@@ -471,8 +470,10 @@ public class Village implements Iterable<Building> {
     }
 
     private Optional<Building> getMainRoomForStructure(int structureId) {
-        OptionalInt mainRoomId = StructureLayout.build(this).mainRoomIdForStructure(structureId);
-        return mainRoomId.isPresent() ? getBuilding(mainRoomId.getAsInt()) : Optional.empty();
+        Structure s = getStructure(structureId).orElse(null);
+        if (s == null) return Optional.empty();
+        int mainRoomId = s.getMainRoomId();
+        return mainRoomId >= 0 ? getBuilding(mainRoomId) : Optional.empty();
     }
 
     public Optional<Building> getMainRoom(Structure structure) {
@@ -506,8 +507,8 @@ public class Village implements Iterable<Building> {
 
     public boolean isMainRoom(Building room) {
         if (room == null || !room.isFunctionalRoom()) return false;
-        return StructureLayout.build(this).mainRoomIdForStructure(room.getStructureId())
-                .orElse(-1) == room.getId();
+        Structure s = getStructure(room.getStructureId()).orElse(null);
+        return s != null && s.getMainRoomId() == room.getId();
     }
 
     public boolean setMainRoom(Building room) {
@@ -537,19 +538,15 @@ public class Village implements Iterable<Building> {
     }
 
     public boolean isMainRoomAutomatic(Structure structure) {
-        return structure != null && StructureLayout.build(this).buildingFor(structure.getId())
-                .map(StructureLayout.BuildingLayout::mainRoomAutomatic)
-                .orElse(true);
+        return structure != null && structure.isMainRoomAutomatic();
     }
 
     List<Structure> getBuildingStructures(Structure structure) {
         if (structure == null) return List.of();
-        return StructureLayout.build(this).buildingFor(structure.getId())
-                .map(building -> building.structureIds().stream()
-                        .map(structures::get)
-                        .filter(Objects::nonNull)
-                        .toList())
-                .orElse(List.of(structure));
+        int groupId = structure.getStructureGroupId();
+        return structures.values().stream()
+                .filter(s -> s.getStructureGroupId() == groupId)
+                .toList();
     }
 
     void transferMainRoom(Structure structure,
@@ -563,7 +560,9 @@ public class Village implements Iterable<Building> {
     void ensureMainRooms() {
         boolean changed = false;
         List<Building> rooms = getRooms().toList();
-        for (List<Structure> group : StructureLayout.groups(structures.values())) {
+        Map<Integer, List<Structure>> groups = structures.values().stream()
+                .collect(Collectors.groupingBy(Structure::getStructureGroupId));
+        for (List<Structure> group : groups.values()) {
             changed |= MainRoomSelector.ensureValid(group, rooms);
         }
         if (changed) markDirty();

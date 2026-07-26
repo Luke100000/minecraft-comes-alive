@@ -187,7 +187,9 @@ final class RoomDFU {
 
     private static void ensureMainRooms(Map<Integer, Structure> structures,
                                         Map<Integer, Building> rooms) {
-        for (List<Structure> group : StructureLayout.groups(structures.values())) {
+        Map<Integer, List<Structure>> groups = structures.values().stream()
+                .collect(java.util.stream.Collectors.groupingBy(Structure::getStructureGroupId));
+        for (List<Structure> group : groups.values()) {
             MainRoomSelector.ensureValid(group, rooms.values());
         }
     }
