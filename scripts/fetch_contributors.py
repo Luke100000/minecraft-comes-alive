@@ -17,6 +17,13 @@ replacements = {
     "[PT] Mlg Magic Hoodini [MemesFTW]": "Mlg Magic Hoodini",
     "Dalek_Caan_2001 Sharks of sliver": "Sharks of sliver",
     "Maicon Alan de Aviz Santos": "Maicon Santos",
+    "Cristian Caleb Roa Vargas": "Cristian Caleb",
+    "I l l u s i o n s a n d d e p r e s s i o n": "IllusionsAndDepression",
+    "Axel Daniel Muñoz Contreras": "Axel Daniel",
+    "brendho lorhan bregoch marques": "Brendho",
+    "Pedro Lucas Oliveira Coelho": "Pedro Lucas",
+    "Halflifemostly The Great": "Halflifemostly",
+    "marcoantonioaragao765": "Marco Antonio",
 }
 
 SUPPORTERS_DIR = (
