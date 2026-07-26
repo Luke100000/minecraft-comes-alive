@@ -91,7 +91,7 @@ public final class StructureLayout {
     private static BuildingLayout buildBuilding(List<Structure> structures, List<Building> rooms) {
         List<PhysicalFloor> floors = structures.stream()
                 .flatMap(structure -> structure.getFloors().stream()
-                        .map(floor -> new PhysicalFloor(structure.getId(), floor)))
+                        .map(floor -> new PhysicalFloor(structure.getId(), floor.id(), floor.anchorY())))
                 .sorted(Comparator.comparingInt(PhysicalFloor::anchorY)
                         .thenComparingInt(PhysicalFloor::structureId)
                         .thenComparingInt(PhysicalFloor::floorId))
@@ -136,7 +136,8 @@ public final class StructureLayout {
                                       List<List<PhysicalFloor>> bands) {
         long key = floorKey(structureId, floorId);
         for (int i = 0; i < bands.size(); i++) {
-            if (bands.get(i).stream().anyMatch(floor -> floor.key() == key)) return i;
+            if (bands.get(i).stream().anyMatch(floor ->
+                    floorKey(floor.structureId(), floor.floorId()) == key)) return i;
         }
         return -1;
     }
@@ -145,18 +146,7 @@ public final class StructureLayout {
         return ((long) structureId << 32) ^ (floorId & 0xffffffffL);
     }
 
-    private record PhysicalFloor(int structureId, StructureFloor floor) {
-        int floorId() {
-            return floor.id();
-        }
-
-        int anchorY() {
-            return floor.anchorY();
-        }
-
-        long key() {
-            return floorKey(structureId, floor.id());
-        }
+    private record PhysicalFloor(int structureId, int floorId, int anchorY) {
     }
 
     public record Layout(List<BuildingLayout> buildings,

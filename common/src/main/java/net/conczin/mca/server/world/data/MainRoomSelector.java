@@ -33,28 +33,19 @@ final class MainRoomSelector {
     }
 
     static boolean ensureValid(List<Structure> structures, Collection<Building> rooms) {
-        Selection selection = resolve(structures, rooms);
-        if (isNormalized(structures, selection)) return false;
-        apply(structures, selection);
-        return true;
+        return applyIfChanged(structures, resolve(structures, rooms));
     }
 
     static boolean setManual(List<Structure> structures,
                              Collection<Building> rooms,
                              int roomId) {
         Building room = eligibleRooms(structures, rooms).get(roomId);
-        if (room == null) return false;
-        Selection selection = selection(room, false);
-        if (isNormalized(structures, selection)) return false;
-        apply(structures, selection);
-        return true;
+        return room != null && applyIfChanged(structures, selection(room, false));
     }
 
     static boolean useAutomatic(List<Structure> structures, Collection<Building> rooms) {
         Selection selection = automaticSelection(structures, eligibleRooms(structures, rooms).values());
-        if (selection == null || isNormalized(structures, selection)) return false;
-        apply(structures, selection);
-        return true;
+        return selection != null && applyIfChanged(structures, selection);
     }
 
     static void transfer(List<Structure> structures,
@@ -119,6 +110,12 @@ final class MainRoomSelector {
         return new Selection(room.getId(), room.getStructureId(), room.getFloorId(), automatic);
     }
 
+    private static boolean applyIfChanged(List<Structure> structures, Selection selection) {
+        if (isNormalized(structures, selection)) return false;
+        apply(structures, selection);
+        return true;
+    }
+
     private static boolean isNormalized(List<Structure> structures, Selection selection) {
         for (Structure structure : structures) {
             boolean holder = selection != null && structure.getId() == selection.structureId();
@@ -138,9 +135,7 @@ final class MainRoomSelector {
                 .findFirst()
                 .orElse(null);
         if (selection != null && holder == null) return;
-        for (Structure structure : structures) {
-            structure.clearMainRoom();
-        }
+        structures.forEach(Structure::clearMainRoom);
         if (holder == null) return;
         if (selection.automatic()) holder.setAutomaticMainRoom(selection.roomId());
         else holder.setManualMainRoom(selection.roomId());
