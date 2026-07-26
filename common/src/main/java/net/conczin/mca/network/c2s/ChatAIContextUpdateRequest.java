@@ -1,14 +1,17 @@
 package net.conczin.mca.network.c2s;
 
+import io.netty.buffer.ByteBuf;
+import net.conczin.mca.Config;
 import net.conczin.mca.MCA;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.chatAI.ChatAIContext;
 import net.conczin.mca.network.HandleablePayload;
-import net.conczin.mca.server.world.data.ChatAIContextData;
 import net.conczin.mca.server.world.data.PlayerSaveData;
 import net.conczin.mca.server.world.data.VillageManager;
+import net.minecraft.core.UUIDUtil;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceKey;
@@ -21,27 +24,16 @@ import java.util.UUID;
 public record ChatAIContextUpdateRequest(Target target, ResourceKey<Level> dimension, UUID villagerUuid,
                                          int villageId, String prompt) implements HandleablePayload {
     public static final CustomPacketPayload.Type<ChatAIContextUpdateRequest> TYPE = new CustomPacketPayload.Type<>(MCA.locate("chat_ai_context_update"));
-    public static final StreamCodec<FriendlyByteBuf, ChatAIContextUpdateRequest> STREAM_CODEC = new StreamCodec<>() {
-        @Override
-        public ChatAIContextUpdateRequest decode(FriendlyByteBuf buffer) {
-            return new ChatAIContextUpdateRequest(
-                    Target.fromId(buffer.readVarInt()),
-                    buffer.readResourceKey(Registries.DIMENSION),
-                    buffer.readUUID(),
-                    buffer.readVarInt(),
-                    buffer.readUtf()
-            );
-        }
-
-        @Override
-        public void encode(FriendlyByteBuf buffer, ChatAIContextUpdateRequest request) {
-            buffer.writeVarInt(request.target.id);
-            buffer.writeResourceKey(request.dimension);
-            buffer.writeUUID(request.villagerUuid);
-            buffer.writeVarInt(request.villageId);
-            buffer.writeUtf(request.prompt);
-        }
-    };
+    private static final StreamCodec<ByteBuf, Target> TARGET_CODEC =
+            ByteBufCodecs.VAR_INT.map(Target::fromId, Target::id);
+    public static final StreamCodec<FriendlyByteBuf, ChatAIContextUpdateRequest> STREAM_CODEC = StreamCodec.composite(
+            TARGET_CODEC, ChatAIContextUpdateRequest::target,
+            ResourceKey.streamCodec(Registries.DIMENSION), ChatAIContextUpdateRequest::dimension,
+            UUIDUtil.STREAM_CODEC, ChatAIContextUpdateRequest::villagerUuid,
+            ByteBufCodecs.VAR_INT, ChatAIContextUpdateRequest::villageId,
+            ByteBufCodecs.STRING_UTF8, ChatAIContextUpdateRequest::prompt,
+            ChatAIContextUpdateRequest::new
+    );
 
     @Override
     public void handleServer(ServerPlayer player) {
@@ -62,7 +54,10 @@ public record ChatAIContextUpdateRequest(Target target, ResourceKey<Level> dimen
                     VillageManager.get(targetLevel).getOrEmpty(villageId).ifPresent(village -> village.setChatAIPrompt(prompt));
                 }
             }
-            case WORLD -> ChatAIContextData.get(player.serverLevel().getServer()).setWorldPrompt(prompt);
+            case WORLD -> {
+                Config.getInstance().villagerChatAISystemPrompt = prompt;
+                Config.getInstance().save();
+            }
         }
     }
 
@@ -93,7 +88,7 @@ public record ChatAIContextUpdateRequest(Target target, ResourceKey<Level> dimen
         }
 
         private int id() {
-            return ordinal();
+            return id;
         }
     }
 }
