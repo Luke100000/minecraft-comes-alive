@@ -10,37 +10,30 @@ import java.util.*;
 /** Single derived view for Room-local and Main Room inherited POIs/type matching. */
 public final class RoomTypeResolver {
     private final Village village;
-    private final StructureLayout.Layout layout;
     private final Map<Integer, Building> roomsById;
-    private final Map<Integer, List<Building>> roomsByBuilding;
+    private final Map<Integer, List<Building>> roomsByGroup;
     private final Map<Integer, Context> contextByRoomId = new HashMap<>();
 
-    private RoomTypeResolver(Village village,
-                             StructureLayout.Layout layout,
-                             Collection<Building> rooms) {
+    private RoomTypeResolver(Village village, Collection<Building> rooms) {
         this.village = village;
-        this.layout = layout == null ? StructureLayout.build(village) : layout;
         List<Building> snapshot = rooms == null ? List.of() : List.copyOf(rooms);
         Map<Integer, Building> byId = new HashMap<>();
-        Map<Integer, List<Building>> byBuilding = new HashMap<>();
+        Map<Integer, List<Building>> byGroup = new HashMap<>();
         for (Building room : snapshot) {
             if (room.getId() >= 0) byId.put(room.getId(), room);
-            byBuilding.computeIfAbsent(buildingId(room.getStructureId()), ignored -> new ArrayList<>()).add(room);
+            byGroup.computeIfAbsent(structureGroupId(room), ignored -> new ArrayList<>()).add(room);
         }
-        byBuilding.replaceAll((ignored, grouped) -> List.copyOf(grouped));
+        byGroup.replaceAll((ignored, grouped) -> List.copyOf(grouped));
         this.roomsById = Map.copyOf(byId);
-        this.roomsByBuilding = Map.copyOf(byBuilding);
+        this.roomsByGroup = Map.copyOf(byGroup);
     }
 
-    public static RoomTypeResolver create(Village village, StructureLayout.Layout layout) {
-        return new RoomTypeResolver(village, layout,
-                village == null ? List.of() : village.getRooms().toList());
+    public static RoomTypeResolver create(Village village) {
+        return new RoomTypeResolver(village, village == null ? List.of() : village.getRooms().toList());
     }
 
-    static RoomTypeResolver create(Village village,
-                                   StructureLayout.Layout layout,
-                                   Collection<Building> rooms) {
-        return new RoomTypeResolver(village, layout, rooms);
+    static RoomTypeResolver create(Village village, Collection<Building> rooms) {
+        return new RoomTypeResolver(village, rooms);
     }
 
     public Context resolve(Building room) {
@@ -72,8 +65,8 @@ public final class RoomTypeResolver {
             return new Context(room, mainRoom == null ? room : mainRoom, own, Map.of(), own, List.of());
         }
 
-        List<Building> contributors = roomsByBuilding.getOrDefault(
-                        buildingId(room.getStructureId()), List.of()).stream()
+        List<Building> contributors = roomsByGroup.getOrDefault(
+                        structureGroupId(room), List.of()).stream()
                 .filter(Building::isFunctionalRoom)
                 .filter(candidate -> !sameRoom(candidate, room))
                 .filter(Building::isInheritanceEnabled)
@@ -97,17 +90,21 @@ public final class RoomTypeResolver {
 
     private Building findMainRoom(Building room) {
         if (village == null || room == null) return room;
-        int mainRoomId = layout.mainRoomIdForStructure(room.getStructureId()).orElse(room.getId());
+        int mainRoomId = village.getStructure(room.getStructureId())
+                .map(Structure::getMainRoomId)
+                .filter(id -> id >= 0)
+                .orElse(room.getId());
         if (room.getId() == mainRoomId) return room;
         Building snapshotRoom = roomsById.get(mainRoomId);
         if (snapshotRoom != null) return snapshotRoom;
         return village.getBuilding(mainRoomId).filter(Building::isFunctionalRoom).orElse(room);
     }
 
-    private int buildingId(int structureId) {
-        return layout.buildingFor(structureId)
-                .map(StructureLayout.BuildingLayout::id)
-                .orElse(structureId);
+    private int structureGroupId(Building room) {
+        if (village == null || room == null || room.getStructureId() < 0) return room == null ? -1 : room.getId();
+        return village.getStructure(room.getStructureId())
+                .map(Structure::getStructureGroupId)
+                .orElse(room.getStructureId());
     }
 
     private static Map<ResourceLocation, List<BlockPos>> snapshot(Map<ResourceLocation, List<BlockPos>> source) {

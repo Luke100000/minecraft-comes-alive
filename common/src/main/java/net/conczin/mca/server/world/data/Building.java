@@ -224,6 +224,14 @@ public class Building implements VillageBuilding {
         this.floorId = floorId;
     }
 
+    public int getFloorNumber(Village village) {
+        if (village == null || structureId < 0 || floorId < 0) return 0;
+        return village.getStructure(structureId)
+                .flatMap(structure -> structure.getFloor(floorId))
+                .map(StructureFloor::floorNumber)
+                .orElse(0);
+    }
+
     public boolean isFunctionalRoom() {
         return !(this instanceof ExternalBuilding);
     }

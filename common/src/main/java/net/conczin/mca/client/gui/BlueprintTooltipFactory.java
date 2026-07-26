@@ -3,7 +3,7 @@ package net.conczin.mca.client.gui;
 import net.conczin.mca.resources.data.BuildingType;
 import net.conczin.mca.server.world.data.Building;
 import net.conczin.mca.server.world.data.RoomTypeResolver;
-import net.conczin.mca.server.world.data.StructureLayout;
+import net.conczin.mca.server.world.data.Structure;
 import net.conczin.mca.server.world.data.Village;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
@@ -11,12 +11,7 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 /** Single owner for Blueprint Room/Structure tooltip hierarchy and styling. */
 final class BlueprintTooltipFactory {
@@ -25,28 +20,19 @@ final class BlueprintTooltipFactory {
     private static final int FLOOR_UPPER_COLOR = 0x6fd6a5;
 
     private final Village village;
-    private final StructureLayout.Layout structureLayout;
     private final RoomTypeResolver roomTypeResolver;
 
-    private BlueprintTooltipFactory(Village village,
-                                    StructureLayout.Layout structureLayout,
-                                    RoomTypeResolver roomTypeResolver) {
+    private BlueprintTooltipFactory(Village village, RoomTypeResolver roomTypeResolver) {
         this.village = village;
-        this.structureLayout = structureLayout;
         this.roomTypeResolver = roomTypeResolver;
     }
 
     static BlueprintTooltipFactory empty() {
-        StructureLayout.Layout layout = StructureLayout.build(null);
-        return new BlueprintTooltipFactory(null, layout,
-                RoomTypeResolver.create(null, layout));
+        return new BlueprintTooltipFactory(null, RoomTypeResolver.create(null));
     }
 
-    static BlueprintTooltipFactory create(Village village,
-                                          StructureLayout.Layout structureLayout,
-                                          RoomTypeResolver roomTypeResolver) {
-        return village == null ? empty()
-                : new BlueprintTooltipFactory(village, structureLayout, roomTypeResolver);
+    static BlueprintTooltipFactory create(Village village, RoomTypeResolver roomTypeResolver) {
+        return village == null ? empty() : new BlueprintTooltipFactory(village, roomTypeResolver);
     }
 
     List<Component> tooltip(Building hovered, Integer floorOrdinal, boolean structureHover) {
@@ -110,7 +96,7 @@ final class BlueprintTooltipFactory {
         List<Component> lines = new LinkedList<>();
         lines.add(floorLabel(floorOrdinal));
         appendAggregateRooms(lines, structureTooltipBuildings(structureBuilding).stream()
-                .filter(room -> structureLayout.isRoomOnFloor(room.getId(), floorOrdinal))
+                .filter(room -> room.getFloorNumber(village) == floorOrdinal)
                 .toList());
         return List.copyOf(lines);
     }
@@ -119,10 +105,12 @@ final class BlueprintTooltipFactory {
         List<Building> structureRooms = structureTooltipBuildings(structureBuilding);
         List<Component> lines = new LinkedList<>();
 
-        for (int floorOrdinal : structureLayout.ordinalsForStructure(structureBuilding.getEffectiveStructureId())) {
+        TreeSet<Integer> floors = new TreeSet<>();
+        structureRooms.forEach(room -> floors.add(room.getFloorNumber(village)));
+        for (int floorOrdinal : floors) {
             lines.add(floorLabel(floorOrdinal));
             appendAggregateRooms(lines, structureRooms.stream()
-                    .filter(room -> structureLayout.isRoomOnFloor(room.getId(), floorOrdinal))
+                    .filter(room -> room.getFloorNumber(village) == floorOrdinal)
                     .toList());
         }
         return List.copyOf(lines);
@@ -141,16 +129,19 @@ final class BlueprintTooltipFactory {
     }
 
     private List<Building> structureTooltipBuildings(Building building) {
-        if (building.getBuildingType().grouped()) return List.of(building);
+        if (!building.isFunctionalRoom() || building.getBuildingType().grouped()) return List.of(building);
 
         int structureId = building.getEffectiveStructureId();
-        Set<Integer> structureIds = structureLayout.buildingFor(structureId)
-                .map(layout -> Set.copyOf(layout.structureIds()))
-                .orElse(Set.of(structureId));
-        return village.getBuildings().values().stream()
+        int groupId = village == null ? structureId : village.getStructure(structureId)
+                .map(Structure::getStructureGroupId).orElse(structureId);
+        return village == null ? List.of(building) : village.getBuildings().values().stream()
                 .filter(Building::isComplete)
                 .filter(Building::isFunctionalRoom)
-                .filter(candidate -> structureIds.contains(candidate.getEffectiveStructureId()))
+                .filter(candidate -> {
+                    int cStructureId = candidate.getEffectiveStructureId();
+                    int cGroupId = village.getStructure(cStructureId).map(Structure::getStructureGroupId).orElse(cStructureId);
+                    return cGroupId == groupId;
+                })
                 .sorted(Comparator.comparingInt(Building::getId))
                 .toList();
     }
