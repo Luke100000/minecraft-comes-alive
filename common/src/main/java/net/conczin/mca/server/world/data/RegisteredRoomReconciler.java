@@ -8,6 +8,7 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 /** Matches one complete registered-Floor partition back to stable Room identities. */
 final class RegisteredRoomReconciler {
@@ -51,7 +52,17 @@ final class RegisteredRoomReconciler {
                 components.stream().filter(component -> component != playerComponent).toList(),
                 previous.stream().filter(room -> room != expected).toList()));
         assignments.sort(Comparator.comparing(Assignment::component, COMPONENT_ORDER));
-        return Optional.of(new Result(assignments));
+        Set<Integer> assignedRoomIds = assignments.stream()
+                .map(Assignment::roomId)
+                .filter(id -> id >= 0)
+                .collect(java.util.stream.Collectors.toSet());
+        Set<Integer> removedRoomIds = previous.stream()
+                .map(Building::getId)
+                .filter(id -> !assignedRoomIds.contains(id))
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        return Optional.of(new Result(
+                previous.stream().map(Building::getId).toList(),
+                assignments, removedRoomIds, playerComponent));
     }
 
     /**
@@ -176,9 +187,14 @@ final class RegisteredRoomReconciler {
         }
     }
 
-    record Result(List<Assignment> assignments) {
+    record Result(List<Integer> previousRoomIds,
+                  List<Assignment> assignments,
+                  Set<Integer> removedRoomIds,
+                  Building playerComponent) {
         Result {
+            previousRoomIds = List.copyOf(previousRoomIds);
             assignments = List.copyOf(assignments);
+            removedRoomIds = Set.copyOf(removedRoomIds);
         }
     }
 }

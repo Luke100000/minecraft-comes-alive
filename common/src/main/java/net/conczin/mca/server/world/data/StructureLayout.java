@@ -91,16 +91,15 @@ public final class StructureLayout {
     private static BuildingLayout buildBuilding(List<Structure> structures, List<Building> rooms) {
         List<PhysicalFloor> floors = structures.stream()
                 .flatMap(structure -> structure.getFloors().stream()
-                        .map(floor -> new PhysicalFloor(structure.getId(), floor.id(), floor.anchorY())))
+                        .map(floor -> new PhysicalFloor(structure.getId(), floor.id(), floor.anchorY(),
+                                structure.getSurfaceReferenceY())))
                 .sorted(Comparator.comparingInt(PhysicalFloor::anchorY)
                         .thenComparingInt(PhysicalFloor::structureId)
                         .thenComparingInt(PhysicalFloor::floorId))
                 .toList();
         List<List<PhysicalFloor>> bands = clusterBands(floors);
         MainRoomSelector.Selection selection = MainRoomSelector.resolve(structures, rooms);
-        int groundIndex = selection == null ? 0
-                : floorBandIndex(selection.structureId(), selection.floorId(), bands);
-        if (groundIndex < 0) groundIndex = 0;
+        int groundIndex = groundBandIndex(floors, bands);
 
         List<Storey> storeys = new ArrayList<>();
         for (int i = 0; i < bands.size(); i++) {
@@ -131,6 +130,21 @@ public final class StructureLayout {
         return bands;
     }
 
+    /** Ground is physical terrain-relative evidence, not whichever Room the player registered first. */
+    private static int groundBandIndex(List<PhysicalFloor> floors,
+                                       List<List<PhysicalFloor>> bands) {
+        PhysicalFloor ground = floors.stream().min(Comparator
+                .comparingInt((PhysicalFloor floor) ->
+                        Math.abs(floor.anchorY() - floor.surfaceReferenceY()))
+                .thenComparing(Comparator.comparingInt(PhysicalFloor::anchorY).reversed())
+                .thenComparingInt(PhysicalFloor::structureId)
+                .thenComparingInt(PhysicalFloor::floorId))
+                .orElse(null);
+        if (ground == null) return 0;
+        int index = floorBandIndex(ground.structureId(), ground.floorId(), bands);
+        return Math.max(0, index);
+    }
+
     private static int floorBandIndex(int structureId,
                                       int floorId,
                                       List<List<PhysicalFloor>> bands) {
@@ -146,7 +160,7 @@ public final class StructureLayout {
         return ((long) structureId << 32) ^ (floorId & 0xffffffffL);
     }
 
-    private record PhysicalFloor(int structureId, int floorId, int anchorY) {
+    private record PhysicalFloor(int structureId, int floorId, int anchorY, int surfaceReferenceY) {
     }
 
     public record Layout(List<BuildingLayout> buildings,

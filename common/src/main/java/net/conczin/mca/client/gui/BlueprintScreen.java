@@ -876,6 +876,7 @@ public class BlueprintScreen extends ExtendedScreen {
 
         column.addTooltip(Component.translatable(labelKey), Component.translatable(tooltipKey), button -> {
             room.setInheritanceEnabled(enable);
+            setVillage(village);
             Network.sendToServer(new ReportBuildingMessage(
                     ReportBuildingMessage.Action.SET_ROOM_INHERITANCE, Boolean.toString(enable)));
             setPage(page);
