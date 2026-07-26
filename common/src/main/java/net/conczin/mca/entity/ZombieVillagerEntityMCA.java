@@ -46,8 +46,7 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
     private final ZombieCommandHandler interactions = new ZombieCommandHandler(this);
     private final UpdatableInventory inventory = new UpdatableInventory(27);
 
-    @Nullable
-    private String chatAIPrompt;
+    private String chatAIPrompt = "";
     private int burned;
 
     public ZombieVillagerEntityMCA(EntityType<? extends ZombieVillager> type, Level world, Gender gender) {
@@ -244,16 +243,12 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
 
     @Override
     public void writeAdditionalConversionData(CompoundTag output) {
-        if (chatAIPrompt != null) {
-            output.putString(VillagerEntityMCA.CHAT_AI_PROMPT_KEY, chatAIPrompt);
-        }
+        output.putString(VillagerEntityMCA.CHAT_AI_PROMPT_KEY, chatAIPrompt);
     }
 
     @Override
     public void readAdditionalConversionData(CompoundTag input) {
-        chatAIPrompt = input.contains(VillagerEntityMCA.CHAT_AI_PROMPT_KEY)
-                ? input.getString(VillagerEntityMCA.CHAT_AI_PROMPT_KEY)
-                : null;
+        chatAIPrompt = input.getString(VillagerEntityMCA.CHAT_AI_PROMPT_KEY);
     }
 
     @Override
@@ -261,9 +256,7 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
         super.readAdditionalSaveData(nbt);
         getTypeDataManager().load(this, nbt);
         relations.readFromNbt(nbt);
-        chatAIPrompt = nbt.contains(VillagerEntityMCA.CHAT_AI_PROMPT_KEY)
-                ? nbt.getString(VillagerEntityMCA.CHAT_AI_PROMPT_KEY)
-                : null;
+        chatAIPrompt = nbt.getString(VillagerEntityMCA.CHAT_AI_PROMPT_KEY);
 
         updateAttributes();
 
@@ -291,9 +284,7 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
         getTypeDataManager().save(this, nbt);
         relations.writeToNbt(nbt);
         InventoryUtils.saveToNBT(this.registryAccess(), inventory, nbt);
-        if (chatAIPrompt != null) {
-            nbt.putString(VillagerEntityMCA.CHAT_AI_PROMPT_KEY, chatAIPrompt);
-        }
+        nbt.putString(VillagerEntityMCA.CHAT_AI_PROMPT_KEY, chatAIPrompt);
     }
 
     @Override
