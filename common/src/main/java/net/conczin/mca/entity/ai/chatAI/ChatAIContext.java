@@ -2,7 +2,6 @@ package net.conczin.mca.entity.ai.chatAI;
 
 import net.conczin.mca.Config;
 import net.conczin.mca.entity.VillagerEntityMCA;
-import net.conczin.mca.server.world.data.ChatAIContextData;
 import net.conczin.mca.server.world.data.PlayerSaveData;
 import net.conczin.mca.server.world.data.Village;
 import net.minecraft.commands.CommandSourceStack;
@@ -156,7 +155,6 @@ public final class ChatAIContext {
             VillagerEntityMCA villager,
             Village village
     ) {
-        append(prompt, "World context", ChatAIContextData.get(player.serverLevel().getServer()).getWorldPrompt());
         append(prompt, "Villager background", villager.getChatAIPrompt());
         append(prompt, "Player context", PlayerSaveData.get(player).getChatAIPrompt());
 

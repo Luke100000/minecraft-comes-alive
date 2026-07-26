@@ -15,7 +15,6 @@ import net.conczin.mca.network.Network;
 import net.conczin.mca.network.s2c.ChatAIContextResponse;
 import net.conczin.mca.network.s2c.OpenGuiRequest;
 import net.conczin.mca.server.ServerInteractionManager;
-import net.conczin.mca.server.world.data.ChatAIContextData;
 import net.conczin.mca.server.world.data.PlayerSaveData;
 import net.conczin.mca.server.world.data.Village;
 import net.conczin.mca.server.world.data.VillageManager;
@@ -104,8 +103,6 @@ public class Command {
         if (village.isEmpty()) {
             village = VillageManager.get(player.serverLevel()).findNearestVillage(player);
         }
-        ChatAIContextData contextData = ChatAIContextData.get(player.serverLevel().getServer());
-
         Network.sendToPlayer(new ChatAIContextResponse(
                 player.serverLevel().dimension(),
                 villager.isPresent(),
@@ -118,7 +115,7 @@ public class Command {
                 village.map(Village::getId).orElse(-1),
                 village.map(Village::getName).orElse(""),
                 village.map(Village::getChatAIPrompt).orElse(""),
-                contextData.getWorldPrompt()
+                Config.getInstance().villagerChatAISystemPrompt
         ), player);
         return 1;
     }
