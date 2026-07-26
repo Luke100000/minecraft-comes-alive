@@ -357,8 +357,6 @@
   "gui.skin_library.not_64": "Image is not 64 by 64 pixel.",
   "gui.skin_library.authenticating": "Authenticating",
   "gui.skin_library.authenticating_browser": "Complete authentication in your browser!",
-  "gui.skin_library.auth_link.title": "Open authentication link?",
-  "gui.skin_library.auth_link.message": "Open or copy this link to log in with your browser.",
   "gui.skin_library.delete_confirm": "Do you really want to delete this content?",
   "gui.skin_library.report_confirm": "Why do you want to report this content?",
   "gui.skin_library.report_invalid": "Invalid Texture",

@@ -33,7 +33,7 @@ public class Api {
 
     public static Response request(HttpMethod httpMethod, Class<? extends Response> expectedAnswer, String url, Map<String, String> queryParams, Map<String, String> body) {
         try {
-            boolean versionedPath = url.startsWith("v2/") || url.startsWith("v3/");
+            boolean versionedPath = url.startsWith("v2/");
             String fullUrl = Config.getInstance().immersiveLibraryUrl + (versionedPath ? "/" : "/v1/") + url;
 
             // Append query params
