@@ -17,7 +17,6 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.PlayerFaceRenderer;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Vec3i;
 import net.minecraft.resources.ResourceLocation;
 
 import java.util.*;
@@ -107,15 +106,7 @@ final class BlueprintMapRenderer implements AutoCloseable {
         for (Building building : geometry.groupedBuildings()) {
             BuildingType buildingType = building.getBuildingType();
             if (buildingType.isIcon()) {
-                BlockPos center = building.getCenter();
                 groupedIconBuildings.add(building);
-
-                int hoverMargin = 6;
-                if (mouseInsideMap
-                        && center.distSqr(new Vec3i(
-                        hoveredMapCell.x(), center.getY(), hoveredMapCell.z())) < hoverMargin * hoverMargin) {
-                    addRoomHover(hoverTargets, building, selectedFloor);
-                }
                 continue;
             }
 
@@ -202,8 +193,8 @@ final class BlueprintMapRenderer implements AutoCloseable {
         }
 
         // The shell/outline is an authoritative whole-Building hit region. Collect the hit
-        // now, then resolve it after Room/icon hit testing so basement/upper Room geometry cannot
-        // steal the aggregate tooltip from the Building shell.
+        // now, then resolve it after Room hit testing so basement/upper Room geometry cannot steal
+        // the aggregate tooltip from the Building shell.
         Set<MapStructureLayer> hoveredStructureLayers = new LinkedHashSet<>();
         for (MapStructureLayer layer : structureLayers) {
             boolean buildingHovered = layer.shellCells().contains(hoveredMapCell)
@@ -236,21 +227,12 @@ final class BlueprintMapRenderer implements AutoCloseable {
                         buildingType.iconU(), buildingType.iconV(),
                         iconScale / viewport.scale()
                 );
-
-                double iconScreenX = viewport.screenX(iconLayer.iconX()) + iconLayer.screenOffsetX();
-                double iconScreenY = viewport.screenY(iconLayer.iconZ()) + iconLayer.screenOffsetY();
-                double hoverRadius = 7.0D * iconScale;
-                double dx = mouseX + 0.5D - iconScreenX;
-                double dz = mouseY + 0.5D - iconScreenY;
-                if (mouseInsideMap && dx * dx + dz * dz < hoverRadius * hoverRadius) {
-                    addRoomHover(hoverTargets, iconLayer.building(), iconLayer.floorOrdinal());
-                }
             }
         }
         matrices.popPose();
 
         // Resolve canonical Building hits last. On the shell, the user's intent is the whole
-        // building, so replace its Room/icon targets with one aggregate target.
+        // building, so replace its Room targets with one aggregate target.
         for (MapStructureLayer layer : hoveredStructureLayers) {
             if (layer.mainRoom() != null) {
                 addStructureHover(hoverTargets, layer.mainRoom(), layer.structureIds());

@@ -37,6 +37,7 @@ final class BlueprintTooltipFactory {
 
     List<Component> tooltip(Building hovered, Integer floorOrdinal, boolean structureHover) {
         if (village == null || hovered == null) return List.of();
+        if (!hovered.isFunctionalRoom()) return externalBuildingTooltip(hovered);
         if (structureHover) {
             return floorOrdinal == null
                     ? allFloorsTooltip(hovered)
@@ -90,6 +91,14 @@ final class BlueprintTooltipFactory {
                             "gui.blueprint.roomTooltip.inheritedFrom", contributor.getId())
                             .withStyle(ChatFormatting.DARK_GRAY))));
         }
+    }
+
+    private List<Component> externalBuildingTooltip(Building building) {
+        List<Component> lines = new ArrayList<>();
+        lines.add(typeLabel(building.getBuildingType()));
+        poiLines(building.getBlocks()).forEach(item ->
+                lines.add(Component.literal("  ").append(item)));
+        return List.copyOf(lines);
     }
 
     private List<Component> structureFloorTooltip(Building structureBuilding, int floorOrdinal) {

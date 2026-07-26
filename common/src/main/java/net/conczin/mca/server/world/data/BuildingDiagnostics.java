@@ -91,8 +91,7 @@ public final class BuildingDiagnostics {
         }
 
         Building.validationResult analysis = switch (lookup.position()) {
-            case OUTSIDE -> manager.analyzeRoomAddition(pos).result();
-            case ATTACHABLE_ROOM -> manager.analyzeRoom(pos).result();
+            case OUTSIDE, ATTACHABLE_ROOM -> manager.analyzeRoomAddition(pos).result();
             case REGISTERED_ROOM -> room == null
                     ? Building.validationResult.NOT_IN_BUILDING
                     : manager.analyzeRegisteredRoomUpdate(village, room.getId(), pos).result();

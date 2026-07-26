@@ -21,11 +21,17 @@ import java.util.UUID;
 
 public class DestinyScreen extends VillagerEditorScreen {
     private static final ResourceLocation LOGO_TEXTURE = MCA.locate("textures/banner.png");
+    private static final int DESTINY_COLUMNS = 3;
+    private static final int DESTINY_ROWS = 3;
+    private static final int DESTINY_LOCATIONS_PER_PAGE = DESTINY_COLUMNS * DESTINY_ROWS;
+    private static final int DESTINY_BUTTON_GAP = 4;
+    private static final int DESTINY_BUTTON_HORIZONTAL_PADDING = 16;
     private final LinkedList<Component> story = new LinkedList<>();
     private final boolean allowTeleportation;
     private String location;
     private boolean teleported = false;
     private ButtonWidget acceptWidget;
+    private int destinyPage;
 
     public DestinyScreen(UUID playerUUID, boolean allowTeleportation) {
         super(playerUUID, playerUUID);
