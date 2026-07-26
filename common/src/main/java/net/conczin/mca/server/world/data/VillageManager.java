@@ -327,17 +327,14 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         if (reconciled == null) {
             return RegisteredRoomUpdate.failure(Building.validationResult.OVERLAP, pos, village);
         }
-        Building playerComponent = reconciled.assignments().stream()
-                .filter(assignment -> assignment.roomId() == expected.getId())
-                .map(RegisteredRoomReconciler.Assignment::component)
-                .findFirst().orElseThrow();
+        Building playerComponent = reconciled.playerComponent();
         List<String> matchingTypes = village.getMatchingRoomTypes(playerComponent).stream()
                 .map(BuildingType::name)
                 .toList();
         return new RegisteredRoomUpdate(Building.validationResult.SUCCESS, pos, village,
                 structure.getId(), floor.id(), expected.getId(),
-                previousRooms.stream().map(Building::getId).toList(),
-                reconciled.assignments(), matchingTypes);
+                reconciled.previousRoomIds(), reconciled.assignments(),
+                reconciled.removedRoomIds(), playerComponent, matchingTypes);
     }
 
     private BuildingScanResult scanRoom(Village village,
@@ -495,7 +492,6 @@ public class VillageManager extends SavedData implements Iterable<Village> {
             return Building.validationResult.OVERLAP;
         }
 
-        Map<RegisteredRoomReconciler.Assignment, Integer> assignedIds = new LinkedHashMap<>();
         int nextRoomId = lastBuildingId;
         for (RegisteredRoomReconciler.Assignment assignment : update.assignments()) {
             Building component = assignment.component();
@@ -519,7 +515,6 @@ public class VillageManager extends SavedData implements Iterable<Village> {
             } else {
                 component.setInheritanceEnabled(playerRoom.isInheritanceEnabled());
             }
-            assignedIds.put(assignment, roomId);
         }
         List<Building> components = update.assignments().stream()
                 .map(RegisteredRoomReconciler.Assignment::component)
@@ -582,7 +577,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         for (RegisteredRoomReconciler.Assignment assignment : update.assignments()) {
             if (!assignment.createsRoom()) continue;
             Building created = assignment.component();
-            village.getBuildings().put(assignedIds.get(assignment), created);
+            village.getBuildings().put(created.getId(), created);
         }
         lastBuildingId = nextRoomId;
         return Building.validationResult.SUCCESS;

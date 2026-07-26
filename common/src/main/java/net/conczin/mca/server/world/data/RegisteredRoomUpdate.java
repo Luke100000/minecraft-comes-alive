@@ -15,11 +15,14 @@ public record RegisteredRoomUpdate(
         int expectedPlayerRoomId,
         List<Integer> previousRoomIds,
         List<RegisteredRoomReconciler.Assignment> assignments,
+        Set<Integer> removedRoomIds,
+        Building playerComponent,
         List<String> playerMatchingTypes
 ) {
     public RegisteredRoomUpdate {
         previousRoomIds = List.copyOf(previousRoomIds);
         assignments = List.copyOf(assignments);
+        removedRoomIds = Set.copyOf(removedRoomIds);
         playerMatchingTypes = List.copyOf(playerMatchingTypes);
     }
 
@@ -27,7 +30,7 @@ public record RegisteredRoomUpdate(
                                         BlockPos source,
                                         Village village) {
         return new RegisteredRoomUpdate(result, source, village, -1, -1, -1,
-                List.of(), List.of(), List.of());
+                List.of(), List.of(), Set.of(), null, List.of());
     }
 
     public boolean isAmbiguous() {
@@ -36,22 +39,5 @@ public record RegisteredRoomUpdate(
 
     public boolean matchesType(String type) {
         return playerMatchingTypes.contains(type);
-    }
-
-    Set<Integer> removedRoomIds() {
-        Set<Integer> assigned = assignments.stream()
-                .map(RegisteredRoomReconciler.Assignment::roomId)
-                .filter(id -> id >= 0)
-                .collect(java.util.stream.Collectors.toSet());
-        return previousRoomIds.stream()
-                .filter(id -> !assigned.contains(id))
-                .collect(java.util.stream.Collectors.toUnmodifiableSet());
-    }
-
-    Building playerComponent() {
-        return assignments.stream()
-                .filter(assignment -> assignment.roomId() == expectedPlayerRoomId)
-                .map(RegisteredRoomReconciler.Assignment::component)
-                .findFirst().orElse(null);
     }
 }
