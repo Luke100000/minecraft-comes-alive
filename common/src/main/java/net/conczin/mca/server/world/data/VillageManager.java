@@ -440,32 +440,99 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         if (category == null) return Building.validationResult.INVALID_TYPE;
 
         registerInitialRoom(village, structure, room, category, forcedType != null);
-
-        // Case 1: Initial Structure itself contains an unregistered Floor above the initial room
-        StructureFloor initialFloor = structure.getFloor(room.getFloorId()).orElse(null);
-        StructureFloor internalGroundFloor = initialFloor == null ? null : structure.getFloors().stream()
-                .filter(f -> f.id() != room.getFloorId() && f.anchorY() > initialFloor.anchorY())
-                .min(Comparator.comparingInt(StructureFloor::anchorY))
-                .orElse(null);
-        if (internalGroundFloor != null) {
-            BlockPos groundSource = StructureScanner.nearestFloorCell(
-                    internalGroundFloor, structure.getSource()).orElse(null);
-            if (groundSource != null) {
-                BuildingScanResult groundRoom = scanResolvedRoom(
-                        village, structure, groundSource, -1, internalGroundFloor, Set.of());
-                if (groundRoom.result() == Building.validationResult.SUCCESS) {
-                    String groundCategory = chooseInitialRoomCategory(groundRoom, null);
-                    if (groundCategory != null) {
-                        registerInitialRoom(village, structure, groundRoom.building(), groundCategory, false);
-                    }
-                }
-            }
-        }
+        registerGroundRoomAboveBasement(village, structure, room);
 
         structure.renumberFloors();
         villages.put(village.getId(), village);
         finalizeVillageMutation(village);
         return Building.validationResult.SUCCESS;
+    }
+
+    /**
+     * Adding from a detected basement also registers exactly one Ground Floor Room in the
+     * same X/Z column. It never registers intermediate basement storeys or every Room on a Floor.
+     */
+    private void registerGroundRoomAboveBasement(Village village,
+                                                 Structure basementStructure,
+                                                 Building basementRoom) {
+        StructureFloor basementFloor = basementStructure.getFloor(basementRoom.getFloorId()).orElse(null);
+        if (basementFloor == null || basementFloor.floorNumber() >= 0) return;
+
+        BlockPos reference = basementRoom.getSourceBlock();
+        Structure targetStructure = basementStructure;
+        StructureFloor groundFloor = groundFloorAtColumn(targetStructure, reference, basementFloor.anchorY());
+
+        if (groundFloor == null) {
+            targetStructure = nearestGroundStructureAbove(
+                    village, basementStructure, reference, basementFloor.anchorY());
+            groundFloor = targetStructure == null ? null
+                    : groundFloorAtColumn(targetStructure, reference, basementFloor.anchorY());
+        }
+
+        // A physically disconnected basement may be discovered before the Building above.
+        // Probe one exact X/Z column near surface level instead of rescanning every basement cell.
+        if (groundFloor == null) {
+            int scanY = Math.max(basementStructure.getRawPos1().getY() + 1,
+                    basementStructure.getSurfaceReferenceY() + 2);
+            StructureScanner.Result scan = StructureScanner.scan(
+                    world,
+                    new BlockPos(reference.getX(), scanY, reference.getZ()),
+                    village.getStructures().values(),
+                    -1);
+            if (scan.result() != Building.validationResult.SUCCESS) return;
+
+            Structure candidate = scan.toStructure(-1);
+            StructureFloor candidateGround = groundFloorAtColumn(
+                    candidate, reference, basementFloor.anchorY());
+            if (candidateGround == null) return;
+            targetStructure = candidate;
+            groundFloor = candidateGround;
+        }
+
+        BlockPos groundSource = new BlockPos(
+                reference.getX(), groundFloor.anchorY(), reference.getZ());
+        Set<BlockPos> blocked = targetStructure.getId() < 0 ? Set.of()
+                : registeredRoomCells(village, targetStructure.getId(), groundFloor.id(), -1);
+        BuildingScanResult groundRoom = scanResolvedRoom(
+                village, targetStructure, groundSource, -1, groundFloor, blocked);
+        if (groundRoom.result() != Building.validationResult.SUCCESS) return;
+
+        String groundCategory = chooseInitialRoomCategory(groundRoom, null);
+        if (groundCategory != null) {
+            registerInitialRoom(village, targetStructure, groundRoom.building(), groundCategory, false);
+        }
+    }
+
+    private static Structure nearestGroundStructureAbove(Village village,
+                                                          Structure basementStructure,
+                                                          BlockPos reference,
+                                                          int basementY) {
+        Structure nearest = null;
+        int nearestY = Integer.MAX_VALUE;
+        for (Structure candidate : village.getStructures().values()) {
+            if (candidate.getId() == basementStructure.getId()) continue;
+            StructureFloor ground = groundFloorAtColumn(candidate, reference, basementY);
+            if (ground == null) continue;
+            if (ground.anchorY() < nearestY
+                    || ground.anchorY() == nearestY && (nearest == null || candidate.getId() < nearest.getId())) {
+                nearest = candidate;
+                nearestY = ground.anchorY();
+            }
+        }
+        return nearest;
+    }
+
+    private static StructureFloor groundFloorAtColumn(Structure structure,
+                                                       BlockPos reference,
+                                                       int basementY) {
+        if (structure == null || reference == null) return null;
+        return structure.getFloors().stream()
+                .filter(floor -> floor.floorNumber() == 0)
+                .filter(floor -> floor.anchorY() > basementY)
+                .filter(floor -> floor.contains(reference.getX(), reference.getZ()))
+                .min(Comparator.comparingInt(StructureFloor::anchorY)
+                        .thenComparingInt(StructureFloor::id))
+                .orElse(null);
     }
 
     private void registerInitialRoom(Village village,
@@ -489,41 +556,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         }
         village.getBuildings().put(room.getId(), room);
         village.getStructures().put(structureId, structure);
-
-        StructureFloor floor = structure.getFloor(room.getFloorId()).orElse(null);
-        if (floor != null) {
-            registerExtraFloorRooms(village, structure, floor);
-        }
         structure.renumberFloors();
-    }
-
-    private void registerExtraFloorRooms(Village village, Structure structure, StructureFloor floor) {
-        int maxSize = Config.getInstance().maxBuildingSize;
-        List<BuildingRoomScanner.Result> results = BuildingRoomScanner.partition(
-                world, structure.getSource(), maxSize, floor);
-        if (results.isEmpty()) return;
-
-        List<Building> existingFloorRooms = village.getRooms()
-                .filter(b -> b.getStructureId() == structure.getId() && b.getFloorId() == floor.id())
-                .toList();
-
-        for (BuildingRoomScanner.Result scanResult : results) {
-            BuildingScanResult scan = roomResultFromGeometry(village, structure, floor, scanResult, -1);
-            if (scan.result() != Building.validationResult.SUCCESS) continue;
-            Building component = scan.building();
-
-            BlockPos seed = component.getSourceBlock();
-            boolean exists = existingFloorRooms.stream()
-                    .anyMatch(b -> b.containsFloorColumn(seed.getX(), seed.getZ()));
-            if (exists) continue;
-
-            String category = chooseInitialRoomCategory(scan, null);
-            if (category != null) {
-                component.setId(lastBuildingId++);
-                component.setType(category);
-                village.getBuildings().put(component.getId(), component);
-            }
-        }
     }
 
     public Building.validationResult commitRegisteredRoomUpdate(RegisteredRoomUpdate update,

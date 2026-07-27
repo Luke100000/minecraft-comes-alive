@@ -50,9 +50,9 @@ public class BlueprintScreen extends ExtendedScreen {
     private static final int MAP_ICONS_BUTTON_WIDTH = 47;
     private static final int MAP_TERRAIN_BUTTON_WIDTH = 52;
     private static final int MAP_SCALE_BUTTON_WIDTH = 47;
-    private static final int PLAYER_CENTERED_BUTTON_WIDTH = 78;
-    private static final int PLAYER_HEAD_BUTTON_SIZE = 16;
-    private static final int PLAYER_HEAD_ICON_SIZE = 12;
+    private static final int PLAYER_CENTERED_BUTTON_WIDTH = 110;
+    private static final int PLAYER_HEAD_BUTTON_SIZE = 20;
+    private static final int PLAYER_HEAD_ICON_SIZE = 16;
     private static final int MAP_SIDE_CONTROL_GUTTER = 14;
     private static final int MAP_SIDE_CONTROL_WIDTH = 132;
     private static Integer rememberedFloorOrdinal;

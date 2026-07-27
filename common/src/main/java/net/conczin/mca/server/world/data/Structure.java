@@ -220,13 +220,16 @@ public final class Structure implements VillageBuilding {
     void renumberFloors() {
         List<StructureFloor> ordered = getFloors();
         if (ordered.isEmpty()) return;
-        StructureFloor ground = ordered.stream()
-                .min(Comparator.comparingLong((StructureFloor floor) ->
-                                Math.abs((long) floor.anchorY() - surfaceReferenceY))
-                        .thenComparing(Comparator.comparingInt(StructureFloor::anchorY).reversed())
-                        .thenComparingInt(StructureFloor::id))
-                .orElse(ordered.getFirst());
-        int groundIndex = ordered.indexOf(ground);
+        int tolerance = BuildingFloorRegionDetector.FLOOR_CLUSTER_TOLERANCE;
+        int groundIndex = java.util.stream.IntStream.range(0, ordered.size())
+                .filter(index -> (long) ordered.get(index).anchorY() >= (long) surfaceReferenceY - tolerance)
+                .boxed()
+                .min(Comparator.comparingLong((Integer index) ->
+                                Math.abs((long) ordered.get(index).anchorY() - surfaceReferenceY))
+                        .thenComparing(Comparator.comparingInt(
+                                (Integer index) -> ordered.get(index).anchorY()).reversed())
+                        .thenComparingInt(index -> ordered.get(index).id()))
+                .orElse(ordered.size());
         for (int index = 0; index < ordered.size(); index++) {
             StructureFloor floor = ordered.get(index);
             floors.put(floor.id(), floor.withFloorNumber(index - groundIndex));

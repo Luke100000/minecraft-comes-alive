@@ -78,6 +78,7 @@ final class BlueprintMapGeometry {
 
     private List<MapStructureLayer> buildStructureLayers(Integer selectedFloor,
                                                          List<MapFootprintLayer> roomLayers) {
+        if (selectedFloor != null && selectedFloor < 0) return List.of();
         List<MapStructureLayer> layers = new ArrayList<>();
         List<Structure> structures = village.getStructures().values().stream()
                 .sorted(Comparator.comparingInt(Structure::getId))
@@ -87,6 +88,7 @@ final class BlueprintMapGeometry {
             LinkedHashSet<BlueprintMapFootprint.Cell> outlineBaseCells = new LinkedHashSet<>();
             for (StructureFloor floor : structure.getFloors()) {
                 if (selectedFloor != null && floor.floorNumber() != selectedFloor) continue;
+                if (floor.floorNumber() < 0) continue;
                 if (floor.region() != null) {
                     outlineBaseCells.addAll(BlueprintMapFootprint.fromFloorRegions(List.of(floor.region())));
                 }
@@ -96,9 +98,12 @@ final class BlueprintMapGeometry {
             LinkedHashSet<BlueprintMapFootprint.Cell> visibleRoomCells = new LinkedHashSet<>();
             roomLayers.stream()
                     .filter(layer -> layer.building().getEffectiveStructureId() == structure.getId())
-                    .forEach(layer -> visibleRoomCells.addAll(layer.footprintCells()));
-
-            outlineBaseCells.addAll(visibleRoomCells);
+                    .forEach(layer -> {
+                        visibleRoomCells.addAll(layer.footprintCells());
+                        if (layer.floorOrdinal() >= 0) {
+                            outlineBaseCells.addAll(layer.footprintCells());
+                        }
+                    });
             Set<BlueprintMapFootprint.Cell> filteredBase = outlineBaseWithoutEntranceProtrusions(outlineBaseCells);
             if (filteredBase.isEmpty()) filteredBase = Set.copyOf(outlineBaseCells);
 
