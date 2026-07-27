@@ -141,8 +141,8 @@ final class StructureFloorMatcher {
         if (room.getFloorRegions().isEmpty() || floor.region() == null) {
             return floor.contains(room.getSourceBlock().getX(), room.getSourceBlock().getZ());
         }
-        BuildingFloorRegion region = room.getFloorRegions().getFirst();
-        return region.intersectionArea(floor.region()) == region.area();
+        return room.getFloorRegions().stream()
+                .allMatch(region -> region.intersectionArea(floor.region()) == region.area());
     }
 
     record Result(Map<Integer, StructureFloor> floors,

@@ -2,145 +2,114 @@ package net.conczin.mca.server.world.data;
 
 import java.util.Collection;
 import java.util.Comparator;
-import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
-import java.util.Objects;
+import java.util.stream.Collectors;
 
-/** Maintains one deterministic, saved Main Room for a logical Building. */
+/** Maintains one deterministic, saved Main Room for one physical Structure. */
 final class MainRoomSelector {
     private MainRoomSelector() {
     }
 
-    static Selection resolve(List<Structure> structures, Collection<Building> rooms) {
-        if (structures == null || structures.isEmpty()) return null;
-        Map<Integer, Building> eligible = eligibleRooms(structures, rooms);
-        List<Selection> saved = structures.stream()
-                .map(structure -> {
-                    Building room = eligible.get(structure.getMainRoomId());
-                    return room == null ? null : selection(room, structure.isMainRoomAutomatic());
-                })
-                .filter(Objects::nonNull)
-                .toList();
-        if (saved.size() == 1) return saved.getFirst();
-
-        Selection manual = saved.stream()
-                .filter(selection -> !selection.automatic())
-                .min(Comparator.comparingInt(Selection::structureId)
-                        .thenComparingInt(Selection::roomId))
-                .orElse(null);
-        return manual != null ? manual : automaticSelection(structures, eligible.values());
+    static Selection resolve(Structure structure, Collection<Building> rooms) {
+        if (structure == null) return null;
+        Map<Integer, Building> eligible = eligibleRooms(structure, rooms);
+        Building saved = eligible.get(structure.getMainRoomId());
+        return saved == null
+                ? automaticSelection(structure, eligible.values())
+                : selection(saved, structure.isMainRoomAutomatic());
     }
 
-    static boolean ensureValid(List<Structure> structures, Collection<Building> rooms) {
-        return applyIfChanged(structures, resolve(structures, rooms));
+    static boolean ensureValid(Structure structure, Collection<Building> rooms) {
+        return applyIfChanged(structure, resolve(structure, rooms));
     }
 
-    static boolean setManual(List<Structure> structures,
-                             Collection<Building> rooms,
-                             int roomId) {
-        Building room = eligibleRooms(structures, rooms).get(roomId);
-        return room != null && applyIfChanged(structures, selection(room, false));
+    static boolean setManual(Structure structure, Collection<Building> rooms, int roomId) {
+        Building room = eligibleRooms(structure, rooms).get(roomId);
+        return room != null && applyIfChanged(structure, selection(room, false));
     }
 
-    static boolean useAutomatic(List<Structure> structures, Collection<Building> rooms) {
-        Selection selection = automaticSelection(structures, eligibleRooms(structures, rooms).values());
-        return selection != null && applyIfChanged(structures, selection);
+    static boolean useAutomatic(Structure structure, Collection<Building> rooms) {
+        if (structure == null) return false;
+        return applyIfChanged(structure,
+                automaticSelection(structure, eligibleRooms(structure, rooms).values()));
     }
 
-    static void transfer(List<Structure> structures,
+    static void transfer(Structure structure,
                          int removedRoomId,
                          int survivorRoomId,
                          int survivorStructureId) {
-        Structure holder = structures.stream()
-                .filter(structure -> structure.getMainRoomId() == removedRoomId)
-                .findFirst()
-                .orElse(null);
-        if (holder == null) return;
-        boolean automatic = holder.isMainRoomAutomatic();
-        apply(structures, new Selection(
-                survivorRoomId, survivorStructureId, -1, automatic));
+        if (structure == null || structure.getMainRoomId() != removedRoomId) return;
+        if (structure.getId() != survivorStructureId) {
+            structure.clearMainRoom();
+            return;
+        }
+        boolean automatic = structure.isMainRoomAutomatic();
+        apply(structure, new Selection(survivorRoomId, -1, automatic));
     }
 
-    private static Selection automaticSelection(List<Structure> structures,
+    private static Selection automaticSelection(Structure structure,
                                                 Collection<Building> eligibleRooms) {
-        Map<Integer, Structure> structuresById = new HashMap<>();
-        structures.forEach(structure -> structuresById.put(structure.getId(), structure));
         return eligibleRooms.stream()
                 .min(Comparator
-                        .comparingInt((Building room) -> surfaceDistance(room, structuresById))
+                        .comparingInt((Building room) -> surfaceDistance(room, structure))
                         .thenComparing(Comparator.comparingInt(
-                                (Building room) -> floorAnchor(room, structuresById)).reversed())
+                                (Building room) -> floorAnchor(room, structure)).reversed())
                         .thenComparingInt(Building::getId))
                 .map(room -> selection(room, true))
                 .orElse(null);
     }
 
-    private static int surfaceDistance(Building room, Map<Integer, Structure> structures) {
-        Structure structure = structures.get(room.getStructureId());
-        int floorY = floorAnchor(room, structures);
-        return structure == null ? Integer.MAX_VALUE
+    private static int surfaceDistance(Building room, Structure structure) {
+        int floorY = floorAnchor(room, structure);
+        return floorY == Integer.MIN_VALUE
+                ? Integer.MAX_VALUE
                 : Math.abs(floorY - structure.getSurfaceReferenceY());
     }
 
-    private static int floorAnchor(Building room, Map<Integer, Structure> structures) {
-        Structure structure = structures.get(room.getStructureId());
-        return structure == null ? Integer.MIN_VALUE
-                : structure.getFloor(room.getFloorId()).map(StructureFloor::anchorY)
+    private static int floorAnchor(Building room, Structure structure) {
+        return structure.getFloor(room.getFloorId())
+                .map(StructureFloor::anchorY)
                 .orElse(Integer.MIN_VALUE);
     }
 
-    private static Map<Integer, Building> eligibleRooms(List<Structure> structures,
-                                                        Collection<Building> rooms) {
-        if (structures == null || rooms == null) return Map.of();
-        Map<Integer, Structure> structuresById = new HashMap<>();
-        structures.forEach(structure -> structuresById.put(structure.getId(), structure));
-        Map<Integer, Building> eligible = new HashMap<>();
-        for (Building room : rooms) {
-            Structure structure = structuresById.get(room.getStructureId());
-            if (room.getId() >= 0 && room.isFunctionalRoom() && structure != null
-                    && structure.getFloor(room.getFloorId()).isPresent()) {
-                eligible.put(room.getId(), room);
-            }
-        }
-        return eligible;
+    private static Map<Integer, Building> eligibleRooms(Structure structure,
+                                                         Collection<Building> rooms) {
+        if (structure == null || rooms == null) return Map.of();
+        return rooms.stream()
+                .filter(room -> room.getId() >= 0)
+                .filter(Building::isFunctionalRoom)
+                .filter(room -> room.getStructureId() == structure.getId())
+                .filter(room -> structure.getFloor(room.getFloorId()).isPresent())
+                .collect(Collectors.toMap(Building::getId, room -> room, (first, ignored) -> first));
     }
 
     private static Selection selection(Building room, boolean automatic) {
-        return new Selection(room.getId(), room.getStructureId(), room.getFloorId(), automatic);
+        return new Selection(room.getId(), room.getFloorId(), automatic);
     }
 
-    private static boolean applyIfChanged(List<Structure> structures, Selection selection) {
-        if (isNormalized(structures, selection)) return false;
-        apply(structures, selection);
+    private static boolean applyIfChanged(Structure structure, Selection selection) {
+        if (isCurrent(structure, selection)) return false;
+        apply(structure, selection);
         return true;
     }
 
-    private static boolean isNormalized(List<Structure> structures, Selection selection) {
-        for (Structure structure : structures) {
-            boolean holder = selection != null && structure.getId() == selection.structureId();
-            if (holder) {
-                if (structure.getMainRoomId() != selection.roomId()
-                        || structure.isMainRoomAutomatic() != selection.automatic()) return false;
-            } else if (structure.getMainRoomId() >= 0 || !structure.isMainRoomAutomatic()) {
-                return false;
-            }
+    private static boolean isCurrent(Structure structure, Selection selection) {
+        return selection == null
+                ? structure.getMainRoomId() < 0 && structure.isMainRoomAutomatic()
+                : structure.getMainRoomId() == selection.roomId()
+                && structure.isMainRoomAutomatic() == selection.automatic();
+    }
+
+    private static void apply(Structure structure, Selection selection) {
+        if (selection == null) {
+            structure.clearMainRoom();
+        } else if (selection.automatic()) {
+            structure.setAutomaticMainRoom(selection.roomId());
+        } else {
+            structure.setManualMainRoom(selection.roomId());
         }
-        return true;
     }
 
-    private static void apply(List<Structure> structures, Selection selection) {
-        Structure holder = selection == null ? null : structures.stream()
-                .filter(structure -> structure.getId() == selection.structureId())
-                .findFirst()
-                .orElse(null);
-        if (selection != null && holder == null) return;
-        structures.forEach(Structure::clearMainRoom);
-        if (holder == null) return;
-        if (selection.automatic()) holder.setAutomaticMainRoom(selection.roomId());
-        else holder.setManualMainRoom(selection.roomId());
-    }
-
-    record Selection(int roomId, int structureId, int floorId, boolean automatic) {
+    record Selection(int roomId, int floorId, boolean automatic) {
     }
 }

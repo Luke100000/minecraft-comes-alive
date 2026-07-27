@@ -3,7 +3,6 @@ package net.conczin.mca.server.world.data;
 import net.conczin.mca.Config;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.core.Vec3i;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
@@ -21,70 +20,6 @@ final class StructureScanner {
     private static final int SURFACE_SAMPLE_MARGIN = 3;
 
     private StructureScanner() {
-    }
-
-    /**
-     * Finds the nearest enclosed physical section above a subterranean entrance Structure.
-     * Ordinary ground-level Structures never auto-register their upper storeys.
-     */
-    static Optional<Result> scanNearestSectionAbove(Level world,
-                                                     Structure origin,
-                                                     Collection<Structure> existing) {
-        if (!isSubterranean(origin)) return Optional.empty();
-
-        List<BlockPos> columns = origin.getFloors().stream()
-                .map(StructureFloor::region)
-                .filter(Objects::nonNull)
-                .flatMap(region -> region.cells().stream())
-                .map(cell -> new BlockPos(cell.getX(), 0, cell.getZ()))
-                .distinct()
-                .sorted(Comparator.comparingInt((BlockPos pos) -> pos.getX()).thenComparingInt(Vec3i::getZ))
-                .toList();
-        if (columns.isEmpty()) return Optional.empty();
-
-        List<Structure> occupied = existing == null
-                ? new ArrayList<>()
-                : new ArrayList<>(existing);
-        if (occupied.stream().noneMatch(structure -> structure.getId() == origin.getId())) {
-            occupied.add(origin);
-        }
-
-        int startY = origin.getRawPos1().getY() + 1;
-        int distance = StructureGrouping.MAX_VERTICAL_GAP + 2;
-        for (int offset = 0; offset < distance; offset++) {
-            int y = startY + offset;
-            for (BlockPos column : columns) {
-                BlockPos seed = new BlockPos(column.getX(), y, column.getZ());
-                if (!isWalkableAnchor(world, seed)) continue;
-
-                Result scan = scan(world, seed, occupied, -1);
-                if (scan.result() != Building.validationResult.SUCCESS) continue;
-                Structure candidate = scan.toStructure(-1);
-                if (StructureGrouping.sharesGroupProximity(origin, candidate)) {
-                    return Optional.of(scan);
-                }
-            }
-        }
-        return Optional.empty();
-    }
-
-    static boolean isSubterranean(Structure structure) {
-        if (structure == null || structure.getFloors().isEmpty()) return false;
-        int highestAnchorY = structure.getFloors().stream()
-                .mapToInt(StructureFloor::anchorY)
-                .max().orElse(structure.getSurfaceReferenceY());
-        return highestAnchorY < structure.getSurfaceReferenceY() - 1;
-    }
-
-    /** Chooses the first physical Floor above the entrance, never a later upper storey. */
-    static Optional<StructureFloor> nearestFloorAbove(Structure origin, Structure candidate) {
-        if (origin == null || candidate == null || origin.getFloors().isEmpty()) return Optional.empty();
-        int highestOriginAnchorY = origin.getFloors().stream()
-                .mapToInt(StructureFloor::anchorY)
-                .max().orElse(Integer.MIN_VALUE);
-        return candidate.getFloors().stream()
-                .filter(floor -> floor.anchorY() > highestOriginAnchorY)
-                .min(Comparator.comparingInt(StructureFloor::anchorY));
     }
 
     static Optional<BlockPos> nearestFloorCell(StructureFloor floor, BlockPos reference) {
@@ -272,6 +207,8 @@ final class StructureScanner {
                                                                  BlockState state,
                                                                  Map<BlockPos, Boolean> roof) {
         if (!isOpen(world, pos, state)) return WalkableAnchorDecision.BLOCKED;
+        BlockPos head = pos.above();
+        if (!isOpen(world, head, world.getBlockState(head))) return WalkableAnchorDecision.BLOCKED_HEADROOM;
         if (!isSupported(world, pos.getX(), pos.getY(), pos.getZ())) return WalkableAnchorDecision.UNSUPPORTED;
         if (!hasRoof(world, pos, roof)) return WalkableAnchorDecision.NO_ROOF;
         return WalkableAnchorDecision.ACCEPTED;
@@ -283,7 +220,7 @@ final class StructureScanner {
     }
 
     enum WalkableAnchorDecision {
-        ACCEPTED, BLOCKED, UNSUPPORTED, NO_ROOF
+        ACCEPTED, BLOCKED, BLOCKED_HEADROOM, UNSUPPORTED, NO_ROOF
     }
 
     private static void enqueueTraversal(BlockPos source,
@@ -353,10 +290,8 @@ final class StructureScanner {
             for (int rise = 1; rise <= ROOF_SEARCH; rise++) {
                 BlockPos probe = new BlockPos(cell.getX(), region.anchorY() + rise, cell.getZ());
                 BlockState state = world.getBlockState(probe);
-                if (!state.isAir()) {
-                    if (!state.is(BlockTags.LEAVES)) {
-                        ceiling = Math.max(ceiling, probe.getY());
-                    }
+                if (isRoofBlock(world, probe, state)) {
+                    ceiling = Math.max(ceiling, probe.getY());
                     break;
                 }
             }
@@ -373,6 +308,7 @@ final class StructureScanner {
                                           int maxRadius) {
         BlockState state = world.getBlockState(side);
         if (!isOpen(world, side, state)
+                || !isOpen(world, side.above(), world.getBlockState(side.above()))
                 || !isSupported(world, side.getX(), side.getY(), side.getZ())) {
             return false;
         }
@@ -411,10 +347,8 @@ final class StructureScanner {
                     }
                     BlockState nextState = world.getBlockState(next);
                     if (StructureConnector.isConnector(nextState) || !isOpen(world, next, nextState)
+                            || !isOpen(world, next.above(), world.getBlockState(next.above()))
                             || !isSupported(world, next.getX(), next.getY(), next.getZ())) {
-                        continue;
-                    }
-                    if (dy != 0 && !isOpen(world, next.above(), world.getBlockState(next.above()))) {
                         continue;
                     }
                     double delta = floorSurface(world, next) - currentFloor;
@@ -484,10 +418,7 @@ final class StructureScanner {
     }
 
     private static boolean isOpen(Level world, BlockPos pos, BlockState state) {
-        return !state.getFluidState().isEmpty()
-                || state.isAir()
-                || state.canBeReplaced()
-                || state.getCollisionShape(world, pos).isEmpty();
+        return state.getFluidState().isEmpty() && state.getCollisionShape(world, pos).isEmpty();
     }
 
     private static boolean isFloorOccupyingObstacle(Level world,
@@ -525,15 +456,20 @@ final class StructureScanner {
             checked.add(cursor);
             BlockPos above = cursor.above();
             BlockState state = world.getBlockState(above);
-            if (!state.isAir()) {
-                boolean result = !state.is(BlockTags.LEAVES);
-                checked.forEach(cell -> cache.put(cell, result));
-                return result;
+            if (isRoofBlock(world, above, state)) {
+                checked.forEach(cell -> cache.put(cell, true));
+                return true;
             }
             cursor = above;
         }
         checked.forEach(cell -> cache.put(cell, false));
         return false;
+    }
+
+    private static boolean isRoofBlock(Level world, BlockPos pos, BlockState state) {
+        return state.getFluidState().isEmpty()
+                && !state.is(BlockTags.LEAVES)
+                && !state.getCollisionShape(world, pos).isEmpty();
     }
 
     static boolean isSupported(Level world, int x, int floorY, int z) {

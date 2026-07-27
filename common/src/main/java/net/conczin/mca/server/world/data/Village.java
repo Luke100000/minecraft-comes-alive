@@ -219,6 +219,14 @@ public class Village implements Iterable<Building> {
 
     public Optional<Structure> getStructureAt(Vec3i pos) {
         return structures.values().stream()
+                .filter(structure -> structure.nearestFloorAtColumn(pos).isPresent())
+                .min(Comparator.comparingInt((Structure structure) ->
+                                structure.verticalDistanceToColumn(pos))
+                        .thenComparingInt(Structure::getId));
+    }
+
+    Optional<Structure> getExactStructureAt(Vec3i pos) {
+        return structures.values().stream()
                 .filter(structure -> structure.containsPos(pos))
                 .min(Comparator.comparingInt(Structure::getId));
     }
@@ -422,7 +430,7 @@ public class Village implements Iterable<Building> {
     }
 
     public int getStructureCount() {
-        return (int) structures.values().stream().mapToInt(Structure::getStructureGroupId).distinct().count()
+        return structures.size()
                 + (int) externalBuildings.values().stream().filter(Building::isComplete).count();
     }
 
@@ -431,20 +439,8 @@ public class Village implements Iterable<Building> {
     public StructuralPosition getStructuralPosition(Vec3i pos) { return getStructuralLookup(pos).position(); }
     public StructuralPosition getStructuralPosition(Level level, BlockPos pos) { return getStructuralLookup(level, pos).position(); }
 
-    /**
-     * Classifies the scan button without pretending an unregistered physical section already exists.
-     * A fresh scan that directly touches an existing logical Structure group is Add Room; otherwise it
-     * remains Add Building.
-     */
     public StructuralPosition getRoomScanPosition(Level level, BlockPos pos) {
-        StructuralPosition persisted = getStructuralPosition(level, pos);
-        if (persisted != StructuralPosition.OUTSIDE) return persisted;
-
-        StructureScanner.Result scan = StructureScanner.scan(level, pos, structures.values(), -1);
-        if (scan.result() != Building.validationResult.SUCCESS) return StructuralPosition.OUTSIDE;
-        return StructureGrouping.findAttachedGroupId(this, scan.toStructure(-1)).isPresent()
-                ? StructuralPosition.ATTACHABLE_ROOM
-                : StructuralPosition.OUTSIDE;
+        return getStructuralPosition(level, pos);
     }
 
     public StructuralLookup getStructuralLookup(Vec3i pos) {
@@ -473,15 +469,29 @@ public class Village implements Iterable<Building> {
         return resolveInteractionPosition(level, pos).map(ResolvedInteraction::structure);
     }
 
+    Optional<Structure> getDirectInteractionStructureAt(Level level, BlockPos pos) {
+        return resolveInteractionPosition(level, pos, false).map(ResolvedInteraction::structure);
+    }
+
     private Optional<ResolvedInteraction> resolveInteractionPosition(Level level, BlockPos pos) {
+        return resolveInteractionPosition(level, pos, true);
+    }
+
+    private Optional<ResolvedInteraction> resolveInteractionPosition(Level level,
+                                                                      BlockPos pos,
+                                                                      boolean allowNearestColumn) {
         Map<Integer, List<Building>> roomsByStructure = getRooms()
                 .collect(Collectors.groupingBy(Building::getStructureId));
         return structures.values().stream()
-                .map(structure -> new ResolvedInteraction(structure, structure.resolveInteractionPosition(
-                        level, pos, roomsByStructure.getOrDefault(structure.getId(), List.of())).orElse(null)))
+                .map(structure -> new ResolvedInteraction(structure, (allowNearestColumn
+                        ? structure.resolveInteractionPosition(level, pos,
+                        roomsByStructure.getOrDefault(structure.getId(), List.of()))
+                        : structure.resolveDirectInteractionPosition(level, pos,
+                        roomsByStructure.getOrDefault(structure.getId(), List.of()))).orElse(null)))
                 .filter(resolved -> resolved.position() != null)
                 .min(Comparator
                         .comparing((ResolvedInteraction resolved) -> resolved.position().room() == null)
+                        .thenComparingInt(resolved -> resolved.structure().verticalDistanceToColumn(pos))
                         .thenComparingInt(resolved -> resolved.structure().getId()));
     }
 
@@ -503,7 +513,7 @@ public class Village implements Iterable<Building> {
             return getRooms().filter(room -> room.containsFloorPosition(pos))
                     .min(Comparator.comparingInt(Building::getId));
         }
-        StructureFloor floor = structure.get().physicalFloorAt(pos).orElse(null);
+        StructureFloor floor = structure.get().nearestFloorAtColumn(pos).orElse(null);
         if (floor == null) return Optional.empty();
         return getRooms().filter(room -> room.getStructureId() == structure.get().getId())
                 .filter(room -> room.getFloorId() == floor.id())
@@ -531,7 +541,7 @@ public class Village implements Iterable<Building> {
         Structure structure = getStructureFor(room).orElse(null);
         if (structure == null) return false;
         boolean changed = MainRoomSelector.setManual(
-                getBuildingStructures(structure), getRooms().toList(), room.getId());
+                structure, getRooms().toList(), room.getId());
         if (!changed) return false;
         markDirty();
         return true;
@@ -540,7 +550,7 @@ public class Village implements Iterable<Building> {
     public boolean useAutomaticMainRoom(Structure structure) {
         if (structure == null || !structures.containsKey(structure.getId())) return false;
         boolean changed = MainRoomSelector.useAutomatic(
-                getBuildingStructures(structure), getRooms().toList());
+                structure, getRooms().toList());
         if (!changed) return false;
         markDirty();
         return true;
@@ -548,7 +558,7 @@ public class Village implements Iterable<Building> {
 
     void refreshAutomaticMainRoom(Structure structure) {
         if (structure == null || !isMainRoomAutomatic(structure)) return;
-        if (MainRoomSelector.useAutomatic(getBuildingStructures(structure), getRooms().toList())) {
+        if (MainRoomSelector.useAutomatic(structure, getRooms().toList())) {
             markDirty();
         }
     }
@@ -557,29 +567,18 @@ public class Village implements Iterable<Building> {
         return structure != null && structure.isMainRoomAutomatic();
     }
 
-    List<Structure> getBuildingStructures(Structure structure) {
-        if (structure == null) return List.of();
-        int groupId = structure.getStructureGroupId();
-        return structures.values().stream()
-                .filter(s -> s.getStructureGroupId() == groupId)
-                .toList();
-    }
-
     void transferMainRoom(Structure structure,
                           int removedRoomId,
                           int survivorRoomId,
                           int survivorStructureId) {
-        MainRoomSelector.transfer(getBuildingStructures(structure),
-                removedRoomId, survivorRoomId, survivorStructureId);
+        MainRoomSelector.transfer(structure, removedRoomId, survivorRoomId, survivorStructureId);
     }
 
     void ensureMainRooms() {
         boolean changed = false;
         List<Building> rooms = getRooms().toList();
-        Map<Integer, List<Structure>> groups = structures.values().stream()
-                .collect(Collectors.groupingBy(Structure::getStructureGroupId));
-        for (List<Structure> group : groups.values()) {
-            changed |= MainRoomSelector.ensureValid(group, rooms);
+        for (Structure structure : structures.values()) {
+            changed |= MainRoomSelector.ensureValid(structure, rooms);
         }
         if (changed) markDirty();
     }

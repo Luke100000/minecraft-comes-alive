@@ -107,6 +107,7 @@ final class StructureConnector {
 
     static boolean isPassageCell(Level world, BlockPos pos) {
         BlockState state = world.getBlockState(pos);
+        if (!state.getFluidState().isEmpty()) return false;
         if (state.getBlock() instanceof DoorBlock || state.getBlock() instanceof FenceGateBlock
                 || state.getBlock() instanceof TrapDoorBlock) return false;
         return state.getBlock() instanceof LadderBlock || state.isAir() || state.canBeReplaced()

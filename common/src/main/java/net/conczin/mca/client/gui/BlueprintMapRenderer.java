@@ -222,8 +222,8 @@ final class BlueprintMapRenderer implements AutoCloseable {
                 drawScaledBuildingIcon(
                         context,
                         ICON_TEXTURES,
-                        iconLayer.iconX() + iconLayer.screenOffsetX() / viewport.scale(),
-                        iconLayer.iconZ() + iconLayer.screenOffsetY() / viewport.scale(),
+                        iconLayer.iconX(),
+                        iconLayer.iconZ(),
                         buildingType.iconU(), buildingType.iconV(),
                         iconScale / viewport.scale()
                 );

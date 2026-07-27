@@ -191,7 +191,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         if (externalType != null) return processExternalBuilding(pos, externalType);
 
         Village village = findNearestVillage(pos, Village.MERGE_MARGIN).orElse(null);
-        if (village != null && village.getInteractionStructureAt(world, pos).isPresent()) {
+        if (village != null && village.getDirectInteractionStructureAt(world, pos).isPresent()) {
             // Auto Scan never registers optional Rooms inside known Structures.
             return Building.validationResult.SUCCESS;
         }
@@ -245,7 +245,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
     private BuildingScanResult analyzeInitialRoom(BlockPos pos) {
         Village village = findNearestVillage(pos, Village.MERGE_MARGIN).orElse(null);
         Collection<Structure> existing = village == null ? List.of() : village.getStructures().values();
-        if (village != null && village.getInteractionStructureAt(world, pos).isPresent()) {
+        if (village != null && village.getDirectInteractionStructureAt(world, pos).isPresent()) {
             return failedRoom(Building.validationResult.IDENTICAL, pos, village);
         }
 
@@ -260,7 +260,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
 
     public BuildingScanResult analyzeRoom(BlockPos pos) {
         Village village = findNearestVillage(pos, Village.MERGE_MARGIN).orElse(null);
-        Structure structure = village == null ? null : village.getInteractionStructureAt(world, pos).orElse(null);
+        Structure structure = village == null ? null : village.getDirectInteractionStructureAt(world, pos).orElse(null);
         if (structure == null) return failedRoom(Building.validationResult.NOT_IN_BUILDING, pos, village);
         if (village.getFunctionalRoomAt(world, pos).isPresent()) {
             return failedRoom(Building.validationResult.IDENTICAL, pos, village);
@@ -310,7 +310,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
                 .collect(java.util.stream.Collectors.toSet());
         List<BuildingScanResult> scanned = BuildingRoomScanner.partitionRegistered(
                         world, pos, Config.getInstance().maxBuildingSize,
-                        Config.getInstance().maxBuildingRadius, floor, registeredCells).stream()
+                        floor, registeredCells).stream()
                 .map(geometry -> roomResultFromGeometry(village, structure, floor, geometry, -1))
                 .toList();
         if (scanned.isEmpty()) {
@@ -353,7 +353,9 @@ public class VillageManager extends SavedData implements Iterable<Village> {
                                                    int existingRoomId) {
         return existingRoomId >= 0 && village != null
                 ? village.getBuilding(existingRoomId).flatMap(room -> structure.getFloor(room.getFloorId())).orElse(null)
-                : structure.floorAtHeight(pos.getY()).orElse(null);
+                : structure.nearestFloorAtColumn(pos)
+                .or(() -> structure.floorAtHeight(pos.getY()))
+                .orElse(null);
     }
     private static Set<BlockPos> registeredRoomCells(Village village,
                                                      int structureId,
@@ -375,8 +377,8 @@ public class VillageManager extends SavedData implements Iterable<Village> {
                                                 int existingRoomId,
                                                 StructureFloor floor,
                                                 Set<BlockPos> blocked) {
-        BuildingRoomScanner.Result geometry = BuildingRoomScanner.scan(world, pos, blocked,
-                Config.getInstance().maxBuildingSize, Config.getInstance().maxBuildingRadius, floor);
+        BuildingRoomScanner.Result geometry = BuildingRoomScanner.scan(
+                world, pos, blocked, Config.getInstance().maxBuildingSize, floor);
         return roomResultFromGeometry(village, structure, floor, geometry, existingRoomId);
     }
 
@@ -429,7 +431,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         if (village == null) village = new Village(lastVillageId++, world);
 
         Structure structure = scan.pendingStructure();
-        if (village.getStructureAt(structure.getSource()).isPresent()) {
+        if (village.getExactStructureAt(structure.getSource()).isPresent()) {
             return Building.validationResult.IDENTICAL;
         }
 
@@ -437,7 +439,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         String category = chooseInitialRoomCategory(scan, forcedType);
         if (category == null) return Building.validationResult.INVALID_TYPE;
 
-        int groupId = registerInitialRoom(village, structure, room, category, forcedType != null);
+        registerInitialRoom(village, structure, room, category, forcedType != null);
 
         // Case 1: Initial Structure itself contains an unregistered Floor above the initial room
         StructureFloor initialFloor = structure.getFloor(room.getFloorId()).orElse(null);
@@ -460,40 +462,17 @@ public class VillageManager extends SavedData implements Iterable<Village> {
             }
         }
 
-        // Case 2: An external basement entrance can be physically disconnected from the Building above.
-        // Register only the nearest physical Floor above the basement. A discovery seed on Floor 1
-        // must not skip the closer Ground Floor contained by the same scanned Structure.
-        StructureScanner.Result stackedScan = StructureScanner.scanNearestSectionAbove(
-                world, structure, village.getStructures().values()).orElse(null);
-        if (stackedScan != null) {
-            Structure stacked = stackedScan.toStructure(-1);
-            StructureFloor nearestFloor = StructureScanner.nearestFloorAbove(structure, stacked).orElse(null);
-            BlockPos nearestSource = StructureScanner.nearestFloorCell(
-                    nearestFloor, structure.getSource()).orElse(null);
-            if (nearestFloor != null && nearestSource != null) {
-                BuildingScanResult stackedRoom = scanResolvedRoom(
-                        village, stacked, nearestSource, -1, nearestFloor, Set.of());
-                if (stackedRoom.result() == Building.validationResult.SUCCESS) {
-                    String stackedCategory = chooseInitialRoomCategory(stackedRoom, null);
-                    if (stackedCategory != null) {
-                        groupId = registerInitialRoom(
-                                village, stacked, stackedRoom.building(), stackedCategory, false);
-                    }
-                }
-            }
-        }
-
-        StructureGrouping.renumberStructureGroup(village, groupId);
+        structure.renumberFloors();
         villages.put(village.getId(), village);
         finalizeVillageMutation(village);
         return Building.validationResult.SUCCESS;
     }
 
-    private int registerInitialRoom(Village village,
-                                    Structure structure,
-                                    Building room,
-                                    String category,
-                                    boolean typeForced) {
+    private void registerInitialRoom(Village village,
+                                     Structure structure,
+                                     Building room,
+                                     String category,
+                                     boolean typeForced) {
         int structureId;
         if (structure.getId() >= 0 && village.getStructure(structure.getId()).isPresent()) {
             structureId = structure.getId();
@@ -501,7 +480,6 @@ public class VillageManager extends SavedData implements Iterable<Village> {
             structureId = lastBuildingId++;
             structure.setId(structureId);
         }
-        int groupId = StructureGrouping.attachStructureGroup(village, structure);
         room.setId(lastBuildingId++);
         room.setStructureId(structureId);
         room.setType(category);
@@ -516,14 +494,13 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         if (floor != null) {
             registerExtraFloorRooms(village, structure, floor);
         }
-        return groupId;
+        structure.renumberFloors();
     }
 
     private void registerExtraFloorRooms(Village village, Structure structure, StructureFloor floor) {
         int maxSize = Config.getInstance().maxBuildingSize;
-        int maxRadius = Config.getInstance().maxBuildingRadius;
         List<BuildingRoomScanner.Result> results = BuildingRoomScanner.partition(
-                world, structure.getSource(), maxSize, maxRadius, floor);
+                world, structure.getSource(), maxSize, floor);
         if (results.isEmpty()) return;
 
         List<Building> existingFloorRooms = village.getRooms()
@@ -719,7 +696,6 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         // commit together. A failed match leaves the persisted Structure untouched.
         Structure updated = new Structure(structure.save());
         if (!updated.applyScan(scan, rooms)) return Building.validationResult.OVERLAP;
-        int previousGroupId = structure.getStructureGroupId();
 
         List<RegisteredRoomUpdate> roomUpdates = new ArrayList<>();
         Map<Integer, List<Building>> roomsByFloor = rooms.stream()
@@ -754,11 +730,6 @@ public class VillageManager extends SavedData implements Iterable<Village> {
             structureSnapshots.forEach((id, snapshot) -> village.getStructures().put(id, snapshot));
             lastBuildingId = previousLastBuildingId;
             return result;
-        }
-        int groupId = StructureGrouping.attachStructureGroup(village, updated);
-        StructureGrouping.renumberStructureGroup(village, groupId);
-        if (previousGroupId != groupId) {
-            StructureGrouping.renumberStructureGroup(village, previousGroupId);
         }
         finalizeVillageMutation(village);
         return Building.validationResult.SUCCESS;
@@ -804,33 +775,22 @@ public class VillageManager extends SavedData implements Iterable<Village> {
     }
 
     public BuildingEditResult removeBuilding(BlockPos pos) {
-        net.conczin.mca.MCA.LOGGER.info("[MCA-RemoveBuilding] start pos={}", pos);
         Village village = findNearestVillage(pos, Village.PLAYER_BORDER_MARGIN).orElse(null);
-        if (village == null) {
-            net.conczin.mca.MCA.LOGGER.info("[MCA-RemoveBuilding] result=NO_BUILDING reason=village_null pos={}", pos);
-            return BuildingEditResult.NO_BUILDING;
-        }
+        if (village == null) return BuildingEditResult.NO_BUILDING;
         Building target = village.getBuildingTarget(pos).orElse(null);
-        net.conczin.mca.MCA.LOGGER.info("[MCA-RemoveBuilding] village={} target={}", village.getId(), target != null ? target.getId() : "null");
         if (target instanceof ExternalBuilding) {
             village.removeBuilding(target.getId());
-            net.conczin.mca.MCA.LOGGER.info("[MCA-RemoveBuilding] result=SUCCESS externalBuilding={}", target.getId());
             return BuildingEditResult.SUCCESS;
         }
         if (target != null && target.isFunctionalRoom() && village.getStructure(target.getStructureId()).isEmpty()) {
             int orphanedStructureId = target.getStructureId();
             List<Integer> orphanedRoomIds = village.getBuildings().values().stream()
-                    .filter(b -> b.getStructureId() == orphanedStructureId)
+                    .filter(building -> building.getStructureId() == orphanedStructureId)
                     .map(Building::getId)
                     .toList();
-            net.conczin.mca.MCA.LOGGER.info("[MCA-RemoveBuilding] removing orphaned rooms={}", orphanedRoomIds);
-            if (orphanedRoomIds.isEmpty()) {
-                village.removeBuilding(target.getId());
-            } else {
-                orphanedRoomIds.forEach(village::removeBuilding);
-            }
+            if (orphanedRoomIds.isEmpty()) village.removeBuilding(target.getId());
+            else orphanedRoomIds.forEach(village::removeBuilding);
             setDirty();
-            net.conczin.mca.MCA.LOGGER.info("[MCA-RemoveBuilding] result=SUCCESS (purged orphaned rooms)");
             return BuildingEditResult.SUCCESS;
         }
         Structure structure = target != null && target.isFunctionalRoom()
@@ -838,29 +798,14 @@ public class VillageManager extends SavedData implements Iterable<Village> {
                 : village.getStructureAt(pos)
                 .or(() -> village.getInteractionStructureAt(world, pos))
                 .orElse(null);
-        if (structure == null) {
-            net.conczin.mca.MCA.LOGGER.info("[MCA-RemoveBuilding] result=NO_BUILDING reason=structure_null pos={}", pos);
-            return BuildingEditResult.NO_BUILDING;
-        }
-        List<Structure> groupStructures = new java.util.ArrayList<>(village.getBuildingStructures(structure));
-        if (!groupStructures.contains(structure)) {
-            groupStructures.add(structure);
-        }
-        Set<Integer> groupStructureIds = groupStructures.stream()
-                .map(Structure::getId)
-                .collect(java.util.stream.Collectors.toSet());
+        if (structure == null) return BuildingEditResult.NO_BUILDING;
 
-        Set<Integer> roomIdsToRemove = new java.util.HashSet<>();
-        if (target != null && target.isFunctionalRoom()) {
-            roomIdsToRemove.add(target.getId());
-        }
-        village.getBuildings().values().stream()
-                .filter(b -> groupStructureIds.contains(b.getStructureId()) || b.getStructureId() == structure.getId())
-                .forEach(b -> roomIdsToRemove.add(b.getId()));
-
-        net.conczin.mca.MCA.LOGGER.info("[MCA-RemoveBuilding] removing groupStructures={} roomIdsToRemove={}", groupStructureIds, roomIdsToRemove);
+        List<Integer> roomIdsToRemove = village.getBuildings().values().stream()
+                .filter(building -> building.getStructureId() == structure.getId())
+                .map(Building::getId)
+                .toList();
         roomIdsToRemove.forEach(village::removeBuilding);
-        groupStructures.forEach(s -> village.removeStructure(s.getId()));
+        village.removeStructure(structure.getId());
 
         if (village.getBuildings().isEmpty() && village.getExternalBuildingMap().isEmpty()
                 && village.getStructures().isEmpty()) {
@@ -869,7 +814,6 @@ public class VillageManager extends SavedData implements Iterable<Village> {
             finalizeVillageMutation(village);
         }
         setDirty();
-        net.conczin.mca.MCA.LOGGER.info("[MCA-RemoveBuilding] result=SUCCESS");
         return BuildingEditResult.SUCCESS;
     }
 

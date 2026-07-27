@@ -3,7 +3,6 @@ package net.conczin.mca.client.gui;
 import net.conczin.mca.resources.data.BuildingType;
 import net.conczin.mca.server.world.data.Building;
 import net.conczin.mca.server.world.data.RoomTypeResolver;
-import net.conczin.mca.server.world.data.Structure;
 import net.conczin.mca.server.world.data.Village;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
@@ -168,24 +167,16 @@ final class BlueprintTooltipFactory {
     }
 
     private List<Building> structureTooltipBuildings(Building building) {
-        if (!building.isFunctionalRoom() || building.getBuildingType().grouped()) return List.of(building);
+        if (!building.isFunctionalRoom() || building.getBuildingType().grouped() || village == null) {
+            return List.of(building);
+        }
 
         int structureId = building.getEffectiveStructureId();
-        Structure targetStruct = village == null ? null : village.getStructure(structureId).orElse(null);
-        int groupId = targetStruct != null ? targetStruct.getStructureGroupId() : structureId;
-
-        return village == null ? List.of(building) : village.getBuildings().values().stream()
+        return village.getRooms()
                 .filter(Building::isComplete)
-                .filter(Building::isFunctionalRoom)
-                .filter(candidate -> {
-                    int cStructureId = candidate.getEffectiveStructureId();
-                    if (cStructureId == structureId) return true;
-                    Structure cStruct = village.getStructure(cStructureId).orElse(null);
-                    if (cStruct == null) return false;
-                    if (cStruct.getStructureGroupId() == groupId) return true;
-                    return targetStruct != null && cStruct.containsPosHorizontally(targetStruct.getSource());
-                })
-                .sorted(Comparator.comparingInt((Building b) -> b.getFloorNumber(village)).thenComparingInt(Building::getId))
+                .filter(candidate -> candidate.getEffectiveStructureId() == structureId)
+                .sorted(Comparator.comparingInt((Building room) -> room.getFloorNumber(village))
+                        .thenComparingInt(Building::getId))
                 .toList();
     }
 

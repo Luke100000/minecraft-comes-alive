@@ -41,7 +41,7 @@ public final class BuildingDiagnostics {
             return new Result(traceId, lookup.position(), uiAction, verdict);
         }
 
-        Structure structureAt = village.getStructureAt(pos).orElse(null);
+        Structure structureAt = village.getExactStructureAt(pos).orElse(null);
         Structure interactionStructure = village.getInteractionStructureAt(world, pos).orElse(null);
         Structure nearestStructure = nearestStructure(village, pos);
         Structure inspected = interactionStructure != null
@@ -63,11 +63,10 @@ public final class BuildingDiagnostics {
             log(traceId, "structure id={} source={} bounds={}..{} containsPos={} connectorAttaches={} logicalFloor={} physicalFloor={}",
                     inspected.getId(), inspected.getSource(), inspected.getRawPos0(), inspected.getRawPos1(),
                     contains, attaches, floor(logicalFloor), floor(physicalFloor));
-            log(traceId, "persistentFloors={} surfaceReferenceY={} storedMainRoomId={} storedMainRoomMode={} structureGroupId={}",
+            log(traceId, "persistentFloors={} surfaceReferenceY={} storedMainRoomId={} storedMainRoomMode={}",
                     floors(inspected.getFloors()),
                     inspected.getSurfaceReferenceY(),
-                    inspected.getMainRoomId(), inspected.isMainRoomAutomatic() ? "AUTOMATIC" : "MANUAL",
-                    inspected.getStructureGroupId());
+                    inspected.getMainRoomId(), inspected.isMainRoomAutomatic() ? "AUTOMATIC" : "MANUAL");
 
             if (room != null) {
                 StructureFloor roomFloor = inspected.getFloor(room.getFloorId()).orElse(null);
