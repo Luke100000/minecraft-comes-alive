@@ -551,6 +551,7 @@
   "blueprint.roomUpdateConflict": "The room changed before the update finished. Try again.",
   "blueprint.roomAlreadyAdded": "This space is already part of a registered room.",
   "blueprint.roomRemoved": "Room removed.",
+  "blueprint.buildingRemoved": "Building removed.",
   "blueprint.noRoomOnFloor": "You are not standing in a registered room.",
   "gui.blueprint.buildingTypes": "Select a building to see its requirements. Once you have built a room, stand inside it and choose \"Add Room\" on the map page.",
   "gui.blueprint.empty": "There is no village! Add the first room to start a new village!",

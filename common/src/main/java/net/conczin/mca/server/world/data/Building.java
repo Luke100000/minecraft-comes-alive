@@ -225,11 +225,20 @@ public class Building implements VillageBuilding {
     }
 
     public int getFloorNumber(Village village) {
-        if (village == null || structureId < 0 || floorId < 0) return 0;
-        return village.getStructure(structureId)
-                .flatMap(structure -> structure.getFloor(floorId))
-                .map(StructureFloor::floorNumber)
-                .orElse(0);
+        if (village == null || structureId < 0) return 0;
+        Structure s = village.getStructure(structureId).orElse(null);
+        if (s != null && floorId >= 0) {
+            Optional<StructureFloor> f = s.getFloor(floorId);
+            if (f.isPresent()) return f.get().floorNumber();
+        }
+        if (s != null) {
+            int surfaceY = s.getSurfaceReferenceY();
+            int roomY = getFloorY();
+            if (roomY < surfaceY) {
+                return (roomY - surfaceY) / 4 - 1;
+            }
+        }
+        return 0;
     }
 
     public boolean isFunctionalRoom() {

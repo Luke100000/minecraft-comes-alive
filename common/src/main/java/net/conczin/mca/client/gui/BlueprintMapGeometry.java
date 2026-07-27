@@ -91,7 +91,6 @@ final class BlueprintMapGeometry {
             LinkedHashSet<BlueprintMapFootprint.Cell> outlineBaseCells = new LinkedHashSet<>();
             for (Structure s : group) {
                 for (StructureFloor f : s.getFloors()) {
-                    if (f.floorNumber() < 0) continue;
                     if (f.region() != null) {
                         outlineBaseCells.addAll(BlueprintMapFootprint.fromFloorRegions(List.of(f.region())));
                     }

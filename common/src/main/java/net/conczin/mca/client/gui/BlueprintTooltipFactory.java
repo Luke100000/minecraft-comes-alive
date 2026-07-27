@@ -125,15 +125,45 @@ final class BlueprintTooltipFactory {
         return List.copyOf(lines);
     }
 
-    /** Main already lists inherited POIs, so avoid a duplicate inherited type section in aggregate hover. */
     private void appendAggregateRooms(List<Component> lines, List<Building> rooms) {
         List<RoomTypeResolver.Context> resolvedRooms = rooms.stream()
                 .map(roomTypeResolver::resolve)
                 .toList();
-        boolean mainVisible = resolvedRooms.stream().anyMatch(RoomTypeResolver.Context::isMainRoom);
+
+        Map<BuildingType, List<RoomTypeResolver.Context>> grouped = new LinkedHashMap<>();
         for (RoomTypeResolver.Context resolved : resolvedRooms) {
-            if (mainVisible && resolved.contributesToMain()) continue;
-            appendRoom(lines, resolved.room(), resolved);
+            BuildingType presentationType = roomTypeResolver.presentationType(resolved);
+            if (presentationType == null) presentationType = resolved.room().getBuildingType();
+            grouped.computeIfAbsent(presentationType, k -> new ArrayList<>()).add(resolved);
+        }
+
+        for (Map.Entry<BuildingType, List<RoomTypeResolver.Context>> entry : grouped.entrySet()) {
+            BuildingType type = entry.getKey();
+            List<RoomTypeResolver.Context> typeRooms = entry.getValue();
+
+            lines.add(Component.literal("  ").append(typeLabel(type)));
+
+            boolean anyMain = typeRooms.stream().anyMatch(RoomTypeResolver.Context::isMainRoom);
+            if (anyMain) {
+                lines.add(Component.literal("    ").append(Component.translatable(
+                        "gui.blueprint.roomTooltip.mainRoom").withStyle(ChatFormatting.GOLD)));
+            }
+
+            Set<String> residents = new LinkedHashSet<>();
+            typeRooms.forEach(ctx -> village.getResidents(ctx.room().getId()).forEach(residents::add));
+            residents.forEach(name ->
+                    lines.add(Component.literal("    ").append(Component.literal(name).withStyle(ChatFormatting.GRAY))));
+
+            Map<ResourceLocation, List<BlockPos>> combinedPoi = new LinkedHashMap<>();
+            typeRooms.forEach(ctx -> ctx.ownPoi().forEach((k, v) ->
+                    combinedPoi.computeIfAbsent(k, key -> new ArrayList<>()).addAll(v)));
+
+            if (!combinedPoi.isEmpty()) {
+                lines.add(Component.literal("    ").append(Component.translatable(
+                        "gui.blueprint.roomTooltip.roomPoi").withStyle(ChatFormatting.GRAY, ChatFormatting.ITALIC)));
+                poiLines(combinedPoi).forEach(item ->
+                        lines.add(Component.literal("      ").append(item)));
+            }
         }
     }
 
@@ -141,17 +171,21 @@ final class BlueprintTooltipFactory {
         if (!building.isFunctionalRoom() || building.getBuildingType().grouped()) return List.of(building);
 
         int structureId = building.getEffectiveStructureId();
-        int groupId = village == null ? structureId : village.getStructure(structureId)
-                .map(Structure::getStructureGroupId).orElse(structureId);
+        Structure targetStruct = village == null ? null : village.getStructure(structureId).orElse(null);
+        int groupId = targetStruct != null ? targetStruct.getStructureGroupId() : structureId;
+
         return village == null ? List.of(building) : village.getBuildings().values().stream()
                 .filter(Building::isComplete)
                 .filter(Building::isFunctionalRoom)
                 .filter(candidate -> {
                     int cStructureId = candidate.getEffectiveStructureId();
-                    int cGroupId = village.getStructure(cStructureId).map(Structure::getStructureGroupId).orElse(cStructureId);
-                    return cGroupId == groupId;
+                    if (cStructureId == structureId) return true;
+                    Structure cStruct = village.getStructure(cStructureId).orElse(null);
+                    if (cStruct == null) return false;
+                    if (cStruct.getStructureGroupId() == groupId) return true;
+                    return targetStruct != null && cStruct.containsPosHorizontally(targetStruct.getSource());
                 })
-                .sorted(Comparator.comparingInt(Building::getId))
+                .sorted(Comparator.comparingInt((Building b) -> b.getFloorNumber(village)).thenComparingInt(Building::getId))
                 .toList();
     }
 

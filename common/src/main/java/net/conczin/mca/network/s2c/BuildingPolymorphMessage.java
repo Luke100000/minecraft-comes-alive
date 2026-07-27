@@ -23,7 +23,7 @@ public record BuildingPolymorphMessage(List<String> matchingTypes,
     public static final StreamCodec<FriendlyByteBuf, BuildingPolymorphMessage> STREAM_CODEC = StreamCodec.composite(
             ByteBufCodecs.collection(ArrayList::new, ByteBufCodecs.STRING_UTF8), BuildingPolymorphMessage::matchingTypes,
             BlockPos.STREAM_CODEC, BuildingPolymorphMessage::scanPos,
-            ByteBufCodecs.idMapper(i -> ReportBuildingMessage.Action.values()[i], ReportBuildingMessage.Action::ordinal), BuildingPolymorphMessage::action,
+            ByteBufCodecs.idMapper(i -> i >= 0 && i < ReportBuildingMessage.Action.VALUES.length ? ReportBuildingMessage.Action.VALUES[i] : ReportBuildingMessage.Action.AUTO_SCAN, ReportBuildingMessage.Action::ordinal), BuildingPolymorphMessage::action,
             ByteBufCodecs.VAR_INT, BuildingPolymorphMessage::expectedRoomId,
             BuildingPolymorphMessage::new
     );

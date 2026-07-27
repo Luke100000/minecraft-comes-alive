@@ -309,9 +309,12 @@ public class BlueprintScreen extends ExtendedScreen {
                         Network.sendToServer(new ReportBuildingMessage(ReportBuildingMessage.Action.REMOVE_ROOM));
                     });
                     removeBuildingButton = column.addButton(
-                            Component.translatable("gui.blueprint.removeBuilding"), b ->
-                                    Network.sendToServer(new ReportBuildingMessage(
-                                            ReportBuildingMessage.Action.REMOVE)));
+                            Component.translatable("gui.blueprint.removeBuilding"), b -> {
+                                MCA.LOGGER.info("[MCA-RemoveBuilding-Client] button clicked playerPos={}",
+                                        minecraft != null && minecraft.player != null ? minecraft.player.blockPosition() : "unknown");
+                                Network.sendToServer(new ReportBuildingMessage(
+                                        ReportBuildingMessage.Action.REMOVE));
+                            });
 
                     advancedButton = addRenderableWidget(new ButtonWidget(
                             bx, floorControlY + 22, MAP_SIDE_CONTROL_WIDTH, 20,
@@ -626,8 +629,16 @@ public class BlueprintScreen extends ExtendedScreen {
         hoverTargets.sort(Comparator.comparingInt(
                 (BlueprintMapRenderer.HoverTarget target) -> target.building().getCenter().getY()).reversed());
 
-        List<List<Component>> tooltips = new ArrayList<>();
+        Map<Integer, BlueprintMapRenderer.HoverTarget> uniqueTargets = new LinkedHashMap<>();
         for (BlueprintMapRenderer.HoverTarget target : hoverTargets) {
+            int buildingId = target.building().getId();
+            if (!uniqueTargets.containsKey(buildingId) || target.structure()) {
+                uniqueTargets.put(buildingId, target);
+            }
+        }
+
+        List<List<Component>> tooltips = new ArrayList<>();
+        for (BlueprintMapRenderer.HoverTarget target : uniqueTargets.values()) {
             tooltips.add(tooltipFactory.tooltip(
                     target.building(), target.floorOrdinal(), target.structure()));
         }

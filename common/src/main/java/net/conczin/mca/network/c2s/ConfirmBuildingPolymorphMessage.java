@@ -18,7 +18,7 @@ public record ConfirmBuildingPolymorphMessage(BlockPos source,
 
     public static final StreamCodec<FriendlyByteBuf, ConfirmBuildingPolymorphMessage> STREAM_CODEC = StreamCodec.composite(
             BlockPos.STREAM_CODEC, ConfirmBuildingPolymorphMessage::source,
-            ByteBufCodecs.idMapper(i -> ReportBuildingMessage.Action.values()[i], ReportBuildingMessage.Action::ordinal), ConfirmBuildingPolymorphMessage::action,
+            ByteBufCodecs.idMapper(i -> i >= 0 && i < ReportBuildingMessage.Action.VALUES.length ? ReportBuildingMessage.Action.VALUES[i] : ReportBuildingMessage.Action.AUTO_SCAN, ReportBuildingMessage.Action::ordinal), ConfirmBuildingPolymorphMessage::action,
             ByteBufCodecs.VAR_INT, ConfirmBuildingPolymorphMessage::expectedRoomId,
             ByteBufCodecs.STRING_UTF8, ConfirmBuildingPolymorphMessage::chosenType,
             ConfirmBuildingPolymorphMessage::new

@@ -20,10 +20,8 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
     public static final CustomPacketPayload.Type<ReportBuildingMessage> TYPE =
             new CustomPacketPayload.Type<>(MCA.locate("report_building"));
     public static final StreamCodec<FriendlyByteBuf, ReportBuildingMessage> STREAM_CODEC = StreamCodec.composite(
-            ByteBufCodecs.idMapper(i -> Action.values()[i], Action::ordinal), ReportBuildingMessage::action,
-            ByteBufCodecs.optional(ByteBufCodecs.STRING_UTF8).map(
-                    optional -> optional.orElse(null), value -> value == null ? Optional.empty() : Optional.of(value)),
-            ReportBuildingMessage::data,
+            ByteBufCodecs.idMapper(i -> i >= 0 && i < Action.VALUES.length ? Action.VALUES[i] : Action.AUTO_SCAN, Action::ordinal), ReportBuildingMessage::action,
+            ByteBufCodecs.optional(ByteBufCodecs.STRING_UTF8).map(opt -> opt.orElse(null), java.util.Optional::ofNullable), ReportBuildingMessage::data,
             ReportBuildingMessage::new);
 
     public ReportBuildingMessage(Action action) {
@@ -44,8 +42,12 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
                         manager.forceRoomType(player.blockPosition(), data), null);
                 case REMOVE_ROOM -> displayEditResult(player,
                         manager.removeRoom(player.blockPosition()), "blueprint.roomRemoved");
-                case REMOVE -> displayEditResult(player,
-                        manager.removeBuilding(player.blockPosition()), null);
+                case REMOVE -> {
+                    net.conczin.mca.MCA.LOGGER.info("[MCA-RemoveBuilding-Server] handle REMOVE action playerPos={}", player.blockPosition());
+                    VillageManager.BuildingEditResult result = manager.removeBuilding(player.blockPosition());
+                    net.conczin.mca.MCA.LOGGER.info("[MCA-RemoveBuilding-Server] removeBuilding result={}", result);
+                    displayEditResult(player, result, "blueprint.buildingRemoved");
+                }
                 case SET_ROOM_INHERITANCE -> setRoomInheritance(manager, player, data);
             }
         } finally {
@@ -226,6 +228,8 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
         REMOVE_ROOM,
         UPDATE_ROOM,
         SET_MAIN_ROOM,
-        SET_ROOM_INHERITANCE
+        SET_ROOM_INHERITANCE;
+
+        public static final Action[] VALUES = values();
     }
 }
