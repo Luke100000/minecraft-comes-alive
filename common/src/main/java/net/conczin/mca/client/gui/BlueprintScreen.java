@@ -100,6 +100,8 @@ public class BlueprintScreen extends ExtendedScreen {
     private final BlueprintMapRenderer mapRenderer = new BlueprintMapRenderer();
     private BuildingType selectedBuilding;
     private UUID selectedVillager;
+    private BlockPos lastRoomScanPosition;
+    private Village.StructuralPosition cachedRoomScanPosition = Village.StructuralPosition.OUTSIDE;
 
     private int mouseX;
     private int mouseY;
@@ -459,7 +461,8 @@ public class BlueprintScreen extends ExtendedScreen {
 
     private void requestStructureScan() {
         Village.StructuralLookup structuralLookup = getPlayerStructuralLookup();
-        ReportBuildingMessage.Action action = getStructureScanAction(structuralLookup.position());
+        ReportBuildingMessage.Action action = getStructureScanAction(
+                getPlayerRoomScanPosition(structuralLookup.position()));
         selectPlayerFloorOnNextVillageResponse = true;
         Network.sendToServer(new ReportBuildingMessage(action));
     }
@@ -476,6 +479,21 @@ public class BlueprintScreen extends ExtendedScreen {
         return village.getStructuralLookup(minecraft.level, minecraft.player.blockPosition());
     }
 
+    private Village.StructuralPosition getPlayerRoomScanPosition(
+            Village.StructuralPosition persistedPosition) {
+        if (persistedPosition != Village.StructuralPosition.OUTSIDE) return persistedPosition;
+        if (village == null || minecraft == null || minecraft.player == null) {
+            return Village.StructuralPosition.OUTSIDE;
+        }
+
+        BlockPos position = minecraft.player.blockPosition();
+        if (!position.equals(lastRoomScanPosition)) {
+            lastRoomScanPosition = position.immutable();
+            cachedRoomScanPosition = village.getRoomScanPosition(minecraft.level, position);
+        }
+        return cachedRoomScanPosition;
+    }
+
     private String getStructureScanTranslationKey(Village.StructuralPosition structuralPosition) {
         return switch (structuralPosition) {
             case OUTSIDE -> "gui.blueprint.addBuilding";
@@ -489,12 +507,13 @@ public class BlueprintScreen extends ExtendedScreen {
             return;
         }
 
-        Village.StructuralPosition structuralPosition = structuralLookup.position();
-        boolean insideBuilding = structuralPosition != Village.StructuralPosition.OUTSIDE;
-        boolean roomRegistered = structuralPosition == Village.StructuralPosition.REGISTERED_ROOM;
+        Village.StructuralPosition persistedPosition = structuralLookup.position();
+        Village.StructuralPosition scanPosition = getPlayerRoomScanPosition(persistedPosition);
+        boolean insideBuilding = persistedPosition != Village.StructuralPosition.OUTSIDE;
+        boolean roomRegistered = persistedPosition == Village.StructuralPosition.REGISTERED_ROOM;
         int y = height / 2 - 56 + 22 * 3;
 
-        structureScanButton.setMessage(getStructureScanTranslationKey(structuralPosition));
+        structureScanButton.setMessage(getStructureScanTranslationKey(scanPosition));
         structureScanButton.active = true;
         structureScanButton.setY(y);
         y += 22;
@@ -1086,6 +1105,8 @@ public class BlueprintScreen extends ExtendedScreen {
 
     public void setVillage(Village village) {
         this.village = village;
+        lastRoomScanPosition = null;
+        cachedRoomScanPosition = Village.StructuralPosition.OUTSIDE;
         TreeSet<Integer> availableFloors = new TreeSet<>();
         if (village != null) {
             for (Structure s : village.getStructures().values()) {
@@ -1095,8 +1116,7 @@ public class BlueprintScreen extends ExtendedScreen {
             }
         }
         this.floorOrdinals = List.copyOf(availableFloors);
-        this.structureCount = village == null ? 0 : village.getStructures().size()
-                + (int) village.getExternalBuildings().filter(Building::isComplete).count();
+        this.structureCount = village == null ? 0 : village.getStructureCount();
         this.roomTypeResolver = RoomTypeResolver.create(village);
         this.tooltipFactory = BlueprintTooltipFactory.create(village, roomTypeResolver);
         this.mapGeometry = BlueprintMapGeometry.build(village, roomTypeResolver);

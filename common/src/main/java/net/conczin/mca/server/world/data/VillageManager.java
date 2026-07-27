@@ -437,21 +437,45 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         String category = chooseInitialRoomCategory(scan, forcedType);
         if (category == null) return Building.validationResult.INVALID_TYPE;
 
-        int structureId = lastBuildingId++;
-        structure.setId(structureId);
-        int groupId = StructureGrouping.resolveStructureGroupId(village, structure);
-        structure.setStructureGroupId(groupId);
-        room.setId(lastBuildingId++);
-        room.setStructureId(structureId);
-        room.setType(category);
-        room.setTypeForced(forcedType != null);
-        structure.setAutomaticMainRoom(room.getId());
-        village.getBuildings().put(room.getId(), room);
-        village.getStructures().put(structureId, structure);
+        int groupId = registerInitialRoom(village, structure, room, category, forcedType != null);
+
+        // An external basement entrance may be physically disconnected from the enclosed room
+        // immediately above it. Register that stacked section as another physical Structure in the
+        // same logical Building, including its first Room, during the original Add Building action.
+        for (StructureScanner.Result stackedScan : StructureScanner.scanStacked(
+                world, structure, village.getStructures().values())) {
+            Structure stacked = stackedScan.toStructure(-1);
+            BuildingScanResult stackedRoom = scanRoom(village, stacked, stackedScan.source(), -1);
+            if (stackedRoom.result() != Building.validationResult.SUCCESS) continue;
+
+            String stackedCategory = chooseInitialRoomCategory(stackedRoom, null);
+            if (stackedCategory == null) continue;
+            groupId = registerInitialRoom(
+                    village, stacked, stackedRoom.building(), stackedCategory, false);
+        }
+
         StructureGrouping.renumberStructureGroup(village, groupId);
         villages.put(village.getId(), village);
         finalizeVillageMutation(village);
         return Building.validationResult.SUCCESS;
+    }
+
+    private int registerInitialRoom(Village village,
+                                    Structure structure,
+                                    Building room,
+                                    String category,
+                                    boolean typeForced) {
+        int structureId = lastBuildingId++;
+        structure.setId(structureId);
+        int groupId = StructureGrouping.attachStructureGroup(village, structure);
+        room.setId(lastBuildingId++);
+        room.setStructureId(structureId);
+        room.setType(category);
+        room.setTypeForced(typeForced);
+        structure.setAutomaticMainRoom(room.getId());
+        village.getBuildings().put(room.getId(), room);
+        village.getStructures().put(structureId, structure);
+        return groupId;
     }
 
     public Building.validationResult commitRegisteredRoomUpdate(RegisteredRoomUpdate update,
@@ -624,6 +648,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         // commit together. A failed match leaves the persisted Structure untouched.
         Structure updated = new Structure(structure.save());
         if (!updated.applyScan(scan, rooms)) return Building.validationResult.OVERLAP;
+        int previousGroupId = structure.getStructureGroupId();
 
         List<RegisteredRoomUpdate> roomUpdates = new ArrayList<>();
         Map<Integer, List<Building>> roomsByFloor = rooms.stream()
@@ -659,7 +684,11 @@ public class VillageManager extends SavedData implements Iterable<Village> {
             lastBuildingId = previousLastBuildingId;
             return result;
         }
-        StructureGrouping.renumberStructureGroup(village, updated.getStructureGroupId());
+        int groupId = StructureGrouping.attachStructureGroup(village, updated);
+        StructureGrouping.renumberStructureGroup(village, groupId);
+        if (previousGroupId != groupId) {
+            StructureGrouping.renumberStructureGroup(village, previousGroupId);
+        }
         finalizeVillageMutation(village);
         return Building.validationResult.SUCCESS;
     }

@@ -3,6 +3,7 @@ package net.conczin.mca.server.world.data;
 import net.conczin.mca.Config;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.Vec3i;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
@@ -20,6 +21,66 @@ final class StructureScanner {
     private static final int SURFACE_SAMPLE_MARGIN = 3;
 
     private StructureScanner() {
+    }
+
+    /**
+     * Finds enclosed physical sections stacked immediately above or below an initial scan. This is
+     * intentionally limited to the same X/Z footprint and the logical-group vertical gap.
+     */
+    static List<Result> scanStacked(Level world, Structure origin, Collection<Structure> existing) {
+        if (origin == null) return List.of();
+
+        List<BlockPos> columns = origin.getFloors().stream()
+                .map(StructureFloor::region)
+                .filter(Objects::nonNull)
+                .flatMap(region -> region.cells().stream())
+                .map(cell -> new BlockPos(cell.getX(), 0, cell.getZ()))
+                .distinct()
+                .sorted(Comparator.comparingInt((BlockPos pos) -> pos.getX()).thenComparingInt(Vec3i::getZ))
+                .toList();
+        if (columns.isEmpty()) return List.of();
+
+        List<Structure> occupied = existing == null
+                ? new ArrayList<>()
+                : new ArrayList<>(existing);
+        if (occupied.stream().noneMatch(structure -> structure.getId() == origin.getId())) {
+            occupied.add(origin);
+        }
+
+        List<Result> result = new ArrayList<>(2);
+        scanStackedDirection(world, origin, occupied, columns,
+                origin.getRawPos1().getY() + 1, 1).ifPresent(scan -> {
+            result.add(scan);
+            Structure discovered = scan.toStructure(Integer.MIN_VALUE + result.size());
+            occupied.add(discovered);
+        });
+        scanStackedDirection(world, origin, occupied, columns,
+                origin.getRawPos0().getY() - 1, -1).ifPresent(result::add);
+        return List.copyOf(result);
+    }
+
+    private static Optional<Result> scanStackedDirection(Level world,
+                                                          Structure origin,
+                                                          Collection<Structure> existing,
+                                                          List<BlockPos> columns,
+                                                          int startY,
+                                                          int direction) {
+        int distance = StructureGrouping.MAX_VERTICAL_GAP + 2;
+        for (int offset = 0; offset < distance; offset++) {
+            int y = startY + offset * direction;
+            for (BlockPos column : columns) {
+                BlockPos seed = new BlockPos(column.getX(), y, column.getZ());
+                if (!isWalkableAnchor(world, seed)) continue;
+
+                Result scan = scan(world, seed, existing, -1);
+                if (scan.result() != Building.validationResult.SUCCESS) continue;
+                Structure candidate = scan.toStructure(-1);
+                if (StructureGrouping.sharesGroupProximity(origin, candidate)) {
+                    return Optional.of(scan);
+                }
+            }
+        }
+        return Optional.empty();
     }
 
     static Result scan(Level world, BlockPos source, Collection<Structure> existing, int ignoredStructureId) {

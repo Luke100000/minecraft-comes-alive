@@ -9,17 +9,44 @@ public final class StructureGrouping {
     private StructureGrouping() {
     }
 
-    /** Resolves structureGroupId for a new or updated Structure by checking X/Z overlap and vertical proximity. */
-    public static int resolveStructureGroupId(Village village, Structure candidate) {
-        if (village == null || candidate == null) return candidate == null ? -1 : candidate.getId();
-
-        for (Structure existing : village.getStructures().values()) {
-            if (existing.getId() == candidate.getId()) continue;
-            if (sharesGroupProximity(candidate, existing)) {
-                return existing.getStructureGroupId();
-            }
+    /**
+     * Attaches one Structure to every logical group it directly touches.
+     *
+     * <p>The lowest touched group ID is canonical. Only directly touched groups are merged;
+     * unrelated Structures are not swept or rebuilt.</p>
+     */
+    public static int attachStructureGroup(Village village, Structure candidate) {
+        if (candidate == null) return -1;
+        if (village == null) {
+            candidate.setStructureGroupId(candidate.getId());
+            return candidate.getId();
         }
-        return candidate.getId();
+
+        SortedSet<Integer> touchedGroupIds = touchedGroupIds(village, candidate);
+        int canonicalGroupId = touchedGroupIds.isEmpty() ? candidate.getId() : touchedGroupIds.first();
+
+        candidate.setStructureGroupId(canonicalGroupId);
+        if (!touchedGroupIds.isEmpty()) {
+            village.getStructures().values().stream()
+                    .filter(existing -> touchedGroupIds.contains(existing.getStructureGroupId()))
+                    .forEach(existing -> existing.setStructureGroupId(canonicalGroupId));
+        }
+        return canonicalGroupId;
+    }
+
+    /** Returns the logical Building group a fresh physical Structure would attach to, without mutating it. */
+    public static OptionalInt findAttachedGroupId(Village village, Structure candidate) {
+        SortedSet<Integer> touched = touchedGroupIds(village, candidate);
+        return touched.isEmpty() ? OptionalInt.empty() : OptionalInt.of(touched.first());
+    }
+
+    private static SortedSet<Integer> touchedGroupIds(Village village, Structure candidate) {
+        if (village == null || candidate == null) return new TreeSet<>();
+        return village.getStructures().values().stream()
+                .filter(existing -> existing.getId() != candidate.getId())
+                .filter(existing -> sharesGroupProximity(candidate, existing))
+                .map(Structure::getStructureGroupId)
+                .collect(java.util.stream.Collectors.toCollection(TreeSet::new));
     }
 
     public static boolean sharesGroupProximity(Structure a, Structure b) {
@@ -74,7 +101,9 @@ public final class StructureGrouping {
             int minSurfaceY = band.stream().mapToInt(ref -> ref.structure.getSurfaceReferenceY()).min().orElse(0);
             int anchorY = band.getFirst().floor.anchorY();
             int diff = Math.abs(anchorY - minSurfaceY);
-            if (anchorY >= minSurfaceY - 1 && diff < bestDistance) {
+            boolean betterGroundCandidate = diff < bestDistance
+                    || (diff == bestDistance && i > groundIndex);
+            if (anchorY >= minSurfaceY - 1 && betterGroundCandidate) {
                 bestDistance = diff;
                 groundIndex = i;
             }

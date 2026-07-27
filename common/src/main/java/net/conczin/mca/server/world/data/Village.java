@@ -431,6 +431,22 @@ public class Village implements Iterable<Building> {
     public StructuralPosition getStructuralPosition(Vec3i pos) { return getStructuralLookup(pos).position(); }
     public StructuralPosition getStructuralPosition(Level level, BlockPos pos) { return getStructuralLookup(level, pos).position(); }
 
+    /**
+     * Classifies the scan button without pretending an unregistered physical section already exists.
+     * A fresh scan that directly touches an existing logical Structure group is Add Room; otherwise it
+     * remains Add Building.
+     */
+    public StructuralPosition getRoomScanPosition(Level level, BlockPos pos) {
+        StructuralPosition persisted = getStructuralPosition(level, pos);
+        if (persisted != StructuralPosition.OUTSIDE) return persisted;
+
+        StructureScanner.Result scan = StructureScanner.scan(level, pos, structures.values(), -1);
+        if (scan.result() != Building.validationResult.SUCCESS) return StructuralPosition.OUTSIDE;
+        return StructureGrouping.findAttachedGroupId(this, scan.toStructure(-1)).isPresent()
+                ? StructuralPosition.ATTACHABLE_ROOM
+                : StructuralPosition.OUTSIDE;
+    }
+
     public StructuralLookup getStructuralLookup(Vec3i pos) {
         Optional<Building> room = getFunctionalRoomAt(pos);
         if (room.isPresent()) return new StructuralLookup(StructuralPosition.REGISTERED_ROOM, room);

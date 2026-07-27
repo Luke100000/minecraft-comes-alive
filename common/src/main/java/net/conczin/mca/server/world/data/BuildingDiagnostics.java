@@ -24,7 +24,10 @@ public final class BuildingDiagnostics {
         Village.StructuralLookup lookup = village == null
                 ? new Village.StructuralLookup(Village.StructuralPosition.OUTSIDE, Optional.empty())
                 : village.getStructuralLookup(world, pos);
-        String uiAction = uiAction(lookup.position());
+        Village.StructuralPosition scanPosition = village == null
+                ? Village.StructuralPosition.OUTSIDE
+                : village.getRoomScanPosition(world, pos);
+        String uiAction = uiAction(scanPosition);
 
         log(traceId, "start position={} dimension={} village={} structuralPosition={} uiAction={} verbose={}",
                 pos, world.dimension().location(), village == null ? "none" : village.getId(),
@@ -32,7 +35,7 @@ public final class BuildingDiagnostics {
 
         if (village == null) {
             Building.validationResult analysis = manager.analyzeRoomAddition(pos).result();
-            String verdict = "NO_NEARBY_VILLAGE: UI uses ADD_ROOM; initial structure analysis=" + analysis;
+            String verdict = "NO_NEARBY_VILLAGE: UI uses " + uiAction + "; initial structure analysis=" + analysis;
             log(traceId, "analysis action={} result={}", uiAction, analysis);
             log(traceId, "verdict={}", verdict);
             return new Result(traceId, lookup.position(), uiAction, verdict);
@@ -116,7 +119,7 @@ public final class BuildingDiagnostics {
         if (position == Village.StructuralPosition.OUTSIDE) {
             boolean contains = structure.containsPos(pos);
             boolean attaches = StructureConnector.attachesToStructure(world, structure, pos);
-            return "NO_INTERACTION_STRUCTURE: UI uses ADD_ROOM; containsPos=" + contains
+            return "NO_INTERACTION_STRUCTURE: UI uses " + uiAction(position) + "; containsPos=" + contains
                     + ", verticalConnectorAttachment=" + attaches + ", analysis=" + analysis;
         }
         if (analysis != Building.validationResult.SUCCESS) {
@@ -232,7 +235,8 @@ public final class BuildingDiagnostics {
 
     private static String uiAction(Village.StructuralPosition position) {
         return switch (position) {
-            case OUTSIDE, ATTACHABLE_ROOM -> "ADD_ROOM";
+            case OUTSIDE -> "ADD_BUILDING";
+            case ATTACHABLE_ROOM -> "ADD_ROOM";
             case REGISTERED_ROOM -> "UPDATE_ROOM";
         };
     }
