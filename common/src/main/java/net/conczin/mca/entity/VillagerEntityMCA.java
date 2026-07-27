@@ -157,7 +157,9 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
     @Override
     public void setJumping(boolean jumping) {
-        super.setJumping(jumping && !this.onClimbable());
+        boolean navigationControlsClimb = this.getNavigation() instanceof MCAGroundPathNavigation navigation
+                && navigation.isControllingClimbable();
+        super.setJumping(jumping && !navigationControlsClimb);
     }
 
     public static AttributeSupplier.Builder createAttributes() {

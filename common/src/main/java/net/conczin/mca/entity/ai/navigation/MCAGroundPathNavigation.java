@@ -7,18 +7,29 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.navigation.GroundPathNavigation;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.pathfinder.Node;
 import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.level.pathfinder.PathFinder;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.phys.shapes.VoxelShape;
 
 public class MCAGroundPathNavigation extends GroundPathNavigation {
-    private static final double LADDER_VERTICAL_SPEED = 0.14D;
-    private static final double LADDER_VERTICAL_TOLERANCE = 0.25D;
-    private static final double LADDER_DESCENT_TOLERANCE = 0.01D;
+    private static final double CLIMB_VERTICAL_SPEED = 0.16D;
+    private static final double CLIMB_HORIZONTAL_SPEED = 0.12D;
+    private static final double CLIMB_HORIZONTAL_GAIN = 0.35D;
+    private static final double ASCENT_NODE_TOLERANCE = 0.20D;
+    private static final double DESCENT_NODE_TOLERANCE = 0.08D;
+    private static final double EXIT_HEIGHT_TOLERANCE = 0.25D;
+    private static final double EXIT_VERTICAL_BIAS = 0.08D;
 
     public MCAGroundPathNavigation(Mob mob, Level level) {
         super(mob, level);
+    }
+
+    public boolean isControllingClimbable() {
+        return getClimbContext() != null;
     }
 
     @Override
@@ -57,7 +68,10 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
     @Override
     public void tick() {
         super.tick();
-        applyPathLadderMotion();
+        ClimbContext context = getClimbContext();
+        if (context != null) {
+            applyClimbableMotion(context);
+        }
     }
 
     @Override
@@ -66,29 +80,21 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
             return;
         }
 
-        Node nextNode = this.path.getNextNode();
-        if (!isClimbable(nextNode.asBlockPos())) {
+        ClimbContext context = getClimbContext();
+        if (context == null) {
             super.followThePath();
             return;
         }
 
         Vec3 position = this.getTempMobPos();
-        int nextNodeIndex = this.path.getNextNodeIndex();
-        Node followingNode = nextNodeIndex + 1 < this.path.getNodeCount()
-                ? this.path.getNode(nextNodeIndex + 1)
-                : null;
-        boolean exitingLadder = followingNode != null
-                && !isClimbable(followingNode.asBlockPos());
-        double targetY = exitingLadder ? followingNode.y : nextNode.y;
-
-        double yDelta = targetY - this.mob.getY();
-        boolean readyForExitHandoff = exitingLadder
-                && yDelta < 0.0D
-                && Math.abs(yDelta) <= LADDER_VERTICAL_TOLERANCE;
-        if ((readyForExitHandoff
-                || hasReachedLadderTarget(followingNode, exitingLadder, yDelta))
-                && (exitingLadder || this.mob.onClimbable())) {
-            this.path.advance();
+        if (context.pathTargetsClimbable()) {
+            double yDelta = context.targetNode().y - this.mob.getY();
+            double tolerance = yDelta < 0.0D
+                    ? DESCENT_NODE_TOLERANCE
+                    : ASCENT_NODE_TOLERANCE;
+            if (this.mob.onClimbable() && Math.abs(yDelta) <= tolerance) {
+                this.path.advance();
+            }
         }
 
         this.doStuckDetection(position);
@@ -103,78 +109,155 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
         return super.getGroundY(position);
     }
 
-    private double getLadderVerticalVelocity() {
+    private ClimbContext getClimbContext() {
         Path path = this.path;
         if (path == null || path.isDone()) {
-            return Double.NaN;
+            return null;
         }
 
         int nextNodeIndex = path.getNextNodeIndex();
         if (nextNodeIndex < 0 || nextNodeIndex >= path.getNodeCount()) {
-            return Double.NaN;
+            return null;
         }
 
         Node nextNode = path.getNode(nextNodeIndex);
-        if (!isClimbable(nextNode.asBlockPos())) {
-            if (this.mob.onClimbable()
-                    && nextNodeIndex > 0
-                    && isClimbable(path.getNode(nextNodeIndex - 1).asBlockPos())) {
-                double yDelta = nextNode.y - this.mob.getY();
-                return clampVerticalVelocity(yDelta);
+        if (isClimbable(nextNode.asBlockPos())) {
+            Node followingNode = nextNodeIndex + 1 < path.getNodeCount()
+                    ? path.getNode(nextNodeIndex + 1)
+                    : null;
+            boolean exitsClimbable = followingNode != null
+                    && !isClimbable(followingNode.asBlockPos());
+            return new ClimbContext(
+                    nextNode,
+                    exitsClimbable ? followingNode : nextNode,
+                    true,
+                    exitsClimbable
+            );
+        }
+
+        if (this.mob.onClimbable() && nextNodeIndex > 0) {
+            Node previousNode = path.getNode(nextNodeIndex - 1);
+            if (isClimbable(previousNode.asBlockPos())) {
+                return new ClimbContext(previousNode, nextNode, false, true);
             }
-            return Double.NaN;
         }
 
-        Node followingNode = nextNodeIndex + 1 < path.getNodeCount()
-                ? path.getNode(nextNodeIndex + 1)
-                : null;
-        boolean exitingLadder = followingNode != null
-                && !isClimbable(followingNode.asBlockPos());
-
-        if (!this.mob.onClimbable() && !exitingLadder) {
-            return Double.NaN;
-        }
-
-        double targetY = exitingLadder ? followingNode.y : nextNode.y;
-        double yDelta = targetY - this.mob.getY();
-        if (hasReachedLadderTarget(followingNode, exitingLadder, yDelta)) {
-            return 0.0D;
-        }
-
-        return clampVerticalVelocity(yDelta);
+        return null;
     }
 
-    private static double clampVerticalVelocity(double yDelta) {
-        return Math.copySign(
-                Math.min(LADDER_VERTICAL_SPEED, Math.abs(yDelta)),
-                yDelta
-        );
-    }
+    private void applyClimbableMotion(ClimbContext context) {
+        BlockPos climbablePos = findAttachedClimbable(context.climbableNode().asBlockPos());
+        Vec3 anchor = getClimbableAnchor(climbablePos);
 
-    private static boolean hasReachedLadderTarget(
-            Node followingNode,
-            boolean exitingLadder,
-            double yDelta
-    ) {
-        boolean finishingDescent = yDelta < 0.0D
-                && (followingNode == null || exitingLadder);
-        double tolerance = finishingDescent
-                ? LADDER_DESCENT_TOLERANCE
-                : LADDER_VERTICAL_TOLERANCE;
-        return Math.abs(yDelta) <= tolerance;
-    }
-
-    private void applyPathLadderMotion() {
-        double controlledY = getLadderVerticalVelocity();
-        if (Double.isNaN(controlledY)) {
+        if (!this.mob.onClimbable()) {
+            this.mob.getMoveControl().setWantedPosition(
+                    anchor.x(), this.mob.getY(), anchor.z(), this.speedModifier
+            );
+            Vec3 movement = this.mob.getDeltaMovement();
+            this.mob.setDeltaMovement(
+                    horizontalVelocity(anchor.x() - this.mob.getX()),
+                    movement.y(),
+                    horizontalVelocity(anchor.z() - this.mob.getZ())
+            );
             return;
         }
 
-        Vec3 movement = this.mob.getDeltaMovement();
-        this.mob.setDeltaMovement(movement.x(), controlledY, movement.z());
+        double targetY = context.targetNode().y;
+        boolean atExitHeight = context.exitsClimbable() && isAtExitHeight(context, targetY);
+        double targetX = anchor.x();
+        double targetZ = anchor.z();
+        if (context.exitsClimbable() && (!context.pathTargetsClimbable() || atExitHeight)) {
+            targetX = context.targetNode().x + 0.5D;
+            targetZ = context.targetNode().z + 0.5D;
+        }
+
+        this.mob.getMoveControl().setWantedPosition(targetX, targetY, targetZ, this.speedModifier);
+
+        double controlledY = Mth.clamp(
+                targetY - this.mob.getY(),
+                -CLIMB_VERTICAL_SPEED,
+                CLIMB_VERTICAL_SPEED
+        );
+        if (atExitHeight) {
+            int exitDirection = Integer.compare(context.targetNode().y, context.climbableNode().y);
+            if (exitDirection != 0) {
+                controlledY = exitDirection > 0
+                        ? Math.max(controlledY, EXIT_VERTICAL_BIAS)
+                        : Math.min(controlledY, -EXIT_VERTICAL_BIAS);
+            }
+        }
+
+        this.mob.setXxa(0.0F);
+        this.mob.setZza(0.0F);
+        this.mob.setDeltaMovement(
+                horizontalVelocity(targetX - this.mob.getX()),
+                controlledY,
+                horizontalVelocity(targetZ - this.mob.getZ())
+        );
+    }
+
+    private boolean isAtExitHeight(ClimbContext context, double targetY) {
+        int exitDirection = Integer.compare(context.targetNode().y, context.climbableNode().y);
+        if (exitDirection > 0) {
+            return this.mob.getY() >= targetY - EXIT_HEIGHT_TOLERANCE;
+        }
+        if (exitDirection < 0) {
+            return this.mob.getY() <= targetY + EXIT_HEIGHT_TOLERANCE;
+        }
+        return Math.abs(targetY - this.mob.getY()) <= EXIT_HEIGHT_TOLERANCE;
+    }
+
+    private Vec3 getClimbableAnchor(BlockPos pos) {
+        BlockState state = this.level.getBlockState(pos);
+        VoxelShape shape = state.getShape(this.level, pos);
+        if (shape.isEmpty()) {
+            return Vec3.atCenterOf(pos);
+        }
+
+        AABB bounds = shape.bounds();
+        return new Vec3(
+                pos.getX() + (bounds.minX + bounds.maxX) * 0.5D,
+                pos.getY() + 0.5D,
+                pos.getZ() + (bounds.minZ + bounds.maxZ) * 0.5D
+        );
+    }
+
+    private static double horizontalVelocity(double delta) {
+        return Mth.clamp(
+                delta * CLIMB_HORIZONTAL_GAIN,
+                -CLIMB_HORIZONTAL_SPEED,
+                CLIMB_HORIZONTAL_SPEED
+        );
+    }
+
+    private BlockPos findAttachedClimbable(BlockPos fallback) {
+        BlockPos mobPos = this.mob.blockPosition();
+        if (isClimbable(mobPos)) {
+            return mobPos;
+        }
+
+        BlockPos above = mobPos.above();
+        if (isClimbable(above)) {
+            return above;
+        }
+
+        BlockPos below = mobPos.below();
+        if (isClimbable(below)) {
+            return below;
+        }
+
+        return fallback;
     }
 
     private boolean isClimbable(BlockPos pos) {
         return this.level.getBlockState(pos).is(BlockTags.CLIMBABLE);
+    }
+
+    private record ClimbContext(
+            Node climbableNode,
+            Node targetNode,
+            boolean pathTargetsClimbable,
+            boolean exitsClimbable
+    ) {
     }
 }

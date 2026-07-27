@@ -1,5 +1,9 @@
-# 7.7.29
+# 7.7.30
 > This is a release of 7.7.29 unrelated to the 7.7.23-ALPHA version.
+
+* Improved Ladder navigation.
+
+# 7.7.29
 
 * Synced patreon supporters
 * Added modded villages support for Destiny Screens
