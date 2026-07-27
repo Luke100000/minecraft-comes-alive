@@ -24,11 +24,13 @@ final class StructureScanner {
     }
 
     /**
-     * Finds enclosed physical sections stacked immediately above or below an initial scan. This is
-     * intentionally limited to the same X/Z footprint and the logical-group vertical gap.
+     * Finds the nearest enclosed physical section above a subterranean entrance Structure.
+     * Ordinary ground-level Structures never auto-register their upper storeys.
      */
-    static List<Result> scanStacked(Level world, Structure origin, Collection<Structure> existing) {
-        if (origin == null) return List.of();
+    static Optional<Result> scanNearestSectionAbove(Level world,
+                                                     Structure origin,
+                                                     Collection<Structure> existing) {
+        if (!isSubterranean(origin)) return Optional.empty();
 
         List<BlockPos> columns = origin.getFloors().stream()
                 .map(StructureFloor::region)
@@ -38,7 +40,7 @@ final class StructureScanner {
                 .distinct()
                 .sorted(Comparator.comparingInt((BlockPos pos) -> pos.getX()).thenComparingInt(Vec3i::getZ))
                 .toList();
-        if (columns.isEmpty()) return List.of();
+        if (columns.isEmpty()) return Optional.empty();
 
         List<Structure> occupied = existing == null
                 ? new ArrayList<>()
@@ -47,32 +49,15 @@ final class StructureScanner {
             occupied.add(origin);
         }
 
-        List<Result> result = new ArrayList<>(2);
-        scanStackedDirection(world, origin, occupied, columns,
-                origin.getRawPos1().getY() + 1, 1).ifPresent(scan -> {
-            result.add(scan);
-            Structure discovered = scan.toStructure(Integer.MIN_VALUE + result.size());
-            occupied.add(discovered);
-        });
-        scanStackedDirection(world, origin, occupied, columns,
-                origin.getRawPos0().getY() - 1, -1).ifPresent(result::add);
-        return List.copyOf(result);
-    }
-
-    private static Optional<Result> scanStackedDirection(Level world,
-                                                          Structure origin,
-                                                          Collection<Structure> existing,
-                                                          List<BlockPos> columns,
-                                                          int startY,
-                                                          int direction) {
+        int startY = origin.getRawPos1().getY() + 1;
         int distance = StructureGrouping.MAX_VERTICAL_GAP + 2;
         for (int offset = 0; offset < distance; offset++) {
-            int y = startY + offset * direction;
+            int y = startY + offset;
             for (BlockPos column : columns) {
                 BlockPos seed = new BlockPos(column.getX(), y, column.getZ());
                 if (!isWalkableAnchor(world, seed)) continue;
 
-                Result scan = scan(world, seed, existing, -1);
+                Result scan = scan(world, seed, occupied, -1);
                 if (scan.result() != Building.validationResult.SUCCESS) continue;
                 Structure candidate = scan.toStructure(-1);
                 if (StructureGrouping.sharesGroupProximity(origin, candidate)) {
@@ -81,6 +66,37 @@ final class StructureScanner {
             }
         }
         return Optional.empty();
+    }
+
+    static boolean isSubterranean(Structure structure) {
+        if (structure == null || structure.getFloors().isEmpty()) return false;
+        int highestAnchorY = structure.getFloors().stream()
+                .mapToInt(StructureFloor::anchorY)
+                .max().orElse(structure.getSurfaceReferenceY());
+        return highestAnchorY < structure.getSurfaceReferenceY() - 1;
+    }
+
+    /** Chooses the first physical Floor above the entrance, never a later upper storey. */
+    static Optional<StructureFloor> nearestFloorAbove(Structure origin, Structure candidate) {
+        if (origin == null || candidate == null || origin.getFloors().isEmpty()) return Optional.empty();
+        int highestOriginAnchorY = origin.getFloors().stream()
+                .mapToInt(StructureFloor::anchorY)
+                .max().orElse(Integer.MIN_VALUE);
+        return candidate.getFloors().stream()
+                .filter(floor -> floor.anchorY() > highestOriginAnchorY)
+                .min(Comparator.comparingInt(StructureFloor::anchorY));
+    }
+
+    static Optional<BlockPos> nearestFloorCell(StructureFloor floor, BlockPos reference) {
+        if (floor == null || floor.region() == null || reference == null) return Optional.empty();
+        return floor.region().cells().stream()
+                .min(Comparator.comparingLong(cell -> horizontalDistanceSquared(cell, reference)));
+    }
+
+    private static long horizontalDistanceSquared(BlockPos first, BlockPos second) {
+        long dx = (long) first.getX() - second.getX();
+        long dz = (long) first.getZ() - second.getZ();
+        return dx * dx + dz * dz;
     }
 
     static Result scan(Level world, BlockPos source, Collection<Structure> existing, int ignoredStructureId) {

@@ -439,19 +439,51 @@ public class VillageManager extends SavedData implements Iterable<Village> {
 
         int groupId = registerInitialRoom(village, structure, room, category, forcedType != null);
 
-        // An external basement entrance may be physically disconnected from the enclosed room
-        // immediately above it. Register that stacked section as another physical Structure in the
-        // same logical Building, including its first Room, during the original Add Building action.
-        for (StructureScanner.Result stackedScan : StructureScanner.scanStacked(
-                world, structure, village.getStructures().values())) {
-            Structure stacked = stackedScan.toStructure(-1);
-            BuildingScanResult stackedRoom = scanRoom(village, stacked, stackedScan.source(), -1);
-            if (stackedRoom.result() != Building.validationResult.SUCCESS) continue;
+        // Case 1: Initial Structure itself contains an unregistered Floor above the initial room
+        StructureFloor initialFloor = structure.getFloor(room.getFloorId()).orElse(null);
+        StructureFloor internalGroundFloor = initialFloor == null ? null : structure.getFloors().stream()
+                .filter(f -> f.id() != room.getFloorId() && f.anchorY() > initialFloor.anchorY())
+                .min(Comparator.comparingInt(StructureFloor::anchorY))
+                .orElse(null);
+        if (internalGroundFloor != null) {
+            BlockPos groundSource = StructureScanner.nearestFloorCell(
+                    internalGroundFloor, structure.getSource()).orElse(null);
+            if (groundSource != null) {
+                BuildingScanResult groundRoom = scanResolvedRoom(
+                        village, structure, groundSource, -1, internalGroundFloor, Set.of());
+                if (groundRoom.result() == Building.validationResult.SUCCESS) {
+                    String groundCategory = chooseInitialRoomCategory(groundRoom, null);
+                    if (groundCategory != null) {
+                        Building groundBuilding = groundRoom.building();
+                        groundBuilding.setId(lastBuildingId++);
+                        groundBuilding.setType(groundCategory);
+                        village.getBuildings().put(groundBuilding.getId(), groundBuilding);
+                    }
+                }
+            }
+        }
 
-            String stackedCategory = chooseInitialRoomCategory(stackedRoom, null);
-            if (stackedCategory == null) continue;
-            groupId = registerInitialRoom(
-                    village, stacked, stackedRoom.building(), stackedCategory, false);
+        // Case 2: An external basement entrance can be physically disconnected from the Building above.
+        // Register only the nearest physical Floor above the basement. A discovery seed on Floor 1
+        // must not skip the closer Ground Floor contained by the same scanned Structure.
+        StructureScanner.Result stackedScan = StructureScanner.scanNearestSectionAbove(
+                world, structure, village.getStructures().values()).orElse(null);
+        if (stackedScan != null) {
+            Structure stacked = stackedScan.toStructure(-1);
+            StructureFloor nearestFloor = StructureScanner.nearestFloorAbove(structure, stacked).orElse(null);
+            BlockPos nearestSource = StructureScanner.nearestFloorCell(
+                    nearestFloor, structure.getSource()).orElse(null);
+            if (nearestFloor != null && nearestSource != null) {
+                BuildingScanResult stackedRoom = scanResolvedRoom(
+                        village, stacked, nearestSource, -1, nearestFloor, Set.of());
+                if (stackedRoom.result() == Building.validationResult.SUCCESS) {
+                    String stackedCategory = chooseInitialRoomCategory(stackedRoom, null);
+                    if (stackedCategory != null) {
+                        groupId = registerInitialRoom(
+                                village, stacked, stackedRoom.building(), stackedCategory, false);
+                    }
+                }
+            }
         }
 
         StructureGrouping.renumberStructureGroup(village, groupId);
