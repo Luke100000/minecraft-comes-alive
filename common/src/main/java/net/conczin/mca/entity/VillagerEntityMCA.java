@@ -111,6 +111,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     private final VillagerCommandHandler interactions = new VillagerCommandHandler(this);
     private final UpdatableInventory inventory = new UpdatableInventory(27);
     private final VillagerDimensions.Mutable dimensions = new VillagerDimensions.Mutable(AgeState.UNASSIGNED);
+    private final ArcherMoveControl archerMoveControl;
     long lastCooldown = 0L;
     private PlayerModel playerModel;
     private int despawnDelay;
@@ -129,12 +130,17 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     public VillagerEntityMCA(EntityType<VillagerEntityMCA> type, Level w, Gender gender) {
         super(type, w);
         inventory.addListener(this::onInvChange);
-        this.moveControl = new ArcherMoveControl(this);
+        this.archerMoveControl = new ArcherMoveControl(this);
+        this.moveControl = this.archerMoveControl;
         genetics.setGender(gender);
         this.setPathfindingMalus(PathType.WATER_BORDER, 16.0F);
         this.setPathfindingMalus(PathType.TRAPDOOR, 8.0F);
         this.setPathfindingMalus(PathType.DANGER_TRAPDOOR, 8.0F);
         this.setPathfindingMalus(PathType.WATER, 16.0F);
+    }
+
+    public ArcherMoveControl getArcherMoveControl() {
+        return this.archerMoveControl;
     }
 
     public static <E extends Entity> CDataManager.Builder<E> createTrackedData(Class<E> type) {
