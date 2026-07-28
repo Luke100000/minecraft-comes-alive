@@ -492,7 +492,7 @@ public class BlueprintScreen extends ExtendedScreen {
     private Village.RoomScanContext getPlayerRoomScanContext() {
         if (village == null || minecraft == null || minecraft.player == null) {
             return new Village.RoomScanContext(Village.StructuralPosition.OUTSIDE, Optional.empty(),
-                    Village.RoomScanMode.ADD_BUILDING, -1);
+                    Village.RoomScanMode.ADD_BUILDING, -1, Integer.MIN_VALUE);
         }
 
         BlockPos position = minecraft.player.blockPosition();
@@ -535,7 +535,11 @@ public class BlueprintScreen extends ExtendedScreen {
             attachmentScanButton.active = attachment;
             attachmentScanButton.setY(y);
             if (attachment) {
-                attachmentScanButton.setMessage(getStructureScanTranslationKey(scanContext.mode()));
+                MutableComponent label = Component.translatable(getStructureScanTranslationKey(scanContext.mode()));
+                if (scanContext.prospectiveFloorNumber() != Integer.MIN_VALUE) {
+                    label.append(Component.literal(" " + scanContext.prospectiveFloorNumber()));
+                }
+                attachmentScanButton.setMessage(label);
                 attachmentScanButton.setTooltip(Tooltip.create(Component.translatable(
                         getStructureScanTranslationKey(scanContext.mode()) + ".tooltip")));
                 y += 22;
@@ -611,6 +615,9 @@ public class BlueprintScreen extends ExtendedScreen {
         LocalPlayer player = minecraft == null ? null : minecraft.player;
         double playerRenderX = player == null ? 0.0D : Mth.lerp(partialTick, player.xo, player.getX());
         double playerRenderZ = player == null ? 0.0D : Mth.lerp(partialTick, player.zo, player.getZ());
+        int playerLogicalBuildingId = player == null ? -1 : getPlayerRoomScanContext().building()
+                .map(room -> village.getLogicalBuildingId(room.getStructureId()))
+                .orElse(-1);
         double villageCenterX = (village.getBox().minX() + village.getBox().maxX() + 1) / 2.0D;
         double villageCenterZ = (village.getBox().minZ() + village.getBox().maxZ() + 1) / 2.0D;
         double requestedMapCenterX = playerCentered && player != null ? playerRenderX : villageCenterX;
@@ -633,6 +640,7 @@ public class BlueprintScreen extends ExtendedScreen {
                 showBuildingIcons,
                 showPlayerHead,
                 player,
+                playerLogicalBuildingId,
                 playerRenderX,
                 playerRenderZ,
                 mouseX,
@@ -641,33 +649,38 @@ public class BlueprintScreen extends ExtendedScreen {
         renderPlayerHeadButtonIcon(context, player);
 
         List<BlueprintMapRenderer.HoverTarget> hoverTargets = new ArrayList<>(renderResult.hoverTargets());
-        hoverTargets.sort(Comparator.comparingInt(
-                (BlueprintMapRenderer.HoverTarget target) -> target.building().getCenter().getY()).reversed());
+        hoverTargets.sort(Comparator.comparingInt(BlueprintMapRenderer.HoverTarget::anchorY).reversed()
+                .thenComparing(Comparator.comparingInt(
+                        BlueprintMapRenderer.HoverTarget::logicalBuildingId).reversed()));
 
         Map<Integer, BlueprintMapRenderer.HoverTarget> uniqueTargets = new LinkedHashMap<>();
         for (BlueprintMapRenderer.HoverTarget target : hoverTargets) {
-            int buildingId = target.building().getId();
-            if (!uniqueTargets.containsKey(buildingId) || target.structure()) {
-                uniqueTargets.put(buildingId, target);
+            uniqueTargets.putIfAbsent(target.logicalBuildingId(), target);
+        }
+        if (uniqueTargets.isEmpty()) return;
+
+        BlueprintMapRenderer.HoverTarget preferred = uniqueTargets.get(renderResult.activeLogicalBuildingId());
+        BlueprintMapRenderer.HoverTarget active = preferred != null
+                ? preferred : uniqueTargets.values().iterator().next();
+
+        List<Component> tooltip = new ArrayList<>(tooltipFactory.tooltip(
+                active.building(), active.floorOrdinal(), active.structure()));
+        List<BlueprintMapRenderer.HoverTarget> alternatives = uniqueTargets.values().stream()
+                .filter(target -> target.logicalBuildingId() != active.logicalBuildingId())
+                .toList();
+        if (!alternatives.isEmpty()) {
+            tooltip.add(Component.empty());
+            tooltip.add(Component.translatable("gui.blueprint.roomTooltip.alsoHere")
+                    .withStyle(ChatFormatting.GRAY, ChatFormatting.ITALIC));
+            for (BlueprintMapRenderer.HoverTarget target : alternatives) {
+                tooltip.add(tooltipFactory.compactTooltip(
+                        target.building(), target.floorOrdinal(),
+                        Integer.compare(target.anchorY(), active.anchorY())));
             }
         }
 
-        List<List<Component>> tooltips = new ArrayList<>();
-        for (BlueprintMapRenderer.HoverTarget target : uniqueTargets.values()) {
-            tooltips.add(tooltipFactory.tooltip(
-                    target.building(), target.floorOrdinal(), target.structure()));
-        }
-
-        int tooltipHeight = 0;
-        for (List<Component> tooltip : tooltips) {
-            tooltipHeight += getTooltipHeight(tooltip) + 9;
-        }
-
-        int tooltipY = mouseY - tooltipHeight / 2 + 12;
-        for (List<Component> tooltip : tooltips) {
-            context.renderComponentTooltip(font, tooltip, mouseX, tooltipY);
-            tooltipY += getTooltipHeight(tooltip) + 9;
-        }
+        int tooltipY = mouseY - getTooltipHeight(tooltip) / 2 + 12;
+        context.renderComponentTooltip(font, tooltip, mouseX, tooltipY);
     }
 
     private void renderPlayerHeadButtonIcon(GuiGraphics context, LocalPlayer player) {

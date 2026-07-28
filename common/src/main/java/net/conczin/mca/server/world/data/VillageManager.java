@@ -514,9 +514,57 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         }
 
         registerInitialRoom(village, structure, room, category, forcedType != null);
+        village.refreshLogicalBuildings();
+        registerGroundRoom(village, structure, room);
         villages.put(village.getId(), village);
         finalizeVillageMutation(village);
         return Building.validationResult.SUCCESS;
+    }
+
+    /** Registers exactly one canonical Ground Floor Room inside this same physical Structure. */
+    private void registerGroundRoom(Village village, Structure structure, Building initialRoom) {
+        StructureFloor initialFloor = structure.getFloor(initialRoom.getFloorId()).orElse(null);
+        if (initialFloor == null) return;
+
+        StructureFloor groundFloor = structure.getFloors().stream()
+                .filter(floor -> floor.floorNumber() == 0)
+                .min(Comparator.comparingInt(StructureFloor::anchorY)
+                        .thenComparingInt(StructureFloor::id))
+                .orElse(null);
+        if (groundFloor == null || groundFloor.id() == initialFloor.id()) return;
+        if (village.getRooms().anyMatch(room -> room.getStructureId() == structure.getId()
+                && room.getFloorId() == groundFloor.id())) {
+            return;
+        }
+
+        BlockPos source = groundRoomSource(groundFloor, initialRoom.getSourceBlock());
+        if (source == null) return;
+        BuildingScanResult groundRoom = scanResolvedRoom(
+                village, structure, source, -1, groundFloor,
+                registeredRoomCells(village, structure.getId(), groundFloor.id(), -1));
+        if (groundRoom.result() != Building.validationResult.SUCCESS) return;
+
+        String category = chooseInitialRoomCategory(groundRoom, null);
+        if (category != null) {
+            registerInitialRoom(village, structure, groundRoom.building(), category, false);
+        }
+    }
+
+    private BlockPos groundRoomSource(StructureFloor floor, BlockPos reference) {
+        if (floor.region() == null || reference == null) return null;
+        return floor.region().cells().stream()
+                .map(cell -> new BlockPos(cell.getX(), floor.anchorY(), cell.getZ()))
+                .filter(cell -> StructureScanner.isWalkableAnchor(world, cell))
+                .min(Comparator.comparingLong((BlockPos cell) -> horizontalDistanceSquared(cell, reference))
+                        .thenComparingInt(BlockPos::getX)
+                        .thenComparingInt(BlockPos::getZ))
+                .orElse(null);
+    }
+
+    private static long horizontalDistanceSquared(BlockPos first, BlockPos second) {
+        long dx = (long) first.getX() - second.getX();
+        long dz = (long) first.getZ() - second.getZ();
+        return dx * dx + dz * dz;
     }
 
     private void registerInitialRoom(Village village,

@@ -41,7 +41,7 @@ final class BlueprintMapGeometry {
         return cache.computeIfAbsent(key, ignored -> {
             List<MapFootprintLayer> rooms = buildRoomLayers(selectedFloor);
             Map<Integer, List<MapFootprintLayer>> roomsByBuilding = groupRoomLayers(rooms);
-            List<MapStructureLayer> structures = buildStructureLayers(selectedFloor, roomsByBuilding);
+            List<MapStructureLayer> structures = buildStructureLayers(roomsByBuilding);
             List<MapIconLayer> icons = buildIconLayers(roomsByBuilding, selectedFloor);
             List<Building> grouped = village.getExternalBuildings().filter(Building::isComplete)
                     .filter(building -> BlueprintMapLayering.isOutdoorVisible(selectedFloor))
@@ -62,6 +62,10 @@ final class BlueprintMapGeometry {
             if (selectedFloor != null && floorNum != selectedFloor) continue;
             Set<BlueprintMapFootprint.Cell> footprintCells = roomFootprint(room);
             if (footprintCells.isEmpty()) continue;
+            int anchorY = village.getStructure(room.getStructureId())
+                    .flatMap(structure -> structure.getFloor(room.getFloorId()))
+                    .map(StructureFloor::anchorY)
+                    .orElse(room.getSourceBlock().getY());
 
             layers.add(new MapFootprintLayer(
                     room,
@@ -70,8 +74,12 @@ final class BlueprintMapGeometry {
                     BlueprintMapFootprint.rowSpans(footprintCells),
                     BlueprintMapFootprint.outerEdges(footprintCells),
                     floorNum,
-                    village.getLogicalBuildingId(room.getStructureId())));
+                    village.getLogicalBuildingId(room.getStructureId()),
+                    anchorY));
         }
+        layers.sort(Comparator.comparingInt(MapFootprintLayer::anchorY)
+                .thenComparingInt(MapFootprintLayer::logicalBuildingId)
+                .thenComparingInt(layer -> layer.building().getId()));
         return List.copyOf(layers);
     }
 
@@ -81,10 +89,7 @@ final class BlueprintMapGeometry {
     }
 
     private List<MapStructureLayer> buildStructureLayers(
-            Integer selectedFloor,
             Map<Integer, List<MapFootprintLayer>> roomsByBuilding) {
-        if (selectedFloor != null && selectedFloor < 0) return List.of();
-
         Map<Integer, List<Structure>> byBuilding = village.getStructures().values().stream()
                 .collect(java.util.stream.Collectors.groupingBy(
                         structure -> village.getLogicalBuildingId(structure.getId()),
@@ -95,13 +100,12 @@ final class BlueprintMapGeometry {
                     .sorted(Comparator.comparingInt(Structure::getId))
                     .toList();
             LinkedHashSet<BlueprintMapFootprint.Cell> outlineBaseCells = new LinkedHashSet<>();
+            int anchorY = Integer.MIN_VALUE;
             for (Structure structure : members) {
                 for (StructureFloor floor : structure.getFloors()) {
-                    boolean visibleShellFloor = selectedFloor == null
-                            ? floor.floorNumber() == 0
-                            : floor.floorNumber() == selectedFloor;
-                    if (visibleShellFloor && floor.region() != null) {
+                    if (floor.floorNumber() >= 0 && floor.region() != null) {
                         outlineBaseCells.addAll(BlueprintMapFootprint.fromFloorRegions(List.of(floor.region())));
+                        anchorY = Math.max(anchorY, floor.anchorY());
                     }
                 }
             }
@@ -122,10 +126,13 @@ final class BlueprintMapGeometry {
             layers.add(new MapStructureLayer(
                     entry.getKey(),
                     village.getMainRoom(root).orElse(null),
+                    anchorY,
                     shellCells,
                     BlueprintMapFootprint.rowSpans(shellCells),
                     BlueprintMapFootprint.outerEdges(outlineCells)));
         }
+        layers.sort(Comparator.comparingInt(MapStructureLayer::anchorY)
+                .thenComparingInt(MapStructureLayer::logicalBuildingId));
         return List.copyOf(layers);
     }
 
@@ -229,7 +236,8 @@ final class BlueprintMapGeometry {
                              List<BlueprintMapFootprint.RowSpan> fillSpans,
                              List<BlueprintMapFootprint.Edge> outlineEdges,
                              Integer floorOrdinal,
-                             int logicalBuildingId) {
+                             int logicalBuildingId,
+                             int anchorY) {
         MapFootprintLayer {
             footprintCells = Set.copyOf(footprintCells);
             fillSpans = List.copyOf(fillSpans);
@@ -237,7 +245,7 @@ final class BlueprintMapGeometry {
         }
     }
 
-    record MapStructureLayer(int logicalBuildingId, Building mainRoom,
+    record MapStructureLayer(int logicalBuildingId, Building mainRoom, int anchorY,
                              Set<BlueprintMapFootprint.Cell> shellCells,
                              List<BlueprintMapFootprint.RowSpan> shellSpans,
                              List<BlueprintMapFootprint.Edge> borderEdges) {

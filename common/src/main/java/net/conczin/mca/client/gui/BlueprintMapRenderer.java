@@ -43,8 +43,11 @@ final class BlueprintMapRenderer implements AutoCloseable {
     private static final float ROOM_BORDER_BRIGHTEN_FACTOR = 1.35f;
     private static final int STRUCTURE_BASE_COLOR = 0x00a0a0a0;
     private static final int BUILDING_SHADE_ALPHA = 0x24;
+    private static final int BUILDING_SHADE_ALPHA_ACTIVE = 0x38;
     private static final int BUILDING_BORDER_ALPHA = 0xc0;
+    private static final int BUILDING_BORDER_ALPHA_ACTIVE = 0xff;
     private static final float BUILDING_BORDER_DARKEN_FACTOR = 0.58f;
+    private static final float BUILDING_BORDER_ACTIVE_FACTOR = 0.85f;
     private static final int ROOM_FILL_ALPHA_HOVERED = 0x98;
 
     private final BlueprintTerrainRenderer terrainRenderer = new BlueprintTerrainRenderer();
@@ -57,6 +60,7 @@ final class BlueprintMapRenderer implements AutoCloseable {
                         boolean showBuildingIcons,
                         boolean showPlayerHead,
                         LocalPlayer player,
+                        int playerLogicalBuildingId,
                         double playerRenderX,
                         double playerRenderZ,
                         int mouseX,
@@ -86,6 +90,21 @@ final class BlueprintMapRenderer implements AutoCloseable {
         List<MapFootprintLayer> footprintLayers = geometry.footprintLayers();
         List<MapStructureLayer> structureLayers = geometry.structureLayers();
         List<MapIconLayer> footprintIconLayers = geometry.iconLayers();
+        List<MapFootprintLayer> roomHitTestLayers = BlueprintMapLayering.frontToBack(footprintLayers);
+        int hoveredLogicalBuildingId = hoveredLogicalBuildingId(
+                roomHitTestLayers, structureLayers, hoveredMapCell, mouseX, mouseY,
+                viewport, selectedFloor, mouseInsideMap);
+        int activeLogicalBuildingId = hoveredLogicalBuildingId >= 0
+                ? hoveredLogicalBuildingId
+                : playerLogicalBuildingId >= 0
+                ? playerLogicalBuildingId
+                : topLogicalBuildingId(footprintLayers, structureLayers);
+        List<MapFootprintLayer> roomRenderLayers = new ArrayList<>(footprintLayers);
+        roomRenderLayers.sort(Comparator.comparingInt(
+                layer -> layer.logicalBuildingId() == activeLogicalBuildingId ? 1 : 0));
+        List<MapStructureLayer> structureRenderLayers = new ArrayList<>(structureLayers);
+        structureRenderLayers.sort(Comparator.comparingInt(
+                layer -> layer.logicalBuildingId() == activeLogicalBuildingId ? 1 : 0));
 
         context.enableScissor(
                 viewport.left() + 1,
@@ -125,35 +144,33 @@ final class BlueprintMapRenderer implements AutoCloseable {
                     buildingType.getColor(), selectedFloor != null, hovering
             );
             if (hovering) {
-                addRoomHover(hoverTargets, building, selectedFloor, building.getId());
+                addRoomHover(hoverTargets, building, selectedFloor, building.getId(), building.getCenter().getY());
             }
         }
 
         matrices.popPose();
 
-        for (MapStructureLayer layer : structureLayers) {
+        for (MapStructureLayer layer : structureRenderLayers) {
             renderStructureShade(
                     context,
                     layer.shellSpans(),
                     STRUCTURE_BASE_COLOR,
+                    layer.logicalBuildingId() == activeLogicalBuildingId,
                     viewport
             );
         }
 
         // The one neutral Building border stays behind the selected Room presentation.
-        for (MapStructureLayer layer : structureLayers) {
+        for (MapStructureLayer layer : structureRenderLayers) {
             renderStructureOutlineScreenSpace(
                     context,
                     layer.borderEdges(),
                     STRUCTURE_BASE_COLOR,
+                    false,
                     viewport
             );
         }
 
-        List<MapFootprintLayer> roomRenderLayers = footprintLayers;
-        List<MapFootprintLayer> roomHitTestLayers = selectedFloor == null
-                ? BlueprintMapLayering.frontToBack(roomRenderLayers)
-                : roomRenderLayers;
         Set<MapFootprintLayer> hoveredFootprintLayers = new HashSet<>();
         for (MapFootprintLayer layer : roomHitTestLayers) {
             boolean hovering = mouseInsideMap
@@ -166,12 +183,12 @@ final class BlueprintMapRenderer implements AutoCloseable {
                 if (!hasRoomHoverForBuilding(hoverTargets, buildingId)) {
                     hoveredFootprintLayers.add(layer);
                 }
-                addRoomHover(hoverTargets, layer.building(), layer.floorOrdinal(), buildingId);
+                addRoomHover(hoverTargets, layer.building(), layer.floorOrdinal(), buildingId, layer.anchorY());
             }
         }
 
-        // Paint every Room back-to-front. The matching reverse hit-test order above ensures
-        // tooltip ownership follows the Room that is actually visible on top.
+        // Paint back-to-front, moving the active logical building last. Hover ownership is
+        // resolved from physical elevation first, so hovering can override the player's building.
         for (MapFootprintLayer layer : roomRenderLayers) {
             boolean hovering = hoveredFootprintLayers.contains(layer);
             renderRoomFootprint(
@@ -191,6 +208,12 @@ final class BlueprintMapRenderer implements AutoCloseable {
                     viewport
             );
         }
+
+        structureRenderLayers.stream()
+                .filter(layer -> layer.logicalBuildingId() == activeLogicalBuildingId)
+                .findFirst()
+                .ifPresent(layer -> renderStructureOutlineScreenSpace(
+                        context, layer.borderEdges(), STRUCTURE_BASE_COLOR, true, viewport));
 
         // The shell/outline is an authoritative whole-Building hit region. Collect the hit
         // now, then resolve it after Room hit testing so basement/upper Room geometry cannot steal
@@ -235,7 +258,8 @@ final class BlueprintMapRenderer implements AutoCloseable {
         // building, so replace its Room targets with one aggregate target.
         for (MapStructureLayer layer : hoveredStructureLayers) {
             if (layer.mainRoom() != null) {
-                addStructureHover(hoverTargets, layer.mainRoom(), layer.logicalBuildingId());
+                addStructureHover(hoverTargets, layer.mainRoom(), layer.logicalBuildingId(),
+                        selectedFloor, layer.anchorY());
             }
         }
 
@@ -249,7 +273,7 @@ final class BlueprintMapRenderer implements AutoCloseable {
                 showPlayerHead
         );
 
-        return new RenderResult(hoverTargets);
+        return new RenderResult(hoverTargets, activeLogicalBuildingId);
     }
 
     private static void pushWorldTransform(PoseStack matrices, BlueprintMapViewport viewport) {
@@ -335,10 +359,11 @@ final class BlueprintMapRenderer implements AutoCloseable {
     private static void renderStructureOutlineScreenSpace(GuiGraphics context,
                                                           List<BlueprintMapFootprint.Edge> edges,
                                                           int baseColor,
+                                                          boolean active,
                                                           BlueprintMapViewport viewport) {
         int outlineColor = withAlpha(
-                darkenColor(baseColor, BUILDING_BORDER_DARKEN_FACTOR),
-                BUILDING_BORDER_ALPHA
+                darkenColor(baseColor, active ? BUILDING_BORDER_ACTIVE_FACTOR : BUILDING_BORDER_DARKEN_FACTOR),
+                active ? BUILDING_BORDER_ALPHA_ACTIVE : BUILDING_BORDER_ALPHA
         );
         renderOutlineScreenSpace(context, edges, outlineColor, viewport);
     }
@@ -346,8 +371,9 @@ final class BlueprintMapRenderer implements AutoCloseable {
     private static void renderStructureShade(GuiGraphics context,
                                              List<BlueprintMapFootprint.RowSpan> shadeSpans,
                                              int baseColor,
+                                             boolean active,
                                              BlueprintMapViewport viewport) {
-        int color = withAlpha(baseColor, BUILDING_SHADE_ALPHA);
+        int color = withAlpha(baseColor, active ? BUILDING_SHADE_ALPHA_ACTIVE : BUILDING_SHADE_ALPHA);
         renderCellSpansScreenSpace(context, shadeSpans, color, viewport);
     }
 
@@ -493,6 +519,47 @@ final class BlueprintMapRenderer implements AutoCloseable {
         }
     }
 
+    private static int hoveredLogicalBuildingId(List<MapFootprintLayer> roomHitTestLayers,
+                                                List<MapStructureLayer> structureLayers,
+                                                BlueprintMapFootprint.Cell hoveredMapCell,
+                                                int mouseX,
+                                                int mouseY,
+                                                BlueprintMapViewport viewport,
+                                                Integer selectedFloor,
+                                                boolean mouseInsideMap) {
+        if (!mouseInsideMap) return -1;
+        for (MapFootprintLayer layer : roomHitTestLayers) {
+            if (isRoomHovered(layer, hoveredMapCell, mouseX, mouseY, viewport, selectedFloor == null)) {
+                return layer.logicalBuildingId();
+            }
+        }
+        for (MapStructureLayer layer : BlueprintMapLayering.frontToBack(structureLayers)) {
+            if (layer.shellCells().contains(hoveredMapCell)
+                    || isOutlineHovered(layer.borderEdges(), mouseX, mouseY, viewport)) {
+                return layer.logicalBuildingId();
+            }
+        }
+        return -1;
+    }
+
+    private static int topLogicalBuildingId(List<MapFootprintLayer> roomLayers,
+                                            List<MapStructureLayer> structureLayers) {
+        MapStructureLayer structure = structureLayers.stream()
+                .max(Comparator.comparingInt(MapStructureLayer::anchorY)
+                        .thenComparingInt(MapStructureLayer::logicalBuildingId))
+                .orElse(null);
+        MapFootprintLayer room = roomLayers.stream()
+                .max(Comparator.comparingInt(MapFootprintLayer::anchorY)
+                        .thenComparingInt(MapFootprintLayer::logicalBuildingId))
+                .orElse(null);
+        if (structure == null) return room == null ? -1 : room.logicalBuildingId();
+        if (room == null) return structure.logicalBuildingId();
+        return room.anchorY() > structure.anchorY()
+                || room.anchorY() == structure.anchorY()
+                && room.logicalBuildingId() > structure.logicalBuildingId()
+                ? room.logicalBuildingId() : structure.logicalBuildingId();
+    }
+
     private static boolean hasRoomHoverForBuilding(List<HoverTarget> hoverTargets, int buildingId) {
         return hoverTargets.stream().anyMatch(target -> !target.structure()
                 && target.logicalBuildingId() == buildingId);
@@ -500,19 +567,22 @@ final class BlueprintMapRenderer implements AutoCloseable {
 
     private static void addStructureHover(List<HoverTarget> hoverTargets,
                                           Building mainRoom,
-                                          int buildingId) {
+                                          int buildingId,
+                                          Integer floorOrdinal,
+                                          int anchorY) {
         hoverTargets.removeIf(target -> !target.structure()
                 && target.logicalBuildingId() == buildingId);
-        HoverTarget target = new HoverTarget(mainRoom, null, true, buildingId);
+        HoverTarget target = new HoverTarget(mainRoom, floorOrdinal, true, buildingId, anchorY);
         if (!hoverTargets.contains(target)) hoverTargets.add(target);
     }
 
     private static void addRoomHover(List<HoverTarget> hoverTargets,
                                      Building building,
                                      Integer floorOrdinal,
-                                     int buildingId) {
+                                     int buildingId,
+                                     int anchorY) {
         if (!building.isFunctionalRoom()) {
-            HoverTarget target = new HoverTarget(building, floorOrdinal, false, buildingId);
+            HoverTarget target = new HoverTarget(building, floorOrdinal, false, buildingId, anchorY);
             if (!hoverTargets.contains(target)) hoverTargets.add(target);
             return;
         }
@@ -520,7 +590,7 @@ final class BlueprintMapRenderer implements AutoCloseable {
         // A concrete Room/icon hover always wins over the logical Building shade beneath it.
         hoverTargets.removeIf(target -> target.structure()
                 && target.logicalBuildingId() == buildingId);
-        HoverTarget target = new HoverTarget(building, floorOrdinal, false, buildingId);
+        HoverTarget target = new HoverTarget(building, floorOrdinal, false, buildingId, anchorY);
         if (!hoverTargets.contains(target)) hoverTargets.add(target);
     }
 
@@ -549,13 +619,13 @@ final class BlueprintMapRenderer implements AutoCloseable {
         terrainRenderer.close();
     }
 
-    record RenderResult(List<HoverTarget> hoverTargets) {
+    record RenderResult(List<HoverTarget> hoverTargets, int activeLogicalBuildingId) {
         RenderResult {
             hoverTargets = List.copyOf(hoverTargets);
         }
     }
 
     record HoverTarget(Building building, Integer floorOrdinal,
-                       boolean structure, int logicalBuildingId) {
+                       boolean structure, int logicalBuildingId, int anchorY) {
     }
 }

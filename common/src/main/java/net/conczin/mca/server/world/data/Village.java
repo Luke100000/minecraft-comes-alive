@@ -438,18 +438,18 @@ public class Village implements Iterable<Building> {
             Building room = resolved.get().position().room();
             if (room != null) {
                 return new RoomScanContext(StructuralPosition.REGISTERED_ROOM,
-                        Optional.of(room), RoomScanMode.UPDATE_ROOM, -1);
+                        Optional.of(room), RoomScanMode.UPDATE_ROOM, -1, Integer.MIN_VALUE);
             }
             return new RoomScanContext(StructuralPosition.ATTACHABLE_ROOM,
                     getMainRoomForStructure(resolved.get().structure().getId()),
-                    RoomScanMode.ADD_ROOM, -1);
+                    RoomScanMode.ADD_ROOM, -1, Integer.MIN_VALUE);
         }
 
         RoomScanTarget target = level != null && pos != null && StructureScanner.isWalkableAnchor(level, pos)
                 ? attachmentTarget(pos).orElse(RoomScanTarget.ADD_BUILDING)
                 : RoomScanTarget.ADD_BUILDING;
         return new RoomScanContext(StructuralPosition.OUTSIDE, Optional.empty(),
-                target.mode(), target.targetBuildingId());
+                target.mode(), target.targetBuildingId(), target.prospectiveFloorNumber());
     }
 
     private Optional<RoomScanTarget> attachmentTarget(BlockPos pos) {
@@ -471,23 +471,11 @@ public class Village implements Iterable<Building> {
             return Optional.empty();
         }
 
+        int floorNumber = prospectiveFloorNumber(target.targetBuildingId(), pos.getY());
+        if (floorNumber == Integer.MIN_VALUE) return Optional.empty();
         return Optional.of(new RoomScanTarget(
-                attachmentMode(target.targetBuildingId(), pos.getY()),
-                target.targetBuildingId()));
-    }
-
-    private RoomScanMode attachmentMode(int buildingId, int queryY) {
-        List<Structure> members = getBuildingStructures(buildingId);
-        if (members.isEmpty()) return RoomScanMode.ADD_BUILDING;
-        int groundReferenceY = members.stream()
-                .flatMap(structure -> structure.getFloors().stream())
-                .filter(floor -> floor.floorNumber() == 0)
-                .mapToInt(StructureFloor::anchorY)
-                .min()
-                .orElseGet(() -> getStructure(buildingId)
-                        .orElse(members.getFirst()).getSurfaceReferenceY());
-        return queryY >= groundReferenceY - BuildingFloorRegionDetector.FLOOR_CLUSTER_TOLERANCE
-                ? RoomScanMode.ADD_FLOOR : RoomScanMode.ADD_BASEMENT;
+                floorNumber < 0 ? RoomScanMode.ADD_BASEMENT : RoomScanMode.ADD_FLOOR,
+                target.targetBuildingId(), floorNumber));
     }
 
     private static AttachmentTarget attachmentTarget(Structure structure,
@@ -635,9 +623,11 @@ public class Village implements Iterable<Building> {
         }
     }
 
-    private record RoomScanTarget(RoomScanMode mode, int targetBuildingId) {
+    private record RoomScanTarget(RoomScanMode mode,
+                                  int targetBuildingId,
+                                  int prospectiveFloorNumber) {
         private static final RoomScanTarget ADD_BUILDING =
-                new RoomScanTarget(RoomScanMode.ADD_BUILDING, -1);
+                new RoomScanTarget(RoomScanMode.ADD_BUILDING, -1, Integer.MIN_VALUE);
     }
 
     public enum StructuralPosition { OUTSIDE, REGISTERED_ROOM, ATTACHABLE_ROOM }
@@ -645,7 +635,8 @@ public class Village implements Iterable<Building> {
     public record RoomScanContext(StructuralPosition position,
                                   Optional<Building> building,
                                   RoomScanMode mode,
-                                  int targetBuildingId) {
+                                  int targetBuildingId,
+                                  int prospectiveFloorNumber) {
         public Optional<Building> functionalRoom() {
             return position == StructuralPosition.REGISTERED_ROOM ? building : Optional.empty();
         }
@@ -667,6 +658,38 @@ public class Village implements Iterable<Building> {
         members.add(candidate);
         return floorNumbers(members, buildingId)
                 .getOrDefault(new FloorRef(candidate, candidateFloor), Integer.MIN_VALUE);
+    }
+
+    private int prospectiveFloorNumber(int buildingId, int queryY) {
+        List<StructureFloor> floors = getBuildingStructures(buildingId).stream()
+                .flatMap(structure -> structure.getFloors().stream())
+                .sorted(Comparator.comparingInt(StructureFloor::anchorY)
+                        .thenComparingInt(StructureFloor::floorNumber)
+                        .thenComparingInt(StructureFloor::id))
+                .toList();
+        if (floors.isEmpty()) return Integer.MIN_VALUE;
+
+        int tolerance = BuildingFloorRegionDetector.FLOOR_CLUSTER_TOLERANCE;
+        StructureFloor nearest = floors.stream()
+                .min(Comparator.comparingInt((StructureFloor floor) -> Math.abs(floor.anchorY() - queryY))
+                        .thenComparingInt(StructureFloor::anchorY)
+                        .thenComparingInt(StructureFloor::id))
+                .orElseThrow();
+        if (Math.abs(nearest.anchorY() - queryY) <= tolerance) return nearest.floorNumber();
+
+        StructureFloor below = floors.stream()
+                .filter(floor -> floor.anchorY() < queryY)
+                .max(Comparator.comparingInt(StructureFloor::anchorY)
+                        .thenComparingInt(StructureFloor::floorNumber))
+                .orElse(null);
+        if (below != null) return below.floorNumber() + 1;
+
+        StructureFloor above = floors.stream()
+                .filter(floor -> floor.anchorY() > queryY)
+                .min(Comparator.comparingInt(StructureFloor::anchorY)
+                        .thenComparingInt(StructureFloor::floorNumber))
+                .orElse(null);
+        return above == null ? Integer.MIN_VALUE : above.floorNumber() - 1;
     }
 
     private Map<FloorRef, Integer> floorNumbers(Collection<Structure> members, int rootStructureId) {

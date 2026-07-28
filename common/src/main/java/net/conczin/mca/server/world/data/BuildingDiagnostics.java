@@ -23,7 +23,7 @@ public final class BuildingDiagnostics {
         Village village = manager.findNearestVillage(pos, Village.MERGE_MARGIN).orElse(null);
         Village.RoomScanContext context = village == null
                 ? new Village.RoomScanContext(Village.StructuralPosition.OUTSIDE, Optional.empty(),
-                Village.RoomScanMode.ADD_BUILDING, -1)
+                Village.RoomScanMode.ADD_BUILDING, -1, Integer.MIN_VALUE)
                 : village.getRoomScanContext(world, pos);
         String uiAction = uiAction(context.mode());
 
