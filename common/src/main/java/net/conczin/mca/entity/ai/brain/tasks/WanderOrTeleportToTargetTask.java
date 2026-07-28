@@ -11,25 +11,21 @@ import net.minecraft.world.level.pathfinder.PathType;
 import net.minecraft.world.level.pathfinder.WalkNodeEvaluator;
 
 public class WanderOrTeleportToTargetTask extends MoveToTargetSink {
-    // Keep the old seven-check interval, but distribute initial checks like vanilla mob AI.
+    // Stagger expensive path checks across villagers while preserving the existing seven-check interval.
     private static final int PATHFINDING_INTERVAL = 7;
-    private int cooldown = -1;
-
-    public WanderOrTeleportToTargetTask() {
-        // nop
-    }
+    private int pathfindingCooldown = -1;
 
     @Override
     protected boolean checkExtraStartConditions(ServerLevel serverWorld, Mob mobEntity) {
-        if (this.cooldown < 0) {
-            this.cooldown = Math.floorMod(mobEntity.getId(), PATHFINDING_INTERVAL);
+        if (this.pathfindingCooldown < 0) {
+            this.pathfindingCooldown = Math.floorMod(mobEntity.getId(), PATHFINDING_INTERVAL);
         }
-        if (this.cooldown > 0) {
-            this.cooldown--;
+        if (this.pathfindingCooldown > 0) {
+            this.pathfindingCooldown--;
             return false;
         }
 
-        this.cooldown = PATHFINDING_INTERVAL - 1;
+        this.pathfindingCooldown = PATHFINDING_INTERVAL - 1;
         return super.checkExtraStartConditions(serverWorld, mobEntity);
     }
 

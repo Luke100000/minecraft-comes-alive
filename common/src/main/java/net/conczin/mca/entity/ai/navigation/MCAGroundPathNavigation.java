@@ -19,6 +19,7 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
     private static final double CLIMB_VERTICAL_SPEED = 0.16D;
     private static final double CLIMB_HORIZONTAL_SPEED = 0.12D;
     private static final double CLIMB_HORIZONTAL_GAIN = 0.35D;
+    private static final double LADDER_ENTRY_OFFSET = 0.1D;
     private static final double ASCENT_NODE_TOLERANCE = 0.20D;
     private static final double DESCENT_NODE_TOLERANCE = 0.08D;
     private static final double EXIT_HEIGHT_TOLERANCE = 0.25D;
@@ -88,17 +89,10 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
 
         Vec3 position = this.getTempMobPos();
         if (context.pathTargetsClimbable() && this.mob.onClimbable()) {
-            double targetY = context.targetNode().y;
-            boolean reached;
-            if (context.verticalDirection() > 0) {
-                reached = this.mob.getY() >= targetY - ASCENT_NODE_TOLERANCE;
-            } else if (context.verticalDirection() < 0) {
-                reached = this.mob.getY() <= targetY + DESCENT_NODE_TOLERANCE;
-            } else {
-                reached = Math.abs(targetY - this.mob.getY()) <= ASCENT_NODE_TOLERANCE;
-            }
-
-            if (reached) {
+            double tolerance = context.verticalDirection() < 0
+                    ? DESCENT_NODE_TOLERANCE
+                    : ASCENT_NODE_TOLERANCE;
+            if (hasReachedHeight(context.targetNode().y, context.verticalDirection(), tolerance)) {
                 this.path.advance();
             }
         }
@@ -230,13 +224,17 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
     }
 
     private boolean isAtExitHeight(ClimbContext context, double targetY) {
-        if (context.verticalDirection() > 0) {
-            return this.mob.getY() >= targetY - EXIT_HEIGHT_TOLERANCE;
+        return hasReachedHeight(targetY, context.verticalDirection(), EXIT_HEIGHT_TOLERANCE);
+    }
+
+    private boolean hasReachedHeight(double targetY, int verticalDirection, double tolerance) {
+        if (verticalDirection > 0) {
+            return this.mob.getY() >= targetY - tolerance;
         }
-        if (context.verticalDirection() < 0) {
-            return this.mob.getY() <= targetY + EXIT_HEIGHT_TOLERANCE;
+        if (verticalDirection < 0) {
+            return this.mob.getY() <= targetY + tolerance;
         }
-        return Math.abs(targetY - this.mob.getY()) <= EXIT_HEIGHT_TOLERANCE;
+        return Math.abs(targetY - this.mob.getY()) <= tolerance;
     }
 
     private Vec3 getClimbableAnchor(BlockPos pos) {
@@ -245,9 +243,9 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
         if (state.getBlock() instanceof LadderBlock) {
             Direction facing = state.getValue(LadderBlock.FACING);
             return center.add(
-                    facing.getStepX() * 0.1D,
+                    facing.getStepX() * LADDER_ENTRY_OFFSET,
                     0.0D,
-                    facing.getStepZ() * 0.1D
+                    facing.getStepZ() * LADDER_ENTRY_OFFSET
             );
         }
         return center;

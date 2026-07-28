@@ -17,7 +17,7 @@ import net.minecraft.world.phys.AABB;
 import org.jetbrains.annotations.Nullable;
 
 public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
-    private static final int MAX_CLIMBABLE_START_DROP = 2;
+    private static final int MAX_CLIMBABLE_VERTICAL_OFFSET = 2;
     private final Long2BooleanMap clearanceCache = new Long2BooleanOpenHashMap();
     private final Long2BooleanMap climbableCache = new Long2BooleanOpenHashMap();
     private final BlockPos.MutableBlockPos climbablePos = new BlockPos.MutableBlockPos();
@@ -51,7 +51,7 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
         }
 
         if (this.mob.onClimbable()) {
-            for (int drop = 1; drop <= MAX_CLIMBABLE_START_DROP; drop++) {
+            for (int drop = 1; drop <= MAX_CLIMBABLE_VERTICAL_OFFSET; drop++) {
                 BlockPos candidate = mobPos.below(drop);
 
                 if (isClimbable(candidate)) {
@@ -125,7 +125,7 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
 
     private int addUpperFloorExits(Node[] nodes, int nodeCount, BlockPos climbable) {
         for (Direction direction : Direction.Plane.HORIZONTAL) {
-            for (int rise = 1; rise <= MAX_CLIMBABLE_START_DROP; rise++) {
+            for (int rise = 1; rise <= MAX_CLIMBABLE_VERTICAL_OFFSET; rise++) {
                 Node node = getStartNode(climbable.relative(direction).above(rise));
                 if (node.type == PathType.OPEN || node.costMalus < 0.0F || !hasBlockClearance(node)) {
                     continue;
