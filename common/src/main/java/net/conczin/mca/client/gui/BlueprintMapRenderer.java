@@ -37,14 +37,14 @@ final class BlueprintMapRenderer implements AutoCloseable {
     private static final int ROOM_FILL_ALPHA_ALL_FLOORS = 0x60;
     private static final int ROOM_FILL_ALPHA_SELECTED_FLOOR = 0x70;
     private static final float ROOM_FILL_BRIGHTEN_FACTOR = 1.15f;
-    private static final int ROOM_BORDER_ALPHA_ALL_FLOORS = 0xd0;
-    private static final int ROOM_BORDER_ALPHA_SELECTED_FLOOR = 0xee;
+    private static final int ROOM_BORDER_ALPHA_ALL_FLOORS = 0xff;
+    private static final int ROOM_BORDER_ALPHA_SELECTED_FLOOR = 0xff;
     private static final int ROOM_BORDER_ALPHA_HOVERED = 0xff;
     private static final float ROOM_BORDER_BRIGHTEN_FACTOR = 1.35f;
     private static final int STRUCTURE_BASE_COLOR = 0x00a0a0a0;
     private static final int BUILDING_SHADE_ALPHA = 0x24;
     private static final int BUILDING_SHADE_ALPHA_ACTIVE = 0x38;
-    private static final int BUILDING_BORDER_ALPHA = 0xc0;
+    private static final int BUILDING_BORDER_ALPHA = 0xff;
     private static final int BUILDING_BORDER_ALPHA_ACTIVE = 0xff;
     private static final float BUILDING_BORDER_DARKEN_FACTOR = 0.58f;
     private static final float BUILDING_BORDER_ACTIVE_FACTOR = 0.85f;
@@ -91,14 +91,9 @@ final class BlueprintMapRenderer implements AutoCloseable {
         List<MapStructureLayer> structureLayers = geometry.structureLayers();
         List<MapIconLayer> footprintIconLayers = geometry.iconLayers();
         List<MapFootprintLayer> roomHitTestLayers = BlueprintMapLayering.frontToBack(footprintLayers);
-        Set<Integer> hoveredLogicalBuildingIds = hoveredLogicalBuildingIds(
+        int hoveredLogicalBuildingId = hoveredLogicalBuildingId(
                 roomHitTestLayers, structureLayers, hoveredMapCell, mouseX, mouseY,
-                viewport, selectedFloor, mouseInsideMap);
-        int hoveredLogicalBuildingId = hoveredLogicalBuildingIds.size() == 1
-                ? hoveredLogicalBuildingIds.iterator().next()
-                : playerLogicalBuildingId >= 0 && hoveredLogicalBuildingIds.contains(playerLogicalBuildingId)
-                ? playerLogicalBuildingId
-                : hoveredLogicalBuildingIds.stream().findFirst().orElse(-1);
+                viewport, selectedFloor, playerLogicalBuildingId, mouseInsideMap);
         int activeLogicalBuildingId = hoveredLogicalBuildingId >= 0
                 ? hoveredLogicalBuildingId
                 : playerLogicalBuildingId >= 0
@@ -171,7 +166,7 @@ final class BlueprintMapRenderer implements AutoCloseable {
                     context,
                     layer.borderEdges(),
                     STRUCTURE_BASE_COLOR,
-                    false,
+                    layer.logicalBuildingId() == activeLogicalBuildingId,
                     viewport
             );
         }
@@ -185,7 +180,8 @@ final class BlueprintMapRenderer implements AutoCloseable {
                 // for tooltip stacking, while only the frontmost Room in a Structure gets the
                 // visual hover highlight.
                 int buildingId = layer.logicalBuildingId();
-                if (!hasRoomHoverForBuilding(hoverTargets, buildingId)) {
+                if (!hasRoomHoverForBuilding(hoverTargets, buildingId)
+                        && isInsideBuildingOutline(structureLayers, buildingId, hoveredMapCell)) {
                     hoveredFootprintLayers.add(layer);
                 }
                 addRoomHover(hoverTargets, layer.building(), layer.floorOrdinal(), buildingId, layer.anchorY());
@@ -214,18 +210,12 @@ final class BlueprintMapRenderer implements AutoCloseable {
             );
         }
 
-        structureRenderLayers.stream()
-                .filter(layer -> layer.logicalBuildingId() == activeLogicalBuildingId)
-                .findFirst()
-                .ifPresent(layer -> renderStructureOutlineScreenSpace(
-                        context, layer.borderEdges(), STRUCTURE_BASE_COLOR, true, viewport));
-
         // The shell/outline is an authoritative whole-Building hit region. Collect the hit
         // now, then resolve it after Room hit testing so basement/upper Room geometry cannot steal
         // the aggregate tooltip from the Building shell.
         Set<MapStructureLayer> hoveredStructureLayers = new LinkedHashSet<>();
         for (MapStructureLayer layer : structureLayers) {
-            boolean buildingHovered = layer.shellCells().contains(hoveredMapCell)
+            boolean buildingHovered = layer.outlineCells().contains(hoveredMapCell)
                     || isOutlineHovered(layer.borderEdges(), mouseX, mouseY, viewport);
             if (mouseInsideMap && buildingHovered) {
                 hoveredStructureLayers.add(layer);
@@ -524,28 +514,44 @@ final class BlueprintMapRenderer implements AutoCloseable {
         }
     }
 
-    private static Set<Integer> hoveredLogicalBuildingIds(List<MapFootprintLayer> roomHitTestLayers,
-                                                          List<MapStructureLayer> structureLayers,
-                                                          BlueprintMapFootprint.Cell hoveredMapCell,
-                                                          int mouseX,
-                                                          int mouseY,
-                                                          BlueprintMapViewport viewport,
-                                                          Integer selectedFloor,
-                                                          boolean mouseInsideMap) {
-        if (!mouseInsideMap) return Set.of();
-        LinkedHashSet<Integer> hovered = new LinkedHashSet<>();
+    private static int hoveredLogicalBuildingId(List<MapFootprintLayer> roomHitTestLayers,
+                                                 List<MapStructureLayer> structureLayers,
+                                                 BlueprintMapFootprint.Cell hoveredMapCell,
+                                                 int mouseX,
+                                                 int mouseY,
+                                                 BlueprintMapViewport viewport,
+                                                 Integer selectedFloor,
+                                                 int playerLogicalBuildingId,
+                                                 boolean mouseInsideMap) {
+        if (!mouseInsideMap) return -1;
+
         for (MapFootprintLayer layer : roomHitTestLayers) {
-            if (isRoomHovered(layer, hoveredMapCell, mouseX, mouseY, viewport, selectedFloor == null)) {
-                hovered.add(layer.logicalBuildingId());
+            if (isInsideBuildingOutline(structureLayers, layer.logicalBuildingId(), hoveredMapCell)
+                    && isRoomHovered(layer, hoveredMapCell, mouseX, mouseY, viewport, selectedFloor == null)) {
+                return layer.logicalBuildingId();
             }
         }
+
+        LinkedHashSet<Integer> hovered = new LinkedHashSet<>();
         for (MapStructureLayer layer : BlueprintMapLayering.frontToBack(structureLayers)) {
-            if (layer.shellCells().contains(hoveredMapCell)
+            if (layer.outlineCells().contains(hoveredMapCell)
                     || isOutlineHovered(layer.borderEdges(), mouseX, mouseY, viewport)) {
                 hovered.add(layer.logicalBuildingId());
             }
         }
-        return Collections.unmodifiableSet(hovered);
+        if (hovered.size() == 1) return hovered.iterator().next();
+        if (playerLogicalBuildingId >= 0 && hovered.contains(playerLogicalBuildingId)) {
+            return playerLogicalBuildingId;
+        }
+        return hovered.stream().findFirst().orElse(-1);
+    }
+
+    private static boolean isInsideBuildingOutline(List<MapStructureLayer> structureLayers,
+                                                   int logicalBuildingId,
+                                                   BlueprintMapFootprint.Cell cell) {
+        return structureLayers.stream()
+                .filter(layer -> layer.logicalBuildingId() == logicalBuildingId)
+                .anyMatch(layer -> layer.outlineCells().contains(cell));
     }
 
     private static int topLogicalBuildingId(List<MapFootprintLayer> roomLayers,

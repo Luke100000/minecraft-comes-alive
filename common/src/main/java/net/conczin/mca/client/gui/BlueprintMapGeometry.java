@@ -140,6 +140,7 @@ final class BlueprintMapGeometry {
                     entry.getKey(),
                     village.getMainRoom(root).orElse(null),
                     anchorY,
+                    outlineShape.cells(),
                     shellShape.cells(),
                     shellShape.spans(),
                     outlineShape.edges()));
@@ -259,10 +260,12 @@ final class BlueprintMapGeometry {
     }
 
     record MapStructureLayer(int logicalBuildingId, Building mainRoom, int anchorY,
+                             Set<BlueprintMapFootprint.Cell> outlineCells,
                              Set<BlueprintMapFootprint.Cell> shellCells,
                              List<BlueprintMapFootprint.RowSpan> shellSpans,
                              List<BlueprintMapFootprint.Edge> borderEdges) {
         MapStructureLayer {
+            outlineCells = Set.copyOf(outlineCells);
             shellCells = Set.copyOf(shellCells);
             shellSpans = List.copyOf(shellSpans);
             borderEdges = List.copyOf(borderEdges);
