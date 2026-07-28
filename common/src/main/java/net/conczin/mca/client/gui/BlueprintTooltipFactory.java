@@ -171,10 +171,11 @@ final class BlueprintTooltipFactory {
             return List.of(building);
         }
 
-        int structureId = building.getEffectiveStructureId();
+        int buildingId = village.getLogicalBuildingId(building.getStructureId());
         return village.getRooms()
                 .filter(Building::isComplete)
-                .filter(candidate -> candidate.getEffectiveStructureId() == structureId)
+                .filter(candidate -> village.getLogicalBuildingId(
+                        candidate.getStructureId()) == buildingId)
                 .sorted(Comparator.comparingInt((Building room) -> room.getFloorNumber(village))
                         .thenComparingInt(Building::getId))
                 .toList();

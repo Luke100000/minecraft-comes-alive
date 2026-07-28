@@ -214,11 +214,6 @@ final class StructureScanner {
         return WalkableAnchorDecision.ACCEPTED;
     }
 
-    /** Explains the exact walkable-anchor predicate used by connector handoffs without changing traversal. */
-    static String explainWalkableAnchor(Level world, BlockPos pos) {
-        return walkableAnchorDecision(world, pos).name();
-    }
-
     enum WalkableAnchorDecision {
         ACCEPTED, BLOCKED, BLOCKED_HEADROOM, UNSUPPORTED, NO_ROOF
     }

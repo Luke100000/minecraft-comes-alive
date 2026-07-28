@@ -87,6 +87,7 @@ public class Village implements Iterable<Building> {
         buildings.putAll(data.buildings());
         externalBuildings.putAll(data.externalBuildings());
         structures.putAll(data.structures());
+        normalizeLogicalBuildings();
         if (!buildings.isEmpty() || !externalBuildings.isEmpty() || !structures.isEmpty()) calculateDimensions();
     }
 
@@ -150,43 +151,50 @@ public class Village implements Iterable<Building> {
         return room == null ? Optional.empty() : getStructure(room.getStructureId());
     }
 
-    public void addBuilding(Building building) {
-        if (building instanceof ExternalBuilding external) {
-            addExternalBuilding(external);
-            return;
-        }
-        buildings.put(building.getId(), building);
-        calculateDimensions();
-        markDirty();
+    public int getLogicalBuildingId(int structureId) {
+        return getStructure(structureId).map(Structure::getLogicalBuildingId).orElse(structureId);
     }
 
-    public void addExternalBuilding(ExternalBuilding building) {
-        externalBuildings.put(building.getId(), building);
-        calculateDimensions();
-        markDirty();
-    }
-
-    public void addStructure(Structure structure) {
-        structures.put(structure.getId(), structure);
-        calculateDimensions();
-        markDirty();
+    List<Structure> getBuildingStructures(int buildingId) {
+        return structures.values().stream()
+                .filter(structure -> structure.getLogicalBuildingId() == buildingId)
+                .sorted(Comparator.comparingInt(Structure::getId))
+                .toList();
     }
 
     public void removeBuilding(int id) {
         boolean roomRemoved = buildings.remove(id) != null;
         boolean externalRemoved = externalBuildings.remove(id) != null;
         if (!roomRemoved && !externalRemoved) return;
-        if (roomRemoved) ensureMainRooms();
+        if (roomRemoved) refreshLogicalBuildings();
         calculateDimensions();
         markDirty();
     }
 
     public void removeStructure(int structureId) {
-        if (structures.remove(structureId) == null) return;
+        Structure removed = structures.remove(structureId);
+        if (removed == null) return;
         buildings.values().removeIf(building -> building.isFunctionalRoom() && building.getStructureId() == structureId);
-        ensureMainRooms();
+
+        int buildingId = removed.getLogicalBuildingId();
+        List<Structure> remaining = getBuildingStructures(buildingId);
+        if (structureId == buildingId && !remaining.isEmpty()) {
+            int replacementId = remaining.getFirst().getId();
+            remaining.forEach(structure -> structure.setLogicalBuildingId(replacementId));
+            buildingId = replacementId;
+        }
+        refreshLogicalBuildings();
         calculateDimensions();
         markDirty();
+    }
+
+    void removeLogicalBuilding(int buildingId) {
+        Set<Integer> memberIds = getBuildingStructures(buildingId).stream()
+                .map(Structure::getId)
+                .collect(Collectors.toSet());
+        if (memberIds.isEmpty()) return;
+        buildings.values().removeIf(building -> memberIds.contains(building.getStructureId()));
+        memberIds.forEach(structures::remove);
     }
 
     public Stream<Building> getBuildingsOfType(String type) {
@@ -205,24 +213,6 @@ public class Village implements Iterable<Building> {
         return getFunctionalRoomAt(pos).or(() -> getExternalBuildings()
                 .filter(building -> building.containsPos(pos))
                 .min(Comparator.comparingInt(Building::getId)));
-    }
-
-    Optional<Building> getBuildingTarget(Vec3i pos) {
-        return Stream.concat(buildings.values().stream(), externalBuildings.values().stream().map(Building.class::cast))
-                .filter(building -> building.containsPos(pos)
-                        || building.containsPositionWithMargin(pos,
-                        Building.PLAYER_POSITION_HORIZONTAL_MARGIN,
-                        Building.PLAYER_POSITION_VERTICAL_MARGIN))
-                .min(Comparator.comparing((Building building) -> !building.containsPos(pos))
-                        .thenComparingDouble(building -> building.getCenter().distSqr(pos)));
-    }
-
-    public Optional<Structure> getStructureAt(Vec3i pos) {
-        return structures.values().stream()
-                .filter(structure -> structure.nearestFloorAtColumn(pos).isPresent())
-                .min(Comparator.comparingInt((Structure structure) ->
-                                structure.verticalDistanceToColumn(pos))
-                        .thenComparingInt(Structure::getId));
     }
 
     Optional<Structure> getExactStructureAt(Vec3i pos) {
@@ -425,95 +415,138 @@ public class Village implements Iterable<Building> {
         buildings.putAll(village.buildings);
         externalBuildings.putAll(village.externalBuildings);
         structures.putAll(village.structures);
+        normalizeLogicalBuildings();
         calculateDimensions();
-        ensureMainRooms();
     }
 
     public int getStructureCount() {
-        return structures.size()
+        return (int) structures.values().stream().mapToInt(Structure::getLogicalBuildingId).distinct().count()
                 + (int) externalBuildings.values().stream().filter(Building::isComplete).count();
     }
 
-    public boolean hasStructuralBuildingAt(Vec3i pos) { return getStructuralPosition(pos) != StructuralPosition.OUTSIDE; }
-    public boolean hasStructuralBuildingAt(Level level, BlockPos pos) { return getStructuralPosition(level, pos) != StructuralPosition.OUTSIDE; }
-    public StructuralPosition getStructuralPosition(Vec3i pos) { return getStructuralLookup(pos).position(); }
-    public StructuralPosition getStructuralPosition(Level level, BlockPos pos) { return getStructuralLookup(level, pos).position(); }
-
-    public StructuralPosition getRoomScanPosition(Level level, BlockPos pos) {
-        return getStructuralPosition(level, pos);
+    public boolean hasStructuralBuildingAt(Level level, BlockPos pos) {
+        return getRoomScanContext(level, pos).position() != StructuralPosition.OUTSIDE;
     }
 
-    public StructuralLookup getStructuralLookup(Vec3i pos) {
-        Optional<Building> room = getFunctionalRoomAt(pos);
-        if (room.isPresent()) return new StructuralLookup(StructuralPosition.REGISTERED_ROOM, room);
-        Optional<Structure> structure = getStructureAt(pos);
-        return structure.map(value -> new StructuralLookup(StructuralPosition.ATTACHABLE_ROOM,
-                        getMainRoomForStructure(value.getId())))
-                .orElseGet(() -> new StructuralLookup(StructuralPosition.OUTSIDE, Optional.empty()));
+    public StructuralPosition getStructuralPosition(Level level, BlockPos pos) {
+        return getRoomScanContext(level, pos).position();
     }
 
-    public StructuralLookup getStructuralLookup(Level level, BlockPos pos) {
+    public RoomScanContext getRoomScanContext(Level level, BlockPos pos) {
         Optional<ResolvedInteraction> resolved = resolveInteractionPosition(level, pos);
-        if (resolved.isEmpty()) {
-            return new StructuralLookup(StructuralPosition.OUTSIDE, Optional.empty());
+        if (resolved.isPresent()) {
+            Building room = resolved.get().position().room();
+            if (room != null) {
+                return new RoomScanContext(StructuralPosition.REGISTERED_ROOM,
+                        Optional.of(room), RoomScanMode.UPDATE_ROOM, -1);
+            }
+            return new RoomScanContext(StructuralPosition.ATTACHABLE_ROOM,
+                    getMainRoomForStructure(resolved.get().structure().getId()),
+                    RoomScanMode.ADD_ROOM, -1);
         }
-        Building room = resolved.get().position().room();
-        if (room != null) {
-            return new StructuralLookup(StructuralPosition.REGISTERED_ROOM, Optional.of(room));
+
+        RoomScanTarget target = level != null && pos != null && StructureScanner.isWalkableAnchor(level, pos)
+                ? attachmentTarget(pos).orElse(RoomScanTarget.ADD_BUILDING)
+                : RoomScanTarget.ADD_BUILDING;
+        return new RoomScanContext(StructuralPosition.OUTSIDE, Optional.empty(),
+                target.mode(), target.targetBuildingId());
+    }
+
+    private Optional<RoomScanTarget> attachmentTarget(BlockPos pos) {
+        List<AttachmentTarget> targets = structures.values().stream()
+                .flatMap(structure -> structure.getFloors().stream()
+                        .map(floor -> attachmentTarget(structure, floor, pos)))
+                .filter(Objects::nonNull)
+                .filter(target -> target.gap() <= MAX_FLOOR_ATTACHMENT_GAP)
+                .toList();
+        AttachmentTarget target = targets.stream()
+                .min(Comparator.comparingInt(AttachmentTarget::gap)
+                        .thenComparingInt(AttachmentTarget::targetBuildingId)
+                        .thenComparingInt(AttachmentTarget::targetStructureId)
+                        .thenComparingInt(AttachmentTarget::floorId))
+                .orElse(null);
+        if (target == null) return Optional.empty();
+        if (targets.stream().anyMatch(candidate -> candidate.gap() == target.gap()
+                && candidate.targetBuildingId() != target.targetBuildingId())) {
+            return Optional.empty();
         }
-        return new StructuralLookup(StructuralPosition.ATTACHABLE_ROOM,
-                getMainRoomForStructure(resolved.get().structure().getId()));
+
+        return Optional.of(new RoomScanTarget(
+                attachmentMode(target.targetBuildingId(), pos.getY()),
+                target.targetBuildingId()));
+    }
+
+    private RoomScanMode attachmentMode(int buildingId, int queryY) {
+        List<Structure> members = getBuildingStructures(buildingId);
+        if (members.isEmpty()) return RoomScanMode.ADD_BUILDING;
+        int groundReferenceY = members.stream()
+                .flatMap(structure -> structure.getFloors().stream())
+                .filter(floor -> floor.floorNumber() == 0)
+                .mapToInt(StructureFloor::anchorY)
+                .min()
+                .orElseGet(() -> getStructure(buildingId)
+                        .orElse(members.getFirst()).getSurfaceReferenceY());
+        return queryY >= groundReferenceY - BuildingFloorRegionDetector.FLOOR_CLUSTER_TOLERANCE
+                ? RoomScanMode.ADD_FLOOR : RoomScanMode.ADD_BASEMENT;
+    }
+
+    private static AttachmentTarget attachmentTarget(Structure structure,
+                                                       StructureFloor floor,
+                                                       BlockPos pos) {
+        if (floor.region() == null || !floor.contains(pos.getX(), pos.getZ())) return null;
+        int gap;
+        if (pos.getY() >= floor.ceilingY()) {
+            gap = pos.getY() - floor.ceilingY();
+        } else if (pos.getY() < floor.anchorY()) {
+            gap = floor.anchorY() - pos.getY();
+        } else {
+            return null;
+        }
+        return new AttachmentTarget(structure.getLogicalBuildingId(), structure.getId(), floor.id(), gap);
     }
 
     Optional<Structure> getInteractionStructureAt(Level level, BlockPos pos) {
         return resolveInteractionPosition(level, pos).map(ResolvedInteraction::structure);
     }
 
-    Optional<Structure> getDirectInteractionStructureAt(Level level, BlockPos pos) {
-        return resolveInteractionPosition(level, pos, false).map(ResolvedInteraction::structure);
-    }
-
     private Optional<ResolvedInteraction> resolveInteractionPosition(Level level, BlockPos pos) {
-        return resolveInteractionPosition(level, pos, true);
-    }
-
-    private Optional<ResolvedInteraction> resolveInteractionPosition(Level level,
-                                                                      BlockPos pos,
-                                                                      boolean allowNearestColumn) {
         Map<Integer, List<Building>> roomsByStructure = getRooms()
                 .collect(Collectors.groupingBy(Building::getStructureId));
         return structures.values().stream()
-                .map(structure -> new ResolvedInteraction(structure, (allowNearestColumn
-                        ? structure.resolveInteractionPosition(level, pos,
-                        roomsByStructure.getOrDefault(structure.getId(), List.of()))
-                        : structure.resolveDirectInteractionPosition(level, pos,
-                        roomsByStructure.getOrDefault(structure.getId(), List.of()))).orElse(null)))
+                .map(structure -> new ResolvedInteraction(structure,
+                        structure.resolveInteractionPosition(level, pos,
+                                roomsByStructure.getOrDefault(structure.getId(), List.of())).orElse(null)))
                 .filter(resolved -> resolved.position() != null)
                 .min(Comparator
-                        .comparing((ResolvedInteraction resolved) -> resolved.position().room() == null)
-                        .thenComparingInt(resolved -> resolved.structure().verticalDistanceToColumn(pos))
+                        .comparing((ResolvedInteraction resolved) -> !resolved.position().physical())
+                        .thenComparing(resolved -> resolved.position().room() == null)
                         .thenComparingInt(resolved -> resolved.structure().getId()));
     }
 
     private Optional<Building> getMainRoomForStructure(int structureId) {
-        Structure s = getStructure(structureId).orElse(null);
-        if (s == null) return Optional.empty();
-        int mainRoomId = s.getMainRoomId();
-        return mainRoomId >= 0 ? getBuilding(mainRoomId) : Optional.empty();
+        Structure structure = getStructure(structureId).orElse(null);
+        if (structure == null) return Optional.empty();
+        for (Structure member : getBuildingStructures(structure.getLogicalBuildingId())) {
+            int mainRoomId = member.getMainRoomId();
+            if (mainRoomId < 0) continue;
+            Building room = buildings.get(mainRoomId);
+            if (room != null && room.isFunctionalRoom()) return Optional.of(room);
+        }
+        return Optional.empty();
     }
 
     public Optional<Building> getMainRoom(Structure structure) {
         if (structure == null) return Optional.empty();
-        return getMainRoomForStructure(structure.getId()).filter(Building::isFunctionalRoom);
+        return getMainRoomForStructure(structure.getId());
     }
 
     public Optional<Building> getFunctionalRoomAt(Vec3i pos) {
-        Optional<Structure> structure = getStructureAt(pos);
+        Optional<Structure> structure = getExactStructureAt(pos);
         if (structure.isEmpty()) {
             return getRooms().filter(room -> room.containsFloorPosition(pos))
                     .min(Comparator.comparingInt(Building::getId));
         }
-        StructureFloor floor = structure.get().nearestFloorAtColumn(pos).orElse(null);
+        StructureFloor floor = structure.get().physicalFloorAt(pos).orElse(null);
         if (floor == null) return Optional.empty();
         return getRooms().filter(room -> room.getStructureId() == structure.get().getId())
                 .filter(room -> room.getFloorId() == floor.id())
@@ -533,15 +566,16 @@ public class Village implements Iterable<Building> {
 
     public boolean isMainRoom(Building room) {
         if (room == null || !room.isFunctionalRoom()) return false;
-        Structure s = getStructure(room.getStructureId()).orElse(null);
-        return s != null && s.getMainRoomId() == room.getId();
+        Structure structure = getStructure(room.getStructureId()).orElse(null);
+        return structure != null && getMainRoom(structure)
+                .map(main -> main.getId() == room.getId()).orElse(false);
     }
 
     public boolean setMainRoom(Building room) {
         Structure structure = getStructureFor(room).orElse(null);
         if (structure == null) return false;
         boolean changed = MainRoomSelector.setManual(
-                structure, getRooms().toList(), room.getId());
+                getBuildingStructures(structure.getLogicalBuildingId()), getRooms().toList(), room.getId());
         if (!changed) return false;
         markDirty();
         return true;
@@ -550,44 +584,168 @@ public class Village implements Iterable<Building> {
     public boolean useAutomaticMainRoom(Structure structure) {
         if (structure == null || !structures.containsKey(structure.getId())) return false;
         boolean changed = MainRoomSelector.useAutomatic(
-                structure, getRooms().toList());
+                getBuildingStructures(structure.getLogicalBuildingId()), getRooms().toList());
         if (!changed) return false;
         markDirty();
         return true;
     }
 
-    void refreshAutomaticMainRoom(Structure structure) {
-        if (structure == null || !isMainRoomAutomatic(structure)) return;
-        if (MainRoomSelector.useAutomatic(structure, getRooms().toList())) {
-            markDirty();
-        }
-    }
-
     public boolean isMainRoomAutomatic(Structure structure) {
-        return structure != null && structure.isMainRoomAutomatic();
+        if (structure == null) return true;
+        return getBuildingStructures(structure.getLogicalBuildingId()).stream()
+                .filter(member -> member.getMainRoomId() >= 0)
+                .findFirst()
+                .map(Structure::isMainRoomAutomatic)
+                .orElse(true);
     }
 
     void transferMainRoom(Structure structure,
                           int removedRoomId,
                           int survivorRoomId,
                           int survivorStructureId) {
-        MainRoomSelector.transfer(structure, removedRoomId, survivorRoomId, survivorStructureId);
+        MainRoomSelector.transfer(getBuildingStructures(structure.getLogicalBuildingId()),
+                removedRoomId, survivorRoomId, survivorStructureId);
     }
 
-    void ensureMainRooms() {
-        boolean changed = false;
+    void refreshLogicalBuildings() {
+        Map<Integer, List<Structure>> byBuilding = structures.values().stream()
+                .collect(Collectors.groupingBy(Structure::getLogicalBuildingId));
+        byBuilding.forEach(this::applyFloorNumbers);
+
         List<Building> rooms = getRooms().toList();
-        for (Structure structure : structures.values()) {
-            changed |= MainRoomSelector.ensureValid(structure, rooms);
+        byBuilding.values().forEach(members -> MainRoomSelector.ensureValid(members, rooms));
+    }
+
+    static final int MAX_FLOOR_ATTACHMENT_GAP = 4;
+
+    private record AttachmentTarget(int targetBuildingId,
+                                    int targetStructureId,
+                                    int floorId,
+                                    int gap) {
+    }
+
+    private record FloorRef(Structure structure, StructureFloor floor) {
+    }
+
+    public enum RoomScanMode {
+        ADD_BUILDING, ADD_ROOM, UPDATE_ROOM, ADD_FLOOR, ADD_BASEMENT;
+
+        public boolean isAttachment() {
+            return this == ADD_FLOOR || this == ADD_BASEMENT;
         }
-        if (changed) markDirty();
+    }
+
+    private record RoomScanTarget(RoomScanMode mode, int targetBuildingId) {
+        private static final RoomScanTarget ADD_BUILDING =
+                new RoomScanTarget(RoomScanMode.ADD_BUILDING, -1);
     }
 
     public enum StructuralPosition { OUTSIDE, REGISTERED_ROOM, ATTACHABLE_ROOM }
 
-    public record StructuralLookup(StructuralPosition position, Optional<Building> building) {
+    public record RoomScanContext(StructuralPosition position,
+                                  Optional<Building> building,
+                                  RoomScanMode mode,
+                                  int targetBuildingId) {
         public Optional<Building> functionalRoom() {
             return position == StructuralPosition.REGISTERED_ROOM ? building : Optional.empty();
+        }
+    }
+
+    private void applyFloorNumbers(int buildingId, Collection<Structure> members) {
+        if (members.isEmpty()) return;
+        floorNumbers(members, buildingId).forEach((ref, number) ->
+                ref.structure().setFloorNumber(ref.floor().id(), number));
+    }
+
+    int prospectiveFloorNumber(int buildingId,
+                               Structure candidate,
+                               StructureFloor candidateFloor) {
+        List<Structure> members = new ArrayList<>(getBuildingStructures(buildingId));
+        if (members.isEmpty() || candidate == null || candidateFloor == null) {
+            return Integer.MIN_VALUE;
+        }
+        members.add(candidate);
+        return floorNumbers(members, buildingId)
+                .getOrDefault(new FloorRef(candidate, candidateFloor), Integer.MIN_VALUE);
+    }
+
+    private Map<FloorRef, Integer> floorNumbers(Collection<Structure> members, int rootStructureId) {
+        List<FloorRef> floors = new ArrayList<>();
+        for (Structure structure : members) {
+            for (StructureFloor floor : structure.getFloors()) {
+                floors.add(new FloorRef(structure, floor));
+            }
+        }
+        floors.sort(Comparator.comparingInt((FloorRef ref) -> ref.floor().anchorY())
+                .thenComparingInt(ref -> ref.structure().getId())
+                .thenComparingInt(ref -> ref.floor().id()));
+        if (floors.isEmpty()) return Map.of();
+
+        int tolerance = BuildingFloorRegionDetector.FLOOR_CLUSTER_TOLERANCE;
+        List<List<FloorRef>> bands = new ArrayList<>();
+        for (FloorRef ref : floors) {
+            List<FloorRef> band = bands.isEmpty() ? null : bands.getLast();
+            if (band == null || ref.floor().anchorY() - band.getFirst().floor().anchorY() > tolerance) {
+                band = new ArrayList<>();
+                bands.add(band);
+            }
+            band.add(ref);
+        }
+
+        Structure root = getStructure(rootStructureId).orElseGet(() -> members.stream()
+                .min(Comparator.comparingInt(Structure::getId)).orElseThrow());
+        int surfaceY = root.getSurfaceReferenceY();
+        int groundBand = java.util.stream.IntStream.range(0, bands.size())
+                .filter(index -> (long) bands.get(index).getFirst().floor().anchorY()
+                        >= (long) surfaceY - tolerance)
+                .boxed()
+                .min(Comparator.comparingLong((Integer index) -> Math.abs(
+                                (long) bands.get(index).getFirst().floor().anchorY() - surfaceY))
+                        .thenComparing(Comparator.comparingInt((Integer index) ->
+                                bands.get(index).getFirst().floor().anchorY()).reversed())
+                        .thenComparingInt(Integer::intValue))
+                .orElse(bands.size());
+
+        Map<FloorRef, Integer> numbers = new HashMap<>();
+        for (int bandIndex = 0; bandIndex < bands.size(); bandIndex++) {
+            int floorNumber = bandIndex - groundBand;
+            for (FloorRef ref : bands.get(bandIndex)) numbers.put(ref, floorNumber);
+        }
+        return Map.copyOf(numbers);
+    }
+
+    private void normalizeLogicalBuildings() {
+        structures.values().forEach(this::normalizeLogicalBuilding);
+        Map<Integer, Integer> canonicalIds = new HashMap<>();
+        structures.values().stream()
+                .sorted(Comparator.comparingInt(Structure::getId))
+                .forEach(structure -> canonicalIds.put(
+                        structure.getId(), resolveBuildingRoot(structure)));
+        canonicalIds.forEach((structureId, buildingId) ->
+                structures.get(structureId).setLogicalBuildingId(buildingId));
+
+        refreshLogicalBuildings();
+    }
+
+    private int resolveBuildingRoot(Structure start) {
+        Set<Integer> visited = new HashSet<>();
+        int currentId = start.getId();
+        while (visited.add(currentId)) {
+            Structure current = structures.get(currentId);
+            if (current == null) return start.getId();
+            int nextId = current.getLogicalBuildingId();
+            if (nextId == currentId) return currentId;
+            currentId = nextId;
+        }
+        return start.getId();
+    }
+
+    private void normalizeLogicalBuilding(Structure structure) {
+        if (structure == null) return;
+        int buildingId = structure.getLogicalBuildingId();
+        if (buildingId < 0
+                || (buildingId != structure.getId() && !structures.containsKey(buildingId))) {
+            structure.setLogicalBuildingId(structure.getId());
         }
     }
 

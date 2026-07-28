@@ -21,24 +21,22 @@ public final class BuildingDiagnostics {
         long traceId = NEXT_TRACE_ID.incrementAndGet();
         VillageManager manager = VillageManager.get(world);
         Village village = manager.findNearestVillage(pos, Village.MERGE_MARGIN).orElse(null);
-        Village.StructuralLookup lookup = village == null
-                ? new Village.StructuralLookup(Village.StructuralPosition.OUTSIDE, Optional.empty())
-                : village.getStructuralLookup(world, pos);
-        Village.StructuralPosition scanPosition = village == null
-                ? Village.StructuralPosition.OUTSIDE
-                : village.getRoomScanPosition(world, pos);
-        String uiAction = uiAction(scanPosition);
+        Village.RoomScanContext context = village == null
+                ? new Village.RoomScanContext(Village.StructuralPosition.OUTSIDE, Optional.empty(),
+                Village.RoomScanMode.ADD_BUILDING, -1)
+                : village.getRoomScanContext(world, pos);
+        String uiAction = uiAction(context.mode());
 
-        log(traceId, "start position={} dimension={} village={} structuralPosition={} uiAction={} verbose={}",
+        log(traceId, "start position={} dimension={} village={} structuralPosition={} uiAction={} targetBuilding={} verbose={}",
                 pos, world.dimension().location(), village == null ? "none" : village.getId(),
-                lookup.position(), uiAction, verbose);
+                context.position(), uiAction, context.targetBuildingId(), verbose);
 
         if (village == null) {
-            Building.validationResult analysis = manager.analyzeRoomAddition(pos).result();
+            Building.validationResult analysis = manager.analyzeBuildingAddition(pos).result();
             String verdict = "NO_NEARBY_VILLAGE: UI uses " + uiAction + "; initial structure analysis=" + analysis;
             log(traceId, "analysis action={} result={}", uiAction, analysis);
             log(traceId, "verdict={}", verdict);
-            return new Result(traceId, lookup.position(), uiAction, verdict);
+            return new Result(traceId, context.position(), uiAction, verdict);
         }
 
         Structure structureAt = village.getExactStructureAt(pos).orElse(null);
@@ -47,7 +45,7 @@ public final class BuildingDiagnostics {
         Structure inspected = interactionStructure != null
                 ? interactionStructure
                 : structureAt != null ? structureAt : nearestStructure;
-        Building room = lookup.functionalRoom().orElse(null);
+        Building room = context.functionalRoom().orElse(null);
         RoomTypeResolver roomTypeResolver = RoomTypeResolver.create(village);
 
         log(traceId, "lookup structureAt={} interactionStructure={} nearestStructure={} lookupBuilding={} lookupBuildingFloor={}",
@@ -60,8 +58,9 @@ public final class BuildingDiagnostics {
             boolean attaches = StructureConnector.attachesToStructure(world, inspected, pos);
             StructureFloor logicalFloor = inspected.resolveFloor(pos.getY()).orElse(null);
             StructureFloor physicalFloor = inspected.physicalFloorAt(pos).orElse(null);
-            log(traceId, "structure id={} source={} bounds={}..{} containsPos={} connectorAttaches={} logicalFloor={} physicalFloor={}",
-                    inspected.getId(), inspected.getSource(), inspected.getRawPos0(), inspected.getRawPos1(),
+            log(traceId, "structure id={} logicalBuildingId={} source={} bounds={}..{} containsPos={} connectorAttaches={} logicalFloor={} physicalFloor={}",
+                    inspected.getId(), inspected.getLogicalBuildingId(), inspected.getSource(),
+                    inspected.getRawPos0(), inspected.getRawPos1(),
                     contains, attaches, floor(logicalFloor), floor(physicalFloor));
             log(traceId, "persistentFloors={} surfaceReferenceY={} storedMainRoomId={} storedMainRoomMode={}",
                     floors(inspected.getFloors()),
@@ -92,20 +91,24 @@ public final class BuildingDiagnostics {
             logFloorDifference(traceId, inspected.getFloors(), scan.floors(), verbose);
         }
 
-        Building.validationResult analysis = switch (lookup.position()) {
-            case OUTSIDE, ATTACHABLE_ROOM -> manager.analyzeRoomAddition(pos).result();
-            case REGISTERED_ROOM -> room == null
+        Building.validationResult analysis = switch (context.mode()) {
+            case ADD_BUILDING -> manager.analyzeBuildingAddition(pos).result();
+            case ADD_ROOM -> manager.analyzeRoom(pos).result();
+            case ADD_FLOOR, ADD_BASEMENT -> manager.analyzeAttachedRoom(
+                    pos, context.mode(), context.targetBuildingId()).result();
+            case UPDATE_ROOM -> room == null
                     ? Building.validationResult.NOT_IN_BUILDING
                     : manager.analyzeRegisteredRoomUpdate(village, room.getId(), pos).result();
         };
         log(traceId, "analysis action={} result={}", uiAction, analysis);
 
-        String verdict = verdict(lookup.position(), analysis, inspected, room, freshPlayerFloor, pos, world);
+        String verdict = verdict(context.position(), uiAction, analysis, inspected, room, freshPlayerFloor, pos, world);
         log(traceId, "verdict={}", verdict);
-        return new Result(traceId, lookup.position(), uiAction, verdict);
+        return new Result(traceId, context.position(), uiAction, verdict);
     }
 
     private static String verdict(Village.StructuralPosition position,
+                                  String uiAction,
                                   Building.validationResult analysis,
                                   Structure structure,
                                   Building room,
@@ -118,11 +121,11 @@ public final class BuildingDiagnostics {
         if (position == Village.StructuralPosition.OUTSIDE) {
             boolean contains = structure.containsPos(pos);
             boolean attaches = StructureConnector.attachesToStructure(world, structure, pos);
-            return "NO_INTERACTION_STRUCTURE: UI uses " + uiAction(position) + "; containsPos=" + contains
+            return "NO_INTERACTION_STRUCTURE: UI uses " + uiAction + "; containsPos=" + contains
                     + ", verticalConnectorAttachment=" + attaches + ", analysis=" + analysis;
         }
         if (analysis != Building.validationResult.SUCCESS) {
-            return "ANALYSIS_FAILED: " + uiAction(position) + " returned " + analysis;
+            return "ANALYSIS_FAILED: " + uiAction + " returned " + analysis;
         }
         if (room != null) {
             StructureFloor persistentRoomFloor = structure.getFloor(room.getFloorId()).orElse(null);
@@ -225,19 +228,16 @@ public final class BuildingDiagnostics {
 
     private static String floor(StructureFloor floor) {
         return floor == null ? "none"
-                : floor.id() + "@" + floor.anchorY() + ".." + floor.ceilingY() + " area=" + floor.area();
+                : "id=" + floor.id() + " number=" + floor.floorNumber() + " @"
+                + floor.anchorY() + ".." + floor.ceilingY() + " area=" + floor.area();
     }
 
     private static String id(Structure structure) {
         return structure == null ? "none" : Integer.toString(structure.getId());
     }
 
-    private static String uiAction(Village.StructuralPosition position) {
-        return switch (position) {
-            case OUTSIDE -> "ADD_BUILDING";
-            case ATTACHABLE_ROOM -> "ADD_ROOM";
-            case REGISTERED_ROOM -> "UPDATE_ROOM";
-        };
+    private static String uiAction(Village.RoomScanMode mode) {
+        return mode.name();
     }
 
     private static void log(long traceId, String message, Object... args) {

@@ -31,14 +31,6 @@ final class BuildingRoomScanner {
                 : materializeComponent(world, source, blocked, maxSize, floor, partition, selected);
     }
 
-    /** Returns every valid current Room component on one persisted physical Floor using one partition pass. */
-    static List<Result> partition(Level world, BlockPos source, int maxSize, StructureFloor floor) {
-        if (floor == null || floor.region() == null) return List.of();
-        PartitionData partition = partitionData(world, floor);
-        return materializePartition(world, source, maxSize, floor,
-                partition, partition.components(), false);
-    }
-
     /** Re-partitions the complete persisted Floor, retaining only components touching registered cells. */
     static List<Result> partitionRegistered(Level world, BlockPos source, int maxSize,
                                             StructureFloor floor, Set<BlockPos> registeredCells) {

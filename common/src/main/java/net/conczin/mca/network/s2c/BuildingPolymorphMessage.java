@@ -17,14 +17,14 @@ import java.util.List;
 public record BuildingPolymorphMessage(List<String> matchingTypes,
                                        BlockPos scanPos,
                                        ReportBuildingMessage.Action action,
-                                       int expectedRoomId) implements HandleablePayload {
+                                       int expectedTargetId) implements HandleablePayload {
     public static final CustomPacketPayload.Type<BuildingPolymorphMessage> TYPE = new CustomPacketPayload.Type<>(MCA.locate("building_polymorph"));
 
     public static final StreamCodec<FriendlyByteBuf, BuildingPolymorphMessage> STREAM_CODEC = StreamCodec.composite(
             ByteBufCodecs.collection(ArrayList::new, ByteBufCodecs.STRING_UTF8), BuildingPolymorphMessage::matchingTypes,
             BlockPos.STREAM_CODEC, BuildingPolymorphMessage::scanPos,
             ByteBufCodecs.idMapper(i -> i >= 0 && i < ReportBuildingMessage.Action.VALUES.length ? ReportBuildingMessage.Action.VALUES[i] : ReportBuildingMessage.Action.AUTO_SCAN, ReportBuildingMessage.Action::ordinal), BuildingPolymorphMessage::action,
-            ByteBufCodecs.VAR_INT, BuildingPolymorphMessage::expectedRoomId,
+            ByteBufCodecs.VAR_INT, BuildingPolymorphMessage::expectedTargetId,
             BuildingPolymorphMessage::new
     );
 

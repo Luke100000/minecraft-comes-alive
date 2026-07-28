@@ -73,7 +73,6 @@ final class RoomDFU {
             Structure structure = new Structure(tag);
             structures.put(structure.getId(), structure);
         }
-        ensureMainRooms(structures, rooms);
         return new Result(rooms, external, structures);
     }
 
@@ -148,7 +147,6 @@ final class RoomDFU {
                 structures.put(structure.getId(), structure);
             });
         }
-        ensureMainRooms(structures, rooms);
         return new Result(rooms, external, structures);
     }
 
@@ -181,16 +179,9 @@ final class RoomDFU {
                     migrated.rooms().forEach(room -> rooms.put(room.getId(), room));
                     structures.put(structureId, migrated.structure());
                 }));
-        ensureMainRooms(structures, rooms);
         return new Result(rooms, external, structures);
     }
 
-    private static void ensureMainRooms(Map<Integer, Structure> structures,
-                                        Map<Integer, Building> rooms) {
-        for (Structure structure : structures.values()) {
-            MainRoomSelector.ensureValid(structure, rooms.values());
-        }
-    }
 
     /**
      * Migrates only deterministic persisted geometry. Development Structures that require invented

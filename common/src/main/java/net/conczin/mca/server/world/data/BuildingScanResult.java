@@ -33,6 +33,12 @@ public record BuildingScanResult(
     }
 
     BuildingScanResult withPendingStructure(Structure structure) {
-        return new BuildingScanResult(result, source, building, matchingTypes, village, structure);
+        return new BuildingScanResult(result, source, building, matchingTypes,
+                village, structure);
+    }
+
+    public int targetBuildingId() {
+        if (pendingStructure == null || pendingStructure.getLogicalBuildingId() == pendingStructure.getId()) return -1;
+        return pendingStructure.getLogicalBuildingId();
     }
 }

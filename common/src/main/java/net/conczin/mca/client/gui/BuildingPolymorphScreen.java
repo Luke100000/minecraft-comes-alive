@@ -28,20 +28,20 @@ public class BuildingPolymorphScreen extends Screen {
     private final List<String> matchingTypes;
     private final BlockPos scanPos;
     private final ReportBuildingMessage.Action action;
-    private final int expectedRoomId;
+    private final int expectedTargetId;
     private final Screen returnScreen;
     private int page;
 
     public BuildingPolymorphScreen(List<String> matchingTypes,
                                    BlockPos scanPos,
                                    ReportBuildingMessage.Action action,
-                                   int expectedRoomId,
+                                   int expectedTargetId,
                                    Screen returnScreen) {
         super(Component.translatable("gui.building_polymorph.title"));
         this.matchingTypes = List.copyOf(matchingTypes);
         this.scanPos = scanPos;
         this.action = action;
-        this.expectedRoomId = expectedRoomId;
+        this.expectedTargetId = expectedTargetId;
         this.returnScreen = returnScreen;
     }
 
@@ -103,7 +103,7 @@ public class BuildingPolymorphScreen extends Screen {
                     Component.translatable("buildingType." + typeName),
                     button -> {
                         Network.sendToServer(new ConfirmBuildingPolymorphMessage(
-                                scanPos, action, expectedRoomId, typeName));
+                                scanPos, action, expectedTargetId, typeName));
                         Objects.requireNonNull(this.minecraft).setScreen(returnScreen);
                     }
             ));

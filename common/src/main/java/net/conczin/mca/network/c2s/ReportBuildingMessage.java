@@ -34,6 +34,11 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
         try {
             switch (action) {
                 case ADD_ROOM -> addRoom(manager, player, player.blockPosition(), null);
+                case ADD_BUILDING -> addBuilding(manager, player, player.blockPosition(), null);
+                case ADD_FLOOR -> addAttachedRoom(manager, player, player.blockPosition(), null,
+                        Village.RoomScanMode.ADD_FLOOR, parseTargetBuildingId(data));
+                case ADD_BASEMENT -> addAttachedRoom(manager, player, player.blockPosition(), null,
+                        Village.RoomScanMode.ADD_BASEMENT, parseTargetBuildingId(data));
                 case UPDATE_ROOM -> updateRoom(manager, player, player.blockPosition(), null);
                 case SET_MAIN_ROOM -> updateMainRoom(manager, player);
                 case AUTO_SCAN -> manager.findNearestVillage(player).ifPresent(Village::toggleAutoScan);
@@ -67,7 +72,40 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
             return;
         }
 
-        commitRoomAddition(manager, player, manager.analyzeRoomAddition(source), forcedType);
+        commitRoomAddition(manager, player, manager.analyzeRoom(source), forcedType, Action.ADD_ROOM);
+    }
+
+    static void addBuilding(VillageManager manager,
+                            ServerPlayer player,
+                            BlockPos source,
+                            String forcedType) {
+        commitRoomAddition(manager, player,
+                manager.analyzeBuildingAddition(source), forcedType, Action.ADD_BUILDING);
+    }
+
+    static void addAttachedRoom(VillageManager manager,
+                                ServerPlayer player,
+                                BlockPos source,
+                                String forcedType,
+                                Village.RoomScanMode mode,
+                                int expectedTargetBuildingId) {
+        if (expectedTargetBuildingId < 0) {
+            displayScanResult(player, Building.validationResult.NOT_IN_BUILDING);
+            return;
+        }
+        Action action = mode == Village.RoomScanMode.ADD_BASEMENT
+                ? Action.ADD_BASEMENT : Action.ADD_FLOOR;
+        commitRoomAddition(manager, player,
+                manager.analyzeAttachedRoom(source, mode, expectedTargetBuildingId), forcedType, action);
+    }
+
+    private static int parseTargetBuildingId(String value) {
+        if (value == null) return -1;
+        try {
+            return Integer.parseInt(value);
+        } catch (NumberFormatException ignored) {
+            return -1;
+        }
     }
 
     private static void fullScan(VillageManager manager, ServerPlayer player) {
@@ -164,37 +202,43 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
     private static void commitRoomAddition(VillageManager manager,
                                            ServerPlayer player,
                                            BuildingScanResult scan,
-                                           String forcedType) {
+                                           String forcedType,
+                                           Action action) {
         if (forcedType == null && scan.result() == Building.validationResult.SUCCESS && scan.isAmbiguous()) {
-            requestType(scan, player, Action.ADD_ROOM);
+            int expectedTarget = action == Action.ADD_FLOOR || action == Action.ADD_BASEMENT
+                    ? scan.targetBuildingId() : -1;
+            requestType(scan, player, action, expectedTarget);
             return;
         }
         Building.validationResult result = manager.commitRoomAddition(scan, forcedType);
         if (result == Building.validationResult.SUCCESS) {
-            player.displayClientMessage(Component.translatable("blueprint.roomAdded"), true);
+            String successKey = switch (action) {
+                case ADD_BUILDING -> "blueprint.buildingAdded";
+                case ADD_FLOOR -> "blueprint.floorAdded";
+                case ADD_BASEMENT -> "blueprint.basementAdded";
+                default -> "blueprint.roomAdded";
+            };
+            player.displayClientMessage(Component.translatable(successKey), true);
         } else {
             displayScanResult(player, result);
         }
     }
 
-    private static void requestType(BuildingScanResult scan, ServerPlayer player, Action action) {
-        requestType(scan, player, action, -1);
-    }
 
     private static void requestType(BuildingScanResult scan,
                                     ServerPlayer player,
                                     Action action,
-                                    int expectedRoomId) {
+                                    int expectedTargetId) {
         Network.sendToPlayer(new BuildingPolymorphMessage(
-                scan.matchingTypes(), scan.source(), action, expectedRoomId), player);
+                scan.matchingTypes(), scan.source(), action, expectedTargetId), player);
     }
 
     private static void requestType(RegisteredRoomUpdate update,
                                     ServerPlayer player,
                                     Action action,
-                                    int expectedRoomId) {
+                                    int expectedTargetId) {
         Network.sendToPlayer(new BuildingPolymorphMessage(
-                update.playerMatchingTypes(), update.source(), action, expectedRoomId), player);
+                update.playerMatchingTypes(), update.source(), action, expectedTargetId), player);
     }
 
     private static void displayScanResult(ServerPlayer player, Building.validationResult result) {
@@ -228,7 +272,10 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
         REMOVE_ROOM,
         UPDATE_ROOM,
         SET_MAIN_ROOM,
-        SET_ROOM_INHERITANCE;
+        SET_ROOM_INHERITANCE,
+        ADD_BUILDING,
+        ADD_FLOOR,
+        ADD_BASEMENT;
 
         public static final Action[] VALUES = values();
     }

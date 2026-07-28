@@ -204,9 +204,6 @@ public class Building implements VillageBuilding {
         return structureId;
     }
 
-    public int getEffectiveStructureId() {
-        return structureId >= 0 ? structureId : id;
-    }
 
     public boolean hasStructure() {
         return structureId >= 0;

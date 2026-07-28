@@ -9,9 +9,10 @@ import net.minecraft.world.level.Level;
 
 import java.util.*;
 
-/** One persistent, independently rescannable physical building. */
+/** One persistent, independently rescannable physical section of a logical building. */
 public final class Structure implements VillageBuilding {
     private int id;
+    private int logicalBuildingId;
     private int mainRoomId = -1;
     private boolean mainRoomAutomatic = true;
     private int surfaceReferenceY;
@@ -23,6 +24,7 @@ public final class Structure implements VillageBuilding {
 
     public Structure(int id, BlockPos source, BlockPos min, BlockPos max, Collection<StructureFloor> floors) {
         this.id = id;
+        logicalBuildingId = id;
         this.source = source.immutable();
         this.min = min.immutable();
         this.max = max.immutable();
@@ -31,11 +33,11 @@ public final class Structure implements VillageBuilding {
             this.floors.put(floor.id(), floor);
             nextFloorId = Math.max(nextFloorId, floor.id() + 1);
         }
-        renumberFloors();
     }
 
     public Structure(CompoundTag tag) {
         id = tag.getInt("id");
+        logicalBuildingId = tag.contains("buildingId") ? tag.getInt("buildingId") : id;
         mainRoomId = tag.contains("mainRoomId") ? tag.getInt("mainRoomId") : -1;
         mainRoomAutomatic = !tag.contains("mainRoomAutomatic") || tag.getBoolean("mainRoomAutomatic");
         nextFloorId = tag.getInt("nextFloorId");
@@ -48,12 +50,12 @@ public final class Structure implements VillageBuilding {
             floors.put(floor.id(), floor);
             nextFloorId = Math.max(nextFloorId, floor.id() + 1);
         }
-        renumberFloors();
     }
 
     public CompoundTag save() {
         CompoundTag tag = new CompoundTag();
         tag.putInt("id", id);
+        tag.putInt("buildingId", getLogicalBuildingId());
         tag.putInt("mainRoomId", mainRoomId);
         tag.putBoolean("mainRoomAutomatic", mainRoomAutomatic);
         tag.putInt("surfaceReferenceY", surfaceReferenceY);
@@ -63,6 +65,14 @@ public final class Structure implements VillageBuilding {
         tag.put("max", NbtHelper.encodeBlockPos(max));
         tag.put("floors", NbtHelper.fromList(getFloors(), StructureFloor::save));
         return tag;
+    }
+
+    int getLogicalBuildingId() {
+        return logicalBuildingId;
+    }
+
+    void setLogicalBuildingId(int logicalBuildingId) {
+        this.logicalBuildingId = logicalBuildingId;
     }
 
     public Optional<StructureFloor> getFloor(int floorId) {
@@ -97,11 +107,6 @@ public final class Structure implements VillageBuilding {
                         .thenComparingInt(StructureFloor::id));
     }
 
-    int verticalDistanceToColumn(Vec3i pos) {
-        return nearestFloorAtColumn(pos)
-                .map(floor -> verticalDistance(floor, pos.getY()))
-                .orElse(Integer.MAX_VALUE);
-    }
 
     private static int verticalDistance(StructureFloor floor, int queryY) {
         if (queryY < floor.anchorY()) return floor.anchorY() - queryY;
@@ -123,22 +128,9 @@ public final class Structure implements VillageBuilding {
     Optional<InteractionPosition> resolveInteractionPosition(Level world,
                                                              BlockPos pos,
                                                              Collection<Building> structureRooms) {
-        return resolveInteractionPosition(world, pos, structureRooms, true);
-    }
-
-    Optional<InteractionPosition> resolveDirectInteractionPosition(Level world,
-                                                                   BlockPos pos,
-                                                                   Collection<Building> structureRooms) {
-        return resolveInteractionPosition(world, pos, structureRooms, false);
-    }
-
-    private Optional<InteractionPosition> resolveInteractionPosition(Level world,
-                                                                     BlockPos pos,
-                                                                     Collection<Building> structureRooms,
-                                                                     boolean allowNearestColumn) {
         Collection<Building> localRooms = structureRooms == null ? List.of() : structureRooms;
         StructureFloor floor = physicalFloorAt(pos).orElse(null);
-        if (floor == null && allowNearestColumn) floor = nearestFloorAtColumn(pos).orElse(null);
+        boolean physical = floor != null;
         int roomX = pos.getX();
         int roomZ = pos.getZ();
         if (floor == null) {
@@ -152,7 +144,7 @@ public final class Structure implements VillageBuilding {
             roomZ = adjacent.getZ();
         }
         return Optional.of(new InteractionPosition(floor,
-                roomAtColumn(localRooms, floor, roomX, roomZ)));
+                roomAtColumn(localRooms, floor, roomX, roomZ), physical));
     }
 
     private BlockPos adjacentInteractionFloorCell(Level world, BlockPos pos, StructureFloor floor) {
@@ -182,7 +174,7 @@ public final class Structure implements VillageBuilding {
                 .orElse(null);
     }
 
-    record InteractionPosition(StructureFloor floor, Building room) {
+    record InteractionPosition(StructureFloor floor, Building room, boolean physical) {
     }
 
     int getMainRoomId() {
@@ -214,27 +206,15 @@ public final class Structure implements VillageBuilding {
 
     void setSurfaceReferenceY(int surfaceReferenceY) {
         this.surfaceReferenceY = surfaceReferenceY;
-        renumberFloors();
     }
 
-    void renumberFloors() {
-        List<StructureFloor> ordered = getFloors();
-        if (ordered.isEmpty()) return;
-        int tolerance = BuildingFloorRegionDetector.FLOOR_CLUSTER_TOLERANCE;
-        int groundIndex = java.util.stream.IntStream.range(0, ordered.size())
-                .filter(index -> (long) ordered.get(index).anchorY() >= (long) surfaceReferenceY - tolerance)
-                .boxed()
-                .min(Comparator.comparingLong((Integer index) ->
-                                Math.abs((long) ordered.get(index).anchorY() - surfaceReferenceY))
-                        .thenComparing(Comparator.comparingInt(
-                                (Integer index) -> ordered.get(index).anchorY()).reversed())
-                        .thenComparingInt(index -> ordered.get(index).id()))
-                .orElse(ordered.size());
-        for (int index = 0; index < ordered.size(); index++) {
-            StructureFloor floor = ordered.get(index);
-            floors.put(floor.id(), floor.withFloorNumber(index - groundIndex));
+    void setFloorNumber(int floorId, int floorNumber) {
+        StructureFloor floor = floors.get(floorId);
+        if (floor != null && floor.floorNumber() != floorNumber) {
+            floors.put(floorId, floor.withFloorNumber(floorNumber));
         }
     }
+
 
     int allocateFloorId() {
         return nextFloorId++;
@@ -252,7 +232,6 @@ public final class Structure implements VillageBuilding {
         min = scan.min();
         max = scan.max();
         surfaceReferenceY = scan.surfaceReferenceY();
-        renumberFloors();
         return true;
     }
 
@@ -262,7 +241,11 @@ public final class Structure implements VillageBuilding {
     }
 
     public void setId(int id) {
+        int previousId = this.id;
         this.id = id;
+        if (logicalBuildingId < 0 || logicalBuildingId == previousId) {
+            logicalBuildingId = id;
+        }
     }
 
     public BlockPos getSource() {
