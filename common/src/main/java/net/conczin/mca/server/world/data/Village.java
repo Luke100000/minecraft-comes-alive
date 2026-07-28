@@ -445,17 +445,20 @@ public class Village implements Iterable<Building> {
                     RoomScanMode.ADD_ROOM, -1, Integer.MIN_VALUE);
         }
 
-        RoomScanTarget target = level != null && pos != null && StructureScanner.isWalkableAnchor(level, pos)
-                ? attachmentTarget(pos).orElse(RoomScanTarget.ADD_BUILDING)
+        // Attachment discovery is intentionally geometry-based rather than roof-gated. An
+        // external doorway/apron is outside the scanned Structure by definition and may be open
+        // to the sky; the authoritative server scan still validates the candidate on click.
+        RoomScanTarget target = level != null && pos != null
+                ? attachmentTarget(level, pos).orElse(RoomScanTarget.ADD_BUILDING)
                 : RoomScanTarget.ADD_BUILDING;
         return new RoomScanContext(StructuralPosition.OUTSIDE, Optional.empty(),
                 target.mode(), target.targetBuildingId(), target.prospectiveFloorNumber());
     }
 
-    private Optional<RoomScanTarget> attachmentTarget(BlockPos pos) {
+    private Optional<RoomScanTarget> attachmentTarget(Level level, BlockPos pos) {
         List<AttachmentTarget> targets = structures.values().stream()
                 .flatMap(structure -> structure.getFloors().stream()
-                        .map(floor -> attachmentTarget(structure, floor, pos)))
+                        .map(floor -> attachmentTarget(level, structure, floor, pos)))
                 .filter(Objects::nonNull)
                 .filter(target -> target.gap() <= MAX_FLOOR_ATTACHMENT_GAP)
                 .toList();
@@ -478,10 +481,11 @@ public class Village implements Iterable<Building> {
                 target.targetBuildingId(), floorNumber));
     }
 
-    private static AttachmentTarget attachmentTarget(Structure structure,
+    private static AttachmentTarget attachmentTarget(Level level,
+                                                       Structure structure,
                                                        StructureFloor floor,
                                                        BlockPos pos) {
-        if (floor.region() == null || !floor.contains(pos.getX(), pos.getZ())) return null;
+        if (floor.region() == null || !touchesAttachmentEntrance(level, floor, pos)) return null;
         int gap;
         if (pos.getY() >= floor.ceilingY()) {
             gap = pos.getY() - floor.ceilingY();
@@ -491,6 +495,31 @@ public class Village implements Iterable<Building> {
             return null;
         }
         return new AttachmentTarget(structure.getLogicalBuildingId(), structure.getId(), floor.id(), gap);
+    }
+
+    private static boolean touchesAttachmentEntrance(Level level, StructureFloor floor, BlockPos pos) {
+        int x = pos.getX();
+        int z = pos.getZ();
+        if (floor.contains(x, z)
+                || floor.contains(x + 1, z)
+                || floor.contains(x - 1, z)
+                || floor.contains(x, z + 1)
+                || floor.contains(x, z - 1)) {
+            return true;
+        }
+
+        // External entrance interaction extends exactly one cell through a real horizontal
+        // connector: interior Floor -> door/fence gate -> player. This deliberately does not
+        // turn generic two-block proximity into an attachment target.
+        for (net.minecraft.core.Direction direction : net.minecraft.core.Direction.values()) {
+            if (direction == net.minecraft.core.Direction.UP
+                    || direction == net.minecraft.core.Direction.DOWN) continue;
+            BlockPos connector = pos.relative(direction);
+            if (!StructureConnector.isHorizontalBoundary(level.getBlockState(connector))) continue;
+            BlockPos interior = connector.relative(direction);
+            if (floor.contains(interior.getX(), interior.getZ())) return true;
+        }
+        return false;
     }
 
     Optional<Structure> getInteractionStructureAt(Level level, BlockPos pos) {
@@ -716,18 +745,28 @@ public class Village implements Iterable<Building> {
         }
 
         Structure root = getStructure(rootStructureId).orElseGet(() -> members.stream()
-                .min(Comparator.comparingInt(Structure::getId)).orElseThrow());
+                .filter(structure -> structure.getId() >= 0)
+                .min(Comparator.comparingInt(Structure::getId))
+                .orElseGet(() -> members.stream().findFirst().orElseThrow()));
         int surfaceY = root.getSurfaceReferenceY();
-        int groundBand = java.util.stream.IntStream.range(0, bands.size())
-                .filter(index -> (long) bands.get(index).getFirst().floor().anchorY()
-                        >= (long) surfaceY - tolerance)
-                .boxed()
-                .min(Comparator.comparingLong((Integer index) -> Math.abs(
-                                (long) bands.get(index).getFirst().floor().anchorY() - surfaceY))
-                        .thenComparing(Comparator.comparingInt((Integer index) ->
-                                bands.get(index).getFirst().floor().anchorY()).reversed())
-                        .thenComparingInt(Integer::intValue))
-                .orElse(bands.size());
+
+        FloorRef establishedGround = establishedGroundFloor(members, root, surfaceY, tolerance);
+        int groundBand = establishedGround == null ? -1 : java.util.stream.IntStream.range(0, bands.size())
+                .filter(index -> bands.get(index).contains(establishedGround))
+                .findFirst()
+                .orElse(-1);
+        if (groundBand < 0) {
+            groundBand = java.util.stream.IntStream.range(0, bands.size())
+                    .filter(index -> (long) bands.get(index).getFirst().floor().anchorY()
+                            >= (long) surfaceY - tolerance)
+                    .boxed()
+                    .min(Comparator.comparingLong((Integer index) -> Math.abs(
+                                    (long) bands.get(index).getFirst().floor().anchorY() - surfaceY))
+                            .thenComparing(Comparator.comparingInt((Integer index) ->
+                                    bands.get(index).getFirst().floor().anchorY()).reversed())
+                            .thenComparingInt(Integer::intValue))
+                    .orElse(bands.size());
+        }
 
         Map<FloorRef, Integer> numbers = new HashMap<>();
         for (int bandIndex = 0; bandIndex < bands.size(); bandIndex++) {
@@ -735,6 +774,33 @@ public class Village implements Iterable<Building> {
             for (FloorRef ref : bands.get(bandIndex)) numbers.put(ref, floorNumber);
         }
         return Map.copyOf(numbers);
+    }
+
+    /**
+     * Once a logical building has a canonical Ground Floor, attaching a new physical Structure
+     * must not redefine it. Prefer the oldest persisted Structure that already owns Floor 0;
+     * negative-ID prospective candidates are deliberately ignored.
+     */
+    private static FloorRef establishedGroundFloor(Collection<Structure> members,
+                                                   Structure root,
+                                                   int surfaceY,
+                                                   int tolerance) {
+        return members.stream()
+                .filter(structure -> structure.getId() >= 0)
+                .sorted(Comparator.comparing((Structure structure) -> structure.getId() != root.getId())
+                        .thenComparingInt(Structure::getId))
+                .map(structure -> structure.getFloors().stream()
+                        .filter(floor -> floor.floorNumber() == 0)
+                        .filter(floor -> (long) floor.anchorY() >= (long) surfaceY - tolerance)
+                        .min(Comparator.comparingLong((StructureFloor floor) ->
+                                        Math.abs((long) floor.anchorY() - surfaceY))
+                                .thenComparing(Comparator.comparingInt(StructureFloor::anchorY).reversed())
+                                .thenComparingInt(StructureFloor::id))
+                        .map(floor -> new FloorRef(structure, floor))
+                        .orElse(null))
+                .filter(Objects::nonNull)
+                .findFirst()
+                .orElse(null);
     }
 
     private void normalizeLogicalBuildings() {

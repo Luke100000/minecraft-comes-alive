@@ -135,13 +135,13 @@ public final class Structure implements VillageBuilding {
         int roomZ = pos.getZ();
         if (floor == null) {
             floor = floorAtHeight(pos.getY()).orElse(null);
-            if (floor == null || !StructureConnector.attachesToStructure(world, this, pos)) {
-                return Optional.empty();
+            if (floor == null) return Optional.empty();
+            if (!StructureConnector.attachesToStructure(world, this, pos)) {
+                BlockPos adjacent = adjacentInteractionFloorCell(world, pos, floor);
+                if (adjacent == null) return Optional.empty();
+                roomX = adjacent.getX();
+                roomZ = adjacent.getZ();
             }
-            BlockPos adjacent = adjacentInteractionFloorCell(world, pos, floor);
-            if (adjacent == null) return Optional.empty();
-            roomX = adjacent.getX();
-            roomZ = adjacent.getZ();
         }
         return Optional.of(new InteractionPosition(floor,
                 roomAtColumn(localRooms, floor, roomX, roomZ), physical));

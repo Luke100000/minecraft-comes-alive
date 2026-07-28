@@ -62,6 +62,12 @@ final class BlueprintMapFootprint {
         return Set.copyOf(expanded);
     }
 
+    /** One canonical cell -> fill spans -> boundary-edge pipeline for every Blueprint map region. */
+    static Shape shape(Set<Cell> cells) {
+        Set<Cell> canonical = Set.copyOf(cells);
+        return new Shape(canonical, rowSpans(canonical), outerEdges(canonical));
+    }
+
     static List<RowSpan> rowSpans(Set<Cell> cells) {
         if (cells.isEmpty()) {
             return List.of();
@@ -156,6 +162,14 @@ final class BlueprintMapFootprint {
             previous = z;
         }
         edges.add(new Edge(x, start, x, previous + 1));
+    }
+
+    record Shape(Set<Cell> cells, List<RowSpan> spans, List<Edge> edges) {
+        Shape {
+            cells = Set.copyOf(cells);
+            spans = List.copyOf(spans);
+            edges = List.copyOf(edges);
+        }
     }
 
     record Cell(int x, int z) {

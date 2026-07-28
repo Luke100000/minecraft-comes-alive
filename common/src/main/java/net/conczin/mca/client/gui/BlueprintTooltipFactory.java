@@ -17,6 +17,7 @@ final class BlueprintTooltipFactory {
     private static final int FLOOR_BASEMENT_COLOR = 0x9b8cff;
     private static final int FLOOR_GROUND_COLOR = 0xf2c94c;
     private static final int FLOOR_UPPER_COLOR = 0x6fd6a5;
+    private static final String DETAIL_INDENT = "  ";
 
     private final Village village;
     private final RoomTypeResolver roomTypeResolver;
@@ -60,11 +61,11 @@ final class BlueprintTooltipFactory {
         String marker = relativeElevation > 0 ? "▲ " : relativeElevation < 0 ? "▼ " : "• ";
         Component line = Component.literal(marker).withStyle(ChatFormatting.DARK_GRAY)
                 .copy().append(typeLabel(presentationType));
-        if (!building.isFunctionalRoom()) return line;
+        if (!building.isFunctionalRoom()) return detail(line);
         int floor = floorOrdinal == null ? building.getFloorNumber(village) : floorOrdinal;
-        return line.copy()
+        return detail(line.copy()
                 .append(Component.literal(" — ").withStyle(ChatFormatting.DARK_GRAY))
-                .append(floorLabel(floor).copy().withStyle(style -> style.withBold(false)));
+                .append(floorLabel(floor).copy().withStyle(style -> style.withBold(false))));
     }
 
     private BuildingType presentationType(Building room, RoomTypeResolver.Context resolved) {
@@ -76,29 +77,26 @@ final class BlueprintTooltipFactory {
                                    Building room,
                                    RoomTypeResolver.Context resolved) {
         if (!resolved.isMainRoom() && resolved.contributesToMain()) {
-            lines.add(Component.literal("  ").append(Component.translatable(
-                    "gui.blueprint.roomTooltip.contributesToMain").withStyle(ChatFormatting.DARK_AQUA)));
+            lines.add(detail(Component.translatable("gui.blueprint.roomTooltip.contributesToMain")
+                    .withStyle(ChatFormatting.DARK_AQUA)));
         }
 
         village.getResidents(room.getId()).forEach(name ->
-                lines.add(Component.literal("  ")
-                        .append(Component.literal(name).withStyle(ChatFormatting.GRAY))));
+                lines.add(detail(Component.literal(name).withStyle(ChatFormatting.GRAY))));
 
         if (!resolved.ownPoi().isEmpty()) {
-            lines.add(Component.literal("  ").append(Component.translatable(
-                    "gui.blueprint.roomTooltip.roomPoi").withStyle(ChatFormatting.GRAY, ChatFormatting.ITALIC)));
-            poiLines(resolved.ownPoi()).forEach(item ->
-                    lines.add(Component.literal("    ").append(item)));
+            lines.add(detail(Component.translatable("gui.blueprint.roomTooltip.roomPoi")
+                    .withStyle(ChatFormatting.GRAY, ChatFormatting.ITALIC)));
+            poiLines(resolved.ownPoi()).forEach(item -> lines.add(detail(item)));
         }
 
         if (!resolved.inheritedPoi().isEmpty()) {
-            lines.add(Component.literal("  ").append(Component.translatable(
-                    "gui.blueprint.roomTooltip.inheritedPoi").withStyle(ChatFormatting.AQUA)));
-            poiLines(resolved.inheritedPoi()).forEach(item ->
-                    lines.add(Component.literal("    ").append(item)));
+            lines.add(detail(Component.translatable("gui.blueprint.roomTooltip.inheritedPoi")
+                    .withStyle(ChatFormatting.AQUA)));
+            poiLines(resolved.inheritedPoi()).forEach(item -> lines.add(detail(item)));
             resolved.contributors().forEach(contributor ->
-                    lines.add(Component.literal("    ").append(Component.translatable(
-                            "gui.blueprint.roomTooltip.inheritedFrom", contributor.getId())
+                    lines.add(detail(Component.translatable(
+                                    "gui.blueprint.roomTooltip.inheritedFrom", contributor.getId())
                             .withStyle(ChatFormatting.DARK_GRAY))));
         }
     }
@@ -106,8 +104,7 @@ final class BlueprintTooltipFactory {
     private List<Component> externalBuildingTooltip(Building building) {
         List<Component> lines = new ArrayList<>();
         lines.add(typeLabel(building.getBuildingType()));
-        poiLines(building.getBlocks()).forEach(item ->
-                lines.add(Component.literal("  ").append(item)));
+        poiLines(building.getBlocks()).forEach(item -> lines.add(detail(item)));
         return List.copyOf(lines);
     }
 
@@ -165,22 +162,21 @@ final class BlueprintTooltipFactory {
             List<RoomTypeResolver.Context> typeRooms = entry.getValue();
 
             boolean repeatType = grouped.size() > 1 || titleType == null || !titleType.name().equals(type.name());
-            if (repeatType) lines.add(Component.literal("  ").append(typeLabel(type)));
+            if (repeatType) lines.add(detail(typeLabel(type)));
 
             Set<String> residents = new LinkedHashSet<>();
             typeRooms.forEach(ctx -> village.getResidents(ctx.room().getId()).forEach(residents::add));
             residents.forEach(name ->
-                    lines.add(Component.literal("    ").append(Component.literal(name).withStyle(ChatFormatting.GRAY))));
+                    lines.add(detail(Component.literal(name).withStyle(ChatFormatting.GRAY))));
 
             Map<ResourceLocation, List<BlockPos>> combinedPoi = new LinkedHashMap<>();
             typeRooms.forEach(ctx -> ctx.ownPoi().forEach((k, v) ->
                     combinedPoi.computeIfAbsent(k, key -> new ArrayList<>()).addAll(v)));
 
             if (!combinedPoi.isEmpty()) {
-                lines.add(Component.literal("    ").append(Component.translatable(
-                        "gui.blueprint.roomTooltip.roomPoi").withStyle(ChatFormatting.GRAY, ChatFormatting.ITALIC)));
-                poiLines(combinedPoi).forEach(item ->
-                        lines.add(Component.literal("      ").append(item)));
+                lines.add(detail(Component.translatable("gui.blueprint.roomTooltip.roomPoi")
+                        .withStyle(ChatFormatting.GRAY, ChatFormatting.ITALIC)));
+                poiLines(combinedPoi).forEach(item -> lines.add(detail(item)));
             }
         }
     }
@@ -198,6 +194,10 @@ final class BlueprintTooltipFactory {
                 .sorted(Comparator.comparingInt((Building room) -> room.getFloorNumber(village))
                         .thenComparingInt(Building::getId))
                 .toList();
+    }
+
+    private static Component detail(Component component) {
+        return Component.literal(DETAIL_INDENT).append(component);
     }
 
     private static Component typeLabel(BuildingType type) {

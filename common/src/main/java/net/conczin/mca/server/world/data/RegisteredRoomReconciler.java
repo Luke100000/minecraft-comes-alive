@@ -46,11 +46,10 @@ final class RegisteredRoomReconciler {
                         .orElse(null));
         if (playerComponent == null) return Optional.empty();
 
-        List<Assignment> assignments = new ArrayList<>();
-        assignments.add(new Assignment(playerComponent, expected));
-        assignments.addAll(matchRemaining(
-                components.stream().filter(component -> component != playerComponent).toList(),
-                previous.stream().filter(room -> room != expected).toList()));
+        // Stable Room identity follows topology, not the player. On a split, the old Room ID
+        // therefore stays with the greatest-overlap parent component while playerComponent
+        // remains available solely for the interaction/type-selection path.
+        List<Assignment> assignments = new ArrayList<>(matchRemaining(components, previous));
         assignments.sort(Comparator.comparing(Assignment::component, COMPONENT_ORDER));
         Set<Integer> assignedRoomIds = assignments.stream()
                 .map(Assignment::roomId)

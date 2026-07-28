@@ -62,6 +62,7 @@ final class BlueprintMapGeometry {
             if (selectedFloor != null && floorNum != selectedFloor) continue;
             Set<BlueprintMapFootprint.Cell> footprintCells = roomFootprint(room);
             if (footprintCells.isEmpty()) continue;
+            BlueprintMapFootprint.Shape shape = BlueprintMapFootprint.shape(footprintCells);
             int anchorY = village.getStructure(room.getStructureId())
                     .flatMap(structure -> structure.getFloor(room.getFloorId()))
                     .map(StructureFloor::anchorY)
@@ -70,9 +71,9 @@ final class BlueprintMapGeometry {
             layers.add(new MapFootprintLayer(
                     room,
                     presentationType(room),
-                    footprintCells,
-                    BlueprintMapFootprint.rowSpans(footprintCells),
-                    BlueprintMapFootprint.outerEdges(footprintCells),
+                    shape.cells(),
+                    shape.spans(),
+                    shape.edges(),
                     floorNum,
                     village.getLogicalBuildingId(room.getStructureId()),
                     anchorY));
@@ -100,36 +101,48 @@ final class BlueprintMapGeometry {
                     .sorted(Comparator.comparingInt(Structure::getId))
                     .toList();
             LinkedHashSet<BlueprintMapFootprint.Cell> outlineBaseCells = new LinkedHashSet<>();
-            int anchorY = Integer.MIN_VALUE;
+            int groundAnchorY = Integer.MAX_VALUE;
+            int lowestNonBasementY = Integer.MAX_VALUE;
             for (Structure structure : members) {
                 for (StructureFloor floor : structure.getFloors()) {
                     if (floor.floorNumber() >= 0 && floor.region() != null) {
                         outlineBaseCells.addAll(BlueprintMapFootprint.fromFloorRegions(List.of(floor.region())));
-                        anchorY = Math.max(anchorY, floor.anchorY());
+                        lowestNonBasementY = Math.min(lowestNonBasementY, floor.anchorY());
+                        if (floor.floorNumber() == 0) {
+                            groundAnchorY = Math.min(groundAnchorY, floor.anchorY());
+                        }
                     }
                 }
             }
             if (outlineBaseCells.isEmpty()) continue;
+            int anchorY = groundAnchorY != Integer.MAX_VALUE ? groundAnchorY : lowestNonBasementY;
+
+            // Keep the intentional one-cell neutral shell around the canonical physical
+            // building footprint. Room geometry remains exact; subtracting visible rooms
+            // leaves the padded shade while both paths still use the same Shape conversion.
+            Set<BlueprintMapFootprint.Cell> filteredBase =
+                    outlineBaseWithoutEntranceProtrusions(outlineBaseCells);
+            if (filteredBase.isEmpty()) filteredBase = Set.copyOf(outlineBaseCells);
+            Set<BlueprintMapFootprint.Cell> outlineCells = BlueprintMapFootprint.expand(
+                    filteredBase, BUILDING_OUTLINE_WIDTH);
 
             LinkedHashSet<BlueprintMapFootprint.Cell> visibleRoomCells = new LinkedHashSet<>();
             roomsByBuilding.getOrDefault(entry.getKey(), List.of())
                     .forEach(layer -> visibleRoomCells.addAll(layer.footprintCells()));
 
-            Set<BlueprintMapFootprint.Cell> filteredBase = outlineBaseWithoutEntranceProtrusions(outlineBaseCells);
-            if (filteredBase.isEmpty()) filteredBase = Set.copyOf(outlineBaseCells);
-            Set<BlueprintMapFootprint.Cell> outlineCells = BlueprintMapFootprint.expand(
-                    filteredBase, BUILDING_OUTLINE_WIDTH);
             LinkedHashSet<BlueprintMapFootprint.Cell> shellCells = new LinkedHashSet<>(outlineCells);
             shellCells.removeAll(visibleRoomCells);
+            BlueprintMapFootprint.Shape shellShape = BlueprintMapFootprint.shape(shellCells);
+            BlueprintMapFootprint.Shape outlineShape = BlueprintMapFootprint.shape(outlineCells);
 
             Structure root = village.getStructure(entry.getKey()).orElse(members.getFirst());
             layers.add(new MapStructureLayer(
                     entry.getKey(),
                     village.getMainRoom(root).orElse(null),
                     anchorY,
-                    shellCells,
-                    BlueprintMapFootprint.rowSpans(shellCells),
-                    BlueprintMapFootprint.outerEdges(outlineCells)));
+                    shellShape.cells(),
+                    shellShape.spans(),
+                    outlineShape.edges()));
         }
         layers.sort(Comparator.comparingInt(MapStructureLayer::anchorY)
                 .thenComparingInt(MapStructureLayer::logicalBuildingId));

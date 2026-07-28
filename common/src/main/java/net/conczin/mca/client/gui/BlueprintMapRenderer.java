@@ -91,9 +91,14 @@ final class BlueprintMapRenderer implements AutoCloseable {
         List<MapStructureLayer> structureLayers = geometry.structureLayers();
         List<MapIconLayer> footprintIconLayers = geometry.iconLayers();
         List<MapFootprintLayer> roomHitTestLayers = BlueprintMapLayering.frontToBack(footprintLayers);
-        int hoveredLogicalBuildingId = hoveredLogicalBuildingId(
+        Set<Integer> hoveredLogicalBuildingIds = hoveredLogicalBuildingIds(
                 roomHitTestLayers, structureLayers, hoveredMapCell, mouseX, mouseY,
                 viewport, selectedFloor, mouseInsideMap);
+        int hoveredLogicalBuildingId = hoveredLogicalBuildingIds.size() == 1
+                ? hoveredLogicalBuildingIds.iterator().next()
+                : playerLogicalBuildingId >= 0 && hoveredLogicalBuildingIds.contains(playerLogicalBuildingId)
+                ? playerLogicalBuildingId
+                : hoveredLogicalBuildingIds.stream().findFirst().orElse(-1);
         int activeLogicalBuildingId = hoveredLogicalBuildingId >= 0
                 ? hoveredLogicalBuildingId
                 : playerLogicalBuildingId >= 0
@@ -519,27 +524,28 @@ final class BlueprintMapRenderer implements AutoCloseable {
         }
     }
 
-    private static int hoveredLogicalBuildingId(List<MapFootprintLayer> roomHitTestLayers,
-                                                List<MapStructureLayer> structureLayers,
-                                                BlueprintMapFootprint.Cell hoveredMapCell,
-                                                int mouseX,
-                                                int mouseY,
-                                                BlueprintMapViewport viewport,
-                                                Integer selectedFloor,
-                                                boolean mouseInsideMap) {
-        if (!mouseInsideMap) return -1;
+    private static Set<Integer> hoveredLogicalBuildingIds(List<MapFootprintLayer> roomHitTestLayers,
+                                                          List<MapStructureLayer> structureLayers,
+                                                          BlueprintMapFootprint.Cell hoveredMapCell,
+                                                          int mouseX,
+                                                          int mouseY,
+                                                          BlueprintMapViewport viewport,
+                                                          Integer selectedFloor,
+                                                          boolean mouseInsideMap) {
+        if (!mouseInsideMap) return Set.of();
+        LinkedHashSet<Integer> hovered = new LinkedHashSet<>();
         for (MapFootprintLayer layer : roomHitTestLayers) {
             if (isRoomHovered(layer, hoveredMapCell, mouseX, mouseY, viewport, selectedFloor == null)) {
-                return layer.logicalBuildingId();
+                hovered.add(layer.logicalBuildingId());
             }
         }
         for (MapStructureLayer layer : BlueprintMapLayering.frontToBack(structureLayers)) {
             if (layer.shellCells().contains(hoveredMapCell)
                     || isOutlineHovered(layer.borderEdges(), mouseX, mouseY, viewport)) {
-                return layer.logicalBuildingId();
+                hovered.add(layer.logicalBuildingId());
             }
         }
-        return -1;
+        return Collections.unmodifiableSet(hovered);
     }
 
     private static int topLogicalBuildingId(List<MapFootprintLayer> roomLayers,

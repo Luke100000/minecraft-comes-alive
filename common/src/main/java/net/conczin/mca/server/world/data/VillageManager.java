@@ -266,9 +266,9 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         }
 
         Structure candidate = structureScan.toStructure(-1);
-        StructureFloor playerFloor = candidate.physicalFloorAt(pos).orElse(null);
-        if (playerFloor == null || !validAttachment(
-                village, candidate, playerFloor, target.targetBuildingId(), requestedMode)) {
+        StructureFloor attachmentFloor = resolveRoomFloor(village, candidate, pos, -1);
+        if (attachmentFloor == null || !validAttachment(
+                village, candidate, attachmentFloor, target.targetBuildingId(), requestedMode)) {
             return failedRoom(Building.validationResult.NOT_IN_BUILDING, pos, village);
         }
 
@@ -287,7 +287,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         int bestGap = members.stream()
                 .flatMap(structure -> structure.getFloors().stream())
                 .filter(floor -> floor.region() != null
-                        && floor.region().intersectionArea(playerFloor.region()) > 0)
+                        && horizontallyAttachable(playerFloor.region(), floor.region()))
                 .mapToInt(floor -> verticalGap(playerFloor, floor))
                 .filter(gap -> gap >= 0)
                 .min()
@@ -299,6 +299,22 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         return requestedMode == Village.RoomScanMode.ADD_BASEMENT
                 ? floorNumber < 0
                 : floorNumber != Integer.MIN_VALUE && floorNumber >= 0;
+    }
+
+    private static boolean horizontallyAttachable(BuildingFloorRegion first,
+                                                  BuildingFloorRegion second) {
+        if (first.intersectionArea(second) > 0) return true;
+        for (BlockPos cell : first.cells()) {
+            int x = cell.getX();
+            int z = cell.getZ();
+            if (second.containsHorizontally(x + 1, z)
+                    || second.containsHorizontally(x - 1, z)
+                    || second.containsHorizontally(x, z + 1)
+                    || second.containsHorizontally(x, z - 1)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static int verticalGap(StructureFloor first, StructureFloor second) {
