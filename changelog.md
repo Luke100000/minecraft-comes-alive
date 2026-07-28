@@ -1,5 +1,9 @@
+# 7.7.31
+> This is a release of 7.7.31 unrelated to the 7.7.23-ALPHA version.
+
+* Improve Ladder performance.
+
 # 7.7.30
-> This is a release of 7.7.30 unrelated to the 7.7.23-ALPHA version.
 
 * Improved Ladder navigation.
 * Fixed crash with archers being on horses.

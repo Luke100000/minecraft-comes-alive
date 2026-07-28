@@ -1,19 +1,19 @@
 package net.conczin.mca.entity.ai.navigation;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.tags.FluidTags;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.navigation.GroundPathNavigation;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.LadderBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.pathfinder.Node;
 import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.level.pathfinder.PathFinder;
-import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
-import net.minecraft.world.phys.shapes.VoxelShape;
 
 public class MCAGroundPathNavigation extends GroundPathNavigation {
     private static final double CLIMB_VERTICAL_SPEED = 0.16D;
@@ -209,17 +209,16 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
 
     private Vec3 getClimbableAnchor(BlockPos pos) {
         BlockState state = this.level.getBlockState(pos);
-        VoxelShape shape = state.getShape(this.level, pos);
-        if (shape.isEmpty()) {
-            return Vec3.atCenterOf(pos);
+        Vec3 center = Vec3.atCenterOf(pos);
+        if (state.getBlock() instanceof LadderBlock) {
+            Direction facing = state.getValue(LadderBlock.FACING);
+            return center.add(
+                    facing.getStepX() * 0.1D,
+                    0.0D,
+                    facing.getStepZ() * 0.1D
+            );
         }
-
-        AABB bounds = shape.bounds();
-        return new Vec3(
-                pos.getX() + (bounds.minX + bounds.maxX) * 0.5D,
-                pos.getY() + 0.5D,
-                pos.getZ() + (bounds.minZ + bounds.maxZ) * 0.5D
-        );
+        return center;
     }
 
     private static double horizontalVelocity(double delta) {

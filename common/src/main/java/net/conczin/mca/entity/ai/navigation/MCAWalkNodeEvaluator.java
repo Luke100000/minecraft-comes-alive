@@ -11,14 +11,16 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.pathfinder.Node;
 import net.minecraft.world.level.pathfinder.PathComputationType;
 import net.minecraft.world.level.pathfinder.PathType;
+import net.minecraft.world.level.pathfinder.PathfindingContext;
 import net.minecraft.world.level.pathfinder.WalkNodeEvaluator;
 import net.minecraft.world.phys.AABB;
 import org.jetbrains.annotations.Nullable;
 
 public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
-    private static final int MAX_LADDER_EDGE_OFFSET = 2;
+    private static final int MAX_CLIMBABLE_START_DROP = 2;
     private final Long2BooleanMap clearanceCache = new Long2BooleanOpenHashMap();
     private final Long2BooleanMap climbableCache = new Long2BooleanOpenHashMap();
+    private final BlockPos.MutableBlockPos climbablePos = new BlockPos.MutableBlockPos();
 
     @Override
     public void done() {
@@ -49,7 +51,7 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
         }
 
         if (this.mob.onClimbable()) {
-            for (int drop = 1; drop <= MAX_LADDER_EDGE_OFFSET; drop++) {
+            for (int drop = 1; drop <= MAX_CLIMBABLE_START_DROP; drop++) {
                 BlockPos candidate = mobPos.below(drop);
 
                 if (isClimbable(candidate)) {
@@ -82,55 +84,25 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
     }
 
     @Override
-    protected Node getStartNode(BlockPos pos) {
-        return isClimbable(pos) ? getClimbableNode(pos) : super.getStartNode(pos);
-    }
-
-    @Override
-    protected boolean canStartAt(BlockPos pos) {
-        return isClimbable(pos) || super.canStartAt(pos);
-    }
-
-    @Override
     public int getNeighbors(Node[] nodes, Node origin) {
-        BlockPos originPos = origin.asBlockPos();
-        boolean originClimbable = isClimbable(originPos);
         int nodeCount = super.getNeighbors(nodes, origin);
-
-        if (originClimbable) {
-            nodeCount = removeLargeVerticalTransitions(nodes, nodeCount, origin);
-            if (!isClimbable(originPos.above())) {
-                nodeCount = addUpperFloorExits(nodes, nodeCount, originPos);
-            }
+        if (!isClimbable(origin.x, origin.y, origin.z)) {
+            return nodeCount;
         }
 
+        nodeCount = removeLargeVerticalTransitions(nodes, nodeCount, origin);
+        BlockPos originPos = origin.asBlockPos();
         BlockPos above = originPos.above();
-        if (isClimbable(above)) {
+        boolean continuesUp = isClimbable(above);
+        if (continuesUp) {
             nodeCount = addClimbableNode(nodes, nodeCount, above);
+        } else {
+            nodeCount = addUpperFloorExits(nodes, nodeCount, originPos);
         }
 
         BlockPos below = originPos.below();
         if (isClimbable(below)) {
             nodeCount = addClimbableNode(nodes, nodeCount, below);
-        }
-
-        if (!originClimbable) {
-            for (Direction direction : Direction.Plane.HORIZONTAL) {
-                BlockPos edgePos = originPos.relative(direction);
-                for (int drop = 1; drop <= MAX_LADDER_EDGE_OFFSET; drop++) {
-                    BlockPos ladderEntry = edgePos.below(drop);
-
-                    if (isClimbable(ladderEntry)) {
-                        nodeCount = addClimbableNode(nodes, nodeCount, ladderEntry);
-                        break;
-                    }
-
-                    if (!this.currentContext.getBlockState(ladderEntry)
-                            .isPathfindable(PathComputationType.LAND)) {
-                        break;
-                    }
-                }
-            }
         }
 
         return nodeCount;
@@ -151,10 +123,10 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
         return writeIndex;
     }
 
-    private int addUpperFloorExits(Node[] nodes, int nodeCount, BlockPos ladder) {
+    private int addUpperFloorExits(Node[] nodes, int nodeCount, BlockPos climbable) {
         for (Direction direction : Direction.Plane.HORIZONTAL) {
-            for (int rise = 1; rise <= MAX_LADDER_EDGE_OFFSET; rise++) {
-                Node node = getStartNode(ladder.relative(direction).above(rise));
+            for (int rise = 1; rise <= MAX_CLIMBABLE_START_DROP; rise++) {
+                Node node = getStartNode(climbable.relative(direction).above(rise));
                 if (node.type == PathType.OPEN || node.costMalus < 0.0F || !hasBlockClearance(node)) {
                     continue;
                 }
@@ -183,43 +155,39 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
         return node;
     }
 
+    @Override
+    public PathType getPathType(PathfindingContext context, int x, int y, int z) {
+        return isClimbable(context, x, y, z)
+                ? PathType.WALKABLE
+                : super.getPathType(context, x, y, z);
+    }
+
     private boolean isClimbable(BlockPos pos) {
-        long key = pos.asLong();
+        return isClimbable(this.currentContext, pos.getX(), pos.getY(), pos.getZ());
+    }
+
+    private boolean isClimbable(int x, int y, int z) {
+        return isClimbable(this.currentContext, x, y, z);
+    }
+
+    private boolean isClimbable(PathfindingContext context, int x, int y, int z) {
+        if (context != this.currentContext) {
+            return context.getBlockState(this.climbablePos.set(x, y, z)).is(BlockTags.CLIMBABLE);
+        }
+
+        long key = BlockPos.asLong(x, y, z);
         if (this.climbableCache.containsKey(key)) {
             return this.climbableCache.get(key);
         }
 
-        boolean climbable = this.currentContext.getBlockState(pos).is(BlockTags.CLIMBABLE);
+        boolean climbable = context.getBlockState(this.climbablePos.set(x, y, z)).is(BlockTags.CLIMBABLE);
         this.climbableCache.put(key, climbable);
         return climbable;
-    }
-
-    private boolean hasReachableClimbableBelow(BlockPos pos) {
-        for (int drop = 1; drop <= MAX_LADDER_EDGE_OFFSET; drop++) {
-            BlockPos candidate = pos.below(drop);
-            if (isClimbable(candidate)) {
-                return true;
-            }
-
-            if (!this.currentContext.getBlockState(candidate)
-                    .isPathfindable(PathComputationType.LAND)) {
-                return false;
-            }
-        }
-        return false;
     }
 
     @Nullable
     @Override
     protected Node findAcceptedNode(int x, int y, int z, int maxYStep, double currentFloor, Direction direction, PathType previousType) {
-        BlockPos pos = new BlockPos(x, y, z);
-        if (isClimbable(pos)) {
-            return getClimbableNode(pos);
-        }
-        if (hasReachableClimbableBelow(pos)) {
-            return null;
-        }
-
         Node node = super.findAcceptedNode(x, y, z, maxYStep, currentFloor, direction, previousType);
         if (node == null || node.costMalus < 0.0F) {
             return node;

@@ -11,9 +11,9 @@ import net.minecraft.world.level.pathfinder.PathType;
 import net.minecraft.world.level.pathfinder.WalkNodeEvaluator;
 
 public class WanderOrTeleportToTargetTask extends MoveToTargetSink {
-    // Pathfinding is one of the slowest components, let's slow it down a bit.
-    private static final int SLOWDOWN = 5;
-    private int cooldown = SLOWDOWN;
+    // Keep the old seven-check interval, but distribute initial checks like vanilla mob AI.
+    private static final int PATHFINDING_INTERVAL = 7;
+    private int cooldown = -1;
 
     public WanderOrTeleportToTargetTask() {
         // nop
@@ -21,13 +21,16 @@ public class WanderOrTeleportToTargetTask extends MoveToTargetSink {
 
     @Override
     protected boolean checkExtraStartConditions(ServerLevel serverWorld, Mob mobEntity) {
-        if (cooldown < 0) {
-            cooldown = SLOWDOWN;
-            return super.checkExtraStartConditions(serverWorld, mobEntity);
-        } else {
-            cooldown--;
+        if (this.cooldown < 0) {
+            this.cooldown = Math.floorMod(mobEntity.getId(), PATHFINDING_INTERVAL);
+        }
+        if (this.cooldown > 0) {
+            this.cooldown--;
             return false;
         }
+
+        this.cooldown = PATHFINDING_INTERVAL - 1;
+        return super.checkExtraStartConditions(serverWorld, mobEntity);
     }
 
     @Override
