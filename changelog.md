@@ -4,6 +4,7 @@
 * Improve Ladder performance.
 * Fixed library auth not working in sandboxed environments.
 * Improved Library Editor, should load faster and other internal improvements.
+* Fixed Smarter Farmers mod incompatibility
 # 7.7.30
 
 * Improved Ladder navigation.
