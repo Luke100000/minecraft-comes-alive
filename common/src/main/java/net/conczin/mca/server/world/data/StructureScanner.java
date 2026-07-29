@@ -21,7 +21,32 @@ final class StructureScanner {
     private StructureScanner() {
     }
 
-    static Result scan(Level world, BlockPos source, Collection<Structure> existing, int ignoredStructureId) {
+    static Result scanNewStructure(Level world,
+                                   BlockPos source,
+                                   Collection<Structure> existing) {
+        return scan(world, source, existing, -1,
+                (roof, maxRadius) -> resolveExactSeed(world, source, roof, maxRadius));
+    }
+
+    static Result scanAttachedStructure(Level world,
+                                        BlockPos source,
+                                        Collection<Structure> existing) {
+        return scan(world, source, existing, -1,
+                (roof, maxRadius) -> resolveAttachmentSeed(world, source, roof, maxRadius));
+    }
+
+    static Result rescanStructure(Level world,
+                                  Structure structure,
+                                  Collection<Structure> existing) {
+        return scan(world, structure.getSource(), existing, structure.getId(),
+                (roof, maxRadius) -> resolvePersistedSeed(world, structure, roof, maxRadius));
+    }
+
+    private static Result scan(Level world,
+                               BlockPos source,
+                               Collection<Structure> existing,
+                               int ignoredStructureId,
+                               SeedResolver seedResolver) {
         int maxSize = Config.getInstance().maxBuildingSize;
         int maxRadius = Config.getInstance().maxBuildingRadius;
         int minSize = Config.getInstance().minBuildingSize;
@@ -33,7 +58,7 @@ final class StructureScanner {
         ArrayDeque<BlockPos> queue = new ArrayDeque<>();
         Map<BlockPos, Boolean> roof = new HashMap<>();
 
-        BlockPos seed = resolveScanSeed(world, source, roof, maxRadius).orElse(null);
+        BlockPos seed = seedResolver.resolve(roof, maxRadius).orElse(null);
         if (seed == null) {
             return Result.failure(Building.validationResult.TOO_SMALL, source);
         }
@@ -149,20 +174,68 @@ final class StructureScanner {
         return new Result(Building.validationResult.SUCCESS, seed, min, max, floors, surfaceReferenceY);
     }
 
-    /**
-     * The supplied source is the single source of truth for scan identity. Player actions pass
-     * the player's feet position; rescans pass the persisted interior seed. Searching downward
-     * or sideways here can silently select a different room or Structure than the caller occupies.
-     */
-    private static Optional<BlockPos> resolveScanSeed(Level world,
-                                                      BlockPos source,
-                                                      Map<BlockPos, Boolean> roof,
-                                                      int maxRadius) {
+    /** New Structure discovery accepts only the enclosed interior occupied by the player. */
+    private static Optional<BlockPos> resolveExactSeed(Level world,
+                                                       BlockPos source,
+                                                       Map<BlockPos, Boolean> roof,
+                                                       int maxRadius) {
         if (!isWalkableAnchor(world, source, world.getBlockState(source), roof)
                 || reachesExterior(world, source, null, roof, maxRadius)) {
             return Optional.empty();
         }
         return Optional.of(source.immutable());
+    }
+
+    /**
+     * An attachment may start on an external apron, but may enter the candidate only through one
+     * adjacent horizontal connector. It never searches vertically or through generic proximity.
+     */
+    private static Optional<BlockPos> resolveAttachmentSeed(Level world,
+                                                            BlockPos source,
+                                                            Map<BlockPos, Boolean> roof,
+                                                            int maxRadius) {
+        Optional<BlockPos> exact = resolveExactSeed(world, source, roof, maxRadius);
+        if (exact.isPresent()) return exact;
+
+        List<BlockPos> candidates = new ArrayList<>();
+        for (Direction direction : HORIZONTAL) {
+            BlockPos connector = source.relative(direction);
+            if (!StructureConnector.isHorizontalBoundary(world.getBlockState(connector))) continue;
+            BlockPos candidate = connector.relative(direction);
+            if (isWalkableAnchor(world, candidate, world.getBlockState(candidate), roof)
+                    && !reachesExterior(world, candidate, connector, roof, maxRadius)) {
+                candidates.add(candidate.immutable());
+            }
+        }
+        return candidates.size() == 1 ? Optional.of(candidates.getFirst()) : Optional.empty();
+    }
+
+    /**
+     * A persisted Structure may outlive its original clear seed when furniture is placed there.
+     * Recovery is limited to that Structure's stored Floor cells, so rescan cannot jump into a
+     * different room above, below or beside it.
+     */
+    private static Optional<BlockPos> resolvePersistedSeed(Level world,
+                                                           Structure structure,
+                                                           Map<BlockPos, Boolean> roof,
+                                                           int maxRadius) {
+        Optional<BlockPos> exact = resolveExactSeed(world, structure.getSource(), roof, maxRadius);
+        if (exact.isPresent()) return exact;
+
+        BlockPos source = structure.getSource();
+        return structure.getFloors().stream()
+                .filter(floor -> floor.region() != null)
+                .flatMap(floor -> floor.region().cells().stream())
+                .distinct()
+                .sorted(Comparator
+                        .comparingInt((BlockPos candidate) -> manhattanDistance(candidate, source))
+                        .thenComparingInt(BlockPos::getY)
+                        .thenComparingInt(BlockPos::getX)
+                        .thenComparingInt(BlockPos::getZ))
+                .filter(candidate -> isWalkableAnchor(world, candidate, world.getBlockState(candidate), roof))
+                .filter(candidate -> !reachesExterior(world, candidate, null, roof, maxRadius))
+                .map(BlockPos::immutable)
+                .findFirst();
     }
 
     private static boolean isWalkableAnchor(Level world,
@@ -535,6 +608,15 @@ final class StructureScanner {
 
     private static int horizontalDistance(BlockPos a, BlockPos b) {
         return Math.abs(a.getX() - b.getX()) + Math.abs(a.getZ() - b.getZ());
+    }
+
+    private static int manhattanDistance(BlockPos a, BlockPos b) {
+        return horizontalDistance(a, b) + Math.abs(a.getY() - b.getY());
+    }
+
+    @FunctionalInterface
+    private interface SeedResolver {
+        Optional<BlockPos> resolve(Map<BlockPos, Boolean> roof, int maxRadius);
     }
 
     record Result(Building.validationResult result,

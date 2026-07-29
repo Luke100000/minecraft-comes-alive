@@ -81,8 +81,8 @@ public final class BuildingDiagnostics {
                         resolved.effectivePoi().values().stream().mapToInt(List::size).sum(), sameColumn, elevatedWithinBand);
             }
 
-            StructureScanner.Result scan = StructureScanner.scan(
-                    world, inspected.getSource(), village.getStructures().values(), inspected.getId());
+            StructureScanner.Result scan = StructureScanner.rescanStructure(
+                    world, inspected, village.getStructures().values());
             freshPlayerFloor = scan.result() == Building.validationResult.SUCCESS
                     ? floorAt(scan.floors(), pos)
                     : null;

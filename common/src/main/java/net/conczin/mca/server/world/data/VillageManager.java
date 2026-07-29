@@ -259,21 +259,23 @@ public class VillageManager extends SavedData implements Iterable<Village> {
             return failedRoom(Building.validationResult.NOT_IN_BUILDING, pos, village);
         }
 
-        StructureScanner.Result structureScan = StructureScanner.scan(
-                world, pos, village.getStructures().values(), -1);
+        StructureScanner.Result structureScan = StructureScanner.scanAttachedStructure(
+                world, pos, village.getStructures().values());
         if (structureScan.result() != Building.validationResult.SUCCESS) {
             return failedRoom(structureScan.result(), pos, village);
         }
 
         Structure candidate = structureScan.toStructure(-1);
-        StructureFloor attachmentFloor = resolveRoomFloor(village, candidate, pos, -1);
+        StructureFloor attachmentFloor = resolveRoomFloor(
+                village, candidate, structureScan.source(), -1);
         if (attachmentFloor == null || !validAttachment(
                 village, candidate, attachmentFloor, target.targetBuildingId(), requestedMode)) {
             return failedRoom(Building.validationResult.NOT_IN_BUILDING, pos, village);
         }
 
         candidate.setLogicalBuildingId(target.targetBuildingId());
-        return scanRoom(village, candidate, pos, -1).withPendingStructure(candidate);
+        return scanRoom(village, candidate, structureScan.source(), -1)
+                .withPendingStructure(candidate);
     }
 
     private static boolean validAttachment(Village village,
@@ -330,7 +332,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
             return failedRoom(Building.validationResult.IDENTICAL, pos, village);
         }
 
-        StructureScanner.Result structureScan = StructureScanner.scan(world, pos, existing, -1);
+        StructureScanner.Result structureScan = StructureScanner.scanNewStructure(world, pos, existing);
         if (structureScan.result() != Building.validationResult.SUCCESS) {
             return failedRoom(structureScan.result(), pos, village);
         }
@@ -751,8 +753,8 @@ public class VillageManager extends SavedData implements Iterable<Village> {
     public Building.validationResult rescanStructure(Village village, int structureId) {
         Structure structure = village == null ? null : village.getStructure(structureId).orElse(null);
         if (structure == null) return Building.validationResult.NOT_IN_BUILDING;
-        StructureScanner.Result scan = StructureScanner.scan(world, structure.getSource(),
-                village.getStructures().values(), structureId);
+        StructureScanner.Result scan = StructureScanner.rescanStructure(
+                world, structure, village.getStructures().values());
         if (scan.result() != Building.validationResult.SUCCESS) return scan.result();
         List<Building> rooms = village.getRooms().filter(room -> room.getStructureId() == structureId).toList();
 
