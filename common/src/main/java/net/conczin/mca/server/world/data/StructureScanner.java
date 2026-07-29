@@ -28,11 +28,11 @@ final class StructureScanner {
                 (roof, maxRadius) -> resolveExactSeed(world, source, roof, maxRadius));
     }
 
-    static Result scanAttachedStructure(Level world,
-                                        BlockPos source,
-                                        Collection<Structure> existing) {
-        return scan(world, source, existing, -1,
-                (roof, maxRadius) -> resolveAttachmentSeed(world, source, roof, maxRadius));
+    static Result scanPlannedStructure(Level world,
+                                       RoomScanPlan plan,
+                                       Collection<Structure> existing) {
+        return scan(world, plan.interactionSource(), existing, -1,
+                (roof, maxRadius) -> resolveExactSeed(world, plan.scanSeed(), roof, maxRadius));
     }
 
     static Result rescanStructure(Level world,
@@ -190,12 +190,17 @@ final class StructureScanner {
      * An attachment may start on an external apron, but may enter the candidate only through one
      * adjacent horizontal connector. It never searches vertically or through generic proximity.
      */
-    private static Optional<BlockPos> resolveAttachmentSeed(Level world,
-                                                            BlockPos source,
-                                                            Map<BlockPos, Boolean> roof,
-                                                            int maxRadius) {
+    static Optional<AttachmentSeed> resolveAttachmentSeed(Level world, BlockPos source) {
+        return resolveAttachmentSeed(world, source, new HashMap<>(),
+                Config.getInstance().maxBuildingRadius);
+    }
+
+    private static Optional<AttachmentSeed> resolveAttachmentSeed(Level world,
+                                                                  BlockPos source,
+                                                                  Map<BlockPos, Boolean> roof,
+                                                                  int maxRadius) {
         Optional<BlockPos> exact = resolveExactSeed(world, source, roof, maxRadius);
-        if (exact.isPresent()) return exact;
+        if (exact.isPresent()) return exact.map(seed -> new AttachmentSeed(seed, false));
 
         List<BlockPos> candidates = new ArrayList<>();
         for (Direction direction : HORIZONTAL) {
@@ -207,7 +212,9 @@ final class StructureScanner {
                 candidates.add(candidate.immutable());
             }
         }
-        return candidates.size() == 1 ? Optional.of(candidates.getFirst()) : Optional.empty();
+        return candidates.size() == 1
+                ? Optional.of(new AttachmentSeed(candidates.getFirst(), true))
+                : Optional.empty();
     }
 
     /**
@@ -617,6 +624,12 @@ final class StructureScanner {
     @FunctionalInterface
     private interface SeedResolver {
         Optional<BlockPos> resolve(Map<BlockPos, Boolean> roof, int maxRadius);
+    }
+
+    record AttachmentSeed(BlockPos seed, boolean crossedHorizontalConnector) {
+        AttachmentSeed {
+            seed = seed.immutable();
+        }
     }
 
     record Result(Building.validationResult result,

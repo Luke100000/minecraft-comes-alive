@@ -60,13 +60,12 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
                                   int expectedTargetId) {
         switch (action) {
             case ADD_ROOM -> {
-                Village village = manager.findNearestVillage(source, Village.MERGE_MARGIN).orElse(null);
-                if (village != null && village.getRoomScanContext(player.serverLevel(), source).mode()
-                        == Village.RoomScanMode.UPDATE_ROOM) {
+                BuildingScanResult scan = manager.analyzeRoom(source);
+                if (scan.result() == Building.validationResult.IDENTICAL) {
                     player.displayClientMessage(Component.translatable("blueprint.roomAlreadyAdded"), true);
                     return;
                 }
-                commitRoomAddition(manager, player, manager.analyzeRoom(source), forcedType, action);
+                commitRoomAddition(manager, player, scan, forcedType, action);
             }
             case ADD_BUILDING -> commitRoomAddition(manager, player,
                     manager.analyzeBuildingAddition(source), forcedType, action);

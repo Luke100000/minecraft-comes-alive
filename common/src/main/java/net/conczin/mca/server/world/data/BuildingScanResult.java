@@ -37,6 +37,11 @@ public record BuildingScanResult(
                 village, structure);
     }
 
+    BuildingScanResult withSource(BlockPos source) {
+        return new BuildingScanResult(result, source, building, matchingTypes,
+                village, pendingStructure);
+    }
+
     public int targetBuildingId() {
         if (pendingStructure == null || pendingStructure.getLogicalBuildingId() == pendingStructure.getId()) return -1;
         return pendingStructure.getLogicalBuildingId();

@@ -21,16 +21,15 @@ public final class BuildingDiagnostics {
         long traceId = NEXT_TRACE_ID.incrementAndGet();
         VillageManager manager = VillageManager.get(world);
         Village village = manager.findNearestVillage(pos, Village.MERGE_MARGIN).orElse(null);
-        Village.RoomScanContext context = village == null
-                ? new Village.RoomScanContext(Optional.empty(),
-                Village.RoomScanMode.ADD_BUILDING, -1, Integer.MIN_VALUE)
-                : village.getRoomScanContext(world, pos);
-        StructuralPosition position = structuralPosition(context);
-        String uiAction = uiAction(context.mode());
+        RoomScanPlan plan = village == null
+                ? RoomScanPlan.addBuilding(pos)
+                : village.getRoomScanPlan(world, pos);
+        StructuralPosition position = structuralPosition(plan);
+        String uiAction = uiAction(plan.mode());
 
-        log(traceId, "start position={} dimension={} village={} structuralPosition={} uiAction={} targetBuilding={} verbose={}",
-                pos, world.dimension().location(), village == null ? "none" : village.getId(),
-                position, uiAction, context.targetBuildingId(), verbose);
+        log(traceId, "start position={} scanSeed={} dimension={} village={} structuralPosition={} uiAction={} targetBuilding={} verbose={}",
+                pos, plan.scanSeed(), world.dimension().location(), village == null ? "none" : village.getId(),
+                position, uiAction, plan.targetBuildingId(), verbose);
 
         if (village == null) {
             Building.validationResult analysis = manager.analyzeBuildingAddition(pos).result();
@@ -46,7 +45,7 @@ public final class BuildingDiagnostics {
         Structure inspected = interactionStructure != null
                 ? interactionStructure
                 : structureAt != null ? structureAt : nearestStructure;
-        Building room = context.functionalRoom().orElse(null);
+        Building room = plan.functionalRoom().orElse(null);
         RoomTypeResolver roomTypeResolver = RoomTypeResolver.create(village);
 
         log(traceId, "lookup structureAt={} interactionStructure={} nearestStructure={} lookupBuilding={} lookupBuildingFloor={}",
@@ -63,10 +62,12 @@ public final class BuildingDiagnostics {
                     inspected.getId(), inspected.getLogicalBuildingId(), inspected.getSource(),
                     inspected.getRawPos0(), inspected.getRawPos1(),
                     contains, attaches, floor(logicalFloor), floor(physicalFloor));
-            log(traceId, "persistentFloors={} surfaceReferenceY={} storedMainRoomId={} storedMainRoomMode={}",
+            Building logicalMainRoom = village.getMainRoom(inspected).orElse(null);
+            log(traceId, "persistentFloors={} surfaceReferenceY={} logicalMainRoomId={} logicalMainRoomMode={}",
                     floors(inspected.getFloors()),
                     inspected.getSurfaceReferenceY(),
-                    inspected.getMainRoomId(), inspected.isMainRoomAutomatic() ? "AUTOMATIC" : "MANUAL");
+                    logicalMainRoom == null ? "none" : logicalMainRoom.getId(),
+                    village.isMainRoomAutomatic(inspected) ? "AUTOMATIC" : "MANUAL");
 
             if (room != null) {
                 StructureFloor roomFloor = inspected.getFloor(room.getFloorId()).orElse(null);
@@ -92,11 +93,11 @@ public final class BuildingDiagnostics {
             logFloorDifference(traceId, inspected.getFloors(), scan.floors(), verbose);
         }
 
-        Building.validationResult analysis = switch (context.mode()) {
+        Building.validationResult analysis = switch (plan.mode()) {
             case ADD_BUILDING -> manager.analyzeBuildingAddition(pos).result();
             case ADD_ROOM -> manager.analyzeRoom(pos).result();
             case ADD_FLOOR, ADD_BASEMENT -> manager.analyzeAttachedRoom(
-                    pos, context.mode(), context.targetBuildingId()).result();
+                    village, plan, plan.mode(), plan.targetBuildingId()).result();
             case UPDATE_ROOM -> room == null
                     ? Building.validationResult.NOT_IN_BUILDING
                     : manager.analyzeRegisteredRoomUpdate(village, room.getId(), pos).result();
@@ -108,8 +109,8 @@ public final class BuildingDiagnostics {
         return new Result(traceId, position, uiAction, verdict);
     }
 
-    private static StructuralPosition structuralPosition(Village.RoomScanContext context) {
-        return switch (context.mode()) {
+    private static StructuralPosition structuralPosition(RoomScanPlan plan) {
+        return switch (plan.mode()) {
             case UPDATE_ROOM -> StructuralPosition.REGISTERED_ROOM;
             case ADD_ROOM -> StructuralPosition.ATTACHABLE_ROOM;
             case ADD_BUILDING, ADD_FLOOR, ADD_BASEMENT -> StructuralPosition.OUTSIDE;

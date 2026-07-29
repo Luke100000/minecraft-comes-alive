@@ -252,29 +252,41 @@ public class VillageManager extends SavedData implements Iterable<Village> {
 
         Village village = findNearestVillage(pos, Village.MERGE_MARGIN).orElse(null);
         if (village == null) return failedRoom(Building.validationResult.NOT_IN_BUILDING, pos, null);
-        Village.RoomScanContext target = village.getRoomScanContext(world, pos);
-        if (target.mode() != requestedMode || target.targetBuildingId() < 0
+        RoomScanPlan plan = village.getRoomScanPlan(world, pos);
+        return analyzeAttachedRoom(village, plan, requestedMode, expectedTargetBuildingId);
+    }
+
+    BuildingScanResult analyzeAttachedRoom(Village village,
+                                           RoomScanPlan plan,
+                                           Village.RoomScanMode requestedMode,
+                                           int expectedTargetBuildingId) {
+        BlockPos source = plan == null ? BlockPos.ZERO : plan.interactionSource();
+        if (village == null || plan == null) {
+            return failedRoom(Building.validationResult.NOT_IN_BUILDING, source, village);
+        }
+        if (plan.mode() != requestedMode || plan.targetBuildingId() < 0
                 || (expectedTargetBuildingId >= 0
-                && target.targetBuildingId() != expectedTargetBuildingId)) {
-            return failedRoom(Building.validationResult.NOT_IN_BUILDING, pos, village);
+                && plan.targetBuildingId() != expectedTargetBuildingId)) {
+            return failedRoom(Building.validationResult.NOT_IN_BUILDING, source, village);
         }
 
-        StructureScanner.Result structureScan = StructureScanner.scanAttachedStructure(
-                world, pos, village.getStructures().values());
+        StructureScanner.Result structureScan = StructureScanner.scanPlannedStructure(
+                world, plan, village.getStructures().values());
         if (structureScan.result() != Building.validationResult.SUCCESS) {
-            return failedRoom(structureScan.result(), pos, village);
+            return failedRoom(structureScan.result(), source, village);
         }
 
         Structure candidate = structureScan.toStructure(-1);
         StructureFloor attachmentFloor = resolveRoomFloor(
-                village, candidate, structureScan.source(), -1);
+                village, candidate, plan.scanSeed(), -1);
         if (attachmentFloor == null || !validAttachment(
-                village, candidate, attachmentFloor, target.targetBuildingId(), requestedMode)) {
-            return failedRoom(Building.validationResult.NOT_IN_BUILDING, pos, village);
+                village, candidate, attachmentFloor, plan.targetBuildingId(), requestedMode)) {
+            return failedRoom(Building.validationResult.NOT_IN_BUILDING, source, village);
         }
 
-        candidate.setLogicalBuildingId(target.targetBuildingId());
-        return scanRoom(village, candidate, structureScan.source(), -1)
+        candidate.setLogicalBuildingId(plan.targetBuildingId());
+        return scanRoom(village, candidate, plan.scanSeed(), -1)
+                .withSource(source)
                 .withPendingStructure(candidate);
     }
 
@@ -283,18 +295,31 @@ public class VillageManager extends SavedData implements Iterable<Village> {
                                            StructureFloor playerFloor,
                                            int targetBuildingId,
                                            Village.RoomScanMode requestedMode) {
-        List<Structure> members = village.getBuildingStructures(targetBuildingId);
-        if (members.isEmpty() || playerFloor.region() == null) return false;
+        if (playerFloor.region() == null) return false;
 
-        int bestGap = members.stream()
-                .flatMap(structure -> structure.getFloors().stream())
-                .filter(floor -> floor.region() != null
-                        && horizontallyAttachable(playerFloor.region(), floor.region()))
-                .mapToInt(floor -> verticalGap(playerFloor, floor))
-                .filter(gap -> gap >= 0)
-                .min()
-                .orElse(Integer.MAX_VALUE);
-        if (bestGap > Village.MAX_FLOOR_ATTACHMENT_GAP) return false;
+        Map<Integer, Integer> gapByBuilding = new HashMap<>();
+        for (Structure structure : village.getStructures().values()) {
+            int buildingId = structure.getLogicalBuildingId();
+            for (StructureFloor floor : structure.getFloors()) {
+                if (floor.region() == null
+                        || !horizontallyAttachable(playerFloor.region(), floor.region())) {
+                    continue;
+                }
+                int gap = verticalGap(playerFloor, floor);
+                if (gap >= 0) gapByBuilding.merge(buildingId, gap, Math::min);
+            }
+        }
+        Integer targetGap = gapByBuilding.get(targetBuildingId);
+        if (targetGap == null || targetGap > Village.MAX_FLOOR_ATTACHMENT_GAP) return false;
+        int nearestGap = gapByBuilding.values().stream().mapToInt(Integer::intValue)
+                .min().orElse(Integer.MAX_VALUE);
+        if (targetGap != nearestGap
+                || gapByBuilding.entrySet().stream()
+                .filter(entry -> entry.getValue() == nearestGap)
+                .limit(2)
+                .count() != 1) {
+            return false;
+        }
 
         int floorNumber = village.prospectiveFloorNumber(
                 targetBuildingId, candidate, playerFloor);
@@ -348,7 +373,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         if (village.getFunctionalRoomAt(world, pos).isPresent()) {
             return failedRoom(Building.validationResult.IDENTICAL, pos, village);
         }
-        return scanRoom(village, structure, pos, -1);
+        return scanRoom(village, structure, pos, -1).withSource(pos);
     }
 
 
@@ -821,7 +846,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         Village village = findNearestVillage(pos, Village.PLAYER_BORDER_MARGIN).orElse(null);
         if (village == null) return BuildingEditResult.NO_BUILDING;
         Building room = village.getFunctionalRoomAt(world, pos).orElse(null);
-        if (room == null) return village.getRoomScanContext(world, pos).mode() == Village.RoomScanMode.ADD_ROOM
+        if (room == null) return village.getRoomScanPlan(world, pos).mode() == Village.RoomScanMode.ADD_ROOM
                 ? BuildingEditResult.NO_ROOM : BuildingEditResult.NO_BUILDING;
         if (village.isMainRoom(room)) return BuildingEditResult.MAIN_ROOM;
         village.removeBuilding(room.getId());

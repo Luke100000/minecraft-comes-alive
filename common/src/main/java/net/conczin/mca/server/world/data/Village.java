@@ -425,33 +425,32 @@ public class Village implements Iterable<Building> {
     }
 
 
-    public RoomScanContext getRoomScanContext(Level level, BlockPos pos) {
+    public RoomScanPlan getRoomScanPlan(Level level, BlockPos pos) {
+        BlockPos source = pos == null ? BlockPos.ZERO : pos.immutable();
+        if (level == null || pos == null) return RoomScanPlan.addBuilding(source);
         Optional<ResolvedInteraction> resolved = resolveInteractionPosition(level, pos);
         if (resolved.isPresent()) {
             Building room = resolved.get().position().room();
             if (room != null) {
-                return new RoomScanContext(
-                        Optional.of(room), RoomScanMode.UPDATE_ROOM, -1, Integer.MIN_VALUE);
+                return new RoomScanPlan(Optional.of(room), RoomScanMode.UPDATE_ROOM,
+                        -1, Integer.MIN_VALUE, source, source);
             }
-            return new RoomScanContext(
+            return new RoomScanPlan(
                     getMainRoomForStructure(resolved.get().structure().getId()),
-                    RoomScanMode.ADD_ROOM, -1, Integer.MIN_VALUE);
+                    RoomScanMode.ADD_ROOM, -1, Integer.MIN_VALUE, source, source);
         }
 
-        // Attachment discovery is intentionally geometry-based rather than roof-gated. An
-        // external doorway/apron is outside the scanned Structure by definition and may be open
-        // to the sky; the authoritative server scan still validates the candidate on click.
-        RoomScanTarget target = level != null && pos != null
-                ? attachmentTarget(level, pos).orElse(RoomScanTarget.ADD_BUILDING)
-                : RoomScanTarget.ADD_BUILDING;
-        return new RoomScanContext(Optional.empty(), target.mode(),
-                target.targetBuildingId(), target.prospectiveFloorNumber());
+        return attachmentPlan(level, source).orElseGet(() -> RoomScanPlan.addBuilding(source));
     }
 
-    private Optional<RoomScanTarget> attachmentTarget(Level level, BlockPos pos) {
+    private Optional<RoomScanPlan> attachmentPlan(Level level, BlockPos source) {
+        StructureScanner.AttachmentSeed attachmentSeed =
+                StructureScanner.resolveAttachmentSeed(level, source).orElse(null);
+        if (attachmentSeed == null) return Optional.empty();
+
         List<AttachmentTarget> targets = structures.values().stream()
                 .flatMap(structure -> structure.getFloors().stream()
-                        .map(floor -> attachmentTarget(level, structure, floor, pos)))
+                        .map(floor -> attachmentTarget(structure, floor, attachmentSeed)))
                 .filter(Objects::nonNull)
                 .filter(target -> target.gap() <= MAX_FLOOR_ATTACHMENT_GAP)
                 .toList();
@@ -467,18 +466,19 @@ public class Village implements Iterable<Building> {
             return Optional.empty();
         }
 
-        int floorNumber = prospectiveFloorNumber(target.targetBuildingId(), pos.getY());
+        int floorNumber = prospectiveFloorNumber(
+                target.targetBuildingId(), attachmentSeed.seed().getY());
         if (floorNumber == Integer.MIN_VALUE) return Optional.empty();
-        return Optional.of(new RoomScanTarget(
+        return Optional.of(new RoomScanPlan(Optional.empty(),
                 floorNumber < 0 ? RoomScanMode.ADD_BASEMENT : RoomScanMode.ADD_FLOOR,
-                target.targetBuildingId(), floorNumber));
+                target.targetBuildingId(), floorNumber, source, attachmentSeed.seed()));
     }
 
-    private static AttachmentTarget attachmentTarget(Level level,
-                                                       Structure structure,
+    private static AttachmentTarget attachmentTarget(Structure structure,
                                                        StructureFloor floor,
-                                                       BlockPos pos) {
-        if (floor.region() == null || !touchesAttachmentEntrance(level, floor, pos)) return null;
+                                                       StructureScanner.AttachmentSeed seed) {
+        if (floor.region() == null || !touchesAttachmentFloor(floor, seed)) return null;
+        BlockPos pos = seed.seed();
         int gap;
         if (pos.getY() >= floor.ceilingY()) {
             gap = pos.getY() - floor.ceilingY();
@@ -490,29 +490,17 @@ public class Village implements Iterable<Building> {
         return new AttachmentTarget(structure.getLogicalBuildingId(), structure.getId(), floor.id(), gap);
     }
 
-    private static boolean touchesAttachmentEntrance(Level level, StructureFloor floor, BlockPos pos) {
+    private static boolean touchesAttachmentFloor(StructureFloor floor,
+                                                  StructureScanner.AttachmentSeed seed) {
+        BlockPos pos = seed.seed();
         int x = pos.getX();
         int z = pos.getZ();
-        if (floor.contains(x, z)
-                || floor.contains(x + 1, z)
+        if (floor.contains(x, z)) return true;
+        return !seed.crossedHorizontalConnector()
+                && (floor.contains(x + 1, z)
                 || floor.contains(x - 1, z)
                 || floor.contains(x, z + 1)
-                || floor.contains(x, z - 1)) {
-            return true;
-        }
-
-        // External entrance interaction extends exactly one cell through a real horizontal
-        // connector: interior Floor -> door/fence gate -> player. This deliberately does not
-        // turn generic two-block proximity into an attachment target.
-        for (net.minecraft.core.Direction direction : net.minecraft.core.Direction.values()) {
-            if (direction == net.minecraft.core.Direction.UP
-                    || direction == net.minecraft.core.Direction.DOWN) continue;
-            BlockPos connector = pos.relative(direction);
-            if (!StructureConnector.isHorizontalBoundary(level.getBlockState(connector))) continue;
-            BlockPos interior = connector.relative(direction);
-            if (floor.contains(interior.getX(), interior.getZ())) return true;
-        }
-        return false;
+                || floor.contains(x, z - 1));
     }
 
     Optional<Structure> getInteractionStructureAt(Level level, BlockPos pos) {
@@ -645,23 +633,6 @@ public class Village implements Iterable<Building> {
             return this == ADD_FLOOR || this == ADD_BASEMENT;
         }
     }
-
-    private record RoomScanTarget(RoomScanMode mode,
-                                  int targetBuildingId,
-                                  int prospectiveFloorNumber) {
-        private static final RoomScanTarget ADD_BUILDING =
-                new RoomScanTarget(RoomScanMode.ADD_BUILDING, -1, Integer.MIN_VALUE);
-    }
-
-    public record RoomScanContext(Optional<Building> building,
-                                  RoomScanMode mode,
-                                  int targetBuildingId,
-                                  int prospectiveFloorNumber) {
-        public Optional<Building> functionalRoom() {
-            return mode == RoomScanMode.UPDATE_ROOM ? building : Optional.empty();
-        }
-    }
-
 
     int prospectiveFloorNumber(int buildingId,
                                Structure candidate,

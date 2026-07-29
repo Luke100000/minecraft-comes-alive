@@ -14,6 +14,7 @@ import net.conczin.mca.resources.Rank;
 import net.conczin.mca.resources.data.BuildingType;
 import net.conczin.mca.resources.data.tasks.Task;
 import net.conczin.mca.server.world.data.Building;
+import net.conczin.mca.server.world.data.RoomScanPlan;
 import net.conczin.mca.server.world.data.RoomTypeResolver;
 import net.conczin.mca.server.world.data.Structure;
 import net.conczin.mca.server.world.data.StructureFloor;
@@ -105,7 +106,7 @@ public class BlueprintScreen extends ExtendedScreen {
     private BuildingType selectedBuilding;
     private UUID selectedVillager;
     private BlockPos lastRoomScanPosition;
-    private Village.RoomScanContext cachedRoomScanContext;
+    private RoomScanPlan cachedRoomScanPlan;
 
     private int mouseX;
     private int mouseY;
@@ -294,7 +295,7 @@ public class BlueprintScreen extends ExtendedScreen {
                         selectPlayerFloorOnNextVillageResponse = true;
                         Network.sendToServer(new ReportBuildingMessage(ReportBuildingMessage.Action.SET_MAIN_ROOM));
                     });
-                    updateMainRoomControl(getPlayerRoomScanContext());
+                    updateMainRoomControl(getPlayerRoomScanPlan());
                     if (isVillage) {
                         column.addButton(Component.translatable("gui.blueprint.renameVillage"), b -> setPage("rename"));
                     }
@@ -416,7 +417,7 @@ public class BlueprintScreen extends ExtendedScreen {
     @Override
     public void render(GuiGraphics context, int sizeX, int sizeY, float offset) {
         if (village != null && ("map".equals(page) || "advanced".equals(page))) {
-            updateMapControls(getPlayerRoomScanContext());
+            updateMapControls(getPlayerRoomScanPlan());
         }
 
         super.render(context, sizeX, sizeY, offset);
@@ -463,14 +464,14 @@ public class BlueprintScreen extends ExtendedScreen {
     }
 
     private void requestPrimaryStructureScan() {
-        Village.RoomScanMode mode = getPlayerRoomScanContext().mode();
+        Village.RoomScanMode mode = getPlayerRoomScanPlan().mode();
         sendStructureScan(mode.isAttachment() ? Village.RoomScanMode.ADD_BUILDING : mode, null);
     }
 
     private void requestAttachmentScan() {
-        Village.RoomScanContext context = getPlayerRoomScanContext();
-        if (!context.mode().isAttachment()) return;
-        sendStructureScan(context.mode(), Integer.toString(context.targetBuildingId()));
+        RoomScanPlan plan = getPlayerRoomScanPlan();
+        if (!plan.mode().isAttachment()) return;
+        sendStructureScan(plan.mode(), Integer.toString(plan.targetBuildingId()));
     }
 
     private void sendStructureScan(Village.RoomScanMode mode, String targetBuildingId) {
@@ -483,18 +484,17 @@ public class BlueprintScreen extends ExtendedScreen {
         selectPlayerFloorOnNextVillageResponse = false;
     }
 
-    private Village.RoomScanContext getPlayerRoomScanContext() {
+    private RoomScanPlan getPlayerRoomScanPlan() {
         if (village == null || minecraft == null || minecraft.player == null) {
-            return new Village.RoomScanContext(Optional.empty(),
-                    Village.RoomScanMode.ADD_BUILDING, -1, Integer.MIN_VALUE);
+            return RoomScanPlan.addBuilding(BlockPos.ZERO);
         }
 
         BlockPos position = minecraft.player.blockPosition();
-        if (!position.equals(lastRoomScanPosition) || cachedRoomScanContext == null) {
+        if (!position.equals(lastRoomScanPosition) || cachedRoomScanPlan == null) {
             lastRoomScanPosition = position.immutable();
-            cachedRoomScanContext = village.getRoomScanContext(minecraft.level, position);
+            cachedRoomScanPlan = village.getRoomScanPlan(minecraft.level, position);
         }
-        return cachedRoomScanContext;
+        return cachedRoomScanPlan;
     }
 
     private String getStructureScanTranslationKey(Village.RoomScanMode mode) {
@@ -507,7 +507,7 @@ public class BlueprintScreen extends ExtendedScreen {
         };
     }
 
-    private void updateMapControls(Village.RoomScanContext scanContext) {
+    private void updateMapControls(RoomScanPlan scanContext) {
         updateFloorControls();
         updateToggleControl(buildingIconsButton, "gui.blueprint.buildingIcons.short", showBuildingIcons);
         updateToggleControl(terrainButton, "gui.blueprint.terrain", showTerrain);
@@ -517,7 +517,7 @@ public class BlueprintScreen extends ExtendedScreen {
         updateMainRoomControl(scanContext);
     }
 
-    private void updateStructureScanControl(Village.RoomScanContext scanContext) {
+    private void updateStructureScanControl(RoomScanPlan scanContext) {
         if (structureScanButton == null) return;
 
         boolean attachment = scanContext.mode().isAttachment();
@@ -563,7 +563,7 @@ public class BlueprintScreen extends ExtendedScreen {
         }
     }
 
-    private void updateRemoveRoomControl(Village.RoomScanContext scanContext) {
+    private void updateRemoveRoomControl(RoomScanPlan scanContext) {
         if (removeRoomButton == null) {
             return;
         }
@@ -619,7 +619,7 @@ public class BlueprintScreen extends ExtendedScreen {
         LocalPlayer player = minecraft == null ? null : minecraft.player;
         double playerRenderX = player == null ? 0.0D : Mth.lerp(partialTick, player.xo, player.getX());
         double playerRenderZ = player == null ? 0.0D : Mth.lerp(partialTick, player.zo, player.getZ());
-        int playerLogicalBuildingId = player == null ? -1 : getPlayerRoomScanContext().building()
+        int playerLogicalBuildingId = player == null ? -1 : getPlayerRoomScanPlan().building()
                 .map(room -> village.getLogicalBuildingId(room.getStructureId()))
                 .orElse(-1);
         double villageCenterX = (village.getBox().minX() + village.getBox().maxX() + 1) / 2.0D;
@@ -887,7 +887,7 @@ public class BlueprintScreen extends ExtendedScreen {
     }
 
     private void addInheritanceControl(SideControlColumn column) {
-        Building room = getPlayerRoomScanContext().functionalRoom().orElse(null);
+        Building room = getPlayerRoomScanPlan().functionalRoom().orElse(null);
         if (room == null) return;
 
         boolean mainRoom = roomTypeResolver.resolve(room).isMainRoom();
@@ -947,7 +947,7 @@ public class BlueprintScreen extends ExtendedScreen {
         }
     }
 
-    private void updateMainRoomControl(Village.RoomScanContext scanContext) {
+    private void updateMainRoomControl(RoomScanPlan scanContext) {
         if (mainRoomButton == null) {
             return;
         }
@@ -1146,7 +1146,7 @@ public class BlueprintScreen extends ExtendedScreen {
     public void setVillage(Village village) {
         this.village = village;
         lastRoomScanPosition = null;
-        cachedRoomScanContext = null;
+        cachedRoomScanPlan = null;
         TreeSet<Integer> availableFloors = new TreeSet<>();
         if (village != null) {
             for (Structure s : village.getStructures().values()) {
@@ -1160,7 +1160,7 @@ public class BlueprintScreen extends ExtendedScreen {
         this.roomTypeResolver = RoomTypeResolver.create(village);
         this.tooltipFactory = BlueprintTooltipFactory.create(village, roomTypeResolver);
         this.mapGeometry = BlueprintMapGeometry.build(village, roomTypeResolver);
-        Village.RoomScanContext scanContext = getPlayerRoomScanContext();
+        RoomScanPlan scanContext = getPlayerRoomScanPlan();
         if (selectPlayerFloorOnNextVillageResponse
                 && scanContext.mode() == Village.RoomScanMode.UPDATE_ROOM) {
             selectPlayerFloor(scanContext);
@@ -1175,7 +1175,7 @@ public class BlueprintScreen extends ExtendedScreen {
         }
     }
 
-    private void selectPlayerFloor(Village.RoomScanContext scanContext) {
+    private void selectPlayerFloor(RoomScanPlan scanContext) {
         scanContext.functionalRoom()
                 .ifPresent(room -> {
                     int ordinal = room.getFloorNumber(village);

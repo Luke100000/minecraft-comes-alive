@@ -1242,6 +1242,6 @@
   "gui.blueprint.useAutomaticMainRoom": "Change to Automatic",
   "gui.blueprint.useAutomaticMainRoom.tooltip": "Let the game choose the Main Room again.",
   "blueprint.mainRoomAutomatic": "The game will choose the Main Room automatically.",
-  "gui.blueprint.roomInheritance.disable": "Stop All Sharing",
-  "gui.blueprint.roomInheritance.disable.tooltip": "Rooms in this building will stop sharing their requirements."
+  "gui.blueprint.roomInheritance.disable": "Stop All Inheritance",
+  "gui.blueprint.roomInheritance.disable.tooltip": "Rooms in this building will stop sharing POI blocks to the Main Room."
 }
