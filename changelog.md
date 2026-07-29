@@ -3,6 +3,27 @@
 * Fixed Graveyard data loss issue
 * Fixed bug.
 
+# 7.7.31-beta.1
+>**Backup** your **WORLD** before using this beta.
+
+> **May have bugs** 
+
+* Completely reworked MCA's building system to better support multi-floor and irregular buildings.
+* Buildings can now have multiple floors and basements.
+* Rooms inside the same building are now detected separately, allowing different room types throughout one building.
+* Added a **Main Room** system, allowing other rooms in the same building to share building types (such as multi-floor inns).
+* Improved building scanning for stairs, ladders, trapdoors, doors, fence gates, furniture, and unusual layouts.
+* Buildings can now be expanded with additional floors, basements, and connected sections.
+* Reworked the **Blueprint Map**.
+
+  * Rooms and buildings now show their actual shape instead of simple rectangles.
+  * Added better floor handling, highlighting, icons, and tooltips.
+* Existing MCA 1.21.1 buildings are automatically migrated to the new system.
+* Improved building rescanning and editing so room and floor changes are preserved more reliably.
+* Lots of fixes and internal improvements to building detection.
+* Please report any issues on the GitHub Issues page or Discord, and remember that backing up your world is always recommended for beta versions.
+
+
 # 7.7.31
 
 ## ChatAI context
