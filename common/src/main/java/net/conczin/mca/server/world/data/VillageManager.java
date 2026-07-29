@@ -657,6 +657,10 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         if (playerRoom == null || !currentFloorRooms.contains(playerRoom)) {
             return Building.validationResult.OVERLAP;
         }
+        Building playerComponent = update.playerComponent();
+        if (playerComponent == null) {
+            return Building.validationResult.OVERLAP;
+        }
 
         int nextRoomId = lastBuildingId;
         for (RegisteredRoomReconciler.Assignment assignment : update.assignments()) {
@@ -697,8 +701,11 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         int currentMainRoomId = village.getMainRoom(structure)
                 .map(Building::getId)
                 .orElse(-1);
+        // expectedPlayerRoomId is the identity before reconciliation. A merge can
+        // remove that ID while playerComponent carries the surviving assigned ID.
+        int reconciledPlayerRoomId = playerComponent.getId();
         int prospectiveMainRoomId = removedRoomIds.contains(currentMainRoomId)
-                ? update.expectedPlayerRoomId() : currentMainRoomId;
+                ? reconciledPlayerRoomId : currentMainRoomId;
         List<Building> prospectiveRooms = village.getRooms()
                 .filter(room -> !update.previousRoomIds().contains(room.getId()))
                 .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
@@ -709,8 +716,6 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         RoomTypeResolver resolver = RoomTypeResolver.create(
                 village, prospectiveRooms);
 
-        Building playerComponent = update.playerComponent();
-        if (playerComponent == null) return Building.validationResult.OVERLAP;
         if (forcedType != null) {
             String selectedType = resolver.resolve(playerComponent, prospectiveMain).updatedType(forcedType);
             if (selectedType == null) return Building.validationResult.INVALID_TYPE;
@@ -738,7 +743,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         for (int removedRoomId : removedRoomIds) {
             village.getBuildings().remove(removedRoomId);
             village.transferMainRoom(structure, removedRoomId,
-                    update.expectedPlayerRoomId(), update.structureId());
+                    reconciledPlayerRoomId, playerComponent.getStructureId());
         }
         for (RegisteredRoomReconciler.Assignment assignment : update.assignments()) {
             if (!assignment.createsRoom()) continue;
