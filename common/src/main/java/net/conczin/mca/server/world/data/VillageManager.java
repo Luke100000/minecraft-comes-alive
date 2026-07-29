@@ -336,7 +336,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         }
 
         Structure candidate = structureScan.toStructure(-1);
-        return scanRoom(village, candidate, pos, -1).withPendingStructure(candidate);
+        return scanRoom(village, candidate, structureScan.source(), -1).withPendingStructure(candidate);
     }
 
     public BuildingScanResult analyzeRoom(BlockPos pos) {

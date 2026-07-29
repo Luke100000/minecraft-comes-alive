@@ -16,7 +16,6 @@ final class StructureScanner {
             Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST
     };
     private static final int ROOF_SEARCH = 16;
-    private static final int SOURCE_HORIZONTAL_SEARCH = 2;
     private static final int SURFACE_SAMPLE_MARGIN = 3;
 
     private StructureScanner() {
@@ -150,29 +149,20 @@ final class StructureScanner {
         return new Result(Building.validationResult.SUCCESS, seed, min, max, floors, surfaceReferenceY);
     }
 
-    /** Resolves a query point such as a flying player or roof position to nearby enclosed interior. */
+    /**
+     * The supplied source is the single source of truth for scan identity. Player actions pass
+     * the player's feet position; rescans pass the persisted interior seed. Searching downward
+     * or sideways here can silently select a different room or Structure than the caller occupies.
+     */
     private static Optional<BlockPos> resolveScanSeed(Level world,
                                                       BlockPos source,
                                                       Map<BlockPos, Boolean> roof,
                                                       int maxRadius) {
-        for (int yOffset = 0; yOffset >= -ROOF_SEARCH; yOffset--) {
-            int y = source.getY() + yOffset;
-            for (int radius = 0; radius <= SOURCE_HORIZONTAL_SEARCH; radius++) {
-                for (int dx = -radius; dx <= radius; dx++) {
-                    for (int dz = -radius; dz <= radius; dz++) {
-                        if (Math.abs(dx) + Math.abs(dz) != radius) continue;
-                        BlockPos candidate = new BlockPos(source.getX() + dx, y, source.getZ() + dz);
-                        if (!isWalkableAnchor(world, candidate, world.getBlockState(candidate), roof)) {
-                            continue;
-                        }
-                        if (!reachesExterior(world, candidate, null, roof, maxRadius)) {
-                            return Optional.of(candidate);
-                        }
-                    }
-                }
-            }
+        if (!isWalkableAnchor(world, source, world.getBlockState(source), roof)
+                || reachesExterior(world, source, null, roof, maxRadius)) {
+            return Optional.empty();
         }
-        return Optional.empty();
+        return Optional.of(source.immutable());
     }
 
     private static boolean isWalkableAnchor(Level world,

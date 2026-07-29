@@ -28,10 +28,14 @@ import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.tags.TagKey;
 import net.minecraft.util.Mth;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.block.Block;
 
 import java.util.*;
 import java.util.function.Consumer;
@@ -1005,8 +1009,20 @@ public class BlueprintScreen extends ExtendedScreen {
 
             //required blocks
             for (Map.Entry<ResourceLocation, Integer> b : selectedBuilding.getGroups().entrySet()) {
-                context.drawString(font, Component.literal(b.getValue() + " x ").append(getBlockName(b.getKey())), x, y, 0xffffffff);
-                y += 10;
+                Component count = Component.literal(b.getValue() + "x");
+                int textY = y + 4;
+
+                context.drawString(font, count, x, textY, 0xffffffff);
+
+                int iconX = x + font.width(count) + 4;
+                ItemStack icon = getBlockIcon(b.getKey());
+                if (!icon.isEmpty()) {
+                    context.renderItem(icon, iconX, y);
+                    iconX += 18;
+                }
+
+                context.drawString(font, getBlockName(b.getKey()), iconX, textY, 0xffffffff);
+                y += 18;
             }
         } else {
             //help
@@ -1072,6 +1088,18 @@ public class BlueprintScreen extends ExtendedScreen {
         } else {
             toggleButtons(buttonMarriage, true);
         }
+    }
+
+    private ItemStack getBlockIcon(ResourceLocation id) {
+        if (BuiltInRegistries.BLOCK.containsKey(id)) {
+            return new ItemStack(BuiltInRegistries.BLOCK.get(id));
+        }
+
+        TagKey<Block> tag = TagKey.create(Registries.BLOCK, id);
+        return BuiltInRegistries.BLOCK.getTag(tag)
+                .flatMap(blocks -> blocks.stream().findFirst())
+                .map(holder -> new ItemStack(holder.value()))
+                .orElse(ItemStack.EMPTY);
     }
 
     private Component getBlockName(ResourceLocation id) {
