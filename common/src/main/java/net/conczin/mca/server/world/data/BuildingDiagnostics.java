@@ -22,21 +22,22 @@ public final class BuildingDiagnostics {
         VillageManager manager = VillageManager.get(world);
         Village village = manager.findNearestVillage(pos, Village.MERGE_MARGIN).orElse(null);
         Village.RoomScanContext context = village == null
-                ? new Village.RoomScanContext(Village.StructuralPosition.OUTSIDE, Optional.empty(),
+                ? new Village.RoomScanContext(Optional.empty(),
                 Village.RoomScanMode.ADD_BUILDING, -1, Integer.MIN_VALUE)
                 : village.getRoomScanContext(world, pos);
+        StructuralPosition position = structuralPosition(context);
         String uiAction = uiAction(context.mode());
 
         log(traceId, "start position={} dimension={} village={} structuralPosition={} uiAction={} targetBuilding={} verbose={}",
                 pos, world.dimension().location(), village == null ? "none" : village.getId(),
-                context.position(), uiAction, context.targetBuildingId(), verbose);
+                position, uiAction, context.targetBuildingId(), verbose);
 
         if (village == null) {
             Building.validationResult analysis = manager.analyzeBuildingAddition(pos).result();
             String verdict = "NO_NEARBY_VILLAGE: UI uses " + uiAction + "; initial structure analysis=" + analysis;
             log(traceId, "analysis action={} result={}", uiAction, analysis);
             log(traceId, "verdict={}", verdict);
-            return new Result(traceId, context.position(), uiAction, verdict);
+            return new Result(traceId, position, uiAction, verdict);
         }
 
         Structure structureAt = village.getExactStructureAt(pos).orElse(null);
@@ -102,12 +103,20 @@ public final class BuildingDiagnostics {
         };
         log(traceId, "analysis action={} result={}", uiAction, analysis);
 
-        String verdict = verdict(context.position(), uiAction, analysis, inspected, room, freshPlayerFloor, pos, world);
+        String verdict = verdict(position, uiAction, analysis, inspected, room, freshPlayerFloor, pos, world);
         log(traceId, "verdict={}", verdict);
-        return new Result(traceId, context.position(), uiAction, verdict);
+        return new Result(traceId, position, uiAction, verdict);
     }
 
-    private static String verdict(Village.StructuralPosition position,
+    private static StructuralPosition structuralPosition(Village.RoomScanContext context) {
+        return switch (context.mode()) {
+            case UPDATE_ROOM -> StructuralPosition.REGISTERED_ROOM;
+            case ADD_ROOM -> StructuralPosition.ATTACHABLE_ROOM;
+            case ADD_BUILDING, ADD_FLOOR, ADD_BASEMENT -> StructuralPosition.OUTSIDE;
+        };
+    }
+
+    private static String verdict(StructuralPosition position,
                                   String uiAction,
                                   Building.validationResult analysis,
                                   Structure structure,
@@ -118,7 +127,7 @@ public final class BuildingDiagnostics {
         if (structure == null) {
             return "NO_STRUCTURE: no nearby physical Structure was available for this position";
         }
-        if (position == Village.StructuralPosition.OUTSIDE) {
+        if (position == StructuralPosition.OUTSIDE) {
             boolean contains = structure.containsPos(pos);
             boolean attaches = StructureConnector.attachesToStructure(world, structure, pos);
             return "NO_INTERACTION_STRUCTURE: UI uses " + uiAction + "; containsPos=" + contains
@@ -248,8 +257,12 @@ public final class BuildingDiagnostics {
     }
 
     public record Result(long traceId,
-                         Village.StructuralPosition position,
+                         StructuralPosition position,
                          String uiAction,
                          String verdict) {
+    }
+
+    public enum StructuralPosition {
+        OUTSIDE, REGISTERED_ROOM, ATTACHABLE_ROOM
     }
 }

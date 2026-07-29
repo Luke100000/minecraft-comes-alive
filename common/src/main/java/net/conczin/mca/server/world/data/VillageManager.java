@@ -238,7 +238,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
     public BuildingScanResult analyzeRoomAddition(BlockPos pos) {
         BuildingScanResult existingRoom = analyzeRoom(pos);
         return existingRoom.result() == Building.validationResult.NOT_IN_BUILDING
-                ? analyzeInitialRoom(pos)
+                ? analyzeBuildingAddition(pos)
                 : existingRoom;
     }
 
@@ -324,10 +324,6 @@ public class VillageManager extends SavedData implements Iterable<Village> {
     }
 
     public BuildingScanResult analyzeBuildingAddition(BlockPos pos) {
-        return analyzeInitialRoom(pos);
-    }
-
-    private BuildingScanResult analyzeInitialRoom(BlockPos pos) {
         Village village = findNearestVillage(pos, Village.MERGE_MARGIN).orElse(null);
         Collection<Structure> existing = village == null ? List.of() : village.getStructures().values();
         if (village != null && village.getInteractionStructureAt(world, pos).isPresent()) {
@@ -353,15 +349,6 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         return scanRoom(village, structure, pos, -1);
     }
 
-    public BuildingScanResult analyzeRegisteredRoom(Village village, int buildingId, BlockPos pos) {
-        Building expected = village == null ? null : village.getBuilding(buildingId).orElse(null);
-        if (expected == null || !expected.isFunctionalRoom()) {
-            return failedRoom(Building.validationResult.NOT_IN_BUILDING, pos, village);
-        }
-        Structure structure = village.getStructureFor(expected).orElse(null);
-        if (structure == null) return failedRoom(Building.validationResult.NOT_IN_BUILDING, pos, village);
-        return scanRoom(village, structure, pos, buildingId);
-    }
 
     public RegisteredRoomUpdate analyzeRegisteredRoomUpdate(Village village, int buildingId, BlockPos pos) {
         Building expected = village == null ? null : village.getBuilding(buildingId).orElse(null);
@@ -812,18 +799,6 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         return Building.validationResult.SUCCESS;
     }
 
-    public Building.validationResult rescanBuilding(Village village, int buildingId) {
-        Building building = village == null ? null : village.getBuilding(buildingId).orElse(null);
-        if (building == null) return Building.validationResult.TOO_SMALL;
-        if (building instanceof ExternalBuilding external) {
-            external.validateBlocks(world);
-            setDirty();
-            return Building.validationResult.SUCCESS;
-        }
-        RegisteredRoomUpdate update = analyzeRegisteredRoomUpdate(
-                village, buildingId, building.getSourceBlock());
-        return commitRegisteredRoomUpdate(update, null);
-    }
 
     public BuildingEditResult forceRoomType(BlockPos pos, String type) {
         Village village = findNearestVillage(pos, Village.PLAYER_BORDER_MARGIN).orElse(null);
@@ -844,7 +819,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         Village village = findNearestVillage(pos, Village.PLAYER_BORDER_MARGIN).orElse(null);
         if (village == null) return BuildingEditResult.NO_BUILDING;
         Building room = village.getFunctionalRoomAt(world, pos).orElse(null);
-        if (room == null) return village.hasStructuralBuildingAt(world, pos)
+        if (room == null) return village.getRoomScanContext(world, pos).mode() == Village.RoomScanMode.ADD_ROOM
                 ? BuildingEditResult.NO_ROOM : BuildingEditResult.NO_BUILDING;
         if (village.isMainRoom(room)) return BuildingEditResult.MAIN_ROOM;
         village.removeBuilding(room.getId());

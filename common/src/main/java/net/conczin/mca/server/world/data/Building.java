@@ -194,20 +194,12 @@ public class Building implements VillageBuilding {
         return x <= 0 || z <= 0 ? 0L : (long) x * z;
     }
 
-    public boolean sharesFloorBandWith(Building other) {
-        return other != null && (floorId >= 0 && other.floorId >= 0
-                ? floorId == other.floorId
-                : Math.abs(getFloorY() - other.getFloorY()) <= BuildingFloorRegionDetector.FLOOR_CLUSTER_TOLERANCE);
-    }
 
     public int getStructureId() {
         return structureId;
     }
 
 
-    public boolean hasStructure() {
-        return structureId >= 0;
-    }
 
     public void setStructureId(int structureId) {
         this.structureId = structureId;
@@ -412,10 +404,6 @@ public class Building implements VillageBuilding {
                 && pos.getZ() >= pos0Z - horizontalMargin && pos.getZ() <= pos1Z + horizontalMargin;
     }
 
-    public boolean containsStructurePosition(Vec3i pos) {
-        return containsFloorPosition(pos) || containsPositionWithMargin(pos,
-                PLAYER_POSITION_HORIZONTAL_MARGIN, PLAYER_POSITION_VERTICAL_MARGIN);
-    }
 
     public boolean overlaps(Building other) {
         return pos1X > other.pos0X && pos0X < other.pos1X
@@ -437,11 +425,6 @@ public class Building implements VillageBuilding {
         return size;
     }
 
-    public int getVerticalDistanceTo(Vec3i pos) {
-        if (pos.getY() < pos0Y) return pos0Y - pos.getY();
-        if (pos.getY() > pos1Y) return pos.getY() - pos1Y;
-        return 0;
-    }
 
     public void copyScannedGeometryFrom(Building scanned, Level world, boolean preserveFloorClassification) {
         int oldFloorId = floorId;

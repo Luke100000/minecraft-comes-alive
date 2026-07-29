@@ -424,23 +424,16 @@ public class Village implements Iterable<Building> {
                 + (int) externalBuildings.values().stream().filter(Building::isComplete).count();
     }
 
-    public boolean hasStructuralBuildingAt(Level level, BlockPos pos) {
-        return getRoomScanContext(level, pos).position() != StructuralPosition.OUTSIDE;
-    }
-
-    public StructuralPosition getStructuralPosition(Level level, BlockPos pos) {
-        return getRoomScanContext(level, pos).position();
-    }
 
     public RoomScanContext getRoomScanContext(Level level, BlockPos pos) {
         Optional<ResolvedInteraction> resolved = resolveInteractionPosition(level, pos);
         if (resolved.isPresent()) {
             Building room = resolved.get().position().room();
             if (room != null) {
-                return new RoomScanContext(StructuralPosition.REGISTERED_ROOM,
+                return new RoomScanContext(
                         Optional.of(room), RoomScanMode.UPDATE_ROOM, -1, Integer.MIN_VALUE);
             }
-            return new RoomScanContext(StructuralPosition.ATTACHABLE_ROOM,
+            return new RoomScanContext(
                     getMainRoomForStructure(resolved.get().structure().getId()),
                     RoomScanMode.ADD_ROOM, -1, Integer.MIN_VALUE);
         }
@@ -451,8 +444,8 @@ public class Village implements Iterable<Building> {
         RoomScanTarget target = level != null && pos != null
                 ? attachmentTarget(level, pos).orElse(RoomScanTarget.ADD_BUILDING)
                 : RoomScanTarget.ADD_BUILDING;
-        return new RoomScanContext(StructuralPosition.OUTSIDE, Optional.empty(),
-                target.mode(), target.targetBuildingId(), target.prospectiveFloorNumber());
+        return new RoomScanContext(Optional.empty(), target.mode(),
+                target.targetBuildingId(), target.prospectiveFloorNumber());
     }
 
     private Optional<RoomScanTarget> attachmentTarget(Level level, BlockPos pos) {
@@ -627,7 +620,8 @@ public class Village implements Iterable<Building> {
     void refreshLogicalBuildings() {
         Map<Integer, List<Structure>> byBuilding = structures.values().stream()
                 .collect(Collectors.groupingBy(Structure::getLogicalBuildingId));
-        byBuilding.forEach(this::applyFloorNumbers);
+        byBuilding.forEach((buildingId, members) -> floorNumbers(members, buildingId)
+                .forEach((ref, number) -> ref.structure().setFloorNumber(ref.floor().id(), number)));
 
         List<Building> rooms = getRooms().toList();
         byBuilding.values().forEach(members -> MainRoomSelector.ensureValid(members, rooms));
@@ -659,23 +653,15 @@ public class Village implements Iterable<Building> {
                 new RoomScanTarget(RoomScanMode.ADD_BUILDING, -1, Integer.MIN_VALUE);
     }
 
-    public enum StructuralPosition { OUTSIDE, REGISTERED_ROOM, ATTACHABLE_ROOM }
-
-    public record RoomScanContext(StructuralPosition position,
-                                  Optional<Building> building,
+    public record RoomScanContext(Optional<Building> building,
                                   RoomScanMode mode,
                                   int targetBuildingId,
                                   int prospectiveFloorNumber) {
         public Optional<Building> functionalRoom() {
-            return position == StructuralPosition.REGISTERED_ROOM ? building : Optional.empty();
+            return mode == RoomScanMode.UPDATE_ROOM ? building : Optional.empty();
         }
     }
 
-    private void applyFloorNumbers(int buildingId, Collection<Structure> members) {
-        if (members.isEmpty()) return;
-        floorNumbers(members, buildingId).forEach((ref, number) ->
-                ref.structure().setFloorNumber(ref.floor().id(), number));
-    }
 
     int prospectiveFloorNumber(int buildingId,
                                Structure candidate,
@@ -804,7 +790,13 @@ public class Village implements Iterable<Building> {
     }
 
     private void normalizeLogicalBuildings() {
-        structures.values().forEach(this::normalizeLogicalBuilding);
+        for (Structure structure : structures.values()) {
+            int buildingId = structure.getLogicalBuildingId();
+            if (buildingId < 0
+                    || (buildingId != structure.getId() && !structures.containsKey(buildingId))) {
+                structure.setLogicalBuildingId(structure.getId());
+            }
+        }
         Map<Integer, Integer> canonicalIds = new HashMap<>();
         structures.values().stream()
                 .sorted(Comparator.comparingInt(Structure::getId))
@@ -829,14 +821,6 @@ public class Village implements Iterable<Building> {
         return start.getId();
     }
 
-    private void normalizeLogicalBuilding(Structure structure) {
-        if (structure == null) return;
-        int buildingId = structure.getLogicalBuildingId();
-        if (buildingId < 0
-                || (buildingId != structure.getId() && !structures.containsKey(buildingId))) {
-            structure.setLogicalBuildingId(structure.getId());
-        }
-    }
 
     public boolean isVillage() {
         return getStructureCount() >= Config.getInstance().minimumBuildingsToBeConsideredAVillage;

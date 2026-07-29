@@ -33,13 +33,9 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
         VillageManager manager = VillageManager.get(player.serverLevel());
         try {
             switch (action) {
-                case ADD_ROOM -> addRoom(manager, player, player.blockPosition(), null);
-                case ADD_BUILDING -> addBuilding(manager, player, player.blockPosition(), null);
-                case ADD_FLOOR -> addAttachedRoom(manager, player, player.blockPosition(), null,
-                        Village.RoomScanMode.ADD_FLOOR, parseTargetBuildingId(data));
-                case ADD_BASEMENT -> addAttachedRoom(manager, player, player.blockPosition(), null,
-                        Village.RoomScanMode.ADD_BASEMENT, parseTargetBuildingId(data));
-                case UPDATE_ROOM -> updateRoom(manager, player, player.blockPosition(), null);
+                case ADD_ROOM, ADD_BUILDING, ADD_FLOOR, ADD_BASEMENT, UPDATE_ROOM ->
+                        executeScanAction(manager, player, player.blockPosition(), null,
+                                action, parseTargetBuildingId(data));
                 case SET_MAIN_ROOM -> updateMainRoom(manager, player);
                 case AUTO_SCAN -> manager.findNearestVillage(player).ifPresent(Village::toggleAutoScan);
                 case FULL_SCAN -> fullScan(manager, player);
@@ -47,12 +43,8 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
                         manager.forceRoomType(player.blockPosition(), data), null);
                 case REMOVE_ROOM -> displayEditResult(player,
                         manager.removeRoom(player.blockPosition()), "blueprint.roomRemoved");
-                case REMOVE -> {
-                    net.conczin.mca.MCA.LOGGER.info("[MCA-RemoveBuilding-Server] handle REMOVE action playerPos={}", player.blockPosition());
-                    VillageManager.BuildingEditResult result = manager.removeBuilding(player.blockPosition());
-                    net.conczin.mca.MCA.LOGGER.info("[MCA-RemoveBuilding-Server] removeBuilding result={}", result);
-                    displayEditResult(player, result, "blueprint.buildingRemoved");
-                }
+                case REMOVE -> displayEditResult(player,
+                        manager.removeBuilding(player.blockPosition()), "blueprint.buildingRemoved");
                 case SET_ROOM_INHERITANCE -> setRoomInheritance(manager, player, data);
             }
         } finally {
@@ -60,43 +52,37 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
         }
     }
 
-    static void addRoom(VillageManager manager,
-                        ServerPlayer player,
-                        BlockPos source,
-                        String forcedType) {
-        Village village = manager.findNearestVillage(source, Village.MERGE_MARGIN).orElse(null);
-        if (village != null
-                && village.getStructuralPosition(player.serverLevel(), source)
-                == Village.StructuralPosition.REGISTERED_ROOM) {
-            player.displayClientMessage(Component.translatable("blueprint.roomAlreadyAdded"), true);
-            return;
+    static void executeScanAction(VillageManager manager,
+                                  ServerPlayer player,
+                                  BlockPos source,
+                                  String forcedType,
+                                  Action action,
+                                  int expectedTargetId) {
+        switch (action) {
+            case ADD_ROOM -> {
+                Village village = manager.findNearestVillage(source, Village.MERGE_MARGIN).orElse(null);
+                if (village != null && village.getRoomScanContext(player.serverLevel(), source).mode()
+                        == Village.RoomScanMode.UPDATE_ROOM) {
+                    player.displayClientMessage(Component.translatable("blueprint.roomAlreadyAdded"), true);
+                    return;
+                }
+                commitRoomAddition(manager, player, manager.analyzeRoom(source), forcedType, action);
+            }
+            case ADD_BUILDING -> commitRoomAddition(manager, player,
+                    manager.analyzeBuildingAddition(source), forcedType, action);
+            case ADD_FLOOR, ADD_BASEMENT -> {
+                if (expectedTargetId < 0) {
+                    displayScanResult(player, Building.validationResult.NOT_IN_BUILDING);
+                    return;
+                }
+                Village.RoomScanMode mode = action == Action.ADD_BASEMENT
+                        ? Village.RoomScanMode.ADD_BASEMENT : Village.RoomScanMode.ADD_FLOOR;
+                commitRoomAddition(manager, player,
+                        manager.analyzeAttachedRoom(source, mode, expectedTargetId), forcedType, action);
+            }
+            case UPDATE_ROOM -> updateRoom(manager, player, source, forcedType, expectedTargetId);
+            default -> MCA.LOGGER.warn("Ignoring invalid building scan action {} from {}", action, player);
         }
-
-        commitRoomAddition(manager, player, manager.analyzeRoom(source), forcedType, Action.ADD_ROOM);
-    }
-
-    static void addBuilding(VillageManager manager,
-                            ServerPlayer player,
-                            BlockPos source,
-                            String forcedType) {
-        commitRoomAddition(manager, player,
-                manager.analyzeBuildingAddition(source), forcedType, Action.ADD_BUILDING);
-    }
-
-    static void addAttachedRoom(VillageManager manager,
-                                ServerPlayer player,
-                                BlockPos source,
-                                String forcedType,
-                                Village.RoomScanMode mode,
-                                int expectedTargetBuildingId) {
-        if (expectedTargetBuildingId < 0) {
-            displayScanResult(player, Building.validationResult.NOT_IN_BUILDING);
-            return;
-        }
-        Action action = mode == Village.RoomScanMode.ADD_BASEMENT
-                ? Action.ADD_BASEMENT : Action.ADD_FLOOR;
-        commitRoomAddition(manager, player,
-                manager.analyzeAttachedRoom(source, mode, expectedTargetBuildingId), forcedType, action);
     }
 
     private static int parseTargetBuildingId(String value) {
@@ -114,12 +100,7 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
             player.displayClientMessage(Component.translatable("blueprint.noBuilding"), true);
             return;
         }
-        Building.validationResult result = manager.fullScan(village);
-        if (result == Building.validationResult.SUCCESS) {
-            player.displayClientMessage(Component.translatable("blueprint.refreshed"), true);
-        } else {
-            displayScanResult(player, result);
-        }
+        displayScanResult(player, manager.fullScan(village), "blueprint.refreshed");
     }
 
     private static void updateMainRoom(VillageManager manager, ServerPlayer player) {
@@ -188,15 +169,12 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
             return;
         }
         if (forcedType == null && update.isAmbiguous()) {
-            requestType(update, player, Action.UPDATE_ROOM, expectedRoomId);
+            requestType(update.playerMatchingTypes(), update.source(), player,
+                    Action.UPDATE_ROOM, expectedRoomId);
             return;
         }
-        Building.validationResult result = manager.commitRegisteredRoomUpdate(update, forcedType);
-        if (result == Building.validationResult.SUCCESS) {
-            player.displayClientMessage(Component.translatable("blueprint.roomUpdated"), true);
-        } else {
-            displayScanResult(player, result);
-        }
+        displayScanResult(player, manager.commitRegisteredRoomUpdate(update, forcedType),
+                "blueprint.roomUpdated");
     }
 
     private static void commitRoomAddition(VillageManager manager,
@@ -207,43 +185,39 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
         if (forcedType == null && scan.result() == Building.validationResult.SUCCESS && scan.isAmbiguous()) {
             int expectedTarget = action == Action.ADD_FLOOR || action == Action.ADD_BASEMENT
                     ? scan.targetBuildingId() : -1;
-            requestType(scan, player, action, expectedTarget);
+            requestType(scan.matchingTypes(), scan.source(), player, action, expectedTarget);
             return;
         }
-        Building.validationResult result = manager.commitRoomAddition(scan, forcedType);
-        if (result == Building.validationResult.SUCCESS) {
-            String successKey = switch (action) {
-                case ADD_BUILDING -> "blueprint.buildingAdded";
-                case ADD_FLOOR -> "blueprint.floorAdded";
-                case ADD_BASEMENT -> "blueprint.basementAdded";
-                default -> "blueprint.roomAdded";
-            };
-            player.displayClientMessage(Component.translatable(successKey), true);
-        } else {
-            displayScanResult(player, result);
-        }
+        String successKey = switch (action) {
+            case ADD_BUILDING -> "blueprint.buildingAdded";
+            case ADD_FLOOR -> "blueprint.floorAdded";
+            case ADD_BASEMENT -> "blueprint.basementAdded";
+            default -> "blueprint.roomAdded";
+        };
+        displayScanResult(player, manager.commitRoomAddition(scan, forcedType), successKey);
     }
 
 
-    private static void requestType(BuildingScanResult scan,
+    private static void requestType(java.util.List<String> matchingTypes,
+                                    BlockPos source,
                                     ServerPlayer player,
                                     Action action,
                                     int expectedTargetId) {
         Network.sendToPlayer(new BuildingPolymorphMessage(
-                scan.matchingTypes(), scan.source(), action, expectedTargetId), player);
-    }
-
-    private static void requestType(RegisteredRoomUpdate update,
-                                    ServerPlayer player,
-                                    Action action,
-                                    int expectedTargetId) {
-        Network.sendToPlayer(new BuildingPolymorphMessage(
-                update.playerMatchingTypes(), update.source(), action, expectedTargetId), player);
+                matchingTypes, source, action, expectedTargetId), player);
     }
 
     private static void displayScanResult(ServerPlayer player, Building.validationResult result) {
-        player.displayClientMessage(Component.translatable(
-                "blueprint.scan." + result.name().toLowerCase(Locale.ENGLISH)), true);
+        displayScanResult(player, result, null);
+    }
+
+    private static void displayScanResult(ServerPlayer player,
+                                          Building.validationResult result,
+                                          String successKey) {
+        String key = result == Building.validationResult.SUCCESS && successKey != null
+                ? successKey
+                : "blueprint.scan." + result.name().toLowerCase(Locale.ENGLISH);
+        player.displayClientMessage(Component.translatable(key), true);
     }
 
     private static void displayEditResult(ServerPlayer player,

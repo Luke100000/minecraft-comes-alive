@@ -85,7 +85,6 @@ public class BlueprintScreen extends ExtendedScreen {
     private TooltipButtonWidget attachmentScanButton;
     private TooltipButtonWidget removeRoomButton;
     private ButtonWidget removeBuildingButton;
-    private ButtonWidget advancedButton;
     private Integer selectedFloorOrdinal = rememberedFloorOrdinal;
     private MapScaleMode mapScaleMode = rememberedMapScaleMode;
     private boolean playerCentered = rememberedPlayerCentered;
@@ -179,7 +178,6 @@ public class BlueprintScreen extends ExtendedScreen {
         attachmentScanButton = null;
         removeRoomButton = null;
         removeBuildingButton = null;
-        advancedButton = null;
 
         // back button
         addRenderableWidget(new ButtonWidget(5, 5, 20, 20, Component.translatable("gui.button.backarrow"), b -> setPage("close")));
@@ -227,21 +225,22 @@ public class BlueprintScreen extends ExtendedScreen {
                 int mapControlY = floorControlY + 22;
                 buildingIconsButton = addRenderableWidget(new ButtonWidget(
                         floorControlX, mapControlY, MAP_ICONS_BUTTON_WIDTH, 20,
-                        getBuildingIconsLabel(), b -> {
+                        toggleLabel("gui.blueprint.buildingIcons.short", showBuildingIcons), b -> {
                     showBuildingIcons = !showBuildingIcons;
-                    updateBuildingIconsControl();
+                    updateToggleControl(buildingIconsButton,
+                            "gui.blueprint.buildingIcons.short", showBuildingIcons);
                 }, Component.translatable("gui.blueprint.buildingIcons")));
                 int terrainControlX = floorControlX + MAP_ICONS_BUTTON_WIDTH + MAP_CONTROL_GAP;
                 terrainButton = addRenderableWidget(new ButtonWidget(
                         terrainControlX, mapControlY, MAP_TERRAIN_BUTTON_WIDTH, 20,
-                        getTerrainLabel(), b -> {
+                        toggleLabel("gui.blueprint.terrain", showTerrain), b -> {
                     showTerrain = !showTerrain;
-                    updateTerrainControl();
+                    updateToggleControl(terrainButton, "gui.blueprint.terrain", showTerrain);
                 }, Component.translatable("gui.blueprint.terrain.tooltip")));
                 int scaleControlX = terrainControlX + MAP_TERRAIN_BUTTON_WIDTH + MAP_CONTROL_GAP;
                 mapScaleButton = addRenderableWidget(new ButtonWidget(
                         scaleControlX, mapControlY, MAP_SCALE_BUTTON_WIDTH, 20,
-                        getMapScaleLabel(), b -> cycleMapScale(1), getMapScaleTooltip()));
+                        Component.literal(mapScaleMode.label), b -> cycleMapScale(1), getMapScaleTooltip()));
 
                 playerCenteredButton = addRenderableWidget(new ButtonWidget(
                         bx, floorControlY, PLAYER_CENTERED_BUTTON_WIDTH, 20,
@@ -307,19 +306,14 @@ public class BlueprintScreen extends ExtendedScreen {
                             "gui.blueprint.addBuilding", b -> requestPrimaryStructureScan());
                     attachmentScanButton = column.addTooltip(
                             "gui.blueprint.addFloor", b -> requestAttachmentScan());
-                    removeRoomButton = column.addTooltip("gui.blueprint.removeRoom", b -> {
-                        MCA.LOGGER.debug("[BuildingRemove] stage=client-click action=REMOVE_ROOM");
-                        Network.sendToServer(new ReportBuildingMessage(ReportBuildingMessage.Action.REMOVE_ROOM));
-                    });
+                    removeRoomButton = column.addTooltip("gui.blueprint.removeRoom", b ->
+                            Network.sendToServer(new ReportBuildingMessage(ReportBuildingMessage.Action.REMOVE_ROOM)));
                     removeBuildingButton = column.addButton(
-                            Component.translatable("gui.blueprint.removeBuilding"), b -> {
-                                MCA.LOGGER.info("[MCA-RemoveBuilding-Client] button clicked playerPos={}",
-                                        minecraft != null && minecraft.player != null ? minecraft.player.blockPosition() : "unknown");
-                                Network.sendToServer(new ReportBuildingMessage(
-                                        ReportBuildingMessage.Action.REMOVE));
-                            });
+                            Component.translatable("gui.blueprint.removeBuilding"), b ->
+                                    Network.sendToServer(new ReportBuildingMessage(
+                                            ReportBuildingMessage.Action.REMOVE)));
 
-                    advancedButton = addRenderableWidget(new ButtonWidget(
+                    addRenderableWidget(new ButtonWidget(
                             bx, floorControlY + 22, MAP_SIDE_CONTROL_WIDTH, 20,
                             Component.translatable("gui.blueprint.advanced"), b -> setPage("advanced")));
                 }
@@ -418,11 +412,7 @@ public class BlueprintScreen extends ExtendedScreen {
     @Override
     public void render(GuiGraphics context, int sizeX, int sizeY, float offset) {
         if (village != null && ("map".equals(page) || "advanced".equals(page))) {
-            updateFloorControls();
-            Village.RoomScanContext scanContext = getPlayerRoomScanContext();
-            updateStructureScanControl(scanContext);
-            updateRemoveRoomControl(scanContext);
-            updateMainRoomControl(scanContext);
+            updateMapControls(getPlayerRoomScanContext());
         }
 
         super.render(context, sizeX, sizeY, offset);
@@ -491,7 +481,7 @@ public class BlueprintScreen extends ExtendedScreen {
 
     private Village.RoomScanContext getPlayerRoomScanContext() {
         if (village == null || minecraft == null || minecraft.player == null) {
-            return new Village.RoomScanContext(Village.StructuralPosition.OUTSIDE, Optional.empty(),
+            return new Village.RoomScanContext(Optional.empty(),
                     Village.RoomScanMode.ADD_BUILDING, -1, Integer.MIN_VALUE);
         }
 
@@ -513,14 +503,24 @@ public class BlueprintScreen extends ExtendedScreen {
         };
     }
 
+    private void updateMapControls(Village.RoomScanContext scanContext) {
+        updateFloorControls();
+        updateToggleControl(buildingIconsButton, "gui.blueprint.buildingIcons.short", showBuildingIcons);
+        updateToggleControl(terrainButton, "gui.blueprint.terrain", showTerrain);
+        updateMapScaleControl();
+        updateStructureScanControl(scanContext);
+        updateRemoveRoomControl(scanContext);
+        updateMainRoomControl(scanContext);
+    }
+
     private void updateStructureScanControl(Village.RoomScanContext scanContext) {
         if (structureScanButton == null) return;
 
         boolean attachment = scanContext.mode().isAttachment();
         Village.RoomScanMode primaryMode = attachment
                 ? Village.RoomScanMode.ADD_BUILDING : scanContext.mode();
-        boolean insideBuilding = scanContext.position() != Village.StructuralPosition.OUTSIDE;
-        boolean roomRegistered = scanContext.position() == Village.StructuralPosition.REGISTERED_ROOM;
+        boolean roomRegistered = scanContext.mode() == Village.RoomScanMode.UPDATE_ROOM;
+        boolean insideBuilding = roomRegistered || scanContext.mode() == Village.RoomScanMode.ADD_ROOM;
         int y = height / 2 - 56 + 22 * 3;
 
         structureScanButton.setMessage(getStructureScanTranslationKey(primaryMode));
@@ -741,19 +741,15 @@ public class BlueprintScreen extends ExtendedScreen {
         updateMapScaleControl();
     }
 
-    private Component getMapScaleLabel() {
-        return Component.literal(mapScaleMode.label());
-    }
-
     private Component getMapScaleTooltip() {
-        return mapScaleMode.tooltipKey() == null
-                ? Component.literal("Map scale: " + mapScaleMode.label())
-                : Component.translatable(mapScaleMode.tooltipKey());
+        return mapScaleMode.tooltipKey == null
+                ? Component.literal("Map scale: " + mapScaleMode.label)
+                : Component.translatable(mapScaleMode.tooltipKey);
     }
 
     private void updateMapScaleControl() {
         if (mapScaleButton != null) {
-            mapScaleButton.setMessage(getMapScaleLabel());
+            mapScaleButton.setMessage(Component.literal(mapScaleMode.label));
             mapScaleButton.setTooltip(Tooltip.create(getMapScaleTooltip()));
         }
     }
@@ -774,13 +770,6 @@ public class BlueprintScreen extends ExtendedScreen {
             this.tooltipKey = tooltipKey;
         }
 
-        String label() {
-            return label;
-        }
-
-        String tooltipKey() {
-            return tooltipKey;
-        }
 
         MapScaleMode step(int direction) {
             MapScaleMode[] values = values();
@@ -883,30 +872,14 @@ public class BlueprintScreen extends ExtendedScreen {
         }
     }
 
-    private Component getBuildingIconsLabel() {
-        MutableComponent label = Component.translatable("gui.blueprint.buildingIcons.short");
-        return showBuildingIcons
-                ? label.withStyle(ChatFormatting.GREEN)
+    private static Component toggleLabel(String key, boolean enabled) {
+        MutableComponent label = Component.translatable(key);
+        return enabled ? label.withStyle(ChatFormatting.GREEN)
                 : label.withStyle(ChatFormatting.GRAY, ChatFormatting.STRIKETHROUGH);
     }
 
-    private void updateBuildingIconsControl() {
-        if (buildingIconsButton != null) {
-            buildingIconsButton.setMessage(getBuildingIconsLabel());
-        }
-    }
-
-    private Component getTerrainLabel() {
-        MutableComponent label = Component.translatable("gui.blueprint.terrain");
-        return showTerrain
-                ? label.withStyle(ChatFormatting.GREEN)
-                : label.withStyle(ChatFormatting.GRAY, ChatFormatting.STRIKETHROUGH);
-    }
-
-    private void updateTerrainControl() {
-        if (terrainButton != null) {
-            terrainButton.setMessage(getTerrainLabel());
-        }
+    private static void updateToggleControl(ButtonWidget button, String key, boolean enabled) {
+        if (button != null) button.setMessage(toggleLabel(key, enabled));
     }
 
     private void addInheritanceControl(SideControlColumn column) {
@@ -1161,17 +1134,11 @@ public class BlueprintScreen extends ExtendedScreen {
         this.mapGeometry = BlueprintMapGeometry.build(village, roomTypeResolver);
         Village.RoomScanContext scanContext = getPlayerRoomScanContext();
         if (selectPlayerFloorOnNextVillageResponse
-                && scanContext.position() == Village.StructuralPosition.REGISTERED_ROOM) {
+                && scanContext.mode() == Village.RoomScanMode.UPDATE_ROOM) {
             selectPlayerFloor(scanContext);
         }
         selectPlayerFloorOnNextVillageResponse = false;
-        updateFloorControls();
-        updateBuildingIconsControl();
-        updateTerrainControl();
-        updateMapScaleControl();
-        updateStructureScanControl(scanContext);
-        updateRemoveRoomControl(scanContext);
-        updateMainRoomControl(scanContext);
+        updateMapControls(scanContext);
 
         if (village == null) {
             setPage("empty");
