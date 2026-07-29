@@ -20,7 +20,7 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
     public static final CustomPacketPayload.Type<ReportBuildingMessage> TYPE =
             new CustomPacketPayload.Type<>(MCA.locate("report_building"));
     public static final StreamCodec<FriendlyByteBuf, ReportBuildingMessage> STREAM_CODEC = StreamCodec.composite(
-            ByteBufCodecs.idMapper(i -> i >= 0 && i < Action.VALUES.length ? Action.VALUES[i] : Action.AUTO_SCAN, Action::ordinal), ReportBuildingMessage::action,
+            ByteBufCodecs.idMapper(i -> Action.VALUES[i], Action::ordinal), ReportBuildingMessage::action,
             ByteBufCodecs.optional(ByteBufCodecs.STRING_UTF8).map(opt -> opt.orElse(null), java.util.Optional::ofNullable), ReportBuildingMessage::data,
             ReportBuildingMessage::new);
 

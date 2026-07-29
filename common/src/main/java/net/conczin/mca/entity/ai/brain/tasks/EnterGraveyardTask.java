@@ -12,7 +12,11 @@ import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 
-import java.util.*;
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Stream;
 
 /**

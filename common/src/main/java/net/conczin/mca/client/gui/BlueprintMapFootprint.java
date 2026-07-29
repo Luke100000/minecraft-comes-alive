@@ -165,11 +165,6 @@ final class BlueprintMapFootprint {
     }
 
     record Shape(Set<Cell> cells, List<RowSpan> spans, List<Edge> edges) {
-        Shape {
-            cells = Set.copyOf(cells);
-            spans = List.copyOf(spans);
-            edges = List.copyOf(edges);
-        }
     }
 
     record Cell(int x, int z) {

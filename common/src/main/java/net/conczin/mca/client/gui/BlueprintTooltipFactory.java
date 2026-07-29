@@ -84,20 +84,13 @@ final class BlueprintTooltipFactory {
         village.getResidents(room.getId()).forEach(name ->
                 lines.add(detail(Component.literal(name).withStyle(ChatFormatting.GRAY))));
 
-        if (!resolved.ownPoi().isEmpty()) {
-            lines.add(detail(Component.translatable("gui.blueprint.roomTooltip.roomPoi")
-                    .withStyle(ChatFormatting.GRAY, ChatFormatting.ITALIC)));
-            poiLines(resolved.ownPoi()).forEach(item -> lines.add(detail(item)));
-        }
-
+        appendPoi(lines, resolved.ownPoi(), Component.translatable("gui.blueprint.roomTooltip.roomPoi")
+                .withStyle(ChatFormatting.GRAY, ChatFormatting.ITALIC));
         if (!resolved.inheritedPoi().isEmpty()) {
-            lines.add(detail(Component.translatable("gui.blueprint.roomTooltip.inheritedPoi")
-                    .withStyle(ChatFormatting.AQUA)));
-            poiLines(resolved.inheritedPoi()).forEach(item -> lines.add(detail(item)));
-            resolved.contributors().forEach(contributor ->
-                    lines.add(detail(Component.translatable(
-                                    "gui.blueprint.roomTooltip.inheritedFrom", contributor.getId())
-                            .withStyle(ChatFormatting.DARK_GRAY))));
+            appendPoi(lines, resolved.inheritedPoi(), Component.translatable("gui.blueprint.roomTooltip.inheritedPoi")
+                    .withStyle(ChatFormatting.AQUA));
+            resolved.contributors().forEach(contributor -> lines.add(detail(Component.translatable(
+                    "gui.blueprint.roomTooltip.inheritedFrom", contributor.getId()).withStyle(ChatFormatting.DARK_GRAY))));
         }
     }
 
@@ -173,11 +166,8 @@ final class BlueprintTooltipFactory {
             typeRooms.forEach(ctx -> ctx.ownPoi().forEach((k, v) ->
                     combinedPoi.computeIfAbsent(k, key -> new ArrayList<>()).addAll(v)));
 
-            if (!combinedPoi.isEmpty()) {
-                lines.add(detail(Component.translatable("gui.blueprint.roomTooltip.roomPoi")
-                        .withStyle(ChatFormatting.GRAY, ChatFormatting.ITALIC)));
-                poiLines(combinedPoi).forEach(item -> lines.add(detail(item)));
-            }
+            appendPoi(lines, combinedPoi, Component.translatable("gui.blueprint.roomTooltip.roomPoi")
+                    .withStyle(ChatFormatting.GRAY, ChatFormatting.ITALIC));
         }
     }
 
@@ -194,6 +184,12 @@ final class BlueprintTooltipFactory {
                 .sorted(Comparator.comparingInt((Building room) -> room.getFloorNumber(village))
                         .thenComparingInt(Building::getId))
                 .toList();
+    }
+
+    private static void appendPoi(List<Component> lines, Map<ResourceLocation, List<BlockPos>> poi, Component title) {
+        if (poi.isEmpty()) return;
+        lines.add(detail(title));
+        poiLines(poi).forEach(item -> lines.add(detail(item)));
     }
 
     private static Component detail(Component component) {
@@ -227,15 +223,11 @@ final class BlueprintTooltipFactory {
     }
 
     private static List<Component> poiLines(Map<ResourceLocation, List<BlockPos>> poi) {
-        List<Component> lines = new ArrayList<>();
-        poi.forEach((block, positions) -> {
-            if (!positions.isEmpty()) {
-                lines.add(Component.literal(positions.size() + " x ")
-                        .append(blockName(block))
-                        .withStyle(ChatFormatting.DARK_GRAY));
-            }
-        });
-        return List.copyOf(lines);
+        return poi.entrySet().stream()
+                .filter(entry -> !entry.getValue().isEmpty())
+                .<Component>map(entry -> Component.literal(entry.getValue().size() + " x ")
+                        .append(blockName(entry.getKey())).withStyle(ChatFormatting.DARK_GRAY))
+                .toList();
     }
 
     private static Component blockName(ResourceLocation id) {

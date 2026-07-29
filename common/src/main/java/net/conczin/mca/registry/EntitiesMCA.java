@@ -23,13 +23,11 @@ public interface EntitiesMCA {
 
     EntityType<VillagerEntityMCA> MALE_VILLAGER = register("male_villager", EntityType.Builder
             .<VillagerEntityMCA>of((t, w) -> new VillagerEntityMCA(t, w, Gender.MALE), MobCategory.MISC)
-            .sized(0.6F, 2.0F)
-            .eyeHeight(EntityType.VILLAGER.getDimensions().eyeHeight()), VillagerEntityMCA::createAttributes
+            .sized(0.6F, 2.0F), VillagerEntityMCA::createAttributes
     );
     EntityType<VillagerEntityMCA> FEMALE_VILLAGER = register("female_villager", EntityType.Builder
             .<VillagerEntityMCA>of((t, w) -> new VillagerEntityMCA(t, w, Gender.FEMALE), MobCategory.MISC)
-            .sized(0.6F, 2.0F)
-            .eyeHeight(EntityType.VILLAGER.getDimensions().eyeHeight()), VillagerEntityMCA::createAttributes
+            .sized(0.6F, 2.0F), VillagerEntityMCA::createAttributes
     );
     EntityType<ZombieVillagerEntityMCA> MALE_ZOMBIE_VILLAGER = register("male_zombie_villager", EntityType.Builder
             .<ZombieVillagerEntityMCA>of((t, w) -> new ZombieVillagerEntityMCA(t, w, Gender.MALE), MobCategory.MONSTER)

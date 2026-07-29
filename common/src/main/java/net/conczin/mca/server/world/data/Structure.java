@@ -216,10 +216,6 @@ public final class Structure implements VillageBuilding {
     }
 
 
-    int allocateFloorId() {
-        return nextFloorId++;
-    }
-
     boolean applyScan(StructureScanner.Result scan, Collection<Building> rooms) {
         StructureFloorMatcher.Result match = StructureFloorMatcher.match(
                 getFloors(), nextFloorId, scan.floors(), rooms).orElse(null);

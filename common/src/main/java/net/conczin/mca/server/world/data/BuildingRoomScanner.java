@@ -46,34 +46,20 @@ final class BuildingRoomScanner {
                         .map(BuildingRoomScanner::columnKey)
                         .anyMatch(registeredColumns::contains))
                 .toList();
-        return materializePartition(world, source, maxSize, floor, partition, selected, true);
+        return selected.stream()
+                .map(component -> materializeComponent(world, source, Set.of(), maxSize,
+                        floor, partition, component))
+                .sorted(Comparator.comparingInt((Result result) -> result.min().getX())
+                        .thenComparingInt(result -> result.min().getZ()))
+                .toList();
     }
 
     private static long columnKey(BlockPos pos) {
         return ((long) pos.getX() << 32) ^ (pos.getZ() & 0xffffffffL);
     }
 
-    private static List<Result> materializePartition(Level world,
-                                                     BlockPos source,
-                                                     int maxSize,
-                                                     StructureFloor floor,
-                                                     PartitionData partition,
-                                                     Collection<BuildingFloorRegion.Component> components,
-                                                     boolean includeFailures) {
-        return components.stream()
-                .map(component -> materializeComponent(world, source, Set.of(), maxSize,
-                        floor, partition, component))
-                .filter(result -> includeFailures || result.status() == Status.SUCCESS)
-                .sorted(Comparator.comparingInt((Result result) -> result.min().getX())
-                        .thenComparingInt(result -> result.min().getZ()))
-                .toList();
-    }
-
     private static PartitionData partitionData(Level world, StructureFloor floor) {
-        return partitionData(world, floor, partitionCells(world, floor));
-    }
-
-    private static PartitionData partitionData(Level world, StructureFloor floor, Set<BlockPos> partitionCells) {
+        Set<BlockPos> partitionCells = partitionCells(world, floor);
         Map<BlockPos, BlockPos> floorConnectors = floorConnectors(world, floor, partitionCells);
         List<BlockPos> passageCells = new ArrayList<>();
         List<BlockPos> functionalPoiCells = new ArrayList<>();

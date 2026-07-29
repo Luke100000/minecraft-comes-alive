@@ -71,7 +71,6 @@ neoForge {
 
 dependencies {
     compileOnly 'org.spongepowered:mixin:0.8.5'
-
 }
 
 configurations {

@@ -7,6 +7,7 @@ import net.conczin.mca.entity.ai.TaskUtils;
 import net.conczin.mca.util.InventoryUtils;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.MemoryStatus;
 import net.minecraft.world.item.FishingRodItem;

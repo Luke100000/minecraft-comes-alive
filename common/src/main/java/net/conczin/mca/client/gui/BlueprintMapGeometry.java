@@ -44,7 +44,7 @@ final class BlueprintMapGeometry {
             List<MapStructureLayer> structures = buildStructureLayers(roomsByBuilding);
             List<MapIconLayer> icons = buildIconLayers(roomsByBuilding, selectedFloor);
             List<Building> grouped = village.getExternalBuildings().filter(Building::isComplete)
-                    .filter(building -> BlueprintMapLayering.isOutdoorVisible(selectedFloor))
+                    .filter(building -> selectedFloor == null || selectedFloor == 0)
                     .sorted(Comparator.comparingInt(Building::getId)).map(Building.class::cast).toList();
             return new MapGeometry(rooms, structures, icons, grouped);
         });
@@ -234,13 +234,6 @@ final class BlueprintMapGeometry {
                        List<MapStructureLayer> structureLayers,
                        List<MapIconLayer> iconLayers,
                        List<Building> groupedBuildings) {
-        MapGeometry {
-            footprintLayers = List.copyOf(footprintLayers);
-            structureLayers = List.copyOf(structureLayers);
-            iconLayers = List.copyOf(iconLayers);
-            groupedBuildings = List.copyOf(groupedBuildings);
-        }
-
         static MapGeometry empty() { return new MapGeometry(List.of(), List.of(), List.of(), List.of()); }
     }
 
@@ -252,11 +245,6 @@ final class BlueprintMapGeometry {
                              Integer floorOrdinal,
                              int logicalBuildingId,
                              int anchorY) {
-        MapFootprintLayer {
-            footprintCells = Set.copyOf(footprintCells);
-            fillSpans = List.copyOf(fillSpans);
-            outlineEdges = List.copyOf(outlineEdges);
-        }
     }
 
     record MapStructureLayer(int logicalBuildingId, Building mainRoom, int anchorY,
@@ -264,12 +252,6 @@ final class BlueprintMapGeometry {
                              Set<BlueprintMapFootprint.Cell> shellCells,
                              List<BlueprintMapFootprint.RowSpan> shellSpans,
                              List<BlueprintMapFootprint.Edge> borderEdges) {
-        MapStructureLayer {
-            outlineCells = Set.copyOf(outlineCells);
-            shellCells = Set.copyOf(shellCells);
-            shellSpans = List.copyOf(shellSpans);
-            borderEdges = List.copyOf(borderEdges);
-        }
     }
 
     record MapIconLayer(Building building, BuildingType presentationType, Integer floorOrdinal,

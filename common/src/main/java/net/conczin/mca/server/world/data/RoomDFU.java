@@ -8,7 +8,7 @@ import net.minecraft.nbt.Tag;
 
 import java.util.*;
 
-/** One-time compatibility boundary for origin/1.21.1 and the pre-v2 floor-system format. */
+/** One-time compatibility boundary for released origin/1.21.1 village data. */
 final class RoomDFU {
     private RoomDFU() {
     }
@@ -20,17 +20,7 @@ final class RoomDFU {
             return loadCurrent(villageTag, legacyInheritance);
         }
 
-        ListTag legacy = villageTag.getList("buildings", Tag.TAG_COMPOUND);
-        boolean floorSystemFormat = legacy.stream()
-                .filter(CompoundTag.class::isInstance)
-                .map(CompoundTag.class::cast)
-                .anyMatch(tag -> tag.contains("structureRoot")
-                        || tag.contains("strictScan")
-                        || tag.contains("groundFloorY")
-                        || tag.contains("floorRegions"));
-        return floorSystemFormat
-                ? migrateFloorSystem(legacy, legacyInheritance)
-                : migrateOrigin(legacy, legacyInheritance);
+        return migrateOrigin(villageTag.getList("buildings", Tag.TAG_COMPOUND), legacyInheritance);
     }
 
     private static Result loadCurrent(CompoundTag villageTag, boolean legacyInheritance) {
@@ -150,98 +140,6 @@ final class RoomDFU {
         return new Result(rooms, external, structures);
     }
 
-    private static Result migrateFloorSystem(ListTag legacy, boolean legacyInheritance) {
-        Map<Integer, ExternalBuilding> external = new HashMap<>();
-        Map<Integer, List<LegacyFloorRoom>> byStructure = new TreeMap<>();
-        for (Tag value : legacy) {
-            CompoundTag tag = (CompoundTag) value;
-            Building room = loadRoom(tag, legacyInheritance);
-            if (room.getBuildingType().grouped()) {
-                ExternalBuilding building = new ExternalBuilding(normalizeRoomTag(tag));
-                external.put(building.getId(), building);
-                continue;
-            }
-            int structureId = tag.contains("structureId") && tag.getInt("structureId") >= 0
-                    ? tag.getInt("structureId") : room.getId();
-            byStructure.computeIfAbsent(structureId, ignored -> new ArrayList<>()).add(new LegacyFloorRoom(
-                    tag,
-                    room,
-                    tag.contains("structureRoot") && tag.getBoolean("structureRoot"),
-                    tag.contains("strictScan") && tag.getBoolean("strictScan"),
-                    tag.contains("floorY") ? tag.getInt("floorY") : room.getFloorY(),
-                    tag.contains("groundFloorY") ? tag.getInt("groundFloorY") : room.getFloorY()));
-        }
-
-        Map<Integer, Building> rooms = new HashMap<>();
-        Map<Integer, Structure> structures = new HashMap<>();
-        byStructure.forEach((structureId, records) -> migrateFloorSystemStructure(structureId, records)
-                .ifPresent(migrated -> {
-                    migrated.rooms().forEach(room -> rooms.put(room.getId(), room));
-                    structures.put(structureId, migrated.structure());
-                }));
-        return new Result(rooms, external, structures);
-    }
-
-
-    /**
-     * Migrates only deterministic persisted geometry. Development Structures that require invented
-     * Floors are discarded individually and can be rescanned in-game.
-     */
-    private static Optional<MigratedStructure> migrateFloorSystemStructure(
-            int structureId,
-            List<LegacyFloorRoom> records) {
-        LegacyFloorRoom container = records.stream()
-                .filter(record -> record.structureRoot() && !record.strictScan())
-                .min(Comparator.comparingInt(record -> record.room().getId()))
-                .or(() -> records.stream()
-                        .filter(record -> !record.strictScan())
-                        .min(Comparator.comparingInt(record -> record.room().getId())))
-                .orElse(null);
-        if (container == null) {
-            return Optional.empty();
-        }
-
-        List<LegacyFloorRoom> functional = records.stream()
-                .filter(LegacyFloorRoom::strictScan)
-                .filter(record -> !record.structureRoot())
-                .filter(record -> !record.room().getFloorRegions().isEmpty())
-                .sorted(Comparator.comparingInt(record -> record.room().getId()))
-                .toList();
-        List<BuildingFloorRegion> regions = collectFloorRegions(container, functional);
-        if (regions.isEmpty()) return Optional.empty();
-
-        BlockPos min = container.room().getRawPos0();
-        BlockPos max = container.room().getRawPos1();
-        List<StructureFloor> floors = createFloors(regions, max.getY() + 1);
-        Structure structure = new Structure(
-                structureId,
-                container.room().getSourceBlock(),
-                min,
-                max,
-                floors);
-
-        List<Building> rooms = new ArrayList<>();
-        Building mainRoom = null;
-        int mainRoomDistance = Integer.MAX_VALUE;
-        for (LegacyFloorRoom legacyRoom : functional) {
-            StructureFloor floor = nearestFloor(floors, legacyRoom.floorY());
-            if (floor == null) continue;
-            Building room = legacyRoom.room();
-            room.setStructureId(structureId);
-            room.setFloorId(floor.id());
-            rooms.add(room);
-            int distance = Math.abs(floor.anchorY() - container.groundFloorY());
-            if (distance < mainRoomDistance
-                    || (distance == mainRoomDistance
-                    && (mainRoom == null || room.getId() < mainRoom.getId()))) {
-                mainRoom = room;
-                mainRoomDistance = distance;
-            }
-        }
-        if (mainRoom != null) structure.setAutomaticMainRoom(mainRoom.getId());
-        return Optional.of(new MigratedStructure(structure, List.copyOf(rooms)));
-    }
-
     private static Optional<Structure> migrateOriginBuilding(Building room) {
         if (room.getFloorRegions().isEmpty()) {
             return Optional.empty();
@@ -255,56 +153,6 @@ final class RoomDFU {
         room.setFloorId(floor.id());
         structure.setAutomaticMainRoom(room.getId());
         return Optional.of(structure);
-    }
-
-    private static List<BuildingFloorRegion> collectFloorRegions(
-            LegacyFloorRoom container,
-            List<LegacyFloorRoom> functional) {
-        Map<Integer, BuildingFloorRegion> byY = new TreeMap<>();
-        for (BuildingFloorRegion region : container.room().getFloorRegions()) {
-            byY.merge(region.anchorY(), region, RoomDFU::largerRegion);
-        }
-        for (LegacyFloorRoom room : functional) {
-            for (BuildingFloorRegion region : room.room().getFloorRegions()) {
-                byY.merge(room.floorY(), region.withAnchorY(room.floorY()), RoomDFU::largerRegion);
-            }
-        }
-        return List.copyOf(byY.values());
-    }
-
-    private static BuildingFloorRegion largerRegion(BuildingFloorRegion first, BuildingFloorRegion second) {
-        return first.area() >= second.area() ? first : second;
-    }
-
-    private static List<StructureFloor> createFloors(List<BuildingFloorRegion> regions, int topExclusive) {
-        List<StructureFloor> floors = new ArrayList<>();
-        for (int i = 0; i < regions.size(); i++) {
-            BuildingFloorRegion region = regions.get(i);
-            int ceiling = i + 1 < regions.size()
-                    ? Math.max(region.anchorY() + 1, regions.get(i + 1).anchorY())
-                    : Math.max(region.anchorY() + 1, topExclusive);
-            floors.add(new StructureFloor(i, region.anchorY(), ceiling, region));
-        }
-        return List.copyOf(floors);
-    }
-
-    private static StructureFloor nearestFloor(List<StructureFloor> floors, int y) {
-        return floors.stream().min(Comparator
-                .comparingInt((StructureFloor floor) -> Math.abs(floor.anchorY() - y))
-                .thenComparingInt(StructureFloor::anchorY)
-                .thenComparingInt(StructureFloor::id)).orElse(null);
-    }
-
-    private record LegacyFloorRoom(
-            CompoundTag tag,
-            Building room,
-            boolean structureRoot,
-            boolean strictScan,
-            int floorY,
-            int groundFloorY) {
-    }
-
-    private record MigratedStructure(Structure structure, List<Building> rooms) {
     }
 
     record Result(

@@ -90,7 +90,7 @@ final class BlueprintMapRenderer implements AutoCloseable {
         List<MapFootprintLayer> footprintLayers = geometry.footprintLayers();
         List<MapStructureLayer> structureLayers = geometry.structureLayers();
         List<MapIconLayer> footprintIconLayers = geometry.iconLayers();
-        List<MapFootprintLayer> roomHitTestLayers = BlueprintMapLayering.frontToBack(footprintLayers);
+        List<MapFootprintLayer> roomHitTestLayers = frontToBack(footprintLayers);
         int hoveredLogicalBuildingId = hoveredLogicalBuildingId(
                 roomHitTestLayers, structureLayers, hoveredMapCell, mouseX, mouseY,
                 viewport, selectedFloor, playerLogicalBuildingId, mouseInsideMap);
@@ -334,7 +334,7 @@ final class BlueprintMapRenderer implements AutoCloseable {
         int fillAlpha = hovered
                 ? ROOM_FILL_ALPHA_HOVERED
                 : selectedFloor ? ROOM_FILL_ALPHA_SELECTED_FLOOR : ROOM_FILL_ALPHA_ALL_FLOORS;
-        int color = withAlpha(brightenColor(baseColor, ROOM_FILL_BRIGHTEN_FACTOR), fillAlpha);
+        int color = withAlpha(scaleColor(baseColor, ROOM_FILL_BRIGHTEN_FACTOR), fillAlpha);
         renderCellSpansScreenSpace(context, spans, color, viewport);
     }
 
@@ -347,7 +347,7 @@ final class BlueprintMapRenderer implements AutoCloseable {
         int outlineAlpha = hovered
                 ? ROOM_BORDER_ALPHA_HOVERED
                 : selectedFloor ? ROOM_BORDER_ALPHA_SELECTED_FLOOR : ROOM_BORDER_ALPHA_ALL_FLOORS;
-        int outlineColor = withAlpha(brightenColor(baseColor, ROOM_BORDER_BRIGHTEN_FACTOR), outlineAlpha);
+        int outlineColor = withAlpha(scaleColor(baseColor, ROOM_BORDER_BRIGHTEN_FACTOR), outlineAlpha);
         renderOutlineScreenSpace(context, edges, outlineColor, viewport);
     }
 
@@ -357,7 +357,7 @@ final class BlueprintMapRenderer implements AutoCloseable {
                                                           boolean active,
                                                           BlueprintMapViewport viewport) {
         int outlineColor = withAlpha(
-                darkenColor(baseColor, active ? BUILDING_BORDER_ACTIVE_FACTOR : BUILDING_BORDER_DARKEN_FACTOR),
+                scaleColor(baseColor, active ? BUILDING_BORDER_ACTIVE_FACTOR : BUILDING_BORDER_DARKEN_FACTOR),
                 active ? BUILDING_BORDER_ALPHA_ACTIVE : BUILDING_BORDER_ALPHA
         );
         renderOutlineScreenSpace(context, edges, outlineColor, viewport);
@@ -533,7 +533,7 @@ final class BlueprintMapRenderer implements AutoCloseable {
         }
 
         LinkedHashSet<Integer> hovered = new LinkedHashSet<>();
-        for (MapStructureLayer layer : BlueprintMapLayering.frontToBack(structureLayers)) {
+        for (MapStructureLayer layer : frontToBack(structureLayers)) {
             if (layer.outlineCells().contains(hoveredMapCell)
                     || isOutlineHovered(layer.borderEdges(), mouseX, mouseY, viewport)) {
                 hovered.add(layer.logicalBuildingId());
@@ -582,6 +582,13 @@ final class BlueprintMapRenderer implements AutoCloseable {
                                           int buildingId,
                                           Integer floorOrdinal,
                                           int anchorY) {
+        // On a selected Floor, keep the concrete Room tooltip instead of replacing it
+        // with the logical-building aggregate for that same Floor.
+        if (floorOrdinal != null && hoverTargets.stream().anyMatch(target -> !target.structure()
+                && target.logicalBuildingId() == buildingId
+                && Objects.equals(target.floorOrdinal(), floorOrdinal))) {
+            return;
+        }
         hoverTargets.removeIf(target -> !target.structure()
                 && target.logicalBuildingId() == buildingId);
         HoverTarget target = new HoverTarget(mainRoom, floorOrdinal, true, buildingId, anchorY);
@@ -599,6 +606,9 @@ final class BlueprintMapRenderer implements AutoCloseable {
             return;
         }
 
+        PhysicalFloorKey floorKey = new PhysicalFloorKey(building.getStructureId(), building.getFloorId());
+        if (hoverTargets.stream().anyMatch(target -> target.samePhysicalFloor(floorKey))) return;
+
         // A concrete Room/icon hover always wins over the logical Building shade beneath it.
         hoverTargets.removeIf(target -> target.structure()
                 && target.logicalBuildingId() == buildingId);
@@ -606,19 +616,17 @@ final class BlueprintMapRenderer implements AutoCloseable {
         if (!hoverTargets.contains(target)) hoverTargets.add(target);
     }
 
-    private static int brightenColor(int color, float factor) {
+    private static <T> List<T> frontToBack(List<T> renderOrder) {
+        ArrayList<T> reversed = new ArrayList<>(renderOrder);
+        Collections.reverse(reversed);
+        return reversed;
+    }
+
+    private static int scaleColor(int color, float factor) {
         int rgb = color & 0x00ffffff;
         int red = Math.min(255, Math.round(((rgb >> 16) & 0xff) * factor));
         int green = Math.min(255, Math.round(((rgb >> 8) & 0xff) * factor));
         int blue = Math.min(255, Math.round((rgb & 0xff) * factor));
-        return red << 16 | green << 8 | blue;
-    }
-
-    private static int darkenColor(int color, float factor) {
-        int rgb = color & 0x00ffffff;
-        int red = Math.round(((rgb >> 16) & 0xff) * factor);
-        int green = Math.round(((rgb >> 8) & 0xff) * factor);
-        int blue = Math.round((rgb & 0xff) * factor);
         return red << 16 | green << 8 | blue;
     }
 
@@ -639,5 +647,13 @@ final class BlueprintMapRenderer implements AutoCloseable {
 
     record HoverTarget(Building building, Integer floorOrdinal,
                        boolean structure, int logicalBuildingId, int anchorY) {
+        boolean samePhysicalFloor(PhysicalFloorKey key) {
+            return !structure && building.isFunctionalRoom()
+                    && building.getStructureId() == key.structureId()
+                    && building.getFloorId() == key.floorId();
+        }
+    }
+
+    private record PhysicalFloorKey(int structureId, int floorId) {
     }
 }

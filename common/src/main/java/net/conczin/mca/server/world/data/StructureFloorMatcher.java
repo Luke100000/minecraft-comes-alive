@@ -37,7 +37,7 @@ final class StructureFloorMatcher {
 
         for (StructureFloor oldFloor : existingFloors) {
             if (requiredFloorIds.contains(oldFloor.id())) continue;
-            int match = bestMatch(oldFloor, detected, usedDetected, List.of());
+            int match = bestMatch(oldFloor, detected, usedDetected);
             if (match < 0) {
                 continue;
             }
@@ -101,16 +101,12 @@ final class StructureFloorMatcher {
 
     private static int bestMatch(StructureFloor oldFloor,
                                  List<StructureFloor> detected,
-                                 Set<Integer> used,
-                                 Collection<Building> rooms) {
+                                 Set<Integer> used) {
         int best = -1;
         long bestScore = Long.MIN_VALUE;
         for (int i = 0; i < detected.size(); i++) {
             if (used.contains(i)) continue;
             StructureFloor candidate = detected.get(i);
-            if (rooms.stream()
-                    .filter(room -> room.getFloorId() == oldFloor.id())
-                    .anyMatch(room -> !roomFootprintInside(room, candidate))) continue;
             long score = matchScore(oldFloor, candidate);
             if (score > bestScore) {
                 bestScore = score;

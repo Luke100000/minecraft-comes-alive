@@ -58,8 +58,8 @@ import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.ai.behavior.BlockPosTracker;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.WalkTarget;
-import net.minecraft.world.entity.ai.navigation.PathNavigation;
 import net.minecraft.world.entity.animal.IronGolem;
+import net.minecraft.world.entity.ai.navigation.PathNavigation;
 import net.minecraft.world.entity.monster.CrossbowAttackMob;
 import net.minecraft.world.entity.monster.Zombie;
 import net.minecraft.world.entity.monster.ZombieVillager;
@@ -1093,10 +1093,8 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         float height = (useRawDimensions ? getRawVerticalScaleFactor() : getVerticalScaleFactor()) * 2.0F;
         float width = getHorizontalScaleFactor() * 0.6F;
 
-        return EntityDimensions.scalable(width, height)
-                .withEyeHeight(getType().getDimensions().eyeHeight())
-                .withAttachments(EntityAttachments.builder()
-                        .attach(EntityAttachment.VEHICLE, 0.0F, getRawVerticalScaleFactor() * VEHICLE_ATTACHMENT_Y, 0.0F));
+        return EntityDimensions.scalable(width, height).withAttachments(EntityAttachments.builder()
+                .attach(EntityAttachment.VEHICLE, 0.0F, getRawVerticalScaleFactor() * VEHICLE_ATTACHMENT_Y, 0.0F));
     }
 
     @Override

@@ -227,6 +227,7 @@ public class DestinyScreen extends VillagerEditorScreen {
 
     @Override
     protected void setPage(String page) {
+        List<String> destinyLocations = page.equals("destiny") ? getDestinyLocations() : List.of();
         if (page.equals("destiny") && !allowTeleportation) {
             Network.sendToServer(new DestinyMessage("", true));
             MCAClient.getDestinyManager().allowClosing();
@@ -234,8 +235,8 @@ public class DestinyScreen extends VillagerEditorScreen {
             return;
         } else if (page.equals("destiny")) {
             //there is only one entry
-            if (Config.getServerConfig().destinySpawnLocations.size() == 1) {
-                selectStory(Config.getServerConfig().destinySpawnLocations.getFirst());
+            if (destinyLocations.size() == 1) {
+                selectStory(destinyLocations.getFirst());
                 return;
             }
         }
@@ -264,24 +265,7 @@ public class DestinyScreen extends VillagerEditorScreen {
                     }
                 }));
             }
-            case "destiny" -> {
-                int x = 0;
-                int y = 0;
-                for (String location : Config.getServerConfig().destinySpawnLocations) {
-                    int rows = (int) Math.ceil(Config.getServerConfig().destinySpawnLocations.size() / 3.0f);
-                    float offsetX = (y + 1) == rows ? (2 - (Config.getServerConfig().destinySpawnLocations.size() - 1) % 3) / 2.0f : 0;
-                    float offsetY = Math.max(0, 3 - rows) / 2.0f;
-                    MutableComponent name = Component.translatable("gui.destiny." + getPath(location));
-                    addRenderableWidget(new ButtonWidget((int) (width / 2.0f - 96 * 1.5f + (x + offsetX) * 96), (int) (height / 2.0f + (y + offsetY) * 20 - 16), 96, 20, name, sender -> {
-                        selectStory(location);
-                    }));
-                    x++;
-                    if (x >= 3) {
-                        x = 0;
-                        y++;
-                    }
-                }
-            }
+            case "destiny" -> drawDestinyLocations(destinyLocations);
             case "story" ->
                     addRenderableWidget(new ButtonWidget(width / 2 - 48, height / 2 + 32, 96, 20, Component.translatable("gui.destiny.next"), sender -> {
                         //we teleport early here to avoid initial flickering
@@ -306,7 +290,7 @@ public class DestinyScreen extends VillagerEditorScreen {
         story.add(Component.translatable("destiny.story.reason"));
         Map<String, String> map = Config.getServerConfig().destinyLocationsToTranslationMap;
         story.add(Component.translatable(map.getOrDefault(location, map.getOrDefault("default", "missing_default"))));
-        story.add(Component.translatable("destiny.story." + getPath(location)));
+        story.add(Component.translatableWithFallback("destiny.story." + getPath(location), getLocationName(location).getString()));
         this.location = location;
         setPage("story");
     }

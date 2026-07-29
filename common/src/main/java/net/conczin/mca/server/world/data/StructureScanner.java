@@ -22,18 +22,6 @@ final class StructureScanner {
     private StructureScanner() {
     }
 
-    static Optional<BlockPos> nearestFloorCell(StructureFloor floor, BlockPos reference) {
-        if (floor == null || floor.region() == null || reference == null) return Optional.empty();
-        return floor.region().cells().stream()
-                .min(Comparator.comparingLong(cell -> horizontalDistanceSquared(cell, reference)));
-    }
-
-    private static long horizontalDistanceSquared(BlockPos first, BlockPos second) {
-        long dx = (long) first.getX() - second.getX();
-        long dz = (long) first.getZ() - second.getZ();
-        return dx * dx + dz * dz;
-    }
-
     static Result scan(Level world, BlockPos source, Collection<Structure> existing, int ignoredStructureId) {
         int maxSize = Config.getInstance().maxBuildingSize;
         int maxRadius = Config.getInstance().maxBuildingRadius;
