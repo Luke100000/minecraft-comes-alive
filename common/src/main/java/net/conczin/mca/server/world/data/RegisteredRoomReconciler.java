@@ -3,17 +3,14 @@ package net.conczin.mca.server.world.data;
 import net.minecraft.core.BlockPos;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 
 /** Matches one complete registered-Floor partition back to stable Room identities. */
 final class RegisteredRoomReconciler {
-    private static final long ASSIGNMENT_INFINITY = Long.MAX_VALUE / 4L;
-
     private RegisteredRoomReconciler() {
     }
 
@@ -28,179 +25,47 @@ final class RegisteredRoomReconciler {
         List<Building> components = scannedComponents.stream()
                 .sorted(COMPONENT_ORDER)
                 .toList();
-        Building expected = previous.stream()
-                .filter(room -> room.getId() == expectedPlayerRoomId)
-                .findFirst().orElse(null);
-        if (expected == null || components.isEmpty()) return Optional.empty();
+        List<Integer> roomIds = previous.stream().map(Building::getId).toList();
+        int expectedRoom = roomIds.indexOf(expectedPlayerRoomId);
+        if (expectedRoom < 0 || components.isEmpty()) return Optional.empty();
 
-        Building playerComponent = components.stream()
-                .filter(component -> component.containsFloorPosition(playerPos))
-                .findFirst()
-                .orElseGet(() -> components.stream()
-                        .filter(component -> component.getFloorFootprintIntersectionArea(expected) > 0)
-                        .sorted(Comparator
-                                .comparingLong((Building component) ->
-                                        component.getFloorFootprintIntersectionArea(expected))
-                                .reversed()
-                                .thenComparing(COMPONENT_ORDER))
-                        .findFirst()
-                        .orElse(null));
-        if (playerComponent == null) return Optional.empty();
-
-        // Stable Room identity normally follows topology, not the player. A Main Room is the
-        // exception during merges: keep its ID on the merged component instead of transferring
-        // Main Room state after reconciliation.
-        Building mainRoom = previous.stream()
-                .filter(room -> room.getId() == mainRoomId)
-                .findFirst().orElse(null);
-        Building mergedMainComponent = mergedMainComponent(mainRoom, previous, components);
-
-        List<Assignment> assignments = new ArrayList<>();
-        if (mergedMainComponent != null) {
-            assignments.add(new Assignment(mergedMainComponent, mainRoom));
-            assignments.addAll(matchRemaining(
-                    components.stream().filter(component -> component != mergedMainComponent).toList(),
-                    previous.stream().filter(room -> room != mainRoom).toList()));
-        } else {
-            assignments.addAll(matchRemaining(components, previous));
-        }
-        assignments.sort(Comparator.comparing(Assignment::component, COMPONENT_ORDER));
-        Set<Integer> assignedRoomIds = assignments.stream()
-                .map(Assignment::roomId)
-                .filter(id -> id >= 0)
-                .collect(java.util.stream.Collectors.toSet());
-        Set<Integer> removedRoomIds = previous.stream()
-                .map(Building::getId)
-                .filter(id -> !assignedRoomIds.contains(id))
-                .collect(java.util.stream.Collectors.toUnmodifiableSet());
-        return Optional.of(new Result(
-                previous.stream().map(Building::getId).toList(),
-                assignments, removedRoomIds, playerComponent));
-    }
-
-    private static Building mergedMainComponent(Building mainRoom,
-                                                List<Building> previousRooms,
-                                                List<Building> components) {
-        if (mainRoom == null) return null;
-        return components.stream()
-                .filter(component -> component.getFloorFootprintIntersectionArea(mainRoom) > 0)
-                .filter(component -> previousRooms.stream()
-                        .filter(room -> component.getFloorFootprintIntersectionArea(room) > 0)
-                        .limit(2)
-                        .count() > 1)
-                .sorted(Comparator
-                        .comparingLong((Building component) ->
-                                component.getFloorFootprintIntersectionArea(mainRoom))
-                        .reversed()
-                        .thenComparing(COMPONENT_ORDER))
-                .findFirst()
-                .orElse(null);
-    }
-
-    /**
-     * Preserves the greatest number of Room IDs, then the greatest total footprint overlap.
-     * Dummy columns let every component remain assignable when no previous Room overlaps it.
-     */
-    private static List<Assignment> matchRemaining(List<Building> components, List<Building> rooms) {
-        if (components.isEmpty()) return List.of();
-
-        int roomColumns = rooms.size();
-        long totalArea = 0L;
-        for (Building component : components) {
-            long area = Math.max(0L, component.getFloorFootprintArea());
-            totalArea = area > ASSIGNMENT_INFINITY - totalArea
-                    ? ASSIGNMENT_INFINITY : totalArea + area;
-        }
-        long roomReuseBonus = totalArea + 1L;
-        long[][] scores = new long[components.size()][roomColumns + components.size()];
-        for (int componentIndex = 0; componentIndex < components.size(); componentIndex++) {
-            Building component = components.get(componentIndex);
-            for (int roomIndex = 0; roomIndex < roomColumns; roomIndex++) {
-                long overlap = component.getFloorFootprintIntersectionArea(rooms.get(roomIndex));
-                if (overlap > 0L) {
-                    scores[componentIndex][roomIndex] = roomReuseBonus + overlap;
-                }
+        long[][] overlaps = new long[components.size()][previous.size()];
+        for (int component = 0; component < components.size(); component++) {
+            for (int room = 0; room < previous.size(); room++) {
+                overlaps[component][room] = components.get(component)
+                        .getFloorFootprintIntersectionArea(previous.get(room));
             }
         }
 
-        int[] assignedColumns = maximumWeightAssignment(scores);
+        int playerComponent = -1;
+        for (int component = 0; component < components.size(); component++) {
+            if (components.get(component).containsFloorPosition(playerPos)) {
+                playerComponent = component;
+                break;
+            }
+        }
+        if (playerComponent < 0) {
+            long bestOverlap = 0;
+            for (int component = 0; component < components.size(); component++) {
+                if (overlaps[component][expectedRoom] > bestOverlap) {
+                    bestOverlap = overlaps[component][expectedRoom];
+                    playerComponent = component;
+                }
+            }
+        }
+        if (playerComponent < 0) return Optional.empty();
+
+        int[] owners = RoomIdentityPolicy.assign(
+                roomIds, expectedPlayerRoomId, mainRoomId, playerComponent, overlaps);
+        Map<Integer, Building> previousById = previous.stream().collect(
+                java.util.stream.Collectors.toMap(Building::getId, room -> room));
         List<Assignment> assignments = new ArrayList<>(components.size());
-        for (int componentIndex = 0; componentIndex < components.size(); componentIndex++) {
-            int roomIndex = assignedColumns[componentIndex];
-            Building room = roomIndex >= 0
-                    && roomIndex < roomColumns
-                    && scores[componentIndex][roomIndex] > 0L
-                    ? rooms.get(roomIndex) : null;
-            assignments.add(new Assignment(components.get(componentIndex), room));
-        }
-        return List.copyOf(assignments);
-    }
-
-    /** Rectangular Hungarian assignment; rows never outnumber columns because each has a dummy. */
-    private static int[] maximumWeightAssignment(long[][] scores) {
-        int rowCount = scores.length;
-        int columnCount = scores[0].length;
-        long maximumScore = 0L;
-        for (long[] row : scores) {
-            for (long score : row) {
-                maximumScore = Math.max(maximumScore, score);
-            }
-        }
-        long[] rowPotential = new long[rowCount + 1];
-        long[] columnPotential = new long[columnCount + 1];
-        int[] matchedRow = new int[columnCount + 1];
-        int[] previousColumn = new int[columnCount + 1];
-
-        for (int row = 1; row <= rowCount; row++) {
-            matchedRow[0] = row;
-            long[] minimum = new long[columnCount + 1];
-            Arrays.fill(minimum, ASSIGNMENT_INFINITY);
-            boolean[] used = new boolean[columnCount + 1];
-            int column = 0;
-            do {
-                used[column] = true;
-                int currentRow = matchedRow[column];
-                long delta = ASSIGNMENT_INFINITY;
-                int nextColumn = 0;
-                for (int candidate = 1; candidate <= columnCount; candidate++) {
-                    if (used[candidate]) continue;
-                    long cost = maximumScore - scores[currentRow - 1][candidate - 1]
-                            - rowPotential[currentRow] - columnPotential[candidate];
-                    if (cost < minimum[candidate]) {
-                        minimum[candidate] = cost;
-                        previousColumn[candidate] = column;
-                    }
-                    if (minimum[candidate] < delta) {
-                        delta = minimum[candidate];
-                        nextColumn = candidate;
-                    }
-                }
-                for (int candidate = 0; candidate <= columnCount; candidate++) {
-                    if (used[candidate]) {
-                        rowPotential[matchedRow[candidate]] += delta;
-                        columnPotential[candidate] -= delta;
-                    } else {
-                        minimum[candidate] -= delta;
-                    }
-                }
-                column = nextColumn;
-            } while (matchedRow[column] != 0);
-
-            do {
-                int nextColumn = previousColumn[column];
-                matchedRow[column] = matchedRow[nextColumn];
-                column = nextColumn;
-            } while (column != 0);
+        for (int component = 0; component < components.size(); component++) {
+            assignments.add(new Assignment(
+                    components.get(component), previousById.get(owners[component])));
         }
 
-        int[] assignedColumn = new int[rowCount];
-        Arrays.fill(assignedColumn, -1);
-        for (int column = 1; column <= columnCount; column++) {
-            if (matchedRow[column] != 0) {
-                assignedColumn[matchedRow[column] - 1] = column - 1;
-            }
-        }
-        return assignedColumn;
+        return Optional.of(new Result(roomIds, assignments, components.get(playerComponent)));
     }
 
     private static final Comparator<Building> COMPONENT_ORDER = Comparator
@@ -221,12 +86,10 @@ final class RegisteredRoomReconciler {
 
     record Result(List<Integer> previousRoomIds,
                   List<Assignment> assignments,
-                  Set<Integer> removedRoomIds,
                   Building playerComponent) {
         Result {
             previousRoomIds = List.copyOf(previousRoomIds);
             assignments = List.copyOf(assignments);
-            removedRoomIds = Set.copyOf(removedRoomIds);
         }
     }
 }
