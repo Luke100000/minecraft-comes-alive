@@ -1,5 +1,6 @@
 # 8.1.5
 
+* Fixed Family Tree Screen crashing on Vulkan Graphics
 * Added persistent **ChatAI Context** editing with `/mca chatAI context`.
   * Context can be set separately for the nearest villager, player, village, and world; it is layered into AI conversations.
   * Villager context survives villager/zombie-villager conversion.
