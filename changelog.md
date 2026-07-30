@@ -23,7 +23,6 @@
 * Lots of fixes and internal improvements to building detection.
 * Please report any issues on the GitHub Issues page or Discord, and remember that backing up your world is always recommended for beta versions.
 
-
 # 7.7.31
 
 ## ChatAI context
