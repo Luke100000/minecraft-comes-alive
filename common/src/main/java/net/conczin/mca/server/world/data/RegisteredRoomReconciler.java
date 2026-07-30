@@ -19,6 +19,7 @@ final class RegisteredRoomReconciler {
 
     static Optional<Result> reconcile(BlockPos playerPos,
                                       int expectedPlayerRoomId,
+                                      int mainRoomId,
                                       Collection<Building> previousRooms,
                                       Collection<Building> scannedComponents) {
         List<Building> previous = previousRooms.stream()
@@ -46,10 +47,23 @@ final class RegisteredRoomReconciler {
                         .orElse(null));
         if (playerComponent == null) return Optional.empty();
 
-        // Stable Room identity follows topology, not the player. On a split, the old Room ID
-        // therefore stays with the greatest-overlap parent component while playerComponent
-        // remains available solely for the interaction/type-selection path.
-        List<Assignment> assignments = new ArrayList<>(matchRemaining(components, previous));
+        // Stable Room identity normally follows topology, not the player. A Main Room is the
+        // exception during merges: keep its ID on the merged component instead of transferring
+        // Main Room state after reconciliation.
+        Building mainRoom = previous.stream()
+                .filter(room -> room.getId() == mainRoomId)
+                .findFirst().orElse(null);
+        Building mergedMainComponent = mergedMainComponent(mainRoom, previous, components);
+
+        List<Assignment> assignments = new ArrayList<>();
+        if (mergedMainComponent != null) {
+            assignments.add(new Assignment(mergedMainComponent, mainRoom));
+            assignments.addAll(matchRemaining(
+                    components.stream().filter(component -> component != mergedMainComponent).toList(),
+                    previous.stream().filter(room -> room != mainRoom).toList()));
+        } else {
+            assignments.addAll(matchRemaining(components, previous));
+        }
         assignments.sort(Comparator.comparing(Assignment::component, COMPONENT_ORDER));
         Set<Integer> assignedRoomIds = assignments.stream()
                 .map(Assignment::roomId)
@@ -62,6 +76,25 @@ final class RegisteredRoomReconciler {
         return Optional.of(new Result(
                 previous.stream().map(Building::getId).toList(),
                 assignments, removedRoomIds, playerComponent));
+    }
+
+    private static Building mergedMainComponent(Building mainRoom,
+                                                List<Building> previousRooms,
+                                                List<Building> components) {
+        if (mainRoom == null) return null;
+        return components.stream()
+                .filter(component -> component.getFloorFootprintIntersectionArea(mainRoom) > 0)
+                .filter(component -> previousRooms.stream()
+                        .filter(room -> component.getFloorFootprintIntersectionArea(room) > 0)
+                        .limit(2)
+                        .count() > 1)
+                .sorted(Comparator
+                        .comparingLong((Building component) ->
+                                component.getFloorFootprintIntersectionArea(mainRoom))
+                        .reversed()
+                        .thenComparing(COMPONENT_ORDER))
+                .findFirst()
+                .orElse(null);
     }
 
     /**

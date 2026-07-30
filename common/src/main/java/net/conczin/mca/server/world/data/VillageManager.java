@@ -420,8 +420,9 @@ public class VillageManager extends SavedData implements Iterable<Village> {
                 .findFirst().orElse(null);
         if (failure != null) return RegisteredRoomUpdate.failure(failure.result(), pos, village);
 
+        int mainRoomId = village.getMainRoom(structure).map(Building::getId).orElse(-1);
         RegisteredRoomReconciler.Result reconciled = RegisteredRoomReconciler.reconcile(
-                pos, expected.getId(), previousRooms,
+                pos, expected.getId(), mainRoomId, previousRooms,
                 scanned.stream().map(BuildingScanResult::building).toList()).orElse(null);
         if (reconciled == null) {
             return RegisteredRoomUpdate.failure(Building.validationResult.OVERLAP, pos, village);
