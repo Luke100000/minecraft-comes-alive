@@ -20,7 +20,7 @@ public class PlayerArmorExtendedModel<T extends LivingEntity> extends HumanoidMo
 
     public PlayerArmorExtendedModel(ModelPart root) {
         super(root);
-        this.breasts = root.getChild(BREASTS);
+        this.breasts = VillagerEntityBaseModelMCA.getChildOrEmpty(root, BREASTS);
     }
 
     public void copyPropertiesTo(HumanoidModel<?> target) {
@@ -107,7 +107,10 @@ public class PlayerArmorExtendedModel<T extends LivingEntity> extends HumanoidMo
         if (state instanceof VillagerStateHolder holder) {
             var visuals = holder.mca$getVisuals();
             if (visuals != null) {
-                applyVillagerDimensions(visuals, state.isCrouching);
+                applyVillagerDimensions(visuals);
+            }
+            if (holder.mca$getHumanoidModelPose() != null) {
+                holder.mca$getHumanoidModelPose().applyTo(this);
             }
         }
     }

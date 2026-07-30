@@ -11,8 +11,8 @@
 * Improved archer movement while mounted and general follow/teleport behavior.
 * Bouquets are treated consistently as gifts for a villager's partner; updated related relationship gifts.
 * Added modded-village support to Destiny locations, including the originating mod in hover information.
-* Improved the Skin Library: safer login/cancellation flow, stale-request protection, likes/submissions paging, editor loading, blacklist filtering, and profession-name fallbacks.
-* Improved player/villager preview rendering and custom-model compatibility, including animation timing and scale handling.
+* Improved the Skin Library: sandbox-compatible login and safer cancellation, stale-request protection, likes/submissions paging, editor loading, blacklist filtering, and profession-name fallbacks.
+* Added and improved EMF/custom-model compatibility for player and villager rendering, including preview animation timing and scale handling.
 * Improved compatibility with Smarter Farmers and other integrations.
 * Fixed tombstone/graveyard block-entity data preservation.
 * Updated supporter, translator, and Portuguese localization data.

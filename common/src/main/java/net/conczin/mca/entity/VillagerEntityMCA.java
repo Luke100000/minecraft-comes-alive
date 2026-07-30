@@ -166,6 +166,13 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         return new MCAGroundPathNavigation(this, level);
     }
 
+    @Override
+    public void setJumping(boolean jumping) {
+        boolean navigationControlsClimb = this.getNavigation() instanceof MCAGroundPathNavigation navigation
+                && navigation.isControllingClimbable();
+        super.setJumping(jumping && !navigationControlsClimb);
+    }
+
     public static <E extends Entity> CDataManager.Builder<E> createTrackedData(CDataManager.Builder<E> builder) {
         return VillagerLike.createTrackedData(builder).addAll(INFECTION_PROGRESS, GROWTH_AMOUNT)
                 .add(Residency::createTrackedData)
@@ -1333,9 +1340,11 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     @Override
     @Nullable
     public <T extends Mob> T convertTo(EntityType<T> type, ConversionParams params, ConversionParams.AfterConversion<T> afterConversion) {
-        residency.leaveHome();
-
-        EntityType<? extends Mob> convertedType = !isRemoved() && type == EntityType.ZOMBIE_VILLAGER ? getGenetics().getGender().getZombieType() : type;
+        boolean convertingToZombieVillager = !isRemoved() && type == EntityType.ZOMBIE_VILLAGER;
+        if (convertingToZombieVillager) {
+            residency.leaveHome();
+        }
+        EntityType<? extends Mob> convertedType = convertingToZombieVillager ? getGenetics().getGender().getZombieType() : type;
 
         UUID oldUuid = getUUID();
 

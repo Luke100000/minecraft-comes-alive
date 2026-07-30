@@ -33,7 +33,7 @@ public class VillagerEntityModelMCA extends VillagerEntityBaseModelMCA {
         leftLegwear = leftLeg.getChild("left_pants");
         rightLegwear = rightLeg.getChild("right_pants");
 
-        breastsWear = tree.getChild(BREASTPLATE);
+        breastsWear = getChildOrEmpty(tree, BREASTPLATE);
     }
 
     //
@@ -86,9 +86,7 @@ public class VillagerEntityModelMCA extends VillagerEntityBaseModelMCA {
 
     public void setupAnim(VillagerRenderState state) {
         super.setupAnim(state);
-        // These parts are already parented to their limbs/body in the baked model,
-        // so copying the parent transform onto them applies that transform twice.
-        CommonVillagerModel.copyPartState(breastsWear, breasts);
+        syncWearParts();
     }
 
     public void setAllVisible(boolean visible) {
@@ -127,12 +125,14 @@ public class VillagerEntityModelMCA extends VillagerEntityBaseModelMCA {
     }
 
     private void copyAttributes(VillagerEntityModelMCA target) {
-        CommonVillagerModel.copyPartState(target.leftLegwear, leftLegwear);
-        CommonVillagerModel.copyPartState(target.rightLegwear, rightLegwear);
-        CommonVillagerModel.copyPartState(target.leftArmwear, leftArmwear);
-        CommonVillagerModel.copyPartState(target.rightArmwear, rightArmwear);
-        CommonVillagerModel.copyPartState(target.bodyWear, bodyWear);
-        CommonVillagerModel.copyPartState(target.breastsWear, breastsWear);
+        target.syncWearParts();
+    }
+
+    @Override
+    public void syncWearParts() {
+        // Limb/body wear is already parented to canonical bones in this target version.
+        // Only the MCA root breastplate needs to mirror the root breast transform.
+        CommonVillagerModel.copyPartState(breastsWear, breasts);
     }
 
     public void copyVisibility(HumanoidModel<?> model) {

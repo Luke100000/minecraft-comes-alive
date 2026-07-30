@@ -1,7 +1,10 @@
 package net.conczin.mca.client.gui;
 
 import net.minecraft.world.entity.LivingEntity;
+import org.jspecify.annotations.Nullable;
 
+import java.util.Map;
+import java.util.WeakHashMap;
 import java.util.function.Supplier;
 
 /**
@@ -16,60 +19,172 @@ import java.util.function.Supplier;
 public final class PreviewEntityAnimation {
     private static final long NANOS_PER_TICK = 50_000_000L;
     private static final int TICK_WRAP = 27_720;
-    private static final ThreadLocal<Float> ACTIVE_PARTIAL_TICK = new ThreadLocal<>();
+    private static final int INITIALIZATION_TICK = 8;
+    private static final float INITIALIZATION_DELTA_TICKS = 20.0F;
+    private static final Map<LivingEntity, Long> START_NANOS = new WeakHashMap<>();
+    private static final ThreadLocal<State> ACTIVE_STATE = new ThreadLocal<>();
 
     private PreviewEntityAnimation() {
     }
 
     public static Float getActivePartialTick() {
-        return ACTIVE_PARTIAL_TICK.get();
+        State state = ACTIVE_STATE.get();
+        return state == null ? null : state.partialTick;
+    }
+
+    /**
+     * Gives stateful animation expressions one settled initialization step for a newly created
+     * preview entity. There is no previous visible pose to interpolate from, so exposing the
+     * default-zero expression state causes artificial spawn/landing transitions in GUI previews.
+     */
+    public static Float getActiveGameTimeDeltaTicks() {
+        State state = ACTIVE_STATE.get();
+        return state != null && state.initializing ? INITIALIZATION_DELTA_TICKS : null;
+    }
+
+    public static @Nullable State getActiveState(LivingEntity entity) {
+        State state = ACTIVE_STATE.get();
+        return state != null && state.entity == entity ? state : null;
     }
 
     public static <T> T withPreviewTime(LivingEntity entity, Supplier<T> render) {
         long now = System.nanoTime();
-        long wholeTicks = now / NANOS_PER_TICK;
-        float partialTick = (now % NANOS_PER_TICK) / (float) NANOS_PER_TICK;
+        Long existingStart = START_NANOS.get(entity);
+        boolean initializing = existingStart == null;
+        long start = initializing ? now : existingStart;
+        if (initializing) {
+            START_NANOS.put(entity, start);
+        }
+        long elapsed = now - start;
+        long wholeTicks = elapsed / NANOS_PER_TICK;
+        float partialTick = (elapsed % NANOS_PER_TICK) / (float) NANOS_PER_TICK;
 
-        int previousTickCount = entity.tickCount;
-        Float previousPartialTick = ACTIVE_PARTIAL_TICK.get();
-        double previousXo = entity.xo;
-        double previousYo = entity.yo;
-        double previousZo = entity.zo;
-        double previousXOld = entity.xOld;
-        double previousYOld = entity.yOld;
-        double previousZOld = entity.zOld;
-        entity.tickCount = (int) (wholeTicks % TICK_WRAP);
-        ACTIVE_PARTIAL_TICK.set(partialTick);
-        // Preview dummies are never ticked, so their position interpolation history can hold a
-        // stale position (e.g. the spawn point from before NBT data teleported them). Mods that
-        // lerp the entity position from previous to current with the preview partial tick (EMF
-        // does, for CEM variables like pos_y) then see the position sweep that gap every frame,
-        // and animation packs read entities as perpetual falling/landing - the editor
-        // preview twitches or replays landing animations in a loop. Pin the history to the
-        // current position for the duration of the preview render.
+        State state = new State(
+                entity,
+                initializing,
+                partialTick,
+                EntityValues.forPreview(
+                        entity,
+                        INITIALIZATION_TICK + (int) (wholeTicks % (TICK_WRAP - INITIALIZATION_TICK))
+                )
+        );
+        return state.run(render);
+    }
 
-        entity.xo = entity.getX();
-        entity.yo = entity.getY();
-        entity.zo = entity.getZ();
-        entity.xOld = entity.getX();
-        entity.yOld = entity.getY();
-        entity.zOld = entity.getZ();
+    /**
+     * Immutable render-time preview values. Minecraft 26.1 queues GUI entities and renders them
+     * after screen extraction has returned, while EMF deliberately keeps a live entity reference
+     * in its render state. Reapplying this snapshot around the actual GUI entity draw gives EMF
+     * the same entity values that were present during the synchronous 1.21.1 render.
+     */
+    public static final class State {
+        private final LivingEntity entity;
+        private final boolean initializing;
+        private final float partialTick;
+        private final EntityValues values;
 
-        try {
-            return render.get();
-        } finally {
-            entity.tickCount = previousTickCount;
-            entity.xo = previousXo;
-            entity.yo = previousYo;
-            entity.zo = previousZo;
-            entity.xOld = previousXOld;
-            entity.yOld = previousYOld;
-            entity.zOld = previousZOld;
-            if (previousPartialTick == null) {
-                ACTIVE_PARTIAL_TICK.remove();
-            } else {
-                ACTIVE_PARTIAL_TICK.set(previousPartialTick);
+        private State(LivingEntity entity, boolean initializing, float partialTick, EntityValues values) {
+            this.entity = entity;
+            this.initializing = initializing;
+            this.partialTick = partialTick;
+            this.values = values;
+        }
+
+        public <T> T run(Supplier<T> render) {
+            EntityValues previousValues = EntityValues.capture(entity);
+            State previousState = ACTIVE_STATE.get();
+            values.apply(entity);
+            ACTIVE_STATE.set(this);
+
+            try {
+                return render.get();
+            } finally {
+                previousValues.apply(entity);
+                if (previousState == null) {
+                    ACTIVE_STATE.remove();
+                } else {
+                    ACTIVE_STATE.set(previousState);
+                }
             }
+        }
+    }
+
+    private record EntityValues(
+            int tickCount,
+            double xo,
+            double yo,
+            double zo,
+            double xOld,
+            double yOld,
+            double zOld,
+            float bodyRot,
+            float bodyRotOld,
+            float yRot,
+            float yRotOld,
+            float xRot,
+            float xRotOld,
+            float headRot,
+            float headRotOld
+    ) {
+        private static EntityValues forPreview(LivingEntity entity, int tickCount) {
+            double x = entity.getX();
+            double y = entity.getY();
+            double z = entity.getZ();
+            return new EntityValues(
+                    tickCount,
+                    x,
+                    y,
+                    z,
+                    x,
+                    y,
+                    z,
+                    entity.yBodyRot,
+                    entity.yBodyRotO,
+                    entity.getYRot(),
+                    entity.yRotO,
+                    entity.getXRot(),
+                    entity.xRotO,
+                    entity.yHeadRot,
+                    entity.yHeadRotO
+            );
+        }
+
+        private static EntityValues capture(LivingEntity entity) {
+            return new EntityValues(
+                    entity.tickCount,
+                    entity.xo,
+                    entity.yo,
+                    entity.zo,
+                    entity.xOld,
+                    entity.yOld,
+                    entity.zOld,
+                    entity.yBodyRot,
+                    entity.yBodyRotO,
+                    entity.getYRot(),
+                    entity.yRotO,
+                    entity.getXRot(),
+                    entity.xRotO,
+                    entity.yHeadRot,
+                    entity.yHeadRotO
+            );
+        }
+
+        private void apply(LivingEntity entity) {
+            entity.tickCount = tickCount;
+            entity.xo = xo;
+            entity.yo = yo;
+            entity.zo = zo;
+            entity.xOld = xOld;
+            entity.yOld = yOld;
+            entity.zOld = zOld;
+            entity.yBodyRot = bodyRot;
+            entity.yBodyRotO = bodyRotOld;
+            entity.setYRot(yRot);
+            entity.yRotO = yRotOld;
+            entity.setXRot(xRot);
+            entity.xRotO = xRotOld;
+            entity.yHeadRot = headRot;
+            entity.yHeadRotO = headRotOld;
         }
     }
 }

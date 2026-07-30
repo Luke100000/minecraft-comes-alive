@@ -21,7 +21,11 @@ public interface CommonVillagerModel<T> {
 
     float getBreastSize();
 
-    void setBreastSize(float getBreastSize);
+    void setBreastSize(float breastSize);
+
+    /** Synchronizes MCA wear parts that mirror the canonical humanoid bones. */
+    default void syncWearParts() {
+    }
 
     default void renderCommon(PoseStack matrices, VertexConsumer vertices, int light, int overlay, int color) {
         //head
@@ -32,6 +36,9 @@ public interface CommonVillagerModel<T> {
         getCommonHeadParts().forEach(a -> a.render(matrices, vertices, light, overlay, color));
         matrices.popPose();
 
+        // Keep root-level wear parts aligned with the final canonical pose.
+        syncWearParts();
+
         //body
         getCommonBodyParts().forEach(a -> a.render(matrices, vertices, light, overlay, color));
 
@@ -40,6 +47,9 @@ public interface CommonVillagerModel<T> {
 
             if (breastSize > 0) {
                 matrices.pushPose();
+                // The breast parts are stored at the model root, but are logically attached to
+                // the torso. Apply the current body transform before the local breast scaling.
+                getBodyPart().translateAndRotate(matrices);
                 matrices.scale(
                         breastSize * 0.2f + 1.05f,
                         breastSize * 0.75f + 0.75f,
@@ -53,7 +63,7 @@ public interface CommonVillagerModel<T> {
         }
     }
 
-    default void applyVillagerDimensions(VillagerVisuals visuals, boolean isSneaking) {
+    default void applyVillagerDimensions(VillagerVisuals visuals) {
         getDimensions().set(visuals.dimensions());
         setBreastSize(visuals.breastSize());
         
@@ -73,16 +83,8 @@ public interface CommonVillagerModel<T> {
             part.yScale = 1.0f;
             part.zScale = 1.0f;
 
-            part.xRot = (float) Math.PI * 0.3f + getBodyPart().xRot;
-
-            float cy = 0.0f;
-            float cz = 0.0f;
-            if (isSneaking) {
-                cy = 3.0f;
-                cz = 1.5f;
-            }
-
-            part.setPos(0.25f, (float) (5.0f - Math.pow(breastSize, 0.5) * 2.5f + cy), -1.5f + breastSize * 0.25f + cz);
+            part.setRotation((float) Math.PI * 0.3f, 0.0f, 0.0f);
+            part.setPos(0.25f, (float) (5.0f - Math.pow(breastSize, 0.5) * 2.5f), -1.5f + breastSize * 0.25f);
         }
     }
 

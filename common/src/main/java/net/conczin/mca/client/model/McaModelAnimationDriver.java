@@ -21,6 +21,11 @@ public final class McaModelAnimationDriver {
         }
 
         @Override
+        public VertexConsumer setColor(int color) {
+            return this;
+        }
+
+        @Override
         public VertexConsumer setUv(float u, float v) {
             return this;
         }
@@ -37,6 +42,11 @@ public final class McaModelAnimationDriver {
 
         @Override
         public VertexConsumer setNormal(float x, float y, float z) {
+            return this;
+        }
+
+        @Override
+        public VertexConsumer setLineWidth(float width) {
             return this;
         }
     };

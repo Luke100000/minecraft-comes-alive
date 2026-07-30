@@ -1,6 +1,8 @@
 package net.conczin.mca.client.render.layer;
 
 import net.conczin.mca.MCA;
+import net.conczin.mca.client.render.HumanoidModelPose;
+import net.conczin.mca.client.render.VillagerStateHolder;
 import net.conczin.mca.client.render.VillagerVisuals;
 import net.conczin.mca.client.resources.ColorPalette;
 import net.minecraft.client.model.HumanoidModel;
@@ -11,6 +13,11 @@ import net.minecraft.resources.Identifier;
 public class SkinLayer<S extends HumanoidRenderState, M extends HumanoidModel<S>> extends VillagerLayer<S, M> {
     public SkinLayer(RenderLayerParent<S, M> renderer, M model) {
         super(renderer, model);
+    }
+
+    @Override
+    protected void prepareModel(S state) {
+        VillagerStateHolder.require(state).mca$setHumanoidModelPose(HumanoidModelPose.capture(getParentModel()));
     }
 
     @Override

@@ -1,5 +1,6 @@
 package net.conczin.mca.client.render;
 
+import net.conczin.mca.client.gui.PreviewEntityAnimation.State;
 import org.jspecify.annotations.Nullable;
 
 public interface VillagerStateHolder {
@@ -13,6 +14,14 @@ public interface VillagerStateHolder {
     @Nullable VillagerRenderData mca$getVillagerRenderData();
 
     void mca$setVillagerRenderData(@Nullable VillagerRenderData renderData);
+
+    @Nullable HumanoidModelPose mca$getHumanoidModelPose();
+
+    void mca$setHumanoidModelPose(@Nullable HumanoidModelPose pose);
+
+    @Nullable State mca$getPreviewEntityAnimationState();
+
+    void mca$setPreviewEntityAnimationState(@Nullable State state);
 
     default boolean mca$isGeneticsRendererActive() {
         VillagerRenderData renderData = mca$getVillagerRenderData();

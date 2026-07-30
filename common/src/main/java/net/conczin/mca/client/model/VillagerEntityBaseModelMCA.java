@@ -3,6 +3,7 @@ package net.conczin.mca.client.model;
 import com.google.common.collect.ImmutableList;
 import net.conczin.mca.Config;
 import net.conczin.mca.client.render.VillagerRenderState;
+import net.conczin.mca.client.render.VillagerStateHolder;
 import net.conczin.mca.client.render.VillagerVisuals;
 import net.conczin.mca.entity.ai.relationship.AgeState;
 import net.conczin.mca.entity.ai.relationship.VillagerDimensions;
@@ -15,6 +16,9 @@ import net.minecraft.client.model.geom.builders.MeshDefinition;
 import net.minecraft.client.model.geom.builders.PartDefinition;
 import net.minecraft.util.Mth;
 
+import java.util.List;
+import java.util.Map;
+
 public class VillagerEntityBaseModelMCA extends HumanoidModel<VillagerRenderState> implements CommonVillagerModel<VillagerRenderState> {
     protected static final String BREASTS = "breasts";
 
@@ -22,10 +26,16 @@ public class VillagerEntityBaseModelMCA extends HumanoidModel<VillagerRenderStat
 
     final VillagerDimensions.Mutable dimensions = new VillagerDimensions.Mutable(AgeState.ADULT);
     float breastSize;
+    private boolean receivesDeferredAnimationPose;
 
     public VillagerEntityBaseModelMCA(ModelPart root) {
         super(root);
-        this.breasts = root.getChild(BREASTS);
+        this.breasts = getChildOrEmpty(root, BREASTS);
+    }
+
+    /** Returns a model child or a detached empty part for externally animated vanilla roots. */
+    static ModelPart getChildOrEmpty(ModelPart root, String name) {
+        return root.hasChild(name) ? root.getChild(name) : new ModelPart(List.of(), Map.of());
     }
 
     public static MeshDefinition getModelData(CubeDeformation dilation) {
@@ -91,7 +101,15 @@ public class VillagerEntityBaseModelMCA extends HumanoidModel<VillagerRenderStat
             this.rightArm.zRot = Mth.lerp(panicAnimationProgress, this.rightArm.zRot, waveSideways);
         }
 
-        applyVillagerDimensions(visuals, state.isCrouching);
+        applyVillagerDimensions(visuals);
+        if (receivesDeferredAnimationPose && state instanceof VillagerStateHolder holder && holder.mca$getHumanoidModelPose() != null) {
+            holder.mca$getHumanoidModelPose().applyTo(this);
+        }
+    }
+
+    public VillagerEntityBaseModelMCA receiveDeferredAnimationPose() {
+        receivesDeferredAnimationPose = true;
+        return this;
     }
 
     public void copyPropertiesTo(HumanoidModel<?> target) {

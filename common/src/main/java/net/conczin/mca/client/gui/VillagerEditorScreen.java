@@ -2088,13 +2088,46 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         Quaternionf rotation = new Quaternionf().rotateZ((float) Math.PI);
         Quaternionf xRotation = new Quaternionf().rotateX(yAngle * 20.0F * ((float) Math.PI / 180.0F));
         rotation.mul(xRotation);
-        EntityRenderState renderState = PreviewEntityAnimation.withPreviewTime(entity,
-                () -> createInventoryRenderState(entity, PreviewEntityAnimation.getActivePartialTick()));
+
+        float displayRotation = previewRotation + rotationOffset;
+        float followXAngle = xAngle * (float) Math.cos(Math.toRadians(displayRotation));
+
+        float previousBodyRot = entity.yBodyRot;
+        float previousBodyRotO = entity.yBodyRotO;
+        float previousYRot = entity.getYRot();
+        float previousYRotO = entity.yRotO;
+        float previousXRot = entity.getXRot();
+        float previousXRotO = entity.xRotO;
+        float previousHeadRot = entity.yHeadRot;
+        float previousHeadRotO = entity.yHeadRotO;
+
+        entity.yBodyRot = 180.0F + displayRotation + followXAngle * 20.0F;
+        entity.yBodyRotO = entity.yBodyRot;
+        entity.setYRot(180.0F + displayRotation + followXAngle * 40.0F);
+        entity.yRotO = entity.getYRot();
+        entity.setXRot(-yAngle * 20.0F);
+        entity.xRotO = entity.getXRot();
+        entity.yHeadRot = entity.getYRot();
+        entity.yHeadRotO = entity.yHeadRot;
+
+        EntityRenderState renderState;
+        try {
+            renderState = PreviewEntityAnimation.withPreviewTime(entity,
+                    () -> createInventoryRenderState(entity, PreviewEntityAnimation.getActivePartialTick()));
+        } finally {
+            entity.yBodyRot = previousBodyRot;
+            entity.yBodyRotO = previousBodyRotO;
+            entity.setYRot(previousYRot);
+            entity.yRotO = previousYRotO;
+            entity.setXRot(previousXRot);
+            entity.xRotO = previousXRotO;
+            entity.yHeadRot = previousHeadRot;
+            entity.yHeadRotO = previousHeadRotO;
+        }
+
         if (renderState instanceof LivingEntityRenderState livingRenderState) {
-            float displayRotation = previewRotation + rotationOffset;
-            float cos = (float) Math.cos(Math.toRadians(displayRotation));
-            livingRenderState.bodyRot = 180.0F + displayRotation + xAngle * 20.0F * cos;
-            livingRenderState.yRot = xAngle * 20.0F * cos;
+            livingRenderState.bodyRot = 180.0F + displayRotation + followXAngle * 20.0F;
+            livingRenderState.yRot = followXAngle * 20.0F;
             livingRenderState.xRot = livingRenderState.pose == Pose.FALL_FLYING ? 0.0F : -yAngle * 20.0F;
             livingRenderState.boundingBoxWidth = livingRenderState.boundingBoxWidth / livingRenderState.scale;
             livingRenderState.boundingBoxHeight = livingRenderState.boundingBoxHeight / livingRenderState.scale;
