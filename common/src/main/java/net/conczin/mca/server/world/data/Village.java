@@ -431,13 +431,9 @@ public class Village implements Iterable<Building> {
         Optional<ResolvedInteraction> resolved = resolveInteractionPosition(level, pos);
         if (resolved.isPresent()) {
             Building room = resolved.get().position().room();
-            if (room != null) {
-                return new RoomScanPlan(Optional.of(room), RoomScanMode.UPDATE_ROOM,
-                        -1, Integer.MIN_VALUE, source, source);
-            }
-            return new RoomScanPlan(
-                    getMainRoomForStructure(resolved.get().structure().getId()),
-                    RoomScanMode.ADD_ROOM, -1, Integer.MIN_VALUE, source, source);
+            if (room != null) return RoomScanPlan.updateRoom(room, source);
+            return RoomScanPlan.addRoom(
+                    getMainRoomForStructure(resolved.get().structure().getId()).orElse(null), source);
         }
 
         return attachmentPlan(level, source).orElseGet(() -> RoomScanPlan.addBuilding(source));
@@ -469,8 +465,7 @@ public class Village implements Iterable<Building> {
         int floorNumber = prospectiveFloorNumber(
                 target.targetBuildingId(), attachmentSeed.seed().getY());
         if (floorNumber == Integer.MIN_VALUE) return Optional.empty();
-        return Optional.of(new RoomScanPlan(Optional.empty(),
-                floorNumber < 0 ? RoomScanMode.ADD_BASEMENT : RoomScanMode.ADD_FLOOR,
+        return Optional.of(RoomScanPlan.attachment(
                 target.targetBuildingId(), floorNumber, source, attachmentSeed.seed()));
     }
 
@@ -597,12 +592,9 @@ public class Village implements Iterable<Building> {
                 .orElse(true);
     }
 
-    void transferMainRoom(Structure structure,
-                          int removedRoomId,
-                          int survivorRoomId,
-                          int survivorStructureId) {
-        MainRoomSelector.transfer(getBuildingStructures(structure.getLogicalBuildingId()),
-                removedRoomId, survivorRoomId, survivorStructureId);
+    void replaceMainRoom(Structure structure, Building replacement) {
+        MainRoomSelector.replace(
+                getBuildingStructures(structure.getLogicalBuildingId()), replacement);
     }
 
     void refreshLogicalBuildings() {

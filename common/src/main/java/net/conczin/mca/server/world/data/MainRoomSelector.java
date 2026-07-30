@@ -47,17 +47,18 @@ final class MainRoomSelector {
                 automaticSelection(structuresById, eligibleRooms(structuresById, rooms).values()));
     }
 
-    static void transfer(List<Structure> structures,
-                         int removedRoomId,
-                         int survivorRoomId,
-                         int survivorStructureId) {
+    static void replace(List<Structure> structures, Building replacement) {
+        if (replacement == null || structures.stream()
+                .noneMatch(structure -> structure.getId() == replacement.getStructureId())) {
+            return;
+        }
         Structure holder = structures.stream()
-                .filter(structure -> structure.getMainRoomId() == removedRoomId)
+                .filter(structure -> structure.getMainRoomId() >= 0)
                 .findFirst()
                 .orElse(null);
         if (holder == null) return;
         apply(structures, new Selection(
-                survivorRoomId, survivorStructureId, holder.isMainRoomAutomatic()));
+                replacement.getId(), replacement.getStructureId(), holder.isMainRoomAutomatic()));
     }
 
     private static Selection automaticSelection(Map<Integer, Structure> structuresById,

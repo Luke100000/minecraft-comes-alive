@@ -747,8 +747,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
             village.getBuildings().put(created.getId(), created);
         }
         if (replacementMain != null) {
-            village.transferMainRoom(structure, mainRoomId,
-                    replacementMain.getId(), replacementMain.getStructureId());
+            village.replaceMainRoom(structure, replacementMain);
         }
         lastBuildingId = nextRoomId;
         return Building.validationResult.SUCCESS;
