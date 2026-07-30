@@ -5,6 +5,7 @@ import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.Relationship;
 import net.conczin.mca.server.world.data.PlayerSaveData;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.InteractionResult;
 import net.minecraft.world.item.Item;
 
 public class BouquetItem extends RelationshipItem {
@@ -18,13 +19,13 @@ public class BouquetItem extends RelationshipItem {
     }
 
     @Override
-    public Result handle(ServerPlayer player, VillagerEntityMCA villager) {
+    public InteractionResult handle(ServerPlayer player, VillagerEntityMCA villager) {
         if (Relationship.IS_ROMANTIC_PARTNER.test(villager, player)) {
-            return Result.PASS;
+            return InteractionResult.PASS;
         }
 
-        Result result = validate(player, villager);
-        if (result != Result.PASS) {
+        InteractionResult result = validate(player, villager);
+        if (result != InteractionResult.PASS) {
             return result;
         }
 
@@ -33,6 +34,6 @@ public class BouquetItem extends RelationshipItem {
         villager.getRelationships().promise(player);
         villager.getVillagerBrain().modifyMoodValue(5);
         villager.sendChatMessage(player, "interaction.promise.success");
-        return Result.CONSUME;
+        return InteractionResult.CONSUME;
     }
 }

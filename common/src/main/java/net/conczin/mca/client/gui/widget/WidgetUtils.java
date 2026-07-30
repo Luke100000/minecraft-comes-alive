@@ -3,6 +3,7 @@ package net.conczin.mca.client.gui.widget;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
+import net.conczin.mca.client.gui.PreviewEntityAnimation;
 import net.minecraft.client.gui.screens.inventory.tooltip.ClientTooltipComponent;
 import net.minecraft.client.gui.screens.inventory.tooltip.DefaultTooltipPositioner;
 import net.minecraft.client.renderer.RenderPipelines;
@@ -56,17 +57,20 @@ public class WidgetUtils {
      * The same as the Inventory function but with negative Z
      */
     public static void drawBackgroundEntity(GuiGraphicsExtractor context, int x, int y, int size, float mouseX, float mouseY, LivingEntity entity) {
-        InventoryScreen.extractEntityInInventoryFollowsMouse(
-                context,
-                x - size,
-                y - size,
-                x + size,
-                y + size,
-                size,
-                0.0f,
-                mouseX,
-                mouseY,
-                entity
-        );
+        PreviewEntityAnimation.withPreviewTime(entity, () -> {
+            InventoryScreen.extractEntityInInventoryFollowsMouse(
+                    context,
+                    x - size,
+                    y - size,
+                    x + size,
+                    y + size,
+                    size,
+                    0.0f,
+                    mouseX,
+                    mouseY,
+                    entity
+            );
+            return null;
+        });
     }
 }

@@ -106,6 +106,11 @@ public class ClientHandlerImpl implements ClientHandler {
     }
 
     @Override
+    public void handleChatAIContextResponse(ChatAIContextResponse message) {
+        client.setScreen(new ChatAIContextScreen(message));
+    }
+
+    @Override
     public void handleFamilyTreeResponse(GetFamilyTreeResponse message) {
         Screen screen = client.screen;
         if (screen instanceof FamilyTreeScreen gui) {

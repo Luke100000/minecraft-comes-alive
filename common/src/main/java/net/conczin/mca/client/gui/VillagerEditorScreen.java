@@ -2088,7 +2088,8 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         Quaternionf rotation = new Quaternionf().rotateZ((float) Math.PI);
         Quaternionf xRotation = new Quaternionf().rotateX(yAngle * 20.0F * ((float) Math.PI / 180.0F));
         rotation.mul(xRotation);
-        EntityRenderState renderState = createInventoryRenderState(entity, delta);
+        EntityRenderState renderState = PreviewEntityAnimation.withPreviewTime(entity,
+                () -> createInventoryRenderState(entity, PreviewEntityAnimation.getActivePartialTick()));
         if (renderState instanceof LivingEntityRenderState livingRenderState) {
             float displayRotation = previewRotation + rotationOffset;
             float cos = (float) Math.cos(Math.toRadians(displayRotation));

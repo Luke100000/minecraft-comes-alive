@@ -50,6 +50,7 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
     private @Nullable Integer lastSeenVillageId;
     private boolean entityDataSet;
     private boolean overrideVillageRequirements = false;
+    private String chatAIPrompt = "";
     private CompoundTag entityData;
     private PlayerDimensions.Scale dimensionsScale;
 
@@ -67,6 +68,7 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
         lastSeenVillageId = nbt.getInt("lastSeenVillage").orElse(null);
         entityDataSet = nbt.contains("entityDataSet") && nbt.getBoolean("entityDataSet").orElse(false);
         overrideVillageRequirements = nbt.contains("overrideVillageRequirements") && nbt.getBoolean("overrideVillageRequirements").orElse(false);
+        chatAIPrompt = nbt.getString("chatAIPrompt").orElse("");
 
         entityData = nbt.getCompound("entityData").orElseGet(() -> {
             resetEntityData();
@@ -265,8 +267,16 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
         nbt.put("entityData", entityData.copy());
         nbt.putBoolean("entityDataSet", entityDataSet);
         nbt.putBoolean("overrideVillageRequirements", overrideVillageRequirements);
+        nbt.putString("chatAIPrompt", chatAIPrompt);
         nbt.put("inbox", NbtHelper.fromList(inbox, v -> v.toTag(provider)));
         return nbt;
+    }
+
+    public String getChatAIPrompt() { return chatAIPrompt; }
+
+    public void setChatAIPrompt(String chatAIPrompt) {
+        this.chatAIPrompt = chatAIPrompt;
+        setDirty();
     }
 
     public void sendMail(Letter pages) {

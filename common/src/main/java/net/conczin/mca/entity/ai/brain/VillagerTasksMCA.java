@@ -468,30 +468,12 @@ public class VillagerTasksMCA {
     }
 
     public static ImmutableList<Pair<Integer, ? extends BehaviorControl<? super VillagerEntityMCA>>> getWorkPackage(VillagerProfession profession, float speedModifier) {
-        boolean isFarmer = profession.equals(BuiltInRegistries.VILLAGER_PROFESSION.getOrThrow(VillagerProfession.FARMER).value());
-        WorkAtPoi villagerWorkTask;
-        if (isFarmer) {
-            villagerWorkTask = new WorkAtComposter();
-        } else {
-            villagerWorkTask = new WorkAtPoi();
+        ImmutableList.Builder<Pair<Integer, ? extends BehaviorControl<? super VillagerEntityMCA>>> tasks = ImmutableList.builder();
+        for (Pair<Integer, ? extends BehaviorControl<? super Villager>> task : VillagerGoalPackages.getWorkPackage(
+                BuiltInRegistries.VILLAGER_PROFESSION.wrapAsHolder(profession), speedModifier)) {
+            tasks.add(Pair.of(task.getFirst(), task.getSecond()));
         }
-
-        return ImmutableList.of(
-                getMinimalLookBehavior(),
-                Pair.of(5, new RunOne<>(
-                        ImmutableList.of(Pair.of(villagerWorkTask, 7),
-                                Pair.of(StrollAroundPoi.create(MemoryModuleType.JOB_SITE, 0.4F, 4), 2),
-                                Pair.of(StrollToPoi.create(MemoryModuleType.JOB_SITE, 0.4F, 1, 10), 5),
-                                Pair.of(StrollToPoiList.create(MemoryModuleType.SECONDARY_JOB_SITE, speedModifier, 1, 6, MemoryModuleType.JOB_SITE), 5),
-                                Pair.of(new HarvestFarmland(), isFarmer ? 2 : 5),
-                                Pair.of(new UseBonemeal(), isFarmer ? 4 : 7))
-                )),
-                Pair.of(10, new ShowTradesToPlayer(400, 1600)),
-                Pair.of(10, SetLookAndInteract.create(EntityType.PLAYER, 4)),
-                Pair.of(2, SetWalkTargetFromBlockMemory.create(MemoryModuleType.JOB_SITE, speedModifier, 9, 100, 1200)),
-                Pair.of(3, new GiveGiftToHero(100)),
-                Pair.of(99, UpdateActivityFromSchedule.create())
-        );
+        return tasks.build();
     }
 
     public static ImmutableList<Pair<Integer, ? extends BehaviorControl<? super VillagerEntityMCA>>> getPlayPackage(float speedModifier) {

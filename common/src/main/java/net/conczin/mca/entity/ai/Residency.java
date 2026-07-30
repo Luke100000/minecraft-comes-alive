@@ -14,12 +14,15 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.tags.BlockTags;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.village.poi.PoiManager;
 import net.minecraft.world.entity.ai.village.poi.PoiTypes;
 import net.minecraft.world.entity.npc.villager.VillagerProfession;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.level.block.BedBlock;
+import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.Optional;
 import java.util.stream.Stream;
@@ -173,6 +176,13 @@ public class Residency {
         return entity.getMCABrain().getMemoryInternal(MemoryModuleType.HOME);
     }
 
+    private static boolean validateBedPoi(ServerLevel level, BlockPos blockPos) {
+        BlockState blockState = level.getBlockState(blockPos);
+        return blockState.is(BlockTags.BEDS)
+                && blockState.hasProperty(BedBlock.OCCUPIED)
+                && !blockState.getValue(BedBlock.OCCUPIED);
+    }
+
     public void setHome(ServerPlayer player) {
         if (!entity.requiresHome()) {
             entity.sendChatMessage(player, "interaction.sethome.temporary");
@@ -185,25 +195,30 @@ public class Residency {
 
         seekHome();
 
-        //check if a bed can be found
-        PoiManager pointOfInterestStorage = ((ServerLevel) player.level()).getPoiManager();
-        Optional<BlockPos> position = pointOfInterestStorage.findAll(registryEntry -> registryEntry.is(PoiTypes.HOME), p -> true, player.blockPosition(), 8, PoiManager.Occupancy.HAS_SPACE).findAny();
-        if (position.isPresent()) {
+        ServerLevel level = (ServerLevel) player.level();
+        PoiManager poiManager = level.getPoiManager();
+        Optional<GlobalPos> previousHome = entity.getBrain().getMemoryInternal(MemoryModuleType.HOME);
+        poiManager.take(
+                registryEntry -> registryEntry.is(PoiTypes.HOME),
+                (registryEntry, blockPos) -> validateBedPoi(level, blockPos),
+                player.blockPosition(),
+                8
+        ).ifPresentOrElse(claimedHome -> {
             entity.sendChatMessage(player, "interaction.sethome.success");
 
-            // Forget the old one
-            entity.getBrain().getMemoryInternal(MemoryModuleType.HOME).ifPresent(p -> {
+            boolean reclaimedSameHome = previousHome
+                    .map(home -> home.dimension().equals(level.dimension()) && home.pos().equals(claimedHome))
+                    .orElse(false);
+            if (!reclaimedSameHome) {
                 entity.releasePoi(MemoryModuleType.HOME);
-                entity.getBrain().eraseMemory(MemoryModuleType.HOME);
-            });
+            }
+            entity.getBrain().eraseMemory(MemoryModuleType.HOME);
 
-            // Remember the new one
-            pointOfInterestStorage.take(registryEntry -> registryEntry.is(PoiTypes.HOME), (p, q) -> true, position.get(), 1);
-            entity.getBrain().setMemory(MemoryModuleType.HOME, GlobalPos.of(entity.level().dimension(), position.get()));
+            entity.getBrain().setMemory(MemoryModuleType.HOME, GlobalPos.of(level.dimension(), claimedHome));
             entity.getBrain().setMemory(MemoryModuleTypeMCA.FORCED_HOME, true);
 
             seekHome();
-        } else {
+        }, () -> {
             entity.getBrain().eraseMemory(MemoryModuleTypeMCA.FORCED_HOME);
 
             getHomeVillage().map(v -> v.getBuildingAt(entity.blockPosition())).filter(Optional::isPresent).map(Optional::get).filter(b -> b.getBuildingType().noBeds()).ifPresentOrElse(building -> {
@@ -211,7 +226,7 @@ public class Residency {
             }, () -> {
                 entity.sendChatMessage(player, "interaction.sethome.bedfail");
             });
-        }
+        });
     }
 
     public void goHome(Player player) {
