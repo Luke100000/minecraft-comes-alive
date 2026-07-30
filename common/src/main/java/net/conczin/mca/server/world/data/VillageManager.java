@@ -430,7 +430,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         return new RegisteredRoomUpdate(Building.validationResult.SUCCESS, pos, village,
                 structure.getId(), floor.id(), expected.getId(),
                 reconciled.previousRoomIds(), reconciled.assignments(),
-                reconciled.removedRoomIds(), playerComponent, matchingTypes);
+                playerComponent, matchingTypes);
     }
 
     private BuildingScanResult scanRoom(Village village,
@@ -695,24 +695,26 @@ public class VillageManager extends SavedData implements Iterable<Village> {
             }
         }
 
-        Set<Integer> removedRoomIds = update.removedRoomIds();
-        int currentMainRoomId = village.getMainRoom(structure)
-                .map(Building::getId)
-                .orElse(-1);
-        // expectedPlayerRoomId is the identity before reconciliation. A merge can
-        // remove that ID while playerComponent carries the surviving assigned ID.
-        int reconciledPlayerRoomId = playerComponent.getId();
-        int prospectiveMainRoomId = removedRoomIds.contains(currentMainRoomId)
-                ? reconciledPlayerRoomId : currentMainRoomId;
+        Set<Integer> removedRoomIds = new HashSet<>(update.previousRoomIds());
+        assignments.stream()
+                .map(RegisteredRoomReconciler.Assignment::roomId)
+                .filter(id -> id >= 0)
+                .forEach(removedRoomIds::remove);
+        int mainRoomId = village.getMainRoom(structure).map(Building::getId).orElse(-1);
+        Building replacementMain = removedRoomIds.contains(mainRoomId)
+                ? assignments.stream()
+                .filter(RegisteredRoomReconciler.Assignment::createsRoom)
+                .map(RegisteredRoomReconciler.Assignment::component)
+                .findFirst().orElse(null)
+                : null;
         List<Building> prospectiveRooms = village.getRooms()
                 .filter(room -> !update.previousRoomIds().contains(room.getId()))
                 .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
         prospectiveRooms.addAll(components);
         Building prospectiveMain = prospectiveRooms.stream()
-                .filter(room -> room.getId() == prospectiveMainRoomId)
-                .findFirst().orElse(null);
-        RoomTypeResolver resolver = RoomTypeResolver.create(
-                village, prospectiveRooms);
+                .filter(room -> room.getId() == mainRoomId)
+                .findFirst().orElse(replacementMain);
+        RoomTypeResolver resolver = RoomTypeResolver.create(village, prospectiveRooms);
 
         if (forcedType != null) {
             String selectedType = resolver.resolve(playerComponent, prospectiveMain).updatedType(forcedType);
@@ -739,14 +741,14 @@ public class VillageManager extends SavedData implements Iterable<Village> {
             existing.setInheritanceEnabled(component.isInheritanceEnabled());
         }
         removedRoomIds.forEach(village.getBuildings()::remove);
-        if (removedRoomIds.contains(currentMainRoomId)) {
-            village.transferMainRoom(structure, currentMainRoomId,
-                    reconciledPlayerRoomId, playerComponent.getStructureId());
-        }
         for (RegisteredRoomReconciler.Assignment assignment : assignments) {
             if (!assignment.createsRoom()) continue;
             Building created = assignment.component();
             village.getBuildings().put(created.getId(), created);
+        }
+        if (replacementMain != null) {
+            village.transferMainRoom(structure, mainRoomId,
+                    replacementMain.getId(), replacementMain.getStructureId());
         }
         lastBuildingId = nextRoomId;
         return Building.validationResult.SUCCESS;
