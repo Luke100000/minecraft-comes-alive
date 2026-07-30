@@ -183,10 +183,6 @@ public class VillageManager extends SavedData implements Iterable<Village> {
     }
 
     public Building.validationResult processBuilding(BlockPos pos) {
-        return processAutoScannedBuilding(pos);
-    }
-
-    private Building.validationResult processAutoScannedBuilding(BlockPos pos) {
         BuildingType externalType = getGroupedBuildingType(pos);
         if (externalType != null) return processExternalBuilding(pos, externalType);
 
@@ -663,8 +659,9 @@ public class VillageManager extends SavedData implements Iterable<Village> {
             return Building.validationResult.OVERLAP;
         }
 
+        List<RegisteredRoomReconciler.Assignment> assignments = update.assignments();
         int nextRoomId = lastBuildingId;
-        for (RegisteredRoomReconciler.Assignment assignment : update.assignments()) {
+        for (RegisteredRoomReconciler.Assignment assignment : assignments) {
             Building component = assignment.component();
             if (component.getStructureId() != update.structureId()
                     || component.getFloorId() != update.floorId()
@@ -687,7 +684,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
                 component.setInheritanceEnabled(playerRoom.isInheritanceEnabled());
             }
         }
-        List<Building> components = update.assignments().stream()
+        List<Building> components = assignments.stream()
                 .map(RegisteredRoomReconciler.Assignment::component)
                 .toList();
         for (int i = 0; i < components.size(); i++) {
@@ -723,7 +720,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
             playerComponent.setType(selectedType);
             playerComponent.setTypeForced(true);
         }
-        for (RegisteredRoomReconciler.Assignment assignment : update.assignments()) {
+        for (RegisteredRoomReconciler.Assignment assignment : assignments) {
             if (!assignment.createsRoom()) continue;
             Building component = assignment.component();
             String type = resolver.resolve(component, prospectiveMain).updatedType(null);
@@ -732,7 +729,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
             component.setTypeForced(false);
         }
 
-        for (RegisteredRoomReconciler.Assignment assignment : update.assignments()) {
+        for (RegisteredRoomReconciler.Assignment assignment : assignments) {
             Building component = assignment.component();
             if (assignment.previous() == null) continue;
             Building existing = assignment.previous();
@@ -741,12 +738,12 @@ public class VillageManager extends SavedData implements Iterable<Village> {
             existing.setTypeForced(component.isTypeForced());
             existing.setInheritanceEnabled(component.isInheritanceEnabled());
         }
-        for (int removedRoomId : removedRoomIds) {
-            village.getBuildings().remove(removedRoomId);
-            village.transferMainRoom(structure, removedRoomId,
+        removedRoomIds.forEach(village.getBuildings()::remove);
+        if (removedRoomIds.contains(currentMainRoomId)) {
+            village.transferMainRoom(structure, currentMainRoomId,
                     reconciledPlayerRoomId, playerComponent.getStructureId());
         }
-        for (RegisteredRoomReconciler.Assignment assignment : update.assignments()) {
+        for (RegisteredRoomReconciler.Assignment assignment : assignments) {
             if (!assignment.createsRoom()) continue;
             Building created = assignment.component();
             village.getBuildings().put(created.getId(), created);
@@ -908,37 +905,6 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         if (village.getBuildings().isEmpty() && village.getExternalBuildingMap().isEmpty()
                 && village.getStructures().isEmpty()) removeVillage(village.getId());
         setDirty();
-    }
-
-    public Set<BlockPos> getBlockedSet(Village village) {
-        Set<BlockPos> blocked = new HashSet<>();
-        if (village != null) village.getRooms().forEach(room -> blocked.add(room.getSourceBlock()));
-        return blocked;
-    }
-
-    public BuildingBlockedResult getBlockedResult(BlockPos pos) {
-        Village village = findNearestVillage(pos, Village.MERGE_MARGIN).orElse(null);
-        Building existing = village == null ? null : village.getBuildingAt(pos).orElse(null);
-        return new BuildingBlockedResult(village == null ? Set.of() : getBlockedSet(village), existing, village);
-    }
-
-    public Building.validationResult processBuilding(BlockPos pos, boolean enforce) {
-        return processBuilding(pos, enforce, null);
-    }
-
-    public Building.validationResult processBuilding(BlockPos pos, boolean enforce, String forcedType) {
-        BuildingType external = getGroupedBuildingType(pos);
-        if (external != null) return processExternalBuilding(pos, external);
-        BuildingScanResult scan = analyzeRoomAddition(pos);
-        if (scan.result() != Building.validationResult.SUCCESS) {
-            if (enforce) {
-                Village village = findNearestVillage(pos, Village.PLAYER_BORDER_MARGIN).orElse(null);
-                if (village != null) village.getInteractionStructureAt(world, pos)
-                        .ifPresent(structure -> removeStructure(village, structure.getId()));
-            }
-            return scan.result();
-        }
-        return commitRoomAddition(scan, forcedType);
     }
 
     private void finalizeVillageMutation(Village target) {
