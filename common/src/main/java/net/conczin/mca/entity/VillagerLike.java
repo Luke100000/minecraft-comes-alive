@@ -615,12 +615,20 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
     default CompoundTag toNbtForConversion() {
         CompoundTag output = new CompoundTag();
         this.getTypeDataManager().save((E) asEntity(), output);
+        writeAdditionalConversionData(output);
         return output;
     }
 
     @SuppressWarnings({"unchecked", "RedundantSuppression"})
     default void readNbtForConversion(CompoundTag input) {
         this.getTypeDataManager().load((E) asEntity(), input);
+        readAdditionalConversionData(input);
+    }
+
+    default void writeAdditionalConversionData(CompoundTag output) {
+    }
+
+    default void readAdditionalConversionData(CompoundTag input) {
     }
 
     void readAdditionalSaveDataForEditor(CompoundTag nbt);

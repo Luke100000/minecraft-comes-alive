@@ -1,6 +1,5 @@
 package net.conczin.mca.client.gui;
 
-import com.mojang.blaze3d.platform.Window;
 import net.conczin.mca.MCA;
 import net.conczin.mca.client.gui.widget.WidgetUtils;
 import net.conczin.mca.client.resources.Icon;
@@ -21,7 +20,6 @@ import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.sounds.SoundEvents;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Matrix3x2fStack;
-import org.lwjgl.opengl.GL11;
 
 import java.util.*;
 
@@ -110,17 +108,7 @@ public class FamilyTreeScreen extends Screen {
 
         focused = null;
 
-        Window window = Minecraft.getInstance().getWindow();
-        double f = window.getGuiScale();
-        int windowHeight = (int) Math.round(window.getGuiScaledHeight() * f);
-
-        int x = 0;
-        int y = (int) (30 * f);
-        int w = (int) (width * f);
-        int h = (int) ((height - 60) * f);
-
-        GL11.glScissor(x, windowHeight - h - y, w, h);
-        GL11.glEnable(GL11.GL_SCISSOR_TEST);
+        context.enableScissor(0, 30, width, height - 30);
 
         final Matrix3x2fStack matrices = context.pose();
         matrices.pushMatrix();
@@ -131,7 +119,7 @@ public class FamilyTreeScreen extends Screen {
         tree.render(context, mouseX - xx, mouseY - yy);
         matrices.popMatrix();
 
-        GL11.glDisable(GL11.GL_SCISSOR_TEST);
+        context.disableScissor();
 
         FamilyTreeNode selected = family.get(focusedEntityId);
 

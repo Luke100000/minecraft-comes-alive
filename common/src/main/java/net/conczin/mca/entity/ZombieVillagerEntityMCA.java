@@ -52,6 +52,7 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
 
     private final ZombieCommandHandler interactions = new ZombieCommandHandler(this);
     private final UpdatableInventory inventory = new UpdatableInventory(27);
+    private String chatAIPrompt = "";
 
     private int burned;
 
@@ -260,6 +261,7 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
         super.readAdditionalSaveData(input);
         getTypeDataManager().load(this, nbt);
         relations.readFromNbt(nbt);
+        chatAIPrompt = nbt.getString(VillagerEntityMCA.CHAT_AI_PROMPT_KEY).orElse("");
 
         updateAttributes();
 
@@ -281,7 +283,18 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
         getTypeDataManager().save(this, nbt);
         relations.writeToNbt(nbt);
         InventoryUtils.saveToNBT(this.registryAccess(), inventory, nbt);
+        nbt.putString(VillagerEntityMCA.CHAT_AI_PROMPT_KEY, chatAIPrompt);
         VillagerEntityMCA.storeMcaSaveData(output, nbt);
+    }
+
+    @Override
+    public void writeAdditionalConversionData(CompoundTag output) {
+        output.putString(VillagerEntityMCA.CHAT_AI_PROMPT_KEY, chatAIPrompt);
+    }
+
+    @Override
+    public void readAdditionalConversionData(CompoundTag input) {
+        chatAIPrompt = input.getString(VillagerEntityMCA.CHAT_AI_PROMPT_KEY).orElse("");
     }
 
     @Override

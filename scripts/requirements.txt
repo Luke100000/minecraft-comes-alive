@@ -1,7 +1,6 @@
 numpy==1.26.2
 opencv-python==4.8.1.78
 tqdm==4.66.3
-python-dotenv~=1.0.1
 google~=3.0.0
 google-cloud-texttospeech~=2.22.0
 boto3~=1.35.83
@@ -9,6 +8,5 @@ botocore~=1.35.83
 protobuf~=5.29.1
 requests~=2.32.3
 openai~=1.58.1
-crowdin-api-client~=1.19.0
 scipy~=1.14.1
 opencv-python~=4.10.0.84

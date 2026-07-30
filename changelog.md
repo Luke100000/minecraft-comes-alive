@@ -1,3 +1,23 @@
+# 8.1.5
+
+* Fixed Family Tree Screen crashing on Vulkan Graphics
+* Added persistent **ChatAI Context** editing with `/mca chatAI context`.
+  * Context can be set separately for the nearest villager, player, village, and world; it is layered into AI conversations.
+  * Villager context survives villager/zombie-villager conversion.
+  * Editing is permission-controlled (level 3 by default, configurable through `villagerChatAIContextPermissionLevel`).
+* Improved ChatAI villager backgrounds, including more varied history, goals, habits, skills, preferences, and beliefs.
+* Improved villager ↔ zombie-villager conversion, preserving MCA identity and persistent data more reliably.
+* Improved ladder and climbable pathfinding, including following, archer movement, and reduced ladder-node work.
+* Improved occupied-bed handling to prevent villagers crowding or behaving erratically around beds.
+* Improved archer movement while mounted and general follow/teleport behavior.
+* Bouquets are treated consistently as gifts for a villager's partner; updated related relationship gifts.
+* Added modded-village support to Destiny locations, including the originating mod in hover information.
+* Improved the Skin Library: sandbox-compatible login and safer cancellation, stale-request protection, likes/submissions paging, editor loading, blacklist filtering, and profession-name fallbacks.
+* Added and improved EMF/custom-model compatibility for player and villager rendering, including preview animation timing and scale handling.
+* Improved compatibility with Smarter Farmers and other integrations.
+* Fixed tombstone/graveyard block-entity data preservation.
+* Updated supporter, translator, and Portuguese localization data.
+
 # 8.1.4
 
 * Port of 1.21.1 and 1.20.1 beta

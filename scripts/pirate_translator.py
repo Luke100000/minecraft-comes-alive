@@ -1,46 +1,46 @@
 import json
-import os
 import urllib.parse
 import urllib.request
+from pathlib import Path
+
 from tqdm.contrib.concurrent import thread_map
 
 
-def translate(s):
-    r = urllib.request.urlopen(
-        "https://pirate.monkeyness.com/api/translate?english=" + urllib.parse.quote(s)
+def translate(text):
+    request = (
+        "https://pirate.monkeyness.com/api/translate?english="
+        + urllib.parse.quote(text)
     )
-    return urllib.parse.unquote(r.read().decode("utf-8"))
+    with urllib.request.urlopen(request, timeout=30) as response:
+        return urllib.parse.unquote(response.read().decode("utf-8"))
 
 
 def load_json(path):
-    if not os.path.exists(path):
+    if not path.exists():
         return {}
-    file = open(path, "r")
-    d = file.read()
-    file.close()
-    return json.loads(d)
+    with path.open(encoding="utf-8") as source:
+        return json.load(source)
 
 
-def save_json(path, d):
-    file = open(path, "w")
-    file.write(json.dumps(d, indent=4))
-    file.close()
+def translate_missing(asset_dir):
+    lang_dir = asset_dir / "lang"
+    phrases = load_json(lang_dir / "en_us.json")
+    pirate_path = lang_dir / "en_pt.json"
+    pirate_phrases = load_json(pirate_path)
+    missing = [(key, text) for key, text in phrases.items() if key not in pirate_phrases]
 
+    if not missing:
+        return
 
-def translate_all(path):
-    phrases = load_json(path + "/lang/en_us.json")
+    keys, texts = zip(*missing)
+    pirate_phrases.update(zip(keys, thread_map(translate, texts)))
 
-    translated_phrases = {}
-    translated = thread_map(translate, phrases.values())
-    for i, key in enumerate(phrases):
-        translated_phrases[key] = translated[i]
-
-    os.makedirs("translated", exist_ok=True)
-    save_json("translated/" + os.path.basename(path) + ".json", translated_phrases)
+    with pirate_path.open("w", encoding="utf-8") as output:
+        json.dump(pirate_phrases, output, indent=2, ensure_ascii=False)
+        output.write("\n")
 
 
 if __name__ == "__main__":
-    assets_dir = "../common/src/main/resources/assets/"
-    translate_all(assets_dir + "mca_books")
-    translate_all(assets_dir + "mca_dialogue")
-    translate_all(assets_dir + "mca")
+    assets_dir = Path(__file__).resolve().parents[1] / "common/src/main/resources/assets"
+    for asset in ("mca_books", "mca_dialogue", "mca"):
+        translate_missing(assets_dir / asset)

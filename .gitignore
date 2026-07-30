@@ -31,6 +31,7 @@ forge*changelog.txt
 /mapppings
 /mcmodsrepo
 /local.properties
+/local-sources/
 
 .vscode/
 *.kra

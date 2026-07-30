@@ -23,11 +23,17 @@ import java.util.UUID;
 
 public class DestinyScreen extends VillagerEditorScreen {
     private static final Identifier LOGO_TEXTURE = MCA.locate("textures/banner.png");
+    private static final int DESTINY_COLUMNS = 3;
+    private static final int DESTINY_ROWS = 3;
+    private static final int DESTINY_LOCATIONS_PER_PAGE = DESTINY_COLUMNS * DESTINY_ROWS;
+    private static final int DESTINY_BUTTON_GAP = 4;
+    private static final int DESTINY_BUTTON_HORIZONTAL_PADDING = 16;
     private final LinkedList<Component> story = new LinkedList<>();
     private final boolean allowTeleportation;
     private String location;
     private boolean teleported = false;
     private ButtonWidget acceptWidget;
+    private int destinyPage;
 
     public DestinyScreen(UUID playerUUID, boolean allowTeleportation) {
         super(playerUUID, playerUUID);
@@ -146,8 +152,73 @@ public class DestinyScreen extends VillagerEditorScreen {
         return split[split.length - 1];
     }
 
+    private List<String> getDestinyLocations() {
+        return Config.getServerConfig().destinySpawnLocations;
+    }
+
+    private MutableComponent getLocationName(String location) {
+        return Component.translatableWithFallback("gui.destiny." + getPath(location), prettifyIdentifier(getPath(location)));
+    }
+
+    private String getLocationModName(String location) {
+        String[] idParts = location.split(":", 2);
+        return idParts.length == 2 && !idParts[0].equalsIgnoreCase("minecraft") ? prettifyIdentifier(idParts[0]) : null;
+    }
+
+    private String prettifyIdentifier(String identifier) {
+        StringBuilder name = new StringBuilder();
+        for (String word : identifier.split("[_\\-/]")) {
+            if (!word.isEmpty()) {
+                if (!name.isEmpty()) name.append(' ');
+                name.append(Character.toUpperCase(word.charAt(0))).append(word.substring(1));
+            }
+        }
+        return name.toString();
+    }
+
+    private void drawDestinyLocations(List<String> locations) {
+        int pageCount = Math.max(1, (locations.size() + DESTINY_LOCATIONS_PER_PAGE - 1) / DESTINY_LOCATIONS_PER_PAGE);
+        destinyPage = Math.clamp(destinyPage, 0, pageCount - 1);
+        List<String> visibleLocations = locations.subList(destinyPage * DESTINY_LOCATIONS_PER_PAGE,
+                Math.min((destinyPage + 1) * DESTINY_LOCATIONS_PER_PAGE, locations.size()));
+        int rows = (int) Math.ceil(visibleLocations.size() / (float) DESTINY_COLUMNS);
+        float offsetY = Math.max(0, DESTINY_ROWS - rows) / 2.0f;
+        for (int row = 0; row < rows; row++) {
+            int rowStart = row * DESTINY_COLUMNS;
+            int entries = Math.min(DESTINY_COLUMNS, visibleLocations.size() - rowStart);
+            int[] widths = new int[entries];
+            MutableComponent[] names = new MutableComponent[entries];
+            int rowWidth = DESTINY_BUTTON_GAP * Math.max(0, entries - 1);
+            for (int column = 0; column < entries; column++) {
+                names[column] = getLocationName(visibleLocations.get(rowStart + column));
+                widths[column] = font.width(names[column]) + DESTINY_BUTTON_HORIZONTAL_PADDING;
+                rowWidth += widths[column];
+            }
+            int buttonX = width / 2 - rowWidth / 2;
+            int buttonY = (int) (height / 2.0f + (row + offsetY) * 24 - 10);
+            for (int column = 0; column < entries; column++) {
+                String destination = visibleLocations.get(rowStart + column);
+                String modName = getLocationModName(destination);
+                addRenderableWidget(modName == null
+                        ? new ButtonWidget(buttonX, buttonY, widths[column], 20, names[column], sender -> selectStory(destination))
+                        : new ButtonWidget(buttonX, buttonY, widths[column], 20, names[column], sender -> selectStory(destination), Component.literal(modName)));
+                buttonX += widths[column] + DESTINY_BUTTON_GAP;
+            }
+        }
+        if (pageCount > 1) {
+            int y = height / 2 + 68;
+            ButtonWidget previous = addRenderableWidget(new ButtonWidget(width / 2 - 68, y, 40, 20, Component.literal("<"), sender -> { destinyPage--; setPage("destiny"); }));
+            previous.active = destinyPage > 0;
+            ButtonWidget indicator = addRenderableWidget(new ButtonWidget(width / 2 - 24, y, 48, 20, Component.literal((destinyPage + 1) + "/" + pageCount), sender -> {}));
+            indicator.active = false;
+            ButtonWidget next = addRenderableWidget(new ButtonWidget(width / 2 + 28, y, 40, 20, Component.literal(">"), sender -> { destinyPage++; setPage("destiny"); }));
+            next.active = destinyPage + 1 < pageCount;
+        }
+    }
+
     @Override
     protected void setPage(String page) {
+        List<String> destinyLocations = page.equals("destiny") ? getDestinyLocations() : List.of();
         if (page.equals("general") && (this.page == null || this.page.equals("loading"))) {
             page = "intro";
         }
@@ -159,8 +230,8 @@ public class DestinyScreen extends VillagerEditorScreen {
             return;
         } else if (page.equals("destiny")) {
             //there is only one entry
-            if (Config.getServerConfig().destinySpawnLocations.size() == 1) {
-                selectStory(Config.getServerConfig().destinySpawnLocations.getFirst());
+            if (destinyLocations.size() == 1) {
+                selectStory(destinyLocations.getFirst());
                 return;
             }
         }
@@ -189,24 +260,7 @@ public class DestinyScreen extends VillagerEditorScreen {
                     }
                 }));
             }
-            case "destiny" -> {
-                int x = 0;
-                int y = 0;
-                for (String location : Config.getServerConfig().destinySpawnLocations) {
-                    int rows = (int) Math.ceil(Config.getServerConfig().destinySpawnLocations.size() / 3.0f);
-                    float offsetX = (y + 1) == rows ? (2 - (Config.getServerConfig().destinySpawnLocations.size() - 1) % 3) / 2.0f : 0;
-                    float offsetY = Math.max(0, 3 - rows) / 2.0f;
-                    MutableComponent name = Component.translatable("gui.destiny." + getPath(location));
-                    addRenderableWidget(new ButtonWidget((int) (width / 2.0f - 96 * 1.5f + (x + offsetX) * 96), (int) (height / 2.0f + (y + offsetY) * 20 - 16), 96, 20, name, sender -> {
-                        selectStory(location);
-                    }));
-                    x++;
-                    if (x >= 3) {
-                        x = 0;
-                        y++;
-                    }
-                }
-            }
+            case "destiny" -> drawDestinyLocations(destinyLocations);
             case "story" ->
                     addRenderableWidget(new ButtonWidget(width / 2 - 48, height / 2 + 32, 96, 20, Component.translatable("gui.destiny.next"), sender -> {
                         //we teleport early here to avoid initial flickering
@@ -231,7 +285,7 @@ public class DestinyScreen extends VillagerEditorScreen {
         story.add(Component.translatable("destiny.story.reason"));
         Map<String, String> map = Config.getServerConfig().destinyLocationsToTranslationMap;
         story.add(Component.translatable(map.getOrDefault(location, map.getOrDefault("default", "missing_default"))));
-        story.add(Component.translatable("destiny.story." + getPath(location)));
+        story.add(Component.translatableWithFallback("destiny.story." + getPath(location), getLocationName(location).getString()));
         this.location = location;
         setPage("story");
     }

@@ -12,6 +12,7 @@ import net.conczin.mca.entity.ai.Relationship;
 import net.conczin.mca.entity.ai.chatAI.modules.*;
 import net.conczin.mca.entity.ai.relationship.AgeState;
 import net.conczin.mca.resources.data.SerializablePair;
+import net.conczin.mca.server.world.data.Village;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
@@ -30,7 +31,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 public class OpenAIChatAI implements ChatAIStrategy {
-    private static final int MAX_MEMORY = 500;
+    private static final int MAX_MEMORY = 768;
     private static final int MAX_MEMORY_TIME = 20 * 60 * 45;
 
     private static final Map<UUID, List<SerializablePair<String, String>>> memory = new HashMap<>();
@@ -186,6 +187,9 @@ public class OpenAIChatAI implements ChatAIStrategy {
                 sb.append("\n");
             }
 
+            ChatAIContext.appendPrompts(sb, player, villager, Village.findNearest(villager).orElse(null));
+
+            // fill in variables and add to system message
             for (String s : input) {
                 for (Map.Entry<String, String> entry : variables.entrySet()) {
                     s = s.replaceAll("\\$" + entry.getKey(), entry.getValue());

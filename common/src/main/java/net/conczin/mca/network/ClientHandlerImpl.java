@@ -106,6 +106,11 @@ public class ClientHandlerImpl implements ClientHandler {
     }
 
     @Override
+    public void handleChatAIContextResponse(ChatAIContextResponse message) {
+        client.gui.setScreen(new ChatAIContextScreen(message));
+    }
+
+    @Override
     public void handleFamilyTreeResponse(GetFamilyTreeResponse message) {
         Screen screen = client.gui.screen();
         if (screen instanceof FamilyTreeScreen gui) {
@@ -235,6 +240,7 @@ public class ClientHandlerImpl implements ClientHandler {
     @Override
     public void handleConfigResponse(ConfigResponse message) {
         Config.setServerConfig(message.getConfig());
+        MCAClient.refreshPlayerDataDependentDimensions();
     }
 
     @Override

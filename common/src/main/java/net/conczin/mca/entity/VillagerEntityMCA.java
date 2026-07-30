@@ -7,6 +7,7 @@ import net.conczin.mca.MCAClient;
 import net.conczin.mca.entity.ai.*;
 import net.conczin.mca.entity.ai.brain.VillagerBrain;
 import net.conczin.mca.entity.ai.brain.VillagerTasksMCA;
+import net.conczin.mca.entity.ai.chatAI.ChatAIContext;
 import net.conczin.mca.entity.ai.navigation.MCAGroundPathNavigation;
 import net.conczin.mca.entity.ai.relationship.*;
 import net.conczin.mca.entity.interaction.VillagerCommandHandler;
@@ -105,12 +106,14 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     private static final CDataParameter<Integer> GROWTH_AMOUNT = CParameter.create("GrowthAmount", -AgeState.getMaxAge());
     private static final float VEHICLE_ATTACHMENT_Y = 0.6F;
     public static final String MCA_DATA_KEY = "MCAData";
+    static final String CHAT_AI_PROMPT_KEY = "ChatAIPrompt";
     private static final CDataManager<VillagerEntityMCA> DATA = createTrackedData(new CDataManager.Builder<>(
             VillagerEntityMCA.class,
             serializer -> SynchedEntityData.defineId(VillagerEntityMCA.class, serializer)
     )).build();
     private static final int RECALCULATE_DIMENSIONS_EVERY_N_TICKS = 100;
     public final ConversationManager conversationManager = new ConversationManager(this);
+    private String chatAIPrompt = "";
     final Identifier EXTRA_HEALTH_EFFECT_ID = MCA.locate("trait_health");
     private final VillagerBrain<VillagerEntityMCA> mcaBrain = new VillagerBrain<>(this);
     private final LongTermMemory longTermMemory = new LongTermMemory(this);
@@ -121,6 +124,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     private final VillagerCommandHandler interactions = new VillagerCommandHandler(this);
     private final UpdatableInventory inventory = new UpdatableInventory(27);
     private final VillagerDimensions.Mutable dimensions = new VillagerDimensions.Mutable(AgeState.UNASSIGNED);
+    private final ArcherMoveControl<VillagerEntityMCA> archerMoveControl;
     long lastCooldown = 0L;
     private PlayerModel playerModel;
     private int despawnDelay;
@@ -144,7 +148,8 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
     public VillagerEntityMCA(EntityType<VillagerEntityMCA> type, Level w, Gender gender) {
         super(type, w);
-        this.moveControl = new ArcherMoveControl<>(this);
+        this.archerMoveControl = new ArcherMoveControl<>(this);
+        this.moveControl = this.archerMoveControl;
         genetics.setGender(gender);
         this.setPathfindingMalus(PathType.WATER_BORDER, 16.0F);
         this.setPathfindingMalus(PathType.TRAPDOOR, 8.0F);
@@ -152,9 +157,20 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         this.getNavigation().setRequiredPathLength((float) Config.getInstance().getVillagerPathfindingDistance());
     }
 
+    public ArcherMoveControl<VillagerEntityMCA> getArcherMoveControl() {
+        return archerMoveControl;
+    }
+
     @Override
     protected PathNavigation createNavigation(Level level) {
         return new MCAGroundPathNavigation(this, level);
+    }
+
+    @Override
+    public void setJumping(boolean jumping) {
+        boolean navigationControlsClimb = this.getNavigation() instanceof MCAGroundPathNavigation navigation
+                && navigation.isControllingClimbable();
+        super.setJumping(jumping && !navigationControlsClimb);
     }
 
     public static <E extends Entity> CDataManager.Builder<E> createTrackedData(CDataManager.Builder<E> builder) {
@@ -1324,9 +1340,11 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     @Override
     @Nullable
     public <T extends Mob> T convertTo(EntityType<T> type, ConversionParams params, ConversionParams.AfterConversion<T> afterConversion) {
-        residency.leaveHome();
-
-        EntityType<? extends Mob> convertedType = !isRemoved() && type == EntityTypes.ZOMBIE_VILLAGER ? getGenetics().getGender().getZombieType() : type;
+        boolean convertingToZombieVillager = !isRemoved() && type == EntityTypes.ZOMBIE_VILLAGER;
+        if (convertingToZombieVillager) {
+            residency.leaveHome();
+        }
+        EntityType<? extends Mob> convertedType = convertingToZombieVillager ? getGenetics().getGender().getZombieType() : type;
 
         UUID oldUuid = getUUID();
 
@@ -1366,6 +1384,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         getTypeDataManager().load(this, nbt);
         relations.readFromNbt(nbt);
         longTermMemory.readFromNbt(nbt);
+        chatAIPrompt = nbt.getString(CHAT_AI_PROMPT_KEY).orElse("");
 
         playerModel = PlayerModel.byId(nbt.getIntOr("PlayerModel", 0));
 
@@ -1406,6 +1425,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
         getTypeDataManager().save(this, nbt);
         InventoryUtils.saveToNBT(this.registryAccess(), inventory, nbt);
+        nbt.putString(CHAT_AI_PROMPT_KEY, getChatAIPrompt());
 
         nbt.putInt("DespawnDelay", this.despawnDelay);
         nbt.putBoolean("InteractedWith", this.interactedWith);
@@ -1415,6 +1435,27 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         }
 
         storeMcaSaveData(output, nbt);
+    }
+
+    public String getChatAIPrompt() {
+        if (chatAIPrompt.isBlank()) {
+            chatAIPrompt = ChatAIContext.createVillagerPrompt();
+        }
+        return chatAIPrompt;
+    }
+
+    public void setChatAIPrompt(String chatAIPrompt) {
+        this.chatAIPrompt = chatAIPrompt;
+    }
+
+    @Override
+    public void writeAdditionalConversionData(CompoundTag output) {
+        output.putString(CHAT_AI_PROMPT_KEY, chatAIPrompt);
+    }
+
+    @Override
+    public void readAdditionalConversionData(CompoundTag input) {
+        chatAIPrompt = input.getString(CHAT_AI_PROMPT_KEY).orElse("");
     }
 
     @Override

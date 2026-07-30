@@ -2,12 +2,12 @@ package net.conczin.mca.entity.ai.brain.tasks;
 
 import com.google.common.collect.ImmutableMap;
 import net.conczin.mca.MCA;
+import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.ArcherMoveControl;
 import net.conczin.mca.entity.ai.brain.sensor.GuardEnemiesSensor;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
-import net.minecraft.world.entity.PathfinderMob;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.ai.behavior.Behavior;
 import net.minecraft.world.entity.ai.behavior.EntityTracker;
@@ -19,7 +19,7 @@ import net.minecraft.world.item.CrossbowItem;
 import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.phys.Vec3;
 
-public class ArcherMovementTask<E extends PathfinderMob> extends Behavior<E> {
+public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E> {
     private static final double SPEED_MODIFIER = 0.5;
     private static final double KITE_SPEED_MODIFIER = 0.85;
     private static final double EMERGENCY_SPEED_MODIFIER = 0.9;
@@ -108,7 +108,7 @@ public class ArcherMovementTask<E extends PathfinderMob> extends Behavior<E> {
         MovementState nextState = selectState(targetDistanceSquared, threatDistanceSquared, threatVerticalDistance);
         enterState(entity, nextState);
 
-        ArcherMoveControl moveControl = getArcherMoveControl(entity);
+        ArcherMoveControl moveControl = entity.getArcherMoveControl();
         moveControl.setEmergencyFleeing(this.state == MovementState.EMERGENCY_FLEE);
 
         switch (this.state) {
@@ -142,7 +142,7 @@ public class ArcherMovementTask<E extends PathfinderMob> extends Behavior<E> {
     @Override
     protected void stop(ServerLevel level, E entity, long gameTime) {
         resetState();
-        ArcherMoveControl moveControl = getArcherMoveControl(entity);
+        ArcherMoveControl moveControl = entity.getArcherMoveControl();
         moveControl.setEmergencyFleeing(false);
         entity.getNavigation().stop();
     }
@@ -301,7 +301,7 @@ public class ArcherMovementTask<E extends PathfinderMob> extends Behavior<E> {
         entity.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
         entity.getNavigation().stop();
 
-        ArcherMoveControl moveControl = getArcherMoveControl(entity);
+        ArcherMoveControl moveControl = entity.getArcherMoveControl();
         this.strafingTime++;
         if (moveControl.wasLastStrafeBlocked() || isStrafeBlocked(entity)) {
             this.blockedStrafeTicks++;
@@ -325,7 +325,7 @@ public class ArcherMovementTask<E extends PathfinderMob> extends Behavior<E> {
             this.strafingTime = 0;
         }
 
-        moveControl.strafe(0.0F, this.strafingClockwise ? 0.5F : -0.5F);
+        moveControl.strafeForArcher(0.0F, this.strafingClockwise ? 0.5F : -0.5F);
     }
 
     private boolean isStrafeBlocked(E entity) {
@@ -379,7 +379,7 @@ public class ArcherMovementTask<E extends PathfinderMob> extends Behavior<E> {
 
     private void logDebugState(ServerLevel level, E entity, LivingEntity target, LivingEntity movementThreat, boolean visible,
                                double targetDistanceSquared, double threatDistanceSquared, double threatVerticalDistance) {
-        ArcherMoveControl moveControl = getArcherMoveControl(entity);
+        ArcherMoveControl moveControl = entity.getArcherMoveControl();
         String stateKey = target.getUUID() + ":" + movementThreat.getUUID() + ":" + this.state + ":" + visible;
         long gameTime = level.getGameTime();
         if (stateKey.equals(this.lastDebugState) && gameTime - this.lastDebugLogTime < DEBUG_LOG_INTERVAL_TICKS) {
@@ -452,14 +452,6 @@ public class ArcherMovementTask<E extends PathfinderMob> extends Behavior<E> {
 
     private static boolean isHoldingRangedWeapon(Mob entity) {
         return entity.isHolding(stack -> stack.getItem() instanceof BowItem || stack.getItem() instanceof CrossbowItem);
-    }
-
-    private static ArcherMoveControl getArcherMoveControl(Mob entity) {
-        if (entity.getMoveControl() instanceof ArcherMoveControl archerMoveControl) {
-            return archerMoveControl;
-        }
-
-        throw new IllegalStateException(entity.getType() + " must use ArcherMoveControl for archer movement");
     }
 
     private enum MovementState {

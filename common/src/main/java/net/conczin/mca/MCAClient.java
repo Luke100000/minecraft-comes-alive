@@ -31,16 +31,15 @@ public class MCAClient {
     }
 
     public static Optional<VillagerLike<?>> getPlayerData(UUID uuid) {
-        if (needsPlayerData()) {
-            if (!MCAClient.playerDataRequests.contains(uuid) && Minecraft.getInstance().getConnection() != null) {
-                MCAClient.playerDataRequests.add(uuid);
-                Network.sendToServer(new PlayerDataRequest(uuid));
-            }
-            if (MCAClient.playerData.containsKey(uuid)) {
-                return Optional.of(MCAClient.playerData.get(uuid));
-            }
+        if (!isPlayerRendererAllowed() && !needsPlayerDataForDimensions()) {
+            return Optional.empty();
         }
-        return Optional.empty();
+
+        if (!playerDataRequests.contains(uuid) && Minecraft.getInstance().getConnection() != null) {
+            playerDataRequests.add(uuid);
+            Network.sendToServer(new PlayerDataRequest(uuid));
+        }
+        return Optional.ofNullable(playerData.get(uuid));
     }
 
     public static boolean useExpandedPersonalityTranslations() {
@@ -51,11 +50,11 @@ public class MCAClient {
     }
 
     public static boolean useGeneticsRenderer(UUID uuid) {
-        return getGeneticsRendererData(uuid).isPresent();
+        return isPlayerRendererAllowed() && getGeneticsRendererData(uuid).isPresent();
     }
 
     public static boolean useVillagerRenderer(UUID uuid) {
-        return getVillagerRendererData(uuid).isPresent();
+        return isPlayerRendererAllowed() && getVillagerRendererData(uuid).isPresent();
     }
 
     public static Optional<VillagerLike<?>> getGeneticsRendererData(UUID uuid) {
@@ -120,8 +119,23 @@ public class MCAClient {
         return id == 0 ? 1 : id;
     }
 
-    private static boolean needsPlayerData() {
-        return isPlayerRendererAllowed() || Config.getServerConfig().scalePlayerHitboxWithSizeAndWidth;
+    public static void refreshPlayerDataDependentDimensions() {
+        Minecraft client = Minecraft.getInstance();
+        if (client.level == null) {
+            return;
+        }
+
+        for (Player player : client.level.players()) {
+            if (needsPlayerDataForDimensions()) {
+                getPlayerData(player.getUUID());
+            }
+            player.refreshDimensions();
+        }
+    }
+
+    private static boolean needsPlayerDataForDimensions() {
+        return Config.getServerConfig().scalePlayerHitboxWithSizeAndWidth
+                || Config.getInstance().scaleEyeHeightWithPlayerHeight;
     }
 
     public static boolean isPlayerRendererAllowed() {
