@@ -43,6 +43,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.ToDoubleFunction;
 
 import static net.minecraft.world.entity.LivingEntity.getSlotForHand;
 
@@ -604,7 +605,8 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
     }
 
     @Nullable
-    static <T extends Mob> T convertPreservingUuid(Mob source, EntityType<T> type) {
+    static <T extends Mob> T convertPreservingUuid(Mob source, EntityType<T> type, boolean keepEquipment,
+                                                    ToDoubleFunction<EquipmentSlot> dropChanceGetter) {
         if (source.isRemoved()) {
             return null;
         }
@@ -626,6 +628,17 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
             converted.setPersistenceRequired();
         }
         converted.setInvulnerable(source.isInvulnerable());
+        if (keepEquipment) {
+            converted.setCanPickUpLoot(source.canPickUpLoot());
+            for (EquipmentSlot slot : EquipmentSlot.values()) {
+                ItemStack stack = source.getItemBySlot(slot);
+                if (!stack.isEmpty()) {
+                    converted.setItemSlot(slot, stack.copyAndClear());
+                    converted.setDropChance(slot, (float) dropChanceGetter.applyAsDouble(slot));
+                }
+            }
+        }
+
         converted.setUUID(source.getUUID());
 
         source.discard();
