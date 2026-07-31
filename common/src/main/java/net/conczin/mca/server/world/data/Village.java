@@ -697,24 +697,20 @@ public class Village implements Iterable<Building> {
                 .filter(structure -> structure.getId() >= 0)
                 .min(Comparator.comparingInt(Structure::getId))
                 .orElseGet(() -> members.stream().findFirst().orElseThrow()));
-        int surfaceY = root.getSurfaceReferenceY();
 
-        FloorRef establishedGround = establishedGroundFloor(members, root, surfaceY, tolerance);
+        FloorRef establishedGround = establishedGroundFloor(members, root, tolerance);
         int groundBand = establishedGround == null ? -1 : java.util.stream.IntStream.range(0, bands.size())
                 .filter(index -> bands.get(index).contains(establishedGround))
                 .findFirst()
                 .orElse(-1);
         if (groundBand < 0) {
+            FloorRef sourceGround = root.physicalFloorAt(root.getSource())
+                    .map(floor -> new FloorRef(root, floor))
+                    .orElse(floors.getFirst());
             groundBand = java.util.stream.IntStream.range(0, bands.size())
-                    .filter(index -> (long) bands.get(index).getFirst().floor().anchorY()
-                            >= (long) surfaceY - tolerance)
-                    .boxed()
-                    .min(Comparator.comparingLong((Integer index) -> Math.abs(
-                                    (long) bands.get(index).getFirst().floor().anchorY() - surfaceY))
-                            .thenComparing(Comparator.comparingInt((Integer index) ->
-                                    bands.get(index).getFirst().floor().anchorY()).reversed())
-                            .thenComparingInt(Integer::intValue))
-                    .orElse(bands.size());
+                    .filter(index -> bands.get(index).contains(sourceGround))
+                    .findFirst()
+                    .orElse(0);
         }
 
         Map<FloorRef, Integer> numbers = new HashMap<>();
@@ -726,30 +722,26 @@ public class Village implements Iterable<Building> {
     }
 
     /**
-     * Once a logical building has a canonical Ground Floor, attaching a new physical Structure
-     * must not redefine it. Prefer the oldest persisted Structure that already owns Floor 0;
-     * negative-ID prospective candidates are deliberately ignored.
+     * Keep a canonical persisted Ground Floor stable. Fresh multi-floor scans initially have 0 on
+     * every detected Floor, so multiple zero Floors only count as established when they occupy the
+     * same logical height band. Prospective negative-ID Structures are deliberately ignored.
      */
     private static FloorRef establishedGroundFloor(Collection<Structure> members,
                                                    Structure root,
-                                                   int surfaceY,
                                                    int tolerance) {
-        return members.stream()
+        List<FloorRef> candidates = members.stream()
                 .filter(structure -> structure.getId() >= 0)
                 .sorted(Comparator.comparing((Structure structure) -> structure.getId() != root.getId())
                         .thenComparingInt(Structure::getId))
-                .map(structure -> structure.getFloors().stream()
+                .flatMap(structure -> structure.getFloors().stream()
                         .filter(floor -> floor.floorNumber() == 0)
-                        .filter(floor -> (long) floor.anchorY() >= (long) surfaceY - tolerance)
-                        .min(Comparator.comparingLong((StructureFloor floor) ->
-                                        Math.abs((long) floor.anchorY() - surfaceY))
-                                .thenComparing(Comparator.comparingInt(StructureFloor::anchorY).reversed())
-                                .thenComparingInt(StructureFloor::id))
-                        .map(floor -> new FloorRef(structure, floor))
-                        .orElse(null))
-                .filter(Objects::nonNull)
-                .findFirst()
-                .orElse(null);
+                        .map(floor -> new FloorRef(structure, floor)))
+                .toList();
+        if (candidates.isEmpty()) return null;
+
+        int minY = candidates.stream().mapToInt(candidate -> candidate.floor().anchorY()).min().orElseThrow();
+        int maxY = candidates.stream().mapToInt(candidate -> candidate.floor().anchorY()).max().orElseThrow();
+        return maxY - minY <= tolerance ? candidates.getFirst() : null;
     }
 
     private void normalizeLogicalBuildings() {

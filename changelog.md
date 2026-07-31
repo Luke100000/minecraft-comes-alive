@@ -22,6 +22,13 @@
 * Fixed villagers being stuck in doors
 * Fixed villagers getting stuck on their way to a bed
 * 
+# 7.7.32-beta.2
+
+* Generic mprovements to floor system, should be more reliable
+* Change tooltip formatting
+* Improved Ground Floor detection
+* Fixed wrong building labelling
+
 # 7.7.32
 
 * Fixed Graveyard data loss issue
