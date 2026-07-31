@@ -60,7 +60,6 @@ final class BlueprintMapRenderer implements AutoCloseable {
                         boolean showBuildingIcons,
                         boolean showPlayerHead,
                         LocalPlayer player,
-                        int playerLogicalBuildingId,
                         double playerRenderX,
                         double playerRenderZ,
                         int mouseX,
@@ -93,18 +92,13 @@ final class BlueprintMapRenderer implements AutoCloseable {
         List<MapFootprintLayer> roomHitTestLayers = frontToBack(footprintLayers);
         int hoveredLogicalBuildingId = hoveredLogicalBuildingId(
                 roomHitTestLayers, structureLayers, hoveredMapCell, mouseX, mouseY,
-                viewport, selectedFloor, playerLogicalBuildingId, mouseInsideMap);
-        int activeLogicalBuildingId = hoveredLogicalBuildingId >= 0
-                ? hoveredLogicalBuildingId
-                : playerLogicalBuildingId >= 0
-                ? playerLogicalBuildingId
-                : topLogicalBuildingId(footprintLayers, structureLayers);
+                viewport, selectedFloor, mouseInsideMap);
         List<MapFootprintLayer> roomRenderLayers = new ArrayList<>(footprintLayers);
         roomRenderLayers.sort(Comparator.comparingInt(
-                layer -> layer.logicalBuildingId() == activeLogicalBuildingId ? 1 : 0));
+                layer -> layer.logicalBuildingId() == hoveredLogicalBuildingId ? 1 : 0));
         List<MapStructureLayer> structureRenderLayers = new ArrayList<>(structureLayers);
         structureRenderLayers.sort(Comparator.comparingInt(
-                layer -> layer.logicalBuildingId() == activeLogicalBuildingId ? 1 : 0));
+                layer -> layer.logicalBuildingId() == hoveredLogicalBuildingId ? 1 : 0));
 
         context.enableScissor(
                 viewport.left() + 1,
@@ -155,7 +149,7 @@ final class BlueprintMapRenderer implements AutoCloseable {
                     context,
                     layer.shellSpans(),
                     STRUCTURE_BASE_COLOR,
-                    layer.logicalBuildingId() == activeLogicalBuildingId,
+                    layer.logicalBuildingId() == hoveredLogicalBuildingId,
                     viewport
             );
         }
@@ -166,7 +160,7 @@ final class BlueprintMapRenderer implements AutoCloseable {
                     context,
                     layer.borderEdges(),
                     STRUCTURE_BASE_COLOR,
-                    layer.logicalBuildingId() == activeLogicalBuildingId,
+                    layer.logicalBuildingId() == hoveredLogicalBuildingId,
                     viewport
             );
         }
@@ -188,8 +182,7 @@ final class BlueprintMapRenderer implements AutoCloseable {
             }
         }
 
-        // Paint back-to-front, moving the active logical building last. Hover ownership is
-        // resolved from physical elevation first, so hovering can override the player's building.
+        // Paint back-to-front, moving the hovered logical building last.
         for (MapFootprintLayer layer : roomRenderLayers) {
             boolean hovering = hoveredFootprintLayers.contains(layer);
             renderRoomFootprint(
@@ -268,7 +261,7 @@ final class BlueprintMapRenderer implements AutoCloseable {
                 showPlayerHead
         );
 
-        return new RenderResult(hoverTargets, activeLogicalBuildingId);
+        return new RenderResult(hoverTargets, hoveredLogicalBuildingId);
     }
 
     private static void pushWorldTransform(PoseStack matrices, BlueprintMapViewport viewport) {
@@ -521,7 +514,6 @@ final class BlueprintMapRenderer implements AutoCloseable {
                                                  int mouseY,
                                                  BlueprintMapViewport viewport,
                                                  Integer selectedFloor,
-                                                 int playerLogicalBuildingId,
                                                  boolean mouseInsideMap) {
         if (!mouseInsideMap) return -1;
 
@@ -539,10 +531,6 @@ final class BlueprintMapRenderer implements AutoCloseable {
                 hovered.add(layer.logicalBuildingId());
             }
         }
-        if (hovered.size() == 1) return hovered.iterator().next();
-        if (playerLogicalBuildingId >= 0 && hovered.contains(playerLogicalBuildingId)) {
-            return playerLogicalBuildingId;
-        }
         return hovered.stream().findFirst().orElse(-1);
     }
 
@@ -554,23 +542,6 @@ final class BlueprintMapRenderer implements AutoCloseable {
                 .anyMatch(layer -> layer.outlineCells().contains(cell));
     }
 
-    private static int topLogicalBuildingId(List<MapFootprintLayer> roomLayers,
-                                            List<MapStructureLayer> structureLayers) {
-        MapStructureLayer structure = structureLayers.stream()
-                .max(Comparator.comparingInt(MapStructureLayer::anchorY)
-                        .thenComparingInt(MapStructureLayer::logicalBuildingId))
-                .orElse(null);
-        MapFootprintLayer room = roomLayers.stream()
-                .max(Comparator.comparingInt(MapFootprintLayer::anchorY)
-                        .thenComparingInt(MapFootprintLayer::logicalBuildingId))
-                .orElse(null);
-        if (structure == null) return room == null ? -1 : room.logicalBuildingId();
-        if (room == null) return structure.logicalBuildingId();
-        return room.anchorY() > structure.anchorY()
-                || room.anchorY() == structure.anchorY()
-                && room.logicalBuildingId() > structure.logicalBuildingId()
-                ? room.logicalBuildingId() : structure.logicalBuildingId();
-    }
 
     private static boolean hasRoomHoverForBuilding(List<HoverTarget> hoverTargets, int buildingId) {
         return hoverTargets.stream().anyMatch(target -> !target.structure()
@@ -639,7 +610,7 @@ final class BlueprintMapRenderer implements AutoCloseable {
         terrainRenderer.close();
     }
 
-    record RenderResult(List<HoverTarget> hoverTargets, int activeLogicalBuildingId) {
+    record RenderResult(List<HoverTarget> hoverTargets, int hoveredLogicalBuildingId) {
         RenderResult {
             hoverTargets = List.copyOf(hoverTargets);
         }

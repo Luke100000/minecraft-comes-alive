@@ -619,9 +619,6 @@ public class BlueprintScreen extends ExtendedScreen {
         LocalPlayer player = minecraft == null ? null : minecraft.player;
         double playerRenderX = player == null ? 0.0D : Mth.lerp(partialTick, player.xo, player.getX());
         double playerRenderZ = player == null ? 0.0D : Mth.lerp(partialTick, player.zo, player.getZ());
-        int playerLogicalBuildingId = player == null ? -1 : getPlayerRoomScanPlan().building()
-                .map(room -> village.getLogicalBuildingId(room.getStructureId()))
-                .orElse(-1);
         double villageCenterX = (village.getBox().minX() + village.getBox().maxX() + 1) / 2.0D;
         double villageCenterZ = (village.getBox().minZ() + village.getBox().maxZ() + 1) / 2.0D;
         double requestedMapCenterX = playerCentered && player != null ? playerRenderX : villageCenterX;
@@ -644,7 +641,6 @@ public class BlueprintScreen extends ExtendedScreen {
                 showBuildingIcons,
                 showPlayerHead,
                 player,
-                playerLogicalBuildingId,
                 playerRenderX,
                 playerRenderZ,
                 mouseX,
@@ -663,7 +659,7 @@ public class BlueprintScreen extends ExtendedScreen {
         }
         if (uniqueTargets.isEmpty()) return;
 
-        BlueprintMapRenderer.HoverTarget preferred = uniqueTargets.get(renderResult.activeLogicalBuildingId());
+        BlueprintMapRenderer.HoverTarget preferred = uniqueTargets.get(renderResult.hoveredLogicalBuildingId());
         BlueprintMapRenderer.HoverTarget active = preferred != null
                 ? preferred : uniqueTargets.values().iterator().next();
 

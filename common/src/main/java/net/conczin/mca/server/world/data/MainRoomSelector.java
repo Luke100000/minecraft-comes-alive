@@ -14,19 +14,19 @@ final class MainRoomSelector {
     static boolean ensureValid(List<Structure> structures, Collection<Building> rooms) {
         Map<Integer, Structure> structuresById = structuresById(structures);
         Map<Integer, Building> eligible = eligibleRooms(structuresById, rooms);
-        Selection manual = manualSelection(structures, eligible);
-        return applyIfChanged(structures, manual != null
-                ? manual : automaticSelection(structuresById, eligible.values()));
+        Selection current = currentSelection(structures, eligible);
+        return applyIfChanged(structures, current != null
+                ? current : automaticSelection(structuresById, eligible.values()));
     }
 
-    private static Selection manualSelection(List<Structure> structures,
-                                             Map<Integer, Building> eligible) {
+    private static Selection currentSelection(List<Structure> structures,
+                                              Map<Integer, Building> eligible) {
         if (structures == null || structures.isEmpty()) return null;
         return structures.stream()
-                .filter(structure -> !structure.isMainRoomAutomatic())
+                .filter(structure -> structure.getMainRoomId() >= 0)
                 .map(structure -> {
                     Building room = eligible.get(structure.getMainRoomId());
-                    return room == null ? null : selection(room, false);
+                    return room == null ? null : selection(room, structure.isMainRoomAutomatic());
                 })
                 .filter(java.util.Objects::nonNull)
                 .min(Comparator.comparingInt(Selection::structureId)

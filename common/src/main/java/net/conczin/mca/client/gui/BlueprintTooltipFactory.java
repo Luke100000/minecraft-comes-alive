@@ -189,11 +189,15 @@ final class BlueprintTooltipFactory {
     private static void appendPoi(List<Component> lines, Map<ResourceLocation, List<BlockPos>> poi, Component title) {
         if (poi.isEmpty()) return;
         lines.add(detail(title));
-        poiLines(poi).forEach(item -> lines.add(detail(item)));
+        poiLines(poi).forEach(item -> lines.add(detailListItem(item)));
     }
 
     private static Component detail(Component component) {
         return Component.literal(DETAIL_INDENT).append(component);
+    }
+
+    private static Component detailListItem(Component component) {
+        return Component.literal(DETAIL_INDENT + DETAIL_INDENT + "- ").append(component);
     }
 
     private static Component typeLabel(BuildingType type) {

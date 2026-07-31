@@ -762,7 +762,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
 
     private static String chooseInitialRoomCategory(BuildingScanResult scan, String forcedType) {
         if (forcedType != null) return forcedType;
-        if (scan.matchingTypes().isEmpty()) return "house";
+        if (scan.matchingTypes().isEmpty()) return "building";
         return scan.matchingTypes().getFirst();
     }
 
