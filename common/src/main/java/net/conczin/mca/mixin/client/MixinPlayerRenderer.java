@@ -65,6 +65,8 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<LivingEnt
     private ModelPart mca$firstPersonSourceArm;
     @Unique
     private boolean mca$firstPersonRightArm;
+    @Unique
+    private boolean mca$firstPersonHasSleeve;
 
     protected MixinPlayerRenderer(EntityRendererProvider.Context context, PlayerModel model, float shadowRadius) {
         super(context, model, shadowRadius);
@@ -163,6 +165,7 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<LivingEnt
         mca$firstPersonPlayer = Minecraft.getInstance().player;
         mca$firstPersonSourceArm = arm;
         mca$firstPersonRightArm = arm == model.rightArm;
+        mca$firstPersonHasSleeve = hasSleeve;
     }
 
     @WrapOperation(
@@ -205,6 +208,7 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<LivingEnt
     ) {
         mca$firstPersonPlayer = null;
         mca$firstPersonSourceArm = null;
+        mca$firstPersonHasSleeve = false;
     }
 
     @Unique
@@ -231,6 +235,7 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<LivingEnt
         }
 
         var animatedArm = rightArm ? mca$villagerAnimationModel.rightArm : mca$villagerAnimationModel.leftArm;
+        var animatedSleeve = rightArm ? mca$villagerAnimationModel.rightSleeve : mca$villagerAnimationModel.leftSleeve;
         if (mca$firstPersonSourceArm == null) {
             return false;
         }
@@ -243,10 +248,10 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<LivingEnt
         PlayerEntityExtendedModel<?> clothingModel = rightArm ? mca$firstPersonRightClothingModel : mca$firstPersonLeftClothingModel;
         skinModel.applyVillagerDimensions(visuals);
         clothingModel.applyVillagerDimensions(visuals);
-        mca$prepareArm(skinModel, rightArm ? HumanoidArm.RIGHT : HumanoidArm.LEFT);
-        mca$prepareArm(clothingModel, rightArm ? HumanoidArm.RIGHT : HumanoidArm.LEFT);
-        mca$copyArmPose(skinModel, animatedArm, rightArm);
-        mca$copyArmPose(clothingModel, animatedArm, rightArm);
+        mca$prepareArm(skinModel, rightArm ? HumanoidArm.RIGHT : HumanoidArm.LEFT, false);
+        mca$prepareArm(clothingModel, rightArm ? HumanoidArm.RIGHT : HumanoidArm.LEFT, mca$firstPersonHasSleeve);
+        mca$copyArmPose(skinModel, animatedArm, animatedSleeve, rightArm);
+        mca$copyArmPose(clothingModel, animatedArm, animatedSleeve, rightArm);
 
         boolean renderedSkin = mca$renderSkinArm(
                 poseStack,
@@ -313,7 +318,7 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<LivingEnt
     }
 
     @Unique
-    private static void mca$prepareArm(PlayerEntityExtendedModel<?> model, HumanoidArm arm) {
+    private static void mca$prepareArm(PlayerEntityExtendedModel<?> model, HumanoidArm arm, boolean showSleeve) {
         var armPart = arm == HumanoidArm.RIGHT ? model.rightArm : model.leftArm;
         var sleevePart = arm == HumanoidArm.RIGHT ? model.rightSleeve : model.leftSleeve;
 
@@ -321,16 +326,16 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<LivingEnt
         armPart.resetPose();
         sleevePart.resetPose();
         armPart.visible = true;
-        sleevePart.visible = true;
+        sleevePart.visible = showSleeve;
         model.leftArm.zRot = -0.1F;
         model.rightArm.zRot = 0.1F;
     }
 
     @Unique
-    private static void mca$copyArmPose(PlayerEntityExtendedModel<?> model, ModelPart animatedArm, boolean rightArm) {
+    private static void mca$copyArmPose(PlayerEntityExtendedModel<?> model, ModelPart animatedArm, ModelPart animatedSleeve, boolean rightArm) {
         ModelPart arm = rightArm ? model.rightArm : model.leftArm;
         ModelPart sleeve = rightArm ? model.rightSleeve : model.leftSleeve;
         arm.loadPose(animatedArm.storePose());
-        sleeve.loadPose(arm.storePose());
+        sleeve.loadPose(animatedSleeve.storePose());
     }
 }
