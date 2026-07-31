@@ -1,3 +1,7 @@
+# 8.1.6
+
+* Fix textures
+
 # 8.1.5
 
 * Fixed Family Tree Screen crashing on Vulkan Graphics

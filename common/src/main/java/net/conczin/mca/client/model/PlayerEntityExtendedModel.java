@@ -57,7 +57,7 @@ public class PlayerEntityExtendedModel<T extends LivingEntity> extends PlayerMod
         CommonVillagerModel.copyPartState(target.rightArm, rightArm);
         CommonVillagerModel.copyPartState(target.leftLeg, leftLeg);
         CommonVillagerModel.copyPartState(target.rightLeg, rightLeg);
-        CommonVillagerModel.copyPartState(target.hat, target.head);
+        CommonVillagerModel.copyPartState(target.hat, hat);
         if (target instanceof CommonVillagerModel<?> villagerTarget) {
             villagerTarget.syncWearParts();
         }
@@ -155,11 +155,8 @@ public class PlayerEntityExtendedModel<T extends LivingEntity> extends PlayerMod
 
     @Override
     public void syncWearParts() {
-        CommonVillagerModel.copyPartState(leftPants, leftLeg);
-        CommonVillagerModel.copyPartState(rightPants, rightLeg);
-        CommonVillagerModel.copyPartState(leftSleeve, leftArm);
-        CommonVillagerModel.copyPartState(rightSleeve, rightArm);
-        CommonVillagerModel.copyPartState(jacket, body);
+        // Player wear parts are children of their canonical bones in 26.1.2+.
+        // Only the detached MCA breastplate needs an explicit root-level pose sync.
         CommonVillagerModel.copyPartState(breastsWear, breasts);
     }
 
