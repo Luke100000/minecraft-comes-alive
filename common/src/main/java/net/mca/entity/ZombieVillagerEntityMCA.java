@@ -117,7 +117,7 @@ public class ZombieVillagerEntityMCA extends ZombieVillagerEntity implements Vil
 
     @Override
     public double getHeightOffset() {
-        return -0.35;
+        return -0.35 + 0.6 * (1.0 - getRawVerticalScaleFactor());
     }
 
     @Override

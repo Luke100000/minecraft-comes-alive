@@ -1,3 +1,7 @@
+# 7.6.28-beta.10
+
+* Fix villagers being positioned wrong on horses/boats.
+
 # 7.6.28-beta.9
 
 * Fixed bugs with some compatibility mods (like Epic Fight)

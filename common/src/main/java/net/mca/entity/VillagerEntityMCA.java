@@ -1062,7 +1062,7 @@ public class VillagerEntityMCA extends VillagerEntity implements VillagerLike<Vi
         if (vehicle instanceof PlayerEntity) {
             return -0.2;
         }
-        return -0.35;
+        return -0.35 + 0.6 * (1.0 - getRawVerticalScaleFactor());
     }
 
     @Override
