@@ -8,7 +8,9 @@ import net.conczin.mca.network.s2c.ChatAIContextResponse;
 import net.conczin.mca.util.compat.ButtonWidget;
 import net.minecraft.Util;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.MultiLineEditBox;
+import net.minecraft.client.gui.components.StringWidget;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
@@ -23,6 +25,7 @@ public class ChatAIContextScreen extends Screen {
     private final Map<Tab, String> prompts = new EnumMap<>(Tab.class);
     private Tab selectedTab = Tab.VILLAGER;
     private MultiLineEditBox promptField;
+    private EditBox nicknameField;
 
     public ChatAIContextScreen(ChatAIContextResponse context) {
         super(Component.translatable("gui.chat_ai_context.title"));
@@ -60,10 +63,27 @@ public class ChatAIContextScreen extends Screen {
                 Component.literal("?"), Component.translatable("gui.chat_ai_context.help.tooltip"), ignored -> openHelp()));
 
         // Prompt
-        promptField = addRenderableWidget(new MultiLineEditBox(font, left + 12, top + 70, 276, 128,
-                Component.translatable("gui.chat_ai_context.placeholder"), Component.translatable("gui.chat_ai_context.prompt")));
+        if (selectedTab == Tab.VILLAGER) {
+            //nickname text field
+            addRenderableWidget(new StringWidget(left + 12, top + 70, 50, 15, Component.translatable("gui.chat_ai_context.nickname"), font));
+
+            nicknameField = addRenderableWidget(new EditBox(font, left + 62, top + 70, 226, 15,
+                    Component.translatable("gui.chat_ai_context.nickname_placeholder")));
+
+            promptField = addRenderableWidget(new MultiLineEditBox(font, left + 12, top + 90, 276, 108,
+                    Component.translatable("gui.chat_ai_context.placeholder"), Component.translatable("gui.chat_ai_context.prompt")));
+        } else {
+            promptField = addRenderableWidget(new MultiLineEditBox(font, left + 12, top + 70, 276, 128,
+                    Component.translatable("gui.chat_ai_context.placeholder"), Component.translatable("gui.chat_ai_context.prompt")));
+        }
         promptField.setCharacterLimit(MAX_PROMPT_LENGTH);
         promptField.setValue(prompts.get(selectedTab));
+
+        nicknameField.setHint(
+                Component.translatable("gui.chat_ai_context.nickname_placeholder")
+                        .withColor(0x808080)
+        );
+        nicknameField.setValue(context.villagerNickname());
 
         // Close
         addRenderableWidget(new ButtonWidget(width / 2 - 44, top + 205, 88, 20,
@@ -82,12 +102,13 @@ public class ChatAIContextScreen extends Screen {
     private void saveCurrent() {
         if (promptField != null && selectedTab.available(context)) {
             String prompt = promptField.getValue();
-            if (prompt.equals(prompts.get(selectedTab))) {
+            String nickname = nicknameField.getValue();
+            if (prompt.equals(prompts.get(selectedTab)) && nickname.equals(context.villagerNickname())) {
                 return;
             }
             prompts.put(selectedTab, prompt);
             Network.sendToServer(new ChatAIContextUpdateRequest(
-                    selectedTab.target, context.dimension(), context.villagerUuid(), context.villageId(), prompt
+                    selectedTab.target, context.dimension(), context.villagerUuid(), context.villageId(), prompt, nickname
             ));
         }
     }

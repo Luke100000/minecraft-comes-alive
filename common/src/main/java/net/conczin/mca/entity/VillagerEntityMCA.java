@@ -32,7 +32,6 @@ import net.minecraft.core.particles.ParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.nbt.NbtOps;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.SynchedEntityData;
@@ -129,6 +128,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     private boolean recoveryFoodFromInventory;
     private int recoveryFoodUseTicks;
     private ItemStack recoveryPreviousMainHand = ItemStack.EMPTY;
+    private final Nicknames nicknames = new Nicknames();
 
     public VillagerEntityMCA(EntityType<VillagerEntityMCA> type, Level w, Gender gender) {
         super(type, w);
@@ -1488,6 +1488,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         getTypeDataManager().load(this, data);
         relations.readFromNbt(data);
         longTermMemory.readFromNbt(data);
+        nicknames.readFromNbt(data);
         chatAIPrompt = data.getString(CHAT_AI_PROMPT_KEY);
 
         playerModel = PlayerModel.byId(data.getInt("PlayerModel"));
@@ -1547,6 +1548,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
         relations.writeToNbt(nbt);
         longTermMemory.writeToNbt(nbt);
+        nicknames.writeToNbt(nbt);
 
         getTypeDataManager().save(this, nbt);
         InventoryUtils.saveToNBT(this.registryAccess(), inventory, nbt);
@@ -1655,5 +1657,17 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     public void customLevelUp() {
         this.setVillagerData(this.getVillagerData().setLevel(this.getVillagerData().getLevel() + 1));
         this.updateTrades();
+    }
+
+    public Nicknames getNicknames() {
+        return nicknames;
+    }
+
+    public void setNickname(UUID playerUUID, String nickname) {
+        if (nickname == null || nickname.isBlank()) {
+            nicknames.data.remove(playerUUID); //if player leaves a blank nickname, it means they want to remove it, or do nothing.
+        } else {
+            nicknames.data.put(playerUUID, nickname.trim());
+        }
     }
 }

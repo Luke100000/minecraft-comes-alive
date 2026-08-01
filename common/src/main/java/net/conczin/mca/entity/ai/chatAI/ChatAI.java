@@ -100,10 +100,17 @@ public class ChatAI {
         // Find name in message
         String normalizedMsg = normalizeString(msg);
         for (VillagerEntityMCA villager : nearbyVillagers) {
+            String nickname = villager.getNicknames().data.get(playerUUID);
+
+            if (nickname != null &&
+                    containsWholeWord(normalizedMsg, normalizeString(nickname))) {
+                return Optional.of(villager);
+            }
+
             String normalizedName = getName(villager);
             String[] nameParts = normalizedName.split(" ");
             for (String part : nameParts) {
-                if (Pattern.compile("\\b" + Pattern.quote(part) + "\\b").matcher(normalizedMsg).find()) {
+                if (containsWholeWord(normalizedMsg, part)) {
                     return Optional.of(villager);
                 }
             }
@@ -120,6 +127,12 @@ public class ChatAI {
         }
 
         return Optional.empty();
+    }
+
+    private static boolean containsWholeWord(String text, String word) {
+        return Pattern.compile("\\b" + Pattern.quote(word) + "\\b")
+                .matcher(text)
+                .find();
     }
 
     /**
