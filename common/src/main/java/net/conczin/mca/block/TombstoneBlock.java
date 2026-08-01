@@ -29,6 +29,7 @@ import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.*;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.monster.ZombieVillager;
+import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.CustomData;
@@ -511,14 +512,16 @@ public class TombstoneBlock extends BaseEntityBlock implements SimpleWaterlogged
 
         public void readFromStack(ItemStack stack) {
             entityData = Optional.ofNullable(stack)
-                    .filter(s -> s.has(DataComponents.ENTITY_DATA))
-                    .map(s -> s.getOrDefault(DataComponents.ENTITY_DATA, CustomData.EMPTY).copyTag())
+                    .filter(s -> s.has(DataComponents.BLOCK_ENTITY_DATA))
+                    .map(s -> s.getOrDefault(DataComponents.BLOCK_ENTITY_DATA, CustomData.EMPTY).copyTag())
                     .map(EntityData::new);
         }
 
         public void writeToStack(ItemStack stack) {
             entityData.ifPresent(data -> {
-                data.writeNbt(stack.getOrDefault(DataComponents.ENTITY_DATA, CustomData.EMPTY).copyTag());
+                CompoundTag entityTag = new CompoundTag();
+                data.writeNbt(entityTag);
+                BlockItem.setBlockEntityData(stack, BlockEntityTypesMCA.TOMBSTONE, entityTag);
             });
         }
 

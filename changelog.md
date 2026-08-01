@@ -1,3 +1,8 @@
+# 7.7.32
+
+* Fixed Graveyard data loss issue
+* Fixed bug.
+
 # 7.7.31
 
 ## ChatAI context
