@@ -25,6 +25,7 @@ public class ChatAIContextScreen extends Screen {
     private final Map<Tab, String> prompts = new EnumMap<>(Tab.class);
     private Tab selectedTab = Tab.VILLAGER;
     private MultiLineEditBox promptField;
+    private final String currentNickname;
     private EditBox nicknameField;
 
     public ChatAIContextScreen(ChatAIContextResponse context) {
@@ -36,6 +37,8 @@ public class ChatAIContextScreen extends Screen {
         prompts.put(Tab.PLAYER, context.playerPrompt());
         prompts.put(Tab.VILLAGE, context.villagePrompt());
         prompts.put(Tab.WORLD, context.worldPrompt());
+
+        currentNickname = context.villagerNickname();
 
         if (!selectedTab.available(context)) {
             selectedTab = Tab.PLAYER;
@@ -83,7 +86,7 @@ public class ChatAIContextScreen extends Screen {
                 Component.translatable("gui.chat_ai_context.nickname_placeholder")
                         .withColor(0x808080)
         );
-        nicknameField.setValue(context.villagerNickname());
+        nicknameField.setValue(currentNickname);
 
         // Close
         addRenderableWidget(new ButtonWidget(width / 2 - 44, top + 205, 88, 20,
