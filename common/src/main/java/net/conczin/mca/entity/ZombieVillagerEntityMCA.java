@@ -221,9 +221,10 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
     public <T extends Mob> T convertTo(EntityType<T> type, boolean keepInventory) {
         T mob;
         if (!isRemoved() && type == EntityType.VILLAGER) {
-            mob = keepInventory
-                    ? (T) super.convertTo(getGenetics().getGender().getVillagerType(), true)
-                    : (T) VillagerLike.convertPreservingUuid(this, getGenetics().getGender().getVillagerType());
+            mob = (T) VillagerLike.convertPreservingUuid(this,
+                    getGenetics().getGender().getVillagerType(),
+                    keepInventory,
+                    this::getEquipmentDropChance);
         } else {
             mob = super.convertTo(type, keepInventory);
         }

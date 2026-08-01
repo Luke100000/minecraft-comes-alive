@@ -1448,9 +1448,10 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         T mob;
         if (!isRemoved() && type == EntityType.ZOMBIE_VILLAGER) {
             residency.leaveHome();
-            mob = keepInventory
-                    ? (T) super.convertTo(getGenetics().getGender().getZombieType(), true)
-                    : (T) VillagerLike.convertPreservingUuid(this, getGenetics().getGender().getZombieType());
+            mob = (T) VillagerLike.convertPreservingUuid(this,
+                    getGenetics().getGender().getZombieType(),
+                    keepInventory,
+                    this::getEquipmentDropChance);
         } else {
             mob = super.convertTo(type, keepInventory);
         }
