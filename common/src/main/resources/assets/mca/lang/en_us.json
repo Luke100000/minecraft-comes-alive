@@ -759,6 +759,8 @@
   "gui.chat_ai_context.world_name": "World",
   "gui.chat_ai_context.prompt": "Context prompt",
   "gui.chat_ai_context.placeholder": "Describe this context for the villager's conversation...",
+  "gui.chat_ai_context.nickname": "Nickname: ",
+  "gui.chat_ai_context.nickname_placeholder": "Set a nickname for this villager...",
   "gui.chat_ai_context.save": "Save",
   "gui.chat_ai_context.close": "Close",
   "gui.chat_ai_context.help.tooltip": "This text is added to ChatAI's system prompt. Use it for a villager's backstory, player details, village atmosphere, or world-wide instructions.",

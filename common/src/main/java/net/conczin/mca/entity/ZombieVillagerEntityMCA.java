@@ -47,6 +47,7 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
     private final UpdatableInventory inventory = new UpdatableInventory(27);
 
     private String chatAIPrompt = "";
+    private CompoundTag nicknameData = new CompoundTag();
     private int burned;
 
     public ZombieVillagerEntityMCA(EntityType<? extends ZombieVillager> type, Level world, Gender gender) {
@@ -245,11 +246,13 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
     @Override
     public void writeAdditionalConversionData(CompoundTag output) {
         output.putString(VillagerEntityMCA.CHAT_AI_PROMPT_KEY, chatAIPrompt);
+        output.put(VillagerEntityMCA.NICKNAMES_KEY, nicknameData.copy());
     }
 
     @Override
     public void readAdditionalConversionData(CompoundTag input) {
         chatAIPrompt = input.getString(VillagerEntityMCA.CHAT_AI_PROMPT_KEY);
+        nicknameData = input.getCompound(VillagerEntityMCA.NICKNAMES_KEY).copy();
     }
 
     @Override
@@ -258,6 +261,7 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
         getTypeDataManager().load(this, nbt);
         relations.readFromNbt(nbt);
         chatAIPrompt = nbt.getString(VillagerEntityMCA.CHAT_AI_PROMPT_KEY);
+        nicknameData = nbt.getCompound(VillagerEntityMCA.NICKNAMES_KEY).copy();
 
         updateAttributes();
 
@@ -286,6 +290,7 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
         relations.writeToNbt(nbt);
         InventoryUtils.saveToNBT(this.registryAccess(), inventory, nbt);
         nbt.putString(VillagerEntityMCA.CHAT_AI_PROMPT_KEY, chatAIPrompt);
+        nbt.put(VillagerEntityMCA.NICKNAMES_KEY, nicknameData.copy());
     }
 
     @Override
