@@ -109,7 +109,7 @@ public class Command {
                 villager.map(VillagerEntityMCA::getUUID).orElse(Util.NIL_UUID),
                 villager.map(v -> v.getName().getString()).orElse(""),
                 villager.map(VillagerEntityMCA::getChatAIPrompt).orElse(""),
-                villager.map(v -> v.getNicknames().data.get(player.getUUID())).orElse(""),
+                villager.map(v -> v.getNickname(player.getUUID())).orElse(""),
                 player.getName().getString(),
                 PlayerSaveData.get(player).getChatAIPrompt(),
                 village.isPresent(),

@@ -38,7 +38,8 @@ public record ChatAIContextUpdateRequest(Target target, ResourceKey<Level> dimen
 
     @Override
     public void handleServer(ServerPlayer player) {
-        if (target == Target.UNKNOWN || !ChatAIContext.canEdit(player) || prompt.length() > MAX_PROMPT_LENGTH) {
+        if (target == Target.UNKNOWN || !ChatAIContext.canEdit(player) || prompt.length() > MAX_PROMPT_LENGTH
+                || (target == Target.VILLAGER && nickname.length() > VillagerEntityMCA.MAX_NICKNAME_LENGTH)) {
             return;
         }
 

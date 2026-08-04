@@ -100,9 +100,9 @@ public class ChatAI {
         // Find name in message
         String normalizedMsg = normalizeString(msg);
         for (VillagerEntityMCA villager : nearbyVillagers) {
-            String nickname = villager.getNicknames().data.get(playerUUID);
+            String nickname = villager.getNickname(playerUUID);
 
-            if (nickname != null &&
+            if (!nickname.isEmpty() &&
                     containsWholeWord(normalizedMsg, normalizeString(nickname))) {
                 return Optional.of(villager);
             }
