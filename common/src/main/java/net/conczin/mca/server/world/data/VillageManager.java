@@ -191,7 +191,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
             // Auto Scan never registers optional Rooms inside known Structures.
             return Building.validationResult.SUCCESS;
         }
-        BuildingScanResult scan = analyzeRoomAddition(pos);
+        BuildingScanResult scan = analyzeReportedBuildingAddition(pos);
         if (scan.result() != Building.validationResult.SUCCESS || scan.isAmbiguous()) return scan.result();
         return commitRoomAddition(scan, null);
     }
@@ -347,13 +347,23 @@ public class VillageManager extends SavedData implements Iterable<Village> {
     }
 
     public BuildingScanResult analyzeBuildingAddition(BlockPos pos) {
+        return analyzeBuildingAddition(pos, false);
+    }
+
+    private BuildingScanResult analyzeReportedBuildingAddition(BlockPos pos) {
+        return analyzeBuildingAddition(pos, true);
+    }
+
+    private BuildingScanResult analyzeBuildingAddition(BlockPos pos, boolean reportedSource) {
         Village village = findNearestVillage(pos, Village.MERGE_MARGIN).orElse(null);
         Collection<Structure> existing = village == null ? List.of() : village.getStructures().values();
         if (village != null && village.getInteractionStructureAt(world, pos).isPresent()) {
             return failedRoom(Building.validationResult.IDENTICAL, pos, village);
         }
 
-        StructureScanner.Result structureScan = StructureScanner.scanNewStructure(world, pos, existing);
+        StructureScanner.Result structureScan = reportedSource
+                ? StructureScanner.scanReportedStructure(world, pos, existing)
+                : StructureScanner.scanNewStructure(world, pos, existing);
         if (structureScan.result() != Building.validationResult.SUCCESS) {
             return failedRoom(structureScan.result(), pos, village);
         }

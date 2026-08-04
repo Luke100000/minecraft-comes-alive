@@ -28,6 +28,13 @@ final class StructureScanner {
                 (roof, maxRadius) -> resolveExactSeed(world, source, roof, maxRadius));
     }
 
+    static Result scanReportedStructure(Level world,
+                                        BlockPos source,
+                                        Collection<Structure> existing) {
+        return scan(world, source, existing, -1,
+                (roof, maxRadius) -> resolveReportedSeed(world, source, roof, maxRadius));
+    }
+
     static Result scanPlannedStructure(Level world,
                                        RoomScanPlan plan,
                                        Collection<Structure> existing) {
@@ -184,6 +191,28 @@ final class StructureScanner {
             return Optional.empty();
         }
         return Optional.of(source.immutable());
+    }
+
+    /**
+     * Auto Scan reports the changed block itself, while manual scans start at the player's feet.
+     * Preserve the legacy behavior of entering from a reported POI/door without treating that
+     * solid block as a bridge between rooms: choose an enclosed walkable horizontal neighbour.
+     */
+    private static Optional<BlockPos> resolveReportedSeed(Level world,
+                                                          BlockPos source,
+                                                          Map<BlockPos, Boolean> roof,
+                                                          int maxRadius) {
+        Optional<BlockPos> exact = resolveExactSeed(world, source, roof, maxRadius);
+        if (exact.isPresent()) return exact;
+
+        for (Direction direction : HORIZONTAL) {
+            BlockPos candidate = source.relative(direction);
+            if (isWalkableAnchor(world, candidate, world.getBlockState(candidate), roof)
+                    && !reachesExterior(world, candidate, null, roof, maxRadius)) {
+                return Optional.of(candidate.immutable());
+            }
+        }
+        return Optional.empty();
     }
 
     /**

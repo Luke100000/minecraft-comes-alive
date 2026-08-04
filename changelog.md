@@ -1,3 +1,7 @@
+# 7.7.33-beta.3
+
+* Fixed auto scan.
+
 # 7.7.33
 **IMPORTANT**
 * Recommended to ***__backup__*** your world.
