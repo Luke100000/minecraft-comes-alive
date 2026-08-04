@@ -1688,7 +1688,11 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
         CompoundTag data = nbt.getCompound(NICKNAMES_KEY);
         for (String playerUUID : data.getAllKeys()) {
-            setNickname(UUID.fromString(playerUUID), data.getString(playerUUID));
+            try {
+                setNickname(UUID.fromString(playerUUID), data.getString(playerUUID));
+            } catch (IllegalArgumentException exception) {
+                MCA.LOGGER.warn("Ignoring invalid nickname player UUID '{}'", playerUUID);
+            }
         }
     }
 
