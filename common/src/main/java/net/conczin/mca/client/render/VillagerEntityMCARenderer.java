@@ -1,33 +1,33 @@
 package net.conczin.mca.client.render;
 
+import net.conczin.mca.client.model.MCAModelLayers;
+import net.conczin.mca.client.model.PlayerAnimationBridge;
 import net.conczin.mca.client.model.VillagerEntityModelMCA;
 import net.conczin.mca.client.render.layer.ClothingLayer;
 import net.conczin.mca.client.render.layer.FaceLayer;
 import net.conczin.mca.client.render.layer.HairLayer;
-import net.conczin.mca.client.render.layer.SkinLayer;
 import net.conczin.mca.entity.VillagerEntityMCA;
+import net.minecraft.client.model.PlayerModel;
+import net.minecraft.client.model.geom.ModelLayerLocation;
 import net.minecraft.client.model.geom.ModelLayers;
-import net.minecraft.client.model.geom.builders.CubeDeformation;
-import net.minecraft.client.model.geom.builders.LayerDefinition;
-import net.minecraft.client.model.geom.builders.MeshDefinition;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 
 public class VillagerEntityMCARenderer extends VillagerLikeEntityMCARenderer<VillagerEntityMCA> {
     public VillagerEntityMCARenderer(EntityRendererProvider.Context ctx) {
-        super(ctx, createAnimationModel(ctx).hideWears());
+        super(ctx, new VillagerEntityModelMCA<VillagerEntityMCA>(
+                ctx.bakeLayer(MCAModelLayers.VILLAGER),
+                new PlayerAnimationBridge<VillagerEntityMCA>(new PlayerModel<VillagerEntityMCA>(ctx.bakeLayer(ModelLayers.PLAYER), false))
+        ).hideWears());
 
-        // The parent drives external animation; visible layers keep MCA geometry and textures.
-        layers.add(0, new SkinLayer<>(this, createVisibleModel(VillagerEntityModelMCA.bodyData(CubeDeformation.NONE)).hideWears()));
-        addLayer(new FaceLayer<>(this, createVisibleModel(VillagerEntityModelMCA.bodyData(new CubeDeformation(0.01F))).hideWears(), "normal"));
-        addLayer(new ClothingLayer<>(this, createVisibleModel(VillagerEntityModelMCA.bodyData(new CubeDeformation(0.0625F))), "normal"));
-        addLayer(new HairLayer<>(this, createVisibleModel(VillagerEntityModelMCA.hairData(new CubeDeformation(0.125F)))));
+        addLayer(new FaceLayer<>(this, createModel(ctx, MCAModelLayers.VILLAGER_FACE).hideWears(), "normal"));
+        addLayer(new ClothingLayer<>(this, createModel(ctx, MCAModelLayers.VILLAGER_CLOTHING), "normal"));
+        addLayer(new HairLayer<>(this, createModel(ctx, MCAModelLayers.VILLAGER_HAIR)));
     }
 
-    private static VillagerEntityModelMCA<VillagerEntityMCA> createAnimationModel(EntityRendererProvider.Context ctx) {
-        return new VillagerEntityModelMCA<>(ctx.bakeLayer(ModelLayers.PLAYER));
-    }
-
-    private static VillagerEntityModelMCA<VillagerEntityMCA> createVisibleModel(MeshDefinition data) {
-        return new VillagerEntityModelMCA<>(LayerDefinition.create(data, 64, 64).bakeRoot());
+    private static VillagerEntityModelMCA<VillagerEntityMCA> createModel(
+            EntityRendererProvider.Context ctx,
+            ModelLayerLocation layer
+    ) {
+        return new VillagerEntityModelMCA<VillagerEntityMCA>(ctx.bakeLayer(layer));
     }
 }

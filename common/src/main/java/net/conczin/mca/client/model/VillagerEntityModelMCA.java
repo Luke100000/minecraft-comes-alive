@@ -1,6 +1,9 @@
 package net.conczin.mca.client.model;
 
 import com.google.common.collect.ImmutableList;
+import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.blaze3d.vertex.VertexConsumer;
+import net.conczin.mca.client.resources.SkinExporter;
 import net.conczin.mca.entity.VillagerLike;
 import net.minecraft.client.model.HumanoidModel;
 import net.minecraft.client.model.PlayerModel;
@@ -12,6 +15,7 @@ import net.minecraft.client.model.geom.builders.CubeListBuilder;
 import net.minecraft.client.model.geom.builders.MeshDefinition;
 import net.minecraft.client.model.geom.builders.PartDefinition;
 import net.minecraft.world.entity.LivingEntity;
+import org.jetbrains.annotations.Nullable;
 
 public class VillagerEntityModelMCA<T extends LivingEntity & VillagerLike<T>> extends VillagerEntityBaseModelMCA<T> {
     protected static final String BREASTPLATE = "breastplate";
@@ -24,16 +28,25 @@ public class VillagerEntityModelMCA<T extends LivingEntity & VillagerLike<T>> ex
     public final ModelPart bodyWear;
 
     private boolean wearsHidden;
+    @Nullable
+    private final PlayerAnimationBridge<T> animationBridge;
+    @Nullable
+    private T currentVillager;
+    private int skinColor = 0xFFFFFFFF;
 
     public VillagerEntityModelMCA(ModelPart tree) {
+        this(tree, null);
+    }
+
+    public VillagerEntityModelMCA(ModelPart tree, @Nullable PlayerAnimationBridge<T> animationBridge) {
         super(tree);
+        this.animationBridge = animationBridge;
         bodyWear = tree.getChild(PartNames.JACKET);
         leftArmwear = tree.getChild("left_sleeve");
         rightArmwear = tree.getChild("right_sleeve");
         leftLegwear = tree.getChild("left_pants");
         rightLegwear = tree.getChild("right_pants");
-
-        breastsWear = getChildOrEmpty(tree, BREASTPLATE);
+        breastsWear = breastTransform.getChild(BREASTPLATE);
     }
 
     //
@@ -56,16 +69,20 @@ public class VillagerEntityModelMCA<T extends LivingEntity & VillagerLike<T>> ex
 
     public static MeshDefinition bodyData(CubeDeformation dilation, boolean slim) {
         MeshDefinition modelData = PlayerModel.createMesh(dilation, slim);
-        PartDefinition root = modelData.getRoot();
-        root.addOrReplaceChild(BREASTS, newBreasts(dilation, 0), PartPose.ZERO);
-        root.addOrReplaceChild(BREASTPLATE, newBreasts(dilation.extend(0.1F), 16), PartPose.ZERO);
+        addBreastParts(modelData.getRoot().getChild(PartNames.BODY), dilation, true);
+        return modelData;
+    }
+
+    public static MeshDefinition attachmentData(CubeDeformation dilation) {
+        MeshDefinition modelData = new MeshDefinition();
+        PartDefinition body = modelData.getRoot().addOrReplaceChild(PartNames.BODY, CubeListBuilder.create(), PartPose.ZERO);
+        addBreastParts(body, dilation, true);
         return modelData;
     }
 
     public static MeshDefinition armorData(CubeDeformation dilation) {
-        MeshDefinition modelData = HumanoidModel.createMesh(dilation, 0.0f);
-        PartDefinition root = modelData.getRoot();
-        root.addOrReplaceChild(BREASTS, newBreasts(dilation, 0), PartPose.ZERO);
+        MeshDefinition modelData = HumanoidModel.createMesh(dilation, 0.0F);
+        addBreastParts(modelData.getRoot().getChild(PartNames.BODY), dilation, false);
         return modelData;
     }
 
@@ -83,17 +100,34 @@ public class VillagerEntityModelMCA<T extends LivingEntity & VillagerLike<T>> ex
     public void setupAnim(T villager, float limbAngle, float limbDistance, float animationProgress, float headYaw, float headPitch) {
         super.setupAnim(villager, limbAngle, limbDistance, animationProgress, headYaw, headPitch);
         syncWearParts();
+        if (animationBridge != null) {
+            currentVillager = villager;
+            skinColor = SkinExporter.getSkinColor(villager);
+        }
+    }
+
+    @Override
+    public void renderToBuffer(PoseStack matrices, VertexConsumer vertices, int light, int overlay, int color) {
+        if (animationBridge != null && currentVillager != null) {
+            animationBridge.apply(this, matrices, light, overlay);
+            applyVillagerDimensions(currentVillager);
+            syncWearParts();
+            color = CommonVillagerModel.multiplyColor(color, skinColor);
+        }
+        super.renderToBuffer(matrices, vertices, light, overlay, color);
     }
 
     @Override
     public void setAllVisible(boolean visible) {
         super.setAllVisible(visible);
-
+        breastTransform.visible = visible;
+        breasts.visible = visible;
         leftArmwear.visible = !wearsHidden && visible;
         rightArmwear.visible = !wearsHidden && visible;
         leftLegwear.visible = !wearsHidden && visible;
         rightLegwear.visible = !wearsHidden && visible;
         bodyWear.visible = !wearsHidden && visible;
+        breastsWear.visible = !wearsHidden && visible;
     }
 
     public VillagerEntityModelMCA<T> hideWears() {
@@ -110,15 +144,12 @@ public class VillagerEntityModelMCA<T extends LivingEntity & VillagerLike<T>> ex
     @Override
     public void copyPropertiesTo(HumanoidModel<T> target) {
         super.copyPropertiesTo(target);
-        if (target instanceof VillagerEntityModelMCA) {
-            copyAttributes((VillagerEntityModelMCA<T>) target);
+        if (target instanceof VillagerEntityModelMCA<?> rawTarget) {
+            @SuppressWarnings("unchecked")
+            VillagerEntityModelMCA<T> model = (VillagerEntityModelMCA<T>) rawTarget;
+            model.hat.copyFrom(model.head);
+            model.syncWearParts();
         }
-    }
-
-    private void copyAttributes(VillagerEntityModelMCA<T> target) {
-        // Rebuild wear parts from the canonical bones copied by HumanoidModel.
-        target.hat.copyFrom(target.head);
-        target.syncWearParts();
     }
 
     @Override
@@ -131,14 +162,13 @@ public class VillagerEntityModelMCA<T extends LivingEntity & VillagerLike<T>> ex
         breastsWear.copyFrom(breasts);
     }
 
+    @Override
     public void copyVisibility(HumanoidModel<?> model) {
         boolean showWears = !wearsHidden;
         head.visible = model.head.visible;
         hat.visible = model.head.visible;
         body.visible = model.body.visible;
         bodyWear.visible = showWears && model.body.visible;
-        breasts.visible = model.body.visible;
-        breastsWear.visible = showWears && model.body.visible;
         leftArm.visible = model.leftArm.visible;
         leftArmwear.visible = showWears && model.leftArm.visible;
         rightArm.visible = model.rightArm.visible;
@@ -147,5 +177,14 @@ public class VillagerEntityModelMCA<T extends LivingEntity & VillagerLike<T>> ex
         leftLegwear.visible = showWears && model.leftLeg.visible;
         rightLeg.visible = model.rightLeg.visible;
         rightLegwear.visible = showWears && model.rightLeg.visible;
+
+        if (model instanceof CommonVillagerModel<?> source) {
+            breastTransform.visible = model.body.visible && source.getBreastTransform().visible;
+            breasts.visible = model.body.visible && source.getBreastPart().visible;
+        } else {
+            breastTransform.visible &= model.body.visible;
+            breasts.visible &= model.body.visible;
+        }
+        breastsWear.visible = showWears && breastTransform.visible;
     }
 }
