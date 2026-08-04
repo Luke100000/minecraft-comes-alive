@@ -448,19 +448,19 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         ItemStack stack = player.getItemInHand(hand);
         if (!stack.is(TagsMCA.Items.VILLAGER_EGGS) && isAlive() && !isTrading() && !isSleeping() && canInteractWithItemStackInHand(stack) && !getVillagerBrain().isPanicking()) {
             if (isBaby()) {
-                copiedSayNo();
+                setUnhappy();
             } else if (!level().isClientSide) {
                 boolean hasOffers = hasTradeOffers();
                 if (hand == InteractionHand.MAIN_HAND) {
                     if (!hasOffers && !level().isClientSide) {
-                        copiedSayNo();
+                        setUnhappy();
                     }
 
                     player.awardStat(Stats.TALKED_TO_VILLAGER);
                 }
 
                 if (hasOffers && !level().isClientSide) {
-                    copiedBeginTradeWith(player);
+                    startTrading(player);
                 }
             }
             return InteractionResult.sidedSuccess(level().isClientSide);
@@ -468,46 +468,8 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         return InteractionResult.PASS;
     }
 
-    private void copiedSayNo() {
-        this.setUnhappyCounter(40);
-        if (!this.level().isClientSide()) {
-            this.playSound(this.getNoSound(), this.getSoundVolume(), this.getVoicePitch());
-        }
-    }
-
     public boolean hasTradeOffers() {
         return !getOffers().isEmpty();
-    }
-
-    public void startTrading(Player customer) {
-        copiedBeginTradeWith(customer);
-    }
-
-    private void copiedBeginTradeWith(Player customer) {
-        this.copiedPrepareOffersFor(customer);
-        this.setTradingPlayer(customer);
-        this.openTradingScreen(customer, this.getDisplayName(), this.getVillagerData().getLevel());
-    }
-
-    private void copiedPrepareOffersFor(Player player) {
-        int reputation = this.getPlayerReputation(player);
-        if (reputation != 0) {
-            for (MerchantOffer tradeOffer : this.getOffers()) {
-                tradeOffer.addToSpecialPriceDiff(-Mth.floor((float) reputation * tradeOffer.getPriceMultiplier()));
-            }
-        }
-
-        if (player.hasEffect(MobEffects.HERO_OF_THE_VILLAGE)) {
-            MobEffectInstance statusEffect = player.getEffect(MobEffects.HERO_OF_THE_VILLAGE);
-            //noinspection ConstantConditions
-            int amplifier = statusEffect.getAmplifier();
-
-            for (MerchantOffer tradeOffer2 : this.getOffers()) {
-                double d = 0.3 + 0.0625 * (double) amplifier;
-                int k = (int) Math.floor(d * (double) tradeOffer2.getBaseCostA().getCount());
-                tradeOffer2.addToSpecialPriceDiff(-Math.max(k, 1));
-            }
-        }
     }
 
     @Override
@@ -1540,6 +1502,29 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
     public void setChatAIPrompt(String chatAIPrompt) {
         this.chatAIPrompt = chatAIPrompt;
+    }
+
+    private boolean isCarriedByPlayer() {
+        return getVehicle() instanceof Player;
+    }
+
+    /**
+     * Vanilla excludes passengers from entity chunk storage. MCA children riding
+     * players are not restored from player data, so they must remain save roots.
+     */
+    @Override
+    public boolean shouldBeSaved() {
+        if (!isCarriedByPlayer()) {
+            return super.shouldBeSaved();
+        }
+
+        Entity.RemovalReason removalReason = getRemovalReason();
+        return removalReason == null || removalReason.shouldSave();
+    }
+
+    @Override
+    public boolean save(CompoundTag nbt) {
+        return isCarriedByPlayer() ? saveAsPassenger(nbt) : super.save(nbt);
     }
 
     @Override

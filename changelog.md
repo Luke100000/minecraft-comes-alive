@@ -1,3 +1,8 @@
+# 7.7.33
+
+* Fixed children you're carrying disappearing on disconnect.
+* Fixed compatibility with Create: Clockware Augments and potentially other mods.
+
 # 7.7.32
 
 * Fixed Graveyard data loss issue
