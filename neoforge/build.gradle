@@ -4,6 +4,14 @@ plugins {
 }
 
 dependencies {
+    implementation(jarJar(
+            "io.github.llamalad7:mixinextras-neoforge:${mixin_extras_version}"
+    )) {
+        version {
+            strictly '[0.5.3,0.6)'
+            prefer mixin_extras_version
+        }
+    }
     runtimeOnly "maven.modrinth:sodium:${sodium_neoforge_version}"
     //runtimeOnly "maven.modrinth:iris:${iris_neoforge_version}"
     runtimeOnly "maven.modrinth:ferrite-core:${ferritecore_neoforge_version}"
