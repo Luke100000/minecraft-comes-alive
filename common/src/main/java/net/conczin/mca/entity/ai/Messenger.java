@@ -5,6 +5,7 @@ import net.conczin.mca.Config;
 import net.conczin.mca.MCA;
 import net.conczin.mca.entity.EntityWrapper;
 import net.conczin.mca.entity.VillagerEntityMCA;
+import net.conczin.mca.entity.ai.relationship.Personality;
 import net.conczin.mca.network.Network;
 import net.conczin.mca.network.s2c.VillagerMessage;
 import net.conczin.mca.resources.API;
@@ -84,7 +85,9 @@ public interface Messenger extends EntityWrapper {
         //and personality
         String personalityString = "";
         if (asEntity() instanceof VillagerEntityMCA v) {
-            personalityString = "#E" + v.getVillagerBrain().getPersonalityId() + ".";
+            personalityString = "#E" + Personality.encodeDialogueId(
+                    v.getVillagerBrain().getPersonalityId()
+            ) + ".";
         }
 
         return Component.translatable(genderString + personalityString + professionString + "#T" + getDialogueType(target).name() + "." + phraseId, newParams);

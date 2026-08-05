@@ -22,6 +22,7 @@ import java.util.function.Predicate;
  * used for persistence and client synchronization.</p>
  */
 public final class Personality implements Comparable<Personality> {
+    private static final String DIALOGUE_DOT_ESCAPE = "%2E";
     private static final Map<ResourceLocation, Personality> REGISTRY = new LinkedHashMap<>();
     private static final List<Personality> LEGACY_VALUES = new ArrayList<>();
     private static final RandomSource RANDOM = RandomSource.create();
@@ -121,8 +122,15 @@ public final class Personality implements Comparable<Personality> {
         return getTranslationSuffix(id);
     }
 
-    public static String getDialoguePrefix(String id) {
-        ResourceLocation parsed = parseId(id);
+    /**
+     * Escapes dots so a namespaced id can be embedded in MCA's dot-delimited dialogue flags.
+     */
+    public static String encodeDialogueId(ResourceLocation id) {
+        return Objects.requireNonNull(id, "id").toString().replace(".", DIALOGUE_DOT_ESCAPE);
+    }
+
+    public static String getDialoguePrefix(String encodedId) {
+        ResourceLocation parsed = parseId(decodeDialogueId(encodedId));
         return getTranslationSuffix(parsed == null ? UNASSIGNED.id : parsed);
     }
 
@@ -170,7 +178,7 @@ public final class Personality implements Comparable<Personality> {
 
     @Override
     public int compareTo(Personality other) {
-        return id.compareTo(other.id);
+        return Integer.compare(compatibilityOrdinal, other.compatibilityOrdinal);
     }
 
     @Override
@@ -196,6 +204,10 @@ public final class Personality implements Comparable<Personality> {
         return normalized.indexOf(':') >= 0
                 ? ResourceLocation.tryParse(normalized)
                 : ResourceLocation.tryBuild(MCA.MOD_ID, normalized);
+    }
+
+    private static String decodeDialogueId(String value) {
+        return value == null ? null : value.replace(DIALOGUE_DOT_ESCAPE, ".");
     }
 
     private static String getTranslationSuffix(ResourceLocation id) {
