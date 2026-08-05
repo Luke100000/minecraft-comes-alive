@@ -3,17 +3,16 @@ package net.conczin.mca.client.render;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.conczin.mca.Config;
 import net.conczin.mca.client.gui.VillagerEditorScreen;
-import net.conczin.mca.client.model.VillagerEntityBaseModelMCA;
+import net.conczin.mca.client.model.MCAModelLayers;
+import net.conczin.mca.client.model.MCAArmorModel;
 import net.conczin.mca.client.model.VillagerEntityModelMCA;
+import net.conczin.mca.client.resources.SkinExporter;
 import net.conczin.mca.entity.Infectable;
 import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.entity.ai.relationship.AgeState;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.model.geom.builders.CubeDeformation;
-import net.minecraft.client.model.geom.builders.LayerDefinition;
 import net.minecraft.client.renderer.MultiBufferSource;
-import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.HumanoidMobRenderer;
 import net.minecraft.client.renderer.entity.layers.HumanoidArmorLayer;
@@ -23,7 +22,6 @@ import net.minecraft.world.entity.EntityAttachment;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.Vec3;
-import org.jetbrains.annotations.Nullable;
 import org.joml.Matrix4f;
 
 public class VillagerLikeEntityMCARenderer<T extends Mob & VillagerLike<T>> extends HumanoidMobRenderer<T, VillagerEntityModelMCA<T>> {
@@ -31,15 +29,12 @@ public class VillagerLikeEntityMCARenderer<T extends Mob & VillagerLike<T>> exte
 
     public VillagerLikeEntityMCARenderer(EntityRendererProvider.Context ctx, VillagerEntityModelMCA<T> model) {
         super(ctx, model, 0.5F);
-        addLayer(new HumanoidArmorLayer<>(this, createArmorModel(0.3f), createArmorModel(0.55f), ctx.getModelManager()));
-    }
-
-    private VillagerEntityBaseModelMCA<T> createArmorModel(float modelSize) {
-        return new VillagerEntityBaseModelMCA<>(
-                LayerDefinition.create(
-                                VillagerEntityBaseModelMCA.getModelData(new CubeDeformation(modelSize)), 64, 32)
-                        .bakeRoot()
-        );
+        addLayer(new HumanoidArmorLayer<>(
+                this,
+                new MCAArmorModel<>(ctx.bakeLayer(MCAModelLayers.VILLAGER_INNER_ARMOR)),
+                new MCAArmorModel<>(ctx.bakeLayer(MCAModelLayers.VILLAGER_OUTER_ARMOR)),
+                ctx.getModelManager()
+        ));
     }
 
     @Override
@@ -50,14 +45,6 @@ public class VillagerLikeEntityMCARenderer<T extends Mob & VillagerLike<T>> exte
         if (villager.getAgeState() == AgeState.BABY && !villager.isPassenger()) {
             matrices.translate(0, 0.6F, 0);
         }
-    }
-
-    @Nullable
-    @Override
-    protected RenderType getRenderType(T entity, boolean showBody, boolean translucent, boolean showOutlines) {
-        //setting the type to null prevents it from rendering
-        //we need a skin layer anyway because of the color
-        return null;
     }
 
     @Override
@@ -108,7 +95,7 @@ public class VillagerLikeEntityMCARenderer<T extends Mob & VillagerLike<T>> exte
 
     @Override
     public ResourceLocation getTextureLocation(T mobEntity) {
-        return DynamicSkinCache.getOrCreateStitchedSkin(mobEntity);
+        return SkinExporter.getSkin(mobEntity);
     }
 
     @Override

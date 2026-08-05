@@ -1,12 +1,10 @@
 package net.conczin.mca.client.model;
 
-import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.conczin.mca.MCAClient;
 import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.entity.ai.relationship.Gender;
-import net.conczin.mca.entity.ai.relationship.VillagerDimensions;
 import net.conczin.mca.registry.EntitiesMCA;
+import net.minecraft.client.model.HumanoidModel;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
@@ -14,6 +12,7 @@ import net.minecraft.world.level.Level;
 
 import java.util.UUID;
 
+/** Shared morphology contract for MCA humanoid models. */
 public interface CommonVillagerModel<T extends LivingEntity> {
     static VillagerLike<?> getVillager(Level world, UUID uuid) {
         if (MCAClient.fallbackVillager == null) {
@@ -25,81 +24,75 @@ public interface CommonVillagerModel<T extends LivingEntity> {
     static VillagerLike<?> getVillager(Entity villager) {
         if (villager instanceof VillagerLike<?> v) {
             return v;
-        } else {
-            return getVillager(villager.level(), villager.getUUID());
         }
+        return getVillager(villager.level(), villager.getUUID());
     }
+
+
+    static int multiplyColor(int first, int second) {
+        int alpha = ((first >>> 24) * (second >>> 24) / 255) << 24;
+        int red = (((first >>> 16) & 0xFF) * ((second >>> 16) & 0xFF) / 255) << 16;
+        int green = (((first >>> 8) & 0xFF) * ((second >>> 8) & 0xFF) / 255) << 8;
+        int blue = (first & 0xFF) * (second & 0xFF) / 255;
+        return alpha | red | green | blue;
+    }
+
+    ModelPart getMorphologyHead();
+
+    ModelPart getMorphologyHat();
+
+    ModelPart getBreastTransform();
 
     ModelPart getBreastPart();
 
-    ModelPart getBodyPart();
-
-    Iterable<ModelPart> getCommonHeadParts();
-
-    Iterable<ModelPart> getCommonBodyParts();
-
     Iterable<ModelPart> getBreastParts();
 
-    VillagerDimensions.Mutable getDimensions();
-
-    float getBreastSize();
-
-    void setBreastSize(float breastSize);
-
-    /** Synchronizes MCA wear parts that mirror the canonical humanoid bones. */
+    /** Synchronizes MCA wear parts that mirror canonical humanoid bones. */
     default void syncWearParts() {
     }
 
-    default void renderCommon(PoseStack matrices, VertexConsumer vertices, int light, int overlay, int color) {
-        //head
-        float headSize = getDimensions().getHead();
-
-        matrices.pushPose();
-        matrices.scale(headSize, headSize, headSize);
-        getCommonHeadParts().forEach(a -> a.render(matrices, vertices, light, overlay, color));
-        matrices.popPose();
-
-        // Keep root-level wear parts aligned with the final canonical pose.
-        syncWearParts();
-
-        //body
-        getCommonBodyParts().forEach(a -> a.render(matrices, vertices, light, overlay, color));
-
-        if (getBreastPart().visible && getBodyPart().visible) {
-            float breastSize = getBreastSize() * getDimensions().getBreasts();
-
-            if (breastSize > 0) {
-                matrices.pushPose();
-                // The breast parts are stored at the model root, but are logically attached to
-                // the torso. Apply the current body transform first so EMF torso animation,
-                // crouching and scaling all carry the chest along without duplicating transforms.
-                getBodyPart().translateAndRotate(matrices);
-                matrices.scale(breastSize * 0.2f + 1.05f, breastSize * 0.75f + 0.75f, breastSize * 0.75f + 0.75f);
-                for (ModelPart part : getBreastParts()) {
-                    part.render(matrices, vertices, light, overlay, color);
-                }
-                matrices.popPose();
-            }
-        }
+    /** Copies parent visibility while preserving the concrete model's layer role. */
+    default void copyVisibility(HumanoidModel<?> parent) {
     }
 
+    /** Copies body-local morphology transforms without copying layer-specific wear visibility. */
+    default void copyMorphologyTo(CommonVillagerModel<?> target) {
+        target.getBreastTransform().copyFrom(getBreastTransform());
+        target.getBreastTransform().visible = getBreastTransform().visible;
+        target.getBreastPart().copyFrom(getBreastPart());
+        target.getBreastPart().visible = getBreastPart().visible;
+    }
+
+    /** Applies current entity genetics directly to model parts; no mutable snapshot is retained. */
     default void applyVillagerDimensions(VillagerLike<?> villager) {
-        getDimensions().set(villager.getVillagerDimensions());
-        setBreastSize(villager.getGenetics().getBreastSize());
-        getBreastPart().visible = villager.getGenetics().getGender() == Gender.FEMALE;
+        var dimensions = villager.getVillagerDimensions();
+        float headScale = dimensions.getHead();
+        setScale(getMorphologyHead(), headScale, headScale, headScale);
+        setScale(getMorphologyHat(), headScale, headScale, headScale);
 
-        float breastSize = getBreastSize();
-        float breastY = (float) (5.0f - Math.pow(breastSize, 0.5) * 2.5f);
-        float breastZ = -1.5f + breastSize * 0.25f;
+        float rawBreastSize = villager.getGenetics().getBreastSize();
+        float scaledBreastSize = rawBreastSize * dimensions.getBreasts();
+        ModelPart transform = getBreastTransform();
+        transform.visible = villager.getGenetics().getGender() == Gender.FEMALE && scaledBreastSize > 0.0F;
+        setScale(
+                transform,
+                scaledBreastSize * 0.2F + 1.05F,
+                scaledBreastSize * 0.75F + 0.75F,
+                scaledBreastSize * 0.75F + 0.75F
+        );
+
+        getBreastPart().visible = villager.getGenetics().getGender() == Gender.FEMALE;
+        float breastY = (float) (5.0F - Math.pow(rawBreastSize, 0.5) * 2.5F);
+        float breastZ = -1.5F + rawBreastSize * 0.25F;
         for (ModelPart part : getBreastParts()) {
-            // Keep the breast transform body-local so renderCommon can compose it with the torso pose.
-            part.setRotation((float) Math.PI * 0.3f, 0.0f, 0.0f);
-            part.setPos(0.25f, breastY, breastZ);
+            part.setRotation((float) Math.PI * 0.3F, 0.0F, 0.0F);
+            part.setPos(0.25F, breastY, breastZ);
         }
     }
 
-    default void copyCommonAttributes(CommonVillagerModel<T> target) {
-        target.getDimensions().set(getDimensions());
-        target.setBreastSize(getBreastSize());
+    private static void setScale(ModelPart part, float x, float y, float z) {
+        part.xScale = x;
+        part.yScale = y;
+        part.zScale = z;
     }
 }

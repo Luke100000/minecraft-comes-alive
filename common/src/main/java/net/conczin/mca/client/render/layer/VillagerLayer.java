@@ -5,8 +5,7 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.conczin.mca.MCA;
 import net.conczin.mca.MCAClient;
-import net.conczin.mca.client.model.PlayerEntityExtendedModel;
-import net.conczin.mca.client.model.VillagerEntityModelMCA;
+import net.conczin.mca.client.model.CommonVillagerModel;
 import net.minecraft.ResourceLocationException;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.model.HumanoidModel;
@@ -58,21 +57,14 @@ public abstract class VillagerLayer<T extends LivingEntity, M extends HumanoidMo
         return false;
     }
 
-    protected void prepareParentModel(PoseStack transform, int light) {
-    }
-
     @Override
     public void render(PoseStack transform, MultiBufferSource provider, int light, T villager, float limbAngle, float limbDistance, float tickDelta, float animationProgress, float headYaw, float headPitch) {
         if (villager instanceof Player && !MCAClient.useVillagerRenderer(villager.getUUID())) {
             return;
         }
 
-        prepareParentModel(transform, light);
-
         // Primarily restores compatibility with Armourers Workshop.
-        if (model instanceof VillagerEntityModelMCA<?> layer) {
-            layer.copyVisibility(getParentModel());
-        } else if (model instanceof PlayerEntityExtendedModel<?> layer) {
+        if (model instanceof CommonVillagerModel<?> layer) {
             layer.copyVisibility(getParentModel());
         }
 

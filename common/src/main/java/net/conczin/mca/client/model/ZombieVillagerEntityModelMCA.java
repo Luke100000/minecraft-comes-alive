@@ -10,6 +10,10 @@ public class ZombieVillagerEntityModelMCA<T extends LivingEntity & VillagerLike<
         super(tree);
     }
 
+    public ZombieVillagerEntityModelMCA(ModelPart tree, PlayerAnimationBridge<T> animationBridge) {
+        super(tree, animationBridge);
+    }
+
     @Override
     public void setupAnim(T villager, float limbAngle, float limbDistance, float animationProgress, float headYaw, float headPitch) {
         super.setupAnim(villager, limbAngle, limbDistance, animationProgress, headYaw, headPitch);
