@@ -1,15 +1,14 @@
 package net.conczin.mca.entity.ai.relationship;
 
 import net.conczin.mca.MCA;
+import net.conczin.mca.util.ExtensibleTypeRegistry;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.RandomSource;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Predicate;
@@ -23,30 +22,30 @@ import java.util.function.Predicate;
  */
 public final class Personality implements Comparable<Personality> {
     private static final String DIALOGUE_DOT_ESCAPE = "%2E";
-    private static final Map<ResourceLocation, Personality> REGISTRY = new LinkedHashMap<>();
+    private static final ExtensibleTypeRegistry<Personality> REGISTRY = new ExtensibleTypeRegistry<>(MCA.MOD_ID, "personality");
     private static final List<Personality> LEGACY_VALUES = new ArrayList<>();
     private static final RandomSource RANDOM = RandomSource.create();
 
     //Fallback on error.
-    public static final Personality UNASSIGNED = registerBuiltIn("unassigned");
+    public static final Personality UNASSIGNED = registerLegacyBuiltIn("unassigned");
 
-    public static final Personality FRIENDLY = registerBuiltIn("friendly");       // Easier to make friends
-    public static final Personality FLIRTY = registerBuiltIn(                     // Likes to chat, flirt and kiss
+    public static final Personality FRIENDLY = registerLegacyBuiltIn("friendly");       // Easier to make friends
+    public static final Personality FLIRTY = registerLegacyBuiltIn(                     // Likes to chat, flirt and kiss
             "flirty",
             Personality::isOldEnoughToFlirt
     );
-    public static final Personality PLAYFUL = registerBuiltIn("playful");         // Loves games and fun activities
-    public static final Personality GLOOMY = registerBuiltIn("gloomy");           // Always assuming the worst
-    public static final Personality SENSITIVE = registerBuiltIn("sensitive");     // Double heart penalty
-    public static final Personality GREEDY = registerBuiltIn("greedy");           // Finds less on chores
-    public static final Personality ODD = registerBuiltIn("odd");                 // some interactions are more difficult
-    public static final Personality CRABBY = registerBuiltIn("crabby");           // Hard to talk to
-    public static final Personality EXTROVERTED = registerBuiltIn("extroverted"); // Enjoys group activities
-    public static final Personality INTROVERTED = registerBuiltIn("introverted"); // Prefers solitary activities
-    public static final Personality RELAXED = registerBuiltIn("relaxed");         // Calm and unbothered
-    public static final Personality ANXIOUS = registerBuiltIn("anxious");         // Easily stressed
-    public static final Personality PEACEFUL = registerBuiltIn("peaceful");       // Avoids conflict
-    public static final Personality UPBEAT = registerBuiltIn("upbeat");           // Optimistic and cheerful
+    public static final Personality PLAYFUL = registerLegacyBuiltIn("playful");         // Loves games and fun activities
+    public static final Personality GLOOMY = registerLegacyBuiltIn("gloomy");           // Always assuming the worst
+    public static final Personality SENSITIVE = registerLegacyBuiltIn("sensitive");     // Double heart penalty
+    public static final Personality GREEDY = registerLegacyBuiltIn("greedy");           // Finds less on chores
+    public static final Personality ODD = registerLegacyBuiltIn("odd");                 // some interactions are more difficult
+    public static final Personality CRABBY = registerLegacyBuiltIn("crabby");           // Hard to talk to
+    public static final Personality EXTROVERTED = registerLegacyBuiltIn("extroverted"); // Enjoys group activities
+    public static final Personality INTROVERTED = registerLegacyBuiltIn("introverted"); // Prefers solitary activities
+    public static final Personality RELAXED = registerLegacyBuiltIn("relaxed");         // Calm and unbothered
+    public static final Personality ANXIOUS = registerLegacyBuiltIn("anxious");         // Easily stressed
+    public static final Personality PEACEFUL = registerLegacyBuiltIn("peaceful");       // Avoids conflict
+    public static final Personality UPBEAT = registerLegacyBuiltIn("upbeat");           // Optimistic and cheerful
 
     private final ResourceLocation id;
     private final Predicate<AgeState> agePredicate;
@@ -68,28 +67,21 @@ public final class Personality implements Comparable<Personality> {
     /**
      * Registers a personality with an age eligibility rule.
      */
-    public static synchronized Personality register(ResourceLocation id, Predicate<AgeState> agePredicate) {
-        Objects.requireNonNull(id, "id");
+    public static Personality register(ResourceLocation id, Predicate<AgeState> agePredicate) {
         Objects.requireNonNull(agePredicate, "agePredicate");
-        if (REGISTRY.containsKey(id)) {
-            throw new IllegalArgumentException("Duplicate personality id '" + id + "'");
-        }
-
-        Personality personality = new Personality(id, agePredicate, REGISTRY.size());
-        REGISTRY.put(id, personality);
-        return personality;
+        return REGISTRY.register(id, registeredId -> new Personality(registeredId, agePredicate, REGISTRY.size()));
     }
 
-    public static synchronized Optional<Personality> get(ResourceLocation id) {
-        return Optional.ofNullable(REGISTRY.get(id));
+    public static Optional<Personality> get(ResourceLocation id) {
+        return REGISTRY.get(id);
     }
 
     public static Optional<Personality> get(String id) {
-        return Optional.ofNullable(parseId(id)).flatMap(Personality::get);
+        return REGISTRY.get(id);
     }
 
-    public static synchronized List<Personality> all() {
-        return List.copyOf(REGISTRY.values());
+    public static List<Personality> all() {
+        return REGISTRY.all();
     }
 
     public static Personality getRandom() {
@@ -119,7 +111,7 @@ public final class Personality implements Comparable<Personality> {
     }
 
     public String getDialoguePrefix() {
-        return getTranslationSuffix(id);
+        return REGISTRY.translationSuffix(id);
     }
 
     /**
@@ -130,16 +122,16 @@ public final class Personality implements Comparable<Personality> {
     }
 
     public static String getDialoguePrefix(String encodedId) {
-        ResourceLocation parsed = parseId(decodeDialogueId(encodedId));
-        return getTranslationSuffix(parsed == null ? UNASSIGNED.id : parsed);
+        ResourceLocation parsed = REGISTRY.parse(decodeDialogueId(encodedId)).orElse(UNASSIGNED.id);
+        return REGISTRY.translationSuffix(parsed);
     }
 
     public Component getName() {
-        return Component.translatable("personality." + getTranslationSuffix(id));
+        return Component.translatable("personality." + REGISTRY.translationSuffix(id));
     }
 
     public Component getDescription() {
-        return Component.translatable("personalityDescription." + getTranslationSuffix(id));
+        return Component.translatable("personalityDescription." + REGISTRY.translationSuffix(id));
     }
 
     /**
@@ -186,33 +178,18 @@ public final class Personality implements Comparable<Personality> {
         return id.toString();
     }
 
-    private static Personality registerBuiltIn(String path) {
-        return registerBuiltIn(path, ageState -> true);
+    private static Personality registerLegacyBuiltIn(String path) {
+        return registerLegacyBuiltIn(path, ageState -> true);
     }
 
-    private static Personality registerBuiltIn(String path, Predicate<AgeState> agePredicate) {
+    private static Personality registerLegacyBuiltIn(String path, Predicate<AgeState> agePredicate) {
         Personality personality = register(MCA.locate(path), agePredicate);
         LEGACY_VALUES.add(personality);
         return personality;
     }
 
-    private static ResourceLocation parseId(String value) {
-        if (value == null) {
-            return null;
-        }
-        String normalized = value.toLowerCase(Locale.ROOT);
-        return normalized.indexOf(':') >= 0
-                ? ResourceLocation.tryParse(normalized)
-                : ResourceLocation.tryBuild(MCA.MOD_ID, normalized);
-    }
-
     private static String decodeDialogueId(String value) {
         return value == null ? null : value.replace(DIALOGUE_DOT_ESCAPE, ".");
-    }
-
-    private static String getTranslationSuffix(ResourceLocation id) {
-        String path = id.getPath().replace('/', '.');
-        return id.getNamespace().equals(MCA.MOD_ID) ? path : id.getNamespace() + "." + path;
     }
 
     private static boolean isOldEnoughToFlirt(AgeState ageState) {
