@@ -84,7 +84,7 @@ public interface Messenger extends EntityWrapper {
         //and personality
         String personalityString = "";
         if (asEntity() instanceof VillagerEntityMCA v) {
-            personalityString = "#E" + v.getVillagerBrain().getPersonality().name() + ".";
+            personalityString = "#E" + v.getVillagerBrain().getPersonalityId() + ".";
         }
 
         return Component.translatable(genderString + personalityString + professionString + "#T" + getDialogueType(target).name() + "." + phraseId, newParams);
