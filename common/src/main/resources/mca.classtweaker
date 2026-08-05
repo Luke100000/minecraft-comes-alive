@@ -20,3 +20,8 @@ accessible method net/minecraft/world/entity/ai/control/MoveControl rotlerp (FFF
 
 # Widen GroundPathNavigation.getSurfaceY so MCA can make water-tag-aware navigation without replacing getTempMobPos.
 extendable method net/minecraft/world/entity/ai/navigation/GroundPathNavigation getSurfaceY ()I
+
+# Reuse CrossbowAttack's vanilla state machine while replacing its exact-item hand selection.
+extendable method net/minecraft/world/entity/ai/behavior/CrossbowAttack crossbowAttack (Lnet/minecraft/world/entity/Mob;Lnet/minecraft/world/entity/LivingEntity;)V
+accessible field net/minecraft/world/entity/ai/behavior/CrossbowAttack crossbowState Lnet/minecraft/world/entity/ai/behavior/CrossbowAttack$CrossbowState;
+accessible class net/minecraft/world/entity/ai/behavior/CrossbowAttack$CrossbowState

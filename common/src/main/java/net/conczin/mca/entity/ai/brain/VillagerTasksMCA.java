@@ -11,6 +11,7 @@ import net.conczin.mca.entity.ai.ActivitiesMCA;
 import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
 import net.conczin.mca.entity.ai.SchedulesMCA;
 import net.conczin.mca.entity.ai.SensorsMCA;
+import net.conczin.mca.entity.ai.RangedWeaponHelper;
 import net.conczin.mca.entity.ai.brain.sensor.GuardEnemiesSensor;
 import net.conczin.mca.entity.ai.brain.tasks.*;
 import net.conczin.mca.entity.ai.brain.tasks.chore.ChoppingTask;
@@ -326,7 +327,7 @@ public class VillagerTasksMCA {
                         new ExtendedMeleeAttackTask(20, 2.0F),
                         (VillagerEntityMCA v) -> !VillagerTasksMCA.isHoldingRangedWeapon(v)
                 )),
-                Pair.of(9, new CrossbowAttack<VillagerEntityMCA, VillagerEntityMCA>())
+                Pair.of(9, new ExtendedCrossbowAttackTask<VillagerEntityMCA, VillagerEntityMCA>())
         );
     }
 
@@ -388,7 +389,8 @@ public class VillagerTasksMCA {
     }
 
     private static boolean shouldRespondToGuardEnemy(VillagerEntityMCA villager, LivingEntity target) {
-        return GuardEnemiesSensor.isGuardEnemy(target, villager)
+        return shouldKeepAttackTarget(villager, target)
+               && GuardEnemiesSensor.isGuardEnemy(target, villager)
                && shouldRespondToAttackTarget(villager, target);
     }
 
@@ -421,7 +423,7 @@ public class VillagerTasksMCA {
     }
 
     private static boolean isHoldingRangedWeapon(VillagerEntityMCA villager) {
-        return villager.isHolding(Items.BOW) || villager.isHolding(Items.CROSSBOW);
+        return RangedWeaponHelper.isHoldingSupportedWeapon(villager);
     }
 
     public static boolean isInDanger(VillagerEntityMCA villager) {

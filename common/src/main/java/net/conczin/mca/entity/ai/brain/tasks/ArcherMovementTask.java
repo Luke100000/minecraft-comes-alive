@@ -4,6 +4,7 @@ import com.google.common.collect.ImmutableMap;
 import net.conczin.mca.MCA;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.ArcherMoveControl;
+import net.conczin.mca.entity.ai.RangedWeaponHelper;
 import net.conczin.mca.entity.ai.brain.sensor.GuardEnemiesSensor;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.LivingEntity;
@@ -15,8 +16,6 @@ import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.MemoryStatus;
 import net.minecraft.world.entity.ai.memory.NearestVisibleLivingEntities;
 import net.minecraft.world.entity.ai.util.LandRandomPos;
-import net.minecraft.world.item.BowItem;
-import net.minecraft.world.item.CrossbowItem;
 import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.phys.Vec3;
 
@@ -106,7 +105,8 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
         double targetDistanceSquared = entity.distanceToSqr(target);
         double threatDistanceSquared = entity.distanceToSqr(movementThreat);
         double threatVerticalDistance = Math.abs(entity.getY() - movementThreat.getY());
-        MovementState nextState = selectState(targetDistanceSquared, threatDistanceSquared, threatVerticalDistance);
+        double attackRangeSquared = RangedWeaponHelper.getAttackRangeSquared(entity, this.maximumRangeSquared);
+        MovementState nextState = selectState(targetDistanceSquared, threatDistanceSquared, threatVerticalDistance, attackRangeSquared);
         enterState(entity, nextState);
 
         ArcherMoveControl moveControl = entity.getArcherMoveControl();
@@ -161,7 +161,8 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
         this.blockedStrafeTicks = 0;
     }
 
-    private MovementState selectState(double targetDistanceSquared, double threatDistanceSquared, double threatVerticalDistance) {
+    private MovementState selectState(double targetDistanceSquared, double threatDistanceSquared,
+                                      double threatVerticalDistance, double attackRangeSquared) {
         boolean closeRangeThreat = threatVerticalDistance <= CLOSE_RANGE_VERTICAL_THREAT_DISTANCE;
         boolean wasEmergencyFleeing = this.state == MovementState.EMERGENCY_FLEE;
         double emergencyThreshold = wasEmergencyFleeing ? EMERGENCY_EXIT_DISTANCE_SQUARED : EMERGENCY_ENTER_DISTANCE_SQUARED;
@@ -175,7 +176,7 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
             return MovementState.KITE;
         }
 
-        if (targetDistanceSquared > this.maximumRangeSquared || this.seeTime < -LOST_SIGHT_BEFORE_APPROACH) {
+        if (targetDistanceSquared > attackRangeSquared || this.seeTime < -LOST_SIGHT_BEFORE_APPROACH) {
             return MovementState.APPROACH;
         }
 
@@ -449,7 +450,7 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
     }
 
     private static boolean isHoldingRangedWeapon(Mob entity) {
-        return entity.isHolding(stack -> stack.getItem() instanceof BowItem || stack.getItem() instanceof CrossbowItem);
+        return RangedWeaponHelper.isHoldingSupportedWeapon(entity);
     }
 
     private enum MovementState {

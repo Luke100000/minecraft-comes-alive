@@ -1585,12 +1585,27 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
     @Override
     public void performRangedAttack(LivingEntity target, float pullProgress) {
-        setTarget(target);
+        InteractionHand crossbowHand = RangedWeaponHelper.getCrossbowHoldingHand(this);
+        if (crossbowHand != null) {
+            ItemStack crossbowStack = this.getItemInHand(crossbowHand);
+            if (crossbowStack.getItem() instanceof CrossbowItem crossbow) {
+                crossbow.performShooting(
+                        this.level(),
+                        this,
+                        crossbowHand,
+                        crossbowStack,
+                        1.75F,
+                        14 - this.level().getDifficulty().getId() * 4,
+                        target
+                );
+                this.onCrossbowAttackPerformed();
+            }
+            return;
+        }
 
-        if (isHolding(Items.CROSSBOW)) {
-            this.performCrossbowAttack(this, 1.75F);
-        } else if (isHolding(Items.BOW)) {
-            ItemStack bow = this.getItemInHand(getMainHandItem().is(Items.BOW) ? InteractionHand.MAIN_HAND : InteractionHand.OFF_HAND);
+        InteractionHand bowHand = RangedWeaponHelper.getBowHoldingHand(this);
+        if (bowHand != null) {
+            ItemStack bow = this.getItemInHand(bowHand);
             ItemStack arrow = this.getProjectile(bow);
             AbstractArrow persistentProjectileEntity = ProjectileUtil.getMobArrow(this, arrow, pullProgress, bow);
             double x = target.getX() - this.getX();
