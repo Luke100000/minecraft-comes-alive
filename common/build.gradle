@@ -71,6 +71,8 @@ neoForge {
 
 dependencies {
     compileOnly 'org.spongepowered:mixin:0.8.5'
+    // Both supported loaders provide the runtime; MCA only needs the API and processor here.
+    compileOnly(annotationProcessor('io.github.llamalad7:mixinextras-common:0.4.1'))
 }
 
 configurations {
