@@ -1,10 +1,85 @@
-# 7.7.31
-> This is a release of 7.7.31 unrelated to the 7.7.23-ALPHA version.
+# 7.7.33
 
-* Improve Ladder performance.
-* Fixed library auth not working in sandboxed environments.
-* Improved Library Editor, should load faster and other internal improvements.
-* Fixed Smarter Farmers mod incompatibility
+* Fixed children you're carrying disappearing on disconnect.
+* Fixed compatibility with Create: Clockware Augments and potentially other mods.
+
+# 7.7.32
+
+* Fixed Graveyard data loss issue
+* Fixed bug.
+
+# 7.7.31
+
+## ChatAI context
+
+* Added a new **ChatAI Context Editor** for giving AI villagers persistent information about themselves, the player, their village, and the world.
+
+  * Open it with `/mca chatAI context`.
+  * The editor automatically targets the **nearest MCA villager** for the Villager tab and the nearest relevant village for the Village tab.
+  * Changes are saved when you switch tabs or close the screen.
+  * Context entries can be up to 4096 characters.
+  * By default, editing requires permission level **3**. The single-player world owner can always use it.
+  * Server owners can change this with `villagerChatAIContextPermissionLevel`.
+
+### How to use the context tabs
+
+* **Villager** - information that belongs only to the selected/nearest villager.
+
+  * Good for personality details, history, secrets, goals, memories, habits, or a custom role.
+  * Example: `You used to be a travelling cartographer. You are fascinated by ruined structures and distrust pillagers.`
+  * Villagers now receive a small randomly generated background automatically if they do not already have one.
+
+* **Player** - information AI villagers should know specifically about the player using the editor.
+
+  * Good for roleplay identity, titles, relationships, important past events, or facts that villagers should consistently remember.
+  * Example: `John is the founder of this settlement and prefers being addressed as Mayor.`
+
+* **Village** - shared information about the current village.
+
+  * Every AI villager in that village can use this context.
+  * Good for settlement history, local rules, rivalries, landmarks, disasters, traditions, or ongoing events.
+  * Example: `Oakvale was rebuilt after a raid. The old watchtower north of town is considered haunted.`
+
+* **World** - global context and instructions shared by AI villagers everywhere.
+
+  * Use this for information or behaviour that should apply across the entire world, rather than to one villager, player, or village.
+  * Good for custom world lore, modpacks, server settings, roleplay rules, factions, historical events, or defining how villagers should generally behave.
+  * Example: `This world is a frozen post-apocalyptic kingdom. Villagers treat redstone technology as ancient machinery and never mention the real world.`
+  * The World tab controls MCA's global ChatAI system prompt, so anything written here can influence every AI villager.
+  * For information specific to one character or location, use the **Villager**, **Player**, or **Village** tabs instead.
+
+The effective AI context is layered together as **World → Villager → Player → Village**, alongside MCA's normal personality, traits, relationships, environment and other conversation information.
+
+## Villagers
+
+* Added more varied automatically generated backgrounds for AI villagers, including personal history, skills, habits, preferences, keepsakes, goals and beliefs.
+* Improved **Villager ↔ Zombie Villager conversion**.
+
+  * MCA identity and persistent data are preserved more reliably through infection and curing.
+  * ChatAI villager context is preserved through conversion.
+  * Conversion behaviour now avoids several UUID/data-transfer edge cases.
+
+## Pathfinding
+
+* Improved ladder/climbable pathfinding performance.
+* Fixed villagers oscillating or behaving erratically while using ladders.
+* Simplified ladder node handling and reduced unnecessary pathfinding work.
+
+## Skin Library
+
+* Fixed Library authentication in sandboxed environments.
+* Improved the Library login/authentication flow.
+* Improved Library Editor performance and internal loading behaviour.
+* Added paging improvements for submissions and likes.
+* Improved profession-name fallbacks.
+* Fixed blacklist handling.
+
+## Mod compatibility
+
+* Fixed compatibility with **Smarter Farmers** and some other mods.
+* Additional internal compatibility and cleanup work.
+
+
 # 7.7.30
 
 * Improved Ladder navigation.
