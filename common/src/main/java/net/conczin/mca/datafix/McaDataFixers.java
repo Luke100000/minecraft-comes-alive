@@ -30,17 +30,33 @@ public final class McaDataFixers {
     }
 
     /**
-     * Returns a migrated copy of an MCA entity-data compound.
+     * Upgrades MCA entity data to the current version.
      *
      * <p>Both the current flat representation and the former nested
-     * {@code MCAData} representation are handled. Payloads from a future MCA
-     * data version are preserved rather than downgraded.</p>
+     * {@code MCAData} representation are handled. Current payloads are returned
+     * unchanged, while payloads from a future MCA version are copied without
+     * modification.</p>
      */
     public static @NotNull CompoundTag update(@NotNull CompoundTag input) {
-        CompoundTag updated = updatePayload(input);
-        if (updated.contains(LEGACY_MCA_DATA_KEY, Tag.TAG_COMPOUND)) {
-            updated.put(LEGACY_MCA_DATA_KEY, updatePayload(updated.getCompound(LEGACY_MCA_DATA_KEY)));
+        if (getVersion(input) > CURRENT_VERSION) {
+            return input.copy();
         }
+
+        CompoundTag updated = updatePayload(input);
+        if (!updated.contains(LEGACY_MCA_DATA_KEY, Tag.TAG_COMPOUND)) {
+            return updated;
+        }
+
+        CompoundTag nested = updated.getCompound(LEGACY_MCA_DATA_KEY);
+        CompoundTag migratedNested = updatePayload(nested);
+        if (migratedNested == nested) {
+            return updated;
+        }
+
+        if (updated == input) {
+            updated = input.copy();
+        }
+        updated.put(LEGACY_MCA_DATA_KEY, migratedNested);
         return updated;
     }
 
@@ -48,6 +64,10 @@ public final class McaDataFixers {
      * Marks newly written data as current without overwriting a future version.
      */
     public static void stampCurrentVersion(@NotNull CompoundTag output) {
+        if (getVersion(output) > CURRENT_VERSION) {
+            return;
+        }
+
         stampPayload(output);
         if (output.contains(LEGACY_MCA_DATA_KEY, Tag.TAG_COMPOUND)) {
             CompoundTag nested = output.getCompound(LEGACY_MCA_DATA_KEY);
@@ -57,24 +77,21 @@ public final class McaDataFixers {
     }
 
     private static @NotNull CompoundTag updatePayload(@NotNull CompoundTag input) {
-        CompoundTag copy = input.copy();
-        int sourceVersion = getVersion(copy);
+        int sourceVersion = getVersion(input);
         if (sourceVersion >= CURRENT_VERSION) {
-            return copy;
+            return input;
         }
 
+        CompoundTag copy = input.copy();
         Dynamic<Tag> result = FIXER.update(
                 MCA_DATA,
                 new Dynamic<>(NbtOps.INSTANCE, copy),
                 sourceVersion,
                 CURRENT_VERSION
         );
-        Tag value = result.getValue();
-        if (value instanceof CompoundTag migrated) {
-            copy = migrated;
-        }
-        copy.putInt(DATA_VERSION_KEY, CURRENT_VERSION);
-        return copy;
+        CompoundTag migrated = result.getValue() instanceof CompoundTag compound ? compound : copy;
+        migrated.putInt(DATA_VERSION_KEY, CURRENT_VERSION);
+        return migrated;
     }
 
     private static int getVersion(CompoundTag input) {
@@ -84,8 +101,7 @@ public final class McaDataFixers {
     }
 
     private static void stampPayload(CompoundTag output) {
-        int version = getVersion(output);
-        if (version <= CURRENT_VERSION) {
+        if (getVersion(output) <= CURRENT_VERSION) {
             output.putInt(DATA_VERSION_KEY, CURRENT_VERSION);
         }
     }
