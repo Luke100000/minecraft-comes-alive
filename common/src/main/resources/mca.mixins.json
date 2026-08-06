@@ -18,7 +18,6 @@
     "MixinMilkBucketItem",
     "MixinMoveToTargetSink",
     "MixinPlayer",
-    "MixinPlayerSaveData",
     "MixinProtoChunk",
     "MixinScreenHandler",
     "MixinServerGamePacketListenerImpl",
