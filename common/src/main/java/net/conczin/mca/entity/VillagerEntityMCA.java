@@ -1608,7 +1608,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
         if (weaponStack.getItem() instanceof BowItem) {
             ItemStack arrow = this.getProjectile(weaponStack);
-            AbstractArrow persistentProjectileEntity = ProjectileUtil.getMobArrow(this, arrow, pullProgress, bow);
+            AbstractArrow persistentProjectileEntity = ProjectileUtil.getMobArrow(this, arrow, pullProgress, weaponStack);
             double x = target.getX() - this.getX();
             double y = target.getY(0.3333333333333333D) - persistentProjectileEntity.getY();
             double z = target.getZ() - this.getZ();

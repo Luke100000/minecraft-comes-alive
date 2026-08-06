@@ -51,7 +51,7 @@ public final class RangedWeaponHelper {
         return Math.min(maximumRangeSquared, getAttackRangeSquared(entity, hand));
     }
 
-    public static boolean isValidAttackTarget(Mob entity, @Nullable LivingEntity target) {
+    public static boolean isValidAttackTarget(LivingEntity entity, @Nullable LivingEntity target) {
         return target != null
                && target.isAlive()
                && !target.isRemoved()
