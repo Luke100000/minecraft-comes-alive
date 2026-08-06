@@ -50,7 +50,9 @@ public final class McaDataFixers {
     public static void stampCurrentVersion(@NotNull CompoundTag output) {
         stampPayload(output);
         if (output.contains(LEGACY_MCA_DATA_KEY, Tag.TAG_COMPOUND)) {
-            stampPayload(output.getCompound(LEGACY_MCA_DATA_KEY));
+            CompoundTag nested = output.getCompound(LEGACY_MCA_DATA_KEY);
+            stampPayload(nested);
+            output.put(LEGACY_MCA_DATA_KEY, nested);
         }
     }
 
