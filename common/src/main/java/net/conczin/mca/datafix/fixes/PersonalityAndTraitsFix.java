@@ -9,6 +9,7 @@ import net.conczin.mca.datafix.McaDataFixers;
 
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -53,11 +54,17 @@ public final class PersonalityAndTraitsFix extends DataFix {
     }
 
     private <T> Dynamic<T> migratePersonality(Dynamic<T> personality) {
-        return personality.asNumber().result()
-                .map(Number::intValue)
-                .map(this::legacyPersonalityId)
-                .map(personality::createString)
-                .orElse(personality);
+        var numeric = personality.asNumber().result();
+        if (numeric.isPresent()) {
+            return personality.createString(legacyPersonalityId(numeric.get().intValue()));
+        }
+
+        var string = personality.asString().result();
+        if (string.isPresent() && !string.get().contains(":")) {
+            return personality.createString("mca:" + string.get().toLowerCase(Locale.ROOT));
+        }
+
+        return personality;
     }
 
     private String legacyPersonalityId(int ordinal) {
@@ -75,7 +82,9 @@ public final class PersonalityAndTraitsFix extends DataFix {
         Map<String, Dynamic<T>> canonicalValues = new LinkedHashMap<>();
         entries.get().forEach(entry -> {
             String sourceId = entry.getFirst().asString("");
-            String canonicalId = sourceId.contains(":") ? sourceId : "mca:" + sourceId;
+            String canonicalId = sourceId.isEmpty() || sourceId.contains(":")
+                    ? sourceId
+                    : "mca:" + sourceId;
             boolean sourceIsCanonical = sourceId.contains(":");
 
             if (sourceIsCanonical || !canonicalValues.containsKey(canonicalId)) {
