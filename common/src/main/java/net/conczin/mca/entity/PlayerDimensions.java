@@ -149,10 +149,7 @@ public final class PlayerDimensions {
     }
 
     private static boolean hasTrait(CompoundTag traits, Traits.Trait trait) {
-        String canonicalId = trait.getId().toString();
-        return traits.getBoolean(canonicalId)
-                || (trait.getId().getNamespace().equals(MCA.MOD_ID)
-                && traits.getBoolean(trait.getId().getPath()));
+        return traits.getBoolean(trait.getId().toString());
     }
 
     private record AgeScale(float width, float height) {
