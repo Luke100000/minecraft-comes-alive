@@ -21,7 +21,7 @@ import java.util.function.Predicate;
  * subclass this type and register the subtype through {@link #register(Personality)}.
  * The identifier is also the stable value used for persistence and client synchronization.</p>
  */
-public class Personality implements Comparable<Personality> {
+public class Personality {
     private static final String DIALOGUE_DOT_ESCAPE = "%2E";
     private static final ExtensibleTypeRegistry<Personality> REGISTRY = new ExtensibleTypeRegistry<>(MCA.MOD_ID, "personality");
     private static final List<Personality> LEGACY_VALUES = new ArrayList<>();
@@ -140,11 +140,6 @@ public class Personality implements Comparable<Personality> {
 
     public @NotNull Component getDescription() {
         return Component.translatable("personalityDescription." + REGISTRY.translationSuffix(id));
-    }
-
-    @Override
-    public int compareTo(@NotNull Personality other) {
-        return id.compareTo(other.id);
     }
 
     @Override
