@@ -24,29 +24,28 @@ import java.util.function.Predicate;
 public class Personality {
     private static final String DIALOGUE_DOT_ESCAPE = "%2E";
     private static final ExtensibleTypeRegistry<Personality> REGISTRY = new ExtensibleTypeRegistry<>(MCA.MOD_ID, "personality");
-    private static final List<Personality> LEGACY_VALUES = new ArrayList<>();
     private static final RandomSource RANDOM = RandomSource.create();
 
     //Fallback on error.
-    public static final Personality UNASSIGNED = registerLegacyBuiltIn("unassigned");
+    public static final Personality UNASSIGNED = registerBuiltIn("unassigned");
 
-    public static final Personality FRIENDLY = registerLegacyBuiltIn("friendly");       // Easier to make friends
-    public static final Personality FLIRTY = registerLegacyBuiltIn(                     // Likes to chat, flirt and kiss
+    public static final Personality FRIENDLY = registerBuiltIn("friendly");       // Easier to make friends
+    public static final Personality FLIRTY = registerBuiltIn(                     // Likes to chat, flirt and kiss
             "flirty",
             Personality::isOldEnoughToFlirt
     );
-    public static final Personality PLAYFUL = registerLegacyBuiltIn("playful");         // Loves games and fun activities
-    public static final Personality GLOOMY = registerLegacyBuiltIn("gloomy");           // Always assuming the worst
-    public static final Personality SENSITIVE = registerLegacyBuiltIn("sensitive");     // Double heart penalty
-    public static final Personality GREEDY = registerLegacyBuiltIn("greedy");           // Finds less on chores
-    public static final Personality ODD = registerLegacyBuiltIn("odd");                 // some interactions are more difficult
-    public static final Personality CRABBY = registerLegacyBuiltIn("crabby");           // Hard to talk to
-    public static final Personality EXTROVERTED = registerLegacyBuiltIn("extroverted"); // Enjoys group activities
-    public static final Personality INTROVERTED = registerLegacyBuiltIn("introverted"); // Prefers solitary activities
-    public static final Personality RELAXED = registerLegacyBuiltIn("relaxed");         // Calm and unbothered
-    public static final Personality ANXIOUS = registerLegacyBuiltIn("anxious");         // Easily stressed
-    public static final Personality PEACEFUL = registerLegacyBuiltIn("peaceful");       // Avoids conflict
-    public static final Personality UPBEAT = registerLegacyBuiltIn("upbeat");           // Optimistic and cheerful
+    public static final Personality PLAYFUL = registerBuiltIn("playful");         // Loves games and fun activities
+    public static final Personality GLOOMY = registerBuiltIn("gloomy");           // Always assuming the worst
+    public static final Personality SENSITIVE = registerBuiltIn("sensitive");     // Double heart penalty
+    public static final Personality GREEDY = registerBuiltIn("greedy");           // Finds less on chores
+    public static final Personality ODD = registerBuiltIn("odd");                 // some interactions are more difficult
+    public static final Personality CRABBY = registerBuiltIn("crabby");           // Hard to talk to
+    public static final Personality EXTROVERTED = registerBuiltIn("extroverted"); // Enjoys group activities
+    public static final Personality INTROVERTED = registerBuiltIn("introverted"); // Prefers solitary activities
+    public static final Personality RELAXED = registerBuiltIn("relaxed");         // Calm and unbothered
+    public static final Personality ANXIOUS = registerBuiltIn("anxious");         // Easily stressed
+    public static final Personality PEACEFUL = registerBuiltIn("peaceful");       // Avoids conflict
+    public static final Personality UPBEAT = registerBuiltIn("upbeat");           // Optimistic and cheerful
 
     private final ResourceLocation id;
     private final Predicate<AgeState> agePredicate;
@@ -106,10 +105,6 @@ public class Personality {
         return valid.get(RANDOM.nextInt(valid.size()));
     }
 
-    public static @NotNull Personality byLegacyOrdinal(int ordinal) {
-        return ordinal >= 0 && ordinal < LEGACY_VALUES.size() ? LEGACY_VALUES.get(ordinal) : UNASSIGNED;
-    }
-
     public @NotNull ResourceLocation getId() {
         return id;
     }
@@ -147,17 +142,15 @@ public class Personality {
         return id.toString();
     }
 
-    private static @NotNull Personality registerLegacyBuiltIn(@NotNull String path) {
-        return registerLegacyBuiltIn(path, ageState -> true);
+    private static @NotNull Personality registerBuiltIn(@NotNull String path) {
+        return registerBuiltIn(path, ageState -> true);
     }
 
-    private static @NotNull Personality registerLegacyBuiltIn(
+    private static @NotNull Personality registerBuiltIn(
             @NotNull String path,
             @NotNull Predicate<AgeState> agePredicate
     ) {
-        Personality personality = register(MCA.locate(path), agePredicate);
-        LEGACY_VALUES.add(personality);
-        return personality;
+        return register(MCA.locate(path), agePredicate);
     }
 
     private static @Nullable String decodeDialogueId(@Nullable String value) {
