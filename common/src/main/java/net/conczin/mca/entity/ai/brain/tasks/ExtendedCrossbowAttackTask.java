@@ -12,35 +12,26 @@ import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.monster.CrossbowAttackMob;
 import net.minecraft.world.item.CrossbowItem;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.ChargedProjectiles;
 
 public final class ExtendedCrossbowAttackTask<E extends Mob & CrossbowAttackMob, T extends LivingEntity> extends CrossbowAttack<E, T> {
     @Override
     protected boolean checkExtraStartConditions(ServerLevel level, E entity) {
         LivingEntity target = getAttackTarget(entity);
-        if (!hasValidTarget(entity, target)) {
-            return false;
-        }
         InteractionHand hand = RangedWeaponHelper.getCrossbowHoldingHand(entity);
-        if (hand != null && entity.getItemInHand(hand).is(Items.CROSSBOW)) {
-            return super.checkExtraStartConditions(level, entity);
-        }
-
-        return hand != null
+        return RangedWeaponHelper.isValidAttackTarget(entity, target)
+               && hand != null
                && BehaviorUtils.canSee(entity, target)
-               && entity.distanceToSqr(target) <= RangedWeaponHelper.getAttackRangeSquared(entity, hand, Double.MAX_VALUE);
+               && entity.distanceToSqr(target) <= RangedWeaponHelper.getAttackRangeSquared(entity, hand);
     }
 
     @Override
     public void crossbowAttack(E entity, LivingEntity target) {
-        InteractionHand hand = RangedWeaponHelper.getCrossbowHoldingHand(entity);
-        if (hand != null && entity.getItemInHand(hand).is(Items.CROSSBOW)) {
-            super.crossbowAttack(entity, target);
-            return;
-        }
-
-        if (hand != null && this.crossbowState == CrossbowState.UNCHARGED) {
+        if (this.crossbowState == CrossbowState.UNCHARGED) {
+            InteractionHand hand = RangedWeaponHelper.getCrossbowHoldingHand(entity);
+            if (hand == null) {
+                return;
+            }
             entity.startUsingItem(hand);
             this.crossbowState = CrossbowState.CHARGING;
             entity.setChargingCrossbow(true);
@@ -67,13 +58,5 @@ public final class ExtendedCrossbowAttackTask<E extends Mob & CrossbowAttackMob,
 
     private static LivingEntity getAttackTarget(LivingEntity entity) {
         return entity.getBrain().getMemory(MemoryModuleType.ATTACK_TARGET).orElse(null);
-    }
-
-    private static boolean hasValidTarget(Mob entity, LivingEntity target) {
-        return target != null
-               && target.isAlive()
-               && !target.isRemoved()
-               && target.level() == entity.level()
-               && entity.canAttack(target);
     }
 }

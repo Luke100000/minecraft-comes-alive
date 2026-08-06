@@ -67,12 +67,14 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
 
     @Override
     protected boolean checkExtraStartConditions(ServerLevel level, E entity) {
-        return hasValidTarget(getAttackTarget(entity)) && isHoldingRangedWeapon(entity);
+        return RangedWeaponHelper.isValidAttackTarget(entity, getAttackTarget(entity))
+               && RangedWeaponHelper.isHoldingSupportedWeapon(entity);
     }
 
     @Override
     protected boolean canStillUse(ServerLevel level, E entity, long gameTime) {
-        return hasValidTarget(getAttackTarget(entity)) && isHoldingRangedWeapon(entity);
+        return RangedWeaponHelper.isValidAttackTarget(entity, getAttackTarget(entity))
+               && RangedWeaponHelper.isHoldingSupportedWeapon(entity);
     }
 
     @Override
@@ -85,7 +87,7 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
     @Override
     protected void tick(ServerLevel level, E entity, long gameTime) {
         LivingEntity target = getAttackTarget(entity);
-        if (!hasValidTarget(target)) {
+        if (!RangedWeaponHelper.isValidAttackTarget(entity, target)) {
             return;
         }
 
@@ -443,14 +445,6 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
 
     private static LivingEntity getAttackTarget(LivingEntity entity) {
         return entity.getBrain().getMemoryInternal(MemoryModuleType.ATTACK_TARGET).orElse(null);
-    }
-
-    private static boolean hasValidTarget(LivingEntity target) {
-        return target != null && target.isAlive() && !target.isRemoved();
-    }
-
-    private static boolean isHoldingRangedWeapon(Mob entity) {
-        return RangedWeaponHelper.isHoldingSupportedWeapon(entity);
     }
 
     private enum MovementState {
