@@ -2,6 +2,8 @@ package net.conczin.mca.block;
 
 import com.mojang.serialization.MapCodec;
 import net.conczin.mca.entity.Infectable;
+import net.conczin.mca.entity.VillagerEntityMCA;
+import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
 import net.conczin.mca.entity.ai.relationship.CompassionateEntity;
 import net.conczin.mca.entity.ai.relationship.EntityRelationship;
 import net.conczin.mca.entity.ai.relationship.Gender;
@@ -25,7 +27,9 @@ import net.minecraft.sounds.SoundSource;
 import net.minecraft.util.Mth;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.*;
+import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.monster.ZombieVillager;
+import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.CustomData;
@@ -378,6 +382,16 @@ public class TombstoneBlock extends BaseEntityBlock implements SimpleWaterlogged
                             compassionateEntity.getRelationships().getFamilyEntry().setDeceased(false);
                         }
 
+                        if (entity instanceof VillagerEntityMCA villager) {
+                            villager.getBrain().eraseMemory(MemoryModuleTypeMCA.LAST_GRIEVE);
+                            villager.getBrain().eraseMemory(MemoryModuleTypeMCA.MOURNING_SITE);
+                            villager.getBrain().eraseMemory(MemoryModuleTypeMCA.MOURNING_POSITION);
+                            villager.getBrain().eraseMemory(MemoryModuleType.PATH);
+                            villager.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
+                            villager.getBrain().eraseMemory(MemoryModuleType.LOOK_TARGET);
+                            villager.getBrain().eraseMemory(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE);
+                        }
+
                         if (entity instanceof Infectable infectable) {
                             infectable.setInfectionProgress(cure ? 0.0f : Math.max(Mth.lerp(level.random.nextFloat(), Infectable.FEVER_THRESHOLD, Infectable.BABBLING_THRESHOLD), infectable.getInfectionProgress())
                             );
@@ -498,14 +512,16 @@ public class TombstoneBlock extends BaseEntityBlock implements SimpleWaterlogged
 
         public void readFromStack(ItemStack stack) {
             entityData = Optional.ofNullable(stack)
-                    .filter(s -> s.has(DataComponents.ENTITY_DATA))
-                    .map(s -> s.getOrDefault(DataComponents.ENTITY_DATA, CustomData.EMPTY).copyTag())
+                    .filter(s -> s.has(DataComponents.BLOCK_ENTITY_DATA))
+                    .map(s -> s.getOrDefault(DataComponents.BLOCK_ENTITY_DATA, CustomData.EMPTY).copyTag())
                     .map(EntityData::new);
         }
 
         public void writeToStack(ItemStack stack) {
             entityData.ifPresent(data -> {
-                data.writeNbt(stack.getOrDefault(DataComponents.ENTITY_DATA, CustomData.EMPTY).copyTag());
+                CompoundTag entityTag = new CompoundTag();
+                data.writeNbt(entityTag);
+                BlockItem.setBlockEntityData(stack, BlockEntityTypesMCA.TOMBSTONE, entityTag);
             });
         }
 

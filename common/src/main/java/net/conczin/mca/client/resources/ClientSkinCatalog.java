@@ -5,39 +5,32 @@ import net.conczin.mca.network.c2s.CustomSkinListRequest;
 import net.conczin.mca.resources.BuiltInSkinCatalog;
 import net.conczin.mca.resources.data.skin.*;
 
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
 public final class ClientSkinCatalog {
     private static boolean customSkinsOutdated = true;
-    private static boolean loaded;
-    private static HashMap<String, Clothing> clothing = new HashMap<>();
-    private static HashMap<String, Hair> hair = new HashMap<>();
-    private static HashMap<String, BodySkin> bodySkins = new HashMap<>();
-    private static HashMap<String, LayeredHair> layeredHair = new HashMap<>();
-    private static HashMap<String, HairStyle> hairStyles = new HashMap<>();
-    private static HashMap<String, Clothing> builtInClothing = new HashMap<>();
-    private static HashMap<String, BodySkin> builtInBodySkins = new HashMap<>();
-    private static HashMap<String, LayeredHair> builtInLayeredHair = new HashMap<>();
-    private static HashMap<String, HairStyle> builtInHairStyles = new HashMap<>();
-    private static HashMap<String, Clothing> serverClothing = new HashMap<>();
-    private static HashMap<String, BodySkin> serverBodySkins = new HashMap<>();
-    private static HashMap<String, LayeredHair> serverLayeredHair = new HashMap<>();
-    private static HashMap<String, HairStyle> serverHairStyles = new HashMap<>();
-    private static HashMap<String, Hair> serverHair = new HashMap<>();
+    private static final BuiltInSkinCatalog.Catalog BUILT_IN = BuiltInSkinCatalog.get();
+    private static Map<String, Clothing> serverClothing = Map.of();
+    private static Map<String, BodySkin> serverBodySkins = Map.of();
+    private static Map<String, LayeredHair> serverLayeredHair = Map.of();
+    private static Map<String, HairStyle> serverHairStyles = Map.of();
+    private static Map<String, Hair> serverHair = Map.of();
+    private static Map<String, Clothing> clothing = BUILT_IN.clothing();
+    private static Map<String, BodySkin> bodySkins = BUILT_IN.bodySkins();
+    private static Map<String, LayeredHair> layeredHair = BUILT_IN.layeredHair();
+    private static Map<String, HairStyle> hairStyles = BUILT_IN.hairStyles();
 
     private ClientSkinCatalog() {
     }
 
-    public static void installServerDelta(HashMap<String, Clothing> clothing, HashMap<String, BodySkin> bodySkins, HashMap<String, LayeredHair> layeredHair, HashMap<String, HairStyle> hairStyles, HashMap<String, Hair> hair) {
-        serverClothing = new HashMap<>(clothing);
-        serverBodySkins = new HashMap<>(bodySkins);
-        serverLayeredHair = new HashMap<>(layeredHair);
-        serverHairStyles = new HashMap<>(hairStyles);
-        serverHair = new HashMap<>(hair);
+    public static void installServerDelta(Map<String, Clothing> clothing, Map<String, BodySkin> bodySkins, Map<String, LayeredHair> layeredHair, Map<String, HairStyle> hairStyles, Map<String, Hair> hair) {
+        serverClothing = Map.copyOf(clothing);
+        serverBodySkins = Map.copyOf(bodySkins);
+        serverLayeredHair = Map.copyOf(layeredHair);
+        serverHairStyles = Map.copyOf(hairStyles);
+        serverHair = Map.copyOf(hair);
         mergeCatalogs();
-        loaded = hasBuiltInResources();
     }
 
     public static void markCustomSkinsOutdated() {
@@ -45,92 +38,66 @@ public final class ClientSkinCatalog {
     }
 
     public static void clear() {
-        clothing.clear();
-        hair.clear();
-        bodySkins.clear();
-        layeredHair.clear();
-        hairStyles.clear();
-        serverClothing.clear();
-        serverBodySkins.clear();
-        serverLayeredHair.clear();
-        serverHairStyles.clear();
-        serverHair.clear();
+        serverClothing = Map.of();
+        serverBodySkins = Map.of();
+        serverLayeredHair = Map.of();
+        serverHairStyles = Map.of();
+        serverHair = Map.of();
         mergeCatalogs();
-        loaded = hasBuiltInResources();
         customSkinsOutdated = true;
     }
 
     public static Map<String, Clothing> clothing() {
         sync();
-        return Collections.unmodifiableMap(clothing);
+        return clothing;
     }
 
     public static Map<String, Hair> hair() {
         sync();
-        return Collections.unmodifiableMap(hair);
+        return serverHair;
     }
 
     public static Map<String, BodySkin> bodySkins() {
         sync();
-        return Collections.unmodifiableMap(bodySkins);
+        return bodySkins;
     }
 
     public static Map<String, LayeredHair> layeredHair() {
         sync();
-        return Collections.unmodifiableMap(layeredHair);
+        return layeredHair;
     }
 
     public static Map<String, HairStyle> hairStyles() {
         sync();
-        return Collections.unmodifiableMap(hairStyles);
+        return hairStyles;
     }
 
     public static void sync() {
-        seedClientResources();
         if (customSkinsOutdated) {
             Network.sendToServer(new CustomSkinListRequest());
             customSkinsOutdated = false;
         }
     }
 
-    private static void seedClientResources() {
-        if (loaded) {
-            return;
+    private static void mergeCatalogs() {
+        clothing = merge(BUILT_IN.clothing(), serverClothing);
+        bodySkins = merge(BUILT_IN.bodySkins(), serverBodySkins);
+        layeredHair = merge(BUILT_IN.layeredHair(), serverLayeredHair);
+
+        HashMap<String, HairStyle> styles = new HashMap<>(BUILT_IN.hairStyles());
+        styles.putAll(serverHairStyles);
+        serverHair.values().forEach(custom -> styles.putIfAbsent(custom.getIdentifier(), HairStyle.fromHair(custom)));
+        hairStyles = Map.copyOf(styles);
+    }
+
+    private static <T> Map<String, T> merge(Map<String, T> builtIn, Map<String, T> server) {
+        if (server.isEmpty()) {
+            return builtIn;
         }
 
-        loadBuiltInCatalog();
-        mergeCatalogs();
-        loaded = hasBuiltInResources();
-    }
-
-    private static void loadBuiltInCatalog() {
-        BuiltInSkinCatalog.Catalog catalog = BuiltInSkinCatalog.get();
-        builtInClothing = new HashMap<>(catalog.clothing());
-        builtInBodySkins = new HashMap<>(catalog.bodySkins());
-        builtInLayeredHair = new HashMap<>(catalog.layeredHair());
-        builtInHairStyles = new HashMap<>(catalog.hairStyles());
-    }
-
-    private static void mergeCatalogs() {
-        clothing = new HashMap<>(builtInClothing);
-        bodySkins = new HashMap<>(builtInBodySkins);
-        layeredHair = new HashMap<>(builtInLayeredHair);
-        hairStyles = new HashMap<>(builtInHairStyles);
-        hair = new HashMap<>();
-
-        clothing.putAll(serverClothing);
-        bodySkins.putAll(serverBodySkins);
-        layeredHair.putAll(serverLayeredHair);
-        hairStyles.putAll(serverHairStyles);
-        hair.putAll(serverHair);
-        serverHair.values().forEach(custom -> hairStyles.putIfAbsent(custom.getIdentifier(), HairStyle.fromHair(custom)));
-    }
-
-    private static boolean hasBuiltInResources() {
-        return !builtInClothing.isEmpty()
-                || !builtInBodySkins.isEmpty()
-                || !builtInLayeredHair.isEmpty()
-                || !builtInHairStyles.isEmpty();
+        HashMap<String, T> merged = new HashMap<>(builtIn);
+        merged.putAll(server);
+        return Map.copyOf(merged);
     }
 
 }

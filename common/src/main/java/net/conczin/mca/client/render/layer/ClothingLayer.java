@@ -1,6 +1,7 @@
 package net.conczin.mca.client.render.layer;
 
 import net.conczin.mca.client.gui.immersive_library.SkinCache;
+import net.conczin.mca.MCA;
 import net.minecraft.client.model.HumanoidModel;
 import net.minecraft.client.renderer.entity.RenderLayerParent;
 import net.minecraft.resources.ResourceLocation;
@@ -20,6 +21,9 @@ public class ClothingLayer<T extends LivingEntity, M extends HumanoidModel<T>> e
     public ResourceLocation getSkin(T villager) {
         String v = getVillager(villager).isBurned() ? "burnt" : variant;
         String identifier = getVillager(villager).getClothes();
+        if (MCA.isBlankString(identifier)) {
+            return null;
+        }
         if (identifier.startsWith("immersive_library:")) {
             return SkinCache.getTextureIdentifier(Integer.parseInt(identifier.substring(18)));
         }

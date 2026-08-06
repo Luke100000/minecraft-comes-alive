@@ -1,3 +1,166 @@
+# 7.7.33
+**IMPORTANT**
+* Recommended to backup your world.
+* This release won't be backwards compatible with previous MCA versions due to internal changes with how traits and personalities are saved
+* This release won't work when upgrading your world to 26.1.2 or 26.2 until 8.1.7 is released.
+* Addon API:
+  * Modernised trait/personality system making it easier for addons to integrate personalities/traits.
+  * Personalities are no longer hardcoded by enums and have their own MCA namespace
+  * Traits have their own namespace
+  * Existing methods have been given a compatibility shim and marked as deprecated so addons touching it will still work.
+* Archer Improvements 
+  * Modded crossbows/bows are supported
+  * Archers now don't glitch out if their target disappears.
+* Fixed children you're carrying disappearing on disconnect.
+* Fixed compatibility with Create: Clockware Augments and potentially other mods.
+
+# 7.7.32
+
+* Fixed Graveyard data loss issue
+* Fixed bug.
+
+# 7.7.31
+
+## ChatAI context
+
+* Added a new **ChatAI Context Editor** for giving AI villagers persistent information about themselves, the player, their village, and the world.
+
+  * Open it with `/mca chatAI context`.
+  * The editor automatically targets the **nearest MCA villager** for the Villager tab and the nearest relevant village for the Village tab.
+  * Changes are saved when you switch tabs or close the screen.
+  * Context entries can be up to 4096 characters.
+  * By default, editing requires permission level **3**. The single-player world owner can always use it.
+  * Server owners can change this with `villagerChatAIContextPermissionLevel`.
+
+### How to use the context tabs
+
+* **Villager** - information that belongs only to the selected/nearest villager.
+
+  * Good for personality details, history, secrets, goals, memories, habits, or a custom role.
+  * Example: `You used to be a travelling cartographer. You are fascinated by ruined structures and distrust pillagers.`
+  * Villagers now receive a small randomly generated background automatically if they do not already have one.
+
+* **Player** - information AI villagers should know specifically about the player using the editor.
+
+  * Good for roleplay identity, titles, relationships, important past events, or facts that villagers should consistently remember.
+  * Example: `John is the founder of this settlement and prefers being addressed as Mayor.`
+
+* **Village** - shared information about the current village.
+
+  * Every AI villager in that village can use this context.
+  * Good for settlement history, local rules, rivalries, landmarks, disasters, traditions, or ongoing events.
+  * Example: `Oakvale was rebuilt after a raid. The old watchtower north of town is considered haunted.`
+
+* **World** - global context and instructions shared by AI villagers everywhere.
+
+  * Use this for information or behaviour that should apply across the entire world, rather than to one villager, player, or village.
+  * Good for custom world lore, modpacks, server settings, roleplay rules, factions, historical events, or defining how villagers should generally behave.
+  * Example: `This world is a frozen post-apocalyptic kingdom. Villagers treat redstone technology as ancient machinery and never mention the real world.`
+  * The World tab controls MCA's global ChatAI system prompt, so anything written here can influence every AI villager.
+  * For information specific to one character or location, use the **Villager**, **Player**, or **Village** tabs instead.
+
+The effective AI context is layered together as **World → Villager → Player → Village**, alongside MCA's normal personality, traits, relationships, environment and other conversation information.
+
+## Villagers
+
+* Added more varied automatically generated backgrounds for AI villagers, including personal history, skills, habits, preferences, keepsakes, goals and beliefs.
+* Improved **Villager ↔ Zombie Villager conversion**.
+
+  * MCA identity and persistent data are preserved more reliably through infection and curing.
+  * ChatAI villager context is preserved through conversion.
+  * Conversion behaviour now avoids several UUID/data-transfer edge cases.
+
+## Pathfinding
+
+* Improved ladder/climbable pathfinding performance.
+* Fixed villagers oscillating or behaving erratically while using ladders.
+* Simplified ladder node handling and reduced unnecessary pathfinding work.
+
+## Skin Library
+
+* Fixed Library authentication in sandboxed environments.
+* Improved the Library login/authentication flow.
+* Improved Library Editor performance and internal loading behaviour.
+* Added paging improvements for submissions and likes.
+* Improved profession-name fallbacks.
+* Fixed blacklist handling.
+
+## Mod compatibility
+
+* Fixed compatibility with **Smarter Farmers** and some other mods.
+* Additional internal compatibility and cleanup work.
+
+
+# 7.7.30
+
+* Improved Ladder navigation.
+* Fixed crash with archers being on horses.
+
+# 7.7.29
+
+* Synced patreon supporters
+* Added modded villages support for Destiny Screens
+  * Any structure which contains the minecraft villages tag or contains the name village is present
+  * Hovering over the Destiny screen gives you the mod it's coming from! 
+
+# 7.7.28
+
+* Fixed villagers crowding around occupied beds / behaving weird.
+  * Existing affected villagers may need Locations -> Home set again, or the affected beds broken and replaced.
+
+# 7.7.27
+
+* Villagers can now recognise ladder nodes and climb and descend them, even when they're following you!
+  * Previously was only in the alpha version.
+
+# 7.7.26
+
+* Minor changes to gifts
+
+# 7.7.25
+
+* Bouquets (flowers) can now be treated as gifts to your partner! (Thanks tranthienlong675!)
+* EMF support has been added
+
+# 7.7.24
+
+* Bug fixes/Internal improvements
+* Port of 1.20.1 beta updates to 1.21.1
+  * Iris Brightness Colour
+  * Increased eye colour vividness
+  * Mourning system has been overhauled, should be way more reliable
+  * Fix Presets not rendering the correct comparison NPC visual snapshots.
+  * Improved Fishing Task
+  * Stopped defineId warning spam in logs
+
+# 7.7.23
+
+* Properly fixed Library preview corrupted model issue - This was a result of having Advanced Hair.
+* Fixed a very specific crash in the Library.
+* Added support for modded water, which broke pathfinding
+* Entities properly avoid specially collision shaped blocks such as lanterns
+* Entities shouldn't get stuck in doors and open them repeatedly.
+
+# 7.7.22
+
+* Fixed Rare Crash
+* Fixed Library Preview rare corruption issue.
+* Improved guard enemy reaction interval with no performance loss.
+
+# 7.7.21
+
+* Fixed Villagers not being able to get through doors cause of their width.
+
+# 7.7.20
+
+* Fixed Rumours not working and throwing an error.
+* Fixed villager name changes not applying
+* Fixed typo in pastries.json which caused an error
+
+# 7.7.19
+
+* Fixed MCA Debug Editor breaking when editing a character while it is sitting down. 
+
 # 7.7.18
 
 Initial Release
@@ -20,6 +183,7 @@ Initial Release
     * Added config options for extra collision checks while villagers pathfind.
     * The broader collision-check option is off by default, but can help modpacks with many custom block shapes.
 * Fixed `bountyHunterInterval <= 0` crashing
+* Fixed some mods breaking lighting rituals on fire.
 
 # 7.7.18-beta.10
 

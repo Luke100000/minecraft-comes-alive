@@ -46,6 +46,8 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
     private final ZombieCommandHandler interactions = new ZombieCommandHandler(this);
     private final UpdatableInventory inventory = new UpdatableInventory(27);
 
+    private String chatAIPrompt = "";
+    private CompoundTag nicknameData = new CompoundTag();
     private int burned;
 
     public ZombieVillagerEntityMCA(EntityType<? extends ZombieVillager> type, Level world, Gender gender) {
@@ -124,7 +126,7 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
 
         boolean useRawDimensions = getAgeState() == AgeState.TEEN || getAgeState() == AgeState.ADULT;
         float height = (useRawDimensions ? getRawVerticalScaleFactor() : getVerticalScaleFactor()) * 2.0F;
-        float width = (useRawDimensions ? getRawHorizontalScaleFactor() : getHorizontalScaleFactor()) * 0.6F;
+        float width = getHorizontalScaleFactor() * 0.6F;
 
         return EntityDimensions.scalable(width, height).withAttachments(EntityAttachments.builder()
                 .attach(EntityAttachment.VEHICLE, 0.0F, getRawVerticalScaleFactor() * VEHICLE_ATTACHMENT_Y, 0.0F));
@@ -220,7 +222,10 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
     public <T extends Mob> T convertTo(EntityType<T> type, boolean keepInventory) {
         T mob;
         if (!isRemoved() && type == EntityType.VILLAGER) {
-            mob = (T) super.convertTo(getGenetics().getGender().getVillagerType(), keepInventory);
+            mob = (T) VillagerLike.convertPreservingUuid(this,
+                    getGenetics().getGender().getVillagerType(),
+                    keepInventory,
+                    this::getEquipmentDropChance);
         } else {
             mob = super.convertTo(type, keepInventory);
         }
@@ -231,7 +236,6 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
         }
 
         if (mob instanceof VillagerEntityMCA villager) {
-            villager.setUUID(getUUID());
             villager.setInventory(inventory);
             villager.setAge(getAgeState().toAge());
         }
@@ -240,10 +244,24 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
     }
 
     @Override
+    public void writeAdditionalConversionData(CompoundTag output) {
+        output.putString(VillagerEntityMCA.CHAT_AI_PROMPT_KEY, chatAIPrompt);
+        output.put(VillagerEntityMCA.NICKNAMES_KEY, nicknameData.copy());
+    }
+
+    @Override
+    public void readAdditionalConversionData(CompoundTag input) {
+        chatAIPrompt = input.getString(VillagerEntityMCA.CHAT_AI_PROMPT_KEY);
+        nicknameData = input.getCompound(VillagerEntityMCA.NICKNAMES_KEY).copy();
+    }
+
+    @Override
     public void readAdditionalSaveData(CompoundTag nbt) {
         super.readAdditionalSaveData(nbt);
         getTypeDataManager().load(this, nbt);
         relations.readFromNbt(nbt);
+        chatAIPrompt = nbt.getString(VillagerEntityMCA.CHAT_AI_PROMPT_KEY);
+        nicknameData = nbt.getCompound(VillagerEntityMCA.NICKNAMES_KEY).copy();
 
         updateAttributes();
 
@@ -271,6 +289,8 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
         getTypeDataManager().save(this, nbt);
         relations.writeToNbt(nbt);
         InventoryUtils.saveToNBT(this.registryAccess(), inventory, nbt);
+        nbt.putString(VillagerEntityMCA.CHAT_AI_PROMPT_KEY, chatAIPrompt);
+        nbt.put(VillagerEntityMCA.NICKNAMES_KEY, nicknameData.copy());
     }
 
     @Override

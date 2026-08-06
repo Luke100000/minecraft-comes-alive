@@ -5,6 +5,7 @@ import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.Relationship;
 import net.conczin.mca.server.world.data.PlayerSaveData;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.InteractionResult;
 
 public class EngagementRingItem extends RelationshipItem {
     public EngagementRingItem(Properties properties) {
@@ -17,24 +18,22 @@ public class EngagementRingItem extends RelationshipItem {
     }
 
     @Override
-    public boolean handle(ServerPlayer player, VillagerEntityMCA villager) {
-        PlayerSaveData playerData = PlayerSaveData.get(player);
-        String response;
-        boolean consume = false;
-
-        if (super.handle(player, villager)) {
-            return false;
-        } else if (Relationship.IS_ENGAGED.test(villager, player)) {
-            response = "interaction.engage.fail.engaged";
-        } else {
-            response = "interaction.engage.success";
-            playerData.engage(villager);
-            villager.getRelationships().engage(player);
-            villager.getVillagerBrain().modifyMoodValue(10);
-            consume = true;
+    public InteractionResult handle(ServerPlayer player, VillagerEntityMCA villager) {
+        InteractionResult result = validate(player, villager);
+        if (result != InteractionResult.PASS) {
+            return result;
         }
 
-        villager.sendChatMessage(player, response);
-        return consume;
+        if (Relationship.IS_ENGAGED.test(villager, player)) {
+            villager.sendChatMessage(player, "interaction.engage.fail.engaged");
+            return InteractionResult.FAIL;
+        }
+
+        PlayerSaveData playerData = PlayerSaveData.get(player);
+        playerData.engage(villager);
+        villager.getRelationships().engage(player);
+        villager.getVillagerBrain().modifyMoodValue(10);
+        villager.sendChatMessage(player, "interaction.engage.success");
+        return InteractionResult.CONSUME;
     }
 }

@@ -7,8 +7,9 @@ accessible method net/minecraft/world/entity/ai/sensing/SensorType <init> (Ljava
 accessible method net/minecraft/world/entity/schedule/Activity <init> (Ljava/lang/String;)V
 accessible method net/minecraft/world/entity/npc/VillagerProfession <init> (Ljava/lang/String;Ljava/util/function/Predicate;Ljava/util/function/Predicate;Lcom/google/common/collect/ImmutableSet;Lcom/google/common/collect/ImmutableSet;Lnet/minecraft/sounds/SoundEvent;)V
 
-# Widen Villager.startTrading so it can be overridden and called directly without an invoker mixin.
-extendable method net/minecraft/world/entity/npc/Villager startTrading (Lnet/minecraft/world/entity/player/Player;)V
+# Widen private Villager interaction helpers so MCA can call vanilla behavior directly.
+accessible method net/minecraft/world/entity/npc/Villager startTrading (Lnet/minecraft/world/entity/player/Player;)V
+accessible method net/minecraft/world/entity/npc/Villager setUnhappy ()V
 
 # Widen AdvancementRewards.loot to allow temporary modification without an accessor mixin.
 accessible field net/minecraft/advancements/AdvancementRewards loot Ljava/util/List;
@@ -16,3 +17,11 @@ mutable field net/minecraft/advancements/AdvancementRewards loot Ljava/util/List
 
 # Widen MoveControl.rotlerp for task usage
 accessible method net/minecraft/world/entity/ai/control/MoveControl rotlerp (FFF)F
+
+# Widen GroundPathNavigation.getSurfaceY so MCA can make water-tag-aware navigation without replacing getTempMobPos.
+extendable method net/minecraft/world/entity/ai/navigation/GroundPathNavigation getSurfaceY ()I
+
+# Reuse CrossbowAttack's vanilla state machine while replacing its exact-item hand selection.
+extendable method net/minecraft/world/entity/ai/behavior/CrossbowAttack crossbowAttack (Lnet/minecraft/world/entity/Mob;Lnet/minecraft/world/entity/LivingEntity;)V
+accessible field net/minecraft/world/entity/ai/behavior/CrossbowAttack crossbowState Lnet/minecraft/world/entity/ai/behavior/CrossbowAttack$CrossbowState;
+accessible class net/minecraft/world/entity/ai/behavior/CrossbowAttack$CrossbowState

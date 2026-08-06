@@ -87,14 +87,11 @@ public final class SkinVisualIds {
     }
 
     private static boolean isKnownLayeredHair(String identifier, LayeredHair.Category category, LayeredHairList list) {
-        return list.hair.values().stream()
-                .anyMatch(entry -> entry.getIdentifier().equals(identifier) && entry.getCategory() == category);
+        return list.get(identifier, category) != null;
     }
 
     private static boolean isKnownLayeredHair(String identifier, LayeredHair.Category category, Gender gender, LayeredHairList list) {
-        return list.hair.values().stream()
-                .anyMatch(entry -> entry.getIdentifier().equals(identifier)
-                        && entry.getCategory() == category
-                        && SkinSelection.matchesGender(entry, gender));
+        LayeredHair entry = list.get(identifier, category);
+        return entry != null && SkinSelection.matchesGender(entry, gender);
     }
 }

@@ -19,7 +19,7 @@ public class ChatAI {
     /**
      * Max time until a conversation is considered invalid
      */
-    private static final int CONVERSATION_TIME = 20 * 60;
+    private static final int CONVERSATION_TIME = 20 * 120;
 
     /**
      * Max distance until a conversation is considered invalid
@@ -100,10 +100,17 @@ public class ChatAI {
         // Find name in message
         String normalizedMsg = normalizeString(msg);
         for (VillagerEntityMCA villager : nearbyVillagers) {
+            String nickname = villager.getNickname(playerUUID);
+
+            if (!nickname.isEmpty() &&
+                    containsWholeWord(normalizedMsg, normalizeString(nickname))) {
+                return Optional.of(villager);
+            }
+
             String normalizedName = getName(villager);
             String[] nameParts = normalizedName.split(" ");
             for (String part : nameParts) {
-                if (Pattern.compile("\\b" + Pattern.quote(part) + "\\b").matcher(normalizedMsg).find()) {
+                if (containsWholeWord(normalizedMsg, part)) {
                     return Optional.of(villager);
                 }
             }
@@ -120,6 +127,12 @@ public class ChatAI {
         }
 
         return Optional.empty();
+    }
+
+    private static boolean containsWholeWord(String text, String word) {
+        return Pattern.compile("\\b" + Pattern.quote(word) + "\\b")
+                .matcher(text)
+                .find();
     }
 
     /**
@@ -159,6 +172,12 @@ public class ChatAI {
             }
         }
         return Optional.empty();
+    }
+
+    /** Finds the nearest MCA villager available to the player for context editing. */
+    public static Optional<VillagerEntityMCA> findClosestVillager(ServerPlayer player) {
+        return WorldUtils.getCloseEntities(player.level(), player, VILLAGER_SEARCH_RANGE, VillagerEntityMCA.class).stream()
+                .min(Comparator.comparingDouble(player::distanceToSqr));
     }
 
     /**

@@ -49,6 +49,7 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
     private Optional<Integer> lastSeenVillage = Optional.empty();
     private boolean entityDataSet;
     private boolean overrideVillageRequirements;
+    private String chatAIPrompt = "";
     private CompoundTag entityData;
     private PlayerDimensions.Scale dimensionsScale;
 
@@ -66,6 +67,7 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
         lastSeenVillage = nbt.contains("lastSeenVillage", Tag.TAG_INT) ? Optional.of(nbt.getInt("lastSeenVillage")) : Optional.empty();
         entityDataSet = nbt.contains("entityDataSet") && nbt.getBoolean("entityDataSet");
         overrideVillageRequirements = nbt.contains("overrideVillageRequirements") && nbt.getBoolean("overrideVillageRequirements");
+        chatAIPrompt = nbt.getString("chatAIPrompt");
 
         if (nbt.contains("entityData")) {
             entityData = nbt.getCompound("entityData");
@@ -128,6 +130,15 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
 
     public CompoundTag getEntityData() {
         return entityData.copy();
+    }
+
+    public String getChatAIPrompt() {
+        return chatAIPrompt;
+    }
+
+    public void setChatAIPrompt(String chatAIPrompt) {
+        this.chatAIPrompt = chatAIPrompt;
+        setDirty();
     }
 
     public PlayerDimensions.Scale getDimensionsScale() {
@@ -271,6 +282,7 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
         nbt.put("entityData", entityData);
         nbt.putBoolean("entityDataSet", entityDataSet);
         nbt.putBoolean("overrideVillageRequirements", overrideVillageRequirements);
+        nbt.putString("chatAIPrompt", chatAIPrompt);
         nbt.put("inbox", NbtHelper.fromList(inbox, v -> v.toTag(provider)));
         return nbt;
     }

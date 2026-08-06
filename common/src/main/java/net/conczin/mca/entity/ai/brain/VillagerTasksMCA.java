@@ -11,6 +11,7 @@ import net.conczin.mca.entity.ai.ActivitiesMCA;
 import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
 import net.conczin.mca.entity.ai.SchedulesMCA;
 import net.conczin.mca.entity.ai.SensorsMCA;
+import net.conczin.mca.entity.ai.RangedWeaponHelper;
 import net.conczin.mca.entity.ai.brain.sensor.GuardEnemiesSensor;
 import net.conczin.mca.entity.ai.brain.tasks.*;
 import net.conczin.mca.entity.ai.brain.tasks.chore.ChoppingTask;
@@ -46,6 +47,9 @@ import net.minecraft.world.item.Items;
 import java.util.Optional;
 
 public class VillagerTasksMCA {
+    private static final float GRIEVING_WALK_SPEED = 0.5F;
+    private static final int GRIEVING_PATH_TIMEOUT = 1200;
+
     public static final ImmutableList<MemoryModuleType<?>> MEMORY_TYPES = ImmutableList.of(
             MemoryModuleType.HOME,
             MemoryModuleType.JOB_SITE,
@@ -85,11 +89,12 @@ public class VillagerTasksMCA {
             MemoryModuleTypeMCA.SMALL_BOUNTY,
             MemoryModuleTypeMCA.HIT_BY_PLAYER,
             MemoryModuleTypeMCA.LAST_GRIEVE,
+            MemoryModuleTypeMCA.MOURNING_SITE,
+            MemoryModuleTypeMCA.MOURNING_POSITION,
             MemoryModuleTypeMCA.FORCED_HOME
     );
 
     public static final ImmutableList<SensorType<? extends Sensor<? super Villager>>> SENSOR_TYPES = ImmutableList.of(
-            SensorType.NEAREST_LIVING_ENTITIES,
             SensorType.NEAREST_PLAYERS,
             SensorType.NEAREST_ITEMS,
             SensorType.NEAREST_BED,
@@ -322,7 +327,7 @@ public class VillagerTasksMCA {
                         new ExtendedMeleeAttackTask(20, 2.0F),
                         (VillagerEntityMCA v) -> !VillagerTasksMCA.isHoldingRangedWeapon(v)
                 )),
-                Pair.of(9, new CrossbowAttack<VillagerEntityMCA, VillagerEntityMCA>())
+                Pair.of(9, new ExtendedCrossbowAttackTask<VillagerEntityMCA, VillagerEntityMCA>())
         );
     }
 
@@ -384,7 +389,8 @@ public class VillagerTasksMCA {
     }
 
     private static boolean shouldRespondToGuardEnemy(VillagerEntityMCA villager, LivingEntity target) {
-        return GuardEnemiesSensor.isGuardEnemy(target, villager)
+        return shouldKeepAttackTarget(villager, target)
+               && GuardEnemiesSensor.isGuardEnemy(target, villager)
                && shouldRespondToAttackTarget(villager, target);
     }
 
@@ -417,7 +423,7 @@ public class VillagerTasksMCA {
     }
 
     private static boolean isHoldingRangedWeapon(VillagerEntityMCA villager) {
-        return villager.isHolding(Items.BOW) || villager.isHolding(Items.CROSSBOW);
+        return RangedWeaponHelper.isHoldingSupportedWeapon(villager);
     }
 
     public static boolean isInDanger(VillagerEntityMCA villager) {
@@ -430,29 +436,35 @@ public class VillagerTasksMCA {
     }
 
     public static ImmutableList<Pair<Integer, ? extends BehaviorControl<? super VillagerEntityMCA>>> getGrievingPackage() {
+        MournAtGraveTask mournAtGrave = new MournAtGraveTask();
         return ImmutableList.of(
+                Pair.of(2, ExtendedWalkTowardsTask.create(
+                        MemoryModuleTypeMCA.MOURNING_POSITION,
+                        GRIEVING_WALK_SPEED,
+                        0,
+                        Config.getInstance().getVillagerPathfindingDistance(),
+                        GRIEVING_PATH_TIMEOUT,
+                        villager -> true,
+                        villager -> { },
+                        villager -> !mournAtGrave.hasArrived()
+                )),
                 Pair.of(0, new SequenceTask<>(
                         ImmutableMap.of(MemoryModuleType.WALK_TARGET, MemoryStatus.VALUE_ABSENT),
                         ImmutableList.of(
-                                new EnterBuildingTask("graveyard", 0.5f),
-                                new RunOne<>(
-                                        ImmutableList.of(
-                                                Pair.of(new HoldItemTask(InteractionHand.MAIN_HAND, Items.WHITE_TULIP), 1),
-                                                Pair.of(new HoldItemTask(InteractionHand.MAIN_HAND, Items.RED_TULIP), 1),
-                                                Pair.of(new HoldItemTask(InteractionHand.MAIN_HAND, Items.ORANGE_TULIP), 1),
-                                                Pair.of(new HoldItemTask(InteractionHand.MAIN_HAND, Items.PINK_TULIP), 1)
-                                        )
-                                ),
-                                new WanderOrTeleportToTargetTask(),
-                                new DoNothing(100, 300),
-                                new SayTask("villager.grieving"),
-                                new DoNothing(100, 300),
-                                new SayTask("villager.grieving"),
-                                new DoNothing(100, 300),
-                                new SayTask("villager.grieving"),
-                                new HoldItemTask(InteractionHand.MAIN_HAND, ItemStack.EMPTY),
+                                new EnterGraveyardTask(GRIEVING_WALK_SPEED),
+                                mournAtGrave,
                                 new LambdaTask<>((v) -> {
-                                    v.getVillagerBrain().justGrieved();
+                                    boolean completed = mournAtGrave.hasCompleted();
+                                    boolean hadAssignedSite = v.getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_SITE).isPresent();
+                                    boolean targetStillMournable = EnterGraveyardTask.hasMournableSite(v);
+                                    boolean periodicCandidateStillExists = !hadAssignedSite && EnterGraveyardTask.hasPeriodicMourningCandidate(v);
+                                    v.getBrain().eraseMemory(MemoryModuleTypeMCA.MOURNING_SITE);
+                                    v.getBrain().eraseMemory(MemoryModuleTypeMCA.MOURNING_POSITION);
+                                    if (completed || (!targetStillMournable && !periodicCandidateStillExists)) {
+                                        v.getVillagerBrain().justGrieved();
+                                    } else {
+                                        v.getVillagerBrain().retryGrievingLater();
+                                    }
                                     v.getBrain().updateActivityFromSchedule(v.level().getDayTime(), v.level().getGameTime());
                                 })
 
@@ -462,29 +474,13 @@ public class VillagerTasksMCA {
     }
 
     public static ImmutableList<Pair<Integer, ? extends BehaviorControl<? super VillagerEntityMCA>>> getWorkPackage(VillagerProfession profession, float speedModifier) {
-        WorkAtPoi villagerWorkTask;
-        if (profession == VillagerProfession.FARMER) {
-            villagerWorkTask = new WorkAtComposter();
-        } else {
-            villagerWorkTask = new WorkAtPoi();
+        // Keep MCA's public package method, but source the task list from vanilla so mods that
+        // transform VillagerGoalPackages#getWorkPackage also affect MCA villagers.
+        ImmutableList.Builder<Pair<Integer, ? extends BehaviorControl<? super VillagerEntityMCA>>> tasks = ImmutableList.builder();
+        for (Pair<Integer, ? extends BehaviorControl<? super Villager>> task : VillagerGoalPackages.getWorkPackage(profession, speedModifier)) {
+            tasks.add(Pair.of(task.getFirst(), task.getSecond()));
         }
-
-        return ImmutableList.of(
-                getMinimalLookBehavior(),
-                Pair.of(5, new RunOne<>(
-                        ImmutableList.of(Pair.of(villagerWorkTask, 7),
-                                Pair.of(StrollAroundPoi.create(MemoryModuleType.JOB_SITE, 0.4F, 4), 2),
-                                Pair.of(StrollToPoi.create(MemoryModuleType.JOB_SITE, 0.4F, 1, 10), 5),
-                                Pair.of(StrollToPoiList.create(MemoryModuleType.SECONDARY_JOB_SITE, speedModifier, 1, 6, MemoryModuleType.JOB_SITE), 5),
-                                Pair.of(new HarvestFarmland(), profession == VillagerProfession.FARMER ? 2 : 5),
-                                Pair.of(new UseBonemeal(), profession == VillagerProfession.FARMER ? 4 : 7))
-                )),
-                Pair.of(10, new ShowTradesToPlayer(400, 1600)),
-                Pair.of(10, SetLookAndInteract.create(EntityType.PLAYER, 4)),
-                Pair.of(2, SetWalkTargetFromBlockMemory.create(MemoryModuleType.JOB_SITE, speedModifier, 9, 100, 1200)),
-                Pair.of(3, new GiveGiftToHero(100)),
-                Pair.of(99, UpdateActivityFromSchedule.create())
-        );
+        return tasks.build();
     }
 
     public static ImmutableList<Pair<Integer, ? extends BehaviorControl<? super VillagerEntityMCA>>> getPlayPackage(float speedModifier) {
@@ -518,7 +514,7 @@ public class VillagerTasksMCA {
                     return !forced;
                 }, v -> {
                     v.getResidency().seekHome();
-                }, ExtendedWalkTowardsTask::findBedStandPosition)),
+                })),
                 //verify the bed, occupancies state and similar
                 Pair.of(3, new ConditionalSingleTickTask<>(ExtendedForgetCompletedPointOfInterestTask.create(
                         registryEntry -> registryEntry.is(PoiTypes.HOME), MemoryModuleType.HOME, (entity) -> {

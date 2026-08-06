@@ -3,7 +3,6 @@ package net.conczin.mca.resources;
 import net.conczin.mca.MCA;
 import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.resources.data.skin.LayeredHair;
-import net.minecraft.ResourceLocationException;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.server.packs.resources.SimplePreparableReloadListener;
@@ -35,33 +34,11 @@ public class LayeredHairList extends SimplePreparableReloadListener<Map<Resource
     @Override
     protected void apply(Map<ResourceLocation, List<String>> data, ResourceManager manager, ProfilerFiller profiler) {
         hair.clear();
-        data.forEach(this::addEntries);
+        data.forEach((id, textures) -> SkinCatalogLoader.addLayeredHair(hair, id, textures));
     }
 
-    private void addEntries(ResourceLocation id, List<String> textures) {
-        LayeredHair.Category fileCategory = getCategoryFromPath(id);
-        textures.forEach(texture -> addEntry(texture, fileCategory));
-    }
-
-    private void addEntry(String texture, LayeredHair.Category category) {
-        ResourceLocation parsed;
-        try {
-            parsed = ResourceLocation.parse(texture);
-        } catch (ResourceLocationException exception) {
-            MCA.LOGGER.warn("Invalid layered hair texture identifier {}", texture, exception);
-            return;
-        }
-        if (!parsed.getPath().startsWith("skins/layered_hair/")) {
-            MCA.LOGGER.warn("Invalid layered hair texture path {}", texture);
-            return;
-        }
-
-        LayeredHair layeredHair = new LayeredHair(texture, Gender.NEUTRAL, category, 1.0F);
-        hair.put(layeredHair.getIdentifier() + "|" + layeredHair.getGender().getDataName() + "|" + layeredHair.getCategory().getId(), layeredHair);
-    }
-
-    public boolean containsIdentifier(String identifier) {
-        return hair.values().stream().anyMatch(entry -> entry.getIdentifier().equals(identifier));
+    public LayeredHair get(String identifier, LayeredHair.Category category) {
+        return hair.get(key(identifier, Gender.NEUTRAL, category));
     }
 
     public WeightedPool<String> getPool(LayeredHair.Category category, Gender gender) {
@@ -100,14 +77,7 @@ public class LayeredHairList extends SimplePreparableReloadListener<Map<Resource
         return SkinSelection.maxChance(SkinSelection.layeredHair(hair.values(), category, gender));
     }
 
-    private static LayeredHair.Category getCategoryFromPath(ResourceLocation id) {
-        String[] parts = id.getPath().split("/");
-        for (String part : parts) {
-            LayeredHair.Category category = LayeredHair.Category.byNameOrNull(part);
-            if (category != null) {
-                return category;
-            }
-        }
-        return LayeredHair.Category.BASE;
+    public static String key(String identifier, Gender gender, LayeredHair.Category category) {
+        return identifier + "|" + gender.getDataName() + "|" + category.getId();
     }
 }

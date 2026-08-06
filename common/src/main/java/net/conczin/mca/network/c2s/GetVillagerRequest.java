@@ -42,7 +42,7 @@ public record GetVillagerRequest(UUID id) implements HandleablePayload {
             data = PlayerSaveData.get(serverPlayer).getEntityData();
         } else if (e instanceof LivingEntity) {
             data = new CompoundTag();
-            e.save(data);
+            e.saveAsPassenger(data);
         } else {
             return null;
         }

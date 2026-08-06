@@ -5,6 +5,8 @@ import net.conczin.mca.network.s2c.*;
 public interface ClientHandler {
     void handleGuiRequest(OpenGuiRequest message);
 
+    void handleChatAIContextResponse(ChatAIContextResponse message);
+
     void handleFamilyTreeResponse(GetFamilyTreeResponse message);
 
     void handleInteractDataResponse(GetInteractDataResponse message);

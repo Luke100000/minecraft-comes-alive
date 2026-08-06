@@ -29,6 +29,7 @@ import net.minecraft.util.FastColor;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.MobSpawnType;
@@ -38,10 +39,12 @@ import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.npc.VillagerDataHolder;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.DyeColor;
+import net.minecraft.world.item.ItemStack;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.ToDoubleFunction;
 
 import static net.minecraft.world.entity.LivingEntity.getSlotForHand;
 
@@ -602,16 +605,69 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
         return false;
     }
 
+    @Nullable
+    static <T extends Mob> T convertPreservingUuid(Mob source, EntityType<T> type, boolean keepEquipment,
+                                                    ToDoubleFunction<EquipmentSlot> dropChanceGetter) {
+        if (source.isRemoved()) {
+            return null;
+        }
+
+        T converted = type.create(source.level());
+        if (converted == null) {
+            return null;
+        }
+
+        Entity vehicle = source.getVehicle();
+        converted.copyPosition(source);
+        converted.setBaby(source.isBaby());
+        converted.setNoAi(source.isNoAi());
+        if (source.hasCustomName()) {
+            converted.setCustomName(source.getCustomName());
+            converted.setCustomNameVisible(source.isCustomNameVisible());
+        }
+        if (source.isPersistenceRequired()) {
+            converted.setPersistenceRequired();
+        }
+        converted.setInvulnerable(source.isInvulnerable());
+        if (keepEquipment) {
+            converted.setCanPickUpLoot(source.canPickUpLoot());
+            for (EquipmentSlot slot : EquipmentSlot.values()) {
+                ItemStack stack = source.getItemBySlot(slot);
+                if (!stack.isEmpty()) {
+                    converted.setItemSlot(slot, stack.copyAndClear());
+                    converted.setDropChance(slot, (float) dropChanceGetter.applyAsDouble(slot));
+                }
+            }
+        }
+
+        converted.setUUID(source.getUUID());
+
+        source.discard();
+        source.level().addFreshEntity(converted);
+        if (vehicle != null) {
+            converted.startRiding(vehicle, true);
+        }
+        return converted;
+    }
+
     @SuppressWarnings({"unchecked", "RedundantSuppression"})
     default CompoundTag toNbtForConversion() {
         CompoundTag output = new CompoundTag();
         this.getTypeDataManager().save((E) asEntity(), output);
+        writeAdditionalConversionData(output);
         return output;
     }
 
     @SuppressWarnings({"unchecked", "RedundantSuppression"})
     default void readNbtForConversion(CompoundTag input) {
         this.getTypeDataManager().load((E) asEntity(), input);
+        readAdditionalConversionData(input);
+    }
+
+    default void writeAdditionalConversionData(CompoundTag output) {
+    }
+
+    default void readAdditionalConversionData(CompoundTag input) {
     }
 
     void readAdditionalSaveDataForEditor(CompoundTag nbt);

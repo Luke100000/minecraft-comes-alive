@@ -6,11 +6,13 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.item.ItemStack;
 
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.IntFunction;
 
 public interface CParameter<T, TrackedType> {
     static CDataParameter<Integer> create(String id, int def) {
@@ -92,6 +94,14 @@ public interface CParameter<T, TrackedType> {
 
     static <T extends Enum<T>> CEnumParameter<T> create(String id, Class<T> type) {
         return new CEnumParameter<>(id, type, null);
+    }
+
+    static CResourceLocationParameter create(String id, ResourceLocation def) {
+        return new CResourceLocationParameter(id, def, null);
+    }
+
+    static CResourceLocationParameter create(String id, ResourceLocation def, IntFunction<ResourceLocation> legacyDecoder) {
+        return new CResourceLocationParameter(id, def, legacyDecoder);
     }
 
     TrackedType getDefault();

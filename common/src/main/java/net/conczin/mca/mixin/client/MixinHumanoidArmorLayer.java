@@ -1,5 +1,7 @@
 package net.conczin.mca.mixin.client;
 
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.conczin.mca.MCAClient;
 import net.conczin.mca.client.model.PlayerArmorExtendedModel;
@@ -16,9 +18,6 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(HumanoidArmorLayer.class)
 public abstract class MixinHumanoidArmorLayer<T extends LivingEntity, A extends HumanoidModel<T>> {
@@ -26,9 +25,6 @@ public abstract class MixinHumanoidArmorLayer<T extends LivingEntity, A extends 
     protected final A mca$leggingsModel = mca$createModel(0.5F);
     @Unique
     protected final A mca$bodyModel = mca$createModel(1.0F);
-    @Unique
-    protected boolean mca$injectionActive;
-
     @Shadow
     protected abstract boolean usesInnerModel(EquipmentSlot slot);
 
@@ -38,18 +34,35 @@ public abstract class MixinHumanoidArmorLayer<T extends LivingEntity, A extends 
         return (A) new PlayerArmorExtendedModel<T>(LayerDefinition.create(VillagerEntityModelMCA.armorData(new CubeDeformation(dilation)), 64, 32).bakeRoot());
     }
 
-    @Inject(method = "render(Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;ILnet/minecraft/world/entity/LivingEntity;FFFFFF)V", at = @At("HEAD"))
-    public void mca$injectRender(PoseStack matrixStack, MultiBufferSource vertexConsumerProvider, int i, T livingEntity, float f, float g, float h, float j, float k, float l, CallbackInfo ci) {
-        mca$injectionActive = livingEntity instanceof Player && MCAClient.useGeneticsRenderer(livingEntity.getUUID());
-    }
-
-    @Inject(method = "getArmorModel(Lnet/minecraft/world/entity/EquipmentSlot;)Lnet/minecraft/client/model/HumanoidModel;", at = @At("HEAD"), cancellable = true)
-    private void mca$injectGetArmorModel(EquipmentSlot slot, CallbackInfoReturnable<A> cir) {
-        if (mca$injectionActive) {
+    @WrapOperation(
+            method = "render(Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;ILnet/minecraft/world/entity/LivingEntity;FFFFFF)V",
+            at = @At(
+                    value = "INVOKE",
+                    target = "Lnet/minecraft/client/renderer/entity/layers/HumanoidArmorLayer;getArmorModel(Lnet/minecraft/world/entity/EquipmentSlot;)Lnet/minecraft/client/model/HumanoidModel;"
+            ),
+            expect = 4
+    )
+    private A mca$selectArmorModel(
+            HumanoidArmorLayer<?, ?, ?> layer,
+            EquipmentSlot slot,
+            Operation<A> original,
+            PoseStack matrixStack,
+            MultiBufferSource vertexConsumerProvider,
+            int light,
+            T livingEntity,
+            float limbSwing,
+            float limbSwingAmount,
+            float partialTick,
+            float ageInTicks,
+            float netHeadYaw,
+            float headPitch
+    ) {
+        if (livingEntity instanceof Player && MCAClient.useGeneticsRenderer(livingEntity.getUUID())) {
             A model = this.usesInnerModel(slot) ? mca$leggingsModel : mca$bodyModel;
             if (model != null) {
-                cir.setReturnValue(model);
+                return model;
             }
         }
+        return original.call(layer, slot);
     }
 }

@@ -283,14 +283,17 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     }
 
     protected void setPage(String page) {
-        if (villager != null) {
+        String prevPage = this.page;
+        boolean keepSelectedPresetPreview = page.equals("presets")
+                && "presets".equals(prevPage)
+                && selectedPreset != null;
+        if (villager != null && !keepSelectedPresetPreview) {
             CompoundTag nbt = saveEntityData(villager);
             villagerVisualization.readAdditionalSaveDataForEditor(nbt);
             villagerVisualization.setAge(villager.getAge());
             villagerVisualization.refreshDimensions();
         }
 
-        String prevPage = this.page;
         // Backup / restore logic for presets page
         if (this.page != null && this.page.equals("presets") && presetsBackupNbt != null && !page.equals("presets")) {
             if (villagerData != null) {
@@ -626,6 +629,8 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                 }
 
                 y = geneChanger(y, Genetics.FACE, getFaceCount());
+                addGeneSlider(width / 2, y, DATA_WIDTH, Genetics.EYE_BRIGHTNESS);
+                y += 22;
 
                 if (hasHetero) {
                     addRenderableWidget(new ButtonWidget(width / 2, y, DATA_WIDTH / 2, 20,
@@ -994,24 +999,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     }
 
     private int getEditableEyeColor(boolean targetLeftEye) {
-        int dye = targetLeftEye ? villager.getEyeLeftDye() : villager.getEyeDye();
-        if (dye != 0xFFFFFFFF) {
-            return dye;
-        }
-
-        boolean heterochromia = villager.getTraits().hasTrait(Traits.HETEROCHROMIA);
-        if (villager.getTraits().hasTrait(Traits.ALBINISM)) {
-            return 0xFFE8A0A0;
-        }
-
-        float eyeColor = Mth.frac(villager.getGenetics().getGene(Genetics.FACE) + (targetLeftEye && heterochromia ? 0.43F : 0.0F));
-        if (eyeColor < 0.35F) {
-            return FastColor.ARGB32.lerp(eyeColor / 0.35F, 0xFF557FA6, 0xFF5B8756);
-        }
-        if (eyeColor < 0.70F) {
-            return FastColor.ARGB32.lerp((eyeColor - 0.35F) / 0.35F, 0xFF5B8756, 0xFF8A6A35);
-        }
-        return FastColor.ARGB32.lerp((eyeColor - 0.70F) / 0.30F, 0xFF8A6A35, 0xFF4A2B18);
+        return EyeTextureLayers.getStaticEyeColor(villager, targetLeftEye);
     }
 
     private int addRgbColorSliders(int y, Runnable onChange) {
@@ -1867,8 +1855,9 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
             rotatePreview(-120.0F * frameSeconds);
         }
 
-        villager.tickCount = (int) (System.currentTimeMillis() / 50L);
-        villagerVisualization.tickCount = villager.tickCount;
+        // tick() already advances both preview entities. Do not replace their age with epoch time:
+        // EMF/CEM exposes entity age as a float, so huge wall-clock tick values lose per-tick precision
+        // and make time-based preview animations appear frozen for several seconds at a time.
 
         if (shouldDrawEntity()) {
             int x = width / 2 - DATA_WIDTH;
@@ -1903,7 +1892,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                 if (shouldPrintPlayerHint() && villagerUUID.equals(playerUUID) && getSelectedPlayerModel() != VillagerLike.PlayerModel.VILLAGER) {
                     final PoseStack matrices = context.pose();
                     matrices.pushPose();
-                    matrices.translate(x, y - 127, 0);
+                    matrices.translate((presetsButton.getX() + presetsButton.getWidth() + exportSkinButton.getX()) / 2.0F, presetsButton.getY() + presetsButton.getHeight() + 6, 0);
                     matrices.scale(0.5f, 0.5f, 0.5f);
                     context.drawCenteredString(font, Component.translatable("gui.villager_editor.model_hint"), 0, 0, 0xAAFFFFFF);
                     matrices.popPose();
@@ -2019,7 +2008,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         float scale = Math.max(1.0F, size * previewZoom) / entity.getScale();
         Vector3f translate = new Vector3f(0.0F, entity.getBbHeight() / 2.0F, 0.0F);
         context.enableScissor(x0, y0, x1, y1);
-        InventoryScreen.renderEntityInInventory(context, centerX, centerY, scale, translate, pose, cameraOrientation, entity);
+        PreviewEntityAnimation.renderEntityInInventory(context, centerX, centerY, scale, translate, pose, cameraOrientation, entity);
         context.flush();
         context.disableScissor();
 
@@ -2224,6 +2213,10 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     private CompoundTag saveEntityData(VillagerEntityMCA entity) {
         CompoundTag nbt = new CompoundTag();
         entity.addAdditionalSaveData(nbt);
+        Component customName = entity.getCustomName();
+        if (customName != null) {
+            nbt.putString("CustomName", Component.Serializer.toJson(customName, entity.registryAccess()));
+        }
         return nbt;
     }
 
@@ -2246,6 +2239,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
 
     private void selectPreset(String name) {
         this.selectedPreset = name;
+        setPage("presets");
         if (name != null) {
             if (nameField != null) {
                 nameField.setValue(name);
@@ -2285,7 +2279,6 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         } else {
             hasVisualChange = false;
         }
-        setPage("presets");
     }
 
     private void savePreset() {

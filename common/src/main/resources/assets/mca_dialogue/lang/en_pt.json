@@ -1479,5 +1479,11 @@
   "dialogue.rock_paper_scissor.loose.scissor/1": "Rock crushes scissors, I win!",
   "dialogue.rock_paper_scissor.win.rock/1": "Blimey, rock crushes scissor, I lost.",
   "dialogue.rock_paper_scissor.win.paper/1": "I can ne'er seem t' win wit' rock.",
-  "dialogue.rock_paper_scissor.win.scissor/1": "Scissors cut paper, ye got me dis time."
+  "dialogue.rock_paper_scissor.win.scissor/1": "Scissors cut paper, ye got me dis time.",
+  "spouse.interaction.procreate.fail.infertile/1": "I can nah 'ave little swabbies...",
+  "spouse.interaction.procreate.fail.infertile/2": "I be infertile, sweetie. We can nah 'ave sprogs.",
+  "spouse.interaction.procreate.fail.infertile/3": "Ye know I be nah able t' 'ave wee maties.",
+  "interaction.procreate.fail.infertile/1": "I can nah 'ave little swabbies.",
+  "interaction.procreate.fail.infertile/2": "I be infertile.",
+  "interaction.procreate.fail.infertile/3": "I can nah 'ave little swabbies."
 }

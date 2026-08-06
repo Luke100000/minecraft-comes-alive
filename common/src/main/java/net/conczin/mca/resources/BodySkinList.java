@@ -1,7 +1,6 @@
 package net.conczin.mca.resources;
 
 import com.google.gson.JsonElement;
-import com.mojang.serialization.JsonOps;
 import net.conczin.mca.MCA;
 import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.resources.data.skin.BodySkin;
@@ -9,7 +8,6 @@ import net.conczin.mca.resources.data.skin.SkinListEntry;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.server.packs.resources.SimpleJsonResourceReloadListener;
-import net.minecraft.util.GsonHelper;
 import net.minecraft.util.profiling.ProfilerFiller;
 
 import java.util.HashMap;
@@ -36,12 +34,7 @@ public class BodySkinList extends SimpleJsonResourceReloadListener {
     }
 
     private void addEntries(ResourceLocation id, JsonElement file) {
-        Gender fileGender = getGenderFromPath(id);
-        SkinListJson.entries(id, file).forEach(entry -> {
-            Gender entryGender = SkinListJson.resolveGender(fileGender, entry);
-            float chance = GsonHelper.getAsFloat(entry.metadata(), "chance", 1.0f);
-            skins.put(entry.identifier(), new BodySkin(entry.identifier(), entryGender, chance));
-        });
+        SkinCatalogLoader.addBodySkins(skins, id, file);
     }
 
     public BodySkin get(String identifier) {
