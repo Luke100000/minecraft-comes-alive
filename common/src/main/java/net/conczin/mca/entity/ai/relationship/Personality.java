@@ -20,7 +20,7 @@ import java.util.function.Predicate;
  * namespaced {@link ResourceLocation}. The identifier is also the stable value
  * used for persistence and client synchronization.</p>
  */
-public final class Personality implements Comparable<Personality> {
+public class Personality implements Comparable<Personality> {
     private static final String DIALOGUE_DOT_ESCAPE = "%2E";
     private static final ExtensibleTypeRegistry<Personality> REGISTRY = new ExtensibleTypeRegistry<>(MCA.MOD_ID, "personality");
     private static final List<Personality> LEGACY_VALUES = new ArrayList<>();
