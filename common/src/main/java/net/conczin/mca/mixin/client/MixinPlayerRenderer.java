@@ -1,5 +1,9 @@
 package net.conczin.mca.mixin.client;
 
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
+import com.llamalad7.mixinextras.sugar.Share;
+import com.llamalad7.mixinextras.sugar.ref.LocalBooleanRef;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.conczin.mca.MCAClient;
@@ -28,7 +32,6 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(PlayerRenderer.class)
@@ -43,10 +46,6 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<AbstractC
     private PlayerEntityExtendedModel<AbstractClientPlayer> mca$playerModel;
     @Unique
     private PlayerModel<AbstractClientPlayer> mca$vanillaModel;
-    @Unique
-    private AbstractClientPlayer mca$firstPersonPlayer;
-    @Unique
-    private MultiBufferSource mca$firstPersonBuffers;
 
     public MixinPlayerRenderer(EntityRendererProvider.Context ctx, PlayerModel<AbstractClientPlayer> model, float shadowRadius) {
         super(ctx, model, shadowRadius);
@@ -116,7 +115,7 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<AbstractC
         mca$selectModel(player);
     }
 
-    @Inject(method = "scale(Lnet/minecraft/client/player/AbstractClientPlayer;Lcom/mojang/blaze3d/vertex/PoseStack;F)V", at = @At("TAIL"), cancellable = true)
+    @Inject(method = "scale(Lnet/minecraft/client/player/AbstractClientPlayer;Lcom/mojang/blaze3d/vertex/PoseStack;F)V", at = @At("TAIL"))
     private void mca$injectScale(AbstractClientPlayer player, PoseStack matrices, float f, CallbackInfo ci) {
         if (MCAClient.useGeneticsRenderer(player.getUUID())) {
             var villager = CommonVillagerModel.getVillager(player);
@@ -125,24 +124,16 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<AbstractC
             if (villager.getAgeState() == AgeState.BABY && !player.isPassenger()) {
                 matrices.translate(0, 0.6F, 0);
             }
-            ci.cancel();
         }
     }
 
-    @Inject(method = "renderHand", at = @At("HEAD"))
-    private void mca$beginRenderHand(PoseStack matrices, MultiBufferSource vertexConsumers, int light, AbstractClientPlayer player, ModelPart arm, ModelPart sleeve, CallbackInfo ci) {
+    @Unique
+    private boolean mca$renderCustomFirstPersonArm(AbstractClientPlayer player, ModelPart arm) {
         String armName = arm == model.rightArm ? "right_arm" : "left_arm";
-        if (!MCAClient.renderArms(player.getUUID(), armName)) {
-            mca$firstPersonPlayer = null;
-            mca$firstPersonBuffers = null;
-            return;
-        }
-
-        mca$firstPersonPlayer = player;
-        mca$firstPersonBuffers = vertexConsumers;
+        return MCAClient.renderArms(player.getUUID(), armName);
     }
 
-    @Redirect(
+    @WrapOperation(
             method = "renderHand",
             at = @At(
                     value = "INVOKE",
@@ -150,9 +141,25 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<AbstractC
                     ordinal = 0
             )
     )
-    private void mca$redirectFirstPersonArmRender(ModelPart originalArm, PoseStack matrices, VertexConsumer originalBuffer, int light, int overlay) {
-        if (mca$firstPersonPlayer == null || mca$firstPersonBuffers == null) {
-            originalArm.render(matrices, originalBuffer, light, overlay);
+    private void mca$wrapFirstPersonArmRender(
+            ModelPart originalArm,
+            PoseStack matrices,
+            VertexConsumer originalBuffer,
+            int light,
+            int overlay,
+            Operation<Void> original,
+            PoseStack methodMatrices,
+            MultiBufferSource vertexConsumers,
+            int methodLight,
+            AbstractClientPlayer player,
+            ModelPart arm,
+            ModelPart sleeve,
+            @Share("renderCustomArm") LocalBooleanRef sharedRenderCustomArm
+    ) {
+        boolean renderCustomArm = mca$renderCustomFirstPersonArm(player, arm);
+        sharedRenderCustomArm.set(renderCustomArm);
+        if (!renderCustomArm) {
+            original.call(originalArm, matrices, originalBuffer, light, overlay);
             return;
         }
 
@@ -166,14 +173,14 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<AbstractC
         McaModelAnimationDriver.animate(animatedArm, matrices, light, overlay);
 
         mca$renderArmLayer(
-                matrices, mca$firstPersonBuffers, light, mca$firstPersonPlayer, mca$skinLayer, right, animatedArm
+                matrices, vertexConsumers, light, player, mca$skinLayer, right, animatedArm
         );
         mca$renderArmLayer(
-                matrices, mca$firstPersonBuffers, light, mca$firstPersonPlayer, mca$clothingLayer, right, animatedArm
+                matrices, vertexConsumers, light, player, mca$clothingLayer, right, animatedArm
         );
     }
 
-    @Redirect(
+    @WrapOperation(
             method = "renderHand",
             at = @At(
                     value = "INVOKE",
@@ -181,21 +188,30 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<AbstractC
                     ordinal = 1
             )
     )
-    private void mca$redirectFirstPersonSleeveRender(ModelPart originalSleeve, PoseStack matrices, VertexConsumer originalBuffer, int light, int overlay) {
-        if (mca$firstPersonPlayer == null || mca$firstPersonBuffers == null) {
-            if (model == mca$playerModel) {
-                ModelPart arm = originalSleeve == model.rightSleeve ? model.rightArm : model.leftArm;
-                originalSleeve.copyFrom(arm);
-            }
-            originalSleeve.render(matrices, originalBuffer, light, overlay);
+    private void mca$wrapFirstPersonSleeveRender(
+            ModelPart originalSleeve,
+            PoseStack matrices,
+            VertexConsumer originalBuffer,
+            int light,
+            int overlay,
+            Operation<Void> original,
+            PoseStack methodMatrices,
+            MultiBufferSource vertexConsumers,
+            int methodLight,
+            AbstractClientPlayer player,
+            ModelPart arm,
+            ModelPart sleeve,
+            @Share("renderCustomArm") LocalBooleanRef sharedRenderCustomArm
+    ) {
+        if (sharedRenderCustomArm.get()) {
+            // Custom arm rendering above already rendered MCA skin and clothing sleeves.
+            return;
         }
-        // Custom arm rendering above already rendered both MCA skin and clothing sleeves.
-    }
 
-    @Inject(method = "renderHand", at = @At("TAIL"))
-    private void mca$endRenderHand(PoseStack matrices, MultiBufferSource vertexConsumers, int light, AbstractClientPlayer player, ModelPart arm, ModelPart sleeve, CallbackInfo ci) {
-        mca$firstPersonPlayer = null;
-        mca$firstPersonBuffers = null;
+        if (model == mca$playerModel) {
+            originalSleeve.copyFrom(arm);
+        }
+        original.call(originalSleeve, matrices, originalBuffer, light, overlay);
     }
 
     @Unique
