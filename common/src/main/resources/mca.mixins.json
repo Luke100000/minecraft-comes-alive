@@ -8,6 +8,7 @@
     "MixinAbstractArrow",
     "MixinAbstractFurnaceBlockEntity",
     "MixinAdvancementRewards",
+    "MixinCrossbowAttack",
     "MixinEntityType",
     "MixinItemStack",
     "MixinGoat",
