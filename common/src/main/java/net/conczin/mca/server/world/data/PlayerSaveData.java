@@ -154,7 +154,7 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
     }
 
     public void setEntityData(CompoundTag entityData) {
-        CompoundTag copy = McaDataFixers.update(entityData);
+        CompoundTag copy = McaDataFixers.update(entityData.copy());
         if (copy.equals(this.entityData)) {
             return;
         }
