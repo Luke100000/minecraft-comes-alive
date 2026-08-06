@@ -62,7 +62,10 @@ public final class PersonalityAndTraitsFix extends DataFix {
 
         String value = personality.asString().result().orElse(null);
         if (value != null && !value.contains(":")) {
-            return personality.createString("mca:" + value.toLowerCase(Locale.ROOT));
+            String normalized = value.toLowerCase(Locale.ROOT);
+            return personality.createString(normalized.isBlank()
+                    ? LEGACY_PERSONALITIES.getFirst()
+                    : "mca:" + normalized);
         }
 
         return personality;
@@ -88,13 +91,17 @@ public final class PersonalityAndTraitsFix extends DataFix {
             boolean namespaced = sourceId.contains(":");
             String canonicalId = sourceId.isEmpty() || namespaced ? sourceId : "mca:" + sourceId;
 
-            if (namespaced || !canonicalValues.containsKey(canonicalId)) {
+            if (namespaced) {
                 canonicalValues.put(canonicalId, entry.getSecond());
+            } else {
+                canonicalValues.putIfAbsent(canonicalId, entry.getSecond());
             }
         }
 
         Map<Dynamic<?>, Dynamic<?>> migrated = new LinkedHashMap<>();
-        canonicalValues.forEach((id, value) -> migrated.put(traits.createString(id), value));
+        for (Map.Entry<String, Dynamic<T>> entry : canonicalValues.entrySet()) {
+            migrated.put(traits.createString(entry.getKey()), entry.getValue());
+        }
         return traits.createMap(migrated);
     }
 }
