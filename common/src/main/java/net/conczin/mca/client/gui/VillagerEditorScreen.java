@@ -2001,7 +2001,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         entity.setYRot(180.0F + displayRotation + followXAngle * 40.0F);
         entity.yRotO = entity.getYRot();
         entity.setXRot(-yAngle * 20.0F);
-        entity.xRotO = entity.xRotO;
+        entity.xRotO = entity.getXRot();
         entity.yHeadRot = entity.getYRot();
         entity.yHeadRotO = entity.getYRot();
 
