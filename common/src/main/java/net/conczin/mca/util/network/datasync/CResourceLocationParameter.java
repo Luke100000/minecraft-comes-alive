@@ -11,6 +11,8 @@ import net.minecraft.world.entity.Entity;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.Objects;
+
 /**
  * Synchronizes a {@link ResourceLocation} through vanilla's string entity-data
  * serializer while exposing a strongly typed value to MCA code.
@@ -24,8 +26,8 @@ public final class CResourceLocationParameter implements CParameter<ResourceLoca
     private final ResourceLocation defaultValue;
 
     CResourceLocationParameter(@NotNull String id, @NotNull ResourceLocation defaultValue) {
-        this.id = id;
-        this.defaultValue = defaultValue;
+        this.id = Objects.requireNonNull(id, "id");
+        this.defaultValue = Objects.requireNonNull(defaultValue, "defaultValue");
     }
 
     @Override
@@ -47,7 +49,7 @@ public final class CResourceLocationParameter implements CParameter<ResourceLoca
             @NotNull SynchedEntityData tracker,
             @NotNull ResourceLocation value
     ) {
-        tracker.set(param, value.toString());
+        tracker.set(param, Objects.requireNonNull(value, "value").toString());
     }
 
     @Override
@@ -63,7 +65,7 @@ public final class CResourceLocationParameter implements CParameter<ResourceLoca
             @NotNull ResourceLocation value,
             @NotNull RegistryAccess registryAccess
     ) {
-        nbt.putString(id, value.toString());
+        nbt.putString(id, Objects.requireNonNull(value, "value").toString());
     }
 
     @Override
@@ -72,6 +74,9 @@ public final class CResourceLocationParameter implements CParameter<ResourceLoca
     }
 
     private @NotNull ResourceLocation parseOrDefault(@Nullable String value) {
+        if (value == null) {
+            return defaultValue;
+        }
         ResourceLocation parsed = ResourceLocation.tryParse(value);
         return parsed == null ? defaultValue : parsed;
     }
