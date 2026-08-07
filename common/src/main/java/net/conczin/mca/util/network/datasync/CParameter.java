@@ -12,7 +12,6 @@ import net.minecraft.world.item.ItemStack;
 
 import java.util.Optional;
 import java.util.UUID;
-import java.util.function.IntFunction;
 
 public interface CParameter<T, TrackedType> {
     static CDataParameter<Integer> create(String id, int def) {
@@ -97,11 +96,7 @@ public interface CParameter<T, TrackedType> {
     }
 
     static CResourceLocationParameter create(String id, ResourceLocation def) {
-        return new CResourceLocationParameter(id, def, null);
-    }
-
-    static CResourceLocationParameter create(String id, ResourceLocation def, IntFunction<ResourceLocation> legacyDecoder) {
-        return new CResourceLocationParameter(id, def, legacyDecoder);
+        return new CResourceLocationParameter(id, def);
     }
 
     TrackedType getDefault();

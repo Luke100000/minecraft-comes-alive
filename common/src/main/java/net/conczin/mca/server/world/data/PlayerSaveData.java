@@ -4,6 +4,7 @@ import com.mojang.serialization.Codec;
 import com.mojang.serialization.DynamicOps;
 import net.conczin.mca.Config;
 import net.conczin.mca.MCA;
+import net.conczin.mca.datafix.McaDataFixers;
 import net.conczin.mca.entity.PlayerDimensions;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.relationship.EntityRelationship;
@@ -70,7 +71,11 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
         chatAIPrompt = nbt.getString("chatAIPrompt");
 
         if (nbt.contains("entityData")) {
-            entityData = nbt.getCompound("entityData");
+            CompoundTag storedEntityData = nbt.getCompound("entityData");
+            entityData = McaDataFixers.update(storedEntityData);
+            if (!entityData.equals(storedEntityData)) {
+                setDirty();
+            }
         } else {
             resetEntityData();
         }
@@ -149,7 +154,7 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
     }
 
     public void setEntityData(CompoundTag entityData) {
-        CompoundTag copy = entityData.copy();
+        CompoundTag copy = McaDataFixers.update(entityData.copy());
         if (copy.equals(this.entityData)) {
             return;
         }
@@ -279,6 +284,7 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
     @Override
     public CompoundTag save(CompoundTag nbt, HolderLookup.Provider provider) {
         lastSeenVillage.ifPresent(id -> nbt.putInt("lastSeenVillage", id));
+        McaDataFixers.stampCurrentVersion(entityData);
         nbt.put("entityData", entityData);
         nbt.putBoolean("entityDataSet", entityDataSet);
         nbt.putBoolean("overrideVillageRequirements", overrideVillageRequirements);

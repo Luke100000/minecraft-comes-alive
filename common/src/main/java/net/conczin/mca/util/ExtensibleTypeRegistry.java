@@ -1,6 +1,7 @@
 package net.conczin.mca.util;
 
 import net.minecraft.resources.ResourceLocation;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -26,14 +27,17 @@ public final class ExtensibleTypeRegistry<T> {
         this.typeName = Objects.requireNonNull(typeName, "typeName");
     }
 
-    public synchronized T register(ResourceLocation id, Function<ResourceLocation, T> factory) {
+    public synchronized <V extends T> V register(
+            ResourceLocation id,
+            Function<ResourceLocation, V> factory
+    ) {
         Objects.requireNonNull(id, "id");
         Objects.requireNonNull(factory, "factory");
         if (entries.containsKey(id)) {
             throw new IllegalArgumentException("Duplicate " + typeName + " id '" + id + "'");
         }
 
-        T value = Objects.requireNonNull(factory.apply(id), typeName + " factory result");
+        V value = Objects.requireNonNull(factory.apply(id), typeName + " factory result");
         entries.put(id, value);
         return value;
     }
@@ -42,7 +46,7 @@ public final class ExtensibleTypeRegistry<T> {
         return Optional.ofNullable(entries.get(id));
     }
 
-    public Optional<T> get(String id) {
+    public Optional<T> get(@Nullable String id) {
         return parse(id).flatMap(this::get);
     }
 
@@ -54,7 +58,7 @@ public final class ExtensibleTypeRegistry<T> {
         return entries.size();
     }
 
-    public Optional<ResourceLocation> parse(String value) {
+    public Optional<ResourceLocation> parse(@Nullable String value) {
         if (value == null) {
             return Optional.empty();
         }

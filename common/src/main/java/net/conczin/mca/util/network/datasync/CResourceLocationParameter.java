@@ -11,7 +11,6 @@ import net.minecraft.world.entity.Entity;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Objects;
-import java.util.function.IntFunction;
 
 /**
  * Synchronizes a {@link ResourceLocation} through vanilla's string entity-data
@@ -20,20 +19,14 @@ import java.util.function.IntFunction;
  * <p>{@link ResourceLocation#STREAM_CODEC} uses the same UTF-8 string wire
  * representation. Reusing {@link EntityDataSerializers#STRING} avoids adding
  * loader-specific custom serializer registration.</p>
- *
- * <p>The optional legacy decoder migrates numeric values written by older
- * parameter implementations.</p>
  */
 public final class CResourceLocationParameter implements CParameter<ResourceLocation, String> {
     private final String id;
     private final ResourceLocation defaultValue;
-    @Nullable
-    private final IntFunction<ResourceLocation> legacyDecoder;
 
-    CResourceLocationParameter(String id, ResourceLocation defaultValue, @Nullable IntFunction<ResourceLocation> legacyDecoder) {
+    CResourceLocationParameter(String id, ResourceLocation defaultValue) {
         this.id = Objects.requireNonNull(id, "id");
         this.defaultValue = Objects.requireNonNull(defaultValue, "defaultValue");
-        this.legacyDecoder = legacyDecoder;
     }
 
     @Override
@@ -42,28 +35,35 @@ public final class CResourceLocationParameter implements CParameter<ResourceLoca
     }
 
     @Override
-    public ResourceLocation get(EntityDataAccessor<String> param, SynchedEntityData tracker) {
+    public ResourceLocation get(
+            EntityDataAccessor<String> param,
+            SynchedEntityData tracker
+    ) {
         return parseOrDefault(tracker.get(param));
     }
 
     @Override
-    public void set(EntityDataAccessor<String> param, SynchedEntityData tracker, ResourceLocation value) {
+    public void set(
+            EntityDataAccessor<String> param,
+            SynchedEntityData tracker,
+            ResourceLocation value
+    ) {
         tracker.set(param, Objects.requireNonNull(value, "value").toString());
     }
 
     @Override
     public ResourceLocation load(CompoundTag nbt, RegistryAccess registryAccess) {
-        if (nbt.contains(id, Tag.TAG_STRING)) {
-            return parseOrDefault(nbt.getString(id));
-        }
-        if (legacyDecoder != null && nbt.contains(id, Tag.TAG_ANY_NUMERIC)) {
-            return Objects.requireNonNullElse(legacyDecoder.apply(nbt.getInt(id)), defaultValue);
-        }
-        return defaultValue;
+        return nbt.contains(id, Tag.TAG_STRING)
+                ? parseOrDefault(nbt.getString(id))
+                : defaultValue;
     }
 
     @Override
-    public void save(CompoundTag nbt, ResourceLocation value, RegistryAccess registryAccess) {
+    public void save(
+            CompoundTag nbt,
+            ResourceLocation value,
+            RegistryAccess registryAccess
+    ) {
         nbt.putString(id, Objects.requireNonNull(value, "value").toString());
     }
 
@@ -72,7 +72,10 @@ public final class CResourceLocationParameter implements CParameter<ResourceLoca
         return SynchedEntityData.defineId(type, EntityDataSerializers.STRING);
     }
 
-    private ResourceLocation parseOrDefault(String value) {
+    private ResourceLocation parseOrDefault(@Nullable String value) {
+        if (value == null) {
+            return defaultValue;
+        }
         ResourceLocation parsed = ResourceLocation.tryParse(value);
         return parsed == null ? defaultValue : parsed;
     }

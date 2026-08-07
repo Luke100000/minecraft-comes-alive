@@ -36,9 +36,7 @@ import static net.conczin.mca.entity.ai.MemoryModuleTypeMCA.LAST_GRIEVE;
  */
 public class VillagerBrain<E extends Mob & VillagerLike<E>> {
     private static final CDataParameter<CompoundTag> MEMORIES = CParameter.create("Memories", new CompoundTag());
-    private static final CResourceLocationParameter PERSONALITY = CParameter.create(
-            "Personality", Personality.UNASSIGNED.getId(), ordinal -> Personality.byLegacyOrdinal(ordinal).getId()
-    );
+    private static final CResourceLocationParameter PERSONALITY = CParameter.create("Personality", Personality.UNASSIGNED.getId());
     private static final CDataParameter<Integer> MOOD = CParameter.create("Mood", 0);
     private static final CEnumParameter<MoveState> MOVE_STATE = CParameter.create("MoveState", MoveState.MOVE);
     private static final CEnumParameter<Chore> ACTIVE_CHORE = CParameter.create("ActiveChore", Chore.NONE);

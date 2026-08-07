@@ -689,7 +689,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                 List<ButtonWidget> personalityButtons = new LinkedList<>();
                 int row = 0;
                 final int BUTTONS_PER_ROW = 2;
-                for (Personality p : Personality.values()) {
+                for (Personality p : Personality.all()) {
                     if (p != Personality.UNASSIGNED) {
                         if (row == BUTTONS_PER_ROW) {
                             row = 0;
@@ -1429,7 +1429,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     }
 
     private Traits.Trait[] getValidTraits() {
-        return (Traits.Trait.values().stream()).filter(e -> {
+        return Traits.all().stream().filter(e -> {
             if (villagerUUID.equals(playerUUID)) {
                 return (Config.getInstance().bypassTraitRestrictions || e.isUsableOnPlayer()) && e.isEnabled();
             }

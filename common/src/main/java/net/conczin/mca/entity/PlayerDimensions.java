@@ -139,13 +139,17 @@ public final class PlayerDimensions {
     }
 
     private static float getTraitsHorizontalScaleFactor(CompoundTag traits) {
-        return (traits.getBoolean(Traits.DWARFISM.id()) ? 0.85F : 1.0F)
-                * (traits.getBoolean(Traits.TOUGH.id()) ? 1.2F : 1.0F)
-                * (traits.getBoolean(Traits.WEAK.id()) ? 0.85F : 1.0F);
+        return (hasTrait(traits, Traits.DWARFISM) ? 0.85F : 1.0F)
+                * (hasTrait(traits, Traits.TOUGH) ? 1.2F : 1.0F)
+                * (hasTrait(traits, Traits.WEAK) ? 0.85F : 1.0F);
     }
 
     private static float getTraitsVerticalScaleFactor(CompoundTag traits) {
-        return traits.getBoolean(Traits.DWARFISM.id()) ? 0.65F : 1.0F;
+        return hasTrait(traits, Traits.DWARFISM) ? 0.65F : 1.0F;
+    }
+
+    private static boolean hasTrait(CompoundTag traits, Traits.Trait trait) {
+        return traits.getBoolean(trait.getId().toString());
     }
 
     private record AgeScale(float width, float height) {

@@ -13,9 +13,6 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.Entity;
 
-import java.util.AbstractMap;
-import java.util.Collection;
-import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -25,43 +22,6 @@ import java.util.stream.Collectors;
 
 public class Traits {
     private static final ExtensibleTypeRegistry<Trait> REGISTRY = new ExtensibleTypeRegistry<>(MCA.MOD_ID, "trait");
-
-    /**
-     * Read-only compatibility view of the former public bare-string registry map.
-     * New code should use {@link #get(String)} or {@link #all()}.
-     */
-    @Deprecated(forRemoval = false)
-    public static final Map<String, Trait> TRAIT_REGISTRY = new AbstractMap<>() {
-        @Override
-        public Set<Entry<String, Trait>> entrySet() {
-            Set<Entry<String, Trait>> entries = new LinkedHashSet<>();
-            for (Trait trait : all()) {
-                entries.add(Map.entry(trait.legacyId(), trait));
-            }
-            return Collections.unmodifiableSet(entries);
-        }
-
-        @Override
-        public Trait get(Object key) {
-            if (!(key instanceof String id)) {
-                return null;
-            }
-            return Traits.get(id)
-                    .filter(trait -> trait.legacyId().equals(id))
-                    .orElse(null);
-        }
-
-        @Override
-        public boolean containsKey(Object key) {
-            return get(key) != null;
-        }
-
-        @Override
-        public int size() {
-            return REGISTRY.size();
-        }
-    };
-
     private static final CDataParameter<CompoundTag> TRAITS = CParameter.create("Traits", new CompoundTag());
 
     public static final Trait LACTOSE_INTOLERANCE = register(MCA.locate("lactose_intolerance"), 1.0F, 1.0F);
@@ -114,24 +74,6 @@ public class Traits {
         return REGISTRY.all();
     }
 
-    /**
-     * Compatibility wrapper for the former bare-string registration API.
-     */
-    @Deprecated(forRemoval = false)
-    public static Trait registerTrait(String id, float chance, float inherit, boolean usableOnPlayer) {
-        ResourceLocation parsed = REGISTRY.parse(id)
-                .orElseThrow(() -> new IllegalArgumentException("Invalid trait id '" + id + "'"));
-        return register(parsed, chance, inherit, usableOnPlayer);
-    }
-
-    /**
-     * Compatibility wrapper for the former bare-string registration API.
-     */
-    @Deprecated(forRemoval = false)
-    public static Trait registerTrait(String id, float chance, float inherit) {
-        return registerTrait(id, chance, inherit, true);
-    }
-
     public static <E extends Entity> CDataManager.Builder<E> createTrackedData(CDataManager.Builder<E> builder) {
         return builder.addAll(TRAITS);
     }
@@ -149,14 +91,7 @@ public class Traits {
     }
 
     public boolean hasTrait(VillagerLike<?> target, Trait trait) {
-        if (trait == null) {
-            return false;
-        }
-
-        CompoundTag traits = target.getTrackedValue(TRAITS);
-        String canonicalId = trait.getId().toString();
-        String legacyId = trait.legacyId();
-        return traits.contains(canonicalId) || (!canonicalId.equals(legacyId) && traits.contains(legacyId));
+        return trait != null && target.getTrackedValue(TRAITS).contains(trait.getId().toString());
     }
 
     public boolean hasTrait(Trait trait) {
@@ -181,7 +116,6 @@ public class Traits {
         }
 
         CompoundTag traits = entity.getTrackedValue(TRAITS).copy();
-        traits.remove(trait.legacyId());
         traits.putBoolean(trait.getId().toString(), true);
         entity.setTrackedValue(TRAITS, traits);
     }
@@ -193,7 +127,6 @@ public class Traits {
 
         CompoundTag traits = entity.getTrackedValue(TRAITS).copy();
         traits.remove(trait.getId().toString());
-        traits.remove(trait.legacyId());
         entity.setTrackedValue(TRAITS, traits);
     }
 
@@ -247,34 +180,6 @@ public class Traits {
             return id;
         }
 
-        /**
-         * Compatibility wrapper returning bare paths for MCA built-ins.
-         */
-        @Deprecated(forRemoval = false)
-        public String id() {
-            return legacyId();
-        }
-
-        private String legacyId() {
-            return REGISTRY.legacyId(id);
-        }
-
-        /**
-         * Compatibility wrapper for the former nested registry API.
-         */
-        @Deprecated(forRemoval = false)
-        public static Collection<Trait> values() {
-            return all();
-        }
-
-        /**
-         * Compatibility wrapper for the former nested registry API.
-         */
-        @Deprecated(forRemoval = false)
-        public static Trait valueOf(String id) {
-            return get(id).orElse(null);
-        }
-
         public Component getName() {
             return Component.translatable("trait." + REGISTRY.translationSuffix(id));
         }
@@ -289,8 +194,7 @@ public class Traits {
 
         public boolean isEnabled() {
             Map<String, Boolean> enabledTraits = Config.getServerConfig().enabledTraits;
-            Boolean canonical = enabledTraits.get(id.toString());
-            return canonical != null ? canonical : enabledTraits.getOrDefault(legacyId(), true);
+            return enabledTraits.getOrDefault(id.toString(), true);
         }
     }
 }
