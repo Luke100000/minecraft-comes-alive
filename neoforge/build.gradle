@@ -52,13 +52,6 @@ neoForge {
     }
 }
 
-tasks.named('processResources') {
-    dependsOn(project(':common').tasks.named('generateAccessTransformer'))
-    from(project(':common').layout.buildDirectory.file('generated/accesstransformer.cfg')) {
-        into 'META-INF'
-    }
-}
-
 // Implement mcgradleconventions loader attribute.
 def loaderAttribute = Attribute.of('io.github.mcgradleconventions.loader', String)
 ['apiElements', 'runtimeElements', 'sourcesElements', 'javadocElements'].each { variant ->
