@@ -8,6 +8,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Function;
 
@@ -23,19 +24,21 @@ public final class ExtensibleTypeRegistry<T> {
     private final Map<ResourceLocation, T> entries = new LinkedHashMap<>();
 
     public ExtensibleTypeRegistry(@NotNull String defaultNamespace, @NotNull String typeName) {
-        this.defaultNamespace = defaultNamespace;
-        this.typeName = typeName;
+        this.defaultNamespace = Objects.requireNonNull(defaultNamespace, "defaultNamespace");
+        this.typeName = Objects.requireNonNull(typeName, "typeName");
     }
 
     public synchronized <V extends T> @NotNull V register(
             @NotNull ResourceLocation id,
             @NotNull Function<@NotNull ResourceLocation, @NotNull V> factory
     ) {
+        Objects.requireNonNull(id, "id");
+        Objects.requireNonNull(factory, "factory");
         if (entries.containsKey(id)) {
             throw new IllegalArgumentException("Duplicate " + typeName + " id '" + id + "'");
         }
 
-        V value = factory.apply(id);
+        V value = Objects.requireNonNull(factory.apply(id), typeName + " factory result");
         entries.put(id, value);
         return value;
     }
@@ -69,11 +72,13 @@ public final class ExtensibleTypeRegistry<T> {
     }
 
     public @NotNull String translationSuffix(@NotNull ResourceLocation id) {
+        Objects.requireNonNull(id, "id");
         String path = id.getPath().replace('/', '.');
         return id.getNamespace().equals(defaultNamespace) ? path : id.getNamespace() + "." + path;
     }
 
     public @NotNull String legacyId(@NotNull ResourceLocation id) {
+        Objects.requireNonNull(id, "id");
         return id.getNamespace().equals(defaultNamespace) ? id.getPath() : id.toString();
     }
 }
