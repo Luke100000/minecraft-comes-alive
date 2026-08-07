@@ -19,7 +19,9 @@
   * Archers now don't glitch out if their target disappears.
 * Fixed children you are carrying disappearing on disconnect.
 * Fixed compatibility with Create: Clockware Augments and potentially other mods.
-
+* Fixed villagers being stuck in doors
+* Fixed villagers getting stuck on their way to a bed
+* 
 # 7.7.32
 
 * Fixed Graveyard data loss issue
