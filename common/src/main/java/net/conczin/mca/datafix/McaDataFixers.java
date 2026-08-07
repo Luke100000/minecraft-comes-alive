@@ -9,7 +9,6 @@ import net.conczin.mca.datafix.fixes.PersonalityAndTraitsFix;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtOps;
 import net.minecraft.nbt.Tag;
-import org.jetbrains.annotations.NotNull;
 
 /**
  * MCA-owned DataFixerUpper pipeline for persisted MCA entity data.
@@ -37,7 +36,7 @@ public final class McaDataFixers {
      * unchanged, while payloads from a future MCA version are copied without
      * modification.</p>
      */
-    public static @NotNull CompoundTag update(@NotNull CompoundTag input) {
+    public static CompoundTag update(CompoundTag input) {
         if (getVersion(input) > CURRENT_VERSION) {
             return input.copy();
         }
@@ -63,7 +62,7 @@ public final class McaDataFixers {
     /**
      * Marks newly written data as current without overwriting a future version.
      */
-    public static void stampCurrentVersion(@NotNull CompoundTag output) {
+    public static void stampCurrentVersion(CompoundTag output) {
         if (getVersion(output) > CURRENT_VERSION) {
             return;
         }
@@ -76,7 +75,7 @@ public final class McaDataFixers {
         }
     }
 
-    private static @NotNull CompoundTag updatePayload(@NotNull CompoundTag input) {
+    private static CompoundTag updatePayload(CompoundTag input) {
         int sourceVersion = getVersion(input);
         if (sourceVersion >= CURRENT_VERSION) {
             return input;
