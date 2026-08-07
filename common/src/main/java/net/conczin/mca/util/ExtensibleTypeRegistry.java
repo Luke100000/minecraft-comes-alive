@@ -1,7 +1,6 @@
 package net.conczin.mca.util;
 
 import net.minecraft.resources.ResourceLocation;
-import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.LinkedHashMap;
@@ -23,14 +22,14 @@ public final class ExtensibleTypeRegistry<T> {
     private final String typeName;
     private final Map<ResourceLocation, T> entries = new LinkedHashMap<>();
 
-    public ExtensibleTypeRegistry(@NotNull String defaultNamespace, @NotNull String typeName) {
+    public ExtensibleTypeRegistry(String defaultNamespace, String typeName) {
         this.defaultNamespace = Objects.requireNonNull(defaultNamespace, "defaultNamespace");
         this.typeName = Objects.requireNonNull(typeName, "typeName");
     }
 
-    public synchronized <V extends T> @NotNull V register(
-            @NotNull ResourceLocation id,
-            @NotNull Function<@NotNull ResourceLocation, @NotNull V> factory
+    public synchronized <V extends T> V register(
+            ResourceLocation id,
+            Function<ResourceLocation, V> factory
     ) {
         Objects.requireNonNull(id, "id");
         Objects.requireNonNull(factory, "factory");
@@ -43,15 +42,15 @@ public final class ExtensibleTypeRegistry<T> {
         return value;
     }
 
-    public synchronized @NotNull Optional<T> get(@NotNull ResourceLocation id) {
+    public synchronized Optional<T> get(ResourceLocation id) {
         return Optional.ofNullable(entries.get(id));
     }
 
-    public @NotNull Optional<T> get(@Nullable String id) {
+    public Optional<T> get(@Nullable String id) {
         return parse(id).flatMap(this::get);
     }
 
-    public synchronized @NotNull List<T> all() {
+    public synchronized List<T> all() {
         return List.copyOf(entries.values());
     }
 
@@ -59,7 +58,7 @@ public final class ExtensibleTypeRegistry<T> {
         return entries.size();
     }
 
-    public @NotNull Optional<ResourceLocation> parse(@Nullable String value) {
+    public Optional<ResourceLocation> parse(@Nullable String value) {
         if (value == null) {
             return Optional.empty();
         }
@@ -71,13 +70,13 @@ public final class ExtensibleTypeRegistry<T> {
         return Optional.ofNullable(id);
     }
 
-    public @NotNull String translationSuffix(@NotNull ResourceLocation id) {
+    public String translationSuffix(ResourceLocation id) {
         Objects.requireNonNull(id, "id");
         String path = id.getPath().replace('/', '.');
         return id.getNamespace().equals(defaultNamespace) ? path : id.getNamespace() + "." + path;
     }
 
-    public @NotNull String legacyId(@NotNull ResourceLocation id) {
+    public String legacyId(ResourceLocation id) {
         Objects.requireNonNull(id, "id");
         return id.getNamespace().equals(defaultNamespace) ? id.getPath() : id.toString();
     }
