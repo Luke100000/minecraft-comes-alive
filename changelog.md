@@ -1,3 +1,20 @@
+# 8.1.7
+
+**IMPORTANT**
+* Recommended to backup your world.
+* This release won't be backwards compatible with previous MCA versions due to internal changes with how traits and personalities are saved
+* This release brings the trait/personality storage migration to 26.1.2/26.2.
+* Addon API:
+  * Modernised trait/personality system making it easier for addons to integrate personalities/traits.
+  * Personalities are no longer hardcoded by enums and have their own MCA namespace
+  * Traits have their own namespace
+  * Existing methods have been given a compatibility shim and marked as deprecated so addons touching it will still work.
+* Archer Improvements
+  * Modded crossbows/bows are supported
+  * Archers now don't glitch out if their target disappears.
+* Fixed children you're carrying disappearing on disconnect.
+* Fixed compatibility with Create: Clockware Augments and potentially other mods.
+
 # 8.1.6
 
 * Fix textures

@@ -7,6 +7,14 @@ plugins {
 }
 
 dependencies {
+    implementation(jarJar(
+            "io.github.llamalad7:mixinextras-neoforge:${mixin_extras_version}"
+    )) {
+        version {
+            strictly '[0.5.3,0.6)'
+            prefer mixin_extras_version
+        }
+    }
     runtimeOnly "maven.modrinth:sodium:${sodium_neoforge_version}"
     runtimeOnly "maven.modrinth:jei:${jei_neoforge_version}"
     //runtimeOnly "maven.modrinth:iris:${iris_neoforge_version}"
@@ -93,3 +101,14 @@ sourceSets.configureEach {
         }
     }
 }
+
+// ModDev applies the generated transformer in development, but a distributed
+// NeoForge jar must also contain it at the loader's conventional resource path.
+tasks.named('processResources', ProcessResources) {
+    dependsOn(project(':common').tasks.named('generateAccessTransformer'))
+    from(project(':common').layout.buildDirectory.file('generated/accesstransformer.cfg')) {
+        into 'META-INF'
+    }
+}
+
+sourceSets.main.resources { srcDir 'src/generated/resources' }

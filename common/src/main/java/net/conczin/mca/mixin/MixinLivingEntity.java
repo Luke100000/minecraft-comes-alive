@@ -1,5 +1,6 @@
 package net.conczin.mca.mixin;
 
+import com.llamalad7.mixinextras.injector.ModifyReturnValue;
 import net.conczin.mca.entity.PlayerDimensions;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.minecraft.world.entity.EntityDimensions;
@@ -9,27 +10,28 @@ import net.minecraft.world.entity.Pose;
 import net.minecraft.world.entity.player.Player;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(LivingEntity.class)
 abstract class MixinLivingEntity {
-    @Inject(method = "getDimensions", at = @At("RETURN"), cancellable = true)
-    private void mca$scalePlayerDimensions(Pose pose, CallbackInfoReturnable<EntityDimensions> info) {
-        //noinspection ConstantValue
+    @ModifyReturnValue(method = "getDimensions", at = @At("RETURN"))
+    private EntityDimensions mca$scalePlayerDimensions(EntityDimensions original, Pose pose) {
         if (pose == Pose.SLEEPING || !((Object) this instanceof Player player)) {
-            return;
+            return original;
         }
 
-        PlayerDimensions.getScale(player).ifPresent(scale ->
-                info.setReturnValue(info.getReturnValue().scale(scale.width(), scale.height()))
-        );
+        return PlayerDimensions.getScale(player)
+                .map(scale -> {
+                    EntityDimensions scaled = original.scale(scale.width(), scale.height());
+                    return scaled;
+                })
+                .orElse(original);
     }
 
-    @Inject(method = "isImmobile()Z", at = @At("HEAD"), cancellable = true)
-    private void mca$onIsImmobile(CallbackInfoReturnable<Boolean> info) {
+    @ModifyReturnValue(method = "isImmobile()Z", at = @At("RETURN"))
+    private boolean mca$allowMcaControlledMovement(boolean original) {
         if ((Object) this instanceof Mob mob && mob.getControllingPassenger() instanceof VillagerEntityMCA) {
-            info.setReturnValue(false);
+            return false;
         }
+        return original;
     }
 }

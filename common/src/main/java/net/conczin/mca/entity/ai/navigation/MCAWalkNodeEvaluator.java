@@ -18,9 +18,12 @@ import org.jetbrains.annotations.Nullable;
 
 public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
     private static final int MAX_CLIMBABLE_VERTICAL_OFFSET = 2;
+    private static final double FLOOR_EPSILON = 1.0E-3D;
+    private static final double BOX_EPSILON = 1.0E-7D;
     private final Long2BooleanMap clearanceCache = new Long2BooleanOpenHashMap();
     private final Long2BooleanMap climbableCache = new Long2BooleanOpenHashMap();
     private final BlockPos.MutableBlockPos climbablePos = new BlockPos.MutableBlockPos();
+    private final BlockPos.MutableBlockPos collisionPos = new BlockPos.MutableBlockPos();
 
     @Override
     public void done() {
@@ -204,7 +207,7 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
     }
 
     private boolean hasBlockClearance(Node node) {
-        AABB clearanceBox = getNodeClearanceBox(node);
+        AABB clearanceBox = getMobBoxAt(node);
         if (!Config.getInstance().villagerPathfindingCheckAllNodeCollisions
                 && !PathfindingBlacklist.overlapsSpecialCollisionBlock(this.currentContext.level(), clearanceBox)) {
             return true;
@@ -215,15 +218,59 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
             return this.clearanceCache.get(key);
         }
 
-        boolean hasClearance = this.currentContext.level().noCollision(this.mob, clearanceBox);
+        boolean hasClearance = hasExactBlockClearance(clearanceBox);
         this.clearanceCache.put(key, hasClearance);
         return hasClearance;
     }
 
-    private static AABB getNodeClearanceBox(Node node) {
-        return new AABB(
-                node.x, node.y, node.z,
-                node.x + 1.0D, node.y + 2.0D, node.z + 1.0D
+    private boolean hasExactBlockClearance(AABB clearanceBox) {
+        int minX = floorMin(clearanceBox.minX);
+        int maxX = floorMax(clearanceBox.maxX);
+        int minY = floorMin(clearanceBox.minY);
+        int maxY = floorMax(clearanceBox.maxY);
+        int minZ = floorMin(clearanceBox.minZ);
+        int maxZ = floorMax(clearanceBox.maxZ);
+        boolean hasPartialCollision = false;
+
+        for (int x = minX; x <= maxX; x++) {
+            for (int y = minY; y <= maxY; y++) {
+                for (int z = minZ; z <= maxZ; z++) {
+                    BlockState state = this.currentContext.getBlockState(this.collisionPos.set(x, y, z));
+                    if (state.isAir()) {
+                        continue;
+                    }
+
+                    if (state.isCollisionShapeFullBlock(this.currentContext.level(), this.collisionPos)) {
+                        return false;
+                    }
+
+                    if (!state.getCollisionShape(this.currentContext.level(), this.collisionPos).isEmpty()) {
+                        hasPartialCollision = true;
+                    }
+                }
+            }
+        }
+
+        return !hasPartialCollision
+               || this.currentContext.level().noBlockCollision(this.mob, clearanceBox);
+    }
+
+    private AABB getMobBoxAt(Node node) {
+        AABB box = this.mob.getBoundingBox();
+        double floorY = this.getFloorLevel(this.collisionPos.set(node.x, node.y, node.z));
+        double centerX = (box.minX + box.maxX) * 0.5D;
+        double centerZ = (box.minZ + box.maxZ) * 0.5D;
+        return box.move(
+                node.x + 0.5D - centerX,
+                floorY + FLOOR_EPSILON - box.minY,
+                node.z + 0.5D - centerZ
         );
+    }
+    private static int floorMin(double value) {
+        return (int)Math.floor(value);
+    }
+
+    private static int floorMax(double value) {
+        return (int)Math.floor(value - BOX_EPSILON);
     }
 }

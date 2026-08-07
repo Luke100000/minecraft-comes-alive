@@ -6,9 +6,21 @@ accessible method net/minecraft/world/entity/ai/memory/MemoryModuleType <init> (
 accessible method net/minecraft/world/entity/ai/sensing/SensorType <init> (Ljava/util/function/Supplier;)V
 accessible method net/minecraft/world/entity/schedule/Activity <init> (Ljava/lang/String;)V
 
+# Widen private Villager interaction helpers so MCA can call vanilla behavior directly.
+accessible method net/minecraft/world/entity/npc/villager/Villager startTrading (Lnet/minecraft/world/entity/player/Player;)V
+accessible method net/minecraft/world/entity/npc/villager/Villager setUnhappy ()V
+
+# Widen AdvancementRewards.loot to allow temporary modification without an accessor mixin.
+accessible field net/minecraft/advancements/AdvancementRewards loot Ljava/util/List;
+mutable field net/minecraft/advancements/AdvancementRewards loot Ljava/util/List;
+
 # Widen MoveControl.rotlerp for task usage
 accessible method net/minecraft/world/entity/ai/control/MoveControl rotlerp (FFF)F
 
 # Widen GroundPathNavigation.getSurfaceY so MCA can make water-tag-aware navigation.
 extendable method net/minecraft/world/entity/ai/navigation/GroundPathNavigation getSurfaceY ()I
 
+# Reuse CrossbowAttack's vanilla state machine while replacing its exact-item hand selection.
+extendable method net/minecraft/world/entity/ai/behavior/CrossbowAttack crossbowAttack (Lnet/minecraft/world/entity/Mob;Lnet/minecraft/world/entity/LivingEntity;)V
+accessible field net/minecraft/world/entity/ai/behavior/CrossbowAttack crossbowState Lnet/minecraft/world/entity/ai/behavior/CrossbowAttack$CrossbowState;
+accessible class net/minecraft/world/entity/ai/behavior/CrossbowAttack$CrossbowState

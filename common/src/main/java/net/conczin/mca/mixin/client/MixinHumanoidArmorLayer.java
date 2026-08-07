@@ -1,5 +1,6 @@
 package net.conczin.mca.mixin.client;
 
+import com.llamalad7.mixinextras.injector.ModifyReturnValue;
 import net.conczin.mca.client.model.PlayerArmorExtendedModel;
 import net.conczin.mca.client.model.VillagerEntityModelMCA;
 import net.conczin.mca.client.render.VillagerStateHolder;
@@ -17,8 +18,6 @@ import net.minecraft.world.item.equipment.Equippable;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(HumanoidArmorLayer.class)
 @SuppressWarnings({"rawtypes", "unchecked"})
@@ -32,23 +31,29 @@ public abstract class MixinHumanoidArmorLayer {
         return new PlayerArmorExtendedModel<>(LayerDefinition.create(mesh, 64, 32).bakeRoot());
     }
 
-    @Inject(method = "getArmorModel(Lnet/minecraft/client/renderer/entity/state/HumanoidRenderState;Lnet/minecraft/world/entity/EquipmentSlot;)Lnet/minecraft/client/model/HumanoidModel;", at = @At("HEAD"), cancellable = true)
-    private void mca$injectGetArmorModel(HumanoidRenderState state, EquipmentSlot slot, CallbackInfoReturnable<HumanoidModel> cir) {
+    @ModifyReturnValue(
+            method = "getArmorModel(Lnet/minecraft/client/renderer/entity/state/HumanoidRenderState;Lnet/minecraft/world/entity/EquipmentSlot;)Lnet/minecraft/client/model/HumanoidModel;",
+            at = @At("RETURN")
+    )
+    private HumanoidModel<?> mca$selectArmorModel(HumanoidModel<?> original, HumanoidRenderState state, EquipmentSlot slot) {
         if (!(state instanceof AvatarRenderState) || !(state instanceof VillagerStateHolder holder) || !holder.mca$isGeneticsRendererActive()) {
-            return;
+            return original;
         }
 
         ItemStack itemStack = mca$getEquipmentForSlot(state, slot);
         Equippable equippable = itemStack.get(DataComponents.EQUIPPABLE);
-        if (equippable == null) return; // should never happen given vanilla's guard, but defensive
+        if (equippable == null) {
+            return original;
+        }
 
         // Only substitute MCA's shaped model for vanilla equipment assets.
         // Custom equipment should keep its own model and renderer hooks.
         if (!equippable.assetId().map(key -> key.identifier().getNamespace().equals("minecraft")).orElse(false)) {
-            return;
+            return original;
         }
 
-        cir.setReturnValue((HumanoidModel) mca$armorModels.get(slot));
+        HumanoidModel<?> model = mca$armorModels.get(slot);
+        return model == null ? original : model;
     }
 
     @Unique

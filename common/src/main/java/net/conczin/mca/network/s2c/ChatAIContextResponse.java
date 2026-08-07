@@ -15,6 +15,7 @@ import java.util.UUID;
 
 public record ChatAIContextResponse(ResourceKey<Level> dimension,
                                     boolean hasVillager, UUID villagerUuid, String villagerName, String villagerPrompt,
+                                    String villagerNickname,
                                     String playerName, String playerPrompt, boolean hasVillage, int villageId,
                                     String villageName, String villagePrompt,
                                     String worldPrompt) implements HandleablePayload {
@@ -25,7 +26,7 @@ public record ChatAIContextResponse(ResourceKey<Level> dimension,
             return new ChatAIContextResponse(
                     buffer.readResourceKey(Registries.DIMENSION),
                     buffer.readBoolean(), buffer.readUUID(), buffer.readUtf(), buffer.readUtf(),
-                    buffer.readUtf(), buffer.readUtf(), buffer.readBoolean(), buffer.readVarInt(),
+                    buffer.readUtf(), buffer.readUtf(), buffer.readUtf(), buffer.readBoolean(), buffer.readVarInt(),
                     buffer.readUtf(), buffer.readUtf(), buffer.readUtf()
             );
         }
@@ -37,6 +38,7 @@ public record ChatAIContextResponse(ResourceKey<Level> dimension,
             buffer.writeUUID(context.villagerUuid());
             buffer.writeUtf(context.villagerName());
             buffer.writeUtf(context.villagerPrompt());
+            buffer.writeUtf(context.villagerNickname);
             buffer.writeUtf(context.playerName());
             buffer.writeUtf(context.playerPrompt());
             buffer.writeBoolean(context.hasVillage());

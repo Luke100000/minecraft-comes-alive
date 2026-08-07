@@ -13,6 +13,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.pathfinder.Node;
 import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.level.pathfinder.PathFinder;
+import net.minecraft.world.level.pathfinder.PathType;
 import net.minecraft.world.phys.Vec3;
 
 public class MCAGroundPathNavigation extends GroundPathNavigation {
@@ -39,6 +40,11 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
         this.nodeEvaluator.setCanPassDoors(true);
         this.nodeEvaluator.setCanOpenDoors(true);
         return new PathFinder(this.nodeEvaluator, maxVisitedNodes);
+    }
+
+    @Override
+    public boolean canCutCorner(PathType type) {
+        return type != PathType.DOOR_OPEN && super.canCutCorner(type);
     }
 
     @Override

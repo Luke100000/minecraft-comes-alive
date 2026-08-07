@@ -11,6 +11,7 @@ import net.conczin.mca.entity.ai.ActivitiesMCA;
 import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
 import net.conczin.mca.entity.ai.SchedulesMCA;
 import net.conczin.mca.entity.ai.SensorsMCA;
+import net.conczin.mca.entity.ai.RangedWeaponHelper;
 import net.conczin.mca.entity.ai.brain.sensor.GuardEnemiesSensor;
 import net.conczin.mca.entity.ai.brain.tasks.*;
 import net.conczin.mca.entity.ai.brain.tasks.chore.ChoppingTask;
@@ -333,7 +334,7 @@ public class VillagerTasksMCA {
                         new ExtendedMeleeAttackTask(20, 2.0F),
                         (VillagerEntityMCA v) -> !VillagerTasksMCA.isHoldingRangedWeapon(v)
                 )),
-                Pair.of(9, new CrossbowAttack<VillagerEntityMCA, VillagerEntityMCA>())
+                Pair.of(9, new ExtendedCrossbowAttackTask<VillagerEntityMCA, VillagerEntityMCA>())
         );
     }
 
@@ -395,9 +396,20 @@ public class VillagerTasksMCA {
     }
 
     private static boolean shouldRespondToGuardEnemy(VillagerEntityMCA villager, LivingEntity target) {
-        return getActivity(villager) != Activity.REST
+        return shouldKeepAttackTarget(villager, target)
+               && GuardEnemiesSensor.isGuardEnemy(target, villager)
+               && shouldRespondToAttackTarget(villager, target);
+    }
+
+    private static boolean shouldRespondToAttackTarget(VillagerEntityMCA villager, LivingEntity target) {
+        return isFollowingPlayer(villager)
+               || getActivity(villager) != Activity.REST
                || target.distanceTo(villager) < 8.0
                || villager.getResidency().getHomeVillage().filter(village -> village.isWithinBorder(villager)).isEmpty();
+    }
+
+    private static boolean isFollowingPlayer(VillagerEntityMCA villager) {
+        return villager.getBrain().getMemoryInternal(MemoryModuleTypeMCA.PLAYER_FOLLOWING).isPresent();
     }
 
     private static void onGuardTargetErased(ServerLevel level, VillagerEntityMCA villager, LivingEntity target) {
@@ -417,7 +429,7 @@ public class VillagerTasksMCA {
     }
 
     private static boolean isHoldingRangedWeapon(VillagerEntityMCA villager) {
-        return villager.isHolding(Items.BOW) || villager.isHolding(Items.CROSSBOW);
+        return RangedWeaponHelper.isHoldingSupportedWeapon(villager);
     }
 
     public static boolean isInDanger(VillagerEntityMCA villager) {
@@ -507,7 +519,7 @@ public class VillagerTasksMCA {
                     return !forced;
                 }, v -> {
                     v.getResidency().seekHome();
-                }, ExtendedWalkTowardsTask::findBedStandPosition)),
+                })),
                 //verify the bed, occupancies state and similar
                 Pair.of(3, new ConditionalSingleTickTask<>(ExtendedForgetCompletedPointOfInterestTask.create(
                         registryEntry -> registryEntry.is(PoiTypes.HOME), MemoryModuleType.HOME, (entity) -> {

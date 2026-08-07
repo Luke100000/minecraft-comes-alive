@@ -88,7 +88,7 @@ public final class PlayerDimensions {
     }
 
     private static boolean hasTrait(CompoundTag traits, Traits.Trait trait) {
-        return traits.getBoolean(trait.id()).orElse(false);
+        return traits.getBoolean(trait.getId().toString()).orElse(false);
     }
 
     private record AgeScale(float width, float height) {
