@@ -427,12 +427,12 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
         );
     }
 
-    private static LivingEntity getNearestMovementThreat(LivingEntity entity, LivingEntity fallback) {
-        return entity.getBrain().getMemoryInternal(MemoryModuleType.NEAREST_VISIBLE_LIVING_ENTITIES)
-                .flatMap(visible -> visible.find(candidate -> RangedWeaponHelper.isValidAttackTarget(entity, candidate))
-                        .filter(candidate -> Math.abs(entity.getY() - candidate.getY()) <= CLOSE_RANGE_VERTICAL_THREAT_DISTANCE)
-                        .filter(candidate -> GuardEnemiesSensor.isGuardEnemy(candidate, entity))
-                        .findFirst())
+    private static LivingEntity getNearestMovementThreat(Mob entity, LivingEntity fallback) {
+        return entity.getBrain().getMemory(MemoryModuleType.NEAREST_VISIBLE_LIVING_ENTITIES)
+                .flatMap(visible -> visible.findClosest(candidate ->
+                        RangedWeaponHelper.isValidAttackTarget(entity, candidate)
+                        && Math.abs(entity.getY() - candidate.getY()) <= CLOSE_RANGE_VERTICAL_THREAT_DISTANCE
+                        && GuardEnemiesSensor.isGuardEnemy(candidate, entity)))
                 .orElse(fallback);
     }
 
