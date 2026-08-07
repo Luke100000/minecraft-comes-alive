@@ -5,11 +5,11 @@ import net.conczin.mca.util.ExtensibleTypeRegistry;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.RandomSource;
-import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Predicate;
 
@@ -50,24 +50,24 @@ public class Personality {
     private final ResourceLocation id;
     private final Predicate<AgeState> agePredicate;
 
-    protected Personality(@NotNull ResourceLocation id, @NotNull Predicate<AgeState> agePredicate) {
-        this.id = id;
-        this.agePredicate = agePredicate;
+    protected Personality(ResourceLocation id, Predicate<AgeState> agePredicate) {
+        this.id = Objects.requireNonNull(id, "id");
+        this.agePredicate = Objects.requireNonNull(agePredicate, "agePredicate");
     }
 
     /**
      * Registers an unrestricted base personality.
      */
-    public static @NotNull Personality register(@NotNull ResourceLocation id) {
+    public static Personality register(ResourceLocation id) {
         return register(new Personality(id, ageState -> true));
     }
 
     /**
      * Registers a base personality with an age eligibility rule.
      */
-    public static @NotNull Personality register(
-            @NotNull ResourceLocation id,
-            @NotNull Predicate<AgeState> agePredicate
+    public static Personality register(
+            ResourceLocation id,
+            Predicate<AgeState> agePredicate
     ) {
         return register(new Personality(id, agePredicate));
     }
@@ -75,27 +75,28 @@ public class Personality {
     /**
      * Registers a personality instance, including addon-defined subtypes, in MCA's shared registry.
      */
-    public static <T extends Personality> @NotNull T register(@NotNull T personality) {
+    public static <T extends Personality> T register(T personality) {
+        Objects.requireNonNull(personality, "personality");
         return REGISTRY.register(personality.getId(), registeredId -> personality);
     }
 
-    public static @NotNull Optional<Personality> get(@NotNull ResourceLocation id) {
+    public static Optional<Personality> get(ResourceLocation id) {
         return REGISTRY.get(id);
     }
 
-    public static @NotNull Optional<Personality> get(@Nullable String id) {
+    public static Optional<Personality> get(@Nullable String id) {
         return REGISTRY.get(id);
     }
 
-    public static @NotNull List<Personality> all() {
+    public static List<Personality> all() {
         return REGISTRY.all();
     }
 
-    public static @NotNull Personality getRandom() {
+    public static Personality getRandom() {
         return getRandom(AgeState.ADULT);
     }
 
-    public static @NotNull Personality getRandom(@NotNull AgeState ageState) {
+    public static Personality getRandom(AgeState ageState) {
         List<Personality> valid = new ArrayList<>();
         for (Personality personality : all()) {
             if (personality != UNASSIGNED && personality.isValidFor(ageState)) {
@@ -105,50 +106,50 @@ public class Personality {
         return valid.get(RANDOM.nextInt(valid.size()));
     }
 
-    public @NotNull ResourceLocation getId() {
+    public ResourceLocation getId() {
         return id;
     }
 
-    public boolean isValidFor(@NotNull AgeState ageState) {
+    public boolean isValidFor(AgeState ageState) {
         return agePredicate.test(ageState);
     }
 
-    public @NotNull String getDialoguePrefix() {
+    public String getDialoguePrefix() {
         return REGISTRY.translationSuffix(id);
     }
 
     /**
      * Escapes dots so a namespaced id can be embedded in MCA's dot-delimited dialogue flags.
      */
-    public static @NotNull String encodeDialogueId(@NotNull ResourceLocation id) {
+    public static String encodeDialogueId(ResourceLocation id) {
         return id.toString().replace(".", DIALOGUE_DOT_ESCAPE);
     }
 
-    public static @NotNull String getDialoguePrefix(@Nullable String encodedId) {
+    public static String getDialoguePrefix(@Nullable String encodedId) {
         ResourceLocation parsed = REGISTRY.parse(decodeDialogueId(encodedId)).orElse(UNASSIGNED.id);
         return REGISTRY.translationSuffix(parsed);
     }
 
-    public @NotNull Component getName() {
+    public Component getName() {
         return Component.translatable("personality." + REGISTRY.translationSuffix(id));
     }
 
-    public @NotNull Component getDescription() {
+    public Component getDescription() {
         return Component.translatable("personalityDescription." + REGISTRY.translationSuffix(id));
     }
 
     @Override
-    public @NotNull String toString() {
+    public String toString() {
         return id.toString();
     }
 
-    private static @NotNull Personality registerBuiltIn(@NotNull String path) {
+    private static Personality registerBuiltIn(String path) {
         return registerBuiltIn(path, ageState -> true);
     }
 
-    private static @NotNull Personality registerBuiltIn(
-            @NotNull String path,
-            @NotNull Predicate<AgeState> agePredicate
+    private static Personality registerBuiltIn(
+            String path,
+            Predicate<AgeState> agePredicate
     ) {
         return register(MCA.locate(path), agePredicate);
     }
@@ -157,7 +158,7 @@ public class Personality {
         return value == null ? null : value.replace(DIALOGUE_DOT_ESCAPE, ".");
     }
 
-    private static boolean isOldEnoughToFlirt(@NotNull AgeState ageState) {
+    private static boolean isOldEnoughToFlirt(AgeState ageState) {
         return ageState != AgeState.BABY && ageState != AgeState.TODDLER && ageState != AgeState.CHILD;
     }
 }
