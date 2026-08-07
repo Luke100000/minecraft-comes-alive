@@ -70,6 +70,8 @@ public class ChatAIContextScreen extends Screen {
 
         // Prompt
         nicknameField = null;
+        int promptY = top + 70;
+        int promptHeight = 128;
         if (selectedTab == Tab.VILLAGER) {
             addRenderableWidget(new StringWidget(left + 12, top + 70, 50, 15, Component.translatable("gui.chat_ai_context.nickname"), font)
                     .setColor(CONTEXT_TEXT_COLOR));
@@ -84,15 +86,13 @@ public class ChatAIContextScreen extends Screen {
             );
             nicknameField.setValue(nickname);
 
-            promptField = addRenderableWidget(new MultiLineEditBox(font, left + 12, top + 90, 276, 108,
-                    Component.translatable("gui.chat_ai_context.placeholder"), Component.translatable("gui.chat_ai_context.prompt")));
-        } else {
-            promptField = addRenderableWidget(new MultiLineEditBox(font, left + 12, top + 70, 276, 128,
-                    Component.translatable("gui.chat_ai_context.placeholder"), Component.translatable("gui.chat_ai_context.prompt")));
+            promptY += 20;
+            promptHeight -= 20;
         }
+        promptField = addRenderableWidget(new MultiLineEditBox(font, left + 12, promptY, 276, promptHeight,
+                Component.translatable("gui.chat_ai_context.placeholder"), Component.translatable("gui.chat_ai_context.prompt")));
         promptField.setCharacterLimit(MAX_PROMPT_LENGTH);
         promptField.setValue(prompts.get(selectedTab));
-
 
         // Close
         addRenderableWidget(new ButtonWidget(width / 2 - 44, top + 205, 88, 20,

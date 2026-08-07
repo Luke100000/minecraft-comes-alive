@@ -36,12 +36,14 @@ public class BowTask<E extends Mob & CrossbowAttackMob> extends Behavior<E> {
 
     @Override
     protected boolean checkExtraStartConditions(ServerLevel level, E entity) {
-        return hasValidTarget(entity, getAttackTarget(entity)) && RangedWeaponHelper.getBowHoldingHand(entity) != null;
+        return RangedWeaponHelper.isValidAttackTarget(entity, getAttackTarget(entity))
+               && RangedWeaponHelper.getBowHoldingHand(entity) != null;
     }
 
     @Override
     protected boolean canStillUse(ServerLevel level, E entity, long gameTime) {
-        return hasValidTarget(entity, getAttackTarget(entity)) && RangedWeaponHelper.getBowHoldingHand(entity) != null;
+        return RangedWeaponHelper.isValidAttackTarget(entity, getAttackTarget(entity))
+               && RangedWeaponHelper.getBowHoldingHand(entity) != null;
     }
 
     @Override
@@ -56,7 +58,7 @@ public class BowTask<E extends Mob & CrossbowAttackMob> extends Behavior<E> {
     protected void tick(ServerLevel level, E entity, long gameTime) {
         LivingEntity target = getAttackTarget(entity);
         InteractionHand bowHand = RangedWeaponHelper.getBowHoldingHand(entity);
-        if (!hasValidTarget(entity, target) || bowHand == null) {
+        if (!RangedWeaponHelper.isValidAttackTarget(entity, target) || bowHand == null) {
             if (entity.isUsingItem()) {
                 logAction(entity, target, false, 0.0, "stop_using", "invalid_target");
                 entity.stopUsingItem();
@@ -162,14 +164,6 @@ public class BowTask<E extends Mob & CrossbowAttackMob> extends Behavior<E> {
 
     private static LivingEntity getAttackTarget(LivingEntity entity) {
         return entity.getBrain().getMemoryInternal(MemoryModuleType.ATTACK_TARGET).orElse(null);
-    }
-
-    private static boolean hasValidTarget(Mob entity, LivingEntity target) {
-        return target != null
-               && target.isAlive()
-               && !target.isRemoved()
-               && target.level() == entity.level()
-               && entity.canAttack(target);
     }
 
     private static String getBowHoldingHandName(Mob entity) {

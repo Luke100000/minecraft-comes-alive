@@ -73,6 +73,7 @@ import net.minecraft.world.entity.projectile.ProjectileUtil;
 import net.minecraft.world.food.FoodProperties;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.ChestMenu;
+import net.minecraft.world.item.BowItem;
 import net.minecraft.world.item.CrossbowItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -1585,29 +1586,29 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
     @Override
     public void performRangedAttack(LivingEntity target, float pullProgress) {
-        InteractionHand crossbowHand = RangedWeaponHelper.getCrossbowHoldingHand(this);
-        if (crossbowHand != null) {
-            ItemStack crossbowStack = this.getItemInHand(crossbowHand);
-            if (crossbowStack.getItem() instanceof CrossbowItem crossbow) {
-                crossbow.performShooting(
-                        this.level(),
-                        this,
-                        crossbowHand,
-                        crossbowStack,
-                        1.75F,
-                        14 - this.level().getDifficulty().getId() * 4,
-                        target
-                );
-                this.onCrossbowAttackPerformed();
-            }
+        InteractionHand weaponHand = RangedWeaponHelper.getWeaponHoldingHand(this);
+        if (weaponHand == null) {
             return;
         }
 
-        InteractionHand bowHand = RangedWeaponHelper.getBowHoldingHand(this);
-        if (bowHand != null) {
-            ItemStack bow = this.getItemInHand(bowHand);
-            ItemStack arrow = this.getProjectile(bow);
-            AbstractArrow persistentProjectileEntity = ProjectileUtil.getMobArrow(this, arrow, pullProgress, bow);
+        ItemStack weaponStack = this.getItemInHand(weaponHand);
+        if (weaponStack.getItem() instanceof CrossbowItem crossbow) {
+            crossbow.performShooting(
+                    this.level(),
+                    this,
+                    weaponHand,
+                    weaponStack,
+                    1.75F,
+                    14 - this.level().getDifficulty().getId() * 4,
+                    target
+            );
+            this.onCrossbowAttackPerformed();
+            return;
+        }
+
+        if (weaponStack.getItem() instanceof BowItem) {
+            ItemStack arrow = this.getProjectile(weaponStack);
+            AbstractArrow persistentProjectileEntity = ProjectileUtil.getMobArrow(this, arrow, pullProgress, weaponStack);
             double x = target.getX() - this.getX();
             double y = target.getY(0.3333333333333333D) - persistentProjectileEntity.getY();
             double z = target.getZ() - this.getZ();
