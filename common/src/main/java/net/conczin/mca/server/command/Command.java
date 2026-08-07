@@ -116,6 +116,7 @@ public class Command {
         Network.sendToPlayer(new ChatAIContextResponse(
                 player.level().dimension(), villager.isPresent(), villager.map(VillagerEntityMCA::getUUID).orElse(Util.NIL_UUID),
                 villager.map(v -> v.getName().getString()).orElse(""), villager.map(VillagerEntityMCA::getChatAIPrompt).orElse(""),
+                villager.map(v -> v.getNickname(player.getUUID())).orElse(""),
                 player.getName().getString(), PlayerSaveData.get(player).getChatAIPrompt(), village.isPresent(),
                 village.map(Village::getId).orElse(-1), village.map(Village::getName).orElse(""),
                 village.map(Village::getChatAIPrompt).orElse(""), Config.getInstance().villagerChatAISystemPrompt

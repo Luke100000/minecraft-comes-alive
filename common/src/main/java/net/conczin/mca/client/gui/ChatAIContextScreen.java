@@ -7,7 +7,9 @@ import net.conczin.mca.network.c2s.ChatAIContextUpdateRequest;
 import net.conczin.mca.network.s2c.ChatAIContextResponse;
 import net.conczin.mca.util.compat.ButtonWidget;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.MultiLineEditBox;
+import net.minecraft.client.gui.components.StringWidget;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.Util;
@@ -16,13 +18,18 @@ import java.net.URI;
 import java.util.EnumMap;
 import java.util.Map;
 
+import static net.conczin.mca.entity.VillagerEntityMCA.MAX_NICKNAME_LENGTH;
 import static net.conczin.mca.network.c2s.ChatAIContextUpdateRequest.MAX_PROMPT_LENGTH;
 
 public class ChatAIContextScreen extends Screen {
+    private static final int CONTEXT_TEXT_COLOR = 0xD0D0D0;
+
     private final ChatAIContextResponse context;
     private final Map<Tab, String> prompts = new EnumMap<>(Tab.class);
     private Tab selectedTab = Tab.VILLAGER;
     private MultiLineEditBox promptField;
+    private EditBox nicknameField;
+    private String nickname;
 
     public ChatAIContextScreen(ChatAIContextResponse context) {
         super(Component.translatable("gui.chat_ai_context.title"));
@@ -33,6 +40,8 @@ public class ChatAIContextScreen extends Screen {
         prompts.put(Tab.PLAYER, context.playerPrompt());
         prompts.put(Tab.VILLAGE, context.villagePrompt());
         prompts.put(Tab.WORLD, context.worldPrompt());
+
+        nickname = context.villagerNickname();
 
         if (!selectedTab.available(context)) {
             selectedTab = Tab.PLAYER;
@@ -60,9 +69,35 @@ public class ChatAIContextScreen extends Screen {
                 Component.literal("?"), Component.translatable("gui.chat_ai_context.help.tooltip"), ignored -> openHelp()));
 
         // Prompt
-        promptField = addRenderableWidget(MultiLineEditBox.builder().setX(left + 12).setY(top + 70)
+        nicknameField = null;
+        int promptY = top + 70;
+        int promptHeight = 128;
+        if (selectedTab == Tab.VILLAGER) {
+            addRenderableWidget(new StringWidget(
+                    left + 12,
+                    top + 70,
+                    50,
+                    15,
+                    Component.translatable("gui.chat_ai_context.nickname").withColor(CONTEXT_TEXT_COLOR),
+                    font
+            ));
+
+            nicknameField = addRenderableWidget(new EditBox(font, left + 62, top + 70, 226, 15,
+                    Component.translatable("gui.chat_ai_context.nickname_placeholder")));
+            nicknameField.setMaxLength(MAX_NICKNAME_LENGTH);
+            nicknameField.setTextColor(CONTEXT_TEXT_COLOR);
+            nicknameField.setHint(
+                    Component.translatable("gui.chat_ai_context.nickname_placeholder")
+                            .withColor(0x808080)
+            );
+            nicknameField.setValue(nickname);
+
+            promptY += 20;
+            promptHeight -= 20;
+        }
+        promptField = addRenderableWidget(MultiLineEditBox.builder().setX(left + 12).setY(promptY)
                 .setPlaceholder(Component.translatable("gui.chat_ai_context.placeholder"))
-                .build(font, 276, 128, Component.translatable("gui.chat_ai_context.prompt")));
+                .build(font, 276, promptHeight, Component.translatable("gui.chat_ai_context.prompt")));
         promptField.setCharacterLimit(MAX_PROMPT_LENGTH);
         promptField.setValue(prompts.get(selectedTab));
 
@@ -81,16 +116,21 @@ public class ChatAIContextScreen extends Screen {
     }
 
     private void saveCurrent() {
-        if (promptField != null && selectedTab.available(context)) {
-            String prompt = promptField.getValue();
-            if (prompt.equals(prompts.get(selectedTab))) {
-                return;
-            }
-            prompts.put(selectedTab, prompt);
-            Network.sendToServer(new ChatAIContextUpdateRequest(
-                    selectedTab.target, context.dimension(), context.villagerUuid(), context.villageId(), prompt
-            ));
+        if (promptField == null || !selectedTab.available(context)) {
+            return;
         }
+
+        String prompt = promptField.getValue();
+        String updatedNickname = nicknameField == null ? nickname : nicknameField.getValue().strip();
+        if (prompt.equals(prompts.get(selectedTab)) && updatedNickname.equals(nickname)) {
+            return;
+        }
+
+        prompts.put(selectedTab, prompt);
+        nickname = updatedNickname;
+        Network.sendToServer(new ChatAIContextUpdateRequest(
+                selectedTab.target, context.dimension(), context.villagerUuid(), context.villageId(), prompt, nickname
+        ));
     }
 
     @Override
@@ -114,7 +154,7 @@ public class ChatAIContextScreen extends Screen {
         graphics.centeredText(font, title, width / 2, top + 12, 0xFFFFFF);
 
         // Name
-        graphics.text(font, Component.translatable(selectedTab.translationKey).append(": ").append(selectedTab.name(context)), left + 12, top + 59, 0xD0D0D0);
+        graphics.text(font, Component.translatable(selectedTab.translationKey).append(": ").append(selectedTab.name(context)), left + 12, top + 59, CONTEXT_TEXT_COLOR);
     }
 
     private void openHelp() {

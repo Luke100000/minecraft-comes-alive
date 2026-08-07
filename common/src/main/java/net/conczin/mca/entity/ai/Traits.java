@@ -1,48 +1,51 @@
 package net.conczin.mca.entity.ai;
 
 import net.conczin.mca.Config;
+import net.conczin.mca.MCA;
 import net.conczin.mca.entity.VillagerLike;
+import net.conczin.mca.util.ExtensibleTypeRegistry;
 import net.conczin.mca.util.network.datasync.CDataManager;
 import net.conczin.mca.util.network.datasync.CDataParameter;
 import net.conczin.mca.util.network.datasync.CParameter;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.Entity;
 
-import java.util.Collection;
-import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
-import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
 public class Traits {
-    public static final Map<String, Trait> TRAIT_REGISTRY = new LinkedHashMap<>();
+    private static final ExtensibleTypeRegistry<Trait> REGISTRY = new ExtensibleTypeRegistry<>(MCA.MOD_ID, "trait");
     private static final CDataParameter<CompoundTag> TRAITS = CParameter.create("Traits", new CompoundTag());
 
-    public static Trait LACTOSE_INTOLERANCE = registerTrait("lactose_intolerance", 1.0F, 1.0F);
-    public static Trait BISEXUAL = registerTrait("bisexual", 1.0F, 0.0F);
-    public static Trait ALBINISM = registerTrait("albinism", 1.0F, 1.0F);
-    public static Trait RAINBOW = registerTrait("rainbow", 0.05F, 0.0F);
-    public static Trait RAINBOW_EYES = registerTrait("rainbow_eyes", 0.05F, 0.0F);
-    public static Trait SIRBEN = registerTrait("sirben", 0.025F, 1.0F);
-    public static Trait DWARFISM = registerTrait("dwarfism", 1.0F, 1.0F);
-    public static Trait HOMOSEXUAL = registerTrait("homosexual", 1.0F, 0.0F);
-    public static Trait HETEROCHROMIA = registerTrait("heterochromia", 1.0F, 0.5F);
-    public static Trait ASEXUAL = registerTrait("asexual", 1.0F, 0.0F);
-    public static Trait COLOR_BLIND = registerTrait("color_blind", 1.0F, 0.5F);
-    public static Trait ATHLETIC = registerTrait("athletic", 1.0F, 0.5F, false);
-    public static Trait LEFT_HANDED = registerTrait("left_handed", 1.0F, 0.5F, false);
-    public static Trait WEAK = registerTrait("weak", 1.0F, 1.0F, false);
-    public static Trait TOUGH = registerTrait("tough", 1.0F, 1.0F, false);
-    public static Trait COELIAC_DISEASE = registerTrait("coeliac_disease", 1.0F, 1.0F, false); // TODO
-    public static Trait DIABETES = registerTrait("diabetes", 1.0F, 1.0F, false); // TODO
-    public static Trait VEGETARIAN = registerTrait("vegetarian", 1.0F, 1.0F, false); // TODO
-    public static Trait INFERTILE = registerTrait("infertile", 1.0F, 0.0F);
-    public static Trait ELECTRIFIED = registerTrait("electrified", 0.0F, 0.0F, false);
-    public static Trait NO_AGING = registerTrait("no_aging", 0.0F, 0.0F, false);
-    // public static Trait UNKNOWN = registerTrait("unknown", 0.0F, 0.0F, false);
+    public static final Trait LACTOSE_INTOLERANCE = register(MCA.locate("lactose_intolerance"), 1.0F, 1.0F);
+    public static final Trait BISEXUAL = register(MCA.locate("bisexual"), 1.0F, 0.0F);
+    public static final Trait ALBINISM = register(MCA.locate("albinism"), 1.0F, 1.0F);
+    public static final Trait RAINBOW = register(MCA.locate("rainbow"), 0.05F, 0.0F);
+    public static final Trait RAINBOW_EYES = register(MCA.locate("rainbow_eyes"), 0.05F, 0.0F);
+    public static final Trait SIRBEN = register(MCA.locate("sirben"), 0.025F, 1.0F);
+    public static final Trait DWARFISM = register(MCA.locate("dwarfism"), 1.0F, 1.0F);
+    public static final Trait HOMOSEXUAL = register(MCA.locate("homosexual"), 1.0F, 0.0F);
+    public static final Trait HETEROCHROMIA = register(MCA.locate("heterochromia"), 1.0F, 0.5F);
+    public static final Trait ASEXUAL = register(MCA.locate("asexual"), 1.0F, 0.0F);
+    public static final Trait COLOR_BLIND = register(MCA.locate("color_blind"), 1.0F, 0.5F);
+    public static final Trait ATHLETIC = register(MCA.locate("athletic"), 1.0F, 0.5F, false);
+    public static final Trait LEFT_HANDED = register(MCA.locate("left_handed"), 1.0F, 0.5F, false);
+    public static final Trait WEAK = register(MCA.locate("weak"), 1.0F, 1.0F, false);
+    public static final Trait TOUGH = register(MCA.locate("tough"), 1.0F, 1.0F, false);
+    public static final Trait COELIAC_DISEASE = register(MCA.locate("coeliac_disease"), 1.0F, 1.0F, false); // TODO
+    public static final Trait DIABETES = register(MCA.locate("diabetes"), 1.0F, 1.0F, false); // TODO
+    public static final Trait VEGETARIAN = register(MCA.locate("vegetarian"), 1.0F, 1.0F, false); // TODO
+    public static final Trait INFERTILE = register(MCA.locate("infertile"), 1.0F, 0.0F);
+    public static final Trait ELECTRIFIED = register(MCA.locate("electrified"), 0.0F, 0.0F, false);
+    public static final Trait NO_AGING = register(MCA.locate("no_aging"), 0.0F, 0.0F, false);
+    // public static final Trait UNKNOWN = register(MCA.locate("unknown"), 0.0F, 0.0F, false);
 
     private final VillagerLike<?> entity;
     private RandomSource random = RandomSource.create();
@@ -51,14 +54,24 @@ public class Traits {
         this.entity = entity;
     }
 
-    public static Trait registerTrait(String id, float chance, float inherit, boolean usableOnPlayer) {
-        Trait trait = new Trait(id, chance, inherit, usableOnPlayer);
-        TRAIT_REGISTRY.put(id, trait);
-        return trait;
+    public static Trait register(Identifier id, float chance, float inherit, boolean usableOnPlayer) {
+        return REGISTRY.register(id, registeredId -> new Trait(registeredId, chance, inherit, usableOnPlayer));
     }
 
-    public static Trait registerTrait(String id, float chance, float inherit) {
-        return registerTrait(id, chance, inherit, true);
+    public static Trait register(Identifier id, float chance, float inherit) {
+        return register(id, chance, inherit, true);
+    }
+
+    public static Optional<Trait> get(Identifier id) {
+        return REGISTRY.get(id);
+    }
+
+    public static Optional<Trait> get(String id) {
+        return REGISTRY.get(id);
+    }
+
+    public static List<Trait> all() {
+        return REGISTRY.all();
     }
 
     public static <E extends Entity> CDataManager.Builder<E> createTrackedData(CDataManager.Builder<E> builder) {
@@ -66,7 +79,11 @@ public class Traits {
     }
 
     public Set<Trait> getTraits() {
-        return entity.getTrackedValue(TRAITS).keySet().stream().map(Trait::valueOf).filter(Objects::nonNull).collect(Collectors.toSet());
+        Set<Trait> traits = new LinkedHashSet<>();
+        for (String id : entity.getTrackedValue(TRAITS).keySet()) {
+            get(id).ifPresent(traits::add);
+        }
+        return traits;
     }
 
     public Set<Trait> getInheritedTraits() {
@@ -74,7 +91,7 @@ public class Traits {
     }
 
     public boolean hasTrait(VillagerLike<?> target, Trait trait) {
-        return trait != null && target.getTrackedValue(TRAITS).contains(trait.id());
+        return trait != null && target.getTrackedValue(TRAITS).contains(trait.getId().toString());
     }
 
     public boolean hasTrait(Trait trait) {
@@ -82,8 +99,7 @@ public class Traits {
     }
 
     public boolean hasTrait(String trait) {
-        Trait value = Trait.valueOf(trait);
-        return value != null && hasTrait(entity, value);
+        return get(trait).filter(this::hasTrait).isPresent();
     }
 
     public boolean eitherHaveTrait(Trait trait, VillagerLike<?> other) {
@@ -98,8 +114,9 @@ public class Traits {
         if (trait == null) {
             return;
         }
+
         CompoundTag traits = entity.getTrackedValue(TRAITS).copy();
-        traits.putBoolean(trait.id(), true);
+        traits.putBoolean(trait.getId().toString(), true);
         entity.setTrackedValue(TRAITS, traits);
     }
 
@@ -107,25 +124,27 @@ public class Traits {
         if (trait == null) {
             return;
         }
+
         CompoundTag traits = entity.getTrackedValue(TRAITS).copy();
-        traits.remove(trait.id());
+        traits.remove(trait.getId().toString());
         entity.setTrackedValue(TRAITS, traits);
     }
 
     //initializes the genes with random numbers
     public void randomize() {
-        float total = (float) Trait.values().stream().mapToDouble(tr -> tr.chance).sum();
-        for (Trait t : Trait.values()) {
-            float chance = Config.getInstance().traitChance / total * t.chance;
-            if (random.nextFloat() < chance && t.isEnabled()) {
-                addTrait(t);
+        List<Trait> traits = all();
+        float total = (float) traits.stream().mapToDouble(trait -> trait.chance).sum();
+        for (Trait trait : traits) {
+            float chance = Config.getInstance().traitChance / total * trait.chance;
+            if (random.nextFloat() < chance && trait.isEnabled()) {
+                addTrait(trait);
             }
         }
     }
 
     public void inherit(Traits from) {
-        for (Trait t : from.getInheritedTraits()) {
-            addTrait(t);
+        for (Trait trait : from.getInheritedTraits()) {
+            addTrait(trait);
         }
     }
 
@@ -137,44 +156,36 @@ public class Traits {
     }
 
     public float getVerticalScaleFactor() {
-        return hasTrait(Traits.DWARFISM) ? 0.65f : 1.0f;
+        return hasTrait(DWARFISM) ? 0.65f : 1.0f;
     }
 
     public float getHorizontalScaleFactor() {
-        return (hasTrait(Traits.DWARFISM) ? 0.85f : 1.0f) * (hasTrait(Traits.TOUGH) ? 1.2f : 1.0f) * (hasTrait(Traits.WEAK) ? 0.85f : 1.0f);
+        return (hasTrait(DWARFISM) ? 0.85f : 1.0f) * (hasTrait(TOUGH) ? 1.2f : 1.0f) * (hasTrait(WEAK) ? 0.85f : 1.0f);
     }
 
-    public static class Trait {
-        private final String id;
+    public static final class Trait {
+        private final Identifier id;
         private final float chance;
         private final float inherit;
         private final boolean usableOnPlayer;
 
-        Trait(String id, float chance, float inherit, boolean usableOnPlayer) {
+        private Trait(Identifier id, float chance, float inherit, boolean usableOnPlayer) {
             this.id = id;
             this.chance = chance;
             this.inherit = inherit;
             this.usableOnPlayer = usableOnPlayer;
         }
 
-        public static Collection<Trait> values() {
-            return TRAIT_REGISTRY.values();
-        }
-
-        public static Trait valueOf(String id) {
-            return TRAIT_REGISTRY.getOrDefault(id, null);
-        }
-
-        public String id() {
-            return this.id;
+        public Identifier getId() {
+            return id;
         }
 
         public Component getName() {
-            return Component.translatable("trait." + id());
+            return Component.translatable("trait." + REGISTRY.translationSuffix(id));
         }
 
         public Component getDescription() {
-            return Component.translatable("traitDescription." + id());
+            return Component.translatable("traitDescription." + REGISTRY.translationSuffix(id));
         }
 
         public boolean isUsableOnPlayer() {
@@ -182,7 +193,8 @@ public class Traits {
         }
 
         public boolean isEnabled() {
-            return Config.getServerConfig().enabledTraits.getOrDefault(id(), false);
+            Map<String, Boolean> enabledTraits = Config.getServerConfig().enabledTraits;
+            return enabledTraits.getOrDefault(id.toString(), true);
         }
     }
 }

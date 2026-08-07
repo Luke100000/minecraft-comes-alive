@@ -12,7 +12,9 @@ import net.conczin.mca.util.network.datasync.CDataManager;
 import net.conczin.mca.util.network.datasync.CDataParameter;
 import net.conczin.mca.util.network.datasync.CEnumParameter;
 import net.conczin.mca.util.network.datasync.CParameter;
+import net.conczin.mca.util.network.datasync.CResourceLocationParameter;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.Mth;
@@ -32,7 +34,7 @@ import static net.conczin.mca.entity.ai.MemoryModuleTypeMCA.LAST_GRIEVE;
  */
 public class VillagerBrain<E extends Mob & VillagerLike<E>> {
     private static final CDataParameter<CompoundTag> MEMORIES = CParameter.create("Memories", new CompoundTag());
-    private static final CEnumParameter<Personality> PERSONALITY = CParameter.create("Personality", Personality.UNASSIGNED);
+    private static final CResourceLocationParameter PERSONALITY = CParameter.create("Personality", Personality.UNASSIGNED.getId());
     private static final CDataParameter<Integer> MOOD = CParameter.create("Mood", 0);
     private static final CEnumParameter<MoveState> MOVE_STATE = CParameter.create("MoveState", MoveState.MOVE);
     private static final CEnumParameter<Chore> ACTIVE_CHORE = CParameter.create("ActiveChore", Chore.NONE);
@@ -142,7 +144,7 @@ public class VillagerBrain<E extends Mob & VillagerLike<E>> {
     }
 
     public void randomize(AgeState ageState) {
-        entity.setTrackedValue(PERSONALITY, Personality.getRandom(ageState));
+        setPersonality(Personality.getRandom(ageState));
         entity.setTrackedValue(MOOD, entity.getRandom().nextInt(MoodGroup.MAX_LEVEL - MoodGroup.NORMAL_MIN_LEVEL + 1) + MoodGroup.NORMAL_MIN_LEVEL);
     }
 
@@ -177,11 +179,15 @@ public class VillagerBrain<E extends Mob & VillagerLike<E>> {
     }
 
     public Personality getPersonality() {
+        return Personality.get(getPersonalityId()).orElse(Personality.UNASSIGNED);
+    }
+
+    public Identifier getPersonalityId() {
         return entity.getTrackedValue(PERSONALITY);
     }
 
-    public void setPersonality(Personality p) {
-        entity.setTrackedValue(PERSONALITY, p);
+    public void setPersonality(Personality personality) {
+        entity.setTrackedValue(PERSONALITY, personality.getId());
     }
 
     public Mood getMood() {

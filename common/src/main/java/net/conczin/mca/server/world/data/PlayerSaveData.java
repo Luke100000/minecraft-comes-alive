@@ -3,6 +3,7 @@ package net.conczin.mca.server.world.data;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.DynamicOps;
 import net.conczin.mca.Config;
+import net.conczin.mca.datafix.McaDataFixers;
 import net.conczin.mca.entity.PlayerDimensions;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.relationship.EntityRelationship;
@@ -70,10 +71,16 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
         overrideVillageRequirements = nbt.contains("overrideVillageRequirements") && nbt.getBoolean("overrideVillageRequirements").orElse(false);
         chatAIPrompt = nbt.getString("chatAIPrompt").orElse("");
 
-        entityData = nbt.getCompound("entityData").orElseGet(() -> {
+        Optional<CompoundTag> storedEntityData = nbt.getCompound("entityData");
+        if (storedEntityData.isPresent()) {
+            CompoundTag stored = storedEntityData.get();
+            entityData = McaDataFixers.update(stored);
+            if (!entityData.equals(stored)) {
+                setDirty();
+            }
+        } else {
             resetEntityData();
-            return entityData;
-        });
+        }
 
         ListTag inbox = nbt.getList("inbox").orElseGet(ListTag::new);
         this.inbox.addAll(NbtHelper.toList(inbox, e -> new Letter((CompoundTag) e, world.registryAccess())));
@@ -143,7 +150,7 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
     }
 
     public void setEntityData(CompoundTag entityData) {
-        CompoundTag copy = entityData.copy();
+        CompoundTag copy = McaDataFixers.update(entityData.copy());
         if (copy.equals(this.entityData)) {
             return;
         }
@@ -264,7 +271,9 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
         if (lastSeenVillageId != null) {
             nbt.putInt("lastSeenVillage", lastSeenVillageId);
         }
-        nbt.put("entityData", entityData.copy());
+        CompoundTag storedEntityData = entityData.copy();
+        McaDataFixers.stampCurrentVersion(storedEntityData);
+        nbt.put("entityData", storedEntityData);
         nbt.putBoolean("entityDataSet", entityDataSet);
         nbt.putBoolean("overrideVillageRequirements", overrideVillageRequirements);
         nbt.putString("chatAIPrompt", chatAIPrompt);
@@ -343,4 +352,3 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
         }
     }
 }
-

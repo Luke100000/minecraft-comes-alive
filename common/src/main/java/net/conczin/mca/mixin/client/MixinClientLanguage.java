@@ -1,5 +1,6 @@
 package net.conczin.mca.mixin.client;
 
+import com.llamalad7.mixinextras.injector.ModifyReturnValue;
 import net.conczin.mca.MCA;
 import net.conczin.mca.entity.CommonSpeechManager;
 import net.conczin.mca.entity.ai.DialogueType;
@@ -58,10 +59,9 @@ abstract class MixinClientLanguage extends Language {
         }
     }
 
-    @Inject(method = "has(Ljava/lang/String;)Z", at = @At("HEAD"), cancellable = true)
-    public void mca$injectHas(String key, CallbackInfoReturnable<Boolean> info) {
-        if (mca$getPool().contains(key)) {
-            info.setReturnValue(true);
-        }
+    @ModifyReturnValue(method = "has(Ljava/lang/String;)Z", at = @At("RETURN"))
+    private boolean mca$includePooledTranslations(boolean original, String key) {
+        boolean pooled = mca$getPool().contains(key);
+        return original || pooled;
     }
 }
