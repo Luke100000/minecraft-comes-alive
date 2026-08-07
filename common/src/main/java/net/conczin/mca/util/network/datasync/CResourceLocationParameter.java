@@ -8,7 +8,6 @@ import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.Entity;
-import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Objects;
@@ -25,35 +24,35 @@ public final class CResourceLocationParameter implements CParameter<ResourceLoca
     private final String id;
     private final ResourceLocation defaultValue;
 
-    CResourceLocationParameter(@NotNull String id, @NotNull ResourceLocation defaultValue) {
+    CResourceLocationParameter(String id, ResourceLocation defaultValue) {
         this.id = Objects.requireNonNull(id, "id");
         this.defaultValue = Objects.requireNonNull(defaultValue, "defaultValue");
     }
 
     @Override
-    public @NotNull String getDefault() {
+    public String getDefault() {
         return defaultValue.toString();
     }
 
     @Override
-    public @NotNull ResourceLocation get(
-            @NotNull EntityDataAccessor<String> param,
-            @NotNull SynchedEntityData tracker
+    public ResourceLocation get(
+            EntityDataAccessor<String> param,
+            SynchedEntityData tracker
     ) {
         return parseOrDefault(tracker.get(param));
     }
 
     @Override
     public void set(
-            @NotNull EntityDataAccessor<String> param,
-            @NotNull SynchedEntityData tracker,
-            @NotNull ResourceLocation value
+            EntityDataAccessor<String> param,
+            SynchedEntityData tracker,
+            ResourceLocation value
     ) {
         tracker.set(param, Objects.requireNonNull(value, "value").toString());
     }
 
     @Override
-    public @NotNull ResourceLocation load(@NotNull CompoundTag nbt, @NotNull RegistryAccess registryAccess) {
+    public ResourceLocation load(CompoundTag nbt, RegistryAccess registryAccess) {
         return nbt.contains(id, Tag.TAG_STRING)
                 ? parseOrDefault(nbt.getString(id))
                 : defaultValue;
@@ -61,19 +60,19 @@ public final class CResourceLocationParameter implements CParameter<ResourceLoca
 
     @Override
     public void save(
-            @NotNull CompoundTag nbt,
-            @NotNull ResourceLocation value,
-            @NotNull RegistryAccess registryAccess
+            CompoundTag nbt,
+            ResourceLocation value,
+            RegistryAccess registryAccess
     ) {
         nbt.putString(id, Objects.requireNonNull(value, "value").toString());
     }
 
     @Override
-    public @NotNull EntityDataAccessor<String> createParam(@NotNull Class<? extends Entity> type) {
+    public EntityDataAccessor<String> createParam(Class<? extends Entity> type) {
         return SynchedEntityData.defineId(type, EntityDataSerializers.STRING);
     }
 
-    private @NotNull ResourceLocation parseOrDefault(@Nullable String value) {
+    private ResourceLocation parseOrDefault(@Nullable String value) {
         if (value == null) {
             return defaultValue;
         }
