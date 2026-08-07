@@ -1,19 +1,24 @@
 # 8.1.7
 
 **IMPORTANT**
-* Recommended to backup your world.
+* Recommended to ***__backup__*** your world.
 * This release won't be backwards compatible with previous MCA versions due to internal changes with how traits and personalities are saved
-* This release brings the trait/personality storage migration to 26.1.2/26.2.
+
+* Improved backend code for compatibility with other mods
+* Added nicknames to /mca chatAI context menu so you can have roleplay names (thanks tranthienlong675!)
+* Updated languages.
 * Addon API:
   * Modernised trait/personality system making it easier for addons to integrate personalities/traits.
   * Personalities are no longer hardcoded by enums and have their own MCA namespace
   * Traits have their own namespace
-  * Existing methods have been given a compatibility shim and marked as deprecated so addons touching it will still work.
 * Archer Improvements
   * Modded crossbows/bows are supported
+    * Some of them may not be due to some modded crossbows being designed for players.
+  * Improved Archer logic
   * Archers now don't glitch out if their target disappears.
-* Fixed children you're carrying disappearing on disconnect.
-* Fixed compatibility with Create: Clockware Augments and potentially other mods.
+* Fixed children you are carrying disappearing on disconnect.
+* Fixed villagers being stuck in doors
+* Fixed villagers getting stuck on their way to a bed
 
 # 8.1.6
 
