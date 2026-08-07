@@ -1,5 +1,6 @@
 # 7.7.33-beta.3
-
+>**Backup** your **WORLD** before using this beta.
+* For a full changelog, look at 7.7.31-beta.1
 * Fixed auto scan.
 
 # 7.7.33
@@ -39,9 +40,6 @@
 * Fixed bug.
 
 # 7.7.31-beta.1
->**Backup** your **WORLD** before using this beta.
-
-> **May have bugs** 
 
 * Completely reworked MCA's building system to better support multi-floor and irregular buildings.
 * Buildings can now have multiple floors and basements.
