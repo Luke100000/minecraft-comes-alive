@@ -61,7 +61,10 @@ abstract class MixinMoveToTargetSink {
         }
 
         Path path = navigation.createPath(mca$getBedApproachPositions(target, bedState), 0);
-        return path != null && path.canReach() ? path : null;
+        // Keep partial paths too. Vanilla MoveToTargetSink will follow a partial path and
+        // retry later, which lets villagers make progress toward home even when the final
+        // standing block is temporarily unreachable.
+        return path;
     }
 
     @WrapOperation(
@@ -145,13 +148,16 @@ abstract class MixinMoveToTargetSink {
         Direction facing = bedState.getValue(BedBlock.FACING);
         BlockPos footPos = bedPos.relative(facing.getOpposite());
 
-        // These are the five standing blocks inside SleepInBed's strict two-block radius.
+        // Prefer any open side of the bed, including directly in front of the head and
+        // directly behind the foot. SleepInBed has an MCA-specific allowance for the
+        // behind-foot position, which is exactly two blocks from the HOME (bed head).
         return Set.of(
                 bedPos.relative(facing),
                 bedPos.relative(facing.getClockWise()),
                 bedPos.relative(facing.getCounterClockWise()),
                 footPos.relative(facing.getClockWise()),
-                footPos.relative(facing.getCounterClockWise())
+                footPos.relative(facing.getCounterClockWise()),
+                footPos.relative(facing.getOpposite())
         );
     }
 }

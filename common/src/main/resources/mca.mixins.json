@@ -21,6 +21,7 @@
     "MixinProtoChunk",
     "MixinScreenHandler",
     "MixinServerGamePacketListenerImpl",
+    "MixinSleepInBed",
     "MixinServerWorld",
     "MixinSynchedEntityData",
     "MixinTranslatableContents",
