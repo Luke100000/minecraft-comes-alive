@@ -1,7 +1,6 @@
 package net.conczin.mca.entity.ai.brain.tasks;
 
 import net.conczin.mca.entity.ai.RangedWeaponHelper;
-import net.minecraft.core.component.DataComponents;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.LivingEntity;
@@ -10,9 +9,6 @@ import net.minecraft.world.entity.ai.behavior.BehaviorUtils;
 import net.minecraft.world.entity.ai.behavior.CrossbowAttack;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.monster.CrossbowAttackMob;
-import net.minecraft.world.item.CrossbowItem;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.component.ChargedProjectiles;
 
 public final class ExtendedCrossbowAttackTask<E extends Mob & CrossbowAttackMob, T extends LivingEntity> extends CrossbowAttack<E, T> {
     @Override
@@ -43,17 +39,8 @@ public final class ExtendedCrossbowAttackTask<E extends Mob & CrossbowAttackMob,
 
     @Override
     protected void stop(ServerLevel level, E entity, long gameTime) {
-        ItemStack crossbowStack = entity.getUseItem();
-        if (!(crossbowStack.getItem() instanceof CrossbowItem)) {
-            InteractionHand hand = RangedWeaponHelper.getCrossbowHoldingHand(entity);
-            crossbowStack = hand == null ? ItemStack.EMPTY : entity.getItemInHand(hand);
-        }
-
         super.stop(level, entity, gameTime);
         entity.setChargingCrossbow(false);
-        if (crossbowStack.getItem() instanceof CrossbowItem) {
-            crossbowStack.set(DataComponents.CHARGED_PROJECTILES, ChargedProjectiles.EMPTY);
-        }
     }
 
     private static LivingEntity getAttackTarget(LivingEntity entity) {

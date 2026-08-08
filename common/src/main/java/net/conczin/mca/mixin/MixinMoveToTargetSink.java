@@ -9,7 +9,6 @@ import net.minecraft.core.Direction;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.world.entity.Mob;
-import net.minecraft.world.entity.PathfinderMob;
 import net.minecraft.world.entity.ai.Brain;
 import net.minecraft.world.entity.ai.behavior.MoveToTargetSink;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
@@ -20,7 +19,6 @@ import net.minecraft.world.level.block.BedBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BedPart;
 import net.minecraft.world.level.pathfinder.Path;
-import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
@@ -61,34 +59,10 @@ abstract class MixinMoveToTargetSink {
         }
 
         Path path = navigation.createPath(mca$getBedApproachPositions(target, bedState), 0);
-        return path != null && path.canReach() ? path : null;
-    }
-
-    @WrapOperation(
-            method = MCA_TRY_COMPUTE_PATH,
-            at = @At(
-                    value = "INVOKE",
-                    target = "Lnet/minecraft/world/entity/ai/util/DefaultRandomPos;getPosTowards(Lnet/minecraft/world/entity/PathfinderMob;IILnet/minecraft/world/phys/Vec3;D)Lnet/minecraft/world/phys/Vec3;"
-            )
-    )
-    @Nullable
-    private Vec3 mca$skipRandomFallbackForBed(
-            PathfinderMob pathfinderMob,
-            int horizontalRange,
-            int verticalRange,
-            Vec3 target,
-            double angle,
-            Operation<Vec3> original,
-            Mob mob,
-            WalkTarget walkTarget,
-            long gameTime
-    ) {
-        BlockPos walkTargetPos = walkTarget.getTarget().currentBlockPosition();
-        if (mca$getTargetBedState(mob, walkTargetPos) != null) {
-            return null;
-        }
-
-        return original.call(pathfinderMob, horizontalRange, verticalRange, target, angle);
+        // Keep partial paths too. Vanilla MoveToTargetSink will follow a partial path and
+        // retry later, which lets villagers make progress toward home even when the final
+        // standing block is temporarily unreachable.
+        return path;
     }
 
     @ModifyReturnValue(method = MCA_REACHED_TARGET, at = @At("RETURN"))
@@ -145,13 +119,16 @@ abstract class MixinMoveToTargetSink {
         Direction facing = bedState.getValue(BedBlock.FACING);
         BlockPos footPos = bedPos.relative(facing.getOpposite());
 
-        // These are the five standing blocks inside SleepInBed's strict two-block radius.
+        // Allow any side of the bed, including directly in front of the head and
+        // directly behind the foot. SleepInBed has an MCA-specific allowance for the
+        // behind-foot position, which is exactly two blocks from the HOME (bed head).
         return Set.of(
                 bedPos.relative(facing),
                 bedPos.relative(facing.getClockWise()),
                 bedPos.relative(facing.getCounterClockWise()),
                 footPos.relative(facing.getClockWise()),
-                footPos.relative(facing.getCounterClockWise())
+                footPos.relative(facing.getCounterClockWise()),
+                footPos.relative(facing.getOpposite())
         );
     }
 }
