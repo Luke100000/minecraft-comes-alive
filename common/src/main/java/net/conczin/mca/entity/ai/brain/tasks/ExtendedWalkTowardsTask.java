@@ -3,6 +3,7 @@ package net.conczin.mca.entity.ai.brain.tasks;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.ai.behavior.OneShot;
 import net.minecraft.world.entity.ai.behavior.declarative.BehaviorBuilder;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
@@ -18,14 +19,27 @@ public final class ExtendedWalkTowardsTask {
     private static final long RANDOM_POS_RETRY_COOLDOWN = 20L;
     private static final int MAX_RANDOM_POS_ATTEMPTS = 32;
 
+    @FunctionalInterface
+    public interface WalkTargetResolver {
+        Optional<BlockPos> resolve(ServerLevel world, VillagerEntityMCA entity, GlobalPos destination);
+    }
+
     private ExtendedWalkTowardsTask() {
     }
 
     public static OneShot<VillagerEntityMCA> create(MemoryModuleType<GlobalPos> destination, float speed, int completionRange, int maxDistance, int maxRunTime, Predicate<VillagerEntityMCA> canGiveUp, Consumer<VillagerEntityMCA> onGiveUp) {
-        return create(destination, speed, completionRange, maxDistance, maxRunTime, canGiveUp, onGiveUp, entity -> true);
+        return create(destination, speed, completionRange, maxDistance, maxRunTime, canGiveUp, onGiveUp, (world, entity, globalPos) -> Optional.empty(), entity -> true);
     }
 
     public static OneShot<VillagerEntityMCA> create(MemoryModuleType<GlobalPos> destination, float speed, int completionRange, int maxDistance, int maxRunTime, Predicate<VillagerEntityMCA> canGiveUp, Consumer<VillagerEntityMCA> onGiveUp, Predicate<VillagerEntityMCA> shouldWalk) {
+        return create(destination, speed, completionRange, maxDistance, maxRunTime, canGiveUp, onGiveUp, (world, entity, globalPos) -> Optional.empty(), shouldWalk);
+    }
+
+    public static OneShot<VillagerEntityMCA> create(MemoryModuleType<GlobalPos> destination, float speed, int completionRange, int maxDistance, int maxRunTime, Predicate<VillagerEntityMCA> canGiveUp, Consumer<VillagerEntityMCA> onGiveUp, WalkTargetResolver walkTargetResolver) {
+        return create(destination, speed, completionRange, maxDistance, maxRunTime, canGiveUp, onGiveUp, walkTargetResolver, entity -> true);
+    }
+
+    public static OneShot<VillagerEntityMCA> create(MemoryModuleType<GlobalPos> destination, float speed, int completionRange, int maxDistance, int maxRunTime, Predicate<VillagerEntityMCA> canGiveUp, Consumer<VillagerEntityMCA> onGiveUp, WalkTargetResolver walkTargetResolver, Predicate<VillagerEntityMCA> shouldWalk) {
         return BehaviorBuilder.create((context) -> {
             return context.group(
                     context.registered(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE),
@@ -43,7 +57,9 @@ public final class ExtendedWalkTowardsTask {
                                 return true;
                             }
                             if (globalPos.dimension() == world.dimension() && (optional.isEmpty() || world.getGameTime() - optional.get() <= (long) maxRunTime)) {
-                                BlockPos targetPos = globalPos.pos();
+                                Optional<BlockPos> resolvedTarget = walkTargetResolver.resolve(world, entity, globalPos);
+                                BlockPos targetPos = resolvedTarget.orElse(globalPos.pos());
+                                int targetCompletionRange = resolvedTarget.isPresent() ? 0 : completionRange;
                                 if (targetPos.distManhattan(entity.blockPosition()) > maxDistance) {
                                     Vec3 vec3d = null;
                                     for (int tries = 0; tries < MAX_RANDOM_POS_ATTEMPTS; tries++) {
@@ -67,8 +83,8 @@ public final class ExtendedWalkTowardsTask {
                                     }
 
                                     walkTarget.set(new WalkTarget(vec3d, speed, completionRange));
-                                } else if (targetPos.distManhattan(entity.blockPosition()) > completionRange) {
-                                    walkTarget.set(new WalkTarget(targetPos, speed, completionRange));
+                                } else if (targetPos.distManhattan(entity.blockPosition()) > targetCompletionRange) {
+                                    walkTarget.set(new WalkTarget(targetPos, speed, targetCompletionRange));
                                 }
                             } else {
                                 if (canGiveUp.test(entity)) {
