@@ -1,3 +1,9 @@
+# 8.1.8
+
+* Fixed villagers being unable to move.
+* Improved villager bed pathing and sleep reliability.
+* Fixed using the Comb, Needle and Thread, or Villager Editor wiping villager inventories.
+
 # 8.1.7
 
 **IMPORTANT**
