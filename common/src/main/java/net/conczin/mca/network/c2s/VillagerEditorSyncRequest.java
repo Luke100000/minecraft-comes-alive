@@ -241,22 +241,14 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
     }
 
     private CompoundTag normalizeVisualData(CompoundTag villagerData) {
-        CompoundTag source = getOrCreateMcaData(villagerData);
-        CompoundTag sanitized = new CompoundTag();
+        CompoundTag mcaData = getOrCreateMcaData(villagerData);
         for (String key : MCA_VISUAL_KEYS) {
-            if (!source.contains(key) && villagerData.contains(key)) {
-                source.put(key, Objects.requireNonNull(villagerData.get(key)).copy());
+            if (!mcaData.contains(key) && villagerData.contains(key)) {
+                mcaData.put(key, Objects.requireNonNull(villagerData.get(key)).copy());
             }
             villagerData.remove(key);
         }
-        for (String key : source.keySet()) {
-            if (isAllowedMcaKey(key)) {
-                sanitized.put(key, Objects.requireNonNull(source.get(key)).copy());
-            }
-        }
-
-        villagerData.put(VillagerEntityMCA.MCA_DATA_KEY, sanitized);
-        return sanitized;
+        return mcaData;
     }
 
     private void clearInvalidIdentifier(CompoundTag mcaData, CompoundTag fallbackMcaData, String key, Predicate<String> validator) {
