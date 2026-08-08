@@ -1,8 +1,13 @@
-# 7.7.33
-**IMPORTANT**
+# 7.7.34
+## **IMPORTANT**
 * Recommended to ***__backup__*** your world.
-* This release won't be backwards compatible with previous MCA versions due to internal changes with how traits and personalities are saved
-* This release won't work with 26.1.2 or 26.2 until version 8.1.7 is released.
+* This release won't be backwards compatible with 7.7.32 and below due to internal changes with how traits and personalities are saved
+* This release works with 26.1.2/26.2 - >=8.1.7
+
+* Fixed villagers being stuck and not able to move
+  * sleeping should be more reliable 
+
+# 7.7.33
 
 * Improved backend code for compatibility with other mods
 * Added nicknames to /mca chatAI context menu so you can have roleplay names (thanks tranthienlong675!)
@@ -21,7 +26,7 @@
 * Fixed compatibility with Create: Clockware Augments and potentially other mods.
 * Fixed villagers being stuck in doors
 * Fixed villagers getting stuck on their way to a bed
-* 
+
 # 7.7.32
 
 * Fixed Graveyard data loss issue
