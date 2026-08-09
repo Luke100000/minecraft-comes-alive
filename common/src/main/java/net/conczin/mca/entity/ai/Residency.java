@@ -109,8 +109,17 @@ public class Residency {
     public void seekHome() {
         if (entity.requiresHome()) {
             VillageManager manager = VillageManager.get((ServerLevel) entity.level());
-            manager.findNearestVillage(entity).ifPresent(v -> {
-                leaveHome();
+            Optional<Village> current = getHomeVillage();
+            Optional<Village> target = getHome()
+                    .filter(home -> home.dimension() == entity.level().dimension())
+                    .flatMap(home -> manager.findNearestVillage(home.pos(), Village.BORDER_MARGIN))
+                    .or(() -> current.filter(village -> village.isWithinBorder(entity)))
+                    .or(() -> manager.findNearestVillage(entity));
+
+            target.ifPresent(v -> {
+                if (current.filter(existing -> existing.getId() == v.getId()).isEmpty()) {
+                    leaveHome();
+                }
                 v.updateResident(entity);
                 entity.setTrackedValue(VILLAGE, v.getId());
             });

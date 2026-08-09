@@ -1,7 +1,7 @@
 package net.conczin.mca.network.c2s;
 
 import net.conczin.mca.MCA;
-import net.conczin.mca.client.gui.FamilyTreeSearchScreen;
+import net.conczin.mca.network.FamilyTreeSearchEntry;
 import net.conczin.mca.network.HandleablePayload;
 import net.conczin.mca.network.Network;
 import net.conczin.mca.network.s2c.FamilyTreeUUIDResponse;
@@ -26,8 +26,8 @@ public record FamilyTreeUUIDLookup(String search) implements HandleablePayload {
     @Override
     public void handleServer(ServerPlayer player) {
         FamilyTree tree = FamilyTree.get(player.serverLevel());
-        List<FamilyTreeSearchScreen.Entry> list = tree.getAllWithNameContaining(search)
-                .map(entry -> new FamilyTreeSearchScreen.Entry(
+        List<FamilyTreeSearchEntry> list = tree.getAllWithNameContaining(search)
+                .map(entry -> new FamilyTreeSearchEntry(
                         entry.id(),
                         entry.getName(),
                         tree.getOrEmpty(entry.father()).map(FamilyTreeNode::getName).orElse(""),

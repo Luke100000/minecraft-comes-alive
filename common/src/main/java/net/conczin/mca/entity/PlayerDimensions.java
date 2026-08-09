@@ -19,6 +19,8 @@ import java.util.Optional;
 import java.util.UUID;
 
 public final class PlayerDimensions {
+    private static final Scale VANILLA_SCALE = new Scale(1.0F, 1.0F);
+
     private PlayerDimensions() {
     }
 
@@ -40,6 +42,9 @@ public final class PlayerDimensions {
     }
 
     public static Scale fromVillager(VillagerLike<?> villager) {
+        if (villager.getPlayerModel() == VillagerLike.PlayerModel.VANILLA) {
+            return VANILLA_SCALE;
+        }
         return new Scale(villager.getRawHorizontalScaleFactor(), villager.getRawVerticalScaleFactor());
     }
 
@@ -59,6 +64,10 @@ public final class PlayerDimensions {
         CompoundTag mcaData = entityData.contains(VillagerEntityMCA.MCA_DATA_KEY, 10)
                 ? entityData.getCompound(VillagerEntityMCA.MCA_DATA_KEY)
                 : entityData;
+        CompoundTag modelData = mcaData.contains("PlayerModel") ? mcaData : entityData;
+        if (VillagerLike.PlayerModel.byId(modelData.getInt("PlayerModel")) == VillagerLike.PlayerModel.VANILLA) {
+            return VANILLA_SCALE;
+        }
         CompoundTag traits = mcaData.contains("Traits", 10) ? mcaData.getCompound("Traits") : new CompoundTag();
         AgeScale age = getAgeScale(entityData);
         Gender gender = Gender.byId(mcaData.contains("Gender") ? mcaData.getInt("Gender") : Gender.UNASSIGNED.ordinal());

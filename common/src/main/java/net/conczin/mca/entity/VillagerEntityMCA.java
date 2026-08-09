@@ -78,7 +78,7 @@ import net.minecraft.world.item.CrossbowItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.ProjectileWeaponItem;
-import net.minecraft.world.item.trading.MerchantOffer;
+import net.minecraft.world.item.trading.MerchantOffers;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.ServerLevelAccessor;
 import net.minecraft.world.level.pathfinder.PathType;
@@ -475,6 +475,20 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
     public boolean hasTradeOffers() {
         return !getOffers().isEmpty();
+    }
+
+    @Override
+    public MerchantOffers getOffers() {
+        MerchantOffers offers = super.getOffers();
+        int previousSize = offers.size();
+        offers.removeIf(offer -> offer.getResult().isEmpty());
+
+        int removed = previousSize - offers.size();
+        if (removed > 0) {
+            MCA.LOGGER.warn("Removed {} invalid villager trade(s) with empty result for villager {} (profession {}, level {})",
+                    removed, getUUID(), getProfessionId(), getVillagerData().getLevel());
+        }
+        return offers;
     }
 
     @Override

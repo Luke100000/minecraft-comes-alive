@@ -1,15 +1,17 @@
-# 7.7.34-beta.3
-> **Backup** your **WORLD** before using this beta.
-* For a full changelog, look at 7.7.33-beta.3
-
-# 7.7.34
+# 7.7.35-beta.3
 ## **IMPORTANT**
 * Recommended to ***__backup__*** your world.
 * This release won't be backwards compatible with 7.7.32 and below due to internal changes with how traits and personalities are saved
 * This release works with 26.1.2/26.2 - >=8.1.7
 
+* Improve mod compatibility
+* Improve villager migration behaviour
+* Fix bugs
+
+# 7.7.34-beta.3
+
 * Fixed villagers being stuck and not able to move
-    * sleeping should be more reliable
+  * sleeping should be more reliable
 
 # 7.7.33-beta.3
 
@@ -17,6 +19,7 @@
 * Fixed auto scan.
 
 # 7.7.33
+
 **IMPORTANT**
 * Recommended to ***__backup__*** your world.
 * This release won't be backwards compatible with previous MCA versions due to internal changes with how traits and personalities are saved
