@@ -1,5 +1,6 @@
 package net.mca.util.network.datasync;
 
+import net.mca.datafix.McaDataFixers;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.data.TrackedData;
 import net.minecraft.nbt.NbtCompound;
@@ -48,11 +49,13 @@ public class CDataManager<E extends Entity> {
     }
 
     public void load(E entity, NbtCompound nbt) {
-        params.forEach(p -> p.load(entity, nbt));
+        NbtCompound migrated = McaDataFixers.update(nbt);
+        params.forEach(p -> p.load(entity, migrated));
     }
 
     public void save(E entity, NbtCompound nbt) {
         params.forEach(p -> p.save(entity, nbt));
+        McaDataFixers.stampCurrentVersion(nbt);
     }
 
     public static class Builder<E extends Entity> {

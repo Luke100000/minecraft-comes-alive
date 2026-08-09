@@ -280,4 +280,9 @@ public class ClientInteractionManagerImpl implements ClientInteractionManager {
     public void handleBuildingPolymorph(BuildingPolymorphMessage message) {
         client.setScreen(new BuildingPolymorphScreen(message.matchingTypes(), message.scanPos(), message.isRoom()));
     }
+
+    @Override
+    public void handleChatAIContextResponse(ChatAIContextResponse response) {
+        client.setScreen(new ChatAIContextScreen(response));
+    }
 }

@@ -69,14 +69,14 @@ public final class PathfindingBlacklist {
     }
 
     private static void refreshCacheIfNeeded() {
-        List<String> configured = Config.getInstance().villagerPathfindingBlacklist;
+        List<String> configured = Config.getInstance().unSafeBlocksToTeleportOn;
         int size = configured.size();
         int hash = configured.hashCode();
         if (size == cachedSize && hash == cachedHash) {
             return;
         }
 
-        cachedMatchers = buildMatchers(configured, "villagerPathfindingBlacklist");
+        cachedMatchers = buildMatchers(configured, "unSafeBlocksToTeleportOn");
         cachedSize = size;
         cachedHash = hash;
     }

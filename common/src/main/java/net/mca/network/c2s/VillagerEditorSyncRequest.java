@@ -43,7 +43,7 @@ public class VillagerEditorSyncRequest extends NbtDataMessage implements Message
 
     private static final String[] MCA_VISUAL_KEYS = {
             "Gender",
-            "clothes",
+            "Clothes",
             "ClothingLocked",
             "Skin",
             "Hair",
@@ -78,10 +78,15 @@ public class VillagerEditorSyncRequest extends NbtDataMessage implements Message
     }
 
     public static boolean isAllowedMcaKey(String key) {
-        if (key.startsWith("gene_")) {
+        if (key.startsWith("Gene") || key.startsWith("gene_")) {
             return true;
         }
-        if (key.equals(Genetics.GENDER_KEY) || key.equals("personality") || key.equals("traits") || key.equals("ageState") || key.equals("hair")) {
+        if (key.equals(Genetics.GENDER_KEY) || key.equals("gender")
+                || key.equals("Personality") || key.equals("personality")
+                || key.equals("Traits") || key.equals("traits")
+                || key.equals("AgeState") || key.equals("ageState")
+                || key.equals("Hair") || key.equals("hair")
+                || key.equals("Clothes") || key.equals("clothes")) {
             return true;
         }
         for (String visualKey : MCA_VISUAL_KEYS) {
@@ -92,7 +97,9 @@ public class VillagerEditorSyncRequest extends NbtDataMessage implements Message
         if (key.equals("HairDye") || key.equals("SkinDye") || key.equals("EyeDye") || key.equals("EyeLeftDye")) {
             return true;
         }
-        if (key.equals("infectionProgress") || key.equals("mood") || key.equals("memories")) {
+        if (key.equals("InfectionProgress") || key.equals("infectionProgress")
+                || key.equals("Mood") || key.equals("mood")
+                || key.equals("Memories") || key.equals("memories")) {
             return true;
         }
         return false;
@@ -246,7 +253,7 @@ public class VillagerEditorSyncRequest extends NbtDataMessage implements Message
         NbtCompound fallbackMcaData = fallbackData == null ? new NbtCompound() : getMcaData(fallbackData);
         Gender gender = getGender(villagerData);
         clearInvalidIdentifier(mcaData, fallbackMcaData, "Skin", identifier -> SkinVisualIds.isBodySkin(identifier, gender));
-        clearInvalidIdentifier(mcaData, fallbackMcaData, "clothes", identifier -> SkinVisualIds.isClothing(identifier, gender));
+        clearInvalidIdentifier(mcaData, fallbackMcaData, "Clothes", identifier -> SkinVisualIds.isClothing(identifier, gender));
         clearInvalidIdentifier(mcaData, fallbackMcaData, "Hair", identifier -> SkinVisualIds.isHairStyle(identifier, gender));
         clearInvalidIdentifier(mcaData, fallbackMcaData, "HairStyle", identifier -> SkinVisualIds.isHairStyle(identifier, gender));
         for (LayeredHair.Category category : LayeredHair.Category.values()) {

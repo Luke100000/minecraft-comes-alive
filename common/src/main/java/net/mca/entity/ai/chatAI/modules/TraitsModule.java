@@ -1,5 +1,6 @@
 package net.mca.entity.ai.chatAI.modules;
 
+import net.mca.MCA;
 import net.mca.entity.VillagerEntityMCA;
 import net.mca.entity.ai.Traits;
 import net.minecraft.server.network.ServerPlayerEntity;
@@ -31,7 +32,10 @@ public class TraitsModule {
 
     public static void apply(List<String> input, VillagerEntityMCA villager, ServerPlayerEntity player) {
         for (Traits.Trait trait : villager.getTraits().getTraits()) {
-            input.add(traitDescription.getOrDefault(trait.id(), "$villager has " + translate(trait.id()) + ". "));
+            String traitName = trait.getId().getNamespace().equals(MCA.MOD_ID)
+                    ? trait.getId().getPath()
+                    : trait.getId().toString();
+            input.add(traitDescription.getOrDefault(traitName, "$villager has " + translate(traitName) + ". "));
         }
     }
 }

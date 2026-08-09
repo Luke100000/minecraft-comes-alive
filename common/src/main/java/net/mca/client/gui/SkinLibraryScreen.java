@@ -69,7 +69,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
     private final List<LiteContent> serverContent = new ArrayList<>();
     private final ColorSelector color = new ColorSelector();
     private final VillagerEditorScreen previousScreen;
-    private final List<LiteContent> contents = new LinkedList<>();
+    private final List<LiteContent> contents = new ArrayList<>();
     private String filteredString = "";
     private SortingMode sortingMode = SortingMode.RECOMMENDATIONS;
     private boolean filterInvalidSkins = true;
@@ -84,8 +84,8 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
     private LiteContent deleteConfirmationContent;
     private LiteContent reportConfirmationContent;
     private Page page;
-    private String lastFilteredString = "";
-    private int lastLoadedPage = -1;
+    private ContentQuery loadedQuery;
+    private ContentQuery pendingQuery;
     private ButtonWidget pageWidget;
     private Workspace workspace;
     private int activeMouseButton;
@@ -105,7 +105,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
     private Thread thread;
     private TextFieldWidget textFieldWidget;
     private boolean skipHairWarning;
-    private List<LiteContent> libraryContents = new LinkedList<>();
+    private final List<LiteContent> remoteContents = new ArrayList<>();
     private final NbtCompound basePreviewData;
 
     public SkinLibraryScreen() {
@@ -142,6 +142,33 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         return nbt;
     }
 
+    private record ContentQuery(
+            int page,
+            String search,
+            SortingMode sorting,
+            boolean filterInvalid,
+            boolean filterHair,
+            boolean filterClothing,
+            boolean moderatorMode
+    ) {
+        private Map<String, String> parameters() {
+            List<String> blacklist = new ArrayList<>(3);
+            if (filterInvalid) blacklist.add("invalid");
+            if (filterHair) blacklist.add("hair");
+            if (filterClothing) blacklist.add("clothing");
+
+            return Map.of(
+                    "whitelist", search,
+                    "blacklist", String.join(",", blacklist),
+                    "order", sorting.order,
+                    "descending", "true",
+                    "offset", Integer.toString(page * CLOTHES_PER_PAGE),
+                    "limit", Integer.toString(CLOTHES_PER_PAGE),
+                    "moderator", Boolean.toString(moderatorMode)
+            );
+        }
+    }
+
     @Override
     public void renderBackground(DrawContext context) {
         if (previousScreen instanceof DestinyScreen) {
@@ -169,69 +196,65 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
 
         if (page == null) {
             if (Auth.loadToken() == null) {
-                setPage(Page.LOADING);
+                setPage(Page.LIBRARY);
             } else {
                 setPage(Page.LOGIN);
             }
-            reloadDatabase();
         } else {
             refreshPage();
         }
     }
 
-    private void reloadDatabase() {
-        reloadDatabase(() -> {
-            if (page == Page.LOADING) {
-                setPage(Page.LIBRARY);
-            }
-        });
-    }
-
-    private void reloadDatabase(Runnable callback) {
-        CompletableFuture.runAsync(() -> {
-            // fetch user
-            if (Auth.hasToken() && authenticated) {
-                Response response = request(Api.HttpMethod.GET, UserResponse.class, "user/mca/me");
-                if (response instanceof UserResponse userResponse) {
-                    currentUser = userResponse.user();
-                    refreshContentList();
-                } else {
-                    setError(Text.translatable("gui.skin_library.list_fetch_failed"));
-                }
-            }
-        }).thenRunAsync(callback);
+    private ContentQuery createQuery() {
+        return new ContentQuery(
+                selectionPage,
+                filteredString,
+                sortingMode,
+                filterInvalidSkins,
+                filterHair,
+                filterClothing,
+                moderatorMode
+        );
     }
 
     private void loadPage() {
-        loadPage(false);
-    }
-
-    private void loadPage(boolean force) {
-        if (lastLoadedPage == selectionPage && lastFilteredString.equals(filteredString) && !force) {
+        if (subscriptionFilter != SubscriptionFilter.LIBRARY) {
             return;
         }
-        lastFilteredString = filteredString;
-        lastLoadedPage = selectionPage;
 
-        CompletableFuture.runAsync(() -> {
-            // fetch assets
-            Response response = request(Api.HttpMethod.GET, ContentListResponse.class, "v2/content/mca", Map.of(
-                    "whitelist", filteredString,
-                    "blacklist", (filterInvalidSkins ? "invalid" : "") + (filterHair ? ",hair" : "") + (filterClothing ? ",clothing" : ""),
-                    "order", sortingMode.order,
-                    "descending", "true",
-                    "offset", String.valueOf(selectionPage * CLOTHES_PER_PAGE),
-                    "limit", String.valueOf(CLOTHES_PER_PAGE),
-                    "moderator", String.valueOf(moderatorMode)
-            ));
+        ContentQuery query = createQuery();
+        if (query.equals(loadedQuery) || query.equals(pendingQuery)) {
+            return;
+        }
 
-            if (response instanceof ContentListResponse contentListResponse) {
-                libraryContents = new ArrayList<>(Arrays.asList(contentListResponse.contents()));
-                refreshContentList();
-            } else {
-                setError(Text.translatable("gui.skin_library.list_fetch_failed"));
-            }
-        });
+        loadedQuery = null;
+        remoteContents.clear();
+        pendingQuery = query;
+
+        CompletableFuture
+                .supplyAsync(() -> request(Api.HttpMethod.GET, ContentListResponse.class, "v2/content/mca", query.parameters()))
+                .thenAccept(response -> MinecraftClient.getInstance().execute(() -> acceptContents(query, response)));
+    }
+
+    private void acceptContents(ContentQuery query, Response response) {
+        if (!query.equals(pendingQuery)) {
+            return;
+        }
+
+        pendingQuery = null;
+        if (!query.equals(createQuery())) {
+            return;
+        }
+
+        if (response instanceof ContentListResponse contentListResponse) {
+            loadedQuery = query;
+            remoteContents.clear();
+            remoteContents.addAll(Arrays.asList(contentListResponse.contents()));
+            clearError();
+            refreshContentList();
+        } else {
+            setError(Text.translatable("gui.skin_library.list_fetch_failed"));
+        }
     }
 
     @Override
@@ -370,39 +393,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
             }
             case LOGIN -> {
                 // check user authentication
-                if (!awaitingAuthentication) {
-                    awaitingAuthentication = true;
-                    CompletableFuture.runAsync(() -> {
-                        try {
-                            Response response = Auth.hasToken() ? request(Api.HttpMethod.GET, IsAuthResponse.class, "auth") : null;
-                            if (response instanceof IsAuthResponse authResponse) {
-                                if (authResponse.authenticated()) {
-                                    authenticated = true;
-                                    clearError();
-                                    reloadDatabase();
-
-                                    //token accepted, save
-                                    Auth.saveToken();
-
-                                    setPage(Page.LIBRARY);
-                                } else {
-                                    //token rejected, delete file
-                                    Auth.clearToken();
-                                    if (!isBrowserOpen) {
-                                        setPage(Page.LIBRARY);
-                                        setError(Text.translatable("gui.skin_library.is_auth_failed"));
-                                    }
-                                }
-                            } else {
-                                setError(Text.translatable("gui.skin_library.is_auth_failed"));
-                            }
-                            Thread.sleep(2000);
-                        } catch (Exception e) {
-                            MCA.LOGGER.error(e);
-                        }
-                        awaitingAuthentication = false;
-                    });
-                }
+                pollAuthentication();
 
                 // auth hint
                 if (isBrowserOpen) {
@@ -425,9 +416,6 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
 
                 //metadata
                 context.drawTooltip(textRenderer, getMetaDataText(focusedContent), width / 2 + 200, height / 2 - 50);
-            }
-            case LOADING -> {
-                context.drawTextWithShadow(textRenderer, Text.translatable("gui.loading"), width / 2, height / 2, 0xFFFFFFFF);
             }
         }
 
@@ -464,6 +452,16 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         }
     }
 
+    private static MutableText getProfessionText(String profession) {
+        if (MCA.isBlankString(profession)) {
+            return Text.translatable("entity.minecraft.villager");
+        }
+
+        String fallback = profession.substring(profession.lastIndexOf('.') + 1);
+        fallback = Character.toUpperCase(fallback.charAt(0)) + fallback.substring(1);
+        return Text.translatableWithFallback("entity.minecraft.villager." + profession, fallback);
+    }
+
     private List<Text> getMetaDataText(LiteContent content) {
         Optional<SkinMeta> meta = SkinCache.getMeta(content);
         if (meta.isEmpty()) {
@@ -475,7 +473,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                     Text.translatable("gui.skin_library.meta.by", content.username()).formatted(Formatting.ITALIC),
                     Text.translatable("gui.skin_library.meta.likes", content.likes()).formatted(Formatting.GRAY),
                     Text.translatable("gui.skin_library.gender", meta.get().getGender() == Gender.MALE ? Text.translatable("gui.villager_editor.masculine") : (meta.get().getGender() == Gender.FEMALE ? Text.translatable("gui.villager_editor.feminine") : Text.translatable("gui.villager_editor.neutral"))),
-                    Text.translatable("gui.skin_library.profession", meta.get().getProfession() == null ? Text.translatable("entity.minecraft.villager") : Text.translatable("entity.minecraft.villager." + meta.get().getProfession())),
+                    Text.translatable("gui.skin_library.profession", getProfessionText(meta.get().getProfession())),
                     Text.translatable("gui.skin_library.temperature", Text.translatable("gui.skin_library.temperature." + (meta.get().getTemperature() + 2))),
                     Text.translatable("gui.skin_library.chance_val", (int) (meta.get().getChance() * 100)).formatted(Formatting.GRAY)
             ));
@@ -788,21 +786,21 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                         Text.translatable("gui.skin_library.sort_likes"),
                         v -> {
                             sortingMode = SortingMode.LIKES;
-                            loadPage(true);
+                            refreshContentList();
                         }));
                 addDrawableChild(new ToggleableTooltipIconButtonWidget(iconX + 22, height / 2 + 82, 7 * 16, 3 * 16,
                         sortingMode == SortingMode.NEWEST,
                         Text.translatable("gui.skin_library.sort_newest"),
                         v -> {
                             sortingMode = SortingMode.NEWEST;
-                            loadPage(true);
+                            refreshContentList();
                         }));
                 addDrawableChild(new ToggleableTooltipIconButtonWidget(iconX + 22 * 2, height / 2 + 82, 14 * 16, 3 * 16,
                         sortingMode == SortingMode.RECOMMENDATIONS,
                         Text.translatable("gui.skin_library.sort_recommendations"),
                         v -> {
                             sortingMode = SortingMode.RECOMMENDATIONS;
-                            loadPage(true);
+                            refreshContentList();
                         }));
 
                 iconX = width / 2 + 50;
@@ -813,7 +811,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                             Text.translatable("gui.skin_library.filter_invalid"),
                             v -> {
                                 filterInvalidSkins = !filterInvalidSkins;
-                                loadPage(true);
+                                refreshContentList();
                             }));
 
                     //filter clothing
@@ -822,7 +820,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                             Text.translatable("gui.skin_library.filter_clothing"),
                             v -> {
                                 filterClothing = !filterClothing;
-                                loadPage(true);
+                                refreshContentList();
                             }));
 
                     //filter hair
@@ -831,7 +829,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                             Text.translatable("gui.skin_library.filter_hair"),
                             v -> {
                                 filterHair = !filterHair;
-                                loadPage(true);
+                                refreshContentList();
                             }));
 
                     //moderator search
@@ -841,7 +839,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                                 Text.translatable("gui.skin_library.filter_moderator"),
                                 v -> {
                                     moderatorMode = !moderatorMode;
-                                    loadPage(true);
+                                    refreshContentList();
                                 }));
                     }
                 }
@@ -857,6 +855,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                     }
                     textFieldWidget.setChangedListener(s -> {
                         filteredString = s;
+                        selectionPage = 0;
                         refreshContentList();
                         textFieldWidget.setSuggestion(null);
                     });
@@ -869,6 +868,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                         .omitKeyText()
                         .build(width / 2 - 200, height / 2 - 110, 60, 20, Text.literal(""), (button, filter) -> {
                             this.subscriptionFilter = filter;
+                            selectionPage = 0;
                             refreshContentList();
                         }));
 
@@ -942,9 +942,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
             case LOGIN -> {
                 addDrawableChild(new ButtonWidget(width / 2 - 50, height / 2 + 25, 100, 20,
                         Text.translatable("gui.skin_library.cancel"),
-                        v -> {
-                            setPage(Page.LIBRARY);
-                        }));
+                        v -> cancelAuthentication()));
             }
             case DETAIL -> {
                 if (canModifyFocusedContent()) {
@@ -1281,8 +1279,12 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                     isLiked(content),
                     Text.translatable("gui.skin_library.like"),
                     v -> {
-                        ((ToggleableTooltipButtonWidget) v).toggle = !((ToggleableTooltipButtonWidget) v).toggle;
-                        setLike(content.contentid(), ((ToggleableTooltipButtonWidget) v).toggle);
+                        ToggleableTooltipButtonWidget button = (ToggleableTooltipButtonWidget) v;
+                        boolean liked = !button.toggle;
+                        if (setLike(content, liked)) {
+                            button.toggle = liked;
+                            refreshContentList();
+                        }
                     }));
         }
 
@@ -1417,7 +1419,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         }
 
         if (page == Page.LOGIN) {
-            if (Auth.loadToken() == null) {
+            if (!Auth.hasToken()) {
                 isBrowserOpen = true;
                 Auth.authenticate(getPlayerName());
             } else {
@@ -1428,6 +1430,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         if (page == Page.LOGOUT) {
             authenticated = false;
             currentUser = null;
+            invalidateRemotePage();
             Auth.clearToken();
             refreshPage();
             return;
@@ -1450,12 +1453,80 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         }
     }
 
+    private void pollAuthentication() {
+        if (awaitingAuthentication) {
+            return;
+        }
+        awaitingAuthentication = true;
+        CompletableFuture.runAsync(() -> {
+            try {
+                String token = Auth.getToken();
+                Response response = token == null ? null : request(Api.HttpMethod.GET, IsAuthResponse.class, "auth");
+                if (page != Page.LOGIN || !Objects.equals(token, Auth.getToken())) {
+                    return;
+                }
+
+                if (response instanceof IsAuthResponse authResponse) {
+                    if (authResponse.authenticated()) {
+                        Response userResponse = request(Api.HttpMethod.GET, UserResponse.class, "user/mca/me");
+                        MinecraftClient.getInstance().execute(() -> {
+                            if (page != Page.LOGIN || !Objects.equals(token, Auth.getToken())) {
+                                return;
+                            }
+
+                            if (userResponse instanceof UserResponse responseUser) {
+                                authenticated = true;
+                                currentUser = responseUser.user();
+                                isBrowserOpen = false;
+                                clearError();
+                                invalidateRemotePage();
+                                Auth.saveToken();
+                                setPage(Page.LIBRARY);
+                            } else {
+                                isBrowserOpen = false;
+                                setError(Text.translatable("gui.skin_library.list_fetch_failed"));
+                            }
+                        });
+                    } else if (!isBrowserOpen) {
+                        Auth.clearToken();
+                        setPage(Page.LIBRARY);
+                        setError(Text.translatable("gui.skin_library.is_auth_failed"));
+                    }
+                } else {
+                    setError(Text.translatable("gui.skin_library.is_auth_failed"));
+                }
+
+                Thread.sleep(2000);
+            } catch (Exception e) {
+                MCA.LOGGER.error(e);
+            } finally {
+                awaitingAuthentication = false;
+            }
+        });
+    }
+
+    private void cancelAuthentication() {
+        Auth.clearToken();
+        authenticated = false;
+        currentUser = null;
+        isBrowserOpen = false;
+        invalidateRemotePage();
+        page = Page.LIBRARY;
+        MinecraftClient.getInstance().setScreen(this);
+    }
+
     private void openHelp() {
         try {
             Util.getOperatingSystem().open(URI.create("https://github.com/Luke100000/minecraft-comes-alive/wiki/Skin-Editor"));
         } catch (Exception e) {
             MCA.LOGGER.error(e);
         }
+    }
+
+    private void invalidateRemotePage() {
+        loadedQuery = null;
+        pendingQuery = null;
+        remoteContents.clear();
     }
 
     private void refreshContentList() {
@@ -1472,7 +1543,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         switch (subscriptionFilter) {
             case LIBRARY -> {
                 loadPage();
-                newList = libraryContents;
+                newList = remoteContents;
             }
             case GLOBAL -> {
                 newList = serverContent;
@@ -1500,7 +1571,8 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         contents.addAll(newList);
 
         // last page reached, go one back
-        if (contents.isEmpty() && selectionPage > 0) {
+        if (contents.isEmpty() && selectionPage > 0
+                && (subscriptionFilter != SubscriptionFilter.LIBRARY || pendingQuery == null)) {
             selectionPage--;
             if (subscriptionFilter == SubscriptionFilter.LIBRARY) {
                 loadPage();
@@ -1608,26 +1680,34 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                     }
 
                     if (request instanceof ContentIdResponse || request instanceof SuccessResponse) {
-                        Response finalRequest = request;
-                        reloadDatabase(() -> {
-                            int contentid = finalRequest instanceof ContentIdResponse response ? response.contentid() : workspace.contentid;
+                        int contentid = request instanceof ContentIdResponse response ? response.contentid() : workspace.contentid;
 
-                            // default tags
-                            setTag(contentid, workspace.skinType.name().toLowerCase(Locale.ROOT), true);
-                            if (workspace.profession != null) {
-                                setTag(contentid, workspace.profession.replace("mca.", ""), true);
+                        // default tags
+                        setTag(contentid, workspace.skinType.name().toLowerCase(Locale.ROOT), true);
+                        if (workspace.profession != null) {
+                            setTag(contentid, workspace.profession.replace("mca.", ""), true);
+                        }
+
+                        Response contentResponse = request(Api.HttpMethod.GET, ContentResponse.class, "content/mca/" + contentid);
+                        if (contentResponse instanceof ContentResponse response) {
+                            var content = response.content();
+                            LiteContent publishedContent = new LiteContent(
+                                    content.contentid(), content.userid(), content.username(), content.likes(),
+                                    content.tags(), content.title(), content.version()
+                            );
+                            if (currentUser != null) {
+                                currentUser.submissions().removeIf(v -> v.contentid() == contentid);
+                                currentUser.submissions().add(publishedContent);
                             }
+                            focusedContent = publishedContent;
+                            setPage(Page.DETAIL);
+                        } else {
+                            setPage(Page.LIBRARY);
+                        }
+                        uploading = false;
 
-                            // open detail page
-                            getSubmittedContent(contentid).or(() -> getContentById(contentid)).ifPresent(content -> {
-                                focusedContent = content;
-                                setPage(Page.DETAIL);
-                                uploading = false;
-                            });
-
-                            //also refresh our cache
-                            SkinCache.enforceSync(contentid);
-                        });
+                        //also refresh our cache
+                        SkinCache.enforceSync(contentid);
                     } else if (request instanceof ErrorResponse response) {
                         if (response.code() == 428) {
                             setError(Text.translatable("gui.skin_library.upload_duplicate"));
@@ -1644,7 +1724,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
     }
 
     private Optional<LiteContent> getContentById(int contentid) {
-        return Stream.concat(libraryContents.stream(), serverContent.stream()).filter(v -> v.contentid() == contentid).findAny();
+        return Stream.concat(remoteContents.stream(), serverContent.stream()).filter(v -> v.contentid() == contentid).findAny();
     }
 
     private Optional<LiteContent> getServerContentById(int contentid) {
@@ -1683,7 +1763,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
     }
 
     private void removeContentLocally(int contentId) {
-        libraryContents.removeIf(v -> v.contentid() == contentId);
+        remoteContents.removeIf(v -> v.contentid() == contentId);
 
         if (currentUser != null) {
             currentUser.likes().removeIf(v -> v.contentid() == contentId);
@@ -1703,16 +1783,23 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         }
     }
 
-    private void setLike(int contentid, boolean add) {
-        if (Auth.hasToken() && currentUser != null) {
-            request(add ? Api.HttpMethod.POST : Api.HttpMethod.DELETE, SuccessResponse.class, "like/mca/" + contentid);
-
-            if (add) {
-                getContentById(contentid).ifPresent(currentUser.likes()::add);
-            } else {
-                currentUser.likes().removeIf(v -> v.contentid() == contentid);
-            }
+    private boolean setLike(LiteContent content, boolean add) {
+        if (!Auth.hasToken() || currentUser == null) {
+            return false;
         }
+
+        Response response = request(add ? Api.HttpMethod.POST : Api.HttpMethod.DELETE, SuccessResponse.class, "like/mca/" + content.contentid());
+        if (!(response instanceof SuccessResponse)) {
+            return false;
+        }
+
+        if (add) {
+            currentUser.likes().removeIf(v -> v.contentid() == content.contentid());
+            currentUser.likes().add(content);
+        } else {
+            currentUser.likes().removeIf(v -> v.contentid() == content.contentid());
+        }
+        return true;
     }
 
     private void setBan(int userid, boolean banned) {
@@ -1776,7 +1863,6 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         LOGOUT,
         DETAIL,
         DELETE,
-        LOADING,
         REPORT
     }
 

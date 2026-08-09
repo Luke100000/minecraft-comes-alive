@@ -3,6 +3,8 @@ package net.mca;
 import com.google.common.collect.ImmutableMap;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.google.gson.JsonSyntaxException;
 import net.mca.entity.EquipmentSet;
 import net.mca.entity.ai.Traits;
@@ -13,6 +15,7 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
@@ -116,6 +119,7 @@ public final class Config extends CommonConfig {
     public String villagerChatAIToken = "";
     public String villagerChatAIModel = "default";
     public String villagerChatAISystemPrompt = "";
+    public int villagerChatAIContextPermissionLevel = 3;
     public boolean villagerChatAIFuseSystemPrompt = false;
     public boolean villagerChatAIUseLongTermMemory = false;
     public boolean villagerChatAIUseSharedLongTermMemory = false;
@@ -250,7 +254,7 @@ public final class Config extends CommonConfig {
             .put(MCA.MOD_ID + ":male_zombie_villager", 3)
             .build();
 
-    public List<String> villagerPathfindingBlacklist = List.of(
+    public List<String> unSafeBlocksToTeleportOn = List.of(
             "#minecraft:climbable",
             "#minecraft:fence_gates",
             "#minecraft:fences",
@@ -323,8 +327,28 @@ public final class Config extends CommonConfig {
     }
 
     public void autocomplete() {
-        for (Traits.Trait trait : Traits.Trait.values()) {
-            enabledTraits.putIfAbsent(trait.id(), true);
+        for (Traits.Trait trait : Traits.all()) {
+            String canonicalId = trait.getId().toString();
+            String legacyId = trait.getId().getNamespace().equals(MCA.MOD_ID)
+                    ? trait.getId().getPath()
+                    : canonicalId;
+            String legacyUppercaseId = legacyId.toUpperCase(Locale.ROOT);
+
+            Boolean canonicalValue = enabledTraits.get(canonicalId);
+            Boolean legacyValue = enabledTraits.get(legacyId);
+            Boolean legacyUppercaseValue = enabledTraits.get(legacyUppercaseId);
+            enabledTraits.put(canonicalId,
+                    canonicalValue != null ? canonicalValue
+                            : legacyValue != null ? legacyValue
+                            : legacyUppercaseValue != null ? legacyUppercaseValue
+                            : true);
+
+            if (!canonicalId.equals(legacyId)) {
+                enabledTraits.remove(legacyId);
+            }
+            if (!canonicalId.equals(legacyUppercaseId)) {
+                enabledTraits.remove(legacyUppercaseId);
+            }
         }
 
         // Minecraft 1.20.1 has no #minecraft:undead entity-type tag. Migrate old
@@ -357,7 +381,9 @@ public final class Config extends CommonConfig {
         if (file.exists()) {
             try (FileReader reader = new FileReader(file)) {
                 Gson gson = new GsonBuilder().setPrettyPrinting().create();
-                Config config = gson.fromJson(reader, Config.class);
+                JsonObject json = JsonParser.parseReader(reader).getAsJsonObject();
+                migrateConfigKeys(json);
+                Config config = gson.fromJson(json, Config.class);
                 if (config == null || config.version != VERSION) {
                     config = new Config();
                 }
@@ -378,6 +404,13 @@ public final class Config extends CommonConfig {
         Config config = new Config();
         config.save();
         return config;
+    }
+
+    private static void migrateConfigKeys(JsonObject json) {
+        if (json.has("villagerPathfindingBlacklist") && !json.has("unSafeBlocksToTeleportOn")) {
+            json.add("unSafeBlocksToTeleportOn", json.get("villagerPathfindingBlacklist"));
+        }
+        json.remove("villagerPathfindingBlacklist");
     }
 
     public static void setServerConfig(CommonConfig config) {

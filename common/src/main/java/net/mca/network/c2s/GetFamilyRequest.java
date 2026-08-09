@@ -36,6 +36,7 @@ public class GetFamilyRequest implements Message {
                     NbtCompound nbt = new NbtCompound();
                     ((MobEntity)e).writeCustomDataToNbt(nbt);
                     nbt.remove("Brain");
+                    nbt.remove("Memories");
                     nbt.remove("memories");
                     nbt.remove("Inventory");
                     familyData.put(e.getUuid().toString(), nbt);

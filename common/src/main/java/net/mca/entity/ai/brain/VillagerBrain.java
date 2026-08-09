@@ -12,6 +12,7 @@ import net.mca.util.network.datasync.CDataManager;
 import net.mca.util.network.datasync.CDataParameter;
 import net.mca.util.network.datasync.CEnumParameter;
 import net.mca.util.network.datasync.CParameter;
+import net.mca.util.network.datasync.CResourceLocationParameter;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.ai.brain.Activity;
@@ -23,6 +24,7 @@ import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
+import net.minecraft.util.Identifier;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
@@ -33,14 +35,14 @@ import static net.mca.entity.ai.MemoryModuleTypeMCA.LAST_GRIEVE;
  * Handles memory and complex bodily functions. Such as walking, and not being a nitwit.
  */
 public class VillagerBrain<E extends MobEntity & VillagerLike<E>> {
-    private static final CDataParameter<NbtCompound> MEMORIES = CParameter.create("memories", new NbtCompound());
-    private static final CEnumParameter<Personality> PERSONALITY = CParameter.create("personality", Personality.UNASSIGNED);
-    private static final CDataParameter<Integer> MOOD = CParameter.create("mood", 0);
-    private static final CEnumParameter<MoveState> MOVE_STATE = CParameter.create("moveState", MoveState.MOVE);
-    private static final CEnumParameter<Chore> ACTIVE_CHORE = CParameter.create("activeChore", Chore.NONE);
-    private static final CDataParameter<Optional<UUID>> CHORE_ASSIGNING_PLAYER = CParameter.create("choreAssigningPlayer", Optional.empty());
-    private static final CDataParameter<Boolean> PANICKING = CParameter.create("isPanicking", false);
-    private static final CDataParameter<Boolean> WEAR_ARMOR = CParameter.create("wearArmor", false);
+    private static final CDataParameter<NbtCompound> MEMORIES = CParameter.create("Memories", new NbtCompound());
+    private static final CResourceLocationParameter PERSONALITY = CParameter.create("Personality", Personality.UNASSIGNED.getId());
+    private static final CDataParameter<Integer> MOOD = CParameter.create("Mood", 0);
+    private static final CEnumParameter<MoveState> MOVE_STATE = CParameter.create("MoveState", MoveState.MOVE);
+    private static final CEnumParameter<Chore> ACTIVE_CHORE = CParameter.create("ActiveChore", Chore.NONE);
+    private static final CDataParameter<Optional<UUID>> CHORE_ASSIGNING_PLAYER = CParameter.create("ChoreAssigningPlayer", Optional.empty());
+    private static final CDataParameter<Boolean> PANICKING = CParameter.create("IsPanicking", false);
+    private static final CDataParameter<Boolean> WEAR_ARMOR = CParameter.create("WearArmor", false);
 
     public static <E2 extends Entity> CDataManager.Builder<E2> createTrackedData(CDataManager.Builder<E2> builder) {
         return builder.addAll(MEMORIES, PERSONALITY, MOOD, MOVE_STATE, ACTIVE_CHORE, CHORE_ASSIGNING_PLAYER, PANICKING, WEAR_ARMOR);
@@ -131,12 +133,12 @@ public class VillagerBrain<E extends MobEntity & VillagerLike<E>> {
     }
 
     public void randomize(AgeState ageState) {
-        entity.setTrackedValue(PERSONALITY, Personality.getRandom(ageState));
+        entity.setTrackedValue(PERSONALITY, Personality.getRandom(ageState).getId());
         entity.setTrackedValue(MOOD, entity.getWorld().random.nextInt(MoodGroup.MAX_LEVEL - MoodGroup.NORMAL_MIN_LEVEL + 1) + MoodGroup.NORMAL_MIN_LEVEL);
     }
 
     public void setPersonality(Personality p) {
-        entity.setTrackedValue(PERSONALITY, p);
+        entity.setTrackedValue(PERSONALITY, p.getId());
     }
 
     public void updateMemories(Memories memories) {
@@ -170,6 +172,10 @@ public class VillagerBrain<E extends MobEntity & VillagerLike<E>> {
     }
 
     public Personality getPersonality() {
+        return Personality.get(getPersonalityId()).orElse(Personality.UNASSIGNED);
+    }
+
+    public Identifier getPersonalityId() {
         return entity.getTrackedValue(PERSONALITY);
     }
 

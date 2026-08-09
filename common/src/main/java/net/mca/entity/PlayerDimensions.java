@@ -126,9 +126,10 @@ public final class PlayerDimensions {
     }
 
     private static float geneScale(NbtCompound entityData, NbtCompound mcaData, Genetics.GeneType gene) {
-        float value = mcaData.contains(gene.key())
-                ? mcaData.getFloat(gene.key())
-                : entityData.contains(gene.key()) ? entityData.getFloat(gene.key()) : 0.5F;
+        String key = "Gene" + gene.key();
+        float value = mcaData.contains(key)
+                ? mcaData.getFloat(key)
+                : entityData.contains(key) ? entityData.getFloat(key) : 0.5F;
         return 0.75F + value / 2.0F;
     }
 
@@ -148,13 +149,17 @@ public final class PlayerDimensions {
     }
 
     private static float getTraitsHorizontalScaleFactor(NbtCompound traits) {
-        return (traits.getBoolean(Traits.DWARFISM.id()) ? 0.85F : 1.0F)
-                * (traits.getBoolean(Traits.TOUGH.id()) ? 1.2F : 1.0F)
-                * (traits.getBoolean(Traits.WEAK.id()) ? 0.85F : 1.0F);
+        return (hasTrait(traits, Traits.DWARFISM) ? 0.85F : 1.0F)
+                * (hasTrait(traits, Traits.TOUGH) ? 1.2F : 1.0F)
+                * (hasTrait(traits, Traits.WEAK) ? 0.85F : 1.0F);
     }
 
     private static float getTraitsVerticalScaleFactor(NbtCompound traits) {
-        return traits.getBoolean(Traits.DWARFISM.id()) ? 0.65F : 1.0F;
+        return hasTrait(traits, Traits.DWARFISM) ? 0.65F : 1.0F;
+    }
+
+    private static boolean hasTrait(NbtCompound traits, Traits.Trait trait) {
+        return traits.getBoolean(trait.getId().toString());
     }
 
     private record AgeScale(float width, float height) {

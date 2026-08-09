@@ -1,6 +1,5 @@
 package net.mca.entity.ai;
 
-import net.minecraft.entity.ai.control.MoveControl;
 import net.minecraft.entity.ai.pathing.EntityNavigation;
 import net.minecraft.entity.ai.pathing.PathNodeMaker;
 import net.minecraft.entity.ai.pathing.PathNodeType;
@@ -12,9 +11,10 @@ import net.minecraft.util.math.MathHelper;
 /**
  * Move control used by MCA archers so strafing can report when terrain blocks or redirects a step.
  */
-public class ArcherMoveControl extends MoveControl {
+public class ArcherMoveControl extends MCAMoveControl {
     private boolean emergencyFleeing;
     private StrafeResult lastStrafeResult = StrafeResult.NONE;
+    private boolean archerStrafeRequested;
 
     public ArcherMoveControl(MobEntity entity) {
         super(entity);
@@ -37,19 +37,44 @@ public class ArcherMoveControl extends MoveControl {
     }
 
     @Override
+    public void strafeTo(float forwards, float sideways) {
+        this.archerStrafeRequested = false;
+        super.strafeTo(forwards, sideways);
+    }
+
+    public void strafeForArcher(float forwards, float sideways) {
+        super.strafeTo(forwards, sideways);
+        this.archerStrafeRequested = true;
+    }
+
+    @Override
     public void tick() {
-        if (this.state == State.STRAFE) {
-            tickStrafe();
+        if (isClimbNavigationActive()) {
+            clearArcherStrafeState();
+            super.tick();
             return;
         }
 
-        this.entity.setSidewaysSpeed(0.0F);
-        this.entity.setForwardSpeed(0.0F);
-        this.lastStrafeResult = StrafeResult.NONE;
+        if (this.state == State.STRAFE && this.archerStrafeRequested) {
+            tickArcherStrafe();
+            this.archerStrafeRequested = false;
+            return;
+        }
+
+        clearArcherStrafeState();
         super.tick();
     }
 
-    private void tickStrafe() {
+    private void clearArcherStrafeState() {
+        this.archerStrafeRequested = false;
+        if (this.lastStrafeResult != StrafeResult.NONE) {
+            this.entity.setSidewaysSpeed(0.0F);
+            this.entity.setForwardSpeed(0.0F);
+            this.lastStrafeResult = StrafeResult.NONE;
+        }
+    }
+
+    private void tickArcherStrafe() {
         float movementSpeed = (float) this.entity.getAttributeValue(EntityAttributes.GENERIC_MOVEMENT_SPEED);
         float modifiedSpeed = (float) this.speed * movementSpeed;
         float forward = this.forwardMovement;

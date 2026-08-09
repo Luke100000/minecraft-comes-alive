@@ -39,7 +39,7 @@ public final class SkinSelection {
             return clothingForProfession(available, gender, agePool);
         }
 
-        String profession = Registries.VILLAGER_PROFESSION.getKey(villager.getVillagerData().getProfession()).toString();
+        String profession = Registries.VILLAGER_PROFESSION.getId(villager.getVillagerData().getProfession()).toString();
         List<Clothing> options = clothingForProfession(available, gender, mapProfession(profession, professionConversions));
         return options.isEmpty() ? clothingForProfession(available, gender, mapProfession("minecraft:none", professionConversions)) : options;
     }

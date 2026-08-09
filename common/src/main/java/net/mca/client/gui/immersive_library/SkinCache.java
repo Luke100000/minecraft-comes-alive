@@ -18,7 +18,6 @@ import java.io.*;
 import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.util.Base64;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -34,9 +33,9 @@ public class SkinCache {
     static final Map<Integer, Boolean> requested = new ConcurrentHashMap<>();
     static final Map<Integer, Integer> cachedVersions = new ConcurrentHashMap<>();
 
-    static final Map<Integer, Identifier> textureIdentifiers = new HashMap<>();
-    static final Map<Integer, NativeImage> images = new HashMap<>();
-    static final Map<Integer, SkinMeta> metas = new HashMap<>();
+    static final Map<Integer, Identifier> textureIdentifiers = new ConcurrentHashMap<>();
+    static final Map<Integer, NativeImage> images = new ConcurrentHashMap<>();
+    static final Map<Integer, SkinMeta> metas = new ConcurrentHashMap<>();
 
     private static File getFile(String key) {
         //noinspection ResultOfMethodCallIgnored

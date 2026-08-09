@@ -6,6 +6,7 @@ import net.mca.MCA;
 import net.mca.cobalt.network.NetworkHandler;
 import net.mca.entity.EntityWrapper;
 import net.mca.entity.VillagerEntityMCA;
+import net.mca.entity.ai.relationship.Personality;
 import net.mca.network.s2c.VillagerMessage;
 import net.mca.resources.API;
 import net.mca.server.world.data.FamilyTree;
@@ -73,7 +74,7 @@ public interface Messenger extends EntityWrapper {
         //and personality
         String personalityString = "";
         if (asEntity() instanceof VillagerEntityMCA v) {
-            personalityString = "#E" + v.getVillagerBrain().getPersonality().name() + ".";
+            personalityString = "#E" + Personality.encodeDialogueId(v.getVillagerBrain().getPersonalityId()) + ".";
         }
 
         return Text.translatable(genderString + personalityString + professionString + "#T" + getDialogueType(target).name() + "." + phraseId, newParams);

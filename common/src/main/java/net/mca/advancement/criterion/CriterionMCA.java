@@ -1,6 +1,6 @@
 package net.mca.advancement.criterion;
 
-import net.mca.mixin.MixinCriteria;
+import net.minecraft.advancement.criterion.Criteria;
 import net.minecraft.advancement.criterion.Criterion;
 
 public interface CriterionMCA {
@@ -16,7 +16,7 @@ public interface CriterionMCA {
     VillagerFateCriterion FATE = register(new VillagerFateCriterion());
 
     static <T extends Criterion<?>> T register(T obj) {
-        return MixinCriteria.register(obj);
+        return Criteria.register(obj);
     }
 
     static void bootstrap() { }

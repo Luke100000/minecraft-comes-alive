@@ -1,7 +1,9 @@
 package net.mca.entity.ai.chatAI.modules;
 
+import net.mca.MCA;
 import net.mca.entity.VillagerEntityMCA;
 import net.mca.entity.ai.relationship.AgeState;
+import net.mca.entity.ai.relationship.Personality;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.village.VillagerProfession;
 
@@ -13,7 +15,11 @@ public class PersonalityModule {
     public static void apply(List<String> input, VillagerEntityMCA villager, ServerPlayerEntity player) {
         input.add("This is a conversation with a " + translate(villager.getGenetics().getGender().name()) + " Minecraft villager named $villager and the Player named $player." + " ");
 
-        input.add("$villager is " + translate(villager.getVillagerBrain().getPersonality().name()) + " and " + translate(villager.getVillagerBrain().getMood().getName()) + ". ");
+        Personality personality = villager.getVillagerBrain().getPersonality();
+        String personalityName = personality.getId().getNamespace().equals(MCA.MOD_ID)
+                ? personality.getId().getPath()
+                : personality.getId().toString();
+        input.add("$villager is " + translate(personalityName) + " and " + translate(villager.getVillagerBrain().getMood().getName()) + ". ");
         if (villager.getAgeState() == AgeState.BABY) {
             input.add("$villager is a baby. ");
         }

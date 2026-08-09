@@ -39,7 +39,7 @@ import net.minecraft.world.Difficulty;
 import net.minecraft.world.World;
 
 public class GrimReaperEntity extends PathAwareEntity implements CTrackedEntity<GrimReaperEntity> {
-    public static final CEnumParameter<ReaperAttackState> ATTACK_STAGE = CParameter.create("attackStage", ReaperAttackState.IDLE);
+    public static final CEnumParameter<ReaperAttackState> ATTACK_STAGE = CParameter.create("AttackStage", ReaperAttackState.IDLE);
 
     public static final CDataManager<GrimReaperEntity> DATA = new CDataManager.Builder<>(GrimReaperEntity.class).addAll(ATTACK_STAGE).build();
 

@@ -86,8 +86,11 @@ public class GiftPredicate {
                 (villager, stack, player) ->
                         villager.getVillagerBrain().getMood().getName().equals(mood) ? 1.0f : 0.0f
         );
-        register("personality", (json, name) ->
-                Personality.valueOf(JsonHelper.asString(json, name).toUpperCase(Locale.ENGLISH)), personality ->
+        register("personality", (json, name) -> {
+            String id = JsonHelper.asString(json, name);
+            return Personality.get(id)
+                    .orElseThrow(() -> new JsonSyntaxException("Unknown personality '" + id + "'"));
+        }, personality ->
                 (villager, stack, player) ->
                         villager.getVillagerBrain().getPersonality() == personality ? 1.0f : 0.0f
         );
@@ -124,12 +127,9 @@ public class GiftPredicate {
             return Ingredient.fromTag(tag);
         }, (Ingredient ingredient) -> (villager, stack, player) -> ingredient.test(stack) ? 1.0f : 0.0f);
         register("trait", (json, name) -> {
-            String id = JsonHelper.asString(json, name).toUpperCase(Locale.ENGLISH);
-            Traits.Trait trait = Traits.TRAIT_REGISTRY.get(id);
-            if (trait == null) {
-                throw new JsonSyntaxException("Unknown trait '" + id + "'");
-            }
-            return trait;
+            String id = JsonHelper.asString(json, name).toLowerCase(Locale.ENGLISH);
+            return Traits.get(id)
+                    .orElseThrow(() -> new JsonSyntaxException("Unknown trait '" + id + "'"));
         }, trait ->
                 (villager, stack, player) ->
                         villager.getTraits().hasTrait(trait) ? 1.0f : 0.0f

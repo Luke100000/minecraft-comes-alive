@@ -4,7 +4,6 @@ import com.mojang.serialization.Codec;
 import dev.architectury.registry.registries.DeferredRegister;
 import dev.architectury.registry.registries.RegistrySupplier;
 import net.mca.MCA;
-import net.mca.mixin.MixinMemoryModuleType;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.ai.brain.MemoryModuleType;
 import net.minecraft.entity.player.PlayerEntity;
@@ -37,6 +36,6 @@ public interface MemoryModuleTypeMCA {
 
     static <U> RegistrySupplier<MemoryModuleType<U>> register(String name, Optional<Codec<U>> codec) {
         Identifier id = new Identifier(MCA.MOD_ID, name);
-        return MEMORY_MODULES.register(id, () -> MixinMemoryModuleType.init(codec));
+        return MEMORY_MODULES.register(id, () -> new MemoryModuleType<>(codec));
     }
 }

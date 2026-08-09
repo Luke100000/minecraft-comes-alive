@@ -34,6 +34,7 @@ public class Village implements Iterable<Building> {
     private final ServerWorld world;
 
     private String name = API.getVillagePool().pickVillageName("village");
+    private String chatAIPrompt = "";
 
     public final List<ItemStack> storageBuffer = new LinkedList<>();
 
@@ -74,6 +75,7 @@ public class Village implements Iterable<Building> {
     public Village(NbtCompound v, ServerWorld world) {
         id = v.getInt("id");
         name = v.getString("name");
+        chatAIPrompt = v.getString("chatAIPrompt");
         taxes = v.getFloat("taxesFloat");
         beds = v.getInt("beds");
         unspentHearts = NbtHelper.toMap(v.getCompound("unspentHearts"), UUID::fromString, i -> ((NbtInt) i).intValue());
@@ -118,6 +120,15 @@ public class Village implements Iterable<Building> {
 
     public boolean isWithinBorder(Entity entity) {
         return isWithinBorder(entity.getBlockPos(), entity instanceof PlayerEntity ? PLAYER_BORDER_MARGIN : BORDER_MARGIN);
+    }
+
+    public String getChatAIPrompt() {
+        return chatAIPrompt;
+    }
+
+    public void setChatAIPrompt(String chatAIPrompt) {
+        this.chatAIPrompt = chatAIPrompt;
+        markDirty();
     }
 
     public boolean isWithinBorder(BlockPos pos, int margin) {
@@ -420,6 +431,7 @@ public class Village implements Iterable<Building> {
         NbtCompound v = new NbtCompound();
         v.putInt("id", id);
         v.putString("name", name);
+        v.putString("chatAIPrompt", chatAIPrompt);
         v.putFloat("taxesFloat", taxes);
         v.putInt("beds", beds);
         v.put("unspentHearts", NbtHelper.fromMap(new NbtCompound(), unspentHearts, UUID::toString, NbtInt::of));

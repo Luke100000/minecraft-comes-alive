@@ -8,10 +8,13 @@ import net.mca.server.world.data.VillageManager;
 import net.mca.util.network.datasync.CDataManager;
 import net.mca.util.network.datasync.CDataParameter;
 import net.mca.util.network.datasync.CParameter;
+import net.minecraft.block.BedBlock;
+import net.minecraft.block.BlockState;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.ai.brain.MemoryModuleType;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.registry.Registries;
+import net.minecraft.registry.tag.BlockTags;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
@@ -28,7 +31,7 @@ import java.util.stream.Stream;
  * Villagers need a place to live too.
  */
 public class Residency {
-    private static final CDataParameter<Integer> VILLAGE = CParameter.create("buildings", -1);
+    private static final CDataParameter<Integer> VILLAGE = CParameter.create("HomeVillage", -1);
 
     public static <E extends Entity> CDataManager.Builder<E> createTrackedData(CDataManager.Builder<E> builder) {
         return builder.addAll(VILLAGE);
@@ -107,8 +110,17 @@ public class Residency {
     public void seekHome() {
         if (entity.requiresHome()) {
             VillageManager manager = VillageManager.get((ServerWorld) entity.getWorld());
-            manager.findNearestVillage(entity).ifPresent(v -> {
-                leaveHome();
+            Optional<Village> current = getHomeVillage();
+            Optional<Village> target = getHome()
+                    .filter(home -> home.getDimension() == entity.getWorld().getRegistryKey())
+                    .flatMap(home -> manager.findNearestVillage(home.getPos(), Village.BORDER_MARGIN))
+                    .or(() -> current.filter(village -> village.isWithinBorder(entity)))
+                    .or(() -> manager.findNearestVillage(entity));
+
+            target.ifPresent(v -> {
+                if (current.filter(existing -> existing.getId() == v.getId()).isEmpty()) {
+                    leaveHome();
+                }
                 v.updateResident(entity);
                 entity.setTrackedValue(VILLAGE, v.getId());
             });
@@ -183,6 +195,13 @@ public class Residency {
         GraveyardManager.get((ServerWorld) entity.getWorld()).reportToVillageManager(entity);
     }
 
+    private static boolean validateBedPoi(ServerWorld world, BlockPos pos) {
+        BlockState state = world.getBlockState(pos);
+        return state.isIn(BlockTags.BEDS)
+                && state.contains(BedBlock.OCCUPIED)
+                && !state.get(BedBlock.OCCUPIED);
+    }
+
     public void setHome(ServerPlayerEntity player) {
         if (!entity.requiresHome()) {
             entity.sendChatMessage(player, "interaction.sethome.temporary");
@@ -195,25 +214,30 @@ public class Residency {
 
         seekHome();
 
-        //check if a bed can be found
-        PointOfInterestStorage pointOfInterestStorage = ((ServerWorld) player.getWorld()).getPointOfInterestStorage();
-        Optional<BlockPos> position = pointOfInterestStorage.getPositions(registryEntry -> registryEntry.matchesKey(PointOfInterestTypes.HOME), p -> true, player.getBlockPos(), 8, PointOfInterestStorage.OccupationStatus.HAS_SPACE).findAny();
-        if (position.isPresent()) {
+        ServerWorld world = (ServerWorld) player.getWorld();
+        PointOfInterestStorage pointOfInterestStorage = world.getPointOfInterestStorage();
+        Optional<GlobalPos> previousHome = entity.getBrain().getOptionalMemory(MemoryModuleType.HOME);
+        pointOfInterestStorage.getPosition(
+                registryEntry -> registryEntry.matchesKey(PointOfInterestTypes.HOME),
+                (registryEntry, pos) -> validateBedPoi(world, pos),
+                player.getBlockPos(),
+                8
+        ).ifPresentOrElse(position -> {
             entity.sendChatMessage(player, "interaction.sethome.success");
 
-            // Forget the old one
-            entity.getBrain().getOptionalMemory(MemoryModuleType.HOME).ifPresent(p -> {
+            boolean reclaimedSameHome = previousHome
+                    .map(home -> home.getDimension().equals(world.getRegistryKey()) && home.getPos().equals(position))
+                    .orElse(false);
+            if (!reclaimedSameHome) {
                 entity.releaseTicketFor(MemoryModuleType.HOME);
-                entity.getBrain().forget(MemoryModuleType.HOME);
-            });
+            }
+            entity.getBrain().forget(MemoryModuleType.HOME);
 
-            // Remember the new one
-            pointOfInterestStorage.getPosition(registryEntry -> registryEntry.matchesKey(PointOfInterestTypes.HOME), (p, q) -> true, position.get(), 1);
-            entity.getBrain().remember(MemoryModuleType.HOME, GlobalPos.create(entity.getWorld().getRegistryKey(), position.get()));
+            entity.getBrain().remember(MemoryModuleType.HOME, GlobalPos.create(world.getRegistryKey(), position));
             entity.getBrain().remember(MemoryModuleTypeMCA.FORCED_HOME.get(), true);
 
             seekHome();
-        } else {
+        }, () -> {
             entity.getBrain().forget(MemoryModuleTypeMCA.FORCED_HOME.get());
 
             getHomeVillage().map(v -> v.getBuildingAt(entity.getBlockPos())).filter(Optional::isPresent).map(Optional::get).filter(b -> b.getBuildingType().noBeds()).ifPresentOrElse(building -> {
@@ -221,7 +245,7 @@ public class Residency {
             }, () -> {
                 entity.sendChatMessage(player, "interaction.sethome.bedfail");
             });
-        }
+        });
     }
 
     public Optional<GlobalPos> getHome() {

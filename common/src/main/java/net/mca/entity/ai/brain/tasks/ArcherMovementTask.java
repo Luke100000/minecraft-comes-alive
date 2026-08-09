@@ -4,6 +4,7 @@ import com.google.common.collect.ImmutableMap;
 import dev.architectury.platform.Platform;
 import net.mca.MCA;
 import net.mca.entity.ai.ArcherMoveControl;
+import net.mca.entity.ai.RangedWeaponHelper;
 import net.mca.entity.ai.brain.sensor.GuardEnemiesSensor;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.ai.NoPenaltyTargeting;
@@ -16,8 +17,6 @@ import net.minecraft.entity.ai.pathing.Path;
 import net.minecraft.entity.attribute.EntityAttributes;
 import net.minecraft.entity.mob.MobEntity;
 import net.minecraft.entity.mob.PathAwareEntity;
-import net.minecraft.item.BowItem;
-import net.minecraft.item.CrossbowItem;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.math.Vec3d;
 
@@ -69,12 +68,14 @@ public class ArcherMovementTask<E extends PathAwareEntity> extends MultiTickTask
 
     @Override
     protected boolean shouldRun(ServerWorld world, E entity) {
-        return hasValidTarget(getAttackTarget(entity)) && isHoldingRangedWeapon(entity);
+        return RangedWeaponHelper.isValidAttackTarget(entity, getAttackTarget(entity))
+                && RangedWeaponHelper.isHoldingSupportedWeapon(entity);
     }
 
     @Override
     protected boolean shouldKeepRunning(ServerWorld world, E entity, long gameTime) {
-        return hasValidTarget(getAttackTarget(entity)) && isHoldingRangedWeapon(entity);
+        return RangedWeaponHelper.isValidAttackTarget(entity, getAttackTarget(entity))
+                && RangedWeaponHelper.isHoldingSupportedWeapon(entity);
     }
 
     @Override
@@ -87,7 +88,7 @@ public class ArcherMovementTask<E extends PathAwareEntity> extends MultiTickTask
     @Override
     protected void keepRunning(ServerWorld world, E entity, long gameTime) {
         LivingEntity target = getAttackTarget(entity);
-        if (!hasValidTarget(target)) {
+        if (!RangedWeaponHelper.isValidAttackTarget(entity, target)) {
             return;
         }
 
@@ -107,7 +108,8 @@ public class ArcherMovementTask<E extends PathAwareEntity> extends MultiTickTask
         double targetDistanceSquared = entity.squaredDistanceTo(target);
         double threatDistanceSquared = entity.squaredDistanceTo(movementThreat);
         double threatVerticalDistance = Math.abs(entity.getY() - movementThreat.getY());
-        MovementState nextState = selectState(targetDistanceSquared, threatDistanceSquared, threatVerticalDistance);
+        double attackRangeSquared = RangedWeaponHelper.getAttackRangeSquared(entity, this.maximumRangeSquared);
+        MovementState nextState = selectState(targetDistanceSquared, threatDistanceSquared, threatVerticalDistance, attackRangeSquared);
         enterState(entity, nextState);
 
         ArcherMoveControl moveControl = getArcherMoveControl(entity);
@@ -162,7 +164,8 @@ public class ArcherMovementTask<E extends PathAwareEntity> extends MultiTickTask
         this.blockedStrafeTicks = 0;
     }
 
-    private MovementState selectState(double targetDistanceSquared, double threatDistanceSquared, double threatVerticalDistance) {
+    private MovementState selectState(double targetDistanceSquared, double threatDistanceSquared,
+                                      double threatVerticalDistance, double attackRangeSquared) {
         boolean closeRangeThreat = threatVerticalDistance <= CLOSE_RANGE_VERTICAL_THREAT_DISTANCE;
         boolean wasEmergencyFleeing = this.state == MovementState.EMERGENCY_FLEE;
         double emergencyThreshold = wasEmergencyFleeing ? EMERGENCY_EXIT_DISTANCE_SQUARED : EMERGENCY_ENTER_DISTANCE_SQUARED;
@@ -176,7 +179,7 @@ public class ArcherMovementTask<E extends PathAwareEntity> extends MultiTickTask
             return MovementState.KITE;
         }
 
-        if (targetDistanceSquared > this.maximumRangeSquared || this.seeTime < -LOST_SIGHT_BEFORE_APPROACH) {
+        if (targetDistanceSquared > attackRangeSquared || this.seeTime < -LOST_SIGHT_BEFORE_APPROACH) {
             return MovementState.APPROACH;
         }
 
@@ -325,7 +328,7 @@ public class ArcherMovementTask<E extends PathAwareEntity> extends MultiTickTask
             this.strafingTime = 0;
         }
 
-        moveControl.strafeTo(0.0F, this.strafingClockwise ? 0.5F : -0.5F);
+        moveControl.strafeForArcher(0.0F, this.strafingClockwise ? 0.5F : -0.5F);
     }
 
     private boolean isStrafeBlocked(E entity) {
@@ -423,9 +426,9 @@ public class ArcherMovementTask<E extends PathAwareEntity> extends MultiTickTask
         );
     }
 
-    private static LivingEntity getNearestMovementThreat(LivingEntity entity, LivingEntity fallback) {
+    private static LivingEntity getNearestMovementThreat(MobEntity entity, LivingEntity fallback) {
         return entity.getBrain().getOptionalMemory(MemoryModuleType.VISIBLE_MOBS)
-                .flatMap(visible -> visible.stream(ArcherMovementTask::hasValidTarget)
+                .flatMap(visible -> visible.stream(candidate -> RangedWeaponHelper.isValidAttackTarget(entity, candidate))
                         .filter(candidate -> Math.abs(entity.getY() - candidate.getY()) <= CLOSE_RANGE_VERTICAL_THREAT_DISTANCE)
                         .filter(candidate -> GuardEnemiesSensor.isGuardEnemy(candidate, entity))
                         .findFirst())
@@ -442,14 +445,6 @@ public class ArcherMovementTask<E extends PathAwareEntity> extends MultiTickTask
 
     private static LivingEntity getAttackTarget(LivingEntity entity) {
         return entity.getBrain().getOptionalMemory(MemoryModuleType.ATTACK_TARGET).orElse(null);
-    }
-
-    private static boolean hasValidTarget(LivingEntity target) {
-        return target != null && target.isAlive() && !target.isRemoved();
-    }
-
-    private static boolean isHoldingRangedWeapon(MobEntity entity) {
-        return entity.isHolding(stack -> stack.getItem() instanceof BowItem || stack.getItem() instanceof CrossbowItem);
     }
 
     private static ArcherMoveControl getArcherMoveControl(MobEntity entity) {

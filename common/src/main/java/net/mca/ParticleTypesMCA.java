@@ -2,7 +2,6 @@ package net.mca;
 
 import dev.architectury.registry.registries.DeferredRegister;
 import dev.architectury.registry.registries.RegistrySupplier;
-import net.mca.mixin.MixinDefaultParticleType;
 import net.minecraft.particle.DefaultParticleType;
 import net.minecraft.particle.ParticleType;
 import net.minecraft.registry.RegistryKeys;
@@ -14,8 +13,8 @@ public interface ParticleTypesMCA {
 
     DeferredRegister<ParticleType<?>> PARTICLE_TYPES = DeferredRegister.create(MCA.MOD_ID, RegistryKeys.PARTICLE_TYPE);
 
-    RegistrySupplier<DefaultParticleType> POS_INTERACTION = register("pos_interaction", () -> MixinDefaultParticleType.init(false));
-    RegistrySupplier<DefaultParticleType> NEG_INTERACTION = register("neg_interaction", () -> MixinDefaultParticleType.init(false));
+    RegistrySupplier<DefaultParticleType> POS_INTERACTION = register("pos_interaction", () -> new DefaultParticleType(false));
+    RegistrySupplier<DefaultParticleType> NEG_INTERACTION = register("neg_interaction", () -> new DefaultParticleType(false));
 
     static void bootstrap() {
         PARTICLE_TYPES.register();

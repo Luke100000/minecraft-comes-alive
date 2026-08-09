@@ -13,6 +13,7 @@ import net.mca.entity.EquipmentSet;
 import net.mca.entity.VillagerEntityMCA;
 import net.mca.entity.ai.ActivityMCA;
 import net.mca.entity.ai.MemoryModuleTypeMCA;
+import net.mca.entity.ai.RangedWeaponHelper;
 import net.mca.entity.ai.SchedulesMCA;
 import net.mca.entity.ai.brain.sensor.GuardEnemiesSensor;
 import net.mca.entity.ai.brain.tasks.*;
@@ -32,7 +33,6 @@ import net.minecraft.entity.ai.brain.sensor.SensorType;
 import net.minecraft.entity.ai.brain.task.*;
 import net.minecraft.entity.passive.VillagerEntity;
 import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.item.Items;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.village.VillagerProfession;
 import net.minecraft.world.poi.PointOfInterestTypes;
@@ -320,7 +320,7 @@ public class VillagerTasksMCA {
                         new ExtendedMeleeAttackTask(20, 2.0F),
                         (VillagerEntityMCA v) -> !VillagerTasksMCA.isHoldingRangedWeapon(v)
                 )),
-                Pair.of(9, new CrossbowAttackTask<VillagerEntityMCA, VillagerEntityMCA>())
+                Pair.of(9, new ExtendedCrossbowAttackTask<VillagerEntityMCA, VillagerEntityMCA>())
         );
     }
 
@@ -382,7 +382,8 @@ public class VillagerTasksMCA {
     }
 
     private static boolean shouldRespondToGuardEnemy(VillagerEntityMCA villager, LivingEntity target) {
-        return GuardEnemiesSensor.isGuardEnemy(target, villager)
+        return shouldKeepAttackTarget(villager, target)
+                && GuardEnemiesSensor.isGuardEnemy(target, villager)
                 && shouldRespondToAttackTarget(villager, target);
     }
 
@@ -426,7 +427,7 @@ public class VillagerTasksMCA {
     }
 
     private static boolean isHoldingRangedWeapon(VillagerEntityMCA villager) {
-        return villager.isHolding(Items.BOW) || villager.isHolding(Items.CROSSBOW);
+        return RangedWeaponHelper.isHoldingSupportedWeapon(villager);
     }
 
     public static boolean isInDanger(VillagerEntityMCA villager) {
@@ -498,29 +499,13 @@ public class VillagerTasksMCA {
     }
 
     public static ImmutableList<Pair<Integer, ? extends Task<? super VillagerEntityMCA>>> getWorkPackage(VillagerProfession profession, float speedModifier) {
-        VillagerWorkTask villagerWorkTask;
-        if (profession == VillagerProfession.FARMER) {
-            villagerWorkTask = new FarmerWorkTask();
-        } else {
-            villagerWorkTask = new VillagerWorkTask();
+        // Keep MCA's public package method, but source the task list from vanilla so mods that
+        // transform VillagerTaskListProvider#createWorkTasks also affect MCA villagers.
+        ImmutableList.Builder<Pair<Integer, ? extends Task<? super VillagerEntityMCA>>> tasks = ImmutableList.builder();
+        for (Pair<Integer, ? extends Task<? super VillagerEntity>> task : VillagerTaskListProvider.createWorkTasks(profession, speedModifier)) {
+            tasks.add(Pair.of(task.getFirst(), task.getSecond()));
         }
-
-        return ImmutableList.of(
-                getMinimalLookBehavior(),
-                Pair.of(5, new RandomTask<>(
-                        ImmutableList.of(Pair.of(villagerWorkTask, 7),
-                                Pair.of(GoToIfNearbyTask.create(MemoryModuleType.JOB_SITE, 0.4F, 4), 2),
-                                Pair.of(GoToNearbyPositionTask.create(MemoryModuleType.JOB_SITE, 0.4F, 1, 10), 5),
-                                Pair.of(GoToSecondaryPositionTask.create(MemoryModuleType.SECONDARY_JOB_SITE, speedModifier, 1, 6, MemoryModuleType.JOB_SITE), 5),
-                                Pair.of(new FarmerVillagerTask(), profession == VillagerProfession.FARMER ? 2 : 5),
-                                Pair.of(new BoneMealTask(), profession == VillagerProfession.FARMER ? 4 : 7))
-                )),
-                Pair.of(10, new HoldTradeOffersTask(400, 1600)),
-                Pair.of(10, FindInteractionTargetTask.create(EntityType.PLAYER, 4)),
-                Pair.of(2, VillagerWalkTowardsTask.create(MemoryModuleType.JOB_SITE, speedModifier, 9, 100, 1200)),
-                Pair.of(3, new GiveGiftsToHeroTask(100)),
-                Pair.of(99, ScheduleActivityTask.create())
-        );
+        return tasks.build();
     }
 
     public static ImmutableList<Pair<Integer, ? extends Task<? super VillagerEntityMCA>>> getPlayPackage(float speedModifier) {
@@ -554,7 +539,7 @@ public class VillagerTasksMCA {
                     return !forced;
                 }, v -> {
                     v.getResidency().seekHome();
-                }, ExtendedWalkTowardsTask::findBedStandPosition)),
+                })),
                 //verify the bed, occupancies state and similar
                 Pair.of(3, new ConditionalSingleTickTask<>(ExtendedForgetCompletedPointOfInterestTask.create(
                         registryEntry -> registryEntry.matchesKey(PointOfInterestTypes.HOME), MemoryModuleType.HOME, (entity) -> {

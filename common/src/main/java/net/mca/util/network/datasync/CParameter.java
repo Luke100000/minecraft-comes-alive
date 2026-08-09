@@ -6,6 +6,7 @@ import net.minecraft.entity.data.TrackedData;
 import net.minecraft.entity.data.TrackedDataHandlerRegistry;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NbtCompound;
+import net.minecraft.util.Identifier;
 import net.minecraft.util.math.BlockPos;
 
 import java.util.Optional;
@@ -33,8 +34,8 @@ public interface CParameter<T, TrackedType> {
     }
 
     static CDataParameter<ItemStack> create(String id, ItemStack def) {
-    	return new CDataParameter<>("babyItem", TrackedDataHandlerRegistry.ITEM_STACK, ItemStack.EMPTY,
-			(nbt, key) -> NbtCompoundDefaultGetters.getItemStack(nbt, key, ItemStack.EMPTY), (nbt, key, stack) ->
+		return new CDataParameter<>(id, TrackedDataHandlerRegistry.ITEM_STACK, def,
+			(nbt, key) -> NbtCompoundDefaultGetters.getItemStack(nbt, key, def), (nbt, key, stack) ->
 			{
 				NbtCompound item = new NbtCompound();
 				stack.writeNbt(item);
@@ -69,6 +70,10 @@ public interface CParameter<T, TrackedType> {
 
     static <T extends Enum<T>> CEnumParameter<T> create(String id, Class<T> type) {
         return new CEnumParameter<>(id, type, null);
+    }
+
+    static CResourceLocationParameter create(String id, Identifier def) {
+        return new CResourceLocationParameter(id, def);
     }
 
     TrackedType getDefault();

@@ -3,6 +3,7 @@ package net.mca.server.world.data;
 import net.mca.Config;
 import net.mca.advancement.criterion.CriterionMCA;
 import net.mca.cobalt.network.NetworkHandler;
+import net.mca.datafix.McaDataFixers;
 import net.mca.entity.EntitiesMCA;
 import net.mca.entity.PlayerDimensions;
 import net.mca.entity.VillagerEntityMCA;
@@ -50,6 +51,7 @@ public class PlayerSaveData extends PersistentState implements EntityRelationshi
 
     private boolean entityDataSet;
     private boolean overrideVillageRequirements;
+    private String chatAIPrompt = "";
     private NbtCompound entityData;
     private PlayerDimensions.Scale dimensionsScale;
 
@@ -81,9 +83,14 @@ public class PlayerSaveData extends PersistentState implements EntityRelationshi
         lastSeenVillage = nbt.contains("lastSeenVillage", NbtElement.INT_TYPE) ? Optional.of(nbt.getInt("lastSeenVillage")) : Optional.empty();
         entityDataSet = nbt.contains("entityDataSet") && nbt.getBoolean("entityDataSet");
         overrideVillageRequirements = nbt.contains("overrideVillageRequirements") && nbt.getBoolean("overrideVillageRequirements");
+        chatAIPrompt = nbt.getString("chatAIPrompt");
 
         if (nbt.contains("entityData")) {
-            entityData = nbt.getCompound("entityData");
+            NbtCompound storedEntityData = nbt.getCompound("entityData");
+            entityData = McaDataFixers.update(storedEntityData);
+            if (!entityData.equals(storedEntityData)) {
+                markDirty();
+            }
         } else {
             resetEntityData();
         }
@@ -117,6 +124,15 @@ public class PlayerSaveData extends PersistentState implements EntityRelationshi
         return entityData.copy();
     }
 
+    public String getChatAIPrompt() {
+        return chatAIPrompt;
+    }
+
+    public void setChatAIPrompt(String chatAIPrompt) {
+        this.chatAIPrompt = chatAIPrompt;
+        markDirty();
+    }
+
     public void setEntityDataSet(boolean entityDataSet) {
         if (this.entityDataSet == entityDataSet) {
             return;
@@ -134,7 +150,7 @@ public class PlayerSaveData extends PersistentState implements EntityRelationshi
     }
 
     public void setEntityData(NbtCompound entityData) {
-        NbtCompound copy = entityData.copy();
+        NbtCompound copy = McaDataFixers.update(entityData.copy());
         if (copy.equals(this.entityData)) {
             return;
         }
@@ -278,9 +294,11 @@ public class PlayerSaveData extends PersistentState implements EntityRelationshi
     @Override
     public NbtCompound writeNbt(NbtCompound nbt) {
         lastSeenVillage.ifPresent(id -> nbt.putInt("lastSeenVillage", id));
+        McaDataFixers.stampCurrentVersion(entityData);
         nbt.put("entityData", entityData);
         nbt.putBoolean("entityDataSet", entityDataSet);
         nbt.putBoolean("overrideVillageRequirements", overrideVillageRequirements);
+        nbt.putString("chatAIPrompt", chatAIPrompt);
         nbt.put("inbox", NbtHelper.fromList(inbox, v -> v));
         return nbt;
     }

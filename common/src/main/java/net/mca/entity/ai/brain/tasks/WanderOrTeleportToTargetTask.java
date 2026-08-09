@@ -11,23 +11,22 @@ import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.math.BlockPos;
 
 public class WanderOrTeleportToTargetTask extends WanderAroundTask {
-    // Pathfinding is one of the slowest components, let's slow it down a bit.
-    private static final int SLOWDOWN = 5;
-    private int cooldown = SLOWDOWN;
-
-    public WanderOrTeleportToTargetTask() {
-        // nop
-    }
+    // Stagger expensive path checks across villagers while preserving the existing seven-check interval.
+    private static final int PATHFINDING_INTERVAL = 7;
+    private int pathfindingCooldown = -1;
 
     @Override
     protected boolean shouldRun(ServerWorld serverWorld, MobEntity mobEntity) {
-        if (cooldown < 0) {
-            cooldown = SLOWDOWN;
-            return super.shouldRun(serverWorld, mobEntity);
-        } else {
-            cooldown--;
+        if (pathfindingCooldown < 0) {
+            pathfindingCooldown = Math.floorMod(mobEntity.getId(), PATHFINDING_INTERVAL);
+        }
+        if (pathfindingCooldown > 0) {
+            pathfindingCooldown--;
             return false;
         }
+
+        pathfindingCooldown = PATHFINDING_INTERVAL - 1;
+        return super.shouldRun(serverWorld, mobEntity);
     }
 
     @Override

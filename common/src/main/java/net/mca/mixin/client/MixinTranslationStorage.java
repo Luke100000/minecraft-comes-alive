@@ -1,5 +1,6 @@
 package net.mca.mixin.client;
 
+import com.llamalad7.mixinextras.injector.ModifyReturnValue;
 import net.mca.MCA;
 import net.mca.entity.CommonSpeechManager;
 import net.mca.entity.ai.DialogueType;
@@ -57,10 +58,8 @@ abstract class MixinTranslationStorage extends Language {
         }
     }
 
-    @Inject(method = "hasTranslation(Ljava/lang/String;)Z", at = @At("HEAD"), cancellable = true)
-    public void mca$onHasTranslation(String key, CallbackInfoReturnable<Boolean> info) {
-        if (mca$getPool().contains(key)) {
-            info.setReturnValue(true);
-        }
+    @ModifyReturnValue(method = "hasTranslation(Ljava/lang/String;)Z", at = @At("RETURN"))
+    public boolean mca$includePooledTranslations(boolean original, String key) {
+        return original || mca$getPool().contains(key);
     }
 }

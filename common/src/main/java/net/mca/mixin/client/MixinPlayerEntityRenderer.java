@@ -68,7 +68,7 @@ public abstract class MixinPlayerEntityRenderer extends LivingEntityRenderer<Abs
         return new PlayerEntityExtendedModel<>(TexturedModelData.of(data, 64, 64).createModel());
     }
 
-    @Inject(method = "scale(Lnet/minecraft/client/network/AbstractClientPlayerEntity;Lnet/minecraft/client/util/math/MatrixStack;F)V", at = @At("TAIL"), cancellable = true)
+    @Inject(method = "scale(Lnet/minecraft/client/network/AbstractClientPlayerEntity;Lnet/minecraft/client/util/math/MatrixStack;F)V", at = @At("TAIL"))
     private void injectScale(AbstractClientPlayerEntity player, MatrixStack matrices, float f, CallbackInfo ci) {
         if (MCAClient.useGeneticsRenderer(player.getUuid())) {
             float height = CommonVillagerModel.getVillager(player).getRawScaleFactor();
@@ -77,7 +77,6 @@ public abstract class MixinPlayerEntityRenderer extends LivingEntityRenderer<Abs
             if (CommonVillagerModel.getVillager(player).getAgeState() == AgeState.BABY && !player.hasVehicle()) {
                 matrices.translate(0, 0.6F, 0);
             }
-            ci.cancel();
 
             // switch to mca model
             model = mca$villagerModel;

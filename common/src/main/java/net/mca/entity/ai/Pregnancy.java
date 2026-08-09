@@ -26,9 +26,9 @@ import java.util.Optional;
  * The progenator. Preg-genator? Preg-genator.
  */
 public class Pregnancy {
-    private static final CDataParameter<Boolean> HAS_BABY = CParameter.create("hasBaby", false);
-    private static final CDataParameter<Boolean> IS_BABY_MALE = CParameter.create("isBabyMale", false);
-    private static final CDataParameter<Integer> BABY_AGE = CParameter.create("babyAge", 0);
+    private static final CDataParameter<Boolean> HAS_BABY = CParameter.create("HasBaby", false);
+    private static final CDataParameter<Boolean> IS_BABY_MALE = CParameter.create("IsBabyMale", false);
+    private static final CDataParameter<Integer> BABY_AGE = CParameter.create("BabyAge", 0);
 
     public static <E extends Entity> CDataManager.Builder<E> createTrackedData(CDataManager.Builder<E> builder) {
         return builder.addAll(HAS_BABY, IS_BABY_MALE, BABY_AGE);

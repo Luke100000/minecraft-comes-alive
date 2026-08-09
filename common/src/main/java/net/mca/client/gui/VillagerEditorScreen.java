@@ -68,7 +68,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     private static final Identifier PREVIEW_MOUSE_FOLLOW_TEXTURE = MCA.locate("textures/gui/preview_mouse_follow.png");
     private static final String[] MCA_VISUAL_KEYS = {
             "Gender",
-            "clothes",
+            "Clothes",
             "ClothingLocked",
             "Skin",
             "Hair",
@@ -684,7 +684,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                 List<ButtonWidget> personalityButtons = new LinkedList<>();
                 int row = 0;
                 final int BUTTONS_PER_ROW = 2;
-                for (Personality p : Personality.values()) {
+                for (Personality p : Personality.all()) {
                     if (p != Personality.UNASSIGNED) {
                         if (row == BUTTONS_PER_ROW) {
                             row = 0;
@@ -1184,8 +1184,8 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         }
 
         String profession = villagerUUID.equals(playerUUID)
-                ? Registries.VILLAGER_PROFESSION.getKey(VillagerProfession.NONE).toString()
-                : Registries.VILLAGER_PROFESSION.getKey(villager.getVillagerData().getProfession()).toString();
+                ? Registries.VILLAGER_PROFESSION.getId(VillagerProfession.NONE).toString()
+                : Registries.VILLAGER_PROFESSION.getId(villager.getVillagerData().getProfession()).toString();
         String mappedProfession = SkinSelection.mapProfession(profession, Config.getInstance().professionConversionsMap);
         List<Clothing> options = SkinSelection.clothingForProfession(ClientSkinCatalog.clothing().values(), gender, mappedProfession);
         if (!options.isEmpty()) {
@@ -1429,7 +1429,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     }
 
     private Traits.Trait[] getValidTraits() {
-        return (Traits.Trait.values().stream()).filter(e -> {
+        return Traits.all().stream().filter(e -> {
             if (villagerUUID.equals(playerUUID)) {
                 return (Config.getInstance().bypassTraitRestrictions || e.isUsableOnPlayer()) && e.isEnabled();
             }

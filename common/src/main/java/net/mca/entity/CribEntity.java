@@ -35,9 +35,9 @@ import java.util.Arrays;
 public class CribEntity extends Entity implements CTrackedEntity<CribEntity>
 {
 	VillagerEntityMCA infant;
-	private static final CDataParameter<ItemStack> BABY = CParameter.create("babyItem", ItemStack.EMPTY);
-	private static final CEnumParameter<CribWoodType> WOOD = CParameter.create("wood", CribWoodType.OAK);
-	private static final CEnumParameter<DyeColor> COLOR = CParameter.create("color", DyeColor.RED);
+	private static final CDataParameter<ItemStack> BABY = CParameter.create("BabyItem", ItemStack.EMPTY);
+	private static final CEnumParameter<CribWoodType> WOOD = CParameter.create("Wood", CribWoodType.OAK);
+	private static final CEnumParameter<DyeColor> COLOR = CParameter.create("Color", DyeColor.RED);
     private static final CDataManager<CribEntity> DATA = createTrackedData().build();
 
     static CDataManager.Builder<CribEntity> createTrackedData() { return new CDataManager.Builder<>(CribEntity.class).addAll(BABY, WOOD, COLOR); }

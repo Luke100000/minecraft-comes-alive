@@ -4,7 +4,6 @@ import com.google.common.collect.ImmutableSet;
 import dev.architectury.registry.registries.DeferredRegister;
 import dev.architectury.registry.registries.RegistrySupplier;
 import net.mca.entity.ai.PointOfInterestTypeMCA;
-import net.mca.mixin.MixinVillagerProfession;
 import net.minecraft.block.Block;
 import net.minecraft.item.Item;
 import net.minecraft.registry.RegistryKey;
@@ -67,7 +66,7 @@ public interface ProfessionsMCA {
     static RegistrySupplier<VillagerProfession> register(String name, boolean canTradeWith, boolean important, boolean needsNoHome, Predicate<RegistryEntry<PointOfInterestType>> heldWorkstation, Predicate<RegistryEntry<PointOfInterestType>> acquirableWorkstation, ImmutableSet<Item> gatherableItems, ImmutableSet<Block> secondaryJobSites, @Nullable SoundEvent workSound) {
         Identifier id = new Identifier(MCA.MOD_ID, name);
         return PROFESSIONS.register(id, () -> {
-            VillagerProfession result = MixinVillagerProfession.init(
+            VillagerProfession result = new VillagerProfession(
                     id.toString().replace(':', '.'), heldWorkstation, acquirableWorkstation, gatherableItems, secondaryJobSites, workSound
             );
             if (!canTradeWith) {

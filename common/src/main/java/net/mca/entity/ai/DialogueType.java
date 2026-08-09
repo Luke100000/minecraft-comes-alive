@@ -119,7 +119,7 @@ public enum DialogueType {
 
         //then try personality
         if (flags.containsKey("E") && MCAClient.useExpandedPersonalityTranslations()) {
-            String personality = Personality.valueOf(flags.get("E")).name().toLowerCase(Locale.ROOT);
+            String personality = Personality.getDialoguePrefix(flags.get("E"));
             Optional<String> p = getPrefixedPhrase(type, personality, key);
             if (p.isPresent()) {
                 return p.get();

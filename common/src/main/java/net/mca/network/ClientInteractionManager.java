@@ -48,4 +48,6 @@ public interface ClientInteractionManager {
     void handleCivilRegistryResponse(CivilRegistryResponse response);
 
     void handleBuildingPolymorph(BuildingPolymorphMessage message);
+
+    void handleChatAIContextResponse(ChatAIContextResponse response);
 }

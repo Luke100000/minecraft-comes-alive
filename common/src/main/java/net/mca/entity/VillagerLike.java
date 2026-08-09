@@ -31,6 +31,7 @@ import net.minecraft.entity.attribute.EntityAttributeModifier;
 import net.minecraft.entity.attribute.EntityAttributes;
 import net.minecraft.entity.mob.MobEntity;
 import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.particle.ParticleTypes;
 import net.minecraft.server.network.ServerPlayerEntity;
@@ -41,17 +42,19 @@ import net.minecraft.util.Hand;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.math.random.Random;
 import net.minecraft.village.VillagerDataContainer;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.ToDoubleFunction;
 
 public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrackedEntity<E>, VillagerDataContainer, Infectable, Messenger {
     CDataParameter<String> VILLAGER_NAME = CParameter.create("villagerName", "");
     CDataParameter<String> CUSTOM_SKIN = CParameter.create("custom_skin", "");
-    CDataParameter<String> CLOTHES = CParameter.create("clothes", "");
-    CDataParameter<String> HAIR = CParameter.create("hair", "");
+    CDataParameter<String> CLOTHES = CParameter.create("Clothes", "");
+    CDataParameter<String> HAIR = CParameter.create("Hair", "");
     CDataParameter<Boolean> CLOTHING_LOCKED = CParameter.create("ClothingLocked", false);
     CDataParameter<String> SKIN = CParameter.create("Skin", "");
     CDataParameter<String> HAIR_STYLE = CParameter.create("HairStyle", "");
@@ -64,7 +67,7 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
     CDataParameter<Integer> HAIR_COLOR = CParameter.create("HairColor", 0xFF000000);
     CDataParameter<Integer> EYE_COLOR = CParameter.create("EyeColor", 0xFFFFFFFF);
     CDataParameter<Integer> EYE_COLOR_LEFT = CParameter.create("EyeColorLeft", 0xFFFFFFFF);
-    CEnumParameter<AgeState> AGE_STATE = CParameter.create("ageState", AgeState.UNASSIGNED);
+    CEnumParameter<AgeState> AGE_STATE = CParameter.create("AgeState", AgeState.UNASSIGNED);
 
     int NO_HAIR_DYE = 0xFF000000;
     UUID SPEED_ID = UUID.fromString("1eaf83ff-7207-5596-c37a-d7a07b3ec4ce");
@@ -414,19 +417,6 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
         };
     }
 
-    static void migrateHairDyeNbt(NbtCompound data) {
-        // 1.20.1 is the oldest supported format: migrate only its legacy RGB float fields
-        // into the same packed 0xAARRGGBB HairColor integer used by the 1.21.1 backport.
-        if (data.contains("hair_color_red") || data.contains("hair_color_green") || data.contains("hair_color_blue")) {
-            float red = data.getFloat("hair_color_red");
-            float green = data.getFloat("hair_color_green");
-            float blue = data.getFloat("hair_color_blue");
-            data.putInt("HairColor", red > 0.0f || green > 0.0f || blue > 0.0f
-                    ? packHairDyeArgb(red, green, blue)
-                    : NO_HAIR_DYE);
-        }
-    }
-
     default AgeState getAgeState() {
         return getTrackedValue(AGE_STATE);
     }
@@ -436,8 +426,10 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
     }
 
     default void updateAttributes() {
-        //set speed
-        float speed = getVillagerBrain().getPersonality().getSpeedModifier();
+        float speed = 1.0f;
+        if (getTraits().hasTrait(Traits.ATHLETIC)) {
+            speed *= 1.1f;
+        }
 
         speed /= (0.9f + getGenetics().getGene(Genetics.WIDTH) * 0.2f);
         speed *= (0.9f + getGenetics().getGene(Genetics.SIZE) * 0.2f);
@@ -684,16 +676,68 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
         return false;
     }
 
+    @Nullable
+    static <T extends MobEntity> T convertPreservingUuid(MobEntity source, EntityType<T> type, boolean keepEquipment,
+                                                         ToDoubleFunction<EquipmentSlot> dropChanceGetter) {
+        if (source.isRemoved()) {
+            return null;
+        }
+
+        T converted = type.create(source.getWorld());
+        if (converted == null) {
+            return null;
+        }
+
+        Entity vehicle = source.getVehicle();
+        converted.copyPositionAndRotation(source);
+        converted.setBaby(source.isBaby());
+        converted.setAiDisabled(source.isAiDisabled());
+        if (source.hasCustomName()) {
+            converted.setCustomName(source.getCustomName());
+            converted.setCustomNameVisible(source.isCustomNameVisible());
+        }
+        if (source.isPersistent()) {
+            converted.setPersistent();
+        }
+        converted.setInvulnerable(source.isInvulnerable());
+        if (keepEquipment) {
+            converted.setCanPickUpLoot(source.canPickUpLoot());
+            for (EquipmentSlot slot : EquipmentSlot.values()) {
+                ItemStack stack = source.getEquippedStack(slot);
+                if (!stack.isEmpty()) {
+                    converted.equipStack(slot, stack.copyAndEmpty());
+                    converted.setEquipmentDropChance(slot, (float) dropChanceGetter.applyAsDouble(slot));
+                }
+            }
+        }
+        converted.setUuid(source.getUuid());
+
+        source.discard();
+        source.getWorld().spawnEntity(converted);
+        if (vehicle != null) {
+            converted.startRiding(vehicle, true);
+        }
+        return converted;
+    }
+
     @SuppressWarnings({"unchecked", "RedundantSuppression"})
-    default NbtCompound toNbtForConversion(EntityType<?> convertingTo) {
+    default NbtCompound toNbtForConversion() {
         NbtCompound output = new NbtCompound();
         this.getTypeDataManager().save((E) asEntity(), output);
+        writeAdditionalConversionData(output);
         return output;
     }
 
     @SuppressWarnings({"unchecked", "RedundantSuppression"})
-    default void readNbtForConversion(EntityType<?> convertingFrom, NbtCompound input) {
+    default void readNbtForConversion(NbtCompound input) {
         this.getTypeDataManager().load((E) asEntity(), input);
+        readAdditionalConversionData(input);
+    }
+
+    default void writeAdditionalConversionData(NbtCompound output) {
+    }
+
+    default void readAdditionalConversionData(NbtCompound input) {
     }
 
     void readAdditionalSaveDataForEditor(NbtCompound nbt);
@@ -717,7 +761,7 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
 
 
     default void copyVillagerAttributesFrom(VillagerLike<?> other) {
-        readNbtForConversion(other.asEntity().getType(), other.toNbtForConversion(asEntity().getType()));
+        readNbtForConversion(other.toNbtForConversion());
     }
 
     static VillagerLike<?> toVillager(PlayerSaveData player) {

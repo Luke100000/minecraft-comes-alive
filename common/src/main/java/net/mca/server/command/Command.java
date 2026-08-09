@@ -10,10 +10,14 @@ import net.mca.MCA;
 import net.mca.cobalt.network.NetworkHandler;
 import net.mca.entity.VillagerEntityMCA;
 import net.mca.entity.ai.chatAI.ChatAI;
+import net.mca.entity.ai.chatAI.ChatAIContext;
 import net.mca.entity.ai.chatAI.OpenAIChatAI;
+import net.mca.network.s2c.ChatAIContextResponse;
 import net.mca.network.s2c.OpenGuiRequest;
 import net.mca.server.ServerInteractionManager;
 import net.mca.server.world.data.PlayerSaveData;
+import net.mca.server.world.data.Village;
+import net.mca.server.world.data.VillageManager;
 import net.minecraft.command.argument.EntityArgumentType;
 import net.minecraft.server.command.CommandManager;
 import net.minecraft.server.command.ServerCommandSource;
@@ -27,6 +31,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
@@ -44,16 +49,21 @@ public class Command {
                 .then(register("mail", Command::mail))
                 .then(register("verify").then(CommandManager.argument("email", StringArgumentType.greedyString()).executes(Command::verify)))
                 .then(register("chatAI")
-                        .requires(p -> p.hasPermissionLevel(2) || p.getServer().isSingleplayer())
                         .executes(Command::chatAIHelp)
+                        .then(CommandManager.literal("context")
+                                .requires(ChatAIContext::canEdit)
+                                .executes(Command::openChatAIContext))
                         .then(CommandManager.literal("disable")
+                                .requires(Command::hasChatAIAdminPermission)
                                 .executes(Command::disableChatAI))
                         .then(CommandManager.literal("default")
+                                .requires(Command::hasChatAIAdminPermission)
                                 .executes(c -> Command.enableChatAI(c, "default", (new Config()).villagerChatAIEndpoint, "")))
                         .then(CommandManager.literal("player2")
+                                .requires(Command::hasChatAIAdminPermission)
                                 .executes(Command::setupPlayer2))
                         .then(register("inworldAI")
-                                .requires(p -> p.hasPermissionLevel(2) || p.getServer().isSingleplayer())
+                                .requires(Command::hasChatAIAdminPermission)
                                 .then(register("keys")
                                         .then(CommandManager.argument("api_key", StringArgumentType.string())
                                                 .executes(c -> Command.inworldAIKey(c.getArgument("api_key", String.class)))))
@@ -66,6 +76,7 @@ public class Command {
                                 )
                         )
                         .then(CommandManager.argument("model", StringArgumentType.string())
+                                .requires(Command::hasChatAIAdminPermission)
                                 .executes(c -> Command.enableChatAI(c, c.getArgument("model", String.class), (new Config()).villagerChatAIEndpoint, ""))
                                 .then(CommandManager.argument("endpoint", StringArgumentType.string())
                                         .executes(c -> Command.enableChatAI(c, c.getArgument("model", String.class), c.getArgument("endpoint", String.class), ""))
@@ -81,7 +92,45 @@ public class Command {
         );
     }
 
+    private static boolean hasChatAIAdminPermission(ServerCommandSource source) {
+        return source.hasPermissionLevel(2) || source.getServer().isSingleplayer();
+    }
+
+    private static int openChatAIContext(CommandContext<ServerCommandSource> ctx) {
+        ServerPlayerEntity player = ctx.getSource().getPlayer();
+        if (player == null) {
+            return 0;
+        }
+
+        Optional<VillagerEntityMCA> villager = ChatAI.findClosestVillager(player);
+        Optional<Village> village = villager.flatMap(Village::findNearest);
+        if (village.isEmpty()) {
+            village = VillageManager.get((net.minecraft.server.world.ServerWorld) player.getWorld()).findNearestVillage(player);
+        }
+
+        NetworkHandler.sendToPlayer(new ChatAIContextResponse(
+                player.getWorld().getRegistryKey().getValue().toString(),
+                villager.isPresent(),
+                villager.map(VillagerEntityMCA::getUuid).orElse(new UUID(0L, 0L)),
+                villager.map(v -> v.getName().getString()).orElse(""),
+                villager.map(VillagerEntityMCA::getChatAIPrompt).orElse(""),
+                villager.map(v -> v.getNickname(player.getUuid())).orElse(""),
+                player.getName().getString(),
+                PlayerSaveData.get(player).getChatAIPrompt(),
+                village.isPresent(),
+                village.map(Village::getId).orElse(-1),
+                village.map(Village::getName).orElse(""),
+                village.map(Village::getChatAIPrompt).orElse(""),
+                Config.getInstance().villagerChatAISystemPrompt
+        ), player);
+        return 1;
+    }
+
     private static int chatAIHelp(CommandContext<ServerCommandSource> ctx) {
+        if (!hasChatAIAdminPermission(ctx.getSource())) {
+            sendMessage(ctx, Text.translatable("command.no_permission").formatted(Formatting.RED));
+            return 0;
+        }
         return enableChatAI(ctx, (new Config()).villagerChatAIModel, (new Config()).villagerChatAIEndpoint, (new Config()).villagerChatAIToken);
     }
 

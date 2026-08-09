@@ -59,7 +59,7 @@ public class ClothingList extends JsonDataLoader {
 
     private List<Clothing> getOptions(Gender gender, @Nullable VillagerProfession profession, Collection<Clothing> available) {
         Map<String, String> map = Config.getInstance().professionConversionsMap;
-        String currentValue = profession == null ? "minecraft:none" : Registries.VILLAGER_PROFESSION.getKey(profession).toString();
+        String currentValue = profession == null ? "minecraft:none" : Registries.VILLAGER_PROFESSION.getId(profession).toString();
         return getOptions(gender, SkinSelection.mapProfession(currentValue, map), available);
     }
 

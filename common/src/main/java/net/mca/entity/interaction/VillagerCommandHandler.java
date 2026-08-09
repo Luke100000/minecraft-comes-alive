@@ -11,7 +11,6 @@ import net.mca.entity.ai.MoveState;
 import net.mca.entity.ai.Traits;
 import net.mca.entity.ai.relationship.RelationshipState;
 import net.mca.item.ItemsMCA;
-import net.mca.mixin.MixinVillagerEntityInvoker;
 import net.mca.server.world.data.FamilyTree;
 import net.mca.server.world.data.FamilyTreeNode;
 import net.mca.server.world.data.PlayerSaveData;
@@ -127,8 +126,7 @@ public class VillagerCommandHandler extends EntityCommandHandler<VillagerEntityM
             }
             case "trade" -> {
                 entity.getInteractions().stopInteracting();
-                MixinVillagerEntityInvoker invoker = (MixinVillagerEntityInvoker) this.entity;
-                invoker.invokeBeginTradeWith(player);
+                this.entity.beginTradeWith(player);
                 return false;
             }
             case "inventory" -> {

@@ -58,5 +58,7 @@ public interface MessagesMCA {
         NetworkHandler.registerMessage(SetTargetMessage.class);
         NetworkHandler.registerMessage(CivilRegistryPageRequest.class);
         NetworkHandler.registerMessage(CivilRegistryResponse.class);
+        NetworkHandler.registerMessage(ChatAIContextUpdateRequest.class);
+        NetworkHandler.registerMessage(ChatAIContextResponse.class);
     }
 }

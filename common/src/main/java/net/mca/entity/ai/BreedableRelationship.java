@@ -28,8 +28,8 @@ import java.util.Optional;
  */
 public class BreedableRelationship extends Relationship<VillagerEntityMCA> {
 
-    private static final CDataParameter<Boolean> IS_PROCREATING = CParameter.create("isProcreating", false);
-    private static final CDataParameter<Integer> LAST_PROCREATION = CParameter.create("lastProcreation", 0);
+    private static final CDataParameter<Boolean> IS_PROCREATING = CParameter.create("IsProcreating", false);
+    private static final CDataParameter<Integer> LAST_PROCREATION = CParameter.create("LastProcreation", 0);
 
     public static <E extends Entity> CDataManager.Builder<E> createTrackedData(CDataManager.Builder<E> builder) {
         return Relationship.createTrackedData(builder)

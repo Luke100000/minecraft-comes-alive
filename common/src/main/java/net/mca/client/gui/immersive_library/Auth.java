@@ -13,16 +13,17 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.util.Base64;
+import java.util.HexFormat;
 
 public class Auth {
-    static final SecureRandom random = new SecureRandom();
+    private static final SecureRandom RANDOM = new SecureRandom();
 
-    static String currentToken;
+    private static String currentToken;
 
     private static String newToken() {
-        byte[] bytes = new byte[64];
-        random.nextBytes(bytes);
-        return sha256(new String(bytes));
+        byte[] bytes = new byte[32];
+        RANDOM.nextBytes(bytes);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
     }
 
     public static String loadToken() {
@@ -53,21 +54,15 @@ public class Auth {
     }
 
     public static void clearToken() {
+        currentToken = null;
         //noinspection ResultOfMethodCallIgnored
         Paths.get("./immersiveLibraryToken_v2").toFile().delete();
     }
 
-    public static String sha256(String input) {
+    private static String sha256(String input) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] hash = digest.digest(input.getBytes(StandardCharsets.UTF_8));
-            StringBuilder hexString = new StringBuilder();
-            for (byte b : hash) {
-                String hex = Integer.toHexString(0xff & b);
-                if (hex.length() == 1) hexString.append('0');
-                hexString.append(hex);
-            }
-            return hexString.toString();
+            return HexFormat.of().formatHex(digest.digest(input.getBytes(StandardCharsets.UTF_8)));
         } catch (NoSuchAlgorithmException e) {
             throw new RuntimeException(e);
         }
@@ -75,16 +70,13 @@ public class Auth {
 
     public static String createDataState(String username, String token) {
         JsonObject json = new JsonObject();
-        json.addProperty("username", Base64.getEncoder().encodeToString(username.getBytes()));
-        json.addProperty("token", Base64.getEncoder().encodeToString(sha256(token).getBytes()));
-        return Base64.getEncoder().encodeToString(json.toString().getBytes());
+        json.addProperty("username", Base64.getEncoder().encodeToString(username.getBytes(StandardCharsets.UTF_8)));
+        json.addProperty("token", Base64.getEncoder().encodeToString(sha256(token).getBytes(StandardCharsets.UTF_8)));
+        return Base64.getEncoder().encodeToString(json.toString().getBytes(StandardCharsets.UTF_8));
     }
 
     public static void authenticate(String username) {
-        // The unique, private token used to authenticate once authorized
         currentToken = newToken();
-
-        // Open the authorization URL in the user's default web browser
         String url = Config.getInstance().immersiveLibraryUrl + "/v1/login?state=" + createDataState(username, currentToken);
         Util.getOperatingSystem().open(url);
     }

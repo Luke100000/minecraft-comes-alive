@@ -5,6 +5,7 @@ import net.mca.CommonConfig;
 import net.mca.cobalt.network.Message;
 
 import java.io.Serial;
+import java.util.List;
 
 public class ConfigResponse implements Message {
     @Serial
@@ -14,6 +15,11 @@ public class ConfigResponse implements Message {
 
     public ConfigResponse(CommonConfig config) {
         this.config = new CommonConfig(config);
+    }
+
+    public ConfigResponse(CommonConfig config, List<String> destinySpawnLocations) {
+        this(config);
+        this.config.destinySpawnLocations = List.copyOf(destinySpawnLocations);
     }
 
     @Override

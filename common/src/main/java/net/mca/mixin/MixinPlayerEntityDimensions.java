@@ -1,13 +1,12 @@
 package net.mca.mixin;
 
+import com.llamalad7.mixinextras.injector.ModifyReturnValue;
 import net.mca.entity.PlayerDimensions;
 import net.minecraft.entity.EntityDimensions;
 import net.minecraft.entity.EntityPose;
 import net.minecraft.entity.player.PlayerEntity;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
  * 1.20.1 equivalent of the 1.21.1 LivingEntity dimensions hook. Keeping the
@@ -15,18 +14,35 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  */
 @Mixin(PlayerEntity.class)
 abstract class MixinPlayerEntityDimensions {
-    @Inject(method = "getDimensions", at = @At("RETURN"), cancellable = true)
-    private void mca$getDimensions(EntityPose pose, CallbackInfoReturnable<EntityDimensions> info) {
+    @ModifyReturnValue(method = "getDimensions", at = @At("RETURN"))
+    private EntityDimensions mca$scalePlayerDimensions(EntityDimensions original, EntityPose pose) {
         if (pose == EntityPose.SLEEPING) {
-            return;
+            return original;
         }
 
         PlayerEntity player = (PlayerEntity) (Object) this;
-        PlayerDimensions.getScale(player).ifPresent(scale -> {
-            EntityDimensions original = info.getReturnValue();
-            EntityDimensions scaled = original.scaled(scale.width(), scale.height());
-            PlayerDimensions.debugAppliedScale(player, original, scaled, scale);
-            info.setReturnValue(scaled);
-        });
+        return PlayerDimensions.getScale(player)
+                .map(scale -> {
+                    EntityDimensions scaled = original.scaled(scale.width(), scale.height());
+                    PlayerDimensions.debugAppliedScale(player, original, scaled, scale);
+                    return scaled;
+                })
+                .orElse(original);
     }
+
+    @ModifyReturnValue(
+            method = "getActiveEyeHeight(Lnet/minecraft/entity/EntityPose;Lnet/minecraft/entity/EntityDimensions;)F",
+            at = @At("RETURN")
+    )
+    private float mca$scalePlayerEyeHeightWithHitbox(float original, EntityPose pose, EntityDimensions dimensions) {
+        if (pose == EntityPose.SLEEPING) {
+            return original;
+        }
+
+        PlayerEntity player = (PlayerEntity) (Object) this;
+        return PlayerDimensions.getScale(player)
+                .map(scale -> original * scale.height())
+                .orElse(original);
+    }
+
 }

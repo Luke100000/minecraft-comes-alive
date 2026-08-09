@@ -6,8 +6,6 @@ import net.mca.MCA;
 import net.mca.entity.ai.brain.sensor.ExplodingCreeperSensor;
 import net.mca.entity.ai.brain.sensor.GuardEnemiesSensor;
 import net.mca.entity.ai.brain.sensor.VillagerMCABabiesSensor;
-import net.mca.mixin.MixinActivity;
-import net.mca.mixin.MixinSensorType;
 import net.minecraft.entity.ai.brain.Activity;
 import net.minecraft.entity.ai.brain.sensor.Sensor;
 import net.minecraft.entity.ai.brain.sensor.SensorType;
@@ -35,11 +33,11 @@ public interface ActivityMCA {
 
     static RegistrySupplier<Activity> activity(String name) {
         Identifier id = new Identifier(MCA.MOD_ID, name);
-        return ACTIVITIES.register(id, () -> MixinActivity.init(id.toString()));
+        return ACTIVITIES.register(id, () -> new Activity(id.toString()));
     }
 
     static <T extends Sensor<?>> RegistrySupplier<SensorType<T>> sensor(String name, Supplier<T> factory) {
         Identifier id = new Identifier(MCA.MOD_ID, name);
-        return SENSORS.register(id, () -> MixinSensorType.init(factory));
+        return SENSORS.register(id, () -> new SensorType<>(factory));
     }
 }

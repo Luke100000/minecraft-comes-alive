@@ -91,7 +91,10 @@ public class GuardEnemiesSensor extends NearestLivingEntitiesSensor<LivingEntity
     }
 
     public static boolean isGuardEnemy(LivingEntity entity, LivingEntity guard) {
-        return getPriority(entity, guard) >= 0;
+        return entity.isAlive()
+                && !entity.isRemoved()
+                && (guard == null || entity.getWorld() == guard.getWorld())
+                && getPriority(entity, guard) >= 0;
     }
 
     private static int getPriority(LivingEntity entity, LivingEntity guard) {

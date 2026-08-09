@@ -1,111 +1,88 @@
 package net.mca.entity.ai;
 
 import net.mca.Config;
+import net.mca.MCA;
 import net.mca.entity.VillagerLike;
+import net.mca.util.ExtensibleTypeRegistry;
 import net.mca.util.network.datasync.CDataManager;
 import net.mca.util.network.datasync.CDataParameter;
 import net.mca.util.network.datasync.CParameter;
 import net.minecraft.entity.Entity;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.text.Text;
+import net.minecraft.util.Identifier;
 import net.minecraft.util.math.random.Random;
 
-import java.util.*;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 public class Traits {
-    private static final CDataParameter<NbtCompound> TRAITS = CParameter.create("traits", new NbtCompound());
+    private static final ExtensibleTypeRegistry<Trait> REGISTRY = new ExtensibleTypeRegistry<>(MCA.MOD_ID, "trait");
+    private static final CDataParameter<NbtCompound> TRAITS = CParameter.create("Traits", new NbtCompound());
 
-    public static final Map<String, Trait> TRAIT_REGISTRY = new LinkedHashMap<>();
+    public static final Trait LACTOSE_INTOLERANCE = register(MCA.locate("lactose_intolerance"), 1.0F, 1.0F);
+    public static final Trait BISEXUAL = register(MCA.locate("bisexual"), 1.0F, 0.0F);
+    public static final Trait ALBINISM = register(MCA.locate("albinism"), 1.0F, 1.0F);
+    public static final Trait RAINBOW = register(MCA.locate("rainbow"), 0.05F, 0.0F);
+    public static final Trait RAINBOW_EYES = register(MCA.locate("rainbow_eyes"), 0.05F, 0.0F);
+    public static final Trait SIRBEN = register(MCA.locate("sirben"), 0.025F, 1.0F);
+    public static final Trait DWARFISM = register(MCA.locate("dwarfism"), 1.0F, 1.0F);
+    public static final Trait HOMOSEXUAL = register(MCA.locate("homosexual"), 1.0F, 0.0F);
+    public static final Trait HETEROCHROMIA = register(MCA.locate("heterochromia"), 1.0F, 0.5F);
+    public static final Trait ASEXUAL = register(MCA.locate("asexual"), 1.0F, 0.0F);
+    public static final Trait COLOR_BLIND = register(MCA.locate("color_blind"), 1.0F, 0.5F);
+    public static final Trait ATHLETIC = register(MCA.locate("athletic"), 1.0F, 0.5F, false);
+    public static final Trait LEFT_HANDED = register(MCA.locate("left_handed"), 1.0F, 0.5F, false);
+    public static final Trait WEAK = register(MCA.locate("weak"), 1.0F, 1.0F, false);
+    public static final Trait TOUGH = register(MCA.locate("tough"), 1.0F, 1.0F, false);
+    public static final Trait COELIAC_DISEASE = register(MCA.locate("coeliac_disease"), 1.0F, 1.0F, false);
+    public static final Trait DIABETES = register(MCA.locate("diabetes"), 1.0F, 1.0F, false);
+    public static final Trait VEGETARIAN = register(MCA.locate("vegetarian"), 1.0F, 1.0F, false);
+    public static final Trait INFERTILE = register(MCA.locate("infertile"), 1.0F, 0.0F);
+    public static final Trait ELECTRIFIED = register(MCA.locate("electrified"), 0.0F, 0.0F, false);
+    public static final Trait NO_AGING = register(MCA.locate("no_aging"), 0.0F, 0.0F, false);
 
-    public static Trait LEFT_HANDED = registerTrait("LEFT_HANDED", 1.0F, 0.5F, false);
-    public static Trait WEAK = registerTrait("WEAK", 1.0F, 1.0F, false);
-    public static Trait TOUGH = registerTrait("TOUGH", 1.0F, 1.0F, false);
-    public static Trait COLOR_BLIND = registerTrait("COLOR_BLIND", 1.0F, 0.5F);
-    public static Trait HETEROCHROMIA = registerTrait("HETEROCHROMIA", 1.0F, 0.5F);
-    public static Trait LACTOSE_INTOLERANCE = registerTrait("LACTOSE_INTOLERANCE", 1.0F, 1.0F);
-    public static Trait COELIAC_DISEASE = registerTrait("COELIAC_DISEASE", 1.0F, 1.0F, false); // TODO: Implement for 7.4
-    public static Trait DIABETES = registerTrait("DIABETES", 1.0F, 1.0F, false); // TODO: Implement for 7.4
-    public static Trait DWARFISM = registerTrait("DWARFISM", 1.0F, 1.0F);
-    public static Trait ALBINISM = registerTrait("ALBINISM", 1.0F, 1.0F);
-    public static Trait VEGETARIAN = registerTrait("VEGETARIAN", 1.0F, 1.0F, false); // TODO: Implement for 7.4
-    public static Trait BISEXUAL = registerTrait("BISEXUAL", 1.0F, 0.0F);
-    public static Trait HOMOSEXUAL = registerTrait("HOMOSEXUAL", 1.0F, 0.0F);
-    public static Trait ASEXUAL = registerTrait("ASEXUAL", 1.0F, 0.0F);
-    public static Trait ELECTRIFIED = registerTrait("ELECTRIFIED", 0.0F, 0.0F, false);
-    public static Trait SIRBEN = registerTrait("SIRBEN", 0.025F, 1.0F);
-    public static Trait RAINBOW = registerTrait("RAINBOW", 0.05F, 0.0F);
-    public static Trait RAINBOW_EYES = registerTrait("RAINBOW_EYES", 0.05F, 0.0F);
-    public static Trait INFERTILE = registerTrait("INFERTILE", 1.0F, 0.0F);
-    public static Trait NO_AGING = registerTrait("NO_AGING", 0.0F, 0.0F, false);
-    public static Trait UNKNOWN = registerTrait("UNKNOWN", 0.0F, 0.0F, false);
+    private final VillagerLike<?> entity;
+    private Random random = Random.create();
 
-    public static Trait registerTrait(String id, float chance, float inherit, boolean usableOnPlayer) {
-        Trait trait = new Trait(id, chance, inherit, usableOnPlayer);
-        TRAIT_REGISTRY.put(id, trait);
-        return trait;
+    public Traits(VillagerLike<?> entity) {
+        this.entity = entity;
     }
 
-    public static Trait registerTrait(String id, float chance, float inherit) {
-        return registerTrait(id, chance, inherit, true);
+    public static Trait register(Identifier id, float chance, float inherit, boolean usableOnPlayer) {
+        return REGISTRY.register(id, registeredId -> new Trait(registeredId, chance, inherit, usableOnPlayer));
     }
 
-    public static class Trait {
-        private final String id;
-        private final float chance;
-        private final float inherit;
-        private final boolean usableOnPlayer;
+    public static Trait register(Identifier id, float chance, float inherit) {
+        return register(id, chance, inherit, true);
+    }
 
-        Trait(String id, float chance, float inherit, boolean usableOnPlayer) {
-            this.id = id;
-            this.chance = chance;
-            this.inherit = inherit;
-            this.usableOnPlayer = usableOnPlayer;
-        }
+    public static Optional<Trait> get(Identifier id) {
+        return REGISTRY.get(id);
+    }
 
-        public String id() {
-            return this.id;
-        }
+    public static Optional<Trait> get(String id) {
+        return REGISTRY.get(id);
+    }
 
-        public static Collection<Trait> values() {
-            return TRAIT_REGISTRY.values();
-        }
-
-        public static Trait valueOf(String id) {
-            return TRAIT_REGISTRY.getOrDefault(id.toUpperCase(Locale.ROOT), UNKNOWN);
-        }
-
-        public Text getName() {
-            return Text.translatable("trait." + id().toLowerCase(Locale.ROOT));
-        }
-
-        public Text getDescription() {
-            return Text.translatable("traitDescription." + id().toLowerCase(Locale.ROOT));
-        }
-
-        public boolean isUsableOnPlayer() {
-            return usableOnPlayer;
-        }
-
-        public boolean isEnabled() {
-            return Config.getServerConfig().enabledTraits.getOrDefault(id(), false);
-        }
+    public static List<Trait> all() {
+        return REGISTRY.all();
     }
 
     public static <E extends Entity> CDataManager.Builder<E> createTrackedData(CDataManager.Builder<E> builder) {
         return builder.addAll(TRAITS);
     }
 
-    private Random random = Random.create();
-
-    private final VillagerLike<?> entity;
-
-    public Traits(VillagerLike<?> entity) {
-        this.entity = entity;
-    }
-
     public Set<Trait> getTraits() {
-        return entity.getTrackedValue(TRAITS).getKeys().stream().map(Trait::valueOf).collect(Collectors.toSet());
+        Set<Trait> traits = new LinkedHashSet<>();
+        for (String id : entity.getTrackedValue(TRAITS).getKeys()) {
+            get(id).ifPresent(traits::add);
+        }
+        return traits;
     }
 
     public Set<Trait> getInheritedTraits() {
@@ -113,7 +90,7 @@ public class Traits {
     }
 
     public boolean hasTrait(VillagerLike<?> target, Trait trait) {
-        return target.getTrackedValue(TRAITS).contains(trait.id());
+        return trait != null && target.getTrackedValue(TRAITS).contains(trait.getId().toString());
     }
 
     public boolean hasTrait(Trait trait) {
@@ -121,10 +98,7 @@ public class Traits {
     }
 
     public boolean hasTrait(String trait) {
-        if (Trait.valueOf(trait) != null) {
-            return hasTrait(entity, Trait.valueOf(trait));
-        }
-        return false;
+        return get(trait).filter(this::hasTrait).isPresent();
     }
 
     public boolean eitherHaveTrait(Trait trait, VillagerLike<?> other) {
@@ -136,39 +110,45 @@ public class Traits {
     }
 
     public void addTrait(Trait trait) {
+        if (trait == null) {
+            return;
+        }
         NbtCompound traits = entity.getTrackedValue(TRAITS).copy();
-        traits.putBoolean(trait.id(), true);
+        traits.putBoolean(trait.getId().toString(), true);
         entity.setTrackedValue(TRAITS, traits);
         updateAttributes(trait);
     }
 
     public void removeTrait(Trait trait) {
+        if (trait == null) {
+            return;
+        }
         NbtCompound traits = entity.getTrackedValue(TRAITS).copy();
-        traits.remove(trait.id());
+        traits.remove(trait.getId().toString());
         entity.setTrackedValue(TRAITS, traits);
         updateAttributes(trait);
     }
 
     private void updateAttributes(Trait trait) {
-        if (trait == WEAK || trait == TOUGH) {
+        if (trait == ATHLETIC || trait == WEAK || trait == TOUGH) {
             entity.updateAttributes();
         }
     }
 
-    //initializes the genes with random numbers
     public void randomize() {
-        float total = (float) Trait.values().stream().mapToDouble(tr -> tr.chance).sum();
-        for (Trait t : Trait.values()) {
-            float chance = Config.getInstance().traitChance / total * t.chance;
-            if (random.nextFloat() < chance && t.isEnabled()) {
-                addTrait(t);
+        List<Trait> traits = all();
+        float total = (float) traits.stream().mapToDouble(trait -> trait.chance).sum();
+        for (Trait trait : traits) {
+            float chance = Config.getInstance().traitChance / total * trait.chance;
+            if (random.nextFloat() < chance && trait.isEnabled()) {
+                addTrait(trait);
             }
         }
     }
 
     public void inherit(Traits from) {
-        for (Trait t : from.getInheritedTraits()) {
-            addTrait(t);
+        for (Trait trait : from.getInheritedTraits()) {
+            addTrait(trait);
         }
     }
 
@@ -180,10 +160,45 @@ public class Traits {
     }
 
     public float getVerticalScaleFactor() {
-        return hasTrait(Traits.DWARFISM) ? 0.65f : 1.0f;
+        return hasTrait(DWARFISM) ? 0.65f : 1.0f;
     }
 
     public float getHorizontalScaleFactor() {
-        return (hasTrait(Traits.DWARFISM) ? 0.85f : 1.0f) * (hasTrait(Traits.TOUGH) ? 1.2f : 1.0f) * (hasTrait(Traits.WEAK) ? 0.85f : 1.0f);
+        return (hasTrait(DWARFISM) ? 0.85f : 1.0f) * (hasTrait(TOUGH) ? 1.2f : 1.0f) * (hasTrait(WEAK) ? 0.85f : 1.0f);
+    }
+
+    public static final class Trait {
+        private final Identifier id;
+        private final float chance;
+        private final float inherit;
+        private final boolean usableOnPlayer;
+
+        private Trait(Identifier id, float chance, float inherit, boolean usableOnPlayer) {
+            this.id = id;
+            this.chance = chance;
+            this.inherit = inherit;
+            this.usableOnPlayer = usableOnPlayer;
+        }
+
+        public Identifier getId() {
+            return id;
+        }
+
+        public Text getName() {
+            return Text.translatable("trait." + REGISTRY.translationSuffix(id));
+        }
+
+        public Text getDescription() {
+            return Text.translatable("traitDescription." + REGISTRY.translationSuffix(id));
+        }
+
+        public boolean isUsableOnPlayer() {
+            return usableOnPlayer;
+        }
+
+        public boolean isEnabled() {
+            Map<String, Boolean> enabledTraits = Config.getServerConfig().enabledTraits;
+            return enabledTraits.getOrDefault(id.toString(), true);
+        }
     }
 }
