@@ -113,7 +113,7 @@ public class Residency {
             Optional<Village> target = getHome()
                     .filter(home -> home.dimension() == entity.level().dimension())
                     .flatMap(home -> manager.findNearestVillage(home.pos(), Village.BORDER_MARGIN))
-                    .or(() -> current)
+                    .or(() -> current.filter(village -> village.isWithinBorder(entity)))
                     .or(() -> manager.findNearestVillage(entity));
 
             target.ifPresent(v -> {
