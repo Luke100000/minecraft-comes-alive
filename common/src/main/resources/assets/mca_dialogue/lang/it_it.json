@@ -179,7 +179,7 @@
   "teen.interaction.relationship.fail.isbaby/2": "Ma sei fuori di testa?!",
   "interaction.relationship.fail.marriedtogiver/1": "Sono già sposato/a con te, sciocchino/a.",
   "interaction.relationship.fail.marriedtogiver/2": "Siamo già sposati. Te lo sei dimenticato?",
-  "interaction.relationship.fail.marriedtogiver/3": "È un bell'anello, ma sono già sposato/a con te, stupido/a.",
+  "interaction.relationship.fail.marriedtogiver/3": "It's pretty, but I am already married to you, stupid.",
   "interaction.relationship.fail.marriedtogiver/4": "Sto avendo un deja vu...",
   "interaction.relationship.fail.marriedtogiver/5": "No ma mi è piaciuto molto la prima volta che l'hai fatto!",
   "interaction.relationship.fail.married/1": "Mi dispiace, ma... sono già sposato/a.",
@@ -1473,5 +1473,11 @@
   "dialogue.rock_paper_scissor.loose.scissor/1": "Il sasso schiaccia le forbici, ho vinto!",
   "dialogue.rock_paper_scissor.win.rock/1": "Ahh, il sasso schiaccia la forbice, ho perso.",
   "dialogue.rock_paper_scissor.win.paper/1": "Non riesco mai a vincere con il sasso.",
-  "dialogue.rock_paper_scissor.win.scissor/1": "Le forbici tagliano la carta, mi hai fregato questa volta."
+  "dialogue.rock_paper_scissor.win.scissor/1": "Le forbici tagliano la carta, mi hai fregato questa volta.",
+  "spouse.interaction.procreate.fail.infertile/1": "I can't have children...",
+  "spouse.interaction.procreate.fail.infertile/2": "I'm infertile, sweetie. We can't have kids.",
+  "spouse.interaction.procreate.fail.infertile/3": "You know I'm not able to have children.",
+  "interaction.procreate.fail.infertile/1": "I can't have children.",
+  "interaction.procreate.fail.infertile/2": "I'm infertile.",
+  "interaction.procreate.fail.infertile/3": "I cannot have children."
 }

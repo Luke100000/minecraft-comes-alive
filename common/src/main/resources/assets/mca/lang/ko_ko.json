@@ -516,5 +516,9 @@
   "notify.child.grownup": "%1$s has grown into an adult!",
   "notify.revival.disabled": "서버 관리자에 의해 부활이 비활성화되었습니다.",
   "notify.trading.disabled": "서버 관리자에 의해 거래가 비활성화되었습니다.",
-  "notify.playerMarriage.disabled": "Player marriage is disabled by the server administrator."
+  "notify.playerMarriage.disabled": "Player marriage is disabled by the server administrator.",
+  "traits.athletic": "운동선수",
+  "personality.upbeat": "익살맞음",
+  "traitDescription.athletic": "더 빨리 달림",
+  "personalityDescription.upbeat": "농담을 좋아함"
 }

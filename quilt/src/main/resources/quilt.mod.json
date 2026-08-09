@@ -4,6 +4,7 @@
     "mca.mixin.json",
     "mca.journeymap.mixin.json"
   ],
+  "access_widener": "mca.accesswidener",
   "quilt_loader": {
     "group": "${group}",
     "id": "mca",

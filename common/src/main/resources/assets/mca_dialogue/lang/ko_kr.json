@@ -179,7 +179,7 @@
   "teen.interaction.relationship.fail.isbaby/2": "그런 짓 하면 안돼요!",
   "interaction.relationship.fail.marriedtogiver/1": "나는 이미 너와 결혼했어, 바보야.",
   "interaction.relationship.fail.marriedtogiver/2": "우리 이미 결혼했잖아. 잊어버린 거야?",
-  "interaction.relationship.fail.marriedtogiver/3": "예쁜 반지지만, 난 이미 너랑 결혼했다고, 바보야.",
+  "interaction.relationship.fail.marriedtogiver/3": "It's pretty, but I am already married to you, stupid.",
   "interaction.relationship.fail.marriedtogiver/4": "데자뷰에 빠지는구만...",
   "interaction.relationship.fail.marriedtogiver/5": "그래도 네가 처음에 했을 때는 마음에 들었단다!",
   "interaction.relationship.fail.married/1": "안돼.. 미안해, 난 이미 결혼했어.",
@@ -1473,5 +1473,11 @@
   "dialogue.rock_paper_scissor.loose.scissor/1": "바위는 가위를 이기지, 내가 이겼다!",
   "dialogue.rock_paper_scissor.win.rock/1": "아, 바위는 가위를 이기지, 내가 졌다.",
   "dialogue.rock_paper_scissor.win.paper/1": "바위로 이길 수 있을 것 같지 않은데.",
-  "dialogue.rock_paper_scissor.win.scissor/1": "가위는 보를 이기지, 네가 날 잡았구나."
+  "dialogue.rock_paper_scissor.win.scissor/1": "가위는 보를 이기지, 네가 날 잡았구나.",
+  "spouse.interaction.procreate.fail.infertile/1": "I can't have children...",
+  "spouse.interaction.procreate.fail.infertile/2": "I'm infertile, sweetie. We can't have kids.",
+  "spouse.interaction.procreate.fail.infertile/3": "You know I'm not able to have children.",
+  "interaction.procreate.fail.infertile/1": "I can't have children.",
+  "interaction.procreate.fail.infertile/2": "I'm infertile.",
+  "interaction.procreate.fail.infertile/3": "I cannot have children."
 }

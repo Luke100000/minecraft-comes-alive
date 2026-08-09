@@ -179,7 +179,7 @@
   "teen.interaction.relationship.fail.isbaby/2": "Isso é inapropriado!",
   "interaction.relationship.fail.marriedtogiver/1": "Eu já sou casado(a) com você, bobinho(a).",
   "interaction.relationship.fail.marriedtogiver/2": "Nós já somos casados. Esqueceu?",
-  "interaction.relationship.fail.marriedtogiver/3": "É um anel bonito, mas eu já sou casado(a) com você, estúpido(a).",
+  "interaction.relationship.fail.marriedtogiver/3": "It's pretty, but I am already married to you, stupid.",
   "interaction.relationship.fail.marriedtogiver/4": "Estou tendo um déjà vu...",
   "interaction.relationship.fail.marriedtogiver/5": "Eu realmente gostei da forma como você fez da primeira vez!",
   "interaction.relationship.fail.married/1": "Desculpa, não... Eu já tenho um cônjuge.",
@@ -1473,5 +1473,11 @@
   "dialogue.rock_paper_scissor.loose.scissor/1": "Pedra esmaga tesoura, eu ganhei!",
   "dialogue.rock_paper_scissor.win.rock/1": "Ahh, pedra esmaga tesoura, eu perdi.",
   "dialogue.rock_paper_scissor.win.paper/1": "Parece que eu nunca ganho com pedra.",
-  "dialogue.rock_paper_scissor.win.scissor/1": "Tesoura corta papel, você me pegou desta vez."
+  "dialogue.rock_paper_scissor.win.scissor/1": "Tesoura corta papel, você me pegou desta vez.",
+  "spouse.interaction.procreate.fail.infertile/1": "I can't have children...",
+  "spouse.interaction.procreate.fail.infertile/2": "I'm infertile, sweetie. We can't have kids.",
+  "spouse.interaction.procreate.fail.infertile/3": "You know I'm not able to have children.",
+  "interaction.procreate.fail.infertile/1": "I can't have children.",
+  "interaction.procreate.fail.infertile/2": "I'm infertile.",
+  "interaction.procreate.fail.infertile/3": "I cannot have children."
 }

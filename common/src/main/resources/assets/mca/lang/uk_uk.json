@@ -516,5 +516,9 @@
   "notify.child.grownup": "%1$s став дорослим!",
   "notify.revival.disabled": "Відродження було відключено адміністратором сервера.",
   "notify.trading.disabled": "Торгівля відключена адміністратором сервера.",
-  "notify.playerMarriage.disabled": "Шлюб гравця вимкнено адміністратором сервера."
+  "notify.playerMarriage.disabled": "Шлюб гравця вимкнено адміністратором сервера.",
+  "traits.athletic": "Атлетичний",
+  "personality.upbeat": "Дотепний",
+  "traitDescription.athletic": "Бігти швидше",
+  "personalityDescription.upbeat": "Любить жарти"
 }

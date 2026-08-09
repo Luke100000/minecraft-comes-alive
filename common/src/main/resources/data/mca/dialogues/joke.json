@@ -9,7 +9,7 @@
           "conditions": [
             {
               "chance": 5,
-              "personality": "witty"
+              "personality": "upbeat"
             },
             {
               "chance": 1,
@@ -43,7 +43,7 @@
           "conditions": [
             {
               "chance": 5,
-              "personality": "grumpy"
+              "personality": "crabby"
             }
           ],
           "actions": {
@@ -61,7 +61,7 @@
           "conditions": [
             {
               "chance": 5,
-              "personality": "witty"
+              "personality": "upbeat"
             },
             {
               "chance": 1,
@@ -95,7 +95,7 @@
           "conditions": [
             {
               "chance": 5,
-              "personality": "grumpy"
+              "personality": "crabby"
             }
           ],
           "actions": {
@@ -113,7 +113,7 @@
           "conditions": [
             {
               "chance": 5,
-              "personality": "witty"
+              "personality": "upbeat"
             },
             {
               "chance": 4,
@@ -151,7 +151,7 @@
           "conditions": [
             {
               "chance": 5,
-              "personality": "grumpy"
+              "personality": "crabby"
             }
           ],
           "actions": {

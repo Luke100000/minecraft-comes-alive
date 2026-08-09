@@ -516,5 +516,9 @@
   "notify.child.grownup": "%1$s has grown into an adult!",
   "notify.revival.disabled": "Revivals have been disabled by the server administrator.",
   "notify.trading.disabled": "Trading is disabled by the server administrator.",
-  "notify.playerMarriage.disabled": "Player marriage is disabled by the server administrator."
+  "notify.playerMarriage.disabled": "Player marriage is disabled by the server administrator.",
+  "traits.athletic": "Atletický",
+  "personality.upbeat": "Vtipný",
+  "traitDescription.athletic": "Běží rychleji",
+  "personalityDescription.upbeat": "Má rád vtipy"
 }

@@ -516,5 +516,9 @@
   "notify.child.grownup": "Ο/Η %1$s έχει μεγαλώσει σε ενήλικα!",
   "notify.revival.disabled": "Οι αναβιώσεις έχουν απενεργοποιηθεί από το διαχειριστή του διακομιστή.",
   "notify.trading.disabled": "Οι συναλλαγές είναι απενεργοποιημένες από το διαχειριστή του διακομιστή.",
-  "notify.playerMarriage.disabled": "Player marriage is disabled by the server administrator."
+  "notify.playerMarriage.disabled": "Player marriage is disabled by the server administrator.",
+  "traits.athletic": "Αθλητικός",
+  "personality.upbeat": "Εξυπνάκιας",
+  "traitDescription.athletic": "Τρέχει πιο γρήγορα",
+  "personalityDescription.upbeat": "Απολαμβάνει Αστεία"
 }

@@ -179,7 +179,7 @@
   "teen.interaction.relationship.fail.isbaby/2": "To nieodpowiednie!",
   "interaction.relationship.fail.marriedtogiver/1": "Jesteśmy już małżeństwem, głuptasie.",
   "interaction.relationship.fail.marriedtogiver/2": "Jesteśmy już parą. Chyba nie zapomniało Ci się?",
-  "interaction.relationship.fail.marriedtogiver/3": "To ładny pierścionek, ale ja już jestem twoją żoną, głuptasie.",
+  "interaction.relationship.fail.marriedtogiver/3": "It's pretty, but I am already married to you, stupid.",
   "interaction.relationship.fail.marriedtogiver/4": "Mam deja vu...",
   "interaction.relationship.fail.marriedtogiver/5": "Bardzo podoba mi się sposób, w jaki zrobiłeś to za pierwszym razem!",
   "interaction.relationship.fail.married/1": "Wybacz.... Już mam kogoś.",
@@ -1473,5 +1473,11 @@
   "dialogue.rock_paper_scissor.loose.scissor/1": "Kamień miażdży nożyce, wygrywam!",
   "dialogue.rock_paper_scissor.win.rock/1": "Ahh, kamień miażdży nożyce, przegrałem.",
   "dialogue.rock_paper_scissor.win.paper/1": "Nigdy nie udaje mi się wygrać z kamieniem.",
-  "dialogue.rock_paper_scissor.win.scissor/1": "Nożyczki tną papier, tym razem mnie masz."
+  "dialogue.rock_paper_scissor.win.scissor/1": "Nożyczki tną papier, tym razem mnie masz.",
+  "spouse.interaction.procreate.fail.infertile/1": "I can't have children...",
+  "spouse.interaction.procreate.fail.infertile/2": "I'm infertile, sweetie. We can't have kids.",
+  "spouse.interaction.procreate.fail.infertile/3": "You know I'm not able to have children.",
+  "interaction.procreate.fail.infertile/1": "I can't have children.",
+  "interaction.procreate.fail.infertile/2": "I'm infertile.",
+  "interaction.procreate.fail.infertile/3": "I cannot have children."
 }

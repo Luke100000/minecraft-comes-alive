@@ -179,7 +179,7 @@
   "teen.interaction.relationship.fail.isbaby/2": "มันไม่เหมาะสม",
   "interaction.relationship.fail.marriedtogiver/1": "ฉันแต่งงานกับคุณไปแล้วไง, คนโง่",
   "interaction.relationship.fail.marriedtogiver/2": "เราแต่งงานกันไปแล้ว คุณลืมหรอ?",
-  "interaction.relationship.fail.marriedtogiver/3": "It's a pretty ring, but I am already married to you, stupid.",
+  "interaction.relationship.fail.marriedtogiver/3": "It's pretty, but I am already married to you, stupid.",
   "interaction.relationship.fail.marriedtogiver/4": "I'm getting deja vu...",
   "interaction.relationship.fail.marriedtogiver/5": "I really like the way you did it the first time though!",
   "interaction.relationship.fail.married/1": "ฉันเสียใจด้วยนะ แต่ว่าฉันแต่งงานไปแล้ว",
@@ -1473,5 +1473,11 @@
   "dialogue.rock_paper_scissor.loose.scissor/1": "Rock crushes scissors, I win!",
   "dialogue.rock_paper_scissor.win.rock/1": "Ahh, rock crushes scissor, I lost.",
   "dialogue.rock_paper_scissor.win.paper/1": "I can never seem to win with rock.",
-  "dialogue.rock_paper_scissor.win.scissor/1": "Scissors cut paper, you got me this time."
+  "dialogue.rock_paper_scissor.win.scissor/1": "Scissors cut paper, you got me this time.",
+  "spouse.interaction.procreate.fail.infertile/1": "I can't have children...",
+  "spouse.interaction.procreate.fail.infertile/2": "I'm infertile, sweetie. We can't have kids.",
+  "spouse.interaction.procreate.fail.infertile/3": "You know I'm not able to have children.",
+  "interaction.procreate.fail.infertile/1": "I can't have children.",
+  "interaction.procreate.fail.infertile/2": "I'm infertile.",
+  "interaction.procreate.fail.infertile/3": "I cannot have children."
 }
