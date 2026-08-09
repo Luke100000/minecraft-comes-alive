@@ -19,6 +19,10 @@ architectury {
     loader("quilt")
 }
 
+loom {
+    accessWidenerPath = project(':common').loom.accessWidenerPath
+}
+
 configurations {
     common {
         canBeResolved = true
@@ -40,6 +44,7 @@ def shadowJarTask = tasks.named('shadowJar')
 dependencies {
     modImplementation "org.quiltmc:quilt-loader:${quiltLoaderVersion}"
     modImplementation "org.quiltmc.quilted-fabric-api:quilted-fabric-api:${quiltedFabricApiVersion}"
+    include(implementation(annotationProcessor("io.github.llamalad7:mixinextras-fabric:${mixin_extras_version}")))
     modImplementation("dev.architectury:architectury-fabric:${architecturyVersion}") {
         exclude group: 'net.fabricmc'
         exclude group: 'net.fabricmc.fabric-api'

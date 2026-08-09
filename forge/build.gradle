@@ -15,8 +15,11 @@ architectury {
 }
 
 loom {
+    accessWidenerPath = project(':common').loom.accessWidenerPath
+
     forge {
         mixinConfig "mca.mixin.json"
+        convertAccessWideners = true
     }
 }
 
@@ -36,6 +39,10 @@ def commonMainSources = project(':common').sourceSets.main.allSource
 dependencies {
     forge "net.minecraftforge:forge:${forgeVersion}"
     modApi "dev.architectury:architectury-forge:${architecturyVersion}"
+
+    // Forge 47 does not bundle MixinExtras. Jar it into the Forge artifact so
+    // common mixins can safely use the same 0.5.4 API as the 1.21.1 branch.
+    implementation(include("io.github.llamalad7:mixinextras-forge:${mixin_extras_version}"))
 
     common(project(path: ':common', configuration: 'namedElements')) { transitive = false }
     shadowCommon project(path: ':common', configuration: 'transformProductionForge')

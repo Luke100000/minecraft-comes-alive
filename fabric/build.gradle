@@ -16,6 +16,8 @@ architectury {
 }
 
 loom {
+    accessWidenerPath = project(':common').loom.accessWidenerPath
+
     runs {
         client {
             programArgs "--username", devUsername
@@ -72,6 +74,12 @@ dependencies {
 
 tasks.named('processResources') {
     inputs.property 'version', projectVersion
+
+    // Fabric's dev runtime loads fabric.mod.json from this project's resource
+    // directory, so the shared descriptors it references must live in the same
+    // mod root. The production shadow jar already includes these common
+    // resources; this keeps development runs consistent with the packaged jar.
+    from project(':common').sourceSets.main.resources
 
     filesMatching('fabric.mod.json') {
         expand version: projectVersion

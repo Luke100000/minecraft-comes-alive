@@ -9,6 +9,10 @@ architectury {
   common enabledPlatforms.split(',')
 }
 
+loom {
+  accessWidenerPath = file("src/main/resources/mca.accesswidener")
+}
+
 dependencies {
   // We depend on Fabric Loader here to use the Fabric @Environment annotations,
   // which get remapped to the correct annotations on each platform.
@@ -17,6 +21,9 @@ dependencies {
 
   // Architectury API. This is optional, and you can comment it out if you don't need it.
   modImplementation "dev.architectury:architectury:${architecturyVersion}"
+
+  // Loader modules provide the runtime; common only needs the API and annotation processor.
+  compileOnly(annotationProcessor("io.github.llamalad7:mixinextras-common:${mixin_extras_version}"))
 }
 
 publishing {
