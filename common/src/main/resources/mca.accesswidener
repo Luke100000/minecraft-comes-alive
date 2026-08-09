@@ -1,0 +1,18 @@
+accessWidener v2 named
+
+# Registry constructors that are not public in vanilla 1.20.1.
+accessible method net/minecraft/particle/DefaultParticleType <init> (Z)V
+accessible method net/minecraft/entity/ai/brain/sensor/SensorType <init> (Ljava/util/function/Supplier;)V
+accessible method net/minecraft/entity/ai/brain/Activity <init> (Ljava/lang/String;)V
+
+# Reuse Villager's vanilla interaction behavior instead of copied methods or invoker mixins.
+accessible method net/minecraft/entity/passive/VillagerEntity sayNo ()V
+accessible method net/minecraft/entity/passive/VillagerEntity beginTradeWith (Lnet/minecraft/entity/player/PlayerEntity;)V
+
+# Reuse CrossbowAttackTask's vanilla state machine while replacing exact-item hand selection.
+extendable method net/minecraft/entity/ai/brain/task/CrossbowAttackTask tickState (Lnet/minecraft/entity/mob/MobEntity;Lnet/minecraft/entity/LivingEntity;)V
+accessible field net/minecraft/entity/ai/brain/task/CrossbowAttackTask state Lnet/minecraft/entity/ai/brain/task/CrossbowAttackTask$CrossbowState;
+accessible class net/minecraft/entity/ai/brain/task/CrossbowAttackTask$CrossbowState
+
+# Use the same support-position helper as modern vanilla follow/pathing code.
+accessible method net/minecraft/entity/Entity getVelocityAffectingPos ()Lnet/minecraft/util/math/BlockPos;

@@ -4,6 +4,9 @@ A collection of Pythons scripts to automate or generate stuff.
 
 Install requirements in `requirements.txt`.
 
+Run `./all.sh` from this directory to update supporters, fill missing Pirate
+translations, and regenerate skins.
+
 ## Name Conversion
 
 Convert a name database to a fancy Json list.
@@ -21,14 +24,9 @@ It has been deprecated in favor of the [online TTS](https://github.com/Luke10000
 
 ## Fetch Contributors
 
-Update Patrons and Crowdin translators.
-
-## Lang Pre-Generation
-
-Used to create a basis for the personality specific dialogues.
-Mostly dead code by now.
+Update patrons and translators from the public Conczin API.
 
 ## Pirate Translator
 
-Used to automatically translate into Pirate Speak, using [Pirate Monkeyness](https://pirate.monkeyness.com/).
-Cool stuff.
+Fill missing entries in the `en_pt.json` locale files using [Pirate Monkeyness](https://pirate.monkeyness.com/).
+Existing translations are preserved, and unchanged files are not rewritten.
