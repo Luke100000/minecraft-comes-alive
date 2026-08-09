@@ -3,7 +3,6 @@
 * Recommended to ***__backup__*** your world.
 * This release won't be backwards compatible with 7.7.32 and below due to internal changes with how traits and personalities are saved
 * This release works with 26.1.2/26.2 - >=8.1.7
-
 * Improve mod compatibility
 * Improve villager migration behaviour
 * Fix bugs
