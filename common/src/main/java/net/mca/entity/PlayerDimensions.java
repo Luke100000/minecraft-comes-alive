@@ -22,6 +22,8 @@ import java.util.UUID;
  * Resolves MCA genetics into player hitbox scale on both logical sides.
  */
 public final class PlayerDimensions {
+    private static final Scale VANILLA_SCALE = new Scale(1.0F, 1.0F);
+
     private PlayerDimensions() {
     }
 
@@ -43,6 +45,9 @@ public final class PlayerDimensions {
     }
 
     public static Scale fromVillager(VillagerLike<?> villager) {
+        if (villager.getPlayerModel() == VillagerLike.PlayerModel.VANILLA) {
+            return VANILLA_SCALE;
+        }
         return new Scale(villager.getRawHorizontalScaleFactor(), villager.getRawVerticalScaleFactor());
     }
 
@@ -62,6 +67,9 @@ public final class PlayerDimensions {
         NbtCompound mcaData = entityData.contains(VillagerEntityMCA.MCA_DATA_KEY, 10)
                 ? entityData.getCompound(VillagerEntityMCA.MCA_DATA_KEY)
                 : entityData;
+        if (getPlayerModel(entityData, mcaData) == VillagerLike.PlayerModel.VANILLA) {
+            return VANILLA_SCALE;
+        }
         NbtCompound traits = mcaData.contains("Traits", 10) ? mcaData.getCompound("Traits") : new NbtCompound();
         AgeScale age = getAgeScale(entityData);
         Gender gender = Genetics.readGender(mcaData);
@@ -79,6 +87,14 @@ public final class PlayerDimensions {
                 * gender.getScaleFactor();
 
         return new Scale(width, height);
+    }
+
+    private static VillagerLike.PlayerModel getPlayerModel(NbtCompound entityData, NbtCompound mcaData) {
+        NbtCompound modelData = mcaData.contains("PlayerModel") || mcaData.contains("playerModel")
+                ? mcaData
+                : entityData;
+        int id = modelData.contains("PlayerModel") ? modelData.getInt("PlayerModel") : modelData.getInt("playerModel");
+        return VillagerLike.PlayerModel.byId(id);
     }
 
     public static void debugAppliedScale(PlayerEntity player, EntityDimensions vanilla, EntityDimensions scaled, Scale scale) {

@@ -15,6 +15,6 @@ public abstract class MixinZombieEntity {
             constant = @Constant(classValue = VillagerEntity.class, ordinal = 0)
     )
     private boolean mca$excludeMcaVillagersFromVanillaConversion(Object entity, Operation<Boolean> original) {
-        return original.call(entity) && !(entity instanceof VillagerEntityMCA);
+        return !(entity instanceof VillagerEntityMCA) && original.call(entity);
     }
 }

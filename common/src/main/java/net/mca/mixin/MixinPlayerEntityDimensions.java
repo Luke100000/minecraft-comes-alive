@@ -35,11 +35,11 @@ abstract class MixinPlayerEntityDimensions {
             at = @At("RETURN")
     )
     private float mca$scalePlayerEyeHeightWithHitbox(float original, EntityPose pose, EntityDimensions dimensions) {
-        if (pose == EntityPose.SLEEPING) {
+        PlayerEntity player = (PlayerEntity) (Object) this;
+        if (player.getPose() == EntityPose.SLEEPING || pose == EntityPose.SLEEPING) {
             return original;
         }
 
-        PlayerEntity player = (PlayerEntity) (Object) this;
         return PlayerDimensions.getScale(player)
                 .map(scale -> original * scale.height())
                 .orElse(original);

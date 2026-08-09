@@ -11,17 +11,33 @@ import org.spongepowered.asm.mixin.injection.At;
 
 @Mixin(Entity.class)
 public abstract class MixinEntity {
-    @ModifyReturnValue(method = "getEyeHeight()F", at = @At("RETURN"))
-    private float mca$scalePlayerEyeHeight(float original) {
+    @ModifyReturnValue(method = "getStandingEyeHeight()F", at = @At("RETURN"))
+    private float mca$scalePlayerStandingEyeHeight(float original) {
+        return original * mca$getPlayerEyeHeightScale();
+    }
+
+    @ModifyReturnValue(method = "getEyeY()D", at = @At("RETURN"))
+    private double mca$scalePlayerEyeY(double original) {
+        float scale = mca$getPlayerEyeHeightScale();
+        if (scale == 1.0F) {
+            return original;
+        }
+
+        PlayerEntity player = (PlayerEntity) (Object) this;
+        double baseY = player.getY();
+        return baseY + (original - baseY) * scale;
+    }
+
+    private float mca$getPlayerEyeHeightScale() {
         if (!((Object) this instanceof PlayerEntity player)
                 || player.getPose() == EntityPose.SLEEPING
                 || !Config.getInstance().scaleEyeHeightWithPlayerHeight
                 || Config.getServerConfig().scalePlayerHitboxWithSizeAndWidth) {
-            return original;
+            return 1.0F;
         }
 
         return MCAClient.getGeneticsPlayerData(player.getUuid())
-                .map(data -> original * data.getRawVerticalScaleFactor())
-                .orElse(original);
+                .map(data -> data.getRawVerticalScaleFactor())
+                .orElse(1.0F);
     }
 }
