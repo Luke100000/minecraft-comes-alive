@@ -1,17 +1,28 @@
-# 7.7.35
-
-* Improve mob compatibility
-* Improve villager migration behaviour
-
+# 7.7.35-beta.3
 ## **IMPORTANT**
 * Recommended to ***__backup__*** your world.
 * This release won't be backwards compatible with 7.7.32 and below due to internal changes with how traits and personalities are saved
 * This release works with 26.1.2/26.2 - >=8.1.7
+* Improve mod compatibility
+* Improve villager migration behaviour
+* Fix bugs
+
+# 7.7.34-beta.3
 
 * Fixed villagers being stuck and not able to move
-  * sleeping should be more reliable 
+  * sleeping should be more reliable
+
+# 7.7.33-beta.3
+
+* For a full changelog, look at 7.7.31-beta.1
+* Fixed auto scan.
 
 # 7.7.33
+
+**IMPORTANT**
+* Recommended to ***__backup__*** your world.
+* This release won't be backwards compatible with previous MCA versions due to internal changes with how traits and personalities are saved
+* This release won't work with 26.1.2 or 26.2 until version 8.1.7 is released.
 
 * Improved backend code for compatibility with other mods
 * Added nicknames to /mca chatAI context menu so you can have roleplay names (thanks tranthienlong675!)
@@ -31,10 +42,34 @@
 * Fixed villagers being stuck in doors
 * Fixed villagers getting stuck on their way to a bed
 
+# 7.7.32-beta.2
+
+* Generic mprovements to floor system, should be more reliable
+* Change tooltip formatting
+* Improved Ground Floor detection
+* Fixed wrong building labelling
+
 # 7.7.32
 
 * Fixed Graveyard data loss issue
 * Fixed bug.
+
+# 7.7.31-beta.1
+
+* Completely reworked MCA's building system to better support multi-floor and irregular buildings.
+* Buildings can now have multiple floors and basements.
+* Rooms inside the same building are now detected separately, allowing different room types throughout one building.
+* Added a **Main Room** system, allowing other rooms in the same building to share building types (such as multi-floor inns).
+* Improved building scanning for stairs, ladders, trapdoors, doors, fence gates, furniture, and unusual layouts.
+* Buildings can now be expanded with additional floors, basements, and connected sections.
+* Reworked the **Blueprint Map**.
+
+  * Rooms and buildings now show their actual shape instead of simple rectangles.
+  * Added better floor handling, highlighting, icons, and tooltips.
+* Existing MCA 1.21.1 buildings are automatically migrated to the new system.
+* Improved building rescanning and editing so room and floor changes are preserved more reliably.
+* Lots of fixes and internal improvements to building detection.
+* Please report any issues on the GitHub Issues page or Discord, and remember that backing up your world is always recommended for beta versions.
 
 # 7.7.31
 

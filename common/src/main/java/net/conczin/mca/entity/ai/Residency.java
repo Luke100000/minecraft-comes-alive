@@ -197,10 +197,6 @@ public class Residency {
             return;
         }
 
-        // also trigger a building refresh, because why not
-        VillageManager manager = VillageManager.get((ServerLevel) player.level());
-        manager.processBuilding(player.blockPosition(), true, false);
-
         seekHome();
 
         ServerLevel level = (ServerLevel) player.level();
