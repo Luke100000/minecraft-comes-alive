@@ -1,3 +1,92 @@
+# 7.7.0-alpha.1
+
+## **IMPORTANT**
+
+* BACKUP YOUR WORLD.
+* Don't use your old world with this build, make a new world or use a copy.
+* This isn't backwards compatible with older 1.20.1 MCA builds, traits/personalities and a lot of MCA saved data got moved to the newer 1.21.1 format.
+  * In theory this should make it more stable to upgrade worlds to 1.21.1 
+
+## ChatAI
+
+* Added `/mca chatAI context`
+  * Lets you add context for the Villager, Player, Village and World.
+  * Villagers can also have nicknames now, mainly useful for roleplay names.
+  * Villagers get randomly generated backgrounds if they don't already have one.
+  * Context saves when changing tabs/closing the screen.
+  * Max context is 4096 characters.
+  * Permission level is 3 by default, configurable with `villagerChatAIContextPermissionLevel`.
+* Improved what ChatAI knows about villagers, players, villages, relationships, traits and personalities.
+
+## Traits / Personalities
+
+* Major trait/personality changes from 1.21.1.
+* Some old personalities got moved/changed to match 1.21.1:
+  * Athletic -> Trait
+  * Witty -> Upbeat
+  * Shy -> Introverted
+  * Lazy -> Relaxed
+  * Grumpy -> Crabby
+* They're automatically migrated
+* 
+[DEV NOTES]
+
+* Personalities aren't hardcoded enums anymore, traits/personalities now use namespaced ids.
+  * Example: `mca:friendly`, `mca:heterochromia` etc.
+  * This should make addon support way easier.
+
+
+## Villagers
+
+* Improved Villager <-> Zombie Villager conversion.
+  * MCA data should transfer way more reliably when infecting/curing villagers.
+  * ChatAI context + nicknames are kept too.
+* Fixed children you're carrying disappearing after disconnecting.
+* Improved saving/syncing for family, pregnancy, relationships, residency and genetics.
+* General entity data/networking improvements.
+
+## Pathfinding / Movement
+
+* Villagers can now climb ladders.
+* Backported a lot of the newer villager movement code.
+* Improved pathfinding around doors, beds, ladders, water and weird collision blocks like lanterns.
+* Fixed villagers getting stuck in doors.
+* Fixed villagers getting stuck trying to get to beds.
+* Reduced some unnecessary pathfinding work.
+* Sleeping should be more reliable.
+* Improved villager/mount movement handling.
+
+## Guards / Archers
+
+* Improved Archer AI quite a bit.
+* Modded bows/crossbows are now supported.
+  * Some may still not work if the modded weapon is coded specifically for players.
+* Improved ranged weapon handling.
+* Archers shouldn't glitch out anymore if their target disappears, dies or goes out of range.
+* Improved guard enemy scanning and combat logic.
+* Improved arrow/projectile handling.
+
+## Destiny
+
+* Improved modded Destiny locations.
+* Added pages if you have too many locations instead of the buttons going everywhere.
+* Modded locations have fallback names if they're missing translations.
+* Hovering modded locations can show what mod they're from.
+* Improved story location fallbacks too.
+
+## Config / Other
+
+* Fixed eye height issues.
+* Improved Library screen should be a lot more faster at loading content.
+* Renamed `villagerPathfindingBlacklist` -> `unSafeBlocksToTeleportOn` to match 1.21.1.
+  * Old config key gets migrated automatically.
+* Synced newer ChatAI/player/villager config.
+* Reworked a bunch of old mixins/registrations to match the newer code, should improve mod compatibility too.
+* Added MixinExtras used by some of the newer backported code.
+* Updated translations/dialogues.
+* Updated supporters/translators.
+* Cleaned up code.
+
 # 7.6.28-beta.10
 
 * Fix villagers being positioned wrong on horses/boats.
