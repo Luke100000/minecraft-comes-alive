@@ -1,7 +1,7 @@
 package net.mca.entity.ai.brain.tasks;
 
 import com.google.common.collect.ImmutableMap;
-import dev.architectury.platform.Platform;
+import net.mca.MCA;
 import net.mca.MCA;
 import net.mca.entity.ai.ArcherMoveControl;
 import net.mca.entity.ai.RangedWeaponHelper;
@@ -135,7 +135,7 @@ public class BowTask<E extends Mob & CrossbowAttackMob> extends Behavior<E> {
     }
 
     private void logAction(E entity, LivingEntity target, boolean visible, double distanceSquared, String action, String reason) {
-        if (!Platform.isDevelopmentEnvironment()) {
+        if (!MCA.platformHelper.isDevelopmentEnvironment()) {
             return;
         }
 

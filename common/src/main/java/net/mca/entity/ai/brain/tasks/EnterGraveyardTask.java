@@ -1,6 +1,6 @@
 package net.mca.entity.ai.brain.tasks;
 
-import dev.architectury.platform.Platform;
+import net.mca.MCA;
 import net.mca.TagsMCA;
 import net.mca.MCA;
 import net.mca.block.TombstoneBlock;
@@ -47,14 +47,14 @@ public class EnterGraveyardTask extends EnterBuildingTask {
     @Override
     protected Optional<BlockPos> getNextPosition(VillagerEntityMCA villager) {
         Optional<MourningTarget> target = findTarget(villager);
-        if (target.isEmpty() && Platform.isDevelopmentEnvironment()) {
+        if (target.isEmpty() && MCA.platformHelper.isDevelopmentEnvironment()) {
             MCA.LOGGER.info("[MOURNING_TRACE_V3] no-target villager={} position={} rememberedGrave={}",
                     villager.getName().getString(),
                     villager.blockPosition(),
                     villager.getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_SITE.get()).orElse(null));
         }
         return target.map(result -> {
-            if (Platform.isDevelopmentEnvironment()) {
+            if (MCA.platformHelper.isDevelopmentEnvironment()) {
                 MCA.LOGGER.info("[MOURNING_TRACE_V3] target villager={} from={} grave={} stand={}",
                         villager.getName().getString(),
                         villager.blockPosition(),

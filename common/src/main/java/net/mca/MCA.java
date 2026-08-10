@@ -1,9 +1,10 @@
 package net.mca;
 
-import dev.architectury.platform.Mod;
-import dev.architectury.platform.Platform;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -16,11 +17,10 @@ import java.util.concurrent.Executors;
 public final class MCA {
     public static final String MOD_ID = "mca";
     public static final Logger LOGGER = LogManager.getLogger();
-    private static final Map<String, Boolean> MOD_CACHE = new HashMap<>();
-
     public static final ExecutorService executorService = Executors.newSingleThreadExecutor();
     public static Map<String, String> translations = new HashMap<>();
     public static String language;
+    public static PlatformHelper platformHelper = new PlatformHelper();
 
     private static MinecraftServer server;
 
@@ -33,16 +33,7 @@ public final class MCA {
     }
 
     public static boolean doesModExist(String modId) {
-        if (!MOD_CACHE.containsKey(modId)) {
-            Optional<Mod> modData;
-            try {
-                modData = Optional.of(Platform.getMod(modId));
-            } catch (Exception ignored) {
-                modData = Optional.empty();
-            }
-            MOD_CACHE.put(modId, modData.isPresent());
-        }
-        return MOD_CACHE.get(modId);
+        return platformHelper.isModLoaded(modId);
     }
 
     public static void setServer(MinecraftServer server) {
@@ -51,5 +42,13 @@ public final class MCA {
 
     public static Optional<MinecraftServer> getServer() {
         return Optional.ofNullable(server);
+    }
+
+    public interface RegisterHelper<T> {
+        void register(ResourceLocation name, T value);
+    }
+
+    public interface AttributeRegisterHelper {
+        void register(EntityType<? extends LivingEntity> entity, AttributeSupplier.Builder attributes);
     }
 }

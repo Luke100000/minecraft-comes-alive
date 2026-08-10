@@ -1,7 +1,7 @@
 package net.mca.entity.ai.brain.tasks;
 
 import com.google.common.collect.ImmutableMap;
-import dev.architectury.platform.Platform;
+import net.mca.MCA;
 import net.mca.MCA;
 import net.mca.entity.ai.ArcherMoveControl;
 import net.mca.entity.ai.RangedWeaponHelper;
@@ -138,7 +138,7 @@ public class ArcherMovementTask<E extends PathfinderMob> extends Behavior<E> {
             }
         }
 
-        if (Platform.isDevelopmentEnvironment()) {
+        if (MCA.platformHelper.isDevelopmentEnvironment()) {
             logDebugState(world, entity, target, movementThreat, visible, targetDistanceSquared, threatDistanceSquared, threatVerticalDistance);
         }
     }

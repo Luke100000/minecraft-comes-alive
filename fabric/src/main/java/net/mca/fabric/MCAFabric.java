@@ -4,14 +4,19 @@ import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
+import net.fabricmc.fabric.api.object.builder.v1.entity.FabricDefaultAttributeRegistry;
 import net.fabricmc.fabric.api.resource.ResourceManagerHelper;
 import net.mca.MCA;
 import net.mca.ParticleTypesMCA;
+import net.mca.ProfessionsMCA;
 import net.mca.SoundsMCA;
 import net.mca.TradeOffersMCA;
 import net.mca.advancement.criterion.CriterionMCA;
+import net.mca.block.BlockEntityTypesMCA;
 import net.mca.block.BlocksMCA;
 import net.mca.entity.EntitiesMCA;
+import net.mca.entity.ai.ActivityMCA;
+import net.mca.entity.ai.MemoryModuleTypeMCA;
 import net.mca.fabric.cobalt.network.NetworkHandlerImpl;
 import net.mca.fabric.resources.*;
 import net.mca.item.ItemsMCA;
@@ -20,17 +25,40 @@ import net.mca.server.ServerInteractionManager;
 import net.mca.server.command.AdminCommand;
 import net.mca.server.command.Command;
 import net.mca.server.world.data.VillageManager;
+import net.minecraft.core.Registry;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.packs.PackType;
 
+import java.util.function.Consumer;
+
 public final class MCAFabric implements ModInitializer {
+    static {
+        MCA.platformHelper = new FabricPlatformHelper();
+    }
+
+    private static <T> void registerHelper(Registry<T> registry, Consumer<MCA.RegisterHelper<T>> consumer) {
+        consumer.accept((name, value) -> Registry.register(registry, name, value));
+    }
+
     @Override
     public void onInitialize() {
         new NetworkHandlerImpl();
 
+        registerHelper(BuiltInRegistries.BLOCK, BlocksMCA::registerBlocks);
+        registerHelper(BuiltInRegistries.BLOCK_ENTITY_TYPE, BlockEntityTypesMCA::registerBlockEntityTypes);
+        registerHelper(BuiltInRegistries.ENTITY_TYPE, EntitiesMCA::registerEntities);
+        registerHelper(BuiltInRegistries.SOUND_EVENT, SoundsMCA::registerSounds);
+        registerHelper(BuiltInRegistries.PARTICLE_TYPE, ParticleTypesMCA::registerParticles);
+        registerHelper(BuiltInRegistries.SENSOR_TYPE, ActivityMCA::registerSensors);
+        registerHelper(BuiltInRegistries.ACTIVITY, ActivityMCA::registerActivities);
+        registerHelper(BuiltInRegistries.MEMORY_MODULE_TYPE, MemoryModuleTypeMCA::registerTypes);
+        registerHelper(BuiltInRegistries.VILLAGER_PROFESSION, ProfessionsMCA::registerProfessions);
+        registerHelper(BuiltInRegistries.ITEM, ItemsMCA::registerItems);
+        registerHelper(BuiltInRegistries.CREATIVE_MODE_TAB, ItemsMCA::registerCreativeModeTab);
+        EntitiesMCA.registerAttributes(FabricDefaultAttributeRegistry::register);
+
         BlocksMCA.bootstrap();
         ItemsMCA.bootstrap();
-        SoundsMCA.bootstrap();
-        ParticleTypesMCA.bootstrap();
         EntitiesMCA.bootstrap();
         MessagesMCA.bootstrap();
         CriterionMCA.bootstrap();

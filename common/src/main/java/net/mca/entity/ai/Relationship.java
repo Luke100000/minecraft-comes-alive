@@ -3,7 +3,7 @@ package net.mca.entity.ai;
 import net.mca.Config;
 import net.mca.MCA;
 import net.mca.TagsMCA;
-import dev.architectury.platform.Platform;
+import net.mca.MCA;
 import net.mca.block.BlocksMCA;
 import net.mca.block.TombstoneBlock;
 import net.mca.entity.Status;
@@ -205,7 +205,7 @@ public class Relationship<T extends Mob & VillagerLike<T>> implements EntityRela
             entity.getVillagerBrain().setGrieving();
             entity.getBrain().setMemory(MemoryModuleTypeMCA.MOURNING_SITE.get(), burialSite);
             entity.getBrain().eraseMemory(MemoryModuleTypeMCA.MOURNING_POSITION.get());
-            if (Platform.isDevelopmentEnvironment()) {
+            if (MCA.platformHelper.isDevelopmentEnvironment()) {
                 MCA.LOGGER.info("[MOURNING_TRACE_V3] assignment villager={} type={} grave={} position={}", entity.getName().getString(), type, burialSite, entity.blockPosition());
             }
             entity.getBrain().eraseMemory(MemoryModuleType.PATH);

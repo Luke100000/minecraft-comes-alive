@@ -1,7 +1,7 @@
 package net.mca.entity.ai.brain.tasks;
 
 import com.google.common.collect.ImmutableMap;
-import dev.architectury.platform.Platform;
+import net.mca.MCA;
 import net.mca.MCA;
 import net.mca.entity.VillagerEntityMCA;
 import net.mca.entity.ai.MemoryModuleTypeMCA;
@@ -45,7 +45,7 @@ public class MournAtGraveTask extends Behavior<VillagerEntityMCA> {
         completed = false;
         hasArrived = false;
         boolean hasTarget = hasMourningTarget(villager);
-        if (Platform.isDevelopmentEnvironment()) {
+        if (MCA.platformHelper.isDevelopmentEnvironment()) {
             MCA.LOGGER.info("[MOURNING_TRACE_V3] task-start villager={} position={} grave={} stand={} walking={} arrived={} hasTarget={}",
                     villager.getName().getString(),
                     villager.blockPosition(),
@@ -70,7 +70,7 @@ public class MournAtGraveTask extends Behavior<VillagerEntityMCA> {
     protected void start(ServerLevel world, VillagerEntityMCA villager, long time) {
         remainingDialogues = DIALOGUE_COUNT;
         villager.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(getFlower(villager)));
-        if (Platform.isDevelopmentEnvironment()) {
+        if (MCA.platformHelper.isDevelopmentEnvironment()) {
             MCA.LOGGER.info("[MOURNING_TRACE_V3] flower-held villager={} position={} time={}", villager.getName().getString(), villager.blockPosition(), time);
         }
     }
@@ -86,7 +86,7 @@ public class MournAtGraveTask extends Behavior<VillagerEntityMCA> {
             villager.getNavigation().stop();
             villager.sendChatToAllAround("villager.grieving");
             nextDialogueTime = time + getDialogueDelay(villager);
-            if (Platform.isDevelopmentEnvironment()) {
+            if (MCA.platformHelper.isDevelopmentEnvironment()) {
                 MCA.LOGGER.info("[MOURNING_TRACE_V3] arrived villager={} position={} grave={} nextLine={}",
                         villager.getName().getString(),
                         villager.blockPosition(),
@@ -107,7 +107,7 @@ public class MournAtGraveTask extends Behavior<VillagerEntityMCA> {
     @Override
     protected void stop(ServerLevel world, VillagerEntityMCA villager, long time) {
         completed = hasArrived && remainingDialogues == 0 && EnterGraveyardTask.isWithinMourningArea(villager);
-        if (Platform.isDevelopmentEnvironment()) {
+        if (MCA.platformHelper.isDevelopmentEnvironment()) {
             MCA.LOGGER.info("[MOURNING_TRACE_V3] task-finish villager={} completed={} arrived={} linesLeft={} position={} walking={}",
                     villager.getName().getString(),
                     completed,

@@ -1,6 +1,6 @@
 package net.mca.entity.ai;
 
-import dev.architectury.registry.registries.RegistrySupplier;
+import net.mca.util.RegistryRef;
 import java.util.Locale;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.particles.SimpleParticleType;
@@ -11,14 +11,14 @@ public class Mood {
     private final String name;
 
     private final int soundInterval;
-    private final RegistrySupplier<SoundEvent> soundMale;
-    private final RegistrySupplier<SoundEvent> soundFemale;
+    private final RegistryRef<SoundEvent> soundMale;
+    private final RegistryRef<SoundEvent> soundFemale;
     private final int particleInterval;
     private final SimpleParticleType particle;
     private final ChatFormatting color;
     private final String building;
 
-    Mood(String name, int soundInterval, RegistrySupplier<SoundEvent> soundMale, RegistrySupplier<SoundEvent> soundFemale, int particleInterval, SimpleParticleType particle, ChatFormatting color, String building) {
+    Mood(String name, int soundInterval, RegistryRef<SoundEvent> soundMale, RegistryRef<SoundEvent> soundFemale, int particleInterval, SimpleParticleType particle, ChatFormatting color, String building) {
         this.name = name;
         this.soundInterval = soundInterval;
         this.soundMale = soundMale;

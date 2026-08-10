@@ -4,7 +4,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.mojang.datafixers.util.Pair;
-import dev.architectury.platform.Platform;
+import net.mca.MCA;
 import net.mca.Config;
 import net.mca.MCA;
 import net.mca.ProfessionsMCA;
@@ -501,7 +501,7 @@ public class VillagerTasksMCA {
                         GRIEVING_PATH_TIMEOUT,
                         villager -> true,
                         villager -> {
-                            if (Platform.isDevelopmentEnvironment()) {
+                            if (MCA.platformHelper.isDevelopmentEnvironment()) {
                                 MCA.LOGGER.info("[MOURNING_TRACE_V3] path-timeout villager={} position={} grave={}",
                                         villager.getName().getString(),
                                         villager.blockPosition(),
@@ -521,7 +521,7 @@ public class VillagerTasksMCA {
                                     boolean targetStillMournable = EnterGraveyardTask.hasMournableSite(v);
                                     boolean periodicCandidateStillExists = !hadAssignedSite
                                             && EnterGraveyardTask.hasPeriodicMourningCandidate(v);
-                                    if (Platform.isDevelopmentEnvironment()) {
+                                    if (MCA.platformHelper.isDevelopmentEnvironment()) {
                                         MCA.LOGGER.info("[MOURNING_TRACE_V3] session-finish villager={} completed={} position={} grave={} stand={} walkTarget={}",
                                                 v.getName().getString(),
                                                 completed,

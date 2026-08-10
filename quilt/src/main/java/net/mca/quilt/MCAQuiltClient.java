@@ -1,8 +1,8 @@
 package net.mca.quilt;
 
-import dev.architectury.registry.client.level.entity.EntityRendererRegistry;
-import dev.architectury.registry.client.particle.ParticleProviderRegistry;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
+import net.fabricmc.fabric.api.client.particle.v1.ParticleFactoryRegistry;
+import net.fabricmc.fabric.api.client.rendering.v1.EntityRendererRegistry;
 import net.fabricmc.fabric.api.resource.ResourceManagerHelper;
 import net.mca.*;
 import net.mca.block.BlockEntityTypesMCA;
@@ -13,14 +13,14 @@ import net.mca.client.resources.GeneratedEyeTextureReloadListener;
 import net.mca.entity.EntitiesMCA;
 import net.mca.quilt.client.gui.QuiltMCAScreens;
 import net.mca.quilt.resources.*;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.item.ModelPredicateProviderRegistry;
-import net.minecraft.client.render.RenderLayer;
-import net.minecraft.client.render.block.entity.BlockEntityRendererFactories;
-import net.minecraft.client.render.entity.VillagerEntityRenderer;
-import net.minecraft.client.render.entity.ZombieVillagerEntityRenderer;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.resource.ResourceType;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.RenderType;
+import net.minecraft.client.renderer.blockentity.BlockEntityRenderers;
+import net.minecraft.client.renderer.entity.VillagerRenderer;
+import net.minecraft.client.renderer.entity.ZombieVillagerRenderer;
+import net.minecraft.client.renderer.item.ItemProperties;
+import net.minecraft.server.packs.PackType;
+import net.minecraft.world.entity.player.Player;
 import org.quiltmc.loader.api.ModContainer;
 import org.quiltmc.qsl.base.api.entrypoint.client.ClientModInitializer;
 import org.quiltmc.qsl.block.extensions.api.client.BlockRenderLayerMap;
@@ -33,42 +33,42 @@ public final class MCAQuiltClient extends ClientProxyAbstractImpl implements Cli
     @Override
     public void onInitializeClient(ModContainer container) {
         if (Config.getInstance().useSquidwardModels) {
-            EntityRendererRegistry.register(EntitiesMCA.MALE_VILLAGER, VillagerEntityRenderer::new);
-            EntityRendererRegistry.register(EntitiesMCA.FEMALE_VILLAGER, VillagerEntityRenderer::new);
+            EntityRendererRegistry.register(EntitiesMCA.MALE_VILLAGER.get(), VillagerRenderer::new);
+            EntityRendererRegistry.register(EntitiesMCA.FEMALE_VILLAGER.get(), VillagerRenderer::new);
 
-            EntityRendererRegistry.register(EntitiesMCA.MALE_ZOMBIE_VILLAGER, ZombieVillagerEntityRenderer::new);
-            EntityRendererRegistry.register(EntitiesMCA.FEMALE_ZOMBIE_VILLAGER, ZombieVillagerEntityRenderer::new);
+            EntityRendererRegistry.register(EntitiesMCA.MALE_ZOMBIE_VILLAGER.get(), ZombieVillagerRenderer::new);
+            EntityRendererRegistry.register(EntitiesMCA.FEMALE_ZOMBIE_VILLAGER.get(), ZombieVillagerRenderer::new);
         } else {
-            EntityRendererRegistry.register(EntitiesMCA.MALE_VILLAGER, VillagerEntityMCARenderer::new);
-            EntityRendererRegistry.register(EntitiesMCA.FEMALE_VILLAGER, VillagerEntityMCARenderer::new);
+            EntityRendererRegistry.register(EntitiesMCA.MALE_VILLAGER.get(), VillagerEntityMCARenderer::new);
+            EntityRendererRegistry.register(EntitiesMCA.FEMALE_VILLAGER.get(), VillagerEntityMCARenderer::new);
 
-            EntityRendererRegistry.register(EntitiesMCA.MALE_ZOMBIE_VILLAGER, ZombieVillagerEntityMCARenderer::new);
-            EntityRendererRegistry.register(EntitiesMCA.FEMALE_ZOMBIE_VILLAGER, ZombieVillagerEntityMCARenderer::new);
+            EntityRendererRegistry.register(EntitiesMCA.MALE_ZOMBIE_VILLAGER.get(), ZombieVillagerEntityMCARenderer::new);
+            EntityRendererRegistry.register(EntitiesMCA.FEMALE_ZOMBIE_VILLAGER.get(), ZombieVillagerEntityMCARenderer::new);
         }
 
-        EntityRendererRegistry.register(EntitiesMCA.GRIM_REAPER, GrimReaperRenderer::new);
-        EntityRendererRegistry.register(EntitiesMCA.CRIB, CribEntityRenderer::new);
+        EntityRendererRegistry.register(EntitiesMCA.GRIM_REAPER.get(), GrimReaperRenderer::new);
+        EntityRendererRegistry.register(EntitiesMCA.CRIB.get(), CribEntityRenderer::new);
 
-        ParticleProviderRegistry.register(ParticleTypesMCA.NEG_INTERACTION.get(), InteractionParticle.Factory::new);
-        ParticleProviderRegistry.register(ParticleTypesMCA.POS_INTERACTION.get(), InteractionParticle.Factory::new);
+        ParticleFactoryRegistry.getInstance().register(ParticleTypesMCA.NEG_INTERACTION.get(), InteractionParticle.Factory::new);
+        ParticleFactoryRegistry.getInstance().register(ParticleTypesMCA.POS_INTERACTION.get(), InteractionParticle.Factory::new);
 
-        BlockEntityRendererFactories.register(BlockEntityTypesMCA.TOMBSTONE.get(), TombstoneBlockEntityRenderer::new);
+        BlockEntityRenderers.register(BlockEntityTypesMCA.TOMBSTONE.get(), TombstoneBlockEntityRenderer::new);
 
-        ResourceLoader.get(ResourceType.CLIENT_RESOURCES).registerReloader(new QuiltMCAScreens());
-        ResourceLoader.get(ResourceType.CLIENT_RESOURCES).registerReloader(new QuiltColorPaletteLoader());
-        ResourceLoader.get(ResourceType.CLIENT_RESOURCES).registerReloader(new QuiltFaceList());
-        ResourceLoader.get(ResourceType.CLIENT_RESOURCES)
+        ResourceLoader.get(PackType.CLIENT_RESOURCES).registerReloader(new QuiltMCAScreens());
+        ResourceLoader.get(PackType.CLIENT_RESOURCES).registerReloader(new QuiltColorPaletteLoader());
+        ResourceLoader.get(PackType.CLIENT_RESOURCES).registerReloader(new QuiltFaceList());
+        ResourceLoader.get(PackType.CLIENT_RESOURCES)
                 .registerReloader(new QuiltGeneratedEyeTextureReloadListener());
-        ResourceLoader.get(ResourceType.CLIENT_RESOURCES).registerReloader(new QuiltSupportersLoader());
-        ResourceLoader.get(ResourceType.CLIENT_RESOURCES).registerReloader(new ApiIdentifiableReloadListener());
+        ResourceLoader.get(PackType.CLIENT_RESOURCES).registerReloader(new QuiltSupportersLoader());
+        ResourceLoader.get(PackType.CLIENT_RESOURCES).registerReloader(new ApiIdentifiableReloadListener());
 
-        ModelPredicatesMCA.setup(ModelPredicateProviderRegistry::register);
+        ModelPredicatesMCA.setup(ItemProperties::register);
 
         ClientPlayConnectionEvents.JOIN.register((handler, sender, server) ->
                 MCAClient.onLogin()
         );
 
-        BlockRenderLayerMap.put(RenderLayer.getCutout(), BlocksMCA.INFERNAL_FLAME.get());
+        BlockRenderLayerMap.put(RenderType.cutout(), BlocksMCA.INFERNAL_FLAME.get());
 
         ClientTickEvents.START.register(MCAClient::tickClient);
 
@@ -76,7 +76,7 @@ public final class MCAQuiltClient extends ClientProxyAbstractImpl implements Cli
     }
 
     @Override
-    public PlayerEntity getClientPlayer() {
-        return MinecraftClient.getInstance().player;
+    public Player getClientPlayer() {
+        return Minecraft.getInstance().player;
     }
 }

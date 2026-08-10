@@ -1,24 +1,24 @@
 package net.mca.block;
 
-import dev.architectury.registry.registries.DeferredRegister;
-import dev.architectury.registry.registries.RegistrySupplier;
 import net.mca.MCA;
+import net.mca.util.RegistryRef;
 import net.minecraft.Util;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.datafix.fixes.References;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.function.BiFunction;
 
 public interface BlockEntityTypesMCA {
-    DeferredRegister<BlockEntityType<?>> BLOCK_ENTITY_TYPES = DeferredRegister.create(MCA.MOD_ID, Registries.BLOCK_ENTITY_TYPE);
+    Map<ResourceLocation, RegistryRef<? extends BlockEntityType<?>>> BLOCK_ENTITY_TYPES = new LinkedHashMap<>();
 
-    RegistrySupplier<BlockEntityType<TombstoneBlock.Data>> TOMBSTONE = register("tombstone", TombstoneBlock.Data::new, List.of(
+    RegistryRef<BlockEntityType<TombstoneBlock.Data>> TOMBSTONE = register("tombstone", TombstoneBlock.Data::new, List.of(
             BlocksMCA.GRAVELLING_HEADSTONE,
             BlocksMCA.UPRIGHT_HEADSTONE,
             BlocksMCA.SLANTED_HEADSTONE,
@@ -34,14 +34,16 @@ public interface BlockEntityTypesMCA {
             BlocksMCA.DEEPSLATE_SLANTED_HEADSTONE
     ));
 
-    static void bootstrap() {
-        BLOCK_ENTITY_TYPES.register();
+    static <T extends BlockEntity> RegistryRef<BlockEntityType<T>> register(String name, BiFunction<BlockPos, BlockState, T> factory, List<RegistryRef<Block>> suppliers) {
+        ResourceLocation id = MCA.locate(name);
+        RegistryRef<BlockEntityType<T>> ref = RegistryRef.of(id, () -> BlockEntityType.Builder.of(
+                factory::apply, suppliers.stream().map(RegistryRef::get).toArray(Block[]::new)
+        ).build(Util.fetchChoiceType(References.BLOCK_ENTITY, id.toString())));
+        BLOCK_ENTITY_TYPES.put(id, ref);
+        return ref;
     }
 
-    static <T extends BlockEntity> RegistrySupplier<BlockEntityType<T>> register(String name, BiFunction<BlockPos, BlockState, T> factory, List<RegistrySupplier<Block>> suppliers) {
-        ResourceLocation id = new ResourceLocation(MCA.MOD_ID, name);
-        return BLOCK_ENTITY_TYPES.register(id, () -> BlockEntityType.Builder.of(
-                factory::apply, suppliers.stream().map(RegistrySupplier::get).toArray(Block[]::new)
-        ).build(Util.fetchChoiceType(References.BLOCK_ENTITY, id.toString())));
+    static void registerBlockEntityTypes(MCA.RegisterHelper<BlockEntityType<?>> helper) {
+        BLOCK_ENTITY_TYPES.forEach((id, ref) -> helper.register(id, ref.get()));
     }
 }

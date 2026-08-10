@@ -1,25 +1,29 @@
 package net.mca;
 
-import dev.architectury.registry.registries.DeferredRegister;
-import dev.architectury.registry.registries.RegistrySupplier;
+import net.mca.util.RegistryRef;
 import java.util.function.Supplier;
 import net.minecraft.core.particles.ParticleType;
 import net.minecraft.core.particles.SimpleParticleType;
-import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceLocation;
+
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 public interface ParticleTypesMCA {
 
-    DeferredRegister<ParticleType<?>> PARTICLE_TYPES = DeferredRegister.create(MCA.MOD_ID, Registries.PARTICLE_TYPE);
+    Map<ResourceLocation, RegistryRef<? extends ParticleType<?>>> PARTICLE_TYPES = new LinkedHashMap<>();
 
-    RegistrySupplier<SimpleParticleType> POS_INTERACTION = register("pos_interaction", () -> new SimpleParticleType(false));
-    RegistrySupplier<SimpleParticleType> NEG_INTERACTION = register("neg_interaction", () -> new SimpleParticleType(false));
+    RegistryRef<SimpleParticleType> POS_INTERACTION = register("pos_interaction", () -> new SimpleParticleType(false));
+    RegistryRef<SimpleParticleType> NEG_INTERACTION = register("neg_interaction", () -> new SimpleParticleType(false));
 
-    static void bootstrap() {
-        PARTICLE_TYPES.register();
+    static <T extends ParticleType<?>> RegistryRef<T> register(String name, Supplier<T> type) {
+        ResourceLocation id = MCA.locate(name);
+        RegistryRef<T> ref = RegistryRef.of(id, type);
+        PARTICLE_TYPES.put(id, ref);
+        return ref;
     }
 
-    static <T extends ParticleType<?>> RegistrySupplier<T> register(String name, Supplier<T> type) {
-        return PARTICLE_TYPES.register(new ResourceLocation(MCA.MOD_ID, name), type);
+    static void registerParticles(MCA.RegisterHelper<ParticleType<?>> helper) {
+        PARTICLE_TYPES.forEach((id, ref) -> helper.register(id, ref.get()));
     }
 }
