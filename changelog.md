@@ -3,7 +3,7 @@
 ## **IMPORTANT**
 
 * BACKUP YOUR WORLD.
-* Don't use your old world with this build, make a new world or use a copy.
+* Only use your old world if  you use a copy.
 * This isn't backwards compatible with older 1.20.1 MCA builds, traits/personalities and a lot of MCA saved data got moved to the newer 1.21.1 format.
   * In theory this should make it more stable to upgrade worlds to 1.21.1 
 
@@ -28,7 +28,7 @@
   * Lazy -> Relaxed
   * Grumpy -> Crabby
 * They're automatically migrated
-* 
+
 [DEV NOTES]
 
 * Personalities aren't hardcoded enums anymore, traits/personalities now use namespaced ids.
@@ -55,6 +55,7 @@
 * Reduced some unnecessary pathfinding work.
 * Sleeping should be more reliable.
 * Improved villager/mount movement handling.
+* Villagers should get to their bed more reliably.
 
 ## Guards / Archers
 
