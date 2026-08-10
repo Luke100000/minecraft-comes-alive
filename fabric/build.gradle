@@ -27,18 +27,17 @@ loom {
     runs {
         client {
             client()
-            programArgs '--username', devUsername
+            setConfigName("Fabric Client")
+            ideConfigGenerated(true)
+            runDir("run")
+            programArgs("--username", devUsername)
         }
+
         server {
             server()
-        }
-        datagen {
-            inherit server
-            name 'Data Generation'
-            vmArg '-Dfabric-api.datagen'
-            vmArg "-Dfabric-api.datagen.output-dir=${file('build/datagen/generated')}"
-            vmArg '-Dfabric-api.datagen.modid=mca'
-            runDir 'build/datagen'
+            setConfigName("Fabric Server")
+            ideConfigGenerated(true)
+            runDir("run")
         }
     }
 }

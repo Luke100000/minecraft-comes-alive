@@ -35,15 +35,8 @@ import java.util.Set;
 
 @Mixin(MoveToTargetSink.class)
 abstract class MixinMoveToTargetSink {
-    @Unique
-    private static final String MCA_TRY_COMPUTE_PATH =
-            "hasFinishedPath(Lnet/minecraft/entity/mob/MobEntity;Lnet/minecraft/entity/ai/brain/WalkTarget;J)Z";
-    @Unique
-    private static final String MCA_REACHED_TARGET =
-            "hasReached(Lnet/minecraft/entity/mob/MobEntity;Lnet/minecraft/entity/ai/brain/WalkTarget;)Z";
-
     @WrapOperation(
-            method = MCA_TRY_COMPUTE_PATH,
+            method = "tryComputePath(Lnet/minecraft/world/entity/Mob;Lnet/minecraft/world/entity/ai/memory/WalkTarget;J)Z",
             at = @At(
                     value = "INVOKE",
                     target = "Lnet/minecraft/world/entity/ai/navigation/PathNavigation;createPath(Lnet/minecraft/core/BlockPos;I)Lnet/minecraft/world/level/pathfinder/Path;"
@@ -77,7 +70,10 @@ abstract class MixinMoveToTargetSink {
         return navigation.createPath(approachTargets, 0);
     }
 
-    @ModifyReturnValue(method = MCA_REACHED_TARGET, at = @At("RETURN"))
+    @ModifyReturnValue(
+            method = "reachedTarget(Lnet/minecraft/world/entity/Mob;Lnet/minecraft/world/entity/ai/memory/WalkTarget;)Z",
+            at = @At("RETURN")
+    )
     private boolean mca$acceptReachedBedApproach(
             boolean original,
             Mob mob,
