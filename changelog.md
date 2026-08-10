@@ -1,3 +1,7 @@
+# 7.7.36
+
+* More bed fixes
+
 # 7.7.35
 
 * Improve mob compatibility
