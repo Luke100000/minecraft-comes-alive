@@ -1,9 +1,9 @@
 package net.mca.client.tts.sound;
 
-import net.minecraft.client.sound.AudioStream;
 import org.lwjgl.BufferUtils;
 
 import javax.sound.sampled.AudioFormat;
+import net.minecraft.client.sounds.AudioStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 
@@ -25,7 +25,7 @@ public class PCMAudioStream implements AudioStream {
     }
 
     @Override
-    public ByteBuffer getBuffer(int size) {
+    public ByteBuffer read(int size) {
         if (buffer == null) {
             return null;
         }

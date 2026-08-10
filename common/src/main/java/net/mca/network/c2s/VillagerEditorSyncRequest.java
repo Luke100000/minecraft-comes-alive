@@ -16,16 +16,15 @@ import net.mca.server.world.data.FamilyTree;
 import net.mca.server.world.data.FamilyTreeNode;
 import net.mca.server.world.data.PlayerSaveData;
 import net.mca.util.NbtHelper;
-import net.minecraft.entity.Entity;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.registry.Registries;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.text.Text;
-import net.minecraft.util.Formatting;
-import net.minecraft.util.Identifier;
-import net.minecraft.village.VillagerProfession;
-
+import net.minecraft.ChatFormatting;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.npc.VillagerProfession;
 import java.io.Serial;
 import java.util.List;
 import java.util.Objects;
@@ -60,7 +59,7 @@ public class VillagerEditorSyncRequest extends NbtDataMessage implements Message
             "AgeState",
             "PlayerModel"
     };
-    public VillagerEditorSyncRequest(String command, UUID uuid, NbtCompound data) {
+    public VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag data) {
         super(data.copy());
         this.command = command;
         this.uuid = uuid;
@@ -105,24 +104,24 @@ public class VillagerEditorSyncRequest extends NbtDataMessage implements Message
         return false;
     }
 
-    public static NbtCompound createEditorPatch(NbtCompound sourceNbt) {
-        NbtCompound patch = new NbtCompound();
-        for (String key : sourceNbt.getKeys()) {
+    public static CompoundTag createEditorPatch(CompoundTag sourceNbt) {
+        CompoundTag patch = new CompoundTag();
+        for (String key : sourceNbt.getAllKeys()) {
             if (isAllowedTopLevelKey(key)) {
                 patch.put(key, Objects.requireNonNull(sourceNbt.get(key)).copy());
             }
         }
 
-        NbtCompound mcaPatch = new NbtCompound();
-        for (String key : sourceNbt.getKeys()) {
+        CompoundTag mcaPatch = new CompoundTag();
+        for (String key : sourceNbt.getAllKeys()) {
             if (isAllowedMcaKey(key)) {
                 mcaPatch.put(key, Objects.requireNonNull(sourceNbt.get(key)).copy());
             }
         }
 
         if (sourceNbt.contains("MCAData", 10)) {
-            NbtCompound sourceMca = sourceNbt.getCompound("MCAData");
-            for (String key : sourceMca.getKeys()) {
+            CompoundTag sourceMca = sourceNbt.getCompound("MCAData");
+            for (String key : sourceMca.getAllKeys()) {
                 if (isAllowedMcaKey(key)) {
                     mcaPatch.put(key, Objects.requireNonNull(sourceMca.get(key)).copy());
                 }
@@ -135,18 +134,18 @@ public class VillagerEditorSyncRequest extends NbtDataMessage implements Message
         return patch;
     }
 
-    public static NbtCompound mergeAllowedEditorPatch(NbtCompound serverData, NbtCompound patch) {
-        NbtCompound merged = serverData.copy();
-        for (String key : patch.getKeys()) {
+    public static CompoundTag mergeAllowedEditorPatch(CompoundTag serverData, CompoundTag patch) {
+        CompoundTag merged = serverData.copy();
+        for (String key : patch.getAllKeys()) {
             if (isAllowedTopLevelKey(key)) {
                 merged.put(key, Objects.requireNonNull(patch.get(key)).copy());
             }
         }
 
         if (patch.contains("MCAData", 10)) {
-            NbtCompound patchMca = patch.getCompound("MCAData");
-            NbtCompound mergedMca = NbtHelper.getOrCreateCompound(merged, "MCAData");
-            for (String key : patchMca.getKeys()) {
+            CompoundTag patchMca = patch.getCompound("MCAData");
+            CompoundTag mergedMca = NbtHelper.getOrCreateCompound(merged, "MCAData");
+            for (String key : patchMca.getAllKeys()) {
                 if (isAllowedMcaKey(key)) {
                     mergedMca.put(key, Objects.requireNonNull(patchMca.get(key)).copy());
                 }
@@ -169,24 +168,24 @@ public class VillagerEditorSyncRequest extends NbtDataMessage implements Message
     }
 
     @Override
-    public void receive(ServerPlayerEntity player) {
-        Entity entity = player.getServerWorld().getEntity(uuid);
+    public void receive(ServerPlayer player) {
+        Entity entity = player.serverLevel().getEntity(uuid);
         switch (command) {
             case "skin", "hair", "layered_hair", "hair_base", "hair_bangs", "hair_back", "hair_front", "hair_extra", "clothing", "gender", "sync" ->
                     saveEntity(player, entity, getData().copy());
             case "profession" -> {
                 if (entity instanceof VillagerEntityMCA villager) {
-                    Identifier professionId = Identifier.tryParse(getData().getString("profession"));
+                    ResourceLocation professionId = ResourceLocation.tryParse(getData().getString("profession"));
                     if (professionId == null) {
                         return;
                     }
-                    VillagerProfession profession = Registries.VILLAGER_PROFESSION.get(professionId);
+                    VillagerProfession profession = BuiltInRegistries.VILLAGER_PROFESSION.get(professionId);
                     if (profession != null) {
                         // Apply editor state (name, genetics, etc.) atomically with the profession change.
                         // This replaces the separate sync packet the client used to send first.
-                        NbtCompound merged = applyVillagerPatch(player, entity, getData().copy());
+                        CompoundTag merged = applyVillagerPatch(player, entity, getData().copy());
                         villager.setProfession(profession);
-                        NbtCompound fresh = GetVillagerRequest.getVillagerData(entity);
+                        CompoundTag fresh = GetVillagerRequest.getVillagerData(entity);
                         NetworkHandler.sendToPlayer(new GetVillagerResponse(fresh != null ? fresh : merged), player);
                     }
                 }
@@ -194,28 +193,28 @@ public class VillagerEditorSyncRequest extends NbtDataMessage implements Message
         }
     }
 
-    private void saveEntity(ServerPlayerEntity player, Entity entity, NbtCompound patch) {
+    private void saveEntity(ServerPlayer player, Entity entity, CompoundTag patch) {
         if (entity == null) {
             return;
         }
 
-        if (entity instanceof ServerPlayerEntity serverPlayer) {
-            NbtCompound serverData = PlayerSaveData.get(serverPlayer).getEntityData();
-            NbtCompound merged = mergeAllowedEditorPatch(serverData, patch);
+        if (entity instanceof ServerPlayer serverPlayer) {
+            CompoundTag serverData = PlayerSaveData.get(serverPlayer).getEntityData();
+            CompoundTag merged = mergeAllowedEditorPatch(serverData, patch);
             PlayerSaveData data = PlayerSaveData.get(serverPlayer);
             data.setEntityData(merged);
             data.setEntityDataSet(true);
             syncFamilyTree(player, entity, merged);
-            serverPlayer.getServerWorld().getPlayers().forEach(p -> NetworkHandler.sendToPlayer(new PlayerDataMessage(serverPlayer.getUuid(), merged), p));
+            serverPlayer.serverLevel().players().forEach(p -> NetworkHandler.sendToPlayer(new PlayerDataMessage(serverPlayer.getUUID(), merged), p));
             NetworkHandler.sendToPlayer(new GetVillagerResponse(merged), player);
             return;
         }
 
-        NbtCompound merged = applyVillagerPatch(player, entity, patch);
+        CompoundTag merged = applyVillagerPatch(player, entity, patch);
         if (merged == null) {
             return;
         }
-        NbtCompound fresh = GetVillagerRequest.getVillagerData(entity);
+        CompoundTag fresh = GetVillagerRequest.getVillagerData(entity);
         NetworkHandler.sendToPlayer(new GetVillagerResponse(fresh != null ? fresh : merged), player);
     }
 
@@ -227,18 +226,18 @@ public class VillagerEditorSyncRequest extends NbtDataMessage implements Message
      * @return the merged compound, or {@code null} if {@code entity} is not a {@link VillagerLike}
      *         or its server data is unavailable.
      */
-    private NbtCompound applyVillagerPatch(ServerPlayerEntity player, Entity entity, NbtCompound patch) {
+    private CompoundTag applyVillagerPatch(ServerPlayer player, Entity entity, CompoundTag patch) {
         if (!(entity instanceof VillagerLike<?> villagerLike)) {
             return null;
         }
-        NbtCompound serverData = GetVillagerRequest.getVillagerData(entity);
+        CompoundTag serverData = GetVillagerRequest.getVillagerData(entity);
         if (serverData == null) {
             return null;
         }
-        NbtCompound merged = mergeAllowedEditorPatch(serverData, patch);
+        CompoundTag merged = mergeAllowedEditorPatch(serverData, patch);
         sanitizeVisualIdentifiers(entity, merged);
         villagerLike.syncFromEditor(merged);
-        entity.calculateDimensions();
+        entity.refreshDimensions();
         syncFamilyTree(player, entity, merged);
         if (entity instanceof VillagerEntityMCA villager) {
             villager.getResidency().getHomeVillage().ifPresent(b -> b.updateResident(villager));
@@ -246,11 +245,11 @@ public class VillagerEditorSyncRequest extends NbtDataMessage implements Message
         return merged;
     }
 
-    private void sanitizeVisualIdentifiers(Entity entity, NbtCompound villagerData) {
-        NbtCompound mcaData = normalizeVisualData(villagerData);
+    private void sanitizeVisualIdentifiers(Entity entity, CompoundTag villagerData) {
+        CompoundTag mcaData = normalizeVisualData(villagerData);
         migrateLegacyHairStyle(mcaData);
-        NbtCompound fallbackData = GetVillagerRequest.getVillagerData(entity);
-        NbtCompound fallbackMcaData = fallbackData == null ? new NbtCompound() : getMcaData(fallbackData);
+        CompoundTag fallbackData = GetVillagerRequest.getVillagerData(entity);
+        CompoundTag fallbackMcaData = fallbackData == null ? new CompoundTag() : getMcaData(fallbackData);
         Gender gender = getGender(villagerData);
         clearInvalidIdentifier(mcaData, fallbackMcaData, "Skin", identifier -> SkinVisualIds.isBodySkin(identifier, gender));
         clearInvalidIdentifier(mcaData, fallbackMcaData, "Clothes", identifier -> SkinVisualIds.isClothing(identifier, gender));
@@ -261,7 +260,7 @@ public class VillagerEditorSyncRequest extends NbtDataMessage implements Message
         }
     }
 
-    private void migrateLegacyHairStyle(NbtCompound mcaData) {
+    private void migrateLegacyHairStyle(CompoundTag mcaData) {
         String hairStyle = mcaData.getString("HairStyle");
         if (SkinVisualIds.isLegacyHairTexture(hairStyle)) {
             mcaData.putString("HairBase", hairStyle);
@@ -270,16 +269,16 @@ public class VillagerEditorSyncRequest extends NbtDataMessage implements Message
         }
     }
 
-    private NbtCompound normalizeVisualData(NbtCompound villagerData) {
-        NbtCompound source = getOrCreateMcaData(villagerData);
-        NbtCompound sanitized = new NbtCompound();
+    private CompoundTag normalizeVisualData(CompoundTag villagerData) {
+        CompoundTag source = getOrCreateMcaData(villagerData);
+        CompoundTag sanitized = new CompoundTag();
         for (String key : MCA_VISUAL_KEYS) {
             if (!source.contains(key) && villagerData.contains(key)) {
                 source.put(key, Objects.requireNonNull(villagerData.get(key)).copy());
             }
             villagerData.remove(key);
         }
-        for (String key : source.getKeys()) {
+        for (String key : source.getAllKeys()) {
             if (isAllowedMcaKey(key)) {
                 sanitized.put(key, Objects.requireNonNull(source.get(key)).copy());
             }
@@ -288,7 +287,7 @@ public class VillagerEditorSyncRequest extends NbtDataMessage implements Message
         return sanitized;
     }
 
-    private void clearInvalidIdentifier(NbtCompound mcaData, NbtCompound fallbackMcaData, String key, Predicate<String> validator) {
+    private void clearInvalidIdentifier(CompoundTag mcaData, CompoundTag fallbackMcaData, String key, Predicate<String> validator) {
         String identifier = mcaData.getString(key);
         if (!MCA.isBlankString(identifier) && !validator.test(identifier)) {
             MCA.LOGGER.warn("Ignoring unknown villager editor visual identifier {}={}", key, identifier);
@@ -297,8 +296,8 @@ public class VillagerEditorSyncRequest extends NbtDataMessage implements Message
         }
     }
 
-    private Gender getGender(NbtCompound villagerData) {
-        NbtCompound mcaData = getMcaData(villagerData);
+    private Gender getGender(CompoundTag villagerData) {
+        CompoundTag mcaData = getMcaData(villagerData);
         Gender gender = Genetics.readGender(mcaData);
         if (gender != Gender.UNASSIGNED || mcaData == villagerData) {
             return gender;
@@ -306,13 +305,13 @@ public class VillagerEditorSyncRequest extends NbtDataMessage implements Message
         return Genetics.readGender(villagerData);
     }
 
-    private NbtCompound getMcaData(NbtCompound villagerData) {
+    private CompoundTag getMcaData(CompoundTag villagerData) {
         return NbtHelper.getCompoundOrSelf(villagerData, VillagerEntityMCA.MCA_DATA_KEY);
     }
 
-    private NbtCompound getOrCreateMcaData(NbtCompound villagerData) {
+    private CompoundTag getOrCreateMcaData(CompoundTag villagerData) {
         boolean hadMcaData = villagerData.contains(VillagerEntityMCA.MCA_DATA_KEY, 10);
-        NbtCompound mcaData = NbtHelper.getOrCreateCompound(villagerData, VillagerEntityMCA.MCA_DATA_KEY);
+        CompoundTag mcaData = NbtHelper.getOrCreateCompound(villagerData, VillagerEntityMCA.MCA_DATA_KEY);
         if (!hadMcaData) {
             for (String key : MCA_VISUAL_KEYS) {
                 if (villagerData.contains(key)) {
@@ -323,29 +322,29 @@ public class VillagerEditorSyncRequest extends NbtDataMessage implements Message
         return mcaData;
     }
 
-    private Optional<FamilyTreeNode> getFamilyNode(ServerPlayerEntity player, FamilyTree tree, String name, Gender gender) {
+    private Optional<FamilyTreeNode> getFamilyNode(ServerPlayer player, FamilyTree tree, String name, Gender gender) {
         try {
             UUID uuid = UUID.fromString(name);
             Optional<FamilyTreeNode> node = tree.getOrEmpty(uuid);
             if (node.isPresent()) {
-                player.sendMessage(Text.translatable("gui.villager_editor.uuid_known", name, node.get().getName()), false);
+                player.displayClientMessage(Component.translatable("gui.villager_editor.uuid_known", name, node.get().getName()), false);
                 return node;
             } else {
-                player.sendMessage(Text.translatable("gui.villager_editor.uuid_unknown", name).formatted(Formatting.RED), false);
+                player.displayClientMessage(Component.translatable("gui.villager_editor.uuid_unknown", name).withStyle(ChatFormatting.RED), false);
                 return Optional.empty();
             }
         } catch (IllegalArgumentException exception) {
             List<FamilyTreeNode> nodes = tree.getAllWithName(name).toList();
             if (nodes.isEmpty()) {
-                player.sendMessage(Text.translatable("gui.villager_editor.name_created", name).formatted(Formatting.YELLOW), false);
+                player.displayClientMessage(Component.translatable("gui.villager_editor.name_created", name).withStyle(ChatFormatting.YELLOW), false);
                 return Optional.of(tree.getOrCreate(UUID.randomUUID(), name, gender));
             } else {
                 if (nodes.size() > 1) {
-                    player.sendMessage(Text.translatable("gui.villager_editor.name_not_unique", name).formatted(Formatting.RED), false);
+                    player.displayClientMessage(Component.translatable("gui.villager_editor.name_not_unique", name).withStyle(ChatFormatting.RED), false);
                     String uuids = nodes.stream().map(FamilyTreeNode::id).map(UUID::toString).collect(Collectors.joining(", "));
-                    player.sendMessage(Text.translatable("gui.villager_editor.list_of_ids", uuids), false);
+                    player.displayClientMessage(Component.translatable("gui.villager_editor.list_of_ids", uuids), false);
                 } else {
-                    player.sendMessage(Text.translatable("gui.villager_editor.name_unique", name), false);
+                    player.displayClientMessage(Component.translatable("gui.villager_editor.name_unique", name), false);
                 }
 
                 return Optional.ofNullable(nodes.get(0));
@@ -353,8 +352,8 @@ public class VillagerEditorSyncRequest extends NbtDataMessage implements Message
         }
     }
 
-    private void syncFamilyTree(ServerPlayerEntity player, Entity entity, NbtCompound villagerData) {
-        FamilyTree tree = FamilyTree.get((ServerWorld) entity.getWorld());
+    private void syncFamilyTree(ServerPlayer player, Entity entity, CompoundTag villagerData) {
+        FamilyTree tree = FamilyTree.get((ServerLevel) entity.level());
         FamilyTreeNode entry = tree.getOrCreate(entity);
         entry.setGender(getGender(villagerData));
 
@@ -362,7 +361,7 @@ public class VillagerEditorSyncRequest extends NbtDataMessage implements Message
             String serializedName = villagerData.getString("CustomName");
             if (!serializedName.isEmpty()) {
                 try {
-                    Text name = Text.Serializer.fromJson(serializedName);
+                    Component name = Component.Serializer.fromJson(serializedName);
                     if (name != null) {
                         entry.setName(name.getString());
                     }

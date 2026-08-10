@@ -7,7 +7,7 @@ import net.mca.entity.ai.relationship.Gender;
 import net.mca.resources.data.skin.Clothing;
 import net.mca.resources.data.skin.LayeredHair;
 import net.mca.resources.data.skin.SkinListEntry;
-import net.minecraft.registry.Registries;
+import net.minecraft.core.registries.BuiltInRegistries;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Collection;
@@ -39,7 +39,7 @@ public final class SkinSelection {
             return clothingForProfession(available, gender, agePool);
         }
 
-        String profession = Registries.VILLAGER_PROFESSION.getId(villager.getVillagerData().getProfession()).toString();
+        String profession = BuiltInRegistries.VILLAGER_PROFESSION.getKey(villager.getVillagerData().getProfession()).toString();
         List<Clothing> options = clothingForProfession(available, gender, mapProfession(profession, professionConversions));
         return options.isEmpty() ? clothingForProfession(available, gender, mapProfession("minecraft:none", professionConversions)) : options;
     }

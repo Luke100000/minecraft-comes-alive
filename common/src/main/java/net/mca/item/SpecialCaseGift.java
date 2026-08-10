@@ -1,9 +1,9 @@
 package net.mca.item;
 
 import net.mca.entity.VillagerEntityMCA;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.util.ActionResult;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.InteractionResult;
 
 public interface SpecialCaseGift {
-    ActionResult handle(ServerPlayerEntity player, VillagerEntityMCA villager);
+    InteractionResult handle(ServerPlayer player, VillagerEntityMCA villager);
 }

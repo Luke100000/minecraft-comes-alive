@@ -5,21 +5,20 @@ import net.mca.entity.ai.relationship.AgeState;
 import net.mca.entity.ai.relationship.Gender;
 import net.mca.resources.Names;
 import net.mca.util.WorldUtils;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.SpawnReason;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Vec3d;
-import net.minecraft.village.TradeOfferList;
-import net.minecraft.village.VillagerData;
-import net.minecraft.village.VillagerProfession;
-import net.minecraft.village.VillagerType;
-import net.minecraft.world.World;
-
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.MobSpawnType;
+import net.minecraft.world.entity.npc.VillagerData;
+import net.minecraft.world.entity.npc.VillagerProfession;
+import net.minecraft.world.entity.npc.VillagerType;
+import net.minecraft.world.item.trading.MerchantOffers;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.Vec3;
 import java.util.Optional;
 import java.util.OptionalInt;
 
 public class VillagerFactory {
-    private final World world;
+    private final Level world;
 
     private Optional<String> name = Optional.empty();
     private Optional<Gender> gender = Optional.empty();
@@ -27,16 +26,16 @@ public class VillagerFactory {
     private Optional<VillagerProfession> profession = Optional.empty();
     private Optional<VillagerType> type = Optional.empty();
     private OptionalInt level = OptionalInt.empty();
-    private Optional<TradeOfferList> offers = Optional.empty();
+    private Optional<MerchantOffers> offers = Optional.empty();
 
     private OptionalInt age = OptionalInt.empty();
-    private Optional<Vec3d> position = Optional.empty();
+    private Optional<Vec3> position = Optional.empty();
 
-    private VillagerFactory(World world) {
+    private VillagerFactory(Level world) {
         this.world = world;
     }
 
-    public static VillagerFactory newVillager(World world) {
+    public static VillagerFactory newVillager(Level world) {
         return new VillagerFactory(world);
     }
 
@@ -61,7 +60,7 @@ public class VillagerFactory {
         return this;
     }
 
-    public VillagerFactory withProfession(VillagerProfession prof, int level, TradeOfferList offers) {
+    public VillagerFactory withProfession(VillagerProfession prof, int level, MerchantOffers offers) {
         withProfession(prof, level);
         this.offers = Optional.of(offers);
         return this;
@@ -73,20 +72,20 @@ public class VillagerFactory {
     }
 
     public VillagerFactory withPosition(double x, double y, double z) {
-        return withPosition(new Vec3d(x, y, z));
+        return withPosition(new Vec3(x, y, z));
     }
 
     public VillagerFactory withPosition(Entity entity) {
         return withPosition(entity.getX(), entity.getY(), entity.getZ());
     }
 
-    public VillagerFactory withPosition(Vec3d pos) {
+    public VillagerFactory withPosition(Vec3 pos) {
         position = Optional.of(pos);
         return this;
     }
 
     public VillagerFactory withPosition(BlockPos pos) {
-        return withPosition(Vec3d.ofBottomCenter(pos.up()));
+        return withPosition(Vec3.atBottomCenterOf(pos.above()));
     }
 
     public VillagerFactory withAge(int age) {
@@ -94,7 +93,7 @@ public class VillagerFactory {
         return this;
     }
 
-    public VillagerEntityMCA spawn(SpawnReason reason) {
+    public VillagerEntityMCA spawn(MobSpawnType reason) {
         if (position.isEmpty()) {
             MCA.LOGGER.info("Attempted to spawn villager without a position being set!");
         }
@@ -111,8 +110,8 @@ public class VillagerFactory {
         VillagerEntityMCA villager = gender.getVillagerType().create(world);
         assert villager != null;
         villager.getGenetics().setGender(gender);
-        villager.setBreedingAge(age.orElseGet(() -> villager.getRandom().nextInt(AgeState.getMaxAge() * 3) - AgeState.getMaxAge()));
-        position.ifPresent(pos -> villager.updatePosition(pos.getX(), pos.getY(), pos.getZ()));
+        villager.setAge(age.orElseGet(() -> villager.getRandom().nextInt(AgeState.getMaxAge() * 3) - AgeState.getMaxAge()));
+        position.ifPresent(pos -> villager.absMoveTo(pos.x(), pos.y(), pos.z()));
         villager.setName(name.orElseGet(() -> Names.pickCitizenName(gender, villager)));
         VillagerData data = villager.getVillagerData();
         villager.setVillagerData(new VillagerData(

@@ -12,17 +12,16 @@ import net.mca.resources.Tasks;
 import net.mca.server.world.data.PlayerSaveData;
 import net.mca.server.world.data.Village;
 import net.mca.server.world.data.VillageManager;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.village.VillagerProfession;
-
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.npc.VillagerProfession;
 import java.util.*;
 import java.util.function.BiPredicate;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-public enum Constraint implements BiPredicate<VillagerLike<?>, ServerPlayerEntity> {
+public enum Constraint implements BiPredicate<VillagerLike<?>, ServerPlayer> {
     FAMILY("family", Relationship.IS_FAMILY.asConstraint()),
     NOT_FAMILY("!family", Relationship.IS_FAMILY.negate().asConstraint()),
 
@@ -92,14 +91,14 @@ public enum Constraint implements BiPredicate<VillagerLike<?>, ServerPlayerEntit
     STAYING("staying", (villager, player) -> villager.getVillagerBrain().getMoveState() == MoveState.STAY),
     NOT_STAYING("!staying", (villager, player) -> villager.getVillagerBrain().getMoveState() != MoveState.STAY),
 
-    VILLAGE_HAS_SPACE("village_has_space", (villager, player) -> PlayerSaveData.get(player).getLastSeenVillage(VillageManager.get((ServerWorld)player.getWorld())).filter(Village::hasSpace).isPresent()),
-    NOT_VILLAGE_HAS_SPACE("!village_has_space", (villager, player) -> PlayerSaveData.get(player).getLastSeenVillage(VillageManager.get((ServerWorld)player.getWorld())).filter(Village::hasSpace).isEmpty()),
+    VILLAGE_HAS_SPACE("village_has_space", (villager, player) -> PlayerSaveData.get(player).getLastSeenVillage(VillageManager.get((ServerLevel)player.level())).filter(Village::hasSpace).isPresent()),
+    NOT_VILLAGE_HAS_SPACE("!village_has_space", (villager, player) -> PlayerSaveData.get(player).getLastSeenVillage(VillageManager.get((ServerLevel)player.level())).filter(Village::hasSpace).isEmpty()),
 
     HAS_VILLAGE("has_village", (villager, player) -> villager instanceof VillagerEntityMCA mcaVillager && mcaVillager.getResidency().getHomeVillage().isPresent()),
     NOT_HAS_VILLAGE("!has_village", (villager, player) -> villager instanceof VillagerEntityMCA mcaVillager && mcaVillager.getResidency().getHomeVillage().isEmpty()),
 
-    RIDING("riding", (villager, player) -> villager.asEntity().hasVehicle()),
-    NOT_RIDING("!riding", (villager, player) -> !villager.asEntity().hasVehicle()),
+    RIDING("riding", (villager, player) -> villager.asEntity().isPassenger()),
+    NOT_RIDING("!riding", (villager, player) -> !villager.asEntity().isPassenger()),
 
     HIT_BY("hit_by", (villager, player) -> {
         if (villager instanceof VillagerEntityMCA v) {
@@ -110,7 +109,7 @@ public enum Constraint implements BiPredicate<VillagerLike<?>, ServerPlayerEntit
     }),
     NOT_HIT_BY("!hit_by", (villager, player) -> !HIT_BY.test(villager, player));
 
-    private static boolean isRankAtLeast(VillagerLike<?> villager, ServerPlayerEntity player, Rank rank) {
+    private static boolean isRankAtLeast(VillagerLike<?> villager, ServerPlayer player, Rank rank) {
         return player != null && villager instanceof VillagerEntityMCA && ((VillagerEntityMCA)villager).getResidency().getHomeVillage()
                 .filter(village -> Tasks.getRank(village, player).isAtLeast(rank)).isPresent();
     }
@@ -118,15 +117,15 @@ public enum Constraint implements BiPredicate<VillagerLike<?>, ServerPlayerEntit
     public static final Map<String, Constraint> REGISTRY = Stream.of(values()).collect(Collectors.toMap(a -> a.id, Function.identity()));
 
     private final String id;
-    private final BiPredicate<VillagerLike<?>, ServerPlayerEntity> check;
+    private final BiPredicate<VillagerLike<?>, ServerPlayer> check;
 
-    Constraint(String id, BiPredicate<VillagerLike<?>, ServerPlayerEntity> check) {
+    Constraint(String id, BiPredicate<VillagerLike<?>, ServerPlayer> check) {
         this.id = id;
         this.check = check;
     }
 
     @Override
-    public boolean test(VillagerLike<?> t, ServerPlayerEntity u) {
+    public boolean test(VillagerLike<?> t, ServerPlayer u) {
         return check.test(t, u);
     }
 
@@ -134,7 +133,7 @@ public enum Constraint implements BiPredicate<VillagerLike<?>, ServerPlayerEntit
         return new HashSet<>(REGISTRY.values());
     }
 
-    public static Set<Constraint> allMatching(VillagerLike<?> villager, ServerPlayerEntity player) {
+    public static Set<Constraint> allMatching(VillagerLike<?> villager, ServerPlayer player) {
         return Stream.of(values()).filter(c -> c.test(villager, player)).collect(Collectors.toSet());
     }
 

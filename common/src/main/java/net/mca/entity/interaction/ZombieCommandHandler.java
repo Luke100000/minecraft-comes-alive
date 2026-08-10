@@ -1,8 +1,8 @@
 package net.mca.entity.interaction;
 
 import net.mca.entity.ZombieVillagerEntityMCA;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.util.Hand;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.InteractionHand;
 
 public class ZombieCommandHandler extends EntityCommandHandler<ZombieVillagerEntityMCA> {
 
@@ -14,13 +14,13 @@ public class ZombieCommandHandler extends EntityCommandHandler<ZombieVillagerEnt
      * Called on the server to respond to button events.
      */
     @Override
-    public boolean handle(ServerPlayerEntity player, String command) {
+    public boolean handle(ServerPlayer player, String command) {
         switch (command) {
             case "gift" -> {
                 // zombies only accept one type of gift, and for now it's not brains
-                if (entity.interactMob(player, Hand.MAIN_HAND).isAccepted()) {
-                    if (!player.getAbilities().creativeMode) {
-                        player.getStackInHand(Hand.MAIN_HAND).decrement(1);
+                if (entity.mobInteract(player, InteractionHand.MAIN_HAND).consumesAction()) {
+                    if (!player.getAbilities().instabuild) {
+                        player.getItemInHand(InteractionHand.MAIN_HAND).shrink(1);
                     }
                 }
                 return true;

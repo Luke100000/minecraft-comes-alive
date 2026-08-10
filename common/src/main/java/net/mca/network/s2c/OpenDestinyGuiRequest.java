@@ -3,8 +3,7 @@ package net.mca.network.s2c;
 import net.mca.ClientProxy;
 import net.mca.Config;
 import net.mca.cobalt.network.Message;
-import net.minecraft.server.network.ServerPlayerEntity;
-
+import net.minecraft.server.level.ServerPlayer;
 import java.io.Serial;
 
 public class OpenDestinyGuiRequest implements Message {
@@ -14,7 +13,7 @@ public class OpenDestinyGuiRequest implements Message {
     public final int player;
     public final boolean allowTeleportation;
 
-    public OpenDestinyGuiRequest(ServerPlayerEntity player) {
+    public OpenDestinyGuiRequest(ServerPlayer player) {
         this.player = player.getId();
         this.allowTeleportation = Config.getInstance().allowDestinyTeleportation;
     }

@@ -2,15 +2,14 @@ package net.mca.network.s2c;
 
 import net.mca.ClientProxy;
 import net.mca.network.NbtDataMessage;
-import net.minecraft.nbt.NbtCompound;
-
+import net.minecraft.nbt.CompoundTag;
 import java.io.Serial;
 
 public class GetVillagerResponse extends NbtDataMessage {
     @Serial
     private static final long serialVersionUID = 4997443623143425383L;
 
-    public GetVillagerResponse(NbtCompound data) {
+    public GetVillagerResponse(CompoundTag data) {
         super(data);
     }
 

@@ -6,11 +6,15 @@ import net.mca.MCA;
 import net.mca.entity.CribWoodType;
 import net.mca.item.CribItem;
 import net.mca.item.ItemsMCA;
-import net.minecraft.data.client.*;
-import net.minecraft.item.Item;
-import net.minecraft.util.DyeColor;
-import net.minecraft.util.Identifier;
-
+import net.minecraft.data.models.BlockModelGenerators;
+import net.minecraft.data.models.ItemModelGenerators;
+import net.minecraft.data.models.model.ModelLocationUtils;
+import net.minecraft.data.models.model.ModelTemplate;
+import net.minecraft.data.models.model.TextureMapping;
+import net.minecraft.data.models.model.TextureSlot;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.item.DyeColor;
+import net.minecraft.world.item.Item;
 import java.util.Locale;
 import java.util.Optional;
 
@@ -19,10 +23,10 @@ public class CribItemModelProvider extends FabricModelProvider {
 	public CribItemModelProvider(FabricDataOutput output) { super(output); }
 
 	@Override
-	public void generateBlockStateModels(BlockStateModelGenerator blockStateModelGenerator) {}
+	public void generateBlockStateModels(BlockModelGenerators blockStateModelGenerator) {}
 
 	@Override
-	public void generateItemModels(ItemModelGenerator itemModelGenerator)
+	public void generateItemModels(ItemModelGenerators itemModelGenerator)
 	{
 		for(CribWoodType wood : CribWoodType.values())
 		{
@@ -34,10 +38,10 @@ public class CribItemModelProvider extends FabricModelProvider {
 					return crib.getColor() == color && crib.getWood() == wood;
 				}).findFirst().orElse(ItemsMCA.CRIBS.get(0)).get();
 
-				Model cribModel = new Model(Optional.of(new Identifier("minecraft", "item/generated")), Optional.empty(), TextureKey.LAYER0, TextureKey.LAYER1);
+				ModelTemplate cribModel = new ModelTemplate(Optional.of(new ResourceLocation("minecraft", "item/generated")), Optional.empty(), TextureSlot.LAYER0, TextureSlot.LAYER1);
 
-				cribModel.upload(ModelIds.getItemModelId(item), TextureMap.layered(MCA.locate("item/crib/beds/" + color.getName()),
-					MCA.locate("item/crib/frames/" + wood.toString().toLowerCase(Locale.ROOT))), itemModelGenerator.writer);
+				cribModel.create(ModelLocationUtils.getModelLocation(item), TextureMapping.layered(MCA.locate("item/crib/beds/" + color.getName()),
+					MCA.locate("item/crib/frames/" + wood.toString().toLowerCase(Locale.ROOT))), itemModelGenerator.output);
 			}
 		}
 	}

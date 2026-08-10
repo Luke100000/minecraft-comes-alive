@@ -1,14 +1,14 @@
 package net.mca.mixin;
 
 import net.mca.ducks.IVillagerEntity;
-import net.minecraft.entity.EntityData;
-import net.minecraft.entity.SpawnReason;
-import net.minecraft.entity.mob.ZombieVillagerEntity;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.village.VillagerData;
-import net.minecraft.village.VillagerProfession;
-import net.minecraft.world.LocalDifficulty;
-import net.minecraft.world.ServerWorldAccess;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.world.DifficultyInstance;
+import net.minecraft.world.entity.MobSpawnType;
+import net.minecraft.world.entity.SpawnGroupData;
+import net.minecraft.world.entity.monster.ZombieVillager;
+import net.minecraft.world.entity.npc.VillagerData;
+import net.minecraft.world.entity.npc.VillagerProfession;
+import net.minecraft.world.level.ServerLevelAccessor;
 import org.jetbrains.annotations.Nullable;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -16,21 +16,21 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.ModifyVariable;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-@Mixin(ZombieVillagerEntity.class)
+@Mixin(ZombieVillager.class)
 abstract class MixinZombieVillagerEntity implements IVillagerEntity {
 
     @Nullable
-    private transient SpawnReason reason;
+    private transient MobSpawnType reason;
 
     @Override
-    public SpawnReason getSpawnReason() {
-        return reason == null ? SpawnReason.NATURAL : reason;
+    public MobSpawnType getSpawnReason() {
+        return reason == null ? MobSpawnType.NATURAL : reason;
     }
 
-    @Inject(method = "initialize", at = @At("HEAD"))
-    private void onInitialize(ServerWorldAccess world, LocalDifficulty difficulty, SpawnReason spawnReason,
-                              @Nullable EntityData entityData,
-                              @Nullable NbtCompound entityNbt, CallbackInfoReturnable<EntityData> info) {
+    @Inject(method = "finalizeSpawn", at = @At("HEAD"))
+    private void onInitialize(ServerLevelAccessor world, DifficultyInstance difficulty, MobSpawnType spawnReason,
+                              @Nullable SpawnGroupData entityData,
+                              @Nullable CompoundTag entityNbt, CallbackInfoReturnable<SpawnGroupData> info) {
         reason = spawnReason;
     }
 
@@ -38,7 +38,7 @@ abstract class MixinZombieVillagerEntity implements IVillagerEntity {
     private VillagerData setVillagerData(VillagerData villagerData) {
         VillagerProfession profession = villagerData.getProfession();
         if (profession.toString().startsWith("mca.")) {
-            villagerData = villagerData.withProfession(VillagerProfession.NONE);
+            villagerData = villagerData.setProfession(VillagerProfession.NONE);
         }
         return villagerData;
     }

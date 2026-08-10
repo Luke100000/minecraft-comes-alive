@@ -5,19 +5,18 @@ import com.google.gson.reflect.TypeToken;
 import net.mca.MCA;
 import net.mca.client.resources.Icon;
 import net.mca.resources.Resources;
-import net.minecraft.resource.JsonDataLoader;
-import net.minecraft.resource.ResourceManager;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.profiler.Profiler;
-
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.packs.resources.ResourceManager;
+import net.minecraft.server.packs.resources.SimpleJsonResourceReloadListener;
+import net.minecraft.util.profiling.ProfilerFiller;
 import java.lang.reflect.Type;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 
-public class MCAScreens extends JsonDataLoader {
-    protected static final Identifier ID = new Identifier(MCA.MOD_ID, "screens");
+public class MCAScreens extends SimpleJsonResourceReloadListener {
+    protected static final ResourceLocation ID = new ResourceLocation(MCA.MOD_ID, "screens");
     private static final Type ICONS_TYPE = new TypeToken<Map<String, Icon>>() {}.getType();
 
     private static MCAScreens INSTANCE;
@@ -35,13 +34,13 @@ public class MCAScreens extends JsonDataLoader {
     }
 
     @Override
-    protected void apply(Map<Identifier, JsonElement> data, ResourceManager manager, Profiler profiler) {
+    protected void apply(Map<ResourceLocation, JsonElement> data, ResourceManager manager, ProfilerFiller profiler) {
         buttons.clear();
         icons.clear();
         data.forEach(this::loadScreen);
     }
 
-    private void loadScreen(Identifier id, JsonElement element) {
+    private void loadScreen(ResourceLocation id, JsonElement element) {
         if (element.isJsonObject()) {
             icons.putAll(Resources.GSON.fromJson(element, ICONS_TYPE));
         } else {

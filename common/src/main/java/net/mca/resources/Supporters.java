@@ -3,20 +3,19 @@ package net.mca.resources;
 import com.google.gson.Gson;
 import com.google.gson.JsonElement;
 import net.mca.MCA;
-import net.minecraft.resource.JsonDataLoader;
-import net.minecraft.resource.ResourceManager;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.math.random.Random;
-import net.minecraft.util.profiler.Profiler;
-
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.packs.resources.ResourceManager;
+import net.minecraft.server.packs.resources.SimpleJsonResourceReloadListener;
+import net.minecraft.util.RandomSource;
+import net.minecraft.util.profiling.ProfilerFiller;
 import java.util.*;
 
-public class Supporters extends JsonDataLoader {
-    protected static final Identifier ID = new Identifier(MCA.MOD_ID, "api/supporters");
+public class Supporters extends SimpleJsonResourceReloadListener {
+    protected static final ResourceLocation ID = new ResourceLocation(MCA.MOD_ID, "api/supporters");
 
     private static Supporters INSTANCE;
 
-    static final Random rng = Random.create();
+    static final RandomSource rng = RandomSource.create();
 
     private final List<String> supporters = new ArrayList<>();
     private final Map<String, List<String>> supporterGroups = new HashMap<>();
@@ -31,8 +30,8 @@ public class Supporters extends JsonDataLoader {
     }
 
     @Override
-    protected void apply(Map<Identifier, JsonElement> prepared, ResourceManager manager, Profiler profiler) {
-        for (Map.Entry<Identifier, JsonElement> pair : prepared.entrySet()) {
+    protected void apply(Map<ResourceLocation, JsonElement> prepared, ResourceManager manager, ProfilerFiller profiler) {
+        for (Map.Entry<ResourceLocation, JsonElement> pair : prepared.entrySet()) {
             List<String> strings = supporterGroups.computeIfAbsent(pair.getKey().toString(), x -> new LinkedList<>());
             for (JsonElement e : pair.getValue().getAsJsonArray()) {
                 supporters.add(e.getAsString());

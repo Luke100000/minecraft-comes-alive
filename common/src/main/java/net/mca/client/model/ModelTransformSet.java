@@ -1,19 +1,18 @@
 package net.mca.client.model;
 
 import com.google.common.base.Preconditions;
-import net.minecraft.client.model.ModelPart;
-import net.minecraft.client.model.ModelTransform;
-import net.minecraft.util.math.MathHelper;
-
 import java.util.HashMap;
 import java.util.Map;
+import net.minecraft.client.model.geom.ModelPart;
+import net.minecraft.client.model.geom.PartPose;
+import net.minecraft.util.Mth;
 
 public interface ModelTransformSet {
     interface Op {
         Op KEEP = (delta, a, b) -> a;
         Op SET = (delta, a, b) -> b;
         Op ADD = (delta, a, b) -> a + b;
-        Op LERP = MathHelper::lerp;
+        Op LERP = Mth::lerp;
 
         float apply(float delta, float a, float b);
     }
@@ -65,20 +64,20 @@ public interface ModelTransformSet {
         }
 
         public Builder with(String key, float x, float y, float z, float pitch, float yaw, float roll, Op pivot, Op rotate) {
-            ModelTransform transform = createTransform(x, y, z, pitch, yaw, roll);
+            PartPose transform = createTransform(x, y, z, pitch, yaw, roll);
             transforms.put(key, (part, op, delta) -> {
-                part.pivotX = op.apply(delta, part.pivotX, pivot.apply(delta, part.pivotX, transform.pivotX));
-                part.pivotY = op.apply(delta, part.pivotY, pivot.apply(delta, part.pivotY, transform.pivotY));
-                part.pivotZ = op.apply(delta, part.pivotZ, pivot.apply(delta, part.pivotZ, transform.pivotZ));
-                part.pitch = op.apply(delta, part.pitch, rotate.apply(delta, part.pitch, transform.pitch));
-                part.yaw = op.apply(delta, part.yaw, rotate.apply(delta, part.yaw, transform.yaw));
-                part.roll = op.apply(delta, part.roll, rotate.apply(delta, part.roll, transform.roll));
+                part.x = op.apply(delta, part.x, pivot.apply(delta, part.x, transform.x));
+                part.y = op.apply(delta, part.y, pivot.apply(delta, part.y, transform.y));
+                part.z = op.apply(delta, part.z, pivot.apply(delta, part.z, transform.z));
+                part.xRot = op.apply(delta, part.xRot, rotate.apply(delta, part.xRot, transform.xRot));
+                part.yRot = op.apply(delta, part.yRot, rotate.apply(delta, part.yRot, transform.yRot));
+                part.zRot = op.apply(delta, part.zRot, rotate.apply(delta, part.zRot, transform.zRot));
             });
             return this;
         }
 
-        public static ModelTransform createTransform(float x, float y, float z, float pitch, float yaw, float roll) {
-            return ModelTransform.of(x, y, z, pitch * TO_RADIANS, yaw * TO_RADIANS, roll * TO_RADIANS);
+        public static PartPose createTransform(float x, float y, float z, float pitch, float yaw, float roll) {
+            return PartPose.offsetAndRotation(x, y, z, pitch * TO_RADIANS, yaw * TO_RADIANS, roll * TO_RADIANS);
         }
 
         public ModelTransformSet build() {

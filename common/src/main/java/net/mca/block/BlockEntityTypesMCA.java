@@ -3,21 +3,20 @@ package net.mca.block;
 import dev.architectury.registry.registries.DeferredRegister;
 import dev.architectury.registry.registries.RegistrySupplier;
 import net.mca.MCA;
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.entity.BlockEntity;
-import net.minecraft.block.entity.BlockEntityType;
-import net.minecraft.datafixer.TypeReferences;
-import net.minecraft.registry.RegistryKeys;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.Util;
-import net.minecraft.util.math.BlockPos;
-
+import net.minecraft.Util;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.datafix.fixes.References;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.entity.BlockEntityType;
+import net.minecraft.world.level.block.state.BlockState;
 import java.util.List;
 import java.util.function.BiFunction;
 
 public interface BlockEntityTypesMCA {
-    DeferredRegister<BlockEntityType<?>> BLOCK_ENTITY_TYPES = DeferredRegister.create(MCA.MOD_ID, RegistryKeys.BLOCK_ENTITY_TYPE);
+    DeferredRegister<BlockEntityType<?>> BLOCK_ENTITY_TYPES = DeferredRegister.create(MCA.MOD_ID, Registries.BLOCK_ENTITY_TYPE);
 
     RegistrySupplier<BlockEntityType<TombstoneBlock.Data>> TOMBSTONE = register("tombstone", TombstoneBlock.Data::new, List.of(
             BlocksMCA.GRAVELLING_HEADSTONE,
@@ -40,9 +39,9 @@ public interface BlockEntityTypesMCA {
     }
 
     static <T extends BlockEntity> RegistrySupplier<BlockEntityType<T>> register(String name, BiFunction<BlockPos, BlockState, T> factory, List<RegistrySupplier<Block>> suppliers) {
-        Identifier id = new Identifier(MCA.MOD_ID, name);
-        return BLOCK_ENTITY_TYPES.register(id, () -> BlockEntityType.Builder.create(
+        ResourceLocation id = new ResourceLocation(MCA.MOD_ID, name);
+        return BLOCK_ENTITY_TYPES.register(id, () -> BlockEntityType.Builder.of(
                 factory::apply, suppliers.stream().map(RegistrySupplier::get).toArray(Block[]::new)
-        ).build(Util.getChoiceType(TypeReferences.BLOCK_ENTITY, id.toString())));
+        ).build(Util.fetchChoiceType(References.BLOCK_ENTITY, id.toString())));
     }
 }

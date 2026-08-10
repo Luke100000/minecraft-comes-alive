@@ -3,7 +3,7 @@ package net.mca.mixin;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import net.mca.util.network.datasync.CParameter;
-import net.minecraft.entity.data.DataTracker;
+import net.minecraft.network.syncher.SynchedEntityData;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 
@@ -11,10 +11,10 @@ import org.spongepowered.asm.mixin.injection.At;
  * Suppresses vanilla's false-positive tracked-data warning for MCA's
  * CParameter abstraction.
  */
-@Mixin(DataTracker.class)
+@Mixin(SynchedEntityData.class)
 public class MixinSynchedEntityData {
     @WrapOperation(
-            method = "registerData",
+            method = "defineId",
             at = @At(
                     value = "INVOKE",
                     target = "Ljava/lang/Object;equals(Ljava/lang/Object;)Z"

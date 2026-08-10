@@ -1,24 +1,23 @@
 package net.mca.client.gui;
 
 import com.google.common.collect.Lists;
-import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.text.OrderedText;
-import net.minecraft.text.Text;
-
 import java.util.List;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.network.chat.Component;
+import net.minecraft.util.FormattedCharSequence;
 
 public class ExtendedScreen extends Screen {
-    protected ExtendedScreen(Text title) {
+    protected ExtendedScreen(Component title) {
         super(title);
     }
 
-    public int getTooltipWidth(List<Text> lines_) {
-        List<? extends OrderedText> lines = Lists.transform(lines_, Text::asOrderedText);
+    public int getTooltipWidth(List<Component> lines_) {
+        List<? extends FormattedCharSequence> lines = Lists.transform(lines_, Component::getVisualOrderText);
 
         int w = 0;
         if (!lines.isEmpty()) {
-            for (OrderedText orderedText : lines) {
-                int j = textRenderer.getWidth(orderedText);
+            for (FormattedCharSequence orderedText : lines) {
+                int j = font.width(orderedText);
                 if (j > w) {
                     w = j;
                 }
@@ -27,8 +26,8 @@ public class ExtendedScreen extends Screen {
         return w;
     }
 
-    public int getTooltipHeight(List<Text> lines_) {
-        List<? extends OrderedText> lines = Lists.transform(lines_, Text::asOrderedText);
+    public int getTooltipHeight(List<Component> lines_) {
+        List<? extends FormattedCharSequence> lines = Lists.transform(lines_, Component::getVisualOrderText);
 
         int h = 8;
         if (!lines.isEmpty()) {

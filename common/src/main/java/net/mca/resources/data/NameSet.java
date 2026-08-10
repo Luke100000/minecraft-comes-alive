@@ -2,8 +2,7 @@ package net.mca.resources.data;
 
 import com.google.common.base.Strings;
 import net.mca.resources.PoolUtil;
-import net.minecraft.util.math.random.Random;
-
+import net.minecraft.util.RandomSource;
 import java.util.Locale;
 
 public final class NameSet {
@@ -32,7 +31,7 @@ public final class NameSet {
         this.second = second;
     }
 
-    public String toName(Random rng) {
+    public String toName(RandomSource rng) {
         String first = PoolUtil.pickOne(first(), null, rng);
         String second = PoolUtil.pickOne(second(), null, rng);
 

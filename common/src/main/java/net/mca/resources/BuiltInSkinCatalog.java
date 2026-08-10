@@ -9,9 +9,8 @@ import net.mca.resources.data.skin.BodySkin;
 import net.mca.resources.data.skin.Clothing;
 import net.mca.resources.data.skin.HairStyle;
 import net.mca.resources.data.skin.LayeredHair;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.InvalidIdentifierException;
-
+import net.minecraft.ResourceLocationException;
+import net.minecraft.resources.ResourceLocation;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
@@ -56,10 +55,10 @@ public final class BuiltInSkinCatalog {
     }
 
     private static void addLayeredHair(HashMap<String, LayeredHair> layeredHair, String texture, LayeredHair.Category category) {
-        Identifier parsed;
+        ResourceLocation parsed;
         try {
-            parsed = new Identifier(texture);
-        } catch (InvalidIdentifierException exception) {
+            parsed = new ResourceLocation(texture);
+        } catch (ResourceLocationException exception) {
             MCA.LOGGER.warn("Invalid built-in layered hair texture identifier {}", texture, exception);
             return;
         }
@@ -72,7 +71,7 @@ public final class BuiltInSkinCatalog {
         layeredHair.put(entry.getIdentifier() + "|" + entry.getGender().getDataName() + "|" + entry.getCategory().getId(), entry);
     }
 
-    private static LayeredHair.Category getCategoryFromPath(Identifier id) {
+    private static LayeredHair.Category getCategoryFromPath(ResourceLocation id) {
         LayeredHair.Category category = LayeredHair.Category.byNameOrNull(id.getPath());
         return category == null ? LayeredHair.Category.BASE : category;
     }
@@ -83,7 +82,7 @@ public final class BuiltInSkinCatalog {
         boolean foundAny = false;
         for (String file : files) {
             String path = "data/" + MCA.MOD_ID + "/" + directory + "/" + file + ".json";
-            Identifier id = new Identifier(MCA.MOD_ID, file);
+            ResourceLocation id = new ResourceLocation(MCA.MOD_ID, file);
             try (InputStream stream = loader.getResourceAsStream(path)) {
                 if (stream != null) {
                     foundAny = true;
@@ -114,6 +113,6 @@ public final class BuiltInSkinCatalog {
 
     @FunctionalInterface
     private interface JsonFileConsumer {
-        void accept(Identifier id, JsonElement file);
+        void accept(ResourceLocation id, JsonElement file);
     }
 }

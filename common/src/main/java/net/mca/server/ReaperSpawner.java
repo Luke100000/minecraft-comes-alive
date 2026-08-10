@@ -8,22 +8,21 @@ import net.mca.entity.EntitiesMCA;
 import net.mca.entity.GrimReaperEntity;
 import net.mca.server.world.data.VillageManager;
 import net.mca.util.WorldUtils;
-import net.minecraft.block.Block;
-import net.minecraft.block.Blocks;
-import net.minecraft.entity.EntityType;
-import net.minecraft.entity.SpawnReason;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.nbt.NbtElement;
-import net.minecraft.nbt.NbtHelper;
-import net.minecraft.registry.tag.BlockTags;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.text.Text;
-import net.minecraft.util.Formatting;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.ChunkPos;
-import net.minecraft.util.math.Direction;
-import net.minecraft.world.World;
-
+import net.minecraft.ChatFormatting;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.NbtUtils;
+import net.minecraft.nbt.Tag;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.tags.BlockTags;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.MobSpawnType;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.Map;
@@ -47,20 +46,20 @@ public class ReaperSpawner {
         this.manager = manager;
     }
 
-    public ReaperSpawner(VillageManager manager, NbtCompound nbt) {
+    public ReaperSpawner(VillageManager manager, CompoundTag nbt) {
         this.manager = manager;
-        net.mca.util.NbtHelper.toList(nbt.getList("summons", NbtElement.COMPOUND_TYPE), n -> new ActiveSummon((NbtCompound) n)).forEach(summon ->
+        net.mca.util.NbtHelper.toList(nbt.getList("summons", Tag.TAG_COMPOUND), n -> new ActiveSummon((CompoundTag) n)).forEach(summon ->
                 activeSummons.put(summon.position.spawnPosition.asLong(), summon)
         );
     }
 
-    private void warn(World world, BlockPos pos, String phrase) {
-        world.getPlayers().stream()
-                .min(Comparator.comparingInt(a -> a.getBlockPos().getManhattanDistance(pos)))
-                .ifPresent(p -> p.sendMessage(Text.translatable(phrase).formatted(Formatting.RED), true));
+    private void warn(Level world, BlockPos pos, String phrase) {
+        world.players().stream()
+                .min(Comparator.comparingInt(a -> a.blockPosition().distManhattan(pos)))
+                .ifPresent(p -> p.displayClientMessage(Component.translatable(phrase).withStyle(ChatFormatting.RED), true));
     }
 
-    public void trySpawnReaper(ServerWorld world, BlockPos pos) {
+    public void trySpawnReaper(ServerLevel world, BlockPos pos) {
         if (!Config.getInstance().allowGrimReaper) {
             return;
         }
@@ -76,7 +75,7 @@ public class ReaperSpawner {
             return;
         }
 
-        MCA.LOGGER.info("Attempting to spawn reaper at {} in {}", pos, world.getRegistryKey().getValue());
+        MCA.LOGGER.info("Attempting to spawn reaper at {} in {}", pos, world.dimension().location());
 
         if (!isNightTime(world)) {
             warn(world, pos, "reaper.day");
@@ -92,23 +91,23 @@ public class ReaperSpawner {
             return;
         }
 
-        start(new SummonPosition(pos.up(), totems));
+        start(new SummonPosition(pos.above(), totems));
 
-        EntityType.LIGHTNING_BOLT.spawn(world, pos, SpawnReason.TRIGGERED);
+        EntityType.LIGHTNING_BOLT.spawn(world, pos, MobSpawnType.TRIGGERED);
 
-        world.setBlockState(pos, Blocks.SOUL_SOIL.getDefaultState(), Block.NOTIFY_NEIGHBORS | Block.NOTIFY_LISTENERS);
-        world.setBlockState(pos.up(), BlocksMCA.INFERNAL_FLAME.get().getDefaultState(), Block.NOTIFY_NEIGHBORS | Block.NOTIFY_LISTENERS);
+        world.setBlock(pos, Blocks.SOUL_SOIL.defaultBlockState(), Block.UPDATE_NEIGHBORS | Block.UPDATE_CLIENTS);
+        world.setBlock(pos.above(), BlocksMCA.INFERNAL_FLAME.get().defaultBlockState(), Block.UPDATE_NEIGHBORS | Block.UPDATE_CLIENTS);
         totems.forEach(totem ->
-                world.setBlockState(totem, BlocksMCA.INFERNAL_FLAME.get().getDefaultState(), Block.NOTIFY_LISTENERS | Block.FORCE_STATE)
+                world.setBlock(totem, BlocksMCA.INFERNAL_FLAME.get().defaultBlockState(), Block.UPDATE_CLIENTS | Block.UPDATE_KNOWN_SHAPE)
         );
     }
 
     private void start(SummonPosition pos) {
         activeSummons.computeIfAbsent(pos.spawnPosition.asLong(), ActiveSummon::new).start(pos);
-        manager.markDirty();
+        manager.setDirty();
     }
 
-    public void tick(ServerWorld world) {
+    public void tick(ServerLevel world) {
         boolean empty = activeSummons.isEmpty();
         activeSummons.values().removeIf(summon -> {
             try {
@@ -119,39 +118,39 @@ public class ReaperSpawner {
             }
         });
         if (!empty) {
-            manager.markDirty();
+            manager.setDirty();
         }
     }
 
-    private boolean isNightTime(World world) {
-        long time = world.getTimeOfDay() % 24000;
+    private boolean isNightTime(Level world) {
+        long time = world.getDayTime() % 24000;
         MCA.LOGGER.info("Current time is {}", time);
         return time >= 13000 && time <= 23000;
     }
 
-    private Set<BlockPos> getTotemsFires(World world, BlockPos pos) {
+    private Set<BlockPos> getTotemsFires(Level world, BlockPos pos) {
         int groundY = pos.getY() - 1;
-        int leftSkyHeight = world.getTopY() - groundY;
+        int leftSkyHeight = world.getMaxBuildHeight() - groundY;
         int minPillarHeight = Math.min(Config.getInstance().minPillarHeight, leftSkyHeight);
-        BlockPos.Mutable target = new BlockPos.Mutable();
+        BlockPos.MutableBlockPos target = new BlockPos.MutableBlockPos();
         return Stream.of(HORIZONTALS).map(d -> target.set(pos).setY(groundY).move(d, 3)).filter(pillarPos -> {
             for (int height = 1; height <= leftSkyHeight; height++) {
                 pillarPos.setY(groundY + height);
-                if (world.getBlockState(pillarPos).isOf(Blocks.OBSIDIAN)) {
+                if (world.getBlockState(pillarPos).is(Blocks.OBSIDIAN)) {
                     continue;
-                } else if (world.getBlockState(pillarPos).isIn(BlockTags.FIRE)) {
+                } else if (world.getBlockState(pillarPos).is(BlockTags.FIRE)) {
                     return height - 1 >= minPillarHeight; // except fire one height
                 } else {
                     return false;
                 }
             }
             return false;
-        }).map(BlockPos::toImmutable).collect(Collectors.toSet());
+        }).map(BlockPos::immutable).collect(Collectors.toSet());
     }
 
-    public NbtCompound writeNbt() {
+    public CompoundTag writeNbt() {
         synchronized (lock) {
-            NbtCompound nbt = new NbtCompound();
+            CompoundTag nbt = new CompoundTag();
             nbt.put("summons", net.mca.util.NbtHelper.fromList(activeSummons.values(), ActiveSummon::write));
             return nbt;
         }
@@ -162,37 +161,37 @@ public class ReaperSpawner {
         public final BlockPos fire;
         public final Set<BlockPos> totems;
 
-        public SummonPosition(NbtCompound tag) {
+        public SummonPosition(CompoundTag tag) {
             if (tag.contains("fire") || tag.contains("totems") || tag.contains("spawnPosition")) {
-                fire = NbtHelper.toBlockPos(tag.getCompound("fire"));
-                totems = new HashSet<>(net.mca.util.NbtHelper.toList(tag.getCompound("totems"), v -> NbtHelper.toBlockPos((NbtCompound) v)));
-                spawnPosition = NbtHelper.toBlockPos(tag.getCompound("spawnPosition"));
+                fire = NbtUtils.readBlockPos(tag.getCompound("fire"));
+                totems = new HashSet<>(net.mca.util.NbtHelper.toList(tag.getCompound("totems"), v -> NbtUtils.readBlockPos((CompoundTag) v)));
+                spawnPosition = NbtUtils.readBlockPos(tag.getCompound("spawnPosition"));
             } else {
                 totems = new HashSet<>();
-                spawnPosition = NbtHelper.toBlockPos(tag);
-                fire = spawnPosition.down(10);
+                spawnPosition = NbtUtils.readBlockPos(tag);
+                fire = spawnPosition.below(10);
             }
         }
 
         public SummonPosition(BlockPos fire, Set<BlockPos> totems) {
             this.fire = fire;
-            this.spawnPosition = fire.up(10);
+            this.spawnPosition = fire.above(10);
             this.totems = totems;
         }
 
-        public boolean isCancelled(World world) {
+        public boolean isCancelled(Level world) {
             return !check(fire, world);
         }
 
-        private boolean check(BlockPos pos, World world) {
-            return world.getBlockState(pos).isOf(BlocksMCA.INFERNAL_FLAME.get());
+        private boolean check(BlockPos pos, Level world) {
+            return world.getBlockState(pos).is(BlocksMCA.INFERNAL_FLAME.get());
         }
 
-        public NbtCompound toNbt() {
-            NbtCompound tag = new NbtCompound();
-            tag.put("fire", NbtHelper.fromBlockPos(fire));
-            tag.put("totems", net.mca.util.NbtHelper.fromList(totems, NbtHelper::fromBlockPos));
-            tag.put("spawnPosition", NbtHelper.fromBlockPos(spawnPosition));
+        public CompoundTag toNbt() {
+            CompoundTag tag = new CompoundTag();
+            tag.put("fire", NbtUtils.writeBlockPos(fire));
+            tag.put("totems", net.mca.util.NbtHelper.fromList(totems, NbtUtils::writeBlockPos));
+            tag.put("spawnPosition", NbtUtils.writeBlockPos(spawnPosition));
             return tag;
         }
     }
@@ -205,7 +204,7 @@ public class ReaperSpawner {
             // nop
         }
 
-        ActiveSummon(NbtCompound nbt) {
+        ActiveSummon(CompoundTag nbt) {
             ticks = nbt.getInt("ticks");
             position = new SummonPosition(nbt.getCompound("position"));
         }
@@ -220,7 +219,7 @@ public class ReaperSpawner {
         /**
          * Updates this summoning instance. Returns true once complete.
          */
-        public boolean tick(ServerWorld world) {
+        public boolean tick(ServerLevel world) {
             if (ticks <= 0 || position == null) {
                 return true;
             }
@@ -228,7 +227,7 @@ public class ReaperSpawner {
             if (position.isCancelled(world)) {
                 position.totems.forEach(totem -> {
                     if (position.check(totem, world)) {
-                        world.setBlockState(totem, Blocks.FIRE.getDefaultState());
+                        world.setBlockAndUpdate(totem, Blocks.FIRE.defaultBlockState());
                     }
                 });
                 position = null;
@@ -237,11 +236,11 @@ public class ReaperSpawner {
             }
 
             if (--ticks % 20 == 0) {
-                EntityType.LIGHTNING_BOLT.spawn(world, position.spawnPosition, SpawnReason.TRIGGERED);
+                EntityType.LIGHTNING_BOLT.spawn(world, position.spawnPosition, MobSpawnType.TRIGGERED);
             }
 
             if (ticks == 0) {
-                GrimReaperEntity reaper = EntitiesMCA.GRIM_REAPER.get().spawn(world, position.spawnPosition, SpawnReason.TRIGGERED);
+                GrimReaperEntity reaper = EntitiesMCA.GRIM_REAPER.get().spawn(world, position.spawnPosition, MobSpawnType.TRIGGERED);
                 if (reaper != null) {
                     reaper.playSound(SoundsMCA.REAPER_SUMMON.get(), 1.0F, 1.0F);
                 }
@@ -252,8 +251,8 @@ public class ReaperSpawner {
             return false;
         }
 
-        public NbtCompound write() {
-            NbtCompound nbt = new NbtCompound();
+        public CompoundTag write() {
+            CompoundTag nbt = new CompoundTag();
             nbt.putInt("ticks", ticks);
             nbt.put("position", position.toNbt());
             return nbt;

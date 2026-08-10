@@ -2,8 +2,8 @@ package net.mca;
 
 import dev.architectury.platform.Mod;
 import dev.architectury.platform.Platform;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.util.Identifier;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -24,8 +24,8 @@ public final class MCA {
 
     private static MinecraftServer server;
 
-    public static Identifier locate(String id) {
-        return new Identifier(MOD_ID, id);
+    public static ResourceLocation locate(String id) {
+        return new ResourceLocation(MOD_ID, id);
     }
 
     public static boolean isBlankString(String string) {

@@ -3,9 +3,9 @@ package net.mca.mixin;
 import it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap;
 import net.mca.MCA;
 import net.mca.advancement.criterion.CriterionMCA;
-import net.minecraft.block.entity.AbstractFurnaceBlockEntity;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.util.Identifier;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.level.block.entity.AbstractFurnaceBlockEntity;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -18,10 +18,10 @@ public class MixinAbstractFurnaceBlockEntity {
 
     @Final
     @Shadow
-    private Object2IntOpenHashMap<Identifier> recipesUsed;
+    private Object2IntOpenHashMap<ResourceLocation> recipesUsed;
 
-    @Inject(method = "dropExperienceForRecipesUsed", at = @At("HEAD"))
-    public void onDropExperience(ServerPlayerEntity player, CallbackInfo ci) {
+    @Inject(method = "awardUsedRecipesAndPopExperience", at = @At("HEAD"))
+    public void onDropExperience(ServerPlayer player, CallbackInfo ci) {
         recipesUsed.forEach((identifier, count) -> {
             if (identifier.getNamespace().equals(MCA.MOD_ID)) {
                 boolean isBaby = identifier.equals(MCA.locate("baby_boy_from_smelting"));

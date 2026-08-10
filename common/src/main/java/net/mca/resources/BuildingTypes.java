@@ -3,17 +3,16 @@ package net.mca.resources;
 import com.google.gson.JsonElement;
 import net.mca.MCA;
 import net.mca.resources.data.BuildingType;
-import net.minecraft.resource.JsonDataLoader;
-import net.minecraft.resource.ResourceManager;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.profiler.Profiler;
-
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.packs.resources.ResourceManager;
+import net.minecraft.server.packs.resources.SimpleJsonResourceReloadListener;
+import net.minecraft.util.profiling.ProfilerFiller;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
 
-public class BuildingTypes extends JsonDataLoader implements Iterable<BuildingType> {
-    protected static final Identifier ID = MCA.locate("building_types");
+public class BuildingTypes extends SimpleJsonResourceReloadListener implements Iterable<BuildingType> {
+    protected static final ResourceLocation ID = MCA.locate("building_types");
 
     private final Map<String, BuildingType> buildingTypes = new HashMap<>();
     private final Map<String, BuildingType> buildingTypesClient = new HashMap<>();
@@ -26,8 +25,8 @@ public class BuildingTypes extends JsonDataLoader implements Iterable<BuildingTy
     }
 
     @Override
-    protected void apply(Map<Identifier, JsonElement> prepared, ResourceManager manager, Profiler profiler) {
-        for (Map.Entry<Identifier, JsonElement> pair : prepared.entrySet()) {
+    protected void apply(Map<ResourceLocation, JsonElement> prepared, ResourceManager manager, ProfilerFiller profiler) {
+        for (Map.Entry<ResourceLocation, JsonElement> pair : prepared.entrySet()) {
             String name = pair.getKey().getPath();
             buildingTypes.put(name, new BuildingType(name, pair.getValue().getAsJsonObject()));
         }

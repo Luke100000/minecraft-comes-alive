@@ -2,27 +2,27 @@ package net.mca.item;
 
 import net.mca.cobalt.network.NetworkHandler;
 import net.mca.network.s2c.OpenGuiRequest;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemStack;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.util.Hand;
-import net.minecraft.util.TypedActionResult;
-import net.minecraft.world.World;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.InteractionResultHolder;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.Level;
 
 public class BlueprintItem extends TooltippedItem {
-    public BlueprintItem(Item.Settings properties) {
+    public BlueprintItem(Item.Properties properties) {
         super(properties);
     }
 
     @Override
-    public final TypedActionResult<ItemStack> use(World world, PlayerEntity player, Hand hand) {
-        ItemStack stack = player.getStackInHand(hand);
+    public final InteractionResultHolder<ItemStack> use(Level world, Player player, InteractionHand hand) {
+        ItemStack stack = player.getItemInHand(hand);
 
-        if (player instanceof ServerPlayerEntity serverPlayer) {
+        if (player instanceof ServerPlayer serverPlayer) {
             NetworkHandler.sendToPlayer(new OpenGuiRequest(OpenGuiRequest.Type.BLUEPRINT), serverPlayer);
         }
 
-        return TypedActionResult.success(stack);
+        return InteractionResultHolder.success(stack);
     }
 }

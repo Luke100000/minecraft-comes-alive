@@ -6,8 +6,7 @@ import net.mca.client.book.pages.TitlePage;
 import net.mca.cobalt.network.NetworkHandler;
 import net.mca.network.c2s.CivilRegistryPageRequest;
 import net.mca.util.localization.FlowingText;
-import net.minecraft.text.Text;
-
+import net.minecraft.network.chat.Component;
 import java.util.*;
 
 public class CivilRegistryBook extends Book {
@@ -17,7 +16,7 @@ public class CivilRegistryBook extends Book {
 
     Page EMPTY = new TitlePage("...", "");
 
-    public CivilRegistryBook(String bookName, Text bookAuthor) {
+    public CivilRegistryBook(String bookName, Component bookAuthor) {
         super(bookName, bookAuthor);
     }
 
@@ -54,19 +53,19 @@ public class CivilRegistryBook extends Book {
         }
     }
 
-    public void receive(int index, List<Text> lines) {
-        List<Text> text = new LinkedList<>();
-        for (Text line : lines) {
-            List<Text> wrap = FlowingText.wrap(line, 110);
+    public void receive(int index, List<Component> lines) {
+        List<Component> text = new LinkedList<>();
+        for (Component line : lines) {
+            List<Component> wrap = FlowingText.wrap(line, 110);
             if (text.size() + wrap.size() > 14) {
                 break;
             }
             int i = 0;
-            for (Text l : wrap) {
+            for (Component l : wrap) {
                 if (i == 0) {
                     text.add(l);
                 } else {
-                    text.add(Text.literal(" ").append(l));
+                    text.add(Component.literal(" ").append(l));
                 }
                 i++;
             }

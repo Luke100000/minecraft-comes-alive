@@ -10,9 +10,8 @@ import net.mca.entity.VillagerEntityMCA;
 import net.mca.entity.VillagerLike;
 import net.mca.network.c2s.ConfigRequest;
 import net.mca.network.c2s.PlayerDataRequest;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.entity.player.PlayerEntity;
-
+import net.minecraft.client.Minecraft;
+import net.minecraft.world.entity.player.Player;
 import java.util.*;
 
 public class MCAClient {
@@ -40,7 +39,7 @@ public class MCAClient {
             return Optional.empty();
         }
 
-        if (!playerDataRequests.contains(uuid) && MinecraftClient.getInstance().getNetworkHandler() != null) {
+        if (!playerDataRequests.contains(uuid) && Minecraft.getInstance().getConnection() != null) {
             playerDataRequests.add(uuid);
             NetworkHandler.sendToServer(new PlayerDataRequest(uuid));
         }
@@ -48,10 +47,10 @@ public class MCAClient {
     }
 
     public static boolean useExpandedPersonalityTranslations() {
-        boolean isTTSPackActive = MinecraftClient.getInstance().getResourceManager().streamResourcePacks().anyMatch(pack -> {
-            return pack.getName().contains("MCAVoices");
+        boolean isTTSPackActive = Minecraft.getInstance().getResourceManager().listPacks().anyMatch(pack -> {
+            return pack.packId().contains("MCAVoices");
         });
-        String language = MinecraftClient.getInstance().options.language;
+        String language = Minecraft.getInstance().options.languageCode;
         return !isTTSPackActive && (language.equals("en_us") || language.equals("ru_ru")) && !Config.getInstance().enableOnlineTTS;
     }
 
@@ -77,11 +76,11 @@ public class MCAClient {
                         .noneMatch(entry -> MCA.doesModExist(entry.getKey()));
     }
 
-    public static void tickClient(MinecraftClient client) {
+    public static void tickClient(Minecraft client) {
         destinyManager.tick(client);
 
-        if (KeyBindings.SKIN_LIBRARY.wasPressed()) {
-            MinecraftClient.getInstance().setScreen(new SkinLibraryScreen());
+        if (KeyBindings.SKIN_LIBRARY.consumeClick()) {
+            Minecraft.getInstance().setScreen(new SkinLibraryScreen());
         }
 
         SpeechManager.INSTANCE.tick(client);
@@ -90,9 +89,9 @@ public class MCAClient {
     public static void addPlayerData(UUID uuid, VillagerEntityMCA villager) {
         playerData.put(uuid, villager);
 
-        MinecraftClient client = MinecraftClient.getInstance();
-        if (client.world != null) {
-            PlayerEntity player = client.world.getPlayerByUuid(uuid);
+        Minecraft client = Minecraft.getInstance();
+        if (client.level != null) {
+            Player player = client.level.getPlayerByUUID(uuid);
             if (player != null) {
                 refreshPlayerDimensions(player, "client player data refresh");
             }
@@ -100,22 +99,22 @@ public class MCAClient {
     }
 
     public static void refreshPlayerDataDependentDimensions() {
-        MinecraftClient client = MinecraftClient.getInstance();
-        if (client.world == null) {
+        Minecraft client = Minecraft.getInstance();
+        if (client.level == null) {
             return;
         }
 
-        for (PlayerEntity player : client.world.getPlayers()) {
+        for (Player player : client.level.players()) {
             if (needsPlayerDataForDimensions()) {
-                getPlayerData(player.getUuid());
+                getPlayerData(player.getUUID());
             }
             refreshPlayerDimensions(player, "client config refresh");
         }
     }
 
-    private static void refreshPlayerDimensions(PlayerEntity player, String reason) {
+    private static void refreshPlayerDimensions(Player player, String reason) {
         PlayerDimensions.debugRefresh(player, "before " + reason);
-        player.calculateDimensions();
+        player.refreshDimensions();
         PlayerDimensions.debugRefresh(player, "after " + reason);
     }
 

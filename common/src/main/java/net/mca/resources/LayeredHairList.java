@@ -3,19 +3,18 @@ package net.mca.resources;
 import net.mca.MCA;
 import net.mca.entity.ai.relationship.Gender;
 import net.mca.resources.data.skin.LayeredHair;
-import net.minecraft.resource.ResourceManager;
-import net.minecraft.resource.SinglePreparationResourceReloader;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.InvalidIdentifierException;
-import net.minecraft.util.profiler.Profiler;
-
+import net.minecraft.ResourceLocationException;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.packs.resources.ResourceManager;
+import net.minecraft.server.packs.resources.SimplePreparableReloadListener;
+import net.minecraft.util.profiling.ProfilerFiller;
 import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-public class LayeredHairList extends SinglePreparationResourceReloader<Map<Identifier, List<String>>> {
-    public static final Identifier ID = MCA.locate("hair_layers");
+public class LayeredHairList extends SimplePreparableReloadListener<Map<ResourceLocation, List<String>>> {
+    public static final ResourceLocation ID = MCA.locate("hair_layers");
     private static LayeredHairList INSTANCE;
     public final HashMap<String, LayeredHair> hair = new HashMap<>();
 
@@ -28,26 +27,26 @@ public class LayeredHairList extends SinglePreparationResourceReloader<Map<Ident
     }
 
     @Override
-    protected Map<Identifier, List<String>> prepare(ResourceManager manager, Profiler profiler) {
+    protected Map<ResourceLocation, List<String>> prepare(ResourceManager manager, ProfilerFiller profiler) {
         return SkinListJson.textureCollections(manager, "hair_layers");
     }
 
     @Override
-    protected void apply(Map<Identifier, List<String>> data, ResourceManager manager, Profiler profiler) {
+    protected void apply(Map<ResourceLocation, List<String>> data, ResourceManager manager, ProfilerFiller profiler) {
         hair.clear();
         data.forEach((id, textures) -> SkinCatalogLoader.addLayeredHair(hair, id, textures));
     }
 
-    private void addEntries(Identifier id, List<String> textures) {
+    private void addEntries(ResourceLocation id, List<String> textures) {
         LayeredHair.Category fileCategory = getCategoryFromPath(id);
         textures.forEach(texture -> addEntry(texture, fileCategory));
     }
 
     private void addEntry(String texture, LayeredHair.Category category) {
-        Identifier parsed;
+        ResourceLocation parsed;
         try {
-            parsed = new Identifier(texture);
-        } catch (InvalidIdentifierException exception) {
+            parsed = new ResourceLocation(texture);
+        } catch (ResourceLocationException exception) {
             MCA.LOGGER.warn("Invalid layered hair texture identifier {}", texture, exception);
             return;
         }
@@ -104,7 +103,7 @@ public class LayeredHairList extends SinglePreparationResourceReloader<Map<Ident
         return SkinSelection.maxChance(SkinSelection.layeredHair(hair.values(), category, gender));
     }
 
-    private static LayeredHair.Category getCategoryFromPath(Identifier id) {
+    private static LayeredHair.Category getCategoryFromPath(ResourceLocation id) {
         String[] parts = id.getPath().split("/");
         for (String part : parts) {
             LayeredHair.Category category = LayeredHair.Category.byNameOrNull(part);

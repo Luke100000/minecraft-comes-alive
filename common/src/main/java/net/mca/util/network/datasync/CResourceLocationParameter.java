@@ -1,24 +1,24 @@
 package net.mca.util.network.datasync;
 
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.data.DataTracker;
-import net.minecraft.entity.data.TrackedData;
-import net.minecraft.entity.data.TrackedDataHandlerRegistry;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.nbt.NbtElement;
-import net.minecraft.util.Identifier;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Objects;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.Tag;
+import net.minecraft.network.syncher.EntityDataAccessor;
+import net.minecraft.network.syncher.EntityDataSerializers;
+import net.minecraft.network.syncher.SynchedEntityData;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.entity.Entity;
 
 /**
  * Synchronizes a namespaced identifier through vanilla's string tracked-data serializer.
  */
-public final class CResourceLocationParameter implements CParameter<Identifier, String> {
+public final class CResourceLocationParameter implements CParameter<ResourceLocation, String> {
     private final String id;
-    private final Identifier defaultValue;
+    private final ResourceLocation defaultValue;
 
-    CResourceLocationParameter(String id, Identifier defaultValue) {
+    CResourceLocationParameter(String id, ResourceLocation defaultValue) {
         this.id = Objects.requireNonNull(id, "id");
         this.defaultValue = Objects.requireNonNull(defaultValue, "defaultValue");
     }
@@ -29,37 +29,37 @@ public final class CResourceLocationParameter implements CParameter<Identifier, 
     }
 
     @Override
-    public Identifier get(TrackedData<String> param, DataTracker tracker) {
+    public ResourceLocation get(EntityDataAccessor<String> param, SynchedEntityData tracker) {
         return parseOrDefault(tracker.get(param));
     }
 
     @Override
-    public void set(TrackedData<String> param, DataTracker tracker, Identifier value) {
+    public void set(EntityDataAccessor<String> param, SynchedEntityData tracker, ResourceLocation value) {
         tracker.set(param, Objects.requireNonNull(value, "value").toString());
     }
 
     @Override
-    public Identifier load(NbtCompound nbt) {
-        return nbt.contains(id, NbtElement.STRING_TYPE)
+    public ResourceLocation load(CompoundTag nbt) {
+        return nbt.contains(id, Tag.TAG_STRING)
                 ? parseOrDefault(nbt.getString(id))
                 : defaultValue;
     }
 
     @Override
-    public void save(NbtCompound nbt, Identifier value) {
+    public void save(CompoundTag nbt, ResourceLocation value) {
         nbt.putString(id, Objects.requireNonNull(value, "value").toString());
     }
 
     @Override
-    public TrackedData<String> createParam(Class<? extends Entity> type) {
-        return DataTracker.registerData(type, TrackedDataHandlerRegistry.STRING);
+    public EntityDataAccessor<String> createParam(Class<? extends Entity> type) {
+        return SynchedEntityData.defineId(type, EntityDataSerializers.STRING);
     }
 
-    private Identifier parseOrDefault(@Nullable String value) {
+    private ResourceLocation parseOrDefault(@Nullable String value) {
         if (value == null) {
             return defaultValue;
         }
-        Identifier parsed = Identifier.tryParse(value);
+        ResourceLocation parsed = ResourceLocation.tryParse(value);
         return parsed == null ? defaultValue : parsed;
     }
 }

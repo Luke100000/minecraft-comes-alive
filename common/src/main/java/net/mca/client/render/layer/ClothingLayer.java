@@ -2,23 +2,23 @@ package net.mca.client.render.layer;
 
 import net.mca.MCA;
 import net.mca.client.gui.immersive_library.SkinCache;
-import net.minecraft.client.render.entity.feature.FeatureRendererContext;
-import net.minecraft.client.render.entity.model.BipedEntityModel;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.util.Identifier;
+import net.minecraft.client.model.HumanoidModel;
+import net.minecraft.client.renderer.entity.RenderLayerParent;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.entity.LivingEntity;
 
 import static net.mca.client.model.CommonVillagerModel.getVillager;
 
-public class ClothingLayer<T extends LivingEntity, M extends BipedEntityModel<T>> extends VillagerLayer<T, M> {
+public class ClothingLayer<T extends LivingEntity, M extends HumanoidModel<T>> extends VillagerLayer<T, M> {
     private final String variant;
 
-    public ClothingLayer(FeatureRendererContext<T, M> renderer, M model, String variant) {
+    public ClothingLayer(RenderLayerParent<T, M> renderer, M model, String variant) {
         super(renderer, model);
         this.variant = variant;
     }
 
     @Override
-    public Identifier getSkin(T villager) {
+    public ResourceLocation getSkin(T villager) {
         String v = getVillager(villager).isBurned() ? "burnt" : variant;
         String identifier = getVillager(villager).getClothes();
         if (MCA.isBlankString(identifier)) {
@@ -28,9 +28,9 @@ public class ClothingLayer<T extends LivingEntity, M extends BipedEntityModel<T>
             return SkinCache.getTextureIdentifier(Integer.parseInt(identifier.substring(18)));
         }
         return cached(identifier + v, clothes -> {
-            Identifier id = new Identifier(getVillager(villager).getClothes());
+            ResourceLocation id = new ResourceLocation(getVillager(villager).getClothes());
 
-            Identifier idNew = new Identifier(id.getNamespace(), id.getPath().replace("normal", v));
+            ResourceLocation idNew = new ResourceLocation(id.getNamespace(), id.getPath().replace("normal", v));
             if (canUse(idNew)) {
                 return idNew;
             }

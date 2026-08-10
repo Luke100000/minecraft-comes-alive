@@ -2,11 +2,10 @@ package net.mca.resources.data.tasks;
 
 import com.google.gson.JsonObject;
 import net.mca.server.world.data.Village;
-import net.minecraft.advancement.Advancement;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.JsonHelper;
-
+import net.minecraft.advancements.Advancement;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.util.GsonHelper;
 import java.util.Objects;
 
 public class AdvancementTask extends Task {
@@ -18,12 +17,12 @@ public class AdvancementTask extends Task {
     }
 
     public AdvancementTask(JsonObject json) {
-        this(JsonHelper.getString(json, "id"));
+        this(GsonHelper.getAsString(json, "id"));
     }
 
     @Override
-    public boolean isCompleted(Village village, ServerPlayerEntity player) {
-        Advancement advancement = Objects.requireNonNull(player.getServer()).getAdvancementLoader().get(new Identifier(identifier));
-        return player.getAdvancementTracker().getProgress(advancement).isDone();
+    public boolean isCompleted(Village village, ServerPlayer player) {
+        Advancement advancement = Objects.requireNonNull(player.getServer()).getAdvancements().getAdvancement(new ResourceLocation(identifier));
+        return player.getAdvancements().getOrStartProgress(advancement).isDone();
     }
 }

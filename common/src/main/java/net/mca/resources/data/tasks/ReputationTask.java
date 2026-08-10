@@ -2,11 +2,10 @@ package net.mca.resources.data.tasks;
 
 import com.google.gson.JsonObject;
 import net.mca.server.world.data.Village;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.text.MutableText;
-import net.minecraft.text.Text;
-import net.minecraft.util.JsonHelper;
-
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.util.GsonHelper;
 import java.io.Serial;
 
 public class ReputationTask extends Task {
@@ -21,11 +20,11 @@ public class ReputationTask extends Task {
     }
 
     public ReputationTask(JsonObject json) {
-        this(JsonHelper.getInt(json, "reputation"));
+        this(GsonHelper.getAsInt(json, "reputation"));
     }
 
     @Override
-    public boolean isCompleted(Village village, ServerPlayerEntity player) {
+    public boolean isCompleted(Village village, ServerPlayer player) {
         return village.getReputation(player) >= reputation;
     }
 
@@ -35,7 +34,7 @@ public class ReputationTask extends Task {
     }
 
     @Override
-    public MutableText getTranslatable() {
-        return Text.translatable("task.reputation", reputation);
+    public MutableComponent getTranslatable() {
+        return Component.translatable("task.reputation", reputation);
     }
 }

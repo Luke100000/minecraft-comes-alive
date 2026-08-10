@@ -9,10 +9,9 @@ import net.mca.entity.ai.LongTermMemory;
 import net.mca.network.s2c.InteractionDialogueQuestionResponse;
 import net.mca.network.s2c.InteractionDialogueResponse;
 import net.mca.resources.Dialogues;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.text.MutableText;
-import net.minecraft.util.JsonHelper;
-
+import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.util.GsonHelper;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
@@ -23,7 +22,7 @@ public class Actions {
     public static final Map<String, Factory<JsonElement>> TYPES = new HashMap<>();
 
     static {
-        register("next", JsonHelper::asString, id -> (villager, player) -> {
+        register("next", GsonHelper::convertToString, id -> (villager, player) -> {
             if (id != null) {
                 Question newQuestion = Dialogues.getInstance().getQuestion(id);
                 if (newQuestion != null) {
@@ -33,7 +32,7 @@ public class Actions {
                         return;
                     } else {
                         // a silent message might be a question the player asks one self and should not be spoken by the villager
-                        MutableText text = villager.getTranslatable(player, Question.getTranslationKey(id));
+                        MutableComponent text = villager.getTranslatable(player, Question.getTranslationKey(id));
                         NetworkHandler.sendToPlayer(new InteractionDialogueResponse(newQuestion, player, villager), player);
                         NetworkHandler.sendToPlayer(new InteractionDialogueQuestionResponse(newQuestion.isSilent(), text), player);
                     }
@@ -51,12 +50,12 @@ public class Actions {
             }
         });
 
-        register("say", JsonHelper::asString, id -> (villager, player) -> {
-            MutableText text = villager.getTranslatable(player, Question.getTranslationKey(id));
+        register("say", GsonHelper::convertToString, id -> (villager, player) -> {
+            MutableComponent text = villager.getTranslatable(player, Question.getTranslationKey(id));
             NetworkHandler.sendToPlayer(new InteractionDialogueQuestionResponse(false, text), player);
         });
 
-        register("remember", JsonHelper::asObject, json -> (villager, player) -> {
+        register("remember", GsonHelper::convertToJsonObject, json -> (villager, player) -> {
             String id = LongTermMemory.parseId(json, player);
             if (json.has("time")) {
                 villager.getLongTermMemory().remember(id, json.get("time").getAsLong());
@@ -67,17 +66,17 @@ public class Actions {
 
         register("quit", (a, b) -> a, id -> (villager, player) -> villager.getInteractions().stopInteracting());
 
-        register("negative", JsonHelper::asInt, hearts -> (villager, player) -> {
+        register("negative", GsonHelper::convertToInt, hearts -> (villager, player) -> {
             villager.getVillagerBrain().modifyMoodValue(-hearts);
             villager.getVillagerBrain().rewardHearts(player, -hearts);
         });
 
-        register("positive", JsonHelper::asInt, hearts -> (villager, player) -> {
+        register("positive", GsonHelper::convertToInt, hearts -> (villager, player) -> {
             villager.getVillagerBrain().modifyMoodValue(hearts);
             villager.getVillagerBrain().rewardHearts(player, hearts);
         });
 
-        register("command", JsonHelper::asString, command -> (villager, player) ->
+        register("command", GsonHelper::convertToString, command -> (villager, player) ->
                 villager.getInteractions().handle(player, command));
     }
 
@@ -119,7 +118,7 @@ public class Actions {
     }
 
     public interface Action {
-        void trigger(VillagerEntityMCA villager, ServerPlayerEntity player);
+        void trigger(VillagerEntityMCA villager, ServerPlayer player);
     }
 
     private final List<Action> actions;
@@ -132,7 +131,7 @@ public class Actions {
         this.negative = negative;
     }
 
-    public void trigger(VillagerEntityMCA villager, ServerPlayerEntity player) {
+    public void trigger(VillagerEntityMCA villager, ServerPlayer player) {
         for (Action c : actions) {
             c.trigger(villager, player);
         }

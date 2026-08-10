@@ -1,16 +1,15 @@
 package net.mca.resources;
 
 import net.mca.MCA;
-import net.minecraft.resource.ResourceManager;
-import net.minecraft.util.math.random.Random;
-
+import net.minecraft.server.packs.resources.ResourceManager;
+import net.minecraft.util.RandomSource;
 import java.util.*;
 
 /**
  * Class API handles interaction with MCAs configurable options via JSON in the resources folder
  */
 public class API {
-    static final Random rng = Random.create();
+    static final RandomSource rng = RandomSource.create();
     static Data instance = new Data();
 
     public static VillageComponents getVillagePool() {
@@ -43,7 +42,7 @@ public class API {
         return sentence;
     }
 
-    public static Random getRng() {
+    public static RandomSource getRng() {
         return rng;
     }
 

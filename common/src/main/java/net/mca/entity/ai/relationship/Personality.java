@@ -2,9 +2,9 @@ package net.mca.entity.ai.relationship;
 
 import net.mca.MCA;
 import net.mca.util.ExtensibleTypeRegistry;
-import net.minecraft.text.Text;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.math.random.Random;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.RandomSource;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -19,7 +19,7 @@ import java.util.function.Predicate;
 public class Personality {
     private static final String DIALOGUE_DOT_ESCAPE = "%2E";
     private static final ExtensibleTypeRegistry<Personality> REGISTRY = new ExtensibleTypeRegistry<>(MCA.MOD_ID, "personality");
-    private static final Random RANDOM = Random.create();
+    private static final RandomSource RANDOM = RandomSource.create();
 
     public static final Personality UNASSIGNED = registerBuiltIn("unassigned");
 
@@ -43,19 +43,19 @@ public class Personality {
     public static final Personality PEACEFUL = registerBuiltIn("peaceful");
     public static final Personality UPBEAT = registerBuiltIn("upbeat");
 
-    private final Identifier id;
+    private final ResourceLocation id;
     private final Predicate<AgeState> agePredicate;
 
-    protected Personality(Identifier id, Predicate<AgeState> agePredicate) {
+    protected Personality(ResourceLocation id, Predicate<AgeState> agePredicate) {
         this.id = Objects.requireNonNull(id, "id");
         this.agePredicate = Objects.requireNonNull(agePredicate, "agePredicate");
     }
 
-    public static Personality register(Identifier id) {
+    public static Personality register(ResourceLocation id) {
         return register(new Personality(id, ageState -> true));
     }
 
-    public static Personality register(Identifier id, Predicate<AgeState> agePredicate) {
+    public static Personality register(ResourceLocation id, Predicate<AgeState> agePredicate) {
         return register(new Personality(id, agePredicate));
     }
 
@@ -64,7 +64,7 @@ public class Personality {
         return REGISTRY.register(personality.getId(), registeredId -> personality);
     }
 
-    public static Optional<Personality> get(Identifier id) {
+    public static Optional<Personality> get(ResourceLocation id) {
         return REGISTRY.get(id);
     }
 
@@ -90,7 +90,7 @@ public class Personality {
         return valid.get(RANDOM.nextInt(valid.size()));
     }
 
-    public Identifier getId() {
+    public ResourceLocation getId() {
         return id;
     }
 
@@ -102,21 +102,21 @@ public class Personality {
         return REGISTRY.translationSuffix(id);
     }
 
-    public static String encodeDialogueId(Identifier id) {
+    public static String encodeDialogueId(ResourceLocation id) {
         return id.toString().replace(".", DIALOGUE_DOT_ESCAPE);
     }
 
     public static String getDialoguePrefix(@Nullable String encodedId) {
-        Identifier parsed = REGISTRY.parse(decodeDialogueId(encodedId)).orElse(UNASSIGNED.id);
+        ResourceLocation parsed = REGISTRY.parse(decodeDialogueId(encodedId)).orElse(UNASSIGNED.id);
         return REGISTRY.translationSuffix(parsed);
     }
 
-    public Text getName() {
-        return Text.translatable("personality." + REGISTRY.translationSuffix(id));
+    public Component getName() {
+        return Component.translatable("personality." + REGISTRY.translationSuffix(id));
     }
 
-    public Text getDescription() {
-        return Text.translatable("personalityDescription." + REGISTRY.translationSuffix(id));
+    public Component getDescription() {
+        return Component.translatable("personalityDescription." + REGISTRY.translationSuffix(id));
     }
 
     @Override

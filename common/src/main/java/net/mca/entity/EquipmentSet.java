@@ -1,9 +1,9 @@
 package net.mca.entity;
 
-import net.minecraft.item.Item;
-import net.minecraft.item.Items;
-import net.minecraft.registry.Registries;
-import net.minecraft.util.Identifier;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.Items;
 
 public record EquipmentSet(String mainHand, String offHand, String head, String chest, String legs, String feet) {
     public static final EquipmentSet NAKED = new EquipmentSet("air", "air", "air", "air", "air", "air");
@@ -53,7 +53,7 @@ public record EquipmentSet(String mainHand, String offHand, String head, String 
         }
 
         try {
-            return Registries.ITEM.getOrEmpty(new Identifier(itemName)).orElse(Items.AIR);
+            return BuiltInRegistries.ITEM.getOptional(new ResourceLocation(itemName)).orElse(Items.AIR);
         } catch (RuntimeException ignored) {
             return Items.AIR;
         }

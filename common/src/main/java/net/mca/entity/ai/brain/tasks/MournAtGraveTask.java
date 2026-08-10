@@ -5,20 +5,20 @@ import dev.architectury.platform.Platform;
 import net.mca.MCA;
 import net.mca.entity.VillagerEntityMCA;
 import net.mca.entity.ai.MemoryModuleTypeMCA;
-import net.minecraft.entity.ai.brain.BlockPosLookTarget;
-import net.minecraft.entity.ai.brain.MemoryModuleType;
-import net.minecraft.entity.ai.brain.task.MultiTickTask;
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.Hand;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.entity.ai.behavior.Behavior;
+import net.minecraft.world.entity.ai.behavior.BlockPosTracker;
+import net.minecraft.world.entity.ai.memory.MemoryModuleType;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 
 /**
  * Holds a flower while the core movement task takes a mourner to its selected tombstone,
  * then keeps it there for an immediate line and three delayed remembrance lines.
  */
-public class MournAtGraveTask extends MultiTickTask<VillagerEntityMCA> {
+public class MournAtGraveTask extends Behavior<VillagerEntityMCA> {
     private static final int MIN_DIALOGUE_DELAY = 100;
     private static final int MAX_DIALOGUE_DELAY = 300;
     private static final int DIALOGUE_COUNT = 3;
@@ -41,16 +41,16 @@ public class MournAtGraveTask extends MultiTickTask<VillagerEntityMCA> {
     }
 
     @Override
-    protected boolean shouldRun(ServerWorld world, VillagerEntityMCA villager) {
+    protected boolean checkExtraStartConditions(ServerLevel world, VillagerEntityMCA villager) {
         completed = false;
         hasArrived = false;
         boolean hasTarget = hasMourningTarget(villager);
         if (Platform.isDevelopmentEnvironment()) {
             MCA.LOGGER.info("[MOURNING_TRACE_V3] task-start villager={} position={} grave={} stand={} walking={} arrived={} hasTarget={}",
                     villager.getName().getString(),
-                    villager.getBlockPos(),
-                    villager.getBrain().getOptionalMemory(MemoryModuleTypeMCA.MOURNING_SITE.get()).orElse(null),
-                    villager.getBrain().getOptionalMemory(MemoryModuleTypeMCA.MOURNING_POSITION.get()).orElse(null),
+                    villager.blockPosition(),
+                    villager.getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_SITE.get()).orElse(null),
+                    villager.getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_POSITION.get()).orElse(null),
                     hasWalkTarget(villager),
                     EnterGraveyardTask.isAtMourningSite(villager),
                     hasTarget);
@@ -59,7 +59,7 @@ public class MournAtGraveTask extends MultiTickTask<VillagerEntityMCA> {
     }
 
     @Override
-    protected boolean shouldKeepRunning(ServerWorld world, VillagerEntityMCA villager, long time) {
+    protected boolean canStillUse(ServerLevel world, VillagerEntityMCA villager, long time) {
         if (hasArrived) {
             return remainingDialogues > 0 && EnterGraveyardTask.isWithinMourningArea(villager);
         }
@@ -67,30 +67,30 @@ public class MournAtGraveTask extends MultiTickTask<VillagerEntityMCA> {
     }
 
     @Override
-    protected void run(ServerWorld world, VillagerEntityMCA villager, long time) {
+    protected void start(ServerLevel world, VillagerEntityMCA villager, long time) {
         remainingDialogues = DIALOGUE_COUNT;
-        villager.setStackInHand(Hand.MAIN_HAND, new ItemStack(getFlower(villager)));
+        villager.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(getFlower(villager)));
         if (Platform.isDevelopmentEnvironment()) {
-            MCA.LOGGER.info("[MOURNING_TRACE_V3] flower-held villager={} position={} time={}", villager.getName().getString(), villager.getBlockPos(), time);
+            MCA.LOGGER.info("[MOURNING_TRACE_V3] flower-held villager={} position={} time={}", villager.getName().getString(), villager.blockPosition(), time);
         }
     }
 
     @Override
-    protected void keepRunning(ServerWorld world, VillagerEntityMCA villager, long time) {
+    protected void tick(ServerLevel world, VillagerEntityMCA villager, long time) {
         if (!hasArrived) {
             if (!EnterGraveyardTask.isAtMourningSite(villager)) {
                 return;
             }
             hasArrived = true;
-            villager.getBrain().forget(MemoryModuleType.WALK_TARGET);
+            villager.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
             villager.getNavigation().stop();
             villager.sendChatToAllAround("villager.grieving");
             nextDialogueTime = time + getDialogueDelay(villager);
             if (Platform.isDevelopmentEnvironment()) {
                 MCA.LOGGER.info("[MOURNING_TRACE_V3] arrived villager={} position={} grave={} nextLine={}",
                         villager.getName().getString(),
-                        villager.getBlockPos(),
-                        villager.getBrain().getOptionalMemory(MemoryModuleTypeMCA.MOURNING_SITE.get()).orElse(null),
+                        villager.blockPosition(),
+                        villager.getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_SITE.get()).orElse(null),
                         nextDialogueTime);
             }
         }
@@ -105,7 +105,7 @@ public class MournAtGraveTask extends MultiTickTask<VillagerEntityMCA> {
     }
 
     @Override
-    protected void finishRunning(ServerWorld world, VillagerEntityMCA villager, long time) {
+    protected void stop(ServerLevel world, VillagerEntityMCA villager, long time) {
         completed = hasArrived && remainingDialogues == 0 && EnterGraveyardTask.isWithinMourningArea(villager);
         if (Platform.isDevelopmentEnvironment()) {
             MCA.LOGGER.info("[MOURNING_TRACE_V3] task-finish villager={} completed={} arrived={} linesLeft={} position={} walking={}",
@@ -113,17 +113,17 @@ public class MournAtGraveTask extends MultiTickTask<VillagerEntityMCA> {
                     completed,
                     hasArrived,
                     remainingDialogues,
-                    villager.getBlockPos(),
+                    villager.blockPosition(),
                     hasWalkTarget(villager));
         }
-        villager.getBrain().forget(MemoryModuleType.WALK_TARGET);
+        villager.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
         villager.getNavigation().stop();
-        villager.setStackInHand(Hand.MAIN_HAND, ItemStack.EMPTY);
-        villager.getBrain().forget(MemoryModuleType.LOOK_TARGET);
+        villager.setItemInHand(InteractionHand.MAIN_HAND, ItemStack.EMPTY);
+        villager.getBrain().eraseMemory(MemoryModuleType.LOOK_TARGET);
     }
 
     @Override
-    protected boolean isTimeLimitExceeded(long time) {
+    protected boolean timedOut(long time) {
         return false;
     }
 
@@ -145,11 +145,11 @@ public class MournAtGraveTask extends MultiTickTask<VillagerEntityMCA> {
     }
 
     private static boolean hasWalkTarget(VillagerEntityMCA villager) {
-        return villager.getBrain().getOptionalMemory(MemoryModuleType.WALK_TARGET).isPresent();
+        return villager.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET).isPresent();
     }
 
     private static void lookAtGrave(VillagerEntityMCA villager) {
-        villager.getBrain().getOptionalMemory(MemoryModuleTypeMCA.MOURNING_SITE.get())
-                .ifPresent(grave -> villager.getBrain().remember(MemoryModuleType.LOOK_TARGET, new BlockPosLookTarget(grave)));
+        villager.getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_SITE.get())
+                .ifPresent(grave -> villager.getBrain().setMemory(MemoryModuleType.LOOK_TARGET, new BlockPosTracker(grave)));
     }
 }

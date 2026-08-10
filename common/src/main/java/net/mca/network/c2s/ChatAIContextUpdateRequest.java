@@ -6,9 +6,8 @@ import net.mca.entity.VillagerEntityMCA;
 import net.mca.entity.ai.chatAI.ChatAIContext;
 import net.mca.server.world.data.PlayerSaveData;
 import net.mca.server.world.data.VillageManager;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.server.world.ServerWorld;
-
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import java.util.UUID;
 
 public class ChatAIContextUpdateRequest implements Message {
@@ -31,19 +30,19 @@ public class ChatAIContextUpdateRequest implements Message {
     }
 
     @Override
-    public void receive(ServerPlayerEntity player) {
+    public void receive(ServerPlayer player) {
         if (target == null || target == Target.UNKNOWN || prompt == null || nickname == null
                 || !ChatAIContext.canEdit(player) || prompt.length() > MAX_PROMPT_LENGTH
                 || (target == Target.VILLAGER && nickname.length() > VillagerEntityMCA.MAX_NICKNAME_LENGTH)) {
             return;
         }
 
-        ServerWorld targetWorld = findWorld(player, dimension);
+        ServerLevel targetWorld = findWorld(player, dimension);
         switch (target) {
             case VILLAGER -> {
                 if (targetWorld != null && targetWorld.getEntity(villagerUuid) instanceof VillagerEntityMCA villager) {
                     villager.setChatAIPrompt(prompt);
-                    villager.setNickname(player.getUuid(), nickname);
+                    villager.setNickname(player.getUUID(), nickname);
                 }
             }
             case PLAYER -> PlayerSaveData.get(player).setChatAIPrompt(prompt);
@@ -59,12 +58,12 @@ public class ChatAIContextUpdateRequest implements Message {
         }
     }
 
-    private static ServerWorld findWorld(ServerPlayerEntity player, String dimension) {
+    private static ServerLevel findWorld(ServerPlayer player, String dimension) {
         if (dimension == null) {
             return null;
         }
-        for (ServerWorld world : player.getServer().getWorlds()) {
-            if (world.getRegistryKey().getValue().toString().equals(dimension)) {
+        for (ServerLevel world : player.getServer().getAllLevels()) {
+            if (world.dimension().location().toString().equals(dimension)) {
                 return world;
             }
         }

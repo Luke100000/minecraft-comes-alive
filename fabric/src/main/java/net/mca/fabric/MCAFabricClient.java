@@ -16,24 +16,24 @@ import net.mca.client.render.*;
 import net.mca.entity.EntitiesMCA;
 import net.mca.fabric.client.gui.FabricMCAScreens;
 import net.mca.fabric.resources.*;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.item.ModelPredicateProviderRegistry;
-import net.minecraft.client.render.RenderLayer;
-import net.minecraft.client.render.block.entity.BlockEntityRendererFactories;
-import net.minecraft.client.render.entity.VillagerEntityRenderer;
-import net.minecraft.client.render.entity.ZombieVillagerEntityRenderer;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.resource.ResourceType;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.RenderType;
+import net.minecraft.client.renderer.blockentity.BlockEntityRenderers;
+import net.minecraft.client.renderer.entity.VillagerRenderer;
+import net.minecraft.client.renderer.entity.ZombieVillagerRenderer;
+import net.minecraft.client.renderer.item.ItemProperties;
+import net.minecraft.server.packs.PackType;
+import net.minecraft.world.entity.player.Player;
 
 public final class MCAFabricClient extends ClientProxyAbstractImpl implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
         if (Config.getInstance().useSquidwardModels) {
-            EntityRendererRegistry.register(EntitiesMCA.MALE_VILLAGER, VillagerEntityRenderer::new);
-            EntityRendererRegistry.register(EntitiesMCA.FEMALE_VILLAGER, VillagerEntityRenderer::new);
+            EntityRendererRegistry.register(EntitiesMCA.MALE_VILLAGER, VillagerRenderer::new);
+            EntityRendererRegistry.register(EntitiesMCA.FEMALE_VILLAGER, VillagerRenderer::new);
 
-            EntityRendererRegistry.register(EntitiesMCA.MALE_ZOMBIE_VILLAGER, ZombieVillagerEntityRenderer::new);
-            EntityRendererRegistry.register(EntitiesMCA.FEMALE_ZOMBIE_VILLAGER, ZombieVillagerEntityRenderer::new);
+            EntityRendererRegistry.register(EntitiesMCA.MALE_ZOMBIE_VILLAGER, ZombieVillagerRenderer::new);
+            EntityRendererRegistry.register(EntitiesMCA.FEMALE_ZOMBIE_VILLAGER, ZombieVillagerRenderer::new);
         } else {
             EntityRendererRegistry.register(EntitiesMCA.MALE_VILLAGER, VillagerEntityMCARenderer::new);
             EntityRendererRegistry.register(EntitiesMCA.FEMALE_VILLAGER, VillagerEntityMCARenderer::new);
@@ -48,23 +48,23 @@ public final class MCAFabricClient extends ClientProxyAbstractImpl implements Cl
         ParticleProviderRegistry.register(ParticleTypesMCA.NEG_INTERACTION.get(), InteractionParticle.Factory::new);
         ParticleProviderRegistry.register(ParticleTypesMCA.POS_INTERACTION.get(), InteractionParticle.Factory::new);
 
-        BlockEntityRendererFactories.register(BlockEntityTypesMCA.TOMBSTONE.get(), TombstoneBlockEntityRenderer::new);
+        BlockEntityRenderers.register(BlockEntityTypesMCA.TOMBSTONE.get(), TombstoneBlockEntityRenderer::new);
 
-        ResourceManagerHelper.get(ResourceType.CLIENT_RESOURCES).registerReloadListener(new FabricMCAScreens());
-        ResourceManagerHelper.get(ResourceType.CLIENT_RESOURCES).registerReloadListener(new FabricColorPaletteLoader());
-        ResourceManagerHelper.get(ResourceType.CLIENT_RESOURCES).registerReloadListener(new FabricFaceList());
-        ResourceManagerHelper.get(ResourceType.CLIENT_RESOURCES)
+        ResourceManagerHelper.get(PackType.CLIENT_RESOURCES).registerReloadListener(new FabricMCAScreens());
+        ResourceManagerHelper.get(PackType.CLIENT_RESOURCES).registerReloadListener(new FabricColorPaletteLoader());
+        ResourceManagerHelper.get(PackType.CLIENT_RESOURCES).registerReloadListener(new FabricFaceList());
+        ResourceManagerHelper.get(PackType.CLIENT_RESOURCES)
                 .registerReloadListener(new FabricGeneratedEyeTextureReloadListener());
-        ResourceManagerHelper.get(ResourceType.CLIENT_RESOURCES).registerReloadListener(new FabricSupportersLoader());
-        ResourceManagerHelper.get(ResourceType.CLIENT_RESOURCES).registerReloadListener(new ApiIdentifiableReloadListener());
+        ResourceManagerHelper.get(PackType.CLIENT_RESOURCES).registerReloadListener(new FabricSupportersLoader());
+        ResourceManagerHelper.get(PackType.CLIENT_RESOURCES).registerReloadListener(new ApiIdentifiableReloadListener());
 
-        ModelPredicatesMCA.setup(ModelPredicateProviderRegistry::register);
+        ModelPredicatesMCA.setup(ItemProperties::register);
 
         ClientPlayConnectionEvents.JOIN.register((handler, sender, server) ->
                 MCAClient.onLogin()
         );
 
-        BlockRenderLayerMap.INSTANCE.putBlock(BlocksMCA.INFERNAL_FLAME.get(), RenderLayer.getCutout());
+        BlockRenderLayerMap.INSTANCE.putBlock(BlocksMCA.INFERNAL_FLAME.get(), RenderType.cutout());
 
         ClientTickEvents.START_CLIENT_TICK.register(MCAClient::tickClient);
 
@@ -72,7 +72,7 @@ public final class MCAFabricClient extends ClientProxyAbstractImpl implements Cl
     }
 
     @Override
-    public PlayerEntity getClientPlayer() {
-        return MinecraftClient.getInstance().player;
+    public Player getClientPlayer() {
+        return Minecraft.getInstance().player;
     }
 }

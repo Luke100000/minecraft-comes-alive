@@ -6,21 +6,21 @@ import net.mca.MCA;
 import net.mca.entity.ai.ArcherMoveControl;
 import net.mca.entity.ai.RangedWeaponHelper;
 import net.mca.entity.ai.brain.sensor.GuardEnemiesSensor;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.ai.NoPenaltyTargeting;
-import net.minecraft.entity.ai.brain.EntityLookTarget;
-import net.minecraft.entity.ai.brain.MemoryModuleState;
-import net.minecraft.entity.ai.brain.MemoryModuleType;
-import net.minecraft.entity.ai.brain.task.LookTargetUtil;
-import net.minecraft.entity.ai.brain.task.MultiTickTask;
-import net.minecraft.entity.ai.pathing.Path;
-import net.minecraft.entity.attribute.EntityAttributes;
-import net.minecraft.entity.mob.MobEntity;
-import net.minecraft.entity.mob.PathAwareEntity;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.PathfinderMob;
+import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.entity.ai.behavior.Behavior;
+import net.minecraft.world.entity.ai.behavior.BehaviorUtils;
+import net.minecraft.world.entity.ai.behavior.EntityTracker;
+import net.minecraft.world.entity.ai.memory.MemoryModuleType;
+import net.minecraft.world.entity.ai.memory.MemoryStatus;
+import net.minecraft.world.entity.ai.util.DefaultRandomPos;
+import net.minecraft.world.level.pathfinder.Path;
+import net.minecraft.world.phys.Vec3;
 
-public class ArcherMovementTask<E extends PathAwareEntity> extends MultiTickTask<E> {
+public class ArcherMovementTask<E extends PathfinderMob> extends Behavior<E> {
     private static final double SPEED_MODIFIER = 0.5;
     private static final double KITE_SPEED_MODIFIER = 0.85;
     private static final double EMERGENCY_SPEED_MODIFIER = 0.9;
@@ -60,39 +60,39 @@ public class ArcherMovementTask<E extends PathAwareEntity> extends MultiTickTask
 
     public ArcherMovementTask(int maximumRange) {
         super(ImmutableMap.of(
-                MemoryModuleType.ATTACK_TARGET, MemoryModuleState.VALUE_PRESENT,
-                MemoryModuleType.VISIBLE_MOBS, MemoryModuleState.REGISTERED
+                MemoryModuleType.ATTACK_TARGET, MemoryStatus.VALUE_PRESENT,
+                MemoryModuleType.NEAREST_VISIBLE_LIVING_ENTITIES, MemoryStatus.REGISTERED
         ), 1200);
         this.maximumRangeSquared = maximumRange * maximumRange;
     }
 
     @Override
-    protected boolean shouldRun(ServerWorld world, E entity) {
+    protected boolean checkExtraStartConditions(ServerLevel world, E entity) {
         return RangedWeaponHelper.isValidAttackTarget(entity, getAttackTarget(entity))
                 && RangedWeaponHelper.isHoldingSupportedWeapon(entity);
     }
 
     @Override
-    protected boolean shouldKeepRunning(ServerWorld world, E entity, long gameTime) {
+    protected boolean canStillUse(ServerLevel world, E entity, long gameTime) {
         return RangedWeaponHelper.isValidAttackTarget(entity, getAttackTarget(entity))
                 && RangedWeaponHelper.isHoldingSupportedWeapon(entity);
     }
 
     @Override
-    protected void run(ServerWorld world, E entity, long gameTime) {
+    protected void start(ServerLevel world, E entity, long gameTime) {
         resetState();
-        entity.getBrain().forget(MemoryModuleType.WALK_TARGET);
+        entity.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
         entity.getNavigation().stop();
     }
 
     @Override
-    protected void keepRunning(ServerWorld world, E entity, long gameTime) {
+    protected void tick(ServerLevel world, E entity, long gameTime) {
         LivingEntity target = getAttackTarget(entity);
         if (!RangedWeaponHelper.isValidAttackTarget(entity, target)) {
             return;
         }
 
-        entity.getBrain().forget(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE);
+        entity.getBrain().eraseMemory(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE);
 
         if (target != this.lastTarget) {
             this.lastTarget = target;
@@ -101,12 +101,12 @@ public class ArcherMovementTask<E extends PathAwareEntity> extends MultiTickTask
             entity.getNavigation().stop();
         }
 
-        boolean visible = LookTargetUtil.isVisibleInMemory(entity, target);
+        boolean visible = BehaviorUtils.canSee(entity, target);
         updateSeeTime(visible);
 
         LivingEntity movementThreat = getNearestMovementThreat(entity, target);
-        double targetDistanceSquared = entity.squaredDistanceTo(target);
-        double threatDistanceSquared = entity.squaredDistanceTo(movementThreat);
+        double targetDistanceSquared = entity.distanceToSqr(target);
+        double threatDistanceSquared = entity.distanceToSqr(movementThreat);
         double threatVerticalDistance = Math.abs(entity.getY() - movementThreat.getY());
         double attackRangeSquared = RangedWeaponHelper.getAttackRangeSquared(entity, this.maximumRangeSquared);
         MovementState nextState = selectState(targetDistanceSquared, threatDistanceSquared, threatVerticalDistance, attackRangeSquared);
@@ -144,7 +144,7 @@ public class ArcherMovementTask<E extends PathAwareEntity> extends MultiTickTask
     }
 
     @Override
-    protected void finishRunning(ServerWorld world, E entity, long gameTime) {
+    protected void stop(ServerLevel world, E entity, long gameTime) {
         resetState();
         ArcherMoveControl moveControl = getArcherMoveControl(entity);
         moveControl.setEmergencyFleeing(false);
@@ -204,10 +204,10 @@ public class ArcherMovementTask<E extends PathAwareEntity> extends MultiTickTask
         this.awayPathTicks = 0;
         this.blockedPathTicks = 0;
         this.blockedStrafeTicks = 0;
-        entity.getBrain().forget(MemoryModuleType.WALK_TARGET);
+        entity.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
 
-        if (--this.repathCooldown <= 0 || entity.getNavigation().isIdle()) {
-            entity.getNavigation().startMovingTo(target, SPEED_MODIFIER);
+        if (--this.repathCooldown <= 0 || entity.getNavigation().isDone()) {
+            entity.getNavigation().moveTo(target, SPEED_MODIFIER);
             this.repathCooldown = getNextRepathCooldown(entity);
         }
     }
@@ -215,7 +215,7 @@ public class ArcherMovementTask<E extends PathAwareEntity> extends MultiTickTask
     private void moveAway(E entity, LivingEntity target, double desiredDistance, int pathTicks, double speedModifier, boolean allowPartialPath) {
         this.strafingTime = -1;
         this.blockedStrafeTicks = 0;
-        entity.getBrain().forget(MemoryModuleType.WALK_TARGET);
+        entity.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
 
         if (isCurrentPathBlocked(entity)) {
             this.blockedPathTicks++;
@@ -224,19 +224,19 @@ public class ArcherMovementTask<E extends PathAwareEntity> extends MultiTickTask
         }
 
         if (this.awayPathTicks > 0
-                && !entity.getNavigation().isIdle()
+                && !entity.getNavigation().isDone()
                 && this.blockedPathTicks < BLOCKED_PATH_TICKS_BEFORE_REPATH) {
             this.awayPathTicks--;
             return;
         }
 
-        if (--this.repathCooldown > 0 && !entity.getNavigation().isIdle()) {
+        if (--this.repathCooldown > 0 && !entity.getNavigation().isDone()) {
             return;
         }
 
         Path path = findPathAway(entity, target, desiredDistance, allowPartialPath);
         if (path != null) {
-            entity.getNavigation().startMovingAlong(path, speedModifier);
+            entity.getNavigation().moveTo(path, speedModifier);
             this.awayPathTicks = pathTicks;
             this.repathCooldown = pathTicks;
             this.blockedPathTicks = 0;
@@ -248,30 +248,30 @@ public class ArcherMovementTask<E extends PathAwareEntity> extends MultiTickTask
     }
 
     private boolean isCurrentPathBlocked(E entity) {
-        if (entity.getNavigation().isIdle()) {
+        if (entity.getNavigation().isDone()) {
             return false;
         }
 
-        return entity.isOnGround()
+        return entity.onGround()
                 && (entity.horizontalCollision
-                || entity.collidedSoftly
-                || entity.getVelocity().horizontalLengthSquared() < STUCK_HORIZONTAL_SPEED_SQUARED);
+                || entity.minorHorizontalCollision
+                || entity.getDeltaMovement().horizontalDistanceSqr() < STUCK_HORIZONTAL_SPEED_SQUARED);
     }
 
     private Path findPathAway(E entity, LivingEntity target, double desiredDistance, boolean allowPartialPath) {
-        double currentDistanceSquared = entity.squaredDistanceTo(target);
+        double currentDistanceSquared = entity.distanceToSqr(target);
         double desiredDistanceSquared = desiredDistance * desiredDistance;
         Path bestPath = null;
         double bestScore = currentDistanceSquared;
 
         for (int i = 0; i < AWAY_PATH_ATTEMPTS; i++) {
-            Vec3d candidate = NoPenaltyTargeting.findFrom(entity, AWAY_HORIZONTAL_DISTANCE, AWAY_VERTICAL_DISTANCE, target.getPos());
-            if (candidate == null || candidate.squaredDistanceTo(target.getPos()) <= currentDistanceSquared + MIN_USEFUL_DISTANCE_GAIN) {
+            Vec3 candidate = DefaultRandomPos.getPosAway(entity, AWAY_HORIZONTAL_DISTANCE, AWAY_VERTICAL_DISTANCE, target.position());
+            if (candidate == null || candidate.distanceToSqr(target.position()) <= currentDistanceSquared + MIN_USEFUL_DISTANCE_GAIN) {
                 continue;
             }
 
-            Path path = entity.getNavigation().findPathTo(candidate.x, candidate.y, candidate.z, 0);
-            if (path == null || !allowPartialPath && !path.reachesTarget()) {
+            Path path = entity.getNavigation().createPath(candidate.x, candidate.y, candidate.z, 0);
+            if (path == null || !allowPartialPath && !path.canReach()) {
                 continue;
             }
 
@@ -279,11 +279,11 @@ public class ArcherMovementTask<E extends PathAwareEntity> extends MultiTickTask
             if (endDistanceSquared <= currentDistanceSquared + MIN_USEFUL_DISTANCE_GAIN) {
                 continue;
             }
-            if (path.reachesTarget() && endDistanceSquared >= desiredDistanceSquared) {
+            if (path.canReach() && endDistanceSquared >= desiredDistanceSquared) {
                 return path;
             }
 
-            double score = endDistanceSquared + (path.reachesTarget() ? this.maximumRangeSquared : 0.0);
+            double score = endDistanceSquared + (path.canReach() ? this.maximumRangeSquared : 0.0);
             if (score > bestScore) {
                 bestScore = score;
                 bestPath = path;
@@ -294,14 +294,14 @@ public class ArcherMovementTask<E extends PathAwareEntity> extends MultiTickTask
     }
 
     private static double getPathEndDistanceSquared(Path path, LivingEntity target) {
-        return path.getEnd() == null ? 0.0 : path.getEnd().getBlockPos().toCenterPos().squaredDistanceTo(target.getPos());
+        return path.getEndNode() == null ? 0.0 : path.getEndNode().asBlockPos().getCenter().distanceToSqr(target.position());
     }
 
     private void strafe(E entity) {
         this.awayPathTicks = 0;
         this.blockedPathTicks = 0;
         this.repathCooldown = 0;
-        entity.getBrain().forget(MemoryModuleType.WALK_TARGET);
+        entity.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
         entity.getNavigation().stop();
 
         ArcherMoveControl moveControl = getArcherMoveControl(entity);
@@ -333,10 +333,10 @@ public class ArcherMovementTask<E extends PathAwareEntity> extends MultiTickTask
 
     private boolean isStrafeBlocked(E entity) {
         return this.strafingTime > 3
-                && entity.isOnGround()
+                && entity.onGround()
                 && (entity.horizontalCollision
-                || entity.collidedSoftly
-                || entity.getVelocity().horizontalLengthSquared() < STUCK_HORIZONTAL_SPEED_SQUARED);
+                || entity.minorHorizontalCollision
+                || entity.getDeltaMovement().horizontalDistanceSqr() < STUCK_HORIZONTAL_SPEED_SQUARED);
     }
 
     private void hold(E entity) {
@@ -345,25 +345,25 @@ public class ArcherMovementTask<E extends PathAwareEntity> extends MultiTickTask
         this.blockedPathTicks = 0;
         this.blockedStrafeTicks = 0;
         this.repathCooldown = 0;
-        entity.getBrain().forget(MemoryModuleType.WALK_TARGET);
+        entity.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
         entity.getNavigation().stop();
     }
 
     private void trackTarget(E entity, LivingEntity target) {
-        entity.getBrain().remember(MemoryModuleType.LOOK_TARGET, new EntityLookTarget(target, true));
-        entity.lookAtEntity(target, LOOK_SPEED, LOOK_SPEED);
+        entity.getBrain().setMemory(MemoryModuleType.LOOK_TARGET, new EntityTracker(target, true));
+        entity.lookAt(target, LOOK_SPEED, LOOK_SPEED);
     }
 
     private void faceTargetForStrafe(E entity, LivingEntity target) {
-        entity.getBrain().forget(MemoryModuleType.LOOK_TARGET);
-        entity.lookAtEntity(target, LOOK_SPEED, LOOK_SPEED);
+        entity.getBrain().eraseMemory(MemoryModuleType.LOOK_TARGET);
+        entity.lookAt(target, LOOK_SPEED, LOOK_SPEED);
     }
 
     private void clearLookTarget(E entity) {
-        entity.getBrain().forget(MemoryModuleType.LOOK_TARGET);
+        entity.getBrain().eraseMemory(MemoryModuleType.LOOK_TARGET);
     }
 
-    private static int getNextRepathCooldown(MobEntity entity) {
+    private static int getNextRepathCooldown(Mob entity) {
         return 10 + entity.getRandom().nextInt(10);
     }
 
@@ -380,11 +380,11 @@ public class ArcherMovementTask<E extends PathAwareEntity> extends MultiTickTask
         }
     }
 
-    private void logDebugState(ServerWorld world, E entity, LivingEntity target, LivingEntity movementThreat, boolean visible,
+    private void logDebugState(ServerLevel world, E entity, LivingEntity target, LivingEntity movementThreat, boolean visible,
                                double targetDistanceSquared, double threatDistanceSquared, double threatVerticalDistance) {
         ArcherMoveControl moveControl = getArcherMoveControl(entity);
-        String stateKey = target.getUuid() + ":" + movementThreat.getUuid() + ":" + this.state + ":" + visible;
-        long gameTime = world.getTime();
+        String stateKey = target.getUUID() + ":" + movementThreat.getUUID() + ":" + this.state + ":" + visible;
+        long gameTime = world.getGameTime();
         if (stateKey.equals(this.lastDebugState) && gameTime - this.lastDebugLogTime < DEBUG_LOG_INTERVAL_TICKS) {
             return;
         }
@@ -393,11 +393,11 @@ public class ArcherMovementTask<E extends PathAwareEntity> extends MultiTickTask
         this.lastDebugLogTime = gameTime;
         MCA.LOGGER.info(
                 "[MCA Archer Movement] entity={} entityName=\"{}\" target={} targetName=\"{}\" threat={} threatName=\"{}\" movement={} targetDistSqr={} threatDistSqr={} threatVerticalDist={} los={} seeTime={} strafingTime={} strafingClockwise={} strafeResult={} awayPathTicks={} blockedPathTicks={} blockedStrafeTicks={} navIdle={} horizontalCollision={} onGround={} yaw={} targetYaw={} headYaw={} bodyYaw={} movementSpeed={} velocity={} pos={} targetPos={} threatPos={}",
-                entity.getUuidAsString(),
+                entity.getStringUUID(),
                 entity.getName().getString(),
-                target.getUuidAsString(),
+                target.getStringUUID(),
                 target.getName().getString(),
-                movementThreat.getUuidAsString(),
+                movementThreat.getStringUUID(),
                 movementThreat.getName().getString(),
                 this.state.debugName,
                 String.format("%.2f", targetDistanceSquared),
@@ -411,43 +411,43 @@ public class ArcherMovementTask<E extends PathAwareEntity> extends MultiTickTask
                 this.awayPathTicks,
                 this.blockedPathTicks,
                 this.blockedStrafeTicks,
-                entity.getNavigation().isIdle(),
+                entity.getNavigation().isDone(),
                 entity.horizontalCollision,
-                entity.isOnGround(),
-                String.format("%.2f", entity.getYaw()),
+                entity.onGround(),
+                String.format("%.2f", entity.getYRot()),
                 String.format("%.2f", getTargetYaw(entity, target)),
-                String.format("%.2f", entity.headYaw),
-                String.format("%.2f", entity.bodyYaw),
-                String.format("%.4f", entity.getAttributeValue(EntityAttributes.GENERIC_MOVEMENT_SPEED)),
-                entity.getVelocity(),
-                entity.getBlockPos(),
-                target.getBlockPos(),
-                movementThreat.getBlockPos()
+                String.format("%.2f", entity.yHeadRot),
+                String.format("%.2f", entity.yBodyRot),
+                String.format("%.4f", entity.getAttributeValue(Attributes.MOVEMENT_SPEED)),
+                entity.getDeltaMovement(),
+                entity.blockPosition(),
+                target.blockPosition(),
+                movementThreat.blockPosition()
         );
     }
 
-    private static LivingEntity getNearestMovementThreat(MobEntity entity, LivingEntity fallback) {
-        return entity.getBrain().getOptionalMemory(MemoryModuleType.VISIBLE_MOBS)
-                .flatMap(visible -> visible.stream(candidate -> RangedWeaponHelper.isValidAttackTarget(entity, candidate))
+    private static LivingEntity getNearestMovementThreat(Mob entity, LivingEntity fallback) {
+        return entity.getBrain().getMemoryInternal(MemoryModuleType.NEAREST_VISIBLE_LIVING_ENTITIES)
+                .flatMap(visible -> visible.find(candidate -> RangedWeaponHelper.isValidAttackTarget(entity, candidate))
                         .filter(candidate -> Math.abs(entity.getY() - candidate.getY()) <= CLOSE_RANGE_VERTICAL_THREAT_DISTANCE)
                         .filter(candidate -> GuardEnemiesSensor.isGuardEnemy(candidate, entity))
                         .findFirst())
                 .orElse(fallback);
     }
 
-    private static float getTargetYaw(MobEntity entity, LivingEntity target) {
+    private static float getTargetYaw(Mob entity, LivingEntity target) {
         double dx = target.getX() - entity.getX();
         double dz = target.getZ() - entity.getZ();
         return Math.abs(dx) <= 1.0E-5 && Math.abs(dz) <= 1.0E-5
-                ? entity.getYaw()
+                ? entity.getYRot()
                 : (float) (Math.atan2(dz, dx) * 180.0F / Math.PI) - 90.0F;
     }
 
     private static LivingEntity getAttackTarget(LivingEntity entity) {
-        return entity.getBrain().getOptionalMemory(MemoryModuleType.ATTACK_TARGET).orElse(null);
+        return entity.getBrain().getMemoryInternal(MemoryModuleType.ATTACK_TARGET).orElse(null);
     }
 
-    private static ArcherMoveControl getArcherMoveControl(MobEntity entity) {
+    private static ArcherMoveControl getArcherMoveControl(Mob entity) {
         if (entity.getMoveControl() instanceof ArcherMoveControl archerMoveControl) {
             return archerMoveControl;
         }

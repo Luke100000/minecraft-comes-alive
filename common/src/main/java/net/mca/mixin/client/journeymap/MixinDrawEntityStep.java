@@ -2,8 +2,8 @@ package net.mca.mixin.client.journeymap;
 
 import net.mca.client.render.JourneyMapIconBridge;
 import net.mca.entity.VillagerLike;
-import net.minecraft.client.texture.NativeImageBackedTexture;
-import net.minecraft.entity.LivingEntity;
+import net.minecraft.client.renderer.texture.DynamicTexture;
+import net.minecraft.world.entity.LivingEntity;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Pseudo;
 import org.spongepowered.asm.mixin.Shadow;
@@ -20,13 +20,13 @@ public abstract class MixinDrawEntityStep {
     private WeakReference<LivingEntity> entityRef;
 
     @Shadow(remap = false)
-    private NativeImageBackedTexture entityTexture;
+    private DynamicTexture entityTexture;
 
     @Shadow(remap = false)
-    private NativeImageBackedTexture locatorTexture;
+    private DynamicTexture locatorTexture;
 
     @Shadow(remap = false)
-    private NativeImageBackedTexture locatorBGTexture;
+    private DynamicTexture locatorBGTexture;
 
     @Shadow(remap = false)
     private boolean showOutline;
@@ -41,7 +41,7 @@ public abstract class MixinDrawEntityStep {
             return;
         }
 
-        NativeImageBackedTexture faceTexture = JourneyMapIconBridge.getOrCreateFaceTexture(villager);
+        DynamicTexture faceTexture = JourneyMapIconBridge.getOrCreateFaceTexture(villager);
         if (faceTexture == null) {
             return;
         }

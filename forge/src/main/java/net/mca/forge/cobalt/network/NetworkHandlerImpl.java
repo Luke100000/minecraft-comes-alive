@@ -3,7 +3,7 @@ package net.mca.forge.cobalt.network;
 import net.mca.MCA;
 import net.mca.cobalt.network.Message;
 import net.mca.cobalt.network.NetworkHandler;
-import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.network.NetworkRegistry;
 import net.minecraftforge.network.PacketDistributor;
 import net.minecraftforge.network.simple.SimpleChannel;
@@ -26,7 +26,7 @@ public class NetworkHandlerImpl extends NetworkHandler.Impl {
                 b -> (T) Message.decode(b),
                 (m, ctx) -> {
                     ctx.get().enqueueWork(() -> {
-                        ServerPlayerEntity sender = ctx.get().getSender();
+                        ServerPlayer sender = ctx.get().getSender();
                         if (sender == null) {
                             m.receive();
                         } else {
@@ -43,7 +43,7 @@ public class NetworkHandlerImpl extends NetworkHandler.Impl {
     }
 
     @Override
-    public void sendToPlayer(Message m, ServerPlayerEntity e) {
+    public void sendToPlayer(Message m, ServerPlayer e) {
         channel.send(PacketDistributor.PLAYER.with(() -> e), m);
     }
 }

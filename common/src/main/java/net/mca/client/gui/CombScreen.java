@@ -34,7 +34,7 @@ public class CombScreen extends VillagerEditorScreen {
             super.setPage("loading");
         } else if (page.equals("hair_style") || isDoneFromLayeredHair(page)) {
             syncVillagerData();
-            close();
+            onClose();
         } else if (page.equals("hair_advanced") || page.equals("hair") || isLayeredHairDestination(page)) {
             super.setPage(page);
         } else {

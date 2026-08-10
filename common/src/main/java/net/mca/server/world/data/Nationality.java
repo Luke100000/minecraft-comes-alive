@@ -2,36 +2,35 @@ package net.mca.server.world.data;
 
 import net.mca.util.NbtHelper;
 import net.mca.util.WorldUtils;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.nbt.NbtInt;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.random.Random;
-import net.minecraft.world.PersistentState;
-
+import net.minecraft.core.BlockPos;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.IntTag;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.util.RandomSource;
+import net.minecraft.world.level.saveddata.SavedData;
 import java.util.HashMap;
 import java.util.Map;
 
-public class Nationality extends PersistentState {
+public class Nationality extends SavedData {
     private static final int CHUNK_SIZE = 128;
     private Map<Long, Integer> map = new HashMap<>();
-    final Random random = Random.create();
+    final RandomSource random = RandomSource.create();
 
-    public static Nationality get(ServerWorld world) {
-        return WorldUtils.loadData(world.getServer().getOverworld(), Nationality::new, w -> new Nationality(), "mca_nationality");
+    public static Nationality get(ServerLevel world) {
+        return WorldUtils.loadData(world.getServer().overworld(), Nationality::new, w -> new Nationality(), "mca_nationality");
     }
 
     Nationality() {
 
     }
 
-    Nationality(NbtCompound nbt) {
-        map = NbtHelper.toMap(nbt, Long::valueOf, e -> ((NbtInt)e).intValue());
+    Nationality(CompoundTag nbt) {
+        map = NbtHelper.toMap(nbt, Long::valueOf, e -> ((IntTag)e).getAsInt());
     }
 
     @Override
-    public NbtCompound writeNbt(NbtCompound nbt) {
-        NbtHelper.fromMap(nbt, map, String::valueOf, NbtInt::of);
+    public CompoundTag save(CompoundTag nbt) {
+        NbtHelper.fromMap(nbt, map, String::valueOf, IntTag::valueOf);
         return nbt;
     }
 
@@ -69,7 +68,7 @@ public class Nationality extends PersistentState {
         long rid = toId(pos.getX(), pos.getZ());
         if (!map.containsKey(rid)) {
             map.put(rid, id);
-            markDirty();
+            setDirty();
         }
         return id;
     }

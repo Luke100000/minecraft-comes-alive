@@ -5,10 +5,9 @@ import net.mca.ProfessionsMCA;
 import net.mca.entity.EquipmentSet;
 import net.mca.entity.VillagerEntityMCA;
 import net.mca.server.world.data.Village;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.Hand;
-import net.minecraft.village.VillagerProfession;
-
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.entity.npc.VillagerProfession;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -20,7 +19,7 @@ public class VillageGuardsManager {
         this.village = village;
     }
 
-    public void spawnGuards(ServerWorld world) {
+    public void spawnGuards(ServerLevel world) {
         int guardCapacity = (int)Math.ceil(village.getPopulation() * Config.getInstance().guardSpawnFraction);
 
         // Count up the guards
@@ -32,7 +31,7 @@ public class VillageGuardsManager {
             if (villager.isGuard()) {
                 guards++;
             } else {
-                if (!villager.isBaby() && !villager.isProfessionImportant() && villager.getExperience() == 0 && villager.getVillagerData().getLevel() <= 1) {
+                if (!villager.isBaby() && !villager.isProfessionImportant() && villager.getVillagerXp() == 0 && villager.getVillagerData().getLevel() <= 1) {
                     nonGuards.add(villager);
                 }
                 citizen++;
@@ -50,7 +49,7 @@ public class VillageGuardsManager {
         }
     }
 
-    public EquipmentSet getGuardEquipment(VillagerProfession profession, Hand dominantHand) {
+    public EquipmentSet getGuardEquipment(VillagerProfession profession, InteractionHand dominantHand) {
         int villageLevel = getVillageEquipmentLevel();
         if (profession == ProfessionsMCA.ARCHER.get()) {
             return getArcherEquipmentForLevel(villageLevel, dominantHand);
@@ -70,11 +69,11 @@ public class VillageGuardsManager {
         return level;
     }
 
-    public static EquipmentSet getEquipmentFor(Hand dominantHand, EquipmentSet rightSet, EquipmentSet leftSet) {
-        return dominantHand == Hand.OFF_HAND && leftSet != null ? leftSet : rightSet;
+    public static EquipmentSet getEquipmentFor(InteractionHand dominantHand, EquipmentSet rightSet, EquipmentSet leftSet) {
+        return dominantHand == InteractionHand.OFF_HAND && leftSet != null ? leftSet : rightSet;
     }
 
-    public static EquipmentSet getGuardEquipmentForLevel(int level, Hand dominantHand) {
+    public static EquipmentSet getGuardEquipmentForLevel(int level, InteractionHand dominantHand) {
         EquipmentSet fallback = switch (clampEquipmentLevel(level)) {
             case 2 -> EquipmentSet.GUARD_2;
             case 1 -> EquipmentSet.GUARD_1;
@@ -83,7 +82,7 @@ public class VillageGuardsManager {
         return getConfiguredEquipment(Config.getInstance().guardEquipment, level, fallback);
     }
 
-    public static EquipmentSet getArcherEquipmentForLevel(int level, Hand dominantHand) {
+    public static EquipmentSet getArcherEquipmentForLevel(int level, InteractionHand dominantHand) {
         EquipmentSet fallback = switch (clampEquipmentLevel(level)) {
             case 2 -> getEquipmentFor(dominantHand, EquipmentSet.ARCHER_2, EquipmentSet.ARCHER_2_LEFT);
             case 1 -> getEquipmentFor(dominantHand, EquipmentSet.ARCHER_1, EquipmentSet.ARCHER_1_LEFT);

@@ -1,28 +1,27 @@
 package net.mca.util.localization;
 
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.font.TextRenderer;
-import net.minecraft.text.MutableText;
-import net.minecraft.text.OrderedText;
-import net.minecraft.text.Style;
-import net.minecraft.text.Text;
-
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.Font;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.network.chat.Style;
+import net.minecraft.util.FormattedCharSequence;
 
 public final class FlowingText {
 
-    private final List<OrderedText> lines;
+    private final List<FormattedCharSequence> lines;
 
     private final float scale;
 
-    public FlowingText(List<OrderedText> lines, float scale) {
+    public FlowingText(List<FormattedCharSequence> lines, float scale) {
         this.lines = lines;
         this.scale = scale;
     }
 
-    public List<OrderedText> lines() {
+    public List<FormattedCharSequence> lines() {
         return lines;
     }
 
@@ -34,13 +33,13 @@ public final class FlowingText {
         /**
          * Scales the given text to fit a desired width and height.
          */
-        static FlowingText wrapLines(TextRenderer renderer, Text text, int maxBlockWidth, int maxBlockHeight) {
+        static FlowingText wrapLines(Font renderer, Component text, int maxBlockWidth, int maxBlockHeight) {
             float scale = 1;
 
-            List<OrderedText> output;
+            List<FormattedCharSequence> output;
 
             do {
-                output = renderer.wrapLines(text, (int)Math.ceil(maxBlockWidth / scale));
+                output = renderer.split(text, (int)Math.ceil(maxBlockWidth / scale));
 
                 if (output.size() * 10 * scale <= maxBlockHeight) {
                     break;
@@ -56,11 +55,11 @@ public final class FlowingText {
         }
     }
 
-    public static List<Text> wrap(Text text, int maxWidth) {
-        return MinecraftClient.getInstance().textRenderer.getTextHandler().wrapLines(text, maxWidth, Style.EMPTY).stream().map(line -> {
-            MutableText compiled = Text.literal("");
+    public static List<Component> wrap(Component text, int maxWidth) {
+        return Minecraft.getInstance().font.getSplitter().splitLines(text, maxWidth, Style.EMPTY).stream().map(line -> {
+            MutableComponent compiled = Component.literal("");
             line.visit((s, t) -> {
-                compiled.append(Text.literal(t).setStyle(s));
+                compiled.append(Component.literal(t).setStyle(s));
                 return Optional.empty();
             }, text.getStyle());
             return compiled;

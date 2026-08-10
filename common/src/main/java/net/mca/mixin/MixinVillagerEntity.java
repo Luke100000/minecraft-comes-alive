@@ -1,33 +1,33 @@
 package net.mca.mixin;
 
 import net.mca.ducks.IVillagerEntity;
-import net.minecraft.entity.EntityData;
-import net.minecraft.entity.SpawnReason;
-import net.minecraft.entity.passive.VillagerEntity;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.world.LocalDifficulty;
-import net.minecraft.world.ServerWorldAccess;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.world.DifficultyInstance;
+import net.minecraft.world.entity.MobSpawnType;
+import net.minecraft.world.entity.SpawnGroupData;
+import net.minecraft.world.entity.npc.Villager;
+import net.minecraft.world.level.ServerLevelAccessor;
 import org.jetbrains.annotations.Nullable;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-@Mixin(VillagerEntity.class)
+@Mixin(Villager.class)
 abstract class MixinVillagerEntity implements IVillagerEntity {
 
     @Nullable
-    private transient SpawnReason reason;
+    private transient MobSpawnType reason;
 
     @Override
-    public SpawnReason getSpawnReason() {
-        return reason == null ? SpawnReason.NATURAL : reason;
+    public MobSpawnType getSpawnReason() {
+        return reason == null ? MobSpawnType.NATURAL : reason;
     }
 
-    @Inject(method = "initialize", at = @At("HEAD"))
-    private void onInitialize(ServerWorldAccess world, LocalDifficulty difficulty, SpawnReason spawnReason,
-            @Nullable EntityData entityData,
-            @Nullable NbtCompound entityNbt, CallbackInfoReturnable<EntityData> info) {
+    @Inject(method = "finalizeSpawn", at = @At("HEAD"))
+    private void onInitialize(ServerLevelAccessor world, DifficultyInstance difficulty, MobSpawnType spawnReason,
+            @Nullable SpawnGroupData entityData,
+            @Nullable CompoundTag entityNbt, CallbackInfoReturnable<SpawnGroupData> info) {
         reason = spawnReason;
     }
 }

@@ -1,7 +1,11 @@
 package net.mca.entity.ai;
 
-import net.minecraft.item.*;
-import net.minecraft.text.Text;
+import net.minecraft.network.chat.Component;
+import net.minecraft.world.item.AxeItem;
+import net.minecraft.world.item.FishingRodItem;
+import net.minecraft.world.item.HoeItem;
+import net.minecraft.world.item.PickaxeItem;
+import net.minecraft.world.item.SwordItem;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Locale;
@@ -35,8 +39,8 @@ public enum Chore {
         this.toolType = toolType;
     }
 
-    public Text getName() {
-        return Text.translatable("gui.label." + friendlyName);
+    public Component getName() {
+        return Component.translatable("gui.label." + friendlyName);
     }
 
     @Nullable

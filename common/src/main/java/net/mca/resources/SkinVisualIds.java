@@ -3,7 +3,7 @@ package net.mca.resources;
 import net.mca.entity.ai.relationship.Gender;
 import net.mca.resources.data.skin.*;
 import net.mca.server.world.data.CustomClothingManager;
-import net.minecraft.util.Identifier;
+import net.minecraft.resources.ResourceLocation;
 
 public final class SkinVisualIds {
     private static final String LEGACY_HAIR_NAMESPACE = "mca";
@@ -70,7 +70,7 @@ public final class SkinVisualIds {
     }
 
     public static boolean isLegacyHairTexture(String identifier) {
-        Identifier parsed = Identifier.tryParse(identifier);
+        ResourceLocation parsed = ResourceLocation.tryParse(identifier);
         return parsed != null
                 && LEGACY_HAIR_NAMESPACE.equals(parsed.getNamespace())
                 && parsed.getPath().startsWith(LEGACY_HAIR_PATH_PREFIX)

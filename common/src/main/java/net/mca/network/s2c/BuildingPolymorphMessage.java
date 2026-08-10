@@ -2,8 +2,7 @@ package net.mca.network.s2c;
 
 import net.mca.ClientProxy;
 import net.mca.cobalt.network.Message;
-import net.minecraft.util.math.BlockPos;
-
+import net.minecraft.core.BlockPos;
 import java.io.Serial;
 import java.util.List;
 
@@ -29,7 +28,7 @@ public class BuildingPolymorphMessage implements Message {
     }
 
     public BlockPos scanPos() {
-        return BlockPos.fromLong(scanPos);
+        return BlockPos.of(scanPos);
     }
 
     public boolean isRoom() {

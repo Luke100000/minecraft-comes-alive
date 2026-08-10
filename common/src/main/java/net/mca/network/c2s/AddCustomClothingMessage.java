@@ -7,8 +7,7 @@ import net.mca.resources.data.skin.Clothing;
 import net.mca.resources.data.skin.Hair;
 import net.mca.resources.data.skin.SkinListEntry;
 import net.mca.server.world.data.CustomClothingManager;
-import net.minecraft.server.network.ServerPlayerEntity;
-
+import net.minecraft.server.level.ServerPlayer;
 import java.io.Serial;
 
 public class AddCustomClothingMessage implements Message {
@@ -30,7 +29,7 @@ public class AddCustomClothingMessage implements Message {
     }
 
     @Override
-    public void receive(ServerPlayerEntity player) {
+    public void receive(ServerPlayer player) {
         if (!CustomClothingManager.canModifyGlobalContent(player)) {
             return;
         }

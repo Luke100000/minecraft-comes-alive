@@ -14,7 +14,7 @@ import net.mca.forge.cobalt.network.NetworkHandlerImpl;
 import net.mca.item.ItemsMCA;
 import net.mca.network.MessagesMCA;
 import net.mca.resources.*;
-import net.minecraft.village.TradeOffers;
+import net.minecraft.world.entity.npc.VillagerTrades;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.AddReloadListenerEvent;
 import net.minecraftforge.event.village.VillagerTradesEvent;
@@ -59,7 +59,7 @@ public final class MCAForge {
     }
 
     private void onVillagerTrades(VillagerTradesEvent event) {
-        Int2ObjectMap<TradeOffers.Factory[]> trades = TradeOffersMCA.createTradeMap().get(event.getType());
+        Int2ObjectMap<VillagerTrades.ItemListing[]> trades = TradeOffersMCA.createTradeMap().get(event.getType());
         if (trades == null) {
             return;
         }

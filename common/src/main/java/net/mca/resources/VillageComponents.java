@@ -2,17 +2,16 @@ package net.mca.resources;
 
 import net.mca.resources.Resources.BrokenResourceException;
 import net.mca.resources.data.NameSet;
-import net.minecraft.util.math.random.Random;
-
+import net.minecraft.util.RandomSource;
 import java.util.HashMap;
 import java.util.Map;
 
 public class VillageComponents {
     private final Map<String, NameSet> namePool = new HashMap<>();
 
-    private final Random rng;
+    private final RandomSource rng;
 
-    VillageComponents(Random rng) {
+    VillageComponents(RandomSource rng) {
         this.rng = rng;
     }
 

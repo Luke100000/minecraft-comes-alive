@@ -6,10 +6,9 @@ import net.mca.network.s2c.CivilRegistryResponse;
 import net.mca.server.world.data.PlayerSaveData;
 import net.mca.server.world.data.Village;
 import net.mca.server.world.data.VillageManager;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.text.Text;
-
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import java.io.Serial;
 import java.util.List;
 
@@ -28,12 +27,12 @@ public class CivilRegistryPageRequest implements Message {
     }
 
     @Override
-    public void receive(ServerPlayerEntity player) {
-        PlayerSaveData.get(player).getLastSeenVillage(VillageManager.get((ServerWorld)player.getWorld())).flatMap(Village::getCivilRegistry).ifPresentOrElse(c -> {
-            List<Text> page = c.getPage(from, to);
+    public void receive(ServerPlayer player) {
+        PlayerSaveData.get(player).getLastSeenVillage(VillageManager.get((ServerLevel)player.level())).flatMap(Village::getCivilRegistry).ifPresentOrElse(c -> {
+            List<Component> page = c.getPage(from, to);
             NetworkHandler.sendToPlayer(new CivilRegistryResponse(index, page), player);
         }, () -> {
-            NetworkHandler.sendToPlayer(new CivilRegistryResponse(index, List.of(Text.translatable("civil_registry.empty"))), player);
+            NetworkHandler.sendToPlayer(new CivilRegistryResponse(index, List.of(Component.translatable("civil_registry.empty"))), player);
         });
     }
 }

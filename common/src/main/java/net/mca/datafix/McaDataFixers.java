@@ -6,9 +6,9 @@ import com.mojang.datafixers.DataFixerBuilder;
 import com.mojang.datafixers.schemas.Schema;
 import com.mojang.serialization.Dynamic;
 import net.mca.datafix.fixes.PersonalityAndTraitsFix;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.nbt.NbtElement;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtOps;
+import net.minecraft.nbt.Tag;
 
 /**
  * MCA-owned DataFixerUpper pipeline for persisted MCA entity data.
@@ -36,18 +36,18 @@ public final class McaDataFixers {
      * unchanged, while payloads from a future MCA version are copied without
      * modification.</p>
      */
-    public static NbtCompound update(NbtCompound input) {
+    public static CompoundTag update(CompoundTag input) {
         if (getVersion(input) > CURRENT_VERSION) {
             return input.copy();
         }
 
-        NbtCompound updated = updatePayload(input);
-        if (!updated.contains(LEGACY_MCA_DATA_KEY, NbtElement.COMPOUND_TYPE)) {
+        CompoundTag updated = updatePayload(input);
+        if (!updated.contains(LEGACY_MCA_DATA_KEY, Tag.TAG_COMPOUND)) {
             return updated;
         }
 
-        NbtCompound nested = updated.getCompound(LEGACY_MCA_DATA_KEY);
-        NbtCompound migratedNested = updatePayload(nested);
+        CompoundTag nested = updated.getCompound(LEGACY_MCA_DATA_KEY);
+        CompoundTag migratedNested = updatePayload(nested);
         if (migratedNested == nested) {
             return updated;
         }
@@ -62,44 +62,44 @@ public final class McaDataFixers {
     /**
      * Marks newly written data as current without overwriting a future version.
      */
-    public static void stampCurrentVersion(NbtCompound output) {
+    public static void stampCurrentVersion(CompoundTag output) {
         if (getVersion(output) > CURRENT_VERSION) {
             return;
         }
 
         stampPayload(output);
-        if (output.contains(LEGACY_MCA_DATA_KEY, NbtElement.COMPOUND_TYPE)) {
-            NbtCompound nested = output.getCompound(LEGACY_MCA_DATA_KEY);
+        if (output.contains(LEGACY_MCA_DATA_KEY, Tag.TAG_COMPOUND)) {
+            CompoundTag nested = output.getCompound(LEGACY_MCA_DATA_KEY);
             stampPayload(nested);
             output.put(LEGACY_MCA_DATA_KEY, nested);
         }
     }
 
-    private static NbtCompound updatePayload(NbtCompound input) {
+    private static CompoundTag updatePayload(CompoundTag input) {
         int sourceVersion = getVersion(input);
         if (sourceVersion >= CURRENT_VERSION) {
             return input;
         }
 
-        NbtCompound copy = input.copy();
-        Dynamic<NbtElement> result = FIXER.update(
+        CompoundTag copy = input.copy();
+        Dynamic<Tag> result = FIXER.update(
                 MCA_DATA,
                 new Dynamic<>(NbtOps.INSTANCE, copy),
                 sourceVersion,
                 CURRENT_VERSION
         );
-        NbtCompound migrated = result.getValue() instanceof NbtCompound compound ? compound : copy;
+        CompoundTag migrated = result.getValue() instanceof CompoundTag compound ? compound : copy;
         migrated.putInt(DATA_VERSION_KEY, CURRENT_VERSION);
         return migrated;
     }
 
-    private static int getVersion(NbtCompound input) {
-        return input.contains(DATA_VERSION_KEY, NbtElement.NUMBER_TYPE)
+    private static int getVersion(CompoundTag input) {
+        return input.contains(DATA_VERSION_KEY, Tag.TAG_ANY_NUMERIC)
                 ? input.getInt(DATA_VERSION_KEY)
                 : 0;
     }
 
-    private static void stampPayload(NbtCompound output) {
+    private static void stampPayload(CompoundTag output) {
         if (getVersion(output) <= CURRENT_VERSION) {
             output.putInt(DATA_VERSION_KEY, CURRENT_VERSION);
         }

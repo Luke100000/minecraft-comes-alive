@@ -2,9 +2,8 @@ package net.mca.network.s2c;
 
 import net.mca.ClientProxy;
 import net.mca.cobalt.network.Message;
-import net.minecraft.text.MutableText;
-import net.minecraft.text.Text;
-
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 import java.io.Serial;
 
 public class InteractionDialogueQuestionResponse implements Message {
@@ -14,13 +13,13 @@ public class InteractionDialogueQuestionResponse implements Message {
     public final String questionText;
     public final boolean silent;
 
-    public InteractionDialogueQuestionResponse(boolean silent, Text questionText) {
-        this.questionText = Text.Serializer.toJson(questionText);
+    public InteractionDialogueQuestionResponse(boolean silent, Component questionText) {
+        this.questionText = Component.Serializer.toJson(questionText);
         this.silent = silent;
     }
 
-    public MutableText getQuestionText() {
-        return Text.Serializer.fromJson(questionText);
+    public MutableComponent getQuestionText() {
+        return Component.Serializer.fromJson(questionText);
     }
 
     @Override

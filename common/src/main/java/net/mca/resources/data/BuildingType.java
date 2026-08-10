@@ -4,15 +4,14 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import net.mca.MCA;
 import net.mca.util.RegistryHelper;
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.registry.Registries;
-import net.minecraft.registry.RegistryKeys;
-import net.minecraft.registry.tag.TagKey;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.JsonHelper;
-import net.minecraft.util.math.BlockPos;
-
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.tags.TagKey;
+import net.minecraft.util.GsonHelper;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
 import java.io.Serial;
 import java.io.Serializable;
 import java.util.*;
@@ -28,9 +27,9 @@ public final class BuildingType implements Serializable {
     private final boolean visible;
     private final boolean noBeds;
     private final Map<String, Integer> blocks;
-    private transient Map<Identifier, Identifier> blockToGroup;
-    private transient Map<TagKey<Block>, Identifier> tagToGroup;
-    private transient Map<Identifier, Integer> groups;
+    private transient Map<ResourceLocation, ResourceLocation> blockToGroup;
+    private transient Map<TagKey<Block>, ResourceLocation> tagToGroup;
+    private transient Map<ResourceLocation, Integer> groups;
     private final boolean icon;
     private final int iconU;
     private final int iconV;
@@ -55,32 +54,32 @@ public final class BuildingType implements Serializable {
 
     public BuildingType(String name, JsonObject value) {
         this.name = name;
-        this.margin = JsonHelper.getInt(value, "margin", 0);
-        this.color = JsonHelper.getString(value, "color", "ffffffff");
-        this.priority = JsonHelper.getInt(value, "priority", 0);
-        this.visible = JsonHelper.getBoolean(value, "visible", true);
-        this.noBeds = JsonHelper.getBoolean(value, "noBeds", false);
+        this.margin = GsonHelper.getAsInt(value, "margin", 0);
+        this.color = GsonHelper.getAsString(value, "color", "ffffffff");
+        this.priority = GsonHelper.getAsInt(value, "priority", 0);
+        this.visible = GsonHelper.getAsBoolean(value, "visible", true);
+        this.noBeds = GsonHelper.getAsBoolean(value, "noBeds", false);
 
-        this.icon = JsonHelper.getBoolean(value, "icon", false);
-        this.iconU = JsonHelper.getInt(value, "iconU", 0);
-        this.iconV = JsonHelper.getInt(value, "iconV", 0);
+        this.icon = GsonHelper.getAsBoolean(value, "icon", false);
+        this.iconU = GsonHelper.getAsInt(value, "iconU", 0);
+        this.iconV = GsonHelper.getAsInt(value, "iconV", 0);
 
-        this.grouped = JsonHelper.getBoolean(value, "grouped", false);
-        this.mergeRange = JsonHelper.getInt(value, "mergeRange", 0);
+        this.grouped = GsonHelper.getAsBoolean(value, "grouped", false);
+        this.mergeRange = GsonHelper.getAsInt(value, "mergeRange", 0);
 
         this.blocks = new HashMap<>();
-        if (JsonHelper.hasJsonObject(value, "blocks")) {
-            JsonObject blocks = JsonHelper.getObject(value, "blocks");
+        if (GsonHelper.isObjectNode(value, "blocks")) {
+            JsonObject blocks = GsonHelper.getAsJsonObject(value, "blocks");
             for (Map.Entry<String, JsonElement> entry : blocks.entrySet()) {
                 this.blocks.put(entry.getKey(), entry.getValue().getAsInt());
             }
         }
 
         this.groups = new HashMap<>();
-        if (JsonHelper.hasJsonObject(value, "groups")) {
-            JsonObject blocks = JsonHelper.getObject(value, "groups");
+        if (GsonHelper.isObjectNode(value, "groups")) {
+            JsonObject blocks = GsonHelper.getAsJsonObject(value, "groups");
             for (Map.Entry<String, JsonElement> entry : blocks.entrySet()) {
-                this.groups.put(new Identifier(entry.getKey()), entry.getValue().getAsInt());
+                this.groups.put(new ResourceLocation(entry.getKey()), entry.getValue().getAsInt());
             }
         }
     }
@@ -108,22 +107,22 @@ public final class BuildingType implements Serializable {
     /**
      * @return a mapping between block identifiers and groups (tags or individual blocks)
      */
-    public Map<Identifier, Identifier> getBlockToGroup() {
+    public Map<ResourceLocation, ResourceLocation> getBlockToGroup() {
         if (blockToGroup == null) {
             blockToGroup = new HashMap<>();
             tagToGroup = new HashMap<>();
             groups = new HashMap<>();
             for (Map.Entry<String, Integer> requirement : blocks.entrySet()) {
-                Identifier identifier;
+                ResourceLocation identifier;
                 if (requirement.getKey().startsWith("#")) {
-                    identifier = new Identifier(requirement.getKey().substring(1));
-                    TagKey<Block> tag = TagKey.of(RegistryKeys.BLOCK, identifier);
+                    identifier = new ResourceLocation(requirement.getKey().substring(1));
+                    TagKey<Block> tag = TagKey.create(Registries.BLOCK, identifier);
                     if (tag == null || RegistryHelper.isTagEmpty(tag)) {
                         MCA.LOGGER.error("Unknown building type tag " + identifier);
                     }
                     tagToGroup.put(tag, identifier);
                 } else {
-                    identifier = new Identifier(requirement.getKey());
+                    identifier = new ResourceLocation(requirement.getKey());
                     blockToGroup.put(identifier, identifier);
                 }
                 groups.put(identifier, requirement.getValue());
@@ -132,21 +131,21 @@ public final class BuildingType implements Serializable {
         return blockToGroup;
     }
 
-    private Optional<Identifier> getGroupForBlock(Identifier blockId) {
+    private Optional<ResourceLocation> getGroupForBlock(ResourceLocation blockId) {
         getBlockToGroup();
 
-        Identifier directGroup = blockToGroup.get(blockId);
+        ResourceLocation directGroup = blockToGroup.get(blockId);
         if (directGroup != null) {
             return Optional.of(directGroup);
         }
 
-        var entry = Registries.BLOCK.getEntry(net.minecraft.registry.RegistryKey.of(RegistryKeys.BLOCK, blockId));
+        var entry = BuiltInRegistries.BLOCK.getHolder(net.minecraft.resources.ResourceKey.create(Registries.BLOCK, blockId));
         if (entry.isEmpty()) {
             return Optional.empty();
         }
 
-        for (Map.Entry<TagKey<Block>, Identifier> tagEntry : tagToGroup.entrySet()) {
-            if (entry.get().isIn(tagEntry.getKey())) {
+        for (Map.Entry<TagKey<Block>, ResourceLocation> tagEntry : tagToGroup.entrySet()) {
+            if (entry.get().is(tagEntry.getKey())) {
                 return Optional.of(tagEntry.getValue());
             }
         }
@@ -154,17 +153,17 @@ public final class BuildingType implements Serializable {
         return Optional.empty();
     }
 
-    private Optional<Identifier> getGroupForBlock(BlockState state) {
+    private Optional<ResourceLocation> getGroupForBlock(BlockState state) {
         getBlockToGroup();
 
-        Identifier blockId = Registries.BLOCK.getId(state.getBlock());
-        Identifier directGroup = blockToGroup.get(blockId);
+        ResourceLocation blockId = BuiltInRegistries.BLOCK.getKey(state.getBlock());
+        ResourceLocation directGroup = blockToGroup.get(blockId);
         if (directGroup != null) {
             return Optional.of(directGroup);
         }
 
-        for (Map.Entry<TagKey<Block>, Identifier> tagEntry : tagToGroup.entrySet()) {
-            if (state.isIn(tagEntry.getKey())) {
+        for (Map.Entry<TagKey<Block>, ResourceLocation> tagEntry : tagToGroup.entrySet()) {
+            if (state.is(tagEntry.getKey())) {
                 blockToGroup.put(blockId, tagEntry.getValue());
                 return Optional.of(tagEntry.getValue());
             }
@@ -173,7 +172,7 @@ public final class BuildingType implements Serializable {
         return Optional.empty();
     }
 
-    public boolean matchesBlock(Identifier blockId) {
+    public boolean matchesBlock(ResourceLocation blockId) {
         return getGroupForBlock(blockId).isPresent();
     }
 
@@ -181,7 +180,7 @@ public final class BuildingType implements Serializable {
         return getGroupForBlock(state).isPresent();
     }
 
-    public Map<Identifier, Integer> getGroups() {
+    public Map<ResourceLocation, Integer> getGroups() {
         getBlockToGroup();
         return groups;
     }
@@ -191,9 +190,9 @@ public final class BuildingType implements Serializable {
      *
      * @return a filtered and grouped map of block types relevant for this building type
      */
-    public Map<Identifier, List<BlockPos>> getGroups(Map<Identifier, List<BlockPos>> blocks) {
-        HashMap<Identifier, List<BlockPos>> available = new HashMap<>();
-        for (Map.Entry<Identifier, List<BlockPos>> entry : blocks.entrySet()) {
+    public Map<ResourceLocation, List<BlockPos>> getGroups(Map<ResourceLocation, List<BlockPos>> blocks) {
+        HashMap<ResourceLocation, List<BlockPos>> available = new HashMap<>();
+        for (Map.Entry<ResourceLocation, List<BlockPos>> entry : blocks.entrySet()) {
             getGroupForBlock(entry.getKey()).ifPresent(group -> available.computeIfAbsent(group, k -> new LinkedList<>()).addAll(entry.getValue()));
         }
         return available;

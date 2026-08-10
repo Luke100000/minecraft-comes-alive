@@ -1,14 +1,14 @@
 package net.mca.entity.ai;
 
-import net.minecraft.block.BlockState;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Direction;
-import net.minecraft.world.World;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Comparator;
 import java.util.List;
 import java.util.function.Predicate;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.state.BlockState;
 
 public interface TaskUtils {
     /**
@@ -20,22 +20,22 @@ public interface TaskUtils {
      * @param z     Z coordinate
      * @return Integer representing the air block above the first non-air block given the provided ordered triples.
      */
-    static int getSpawnSafeTopLevel(World world, int x, int y, int z) {
-        BlockPos.Mutable pos = new BlockPos.Mutable(x, Math.min(y, world.getTopY()), z);
-        while (world.isAir(pos.move(Direction.DOWN)) && pos.getY() > world.getBottomY()) {}
+    static int getSpawnSafeTopLevel(Level world, int x, int y, int z) {
+        BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos(x, Math.min(y, world.getMaxBuildHeight()), z);
+        while (world.isEmptyBlock(pos.move(Direction.DOWN)) && pos.getY() > world.getMinBuildHeight()) {}
 
         return pos.getY() + 1;
     }
 
-    static List<BlockPos> getNearbyBlocks(BlockPos origin, World world, @Nullable Predicate<BlockState> filter, int xzDist, int yDist) {
-        return BlockPos.streamOutwards(origin, xzDist, yDist, xzDist)
+    static List<BlockPos> getNearbyBlocks(BlockPos origin, Level world, @Nullable Predicate<BlockState> filter, int xzDist, int yDist) {
+        return BlockPos.withinManhattanStream(origin, xzDist, yDist, xzDist)
                 .filter(pos -> !origin.equals(pos) && (filter == null || filter.test(world.getBlockState(pos))))
-                .map(BlockPos::toImmutable)
+                .map(BlockPos::immutable)
                 .toList();
     }
 
     @Nullable
     static BlockPos getNearestPoint(BlockPos origin, List<BlockPos> blocks) {
-        return blocks.stream().min(Comparator.comparing(origin::getSquaredDistance)).orElse(null);
+        return blocks.stream().min(Comparator.comparing(origin::distSqr)).orElse(null);
     }
 }

@@ -4,9 +4,8 @@ import net.mca.Config;
 import net.mca.entity.VillagerEntityMCA;
 import net.mca.server.world.data.PlayerSaveData;
 import net.mca.server.world.data.Village;
-import net.minecraft.server.command.ServerCommandSource;
-import net.minecraft.server.network.ServerPlayerEntity;
-
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.server.level.ServerPlayer;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -111,13 +110,13 @@ public final class ChatAIContext {
     private ChatAIContext() {
     }
 
-    public static boolean canEdit(ServerPlayerEntity player) {
-        return player.hasPermissionLevel(Config.getInstance().villagerChatAIContextPermissionLevel)
-                || player.getServer().isHost(player.getGameProfile());
+    public static boolean canEdit(ServerPlayer player) {
+        return player.hasPermissions(Config.getInstance().villagerChatAIContextPermissionLevel)
+                || player.getServer().isSingleplayerOwner(player.getGameProfile());
     }
 
-    public static boolean canEdit(ServerCommandSource source) {
-        ServerPlayerEntity player = source.getPlayer();
+    public static boolean canEdit(CommandSourceStack source) {
+        ServerPlayer player = source.getPlayer();
         return player != null && canEdit(player);
     }
 
@@ -134,7 +133,7 @@ public final class ChatAIContext {
         return String.join(" ", facts.subList(0, 3));
     }
 
-    public static void appendPrompts(StringBuilder prompt, ServerPlayerEntity player, VillagerEntityMCA villager, Village village) {
+    public static void appendPrompts(StringBuilder prompt, ServerPlayer player, VillagerEntityMCA villager, Village village) {
         append(prompt, "Villager background", villager.getChatAIPrompt());
         append(prompt, "Player context", PlayerSaveData.get(player).getChatAIPrompt());
         if (village != null) {

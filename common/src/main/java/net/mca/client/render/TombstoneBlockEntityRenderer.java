@@ -3,86 +3,85 @@ package net.mca.client.render;
 import net.mca.block.TombstoneBlock;
 import net.mca.block.TombstoneBlock.Data;
 import net.mca.util.localization.FlowingText;
-import net.minecraft.block.BlockState;
-import net.minecraft.client.font.TextRenderer;
-import net.minecraft.client.render.VertexConsumerProvider;
-import net.minecraft.client.render.block.entity.BlockEntityRenderer;
-import net.minecraft.client.render.block.entity.BlockEntityRendererFactory;
-import net.minecraft.client.util.math.MatrixStack;
-import net.minecraft.state.property.Properties;
-import net.minecraft.text.OrderedText;
-import net.minecraft.text.Text;
-import net.minecraft.util.math.Direction;
-import net.minecraft.util.math.RotationAxis;
-import net.minecraft.util.math.Vec3d;
-
+import net.minecraft.client.gui.Font;
+import net.minecraft.client.renderer.MultiBufferSource;
+import net.minecraft.client.renderer.blockentity.BlockEntityRenderer;
+import net.minecraft.client.renderer.blockentity.BlockEntityRendererProvider;
+import net.minecraft.core.Direction;
+import net.minecraft.network.chat.Component;
+import net.minecraft.util.FormattedCharSequence;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+import net.minecraft.world.phys.Vec3;
+import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.math.Axis;
 import java.util.List;
 
 public class TombstoneBlockEntityRenderer implements BlockEntityRenderer<TombstoneBlock.Data> {
 
-    private final TextRenderer text;
+    private final Font text;
 
-    public TombstoneBlockEntityRenderer(BlockEntityRendererFactory.Context context) {
-        text = context.getTextRenderer();
+    public TombstoneBlockEntityRenderer(BlockEntityRendererProvider.Context context) {
+        text = context.getFont();
     }
 
     @Override
-    public int getRenderDistance() {
+    public int getViewDistance() {
         return 32;
     }
 
     @Override
-    public void render(Data entity, float tickDelta, MatrixStack matrices, VertexConsumerProvider vertexConsumers, int light, int overlay) {
+    public void render(Data entity, float tickDelta, PoseStack matrices, MultiBufferSource vertexConsumers, int light, int overlay) {
         if (!entity.hasEntity()) {
             return;
         }
 
-        BlockState state = entity.getCachedState();
+        BlockState state = entity.getBlockState();
 
-        matrices.push();
+        matrices.pushPose();
         matrices.translate(0.5, 0.5, 0.5);
 
-        Direction facing = state.get(Properties.HORIZONTAL_FACING).getOpposite();
+        Direction facing = state.getValue(BlockStateProperties.HORIZONTAL_FACING).getOpposite();
 
-        matrices.multiply(RotationAxis.POSITIVE_Y.rotationDegrees(-facing.asRotation()));
+        matrices.mulPose(Axis.YP.rotationDegrees(-facing.toYRot()));
         matrices.translate(0, 0, 0);
         matrices.scale(0.010416667F, 0.010416667F, 0.010416667F);
-        matrices.multiply(RotationAxis.POSITIVE_Z.rotationDegrees(180));
+        matrices.mulPose(Axis.ZP.rotationDegrees(180));
 
         TombstoneBlock block = (TombstoneBlock)state.getBlock();
 
-        matrices.multiply(RotationAxis.POSITIVE_X.rotationDegrees(block.getRotation()));
+        matrices.mulPose(Axis.XP.rotationDegrees(block.getRotation()));
 
-        Vec3d offset = block.getNameplateOffset();
-        matrices.translate(offset.getX(), offset.getY(), offset.getZ());
+        Vec3 offset = block.getNameplateOffset();
+        matrices.translate(offset.x(), offset.y(), offset.z());
 
         int maxLineWidth = block.getLineWidth();
 
-        float y = drawText(text, text.wrapLines(Text.translatable("block.mca.tombstone.header"), maxLineWidth), 0, matrices, vertexConsumers, light);
+        float y = drawText(text, text.split(Component.translatable("block.mca.tombstone.header"), maxLineWidth), 0, matrices, vertexConsumers, light);
 
         y += 5;
 
         FlowingText name = entity.getOrCreateEntityName(n -> FlowingText.Factory.wrapLines(text, n, maxLineWidth, block.getMaxNameHeight()));
 
-        matrices.push();
+        matrices.pushPose();
         matrices.scale(name.scale(), name.scale(), name.scale());
 
         y = drawText(text, name.lines(), y / name.scale(), matrices, vertexConsumers, light) * name.scale();
 
-        matrices.pop();
+        matrices.popPose();
 
         y += 5;
 
-        drawText(text, text.wrapLines(Text.translatable("block.mca.tombstone.footer." + entity.getGender().binary().getDataName()), maxLineWidth), y, matrices, vertexConsumers, light);
+        drawText(text, text.split(Component.translatable("block.mca.tombstone.footer." + entity.getGender().binary().getDataName()), maxLineWidth), y, matrices, vertexConsumers, light);
 
-        matrices.pop();
+        matrices.popPose();
     }
 
-    private float drawText(TextRenderer text, List<OrderedText> lines, float y, MatrixStack matrices, VertexConsumerProvider vertexConsumers, int light) {
-        for (OrderedText line : lines) {
-            float x = -text.getWidth(line) / 2F;
+    private float drawText(Font text, List<FormattedCharSequence> lines, float y, PoseStack matrices, MultiBufferSource vertexConsumers, int light) {
+        for (FormattedCharSequence line : lines) {
+            float x = -text.width(line) / 2F;
 
-            text.drawWithOutline(line, x, y, 0xFFFFFF, 0x000000, matrices.peek().getPositionMatrix(), vertexConsumers, light);
+            text.drawInBatch8xOutline(line, x, y, 0xFFFFFF, 0x000000, matrices.last().pose(), vertexConsumers, light);
 
             y += 10;
         }

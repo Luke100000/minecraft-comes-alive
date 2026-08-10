@@ -2,8 +2,8 @@ package net.mca.mixin;
 
 import com.llamalad7.mixinextras.injector.ModifyExpressionValue;
 import net.mca.Config;
-import net.minecraft.advancement.AdvancementRewards;
-import net.minecraft.util.Identifier;
+import net.minecraft.advancements.AdvancementRewards;
+import net.minecraft.resources.ResourceLocation;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 
@@ -12,19 +12,19 @@ import java.util.Arrays;
 @Mixin(AdvancementRewards.class)
 public abstract class MixinAdvancementRewards {
     @ModifyExpressionValue(
-            method = "apply",
+            method = "grant",
             at = @At(
                     value = "FIELD",
-                    target = "Lnet/minecraft/advancement/AdvancementRewards;loot:[Lnet/minecraft/util/Identifier;"
+                    target = "Lnet/minecraft/advancements/AdvancementRewards;loot:[Lnet/minecraft/resources/ResourceLocation;"
             )
     )
-    private Identifier[] mca$filterAdvancementBooks(Identifier[] original) {
+    private ResourceLocation[] mca$filterAdvancementBooks(ResourceLocation[] original) {
         if (Config.getInstance().giveAdvancementBooks || original == null) {
             return original;
         }
 
         return Arrays.stream(original)
                 .filter(id -> !id.toString().startsWith("mca:books/"))
-                .toArray(Identifier[]::new);
+                .toArray(ResourceLocation[]::new);
     }
 }

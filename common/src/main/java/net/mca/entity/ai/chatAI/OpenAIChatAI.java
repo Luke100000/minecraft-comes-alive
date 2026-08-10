@@ -11,13 +11,13 @@ import net.mca.entity.ai.Relationship;
 import net.mca.entity.ai.chatAI.modules.*;
 import net.mca.entity.ai.relationship.AgeState;
 import net.mca.server.world.data.Village;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.text.ClickEvent;
-import net.minecraft.text.HoverEvent;
-import net.minecraft.text.MutableText;
-import net.minecraft.text.Text;
-import net.minecraft.util.Formatting;
-import net.minecraft.util.Pair;
+import net.minecraft.ChatFormatting;
+import net.minecraft.network.chat.ClickEvent;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.HoverEvent;
+import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.util.Tuple;
 import org.apache.commons.io.IOUtils;
 import org.jetbrains.annotations.Nullable;
 
@@ -33,7 +33,7 @@ public class OpenAIChatAI implements ChatAIStrategy {
     private static final int MAX_MEMORY = 768;
     private static final int MAX_MEMORY_TIME = 20 * 60 * 45;
 
-    private static final Map<UUID, List<Pair<String, String>>> memory = new HashMap<>();
+    private static final Map<UUID, List<Tuple<String, String>>> memory = new HashMap<>();
     private static final Map<UUID, Long> lastInteractions = new HashMap<>();
 
     public static String translate(String phrase) {
@@ -126,7 +126,7 @@ public class OpenAIChatAI implements ChatAIStrategy {
         }
     }
 
-    public Optional<String> answer(ServerPlayerEntity player, VillagerEntityMCA villager, String msg) {
+    public Optional<String> answer(ServerPlayer player, VillagerEntityMCA villager, String msg) {
         try {
             Config config = Config.getInstance();
             boolean isInHouse = config.villagerChatAIEndpoint.contains("conczin.net");
@@ -135,15 +135,15 @@ public class OpenAIChatAI implements ChatAIStrategy {
             String villagerName = villager.getName().getString();
 
             // forgot about last conversation if it's too long ago
-            long time = villager.getWorld().getTime();
-            if (time > lastInteractions.getOrDefault(villager.getUuid(), 0L) + MAX_MEMORY_TIME) {
-                memory.remove(villager.getUuid());
+            long time = villager.level().getGameTime();
+            if (time > lastInteractions.getOrDefault(villager.getUUID(), 0L) + MAX_MEMORY_TIME) {
+                memory.remove(villager.getUUID());
             }
-            lastInteractions.put(villager.getUuid(), time);
+            lastInteractions.put(villager.getUUID(), time);
 
             // remember phrase
-            List<Pair<String, String>> pastDialogue = memory.computeIfAbsent(villager.getUuid(), key -> new LinkedList<>());
-            while (pastDialogue.stream().mapToInt(v -> (v.getRight().length() / 4)).sum() > MAX_MEMORY) {
+            List<Tuple<String, String>> pastDialogue = memory.computeIfAbsent(villager.getUUID(), key -> new LinkedList<>());
+            while (pastDialogue.stream().mapToInt(v -> (v.getB().length() / 4)).sum() > MAX_MEMORY) {
                 pastDialogue.remove(0);
             }
 
@@ -167,11 +167,11 @@ public class OpenAIChatAI implements ChatAIStrategy {
 
             // add control variables
             if (isInHouse || config.villagerChatAIIncludeSessionInformation) {
-                long seed = player.getServerWorld().getSeed();
+                long seed = player.serverLevel().getSeed();
                 sb.append("[world_id:").append(seed).append("]");
 
-                sb.append("[player_id:").append(player.getUuid()).append("]");
-                sb.append("[character_id:").append(villager.getUuid()).append("]");
+                sb.append("[player_id:").append(player.getUUID()).append("]");
+                sb.append("[character_id:").append(villager.getUUID()).append("]");
 
                 if (config.villagerChatAIUseLongTermMemory) {
                     sb.append("[use_memory:true]");
@@ -245,9 +245,9 @@ public class OpenAIChatAI implements ChatAIStrategy {
             body.append("\"messages\": [");
             // System Message
             body.append("{\"role\": \"system\", \"content\": ").append(jsonStringQuote(system)).append("},");
-            for (Pair<String, String> pair : pastDialogue) {
-                String role = pair.getLeft();
-                String content = pair.getRight();
+            for (Tuple<String, String> pair : pastDialogue) {
+                String role = pair.getA();
+                String content = pair.getB();
                 String name = role.equals("user") ? playerName : villagerName;
                 body.append("{\"role\": \"").append(role)
                         .append("\", \"name\": \"").append(name)
@@ -271,8 +271,8 @@ public class OpenAIChatAI implements ChatAIStrategy {
             if (message.error == null) {
                 if (message.answer != null) {
                     // remember
-                    pastDialogue.add(new Pair<>("user", msg));
-                    pastDialogue.add(new Pair<>("assistant", message.answer.message != null ? message.answer.message : "..."));
+                    pastDialogue.add(new Tuple<>("user", msg));
+                    pastDialogue.add(new Tuple<>("assistant", message.answer.message != null ? message.answer.message : "..."));
 
                     // act
                     if (message.answer.optionalCommand() != null && !message.answer.optionalCommand().isEmpty()) {
@@ -283,22 +283,22 @@ public class OpenAIChatAI implements ChatAIStrategy {
 
                 return Optional.ofNullable(message.answer != null ? message.answer.message : null);
             } else if (message.error.equals("invalid_model")) {
-                player.sendMessage(Text.literal("Invalid model!").formatted(Formatting.RED), false);
+                player.displayClientMessage(Component.literal("Invalid model!").withStyle(ChatFormatting.RED), false);
             } else if (message.error.equals("limit")) {
-                MutableText styled = (Text.translatable("mca.limit.patreon")).styled(s -> s
-                        .withColor(Formatting.GOLD)
+                MutableComponent styled = (Component.translatable("mca.limit.patreon")).withStyle(s -> s
+                        .withColor(ChatFormatting.GOLD)
                         .withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, "https://github.com/Luke100000/minecraft-comes-alive/wiki/GPT3-based-conversations#increase-conversation-limit"))
-                        .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Text.translatable("mca.limit.patreon.hover"))));
+                        .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Component.translatable("mca.limit.patreon.hover"))));
 
-                player.sendMessage(styled, false);
+                player.displayClientMessage(styled, false);
             } else if (message.error.equals("limit_premium")) {
-                player.sendMessage(Text.translatable("mca.limit.premium").formatted(Formatting.RED), false);
+                player.displayClientMessage(Component.translatable("mca.limit.premium").withStyle(ChatFormatting.RED), false);
             } else {
-                player.sendMessage(Text.literal(message.error).formatted(Formatting.RED), false);
+                player.displayClientMessage(Component.literal(message.error).withStyle(ChatFormatting.RED), false);
             }
         } catch (Exception e) {
             MCA.LOGGER.error("Failed to parse LLM response!", e);
-            player.sendMessage(Text.translatable("mca.ai_broken").formatted(Formatting.RED), false);
+            player.displayClientMessage(Component.translatable("mca.ai_broken").withStyle(ChatFormatting.RED), false);
         }
 
         return Optional.empty();

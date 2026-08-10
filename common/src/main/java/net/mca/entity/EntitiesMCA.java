@@ -9,45 +9,44 @@ import net.mca.entity.ai.ActivityMCA;
 import net.mca.entity.ai.MemoryModuleTypeMCA;
 import net.mca.entity.ai.SchedulesMCA;
 import net.mca.entity.ai.relationship.Gender;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.EntityType;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.SpawnGroup;
-import net.minecraft.entity.attribute.DefaultAttributeContainer;
-import net.minecraft.registry.RegistryKeys;
-import net.minecraft.util.Identifier;
-
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.MobCategory;
+import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
 import java.util.function.Supplier;
 
 public interface EntitiesMCA {
 
-    DeferredRegister<EntityType<?>> ENTITY_TYPES = DeferredRegister.create(MCA.MOD_ID, RegistryKeys.ENTITY_TYPE);
+    DeferredRegister<EntityType<?>> ENTITY_TYPES = DeferredRegister.create(MCA.MOD_ID, Registries.ENTITY_TYPE);
 
     RegistrySupplier<EntityType<VillagerEntityMCA>> MALE_VILLAGER = register("male_villager", EntityType.Builder
-            .<VillagerEntityMCA>create((t, w) -> new VillagerEntityMCA(t, w, Gender.MALE), SpawnGroup.MISC)
-            .setDimensions(0.6F, 2.0F), VillagerEntityMCA::createVillagerAttributes
+            .<VillagerEntityMCA>of((t, w) -> new VillagerEntityMCA(t, w, Gender.MALE), MobCategory.MISC)
+            .sized(0.6F, 2.0F), VillagerEntityMCA::createAttributes
     );
     RegistrySupplier<EntityType<VillagerEntityMCA>> FEMALE_VILLAGER = register("female_villager", EntityType.Builder
-            .<VillagerEntityMCA>create((t, w) -> new VillagerEntityMCA(t, w, Gender.FEMALE), SpawnGroup.MISC)
-            .setDimensions(0.6F, 2.0F), VillagerEntityMCA::createVillagerAttributes
+            .<VillagerEntityMCA>of((t, w) -> new VillagerEntityMCA(t, w, Gender.FEMALE), MobCategory.MISC)
+            .sized(0.6F, 2.0F), VillagerEntityMCA::createAttributes
     );
     RegistrySupplier<EntityType<ZombieVillagerEntityMCA>> MALE_ZOMBIE_VILLAGER = register("male_zombie_villager", EntityType.Builder
-            .<ZombieVillagerEntityMCA>create((t, w) -> new ZombieVillagerEntityMCA(t, w, Gender.MALE), SpawnGroup.MONSTER)
-            .setDimensions(0.6F, 2.0F), ZombieVillagerEntityMCA::createZombieAttributes
+            .<ZombieVillagerEntityMCA>of((t, w) -> new ZombieVillagerEntityMCA(t, w, Gender.MALE), MobCategory.MONSTER)
+            .sized(0.6F, 2.0F), ZombieVillagerEntityMCA::createAttributes
     );
     RegistrySupplier<EntityType<ZombieVillagerEntityMCA>> FEMALE_ZOMBIE_VILLAGER = register("female_zombie_villager", EntityType.Builder
-            .<ZombieVillagerEntityMCA>create((t, w) -> new ZombieVillagerEntityMCA(t, w, Gender.FEMALE), SpawnGroup.MONSTER)
-            .setDimensions(0.6F, 2.0F), ZombieVillagerEntityMCA::createZombieAttributes
+            .<ZombieVillagerEntityMCA>of((t, w) -> new ZombieVillagerEntityMCA(t, w, Gender.FEMALE), MobCategory.MONSTER)
+            .sized(0.6F, 2.0F), ZombieVillagerEntityMCA::createAttributes
     );
     RegistrySupplier<EntityType<GrimReaperEntity>> GRIM_REAPER = register("grim_reaper", EntityType.Builder
-            .create(GrimReaperEntity::new, SpawnGroup.MONSTER)
-            .setDimensions(1, 2.6F)
-            .makeFireImmune(), GrimReaperEntity::createAttributes
+            .of(GrimReaperEntity::new, MobCategory.MONSTER)
+            .sized(1, 2.6F)
+            .fireImmune(), GrimReaperEntity::createAttributes
     );
     RegistrySupplier<EntityType<CribEntity>> CRIB = registerNonLiving("crib", EntityType.Builder
-    		.<CribEntity>create((t, w) -> new CribEntity(t, w), SpawnGroup.MISC)
-            .setDimensions(1.2F, 1.0F)
-            .makeFireImmune()
+            .<CribEntity>of((t, w) -> new CribEntity(t, w), MobCategory.MISC)
+            .sized(1.2F, 1.0F)
+            .fireImmune()
     );
 
     static void bootstrap() {
@@ -59,15 +58,15 @@ public interface EntitiesMCA {
     }
     
     static<T extends Entity> RegistrySupplier<EntityType<T>> registerNonLiving(String name, EntityType.Builder<T> builder) {
-        Identifier id = new Identifier(MCA.MOD_ID, name);
+        ResourceLocation id = new ResourceLocation(MCA.MOD_ID, name);
         return ENTITY_TYPES.register(id, () -> {
             EntityType<T> result = builder.build(id.toString());
             return result;
         });
     }
 
-    static <T extends LivingEntity> RegistrySupplier<EntityType<T>> register(String name, EntityType.Builder<T> builder, Supplier<DefaultAttributeContainer.Builder> attributes) {
-        Identifier id = new Identifier(MCA.MOD_ID, name);
+    static <T extends LivingEntity> RegistrySupplier<EntityType<T>> register(String name, EntityType.Builder<T> builder, Supplier<AttributeSupplier.Builder> attributes) {
+        ResourceLocation id = new ResourceLocation(MCA.MOD_ID, name);
         return ENTITY_TYPES.register(id, () -> {
             EntityType<T> result = builder.build(id.toString());
             EntityAttributeRegistry.register(() -> result, attributes);

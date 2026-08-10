@@ -2,12 +2,11 @@ package net.mca.entity.ai.brain.tasks;
 
 import com.google.common.collect.ImmutableMap;
 import net.mca.entity.VillagerEntityMCA;
-import net.minecraft.entity.ai.brain.task.MultiTickTask;
-import net.minecraft.server.world.ServerWorld;
-
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.ai.behavior.Behavior;
 import java.util.function.Predicate;
 
-public class SayTask extends MultiTickTask<VillagerEntityMCA> {
+public class SayTask extends Behavior<VillagerEntityMCA> {
     private final String phrase;
     private final int interval;
     private final Predicate<VillagerEntityMCA> condition;
@@ -25,12 +24,12 @@ public class SayTask extends MultiTickTask<VillagerEntityMCA> {
         this.condition = condition;
     }
 
-    protected boolean shouldRun(ServerWorld world, VillagerEntityMCA entity) {
-        return entity.getWorld().getTime() - lastShout > interval && condition.test(entity);
+    protected boolean checkExtraStartConditions(ServerLevel world, VillagerEntityMCA entity) {
+        return entity.level().getGameTime() - lastShout > interval && condition.test(entity);
     }
 
-    protected void run(ServerWorld world, VillagerEntityMCA entity, long time) {
+    protected void start(ServerLevel world, VillagerEntityMCA entity, long time) {
         entity.sendChatToAllAround(phrase);
-        lastShout = entity.getWorld().getTime();
+        lastShout = entity.level().getGameTime();
     }
 }

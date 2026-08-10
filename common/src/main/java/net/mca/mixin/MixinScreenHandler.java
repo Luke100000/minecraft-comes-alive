@@ -1,12 +1,12 @@
 package net.mca.mixin;
 
 import net.mca.item.BabyItem;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.item.ItemStack;
-import net.minecraft.screen.ScreenHandler;
-import net.minecraft.screen.slot.Slot;
-import net.minecraft.screen.slot.SlotActionType;
-import net.minecraft.util.collection.DefaultedList;
+import net.minecraft.core.NonNullList;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.inventory.ClickType;
+import net.minecraft.world.inventory.Slot;
+import net.minecraft.world.item.ItemStack;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -15,14 +15,14 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-@Mixin(ScreenHandler.class)
+@Mixin(AbstractContainerMenu.class)
 abstract class MixinScreenHandler {
-    @Shadow @Final public DefaultedList<Slot> slots;
+    @Shadow @Final public NonNullList<Slot> slots;
 
-    @Shadow public abstract ItemStack getCursorStack();
+    @Shadow public abstract ItemStack getCarried();
 
-    @Inject(method = "onSlotClick", at = @At("HEAD"), cancellable = true)
-    private void onSlotClick(int slotIndex, int button, SlotActionType actionType, PlayerEntity player, CallbackInfo info) {
+    @Inject(method = "clicked", at = @At("HEAD"), cancellable = true)
+    private void onSlotClick(int slotIndex, int button, ClickType actionType, Player player, CallbackInfo info) {
         ItemStack stack = mca$getDroppedStack(slotIndex, actionType, player);
         if (BabyItem.shouldCancelDrop(stack, player)) {
             info.cancel();
@@ -30,14 +30,14 @@ abstract class MixinScreenHandler {
     }
 
     @Unique
-    private ItemStack mca$getDroppedStack(int slotIndex, SlotActionType actionType, PlayerEntity player) {
-        if (slotIndex == ScreenHandler.EMPTY_SPACE_SLOT_INDEX && actionType == SlotActionType.PICKUP) {
-            return getCursorStack();
+    private ItemStack mca$getDroppedStack(int slotIndex, ClickType actionType, Player player) {
+        if (slotIndex == AbstractContainerMenu.SLOT_CLICKED_OUTSIDE && actionType == ClickType.PICKUP) {
+            return getCarried();
         }
-        if (slotIndex >= 0 && slotIndex < slots.size() && actionType == SlotActionType.THROW) {
+        if (slotIndex >= 0 && slotIndex < slots.size() && actionType == ClickType.THROW) {
             Slot slot = slots.get(slotIndex);
-            if (slot.canTakeItems(player)) {
-                return slot.getStack();
+            if (slot.mayPickup(player)) {
+                return slot.getItem();
             }
         }
         return ItemStack.EMPTY;

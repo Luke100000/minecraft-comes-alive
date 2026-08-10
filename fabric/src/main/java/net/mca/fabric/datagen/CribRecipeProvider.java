@@ -5,14 +5,13 @@ import net.fabricmc.fabric.api.datagen.v1.provider.FabricRecipeProvider;
 import net.mca.entity.CribWoodType;
 import net.mca.item.CribItem;
 import net.mca.item.ItemsMCA;
-import net.minecraft.block.Blocks;
-import net.minecraft.data.server.recipe.RecipeJsonProvider;
-import net.minecraft.data.server.recipe.RecipeProvider;
-import net.minecraft.data.server.recipe.ShapedRecipeJsonBuilder;
-import net.minecraft.item.ItemConvertible;
-import net.minecraft.recipe.book.RecipeCategory;
-import net.minecraft.util.DyeColor;
-
+import net.minecraft.data.recipes.FinishedRecipe;
+import net.minecraft.data.recipes.RecipeCategory;
+import net.minecraft.data.recipes.RecipeProvider;
+import net.minecraft.data.recipes.ShapedRecipeBuilder;
+import net.minecraft.world.item.DyeColor;
+import net.minecraft.world.level.ItemLike;
+import net.minecraft.world.level.block.Blocks;
 import java.util.function.Consumer;
 
 public class CribRecipeProvider extends FabricRecipeProvider
@@ -20,30 +19,30 @@ public class CribRecipeProvider extends FabricRecipeProvider
 	public CribRecipeProvider(FabricDataOutput output) { super(output); }
 
 	@Override
-	public void generate(Consumer<RecipeJsonProvider> consumer)
+	public void buildRecipes(Consumer<FinishedRecipe> consumer)
 	{
 		for(CribWoodType wood : CribWoodType.values())
 		{
 			for(DyeColor color : DyeColor.values())
 			{
-				ShapedRecipeJsonBuilder.create(RecipeCategory.DECORATIONS, ItemsMCA.CRIBS.stream().filter(c ->
+				ShapedRecipeBuilder.shaped(RecipeCategory.DECORATIONS, ItemsMCA.CRIBS.stream().filter(c ->
 				{
 					CribItem crib = (CribItem) c.get();
 					return crib.getColor() == color && crib.getWood() == wood;
 				}).findFirst().get().get(), 1)
-				.input(Character.valueOf('F'), fenceFromWoodType(wood))
-				.input(Character.valueOf('P'), plankFromWoodType(wood))
-				.input(Character.valueOf('C'), carpetFromColor(color))
+				.define(Character.valueOf('F'), fenceFromWoodType(wood))
+				.define(Character.valueOf('P'), plankFromWoodType(wood))
+				.define(Character.valueOf('C'), carpetFromColor(color))
 				.pattern("F F")
 				.pattern("FCF")
 				.pattern("PPP")
-				.criterion(RecipeProvider.hasItem(plankFromWoodType(wood)), RecipeProvider.conditionsFromItem(plankFromWoodType(wood)))
-				.offerTo(consumer);
+				.unlockedBy(RecipeProvider.getHasName(plankFromWoodType(wood)), RecipeProvider.has(plankFromWoodType(wood)))
+				.save(consumer);
 			}
 		}
 	}
 
-	private static ItemConvertible plankFromWoodType(CribWoodType woodType)
+	private static ItemLike plankFromWoodType(CribWoodType woodType)
 	{
 		switch(woodType)
 		{
@@ -72,7 +71,7 @@ public class CribRecipeProvider extends FabricRecipeProvider
 		}
 	}
 
-	private static ItemConvertible fenceFromWoodType(CribWoodType woodType)
+	private static ItemLike fenceFromWoodType(CribWoodType woodType)
 	{
 		switch(woodType)
 		{
@@ -101,7 +100,7 @@ public class CribRecipeProvider extends FabricRecipeProvider
 		}
 	}
 	
-	private static ItemConvertible carpetFromColor(DyeColor color)
+	private static ItemLike carpetFromColor(DyeColor color)
 	{
 		switch(color)
 		{

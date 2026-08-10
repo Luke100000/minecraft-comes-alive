@@ -1,9 +1,9 @@
 package net.mca.entity;
 
-import net.minecraft.entity.mob.MobEntity;
+import net.minecraft.world.entity.Mob;
 
 public interface EntityWrapper {
-    default MobEntity asEntity() {
-        return (MobEntity) this;
+    default Mob asEntity() {
+        return (Mob) this;
     }
 }

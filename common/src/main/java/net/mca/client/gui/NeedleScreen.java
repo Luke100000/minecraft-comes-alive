@@ -33,7 +33,7 @@ public class NeedleScreen extends VillagerEditorScreen {
             super.setPage("loading");
         } else if (page.equals("body") || page.equals("clothing_style")) {
             syncVillagerData();
-            close();
+            onClose();
         } else {
             super.setPage("clothing");
         }

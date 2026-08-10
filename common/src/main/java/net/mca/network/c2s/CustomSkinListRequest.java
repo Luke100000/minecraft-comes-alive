@@ -6,8 +6,7 @@ import net.mca.network.s2c.CustomSkinListResponse;
 import net.mca.resources.*;
 import net.mca.resources.data.skin.*;
 import net.mca.server.world.data.CustomClothingManager;
-import net.minecraft.server.network.ServerPlayerEntity;
-
+import net.minecraft.server.level.ServerPlayer;
 import java.io.Serial;
 import java.util.HashMap;
 import java.util.Map;
@@ -19,7 +18,7 @@ public class CustomSkinListRequest implements Message {
     private static final long serialVersionUID = 6770418768511400031L;
 
     @Override
-    public void receive(ServerPlayerEntity player) {
+    public void receive(ServerPlayer player) {
         BuiltInSkinCatalog.Catalog builtIn = BuiltInSkinCatalog.get();
         HashMap<String, Clothing> clothing = delta(ClothingList.getInstance() == null ? Map.of() : ClothingList.getInstance().clothing, builtIn.clothing(), CustomSkinListRequest::sameClothing);
         HashMap<String, BodySkin> bodySkins = delta(BodySkinList.getInstance() == null ? Map.of() : BodySkinList.getInstance().skins, builtIn.bodySkins(), CustomSkinListRequest::sameBodySkin);

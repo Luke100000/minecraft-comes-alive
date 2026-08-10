@@ -7,18 +7,17 @@ import net.mca.network.c2s.ConfirmBuildingPolymorphMessage;
 import net.mca.resources.BuildingTypes;
 import net.mca.resources.data.BuildingType;
 import net.mca.util.compat.ButtonWidget;
-import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.text.Text;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.MathHelper;
-
+import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.core.BlockPos;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.Mth;
 import java.util.List;
 import java.util.Objects;
 
 public class BuildingPolymorphScreen extends Screen {
-    private static final Identifier ICON_TEXTURES = new Identifier(MCA.MOD_ID, "textures/buildings.png");
+    private static final ResourceLocation ICON_TEXTURES = new ResourceLocation(MCA.MOD_ID, "textures/buildings.png");
     private static final int BUTTON_WIDTH = 180;
     private static final int BUTTON_HEIGHT = 20;
     private static final int BUTTON_SPACING = 6;
@@ -30,13 +29,13 @@ public class BuildingPolymorphScreen extends Screen {
     private int page;
 
     public BuildingPolymorphScreen(List<String> matchingTypes, BlockPos scanPos, boolean isRoom) {
-        super(Text.translatable("gui.building_polymorph.title"));
+        super(Component.translatable("gui.building_polymorph.title"));
         this.matchingTypes = List.copyOf(matchingTypes);
         this.scanPos = scanPos;
         this.isRoom = isRoom;
     }
 
-    private void drawBuildingIcon(DrawContext context, String typeName, int x, int y) {
+    private void drawBuildingIcon(GuiGraphics context, String typeName, int x, int y) {
         BuildingType type = BuildingTypes.getInstance().getBuildingType(typeName);
         if (type == null || !type.isIcon()) {
             return;
@@ -70,15 +69,15 @@ public class BuildingPolymorphScreen extends Screen {
     }
 
     private void setPage(int page) {
-        this.page = MathHelper.clamp(page, 0, getPageCount() - 1);
-        clearChildren();
+        this.page = Mth.clamp(page, 0, getPageCount() - 1);
+        clearWidgets();
         init();
     }
 
     @Override
     protected void init() {
         super.init();
-        page = MathHelper.clamp(page, 0, getPageCount() - 1);
+        page = Mth.clamp(page, 0, getPageCount() - 1);
         int startY = getContentTop() + 35;
         int pageStart = page * getEntriesPerPage();
         int visibleEntries = getVisibleEntries();
@@ -86,90 +85,90 @@ public class BuildingPolymorphScreen extends Screen {
         for (int i = 0; i < visibleEntries; i++) {
             String typeName = matchingTypes.get(pageStart + i);
             int y = startY + i * (BUTTON_HEIGHT + BUTTON_SPACING);
-            addDrawableChild(new PolymorphButton(
+            addRenderableWidget(new PolymorphButton(
                     width / 2 - BUTTON_WIDTH / 2,
                     y,
                     BUTTON_WIDTH,
                     BUTTON_HEIGHT,
                     typeName,
-                    Text.translatable("buildingType." + typeName),
+                    Component.translatable("buildingType." + typeName),
                     button -> {
                         NetworkHandler.sendToServer(new ConfirmBuildingPolymorphMessage(scanPos, isRoom, typeName));
-                        Objects.requireNonNull(client).setScreen(null);
+                        Objects.requireNonNull(minecraft).setScreen(null);
                     }
             ));
         }
 
         int footerY = startY + visibleEntries * (BUTTON_HEIGHT + BUTTON_SPACING) + 10;
         if (hasMultiplePages()) {
-            ButtonWidget previous = addDrawableChild(new ButtonWidget(
+            ButtonWidget previous = addRenderableWidget(new ButtonWidget(
                     width / 2 - 90,
                     footerY,
                     32,
                     BUTTON_HEIGHT,
-                    Text.literal("<"),
+                    Component.literal("<"),
                     button -> setPage(page - 1)
             ));
             previous.active = page > 0;
 
-            ButtonWidget pageLabel = addDrawableChild(new ButtonWidget(
+            ButtonWidget pageLabel = addRenderableWidget(new ButtonWidget(
                     width / 2 - 54,
                     footerY,
                     108,
                     BUTTON_HEIGHT,
-                    Text.literal((page + 1) + " / " + getPageCount()),
+                    Component.literal((page + 1) + " / " + getPageCount()),
                     button -> {
                     }
             ));
             pageLabel.active = false;
 
-            ButtonWidget next = addDrawableChild(new ButtonWidget(
+            ButtonWidget next = addRenderableWidget(new ButtonWidget(
                     width / 2 + 58,
                     footerY,
                     32,
                     BUTTON_HEIGHT,
-                    Text.literal(">"),
+                    Component.literal(">"),
                     button -> setPage(page + 1)
             ));
             next.active = page < getPageCount() - 1;
             footerY += BUTTON_HEIGHT + BUTTON_SPACING;
         }
 
-        addDrawableChild(new ButtonWidget(
+        addRenderableWidget(new ButtonWidget(
                 width / 2 - 50,
                 footerY,
                 100,
                 BUTTON_HEIGHT,
-                Text.translatable("gui.blueprint.cancel"),
-                button -> Objects.requireNonNull(client).setScreen(null)
+                Component.translatable("gui.blueprint.cancel"),
+                button -> Objects.requireNonNull(minecraft).setScreen(null)
         ));
     }
 
     @Override
-    public boolean shouldPause() {
+    public boolean isPauseScreen() {
         return false;
     }
 
     @Override
-    public void render(DrawContext context, int mouseX, int mouseY, float delta) {
+    public void render(GuiGraphics context, int mouseX, int mouseY, float delta) {
         renderBackground(context);
         super.render(context, mouseX, mouseY, delta);
         int textYStart = getContentTop();
-        context.drawCenteredTextWithShadow(textRenderer, Text.translatable("gui.building_polymorph.title"), width / 2, textYStart, 0xffffff);
-        context.drawCenteredTextWithShadow(textRenderer, Text.translatable("gui.building_polymorph.desc"), width / 2, textYStart + 15, 0xaaaaaa);
+        context.drawCenteredString(font, Component.translatable("gui.building_polymorph.title"), width / 2, textYStart, 0xffffff);
+        context.drawCenteredString(font, Component.translatable("gui.building_polymorph.desc"), width / 2, textYStart + 15, 0xaaaaaa);
     }
 
     private class PolymorphButton extends ButtonWidget {
         private final String typeName;
 
-        public PolymorphButton(int x, int y, int width, int height, String typeName, Text text, PressAction onPress) {
+        public PolymorphButton(int x, int y, int width, int height, String typeName, Component text, OnPress onPress) {
             super(x, y, width, height, text, onPress);
             this.typeName = typeName;
         }
 
         @Override
-        public void renderButton(DrawContext context, int mouseX, int mouseY, float delta) {
-            super.renderButton(context, mouseX, mouseY, delta);
+        public void renderWidget(GuiGraphics context, int mouseX, int mouseY, float delta) {
+            super.renderWidget(context, mouseX, mouseY, delta);
             drawBuildingIcon(context, typeName, getX() + 10, getY() + 10);
         }
     }

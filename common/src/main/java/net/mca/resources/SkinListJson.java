@@ -3,10 +3,9 @@ package net.mca.resources;
 import com.google.gson.*;
 import net.mca.MCA;
 import net.mca.entity.ai.relationship.Gender;
-import net.minecraft.resource.ResourceManager;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.JsonHelper;
-
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.packs.resources.ResourceManager;
+import net.minecraft.util.GsonHelper;
 import java.io.Reader;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -17,7 +16,7 @@ public final class SkinListJson {
     private SkinListJson() {
     }
 
-    public static List<Entry> entries(Identifier fileId, JsonElement file) {
+    public static List<Entry> entries(ResourceLocation fileId, JsonElement file) {
         if (!file.isJsonArray()) {
             MCA.LOGGER.warn("Invalid skin list {}, expected an array", fileId);
             return List.of();
@@ -41,7 +40,7 @@ public final class SkinListJson {
             }
 
             JsonObject metadata = object.deepCopy();
-            String identifier = JsonHelper.getString(metadata, "id");
+            String identifier = GsonHelper.getAsString(metadata, "id");
             metadata.remove("id");
             entries.add(new Entry(identifier, metadata));
         });
@@ -91,15 +90,15 @@ public final class SkinListJson {
         return Gender.UNASSIGNED;
     }
 
-    public static Map<Identifier, List<String>> textureCollections(ResourceManager manager, String directory) {
-        Map<Identifier, List<String>> collections = new LinkedHashMap<>();
+    public static Map<ResourceLocation, List<String>> textureCollections(ResourceManager manager, String directory) {
+        Map<ResourceLocation, List<String>> collections = new LinkedHashMap<>();
 
-        manager.findResources(directory, id -> id.getPath().endsWith(".json")).forEach((file, resource) -> {
+        manager.listResources(directory, id -> id.getPath().endsWith(".json")).forEach((file, resource) -> {
             String path = file.getPath();
             String idPath = path.substring(directory.length() + 1, path.length() - ".json".length());
-            Identifier id = new Identifier(file.getNamespace(), idPath);
+            ResourceLocation id = new ResourceLocation(file.getNamespace(), idPath);
             List<String> textures = collections.computeIfAbsent(id, ignored -> new ArrayList<>());
-            try (Reader reader = resource.getReader()) {
+            try (Reader reader = resource.openAsReader()) {
                 appendTextureCollection(id, JsonParser.parseReader(reader), textures);
             } catch (Exception exception) {
                 MCA.LOGGER.warn("Failed to read skin texture collection {}", id, exception);
@@ -109,13 +108,13 @@ public final class SkinListJson {
         return collections;
     }
 
-    public static List<String> textureCollection(Identifier id, JsonElement file) {
+    public static List<String> textureCollection(ResourceLocation id, JsonElement file) {
         List<String> textures = new ArrayList<>();
         appendTextureCollection(id, file, textures);
         return textures;
     }
 
-    private static void appendTextureCollection(Identifier id, JsonElement file, List<String> textures) {
+    private static void appendTextureCollection(ResourceLocation id, JsonElement file, List<String> textures) {
         if (file.isJsonArray()) {
             appendTextureArray(id, file, textures);
             return;
@@ -125,7 +124,7 @@ public final class SkinListJson {
         }
 
         JsonObject object = file.getAsJsonObject();
-        if (JsonHelper.getBoolean(object, "replace", false)) {
+        if (GsonHelper.getAsBoolean(object, "replace", false)) {
             textures.clear();
         }
         JsonElement textureArray = object.get("textures");
@@ -136,7 +135,7 @@ public final class SkinListJson {
         appendTextureArray(id, textureArray, textures);
     }
 
-    private static void appendTextureArray(Identifier id, JsonElement textureArray, List<String> textures) {
+    private static void appendTextureArray(ResourceLocation id, JsonElement textureArray, List<String> textures) {
         if (!textureArray.isJsonArray()) {
             throw new JsonParseException("Expected textures array");
         }

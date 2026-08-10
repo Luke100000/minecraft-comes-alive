@@ -1,9 +1,9 @@
 package net.mca.entity.ai.goal;
 
 import net.mca.entity.GrimReaperEntity;
-import net.minecraft.entity.ai.NoWaterTargeting;
-import net.minecraft.entity.ai.goal.Goal;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.entity.ai.goal.Goal;
+import net.minecraft.world.entity.ai.util.AirRandomPos;
+import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.EnumSet;
@@ -27,16 +27,16 @@ public class GrimReaperIdleGoal extends Goal {
         this.speedModifier = speed;
         this.interval = interval;
 
-        setControls(EnumSet.of(Goal.Control.MOVE));
+        setFlags(EnumSet.of(Goal.Flag.MOVE));
     }
 
     @Override
-    public boolean canStart() {
+    public boolean canUse() {
         if (this.reaper.getRandom().nextInt(this.interval) != 0) {
             return false;
         }
 
-        Vec3d vector3d = getPosition();
+        Vec3 vector3d = getPosition();
         if (vector3d == null) {
             return false;
         }
@@ -48,22 +48,22 @@ public class GrimReaperIdleGoal extends Goal {
     }
 
     @Nullable
-    protected Vec3d getPosition() {
+    protected Vec3 getPosition() {
         if (reaper.getTarget() != null) {
-            return reaper.getTarget().getPos();
+            return reaper.getTarget().position();
         }
 
-        return NoWaterTargeting.find(reaper, 8, 6, -1, Vec3d.ofBottomCenter(reaper.getBlockPos()), 1);
+        return AirRandomPos.getPosTowards(reaper, 8, 6, -1, Vec3.atBottomCenterOf(reaper.blockPosition()), 1);
     }
 
     @Override
-    public boolean shouldContinue() {
-        return !reaper.getNavigation().isIdle();
+    public boolean canContinueToUse() {
+        return !reaper.getNavigation().isDone();
     }
 
     @Override
     public void start() {
-        reaper.getNavigation().startMovingTo(wantedX, wantedY, wantedZ, speedModifier);
+        reaper.getNavigation().moveTo(wantedX, wantedY, wantedZ, speedModifier);
     }
 
     @Override

@@ -3,36 +3,36 @@ package net.mca.advancement.criterion;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
 import net.mca.MCA;
-import net.minecraft.advancement.criterion.AbstractCriterion;
-import net.minecraft.advancement.criterion.AbstractCriterionConditions;
-import net.minecraft.predicate.entity.AdvancementEntityPredicateDeserializer;
-import net.minecraft.predicate.entity.AdvancementEntityPredicateSerializer;
-import net.minecraft.predicate.entity.LootContextPredicate;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.util.Identifier;
+import net.minecraft.advancements.critereon.AbstractCriterionTriggerInstance;
+import net.minecraft.advancements.critereon.ContextAwarePredicate;
+import net.minecraft.advancements.critereon.DeserializationContext;
+import net.minecraft.advancements.critereon.SerializationContext;
+import net.minecraft.advancements.critereon.SimpleCriterionTrigger;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerPlayer;
 
-public class ChildAgeStateChangeCriterion extends AbstractCriterion<ChildAgeStateChangeCriterion.Conditions> {
-    private static final Identifier ID = MCA.locate("child_age_state_change");
+public class ChildAgeStateChangeCriterion extends SimpleCriterionTrigger<ChildAgeStateChangeCriterion.Conditions> {
+    private static final ResourceLocation ID = MCA.locate("child_age_state_change");
 
     @Override
-    public Identifier getId() {
+    public ResourceLocation getId() {
         return ID;
     }
 
     @Override
-    public Conditions conditionsFromJson(JsonObject json, LootContextPredicate player, AdvancementEntityPredicateDeserializer deserializer) {
+    public Conditions createInstance(JsonObject json, ContextAwarePredicate player, DeserializationContext deserializer) {
         String event = json.has("state") ? json.get("state").getAsString() : "";
         return new Conditions(player, event);
     }
 
-    public void trigger(ServerPlayerEntity player, String event) {
+    public void trigger(ServerPlayer player, String event) {
         trigger(player, (conditions) -> conditions.test(event));
     }
 
-    public static class Conditions extends AbstractCriterionConditions {
+    public static class Conditions extends AbstractCriterionTriggerInstance {
         private final String event;
 
-        public Conditions(LootContextPredicate player, String event) {
+        public Conditions(ContextAwarePredicate player, String event) {
             super(ChildAgeStateChangeCriterion.ID, player);
             this.event = event;
         }
@@ -42,8 +42,8 @@ public class ChildAgeStateChangeCriterion extends AbstractCriterion<ChildAgeStat
         }
 
         @Override
-        public JsonObject toJson(AdvancementEntityPredicateSerializer serializer) {
-            JsonObject json = super.toJson(serializer);
+        public JsonObject serializeToJson(SerializationContext serializer) {
+            JsonObject json = super.serializeToJson(serializer);
             json.add("state", new JsonPrimitive(event));
             return json;
         }

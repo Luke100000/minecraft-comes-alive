@@ -3,16 +3,16 @@ package net.mca.entity.ai.brain.tasks;
 import com.google.common.collect.ImmutableMap;
 import net.mca.entity.VillagerLike;
 import net.mca.entity.ai.Messenger;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.ai.brain.MemoryModuleState;
-import net.minecraft.entity.ai.brain.MemoryModuleType;
-import net.minecraft.entity.ai.brain.task.LookTargetUtil;
-import net.minecraft.entity.ai.brain.task.MultiTickTask;
-import net.minecraft.entity.mob.MobEntity;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.Hand;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.ai.behavior.Behavior;
+import net.minecraft.world.entity.ai.behavior.BehaviorUtils;
+import net.minecraft.world.entity.ai.memory.MemoryModuleType;
+import net.minecraft.world.entity.ai.memory.MemoryStatus;
 
-public class ExtendedMeleeAttackTask extends MultiTickTask<MobEntity> {
+public class ExtendedMeleeAttackTask extends Behavior<Mob> {
     private final float range;
     private final int interval;
     private final MemoryModuleType<? extends LivingEntity> target;
@@ -22,32 +22,32 @@ public class ExtendedMeleeAttackTask extends MultiTickTask<MobEntity> {
     }
 
     public ExtendedMeleeAttackTask(int interval, float range, MemoryModuleType<? extends LivingEntity> target) {
-        super(ImmutableMap.of(MemoryModuleType.LOOK_TARGET, MemoryModuleState.REGISTERED, target, MemoryModuleState.VALUE_PRESENT, MemoryModuleType.ATTACK_COOLING_DOWN, MemoryModuleState.VALUE_ABSENT));
+        super(ImmutableMap.of(MemoryModuleType.LOOK_TARGET, MemoryStatus.REGISTERED, target, MemoryStatus.VALUE_PRESENT, MemoryModuleType.ATTACK_COOLING_DOWN, MemoryStatus.VALUE_ABSENT));
         this.range = range;
         this.interval = interval;
         this.target = target;
     }
 
     @Override
-    protected boolean shouldRun(ServerWorld serverWorld, MobEntity attacker) {
+    protected boolean checkExtraStartConditions(ServerLevel serverWorld, Mob attacker) {
         LivingEntity target = getTarget(attacker);
-        return LookTargetUtil.isVisibleInMemory(attacker, target) && withinRange(attacker, target);
+        return BehaviorUtils.canSee(attacker, target) && withinRange(attacker, target);
     }
 
     @Override
-    protected void run(ServerWorld serverWorld, MobEntity mobEntity, long l) {
+    protected void start(ServerLevel serverWorld, Mob mobEntity, long l) {
         LivingEntity livingEntity = getTarget(mobEntity);
-        LookTargetUtil.lookAt(mobEntity, livingEntity);
+        BehaviorUtils.lookAtEntity(mobEntity, livingEntity);
         if (mobEntity instanceof VillagerLike<?> villager) {
-            mobEntity.swingHand(villager.getDominantHand());
+            mobEntity.swing(villager.getDominantHand());
         } else {
-            mobEntity.swingHand(Hand.MAIN_HAND);
+            mobEntity.swing(InteractionHand.MAIN_HAND);
         }
-        mobEntity.tryAttack(livingEntity);
-        mobEntity.getBrain().remember(MemoryModuleType.ATTACK_COOLING_DOWN, true, interval);
+        mobEntity.doHurtTarget(livingEntity);
+        mobEntity.getBrain().setMemoryWithExpiry(MemoryModuleType.ATTACK_COOLING_DOWN, true, interval);
 
         // kill phrase
-        if (livingEntity.isDead() && mobEntity instanceof Messenger messenger) {
+        if (livingEntity.isDeadOrDying() && mobEntity instanceof Messenger messenger) {
             if (mobEntity.getRandom().nextFloat() < 0.3) {
                 messenger.sendChatToAllAround("villager.kill");
             }
@@ -55,12 +55,12 @@ public class ExtendedMeleeAttackTask extends MultiTickTask<MobEntity> {
     }
 
     private boolean withinRange(LivingEntity attacker, LivingEntity target) {
-        double d = attacker.squaredDistanceTo(target.getX(), target.getY(), target.getZ());
-        double r = attacker.getWidth() + target.getWidth() + range;
+        double d = attacker.distanceToSqr(target.getX(), target.getY(), target.getZ());
+        double r = attacker.getBbWidth() + target.getBbWidth() + range;
         return d <= r * r;
     }
 
-    private LivingEntity getTarget(MobEntity mobEntity) {
-        return mobEntity.getBrain().getOptionalMemory(target).get();
+    private LivingEntity getTarget(Mob mobEntity) {
+        return mobEntity.getBrain().getMemoryInternal(target).get();
     }
 }

@@ -5,13 +5,12 @@ import net.mca.entity.EntitiesMCA;
 import net.mca.entity.VillagerLike;
 import net.mca.entity.ai.relationship.Gender;
 import net.mca.entity.ai.relationship.VillagerDimensions;
-import net.minecraft.client.model.ModelPart;
-import net.minecraft.client.render.VertexConsumer;
-import net.minecraft.client.util.math.MatrixStack;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.world.World;
-
+import net.minecraft.client.model.geom.ModelPart;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.level.Level;
+import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.blaze3d.vertex.VertexConsumer;
 import java.util.UUID;
 
 public interface CommonVillagerModel<T extends LivingEntity> {
@@ -31,14 +30,14 @@ public interface CommonVillagerModel<T extends LivingEntity> {
 
     void setBreastSize(float getBreastSize);
 
-    default void renderCommon(MatrixStack matrices, VertexConsumer vertices, int light, int overlay, float red, float green, float blue, float alpha) {
+    default void renderCommon(PoseStack matrices, VertexConsumer vertices, int light, int overlay, float red, float green, float blue, float alpha) {
         //head
         float headSize = getDimensions().getHead();
 
-        matrices.push();
+        matrices.pushPose();
         matrices.scale(headSize, headSize, headSize);
         getCommonHeadParts().forEach(a -> a.render(matrices, vertices, light, overlay, red, green, blue, alpha));
-        matrices.pop();
+        matrices.popPose();
 
         //body
         getCommonBodyParts().forEach(a -> a.render(matrices, vertices, light, overlay, red, green, blue, alpha));
@@ -47,12 +46,12 @@ public interface CommonVillagerModel<T extends LivingEntity> {
             float breastSize = getBreastSize() * getDimensions().getBreasts();
 
             if (breastSize > 0) {
-                matrices.push();
+                matrices.pushPose();
                 matrices.scale(breastSize * 0.2F + 1.05F, breastSize * 0.75F + 0.75F, breastSize * 0.45F + 0.75F);
                 for (ModelPart part : getBreastParts()) {
                     part.render(matrices, vertices, light, overlay, red, green, blue, alpha);
                 }
-                matrices.pop();
+                matrices.popPose();
             }
         }
     }
@@ -63,7 +62,7 @@ public interface CommonVillagerModel<T extends LivingEntity> {
         getBreastPart().visible = villager.getGenetics().getGender() == Gender.FEMALE;
 
         for (ModelPart part : getBreastParts()) {
-            part.pitch = (float)Math.PI * 0.3f + getBodyPart().pitch;
+            part.xRot = (float)Math.PI * 0.3f + getBodyPart().xRot;
 
             float cy = 0.0f;
             float cz = 0.0f;
@@ -72,7 +71,7 @@ public interface CommonVillagerModel<T extends LivingEntity> {
                 cz = 1.5f;
             }
 
-            part.setPivot(0.25f, (float)(5.0f - Math.pow(getBreastSize(), 0.5) * 2.5f + cy), -1.5f + getBreastSize() * 0.25f + cz);
+            part.setPos(0.25f, (float)(5.0f - Math.pow(getBreastSize(), 0.5) * 2.5f + cy), -1.5f + getBreastSize() * 0.25f + cz);
         }
     }
 
@@ -81,7 +80,7 @@ public interface CommonVillagerModel<T extends LivingEntity> {
         target.setBreastSize(getBreastSize());
     }
 
-    static VillagerLike<?> getVillager(World world, UUID uuid) {
+    static VillagerLike<?> getVillager(Level world, UUID uuid) {
         if (MCAClient.fallbackVillager == null) {
             MCAClient.fallbackVillager = EntitiesMCA.MALE_VILLAGER.get().create(world);
         }
@@ -92,7 +91,7 @@ public interface CommonVillagerModel<T extends LivingEntity> {
         if (villager instanceof VillagerLike<?> v) {
             return v;
         } else {
-            return getVillager(villager.getWorld(), villager.getUuid());
+            return getVillager(villager.level(), villager.getUUID());
         }
     }
 }

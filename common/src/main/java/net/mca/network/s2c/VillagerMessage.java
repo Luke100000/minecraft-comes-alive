@@ -2,9 +2,8 @@ package net.mca.network.s2c;
 
 import net.mca.ClientProxy;
 import net.mca.cobalt.network.Message;
-import net.minecraft.text.MutableText;
-import net.minecraft.text.Text;
-
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 import java.io.Serial;
 import java.util.UUID;
 
@@ -16,9 +15,9 @@ public class VillagerMessage implements Message {
     private final String message;
     private final UUID uuid;
 
-    public VillagerMessage(MutableText prefix, MutableText message, UUID uuid) {
-        this.prefix = Text.Serializer.toJson(prefix);
-        this.message = Text.Serializer.toJson(message);
+    public VillagerMessage(MutableComponent prefix, MutableComponent message, UUID uuid) {
+        this.prefix = Component.Serializer.toJson(prefix);
+        this.message = Component.Serializer.toJson(message);
         this.uuid = uuid;
     }
 
@@ -27,17 +26,17 @@ public class VillagerMessage implements Message {
         ClientProxy.getNetworkHandler().handleVillagerMessage(this);
     }
 
-    public MutableText safeLoadFromJson(String json) {
-        MutableText mutableText = Text.Serializer.fromJson(json);
-        if (mutableText == null) return Text.literal("");
+    public MutableComponent safeLoadFromJson(String json) {
+        MutableComponent mutableText = Component.Serializer.fromJson(json);
+        if (mutableText == null) return Component.literal("");
         return mutableText;
     }
 
-    public MutableText getMessage() {
+    public MutableComponent getMessage() {
         return safeLoadFromJson(prefix).append(safeLoadFromJson(message));
     }
 
-    public MutableText getContent() {
+    public MutableComponent getContent() {
         return safeLoadFromJson(message);
     }
 

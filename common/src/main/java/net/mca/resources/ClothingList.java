@@ -7,12 +7,12 @@ import net.mca.entity.VillagerLike;
 import net.mca.entity.ai.relationship.Gender;
 import net.mca.resources.data.skin.Clothing;
 import net.mca.server.world.data.CustomClothingManager;
-import net.minecraft.registry.Registries;
-import net.minecraft.resource.JsonDataLoader;
-import net.minecraft.resource.ResourceManager;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.profiler.Profiler;
-import net.minecraft.village.VillagerProfession;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.packs.resources.ResourceManager;
+import net.minecraft.server.packs.resources.SimpleJsonResourceReloadListener;
+import net.minecraft.util.profiling.ProfilerFiller;
+import net.minecraft.world.entity.npc.VillagerProfession;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Collection;
@@ -21,8 +21,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
 
-public class ClothingList extends JsonDataLoader {
-    public static final Identifier ID = MCA.locate("skins/clothing");
+public class ClothingList extends SimpleJsonResourceReloadListener {
+    public static final ResourceLocation ID = MCA.locate("skins/clothing");
     private static ClothingList INSTANCE;
     public final HashMap<String, Clothing> clothing = new HashMap<>();
 
@@ -36,7 +36,7 @@ public class ClothingList extends JsonDataLoader {
     }
 
     @Override
-    protected void apply(Map<Identifier, JsonElement> data, ResourceManager manager, Profiler profiler) {
+    protected void apply(Map<ResourceLocation, JsonElement> data, ResourceManager manager, ProfilerFiller profiler) {
         clothing.clear();
 
         data.forEach((id, file) -> SkinCatalogLoader.addClothing(clothing, id, file));
@@ -59,7 +59,7 @@ public class ClothingList extends JsonDataLoader {
 
     private List<Clothing> getOptions(Gender gender, @Nullable VillagerProfession profession, Collection<Clothing> available) {
         Map<String, String> map = Config.getInstance().professionConversionsMap;
-        String currentValue = profession == null ? "minecraft:none" : Registries.VILLAGER_PROFESSION.getId(profession).toString();
+        String currentValue = profession == null ? "minecraft:none" : BuiltInRegistries.VILLAGER_PROFESSION.getKey(profession).toString();
         return getOptions(gender, SkinSelection.mapProfession(currentValue, map), available);
     }
 

@@ -6,9 +6,9 @@ import net.mca.server.ServerInteractionManager;
 import net.mca.server.command.AdminCommand;
 import net.mca.server.command.Command;
 import net.mca.server.world.data.VillageManager;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.server.world.ServerWorld;
+import net.minecraft.client.Minecraft;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.event.TickEvent;
@@ -33,8 +33,8 @@ public class ForgeBusEvents {
 
     @SubscribeEvent
     public static void onWorldTick(TickEvent.LevelTickEvent event) {
-        if (!event.level.isClient && event.side == LogicalSide.SERVER && event.phase == TickEvent.Phase.END) {
-            VillageManager.get((ServerWorld)event.level).tick();
+        if (!event.level.isClientSide && event.side == LogicalSide.SERVER && event.phase == TickEvent.Phase.END) {
+            VillageManager.get((ServerLevel)event.level).tick();
         }
     }
 
@@ -48,8 +48,8 @@ public class ForgeBusEvents {
 
     @SubscribeEvent
     public static void OnEntityJoinWorldEvent(EntityJoinLevelEvent event) {
-        if (event.getEntity().getWorld().isClient) {
-            if (MinecraftClient.getInstance().player == null || event.getEntity().getUuid().equals(MinecraftClient.getInstance().player.getUuid())) {
+        if (event.getEntity().level().isClientSide) {
+            if (Minecraft.getInstance().player == null || event.getEntity().getUUID().equals(Minecraft.getInstance().player.getUUID())) {
                 MCAClient.onLogin();
             }
         }
@@ -57,11 +57,11 @@ public class ForgeBusEvents {
 
     @SubscribeEvent
     public static void onPlayerLoggedInEvent(PlayerEvent.PlayerLoggedInEvent event) {
-        ServerInteractionManager.getInstance().onPlayerJoin((ServerPlayerEntity)event.getEntity());
+        ServerInteractionManager.getInstance().onPlayerJoin((ServerPlayer)event.getEntity());
     }
 
     @SubscribeEvent
     public static void onParticleFactoryRegistration(TickEvent.ClientTickEvent event) {
-        MCAClient.tickClient(MinecraftClient.getInstance());
+        MCAClient.tickClient(Minecraft.getInstance());
     }
 }

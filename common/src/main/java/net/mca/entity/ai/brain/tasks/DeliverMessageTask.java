@@ -4,18 +4,17 @@ import com.google.common.collect.ImmutableMap;
 import net.mca.entity.VillagerEntityMCA;
 import net.mca.entity.ai.ConversationManager;
 import net.mca.entity.ai.MemoryModuleTypeMCA;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.ai.brain.MemoryModuleState;
-import net.minecraft.entity.ai.brain.MemoryModuleType;
-import net.minecraft.entity.ai.brain.task.LookTargetUtil;
-import net.minecraft.entity.ai.brain.task.MultiTickTask;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.math.Vec3d;
-
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.ai.behavior.Behavior;
+import net.minecraft.world.entity.ai.behavior.BehaviorUtils;
+import net.minecraft.world.entity.ai.memory.MemoryModuleType;
+import net.minecraft.world.entity.ai.memory.MemoryStatus;
+import net.minecraft.world.phys.Vec3;
 import java.util.Optional;
 
-public class DeliverMessageTask extends MultiTickTask<VillagerEntityMCA> {
+public class DeliverMessageTask extends Behavior<VillagerEntityMCA> {
     private static final int TALKING_TIME_MIN = 100;
     private static final int TALKING_TIME_MAX = 500;
     private static final long MIN_TIME_BETWEEN_SOUND = 20 * 60 * 5;
@@ -26,19 +25,19 @@ public class DeliverMessageTask extends MultiTickTask<VillagerEntityMCA> {
     private int talked;
 
     private long lastInteraction = Long.MIN_VALUE;
-    private Vec3d lastInteractionPos;
+    private Vec3 lastInteractionPos;
 
     public DeliverMessageTask() {
         super(ImmutableMap.of(
-                MemoryModuleType.WALK_TARGET, MemoryModuleState.REGISTERED,
-                MemoryModuleType.LOOK_TARGET, MemoryModuleState.REGISTERED,
-                MemoryModuleType.INTERACTION_TARGET, MemoryModuleState.REGISTERED
+                MemoryModuleType.WALK_TARGET, MemoryStatus.REGISTERED,
+                MemoryModuleType.LOOK_TARGET, MemoryStatus.REGISTERED,
+                MemoryModuleType.INTERACTION_TARGET, MemoryStatus.REGISTERED
         ), 600);
     }
 
     @Override
-    protected boolean shouldRun(ServerWorld world, VillagerEntityMCA villager) {
-        if (villager.getBrain().getOptionalMemory(MemoryModuleType.ATTACK_TARGET).isPresent()) {
+    protected boolean checkExtraStartConditions(ServerLevel world, VillagerEntityMCA villager) {
+        if (villager.getBrain().getMemoryInternal(MemoryModuleType.ATTACK_TARGET).isPresent()) {
             return false;
         }
 
@@ -55,23 +54,23 @@ public class DeliverMessageTask extends MultiTickTask<VillagerEntityMCA> {
     }
 
     @Override
-    protected void run(ServerWorld world, VillagerEntityMCA villager, long time) {
+    protected void start(ServerLevel world, VillagerEntityMCA villager, long time) {
         talked = 0;
     }
 
     @Override
-    protected boolean shouldKeepRunning(ServerWorld world, VillagerEntityMCA villager, long time) {
+    protected boolean canStillUse(ServerLevel world, VillagerEntityMCA villager, long time) {
         return  message != null
                 && talked < getMaxTalkingTime()
-                && villager.getBrain().getOptionalMemory(MemoryModuleType.ATTACK_TARGET).isEmpty()
+                && villager.getBrain().getMemoryInternal(MemoryModuleType.ATTACK_TARGET).isEmpty()
                 && !villager.getVillagerBrain().isPanicking()
                 && !villager.isSleeping();
     }
 
     private int getMaxTalkingTime() {
         if (lastInteractionPos != null) {
-            Vec3d pos = receiver.getPos();
-            if (lastInteractionPos.isInRange(pos, 1.0)) {
+            Vec3 pos = receiver.position();
+            if (lastInteractionPos.closerThan(pos, 1.0)) {
                 return TALKING_TIME_MAX;
             }
         }
@@ -79,15 +78,15 @@ public class DeliverMessageTask extends MultiTickTask<VillagerEntityMCA> {
     }
 
     @Override
-    protected void keepRunning(ServerWorld world, VillagerEntityMCA villager, long time) {
+    protected void tick(ServerLevel world, VillagerEntityMCA villager, long time) {
         // Look at the Receiver
         if (receiver instanceof LivingEntity e) {
-            villager.getBrain().remember(MemoryModuleType.INTERACTION_TARGET, e);
-            LookTargetUtil.lookAt(villager, e);
+            villager.getBrain().setMemory(MemoryModuleType.INTERACTION_TARGET, e);
+            BehaviorUtils.lookAtEntity(villager, e);
         }
 
         // Walk towards receiver
-        LookTargetUtil.walkTowards(villager, receiver, 0.5F, 2);
+        BehaviorUtils.setWalkAndLookTargetMemories(villager, receiver, 0.5F, 2);
 
         // Wait until the next talk cycle if receiver changed
         if (message.getReceiver() != receiver) {
@@ -100,7 +99,7 @@ public class DeliverMessageTask extends MultiTickTask<VillagerEntityMCA> {
                 villager.playWelcomeSound();
             }
             lastInteraction = time;
-            lastInteractionPos = receiver.getPos();
+            lastInteractionPos = receiver.position();
             message.deliver();
         } else if (!message.stillValid() && isWithinRange(villager, receiver)) {
             // Increase reply time timer
@@ -120,12 +119,12 @@ public class DeliverMessageTask extends MultiTickTask<VillagerEntityMCA> {
     }
 
     @Override
-    protected void finishRunning(ServerWorld world, VillagerEntityMCA villager, long time) {
+    protected void stop(ServerLevel world, VillagerEntityMCA villager, long time) {
         message = null;
         receiver = null;
-        villager.getBrain().forget(MemoryModuleType.INTERACTION_TARGET);
-        villager.getBrain().forget(MemoryModuleType.WALK_TARGET);
-        villager.getBrain().forget(MemoryModuleType.LOOK_TARGET);
+        villager.getBrain().eraseMemory(MemoryModuleType.INTERACTION_TARGET);
+        villager.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
+        villager.getBrain().eraseMemory(MemoryModuleType.LOOK_TARGET);
     }
 
     private static Optional<ConversationManager.Message> getMessage(VillagerEntityMCA villager) {
@@ -134,13 +133,13 @@ public class DeliverMessageTask extends MultiTickTask<VillagerEntityMCA> {
 
     private static boolean isWithinRange(VillagerEntityMCA villager, Entity player) {
         // Staying villagers can't reach you
-        if (villager.getBrain().getOptionalMemory(MemoryModuleTypeMCA.STAYING.get()).isPresent()) {
+        if (villager.getBrain().getMemoryInternal(MemoryModuleTypeMCA.STAYING.get()).isPresent()) {
             return true;
         }
-        return villager.getBlockPos().isWithinDistance(player.getBlockPos(), 3);
+        return villager.blockPosition().closerThan(player.blockPosition(), 3);
     }
 
     private static boolean isWithinSeeRange(VillagerEntityMCA villager, Entity player) {
-        return villager.getBlockPos().isWithinDistance(player.getBlockPos(), 64);
+        return villager.blockPosition().closerThan(player.blockPosition(), 64);
     }
 }

@@ -3,7 +3,7 @@ package net.mca.resources.data.skin;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.mca.entity.ai.relationship.Gender;
-import net.minecraft.util.Identifier;
+import net.minecraft.resources.ResourceLocation;
 
 public class BodySkin extends SkinListEntry {
     public static final Codec<Definition> DEFINITION_CODEC = RecordCodecBuilder.create(instance -> instance.group(
@@ -11,7 +11,7 @@ public class BodySkin extends SkinListEntry {
             Codec.FLOAT.optionalFieldOf("chance", 1.0f).forGetter(Definition::chance)
     ).apply(instance, Definition::new));
     public static final Codec<BodySkin> CODEC = RecordCodecBuilder.create(instance -> instance.group(
-            Identifier.CODEC.fieldOf("id").forGetter(BodySkin::getIdentifierValue),
+            ResourceLocation.CODEC.fieldOf("id").forGetter(BodySkin::getIdentifierValue),
             GENDER_CODEC.optionalFieldOf("gender", Gender.NEUTRAL).forGetter(BodySkin::getGender),
             Codec.FLOAT.optionalFieldOf("chance", 1.0f).forGetter(BodySkin::getChance)
     ).apply(instance, (id, gender, chance) -> new BodySkin(id.toString(), gender, chance)));

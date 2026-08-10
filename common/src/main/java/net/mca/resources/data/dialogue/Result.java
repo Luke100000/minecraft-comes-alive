@@ -7,8 +7,7 @@ import net.mca.entity.VillagerEntityMCA;
 import net.mca.entity.ai.Memories;
 import net.mca.entity.interaction.InteractionPredicate;
 import net.mca.resources.data.analysis.IntAnalysis;
-import net.minecraft.server.network.ServerPlayerEntity;
-
+import net.minecraft.server.level.ServerPlayer;
 import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
@@ -60,7 +59,7 @@ public class Result {
         return Objects.requireNonNullElse(conditions, Collections.emptyList());
     }
 
-    public IntAnalysis getChances(VillagerEntityMCA villager, ServerPlayerEntity player) {
+    public IntAnalysis getChances(VillagerEntityMCA villager, ServerPlayer player) {
         IntAnalysis analysis = new IntAnalysis();
         Memories memory = villager.getVillagerBrain().getMemoriesForPlayer(player);
 

@@ -5,20 +5,19 @@ import net.mca.MCA;
 import net.mca.cobalt.network.Message;
 import net.mca.util.WorldUtils;
 import net.mca.util.compat.ExtendedFuzzyPositions;
-import net.minecraft.entity.ai.FuzzyPositions;
-import net.minecraft.entity.effect.StatusEffects;
-import net.minecraft.network.packet.s2c.play.PositionFlag;
-import net.minecraft.registry.RegistryKeys;
-import net.minecraft.registry.tag.TagKey;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.server.world.ChunkTicketType;
-import net.minecraft.text.Text;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.ChunkPos;
-import net.minecraft.world.Heightmap;
-
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.level.TicketType;
+import net.minecraft.tags.TagKey;
+import net.minecraft.world.effect.MobEffects;
+import net.minecraft.world.entity.RelativeMovement;
+import net.minecraft.world.entity.ai.util.RandomPos;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.levelgen.Heightmap;
 import java.io.Serial;
 import java.util.EnumSet;
 import java.util.Optional;
@@ -44,10 +43,10 @@ public class DestinyMessage implements Message {
     }
 
     @Override
-    public void receive(ServerPlayerEntity player) {
+    public void receive(ServerPlayer player) {
         if (isClosing) {
-            player.removeStatusEffect(StatusEffects.INVISIBILITY);
-            player.removeStatusEffect(StatusEffects.HEALTH_BOOST);
+            player.removeEffect(MobEffects.INVISIBILITY);
+            player.removeEffect(MobEffects.HEALTH_BOOST);
         }
 
         if (!Config.getInstance().allowDestinyTeleportation || location == null || location.equals("somewhere")) {
@@ -63,44 +62,44 @@ public class DestinyMessage implements Message {
             Optional<BlockPos> position;
             if (location.charAt(0) == '#') {
                 String tagId = location.substring(1);
-                position = WorldUtils.getClosestStructurePosition(player.getServerWorld(), player.getBlockPos(), TagKey.of(RegistryKeys.STRUCTURE, new Identifier(tagId)), 128);
+                position = WorldUtils.getClosestStructurePosition(player.serverLevel(), player.blockPosition(), TagKey.create(Registries.STRUCTURE, new ResourceLocation(tagId)), 128);
             } else {
-                position = WorldUtils.getClosestStructurePosition(player.getServerWorld(), player.getBlockPos(), new Identifier(location), 128);
+                position = WorldUtils.getClosestStructurePosition(player.serverLevel(), player.blockPosition(), new ResourceLocation(location), 128);
             }
 
             server.execute(() -> position.ifPresentOrElse(
                     pos -> handleBlockPos(player, pos),
-                    () -> player.sendMessage(Text.translatable("destiny.teleport.failed"), false)
+                    () -> player.displayClientMessage(Component.translatable("destiny.teleport.failed"), false)
             ));
         });
     }
 
 
-    private void handleBlockPos(ServerPlayerEntity player, BlockPos pos) {
-        player.getWorld().getWorldChunk(pos);
+    private void handleBlockPos(ServerPlayer player, BlockPos pos) {
+        player.level().getChunkAt(pos);
 
         if (location.equals("minecraft:ancient_city")) {
             pos = new BlockPos(pos.getX(), -50, pos.getZ());
         } else {
-            pos = player.getWorld().getTopPosition(Heightmap.Type.WORLD_SURFACE, pos);
+            pos = player.level().getHeightmapPos(Heightmap.Types.WORLD_SURFACE, pos);
         }
 
-        pos = FuzzyPositions.upWhile(pos, player.getWorld().getHeight(), p -> player.getWorld().getBlockState(p).shouldSuffocate(player.getWorld(), p));
-        pos = ExtendedFuzzyPositions.downWhile(pos, 1, p -> !player.getWorld().getBlockState(p.down()).isFullCube(player.getWorld(), p));
+        pos = RandomPos.moveUpOutOfSolid(pos, player.level().getHeight(), p -> player.level().getBlockState(p).isSuffocating(player.level(), p));
+        pos = ExtendedFuzzyPositions.downWhile(pos, 1, p -> !player.level().getBlockState(p.below()).isCollisionShapeFullBlock(player.level(), p));
 
-        if (!player.getWorld().getWorldBorder().contains(pos) || pos.getY() < player.getWorld().getBottomY() || pos.getY() >= player.getWorld().getTopY()) {
-            player.sendMessage(Text.translatable("destiny.teleport.failed"), false);
+        if (!player.level().getWorldBorder().isWithinBounds(pos) || pos.getY() < player.level().getMinBuildHeight() || pos.getY() >= player.level().getMaxBuildHeight()) {
+            player.displayClientMessage(Component.translatable("destiny.teleport.failed"), false);
             return;
         }
 
         ChunkPos chunkPos = new ChunkPos(pos);
-        player.getServerWorld().getChunkManager().addTicket(ChunkTicketType.POST_TELEPORT, chunkPos, 1, player.getId());
-        player.networkHandler.requestTeleport(pos.getX(), pos.getY(), pos.getZ(), player.getYaw(), player.getPitch(), EnumSet.noneOf(PositionFlag.class));
+        player.serverLevel().getChunkSource().addRegionTicket(TicketType.POST_TELEPORT, chunkPos, 1, player.getId());
+        player.connection.teleport(pos.getX(), pos.getY(), pos.getZ(), player.getYRot(), player.getXRot(), EnumSet.noneOf(RelativeMovement.class));
 
         //set spawn
-        player.setSpawnPoint(player.getWorld().getRegistryKey(), pos, 0.0f, true, false);
-        if (player.getWorld().getServer() != null && player.getWorld().getServer().isHost(player.getGameProfile())) {
-            player.getServerWorld().setSpawnPos(pos, 0.0f);
+        player.setRespawnPosition(player.level().dimension(), pos, 0.0f, true, false);
+        if (player.level().getServer() != null && player.level().getServer().isSingleplayerOwner(player.getGameProfile())) {
+            player.serverLevel().setDefaultSpawnPos(pos, 0.0f);
         }
     }
 }

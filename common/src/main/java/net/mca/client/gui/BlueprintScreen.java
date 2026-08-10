@@ -16,19 +16,18 @@ import net.mca.server.world.data.Building;
 import net.mca.server.world.data.Village;
 import net.mca.util.compat.ButtonWidget;
 import net.mca.util.localization.FlowingText;
-import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.gui.widget.TextFieldWidget;
-import net.minecraft.client.gui.widget.TexturedButtonWidget;
-import net.minecraft.client.network.ClientPlayerEntity;
-import net.minecraft.client.util.math.MatrixStack;
-import net.minecraft.registry.Registries;
-import net.minecraft.text.MutableText;
-import net.minecraft.text.Text;
-import net.minecraft.util.Formatting;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Vec3i;
-
+import net.minecraft.ChatFormatting;
+import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.gui.components.ImageButton;
+import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Vec3i;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.resources.ResourceLocation;
+import com.mojang.blaze3d.vertex.PoseStack;
 import java.util.*;
 import java.util.function.Consumer;
 
@@ -49,9 +48,9 @@ public class BlueprintScreen extends ExtendedScreen {
     private ButtonWidget buttonPage;
     private int pageNumber = 0;
     // 1.19.3: This needs to be the MC type, DO NOT TOUCH !!!
-    private final List<net.minecraft.client.gui.widget.ButtonWidget> catalogButtons = new LinkedList<>();
+    private final List<net.minecraft.client.gui.components.Button> catalogButtons = new LinkedList<>();
 
-    private static final Identifier ICON_TEXTURES = MCA.locate("textures/buildings.png");
+    private static final ResourceLocation ICON_TEXTURES = MCA.locate("textures/buildings.png");
     private BuildingType selectedBuilding;
     private UUID selectedVillager;
 
@@ -61,7 +60,7 @@ public class BlueprintScreen extends ExtendedScreen {
     private Map<Rank, List<Task>> tasks;
 
     public BlueprintScreen() {
-        super(Text.literal("Blueprint"));
+        super(Component.literal("Blueprint"));
     }
 
     private void saveVillage() {
@@ -83,17 +82,17 @@ public class BlueprintScreen extends ExtendedScreen {
         saveVillage();
     }
 
-    private ButtonWidget[] createValueChanger(int x, int y, int w, int h, Consumer<Boolean> onPress, Text tooltip) {
+    private ButtonWidget[] createValueChanger(int x, int y, int w, int h, Consumer<Boolean> onPress, Component tooltip) {
         ButtonWidget[] buttons = new ButtonWidget[3];
 
-        buttons[1] = addDrawableChild(new ButtonWidget(x - w / 2, y, w / 4, h,
-                Text.literal("<<"), b -> onPress.accept(false)));
+        buttons[1] = addRenderableWidget(new ButtonWidget(x - w / 2, y, w / 4, h,
+                Component.literal("<<"), b -> onPress.accept(false)));
 
-        buttons[2] = addDrawableChild(new ButtonWidget(x + w / 4, y, w / 4, h,
-                Text.literal(">>"), b -> onPress.accept(true)));
+        buttons[2] = addRenderableWidget(new ButtonWidget(x + w / 4, y, w / 4, h,
+                Component.literal(">>"), b -> onPress.accept(true)));
 
-        buttons[0] = addDrawableChild(new ButtonWidget(x - w / 4, y, w / 2, h,
-                Text.literal(""), b -> {
+        buttons[0] = addRenderableWidget(new ButtonWidget(x - w / 4, y, w / 2, h,
+                Component.literal(""), b -> {
         },
                 tooltip
         ));
@@ -101,7 +100,7 @@ public class BlueprintScreen extends ExtendedScreen {
         return buttons;
     }
 
-    protected void drawBuildingIcon(DrawContext context, Identifier texture, int x, int y, int u, int v) {
+    protected void drawBuildingIcon(GuiGraphics context, ResourceLocation texture, int x, int y, int u, int v) {
         WidgetUtils.drawBuildingIcon(context, texture, x, y, u, v);
     }
 
@@ -113,25 +112,25 @@ public class BlueprintScreen extends ExtendedScreen {
 
     private void setPage(String page) {
         if (page.equals("close")) {
-            assert client != null;
-            client.setScreen(null);
+            assert minecraft != null;
+            minecraft.setScreen(null);
             return;
         }
 
         this.page = page;
 
-        clearChildren();
+        clearWidgets();
 
         // back button
-        addDrawableChild(new ButtonWidget(5, 5, 20, 20, Text.translatable("gui.button.backarrow"), b -> setPage("close")));
+        addRenderableWidget(new ButtonWidget(5, 5, 20, 20, Component.translatable("gui.button.backarrow"), b -> setPage("close")));
 
         //page selection
         int bx = width / 2 - 180;
         int by = height / 2 - 56;
         if (!page.equals("rename") && (!page.equals("empty") && !page.equals("waiting"))) {
             for (String p : new String[]{"map", "rank", "catalog", "villagers", "rules", "refresh"}) {
-                ButtonWidget widget = new ButtonWidget(bx, by, 80, 20, Text.translatable("gui.blueprint." + p), b -> setPage(p));
-                addDrawableChild(widget);
+                ButtonWidget widget = new ButtonWidget(bx, by, 80, 20, Component.translatable("gui.blueprint." + p), b -> setPage(p));
+                addRenderableWidget(widget);
                 if (page.equals(p)) {
                     widget.active = false;
                 }
@@ -144,11 +143,11 @@ public class BlueprintScreen extends ExtendedScreen {
                 //add building
                 bx = width / 2 - 48;
                 by = height / 2;
-                addDrawableChild(new TooltipButtonWidget(bx - 50, by + 5, 96, 20, "gui.blueprint.addRoom", b -> {
+                addRenderableWidget(new TooltipButtonWidget(bx - 50, by + 5, 96, 20, "gui.blueprint.addRoom", b -> {
                     NetworkHandler.sendToServer(new ReportBuildingMessage(ReportBuildingMessage.Action.ADD_ROOM));
                     NetworkHandler.sendToServer(new GetVillageRequest());
                 }));
-                addDrawableChild(new TooltipButtonWidget(bx + 50, by + 5, 96, 20, "gui.blueprint.addBuilding", b -> {
+                addRenderableWidget(new TooltipButtonWidget(bx + 50, by + 5, 96, 20, "gui.blueprint.addBuilding", b -> {
                     NetworkHandler.sendToServer(new ReportBuildingMessage(ReportBuildingMessage.Action.ADD));
                     NetworkHandler.sendToServer(new GetVillageRequest());
                 }));
@@ -156,22 +155,22 @@ public class BlueprintScreen extends ExtendedScreen {
             case "refresh":
                 NetworkHandler.sendToServer(new ReportBuildingMessage(ReportBuildingMessage.Action.FULL_SCAN));
                 NetworkHandler.sendToServer(new GetVillageRequest());
-                assert client != null;
-                assert client.player != null;
-                client.player.sendMessage(Text.translatable("blueprint.refreshed"), true);
+                assert minecraft != null;
+                assert minecraft.player != null;
+                minecraft.player.displayClientMessage(Component.translatable("blueprint.refreshed"), true);
                 setPage("map");
                 break;
             case "advanced":
                 //auto-scan
                 bx = width / 2 + 180 - 64 - 16;
                 by = height / 2 - 56;
-                MutableText text = Text.translatable("gui.blueprint.autoScan");
+                MutableComponent text = Component.translatable("gui.blueprint.autoScan");
                 if (village.isAutoScan()) {
-                    text.formatted(Formatting.GREEN);
+                    text.withStyle(ChatFormatting.GREEN);
                 } else {
-                    text.formatted(Formatting.GRAY).formatted(Formatting.STRIKETHROUGH);
+                    text.withStyle(ChatFormatting.GRAY).withStyle(ChatFormatting.STRIKETHROUGH);
                 }
-                addDrawableChild(new TooltipButtonWidget(bx, by, 96, 20, text, Text.translatable("gui.blueprint.autoScan.tooltip"), b -> {
+                addRenderableWidget(new TooltipButtonWidget(bx, by, 96, 20, text, Component.translatable("gui.blueprint.autoScan.tooltip"), b -> {
                     NetworkHandler.sendToServer(new ReportBuildingMessage(ReportBuildingMessage.Action.AUTO_SCAN));
                     NetworkHandler.sendToServer(new GetVillageRequest());
                     village.toggleAutoScan();
@@ -180,14 +179,14 @@ public class BlueprintScreen extends ExtendedScreen {
                 by += 22;
 
                 //restrict access
-                addDrawableChild(new TooltipButtonWidget(bx, by, 96, 20, "gui.blueprint.restrictAccess", b -> {
+                addRenderableWidget(new TooltipButtonWidget(bx, by, 96, 20, "gui.blueprint.restrictAccess", b -> {
                     NetworkHandler.sendToServer(new ReportBuildingMessage(ReportBuildingMessage.Action.FORCE_TYPE, "blocked"));
                     NetworkHandler.sendToServer(new GetVillageRequest());
                 }));
                 by += 22;
 
                 //add whole building
-                addDrawableChild(new TooltipButtonWidget(bx, by, 96, 20, "gui.blueprint.addBuilding", b -> {
+                addRenderableWidget(new TooltipButtonWidget(bx, by, 96, 20, "gui.blueprint.addBuilding", b -> {
                     NetworkHandler.sendToServer(new ReportBuildingMessage(ReportBuildingMessage.Action.ADD));
                     NetworkHandler.sendToServer(new GetVillageRequest());
                 }));
@@ -195,7 +194,7 @@ public class BlueprintScreen extends ExtendedScreen {
 
                 //rename village
                 if (isVillage) {
-                    addDrawableChild(new ButtonWidget(bx, by, 96, 20, Text.translatable("gui.blueprint.renameVillage"), b -> {
+                    addRenderableWidget(new ButtonWidget(bx, by, 96, 20, Component.translatable("gui.blueprint.renameVillage"), b -> {
                         setPage("rename");
                     }));
                 }
@@ -203,14 +202,14 @@ public class BlueprintScreen extends ExtendedScreen {
                 //add building
                 bx = width / 2 + 180 - 64 - 16;
                 by = height / 2 - 56 + 22 * 3;
-                addDrawableChild(new TooltipButtonWidget(bx, by, 96, 20, "gui.blueprint.addRoom", b -> {
+                addRenderableWidget(new TooltipButtonWidget(bx, by, 96, 20, "gui.blueprint.addRoom", b -> {
                     NetworkHandler.sendToServer(new ReportBuildingMessage(ReportBuildingMessage.Action.ADD_ROOM));
                     NetworkHandler.sendToServer(new GetVillageRequest());
                 }));
                 by += 22;
 
                 //remove building
-                addDrawableChild(new ButtonWidget(bx, by, 96, 20, Text.translatable("gui.blueprint.removeBuilding"), b -> {
+                addRenderableWidget(new ButtonWidget(bx, by, 96, 20, Component.translatable("gui.blueprint.removeBuilding"), b -> {
                     NetworkHandler.sendToServer(new ReportBuildingMessage(ReportBuildingMessage.Action.REMOVE));
                     NetworkHandler.sendToServer(new GetVillageRequest());
                 }));
@@ -218,7 +217,7 @@ public class BlueprintScreen extends ExtendedScreen {
 
                 //advanced
                 if (!page.equals("advanced")) {
-                    addDrawableChild(new ButtonWidget(bx, by, 96, 20, Text.translatable("gui.blueprint.advanced"), b -> {
+                    addRenderableWidget(new ButtonWidget(bx, by, 96, 20, Component.translatable("gui.blueprint.advanced"), b -> {
                         setPage("advanced");
                     }));
                 }
@@ -236,23 +235,23 @@ public class BlueprintScreen extends ExtendedScreen {
                 catalogButtons.clear();
                 for (BuildingType bt : BuildingTypes.getInstance()) {
                     if (bt.visible()) {
-                        net.minecraft.client.gui.widget.ButtonWidget widget;
+                        net.minecraft.client.gui.components.Button widget;
                         if (bt.hasIcon()) {
-                            widget = new TexturedButtonWidget(
+                            widget = new ImageButton(
                                     row * size + x + 10, col * size + y - 10, 20, 20, bt.iconU(), bt.iconV() + 20, 20, ICON_TEXTURES, 256, 256, button -> {
                                 selectBuilding(bt);
                                 button.active = false;
                                 catalogButtons.forEach(entry -> entry.active = true);
-                            }, Text.translatable("buildingType." + bt.name()));
+                            }, Component.translatable("buildingType." + bt.name()));
                         } else {
                             widget = new ButtonWidget(
-                                    row * size + x + 10, col * size + y - 10, 20, 20, Text.empty(), button -> {
+                                    row * size + x + 10, col * size + y - 10, 20, 20, Component.empty(), button -> {
                                 selectBuilding(bt);
                                 button.active = false;
                                 catalogButtons.forEach(entry -> entry.active = true);
-                            }, Text.translatable("buildingType." + bt.name()));
+                            }, Component.translatable("buildingType." + bt.name()));
                         }
-                        catalogButtons.add(addDrawableChild(widget));
+                        catalogButtons.add(addRenderableWidget(widget));
 
                         row++;
                         if (row > 4) {
@@ -263,43 +262,43 @@ public class BlueprintScreen extends ExtendedScreen {
                 }
                 break;
             case "villagers":
-                addDrawableChild(new ButtonWidget(width / 2 - 24 - 20, height / 2 + 54, 20, 20, Text.literal("<"), b -> {
+                addRenderableWidget(new ButtonWidget(width / 2 - 24 - 20, height / 2 + 54, 20, 20, Component.literal("<"), b -> {
                     if (pageNumber > 0) {
                         pageNumber--;
                     }
                 }));
-                addDrawableChild(new ButtonWidget(width / 2 + 24, height / 2 + 54, 20, 20, Text.literal(">"), b -> {
+                addRenderableWidget(new ButtonWidget(width / 2 + 24, height / 2 + 54, 20, 20, Component.literal(">"), b -> {
                     if (pageNumber < Math.ceil(village.getPopulation() / 9.0) - 1) {
                         pageNumber++;
                     }
                 }));
-                buttonPage = addDrawableChild(new ButtonWidget(width / 2 - 24, height / 2 + 54, 48, 20, Text.literal("0/0)"), b -> {
+                buttonPage = addRenderableWidget(new ButtonWidget(width / 2 - 24, height / 2 + 54, 48, 20, Component.literal("0/0)"), b -> {
                 }));
                 break;
             case "rules":
                 //taxes
-                buttonTaxes = createValueChanger(width / 2, height / 2 + POSITION_TAXES + 10, 80, 20, b -> changeTaxes(b ? 0.125f : -0.125f), Text.translatable("gui.blueprint.tooltip.taxes"));
+                buttonTaxes = createValueChanger(width / 2, height / 2 + POSITION_TAXES + 10, 80, 20, b -> changeTaxes(b ? 0.125f : -0.125f), Component.translatable("gui.blueprint.tooltip.taxes"));
                 toggleButtons(buttonTaxes, false);
 
                 //birth threshold
-                buttonBirths = createValueChanger(width / 2, height / 2 + POSITION_BIRTH + 10, 80, 20, b -> changePopulationThreshold(b ? 0.125f : -0.125f), Text.translatable("gui.blueprint.tooltip.births"));
+                buttonBirths = createValueChanger(width / 2, height / 2 + POSITION_BIRTH + 10, 80, 20, b -> changePopulationThreshold(b ? 0.125f : -0.125f), Component.translatable("gui.blueprint.tooltip.births"));
                 toggleButtons(buttonBirths, false);
 
                 //marriage threshold
-                buttonMarriage = createValueChanger(width / 2, height / 2 + POSITION_MARRIAGE + 10, 80, 20, b -> changeMarriageThreshold(b ? 0.125f : -0.125f), Text.translatable("gui.blueprint.tooltip.marriage"));
+                buttonMarriage = createValueChanger(width / 2, height / 2 + POSITION_MARRIAGE + 10, 80, 20, b -> changeMarriageThreshold(b ? 0.125f : -0.125f), Component.translatable("gui.blueprint.tooltip.marriage"));
                 toggleButtons(buttonMarriage, false);
                 break;
             case "rename":
-                TextFieldWidget field = addDrawableChild(new TextFieldWidget(textRenderer, width / 2 - 65, height / 2 - 16, 130, 20, Text.translatable("gui.blueprint.renameVillage")));
+                EditBox field = addRenderableWidget(new EditBox(font, width / 2 - 65, height / 2 - 16, 130, 20, Component.translatable("gui.blueprint.renameVillage")));
                 field.setMaxLength(32);
-                field.setText(village.getName());
+                field.setValue(village.getName());
 
-                addDrawableChild(new ButtonWidget(width / 2 - 66, height / 2 + 8, 64, 20, Text.translatable("gui.blueprint.cancel"), b -> {
+                addRenderableWidget(new ButtonWidget(width / 2 - 66, height / 2 + 8, 64, 20, Component.translatable("gui.blueprint.cancel"), b -> {
                     setPage("map");
                 }));
-                addDrawableChild(new ButtonWidget(width / 2 + 2, height / 2 + 8, 64, 20, Text.translatable("gui.blueprint.rename"), b -> {
-                    NetworkHandler.sendToServer(new RenameVillageMessage(village.getId(), field.getText()));
-                    village.setName(field.getText());
+                addRenderableWidget(new ButtonWidget(width / 2 + 2, height / 2 + 8, 64, 20, Component.translatable("gui.blueprint.rename"), b -> {
+                    NetworkHandler.sendToServer(new RenameVillageMessage(village.getId(), field.getValue()));
+                    village.setName(field.getValue());
                     setPage("map");
                 }));
                 break;
@@ -311,23 +310,23 @@ public class BlueprintScreen extends ExtendedScreen {
     }
 
     @Override
-    public boolean shouldPause() {
+    public boolean isPauseScreen() {
         return false;
     }
 
     @Override
-    public void render(DrawContext context, int sizeX, int sizeY, float offset) {
+    public void render(GuiGraphics context, int sizeX, int sizeY, float offset) {
         renderBackground(context);
 
-        assert client != null;
-        this.mouseX = (int) (client.mouse.getX() * width / client.getWindow().getFramebufferWidth());
-        this.mouseY = (int) (client.mouse.getY() * height / client.getWindow().getFramebufferHeight());
+        assert minecraft != null;
+        this.mouseX = (int) (minecraft.mouseHandler.xpos() * width / minecraft.getWindow().getWidth());
+        this.mouseY = (int) (minecraft.mouseHandler.ypos() * height / minecraft.getWindow().getHeight());
 
         switch (page) {
             case "waiting" ->
-                    context.drawCenteredTextWithShadow(textRenderer, Text.translatable("gui.blueprint.waiting"), width / 2, height / 2, 0xffaaaaaa);
+                    context.drawCenteredString(font, Component.translatable("gui.blueprint.waiting"), width / 2, height / 2, 0xffaaaaaa);
                 case "empty" ->
-                    context.drawCenteredTextWithShadow(textRenderer, Text.translatable("gui.blueprint.empty"), width / 2, height / 2 - 20, 0xffaaaaaa);
+                    context.drawCenteredString(font, Component.translatable("gui.blueprint.empty"), width / 2, height / 2 - 20, 0xffaaaaaa);
             case "map" -> {
                 renderStats(context);
                 renderName(context);
@@ -349,45 +348,45 @@ public class BlueprintScreen extends ExtendedScreen {
         super.render(context, sizeX, sizeY, offset);
     }
 
-    private void renderName(DrawContext context) {
-        final MatrixStack matrices = context.getMatrices();
+    private void renderName(GuiGraphics context) {
+        final PoseStack matrices = context.pose();
         //name
-        matrices.push();
+        matrices.pushPose();
         matrices.scale(2.0f, 2.0f, 2.0f);
         if (isVillage) {
-            context.drawCenteredTextWithShadow(textRenderer, village.getName(), width / 4, height / 4 - 48, 0xffffffff);
+            context.drawCenteredString(font, village.getName(), width / 4, height / 4 - 48, 0xffffffff);
         } else {
-            context.drawCenteredTextWithShadow(textRenderer, Text.translatable("gui.blueprint.settlement"), width / 4, height / 4 - 48, 0xffffffff);
+            context.drawCenteredString(font, Component.translatable("gui.blueprint.settlement"), width / 4, height / 4 - 48, 0xffffffff);
         }
-        matrices.pop();
+        matrices.popPose();
     }
 
-    private void renderStats(DrawContext context) {
+    private void renderStats(GuiGraphics context) {
         int x = width / 2 + (page.equals("rank") ? -70 : 105);
         int y = height / 2 - 50;
 
         //rank
-        Text rankStr = Text.translatable(rank.getTranslationKey());
+        Component rankStr = Component.translatable(rank.getTranslationKey());
         int rankColor = rank.ordinal() == 0 ? 0xffff0000 : 0xffffff00;
 
-        context.drawTextWithShadow(textRenderer, Text.translatable("gui.blueprint.currentRank", rankStr), x, y, rankColor);
-        context.drawTextWithShadow(textRenderer, Text.translatable("gui.blueprint.reputation", String.valueOf(reputation)), x, y + 11, rank.ordinal() == 0 ? 0xffff0000 : 0xffffffff);
-        context.drawTextWithShadow(textRenderer, Text.translatable("gui.blueprint.buildings", village.getBuildings().size()), x, y + 22, 0xffffffff);
-        context.drawTextWithShadow(textRenderer, Text.translatable("gui.blueprint.population", village.getPopulation(), village.getMaxPopulation()), x, y + 33, 0xffffffff);
+        context.drawString(font, Component.translatable("gui.blueprint.currentRank", rankStr), x, y, rankColor);
+        context.drawString(font, Component.translatable("gui.blueprint.reputation", String.valueOf(reputation)), x, y + 11, rank.ordinal() == 0 ? 0xffff0000 : 0xffffffff);
+        context.drawString(font, Component.translatable("gui.blueprint.buildings", village.getBuildings().size()), x, y + 22, 0xffffffff);
+        context.drawString(font, Component.translatable("gui.blueprint.population", village.getPopulation(), village.getMaxPopulation()), x, y + 33, 0xffffffff);
     }
 
-    private void renderMap(DrawContext context) {
-        final MatrixStack matrices = context.getMatrices();
+    private void renderMap(GuiGraphics context) {
+        final PoseStack matrices = context.pose();
         int mapSize = 75;
         int y = height / 2 + 8;
         WidgetUtils.drawRectangle(context, width / 2 - mapSize, y - mapSize, width / 2 + mapSize, y + mapSize, 0xffffff88);
 
         //hint
         if (!village.isAutoScan() && village.getBuildings().size() <= 1) {
-            context.drawCenteredTextWithShadow(textRenderer, Text.translatable("gui.blueprint.autoScanDisabled"), width / 2, height / 2 + 90, 0xaaffffff);
+            context.drawCenteredString(font, Component.translatable("gui.blueprint.autoScanDisabled"), width / 2, height / 2 + 90, 0xaaffffff);
         }
 
-        matrices.push();
+        matrices.pushPose();
 
         //center and scale the map
         float sc = Math.min((float) mapSize / (village.getBox().getMaxBlockCount() + 3) * 2, 2.0f);
@@ -398,8 +397,8 @@ public class BlueprintScreen extends ExtendedScreen {
         matrices.translate(-village.getCenter().getX(), -village.getCenter().getZ(), 0);
 
         //show the players location
-        assert client != null;
-        ClientPlayerEntity player = client.player;
+        assert minecraft != null;
+        LocalPlayer player = minecraft.player;
         if (player != null) {
             WidgetUtils.drawRectangle(context, (int) player.getX() - 1, (int) player.getZ() - 1, (int) player.getX() + 1, (int) player.getZ() + 1, 0xffff00ff);
         }
@@ -416,7 +415,7 @@ public class BlueprintScreen extends ExtendedScreen {
 
                 //tooltip
                 int margin = 6;
-                if (c.getSquaredDistance(new Vec3i(mouseLocalX, c.getY(), mouseLocalY)) < margin * margin) {
+                if (c.distSqr(new Vec3i(mouseLocalX, c.getY(), mouseLocalY)) < margin * margin) {
                     hoverBuildings.add(building);
                 }
             } else {
@@ -438,52 +437,52 @@ public class BlueprintScreen extends ExtendedScreen {
             }
         }
 
-        matrices.pop();
+        matrices.popPose();
 
         //sort vertically
         hoverBuildings.sort((a, b) -> b.getCenter().getY() - a.getCenter().getY());
 
         //get tooltips
-        List<List<Text>> tooltips = new LinkedList<>();
+        List<List<Component>> tooltips = new LinkedList<>();
         for (Building b : hoverBuildings) {
             tooltips.add(getBuildingTooltip(b));
         }
 
         //get height
         int h = 0;
-        for (List<Text> b : tooltips) {
+        for (List<Component> b : tooltips) {
             h += getTooltipHeight(b) + 9;
         }
 
         //render
         int py = mouseY - h / 2 + 12;
-        for (List<Text> b : tooltips) {
-            context.drawTooltip(textRenderer, b, mouseX, py);
+        for (List<Component> b : tooltips) {
+            context.renderComponentTooltip(font, b, mouseX, py);
             py += getTooltipHeight(b) + 9;
         }
     }
 
-    private List<Text> getBuildingTooltip(Building hoverBuilding) {
-        List<Text> lines = new LinkedList<>();
+    private List<Component> getBuildingTooltip(Building hoverBuilding) {
+        List<Component> lines = new LinkedList<>();
 
         //name
         BuildingType bt = BuildingTypes.getInstance().getBuildingType(hoverBuilding.getType());
-        lines.add(Text.translatable("buildingType." + bt.name()));
+        lines.add(Component.translatable("buildingType." + bt.name()));
 
         //residents
         for (String name : village.getResidents(hoverBuilding.getId())) {
-            lines.add(Text.literal(name));
+            lines.add(Component.literal(name));
         }
 
         //present blocks
-        for (Map.Entry<Identifier, List<BlockPos>> block : hoverBuilding.getBlocks().entrySet()) {
-            lines.add(Text.literal(block.getValue().size() + " x ").append(getBlockName(block.getKey())).formatted(Formatting.GRAY));
+        for (Map.Entry<ResourceLocation, List<BlockPos>> block : hoverBuilding.getBlocks().entrySet()) {
+            lines.add(Component.literal(block.getValue().size() + " x ").append(getBlockName(block.getKey())).withStyle(ChatFormatting.GRAY));
         }
 
         return lines;
     }
 
-    private void renderTasks(DrawContext context) {
+    private void renderTasks(GuiGraphics context) {
         if (rank == null) {
             return;
         }
@@ -494,57 +493,57 @@ public class BlueprintScreen extends ExtendedScreen {
         //tasks
         for (Task task : tasks.get(rank.promote())) {
             boolean completed = completedTasks.contains(task.getId());
-            Text t = task.getTranslatable().formatted(completed ? Formatting.STRIKETHROUGH : Formatting.RESET);
-            context.drawTextWithShadow(textRenderer, t, x, y, completed ? 0xff88ff88 : 0xffff5555);
+            Component t = task.getTranslatable().withStyle(completed ? ChatFormatting.STRIKETHROUGH : ChatFormatting.RESET);
+            context.drawString(font, t, x, y, completed ? 0xff88ff88 : 0xffff5555);
             y += 11;
         }
     }
 
-    private void renderCatalog(DrawContext context) {
-        final MatrixStack matrices = context.getMatrices();
+    private void renderCatalog(GuiGraphics context) {
+        final PoseStack matrices = context.pose();
         //title
-        matrices.push();
+        matrices.pushPose();
         matrices.scale(2.0f, 2.0f, 2.0f);
-        context.drawCenteredTextWithShadow(textRenderer, Text.translatable("gui.blueprint.catalogFull"), width / 4, height / 4 - 52, 0xffffffff);
-        matrices.pop();
+        context.drawCenteredString(font, Component.translatable("gui.blueprint.catalogFull"), width / 4, height / 4 - 52, 0xffffffff);
+        matrices.popPose();
 
         //explanation
-        context.drawCenteredTextWithShadow(textRenderer, Text.translatable("gui.blueprint.catalogHint").formatted(Formatting.GRAY), width / 2, height / 2 - 82, 0xffffffff);
+        context.drawCenteredString(font, Component.translatable("gui.blueprint.catalogHint").withStyle(ChatFormatting.GRAY), width / 2, height / 2 - 82, 0xffffffff);
 
         //building
         int x = width / 2 + 35;
         int y = height / 2 - 50;
         if (selectedBuilding != null) {
             //name
-            context.drawTextWithShadow(textRenderer, Text.translatable("buildingType." + selectedBuilding.name()), x, y, selectedBuilding.getColor());
+            context.drawString(font, Component.translatable("buildingType." + selectedBuilding.name()), x, y, selectedBuilding.getColor());
             y += 12;
 
             //description
-            List<Text> wrap = FlowingText.wrap(Text.translatable("buildingType." + selectedBuilding.name() + ".description").formatted(Formatting.GRAY).formatted(Formatting.ITALIC), 150);
-            for (Text t : wrap) {
-                context.drawTextWithShadow(textRenderer, t, x, y, 0xffffffff);
+            List<Component> wrap = FlowingText.wrap(Component.translatable("buildingType." + selectedBuilding.name() + ".description").withStyle(ChatFormatting.GRAY).withStyle(ChatFormatting.ITALIC), 150);
+            for (Component t : wrap) {
+                context.drawString(font, t, x, y, 0xffffffff);
                 y += 10;
             }
             y += 24;
 
             //required blocks
-            for (Map.Entry<Identifier, Integer> b : selectedBuilding.getGroups().entrySet()) {
-                context.drawTextWithShadow(textRenderer, Text.literal(b.getValue() + " x ").append(getBlockName(b.getKey())), x, y, 0xffffffff);
+            for (Map.Entry<ResourceLocation, Integer> b : selectedBuilding.getGroups().entrySet()) {
+                context.drawString(font, Component.literal(b.getValue() + " x ").append(getBlockName(b.getKey())), x, y, 0xffffffff);
                 y += 10;
             }
         } else {
             //help
-            List<Text> wrap = FlowingText.wrap(Text.translatable("gui.blueprint.buildingTypes").formatted(Formatting.GRAY).formatted(Formatting.ITALIC), 150);
-            for (Text t : wrap) {
-                context.drawTextWithShadow(textRenderer, t, x, y, 0xffffffff);
+            List<Component> wrap = FlowingText.wrap(Component.translatable("gui.blueprint.buildingTypes").withStyle(ChatFormatting.GRAY).withStyle(ChatFormatting.ITALIC), 150);
+            for (Component t : wrap) {
+                context.drawString(font, t, x, y, 0xffffffff);
                 y += 10;
             }
         }
     }
 
-    private void renderVillagers(DrawContext context) {
+    private void renderVillagers(GuiGraphics context) {
         int maxPages = (int) Math.ceil(village.getPopulation() / 9.0);
-        buttonPage.setMessage(Text.literal((pageNumber + 1) + "/" + maxPages));
+        buttonPage.setMessage(Component.literal((pageNumber + 1) + "/" + maxPages));
 
         List<Map.Entry<UUID, String>> villager = village.getResidentNames().entrySet().stream()
                 .sorted(Map.Entry.comparingByValue()).toList();
@@ -555,7 +554,7 @@ public class BlueprintScreen extends ExtendedScreen {
             if (index < villager.size()) {
                 int y = height / 2 - 51 + i * 11;
                 boolean hover = isMouseWithin(width / 2 - 50, y - 1, 100, 11);
-                context.drawCenteredTextWithShadow(textRenderer, Text.literal(villager.get(index).getValue()), width / 2, y, hover ? 0xFFD7D784 : 0xFFFFFFFF);
+                context.drawCenteredString(font, Component.literal(villager.get(index).getValue()), width / 2, y, hover ? 0xFFD7D784 : 0xFFFFFFFF);
                 if (hover) {
                     selectedVillager = villager.get(index).getKey();
                 }
@@ -565,44 +564,44 @@ public class BlueprintScreen extends ExtendedScreen {
         }
     }
 
-    private void renderRules(DrawContext context) {
-        buttonTaxes[0].setMessage(Text.literal((int) (village.getTaxes() * 100) + "%"));
-        buttonMarriage[0].setMessage(Text.literal((int) (village.getMarriageThreshold() * 100) + "%"));
-        buttonBirths[0].setMessage(Text.literal((int) (village.getPopulationThreshold() * 100) + "%"));
+    private void renderRules(GuiGraphics context) {
+        buttonTaxes[0].setMessage(Component.literal((int) (village.getTaxes() * 100) + "%"));
+        buttonMarriage[0].setMessage(Component.literal((int) (village.getMarriageThreshold() * 100) + "%"));
+        buttonBirths[0].setMessage(Component.literal((int) (village.getPopulationThreshold() * 100) + "%"));
 
         //taxes
-        context.drawCenteredTextWithShadow(textRenderer, Text.translatable("gui.blueprint.taxes"), width / 2, height / 2 + POSITION_TAXES, 0xffffffff);
+        context.drawCenteredString(font, Component.translatable("gui.blueprint.taxes"), width / 2, height / 2 + POSITION_TAXES, 0xffffffff);
         if (!rank.isAtLeast(Rank.MERCHANT)) {
-            context.drawCenteredTextWithShadow(textRenderer, Text.translatable("gui.blueprint.rankTooLow"), width / 2, height / 2 + POSITION_TAXES + 15, 0xffffffff);
+            context.drawCenteredString(font, Component.translatable("gui.blueprint.rankTooLow"), width / 2, height / 2 + POSITION_TAXES + 15, 0xffffffff);
             toggleButtons(buttonTaxes, false);
         } else {
             toggleButtons(buttonTaxes, true);
         }
 
         //births
-        context.drawCenteredTextWithShadow(textRenderer, Text.translatable("gui.blueprint.birth"), width / 2, height / 2 + POSITION_BIRTH, 0xffffffff);
+        context.drawCenteredString(font, Component.translatable("gui.blueprint.birth"), width / 2, height / 2 + POSITION_BIRTH, 0xffffffff);
         if (!rank.isAtLeast(Rank.NOBLE)) {
-            context.drawCenteredTextWithShadow(textRenderer, Text.translatable("gui.blueprint.rankTooLow"), width / 2, height / 2 + POSITION_BIRTH + 15, 0xffffffff);
+            context.drawCenteredString(font, Component.translatable("gui.blueprint.rankTooLow"), width / 2, height / 2 + POSITION_BIRTH + 15, 0xffffffff);
             toggleButtons(buttonBirths, false);
         } else {
             toggleButtons(buttonBirths, true);
         }
 
         //marriages
-        context.drawCenteredTextWithShadow(textRenderer, Text.translatable("gui.blueprint.marriage"), width / 2, height / 2 + POSITION_MARRIAGE, 0xffffffff);
+        context.drawCenteredString(font, Component.translatable("gui.blueprint.marriage"), width / 2, height / 2 + POSITION_MARRIAGE, 0xffffffff);
         if (!rank.isAtLeast(Rank.MAYOR)) {
-            context.drawCenteredTextWithShadow(textRenderer, Text.translatable("gui.blueprint.rankTooLow"), width / 2, height / 2 + POSITION_MARRIAGE + 15, 0xffffffff);
+            context.drawCenteredString(font, Component.translatable("gui.blueprint.rankTooLow"), width / 2, height / 2 + POSITION_MARRIAGE + 15, 0xffffffff);
             toggleButtons(buttonMarriage, false);
         } else {
             toggleButtons(buttonMarriage, true);
         }
     }
 
-    private Text getBlockName(Identifier id) {
-        if (Registries.BLOCK.containsId(id)) {
-            return Text.translatable(Registries.BLOCK.get(id).getTranslationKey());
+    private Component getBlockName(ResourceLocation id) {
+        if (BuiltInRegistries.BLOCK.containsKey(id)) {
+            return Component.translatable(BuiltInRegistries.BLOCK.get(id).getDescriptionId());
         } else {
-            return Text.translatable("tag.block." + id.getNamespace() + "." + id.getPath());
+            return Component.translatable("tag.block." + id.getNamespace() + "." + id.getPath());
         }
     }
 
@@ -616,8 +615,8 @@ public class BlueprintScreen extends ExtendedScreen {
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         if (page.equals("villagers") && selectedVillager != null) {
-            assert client != null;
-            client.setScreen(new FamilyTreeScreen(selectedVillager));
+            assert minecraft != null;
+            minecraft.setScreen(new FamilyTreeScreen(selectedVillager));
         }
 
         return super.mouseClicked(mouseX, mouseY, button);

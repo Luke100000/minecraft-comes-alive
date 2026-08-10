@@ -5,18 +5,17 @@ import com.google.gson.JsonObject;
 import net.mca.MCA;
 import net.mca.entity.ai.relationship.Gender;
 import net.mca.resources.data.skin.Hair;
-import net.minecraft.resource.JsonDataLoader;
-import net.minecraft.resource.ResourceManager;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.JsonHelper;
-import net.minecraft.util.profiler.Profiler;
-
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.packs.resources.ResourceManager;
+import net.minecraft.server.packs.resources.SimpleJsonResourceReloadListener;
+import net.minecraft.util.GsonHelper;
+import net.minecraft.util.profiling.ProfilerFiller;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 
-public class HairList extends JsonDataLoader {
-    protected static final Identifier ID = MCA.locate("skins/hair");
+public class HairList extends SimpleJsonResourceReloadListener {
+    protected static final ResourceLocation ID = MCA.locate("skins/hair");
 
     public final HashMap<String, Hair> hair = new HashMap<>();
 
@@ -32,7 +31,7 @@ public class HairList extends JsonDataLoader {
     }
 
     @Override
-    protected void apply(Map<Identifier, JsonElement> data, ResourceManager manager, Profiler profiler) {
+    protected void apply(Map<ResourceLocation, JsonElement> data, ResourceManager manager, ProfilerFiller profiler) {
         hair.clear();
 
         data.forEach((id, file) -> {
@@ -46,10 +45,10 @@ public class HairList extends JsonDataLoader {
             for (String key : file.getAsJsonObject().keySet()) {
                 JsonObject object = file.getAsJsonObject().get(key).getAsJsonObject();
 
-                for (int i = 0; i < JsonHelper.getInt(object, "count", 1); i++) {
+                for (int i = 0; i < GsonHelper.getAsInt(object, "count", 1); i++) {
                     String identifier = String.format(Locale.ROOT, key, i);
 
-                    Hair c = new Hair(identifier, gender, JsonHelper.getFloat(object, "chance", 1.0f));
+                    Hair c = new Hair(identifier, gender, GsonHelper.getAsFloat(object, "chance", 1.0f));
 
                     if (!hair.containsKey(identifier) || !object.has("count")) {
                         hair.put(identifier, c);

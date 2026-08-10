@@ -1,8 +1,7 @@
 package net.mca.server.world.data;
 
-import net.minecraft.util.math.BlockPos;
-
 import java.util.Set;
+import net.minecraft.core.BlockPos;
 
 public record BuildingBlockedResult(
         Set<BlockPos> blocked,

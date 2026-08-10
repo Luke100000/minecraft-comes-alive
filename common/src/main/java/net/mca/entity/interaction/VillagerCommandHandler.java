@@ -15,31 +15,30 @@ import net.mca.server.world.data.FamilyTree;
 import net.mca.server.world.data.FamilyTreeNode;
 import net.mca.server.world.data.PlayerSaveData;
 import net.mca.util.WorldUtils;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.Saddleable;
-import net.minecraft.entity.ai.FuzzyPositions;
-import net.minecraft.entity.passive.CamelEntity;
-import net.minecraft.entity.player.PlayerInventory;
-import net.minecraft.entity.vehicle.BoatEntity;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
-import net.minecraft.network.packet.s2c.play.EntityPassengersSetS2CPacket;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.text.Text;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Box;
-import net.minecraft.util.math.Vec3d;
-import net.minecraft.village.VillagerProfession;
-
+import net.minecraft.core.BlockPos;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.protocol.game.ClientboundSetPassengersPacket;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.Saddleable;
+import net.minecraft.world.entity.ai.util.RandomPos;
+import net.minecraft.world.entity.animal.camel.Camel;
+import net.minecraft.world.entity.npc.VillagerProfession;
+import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.entity.vehicle.Boat;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
 import java.util.Comparator;
 import java.util.Optional;
 
 public class VillagerCommandHandler extends EntityCommandHandler<VillagerEntityMCA> {
     private static boolean canMount(Entity mount) {
-        int seats = (mount instanceof CamelEntity || mount instanceof BoatEntity) ? 2 : 1;
-        return mount.getPassengerList().size() < seats;
+        int seats = (mount instanceof Camel || mount instanceof Boat) ? 2 : 1;
+        return mount.getPassengers().size() < seats;
     }
 
     public VillagerCommandHandler(VillagerEntityMCA entity) {
@@ -50,7 +49,7 @@ public class VillagerCommandHandler extends EntityCommandHandler<VillagerEntityM
      * Called on the server to respond to button events.
      */
     @Override
-    public boolean handle(ServerPlayerEntity player, String command) {
+    public boolean handle(ServerPlayer player, String command) {
         Memories memory = entity.getVillagerBrain().getMemoriesForPlayer(player);
 
         if (MoveState.byCommand(command).filter(state -> {
@@ -63,7 +62,7 @@ public class VillagerCommandHandler extends EntityCommandHandler<VillagerEntityM
         if (Chore.byCommand(command).filter(chore -> {
             entity.getVillagerBrain().assignJob(chore, player);
             CriterionMCA.GENERIC_EVENT_CRITERION.trigger(player, "chores");
-            entity.sendChatMessage(Text.translatable("chore.success"), player);
+            entity.sendChatMessage(Component.translatable("chore.success"), player);
             return true;
         }).isPresent()) {
             return true;
@@ -79,29 +78,29 @@ public class VillagerCommandHandler extends EntityCommandHandler<VillagerEntityM
 
         switch (command) {
             case "pick_up" -> {
-                if (player.getPassengerList().size() >= 3) {
-                    player.getPassengerList().get(0).stopRiding();
+                if (player.getPassengers().size() >= 3) {
+                    player.getPassengers().get(0).stopRiding();
                 }
-                if (entity.hasVehicle()) {
+                if (entity.isPassenger()) {
                     entity.stopRiding();
                 } else {
                     entity.startRiding(player, true);
                 }
-                player.networkHandler.sendPacket(new EntityPassengersSetS2CPacket(player));
+                player.connection.send(new ClientboundSetPassengersPacket(player));
                 return false;
             }
             case "ridehorse" -> {
-                if (entity.hasVehicle()) {
+                if (entity.isPassenger()) {
                     entity.stopRiding();
                 } else {
                     Entity playerVehicle = player.getVehicle();
                     if (playerVehicle != null && canMount(playerVehicle) && entity.startRiding(playerVehicle, false)) {
                         entity.sendChatMessage(player, "interaction.ridehorse.success");
                     } else {
-                        entity.getWorld().getOtherEntities(player, player.getBoundingBox().expand(10), e -> (e instanceof Saddleable saddleable && saddleable.isSaddled()) || e instanceof BoatEntity)
+                        entity.level().getEntities(player, player.getBoundingBox().inflate(10), e -> (e instanceof Saddleable saddleable && saddleable.isSaddled()) || e instanceof Boat)
                                 .stream()
                                 .filter(VillagerCommandHandler::canMount)
-                                .min(Comparator.comparingDouble(a -> a.squaredDistanceTo(entity)))
+                                .min(Comparator.comparingDouble(a -> a.distanceToSqr(entity)))
                                 .filter(mount -> entity.startRiding(mount, false))
                                 .ifPresentOrElse(
                                         mount -> entity.sendChatMessage(player, "interaction.ridehorse.success"),
@@ -126,11 +125,11 @@ public class VillagerCommandHandler extends EntityCommandHandler<VillagerEntityM
             }
             case "trade" -> {
                 entity.getInteractions().stopInteracting();
-                this.entity.beginTradeWith(player);
+                this.entity.startTrading(player);
                 return false;
             }
             case "inventory" -> {
-                player.openHandledScreen(entity);
+                player.openMenu(entity);
                 return false;
             }
             case "gift" -> {
@@ -139,7 +138,7 @@ public class VillagerCommandHandler extends EntityCommandHandler<VillagerEntityM
             }
             case "adopt" -> {
                 entity.sendChatMessage(player, "interaction.adopt.success");
-                FamilyTree familyTree = FamilyTree.get((ServerWorld) player.getWorld());
+                FamilyTree familyTree = FamilyTree.get((ServerLevel) player.level());
                 FamilyTreeNode parentNode = familyTree.getOrCreate(player);
                 entity.getRelationships().getFamilyEntry().replaceParents(parentNode, familyTree.getOrEmpty(parentNode.partner()));
             }
@@ -148,23 +147,23 @@ public class VillagerCommandHandler extends EntityCommandHandler<VillagerEntityM
                     entity.sendChatMessage(player, "interaction.procreate.fail.lowhearts");
                 } else if (entity.getTraits().hasTrait(Traits.INFERTILE)) {
                     entity.sendChatMessage(player, "interaction.procreate.fail.infertile");
-                } else if (entity.getRelationships().mayProcreateAgain(player.getWorld().getTime())) {
-                    entity.getRelationships().startProcreating(player.getWorld().getTime());
+                } else if (entity.getRelationships().mayProcreateAgain(player.level().getGameTime())) {
+                    entity.getRelationships().startProcreating(player.level().getGameTime());
                 } else {
                     entity.sendChatMessage(player, "interaction.procreate.fail.toosoon");
                 }
                 return true;
             }
             case "divorcePapers" -> {
-                player.getInventory().insertStack(new ItemStack(ItemsMCA.DIVORCE_PAPERS.get()));
+                player.getInventory().add(new ItemStack(ItemsMCA.DIVORCE_PAPERS.get()));
                 return true;
             }
             case "divorceConfirm" -> {
-                ItemStack papers = ItemsMCA.DIVORCE_PAPERS.get().getDefaultStack();
+                ItemStack papers = ItemsMCA.DIVORCE_PAPERS.get().getDefaultInstance();
                 Memories memories = entity.getVillagerBrain().getMemoriesForPlayer(player);
                 if (player.getInventory().contains(papers)) {
                     entity.sendChatMessage(player, "divorcePaper");
-                    player.getInventory().removeOne(papers);
+                    player.getInventory().removeItem(papers);
                     memories.modHearts(-20);
                 } else {
                     entity.sendChatMessage(player, "divorce");
@@ -236,9 +235,9 @@ public class VillagerCommandHandler extends EntityCommandHandler<VillagerEntityM
                 return true;
             }
             case "apologize" -> {
-                Vec3d pos = entity.getPos();
-                entity.getWorld().getNonSpectatingEntities(VillagerEntityMCA.class, new Box(pos, pos).expand(32)).forEach(v -> {
-                    if (entity.squaredDistanceTo(v) <= (v.getTarget() == null ? 1024 : 64)) {
+                Vec3 pos = entity.position();
+                entity.level().getEntitiesOfClass(VillagerEntityMCA.class, new AABB(pos, pos).inflate(32)).forEach(v -> {
+                    if (entity.distanceToSqr(v) <= (v.getTarget() == null ? 1024 : 64)) {
                         v.pardonPlayers(99);
                     }
                 });
@@ -251,11 +250,11 @@ public class VillagerCommandHandler extends EntityCommandHandler<VillagerEntityM
                     }
 
                     //slightly randomly the search center
-                    ServerWorld world = (ServerWorld) entity.getWorld();
+                    ServerLevel world = (ServerLevel) entity.level();
                     String finalArg = arg;
                     MCA.executorService.execute(() -> {
-                        Identifier identifier = new Identifier(finalArg);
-                        BlockPos pos = FuzzyPositions.localFuzz(entity.getRandom(), 1024, 0).add(entity.getBlockPos());
+                        ResourceLocation identifier = new ResourceLocation(finalArg);
+                        BlockPos pos = RandomPos.generateRandomDirection(entity.getRandom(), 1024, 0).offset(entity.blockPosition());
                         Optional<BlockPos> position = WorldUtils.getClosestStructurePosition(world, pos, identifier, 64);
                         if (position.isPresent()) {
                             String posString = position.get().getX() + "," + position.get().getY() + "," + position.get().getZ();
@@ -268,19 +267,19 @@ public class VillagerCommandHandler extends EntityCommandHandler<VillagerEntityM
                     entity.sendChatMessage(player, "dialogue.location.forgot");
                 }
             }
-            case "slap" -> player.damage(player.getWorld().getDamageSources().cramming(), 1.0f);
+            case "slap" -> player.hurt(player.level().damageSources().cramming(), 1.0f);
         }
 
         return super.handle(player, command);
     }
 
-    private void payEmeralds(ServerPlayerEntity player, int emeralds) {
-        PlayerInventory inventory = player.getInventory();
-        for (int j = 0; j < inventory.size(); ++j) {
-            ItemStack itemStack = inventory.getStack(j);
+    private void payEmeralds(ServerPlayer player, int emeralds) {
+        Inventory inventory = player.getInventory();
+        for (int j = 0; j < inventory.getContainerSize(); ++j) {
+            ItemStack itemStack = inventory.getItem(j);
             if (itemStack.getItem().equals(Items.EMERALD)) {
                 int c = Math.min(itemStack.getCount(), emeralds);
-                itemStack.decrement(c);
+                itemStack.shrink(c);
                 emeralds -= c;
                 if (emeralds <= 0) {
                     return;

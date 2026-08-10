@@ -3,11 +3,10 @@ package net.mca.mixin;
 import net.mca.Config;
 import net.mca.entity.VillagerEntityMCA;
 import net.mca.entity.ai.chatAI.ChatAI;
-import net.minecraft.network.packet.c2s.play.ChatMessageC2SPacket;
-import net.minecraft.server.network.ServerPlayNetworkHandler;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.text.Text;
-
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.protocol.game.ServerboundChatPacket;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.network.ServerGamePacketListenerImpl;
 import org.apache.commons.lang3.StringUtils;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -19,15 +18,15 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
-@Mixin(ServerPlayNetworkHandler.class)
+@Mixin(ServerGamePacketListenerImpl.class)
 public class MixinServerPlayNetworkHandler {
     @Shadow
-    public ServerPlayerEntity player;
+    public ServerPlayer player;
 
-    @Inject(method = "onChatMessage", at = @At("HEAD"))
-    public void sendMessage(ChatMessageC2SPacket message, CallbackInfo ci) {
+    @Inject(method = "handleChat", at = @At("HEAD"))
+    public void sendMessage(ServerboundChatPacket message, CallbackInfo ci) {
         if (Config.getInstance().enableVillagerChatAI) {
-            String msg = StringUtils.normalizeSpace(message.chatMessage());
+            String msg = StringUtils.normalizeSpace(message.message());
             if (!msg.startsWith("/")) {
                 // Check if there's an eligible villager for the conversation
                 Optional<VillagerEntityMCA> villager = ChatAI.getVillagerForConversation(player, msg);
@@ -38,10 +37,10 @@ public class MixinServerPlayNetworkHandler {
     }
 
     @Unique
-    private void mca$runAsyncAnswerRequest(ServerPlayerEntity player, VillagerEntityMCA villager, String msg) {
+    private void mca$runAsyncAnswerRequest(ServerPlayer player, VillagerEntityMCA villager, String msg) {
         CompletableFuture.runAsync(() -> {
             Optional<String> answer = ChatAI.answer(player, villager, msg);
-            answer.ifPresent(a -> villager.conversationManager.addMessage(player, Text.literal(a)));
+            answer.ifPresent(a -> villager.conversationManager.addMessage(player, Component.literal(a)));
         });
     }
 }

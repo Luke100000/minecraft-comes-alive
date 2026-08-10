@@ -3,15 +3,15 @@ package net.mca.mixin.client;
 import com.llamalad7.mixinextras.injector.ModifyReturnValue;
 import net.mca.Config;
 import net.mca.MCAClient;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.EntityPose;
-import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.Pose;
+import net.minecraft.world.entity.player.Player;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 
 @Mixin(Entity.class)
 public abstract class MixinEntity {
-    @ModifyReturnValue(method = "getStandingEyeHeight()F", at = @At("RETURN"))
+    @ModifyReturnValue(method = "getEyeHeight()F", at = @At("RETURN"))
     private float mca$scalePlayerStandingEyeHeight(float original) {
         return original * mca$getPlayerEyeHeightScale();
     }
@@ -23,20 +23,20 @@ public abstract class MixinEntity {
             return original;
         }
 
-        PlayerEntity player = (PlayerEntity) (Object) this;
+        Player player = (Player) (Object) this;
         double baseY = player.getY();
         return baseY + (original - baseY) * scale;
     }
 
     private float mca$getPlayerEyeHeightScale() {
-        if (!((Object) this instanceof PlayerEntity player)
-                || player.getPose() == EntityPose.SLEEPING
+        if (!((Object) this instanceof Player player)
+                || player.getPose() == Pose.SLEEPING
                 || !Config.getInstance().scaleEyeHeightWithPlayerHeight
                 || Config.getServerConfig().scalePlayerHitboxWithSizeAndWidth) {
             return 1.0F;
         }
 
-        return MCAClient.getGeneticsPlayerData(player.getUuid())
+        return MCAClient.getGeneticsPlayerData(player.getUUID())
                 .map(data -> data.getRawVerticalScaleFactor())
                 .orElse(1.0F);
     }

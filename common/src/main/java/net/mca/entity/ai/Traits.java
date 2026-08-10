@@ -7,12 +7,11 @@ import net.mca.util.ExtensibleTypeRegistry;
 import net.mca.util.network.datasync.CDataManager;
 import net.mca.util.network.datasync.CDataParameter;
 import net.mca.util.network.datasync.CParameter;
-import net.minecraft.entity.Entity;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.text.Text;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.math.random.Random;
-
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.RandomSource;
+import net.minecraft.world.entity.Entity;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -22,7 +21,7 @@ import java.util.stream.Collectors;
 
 public class Traits {
     private static final ExtensibleTypeRegistry<Trait> REGISTRY = new ExtensibleTypeRegistry<>(MCA.MOD_ID, "trait");
-    private static final CDataParameter<NbtCompound> TRAITS = CParameter.create("Traits", new NbtCompound());
+    private static final CDataParameter<CompoundTag> TRAITS = CParameter.create("Traits", new CompoundTag());
 
     public static final Trait LACTOSE_INTOLERANCE = register(MCA.locate("lactose_intolerance"), 1.0F, 1.0F);
     public static final Trait BISEXUAL = register(MCA.locate("bisexual"), 1.0F, 0.0F);
@@ -47,21 +46,21 @@ public class Traits {
     public static final Trait NO_AGING = register(MCA.locate("no_aging"), 0.0F, 0.0F, false);
 
     private final VillagerLike<?> entity;
-    private Random random = Random.create();
+    private RandomSource random = RandomSource.create();
 
     public Traits(VillagerLike<?> entity) {
         this.entity = entity;
     }
 
-    public static Trait register(Identifier id, float chance, float inherit, boolean usableOnPlayer) {
+    public static Trait register(ResourceLocation id, float chance, float inherit, boolean usableOnPlayer) {
         return REGISTRY.register(id, registeredId -> new Trait(registeredId, chance, inherit, usableOnPlayer));
     }
 
-    public static Trait register(Identifier id, float chance, float inherit) {
+    public static Trait register(ResourceLocation id, float chance, float inherit) {
         return register(id, chance, inherit, true);
     }
 
-    public static Optional<Trait> get(Identifier id) {
+    public static Optional<Trait> get(ResourceLocation id) {
         return REGISTRY.get(id);
     }
 
@@ -79,7 +78,7 @@ public class Traits {
 
     public Set<Trait> getTraits() {
         Set<Trait> traits = new LinkedHashSet<>();
-        for (String id : entity.getTrackedValue(TRAITS).getKeys()) {
+        for (String id : entity.getTrackedValue(TRAITS).getAllKeys()) {
             get(id).ifPresent(traits::add);
         }
         return traits;
@@ -113,7 +112,7 @@ public class Traits {
         if (trait == null) {
             return;
         }
-        NbtCompound traits = entity.getTrackedValue(TRAITS).copy();
+        CompoundTag traits = entity.getTrackedValue(TRAITS).copy();
         traits.putBoolean(trait.getId().toString(), true);
         entity.setTrackedValue(TRAITS, traits);
         updateAttributes(trait);
@@ -123,7 +122,7 @@ public class Traits {
         if (trait == null) {
             return;
         }
-        NbtCompound traits = entity.getTrackedValue(TRAITS).copy();
+        CompoundTag traits = entity.getTrackedValue(TRAITS).copy();
         traits.remove(trait.getId().toString());
         entity.setTrackedValue(TRAITS, traits);
         updateAttributes(trait);
@@ -153,8 +152,8 @@ public class Traits {
     }
 
     public void inherit(Traits from, long seed) {
-        Random old = random;
-        random = Random.create(seed);
+        RandomSource old = random;
+        random = RandomSource.create(seed);
         inherit(from);
         random = old;
     }
@@ -168,28 +167,28 @@ public class Traits {
     }
 
     public static final class Trait {
-        private final Identifier id;
+        private final ResourceLocation id;
         private final float chance;
         private final float inherit;
         private final boolean usableOnPlayer;
 
-        private Trait(Identifier id, float chance, float inherit, boolean usableOnPlayer) {
+        private Trait(ResourceLocation id, float chance, float inherit, boolean usableOnPlayer) {
             this.id = id;
             this.chance = chance;
             this.inherit = inherit;
             this.usableOnPlayer = usableOnPlayer;
         }
 
-        public Identifier getId() {
+        public ResourceLocation getId() {
             return id;
         }
 
-        public Text getName() {
-            return Text.translatable("trait." + REGISTRY.translationSuffix(id));
+        public Component getName() {
+            return Component.translatable("trait." + REGISTRY.translationSuffix(id));
         }
 
-        public Text getDescription() {
-            return Text.translatable("traitDescription." + REGISTRY.translationSuffix(id));
+        public Component getDescription() {
+            return Component.translatable("traitDescription." + REGISTRY.translationSuffix(id));
         }
 
         public boolean isUsableOnPlayer() {

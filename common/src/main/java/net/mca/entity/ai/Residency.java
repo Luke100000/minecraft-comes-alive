@@ -8,22 +8,21 @@ import net.mca.server.world.data.VillageManager;
 import net.mca.util.network.datasync.CDataManager;
 import net.mca.util.network.datasync.CDataParameter;
 import net.mca.util.network.datasync.CParameter;
-import net.minecraft.block.BedBlock;
-import net.minecraft.block.BlockState;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.ai.brain.MemoryModuleType;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.registry.Registries;
-import net.minecraft.registry.tag.BlockTags;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.GlobalPos;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.GlobalPos;
-import net.minecraft.village.VillagerProfession;
-import net.minecraft.world.poi.PointOfInterestStorage;
-import net.minecraft.world.poi.PointOfInterestTypes;
-
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.tags.BlockTags;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.ai.memory.MemoryModuleType;
+import net.minecraft.world.entity.ai.village.poi.PoiManager;
+import net.minecraft.world.entity.ai.village.poi.PoiTypes;
+import net.minecraft.world.entity.npc.VillagerProfession;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.level.block.BedBlock;
+import net.minecraft.world.level.block.state.BlockState;
 import java.util.Optional;
 import java.util.stream.Stream;
 
@@ -45,35 +44,35 @@ public class Residency {
 
     public BlockPos getWorkplace() {
         return entity.getBrain()
-                .getOptionalMemory(MemoryModuleType.JOB_SITE)
-                .map(GlobalPos::getPos)
-                .orElse(BlockPos.ORIGIN);
+                .getMemoryInternal(MemoryModuleType.JOB_SITE)
+                .map(GlobalPos::pos)
+                .orElse(BlockPos.ZERO);
     }
 
-    public void setWorkplace(ServerPlayerEntity player) {
-        PointOfInterestStorage pointOfInterestStorage = ((ServerWorld) player.getWorld()).getPointOfInterestStorage();
-        pointOfInterestStorage.getNearestPosition(VillagerProfession.NONE.acquirableWorkstation(), a -> true, entity.getBlockPos(), 8, PointOfInterestStorage.OccupationStatus.HAS_SPACE).ifPresentOrElse(blockPos -> {
+    public void setWorkplace(ServerPlayer player) {
+        PoiManager pointOfInterestStorage = ((ServerLevel) player.level()).getPoiManager();
+        pointOfInterestStorage.findClosest(VillagerProfession.NONE.acquirableJobSite(), a -> true, entity.blockPosition(), 8, PoiManager.Occupancy.HAS_SPACE).ifPresentOrElse(blockPos -> {
                     pointOfInterestStorage.getType(blockPos).ifPresent(pointOfInterestType -> {
-                        pointOfInterestStorage.getPosition(VillagerProfession.NONE.acquirableWorkstation(), (registryEntry, blockPos2) -> {
+                        pointOfInterestStorage.take(VillagerProfession.NONE.acquirableJobSite(), (registryEntry, blockPos2) -> {
                             return blockPos2.equals(blockPos);
                         }, blockPos, 1);
 
                         // Forget current site
-                        entity.releaseTicketFor(MemoryModuleType.POTENTIAL_JOB_SITE);
-                        entity.getBrain().forget(MemoryModuleType.POTENTIAL_JOB_SITE);
-                        entity.releaseTicketFor(MemoryModuleType.JOB_SITE);
-                        entity.getBrain().forget(MemoryModuleType.JOB_SITE);
+                        entity.releasePoi(MemoryModuleType.POTENTIAL_JOB_SITE);
+                        entity.getBrain().eraseMemory(MemoryModuleType.POTENTIAL_JOB_SITE);
+                        entity.releasePoi(MemoryModuleType.JOB_SITE);
+                        entity.getBrain().eraseMemory(MemoryModuleType.JOB_SITE);
 
                         // Set
-                        GlobalPos globalPos = GlobalPos.create(player.getWorld().getRegistryKey(), blockPos);
-                        entity.getBrain().remember(MemoryModuleType.JOB_SITE, globalPos);
-                        player.getWorld().sendEntityStatus(entity, (byte) 14);
-                        MinecraftServer minecraftServer = player.getWorld().getServer();
-                        Optional.ofNullable(minecraftServer.getWorld(globalPos.getDimension())).flatMap(world -> {
-                            return world.getPointOfInterestStorage().getType(globalPos.getPos());
+                        GlobalPos globalPos = GlobalPos.of(player.level().dimension(), blockPos);
+                        entity.getBrain().setMemory(MemoryModuleType.JOB_SITE, globalPos);
+                        player.level().broadcastEntityEvent(entity, (byte) 14);
+                        MinecraftServer minecraftServer = player.level().getServer();
+                        Optional.ofNullable(minecraftServer.getLevel(globalPos.dimension())).flatMap(world -> {
+                            return world.getPoiManager().getType(globalPos.pos());
                         }).flatMap(registryEntry -> {
-                            return Registries.VILLAGER_PROFESSION.stream().filter(profession -> {
-                                return profession.heldWorkstation().test(registryEntry);
+                            return BuiltInRegistries.VILLAGER_PROFESSION.stream().filter(profession -> {
+                                return profession.heldJobSite().test(registryEntry);
                             }).findFirst();
                         }).ifPresent(profession -> {
                             VillagerProfession oldProfession = entity.getVillagerData().getProfession();
@@ -81,13 +80,13 @@ public class Residency {
                                 return;
                             }
                             int level = entity.getVillagerData().getLevel();
-                            entity.setVillagerData(entity.getVillagerData().withProfession(profession).withLevel(1));
+                            entity.setVillagerData(entity.getVillagerData().setProfession(profession).setLevel(1));
                             entity.setOffers(null);
                             entity.getOffers();
                             for (int l = 1; l < level; l++) {
                                 entity.customLevelUp();
                             }
-                            entity.reinitializeBrain((ServerWorld) player.getWorld());
+                            entity.refreshBrain((ServerLevel) player.level());
                         });
 
                         // Success
@@ -100,7 +99,7 @@ public class Residency {
     }
 
     public Optional<Village> getHomeVillage() {
-        VillageManager manager = VillageManager.get((ServerWorld) entity.getWorld());
+        VillageManager manager = VillageManager.get((ServerLevel) entity.level());
         return manager.getOrEmpty(entity.getTrackedValue(VILLAGE));
     }
 
@@ -109,11 +108,11 @@ public class Residency {
      */
     public void seekHome() {
         if (entity.requiresHome()) {
-            VillageManager manager = VillageManager.get((ServerWorld) entity.getWorld());
+            VillageManager manager = VillageManager.get((ServerLevel) entity.level());
             Optional<Village> current = getHomeVillage();
             Optional<Village> target = getHome()
-                    .filter(home -> home.getDimension() == entity.getWorld().getRegistryKey())
-                    .flatMap(home -> manager.findNearestVillage(home.getPos(), Village.BORDER_MARGIN))
+                    .filter(home -> home.dimension() == entity.level().dimension())
+                    .flatMap(home -> manager.findNearestVillage(home.pos(), Village.BORDER_MARGIN))
                     .or(() -> current.filter(village -> village.isWithinBorder(entity)))
                     .or(() -> manager.findNearestVillage(entity));
 
@@ -137,7 +136,7 @@ public class Residency {
 
     public void tick() {
         //report buildings close by
-        if (entity.age % 600 == 0 && entity.requiresHome()) {
+        if (entity.tickCount % 600 == 0 && entity.requiresHome()) {
             Optional<Village> village = getHomeVillage();
             if (village.isEmpty() && Config.getInstance().enableAutoScanByDefault || village.filter(Village::isAutoScan).isPresent()) {
                 reportBuildings();
@@ -150,7 +149,7 @@ public class Residency {
         }
 
         //slowly inject village boni
-        if (entity.age % 1200 == 0) {
+        if (entity.tickCount % 1200 == 0) {
             getHomeVillage().ifPresentOrElse(village -> {
                 //fetch mood from the village storage
                 int mood = village.popMood();
@@ -159,7 +158,7 @@ public class Residency {
                 }
 
                 //fetch hearts
-                entity.getWorld().getPlayers().forEach(player -> {
+                entity.level().players().forEach(player -> {
                     int rep = village.popHearts(player);
                     if (rep != 0) {
                         entity.getVillagerBrain().getMemoriesForPlayer(player).modHearts(rep);
@@ -167,7 +166,7 @@ public class Residency {
                 });
 
                 //update the reputation
-                entity.getWorld().getPlayers().forEach(player -> {
+                entity.level().players().forEach(player -> {
                     //currently, only hearts are considered, maybe additional factors can affect that too
                     int hearts = entity.getVillagerBrain().getMemoriesForPlayer(player).getHearts();
                     village.setReputation(player, entity, hearts);
@@ -178,69 +177,69 @@ public class Residency {
 
     //report potential buildings within this villagers reach
     private void reportBuildings() {
-        VillageManager manager = VillageManager.get((ServerWorld) entity.getWorld());
+        VillageManager manager = VillageManager.get((ServerLevel) entity.level());
 
         //fetch all near POIs
-        Stream<BlockPos> stream = ((ServerWorld) entity.getWorld()).getPointOfInterestStorage().getPositions(
+        Stream<BlockPos> stream = ((ServerLevel) entity.level()).getPoiManager().findAll(
                 type -> true,
                 p -> !manager.cache.contains(p),
-                entity.getBlockPos(),
+                entity.blockPosition(),
                 48,
-                PointOfInterestStorage.OccupationStatus.ANY);
+                PoiManager.Occupancy.ANY);
 
         //check if it is a building
         stream.forEach(manager::reportBuilding);
 
         // also add tombstones
-        GraveyardManager.get((ServerWorld) entity.getWorld()).reportToVillageManager(entity);
+        GraveyardManager.get((ServerLevel) entity.level()).reportToVillageManager(entity);
     }
 
-    private static boolean validateBedPoi(ServerWorld world, BlockPos pos) {
+    private static boolean validateBedPoi(ServerLevel world, BlockPos pos) {
         BlockState state = world.getBlockState(pos);
-        return state.isIn(BlockTags.BEDS)
-                && state.contains(BedBlock.OCCUPIED)
-                && !state.get(BedBlock.OCCUPIED);
+        return state.is(BlockTags.BEDS)
+                && state.hasProperty(BedBlock.OCCUPIED)
+                && !state.getValue(BedBlock.OCCUPIED);
     }
 
-    public void setHome(ServerPlayerEntity player) {
+    public void setHome(ServerPlayer player) {
         if (!entity.requiresHome()) {
             entity.sendChatMessage(player, "interaction.sethome.temporary");
             return;
         }
 
         // also trigger a building refresh, because why not
-        VillageManager manager = VillageManager.get((ServerWorld) player.getWorld());
-        manager.processBuilding(player.getBlockPos(), true, false);
+        VillageManager manager = VillageManager.get((ServerLevel) player.level());
+        manager.processBuilding(player.blockPosition(), true, false);
 
         seekHome();
 
-        ServerWorld world = (ServerWorld) player.getWorld();
-        PointOfInterestStorage pointOfInterestStorage = world.getPointOfInterestStorage();
-        Optional<GlobalPos> previousHome = entity.getBrain().getOptionalMemory(MemoryModuleType.HOME);
-        pointOfInterestStorage.getPosition(
-                registryEntry -> registryEntry.matchesKey(PointOfInterestTypes.HOME),
+        ServerLevel world = (ServerLevel) player.level();
+        PoiManager pointOfInterestStorage = world.getPoiManager();
+        Optional<GlobalPos> previousHome = entity.getBrain().getMemoryInternal(MemoryModuleType.HOME);
+        pointOfInterestStorage.take(
+                registryEntry -> registryEntry.is(PoiTypes.HOME),
                 (registryEntry, pos) -> validateBedPoi(world, pos),
-                player.getBlockPos(),
+                player.blockPosition(),
                 8
         ).ifPresentOrElse(position -> {
             entity.sendChatMessage(player, "interaction.sethome.success");
 
             boolean reclaimedSameHome = previousHome
-                    .map(home -> home.getDimension().equals(world.getRegistryKey()) && home.getPos().equals(position))
+                    .map(home -> home.dimension().equals(world.dimension()) && home.pos().equals(position))
                     .orElse(false);
             if (!reclaimedSameHome) {
-                entity.releaseTicketFor(MemoryModuleType.HOME);
+                entity.releasePoi(MemoryModuleType.HOME);
             }
-            entity.getBrain().forget(MemoryModuleType.HOME);
+            entity.getBrain().eraseMemory(MemoryModuleType.HOME);
 
-            entity.getBrain().remember(MemoryModuleType.HOME, GlobalPos.create(world.getRegistryKey(), position));
-            entity.getBrain().remember(MemoryModuleTypeMCA.FORCED_HOME.get(), true);
+            entity.getBrain().setMemory(MemoryModuleType.HOME, GlobalPos.of(world.dimension(), position));
+            entity.getBrain().setMemory(MemoryModuleTypeMCA.FORCED_HOME.get(), true);
 
             seekHome();
         }, () -> {
-            entity.getBrain().forget(MemoryModuleTypeMCA.FORCED_HOME.get());
+            entity.getBrain().eraseMemory(MemoryModuleTypeMCA.FORCED_HOME.get());
 
-            getHomeVillage().map(v -> v.getBuildingAt(entity.getBlockPos())).filter(Optional::isPresent).map(Optional::get).filter(b -> b.getBuildingType().noBeds()).ifPresentOrElse(building -> {
+            getHomeVillage().map(v -> v.getBuildingAt(entity.blockPosition())).filter(Optional::isPresent).map(Optional::get).filter(b -> b.getBuildingType().noBeds()).ifPresentOrElse(building -> {
                 entity.sendChatMessage(player, "interaction.sethome.bedfail." + building.getBuildingType().name());
             }, () -> {
                 entity.sendChatMessage(player, "interaction.sethome.bedfail");
@@ -249,14 +248,14 @@ public class Residency {
     }
 
     public Optional<GlobalPos> getHome() {
-        return entity.getMCABrain().getOptionalMemory(MemoryModuleType.HOME);
+        return entity.getMCABrain().getMemoryInternal(MemoryModuleType.HOME);
     }
 
-    public void goHome(PlayerEntity player) {
+    public void goHome(Player player) {
         entity.getVillagerBrain().setMoveState(MoveState.MOVE, player);
         entity.getInteractions().stopInteracting();
-        getHome().filter(p -> p.getDimension() == entity.getWorld().getRegistryKey()).ifPresentOrElse(home -> {
-            entity.moveTowards(home.getPos());
+        getHome().filter(p -> p.dimension() == entity.level().dimension()).ifPresentOrElse(home -> {
+            entity.moveTowards(home.pos());
             entity.sendChatMessage(player, "interaction.gohome.success");
         }, () -> entity.sendChatMessage(player, "interaction.gohome.fail.nohome"));
     }

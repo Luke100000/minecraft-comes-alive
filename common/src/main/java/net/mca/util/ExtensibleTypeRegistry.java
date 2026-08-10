@@ -1,6 +1,5 @@
 package net.mca.util;
 
-import net.minecraft.util.Identifier;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.LinkedHashMap;
@@ -10,6 +9,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Function;
+import net.minecraft.resources.ResourceLocation;
 
 /**
  * Small insertion-ordered registry for MCA types exposed to addon mods.
@@ -20,14 +20,14 @@ import java.util.function.Function;
 public final class ExtensibleTypeRegistry<T> {
     private final String defaultNamespace;
     private final String typeName;
-    private final Map<Identifier, T> entries = new LinkedHashMap<>();
+    private final Map<ResourceLocation, T> entries = new LinkedHashMap<>();
 
     public ExtensibleTypeRegistry(String defaultNamespace, String typeName) {
         this.defaultNamespace = Objects.requireNonNull(defaultNamespace, "defaultNamespace");
         this.typeName = Objects.requireNonNull(typeName, "typeName");
     }
 
-    public synchronized <V extends T> V register(Identifier id, Function<Identifier, V> factory) {
+    public synchronized <V extends T> V register(ResourceLocation id, Function<ResourceLocation, V> factory) {
         Objects.requireNonNull(id, "id");
         Objects.requireNonNull(factory, "factory");
         if (entries.containsKey(id)) {
@@ -39,7 +39,7 @@ public final class ExtensibleTypeRegistry<T> {
         return value;
     }
 
-    public synchronized Optional<T> get(Identifier id) {
+    public synchronized Optional<T> get(ResourceLocation id) {
         return Optional.ofNullable(entries.get(id));
     }
 
@@ -55,19 +55,19 @@ public final class ExtensibleTypeRegistry<T> {
         return entries.size();
     }
 
-    public Optional<Identifier> parse(@Nullable String value) {
+    public Optional<ResourceLocation> parse(@Nullable String value) {
         if (value == null) {
             return Optional.empty();
         }
 
         String normalized = value.toLowerCase(Locale.ROOT);
-        Identifier id = normalized.indexOf(':') >= 0
-                ? Identifier.tryParse(normalized)
-                : Identifier.tryParse(defaultNamespace + ":" + normalized);
+        ResourceLocation id = normalized.indexOf(':') >= 0
+                ? ResourceLocation.tryParse(normalized)
+                : ResourceLocation.tryParse(defaultNamespace + ":" + normalized);
         return Optional.ofNullable(id);
     }
 
-    public String translationSuffix(Identifier id) {
+    public String translationSuffix(ResourceLocation id) {
         Objects.requireNonNull(id, "id");
         String path = id.getPath().replace('/', '.');
         return id.getNamespace().equals(defaultNamespace) ? path : id.getNamespace() + "." + path;

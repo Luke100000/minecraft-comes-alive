@@ -2,25 +2,25 @@ package net.mca.client.gui.widget;
 
 import com.mojang.blaze3d.systems.RenderSystem;
 import net.mca.util.compat.ButtonWidget;
-import net.minecraft.client.gui.DrawContext;
-import net.minecraft.text.Text;
-import net.minecraft.util.Identifier;
+import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 
 public class ToggleableTextureButtonWidget extends ButtonWidget {
     private static final float SPRITE_ASPECT = 28.0F / 20.0F;
 
-    private final Identifier texture;
+    private final ResourceLocation texture;
     private final boolean toggle;
 
-    public ToggleableTextureButtonWidget(int x, int y, int width, int height, Identifier texture, boolean toggle, Text tooltip, PressAction onPress) {
-        super(x, y, width, height, Text.empty(), onPress, tooltip);
+    public ToggleableTextureButtonWidget(int x, int y, int width, int height, ResourceLocation texture, boolean toggle, Component tooltip, OnPress onPress) {
+        super(x, y, width, height, Component.empty(), onPress, tooltip);
         this.texture = texture;
         this.toggle = toggle;
     }
 
     @Override
-    public void renderButton(DrawContext context, int mouseX, int mouseY, float delta) {
-        super.renderButton(context, mouseX, mouseY, delta);
+    public void renderWidget(GuiGraphics context, int mouseX, int mouseY, float delta) {
+        super.renderWidget(context, mouseX, mouseY, delta);
 
         float availW = this.width - 4;
         float availH = this.height - 4;
@@ -42,6 +42,6 @@ public class ToggleableTextureButtonWidget extends ButtonWidget {
 
         RenderSystem.enableBlend();
         RenderSystem.defaultBlendFunc();
-        context.drawTexture(texture, x, y, width, height, 0.0F, (float) v, 28, 20, 28, 40);
+        context.blit(texture, x, y, width, height, 0.0F, (float) v, 28, 20, 28, 40);
     }
 }

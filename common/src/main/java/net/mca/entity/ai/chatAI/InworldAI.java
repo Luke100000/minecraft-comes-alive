@@ -7,10 +7,9 @@ import net.mca.entity.ai.chatAI.inworldAIModules.SessionModule;
 import net.mca.entity.ai.chatAI.inworldAIModules.TriggerModule;
 import net.mca.entity.ai.chatAI.inworldAIModules.api.Interaction;
 import net.mca.entity.ai.chatAI.inworldAIModules.api.TriggerEvent;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.text.Text;
-import net.minecraft.util.Formatting;
-
+import net.minecraft.ChatFormatting;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerPlayer;
 import java.util.Optional;
 
 public class InworldAI implements ChatAIStrategy {
@@ -34,7 +33,7 @@ public class InworldAI implements ChatAIStrategy {
      * @param msg      The message
      * @return {@code Optional.EMPTY} on error, Optional containing the answer to a message on success
      */
-    public Optional<String> answer(ServerPlayerEntity player, VillagerEntityMCA villager, String msg) {
+    public Optional<String> answer(ServerPlayer player, VillagerEntityMCA villager, String msg) {
 
         // Create status update event for Character (Includes relationship and current emotional state)
         TriggerEvent.Parameter relationshipTrigger = relationshipModule.getRelationshipTriggerParameter(player, villager);
@@ -60,7 +59,7 @@ public class InworldAI implements ChatAIStrategy {
                 return Optional.of(answer);
             }
         } else {
-            player.sendMessage(Text.translatable("mca.ai_broken").formatted(Formatting.RED), false);
+            player.displayClientMessage(Component.translatable("mca.ai_broken").withStyle(ChatFormatting.RED), false);
             return Optional.empty();
         }
     }

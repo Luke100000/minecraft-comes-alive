@@ -9,35 +9,35 @@ import net.mca.network.s2c.PlayerDataMessage;
 import net.mca.server.world.data.FamilyTree;
 import net.mca.server.world.data.FamilyTreeNode;
 import net.mca.server.world.data.PlayerSaveData;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.item.ItemStack;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.nbt.NbtElement;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.sound.SoundEvents;
-import net.minecraft.util.ActionResult;
-import net.minecraft.util.Hand;
-import net.minecraft.util.TypedActionResult;
-import net.minecraft.world.World;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.Tag;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.InteractionResult;
+import net.minecraft.world.InteractionResultHolder;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.Level;
 
 public class PotionOfMetamorphosisItem extends TooltippedItem {
     private final Gender gender;
 
-    public PotionOfMetamorphosisItem(Settings properties, Gender gender) {
+    public PotionOfMetamorphosisItem(Properties properties, Gender gender) {
         super(properties);
         this.gender = gender;
     }
 
     @Override
-    public final TypedActionResult<ItemStack> use(World world, PlayerEntity player, Hand hand) {
-        if (player instanceof ServerPlayerEntity serverPlayer) {
+    public final InteractionResultHolder<ItemStack> use(Level world, Player player, InteractionHand hand) {
+        if (player instanceof ServerPlayer serverPlayer) {
             // set gender
             PlayerSaveData data = PlayerSaveData.get(serverPlayer);
-            NbtCompound villagerData = data.getEntityData();
-            NbtCompound mcaData = villagerData.contains(VillagerEntityMCA.MCA_DATA_KEY, NbtElement.COMPOUND_TYPE)
+            CompoundTag villagerData = data.getEntityData();
+            CompoundTag mcaData = villagerData.contains(VillagerEntityMCA.MCA_DATA_KEY, Tag.TAG_COMPOUND)
                     ? villagerData.getCompound(VillagerEntityMCA.MCA_DATA_KEY)
                     : villagerData;
             Genetics.writeGender(mcaData, gender);
@@ -46,35 +46,35 @@ public class PotionOfMetamorphosisItem extends TooltippedItem {
             common(serverPlayer);
 
             // also update players
-            serverPlayer.getServerWorld().getPlayers().forEach(p -> NetworkHandler.sendToPlayer(new PlayerDataMessage(player.getUuid(), villagerData), p));
+            serverPlayer.serverLevel().players().forEach(p -> NetworkHandler.sendToPlayer(new PlayerDataMessage(player.getUUID(), villagerData), p));
 
             // remove item
-            ItemStack stack = player.getStackInHand(hand);
-            stack.decrement(1);
-            return TypedActionResult.success(stack);
+            ItemStack stack = player.getItemInHand(hand);
+            stack.shrink(1);
+            return InteractionResultHolder.success(stack);
         }
         return super.use(world, player, hand);
     }
 
-    public ActionResult useOnEntity(ItemStack stack, PlayerEntity player, LivingEntity entity, Hand hand) {
-        if (entity instanceof VillagerLike<?> villager && !entity.getWorld().isClient) {
+    public InteractionResult interactLivingEntity(ItemStack stack, Player player, LivingEntity entity, InteractionHand hand) {
+        if (entity instanceof VillagerLike<?> villager && !entity.level().isClientSide) {
             villager.getGenetics().setGender(gender);
 
             common(entity);
 
-            stack.decrement(1);
-            return ActionResult.SUCCESS;
+            stack.shrink(1);
+            return InteractionResult.SUCCESS;
         } else {
-            return ActionResult.CONSUME;
+            return InteractionResult.CONSUME;
         }
     }
 
     private void common(Entity entity) {
         // sound
-        entity.playSound(SoundEvents.ENTITY_ZOMBIE_VILLAGER_CONVERTED, 1.0f, 1.0f);
+        entity.playSound(SoundEvents.ZOMBIE_VILLAGER_CONVERTED, 1.0f, 1.0f);
 
         // update family tree
-        FamilyTree tree = FamilyTree.get((ServerWorld)entity.getWorld());
+        FamilyTree tree = FamilyTree.get((ServerLevel)entity.level());
         FamilyTreeNode entry = tree.getOrCreate(entity);
         entry.setGender(gender);
     }

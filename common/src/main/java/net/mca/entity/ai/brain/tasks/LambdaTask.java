@@ -1,13 +1,12 @@
 package net.mca.entity.ai.brain.tasks;
 
 import net.mca.entity.VillagerEntityMCA;
-import net.minecraft.entity.ai.brain.task.MultiTickTask;
-import net.minecraft.server.world.ServerWorld;
-
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.ai.behavior.Behavior;
 import java.util.Map;
 import java.util.function.Consumer;
 
-public class LambdaTask<E extends VillagerEntityMCA> extends MultiTickTask<E> {
+public class LambdaTask<E extends VillagerEntityMCA> extends Behavior<E> {
     private final Consumer<E> lambda;
 
     public LambdaTask(Consumer<E> lambda) {
@@ -16,22 +15,22 @@ public class LambdaTask<E extends VillagerEntityMCA> extends MultiTickTask<E> {
     }
 
     @Override
-    protected boolean shouldRun(ServerWorld world, E entity) {
+    protected boolean checkExtraStartConditions(ServerLevel world, E entity) {
         return true;
     }
 
     @Override
-    protected boolean shouldKeepRunning(ServerWorld world, E entity, long time) {
+    protected boolean canStillUse(ServerLevel world, E entity, long time) {
         return false;
     }
 
     @Override
-    protected boolean isTimeLimitExceeded(long time) {
+    protected boolean timedOut(long time) {
         return false;
     }
 
     @Override
-    protected void run(ServerWorld world, E entity, long time) {
+    protected void start(ServerLevel world, E entity, long time) {
         lambda.accept(entity);
     }
 }

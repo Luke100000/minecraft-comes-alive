@@ -2,12 +2,11 @@ package net.mca.util;
 
 import com.mojang.datafixers.util.Pair;
 import net.mca.MCA;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.nbt.NbtElement;
-import net.minecraft.nbt.NbtList;
+import net.minecraft.core.GlobalPos;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.NbtOps;
-import net.minecraft.util.math.GlobalPos;
-
+import net.minecraft.nbt.Tag;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -20,43 +19,43 @@ import java.util.stream.Stream;
 public interface NbtHelper {
 
     @SuppressWarnings("unchecked")
-    static <T extends NbtElement> T computeIfAbsent(NbtCompound nbt, String key, int type, Supplier<T> factory) {
+    static <T extends Tag> T computeIfAbsent(CompoundTag nbt, String key, int type, Supplier<T> factory) {
         if (!nbt.contains(key, type)) {
             nbt.put(key, factory.get());
         }
         return (T)nbt.get(key);
     }
 
-    static NbtCompound getOrCreateCompound(NbtCompound nbt, String key) {
+    static CompoundTag getOrCreateCompound(CompoundTag nbt, String key) {
         if (!nbt.contains(key, 10)) {
-            nbt.put(key, new NbtCompound());
+            nbt.put(key, new CompoundTag());
         }
         return nbt.getCompound(key);
     }
 
-    static NbtCompound getCompoundOrSelf(NbtCompound nbt, String key) {
+    static CompoundTag getCompoundOrSelf(CompoundTag nbt, String key) {
         return nbt.contains(key, 10) ? nbt.getCompound(key) : nbt;
     }
 
-    static NbtCompound copyTo(NbtCompound from, NbtCompound to) {
-        from.getKeys().forEach(key -> to.put(key, from.get(key)));
+    static CompoundTag copyTo(CompoundTag from, CompoundTag to) {
+        from.getAllKeys().forEach(key -> to.put(key, from.get(key)));
         return to;
     }
 
-    static <V> List<V> toList(NbtElement nbt, Function<NbtElement, V> valueMapper) {
+    static <V> List<V> toList(Tag nbt, Function<Tag, V> valueMapper) {
         return toStream(nbt, valueMapper).collect(Collectors.toList());
     }
 
-    static <V> Stream<V> toStream(NbtElement nbt, Function<NbtElement, V> valueMapper) {
-        return ((NbtList)nbt).stream().map(valueMapper);
+    static <V> Stream<V> toStream(Tag nbt, Function<Tag, V> valueMapper) {
+        return ((ListTag)nbt).stream().map(valueMapper);
     }
 
-    static <K, V> Map<K, V> toMap(NbtCompound nbt, Function<String, K> keyMapper, Function<NbtElement, V> valueMapper) {
+    static <K, V> Map<K, V> toMap(CompoundTag nbt, Function<String, K> keyMapper, Function<Tag, V> valueMapper) {
         return toMap(nbt, keyMapper, (k, e) -> valueMapper.apply(e));
     }
 
-    static <K, V> Map<K, V> toMap(NbtCompound nbt, Function<String, K> keyMapper, BiFunction<K, NbtElement, V> valueMapper) {
-        return nbt.getKeys().stream()
+    static <K, V> Map<K, V> toMap(CompoundTag nbt, Function<String, K> keyMapper, BiFunction<K, Tag, V> valueMapper) {
+        return nbt.getAllKeys().stream()
                 .map(e -> {
                     K k = keyMapper.apply(e);
                     if (k == null) return null;
@@ -69,24 +68,24 @@ public interface NbtHelper {
                 );
     }
 
-    static <V> NbtList fromList(Iterable<V> list, Function<V, NbtElement> valueMapper) {
-        NbtList output = new NbtList();
+    static <V> ListTag fromList(Iterable<V> list, Function<V, Tag> valueMapper) {
+        ListTag output = new ListTag();
         list.forEach(item -> {
             output.add(valueMapper.apply(item));
         });
         return output;
     }
 
-    static <K, V> NbtCompound fromMap(NbtCompound output, Map<K, V> map, Function<K, String> keyMapper, Function<V, NbtElement> valueMapper) {
+    static <K, V> CompoundTag fromMap(CompoundTag output, Map<K, V> map, Function<K, String> keyMapper, Function<V, Tag> valueMapper) {
         map.forEach((key, value) -> output.put(keyMapper.apply(key), valueMapper.apply(value)));
         return output;
     }
 
-    static NbtElement encodeGlobalPosition(GlobalPos v) {
+    static Tag encodeGlobalPosition(GlobalPos v) {
         return GlobalPos.CODEC.encodeStart(NbtOps.INSTANCE, v).resultOrPartial(MCA.LOGGER::error).orElseThrow();
     }
 
-    static GlobalPos decodeGlobalPos(NbtElement element) {
+    static GlobalPos decodeGlobalPos(Tag element) {
         return GlobalPos.CODEC.parse(NbtOps.INSTANCE, element).resultOrPartial(MCA.LOGGER::error).orElse(null);
     }
 }

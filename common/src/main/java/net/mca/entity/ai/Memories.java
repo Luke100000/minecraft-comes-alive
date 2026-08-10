@@ -2,8 +2,8 @@ package net.mca.entity.ai;
 
 import net.mca.entity.VillagerLike;
 import net.mca.entity.ai.brain.VillagerBrain;
-import net.minecraft.entity.mob.MobEntity;
-import net.minecraft.nbt.NbtCompound;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.world.entity.Mob;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.UUID;
@@ -78,10 +78,10 @@ public class Memories {
         brain.updateMemories(this);
     }
 
-    public NbtCompound toCNBT() {
-        NbtCompound nbt = new NbtCompound();
+    public CompoundTag toCNBT() {
+        CompoundTag nbt = new CompoundTag();
 
-        nbt.putUuid("playerUUID", playerUUID);
+        nbt.putUUID("playerUUID", playerUUID);
         nbt.putInt("hearts", hearts);
         nbt.putInt("interactionFatigue", interactionFatigue);
         nbt.putInt("dialogueType", dialogueType.ordinal());
@@ -90,12 +90,12 @@ public class Memories {
         return nbt;
     }
 
-    public static <E extends MobEntity & VillagerLike<E>> Memories fromCNBT(E villager, @Nullable NbtCompound tag) {
+    public static <E extends Mob & VillagerLike<E>> Memories fromCNBT(E villager, @Nullable CompoundTag tag) {
         if (tag == null || tag.isEmpty()) {
             return null;
         }
 
-        Memories memories = new Memories(villager.getVillagerBrain(), villager.getWorld().getTimeOfDay(), tag.getUuid("playerUUID"));
+        Memories memories = new Memories(villager.getVillagerBrain(), villager.level().getDayTime(), tag.getUUID("playerUUID"));
 
         memories.hearts = tag.getInt("hearts");
         memories.interactionFatigue = tag.getInt("interactionFatigue");

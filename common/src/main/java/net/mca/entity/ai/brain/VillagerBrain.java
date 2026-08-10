@@ -13,18 +13,18 @@ import net.mca.util.network.datasync.CDataParameter;
 import net.mca.util.network.datasync.CEnumParameter;
 import net.mca.util.network.datasync.CParameter;
 import net.mca.util.network.datasync.CResourceLocationParameter;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.ai.brain.Activity;
-import net.minecraft.entity.ai.brain.EntityLookTarget;
-import net.minecraft.entity.ai.brain.MemoryModuleType;
-import net.minecraft.entity.ai.brain.WalkTarget;
-import net.minecraft.entity.mob.MobEntity;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.Identifier;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.ai.behavior.EntityTracker;
+import net.minecraft.world.entity.ai.memory.MemoryModuleType;
+import net.minecraft.world.entity.ai.memory.WalkTarget;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.entity.schedule.Activity;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
@@ -34,8 +34,8 @@ import static net.mca.entity.ai.MemoryModuleTypeMCA.LAST_GRIEVE;
 /**
  * Handles memory and complex bodily functions. Such as walking, and not being a nitwit.
  */
-public class VillagerBrain<E extends MobEntity & VillagerLike<E>> {
-    private static final CDataParameter<NbtCompound> MEMORIES = CParameter.create("Memories", new NbtCompound());
+public class VillagerBrain<E extends Mob & VillagerLike<E>> {
+    private static final CDataParameter<CompoundTag> MEMORIES = CParameter.create("Memories", new CompoundTag());
     private static final CResourceLocationParameter PERSONALITY = CParameter.create("Personality", Personality.UNASSIGNED.getId());
     private static final CDataParameter<Integer> MOOD = CParameter.create("Mood", 0);
     private static final CEnumParameter<MoveState> MOVE_STATE = CParameter.create("MoveState", MoveState.MOVE);
@@ -65,27 +65,27 @@ public class VillagerBrain<E extends MobEntity & VillagerLike<E>> {
         if (entity.getTrackedValue(ACTIVE_CHORE) != Chore.NONE) {
             // find something to do
             //todo here switch between rest and chore
-            entity.getBrain().getFirstPossibleNonCoreActivity().ifPresent(activity -> {
+            entity.getBrain().getActiveNonCoreActivity().ifPresent(activity -> {
                 if (!activity.equals(ActivityMCA.CHORE.get())) {
-                    entity.getBrain().doExclusively(ActivityMCA.CHORE.get());
+                    entity.getBrain().setActiveActivityIfPossible(ActivityMCA.CHORE.get());
                 }
             });
         }
 
-        boolean panicking = entity.getBrain().hasActivity(Activity.PANIC);
+        boolean panicking = entity.getBrain().isActive(Activity.PANIC);
         if (panicking != entity.getTrackedValue(PANICKING)) {
             entity.setTrackedValue(PANICKING, panicking);
         }
 
-        if (entity.age % 20 == 0) {
+        if (entity.tickCount % 20 == 0) {
             updateMoveState();
         }
 
         // decrease interaction fatigue
-        if (entity.age % Math.max(1, Config.getInstance().interactionFatigueCooldown) == 0) {
-            NbtCompound nbt = entity.getTrackedValue(MEMORIES);
+        if (entity.tickCount % Math.max(1, Config.getInstance().interactionFatigueCooldown) == 0) {
+            CompoundTag nbt = entity.getTrackedValue(MEMORIES);
             if (nbt != null) {
-                for (String uuid : nbt.getKeys()) {
+                for (String uuid : nbt.getAllKeys()) {
                     Memories memories = Memories.fromCNBT(entity, nbt.getCompound(uuid));
                     int fatigue = memories.getInteractionFatigue();
                     if (fatigue > 0) {
@@ -100,15 +100,15 @@ public class VillagerBrain<E extends MobEntity & VillagerLike<E>> {
         return entity.getTrackedValue(ACTIVE_CHORE);
     }
 
-    public Optional<PlayerEntity> getJobAssigner() {
-        return entity.getTrackedValue(CHORE_ASSIGNING_PLAYER).map(id -> entity.getWorld().getPlayerByUuid(id));
+    public Optional<Player> getJobAssigner() {
+        return entity.getTrackedValue(CHORE_ASSIGNING_PLAYER).map(id -> entity.level().getPlayerByUUID(id));
     }
 
     /**
      * Tells the villager to stop doing whatever it's doing.
      */
     public void abandonJob() {
-        entity.getBrain().doExclusively(Activity.IDLE);
+        entity.getBrain().setActiveActivityIfPossible(Activity.IDLE);
         entity.setTrackedValue(ACTIVE_CHORE, Chore.NONE);
         entity.setTrackedValue(CHORE_ASSIGNING_PLAYER, Optional.empty());
 
@@ -118,12 +118,12 @@ public class VillagerBrain<E extends MobEntity & VillagerLike<E>> {
     /**
      * Assigns a job for the villager to do.
      */
-    public void assignJob(Chore chore, PlayerEntity player) {
-        entity.getBrain().doExclusively(ActivityMCA.CHORE.get());
+    public void assignJob(Chore chore, Player player) {
+        entity.getBrain().setActiveActivityIfPossible(ActivityMCA.CHORE.get());
         entity.setTrackedValue(ACTIVE_CHORE, chore);
-        entity.setTrackedValue(CHORE_ASSIGNING_PLAYER, Optional.of(player.getUuid()));
-        entity.getBrain().forget(MemoryModuleTypeMCA.PLAYER_FOLLOWING.get());
-        entity.getBrain().forget(MemoryModuleTypeMCA.STAYING.get());
+        entity.setTrackedValue(CHORE_ASSIGNING_PLAYER, Optional.of(player.getUUID()));
+        entity.getBrain().eraseMemory(MemoryModuleTypeMCA.PLAYER_FOLLOWING.get());
+        entity.getBrain().eraseMemory(MemoryModuleTypeMCA.STAYING.get());
 
         resetsBrain();
     }
@@ -134,7 +134,7 @@ public class VillagerBrain<E extends MobEntity & VillagerLike<E>> {
 
     public void randomize(AgeState ageState) {
         entity.setTrackedValue(PERSONALITY, Personality.getRandom(ageState).getId());
-        entity.setTrackedValue(MOOD, entity.getWorld().random.nextInt(MoodGroup.MAX_LEVEL - MoodGroup.NORMAL_MIN_LEVEL + 1) + MoodGroup.NORMAL_MIN_LEVEL);
+        entity.setTrackedValue(MOOD, entity.level().random.nextInt(MoodGroup.MAX_LEVEL - MoodGroup.NORMAL_MIN_LEVEL + 1) + MoodGroup.NORMAL_MIN_LEVEL);
     }
 
     public void setPersonality(Personality p) {
@@ -142,30 +142,30 @@ public class VillagerBrain<E extends MobEntity & VillagerLike<E>> {
     }
 
     public void updateMemories(Memories memories) {
-        NbtCompound nbt = entity.getTrackedValue(MEMORIES);
+        CompoundTag nbt = entity.getTrackedValue(MEMORIES);
 
-        nbt = nbt == null ? new NbtCompound() : nbt.copy();
+        nbt = nbt == null ? new CompoundTag() : nbt.copy();
         nbt.put(memories.getPlayerUUID().toString(), memories.toCNBT());
         entity.setTrackedValue(MEMORIES, nbt);
     }
 
     public Map<UUID, Memories> getMemories() {
-        NbtCompound nbt = entity.getTrackedValue(MEMORIES);
+        CompoundTag nbt = entity.getTrackedValue(MEMORIES);
         Map<UUID, Memories> memories = new HashMap<>();
-        for (String uuid : nbt.getKeys()) {
+        for (String uuid : nbt.getAllKeys()) {
             memories.put(UUID.fromString(uuid), Memories.fromCNBT(entity, nbt.getCompound(uuid)));
         }
         return memories;
     }
 
-    public Memories getMemoriesForPlayer(PlayerEntity player) {
-        NbtCompound nbt = entity.getTrackedValue(MEMORIES);
-        nbt = nbt == null ? new NbtCompound() : nbt;
-        NbtCompound compoundTag = nbt.getCompound(player.getUuid().toString());
+    public Memories getMemoriesForPlayer(Player player) {
+        CompoundTag nbt = entity.getTrackedValue(MEMORIES);
+        nbt = nbt == null ? new CompoundTag() : nbt;
+        CompoundTag compoundTag = nbt.getCompound(player.getUUID().toString());
         Memories returnMemories = Memories.fromCNBT(entity, compoundTag);
         if (returnMemories == null) {
-            returnMemories = new Memories(this, player.getWorld().getTimeOfDay(), player.getUuid());
-            nbt.put(player.getUuid().toString(), returnMemories.toCNBT());
+            returnMemories = new Memories(this, player.level().getDayTime(), player.getUUID());
+            nbt.put(player.getUUID().toString(), returnMemories.toCNBT());
             entity.setTrackedValue(MEMORIES, nbt);
         }
         return returnMemories;
@@ -175,7 +175,7 @@ public class VillagerBrain<E extends MobEntity & VillagerLike<E>> {
         return Personality.get(getPersonalityId()).orElse(Personality.UNASSIGNED);
     }
 
-    public Identifier getPersonalityId() {
+    public ResourceLocation getPersonalityId() {
         return entity.getTrackedValue(PERSONALITY);
     }
 
@@ -199,21 +199,21 @@ public class VillagerBrain<E extends MobEntity & VillagerLike<E>> {
         return entity.getTrackedValue(MOVE_STATE);
     }
 
-    public void setMoveState(MoveState state, @Nullable PlayerEntity leader) {
+    public void setMoveState(MoveState state, @Nullable Player leader) {
         Optional<LivingEntity> combatWalkTarget = getCombatWalkTargetToRestore(state);
         boolean refreshBrain = true;
         entity.setTrackedValue(MOVE_STATE, state);
         if (state == MoveState.MOVE) {
-            entity.getBrain().forget(MemoryModuleTypeMCA.PLAYER_FOLLOWING.get());
-            entity.getBrain().forget(MemoryModuleTypeMCA.STAYING.get());
+            entity.getBrain().eraseMemory(MemoryModuleTypeMCA.PLAYER_FOLLOWING.get());
+            entity.getBrain().eraseMemory(MemoryModuleTypeMCA.STAYING.get());
         }
         if (state == MoveState.STAY) {
-            entity.getBrain().forget(MemoryModuleTypeMCA.PLAYER_FOLLOWING.get());
-            entity.getBrain().remember(MemoryModuleTypeMCA.STAYING.get(), true);
+            entity.getBrain().eraseMemory(MemoryModuleTypeMCA.PLAYER_FOLLOWING.get());
+            entity.getBrain().setMemory(MemoryModuleTypeMCA.STAYING.get(), true);
         }
         if (state == MoveState.FOLLOW) {
-            entity.getBrain().remember(MemoryModuleTypeMCA.PLAYER_FOLLOWING.get(), leader);
-            entity.getBrain().forget(MemoryModuleTypeMCA.STAYING.get());
+            entity.getBrain().setMemory(MemoryModuleTypeMCA.PLAYER_FOLLOWING.get(), leader);
+            entity.getBrain().eraseMemory(MemoryModuleTypeMCA.STAYING.get());
             abandonJob();
             refreshBrain = false;
         }
@@ -226,28 +226,28 @@ public class VillagerBrain<E extends MobEntity & VillagerLike<E>> {
 
     private Optional<LivingEntity> getCombatWalkTargetToRestore(MoveState state) {
         if (state == MoveState.FOLLOW && entity.asEntity() instanceof VillagerEntityMCA villager && villager.isGuard()) {
-            return villager.getBrain().getOptionalMemory(MemoryModuleType.ATTACK_TARGET)
-                    .filter(target -> target.isAlive() && target.getWorld() == villager.getWorld());
+            return villager.getBrain().getMemoryInternal(MemoryModuleType.ATTACK_TARGET)
+                    .filter(target -> target.isAlive() && target.level() == villager.level());
         }
         return Optional.empty();
     }
 
     private void restoreCombatWalkTarget(LivingEntity target) {
-        entity.getBrain().remember(MemoryModuleType.LOOK_TARGET, new EntityLookTarget(target, true));
-        entity.getBrain().remember(MemoryModuleType.WALK_TARGET, new WalkTarget(new EntityLookTarget(target, false), 0.75F, 0));
+        entity.getBrain().setMemory(MemoryModuleType.LOOK_TARGET, new EntityTracker(target, true));
+        entity.getBrain().setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(new EntityTracker(target, false), 0.75F, 0));
     }
 
     private void resetsBrain() {
         if (entity.asEntity() instanceof VillagerEntityMCA villager) {
-            Optional<LivingEntity> attackTarget = villager.getBrain().getOptionalMemory(MemoryModuleType.ATTACK_TARGET);
-            Optional<PlayerEntity> following = villager.getBrain().getOptionalMemory(MemoryModuleTypeMCA.PLAYER_FOLLOWING.get());
-            Optional<Boolean> staying = villager.getBrain().getOptionalMemory(MemoryModuleTypeMCA.STAYING.get());
+            Optional<LivingEntity> attackTarget = villager.getBrain().getMemoryInternal(MemoryModuleType.ATTACK_TARGET);
+            Optional<Player> following = villager.getBrain().getMemoryInternal(MemoryModuleTypeMCA.PLAYER_FOLLOWING.get());
+            Optional<Boolean> staying = villager.getBrain().getMemoryInternal(MemoryModuleTypeMCA.STAYING.get());
 
-            villager.reinitializeBrain((ServerWorld)villager.getWorld());
+            villager.refreshBrain((ServerLevel)villager.level());
 
-            attackTarget.ifPresent(target -> villager.getBrain().remember(MemoryModuleType.ATTACK_TARGET, target));
-            following.ifPresent(player -> villager.getBrain().remember(MemoryModuleTypeMCA.PLAYER_FOLLOWING.get(), player));
-            staying.ifPresent(value -> villager.getBrain().remember(MemoryModuleTypeMCA.STAYING.get(), value));
+            attackTarget.ifPresent(target -> villager.getBrain().setMemory(MemoryModuleType.ATTACK_TARGET, target));
+            following.ifPresent(player -> villager.getBrain().setMemory(MemoryModuleTypeMCA.PLAYER_FOLLOWING.get(), player));
+            staying.ifPresent(value -> villager.getBrain().setMemory(MemoryModuleTypeMCA.STAYING.get(), value));
         }
     }
 
@@ -260,23 +260,23 @@ public class VillagerBrain<E extends MobEntity & VillagerLike<E>> {
     }
 
     public void setGrieving() {
-        entity.getBrain().remember(LAST_GRIEVE.get(), -GRIEVE_COOLDOWN);
+        entity.getBrain().setMemory(LAST_GRIEVE.get(), -GRIEVE_COOLDOWN);
     }
 
     public void retryGrievingLater() {
-        entity.getBrain().remember(LAST_GRIEVE.get(), entity.getWorld().getTime() - GRIEVE_COOLDOWN + GRIEVE_RETRY_DELAY);
+        entity.getBrain().setMemory(LAST_GRIEVE.get(), entity.level().getGameTime() - GRIEVE_COOLDOWN + GRIEVE_RETRY_DELAY);
     }
 
     public void justGrieved() {
-        entity.getBrain().remember(LAST_GRIEVE.get(), entity.getWorld().getTime());
+        entity.getBrain().setMemory(LAST_GRIEVE.get(), entity.level().getGameTime());
     }
 
     public boolean shouldGrieve() {
-        Optional<Long> memory = entity.getBrain().getOptionalMemory(LAST_GRIEVE.get());
+        Optional<Long> memory = entity.getBrain().getMemoryInternal(LAST_GRIEVE.get());
         if (memory.isPresent()) {
-            return entity.getWorld().getTime() - memory.get() > GRIEVE_COOLDOWN;
+            return entity.level().getGameTime() - memory.get() > GRIEVE_COOLDOWN;
         } else {
-            entity.getBrain().remember(LAST_GRIEVE.get(), entity.getWorld().getTime() - random.nextLong(GRIEVE_COOLDOWN));
+            entity.getBrain().setMemory(LAST_GRIEVE.get(), entity.level().getGameTime() - random.nextLong(GRIEVE_COOLDOWN));
             return false;
         }
     }
@@ -285,10 +285,10 @@ public class VillagerBrain<E extends MobEntity & VillagerLike<E>> {
      * Read the move state from the active memory.
      */
     public void updateMoveState() {
-        if (getMoveState() == MoveState.FOLLOW && entity.getBrain().getOptionalMemory(MemoryModuleTypeMCA.PLAYER_FOLLOWING.get()).isEmpty()) {
-            if (entity.getBrain().getOptionalMemory(MemoryModuleTypeMCA.STAYING.get()).isPresent()) {
+        if (getMoveState() == MoveState.FOLLOW && entity.getBrain().getMemoryInternal(MemoryModuleTypeMCA.PLAYER_FOLLOWING.get()).isEmpty()) {
+            if (entity.getBrain().getMemoryInternal(MemoryModuleTypeMCA.STAYING.get()).isPresent()) {
                 entity.setTrackedValue(MOVE_STATE, MoveState.STAY);
-            } else if (entity.getBrain().getOptionalMemory(MemoryModuleTypeMCA.PLAYER_FOLLOWING.get()).isPresent()) {
+            } else if (entity.getBrain().getMemoryInternal(MemoryModuleTypeMCA.PLAYER_FOLLOWING.get()).isPresent()) {
                 entity.setTrackedValue(MOVE_STATE, MoveState.FOLLOW);
             } else {
                 entity.setTrackedValue(MOVE_STATE, MoveState.MOVE);
@@ -296,7 +296,7 @@ public class VillagerBrain<E extends MobEntity & VillagerLike<E>> {
         }
     }
 
-    public void rewardHearts(ServerPlayerEntity player, int hearts) {
+    public void rewardHearts(ServerPlayer player, int hearts) {
         Memories memory = entity.getVillagerBrain().getMemoriesForPlayer(player);
 
         if (hearts == 0) {
@@ -306,9 +306,9 @@ public class VillagerBrain<E extends MobEntity & VillagerLike<E>> {
         //spawn particles
         if (hearts > 0) {
             //spawn particles
-            entity.getWorld().sendEntityStatus(entity, Status.MCA_VILLAGER_POS_INTERACTION);
+            entity.level().broadcastEntityEvent(entity, Status.MCA_VILLAGER_POS_INTERACTION);
         } else {
-            entity.getWorld().sendEntityStatus(entity, Status.MCA_VILLAGER_NEG_INTERACTION);
+            entity.level().broadcastEntityEvent(entity, Status.MCA_VILLAGER_NEG_INTERACTION);
 
             //sensitive people doubles the loss
             if (entity.getVillagerBrain().getPersonality() == Personality.SENSITIVE) {

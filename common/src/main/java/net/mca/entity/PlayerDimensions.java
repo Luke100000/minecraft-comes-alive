@@ -8,13 +8,12 @@ import net.mca.entity.ai.Traits;
 import net.mca.entity.ai.relationship.AgeState;
 import net.mca.entity.ai.relationship.Gender;
 import net.mca.server.world.data.PlayerSaveData;
-import net.minecraft.entity.EntityDimensions;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.util.math.Box;
-import net.minecraft.util.math.MathHelper;
-
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.util.Mth;
+import net.minecraft.world.entity.EntityDimensions;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.phys.AABB;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -27,18 +26,18 @@ public final class PlayerDimensions {
     private PlayerDimensions() {
     }
 
-    public static Optional<Scale> getScale(PlayerEntity player) {
+    public static Optional<Scale> getScale(Player player) {
         if (!Config.getServerConfig().scalePlayerHitboxWithSizeAndWidth) {
             return Optional.empty();
         }
 
-        if (player instanceof ServerPlayerEntity serverPlayer) {
+        if (player instanceof ServerPlayer serverPlayer) {
             PlayerSaveData data = PlayerSaveData.get(serverPlayer);
             return data.isEntityDataSet() ? Optional.of(data.getDimensionsScale()) : Optional.empty();
         }
 
-        if (player.getWorld().isClient) {
-            return ClientProxy.getPlayerData(player.getUuid()).map(PlayerDimensions::fromVillager);
+        if (player.level().isClientSide) {
+            return ClientProxy.getPlayerData(player.getUUID()).map(PlayerDimensions::fromVillager);
         }
 
         return Optional.empty();
@@ -63,14 +62,14 @@ public final class PlayerDimensions {
         return scale;
     }
 
-    private static Scale fromEntityData(NbtCompound entityData) {
-        NbtCompound mcaData = entityData.contains(VillagerEntityMCA.MCA_DATA_KEY, 10)
+    private static Scale fromEntityData(CompoundTag entityData) {
+        CompoundTag mcaData = entityData.contains(VillagerEntityMCA.MCA_DATA_KEY, 10)
                 ? entityData.getCompound(VillagerEntityMCA.MCA_DATA_KEY)
                 : entityData;
         if (getPlayerModel(entityData, mcaData) == VillagerLike.PlayerModel.VANILLA) {
             return VANILLA_SCALE;
         }
-        NbtCompound traits = mcaData.contains("Traits", 10) ? mcaData.getCompound("Traits") : new NbtCompound();
+        CompoundTag traits = mcaData.contains("Traits", 10) ? mcaData.getCompound("Traits") : new CompoundTag();
         AgeScale age = getAgeScale(entityData);
         Gender gender = Genetics.readGender(mcaData);
         if (gender == Gender.UNASSIGNED && mcaData != entityData) {
@@ -89,20 +88,20 @@ public final class PlayerDimensions {
         return new Scale(width, height);
     }
 
-    private static VillagerLike.PlayerModel getPlayerModel(NbtCompound entityData, NbtCompound mcaData) {
-        NbtCompound modelData = mcaData.contains("PlayerModel") || mcaData.contains("playerModel")
+    private static VillagerLike.PlayerModel getPlayerModel(CompoundTag entityData, CompoundTag mcaData) {
+        CompoundTag modelData = mcaData.contains("PlayerModel") || mcaData.contains("playerModel")
                 ? mcaData
                 : entityData;
         int id = modelData.contains("PlayerModel") ? modelData.getInt("PlayerModel") : modelData.getInt("playerModel");
         return VillagerLike.PlayerModel.byId(id);
     }
 
-    public static void debugAppliedScale(PlayerEntity player, EntityDimensions vanilla, EntityDimensions scaled, Scale scale) {
+    public static void debugAppliedScale(Player player, EntityDimensions vanilla, EntityDimensions scaled, Scale scale) {
         if (MCA.LOGGER.isDebugEnabled()) {
             MCA.LOGGER.debug("[MCA player hitbox] apply player={} uuid={} side={} pose={} scale={}x{} vanilla={}x{} scaled={}x{} cachedBb={}x{}",
                     player.getName().getString(),
-                    player.getUuid(),
-                    player.getWorld().isClient ? "client" : "server",
+                    player.getUUID(),
+                    player.level().isClientSide ? "client" : "server",
                     player.getPose(),
                     scale.width(),
                     scale.height(),
@@ -110,22 +109,22 @@ public final class PlayerDimensions {
                     vanilla.height,
                     scaled.width,
                     scaled.height,
-                    player.getWidth(),
-                    player.getHeight());
+                    player.getBbWidth(),
+                    player.getBbHeight());
         }
     }
 
-    public static void debugRefresh(PlayerEntity player, String reason) {
+    public static void debugRefresh(Player player, String reason) {
         if (MCA.LOGGER.isDebugEnabled()) {
-            Box box = player.getBoundingBox();
+            AABB box = player.getBoundingBox();
             MCA.LOGGER.debug("[MCA player hitbox] refresh {} player={} uuid={} side={} pose={} cached={}x{} bb=[{}, {}, {} -> {}, {}, {}]",
                     reason,
                     player.getName().getString(),
-                    player.getUuid(),
-                    player.getWorld().isClient ? "client" : "server",
+                    player.getUUID(),
+                    player.level().isClientSide ? "client" : "server",
                     player.getPose(),
-                    player.getWidth(),
-                    player.getHeight(),
+                    player.getBbWidth(),
+                    player.getBbHeight(),
                     box.minX,
                     box.minY,
                     box.minZ,
@@ -141,7 +140,7 @@ public final class PlayerDimensions {
         }
     }
 
-    private static float geneScale(NbtCompound entityData, NbtCompound mcaData, Genetics.GeneType gene) {
+    private static float geneScale(CompoundTag entityData, CompoundTag mcaData, Genetics.GeneType gene) {
         String key = "Gene" + gene.key();
         float value = mcaData.contains(key)
                 ? mcaData.getFloat(key)
@@ -149,7 +148,7 @@ public final class PlayerDimensions {
         return 0.75F + value / 2.0F;
     }
 
-    private static AgeScale getAgeScale(NbtCompound entityData) {
+    private static AgeScale getAgeScale(CompoundTag entityData) {
         int age = entityData.contains("Age") ? entityData.getInt("Age") : 0;
         AgeState current = AgeState.byCurrentAge(age);
         AgeState next = current.getNext();
@@ -159,22 +158,22 @@ public final class PlayerDimensions {
 
         float delta = AgeState.getDelta(age);
         return new AgeScale(
-                MathHelper.lerp(delta, current.getWidth(), next.getWidth()),
-                MathHelper.lerp(delta, current.getHeight(), next.getHeight())
+                Mth.lerp(delta, current.getWidth(), next.getWidth()),
+                Mth.lerp(delta, current.getHeight(), next.getHeight())
         );
     }
 
-    private static float getTraitsHorizontalScaleFactor(NbtCompound traits) {
+    private static float getTraitsHorizontalScaleFactor(CompoundTag traits) {
         return (hasTrait(traits, Traits.DWARFISM) ? 0.85F : 1.0F)
                 * (hasTrait(traits, Traits.TOUGH) ? 1.2F : 1.0F)
                 * (hasTrait(traits, Traits.WEAK) ? 0.85F : 1.0F);
     }
 
-    private static float getTraitsVerticalScaleFactor(NbtCompound traits) {
+    private static float getTraitsVerticalScaleFactor(CompoundTag traits) {
         return hasTrait(traits, Traits.DWARFISM) ? 0.65F : 1.0F;
     }
 
-    private static boolean hasTrait(NbtCompound traits, Traits.Trait trait) {
+    private static boolean hasTrait(CompoundTag traits, Traits.Trait trait) {
         return traits.getBoolean(trait.getId().toString());
     }
 

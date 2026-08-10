@@ -1,10 +1,9 @@
 package net.mca.entity.ai;
 
 import net.mca.SoundsMCA;
-import net.minecraft.particle.ParticleTypes;
-import net.minecraft.util.Formatting;
-import net.minecraft.util.math.MathHelper;
-
+import net.minecraft.ChatFormatting;
+import net.minecraft.core.particles.ParticleTypes;
+import net.minecraft.util.Mth;
 import java.util.Arrays;
 import java.util.List;
 
@@ -14,22 +13,22 @@ public class MoodGroup {
                     .sounds(4, SoundsMCA.VILLAGER_MALE_CRY, SoundsMCA.VILLAGER_FEMALE_CRY)
                     .particles(20, ParticleTypes.SPLASH)
                     .building("inn")
-                    .color(Formatting.RED).build(),
+                    .color(ChatFormatting.RED).build(),
             new MoodBuilder("sad")
                     .sounds(8, SoundsMCA.VILLAGER_MALE_CRY, SoundsMCA.VILLAGER_FEMALE_CRY)
                     .particles(50, ParticleTypes.SPLASH)
                     .building("inn")
-                    .color(Formatting.GOLD).build(),
+                    .color(ChatFormatting.GOLD).build(),
             new MoodBuilder("unhappy")
                     .building("music_store").build(),
             new MoodBuilder("passive").build(),
             new MoodBuilder("fine").build(),
             new MoodBuilder("happy")
-                    .color(Formatting.DARK_GREEN).build(),
+                    .color(ChatFormatting.DARK_GREEN).build(),
             new MoodBuilder("overjoyed")
                     .sounds(8, SoundsMCA.VILLAGER_MALE_LAUGH, SoundsMCA.VILLAGER_FEMALE_LAUGH)
                     .particles(50, ParticleTypes.HAPPY_VILLAGER)
-                    .color(Formatting.GREEN).build());
+                    .color(ChatFormatting.GREEN).build());
 
     //-15 to 15 is a range create normal interactions, but mood can go -15 to -100 due to player interactions.
     public static final int NORMAL_MIN_LEVEL = -15;
@@ -43,12 +42,12 @@ public class MoodGroup {
 
     // clamps to valid range
     public static int clampMood(int moodPoints) {
-        return MathHelper.clamp(moodPoints, NORMAL_MIN_LEVEL, MAX_LEVEL);
+        return Mth.clamp(moodPoints, NORMAL_MIN_LEVEL, MAX_LEVEL);
     }
 
     // returns the index of mood based on mood points
     private int getLevel(int moodPoints) {
-        return MathHelper.clamp(
+        return Mth.clamp(
                 (moodPoints - NORMAL_MIN_LEVEL) * moods.size() / (MAX_LEVEL - NORMAL_MIN_LEVEL),
                 0,
                 moods.size() - 1

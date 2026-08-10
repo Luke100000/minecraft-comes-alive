@@ -5,18 +5,17 @@ import net.mca.Config;
 import net.mca.entity.VillagerEntityMCA;
 import net.mca.entity.ai.MemoryModuleTypeMCA;
 import net.mca.util.RegistryHelper;
-import net.minecraft.entity.EntityType;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.ai.brain.LivingTargetCache;
-import net.minecraft.entity.ai.brain.MemoryModuleType;
-import net.minecraft.entity.ai.brain.sensor.NearestLivingEntitiesSensor;
-import net.minecraft.entity.mob.MobEntity;
-import net.minecraft.entity.mob.Monster;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.registry.Registries;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.Identifier;
-
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.ai.memory.MemoryModuleType;
+import net.minecraft.world.entity.ai.memory.NearestVisibleLivingEntities;
+import net.minecraft.world.entity.ai.sensing.NearestLivingEntitySensor;
+import net.minecraft.world.entity.monster.Enemy;
+import net.minecraft.world.entity.player.Player;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -27,15 +26,15 @@ import java.util.Set;
  * <p>The shared nearby-entity scan also supplies other villager behaviors. Non-guard villagers
  * skip only the guard-target prioritization unless they are following a player or already fighting.</p>
  */
-public class GuardEnemiesSensor extends NearestLivingEntitiesSensor<LivingEntity> {
+public class GuardEnemiesSensor extends NearestLivingEntitySensor<LivingEntity> {
     private static final double GUARD_ENEMY_RANGE = 48.0;
     private static final double GUARD_ENEMY_RANGE_SQUARED = GUARD_ENEMY_RANGE * GUARD_ENEMY_RANGE;
 
     @Override
-    public Set<MemoryModuleType<?>> getOutputMemoryModules() {
+    public Set<MemoryModuleType<?>> requires() {
         return ImmutableSet.of(
-                MemoryModuleType.MOBS,
-                MemoryModuleType.VISIBLE_MOBS,
+                MemoryModuleType.NEAREST_LIVING_ENTITIES,
+                MemoryModuleType.NEAREST_VISIBLE_LIVING_ENTITIES,
                 MemoryModuleType.ATTACK_TARGET,
                 MemoryModuleTypeMCA.PLAYER_FOLLOWING.get(),
                 MemoryModuleTypeMCA.NEAREST_GUARD_ENEMY.get()
@@ -43,42 +42,42 @@ public class GuardEnemiesSensor extends NearestLivingEntitiesSensor<LivingEntity
     }
 
     @Override
-    protected void sense(ServerWorld world, LivingEntity entity) {
-        super.sense(world, entity);
+    protected void doTick(ServerLevel world, LivingEntity entity) {
+        super.doTick(world, entity);
 
         if (!(entity instanceof VillagerEntityMCA villager)) {
             return;
         }
 
         boolean shouldScan = villager.isGuard()
-                || villager.getBrain().getOptionalMemory(MemoryModuleTypeMCA.PLAYER_FOLLOWING.get()).isPresent()
-                || villager.getBrain().getOptionalMemory(MemoryModuleType.ATTACK_TARGET).isPresent();
+                || villager.getBrain().getMemoryInternal(MemoryModuleTypeMCA.PLAYER_FOLLOWING.get()).isPresent()
+                || villager.getBrain().getMemoryInternal(MemoryModuleType.ATTACK_TARGET).isPresent();
 
         if (!shouldScan) {
-            villager.getBrain().forget(MemoryModuleTypeMCA.NEAREST_GUARD_ENEMY.get());
+            villager.getBrain().eraseMemory(MemoryModuleTypeMCA.NEAREST_GUARD_ENEMY.get());
             return;
         }
 
-        villager.getBrain().remember(MemoryModuleTypeMCA.NEAREST_GUARD_ENEMY.get(), getNearestHostile(villager));
+        villager.getBrain().setMemory(MemoryModuleTypeMCA.NEAREST_GUARD_ENEMY.get(), getNearestHostile(villager));
     }
 
     private Optional<LivingEntity> getNearestHostile(VillagerEntityMCA entity) {
-        return getVisibleMobs(entity).flatMap(list -> list.stream(target -> isGuardEnemy(target, entity))
+        return getVisibleMobs(entity).flatMap(list -> list.find(target -> isGuardEnemy(target, entity))
                 .filter(target -> isWithinGuardEnemyRange(entity, target))
                 .min((a, b) -> compareEntities(entity, a, b)));
     }
 
     private boolean isWithinGuardEnemyRange(LivingEntity guard, LivingEntity target) {
-        if (target.squaredDistanceTo(guard) <= GUARD_ENEMY_RANGE_SQUARED) {
+        if (target.distanceToSqr(guard) <= GUARD_ENEMY_RANGE_SQUARED) {
             return true;
         }
         return getFollowedPlayer(guard)
-                .filter(player -> target.squaredDistanceTo(player) <= GUARD_ENEMY_RANGE_SQUARED)
+                .filter(player -> target.distanceToSqr(player) <= GUARD_ENEMY_RANGE_SQUARED)
                 .isPresent();
     }
 
-    private Optional<LivingTargetCache> getVisibleMobs(LivingEntity entity) {
-        return entity.getBrain().getOptionalMemory(MemoryModuleType.VISIBLE_MOBS);
+    private Optional<NearestVisibleLivingEntities> getVisibleMobs(LivingEntity entity) {
+        return entity.getBrain().getMemoryInternal(MemoryModuleType.NEAREST_VISIBLE_LIVING_ENTITIES);
     }
 
     private int compareEntities(LivingEntity entity, LivingEntity hostile1, LivingEntity hostile2) {
@@ -87,13 +86,13 @@ public class GuardEnemiesSensor extends NearestLivingEntitiesSensor<LivingEntity
     }
 
     private int compareDistances(LivingEntity entity, LivingEntity hostile1, LivingEntity hostile2) {
-        return Double.compare(hostile1.squaredDistanceTo(entity), hostile2.squaredDistanceTo(entity));
+        return Double.compare(hostile1.distanceToSqr(entity), hostile2.distanceToSqr(entity));
     }
 
     public static boolean isGuardEnemy(LivingEntity entity, LivingEntity guard) {
         return entity.isAlive()
                 && !entity.isRemoved()
-                && (guard == null || entity.getWorld() == guard.getWorld())
+                && (guard == null || entity.level() == guard.level())
                 && getPriority(entity, guard) >= 0;
     }
 
@@ -101,7 +100,7 @@ public class GuardEnemiesSensor extends NearestLivingEntitiesSensor<LivingEntity
         if (entity instanceof VillagerEntityMCA villager) {
             return villager.isHostile() ? 10 : -1;
         }
-        if (guard != null && entity instanceof MobEntity mob && mob.getTarget() == guard) {
+        if (guard != null && entity instanceof Mob mob && mob.getTarget() == guard) {
             return 9;
         }
 
@@ -110,10 +109,10 @@ public class GuardEnemiesSensor extends NearestLivingEntitiesSensor<LivingEntity
             return configuredPriority.get();
         }
 
-        Optional<PlayerEntity> followedPlayer = getFollowedPlayer(guard);
+        Optional<Player> followedPlayer = getFollowedPlayer(guard);
         if (followedPlayer.isPresent()) {
-            PlayerEntity player = followedPlayer.get();
-            if (entity instanceof MobEntity mob && mob.getTarget() == player) {
+            Player player = followedPlayer.get();
+            if (entity instanceof Mob mob && mob.getTarget() == player) {
                 return 9;
             }
             if (isFollowingDefenseEnemy(entity, player)) {
@@ -121,37 +120,37 @@ public class GuardEnemiesSensor extends NearestLivingEntitiesSensor<LivingEntity
             }
         }
 
-        if (Config.getInstance().guardsTargetMonsters && entity instanceof Monster) {
+        if (Config.getInstance().guardsTargetMonsters && entity instanceof Enemy) {
             return 3;
         }
         return -1;
     }
 
     private static Optional<Integer> getConfiguredPriority(EntityType<?> type) {
-        Identifier id = Registries.ENTITY_TYPE.getId(type);
+        ResourceLocation id = BuiltInRegistries.ENTITY_TYPE.getKey(type);
         if (Config.getInstance().guardsTargetEntities.containsKey(id.toString())) {
             return Optional.of(Config.getInstance().guardsTargetEntities.get(id.toString()));
         }
         return getTagPriority(type);
     }
 
-    private static Optional<PlayerEntity> getFollowedPlayer(LivingEntity guard) {
+    private static Optional<Player> getFollowedPlayer(LivingEntity guard) {
         if (guard instanceof VillagerEntityMCA villager) {
-            return villager.getBrain().getOptionalMemory(MemoryModuleTypeMCA.PLAYER_FOLLOWING.get());
+            return villager.getBrain().getMemoryInternal(MemoryModuleTypeMCA.PLAYER_FOLLOWING.get());
         }
         return Optional.empty();
     }
 
-    private static boolean isFollowingDefenseEnemy(LivingEntity entity, PlayerEntity player) {
-        return entity instanceof Monster && entity.squaredDistanceTo(player) <= GUARD_ENEMY_RANGE_SQUARED;
+    private static boolean isFollowingDefenseEnemy(LivingEntity entity, Player player) {
+        return entity instanceof Enemy && entity.distanceToSqr(player) <= GUARD_ENEMY_RANGE_SQUARED;
     }
 
     private static Optional<Integer> getTagPriority(EntityType<?> type) {
         for (Map.Entry<String, Integer> entry : Config.getInstance().guardsTargetEntities.entrySet()) {
             String key = entry.getKey();
             if (key.startsWith("#")) {
-                Identifier id = Identifier.tryParse(key.substring(1));
-                if (id != null && RegistryHelper.isObjectInTag(Registries.ENTITY_TYPE, id, type)) {
+                ResourceLocation id = ResourceLocation.tryParse(key.substring(1));
+                if (id != null && RegistryHelper.isObjectInTag(BuiltInRegistries.ENTITY_TYPE, id, type)) {
                     return Optional.of(entry.getValue());
                 }
             }

@@ -14,40 +14,39 @@ import net.mca.entity.ai.relationship.RelationshipState;
 import net.mca.item.BabyItem;
 import net.mca.server.SpawnQueue;
 import net.mca.server.world.data.*;
-import net.minecraft.command.argument.EntityArgumentType;
-import net.minecraft.command.argument.UuidArgumentType;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.EntityType;
-import net.minecraft.entity.passive.VillagerEntity;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.item.ItemStack;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.server.command.CommandManager;
-import net.minecraft.server.command.ServerCommandSource;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.text.ClickEvent;
-import net.minecraft.text.HoverEvent;
-import net.minecraft.text.MutableText;
-import net.minecraft.text.Text;
-import net.minecraft.util.Formatting;
-import net.minecraft.util.Util;
-import net.minecraft.util.math.BlockPos;
-
+import net.minecraft.ChatFormatting;
+import net.minecraft.Util;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
+import net.minecraft.commands.arguments.EntityArgument;
+import net.minecraft.commands.arguments.UuidArgument;
+import net.minecraft.core.BlockPos;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.chat.ClickEvent;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.HoverEvent;
+import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.npc.Villager;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
 import java.util.*;
 import java.util.stream.Stream;
 
-import static net.minecraft.util.Formatting.*;
+import static net.minecraft.ChatFormatting.*;
 
 public class AdminCommand {
-    private static final List<NbtCompound> storedVillagers = new ArrayList<>();
+    private static final List<CompoundTag> storedVillagers = new ArrayList<>();
 
-    public static void register(CommandDispatcher<ServerCommandSource> dispatcher) {
-        dispatcher.register(CommandManager.literal("mca-admin")
+    public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
+        dispatcher.register(Commands.literal("mca-admin")
                 .then(register("help", AdminCommand::displayHelp))
                 .then(register("clearLoadedVillagers", AdminCommand::clearLoadedVillagers))
                 .then(register("restoreClearedVillagers", AdminCommand::restoreClearedVillagers))
-                .then(register("forceBuildingType").then(CommandManager.argument("type", StringArgumentType.string()).executes(AdminCommand::forceBuildingType)).executes(AdminCommand::clearForcedBuildingType))
+                .then(register("forceBuildingType").then(Commands.argument("type", StringArgumentType.string()).executes(AdminCommand::forceBuildingType)).executes(AdminCommand::clearForcedBuildingType))
                 .then(register("forceFullHearts", AdminCommand::forceFullHearts))
                 .then(register("forceBabyGrowth", AdminCommand::forceBabyGrowth))
                 .then(register("forceChildGrowth", AdminCommand::forceChildGrowth))
@@ -55,24 +54,24 @@ public class AdminCommand {
                 .then(register("decrementHearts", AdminCommand::decrementHearts))
                 .then(register("resetPlayerData", AdminCommand::resetPlayerData))
                 .then(register("overrideVillageRequirements")
-                        .then(CommandManager.argument("target", EntityArgumentType.player())
-                                .then(CommandManager.argument("value", BoolArgumentType.bool())
+                        .then(Commands.argument("target", EntityArgument.player())
+                                .then(Commands.argument("value", BoolArgumentType.bool())
                                         .executes(AdminCommand::overrideVillageRequirements))))
                 .then(register("resetMarriage", AdminCommand::resetMarriage))
                 .then(register("listVillages", AdminCommand::listVillages))
-                .then(register("assumeNameDead").then(CommandManager.argument("name", StringArgumentType.string()).executes(AdminCommand::assumeNameDead)))
-                .then(register("assumeUuidDead").then(CommandManager.argument("uuid", UuidArgumentType.uuid()).executes(AdminCommand::assumeUuidDead)))
-                .then(register("removeVillageWithId").then(CommandManager.argument("id", IntegerArgumentType.integer()).executes(AdminCommand::removeVillageWithId)))
-                .then(register("convertVanillaVillagers").then(CommandManager.argument("radius", IntegerArgumentType.integer()).executes(AdminCommand::convertVanillaVillagers)))
-                .then(register("removeVillage").then(CommandManager.argument("name", StringArgumentType.string()).executes(AdminCommand::removeVillage)))
-                .then(register("buildingProcessingRate").then(CommandManager.argument("cooldown", IntegerArgumentType.integer()).executes(AdminCommand::buildingProcessingRate)))
-                .requires((serverCommandSource) -> serverCommandSource.hasPermissionLevel(2))
+                .then(register("assumeNameDead").then(Commands.argument("name", StringArgumentType.string()).executes(AdminCommand::assumeNameDead)))
+                .then(register("assumeUuidDead").then(Commands.argument("uuid", UuidArgument.uuid()).executes(AdminCommand::assumeUuidDead)))
+                .then(register("removeVillageWithId").then(Commands.argument("id", IntegerArgumentType.integer()).executes(AdminCommand::removeVillageWithId)))
+                .then(register("convertVanillaVillagers").then(Commands.argument("radius", IntegerArgumentType.integer()).executes(AdminCommand::convertVanillaVillagers)))
+                .then(register("removeVillage").then(Commands.argument("name", StringArgumentType.string()).executes(AdminCommand::removeVillage)))
+                .then(register("buildingProcessingRate").then(Commands.argument("cooldown", IntegerArgumentType.integer()).executes(AdminCommand::buildingProcessingRate)))
+                .requires((serverCommandSource) -> serverCommandSource.hasPermission(2))
         );
     }
 
-    private static int listVillages(CommandContext<ServerCommandSource> ctx) {
+    private static int listVillages(CommandContext<CommandSourceStack> ctx) {
         //remove from villages
-        for (Village village : VillageManager.get(ctx.getSource().getWorld())) {
+        for (Village village : VillageManager.get(ctx.getSource().getLevel())) {
             final BlockPos pos = village.getBox().getCenter();
             success(String.format(Locale.ROOT, "%d: %s with %d buildings and %d/%d villager(s)",
                             village.getId(),
@@ -81,16 +80,16 @@ public class AdminCommand {
                             village.getPopulation(),
                             village.getMaxPopulation()
                     ), ctx,
-                    new HoverEvent(HoverEvent.Action.SHOW_TEXT, Text.translatable("chat.coordinates.tooltip")),
+                    new HoverEvent(HoverEvent.Action.SHOW_TEXT, Component.translatable("chat.coordinates.tooltip")),
                     new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, "/tp @s " + pos.getX() + " ~ " + pos.getZ()));
         }
         return 0;
     }
 
-    private static int assumeNameDead(CommandContext<ServerCommandSource> ctx) {
+    private static int assumeNameDead(CommandContext<CommandSourceStack> ctx) {
         String name = StringArgumentType.getString(ctx, "name");
         //remove spouse too
-        FamilyTree tree = FamilyTree.get(ctx.getSource().getWorld());
+        FamilyTree tree = FamilyTree.get(ctx.getSource().getLevel());
         List<FamilyTreeNode> collect = tree.getAllWithName(name).filter(n -> !n.isDeceased()).toList();
         if (collect.isEmpty()) {
             fail("Villager does not exist.", ctx);
@@ -104,9 +103,9 @@ public class AdminCommand {
         return 0;
     }
 
-    private static int assumeUuidDead(CommandContext<ServerCommandSource> ctx) {
-        UUID uuid = UuidArgumentType.getUuid(ctx, "uuid");
-        FamilyTree tree = FamilyTree.get(ctx.getSource().getWorld());
+    private static int assumeUuidDead(CommandContext<CommandSourceStack> ctx) {
+        UUID uuid = UuidArgument.getUuid(ctx, "uuid");
+        FamilyTree tree = FamilyTree.get(ctx.getSource().getLevel());
         Optional<FamilyTreeNode> node = tree.getOrEmpty(uuid);
         if (node.isPresent()) {
             node.get().setDeceased(true);
@@ -118,17 +117,17 @@ public class AdminCommand {
         return 0;
     }
 
-    private static void assumeDead(CommandContext<ServerCommandSource> ctx, UUID uuid) {
-        for (Village village : VillageManager.get(ctx.getSource().getWorld())) {
+    private static void assumeDead(CommandContext<CommandSourceStack> ctx, UUID uuid) {
+        for (Village village : VillageManager.get(ctx.getSource().getLevel())) {
             village.removeResident(uuid);
         }
 
-        FamilyTree tree = FamilyTree.get(ctx.getSource().getWorld());
+        FamilyTree tree = FamilyTree.get(ctx.getSource().getLevel());
         Optional<FamilyTreeNode> node = tree.getOrEmpty(uuid);
         node.filter(n -> n.partner() != null).ifPresent(n -> n.updatePartner(null, RelationshipState.WIDOW));
 
         //remove from player spouse
-        ctx.getSource().getWorld().getPlayers().forEach(player -> {
+        ctx.getSource().getLevel().players().forEach(player -> {
             PlayerSaveData playerData = PlayerSaveData.get(player);
             if (playerData.getPartnerUUID().orElse(Util.NIL_UUID).equals(uuid)) {
                 playerData.endRelationShip(RelationshipState.SINGLE);
@@ -136,9 +135,9 @@ public class AdminCommand {
         });
     }
 
-    private static int removeVillageWithId(CommandContext<ServerCommandSource> ctx) {
+    private static int removeVillageWithId(CommandContext<CommandSourceStack> ctx) {
         int id = IntegerArgumentType.getInteger(ctx, "id");
-        if (VillageManager.get(ctx.getSource().getWorld()).removeVillage(id)) {
+        if (VillageManager.get(ctx.getSource().getLevel()).removeVillage(id)) {
             success("Village deleted.", ctx);
         } else {
             fail("Village with this ID does not exist.", ctx);
@@ -146,10 +145,10 @@ public class AdminCommand {
         return 0;
     }
 
-    private static int convertVanillaVillagers(CommandContext<ServerCommandSource> ctx) {
+    private static int convertVanillaVillagers(CommandContext<CommandSourceStack> ctx) {
         int radius = IntegerArgumentType.getInteger(ctx, "radius");
-        ServerWorld world = ctx.getSource().getWorld();
-        world.getEntitiesByType(EntityType.VILLAGER, x -> true).stream().map(VillagerEntity.class::cast).forEach(v -> {
+        ServerLevel world = ctx.getSource().getLevel();
+        world.getEntities(EntityType.VILLAGER, x -> true).stream().map(Villager.class::cast).forEach(v -> {
             if (v.distanceTo(ctx.getSource().getEntity()) < radius) {
                 SpawnQueue.getInstance().convert(v);
             }
@@ -157,15 +156,15 @@ public class AdminCommand {
         return 0;
     }
 
-    private static int setBuildingType(CommandContext<ServerCommandSource> ctx, String type) {
-        PlayerEntity player = ctx.getSource().getPlayer();
+    private static int setBuildingType(CommandContext<CommandSourceStack> ctx, String type) {
+        Player player = ctx.getSource().getPlayer();
         if (player == null) return 0;
 
-        VillageManager villages = VillageManager.get(ctx.getSource().getWorld());
+        VillageManager villages = VillageManager.get(ctx.getSource().getLevel());
         Optional<Village> village = villages.findNearestVillage(player);
 
         Optional<Building> building = village.flatMap(v -> v.getBuildings().values().stream().filter((b) ->
-                b.containsPos(player.getBlockPos())).findAny());
+                b.containsPos(player.blockPosition())).findAny());
         if (building.isPresent()) {
             if (building.get().getType().equals(type)) {
                 building.get().setTypeForced(false);
@@ -175,28 +174,28 @@ public class AdminCommand {
                 building.get().setType(type);
             }
         } else {
-            fail(Text.translatable("blueprint.noBuilding").getString(), ctx);
+            fail(Component.translatable("blueprint.noBuilding").getString(), ctx);
         }
         return 0;
     }
 
-    private static int forceBuildingType(CommandContext<ServerCommandSource> ctx) {
+    private static int forceBuildingType(CommandContext<CommandSourceStack> ctx) {
         return setBuildingType(ctx, StringArgumentType.getString(ctx, "type"));
     }
 
-    private static int clearForcedBuildingType(CommandContext<ServerCommandSource> ctx) {
+    private static int clearForcedBuildingType(CommandContext<CommandSourceStack> ctx) {
         return setBuildingType(ctx, null);
     }
 
-    private static int removeVillage(CommandContext<ServerCommandSource> ctx) {
+    private static int removeVillage(CommandContext<CommandSourceStack> ctx) {
         String name = StringArgumentType.getString(ctx, "name");
-        List<Village> collect = VillageManager.get(ctx.getSource().getWorld()).findVillages(v -> v.getName().equals(name)).toList();
+        List<Village> collect = VillageManager.get(ctx.getSource().getLevel()).findVillages(v -> v.getName().equals(name)).toList();
         if (collect.isEmpty()) {
             fail("No village with this name exists.", ctx);
         } else if (collect.size() > 1) {
             success("Village deleted.", ctx);
             fail("No village with this name exists.", ctx);
-        } else if (VillageManager.get(ctx.getSource().getWorld()).removeVillage(collect.get(0).getId())) {
+        } else if (VillageManager.get(ctx.getSource().getLevel()).removeVillage(collect.get(0).getId())) {
             success("Village deleted.", ctx);
         } else {
             fail("Unknown error.", ctx);
@@ -204,14 +203,14 @@ public class AdminCommand {
         return 0;
     }
 
-    private static int buildingProcessingRate(CommandContext<ServerCommandSource> ctx) {
+    private static int buildingProcessingRate(CommandContext<CommandSourceStack> ctx) {
         int cooldown = IntegerArgumentType.getInteger(ctx, "cooldown");
-        VillageManager.get(ctx.getSource().getWorld()).setBuildingCooldown(cooldown);
+        VillageManager.get(ctx.getSource().getLevel()).setBuildingCooldown(cooldown);
         return 0;
     }
 
-    private static int resetPlayerData(CommandContext<ServerCommandSource> ctx) {
-        ServerPlayerEntity player = ctx.getSource().getPlayer();
+    private static int resetPlayerData(CommandContext<CommandSourceStack> ctx) {
+        ServerPlayer player = ctx.getSource().getPlayer();
         if (player == null) return 0;
         PlayerSaveData playerData = PlayerSaveData.get(player);
         playerData.reset();
@@ -219,16 +218,16 @@ public class AdminCommand {
         return 0;
     }
 
-    private static int overrideVillageRequirements(CommandContext<ServerCommandSource> ctx) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
-        ServerPlayerEntity target = EntityArgumentType.getPlayer(ctx, "target");
+    private static int overrideVillageRequirements(CommandContext<CommandSourceStack> ctx) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
+        ServerPlayer target = EntityArgument.getPlayer(ctx, "target");
         boolean value = BoolArgumentType.getBool(ctx, "value");
         PlayerSaveData.get(target).setOverrideVillageRequirements(value);
         success("Village requirement override for " + target.getGameProfile().getName() + " set to " + value + ".", ctx);
         return 0;
     }
 
-    private static int resetMarriage(CommandContext<ServerCommandSource> ctx) {
-        ServerPlayerEntity player = ctx.getSource().getPlayer();
+    private static int resetMarriage(CommandContext<CommandSourceStack> ctx) {
+        ServerPlayer player = ctx.getSource().getPlayer();
         if (player == null) return 0;
         PlayerSaveData playerData = PlayerSaveData.get(player);
         playerData.endRelationShip(RelationshipState.SINGLE);
@@ -236,33 +235,33 @@ public class AdminCommand {
         return 0;
     }
 
-    private static int decrementHearts(CommandContext<ServerCommandSource> ctx) {
-        PlayerEntity player = ctx.getSource().getPlayer();
+    private static int decrementHearts(CommandContext<CommandSourceStack> ctx) {
+        Player player = ctx.getSource().getPlayer();
         if (player == null) return 0;
         getLoadedVillagers(ctx).forEach(v -> v.getVillagerBrain().getMemoriesForPlayer(player).modHearts(-10));
         return 0;
     }
 
-    private static int incrementHearts(CommandContext<ServerCommandSource> ctx) {
-        PlayerEntity player = ctx.getSource().getPlayer();
+    private static int incrementHearts(CommandContext<CommandSourceStack> ctx) {
+        Player player = ctx.getSource().getPlayer();
         if (player == null) return 0;
         getLoadedVillagers(ctx).forEach(v -> v.getVillagerBrain().getMemoriesForPlayer(player).modHearts(10));
         return 0;
     }
 
-    private static int forceChildGrowth(CommandContext<ServerCommandSource> ctx) {
-        getLoadedVillagers(ctx).forEach(v -> v.setBreedingAge(0));
+    private static int forceChildGrowth(CommandContext<CommandSourceStack> ctx) {
+        getLoadedVillagers(ctx).forEach(v -> v.setAge(0));
         return 0;
     }
 
-    private static int forceBabyGrowth(CommandContext<ServerCommandSource> ctx) {
-        PlayerEntity player = ctx.getSource().getPlayer();
+    private static int forceBabyGrowth(CommandContext<CommandSourceStack> ctx) {
+        Player player = ctx.getSource().getPlayer();
         ItemStack heldStack;
         if (player != null) {
-            heldStack = player.getMainHandStack();
+            heldStack = player.getMainHandItem();
 
             if (heldStack.getItem() instanceof BabyItem) {
-                NbtCompound nbt = BabyItem.getBabyNbt(heldStack);
+                CompoundTag nbt = BabyItem.getBabyNbt(heldStack);
                 nbt.putInt("age", Config.getInstance().babyItemGrowUpTime);
                 success("Baby is old enough to place now.", ctx);
             } else {
@@ -272,8 +271,8 @@ public class AdminCommand {
         return 0;
     }
 
-    private static int forceFullHearts(CommandContext<ServerCommandSource> ctx) {
-        PlayerEntity player = ctx.getSource().getPlayer();
+    private static int forceFullHearts(CommandContext<CommandSourceStack> ctx) {
+        Player player = ctx.getSource().getPlayer();
         if (player != null) {
             getLoadedVillagers(ctx).forEach(v -> {
                 v.getVillagerBrain().getMemoriesForPlayer(player).setHearts(1000);
@@ -282,10 +281,10 @@ public class AdminCommand {
         return 0;
     }
 
-    private static int restoreClearedVillagers(CommandContext<ServerCommandSource> ctx) {
+    private static int restoreClearedVillagers(CommandContext<CommandSourceStack> ctx) {
         storedVillagers.forEach(tag ->
-                EntityType.getEntityFromNbt(tag, ctx.getSource().getWorld()).ifPresent(v ->
-                        ctx.getSource().getWorld().spawnEntity(v)
+                EntityType.create(tag, ctx.getSource().getLevel()).ifPresent(v ->
+                        ctx.getSource().getLevel().addFreshEntity(v)
                 )
         );
         storedVillagers.clear();
@@ -293,19 +292,19 @@ public class AdminCommand {
         return 0;
     }
 
-    private static ArgumentBuilder<ServerCommandSource, ?> register(String name, Command<ServerCommandSource> cmd) {
-        return CommandManager.literal(name).requires(cs -> cs.hasPermissionLevel(2)).executes(cmd);
+    private static ArgumentBuilder<CommandSourceStack, ?> register(String name, Command<CommandSourceStack> cmd) {
+        return Commands.literal(name).requires(cs -> cs.hasPermission(2)).executes(cmd);
     }
 
-    private static ArgumentBuilder<ServerCommandSource, ?> register(String name) {
-        return CommandManager.literal(name).requires(cs -> cs.hasPermissionLevel(2));
+    private static ArgumentBuilder<CommandSourceStack, ?> register(String name) {
+        return Commands.literal(name).requires(cs -> cs.hasPermission(2));
     }
 
-    private static int clearLoadedVillagers(final CommandContext<ServerCommandSource> ctx) {
+    private static int clearLoadedVillagers(final CommandContext<CommandSourceStack> ctx) {
         storedVillagers.clear();
         getLoadedVillagers(ctx).forEach(v -> {
-            NbtCompound tag = new NbtCompound();
-            if (v.saveSelfNbt(tag)) {
+            CompoundTag tag = new CompoundTag();
+            if (v.saveAsPassenger(tag)) {
                 storedVillagers.add(tag);
                 v.discard();
             }
@@ -315,33 +314,33 @@ public class AdminCommand {
         return 0;
     }
 
-    private static Stream<VillagerEntityMCA> getLoadedVillagers(final CommandContext<ServerCommandSource> ctx) {
-        ServerWorld world = ctx.getSource().getWorld();
-        return Stream.concat(world.getEntitiesByType(EntitiesMCA.FEMALE_VILLAGER.get(), x -> true).stream(), world.getEntitiesByType(EntitiesMCA.MALE_VILLAGER.get(), x -> true).stream()).map(VillagerEntityMCA.class::cast);
+    private static Stream<VillagerEntityMCA> getLoadedVillagers(final CommandContext<CommandSourceStack> ctx) {
+        ServerLevel world = ctx.getSource().getLevel();
+        return Stream.concat(world.getEntities(EntitiesMCA.FEMALE_VILLAGER.get(), x -> true).stream(), world.getEntities(EntitiesMCA.MALE_VILLAGER.get(), x -> true).stream()).map(VillagerEntityMCA.class::cast);
     }
 
-    private static void success(String message, CommandContext<ServerCommandSource> ctx, Object... events) {
-        ctx.getSource().sendFeedback(() -> message(message, GREEN, events), true);
+    private static void success(String message, CommandContext<CommandSourceStack> ctx, Object... events) {
+        ctx.getSource().sendSuccess(() -> message(message, GREEN, events), true);
     }
 
-    private static void fail(String message, CommandContext<ServerCommandSource> ctx, Object... events) {
-        ctx.getSource().sendError(message(message, RED, events));
+    private static void fail(String message, CommandContext<CommandSourceStack> ctx, Object... events) {
+        ctx.getSource().sendFailure(message(message, RED, events));
     }
 
-    private static Text message(String message, Formatting red, Object[] events) {
-        MutableText data = Text.literal(message).formatted(red);
+    private static Component message(String message, ChatFormatting red, Object[] events) {
+        MutableComponent data = Component.literal(message).withStyle(red);
         for (Object evt : events) {
             if (evt instanceof ClickEvent clickEvent) {
-                data.styled((style -> style.withClickEvent(clickEvent)));
+                data.withStyle((style -> style.withClickEvent(clickEvent)));
             }
             if (evt instanceof HoverEvent hoverEvent) {
-                data.styled((style -> style.withHoverEvent(hoverEvent)));
+                data.withStyle((style -> style.withHoverEvent(hoverEvent)));
             }
         }
         return data;
     }
 
-    private static int displayHelp(CommandContext<ServerCommandSource> ctx) {
+    private static int displayHelp(CommandContext<CommandSourceStack> ctx) {
         Entity player = ctx.getSource().getEntity();
         if (player == null) {
             return 0;
@@ -377,6 +376,6 @@ public class AdminCommand {
 
 
     private static void sendMessage(Entity commandSender, String message) {
-        commandSender.sendMessage(Text.literal(GOLD + "[MCA] " + RESET + message));
+        commandSender.sendSystemMessage(Component.literal(GOLD + "[MCA] " + RESET + message));
     }
 }

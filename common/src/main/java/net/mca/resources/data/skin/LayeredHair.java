@@ -5,9 +5,8 @@ import com.mojang.serialization.Codec;
 import com.mojang.serialization.DataResult;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.mca.entity.ai.relationship.Gender;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.JsonHelper;
-
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.GsonHelper;
 import java.util.List;
 import java.util.Locale;
 
@@ -25,7 +24,7 @@ public class LayeredHair extends SkinListEntry {
             Codec.FLOAT.optionalFieldOf("chance", 1.0f).forGetter(Definition::chance)
     ).apply(instance, Definition::new));
     public static final Codec<LayeredHair> CODEC = RecordCodecBuilder.create(instance -> instance.group(
-            Identifier.CODEC.fieldOf("id").forGetter(LayeredHair::getIdentifierValue),
+            ResourceLocation.CODEC.fieldOf("id").forGetter(LayeredHair::getIdentifierValue),
             GENDER_CODEC.optionalFieldOf("gender", Gender.NEUTRAL).forGetter(LayeredHair::getGender),
             CATEGORY_CODEC.fieldOf("category").forGetter(LayeredHair::getCategory),
             Codec.FLOAT.optionalFieldOf("chance", 1.0f).forGetter(LayeredHair::getChance)
@@ -35,7 +34,7 @@ public class LayeredHair extends SkinListEntry {
 
     public LayeredHair(String identifier, JsonObject object) {
         super(identifier, object);
-        this.category = Category.byName(JsonHelper.getString(object, "category", ""));
+        this.category = Category.byName(GsonHelper.getAsString(object, "category", ""));
     }
 
     public LayeredHair(String identifier, Gender gender, Category category, float chance) {

@@ -3,8 +3,7 @@ package net.mca.entity.ai.chatAI.modules;
 import net.mca.MCA;
 import net.mca.entity.VillagerEntityMCA;
 import net.mca.entity.ai.Traits;
-import net.minecraft.server.network.ServerPlayerEntity;
-
+import net.minecraft.server.level.ServerPlayer;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -30,7 +29,7 @@ public class TraitsModule {
         put("rainbow", "$villager has colorful hair.");
     }};
 
-    public static void apply(List<String> input, VillagerEntityMCA villager, ServerPlayerEntity player) {
+    public static void apply(List<String> input, VillagerEntityMCA villager, ServerPlayer player) {
         for (Traits.Trait trait : villager.getTraits().getTraits()) {
             String traitName = trait.getId().getNamespace().equals(MCA.MOD_ID)
                     ? trait.getId().getPath()

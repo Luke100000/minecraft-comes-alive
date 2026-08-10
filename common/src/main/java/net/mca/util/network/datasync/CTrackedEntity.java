@@ -1,6 +1,6 @@
 package net.mca.util.network.datasync;
 
-import net.minecraft.entity.Entity;
+import net.minecraft.world.entity.Entity;
 
 public interface CTrackedEntity<T extends Entity> {
 

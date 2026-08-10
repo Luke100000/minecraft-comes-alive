@@ -19,21 +19,21 @@ import net.mca.resources.Rank;
 import net.mca.resources.Tasks;
 import net.mca.util.NbtHelper;
 import net.mca.util.WorldUtils;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.damage.DamageSource;
-import net.minecraft.entity.mob.MobEntity;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.item.ItemStack;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.nbt.NbtElement;
-import net.minecraft.nbt.NbtList;
-import net.minecraft.nbt.NbtString;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.text.Text;
-import net.minecraft.util.Formatting;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.world.PersistentState;
+import net.minecraft.ChatFormatting;
+import net.minecraft.core.BlockPos;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.StringTag;
+import net.minecraft.nbt.Tag;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.saveddata.SavedData;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -43,8 +43,8 @@ import java.util.Optional;
 import java.util.UUID;
 
 @SuppressWarnings("OptionalUsedAsFieldOrParameterType")
-public class PlayerSaveData extends PersistentState implements EntityRelationship {
-    private final ServerWorld world;
+public class PlayerSaveData extends SavedData implements EntityRelationship {
+    private final ServerLevel world;
     private final UUID uuid;
 
     private Optional<Integer> lastSeenVillage = Optional.empty();
@@ -52,50 +52,50 @@ public class PlayerSaveData extends PersistentState implements EntityRelationshi
     private boolean entityDataSet;
     private boolean overrideVillageRequirements;
     private String chatAIPrompt = "";
-    private NbtCompound entityData;
+    private CompoundTag entityData;
     private PlayerDimensions.Scale dimensionsScale;
 
-    private final List<NbtCompound> inbox = new LinkedList<>();
+    private final List<CompoundTag> inbox = new LinkedList<>();
 
-    public static PlayerSaveData get(ServerPlayerEntity player) {
-        return get((ServerWorld) player.getWorld(), player.getUuid());
+    public static PlayerSaveData get(ServerPlayer player) {
+        return get((ServerLevel) player.level(), player.getUUID());
     }
 
-    public static PlayerSaveData get(ServerWorld world, UUID uuid) {
-        return WorldUtils.loadData(world.getServer().getOverworld(), nbt -> new PlayerSaveData(world, uuid, nbt), w -> new PlayerSaveData(world, uuid), "mca_player_" + uuid);
+    public static PlayerSaveData get(ServerLevel world, UUID uuid) {
+        return WorldUtils.loadData(world.getServer().overworld(), nbt -> new PlayerSaveData(world, uuid, nbt), w -> new PlayerSaveData(world, uuid), "mca_player_" + uuid);
     }
 
-    public static Optional<PlayerSaveData> getIfPresent(ServerWorld world, UUID uuid) {
-        return Optional.ofNullable(world.getPersistentStateManager().get(nbt -> new PlayerSaveData(world, uuid, nbt), "mca_player_" + uuid));
+    public static Optional<PlayerSaveData> getIfPresent(ServerLevel world, UUID uuid) {
+        return Optional.ofNullable(world.getDataStorage().get(nbt -> new PlayerSaveData(world, uuid, nbt), "mca_player_" + uuid));
     }
 
-    PlayerSaveData(ServerWorld world, UUID uuid) {
+    PlayerSaveData(ServerLevel world, UUID uuid) {
         this.world = world;
         this.uuid = uuid;
 
         resetEntityData();
     }
 
-    PlayerSaveData(ServerWorld world, UUID uuid, NbtCompound nbt) {
+    PlayerSaveData(ServerLevel world, UUID uuid, CompoundTag nbt) {
         this.world = world;
         this.uuid = uuid;
 
-        lastSeenVillage = nbt.contains("lastSeenVillage", NbtElement.INT_TYPE) ? Optional.of(nbt.getInt("lastSeenVillage")) : Optional.empty();
+        lastSeenVillage = nbt.contains("lastSeenVillage", Tag.TAG_INT) ? Optional.of(nbt.getInt("lastSeenVillage")) : Optional.empty();
         entityDataSet = nbt.contains("entityDataSet") && nbt.getBoolean("entityDataSet");
         overrideVillageRequirements = nbt.contains("overrideVillageRequirements") && nbt.getBoolean("overrideVillageRequirements");
         chatAIPrompt = nbt.getString("chatAIPrompt");
 
         if (nbt.contains("entityData")) {
-            NbtCompound storedEntityData = nbt.getCompound("entityData");
+            CompoundTag storedEntityData = nbt.getCompound("entityData");
             entityData = McaDataFixers.update(storedEntityData);
             if (!entityData.equals(storedEntityData)) {
-                markDirty();
+                setDirty();
             }
         } else {
             resetEntityData();
         }
 
-        NbtList inbox = nbt.getList("inbox", NbtElement.COMPOUND_TYPE);
+        ListTag inbox = nbt.getList("inbox", Tag.TAG_COMPOUND);
         if (inbox != null) {
             this.inbox.clear();
             for (int i = 0; i < inbox.size(); i++) {
@@ -105,7 +105,7 @@ public class PlayerSaveData extends PersistentState implements EntityRelationshi
     }
 
     private void resetEntityData() {
-        entityData = new NbtCompound();
+        entityData = new CompoundTag();
 
         VillagerEntityMCA villager = EntitiesMCA.MALE_VILLAGER.get().create(world);
         assert villager != null;
@@ -113,14 +113,14 @@ public class PlayerSaveData extends PersistentState implements EntityRelationshi
         villager.getGenetics().randomize();
         villager.getTraits().randomize();
         villager.getVillagerBrain().randomize();
-        ((MobEntity) villager).writeCustomDataToNbt(entityData);
+        ((Mob) villager).addAdditionalSaveData(entityData);
     }
 
     public boolean isEntityDataSet() {
         return entityDataSet;
     }
 
-    public NbtCompound getEntityData() {
+    public CompoundTag getEntityData() {
         return entityData.copy();
     }
 
@@ -130,7 +130,7 @@ public class PlayerSaveData extends PersistentState implements EntityRelationshi
 
     public void setChatAIPrompt(String chatAIPrompt) {
         this.chatAIPrompt = chatAIPrompt;
-        markDirty();
+        setDirty();
     }
 
     public void setEntityDataSet(boolean entityDataSet) {
@@ -138,7 +138,7 @@ public class PlayerSaveData extends PersistentState implements EntityRelationshi
             return;
         }
         this.entityDataSet = entityDataSet;
-        markDirty();
+        setDirty();
         refreshPlayerDimensions();
     }
 
@@ -149,22 +149,22 @@ public class PlayerSaveData extends PersistentState implements EntityRelationshi
         return dimensionsScale;
     }
 
-    public void setEntityData(NbtCompound entityData) {
-        NbtCompound copy = McaDataFixers.update(entityData.copy());
+    public void setEntityData(CompoundTag entityData) {
+        CompoundTag copy = McaDataFixers.update(entityData.copy());
         if (copy.equals(this.entityData)) {
             return;
         }
         this.entityData = copy;
         dimensionsScale = PlayerDimensions.fromPlayerData(this);
-        markDirty();
+        setDirty();
         refreshPlayerDimensions();
     }
 
     private void refreshPlayerDimensions() {
-        PlayerEntity player = world.getPlayerByUuid(uuid);
-        if (player instanceof ServerPlayerEntity serverPlayer) {
+        Player player = world.getPlayerByUUID(uuid);
+        if (player instanceof ServerPlayer serverPlayer) {
             PlayerDimensions.debugRefresh(serverPlayer, "before server player data refresh");
-            serverPlayer.calculateDimensions();
+            serverPlayer.refreshDimensions();
             PlayerDimensions.debugRefresh(serverPlayer, "after server player data refresh");
         }
     }
@@ -179,7 +179,7 @@ public class PlayerSaveData extends PersistentState implements EntityRelationshi
 
     public void setOverrideVillageRequirements(boolean overrideVillageRequirements) {
         this.overrideVillageRequirements = overrideVillageRequirements;
-        markDirty();
+        setDirty();
     }
 
     @Override
@@ -193,7 +193,7 @@ public class PlayerSaveData extends PersistentState implements EntityRelationshi
         }
     }
 
-    public void updateLastSeenVillage(VillageManager manager, ServerPlayerEntity self) {
+    public void updateLastSeenVillage(VillageManager manager, ServerPlayer self) {
         Optional<Village> prevVillage = getLastSeenVillage(manager);
         Optional<Village> nextVillage = prevVillage
                 .filter(v -> v.isWithinBorder(self))
@@ -208,9 +208,9 @@ public class PlayerSaveData extends PersistentState implements EntityRelationshi
         }
     }
 
-    public void setLastSeenVillage(ServerPlayerEntity self, Village oldVillage, @Nullable Village newVillage) {
+    public void setLastSeenVillage(ServerPlayer self, Village oldVillage, @Nullable Village newVillage) {
         lastSeenVillage = Optional.ofNullable(newVillage).map(Village::getId);
-        markDirty();
+        setDirty();
 
         if (oldVillage != newVillage) {
             if (oldVillage != null) {
@@ -230,15 +230,15 @@ public class PlayerSaveData extends PersistentState implements EntityRelationshi
         return lastSeenVillage;
     }
 
-    protected void onLeave(PlayerEntity self, Village village) {
+    protected void onLeave(Player self, Village village) {
         if (Config.getInstance().enterVillageNotification && village.isVillage()) {
-            self.sendMessage(Text.translatable("gui.village.left", village.getName()).formatted(Formatting.GOLD), true);
+            self.displayClientMessage(Component.translatable("gui.village.left", village.getName()).withStyle(ChatFormatting.GOLD), true);
         }
     }
 
-    protected void onEnter(PlayerEntity self, Village village) {
+    protected void onEnter(Player self, Village village) {
         if (Config.getInstance().enterVillageNotification && village.isVillage()) {
-            self.sendMessage(Text.translatable("gui.village.welcome", village.getName()).formatted(Formatting.GOLD), true);
+            self.displayClientMessage(Component.translatable("gui.village.welcome", village.getName()).withStyle(ChatFormatting.GOLD), true);
         }
         village.onEnter(world);
     }
@@ -246,17 +246,17 @@ public class PlayerSaveData extends PersistentState implements EntityRelationshi
     @Override
     public void marry(Entity spouse) {
         EntityRelationship.super.marry(spouse);
-        markDirty();
+        setDirty();
     }
 
     @Override
     public void endRelationShip(RelationshipState newState) {
         EntityRelationship.super.endRelationShip(newState);
-        markDirty();
+        setDirty();
     }
 
     @Override
-    public ServerWorld getWorld() {
+    public ServerLevel getWorld() {
         return world;
     }
 
@@ -267,8 +267,8 @@ public class PlayerSaveData extends PersistentState implements EntityRelationshi
 
     @Override
     public Gender getGender() {
-        NbtCompound entityData = getEntityData();
-        NbtCompound mcaData = entityData.contains(VillagerEntityMCA.MCA_DATA_KEY, NbtElement.COMPOUND_TYPE)
+        CompoundTag entityData = getEntityData();
+        CompoundTag mcaData = entityData.contains(VillagerEntityMCA.MCA_DATA_KEY, Tag.TAG_COMPOUND)
                 ? entityData.getCompound(VillagerEntityMCA.MCA_DATA_KEY)
                 : entityData;
         Gender gender = Genetics.readGender(mcaData);
@@ -281,18 +281,18 @@ public class PlayerSaveData extends PersistentState implements EntityRelationshi
     @Override
     public @NotNull FamilyTreeNode getFamilyEntry() {
         return getFamilyTree().getOrEmpty(uuid).orElseGet(() -> {
-            String name = Optional.ofNullable(world.getPlayerByUuid(uuid)).map(p -> p.getName().getString()).orElse("Unnamed Adventurer");
+            String name = Optional.ofNullable(world.getPlayerByUUID(uuid)).map(p -> p.getName().getString()).orElse("Unnamed Adventurer");
             return getFamilyTree().getOrCreate(uuid, name, getGender(), true);
         });
     }
 
     public void reset() {
         endRelationShip(RelationshipState.SINGLE);
-        markDirty();
+        setDirty();
     }
 
     @Override
-    public NbtCompound writeNbt(NbtCompound nbt) {
+    public CompoundTag save(CompoundTag nbt) {
         lastSeenVillage.ifPresent(id -> nbt.putInt("lastSeenVillage", id));
         McaDataFixers.stampCurrentVersion(entityData);
         nbt.put("entityData", entityData);
@@ -303,11 +303,11 @@ public class PlayerSaveData extends PersistentState implements EntityRelationshi
         return nbt;
     }
 
-    public void sendMail(NbtCompound nbt) {
+    public void sendMail(CompoundTag nbt) {
         if (Config.getInstance().enableVillagerMailingPlayers) {
             inbox.add(nbt);
         }
-        markDirty();
+        setDirty();
     }
 
     public boolean hasMail() {
@@ -316,9 +316,9 @@ public class PlayerSaveData extends PersistentState implements EntityRelationshi
 
     public ItemStack getMail() {
         if (hasMail()) {
-            NbtCompound nbt = inbox.remove(0);
+            CompoundTag nbt = inbox.remove(0);
             ItemStack stack = new ItemStack(ItemsMCA.LETTER.get(), 1);
-            stack.setNbt(nbt);
+            stack.setTag(nbt);
             return stack;
         } else {
             return null;
@@ -330,18 +330,18 @@ public class PlayerSaveData extends PersistentState implements EntityRelationshi
     }
 
     public void sendLetter(List<String> lines) {
-        NbtList l = new NbtList();
+        ListTag l = new ListTag();
         for (String line : lines) {
-            l.add(0, NbtString.of(line));
+            l.add(0, StringTag.valueOf(line));
         }
-        NbtCompound nbt = new NbtCompound();
+        CompoundTag nbt = new CompoundTag();
         nbt.put("pages", l);
         sendMail(nbt);
 
-        Optional.ofNullable(world.getPlayerByUuid(uuid)).ifPresent(p -> showMailNotification((ServerPlayerEntity) p));
+        Optional.ofNullable(world.getPlayerByUUID(uuid)).ifPresent(p -> showMailNotification((ServerPlayer) p));
     }
 
-    public static void showMailNotification(ServerPlayerEntity player) {
+    public static void showMailNotification(ServerPlayer player) {
         NetworkHandler.sendToPlayer(new ShowToastRequest(
                 "server.mail.title",
                 "server.mail.description"

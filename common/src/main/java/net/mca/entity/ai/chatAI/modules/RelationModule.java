@@ -2,12 +2,11 @@ package net.mca.entity.ai.chatAI.modules;
 
 import net.mca.entity.VillagerEntityMCA;
 import net.mca.entity.ai.Relationship;
-import net.minecraft.server.network.ServerPlayerEntity;
-
+import net.minecraft.server.level.ServerPlayer;
 import java.util.List;
 
 public class RelationModule {
-    public static void apply(List<String> input, VillagerEntityMCA villager, ServerPlayerEntity player) {
+    public static void apply(List<String> input, VillagerEntityMCA villager, ServerPlayer player) {
         boolean silentHearts = false;
 
         if (Relationship.IS_MARRIED.test(villager, player)) {

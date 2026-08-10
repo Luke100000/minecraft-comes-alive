@@ -2,9 +2,8 @@ package net.mca.entity.ai.relationship;
 
 import net.mca.Config;
 import net.mca.resources.API;
-import net.minecraft.text.Text;
-import net.minecraft.util.math.MathHelper;
-
+import net.minecraft.network.chat.Component;
+import net.minecraft.util.Mth;
 import java.util.Locale;
 
 public enum AgeState implements VillagerDimensions {
@@ -41,8 +40,8 @@ public enum AgeState implements VillagerDimensions {
         this.pitch = pitch;
     }
 
-    public Text getName() {
-        return Text.translatable("enum.agestate." + name().toLowerCase(Locale.ENGLISH));
+    public Component getName() {
+        return Component.translatable("enum.agestate." + name().toLowerCase(Locale.ENGLISH));
     }
 
     @Override
@@ -99,7 +98,7 @@ public enum AgeState implements VillagerDimensions {
     }
 
     public static int getId(int age) {
-        return MathHelper.clamp(1 + (age + getMaxAge()) / getStageDuration(), 0, 5);
+        return Mth.clamp(1 + (age + getMaxAge()) / getStageDuration(), 0, 5);
     }
 
     public static AgeState byCurrentAge(int age) {

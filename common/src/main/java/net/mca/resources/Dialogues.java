@@ -12,16 +12,15 @@ import net.mca.resources.data.dialogue.Actions;
 import net.mca.resources.data.dialogue.Answer;
 import net.mca.resources.data.dialogue.Question;
 import net.mca.resources.data.dialogue.Result;
-import net.minecraft.resource.JsonDataLoader;
-import net.minecraft.resource.ResourceManager;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.profiler.Profiler;
-
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.packs.resources.ResourceManager;
+import net.minecraft.server.packs.resources.SimpleJsonResourceReloadListener;
+import net.minecraft.util.profiling.ProfilerFiller;
 import java.util.*;
 
-public class Dialogues extends JsonDataLoader {
-    protected static final Identifier ID = new Identifier(MCA.MOD_ID, "dialogues");
+public class Dialogues extends SimpleJsonResourceReloadListener {
+    protected static final ResourceLocation ID = new ResourceLocation(MCA.MOD_ID, "dialogues");
 
     private static Dialogues INSTANCE;
 
@@ -37,12 +36,12 @@ public class Dialogues extends JsonDataLoader {
     }
 
     @Override
-    protected void apply(Map<Identifier, JsonElement> data, ResourceManager manager, Profiler profiler) {
+    protected void apply(Map<ResourceLocation, JsonElement> data, ResourceManager manager, ProfilerFiller profiler) {
         questions.clear();
         data.forEach(this::loadDialogue);
     }
 
-    private void loadDialogue(Identifier identifier, JsonElement element) {
+    private void loadDialogue(ResourceLocation identifier, JsonElement element) {
         String id = identifier.getPath().substring(identifier.getPath().lastIndexOf('/') + 1);
         if (!this.checkIsMcaDialogue(element)) {
             MCA.LOGGER.warn("Dialogue {} is not properly formatted, not loading", identifier);
@@ -70,7 +69,7 @@ public class Dialogues extends JsonDataLoader {
     }
 
     //selects a specific answer while being in given question
-    public void selectAnswer(VillagerEntityMCA villager, ServerPlayerEntity player, String questionId, String answerId) {
+    public void selectAnswer(VillagerEntityMCA villager, ServerPlayer player, String questionId, String answerId) {
         Question question = getQuestion(questionId);
         if (question == null) {
             MCA.LOGGER.warn("Player {} tried to select an unknown dialogue question '{}'", player.getGameProfile().getName(), questionId);

@@ -18,14 +18,13 @@ import net.mca.server.ServerInteractionManager;
 import net.mca.server.world.data.PlayerSaveData;
 import net.mca.server.world.data.Village;
 import net.mca.server.world.data.VillageManager;
-import net.minecraft.command.argument.EntityArgumentType;
-import net.minecraft.server.command.CommandManager;
-import net.minecraft.server.command.ServerCommandSource;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.text.ClickEvent;
-import net.minecraft.text.Text;
-import net.minecraft.util.Formatting;
-
+import net.minecraft.ChatFormatting;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
+import net.minecraft.commands.arguments.EntityArgument;
+import net.minecraft.network.chat.ClickEvent;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerPlayer;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
@@ -36,68 +35,68 @@ import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 public class Command {
-    public static void register(CommandDispatcher<ServerCommandSource> dispatcher) {
-        dispatcher.register(CommandManager.literal(MCA.MOD_ID)
-                .then(register("propose").then(CommandManager.argument("target", EntityArgumentType.player()).executes(Command::propose)))
-                .then(register("accept").then(CommandManager.argument("target", EntityArgumentType.player()).executes(Command::accept)))
+    public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
+        dispatcher.register(Commands.literal(MCA.MOD_ID)
+                .then(register("propose").then(Commands.argument("target", EntityArgument.player()).executes(Command::propose)))
+                .then(register("accept").then(Commands.argument("target", EntityArgument.player()).executes(Command::accept)))
                 .then(register("proposals", Command::displayProposal))
                 .then(register("procreate", Command::procreate))
                 .then(register("separate", Command::separate))
-                .then(register("reject").then(CommandManager.argument("target", EntityArgumentType.player()).executes(Command::reject)))
+                .then(register("reject").then(Commands.argument("target", EntityArgument.player()).executes(Command::reject)))
                 .then(register("editor", Command::editor))
                 .then(register("destiny", Command::destiny))
                 .then(register("mail", Command::mail))
-                .then(register("verify").then(CommandManager.argument("email", StringArgumentType.greedyString()).executes(Command::verify)))
+                .then(register("verify").then(Commands.argument("email", StringArgumentType.greedyString()).executes(Command::verify)))
                 .then(register("chatAI")
                         .executes(Command::chatAIHelp)
-                        .then(CommandManager.literal("context")
+                        .then(Commands.literal("context")
                                 .requires(ChatAIContext::canEdit)
                                 .executes(Command::openChatAIContext))
-                        .then(CommandManager.literal("disable")
+                        .then(Commands.literal("disable")
                                 .requires(Command::hasChatAIAdminPermission)
                                 .executes(Command::disableChatAI))
-                        .then(CommandManager.literal("default")
+                        .then(Commands.literal("default")
                                 .requires(Command::hasChatAIAdminPermission)
                                 .executes(c -> Command.enableChatAI(c, "default", (new Config()).villagerChatAIEndpoint, "")))
-                        .then(CommandManager.literal("player2")
+                        .then(Commands.literal("player2")
                                 .requires(Command::hasChatAIAdminPermission)
                                 .executes(Command::setupPlayer2))
                         .then(register("inworldAI")
                                 .requires(Command::hasChatAIAdminPermission)
                                 .then(register("keys")
-                                        .then(CommandManager.argument("api_key", StringArgumentType.string())
+                                        .then(Commands.argument("api_key", StringArgumentType.string())
                                                 .executes(c -> Command.inworldAIKey(c.getArgument("api_key", String.class)))))
                                 .then(register("addCharacter")
-                                        .then(CommandManager.argument("villager_name", StringArgumentType.string())
-                                                .then(CommandManager.argument("character_endpoint", StringArgumentType.string())
+                                        .then(Commands.argument("villager_name", StringArgumentType.string())
+                                                .then(Commands.argument("character_endpoint", StringArgumentType.string())
                                                         .executes(c -> Command.inworldAICharacter(c, c.getArgument("villager_name", String.class), c.getArgument("character_endpoint", String.class)))
                                                 )
                                         )
                                 )
                         )
-                        .then(CommandManager.argument("model", StringArgumentType.string())
+                        .then(Commands.argument("model", StringArgumentType.string())
                                 .requires(Command::hasChatAIAdminPermission)
                                 .executes(c -> Command.enableChatAI(c, c.getArgument("model", String.class), (new Config()).villagerChatAIEndpoint, ""))
-                                .then(CommandManager.argument("endpoint", StringArgumentType.string())
+                                .then(Commands.argument("endpoint", StringArgumentType.string())
                                         .executes(c -> Command.enableChatAI(c, c.getArgument("model", String.class), c.getArgument("endpoint", String.class), ""))
-                                        .then(CommandManager.argument("token", StringArgumentType.string())
+                                        .then(Commands.argument("token", StringArgumentType.string())
                                                 .executes(c -> Command.enableChatAI(c, c.getArgument("model", String.class), c.getArgument("endpoint", String.class), c.getArgument("token", String.class)))))))
                 .then(register("tts")
                         .requires(p -> p.getServer().isSingleplayer())
-                        .then(CommandManager.literal("default").executes(ctx -> ttsEnable(ctx, "default")))
-                        .then(CommandManager.literal("elevenlabs").executes(ctx -> ttsEnable(ctx, "elevenlabs")))
-                        .then(CommandManager.literal("realtime").executes(ctx -> ttsEnable(ctx, "realtime")))
-                        .then(CommandManager.literal("disable").executes(Command::ttsDisable))
+                        .then(Commands.literal("default").executes(ctx -> ttsEnable(ctx, "default")))
+                        .then(Commands.literal("elevenlabs").executes(ctx -> ttsEnable(ctx, "elevenlabs")))
+                        .then(Commands.literal("realtime").executes(ctx -> ttsEnable(ctx, "realtime")))
+                        .then(Commands.literal("disable").executes(Command::ttsDisable))
                 )
         );
     }
 
-    private static boolean hasChatAIAdminPermission(ServerCommandSource source) {
-        return source.hasPermissionLevel(2) || source.getServer().isSingleplayer();
+    private static boolean hasChatAIAdminPermission(CommandSourceStack source) {
+        return source.hasPermission(2) || source.getServer().isSingleplayer();
     }
 
-    private static int openChatAIContext(CommandContext<ServerCommandSource> ctx) {
-        ServerPlayerEntity player = ctx.getSource().getPlayer();
+    private static int openChatAIContext(CommandContext<CommandSourceStack> ctx) {
+        ServerPlayer player = ctx.getSource().getPlayer();
         if (player == null) {
             return 0;
         }
@@ -105,16 +104,16 @@ public class Command {
         Optional<VillagerEntityMCA> villager = ChatAI.findClosestVillager(player);
         Optional<Village> village = villager.flatMap(Village::findNearest);
         if (village.isEmpty()) {
-            village = VillageManager.get((net.minecraft.server.world.ServerWorld) player.getWorld()).findNearestVillage(player);
+            village = VillageManager.get((net.minecraft.server.level.ServerLevel) player.level()).findNearestVillage(player);
         }
 
         NetworkHandler.sendToPlayer(new ChatAIContextResponse(
-                player.getWorld().getRegistryKey().getValue().toString(),
+                player.level().dimension().location().toString(),
                 villager.isPresent(),
-                villager.map(VillagerEntityMCA::getUuid).orElse(new UUID(0L, 0L)),
+                villager.map(VillagerEntityMCA::getUUID).orElse(new UUID(0L, 0L)),
                 villager.map(v -> v.getName().getString()).orElse(""),
                 villager.map(VillagerEntityMCA::getChatAIPrompt).orElse(""),
-                villager.map(v -> v.getNickname(player.getUuid())).orElse(""),
+                villager.map(v -> v.getNickname(player.getUUID())).orElse(""),
                 player.getName().getString(),
                 PlayerSaveData.get(player).getChatAIPrompt(),
                 village.isPresent(),
@@ -126,9 +125,9 @@ public class Command {
         return 1;
     }
 
-    private static int chatAIHelp(CommandContext<ServerCommandSource> ctx) {
+    private static int chatAIHelp(CommandContext<CommandSourceStack> ctx) {
         if (!hasChatAIAdminPermission(ctx.getSource())) {
-            sendMessage(ctx, Text.translatable("command.no_permission").formatted(Formatting.RED));
+            sendMessage(ctx, Component.translatable("command.no_permission").withStyle(ChatFormatting.RED));
             return 0;
         }
         return enableChatAI(ctx, (new Config()).villagerChatAIModel, (new Config()).villagerChatAIEndpoint, (new Config()).villagerChatAIToken);
@@ -140,18 +139,18 @@ public class Command {
         return 0;
     }
 
-    private static int inworldAICharacter(CommandContext<ServerCommandSource> ctx, String name, String endpoint) {
-        ServerPlayerEntity player = ctx.getSource().getPlayer();
+    private static int inworldAICharacter(CommandContext<CommandSourceStack> ctx, String name, String endpoint) {
+        ServerPlayer player = ctx.getSource().getPlayer();
         Optional<VillagerEntityMCA> optionalVillager = ChatAI.findVillagerInArea(player, name);
         optionalVillager.ifPresent(v -> {
-            Config.getInstance().inworldAIResourceNames.put(v.getUuid(), endpoint);
-            ChatAI.clearStrategy(v.getUuid());
+            Config.getInstance().inworldAIResourceNames.put(v.getUUID(), endpoint);
+            ChatAI.clearStrategy(v.getUUID());
             Config.getInstance().save();
         });
         return 0;
     }
 
-    private static int enableChatAI(CommandContext<ServerCommandSource> ctx, String model, String endpoint, String token) {
+    private static int enableChatAI(CommandContext<CommandSourceStack> ctx, String model, String endpoint, String token) {
         Config.getInstance().enableVillagerChatAI = true;
         Config.getInstance().villagerChatAIModel = model;
         Config.getInstance().villagerChatAIEndpoint = endpoint;
@@ -159,7 +158,7 @@ public class Command {
         Config.getInstance().save();
 
         if (model.equals("default")) {
-            sendMessage(ctx, Text.translatable("mca.ai_help").styled(s -> s
+            sendMessage(ctx, Component.translatable("mca.ai_help").withStyle(s -> s
                     .withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, "https://github.com/Luke100000/minecraft-comes-alive/wiki/GPT3-based-conversations"))
             ));
         } else {
@@ -168,14 +167,14 @@ public class Command {
         return 0;
     }
 
-    private static int disableChatAI(CommandContext<ServerCommandSource> c) {
+    private static int disableChatAI(CommandContext<CommandSourceStack> c) {
         Config.getInstance().enableVillagerChatAI = false;
         Config.getInstance().save();
         sendMessage(c, "command.chat_ai.disabled");
         return 0;
     }
 
-    private static int setupPlayer2(CommandContext<ServerCommandSource> ctx) {
+    private static int setupPlayer2(CommandContext<CommandSourceStack> ctx) {
         // Use player2s endpoint
         Config.getInstance().enableVillagerChatAI = true;
         Config.getInstance().villagerChatAIModel = "player2";
@@ -189,68 +188,68 @@ public class Command {
 
         Config.getInstance().save();
 
-        sendMessage(ctx, Text.translatable("command.chat_ai.player2").styled(s -> s
+        sendMessage(ctx, Component.translatable("command.chat_ai.player2").withStyle(s -> s
                 .withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, "https://player2.game/"))));
         return 0;
     }
 
-    private static int ttsEnable(CommandContext<ServerCommandSource> ctx, String model) {
+    private static int ttsEnable(CommandContext<CommandSourceStack> ctx, String model) {
         Config.getInstance().enableOnlineTTS = true;
         Config.getInstance().onlineTTSModel = model;
         Config.getInstance().save();
-        sendMessage(ctx, Text.translatable("command.tts.enabled." + model));
+        sendMessage(ctx, Component.translatable("command.tts.enabled." + model));
         return 0;
     }
 
-    private static int ttsDisable(CommandContext<ServerCommandSource> ctx) {
+    private static int ttsDisable(CommandContext<CommandSourceStack> ctx) {
         Config.getInstance().enableOnlineTTS = false;
         Config.getInstance().save();
 
         return 0;
     }
 
-    private static int editor(CommandContext<ServerCommandSource> ctx) {
-        ServerPlayerEntity player = ctx.getSource().getPlayer();
+    private static int editor(CommandContext<CommandSourceStack> ctx) {
+        ServerPlayer player = ctx.getSource().getPlayer();
         if (player == null) {
             return 1;
         }
-        if (ctx.getSource().hasPermissionLevel(2) || Config.getInstance().allowFullPlayerEditor) {
+        if (ctx.getSource().hasPermission(2) || Config.getInstance().allowFullPlayerEditor) {
             NetworkHandler.sendToPlayer(new OpenGuiRequest(OpenGuiRequest.Type.VILLAGER_EDITOR, player), player);
             return 0;
         } else if (Config.getInstance().allowLimitedPlayerEditor) {
             NetworkHandler.sendToPlayer(new OpenGuiRequest(OpenGuiRequest.Type.LIMITED_VILLAGER_EDITOR, player), player);
             return 0;
         } else {
-            sendMessage(ctx, Text.translatable("command.no_permission").formatted(Formatting.RED));
+            sendMessage(ctx, Component.translatable("command.no_permission").withStyle(ChatFormatting.RED));
             return 1;
         }
     }
 
-    private static int destiny(CommandContext<ServerCommandSource> ctx) {
-        if (ctx.getSource().hasPermissionLevel(2) || Config.getInstance().allowDestinyCommandOnce) {
-            ServerPlayerEntity player = ctx.getSource().getPlayer();
+    private static int destiny(CommandContext<CommandSourceStack> ctx) {
+        if (ctx.getSource().hasPermission(2) || Config.getInstance().allowDestinyCommandOnce) {
+            ServerPlayer player = ctx.getSource().getPlayer();
             if (player != null && !PlayerSaveData.get(player).isEntityDataSet() || Config.getInstance().allowDestinyCommandMoreThanOnce) {
                 ServerInteractionManager.launchDestiny(player);
                 return 0;
             } else {
-                sendMessage(ctx, Text.translatable("command.only_one_destiny").formatted(Formatting.RED));
+                sendMessage(ctx, Component.translatable("command.only_one_destiny").withStyle(ChatFormatting.RED));
                 return 1;
             }
         } else {
-            sendMessage(ctx, Text.translatable("command.no_permission").formatted(Formatting.RED));
+            sendMessage(ctx, Component.translatable("command.no_permission").withStyle(ChatFormatting.RED));
             return 1;
         }
     }
 
-    private static int mail(CommandContext<ServerCommandSource> ctx) {
-        ServerPlayerEntity player = ctx.getSource().getPlayer();
+    private static int mail(CommandContext<CommandSourceStack> ctx) {
+        ServerPlayer player = ctx.getSource().getPlayer();
         if (player == null) {
             return 1;
         }
         PlayerSaveData data = PlayerSaveData.get(player);
         if (data.hasMail()) {
             while (data.hasMail()) {
-                player.getInventory().offerOrDrop(data.getMail());
+                player.getInventory().placeItemBackInInventory(data.getMail());
             }
         } else {
             sendMessage(ctx, "command.no_mail");
@@ -258,8 +257,8 @@ public class Command {
         return 0;
     }
 
-    private static int verify(CommandContext<ServerCommandSource> ctx) {
-        ServerPlayerEntity player = ctx.getSource().getPlayer();
+    private static int verify(CommandContext<CommandSourceStack> ctx) {
+        ServerPlayer player = ctx.getSource().getPlayer();
 
         CompletableFuture.runAsync(() -> {
             // build http request
@@ -276,68 +275,68 @@ public class Command {
             String request = OpenAIChatAI.verify(encodedURL);
 
             if (request.equals("success")) {
-                sendMessage(ctx, Text.translatable("command.verify.success").formatted(Formatting.GREEN));
+                sendMessage(ctx, Component.translatable("command.verify.success").withStyle(ChatFormatting.GREEN));
             } else if (request.equals("failed")) {
-                sendMessage(ctx, Text.translatable("command.verify.failed").formatted(Formatting.RED));
+                sendMessage(ctx, Component.translatable("command.verify.failed").withStyle(ChatFormatting.RED));
             } else {
-                sendMessage(ctx, Text.translatable("command.verify.crashed").formatted(Formatting.RED));
+                sendMessage(ctx, Component.translatable("command.verify.crashed").withStyle(ChatFormatting.RED));
             }
         });
         return 0;
     }
 
-    private static int propose(CommandContext<ServerCommandSource> ctx) throws CommandSyntaxException {
-        ServerPlayerEntity target = EntityArgumentType.getPlayer(ctx, "target");
+    private static int propose(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        ServerPlayer target = EntityArgument.getPlayer(ctx, "target");
         ServerInteractionManager.getInstance().sendProposal(ctx.getSource().getPlayer(), target);
 
         return 0;
     }
 
-    private static int accept(CommandContext<ServerCommandSource> ctx) throws CommandSyntaxException {
-        ServerPlayerEntity target = EntityArgumentType.getPlayer(ctx, "target");
+    private static int accept(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        ServerPlayer target = EntityArgument.getPlayer(ctx, "target");
         ServerInteractionManager.getInstance().acceptProposal(ctx.getSource().getPlayer(), target);
         return 0;
     }
 
-    private static int displayProposal(CommandContext<ServerCommandSource> ctx) {
+    private static int displayProposal(CommandContext<CommandSourceStack> ctx) {
         ServerInteractionManager.getInstance().listProposals(ctx.getSource().getPlayer());
 
         return 0;
     }
 
-    private static int procreate(CommandContext<ServerCommandSource> ctx) {
+    private static int procreate(CommandContext<CommandSourceStack> ctx) {
         ServerInteractionManager.getInstance().procreate(ctx.getSource().getPlayer());
         return 0;
     }
 
-    private static int separate(CommandContext<ServerCommandSource> ctx) {
+    private static int separate(CommandContext<CommandSourceStack> ctx) {
         ServerInteractionManager.getInstance().endMarriage(ctx.getSource().getPlayer());
         return 0;
     }
 
-    private static int reject(CommandContext<ServerCommandSource> ctx) throws CommandSyntaxException {
-        ServerPlayerEntity target = EntityArgumentType.getPlayer(ctx, "target");
+    private static int reject(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        ServerPlayer target = EntityArgument.getPlayer(ctx, "target");
         ServerInteractionManager.getInstance().rejectProposal(ctx.getSource().getPlayer(), target);
         return 0;
     }
 
 
-    private static ArgumentBuilder<ServerCommandSource, ?> register(String name, com.mojang.brigadier.Command<ServerCommandSource> cmd) {
-        return CommandManager.literal(name).requires(cs -> cs.hasPermissionLevel(0)).executes(cmd);
+    private static ArgumentBuilder<CommandSourceStack, ?> register(String name, com.mojang.brigadier.Command<CommandSourceStack> cmd) {
+        return Commands.literal(name).requires(cs -> cs.hasPermission(0)).executes(cmd);
     }
 
-    private static ArgumentBuilder<ServerCommandSource, ?> register(String name) {
-        return CommandManager.literal(name).requires(cs -> cs.hasPermissionLevel(0));
+    private static ArgumentBuilder<CommandSourceStack, ?> register(String name) {
+        return Commands.literal(name).requires(cs -> cs.hasPermission(0));
     }
 
-    private static void sendMessage(CommandContext<ServerCommandSource> ctx, String message) {
-        sendMessage(ctx, Text.translatable(message));
+    private static void sendMessage(CommandContext<CommandSourceStack> ctx, String message) {
+        sendMessage(ctx, Component.translatable(message));
     }
 
-    private static void sendMessage(CommandContext<ServerCommandSource> ctx, Text message) {
-        ServerPlayerEntity player = ctx.getSource().getPlayer();
+    private static void sendMessage(CommandContext<CommandSourceStack> ctx, Component message) {
+        ServerPlayer player = ctx.getSource().getPlayer();
         if (player != null) {
-            player.sendMessage(message);
+            player.sendSystemMessage(message);
         }
     }
 }

@@ -1,21 +1,20 @@
 package net.mca;
 
-import net.minecraft.client.option.KeyBinding;
-import net.minecraft.client.util.InputUtil;
 import org.lwjgl.glfw.GLFW;
-
+import com.mojang.blaze3d.platform.InputConstants;
 import java.util.LinkedList;
 import java.util.List;
+import net.minecraft.client.KeyMapping;
 
 public class KeyBindings {
-    public static final List<KeyBinding> list = new LinkedList<>();
+    public static final List<KeyMapping> list = new LinkedList<>();
 
-    public static final KeyBinding SKIN_LIBRARY = newKey("skin_library", GLFW.GLFW_KEY_U);
+    public static final KeyMapping SKIN_LIBRARY = newKey("skin_library", GLFW.GLFW_KEY_U);
 
-    private static KeyBinding newKey(String name, int code) {
-        KeyBinding key = new KeyBinding(
+    private static KeyMapping newKey(String name, int code) {
+        KeyMapping key = new KeyMapping(
                 "key.mca." + name,
-                InputUtil.Type.KEYSYM,
+                InputConstants.Type.KEYSYM,
                 code,
                 "itemGroup.mca.mca_tab"
         );

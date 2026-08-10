@@ -2,11 +2,10 @@ package net.mca.resources.data.tasks;
 
 import com.google.gson.JsonObject;
 import net.mca.server.world.data.Village;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.text.MutableText;
-import net.minecraft.text.Text;
-import net.minecraft.util.JsonHelper;
-
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.util.GsonHelper;
 import java.io.Serial;
 
 public class PopulationTask extends Task {
@@ -21,11 +20,11 @@ public class PopulationTask extends Task {
     }
 
     public PopulationTask(JsonObject json) {
-        this(JsonHelper.getInt(json, "population"));
+        this(GsonHelper.getAsInt(json, "population"));
     }
 
     @Override
-    public boolean isCompleted(Village village, ServerPlayerEntity player) {
+    public boolean isCompleted(Village village, ServerPlayer player) {
         return village.getPopulation() >= population;
     }
 
@@ -35,7 +34,7 @@ public class PopulationTask extends Task {
     }
 
     @Override
-    public MutableText getTranslatable() {
-        return Text.translatable("task.population", population);
+    public MutableComponent getTranslatable() {
+        return Component.translatable("task.population", population);
     }
 }

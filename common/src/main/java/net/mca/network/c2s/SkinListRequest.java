@@ -8,8 +8,7 @@ import net.mca.resources.HairList;
 import net.mca.resources.data.skin.Clothing;
 import net.mca.resources.data.skin.Hair;
 import net.mca.server.world.data.CustomClothingManager;
-import net.minecraft.server.network.ServerPlayerEntity;
-
+import net.minecraft.server.level.ServerPlayer;
 import java.io.Serial;
 import java.util.HashMap;
 import java.util.Map;
@@ -26,7 +25,7 @@ public class SkinListRequest implements Message {
     }
 
     @Override
-    public void receive(ServerPlayerEntity player) {
+    public void receive(ServerPlayer player) {
         Map<String, Clothing> clothing = CustomClothingManager.getClothing().getEntries();
         Map<String, Hair> hair = CustomClothingManager.getHair().getEntries();
         NetworkHandler.sendToPlayer(new SkinListResponse(merge(ClothingList.getInstance().clothing, clothing), merge(HairList.getInstance().hair, hair)), player);

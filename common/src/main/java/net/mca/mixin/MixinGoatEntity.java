@@ -3,54 +3,58 @@ package net.mca.mixin;
 import net.mca.advancement.criterion.CriterionMCA;
 import net.mca.item.ItemsMCA;
 import net.mca.util.WorldUtils;
-import net.minecraft.entity.*;
-import net.minecraft.entity.mob.WitherSkeletonEntity;
-import net.minecraft.entity.passive.AnimalEntity;
-import net.minecraft.entity.passive.GoatEntity;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.sound.SoundEvent;
-import net.minecraft.text.Text;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.world.SpawnHelper;
-import net.minecraft.world.World;
+import net.minecraft.core.BlockPos;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.sounds.SoundEvent;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.LightningBolt;
+import net.minecraft.world.entity.MobSpawnType;
+import net.minecraft.world.entity.SpawnPlacements;
+import net.minecraft.world.entity.animal.Animal;
+import net.minecraft.world.entity.animal.goat.Goat;
+import net.minecraft.world.entity.monster.WitherSkeleton;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.NaturalSpawner;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-@Mixin(GoatEntity.class)
-public abstract class MixinGoatEntity extends AnimalEntity {
-    protected MixinGoatEntity(EntityType<? extends AnimalEntity> entityType, World world) {
+@Mixin(Goat.class)
+public abstract class MixinGoatEntity extends Animal {
+    protected MixinGoatEntity(EntityType<? extends Animal> entityType, Level world) {
         super(entityType, world);
     }
 
-    @Inject(method = "getMilkingSound()Lnet/minecraft/sound/SoundEvent;", at = @At("HEAD"))
+    @Inject(method = "getMilkingSound()Lnet/minecraft/sounds/SoundEvent;", at = @At("HEAD"))
     protected void getMilkingSound(CallbackInfoReturnable<SoundEvent> cir) {
-        if (!this.getWorld().isClient && this.getWorld().isRaining()) {
-            long time = this.getWorld().getTimeOfDay() % 24000;
-            BlockPos pos = getBlockPos();
-            if (time > 16000 && time < 20000 && this.getWorld().getBiome(pos).value().isCold(pos) && SpawnHelper.canSpawn(SpawnRestriction.Location.ON_GROUND, getWorld(), pos, EntityType.WITHER_SKELETON)) {
-                WitherSkeletonEntity ancientCultist = EntityType.WITHER_SKELETON.create(getWorld());
+        if (!this.level().isClientSide && this.level().isRaining()) {
+            long time = this.level().getDayTime() % 24000;
+            BlockPos pos = blockPosition();
+            if (time > 16000 && time < 20000 && this.level().getBiome(pos).value().coldEnoughToSnow(pos) && NaturalSpawner.isSpawnPositionOk(SpawnPlacements.Type.ON_GROUND, level(), pos, EntityType.WITHER_SKELETON)) {
+                WitherSkeleton ancientCultist = EntityType.WITHER_SKELETON.create(level());
                 if (ancientCultist != null) {
                     //place the ancient boi
-                    ancientCultist.setPosition(pos.getX(), pos.getY(), pos.getZ());
-                    WorldUtils.spawnEntity(getWorld(), ancientCultist, SpawnReason.EVENT);
+                    ancientCultist.setPos(pos.getX(), pos.getY(), pos.getZ());
+                    WorldUtils.spawnEntity(level(), ancientCultist, MobSpawnType.EVENT);
 
                     //drip
-                    ancientCultist.equipStack(EquipmentSlot.HEAD, new ItemStack(Items.GOLDEN_HELMET));
-                    ancientCultist.equipStack(EquipmentSlot.CHEST, new ItemStack(Items.GOLDEN_CHESTPLATE));
-                    ancientCultist.equipStack(EquipmentSlot.LEGS, new ItemStack(Items.GOLDEN_LEGGINGS));
-                    ancientCultist.equipStack(EquipmentSlot.FEET, new ItemStack(Items.GOLDEN_BOOTS));
-                    ancientCultist.equipStack(EquipmentSlot.MAINHAND, new ItemStack(Items.GOLDEN_SWORD));
-                    ancientCultist.equipStack(EquipmentSlot.OFFHAND, new ItemStack(ItemsMCA.BOOK_CULT_ANCIENT.get()));
-                    ancientCultist.setEquipmentDropChance(EquipmentSlot.OFFHAND, 1.0f);
+                    ancientCultist.setItemSlot(EquipmentSlot.HEAD, new ItemStack(Items.GOLDEN_HELMET));
+                    ancientCultist.setItemSlot(EquipmentSlot.CHEST, new ItemStack(Items.GOLDEN_CHESTPLATE));
+                    ancientCultist.setItemSlot(EquipmentSlot.LEGS, new ItemStack(Items.GOLDEN_LEGGINGS));
+                    ancientCultist.setItemSlot(EquipmentSlot.FEET, new ItemStack(Items.GOLDEN_BOOTS));
+                    ancientCultist.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.GOLDEN_SWORD));
+                    ancientCultist.setItemSlot(EquipmentSlot.OFFHAND, new ItemStack(ItemsMCA.BOOK_CULT_ANCIENT.get()));
+                    ancientCultist.setDropChance(EquipmentSlot.OFFHAND, 1.0f);
 
-                    ancientCultist.setCustomName(Text.translatable("entity.mca.ancient_cultist"));
+                    ancientCultist.setCustomName(Component.translatable("entity.mca.ancient_cultist"));
 
                     //advancement
-                    ((ServerWorld)this.getWorld()).getPlayers().stream().filter(p -> p.distanceTo(this) < 30).forEach(p -> {
+                    ((ServerLevel)this.level()).players().stream().filter(p -> p.distanceTo(this) < 30).forEach(p -> {
                         CriterionMCA.GENERIC_EVENT_CRITERION.trigger(p, "ancient_cultists");
                     });
 
@@ -58,12 +62,12 @@ public abstract class MixinGoatEntity extends AnimalEntity {
                     kill();
 
                     //extra spiciness
-                    getWorld().setLightningTicksLeft(10);
-                    LightningEntity bolt = EntityType.LIGHTNING_BOLT.create(getWorld());
+                    level().setSkyFlashTime(10);
+                    LightningBolt bolt = EntityType.LIGHTNING_BOLT.create(level());
                     if (bolt != null) {
-                        bolt.setCosmetic(true);
-                        bolt.updatePosition(pos.getX() + 0.5F, pos.getY(), pos.getZ() + 0.5F);
-                        getWorld().spawnEntity(bolt);
+                        bolt.setVisualOnly(true);
+                        bolt.absMoveTo(pos.getX() + 0.5F, pos.getY(), pos.getZ() + 0.5F);
+                        level().addFreshEntity(bolt);
                     }
                 }
             }

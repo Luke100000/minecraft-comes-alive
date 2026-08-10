@@ -6,13 +6,12 @@ import net.mca.cobalt.network.NetworkHandler;
 import net.mca.network.c2s.ChatAIContextUpdateRequest;
 import net.mca.network.s2c.ChatAIContextResponse;
 import net.mca.util.compat.ButtonWidget;
-import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.client.gui.widget.EditBoxWidget;
-import net.minecraft.client.gui.widget.TextFieldWidget;
-import net.minecraft.text.Text;
-import net.minecraft.util.Util;
-
+import net.minecraft.Util;
+import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.gui.components.MultiLineEditBox;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.network.chat.Component;
 import java.net.URI;
 import java.util.EnumMap;
 import java.util.Map;
@@ -26,12 +25,12 @@ public class ChatAIContextScreen extends Screen {
     private final ChatAIContextResponse context;
     private final Map<Tab, String> prompts = new EnumMap<>(Tab.class);
     private Tab selectedTab = Tab.VILLAGER;
-    private EditBoxWidget promptField;
-    private TextFieldWidget nicknameField;
+    private MultiLineEditBox promptField;
+    private EditBox nicknameField;
     private String nickname;
 
     public ChatAIContextScreen(ChatAIContextResponse context) {
-        super(Text.translatable("gui.chat_ai_context.title"));
+        super(Component.translatable("gui.chat_ai_context.title"));
         this.context = context;
 
         prompts.put(Tab.VILLAGER, context.villagerPrompt());
@@ -54,19 +53,19 @@ public class ChatAIContextScreen extends Screen {
 
         int x = left + 12;
         for (Tab tab : Tab.values()) {
-            ButtonWidget button = addDrawableChild(new ButtonWidget(
+            ButtonWidget button = addRenderableWidget(new ButtonWidget(
                     x, top + 30, 67, 20,
-                    Text.translatable(tab.translationKey),
+                    Component.translatable(tab.translationKey),
                     ignored -> selectTab(tab)
             ));
             button.active = tab != selectedTab && tab.available(context);
             x += 70;
         }
 
-        addDrawableChild(new TooltipButtonWidget(
+        addRenderableWidget(new TooltipButtonWidget(
                 left + 270, top + 6, 18, 18,
-                Text.literal("?"),
-                Text.translatable("gui.chat_ai_context.help.tooltip"),
+                Component.literal("?"),
+                Component.translatable("gui.chat_ai_context.help.tooltip"),
                 ignored -> openHelp()
         ));
 
@@ -74,28 +73,28 @@ public class ChatAIContextScreen extends Screen {
         int promptY = top + 70;
         int promptHeight = 128;
         if (selectedTab == Tab.VILLAGER) {
-            nicknameField = addDrawableChild(new TextFieldWidget(
-                    textRenderer, left + 80, top + 70, 208, 15,
-                    Text.translatable("gui.chat_ai_context.nickname_placeholder")
+            nicknameField = addRenderableWidget(new EditBox(
+                    font, left + 80, top + 70, 208, 15,
+                    Component.translatable("gui.chat_ai_context.nickname_placeholder")
             ));
             nicknameField.setMaxLength(MAX_NICKNAME_LENGTH);
-            nicknameField.setPlaceholder(Text.translatable("gui.chat_ai_context.nickname_placeholder"));
-            nicknameField.setText(nickname);
+            nicknameField.setHint(Component.translatable("gui.chat_ai_context.nickname_placeholder"));
+            nicknameField.setValue(nickname);
             promptY += 20;
             promptHeight -= 20;
         }
 
-        promptField = addDrawableChild(new EditBoxWidget(
-                textRenderer, left + 12, promptY, 276, promptHeight,
-                Text.translatable("gui.chat_ai_context.placeholder"),
-                Text.translatable("gui.chat_ai_context.prompt")
+        promptField = addRenderableWidget(new MultiLineEditBox(
+                font, left + 12, promptY, 276, promptHeight,
+                Component.translatable("gui.chat_ai_context.placeholder"),
+                Component.translatable("gui.chat_ai_context.prompt")
         ));
-        promptField.setMaxLength(MAX_PROMPT_LENGTH);
-        promptField.setText(prompts.get(selectedTab));
+        promptField.setCharacterLimit(MAX_PROMPT_LENGTH);
+        promptField.setValue(prompts.get(selectedTab));
 
-        addDrawableChild(new ButtonWidget(
+        addRenderableWidget(new ButtonWidget(
                 width / 2 - 44, top + 205, 88, 20,
-                Text.translatable("gui.chat_ai_context.close"), ignored -> close()
+                Component.translatable("gui.chat_ai_context.close"), ignored -> onClose()
         ));
     }
 
@@ -105,7 +104,7 @@ public class ChatAIContextScreen extends Screen {
         }
         saveCurrent();
         selectedTab = tab;
-        clearChildren();
+        clearWidgets();
         init();
     }
 
@@ -114,8 +113,8 @@ public class ChatAIContextScreen extends Screen {
             return;
         }
 
-        String prompt = promptField.getText();
-        String updatedNickname = nicknameField == null ? nickname : nicknameField.getText().strip();
+        String prompt = promptField.getValue();
+        String updatedNickname = nicknameField == null ? nickname : nicknameField.getValue().strip();
         if (prompt.equals(prompts.get(selectedTab)) && updatedNickname.equals(nickname)) {
             return;
         }
@@ -133,9 +132,9 @@ public class ChatAIContextScreen extends Screen {
     }
 
     @Override
-    public void close() {
+    public void onClose() {
         saveCurrent();
-        super.close();
+        super.onClose();
     }
 
     @Override
@@ -147,7 +146,7 @@ public class ChatAIContextScreen extends Screen {
     }
 
     @Override
-    public void render(DrawContext drawContext, int mouseX, int mouseY, float delta) {
+    public void render(GuiGraphics drawContext, int mouseX, int mouseY, float delta) {
         renderBackground(drawContext);
 
         int left = width / 2 - 150;
@@ -155,14 +154,14 @@ public class ChatAIContextScreen extends Screen {
         drawContext.fill(0, 0, width, height, 0x90000000);
         drawContext.fill(left, top, left + 300, top + 232, 0xE0181B20);
         drawContext.fill(left + 1, top + 1, left + 299, top + 231, 0xE02A2E36);
-        drawContext.drawCenteredTextWithShadow(textRenderer, title, width / 2, top + 12, 0xFFFFFF);
+        drawContext.drawCenteredString(font, title, width / 2, top + 12, 0xFFFFFF);
 
-        Text contextName = Text.translatable(selectedTab.translationKey)
+        Component contextName = Component.translatable(selectedTab.translationKey)
                 .append(": ")
                 .append(selectedTab.name(context));
-        drawContext.drawTextWithShadow(textRenderer, contextName, left + 12, top + 59, CONTEXT_TEXT_COLOR);
+        drawContext.drawString(font, contextName, left + 12, top + 59, CONTEXT_TEXT_COLOR);
         if (selectedTab == Tab.VILLAGER) {
-            drawContext.drawTextWithShadow(textRenderer, Text.translatable("gui.chat_ai_context.nickname"), left + 12, top + 73, CONTEXT_TEXT_COLOR);
+            drawContext.drawString(font, Component.translatable("gui.chat_ai_context.nickname"), left + 12, top + 73, CONTEXT_TEXT_COLOR);
         }
 
         super.render(drawContext, mouseX, mouseY, delta);
@@ -170,7 +169,7 @@ public class ChatAIContextScreen extends Screen {
 
     private void openHelp() {
         try {
-            Util.getOperatingSystem().open(URI.create("https://github.com/Luke100000/minecraft-comes-alive/wiki/GPT3-based-conversations"));
+            Util.getPlatform().openUri(URI.create("https://github.com/Luke100000/minecraft-comes-alive/wiki/GPT3-based-conversations"));
         } catch (Exception e) {
             MCA.LOGGER.error("Unable to open ChatAI help", e);
         }
@@ -218,7 +217,7 @@ public class ChatAIContextScreen extends Screen {
 
             @Override
             String name(ChatAIContextResponse context) {
-                return Text.translatable("gui.chat_ai_context.world_name").getString();
+                return Component.translatable("gui.chat_ai_context.world_name").getString();
             }
         };
 

@@ -1,11 +1,11 @@
 package net.mca.client.resources;
 
+import com.mojang.blaze3d.platform.NativeImage;
 import net.mca.entity.VillagerLike;
 import net.mca.entity.ai.Genetics;
 import net.mca.entity.ai.Traits;
-import net.minecraft.client.texture.NativeImage;
-import net.minecraft.util.math.ColorHelper;
-import net.minecraft.util.math.MathHelper;
+import net.minecraft.util.FastColor;
+import net.minecraft.util.Mth;
 
 public final class EyeTextureLayers {
     private static final int SCLERA_MIN_CHANNEL = 160;
@@ -37,16 +37,16 @@ public final class EyeTextureLayers {
             return ALBINISM_EYE_COLOR;
         }
 
-        float eyeColor = MathHelper.fractionalPart(
+        float eyeColor = Mth.frac(
                 villager.getGenetics().getGene(Genetics.FACE) + (shifted ? 0.43F : 0.0F)
         );
         if (eyeColor < 0.35F) {
-            return ColorHelper.Argb.lerp(eyeColor / 0.35F, BLUE_EYE_COLOR, GREEN_EYE_COLOR);
+            return FastColor.ARGB32.lerp(eyeColor / 0.35F, BLUE_EYE_COLOR, GREEN_EYE_COLOR);
         }
         if (eyeColor < 0.70F) {
-            return ColorHelper.Argb.lerp((eyeColor - 0.35F) / 0.35F, GREEN_EYE_COLOR, HAZEL_EYE_COLOR);
+            return FastColor.ARGB32.lerp((eyeColor - 0.35F) / 0.35F, GREEN_EYE_COLOR, HAZEL_EYE_COLOR);
         }
-        return ColorHelper.Argb.lerp((eyeColor - 0.70F) / 0.30F, HAZEL_EYE_COLOR, BROWN_EYE_COLOR);
+        return FastColor.ARGB32.lerp((eyeColor - 0.70F) / 0.30F, HAZEL_EYE_COLOR, BROWN_EYE_COLOR);
     }
 
     /**
@@ -57,7 +57,7 @@ public final class EyeTextureLayers {
      * @param brightness gene value in [0, 1] — 0 = darker, 0.5 = natural, 1 = brighter
      */
     public static int applyBrightness(int argb, float brightness) {
-        brightness = MathHelper.clamp(brightness, 0.0F, 1.0F);
+        brightness = Mth.clamp(brightness, 0.0F, 1.0F);
         float factor = 0.5F + brightness;
         int a = (argb >>> 24) & 0xFF;
         int r = scaleChannel((argb >>> 16) & 0xFF, factor);
@@ -67,7 +67,7 @@ public final class EyeTextureLayers {
     }
 
     private static int scaleChannel(int channel, float factor) {
-        return MathHelper.clamp(Math.round(channel * factor), 0, 255);
+        return Mth.clamp(Math.round(channel * factor), 0, 255);
     }
 
     public static Bounds findBounds(NativeImage image) {
@@ -78,7 +78,7 @@ public final class EyeTextureLayers {
 
         for (int x = 0; x < image.getWidth(); x++) {
             for (int y = 0; y < image.getHeight(); y++) {
-                int pixel = image.getColor(x, y);
+                int pixel = image.getPixelRGBA(x, y);
                 int alpha = (pixel >> 24) & 0xFF;
                 if (alpha == 0) {
                     continue;

@@ -1,6 +1,6 @@
 package net.mca.cobalt.network;
 
-import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.server.level.ServerPlayer;
 
 public abstract class NetworkHandler {
     private static Impl INSTANCE;
@@ -13,7 +13,7 @@ public abstract class NetworkHandler {
         INSTANCE.sendToServer(m);
     }
 
-    public static void sendToPlayer(Message m, ServerPlayerEntity e) {
+    public static void sendToPlayer(Message m, ServerPlayer e) {
         INSTANCE.sendToPlayer(m, e);
     }
 
@@ -26,6 +26,6 @@ public abstract class NetworkHandler {
 
         public abstract void sendToServer(Message m);
 
-        public abstract void sendToPlayer(Message m, ServerPlayerEntity e);
+        public abstract void sendToPlayer(Message m, ServerPlayer e);
     }
 }

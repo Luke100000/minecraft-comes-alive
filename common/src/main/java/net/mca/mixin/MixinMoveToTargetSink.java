@@ -4,26 +4,26 @@ import com.llamalad7.mixinextras.injector.ModifyReturnValue;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import net.mca.entity.VillagerEntityMCA;
-import net.minecraft.block.BedBlock;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.enums.BedPart;
-import net.minecraft.entity.Dismounting;
-import net.minecraft.entity.ai.brain.Activity;
-import net.minecraft.entity.ai.brain.Brain;
-import net.minecraft.entity.ai.brain.MemoryModuleType;
-import net.minecraft.entity.ai.brain.WalkTarget;
-import net.minecraft.entity.ai.brain.task.WanderAroundTask;
-import net.minecraft.entity.ai.pathing.EntityNavigation;
-import net.minecraft.entity.ai.pathing.LandPathNodeMaker;
-import net.minecraft.entity.ai.pathing.Path;
-import net.minecraft.entity.ai.pathing.PathNodeType;
-import net.minecraft.entity.mob.MobEntity;
-import net.minecraft.registry.tag.BlockTags;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Box;
-import net.minecraft.util.math.Direction;
-import net.minecraft.util.math.GlobalPos;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.core.GlobalPos;
+import net.minecraft.tags.BlockTags;
+import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.ai.Brain;
+import net.minecraft.world.entity.ai.behavior.MoveToTargetSink;
+import net.minecraft.world.entity.ai.memory.MemoryModuleType;
+import net.minecraft.world.entity.ai.memory.WalkTarget;
+import net.minecraft.world.entity.ai.navigation.PathNavigation;
+import net.minecraft.world.entity.schedule.Activity;
+import net.minecraft.world.entity.vehicle.DismountHelper;
+import net.minecraft.world.level.block.BedBlock;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.BedPart;
+import net.minecraft.world.level.pathfinder.BlockPathTypes;
+import net.minecraft.world.level.pathfinder.Path;
+import net.minecraft.world.level.pathfinder.WalkNodeEvaluator;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
@@ -33,7 +33,7 @@ import java.util.HashSet;
 import java.util.Optional;
 import java.util.Set;
 
-@Mixin(WanderAroundTask.class)
+@Mixin(MoveToTargetSink.class)
 abstract class MixinMoveToTargetSink {
     @Unique
     private static final String MCA_TRY_COMPUTE_PATH =
@@ -46,16 +46,16 @@ abstract class MixinMoveToTargetSink {
             method = MCA_TRY_COMPUTE_PATH,
             at = @At(
                     value = "INVOKE",
-                    target = "Lnet/minecraft/entity/ai/pathing/EntityNavigation;findPathTo(Lnet/minecraft/util/math/BlockPos;I)Lnet/minecraft/entity/ai/pathing/Path;"
+                    target = "Lnet/minecraft/world/entity/ai/navigation/PathNavigation;createPath(Lnet/minecraft/core/BlockPos;I)Lnet/minecraft/world/level/pathfinder/Path;"
             )
     )
     @Nullable
     private Path mca$createBedApproachPath(
-            EntityNavigation navigation,
+            PathNavigation navigation,
             BlockPos target,
             int reachRange,
             Operation<Path> original,
-            MobEntity mob,
+            Mob mob,
             WalkTarget walkTarget,
             long gameTime
     ) {
@@ -74,20 +74,20 @@ abstract class MixinMoveToTargetSink {
         // Keep partial paths too. Vanilla WanderAroundTask will follow a partial path and
         // retry later, which lets villagers make progress toward home even when the final
         // standing position is temporarily unreachable.
-        return navigation.findPathTo(approachTargets, 0);
+        return navigation.createPath(approachTargets, 0);
     }
 
     @ModifyReturnValue(method = MCA_REACHED_TARGET, at = @At("RETURN"))
     private boolean mca$acceptReachedBedApproach(
             boolean original,
-            MobEntity mob,
+            Mob mob,
             WalkTarget walkTarget
     ) {
         if (original) {
             return true;
         }
 
-        BlockPos bedPos = walkTarget.getLookTarget().getBlockPos();
+        BlockPos bedPos = walkTarget.getTarget().currentBlockPosition();
         BlockState bedState = mca$getTargetBedState(mob, bedPos);
         if (bedState == null) {
             return false;
@@ -95,7 +95,7 @@ abstract class MixinMoveToTargetSink {
 
         // Mirror vanilla's on-ground node-Y calculation, then use the same resolver
         // that produced the path targets so reachability has one source of truth.
-        BlockPos navigationPos = BlockPos.ofFloored(mob.getX(), mob.getY() + 0.5D, mob.getZ());
+        BlockPos navigationPos = BlockPos.containing(mob.getX(), mob.getY() + 0.5D, mob.getZ());
         for (BlockPos approach : mca$getBedApproachPositions(bedPos, bedState)) {
             if (approach.getX() != navigationPos.getX() || approach.getZ() != navigationPos.getZ()) {
                 continue;
@@ -108,38 +108,38 @@ abstract class MixinMoveToTargetSink {
 
     @Unique
     @Nullable
-    private static BlockState mca$getTargetBedState(MobEntity mob, BlockPos target) {
+    private static BlockState mca$getTargetBedState(Mob mob, BlockPos target) {
         if (!(mob instanceof VillagerEntityMCA villager) || villager.isSleeping()) {
             return null;
         }
 
         Brain<?> brain = villager.getBrain();
-        if (!brain.hasActivity(Activity.REST)) {
+        if (!brain.isActive(Activity.REST)) {
             return null;
         }
 
-        Optional<GlobalPos> homeMemory = brain.getOptionalMemory(MemoryModuleType.HOME);
+        Optional<GlobalPos> homeMemory = brain.getMemoryInternal(MemoryModuleType.HOME);
         if (homeMemory.isEmpty()) {
             return null;
         }
 
         GlobalPos home = homeMemory.get();
-        if (home.getDimension() != mob.getWorld().getRegistryKey()
-                || !home.getPos().equals(target)) {
+        if (home.dimension() != mob.level().dimension()
+                || !home.pos().equals(target)) {
             return null;
         }
 
-        BlockState state = mob.getWorld().getBlockState(target);
-        return state.isIn(BlockTags.BEDS)
-                && state.contains(BedBlock.FACING)
-                && state.contains(BedBlock.PART)
-                && state.get(BedBlock.PART) == BedPart.HEAD
+        BlockState state = mob.level().getBlockState(target);
+        return state.is(BlockTags.BEDS)
+                && state.hasProperty(BedBlock.FACING)
+                && state.hasProperty(BedBlock.PART)
+                && state.getValue(BedBlock.PART) == BedPart.HEAD
                 ? state
                 : null;
     }
 
     @Unique
-    private static Set<BlockPos> mca$getBedApproachPathTargets(MobEntity mob, BlockPos bedPos, BlockState bedState) {
+    private static Set<BlockPos> mca$getBedApproachPathTargets(Mob mob, BlockPos bedPos, BlockState bedState) {
         Set<BlockPos> targets = new HashSet<>();
         for (BlockPos approach : mca$getBedApproachPositions(bedPos, bedState)) {
             BlockPos target = mca$resolveBedApproachPathTarget(mob, approach);
@@ -152,66 +152,66 @@ abstract class MixinMoveToTargetSink {
 
     @Unique
     @Nullable
-    private static BlockPos mca$resolveBedApproachPathTarget(MobEntity mob, BlockPos approach) {
-        Vec3d standPosition = mca$findSafeBedApproachPosition(mob, approach);
+    private static BlockPos mca$resolveBedApproachPathTarget(Mob mob, BlockPos approach) {
+        Vec3 standPosition = mca$findSafeBedApproachPosition(mob, approach);
         if (standPosition == null) {
-            BlockState state = mob.getWorld().getBlockState(approach);
-            if (state.getCollisionShape(mob.getWorld(), approach).isEmpty()
-                    || state.isFullCube(mob.getWorld(), approach)) {
+            BlockState state = mob.level().getBlockState(approach);
+            if (state.getCollisionShape(mob.level(), approach).isEmpty()
+                    || state.isCollisionShapeFullBlock(mob.level(), approach)) {
                 return null;
             }
 
             // A top slab/stair occupies the approach block itself, so its walk node is
             // in the block above. Full blocks are deliberately excluded to avoid making
             // bookshelves and similar furniture valid bed approaches.
-            standPosition = mca$findSafeBedApproachPosition(mob, approach.up());
+            standPosition = mca$findSafeBedApproachPosition(mob, approach.above());
         }
 
         if (standPosition == null) {
             return null;
         }
 
-        BlockPos pathTarget = BlockPos.ofFloored(
+        BlockPos pathTarget = BlockPos.containing(
                 standPosition.x,
                 standPosition.y + 0.5D,
                 standPosition.z
         );
-        PathNodeType pathType = LandPathNodeMaker.getLandNodeType(mob.getWorld(), pathTarget.mutableCopy());
-        return pathType != PathNodeType.OPEN && mob.getPathfindingPenalty(pathType) >= 0.0F
+        BlockPathTypes pathType = WalkNodeEvaluator.getBlockPathTypeStatic(mob.level(), pathTarget.mutable());
+        return pathType != BlockPathTypes.OPEN && mob.getPathfindingMalus(pathType) >= 0.0F
                 ? pathTarget
                 : null;
     }
 
     @Unique
     @Nullable
-    private static Vec3d mca$findSafeBedApproachPosition(MobEntity mob, BlockPos approach) {
-        Vec3d standPosition = Dismounting.findRespawnPos(
-                mob.getType(), mob.getWorld(), approach, true
+    private static Vec3 mca$findSafeBedApproachPosition(Mob mob, BlockPos approach) {
+        Vec3 standPosition = DismountHelper.findSafeDismountLocation(
+                mob.getType(), mob.level(), approach, true
         );
         if (standPosition == null) {
             return null;
         }
 
-        Box box = mob.getBoundingBox().offset(
+        AABB box = mob.getBoundingBox().move(
                 standPosition.x - mob.getX(),
                 standPosition.y - mob.getY(),
                 standPosition.z - mob.getZ()
         );
-        return mob.getWorld().isSpaceEmpty(mob, box) ? standPosition : null;
+        return mob.level().noCollision(mob, box) ? standPosition : null;
     }
 
     @Unique
     private static Set<BlockPos> mca$getBedApproachPositions(BlockPos bedPos, BlockState bedState) {
-        Direction facing = bedState.get(BedBlock.FACING);
-        BlockPos footPos = bedPos.offset(facing.getOpposite());
+        Direction facing = bedState.getValue(BedBlock.FACING);
+        BlockPos footPos = bedPos.relative(facing.getOpposite());
 
         return Set.of(
-                bedPos.offset(facing),
-                bedPos.offset(facing.rotateYClockwise()),
-                bedPos.offset(facing.rotateYCounterclockwise()),
-                footPos.offset(facing.rotateYClockwise()),
-                footPos.offset(facing.rotateYCounterclockwise()),
-                footPos.offset(facing.getOpposite())
+                bedPos.relative(facing),
+                bedPos.relative(facing.getClockWise()),
+                bedPos.relative(facing.getCounterClockWise()),
+                footPos.relative(facing.getClockWise()),
+                footPos.relative(facing.getCounterClockWise()),
+                footPos.relative(facing.getOpposite())
         );
     }
 }

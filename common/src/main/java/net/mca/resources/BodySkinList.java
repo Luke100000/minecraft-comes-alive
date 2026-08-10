@@ -5,16 +5,15 @@ import net.mca.MCA;
 import net.mca.entity.ai.relationship.Gender;
 import net.mca.resources.data.skin.BodySkin;
 import net.mca.resources.data.skin.SkinListEntry;
-import net.minecraft.resource.JsonDataLoader;
-import net.minecraft.resource.ResourceManager;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.profiler.Profiler;
-
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.packs.resources.ResourceManager;
+import net.minecraft.server.packs.resources.SimpleJsonResourceReloadListener;
+import net.minecraft.util.profiling.ProfilerFiller;
 import java.util.HashMap;
 import java.util.Map;
 
-public class BodySkinList extends JsonDataLoader {
-    public static final Identifier ID = MCA.locate("skins/body");
+public class BodySkinList extends SimpleJsonResourceReloadListener {
+    public static final ResourceLocation ID = MCA.locate("skins/body");
     private static BodySkinList INSTANCE;
     public final HashMap<String, BodySkin> skins = new HashMap<>();
 
@@ -28,12 +27,12 @@ public class BodySkinList extends JsonDataLoader {
     }
 
     @Override
-    protected void apply(Map<Identifier, JsonElement> data, ResourceManager manager, Profiler profiler) {
+    protected void apply(Map<ResourceLocation, JsonElement> data, ResourceManager manager, ProfilerFiller profiler) {
         skins.clear();
         data.forEach(this::addEntries);
     }
 
-    private void addEntries(Identifier id, JsonElement file) {
+    private void addEntries(ResourceLocation id, JsonElement file) {
         SkinCatalogLoader.addBodySkins(skins, id, file);
     }
 
@@ -50,7 +49,7 @@ public class BodySkinList extends JsonDataLoader {
                         (a, b) -> a.entries.addAll(b.entries));
     }
 
-    public static Gender getGenderFromPath(Identifier id) {
+    public static Gender getGenderFromPath(ResourceLocation id) {
         String path = id.getPath();
         int slash = path.lastIndexOf('/');
         return Gender.byName(slash >= 0 ? path.substring(slash + 1) : path);

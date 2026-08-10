@@ -4,58 +4,58 @@ import com.google.gson.JsonObject;
 import net.mca.MCA;
 import net.mca.server.world.data.FamilyTree;
 import net.mca.server.world.data.FamilyTreeNode;
-import net.minecraft.advancement.criterion.AbstractCriterion;
-import net.minecraft.advancement.criterion.AbstractCriterionConditions;
-import net.minecraft.predicate.NumberRange;
-import net.minecraft.predicate.entity.AdvancementEntityPredicateDeserializer;
-import net.minecraft.predicate.entity.AdvancementEntityPredicateSerializer;
-import net.minecraft.predicate.entity.LootContextPredicate;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.util.Identifier;
+import net.minecraft.advancements.critereon.AbstractCriterionTriggerInstance;
+import net.minecraft.advancements.critereon.ContextAwarePredicate;
+import net.minecraft.advancements.critereon.DeserializationContext;
+import net.minecraft.advancements.critereon.MinMaxBounds;
+import net.minecraft.advancements.critereon.SerializationContext;
+import net.minecraft.advancements.critereon.SimpleCriterionTrigger;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerPlayer;
 
-public class FamilyCriterion extends AbstractCriterion<FamilyCriterion.Conditions> {
-    private static final Identifier ID = MCA.locate("family");
+public class FamilyCriterion extends SimpleCriterionTrigger<FamilyCriterion.Conditions> {
+    private static final ResourceLocation ID = MCA.locate("family");
 
     @Override
-    public Identifier getId() {
+    public ResourceLocation getId() {
         return ID;
     }
 
     @Override
-    public Conditions conditionsFromJson(JsonObject json, LootContextPredicate player, AdvancementEntityPredicateDeserializer deserializer) {
+    public Conditions createInstance(JsonObject json, ContextAwarePredicate player, DeserializationContext deserializer) {
         // quite limited, but I do not assume any more use cases
-        NumberRange.IntRange c = NumberRange.IntRange.fromJson(json.get("children"));
-        NumberRange.IntRange gc = NumberRange.IntRange.fromJson(json.get("grandchildren"));
+        MinMaxBounds.Ints c = MinMaxBounds.Ints.fromJson(json.get("children"));
+        MinMaxBounds.Ints gc = MinMaxBounds.Ints.fromJson(json.get("grandchildren"));
         return new Conditions(player, c, gc);
     }
 
-    public void trigger(ServerPlayerEntity player) {
-        FamilyTreeNode familyTree = FamilyTree.get(player.getServerWorld()).getOrCreate(player);
+    public void trigger(ServerPlayer player) {
+        FamilyTreeNode familyTree = FamilyTree.get(player.serverLevel()).getOrCreate(player);
         long c = familyTree.getRelatives(0, 1).count();
         long gc = familyTree.getRelatives(0, 2).count() - c;
 
         trigger(player, condition -> condition.test((int)c, (int)gc));
     }
 
-    public static class Conditions extends AbstractCriterionConditions {
-        private final NumberRange.IntRange children;
-        private final NumberRange.IntRange grandchildren;
+    public static class Conditions extends AbstractCriterionTriggerInstance {
+        private final MinMaxBounds.Ints children;
+        private final MinMaxBounds.Ints grandchildren;
 
-        public Conditions(LootContextPredicate player, NumberRange.IntRange children, NumberRange.IntRange grandchildren) {
+        public Conditions(ContextAwarePredicate player, MinMaxBounds.Ints children, MinMaxBounds.Ints grandchildren) {
             super(FamilyCriterion.ID, player);
             this.children = children;
             this.grandchildren = grandchildren;
         }
 
         public boolean test(int c, int gc) {
-            return children.test(c) && grandchildren.test(gc);
+            return children.matches(c) && grandchildren.matches(gc);
         }
 
         @Override
-        public JsonObject toJson(AdvancementEntityPredicateSerializer serializer) {
-            JsonObject json = super.toJson(serializer);
-            json.add("children", children.toJson());
-            json.add("grandchildren", grandchildren.toJson());
+        public JsonObject serializeToJson(SerializationContext serializer) {
+            JsonObject json = super.serializeToJson(serializer);
+            json.add("children", children.serializeToJson());
+            json.add("grandchildren", grandchildren.serializeToJson());
             return json;
         }
     }

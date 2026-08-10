@@ -1,50 +1,50 @@
 package net.mca.entity.ai.brain.tasks;
 
 import net.mca.entity.ai.RangedWeaponHelper;
-import net.minecraft.entity.CrossbowUser;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.ai.brain.MemoryModuleType;
-import net.minecraft.entity.ai.brain.task.CrossbowAttackTask;
-import net.minecraft.entity.ai.brain.task.LookTargetUtil;
-import net.minecraft.entity.mob.MobEntity;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.Hand;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.ai.behavior.BehaviorUtils;
+import net.minecraft.world.entity.ai.behavior.CrossbowAttack;
+import net.minecraft.world.entity.ai.memory.MemoryModuleType;
+import net.minecraft.world.entity.monster.CrossbowAttackMob;
 
-public final class ExtendedCrossbowAttackTask<E extends MobEntity & CrossbowUser, T extends LivingEntity> extends CrossbowAttackTask<E, T> {
+public final class ExtendedCrossbowAttackTask<E extends Mob & CrossbowAttackMob, T extends LivingEntity> extends CrossbowAttack<E, T> {
 
     @Override
-    protected boolean shouldRun(ServerWorld world, E entity) {
+    protected boolean checkExtraStartConditions(ServerLevel world, E entity) {
         LivingEntity target = getAttackTarget(entity);
-        Hand hand = RangedWeaponHelper.getCrossbowHoldingHand(entity);
+        InteractionHand hand = RangedWeaponHelper.getCrossbowHoldingHand(entity);
         return RangedWeaponHelper.isValidAttackTarget(entity, target)
                 && hand != null
-                && LookTargetUtil.isVisibleInMemory(entity, target)
-                && entity.squaredDistanceTo(target) <= RangedWeaponHelper.getAttackRangeSquared(entity, hand);
+                && BehaviorUtils.canSee(entity, target)
+                && entity.distanceToSqr(target) <= RangedWeaponHelper.getAttackRangeSquared(entity, hand);
     }
 
     @Override
-    protected void finishRunning(ServerWorld world, E entity, long time) {
-        super.finishRunning(world, entity, time);
-        entity.setCharging(false);
+    protected void stop(ServerLevel world, E entity, long time) {
+        super.stop(world, entity, time);
+        entity.setChargingCrossbow(false);
     }
 
     @Override
-    protected void tickState(E entity, LivingEntity target) {
-        if (state == CrossbowState.UNCHARGED) {
-            Hand hand = RangedWeaponHelper.getCrossbowHoldingHand(entity);
+    protected void crossbowAttack(E entity, LivingEntity target) {
+        if (crossbowState == CrossbowState.UNCHARGED) {
+            InteractionHand hand = RangedWeaponHelper.getCrossbowHoldingHand(entity);
             if (hand == null) {
                 return;
             }
-            entity.setCurrentHand(hand);
-            state = CrossbowState.CHARGING;
-            entity.setCharging(true);
+            entity.startUsingItem(hand);
+            crossbowState = CrossbowState.CHARGING;
+            entity.setChargingCrossbow(true);
             return;
         }
 
-        super.tickState(entity, target);
+        super.crossbowAttack(entity, target);
     }
 
     private static LivingEntity getAttackTarget(LivingEntity entity) {
-        return entity.getBrain().getOptionalMemory(MemoryModuleType.ATTACK_TARGET).orElse(null);
+        return entity.getBrain().getMemoryInternal(MemoryModuleType.ATTACK_TARGET).orElse(null);
     }
 }

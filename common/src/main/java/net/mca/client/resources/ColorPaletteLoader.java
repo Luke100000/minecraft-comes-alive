@@ -1,29 +1,28 @@
 package net.mca.client.resources;
 
 import net.mca.MCA;
-import net.minecraft.client.texture.NativeImage;
-import net.minecraft.resource.ResourceManager;
-import net.minecraft.resource.SinglePreparationResourceReloader;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.profiler.Profiler;
-
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.packs.resources.ResourceManager;
+import net.minecraft.server.packs.resources.SimplePreparableReloadListener;
+import net.minecraft.util.profiling.ProfilerFiller;
+import com.mojang.blaze3d.platform.NativeImage;
 import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
-public class ColorPaletteLoader extends SinglePreparationResourceReloader<Map<Identifier, ColorPalette.Data>> {
-    protected static final Identifier ID = new Identifier(MCA.MOD_ID, "color_palettes");
+public class ColorPaletteLoader extends SimplePreparableReloadListener<Map<ResourceLocation, ColorPalette.Data>> {
+    protected static final ResourceLocation ID = new ResourceLocation(MCA.MOD_ID, "color_palettes");
 
     @Override
-    protected Map<Identifier, ColorPalette.Data> prepare(ResourceManager manager, Profiler profiler) {
+    protected Map<ResourceLocation, ColorPalette.Data> prepare(ResourceManager manager, ProfilerFiller profiler) {
         return ColorPalette.REGISTRY.entrySet().stream().collect(Collectors.toMap(Map.Entry::getKey, entry -> {
             return loadPalette(entry.getKey(), manager);
         }));
     }
 
     @SuppressWarnings("deprecation")
-    private ColorPalette.Data loadPalette(Identifier id, ResourceManager manager) {
-        try (NativeImage img = NativeImage.read(manager.getResource(id).get().getInputStream())) {
+    private ColorPalette.Data loadPalette(ResourceLocation id, ResourceManager manager) {
+        try (NativeImage img = NativeImage.read(manager.getResource(id).get().open())) {
             return new ColorPalette.Data(
                     img.getWidth(),
                     img.getHeight(),
@@ -36,7 +35,7 @@ public class ColorPaletteLoader extends SinglePreparationResourceReloader<Map<Id
     }
 
     @Override
-    protected void apply(Map<Identifier, ColorPalette.Data> palettes, ResourceManager manager, Profiler profiler) {
+    protected void apply(Map<ResourceLocation, ColorPalette.Data> palettes, ResourceManager manager, ProfilerFiller profiler) {
         palettes.forEach((id, data) -> {
             if (ColorPalette.REGISTRY.containsKey(id)) {
                 ColorPalette.REGISTRY.get(id).data = Objects.requireNonNull(data);

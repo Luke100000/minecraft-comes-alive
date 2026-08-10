@@ -2,8 +2,7 @@ package net.mca.network.s2c;
 
 import net.mca.ClientProxy;
 import net.mca.cobalt.network.Message;
-import net.minecraft.entity.Entity;
-
+import net.minecraft.world.entity.Entity;
 import java.io.Serial;
 import java.util.UUID;
 
@@ -18,7 +17,7 @@ public class OpenGuiRequest implements Message {
     public final UUID villagerUuid;
 
     public OpenGuiRequest(OpenGuiRequest.Type gui, Entity villager) {
-        this(gui, villager.getId(), villager.getUuid());
+        this(gui, villager.getId(), villager.getUUID());
     }
 
     public OpenGuiRequest(OpenGuiRequest.Type gui, int villager) {

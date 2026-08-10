@@ -6,18 +6,17 @@ import net.mca.MCA;
 import net.mca.entity.ai.brain.sensor.ExplodingCreeperSensor;
 import net.mca.entity.ai.brain.sensor.GuardEnemiesSensor;
 import net.mca.entity.ai.brain.sensor.VillagerMCABabiesSensor;
-import net.minecraft.entity.ai.brain.Activity;
-import net.minecraft.entity.ai.brain.sensor.Sensor;
-import net.minecraft.entity.ai.brain.sensor.SensorType;
-import net.minecraft.registry.RegistryKeys;
-import net.minecraft.util.Identifier;
-
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.entity.ai.sensing.Sensor;
+import net.minecraft.world.entity.ai.sensing.SensorType;
+import net.minecraft.world.entity.schedule.Activity;
 import java.util.function.Supplier;
 
 public interface ActivityMCA {
 
-    DeferredRegister<Activity> ACTIVITIES = DeferredRegister.create(MCA.MOD_ID, RegistryKeys.ACTIVITY);
-    DeferredRegister<SensorType<?>> SENSORS = DeferredRegister.create(MCA.MOD_ID, RegistryKeys.SENSOR_TYPE);
+    DeferredRegister<Activity> ACTIVITIES = DeferredRegister.create(MCA.MOD_ID, Registries.ACTIVITY);
+    DeferredRegister<SensorType<?>> SENSORS = DeferredRegister.create(MCA.MOD_ID, Registries.SENSOR_TYPE);
 
     RegistrySupplier<Activity> CHORE = activity("chore");
     RegistrySupplier<Activity> GRIEVE = activity("grieve");
@@ -32,12 +31,12 @@ public interface ActivityMCA {
     }
 
     static RegistrySupplier<Activity> activity(String name) {
-        Identifier id = new Identifier(MCA.MOD_ID, name);
+        ResourceLocation id = new ResourceLocation(MCA.MOD_ID, name);
         return ACTIVITIES.register(id, () -> new Activity(id.toString()));
     }
 
     static <T extends Sensor<?>> RegistrySupplier<SensorType<T>> sensor(String name, Supplier<T> factory) {
-        Identifier id = new Identifier(MCA.MOD_ID, name);
+        ResourceLocation id = new ResourceLocation(MCA.MOD_ID, name);
         return SENSORS.register(id, () -> new SensorType<>(factory));
     }
 }

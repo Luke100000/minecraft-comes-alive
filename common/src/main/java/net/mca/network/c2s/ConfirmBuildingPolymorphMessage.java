@@ -3,10 +3,9 @@ package net.mca.network.c2s;
 import net.mca.cobalt.network.Message;
 import net.mca.server.world.data.Building;
 import net.mca.server.world.data.VillageManager;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.text.Text;
-import net.minecraft.util.math.BlockPos;
-
+import net.minecraft.core.BlockPos;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerPlayer;
 import java.io.Serial;
 import java.util.Locale;
 
@@ -28,9 +27,9 @@ public class ConfirmBuildingPolymorphMessage implements Message {
     }
 
     @Override
-    public void receive(ServerPlayerEntity player) {
-        VillageManager villages = VillageManager.get(player.getServerWorld());
-        Building.validationResult result = villages.processBuilding(BlockPos.fromLong(source), true, strictScan, chosenType);
-        player.sendMessage(Text.translatable("blueprint.scan." + result.name().toLowerCase(Locale.ENGLISH)), true);
+    public void receive(ServerPlayer player) {
+        VillageManager villages = VillageManager.get(player.serverLevel());
+        Building.validationResult result = villages.processBuilding(BlockPos.of(source), true, strictScan, chosenType);
+        player.displayClientMessage(Component.translatable("blueprint.scan." + result.name().toLowerCase(Locale.ENGLISH)), true);
     }
 }

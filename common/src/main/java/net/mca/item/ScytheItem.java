@@ -6,161 +6,165 @@ import net.mca.advancement.criterion.CriterionMCA;
 import net.mca.block.TombstoneBlock;
 import net.mca.entity.EntitiesMCA;
 import net.mca.util.localization.FlowingText;
-import net.minecraft.block.BlockState;
-import net.minecraft.client.item.TooltipContext;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.effect.StatusEffectInstance;
-import net.minecraft.entity.effect.StatusEffects;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.ItemUsageContext;
-import net.minecraft.item.SwordItem;
-import net.minecraft.item.ToolMaterials;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.sound.SoundEvent;
-import net.minecraft.sound.SoundEvents;
-import net.minecraft.text.Text;
+import net.minecraft.ChatFormatting;
+import net.minecraft.core.BlockPos;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.sounds.SoundEvent;
+import net.minecraft.sounds.SoundEvents;
 import net.minecraft.util.*;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.random.Random;
-import net.minecraft.world.World;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.InteractionResult;
+import net.minecraft.world.InteractionResultHolder;
+import net.minecraft.world.effect.MobEffectInstance;
+import net.minecraft.world.effect.MobEffects;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.SwordItem;
+import net.minecraft.world.item.Tiers;
+import net.minecraft.world.item.TooltipFlag;
+import net.minecraft.world.item.UseAnim;
+import net.minecraft.world.item.context.UseOnContext;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.state.BlockState;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
 
 public class ScytheItem extends SwordItem {
 
-    public ScytheItem(Settings settings) {
-        super(ToolMaterials.GOLD, 10, -2.4F, settings);
+    public ScytheItem(Properties settings) {
+        super(Tiers.GOLD, 10, -2.4F, settings);
     }
 
     @Override
-    public void appendTooltip(ItemStack stack, @Nullable World world, List<Text> tooltip, TooltipContext context) {
-        tooltip.addAll(FlowingText.wrap(Text.translatable(getTranslationKey(stack) + ".tooltip").formatted(Formatting.GRAY), 160));
+    public void appendHoverText(ItemStack stack, @Nullable Level world, List<Component> tooltip, TooltipFlag context) {
+        tooltip.addAll(FlowingText.wrap(Component.translatable(getDescriptionId(stack) + ".tooltip").withStyle(ChatFormatting.GRAY), 160));
     }
 
     @Override
-    public UseAction getUseAction(ItemStack stack) {
-        return UseAction.BLOCK;
+    public UseAnim getUseAnimation(ItemStack stack) {
+        return UseAnim.BLOCK;
     }
 
     @Override
-    public int getMaxUseTime(ItemStack stack) {
+    public int getUseDuration(ItemStack stack) {
         return 72000;
     }
 
     @Override
-    public void inventoryTick(ItemStack stack, World world, Entity entity, int slot, boolean selected) {
+    public void inventoryTick(ItemStack stack, Level world, Entity entity, int slot, boolean selected) {
         if (!(entity instanceof LivingEntity living)) {
             return;
         }
 
-        boolean active = stack.getOrCreateNbt().getBoolean("active");
+        boolean active = stack.getOrCreateTag().getBoolean("active");
 
-        Random r = entity.getWorld().random;
+        RandomSource r = entity.level().random;
 
         if (active != selected) {
-            stack.getOrCreateNbt().putBoolean("active", selected);
+            stack.getOrCreateTag().putBoolean("active", selected);
 
             float baseVolume = selected ? 0.75F : 0.25F;
-            entity.getWorld().playSound(null, entity.getBlockPos(), SoundsMCA.REAPER_SCYTHE_OUT.get(), entity.getSoundCategory(),
+            entity.level().playSound(null, entity.blockPosition(), SoundsMCA.REAPER_SCYTHE_OUT.get(), entity.getSoundSource(),
                     baseVolume + r.nextFloat() / 2F,
                     0.65F + r.nextFloat() / 10F
             );
         }
 
         if (selected) {
-            if (living.handSwingTicks == -1) {
-                entity.getWorld().playSound(null, entity.getBlockPos(), SoundsMCA.REAPER_SCYTHE_SWING.get(), entity.getSoundCategory(), 0.25F, 1);
+            if (living.swingTime == -1) {
+                entity.level().playSound(null, entity.blockPosition(), SoundsMCA.REAPER_SCYTHE_SWING.get(), entity.getSoundSource(), 0.25F, 1);
             }
         }
     }
 
     @Override
-    public TypedActionResult<ItemStack> use(World world, PlayerEntity user, Hand hand) {
-        user.setCurrentHand(hand);
+    public InteractionResultHolder<ItemStack> use(Level world, Player user, InteractionHand hand) {
+        user.startUsingItem(hand);
         return super.use(world, user, hand);
     }
 
     @Override
-    public ActionResult useOnBlock(ItemUsageContext context) {
-        if (hasSoul(context.getStack())) {
-            ActionResult result = use(context, false);
-            if (result == ActionResult.SUCCESS) {
-                setSoul(context.getStack(), false);
+    public InteractionResult useOn(UseOnContext context) {
+        if (hasSoul(context.getItemInHand())) {
+            InteractionResult result = use(context, false);
+            if (result == InteractionResult.SUCCESS) {
+                setSoul(context.getItemInHand(), false);
             }
-            if (result != ActionResult.PASS) {
+            if (result != InteractionResult.PASS) {
                 return result;
             }
         }
 
-        return super.useOnBlock(context);
+        return super.useOn(context);
     }
 
     @Override
-    public boolean hasGlint(ItemStack stack) {
-        return super.hasGlint(stack) || hasSoul(stack);
+    public boolean isFoil(ItemStack stack) {
+        return super.isFoil(stack) || hasSoul(stack);
     }
 
     @Override
-    public boolean postHit(ItemStack stack, LivingEntity target, LivingEntity attacker) {
-        if (target.getWorld().random.nextInt(50) > 40) {
-            target.addStatusEffect(new StatusEffectInstance(StatusEffects.WITHER, 1000, 1));
+    public boolean hurtEnemy(ItemStack stack, LivingEntity target, LivingEntity attacker) {
+        if (target.level().random.nextInt(50) > 40) {
+            target.addEffect(new MobEffectInstance(MobEffects.WITHER, 1000, 1));
         }
 
         SoundEvent sound = SoundsMCA.REAPER_SCYTHE_OUT.get();
 
-        if (!hasSoul(stack) && target.isDead() && (target.getType() == EntitiesMCA.MALE_VILLAGER.get() || target.getType() == EntitiesMCA.FEMALE_VILLAGER.get())) {
+        if (!hasSoul(stack) && target.isDeadOrDying() && (target.getType() == EntitiesMCA.MALE_VILLAGER.get() || target.getType() == EntitiesMCA.FEMALE_VILLAGER.get())) {
             setSoul(stack, true);
-            sound = SoundEvents.BLOCK_BELL_RESONATE;
+            sound = SoundEvents.BELL_RESONATE;
 
-            if (attacker instanceof ServerPlayerEntity) {
-                CriterionMCA.GENERIC_EVENT_CRITERION.trigger((ServerPlayerEntity)attacker, "scytheKill");
+            if (attacker instanceof ServerPlayer) {
+                CriterionMCA.GENERIC_EVENT_CRITERION.trigger((ServerPlayer)attacker, "scytheKill");
             }
         }
 
-        Random r = attacker.getWorld().random;
-        attacker.getWorld().playSound(null, attacker.getBlockPos(), sound, attacker.getSoundCategory(),
+        RandomSource r = attacker.level().random;
+        attacker.level().playSound(null, attacker.blockPosition(), sound, attacker.getSoundSource(),
                 0.75F + r.nextFloat() / 2F,
                 0.75F + r.nextFloat() / 2F
         );
 
-        return super.postHit(stack, target, attacker);
+        return super.hurtEnemy(stack, target, attacker);
     }
 
     @Override
-    public boolean canRepair(ItemStack stack, ItemStack ingredient) {
+    public boolean isValidRepairItem(ItemStack stack, ItemStack ingredient) {
         return stack.getItem() == ingredient.getItem();
     }
 
     public static void setSoul(ItemStack stack, boolean soul) {
-        stack.getOrCreateNbt().putBoolean("hasSoul", soul);
+        stack.getOrCreateTag().putBoolean("hasSoul", soul);
     }
 
     public static boolean hasSoul(ItemStack stack) {
-        return stack.hasNbt() && stack.getNbt().getBoolean("hasSoul");
+        return stack.hasTag() && stack.getTag().getBoolean("hasSoul");
     }
 
-    public static ActionResult use(ItemUsageContext context, boolean cure) {
-        World world = context.getWorld();
-        BlockPos pos = context.getBlockPos();
+    public static InteractionResult use(UseOnContext context, boolean cure) {
+        Level world = context.getLevel();
+        BlockPos pos = context.getClickedPos();
         BlockState state = world.getBlockState(pos);
 
-        if (state.isIn(TagsMCA.Blocks.TOMBSTONES)) {
+        if (state.is(TagsMCA.Blocks.TOMBSTONES)) {
             return TombstoneBlock.Data.of(world.getBlockEntity(pos)).filter(TombstoneBlock.Data::hasEntity).map(data -> {
-                if (!context.getWorld().isClient) {
-                    CriterionMCA.GENERIC_EVENT_CRITERION.trigger((ServerPlayerEntity)context.getPlayer(), cure ? "staffOfLife" : "scytheRevive");
+                if (!context.getLevel().isClientSide) {
+                    CriterionMCA.GENERIC_EVENT_CRITERION.trigger((ServerPlayer)context.getPlayer(), cure ? "staffOfLife" : "scytheRevive");
                 }
 
-                if (!world.isClient && !data.isResurrecting()) {
+                if (!world.isClientSide && !data.isResurrecting()) {
                     data.startResurrecting(cure);
-                    return ActionResult.SUCCESS;
+                    return InteractionResult.SUCCESS;
                 }
 
-                return ActionResult.PASS;
-            }).orElse(ActionResult.FAIL);
+                return InteractionResult.PASS;
+            }).orElse(InteractionResult.FAIL);
         }
-        return ActionResult.PASS;
+        return InteractionResult.PASS;
     }
 }

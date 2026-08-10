@@ -11,14 +11,13 @@ import net.mca.util.WorldUtils;
 import net.mca.util.network.datasync.CDataManager;
 import net.mca.util.network.datasync.CDataParameter;
 import net.mca.util.network.datasync.CParameter;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.SpawnReason;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.item.ItemStack;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.text.Text;
-import net.minecraft.util.math.random.Random;
-
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.util.RandomSource;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.MobSpawnType;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -77,8 +76,8 @@ public class Pregnancy {
 
             VillagerEntityMCA child = createChild(getGender(), father);
 
-            child.setPosition(mother.getX(), mother.getY(), mother.getZ());
-            WorldUtils.spawnEntity(mother.getWorld(), child, SpawnReason.BREEDING);
+            child.setPos(mother.getX(), mother.getY(), mother.getZ());
+            WorldUtils.spawnEntity(mother.level(), child, MobSpawnType.BREEDING);
         });
     }
 
@@ -99,13 +98,13 @@ public class Pregnancy {
             }
 
             setPregnant(true);
-            mother.setTrackedValue(IS_BABY_MALE, mother.getWorld().random.nextBoolean());
+            mother.setTrackedValue(IS_BABY_MALE, mother.level().random.nextBoolean());
             return true;
         }).orElse(false);
     }
 
     public VillagerEntityMCA createChild(Gender gender, VillagerEntityMCA partner) {
-        VillagerEntityMCA child = Objects.requireNonNull(gender.getVillagerType().create(mother.getWorld()));
+        VillagerEntityMCA child = Objects.requireNonNull(gender.getVillagerType().create(mother.level()));
 
         child.getGenetics().combine(partner.getGenetics(), mother.getGenetics());
         child.getTraits().inherit(partner.getTraits());
@@ -116,12 +115,12 @@ public class Pregnancy {
 
         // advancement
         child.getRelationships().getFamily(2, 0)
-                .filter(ServerPlayerEntity.class::isInstance)
-                .map(ServerPlayerEntity.class::cast)
+                .filter(ServerPlayer.class::isInstance)
+                .map(ServerPlayer.class::cast)
                 .forEach(CriterionMCA.FAMILY::trigger);
 
         // civil entry
-        mother.getResidency().getHomeVillage().flatMap(Village::getCivilRegistry).ifPresent(r -> r.addText(Text.translatable("events.baby", mother.getName(), partner.getName())));
+        mother.getResidency().getHomeVillage().flatMap(Village::getCivilRegistry).ifPresent(r -> r.addText(Component.translatable("events.baby", mother.getName(), partner.getName())));
 
         return child;
     }
@@ -137,7 +136,7 @@ public class Pregnancy {
     }
 
     public void procreate(Entity spouse) {
-        Random random = mother.getRandom();
+        RandomSource random = mother.getRandom();
 
         //make sure this villager is registered in the family tree
         int count = 1;
@@ -146,7 +145,7 @@ public class Pregnancy {
         }
 
         // advancement
-        if (spouse instanceof ServerPlayerEntity player) {
+        if (spouse instanceof ServerPlayer player) {
             CriterionMCA.BABY_CRITERION.trigger(player, count);
         }
 
@@ -154,8 +153,8 @@ public class Pregnancy {
         for (int i = 0; i < count; i++) {
             boolean flip = mother.getGenetics().getGender() == Gender.MALE;
             ItemStack stack = BabyItem.createItem(flip ? spouse : mother, flip ? mother : spouse, seed);
-            if (!(spouse instanceof PlayerEntity player && player.giveItemStack(stack))) {
-                mother.getInventory().addStack(stack);
+            if (!(spouse instanceof Player player && player.addItem(stack))) {
+                mother.getInventory().addItem(stack);
             }
         }
     }

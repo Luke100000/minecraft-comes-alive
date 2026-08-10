@@ -1,6 +1,7 @@
 package net.mca.client.gui;
 
 import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.vertex.PoseStack;
 import net.mca.Config;
 import net.mca.MCA;
 import net.mca.MCAClient;
@@ -8,26 +9,24 @@ import net.mca.cobalt.network.NetworkHandler;
 import net.mca.network.c2s.DestinyMessage;
 import net.mca.util.compat.ButtonWidget;
 import net.mca.util.localization.FlowingText;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.util.math.MatrixStack;
-import net.minecraft.text.MutableText;
-import net.minecraft.text.Text;
-import net.minecraft.util.Identifier;
-
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.resources.ResourceLocation;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
 public class DestinyScreen extends VillagerEditorScreen {
-    private static final Identifier LOGO_TEXTURE = new Identifier("mca:textures/banner.png");
+    private static final ResourceLocation LOGO_TEXTURE = new ResourceLocation("mca:textures/banner.png");
     private static final int DESTINY_COLUMNS = 3;
     private static final int DESTINY_ROWS = 3;
     private static final int DESTINY_LOCATIONS_PER_PAGE = DESTINY_COLUMNS * DESTINY_ROWS;
     private static final int DESTINY_BUTTON_GAP = 4;
     private static final int DESTINY_BUTTON_HORIZONTAL_PADDING = 16;
-    private final LinkedList<Text> story = new LinkedList<>();
+    private final LinkedList<Component> story = new LinkedList<>();
     private String location;
     private boolean teleported = false;
     private final boolean allowTeleportation;
@@ -41,7 +40,7 @@ public class DestinyScreen extends VillagerEditorScreen {
     }
 
     @Override
-    public boolean shouldPause() {
+    public boolean isPauseScreen() {
         return true;
     }
 
@@ -51,7 +50,7 @@ public class DestinyScreen extends VillagerEditorScreen {
     }
 
     @Override
-    public void close() {
+    public void onClose() {
         if (!page.equals("general") && !page.equals("story")) {
             setPage("destiny");
         }
@@ -71,42 +70,42 @@ public class DestinyScreen extends VillagerEditorScreen {
     }
 
     @Override
-    public void renderBackground(DrawContext context) {
-        assert MinecraftClient.getInstance().world != null;
-        renderBackgroundTexture(context);
+    public void renderBackground(GuiGraphics context) {
+        assert Minecraft.getInstance().level != null;
+        renderDirtBackground(context);
     }
 
-    private void drawScaledText(DrawContext context, Text text, int x, int y, float scale) {
-        final MatrixStack matrices = context.getMatrices();
-        matrices.push();
+    private void drawScaledText(GuiGraphics context, Component text, int x, int y, float scale) {
+        final PoseStack matrices = context.pose();
+        matrices.pushPose();
         matrices.scale(scale, scale, scale);
-        context.drawCenteredTextWithShadow(textRenderer, text, (int) (x / scale), (int) (y / scale), 0xffffffff);
-        matrices.pop();
+        context.drawCenteredString(font, text, (int) (x / scale), (int) (y / scale), 0xffffffff);
+        matrices.popPose();
     }
 
     @Override
-    public void render(DrawContext context, int mouseX, int mouseY, float delta) {
+    public void render(GuiGraphics context, int mouseX, int mouseY, float delta) {
         super.render(context, mouseX, mouseY, delta);
 
-        final MatrixStack matrices = context.getMatrices();
+        final PoseStack matrices = context.pose();
 
         switch (page) {
             case "general" -> {
-                drawScaledText(context, Text.translatable("gui.destiny.whoareyou"), width / 2, height / 2 - 24, 1.5f);
-                matrices.push();
+                drawScaledText(context, Component.translatable("gui.destiny.whoareyou"), width / 2, height / 2 - 24, 1.5f);
+                matrices.pushPose();
                 matrices.scale(0.25f, 0.25f, 0.25f);
                 RenderSystem.enableBlend();
                 RenderSystem.defaultBlendFunc();
                 RenderSystem.setShaderColor(1, 1, 1, 1);
-                context.drawTexture(LOGO_TEXTURE, width * 2 - 512, -40, 0, 0, 1024, 512, 1024, 512);
-                matrices.pop();
+                context.blit(LOGO_TEXTURE, width * 2 - 512, -40, 0, 0, 1024, 512, 1024, 512);
+                matrices.popPose();
             }
             case "destiny" ->
-                    drawScaledText(context, Text.translatable("gui.destiny.journey"), width / 2, height / 2 - 48, 1.5f);
+                    drawScaledText(context, Component.translatable("gui.destiny.journey"), width / 2, height / 2 - 48, 1.5f);
             case "story" -> {
-                List<Text> text = FlowingText.wrap(story.getFirst(), 256);
+                List<Component> text = FlowingText.wrap(story.getFirst(), 256);
                 int y = (int) (height / 2.0 - 20 - 7.5f * text.size());
-                for (Text t : text) {
+                for (Component t : text) {
                     drawScaledText(context, t, width / 2, y, 1.25f);
                     y += 15;
                 }
@@ -128,8 +127,8 @@ public class DestinyScreen extends VillagerEditorScreen {
         return Config.getServerConfig().destinySpawnLocations;
     }
 
-    private MutableText getLocationName(String location) {
-        return Text.translatableWithFallback("gui.destiny." + getPath(location), getFallbackLocationName(location));
+    private MutableComponent getLocationName(String location) {
+        return Component.translatableWithFallback("gui.destiny." + getPath(location), getFallbackLocationName(location));
     }
 
     private String getFallbackLocationName(String location) {
@@ -174,13 +173,13 @@ public class DestinyScreen extends VillagerEditorScreen {
             int rowEnd = Math.min(rowStart + DESTINY_COLUMNS, visibleLocations.size());
             int entriesInRow = rowEnd - rowStart;
             int[] buttonWidths = new int[entriesInRow];
-            MutableText[] names = new MutableText[entriesInRow];
+            MutableComponent[] names = new MutableComponent[entriesInRow];
             int rowWidth = DESTINY_BUTTON_GAP * Math.max(0, entriesInRow - 1);
 
             for (int column = 0; column < entriesInRow; column++) {
-                MutableText name = getLocationName(visibleLocations.get(rowStart + column));
+                MutableComponent name = getLocationName(visibleLocations.get(rowStart + column));
                 names[column] = name;
-                buttonWidths[column] = textRenderer.getWidth(name) + DESTINY_BUTTON_HORIZONTAL_PADDING;
+                buttonWidths[column] = font.width(name) + DESTINY_BUTTON_HORIZONTAL_PADDING;
                 rowWidth += buttonWidths[column];
             }
 
@@ -191,16 +190,16 @@ public class DestinyScreen extends VillagerEditorScreen {
                 String modName = getLocationModName(location);
                 ButtonWidget button = modName == null
                         ? new ButtonWidget(buttonX, buttonY, buttonWidths[column], 20, names[column], sender -> selectStory(location))
-                        : new ButtonWidget(buttonX, buttonY, buttonWidths[column], 20, names[column], sender -> selectStory(location), Text.literal(modName));
-                addDrawableChild(button);
+                        : new ButtonWidget(buttonX, buttonY, buttonWidths[column], 20, names[column], sender -> selectStory(location), Component.literal(modName));
+                addRenderableWidget(button);
                 buttonX += buttonWidths[column] + DESTINY_BUTTON_GAP;
             }
         }
 
         if (pageCount > 1) {
             int paginationY = height / 2 + 68;
-            ButtonWidget previous = addDrawableChild(new ButtonWidget(
-                    width / 2 - 68, paginationY, 40, 20, Text.literal("<"),
+            ButtonWidget previous = addRenderableWidget(new ButtonWidget(
+                    width / 2 - 68, paginationY, 40, 20, Component.literal("<"),
                     sender -> {
                         destinyPage--;
                         setPage("destiny");
@@ -208,14 +207,14 @@ public class DestinyScreen extends VillagerEditorScreen {
             ));
             previous.active = destinyPage > 0;
 
-            ButtonWidget pageIndicator = addDrawableChild(new ButtonWidget(
+            ButtonWidget pageIndicator = addRenderableWidget(new ButtonWidget(
                     width / 2 - 24, paginationY, 48, 20,
-                    Text.literal((destinyPage + 1) + "/" + pageCount), sender -> {
+                    Component.literal((destinyPage + 1) + "/" + pageCount), sender -> {
             }));
             pageIndicator.active = false;
 
-            ButtonWidget next = addDrawableChild(new ButtonWidget(
-                    width / 2 + 28, paginationY, 40, 20, Text.literal(">"),
+            ButtonWidget next = addRenderableWidget(new ButtonWidget(
+                    width / 2 + 28, paginationY, 40, 20, Component.literal(">"),
                     sender -> {
                         destinyPage++;
                         setPage("destiny");
@@ -231,7 +230,7 @@ public class DestinyScreen extends VillagerEditorScreen {
         if (page.equals("destiny") && !allowTeleportation) {
             NetworkHandler.sendToServer(new DestinyMessage(true));
             MCAClient.getDestinyManager().allowClosing();
-            super.close();
+            super.onClose();
             return;
         } else if (page.equals("destiny")) {
             //there is only one entry
@@ -242,7 +241,7 @@ public class DestinyScreen extends VillagerEditorScreen {
         }
 
         this.page = page;
-        clearChildren();
+        clearWidgets();
         switch (page) {
             case "general" -> {
                 drawName(width / 2 - DATA_WIDTH / 2, height / 2, name -> {
@@ -255,7 +254,7 @@ public class DestinyScreen extends VillagerEditorScreen {
 
                 addModelSelectionWidgets(width / 2 - DATA_WIDTH / 2, height / 2 + 24 + 22);
 
-                acceptWidget = addDrawableChild(new ButtonWidget(width / 2 - 32, height / 2 + 60 + 22, 64, 20, Text.translatable("gui.button.accept"), sender -> {
+                acceptWidget = addRenderableWidget(new ButtonWidget(width / 2 - 32, height / 2 + 60 + 22, 64, 20, Component.translatable("gui.button.accept"), sender -> {
                     if (Config.getServerConfig().allowBodyCustomizationInDestiny) {
                         setPage("body");
                     } else if (Config.getServerConfig().allowTraitCustomizationInDestiny) {
@@ -267,7 +266,7 @@ public class DestinyScreen extends VillagerEditorScreen {
             }
             case "destiny" -> drawDestinyLocations(destinyLocations);
             case "story" ->
-                    addDrawableChild(new ButtonWidget(width / 2 - 48, height / 2 + 32, 96, 20, Text.translatable("gui.destiny.next"), sender -> {
+                    addRenderableWidget(new ButtonWidget(width / 2 - 48, height / 2 + 32, 96, 20, Component.translatable("gui.destiny.next"), sender -> {
                         //we teleport early here to avoid initial flickering
                         if (!teleported) {
                             NetworkHandler.sendToServer(new DestinyMessage(location));
@@ -278,7 +277,7 @@ public class DestinyScreen extends VillagerEditorScreen {
                             story.remove(0);
                         } else {
                             NetworkHandler.sendToServer(new DestinyMessage(true));
-                            super.close();
+                            super.onClose();
                         }
                     }));
             default -> super.setPage(page);
@@ -287,10 +286,10 @@ public class DestinyScreen extends VillagerEditorScreen {
 
     private void selectStory(String location) {
         story.clear();
-        story.add(Text.translatable("destiny.story.reason"));
+        story.add(Component.translatable("destiny.story.reason"));
         Map<String, String> map = Config.getServerConfig().destinyLocationsToTranslationMap;
-        story.add(Text.translatable(map.getOrDefault(location, map.getOrDefault("default", "missing_default"))));
-        story.add(Text.translatableWithFallback("destiny.story." + getPath(location), getLocationName(location).getString()));
+        story.add(Component.translatable(map.getOrDefault(location, map.getOrDefault("default", "missing_default"))));
+        story.add(Component.translatableWithFallback("destiny.story." + getPath(location), getLocationName(location).getString()));
         this.location = location;
         setPage("story");
     }

@@ -10,10 +10,9 @@ import net.mca.resources.data.skin.BodySkin;
 import net.mca.resources.data.skin.Clothing;
 import net.mca.resources.data.skin.HairStyle;
 import net.mca.resources.data.skin.LayeredHair;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.InvalidIdentifierException;
-import net.minecraft.util.JsonHelper;
-
+import net.minecraft.ResourceLocationException;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.GsonHelper;
 import java.util.List;
 import java.util.Map;
 
@@ -24,7 +23,7 @@ final class SkinCatalogLoader {
     private SkinCatalogLoader() {
     }
 
-    static void addClothing(Map<String, Clothing> clothing, Identifier id, JsonElement file) {
+    static void addClothing(Map<String, Clothing> clothing, ResourceLocation id, JsonElement file) {
         Gender fileGender = BodySkinList.getGenderFromPath(id);
         for (SkinListJson.Entry entry : SkinListJson.entries(id, file)) {
             Gender entryGender = SkinListJson.resolveGender(fileGender, entry);
@@ -33,23 +32,23 @@ final class SkinCatalogLoader {
                 continue;
             }
             JsonObject metadata = entry.metadata();
-            String profession = metadata.has("profession") && !metadata.get("profession").isJsonNull() ? JsonHelper.getString(metadata, "profession", null) : null;
-            boolean exclude = JsonHelper.getBoolean(metadata, "exclude", false);
-            int temperature = JsonHelper.getInt(metadata, "temperature", 0);
+            String profession = metadata.has("profession") && !metadata.get("profession").isJsonNull() ? GsonHelper.getAsString(metadata, "profession", null) : null;
+            boolean exclude = GsonHelper.getAsBoolean(metadata, "exclude", false);
+            int temperature = GsonHelper.getAsInt(metadata, "temperature", 0);
             clothing.put(entry.identifier(), new Clothing(entry.identifier(), profession, temperature, exclude, entryGender));
         }
     }
 
-    static void addBodySkins(Map<String, BodySkin> bodySkins, Identifier id, JsonElement file) {
+    static void addBodySkins(Map<String, BodySkin> bodySkins, ResourceLocation id, JsonElement file) {
         Gender fileGender = BodySkinList.getGenderFromPath(id);
         for (SkinListJson.Entry entry : SkinListJson.entries(id, file)) {
             Gender entryGender = SkinListJson.resolveGender(fileGender, entry);
-            float chance = JsonHelper.getFloat(entry.metadata(), "chance", 1.0f);
+            float chance = GsonHelper.getAsFloat(entry.metadata(), "chance", 1.0f);
             bodySkins.put(entry.identifier(), new BodySkin(entry.identifier(), entryGender, chance));
         }
     }
 
-    static void addHairStyles(Map<String, HairStyle> hairStyles, Identifier id, JsonElement file) {
+    static void addHairStyles(Map<String, HairStyle> hairStyles, ResourceLocation id, JsonElement file) {
         HAIR_STYLE_FILE_CODEC.parse(JsonOps.INSTANCE, file)
                 .resultOrPartial(error -> MCA.LOGGER.warn("Invalid hair style list {}: {}", id, error))
                 .ifPresent(entries -> {
@@ -59,20 +58,20 @@ final class SkinCatalogLoader {
                 });
     }
 
-    static void addLayeredHair(Map<String, LayeredHair> layeredHair, Identifier id, JsonElement file) {
+    static void addLayeredHair(Map<String, LayeredHair> layeredHair, ResourceLocation id, JsonElement file) {
         addLayeredHair(layeredHair, id, SkinListJson.textureCollection(id, file));
     }
 
-    static void addLayeredHair(Map<String, LayeredHair> layeredHair, Identifier id, List<String> textures) {
+    static void addLayeredHair(Map<String, LayeredHair> layeredHair, ResourceLocation id, List<String> textures) {
         LayeredHair.Category category = getLayeredHairCategory(id);
         textures.forEach(texture -> addLayeredHair(layeredHair, texture, category));
     }
 
     private static void addLayeredHair(Map<String, LayeredHair> layeredHair, String texture, LayeredHair.Category category) {
-        Identifier parsed;
+        ResourceLocation parsed;
         try {
-            parsed = new Identifier(texture);
-        } catch (InvalidIdentifierException exception) {
+            parsed = new ResourceLocation(texture);
+        } catch (ResourceLocationException exception) {
             MCA.LOGGER.warn("Invalid layered hair texture identifier {}", texture, exception);
             return;
         }
@@ -84,7 +83,7 @@ final class SkinCatalogLoader {
         layeredHair.put(LayeredHairList.key(entry.getIdentifier(), entry.getGender(), entry.getCategory()), entry);
     }
 
-    private static LayeredHair.Category getLayeredHairCategory(Identifier id) {
+    private static LayeredHair.Category getLayeredHairCategory(ResourceLocation id) {
         String[] parts = id.getPath().split("/");
         for (String part : parts) {
             LayeredHair.Category category = LayeredHair.Category.byNameOrNull(part);

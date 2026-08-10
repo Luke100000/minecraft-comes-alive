@@ -2,9 +2,8 @@ package net.mca.entity.ai;
 
 import com.google.gson.JsonObject;
 import net.mca.entity.VillagerEntityMCA;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.server.network.ServerPlayerEntity;
-
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.server.level.ServerPlayer;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -21,18 +20,18 @@ public class LongTermMemory {
         this.entity = entity;
     }
 
-    public void writeToNbt(NbtCompound nbt) {
-        NbtCompound memory = new NbtCompound();
+    public void writeToNbt(CompoundTag nbt) {
+        CompoundTag memory = new CompoundTag();
         for (Map.Entry<String, Long> entry : memories.entrySet()) {
             memory.putLong(entry.getKey(), entry.getValue());
         }
         nbt.put("longTermMemory", memory);
     }
 
-    public void readFromNbt(NbtCompound nbt) {
-        NbtCompound memory = nbt.getCompound("longTermMemory");
+    public void readFromNbt(CompoundTag nbt) {
+        CompoundTag memory = nbt.getCompound("longTermMemory");
         memories.clear();
-        for (String key : memory.getKeys()) {
+        for (String key : memory.getAllKeys()) {
             memories.put(key, memory.getLong(key));
         }
     }
@@ -43,7 +42,7 @@ public class LongTermMemory {
     }
 
     public void remember(String id, long time) {
-        long currentTime = entity.getWorld().getTime();
+        long currentTime = entity.level().getGameTime();
         if (memories.containsKey(id)) {
             currentTime = Math.max(currentTime, memories.get(id));
         }
@@ -52,10 +51,10 @@ public class LongTermMemory {
 
     public long getMemory(String id) {
         if (memories.containsKey(id)) {
-            if (entity.getWorld().getTime() > memories.get(id)) {
+            if (entity.level().getGameTime() > memories.get(id)) {
                 memories.remove(id);
             } else {
-                return memories.get(id) - entity.getWorld().getTime();
+                return memories.get(id) - entity.level().getGameTime();
             }
         }
         return 0;
@@ -65,13 +64,13 @@ public class LongTermMemory {
         return getMemory(id) > 0;
     }
 
-    public static String parseId(JsonObject json, ServerPlayerEntity player) {
+    public static String parseId(JsonObject json, ServerPlayer player) {
         String id = json.get("id").getAsString();
         if (json.has("var")) {
             switch (json.get("var").getAsString()) {
                 case "player" -> {
                     assert player != null;
-                    id += "." + player.getUuid().toString();
+                    id += "." + player.getUUID().toString();
                 }
             }
         }

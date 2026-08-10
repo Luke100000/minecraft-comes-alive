@@ -5,15 +5,15 @@ import net.mca.entity.ai.relationship.EntityRelationship;
 import net.mca.entity.ai.relationship.Gender;
 import net.mca.entity.ai.relationship.RelationshipState;
 import net.mca.util.NbtHelper;
-import net.minecraft.entity.Entity;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.nbt.NbtElement;
-import net.minecraft.registry.Registries;
-import net.minecraft.text.MutableText;
-import net.minecraft.text.Text;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.Util;
-import net.minecraft.village.VillagerProfession;
+import net.minecraft.Util;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.Tag;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.npc.VillagerProfession;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.Serial;
@@ -34,7 +34,7 @@ public final class FamilyTreeNode implements Serializable {
     private Gender gender;
 
     private String name;
-    private String profession = Registries.VILLAGER_PROFESSION.getId(VillagerProfession.NONE).toString();
+    private String profession = BuiltInRegistries.VILLAGER_PROFESSION.getKey(VillagerProfession.NONE).toString();
 
     private final UUID id;
 
@@ -60,21 +60,21 @@ public final class FamilyTreeNode implements Serializable {
         this.mother = mother;
     }
 
-    public FamilyTreeNode(FamilyTree rootNode, UUID id, NbtCompound nbt) {
+    public FamilyTreeNode(FamilyTree rootNode, UUID id, CompoundTag nbt) {
         this(
                 rootNode,
                 id,
                 nbt.getString("name"),
                 nbt.getBoolean("isPlayer"),
                 Gender.byId(nbt.getInt("gender")),
-                nbt.getUuid("father"),
-                nbt.getUuid("mother")
+                nbt.getUUID("father"),
+                nbt.getUUID("mother")
         );
-        children.addAll(NbtHelper.toList(nbt.getList("children", NbtElement.COMPOUND_TYPE), c -> ((NbtCompound)c).getUuid("uuid")));
+        children.addAll(NbtHelper.toList(nbt.getList("children", Tag.TAG_COMPOUND), c -> ((CompoundTag)c).getUUID("uuid")));
         profession = nbt.getString("profession");
         deceased = nbt.getBoolean("isDeceased");
-        if (nbt.containsUuid("spouse")) {
-            partner = nbt.getUuid("spouse");
+        if (nbt.hasUUID("spouse")) {
+            partner = nbt.getUUID("spouse");
         }
         relationshipState = RelationshipState.byId(nbt.getInt("marriageState"));
     }
@@ -85,7 +85,7 @@ public final class FamilyTreeNode implements Serializable {
 
     private void markDirty() {
         if (rootNode != null) {
-            rootNode.markDirty();
+            rootNode.setDirty();
         }
     }
 
@@ -108,16 +108,16 @@ public final class FamilyTreeNode implements Serializable {
     }
 
     public void setProfession(VillagerProfession profession) {
-        this.profession = Registries.VILLAGER_PROFESSION.getId(profession).toString();
+        this.profession = BuiltInRegistries.VILLAGER_PROFESSION.getKey(profession).toString();
         markDirty();
     }
 
     public VillagerProfession getProfession() {
-        return Registries.VILLAGER_PROFESSION.get(getProfessionId());
+        return BuiltInRegistries.VILLAGER_PROFESSION.get(getProfessionId());
     }
 
-    public Identifier getProfessionId() {
-        return Identifier.tryParse(profession);
+    public ResourceLocation getProfessionId() {
+        return ResourceLocation.tryParse(profession);
     }
 
     public String getProfessionName() {
@@ -130,8 +130,8 @@ public final class FamilyTreeNode implements Serializable {
         return MCA.isBlankString(professionName) ? "mca.none" : professionName;
     }
 
-    public MutableText getProfessionText() {
-        return Text.translatable("entity.minecraft.villager." + getProfessionName());
+    public MutableComponent getProfessionText() {
+        return Component.translatable("entity.minecraft.villager." + getProfessionName());
     }
 
     public boolean isPlayer() {
@@ -168,14 +168,14 @@ public final class FamilyTreeNode implements Serializable {
 
     public void updatePartner(@Nullable Entity newPartner, @Nullable RelationshipState state) {
         //cancel relationship with previous partner
-        if (!this.partner.equals(Util.NIL_UUID) && (newPartner == null || !this.partner.equals(newPartner.getUuid()))) {
+        if (!this.partner.equals(Util.NIL_UUID) && (newPartner == null || !this.partner.equals(newPartner.getUUID()))) {
             getRoot().getOrEmpty(this.partner).ifPresent(n -> {
                 n.partner = Util.NIL_UUID;
                 n.relationshipState = RelationshipState.SINGLE;
             });
         }
 
-        this.partner = newPartner == null ? Util.NIL_UUID : newPartner.getUuid();
+        this.partner = newPartner == null ? Util.NIL_UUID : newPartner.getUUID();
         this.relationshipState = state == null && newPartner == null ? RelationshipState.SINGLE : state;
 
         // ensure the family tree has an entry
@@ -183,7 +183,7 @@ public final class FamilyTreeNode implements Serializable {
             rootNode.getOrCreate(newPartner);
         }
 
-        rootNode.markDirty();
+        rootNode.setDirty();
     }
 
     public void updatePartner(FamilyTreeNode spouse) {
@@ -454,19 +454,19 @@ public final class FamilyTreeNode implements Serializable {
         });
     }
 
-    public NbtCompound save() {
-        NbtCompound nbt = new NbtCompound();
+    public CompoundTag save() {
+        CompoundTag nbt = new CompoundTag();
         nbt.putString("name", name);
         nbt.putBoolean("isPlayer", isPlayer);
         nbt.putBoolean("isDeceased", deceased);
         nbt.putInt("gender", gender.getId());
-        nbt.putUuid("father", father);
-        nbt.putUuid("mother", mother);
-        nbt.putUuid("spouse", partner);
+        nbt.putUUID("father", father);
+        nbt.putUUID("mother", mother);
+        nbt.putUUID("spouse", partner);
         nbt.putInt("marriageState", relationshipState.ordinal());
         nbt.put("children", NbtHelper.fromList(children, child -> {
-            NbtCompound n = new NbtCompound();
-            n.putUuid("uuid", child);
+            CompoundTag n = new CompoundTag();
+            n.putUUID("uuid", child);
             return n;
         }));
         return nbt;

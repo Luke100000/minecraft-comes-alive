@@ -2,8 +2,8 @@ package net.mca.mixin.client.journeymap;
 
 import net.mca.client.render.JourneyMapIconBridge;
 import net.mca.entity.VillagerLike;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.util.Identifier;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.entity.LivingEntity;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Pseudo;
 import org.spongepowered.asm.mixin.Shadow;
@@ -15,7 +15,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(targets = "journeymap.client.model.entity.EntityDTO", remap = false)
 public abstract class MixinEntityDTO {
     @Shadow(remap = false)
-    public abstract void setEntityIconLocation(Identifier entityIconLocation);
+    public abstract void setEntityIconLocation(ResourceLocation entityIconLocation);
 
     @Shadow(remap = false)
     public abstract void setDrawOutline(boolean drawOutline);
@@ -26,7 +26,7 @@ public abstract class MixinEntityDTO {
             return;
         }
 
-        Identifier icon = JourneyMapIconBridge.getOrCreateFaceIcon(villager);
+        ResourceLocation icon = JourneyMapIconBridge.getOrCreateFaceIcon(villager);
         if (icon != null) {
             this.setDrawOutline(false);
             this.setEntityIconLocation(icon);

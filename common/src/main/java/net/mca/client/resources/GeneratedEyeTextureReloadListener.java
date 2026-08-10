@@ -2,19 +2,19 @@ package net.mca.client.resources;
 
 import net.mca.client.render.DynamicSkinCache;
 import net.mca.client.render.layer.FaceLayer;
-import net.minecraft.resource.ResourceManager;
-import net.minecraft.resource.SinglePreparationResourceReloader;
-import net.minecraft.util.profiler.Profiler;
+import net.minecraft.server.packs.resources.ResourceManager;
+import net.minecraft.server.packs.resources.SimplePreparableReloadListener;
+import net.minecraft.util.profiling.ProfilerFiller;
 
 /** Releases client-generated textures before resource reloads replace their source assets. */
-public class GeneratedEyeTextureReloadListener extends SinglePreparationResourceReloader<Void> {
+public class GeneratedEyeTextureReloadListener extends SimplePreparableReloadListener<Void> {
     @Override
-    protected Void prepare(ResourceManager manager, Profiler profiler) {
+    protected Void prepare(ResourceManager manager, ProfilerFiller profiler) {
         return null;
     }
 
     @Override
-    protected void apply(Void ignored, ResourceManager manager, Profiler profiler) {
+    protected void apply(Void ignored, ResourceManager manager, ProfilerFiller profiler) {
         FaceLayer.clearGeneratedEyeTextureCache();
         DynamicSkinCache.clear();
     }

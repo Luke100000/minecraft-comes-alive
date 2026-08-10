@@ -3,16 +3,15 @@ package net.mca.entity.ai.navigation;
 import com.google.gson.JsonSyntaxException;
 import net.mca.Config;
 import net.mca.util.RegistryHelper;
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.registry.Registries;
-import net.minecraft.registry.RegistryKeys;
-import net.minecraft.registry.tag.TagKey;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Box;
-import net.minecraft.world.BlockView;
-
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.tags.TagKey;
+import net.minecraft.world.level.BlockGetter;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.AABB;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Predicate;
@@ -36,7 +35,7 @@ public final class PathfindingBlacklist {
         return matches(state, cachedMatchers);
     }
 
-    public static boolean overlapsSpecialCollisionBlock(BlockView world, Box box) {
+    public static boolean overlapsSpecialCollisionBlock(BlockGetter world, AABB box) {
         refreshCollisionCacheIfNeeded();
         int minX = floorMin(box.minX);
         int maxX = floorMax(box.maxX);
@@ -44,7 +43,7 @@ public final class PathfindingBlacklist {
         int maxY = floorMax(box.maxY);
         int minZ = floorMin(box.minZ);
         int maxZ = floorMax(box.maxZ);
-        BlockPos.Mutable pos = new BlockPos.Mutable();
+        BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
 
         for (int x = minX; x <= maxX; x++) {
             for (int y = minY; y <= maxY; y++) {
@@ -102,15 +101,15 @@ public final class PathfindingBlacklist {
             }
 
             if (entry.charAt(0) == '#') {
-                Identifier identifier = new Identifier(entry.substring(1));
-                TagKey<Block> tag = TagKey.of(RegistryKeys.BLOCK, identifier);
+                ResourceLocation identifier = new ResourceLocation(entry.substring(1));
+                TagKey<Block> tag = TagKey.create(Registries.BLOCK, identifier);
                 if (RegistryHelper.isTagEmpty(tag)) {
                     throw new JsonSyntaxException("Unknown block tag in " + configName + " '" + identifier + "'");
                 }
-                matchers.add(state -> state.isIn(tag));
+                matchers.add(state -> state.is(tag));
             } else {
-                Identifier identifier = new Identifier(entry);
-                matchers.add(state -> Registries.BLOCK.getId(state.getBlock()).equals(identifier));
+                ResourceLocation identifier = new ResourceLocation(entry);
+                matchers.add(state -> BuiltInRegistries.BLOCK.getKey(state.getBlock()).equals(identifier));
             }
         }
         return List.copyOf(matchers);

@@ -1,12 +1,11 @@
 package net.mca.client.book.pages;
 
-import net.minecraft.text.Text;
-
 import java.util.LinkedList;
 import java.util.List;
+import net.minecraft.network.chat.Component;
 
 public abstract class ListPage extends Page {
-    final List<Text> text;
+    final List<Component> text;
 
     int page;
 
@@ -14,7 +13,7 @@ public abstract class ListPage extends Page {
         this.text = new LinkedList<>();
     }
 
-    public ListPage(List<Text> text) {
+    public ListPage(List<Component> text) {
         this.text = text;
     }
 

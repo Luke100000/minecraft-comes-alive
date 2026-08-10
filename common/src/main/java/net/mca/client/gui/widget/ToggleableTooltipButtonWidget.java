@@ -1,11 +1,11 @@
 package net.mca.client.gui.widget;
 
-import net.minecraft.text.MutableText;
+import net.minecraft.network.chat.MutableComponent;
 
 public class ToggleableTooltipButtonWidget extends TooltipButtonWidget {
     public boolean toggle;
 
-    public ToggleableTooltipButtonWidget(int x, int y, int width, int height, boolean toggle, MutableText message, MutableText tooltip, PressAction onPress) {
+    public ToggleableTooltipButtonWidget(int x, int y, int width, int height, boolean toggle, MutableComponent message, MutableComponent tooltip, OnPress onPress) {
         super(x, y, width, height, message, tooltip, onPress);
 
         this.toggle = toggle;

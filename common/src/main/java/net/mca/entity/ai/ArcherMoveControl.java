@@ -1,12 +1,12 @@
 package net.mca.entity.ai;
 
-import net.minecraft.entity.ai.pathing.EntityNavigation;
-import net.minecraft.entity.ai.pathing.PathNodeMaker;
-import net.minecraft.entity.ai.pathing.PathNodeType;
-import net.minecraft.entity.attribute.EntityAttributes;
-import net.minecraft.entity.mob.MobEntity;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.MathHelper;
+import net.minecraft.core.BlockPos;
+import net.minecraft.util.Mth;
+import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.entity.ai.navigation.PathNavigation;
+import net.minecraft.world.level.pathfinder.BlockPathTypes;
+import net.minecraft.world.level.pathfinder.NodeEvaluator;
 
 /**
  * Move control used by MCA archers so strafing can report when terrain blocks or redirects a step.
@@ -16,7 +16,7 @@ public class ArcherMoveControl extends MCAMoveControl {
     private StrafeResult lastStrafeResult = StrafeResult.NONE;
     private boolean archerStrafeRequested;
 
-    public ArcherMoveControl(MobEntity entity) {
+    public ArcherMoveControl(Mob entity) {
         super(entity);
     }
 
@@ -37,13 +37,13 @@ public class ArcherMoveControl extends MCAMoveControl {
     }
 
     @Override
-    public void strafeTo(float forwards, float sideways) {
+    public void strafe(float forwards, float sideways) {
         this.archerStrafeRequested = false;
-        super.strafeTo(forwards, sideways);
+        super.strafe(forwards, sideways);
     }
 
     public void strafeForArcher(float forwards, float sideways) {
-        super.strafeTo(forwards, sideways);
+        super.strafe(forwards, sideways);
         this.archerStrafeRequested = true;
     }
 
@@ -55,7 +55,7 @@ public class ArcherMoveControl extends MCAMoveControl {
             return;
         }
 
-        if (this.state == State.STRAFE && this.archerStrafeRequested) {
+        if (this.operation == Operation.STRAFE && this.archerStrafeRequested) {
             tickArcherStrafe();
             this.archerStrafeRequested = false;
             return;
@@ -68,18 +68,18 @@ public class ArcherMoveControl extends MCAMoveControl {
     private void clearArcherStrafeState() {
         this.archerStrafeRequested = false;
         if (this.lastStrafeResult != StrafeResult.NONE) {
-            this.entity.setSidewaysSpeed(0.0F);
-            this.entity.setForwardSpeed(0.0F);
+            this.mob.setXxa(0.0F);
+            this.mob.setZza(0.0F);
             this.lastStrafeResult = StrafeResult.NONE;
         }
     }
 
     private void tickArcherStrafe() {
-        float movementSpeed = (float) this.entity.getAttributeValue(EntityAttributes.GENERIC_MOVEMENT_SPEED);
-        float modifiedSpeed = (float) this.speed * movementSpeed;
-        float forward = this.forwardMovement;
-        float sideways = this.sidewaysMovement;
-        float distance = MathHelper.sqrt(forward * forward + sideways * sideways);
+        float movementSpeed = (float) this.mob.getAttributeValue(Attributes.MOVEMENT_SPEED);
+        float modifiedSpeed = (float) this.speedModifier * movementSpeed;
+        float forward = this.strafeForwards;
+        float sideways = this.strafeRight;
+        float distance = Mth.sqrt(forward * forward + sideways * sideways);
         if (distance < 1.0F) {
             distance = 1.0F;
         }
@@ -87,36 +87,36 @@ public class ArcherMoveControl extends MCAMoveControl {
         distance = modifiedSpeed / distance;
         forward *= distance;
         sideways *= distance;
-        float sin = MathHelper.sin(this.entity.getYaw() * ((float) Math.PI / 180.0F));
-        float cos = MathHelper.cos(this.entity.getYaw() * ((float) Math.PI / 180.0F));
+        float sin = Mth.sin(this.mob.getYRot() * ((float) Math.PI / 180.0F));
+        float cos = Mth.cos(this.mob.getYRot() * ((float) Math.PI / 180.0F));
         float dx = forward * cos - sideways * sin;
         float dz = sideways * cos + forward * sin;
         if (!isWalkable(dx, dz)) {
-            if (this.sidewaysMovement != 0.0F) {
-                this.sidewaysMovement = -this.sidewaysMovement;
+            if (this.strafeRight != 0.0F) {
+                this.strafeRight = -this.strafeRight;
                 this.lastStrafeResult = StrafeResult.REDIRECTED;
             } else {
-                this.forwardMovement = 0.0F;
-                this.sidewaysMovement = 0.0F;
+                this.strafeForwards = 0.0F;
+                this.strafeRight = 0.0F;
                 this.lastStrafeResult = StrafeResult.BLOCKED;
             }
         } else {
             this.lastStrafeResult = StrafeResult.ACCEPTED;
         }
 
-        this.entity.setMovementSpeed(modifiedSpeed);
-        this.entity.setForwardSpeed(this.forwardMovement);
-        this.entity.setSidewaysSpeed(this.sidewaysMovement);
-        this.state = State.WAIT;
+        this.mob.setSpeed(modifiedSpeed);
+        this.mob.setZza(this.strafeForwards);
+        this.mob.setXxa(this.strafeRight);
+        this.operation = Operation.WAIT;
     }
 
     private boolean isWalkable(float dx, float dz) {
-        EntityNavigation navigation = this.entity.getNavigation();
+        PathNavigation navigation = this.mob.getNavigation();
         if (navigation != null) {
-            PathNodeMaker nodeMaker = navigation.getNodeMaker();
-            BlockPos pos = BlockPos.ofFloored(this.entity.getX() + dx, this.entity.getBlockY(), this.entity.getZ() + dz);
+            NodeEvaluator nodeMaker = navigation.getNodeEvaluator();
+            BlockPos pos = BlockPos.containing(this.mob.getX() + dx, this.mob.getBlockY(), this.mob.getZ() + dz);
             if (nodeMaker != null
-                    && nodeMaker.getNodeType(this.entity.getWorld(), pos.getX(), pos.getY(), pos.getZ(), this.entity) != PathNodeType.WALKABLE) {
+                    && nodeMaker.getBlockPathType(this.mob.level(), pos.getX(), pos.getY(), pos.getZ(), this.mob) != BlockPathTypes.WALKABLE) {
                 return false;
             }
         }

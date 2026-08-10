@@ -4,26 +4,26 @@ import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import net.mca.ProfessionsMCA;
 import net.mca.entity.VillagerEntityMCA;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.damage.DamageSource;
-import net.minecraft.entity.projectile.PersistentProjectileEntity;
+import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.projectile.AbstractArrow;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 
-@Mixin(PersistentProjectileEntity.class)
+@Mixin(AbstractArrow.class)
 public abstract class MixinAbstractArrow {
     @WrapOperation(
-            method = "onEntityHit",
+            method = "onHitEntity",
             at = @At(
                     value = "INVOKE",
-                    target = "Lnet/minecraft/entity/Entity;damage(Lnet/minecraft/entity/damage/DamageSource;F)Z"
+                    target = "Lnet/minecraft/world/entity/Entity;hurt(Lnet/minecraft/world/damagesource/DamageSource;F)Z"
             )
     )
     private boolean mca$allowArcherFollowUpHits(Entity target, DamageSource source, float amount, Operation<Boolean> original) {
-        VillagerEntityMCA archer = mca$getMcaArcherOwner((PersistentProjectileEntity)(Object)this);
+        VillagerEntityMCA archer = mca$getMcaArcherOwner((AbstractArrow)(Object)this);
         if (target instanceof LivingEntity livingTarget && archer != null) {
-            livingTarget.timeUntilRegen = 0;
+            livingTarget.invulnerableTime = 0;
         }
 
         boolean hurt = original.call(target, source, amount);
@@ -33,7 +33,7 @@ public abstract class MixinAbstractArrow {
         return hurt;
     }
 
-    private VillagerEntityMCA mca$getMcaArcherOwner(PersistentProjectileEntity arrow) {
+    private VillagerEntityMCA mca$getMcaArcherOwner(AbstractArrow arrow) {
         Entity owner = arrow.getOwner();
         if (owner instanceof VillagerEntityMCA villager && villager.getProfession() == ProfessionsMCA.ARCHER.get()) {
             return villager;

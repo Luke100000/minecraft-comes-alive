@@ -1,7 +1,7 @@
 package net.mca.network;
 
 import net.mca.cobalt.network.Message;
-import net.minecraft.nbt.NbtCompound;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtIo;
 
 import java.io.*;
@@ -12,11 +12,11 @@ public abstract class NbtDataMessage implements Message {
 
     private final Data data;
 
-    public NbtDataMessage(NbtCompound data) {
+    public NbtDataMessage(CompoundTag data) {
         this.data = new Data(data);
     }
 
-    public NbtCompound getData() {
+    public CompoundTag getData() {
         return data.nbt;
     }
 
@@ -24,9 +24,9 @@ public abstract class NbtDataMessage implements Message {
         @Serial
         private static final long serialVersionUID = 5728742776742369248L;
 
-        transient NbtCompound nbt;
+        transient CompoundTag nbt;
 
-        Data(NbtCompound nbt) {
+        Data(CompoundTag nbt) {
             this.nbt = nbt;
         }
 

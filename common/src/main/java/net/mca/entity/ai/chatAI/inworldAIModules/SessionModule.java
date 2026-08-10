@@ -8,8 +8,7 @@ import net.mca.entity.ai.chatAI.inworldAIModules.api.Requests;
 import net.mca.entity.ai.chatAI.inworldAIModules.api.Session;
 import net.mca.entity.ai.chatAI.inworldAIModules.api.TriggerEvent;
 import net.mca.server.world.data.PlayerSaveData;
-import net.minecraft.server.network.ServerPlayerEntity;
-
+import net.minecraft.server.level.ServerPlayer;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -46,7 +45,7 @@ public class SessionModule {
      * @param statusUpdate status-update event for the Character.
      * @return {@code Optional.EMPTY} if the request failed, Optional containing Interaction object otherwise
      */
-    public Optional<Interaction> getResponse(ServerPlayerEntity player, String msg, TriggerEvent statusUpdate) {
+    public Optional<Interaction> getResponse(ServerPlayer player, String msg, TriggerEvent statusUpdate) {
         // Creates a new session if needed
         long currentTime = System.currentTimeMillis();
         if(!openSessionIfNeeded(player, currentTime)) {
@@ -54,11 +53,11 @@ public class SessionModule {
         }
 
         // Gets current session for player with this character and makes request
-        OpenSession openSession = openSessionMap.get(player.getUuid());
+        OpenSession openSession = openSessionMap.get(player.getUUID());
 
         // Sends the status update every x messages
         if (openSession.getInteractionCount() %  STATUS_UPDATE_FREQUENCY == 0) {
-            sendTriggerRequest(openSession.getSession(), statusUpdate, player.getUuid().toString());
+            sendTriggerRequest(openSession.getSession(), statusUpdate, player.getUUID().toString());
         }
 
         Optional<Interaction> interactionOptional = sendTextRequest(openSession.getSession(), msg);
@@ -149,10 +148,10 @@ public class SessionModule {
      * @param currentTime The time the session was opened
      * @return {@code true} if a valid session exists, {@code false} if creation of a new session failed
      */
-    private boolean openSessionIfNeeded(ServerPlayerEntity player, long currentTime) {
-        OpenSession openSession = openSessionMap.getOrDefault(player.getUuid(), new OpenSession(null, 0));
+    private boolean openSessionIfNeeded(ServerPlayer player, long currentTime) {
+        OpenSession openSession = openSessionMap.getOrDefault(player.getUUID(), new OpenSession(null, 0));
         if (openSession.getSession() == null || currentTime - openSession.getLastInteractionMillis() > SESSION_MAX_VALID_TIME) {
-            Optional<Session> sessionOptional = openSessionRequest(player.getUuid().toString(),
+            Optional<Session> sessionOptional = openSessionRequest(player.getUUID().toString(),
                     player.getName().getString(),
                     PlayerSaveData.get(player).getGender().getDataName());
 
@@ -161,7 +160,7 @@ public class SessionModule {
                 return false;
             } else {
                 OpenSession newSession = new OpenSession(sessionOptional.get(), currentTime);
-                openSessionMap.put(player.getUuid(), newSession);
+                openSessionMap.put(player.getUUID(), newSession);
             }
         }
         return true;

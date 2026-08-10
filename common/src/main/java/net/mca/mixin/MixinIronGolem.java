@@ -1,23 +1,23 @@
 package net.mca.mixin;
 
 import net.mca.entity.VillagerEntityMCA;
-import net.minecraft.entity.EntityType;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.passive.IronGolemEntity;
-import net.minecraft.world.World;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.animal.IronGolem;
+import net.minecraft.world.level.Level;
 import org.spongepowered.asm.mixin.Mixin;
 
-@Mixin(IronGolemEntity.class)
+@Mixin(IronGolem.class)
 public abstract class MixinIronGolem extends LivingEntity {
-    protected MixinIronGolem(EntityType<? extends LivingEntity> type, World world) {
+    protected MixinIronGolem(EntityType<? extends LivingEntity> type, Level world) {
         super(type, world);
     }
 
     @Override
-    public boolean canTarget(LivingEntity target) {
+    public boolean canAttack(LivingEntity target) {
         if (target instanceof VillagerEntityMCA) {
             return false;
         }
-        return super.canTarget(target);
+        return super.canAttack(target);
     }
 }

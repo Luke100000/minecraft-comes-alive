@@ -7,19 +7,18 @@ import net.mca.resources.data.skin.Hair;
 import net.mca.resources.data.skin.HairStyle;
 import net.mca.resources.data.skin.LayeredHair;
 import net.mca.resources.data.skin.SkinListEntry;
-import net.minecraft.resource.JsonDataLoader;
-import net.minecraft.resource.ResourceManager;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.profiler.Profiler;
-
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.packs.resources.ResourceManager;
+import net.minecraft.server.packs.resources.SimpleJsonResourceReloadListener;
+import net.minecraft.util.profiling.ProfilerFiller;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Function;
 
-public class HairStyleList extends JsonDataLoader {
-    public static final Identifier ID = MCA.locate("skins/hair_styles");
+public class HairStyleList extends SimpleJsonResourceReloadListener {
+    public static final ResourceLocation ID = MCA.locate("skins/hair_styles");
     private static HairStyleList INSTANCE;
     public final HashMap<String, HairStyle> styles = new HashMap<>();
 
@@ -33,7 +32,7 @@ public class HairStyleList extends JsonDataLoader {
     }
 
     @Override
-    protected void apply(Map<Identifier, JsonElement> data, ResourceManager manager, Profiler profiler) {
+    protected void apply(Map<ResourceLocation, JsonElement> data, ResourceManager manager, ProfilerFiller profiler) {
         styles.clear();
 
         data.forEach((id, file) -> SkinCatalogLoader.addHairStyles(styles, id, file));

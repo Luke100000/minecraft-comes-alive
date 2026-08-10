@@ -2,13 +2,11 @@ package net.mca.client.gui;
 
 import net.mca.client.resources.Icon;
 import net.mca.entity.interaction.Constraint;
-import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.client.gui.widget.ButtonWidget;
-import net.minecraft.client.gui.widget.ClickableWidget;
-import net.minecraft.text.Text;
-import net.minecraft.util.Identifier;
-
+import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.AbstractWidget;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 import java.util.*;
 
 public abstract class AbstractDynamicScreen extends Screen {
@@ -22,7 +20,7 @@ public abstract class AbstractDynamicScreen extends Screen {
 
     private Set<Constraint> constraints = new HashSet<>();
 
-    protected AbstractDynamicScreen(Text title) {
+    protected AbstractDynamicScreen(Component title) {
         super(title);
     }
 
@@ -40,7 +38,7 @@ public abstract class AbstractDynamicScreen extends Screen {
     }
 
     @Override
-    public void render(DrawContext context, int mouseX, int mouseY, float delta) {
+    public void render(GuiGraphics context, int mouseX, int mouseY, float delta) {
         super.render(context, mouseX, mouseY, delta);
         this.mouseX = mouseX;
         this.mouseY = mouseY;
@@ -60,21 +58,21 @@ public abstract class AbstractDynamicScreen extends Screen {
 
     protected void enableAllButtons() {
         children().forEach(b -> {
-            if (b instanceof ClickableWidget) {
-                ((ClickableWidget)b).active = true;
+            if (b instanceof AbstractWidget) {
+                ((AbstractWidget)b).active = true;
             }
         });
     }
 
     protected void disableAllButtons() {
         this.children().forEach(b -> {
-            if (b instanceof ClickableWidget) {
+            if (b instanceof AbstractWidget) {
                 if (b instanceof ButtonEx) {
                     if (!((ButtonEx)b).getApiButton().identifier().equals("gui.button.backarrow")) {
-                        ((ClickableWidget)b).active = false;
+                        ((AbstractWidget)b).active = false;
                     }
                 } else {
-                    ((ClickableWidget)b).active = false;
+                    ((AbstractWidget)b).active = false;
                 }
             }
         });
@@ -88,27 +86,27 @@ public abstract class AbstractDynamicScreen extends Screen {
     public void setLayout(String guiKey) {
         activeScreen = guiKey;
 
-        clearChildren();
+        clearWidgets();
         MCAScreens.getInstance().getScreen(guiKey).ifPresent(buttons -> {
             for (Button b : buttons) {
-                addDrawableChild(new ButtonEx(b, this));
+                addRenderableWidget(new ButtonEx(b, this));
             }
         });
     }
 
-    protected void drawIcon(DrawContext context, Identifier texture, String key) {
+    protected void drawIcon(GuiGraphics context, ResourceLocation texture, String key) {
         Icon icon = MCAScreens.getInstance().getIcon(key);
-        context.drawTexture(texture, (int)(icon.x() / iconScale), (int)(icon.y() / iconScale), icon.u(), icon.v(), 16, 16);
+        context.blit(texture, (int)(icon.x() / iconScale), (int)(icon.y() / iconScale), icon.u(), icon.v(), 16, 16);
     }
 
-    protected void drawHoveringIconText(DrawContext context, Text text, String key) {
+    protected void drawHoveringIconText(GuiGraphics context, Component text, String key) {
         Icon icon = MCAScreens.getInstance().getIcon(key);
-        context.drawTooltip(textRenderer, text, icon.x() + 16, icon.y() + 20);
+        context.renderTooltip(font, text, icon.x() + 16, icon.y() + 20);
     }
 
-    protected void drawHoveringIconText(DrawContext context, List<Text> text, String key) {
+    protected void drawHoveringIconText(GuiGraphics context, List<Component> text, String key) {
         Icon icon = MCAScreens.getInstance().getIcon(key);
-        context.drawTooltip(textRenderer, text, icon.x() + 16, icon.y() + 20);
+        context.renderComponentTooltip(font, text, icon.x() + 16, icon.y() + 20);
     }
 
     //checks if the mouse hovers over a specified button
@@ -122,17 +120,17 @@ public abstract class AbstractDynamicScreen extends Screen {
         return mouseX > x && mouseX < x + w && mouseY > y && mouseY < y + h;
     }
 
-    private static class ButtonEx extends ButtonWidget {
-        private final Button apiButton;
+    private static class ButtonEx extends net.minecraft.client.gui.components.Button {
+        private final net.mca.client.gui.Button apiButton;
 
-        public ButtonEx(Button apiButton, AbstractDynamicScreen screen) {
+        public ButtonEx(net.mca.client.gui.Button apiButton, AbstractDynamicScreen screen) {
             super((int)(screen.width * Alignment.alignments.get(apiButton.align()).h + apiButton.x()),
                     (int)(screen.height * Alignment.alignments.get(apiButton.align()).v + apiButton.y()),
                     apiButton.width(),
                     apiButton.height(),
                     getButtonMessage(apiButton, screen),
                     a -> screen.buttonPressed(apiButton),
-                    DEFAULT_NARRATION_SUPPLIER);
+                    DEFAULT_NARRATION);
             this.apiButton = apiButton;
 
             // Remove the button if we specify it should not be present on constraint failure
@@ -145,15 +143,15 @@ public abstract class AbstractDynamicScreen extends Screen {
             }
         }
 
-        private static Text getButtonMessage(Button apiButton, AbstractDynamicScreen screen) {
+        private static Component getButtonMessage(net.mca.client.gui.Button apiButton, AbstractDynamicScreen screen) {
             if ("gui.button.ridehorse".equals(apiButton.identifier())
                     && screen.getConstraints().contains(Constraint.RIDING)) {
-                return Text.translatable("gui.button.dismount");
+                return Component.translatable("gui.button.dismount");
             }
-            return Text.translatable(apiButton.identifier());
+            return Component.translatable(apiButton.identifier());
         }
 
-        public Button getApiButton() {
+        public net.mca.client.gui.Button getApiButton() {
             return apiButton;
         }
     }

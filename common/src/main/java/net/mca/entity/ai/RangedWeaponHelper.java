@@ -1,12 +1,11 @@
 package net.mca.entity.ai;
 
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.mob.MobEntity;
-import net.minecraft.item.BowItem;
-import net.minecraft.item.CrossbowItem;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.RangedWeaponItem;
-import net.minecraft.util.Hand;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.Mob;
+import net.minecraft.world.item.BowItem;
+import net.minecraft.world.item.CrossbowItem;
+import net.minecraft.world.item.ProjectileWeaponItem;
 import org.jetbrains.annotations.Nullable;
 
 public final class RangedWeaponHelper {
@@ -18,60 +17,60 @@ public final class RangedWeaponHelper {
     }
 
     @Nullable
-    public static Hand getWeaponHoldingHand(LivingEntity entity) {
-        Hand crossbowHand = findHoldingHand(entity, CrossbowItem.class);
+    public static InteractionHand getWeaponHoldingHand(LivingEntity entity) {
+        InteractionHand crossbowHand = findHoldingHand(entity, CrossbowItem.class);
         return crossbowHand != null ? crossbowHand : findHoldingHand(entity, BowItem.class);
     }
 
     @Nullable
-    public static Hand getBowHoldingHand(LivingEntity entity) {
+    public static InteractionHand getBowHoldingHand(LivingEntity entity) {
         return getSelectedHoldingHand(entity, BowItem.class);
     }
 
     @Nullable
-    public static Hand getCrossbowHoldingHand(LivingEntity entity) {
+    public static InteractionHand getCrossbowHoldingHand(LivingEntity entity) {
         return getSelectedHoldingHand(entity, CrossbowItem.class);
     }
 
     public static double getAttackRangeSquared(LivingEntity entity, double maximumRangeSquared) {
-        Hand hand = getWeaponHoldingHand(entity);
+        InteractionHand hand = getWeaponHoldingHand(entity);
         return hand == null ? 0.0D : getAttackRangeSquared(entity, hand, maximumRangeSquared);
     }
 
-    public static double getAttackRangeSquared(LivingEntity entity, Hand hand) {
-        if (!(entity.getStackInHand(hand).getItem() instanceof RangedWeaponItem weapon)) {
+    public static double getAttackRangeSquared(LivingEntity entity, InteractionHand hand) {
+        if (!(entity.getItemInHand(hand).getItem() instanceof ProjectileWeaponItem weapon)) {
             return 0.0D;
         }
 
-        double range = weapon.getRange();
+        double range = weapon.getDefaultProjectileRange();
         return range * range;
     }
 
-    public static double getAttackRangeSquared(LivingEntity entity, Hand hand, double maximumRangeSquared) {
+    public static double getAttackRangeSquared(LivingEntity entity, InteractionHand hand, double maximumRangeSquared) {
         return Math.min(maximumRangeSquared, getAttackRangeSquared(entity, hand));
     }
 
-    public static boolean isValidAttackTarget(MobEntity entity, @Nullable LivingEntity target) {
+    public static boolean isValidAttackTarget(Mob entity, @Nullable LivingEntity target) {
         return target != null
                 && target.isAlive()
                 && !target.isRemoved()
-                && target.getWorld() == entity.getWorld()
-                && entity.canTarget(target);
+                && target.level() == entity.level()
+                && entity.canAttack(target);
     }
 
     @Nullable
-    private static Hand getSelectedHoldingHand(LivingEntity entity, Class<? extends RangedWeaponItem> weaponType) {
-        Hand hand = getWeaponHoldingHand(entity);
-        return hand != null && weaponType.isInstance(entity.getStackInHand(hand).getItem()) ? hand : null;
+    private static InteractionHand getSelectedHoldingHand(LivingEntity entity, Class<? extends ProjectileWeaponItem> weaponType) {
+        InteractionHand hand = getWeaponHoldingHand(entity);
+        return hand != null && weaponType.isInstance(entity.getItemInHand(hand).getItem()) ? hand : null;
     }
 
     @Nullable
-    private static Hand findHoldingHand(LivingEntity entity, Class<? extends RangedWeaponItem> weaponType) {
-        if (weaponType.isInstance(entity.getMainHandStack().getItem())) {
-            return Hand.MAIN_HAND;
+    private static InteractionHand findHoldingHand(LivingEntity entity, Class<? extends ProjectileWeaponItem> weaponType) {
+        if (weaponType.isInstance(entity.getMainHandItem().getItem())) {
+            return InteractionHand.MAIN_HAND;
         }
-        if (weaponType.isInstance(entity.getOffHandStack().getItem())) {
-            return Hand.OFF_HAND;
+        if (weaponType.isInstance(entity.getOffhandItem().getItem())) {
+            return InteractionHand.OFF_HAND;
         }
         return null;
     }

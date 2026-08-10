@@ -4,63 +4,63 @@ import com.google.common.collect.ImmutableMap;
 import net.mca.entity.VillagerEntityMCA;
 import net.mca.entity.ai.MemoryModuleTypeMCA;
 import net.mca.entity.ai.navigation.MCAGroundPathNavigation;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.ai.brain.BlockPosLookTarget;
-import net.minecraft.entity.ai.brain.EntityLookTarget;
-import net.minecraft.entity.ai.brain.MemoryModuleState;
-import net.minecraft.entity.ai.brain.MemoryModuleType;
-import net.minecraft.entity.ai.brain.WalkTarget;
-import net.minecraft.entity.ai.brain.task.MultiTickTask;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.math.BlockPos;
+import net.minecraft.core.BlockPos;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.ai.behavior.Behavior;
+import net.minecraft.world.entity.ai.behavior.BlockPosTracker;
+import net.minecraft.world.entity.ai.behavior.EntityTracker;
+import net.minecraft.world.entity.ai.memory.MemoryModuleType;
+import net.minecraft.world.entity.ai.memory.MemoryStatus;
+import net.minecraft.world.entity.ai.memory.WalkTarget;
 
-public class FollowTask extends MultiTickTask<VillagerEntityMCA> {
+public class FollowTask extends Behavior<VillagerEntityMCA> {
     public FollowTask() {
         super(ImmutableMap.of(
-                MemoryModuleTypeMCA.PLAYER_FOLLOWING.get(), MemoryModuleState.VALUE_PRESENT
+                MemoryModuleTypeMCA.PLAYER_FOLLOWING.get(), MemoryStatus.VALUE_PRESENT
         ));
     }
 
     @Override
-    protected boolean shouldRun(ServerWorld world, VillagerEntityMCA villager) {
-        return villager.getBrain().getOptionalMemory(MemoryModuleTypeMCA.PLAYER_FOLLOWING.get()).isPresent();
+    protected boolean checkExtraStartConditions(ServerLevel world, VillagerEntityMCA villager) {
+        return villager.getBrain().getMemoryInternal(MemoryModuleTypeMCA.PLAYER_FOLLOWING.get()).isPresent();
     }
 
     @Override
-    protected boolean shouldKeepRunning(ServerWorld world, VillagerEntityMCA villager, long time) {
-        return this.shouldRun(world, villager);
+    protected boolean canStillUse(ServerLevel world, VillagerEntityMCA villager, long time) {
+        return this.checkExtraStartConditions(world, villager);
     }
 
     @Override
-    protected void keepRunning(ServerWorld world, VillagerEntityMCA villager, long time) {
-        villager.getBrain().getOptionalMemory(MemoryModuleTypeMCA.PLAYER_FOLLOWING.get()).ifPresent(playerToFollow -> {
-            if (villager.getVillagerBrain().isPanicking() && villager.getBrain().getOptionalMemory(MemoryModuleType.HURT_BY_ENTITY).filter(livingEntity -> livingEntity == playerToFollow).isPresent()) {
-                villager.getBrain().forget(MemoryModuleTypeMCA.PLAYER_FOLLOWING.get());
+    protected void tick(ServerLevel world, VillagerEntityMCA villager, long time) {
+        villager.getBrain().getMemoryInternal(MemoryModuleTypeMCA.PLAYER_FOLLOWING.get()).ifPresent(playerToFollow -> {
+            if (villager.getVillagerBrain().isPanicking() && villager.getBrain().getMemoryInternal(MemoryModuleType.HURT_BY_ENTITY).filter(livingEntity -> livingEntity == playerToFollow).isPresent()) {
+                villager.getBrain().eraseMemory(MemoryModuleTypeMCA.PLAYER_FOLLOWING.get());
             } else if (shouldYieldToGuardCombat(villager)) {
                 return;
             } else {
                 float dist = villager.distanceTo(playerToFollow) - 2;
                 float speed = Math.min(1.0f, Math.max(0.6f, dist * 0.4f * 0.25f));
-                float speedModifier = (villager.hasVehicle() ? 1.7f : 0.8f) * speed;
+                float speedModifier = (villager.isPassenger() ? 1.7f : 0.8f) * speed;
                 BlockPos followPosition = getFollowPosition(playerToFollow);
 
                 int verticalDistance = Math.abs(villager.getBlockY() - followPosition.getY());
                 int closeEnoughDistance = verticalDistance > 1 ? 0 : 2;
-                boolean climbing = villager.isClimbing()
+                boolean climbing = villager.onClimbable()
                         || villager.getNavigation() instanceof MCAGroundPathNavigation navigation
                         && navigation.isControllingClimbable();
                 if (climbing) {
                     closeEnoughDistance = 0;
                 }
 
-                villager.getBrain().remember(
+                villager.getBrain().setMemory(
                         MemoryModuleType.LOOK_TARGET,
-                        new EntityLookTarget(playerToFollow, true)
+                        new EntityTracker(playerToFollow, true)
                 );
-                villager.getBrain().remember(
+                villager.getBrain().setMemory(
                         MemoryModuleType.WALK_TARGET,
                         new WalkTarget(
-                                new BlockPosLookTarget(followPosition),
+                                new BlockPosTracker(followPosition),
                                 speedModifier,
                                 closeEnoughDistance
                         )
@@ -70,13 +70,13 @@ public class FollowTask extends MultiTickTask<VillagerEntityMCA> {
     }
 
     private static BlockPos getFollowPosition(Entity target) {
-        return target.isOnGround()
-                ? target.getVelocityAffectingPos().up()
-                : target.getBlockPos();
+        return target.onGround()
+                ? target.getBlockPosBelowThatAffectsMyMovement().above()
+                : target.blockPosition();
     }
 
     private boolean shouldYieldToGuardCombat(VillagerEntityMCA villager) {
         return villager.isGuard()
-                && villager.getBrain().getOptionalMemory(MemoryModuleType.ATTACK_TARGET).isPresent();
+                && villager.getBrain().getMemoryInternal(MemoryModuleType.ATTACK_TARGET).isPresent();
     }
 }

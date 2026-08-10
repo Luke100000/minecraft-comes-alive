@@ -2,9 +2,8 @@ package net.mca.network.c2s;
 
 import net.mca.cobalt.network.Message;
 import net.mca.entity.VillagerEntityMCA;
-import net.minecraft.entity.Entity;
-import net.minecraft.server.network.ServerPlayerEntity;
-
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.Entity;
 import java.io.Serial;
 import java.util.UUID;
 
@@ -19,8 +18,8 @@ public class InteractionCloseRequest implements Message {
     }
 
     @Override
-    public void receive(ServerPlayerEntity player) {
-        Entity v = player.getServerWorld().getEntity(villagerUUID);
+    public void receive(ServerPlayer player) {
+        Entity v = player.serverLevel().getEntity(villagerUUID);
         if (v instanceof VillagerEntityMCA villager) {
             villager.getInteractions().stopInteracting();
         }

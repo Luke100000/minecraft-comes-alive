@@ -7,40 +7,39 @@ import net.mca.entity.VillagerLike;
 import net.mca.entity.ai.Genetics;
 import net.mca.entity.ai.Traits;
 import net.mca.resources.FaceList;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.render.VertexConsumerProvider;
-import net.minecraft.client.render.entity.LivingEntityRenderer;
-import net.minecraft.client.render.entity.feature.FeatureRendererContext;
-import net.minecraft.client.render.entity.model.BipedEntityModel;
-import net.minecraft.client.texture.NativeImage;
-import net.minecraft.client.texture.NativeImageBackedTexture;
-import net.minecraft.client.util.math.MatrixStack;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.passive.SheepEntity;
-import net.minecraft.util.DyeColor;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.math.ColorHelper;
-import net.minecraft.util.math.MathHelper;
-
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.model.HumanoidModel;
+import net.minecraft.client.renderer.MultiBufferSource;
+import net.minecraft.client.renderer.entity.LivingEntityRenderer;
+import net.minecraft.client.renderer.entity.RenderLayerParent;
+import net.minecraft.client.renderer.texture.DynamicTexture;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.FastColor;
+import net.minecraft.util.Mth;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.animal.Sheep;
+import net.minecraft.world.item.DyeColor;
+import com.mojang.blaze3d.platform.NativeImage;
+import com.mojang.blaze3d.vertex.PoseStack;
 import java.io.InputStream;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 
-public class FaceLayer<T extends LivingEntity, M extends BipedEntityModel<T>> extends VillagerLayer<T, M> {
-    private static final Map<EyeLayerKey, Identifier> EYE_TEXTURE_CACHE = new ConcurrentHashMap<>();
+public class FaceLayer<T extends LivingEntity, M extends HumanoidModel<T>> extends VillagerLayer<T, M> {
+    private static final Map<EyeLayerKey, ResourceLocation> EYE_TEXTURE_CACHE = new ConcurrentHashMap<>();
 
     private final String variant;
 
-    public FaceLayer(FeatureRendererContext<T, M> renderer, M model, String variant) {
+    public FaceLayer(RenderLayerParent<T, M> renderer, M model, String variant) {
         super(renderer, model);
         this.variant = variant;
     }
 
     @Override
-    public void render(MatrixStack transform, VertexConsumerProvider provider, int light, T villager, float limbAngle, float limbDistance, float tickDelta, float animationProgress, float headYaw, float headPitch) {
-        model.setVisible(false);
+    public void render(PoseStack transform, MultiBufferSource provider, int light, T villager, float limbAngle, float limbDistance, float tickDelta, float animationProgress, float headYaw, float headPitch) {
+        model.setAllVisible(false);
         model.head.visible = true;
         super.render(transform, provider, light, villager, limbAngle, limbDistance, tickDelta, animationProgress, headYaw, headPitch);
     }
@@ -51,12 +50,12 @@ public class FaceLayer<T extends LivingEntity, M extends BipedEntityModel<T>> ex
     }
 
     @Override
-    public void renderFinal(MatrixStack transform, VertexConsumerProvider provider, int light, T villager, float tickDelta, boolean visible, boolean glowing) {
-        int overlay = LivingEntityRenderer.getOverlay(villager, 0);
-        Identifier skin = getSkin(villager);
+    public void renderFinal(PoseStack transform, MultiBufferSource provider, int light, T villager, float tickDelta, boolean visible, boolean glowing) {
+        int overlay = LivingEntityRenderer.getOverlayCoords(villager, 0);
+        ResourceLocation skin = getSkin(villager);
 
         if (isBlinking(villager)) {
-            Identifier blink = getBlinkSkin();
+            ResourceLocation blink = getBlinkSkin();
             if (canUse(blink)) {
                 renderModel(transform, provider, light, model, 1.0F, 1.0F, 1.0F, blink, overlay, visible, glowing);
             }
@@ -76,19 +75,19 @@ public class FaceLayer<T extends LivingEntity, M extends BipedEntityModel<T>> ex
             }
         }
 
-        Identifier extraOverlay = getOverlay(villager);
+        ResourceLocation extraOverlay = getOverlay(villager);
         if (!Objects.equals(skin, extraOverlay) && canUse(extraOverlay)) {
             renderModel(transform, provider, light, model, 1.0F, 1.0F, 1.0F, extraOverlay, overlay, visible, glowing);
         }
     }
 
-    private void renderEyeLayer(MatrixStack transform, VertexConsumerProvider provider, int light, T villager, Identifier texture, int color, int overlay, boolean visible, boolean glowing) {
+    private void renderEyeLayer(PoseStack transform, MultiBufferSource provider, int light, T villager, ResourceLocation texture, int color, int overlay, boolean visible, boolean glowing) {
         float[] rgb = argbToRgb(color);
         renderModel(transform, provider, light, model, rgb[0], rgb[1], rgb[2], texture, overlay, visible, glowing);
     }
 
     @Override
-    public Identifier getSkin(T villager) {
+    public ResourceLocation getSkin(T villager) {
         FaceList list = FaceList.getInstance();
         if (list == null) {
             return getBlinkSkin();
@@ -96,34 +95,34 @@ public class FaceLayer<T extends LivingEntity, M extends BipedEntityModel<T>> ex
         return list.pick(variant, getVillager(villager).getGenetics().getGene(Genetics.FACE));
     }
 
-    private Identifier getBlinkSkin() {
+    private ResourceLocation getBlinkSkin() {
         return cached("skins/face/normal/blink.png", MCA::locate);
     }
 
     @Override
-    protected Identifier getOverlay(T villager) {
+    protected ResourceLocation getOverlay(T villager) {
         return null;
     }
 
     public static void clearGeneratedEyeTextureCache() {
-        var textureManager = MinecraftClient.getInstance().getTextureManager();
+        var textureManager = Minecraft.getInstance().getTextureManager();
         EYE_TEXTURE_CACHE.values().forEach(id -> {
             if (id != null && id.getNamespace().equals(MCA.MOD_ID) && id.getPath().startsWith("dynamic/eye/")) {
-                textureManager.destroyTexture(id);
+                textureManager.release(id);
             }
         });
         EYE_TEXTURE_CACHE.clear();
     }
 
-    private Identifier getOrGenerateEyeLayer(Identifier original, EyeTextureLayers.Layer layer, EyeTextureLayers.Side side) {
+    private ResourceLocation getOrGenerateEyeLayer(ResourceLocation original, EyeTextureLayers.Layer layer, EyeTextureLayers.Side side) {
         return EYE_TEXTURE_CACHE.computeIfAbsent(new EyeLayerKey(original, layer, side), key -> {
             try {
-                var resource = MinecraftClient.getInstance().getResourceManager().getResource(key.texture());
+                var resource = Minecraft.getInstance().getResourceManager().getResource(key.texture());
                 if (resource.isEmpty()) {
                     return key.texture();
                 }
 
-                try (InputStream stream = resource.get().getInputStream(); NativeImage originalImage = NativeImage.read(stream)) {
+                try (InputStream stream = resource.get().open(); NativeImage originalImage = NativeImage.read(stream)) {
                     int width = originalImage.getWidth();
                     int height = originalImage.getHeight();
                     EyeTextureLayers.Bounds bounds = EyeTextureLayers.findBounds(originalImage);
@@ -136,7 +135,7 @@ public class FaceLayer<T extends LivingEntity, M extends BipedEntityModel<T>> ex
                     try {
                         for (int x = 0; x < width; x++) {
                             for (int y = 0; y < height; y++) {
-                                int pixel = originalImage.getColor(x, y);
+                                int pixel = originalImage.getPixelRGBA(x, y);
                                 int alpha = abgrAlpha(pixel);
                                 if (alpha == 0 || !EyeTextureLayers.isInSide(x, splitX, key.side())) {
                                     continue;
@@ -145,15 +144,15 @@ public class FaceLayer<T extends LivingEntity, M extends BipedEntityModel<T>> ex
                                 boolean includePixel = EyeTextureLayers.isPixelForLayer(
                                         key.layer(), alpha, abgrRed(pixel), abgrGreen(pixel), abgrBlue(pixel));
                                 if (includePixel) {
-                                    newImage.setColor(x, y, pixel);
+                                    newImage.setPixelRGBA(x, y, pixel);
                                 }
                             }
                         }
 
-                        Identifier newId = MCA.locate("dynamic/eye/" + key.side().name().toLowerCase(Locale.ROOT)
+                        ResourceLocation newId = MCA.locate("dynamic/eye/" + key.side().name().toLowerCase(Locale.ROOT)
                                 + "/" + key.layer().name().toLowerCase(Locale.ROOT) + "/"
                                 + key.texture().getNamespace() + "_" + key.texture().getPath().replace('/', '_'));
-                        MinecraftClient.getInstance().getTextureManager().registerTexture(newId, new NativeImageBackedTexture(newImage));
+                        Minecraft.getInstance().getTextureManager().register(newId, new DynamicTexture(newImage));
                         return newId;
                     } catch (Exception exception) {
                         newImage.close();
@@ -180,18 +179,18 @@ public class FaceLayer<T extends LivingEntity, M extends BipedEntityModel<T>> ex
     }
 
     private int getRainbow(T villager, float tickDelta, int offset) {
-        int ticks = Math.abs(villager.age) + offset;
+        int ticks = Math.abs(villager.tickCount) + offset;
         int block = ticks / 25 + villager.getId();
         int count = DyeColor.values().length;
         int first = block % count;
         int second = (block + 1) % count;
         float mix = ((float)(ticks % 25) + tickDelta) / 25.0F;
-        return ColorHelper.Argb.lerp(mix, rgbToArgb(SheepEntity.getRgbColor(DyeColor.byId(first))), rgbToArgb(SheepEntity.getRgbColor(DyeColor.byId(second))));
+        return FastColor.ARGB32.lerp(mix, rgbToArgb(Sheep.getColorArray(DyeColor.byId(first))), rgbToArgb(Sheep.getColorArray(DyeColor.byId(second))));
     }
 
     private boolean isBlinking(T villager) {
-        int time = villager.age / 2 + (int)(getVillager(villager).getGenetics().getGene(Genetics.HEMOGLOBIN) * 65536);
-        return time % 50 == 1 || time % 57 == 1 || villager.isSleeping() || villager.isDead();
+        int time = villager.tickCount / 2 + (int)(getVillager(villager).getGenetics().getGene(Genetics.HEMOGLOBIN) * 65536);
+        return time % 50 == 1 || time % 57 == 1 || villager.isSleeping() || villager.isDeadOrDying();
     }
 
     private VillagerLike<?> getVillager(T villager) {
@@ -208,9 +207,9 @@ public class FaceLayer<T extends LivingEntity, M extends BipedEntityModel<T>> ex
 
     private static int rgbToArgb(float[] rgb) {
         return 0xFF000000
-                | (MathHelper.clamp(Math.round(rgb[0] * 255.0F), 0, 255) << 16)
-                | (MathHelper.clamp(Math.round(rgb[1] * 255.0F), 0, 255) << 8)
-                | MathHelper.clamp(Math.round(rgb[2] * 255.0F), 0, 255);
+                | (Mth.clamp(Math.round(rgb[0] * 255.0F), 0, 255) << 16)
+                | (Mth.clamp(Math.round(rgb[1] * 255.0F), 0, 255) << 8)
+                | Mth.clamp(Math.round(rgb[2] * 255.0F), 0, 255);
     }
 
     private static int abgrAlpha(int color) {
@@ -229,6 +228,6 @@ public class FaceLayer<T extends LivingEntity, M extends BipedEntityModel<T>> ex
         return (color >>> 16) & 0xFF;
     }
 
-    private record EyeLayerKey(Identifier texture, EyeTextureLayers.Layer layer, EyeTextureLayers.Side side) {
+    private record EyeLayerKey(ResourceLocation texture, EyeTextureLayers.Layer layer, EyeTextureLayers.Side side) {
     }
 }

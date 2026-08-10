@@ -5,23 +5,22 @@ import com.mojang.datafixers.util.Pair;
 import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import net.mca.entity.VillagerEntityMCA;
-import net.minecraft.block.BedBlock;
-import net.minecraft.block.BlockState;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.ai.brain.MemoryModuleState;
-import net.minecraft.entity.ai.brain.MemoryModuleType;
-import net.minecraft.entity.ai.brain.task.MultiTickTask;
-import net.minecraft.entity.ai.pathing.Path;
-import net.minecraft.registry.entry.RegistryEntry;
-import net.minecraft.registry.tag.BlockTags;
-import net.minecraft.server.network.DebugInfoSender;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.GlobalPos;
-import net.minecraft.util.math.random.Random;
-import net.minecraft.world.poi.PointOfInterestStorage;
-import net.minecraft.world.poi.PointOfInterestType;
-
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.GlobalPos;
+import net.minecraft.core.Holder;
+import net.minecraft.network.protocol.game.DebugPackets;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.tags.BlockTags;
+import net.minecraft.util.RandomSource;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.ai.behavior.Behavior;
+import net.minecraft.world.entity.ai.memory.MemoryModuleType;
+import net.minecraft.world.entity.ai.memory.MemoryStatus;
+import net.minecraft.world.entity.ai.village.poi.PoiManager;
+import net.minecraft.world.entity.ai.village.poi.PoiType;
+import net.minecraft.world.level.block.BedBlock;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.pathfinder.Path;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.BiPredicate;
@@ -29,9 +28,9 @@ import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
-import static net.minecraft.entity.ai.brain.task.FindPointOfInterestTask.findPathToPoi;
+import static net.minecraft.world.entity.ai.behavior.AcquirePoi.findPathToPois;
 
-public class ExtendedFindPointOfInterestTask extends MultiTickTask<VillagerEntityMCA> {
+public class ExtendedFindPointOfInterestTask extends Behavior<VillagerEntityMCA> {
     private static final int MAX_POSITIONS_PER_RUN = 5;
     private static final int POSITION_EXPIRE_INTERVAL = 200;
     public static final int POI_SORTING_RADIUS = 48;
@@ -39,18 +38,18 @@ public class ExtendedFindPointOfInterestTask extends MultiTickTask<VillagerEntit
     private final Consumer<VillagerEntityMCA> onFinish;
     private final BiPredicate<VillagerEntityMCA, BlockPos> predicate;
 
-    private final Predicate<RegistryEntry<PointOfInterestType>> poiType;
+    private final Predicate<Holder<PoiType>> poiType;
     private final MemoryModuleType<GlobalPos> targetMemoryModuleType;
     private final boolean onlyRunIfAdult;
     private final Optional<Byte> entityStatus;
     private long positionExpireTimeLimit;
     private final Long2ObjectMap<RetryMarker> foundPositionsToExpiry = new Long2ObjectOpenHashMap<>();
 
-    public ExtendedFindPointOfInterestTask(Predicate<RegistryEntry<PointOfInterestType>> poiType, MemoryModuleType<GlobalPos> moduleType, boolean onlyRunIfAdult, Optional<Byte> entityStatus, Consumer<VillagerEntityMCA> onFinish) {
+    public ExtendedFindPointOfInterestTask(Predicate<Holder<PoiType>> poiType, MemoryModuleType<GlobalPos> moduleType, boolean onlyRunIfAdult, Optional<Byte> entityStatus, Consumer<VillagerEntityMCA> onFinish) {
         this(poiType, moduleType, onlyRunIfAdult, entityStatus, onFinish, (e, p) -> true);
     }
 
-    public ExtendedFindPointOfInterestTask(Predicate<RegistryEntry<PointOfInterestType>> poiType, MemoryModuleType<GlobalPos> moduleType, boolean onlyRunIfAdult, Optional<Byte> entityStatus, Consumer<VillagerEntityMCA> onFinish, BiPredicate<VillagerEntityMCA, BlockPos> predicate) {
+    public ExtendedFindPointOfInterestTask(Predicate<Holder<PoiType>> poiType, MemoryModuleType<GlobalPos> moduleType, boolean onlyRunIfAdult, Optional<Byte> entityStatus, Consumer<VillagerEntityMCA> onFinish, BiPredicate<VillagerEntityMCA, BlockPos> predicate) {
         super(create(moduleType));
 
         this.onFinish = onFinish;
@@ -61,29 +60,29 @@ public class ExtendedFindPointOfInterestTask extends MultiTickTask<VillagerEntit
         this.entityStatus = entityStatus;
     }
 
-    private static ImmutableMap<MemoryModuleType<?>, MemoryModuleState> create(MemoryModuleType<GlobalPos> firstModule) {
-        ImmutableMap.Builder<MemoryModuleType<?>, MemoryModuleState> builder = ImmutableMap.builder();
-        builder.put(firstModule, MemoryModuleState.VALUE_ABSENT);
+    private static ImmutableMap<MemoryModuleType<?>, MemoryStatus> create(MemoryModuleType<GlobalPos> firstModule) {
+        ImmutableMap.Builder<MemoryModuleType<?>, MemoryStatus> builder = ImmutableMap.builder();
+        builder.put(firstModule, MemoryStatus.VALUE_ABSENT);
         return builder.build();
     }
 
     @Override
-    protected boolean shouldRun(ServerWorld serverWorld, VillagerEntityMCA pathAwareEntity) {
+    protected boolean checkExtraStartConditions(ServerLevel serverWorld, VillagerEntityMCA pathAwareEntity) {
         if (this.onlyRunIfAdult && pathAwareEntity.isBaby()) {
             return false;
         }
         if (this.positionExpireTimeLimit == 0L) {
-            this.positionExpireTimeLimit = pathAwareEntity.getWorld().getTime() + (long)serverWorld.random.nextInt(POSITION_EXPIRE_INTERVAL);
+            this.positionExpireTimeLimit = pathAwareEntity.level().getGameTime() + (long)serverWorld.random.nextInt(POSITION_EXPIRE_INTERVAL);
             return false;
         }
-        return serverWorld.getTime() >= this.positionExpireTimeLimit;
+        return serverWorld.getGameTime() >= this.positionExpireTimeLimit;
     }
 
 
     @Override
-    protected void run(ServerWorld serverWorld, VillagerEntityMCA villager, long l) {
+    protected void start(ServerLevel serverWorld, VillagerEntityMCA villager, long l) {
         this.positionExpireTimeLimit = l + POSITION_EXPIRE_INTERVAL + (long)serverWorld.getRandom().nextInt(POSITION_EXPIRE_INTERVAL);
-        PointOfInterestStorage pointOfInterestStorage = serverWorld.getPointOfInterestStorage();
+        PoiManager pointOfInterestStorage = serverWorld.getPoiManager();
         this.foundPositionsToExpiry.long2ObjectEntrySet().removeIf(entry -> !entry.getValue().isAttempting(l));
         Predicate<BlockPos> predicate = blockPos -> {
             RetryMarker retryMarker = this.foundPositionsToExpiry.get(blockPos.asLong());
@@ -98,45 +97,45 @@ public class ExtendedFindPointOfInterestTask extends MultiTickTask<VillagerEntit
             }
             return this.predicate.test(villager, blockPos);
         };
-        Set<Pair<RegistryEntry<PointOfInterestType>, BlockPos>> set = pointOfInterestStorage.getSortedTypesAndPositions(this.poiType, predicate, villager.getBlockPos(), POI_SORTING_RADIUS, PointOfInterestStorage.OccupationStatus.HAS_SPACE).limit(MAX_POSITIONS_PER_RUN).collect(Collectors.toSet());
-        Path path = findPathToPoi(villager, set);
-        if (path != null && path.reachesTarget()) {
+        Set<Pair<Holder<PoiType>, BlockPos>> set = pointOfInterestStorage.findAllClosestFirstWithType(this.poiType, predicate, villager.blockPosition(), POI_SORTING_RADIUS, PoiManager.Occupancy.HAS_SPACE).limit(MAX_POSITIONS_PER_RUN).collect(Collectors.toSet());
+        Path path = findPathToPois(villager, set);
+        if (path != null && path.canReach()) {
             BlockPos blockPos2 = path.getTarget();
             pointOfInterestStorage.getType(blockPos2).ifPresent(pointOfInterestType -> {
-                pointOfInterestStorage.getPosition(this.poiType, (typeRegistryEntry, otherPos) -> {
+                pointOfInterestStorage.take(this.poiType, (typeRegistryEntry, otherPos) -> {
                     return otherPos.equals(blockPos2);
                 }, blockPos2, 1);
 
-                villager.getBrain().remember(this.targetMemoryModuleType, GlobalPos.create(serverWorld.getRegistryKey(), blockPos2));
-                this.entityStatus.ifPresent(statusByte -> serverWorld.sendEntityStatus(villager, statusByte));
+                villager.getBrain().setMemory(this.targetMemoryModuleType, GlobalPos.of(serverWorld.dimension(), blockPos2));
+                this.entityStatus.ifPresent(statusByte -> serverWorld.broadcastEntityEvent(villager, statusByte));
                 this.foundPositionsToExpiry.clear();
-                DebugInfoSender.sendPointOfInterest(serverWorld, blockPos2);
+                DebugPackets.sendPoiTicketCountPacket(serverWorld, blockPos2);
 
                 // on finish callback
                 onFinish.accept(villager);
             });
         } else {
-            for (Pair<RegistryEntry<PointOfInterestType>, BlockPos> blockPos2 : set) {
-                this.foundPositionsToExpiry.computeIfAbsent(blockPos2.getSecond().asLong(), m -> new RetryMarker(villager.getWorld().random, l));
+            for (Pair<Holder<PoiType>, BlockPos> blockPos2 : set) {
+                this.foundPositionsToExpiry.computeIfAbsent(blockPos2.getSecond().asLong(), m -> new RetryMarker(villager.level().random, l));
             }
         }
     }
 
     //todo this check is not necessary in vanilla, but since the 1.19.2 port of 7.4.0 it is requires as occupied beds are used
-    private boolean isBedOccupiedByOthers(ServerWorld world, BlockPos pos, LivingEntity entity) {
+    private boolean isBedOccupiedByOthers(ServerLevel world, BlockPos pos, LivingEntity entity) {
         BlockState blockState = world.getBlockState(pos);
-        return blockState.isIn(BlockTags.BEDS) && blockState.get(BedBlock.OCCUPIED) && !entity.isSleeping();
+        return blockState.is(BlockTags.BEDS) && blockState.getValue(BedBlock.OCCUPIED) && !entity.isSleeping();
     }
 
     static class RetryMarker {
         private static final int MIN_DELAY = 40;
         private static final int ATTEMPT_DURATION = 400;
-        private final Random random;
+        private final RandomSource random;
         private long previousAttemptAt;
         private long nextScheduledAttemptAt;
         private int currentDelay;
 
-        RetryMarker(Random random, long time) {
+        RetryMarker(RandomSource random, long time) {
             this.random = random;
             this.setAttemptTime(time);
         }

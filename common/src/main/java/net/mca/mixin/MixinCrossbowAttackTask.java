@@ -3,36 +3,36 @@ package net.mca.mixin;
 import com.llamalad7.mixinextras.injector.ModifyExpressionValue;
 import net.mca.entity.ai.RangedWeaponHelper;
 import net.mca.entity.ai.brain.tasks.ExtendedCrossbowAttackTask;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.ai.brain.task.CrossbowAttackTask;
-import net.minecraft.entity.mob.MobEntity;
-import net.minecraft.item.CrossbowItem;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
-import net.minecraft.util.Hand;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.ai.behavior.CrossbowAttack;
+import net.minecraft.world.item.CrossbowItem;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 
-@Mixin(CrossbowAttackTask.class)
+@Mixin(CrossbowAttack.class)
 abstract class MixinCrossbowAttackTask {
     @ModifyExpressionValue(
-            method = "tickState(Lnet/minecraft/entity/mob/MobEntity;Lnet/minecraft/entity/LivingEntity;)V",
+            method = "crossbowAttack(Lnet/minecraft/world/entity/Mob;Lnet/minecraft/world/entity/LivingEntity;)V",
             at = @At(
                     value = "INVOKE",
-                    target = "Lnet/minecraft/item/CrossbowItem;getPullTime(Lnet/minecraft/item/ItemStack;)I"
+                    target = "Lnet/minecraft/world/item/CrossbowItem;getChargeDuration(Lnet/minecraft/world/item/ItemStack;)I"
             )
     )
-    private int mca$useItemDefinedChargeDuration(int original, MobEntity entity, LivingEntity ignoredTarget) {
+    private int mca$useItemDefinedChargeDuration(int original, Mob entity, LivingEntity ignoredTarget) {
         if (!((Object) this instanceof ExtendedCrossbowAttackTask<?, ?>)) {
             return original;
         }
 
-        ItemStack stack = entity.getActiveItem();
-        if (stack.isOf(Items.CROSSBOW) || !(stack.getItem() instanceof CrossbowItem)) {
+        ItemStack stack = entity.getUseItem();
+        if (stack.is(Items.CROSSBOW) || !(stack.getItem() instanceof CrossbowItem)) {
             return original;
         }
 
-        return stack.getMaxUseTime() - 3;
+        return stack.getUseDuration() - 3;
     }
 
     /**
@@ -43,22 +43,22 @@ abstract class MixinCrossbowAttackTask {
      * 1.21.1 state-machine shape without owning READY_TO_ATTACK itself.
      */
     @ModifyExpressionValue(
-            method = "tickState(Lnet/minecraft/entity/mob/MobEntity;Lnet/minecraft/entity/LivingEntity;)V",
+            method = "crossbowAttack(Lnet/minecraft/world/entity/Mob;Lnet/minecraft/world/entity/LivingEntity;)V",
             at = @At(
                     value = "INVOKE",
-                    target = "Lnet/minecraft/entity/mob/MobEntity;getStackInHand(Lnet/minecraft/util/Hand;)Lnet/minecraft/item/ItemStack;"
+                    target = "Lnet/minecraft/world/entity/Mob;getItemInHand(Lnet/minecraft/world/InteractionHand;)Lnet/minecraft/world/item/ItemStack;"
             )
     )
     private ItemStack mca$useSelectedCrossbowForLegacyChargeReset(
             ItemStack original,
-            MobEntity entity,
+            Mob entity,
             LivingEntity ignoredTarget
     ) {
         if (!((Object) this instanceof ExtendedCrossbowAttackTask<?, ?>)) {
             return original;
         }
 
-        Hand hand = RangedWeaponHelper.getCrossbowHoldingHand(entity);
-        return hand == null ? original : entity.getStackInHand(hand);
+        InteractionHand hand = RangedWeaponHelper.getCrossbowHoldingHand(entity);
+        return hand == null ? original : entity.getItemInHand(hand);
     }
 }
