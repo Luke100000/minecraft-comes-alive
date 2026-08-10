@@ -22,7 +22,7 @@ public class Requests {
      * Same as {@link #makeRequest(String, String, String) below} but without a session ID
      * @param urlString The URL to which the request is to be sent.
      * @param body The body of the request, which is sent as a string.
-     * @return An Optional<String> that contains the response from the server if the request was successful, or an empty Optional if an exception occurred.
+     * @return An {@code Optional<String>} that contains the response from the server if the request was successful, or an empty Optional if an exception occurred.
      */
     public static Optional<String> makeRequest(String urlString, String body) {
         return makeRequest(urlString, body, "");
@@ -35,7 +35,7 @@ public class Requests {
      * @param urlString   The URL to which the request is to be sent.
      * @param body        The body of the request, which is sent as a string.
      * @param sessionIDAuth The session ID used for authentication, which is sent as a string.
-     * @return            An Optional<String> that contains the response from the server if the request was successful, or an empty Optional if an exception occurred.
+     * @return            An {@code Optional<String>} that contains the response from the server if the request was successful, or an empty Optional if an exception occurred.
      */
     public static Optional<String> makeRequest(String urlString, String body, String sessionIDAuth) {
         String responseString = "No response";

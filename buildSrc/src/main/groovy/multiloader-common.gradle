@@ -1,0 +1,104 @@
+plugins {
+    id 'java-library'
+    id 'maven-publish'
+}
+
+group = providers.gradleProperty('groupId').get()
+description = providers.gradleProperty('description').get()
+
+base {
+    archivesName = rootProject.name
+}
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(17)
+    withSourcesJar()
+    withJavadocJar()
+}
+
+repositories {
+    mavenCentral()
+    maven {
+        name = 'Fabric'
+        url = 'https://maven.fabricmc.net/'
+    }
+    maven {
+        name = 'Forge'
+        url = 'https://maven.minecraftforge.net/'
+    }
+    maven {
+        name = 'NeoForge'
+        url = 'https://maven.neoforged.net/releases/'
+    }
+    maven {
+        name = 'Sponge'
+        url = 'https://repo.spongepowered.org/repository/maven-public/'
+    }
+    maven {
+        name = 'ParchmentMC'
+        url = 'https://maven.parchmentmc.org/'
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.release = 17
+    options.deprecation = true
+    options.compilerArgs << '-Xmaxerrs' << '1000' << '-Xlint:deprecation' << '-Xlint:unchecked'
+}
+
+tasks.withType(JavaForkOptions).configureEach {
+    if (maxHeapSize == null) {
+        maxHeapSize = '4G'
+    }
+    if (!jvmArgs.contains('--enable-native-access=ALL-UNNAMED')) {
+        jvmArgs('--enable-native-access=ALL-UNNAMED')
+    }
+}
+
+processResources {
+    def expandProps = [
+            version        : project.version,
+            group          : project.group,
+            update_json_url: providers.gradleProperty('update_json_url').get()
+    ]
+    filesMatching(['fabric.mod.json', 'META-INF/mods.toml']) {
+        expand expandProps
+    }
+    inputs.properties(expandProps)
+}
+
+sourcesJar {
+    from(rootProject.file('LICENSE'))
+}
+
+jar {
+    from(rootProject.file('LICENSE'))
+    manifest {
+        attributes([
+                'Specification-Title'   : providers.gradleProperty('displayname').get(),
+                'Specification-Version' : project.version,
+                'Implementation-Title'  : project.name,
+                'Implementation-Version': project.version,
+                'Built-On-Minecraft'    : providers.gradleProperty('minecraft_version').get()
+        ])
+    }
+}
+
+publishing {
+    publications {
+        register('mavenJava', MavenPublication) {
+            artifactId = providers.gradleProperty('artifactId').get()
+            from components.java
+        }
+    }
+    repositories {
+        maven {
+            name = 'reposiliteRepository'
+            url = uri('https://maven.conczin.net/Artifacts')
+            credentials {
+                username = System.getenv('MAVEN_USERNAME')
+                password = System.getenv('MAVEN_TOKEN')
+            }
+        }
+    }
+}

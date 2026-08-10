@@ -1,0 +1,14 @@
+classTweaker v1 named
+accessible method net/minecraft/core/particles/SimpleParticleType <init> (Z)V
+accessible method net/minecraft/world/entity/ai/sensing/SensorType <init> (Ljava/util/function/Supplier;)V
+accessible method net/minecraft/world/entity/schedule/Activity <init> (Ljava/lang/String;)V
+accessible method net/minecraft/world/entity/npc/Villager setUnhappy ()V
+accessible method net/minecraft/world/entity/npc/Villager startTrading (Lnet/minecraft/world/entity/player/Player;)V
+extendable method net/minecraft/world/entity/ai/behavior/CrossbowAttack crossbowAttack (Lnet/minecraft/world/entity/Mob;Lnet/minecraft/world/entity/LivingEntity;)V
+accessible field net/minecraft/world/entity/ai/behavior/CrossbowAttack crossbowState Lnet/minecraft/world/entity/ai/behavior/CrossbowAttack$CrossbowState;
+accessible class net/minecraft/world/entity/ai/behavior/CrossbowAttack$CrossbowState
+accessible method net/minecraft/world/entity/Entity getBlockPosBelowThatAffectsMyMovement ()Lnet/minecraft/core/BlockPos;
+accessible method net/minecraft/world/entity/item/ItemEntity getBlockPosBelowThatAffectsMyMovement ()Lnet/minecraft/core/BlockPos;
+accessible method net/minecraft/world/entity/ExperienceOrb getBlockPosBelowThatAffectsMyMovement ()Lnet/minecraft/core/BlockPos;
+accessible method net/minecraft/advancements/CriteriaTriggers register (Lnet/minecraft/advancements/CriterionTrigger;)Lnet/minecraft/advancements/CriterionTrigger;
+accessible class net/minecraft/world/level/block/entity/BlockEntityType$BlockEntitySupplier

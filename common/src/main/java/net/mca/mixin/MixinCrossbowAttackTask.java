@@ -37,7 +37,7 @@ abstract class MixinCrossbowAttackTask {
 
     /**
      * 1.20.1 stores a separate boolean Charged flag and clears it after firing.
-     * Fabric/Quilt locate that stack using the exact vanilla crossbow item,
+     * Fabric locates that stack using the exact vanilla crossbow item,
      * while 1.21.1 no longer has this cleanup at all. Redirect only the stack
      * selected for the old 1.20.1 cleanup so the extended task keeps the
      * 1.21.1 state-machine shape without owning READY_TO_ATTACK itself.

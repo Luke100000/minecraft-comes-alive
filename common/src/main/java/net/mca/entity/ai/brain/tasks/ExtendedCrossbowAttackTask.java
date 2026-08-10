@@ -29,7 +29,7 @@ public final class ExtendedCrossbowAttackTask<E extends Mob & CrossbowAttackMob,
     }
 
     @Override
-    protected void crossbowAttack(E entity, LivingEntity target) {
+    public void crossbowAttack(E entity, LivingEntity target) {
         if (crossbowState == CrossbowState.UNCHARGED) {
             InteractionHand hand = RangedWeaponHelper.getCrossbowHoldingHand(entity);
             if (hand == null) {

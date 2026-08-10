@@ -1,92 +1,72 @@
 plugins {
-    id "com.gradleup.shadow" version "9.3.0"
+    id 'multiloader-loader'
+    id 'net.neoforged.moddev.legacyforge'
 }
-
-def projectVersion = version.toString()
-def publicationArtifactId = providers.gradleProperty('artifactId').get()
-def publicationGroupId = providers.gradleProperty('groupId').get()
-def forgeVersion = providers.gradleProperty('forge_version').get()
-def architecturyVersion = providers.gradleProperty('architectury_version').get()
-def updateJsonUrl = providers.gradleProperty('update_json_url').get()
-
-architectury {
-    platformSetupLoomIde()
-    forge()
-}
-
-loom {
-    accessWidenerPath = project(':common').loom.accessWidenerPath
-
-    forge {
-        mixinConfig "mca.mixin.json"
-        convertAccessWideners = true
-    }
-}
-
-configurations {
-    common
-    shadowCommon
-    compileClasspath.extendsFrom common
-    runtimeClasspath.extendsFrom common
-    developmentForge.extendsFrom common
-}
-
-def shadowCommonConfiguration = configurations.named('shadowCommon')
-def shadowRuntimeElementsConfiguration = configurations.named('shadowRuntimeElements')
-def shadowJarTask = tasks.named('shadowJar')
-def commonMainSources = project(':common').sourceSets.main.allSource
 
 dependencies {
-    forge "net.minecraftforge:forge:${forgeVersion}"
-    modApi "dev.architectury:architectury-forge:${architecturyVersion}"
-
-    // Forge 47 does not bundle MixinExtras. Jar it into the Forge artifact so
-    // common mixins can safely use the same 0.5.4 API as the 1.21.1 branch.
-    implementation(include("io.github.llamalad7:mixinextras-forge:${mixin_extras_version}"))
-
-    common(project(path: ':common', configuration: 'namedElements')) { transitive = false }
-    shadowCommon project(path: ':common', configuration: 'transformProductionForge')
-}
-
-tasks.named('processResources') {
-    inputs.property 'version', projectVersion
-    inputs.property 'update_json_url', updateJsonUrl
-
-    filesMatching('META-INF/mods.toml') {
-        expand version: projectVersion, update_json_url: updateJsonUrl
-    }
-}
-
-tasks.named('shadowJar') {
-    exclude "fabric.mod.json"
-    exclude "architectury.common.json"
-
-    configurations = [shadowCommonConfiguration.get()]
-    archiveClassifier = "dev-shadow"
-}
-
-tasks.named('remapJar') {
-    input.set(shadowJarTask.flatMap { it.archiveFile })
-    dependsOn shadowJarTask
-}
-
-tasks.named('sourcesJar') {
-    from commonMainSources
-}
-
-components.java {
-    addVariantsFromConfiguration(shadowRuntimeElementsConfiguration.get()) {
-        skip()
-    }
-}
-
-publishing {
-    publications {
-        mavenCommon(MavenPublication) {
-            artifactId = publicationArtifactId
-            groupId = publicationGroupId
-            version = projectVersion + "+forge"
-            from components.java
+    compileOnly "io.github.llamalad7:mixinextras-common:${mixin_extras_version}"
+    implementation(jarJar("io.github.llamalad7:mixinextras-forge:${mixin_extras_version}")) {
+        version {
+            strictly '[0.5.4,0.6)'
+            prefer mixin_extras_version
         }
     }
+    annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
+}
+
+mixin {
+    add sourceSets.main, 'mca.refmap.json'
+    config 'mca.mixin.json'
+    config 'mca.journeymap.mixin.json'
+}
+
+legacyForge {
+    version = forge_version
+    validateAccessTransformers = true
+    accessTransformers.from(project(':common').tasks.named('generateAccessTransformer'))
+
+    parchment {
+        minecraftVersion = parchment_minecraft
+        mappingsVersion = parchment_version
+    }
+
+    runs {
+        client { client() }
+        data { data() }
+        server { server() }
+    }
+
+    mods {
+        mca {
+            sourceSet sourceSets.main
+        }
+    }
+}
+
+tasks.named('processResources', ProcessResources) {
+    dependsOn(project(':common').tasks.named('generateAccessTransformer'))
+    from(project(':common').layout.buildDirectory.file('generated/accesstransformer.cfg')) {
+        into 'META-INF'
+    }
+    filesMatching('mca.mixin.json') {
+        filter { line ->
+            line.contains('"minVersion"')
+                    ? line + System.lineSeparator() + '  "refmap": "mca.refmap.json",'
+                    : line
+        }
+    }
+}
+
+jar {
+    manifest {
+        attributes 'MixinConfigs': 'mca.mixin.json'
+    }
+}
+
+tasks.named('javadoc') {
+    enabled = false
+}
+
+tasks.named('javadocJar') {
+    enabled = false
 }

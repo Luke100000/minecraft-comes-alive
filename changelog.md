@@ -1,9 +1,11 @@
 # 7.7.0-alpha.1
+## **Architectury API is no longer required.**
 
-## **IMPORTANT**
+
+**IMPORTANT**
 
 * BACKUP YOUR WORLD.
-* Only use your old world if  you use a copy.
+* Only use your old world with a backup!!!
 * This isn't backwards compatible with older 1.20.1 MCA builds, traits/personalities and a lot of MCA saved data got moved to the newer 1.21.1 format.
   * In theory this should make it more stable to upgrade worlds to 1.21.1 
 

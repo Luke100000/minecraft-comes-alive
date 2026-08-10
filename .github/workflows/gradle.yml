@@ -31,9 +31,9 @@ jobs:
           cache-read-only: false
           cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
       - name: Build Artifacts with Gradle
-        run: ./gradlew build --build-cache --console=plain --non-interactive
+        run: ./gradlew build --build-cache --configuration-cache --console=plain --non-interactive
       - name: Publish to Maven
-        run: ./gradlew publish --build-cache --console=plain --non-interactive
+        run: ./gradlew publish --build-cache --configuration-cache --console=plain --non-interactive
       - name: Get tag
         if: ${{ success() && startsWith(github.ref, 'refs/tags/') }}
         id: tag
@@ -61,7 +61,6 @@ jobs:
           loaders: |
             fabric
             forge
-            quilt
           game-versions: |
             ${{steps.split.outputs._1}}
           java: |
@@ -69,7 +68,6 @@ jobs:
           dependencies: |
             architectury-api | depends | *
             fabric-api | recommends | *
-            qsl | recommends | *
 
           retry-attempts: 2
           retry-delay: 10000

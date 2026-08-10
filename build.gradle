@@ -1,112 +1,37 @@
 plugins {
-    id 'java-library'
-    id 'architectury-plugin' version '3.5.167'
-    id 'dev.architectury.loom' version '1.17.477' apply false
-    id "io.github.pacifistmc.forgix" version "1.2.9"
-}
-
-architectury {
-    minecraft = rootProject.minecraft_version
+    id 'fabric-loom' version '1.17.17' apply false
+    id 'net.neoforged.moddev.legacyforge' version '2.0.142' apply false
+    id 'io.github.pacifistmc.forgix' version '1.2.9'
 }
 
 def getAppVersion = { ->
     try {
-        def version = providers.exec {
+        def tag = providers.exec {
             commandLine 'git', 'describe', '--tags', '--abbrev=0'
         }.standardOutput.asText.get().trim()
-        return version
+        return tag.isEmpty() ? "${minecraft_version}-SNAPSHOT" : tag
     } catch (Exception e) {
         println "Warning: ${e.message}, is git installed?"
-        return "dev"
+        return "${minecraft_version}-DEV"
     }
 } as Object
 
-subprojects {
-    apply plugin: 'dev.architectury.loom'
-
-    repositories {
-        maven {
-            name = 'ParchmentMC'
-            url = 'https://maven.parchmentmc.org'
-        }
-    }
-
-    dependencies {
-        minecraft "com.mojang:minecraft:${project.minecraft_version}"
-        mappings loom.layered {
-            officialMojangMappings()
-            parchment("org.parchmentmc.data:parchment-${project.parchment_minecraft}:${project.parchment_version}@zip")
-        }
-    }
-}
-
 allprojects {
-    apply plugin: "maven-publish"
-    apply plugin: 'architectury-plugin'
-
-    group = rootProject.groupId
-    description = rootProject.displayname
-    base.archivesName = rootProject.name
+    group = providers.gradleProperty('groupId').get()
+    description = providers.gradleProperty('description').get()
     version = getAppVersion()
-
-    build.finalizedBy(mergeJars)
-    assemble.finalizedBy(mergeJars)
-
-    java {
-        withSourcesJar()
-
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
-    }
-
-    tasks.withType(JavaCompile).configureEach {
-        it.options.release = 17
-        it.options.deprecation = true
-        it.options.compilerArgs << "-Xmaxerrs" << "1000" << "-Xlint:deprecation" << "-Xlint:unchecked"
-    }
-
-    tasks.configureEach { task ->
-        if (task instanceof JavaForkOptions) {
-            if (task.maxHeapSize == null) {
-                task.maxHeapSize = '4G'
-            }
-            ['--enable-native-access=ALL-UNNAMED'].each { nativeAccessJvmArg ->
-                if (!task.jvmArgs.contains(nativeAccessJvmArg)) {
-                    task.jvmArgs(nativeAccessJvmArg)
-                }
-            }
-        }
-    }
-
-    publishing {
-        repositories {
-            maven {
-                name = "reposiliteRepository"
-                url = uri("https://maven.conczin.net/Artifacts")
-                credentials {
-                    username = System.getenv("MAVEN_USERNAME")
-                    password = System.getenv("MAVEN_TOKEN")
-                }
-            }
-        }
-    }
 }
 
 forgix {
-    group = rootProject.groupId
+    group = providers.gradleProperty('groupId').get()
     mergedJarName = "${rootProject.name}-${rootProject.version}-universal.jar"
-    outputDir = "build/libs"
+    outputDir = 'build/libs'
 
     forge {
         jarLocation = "build/libs/${rootProject.name}-${rootProject.version}.jar"
-        mixin "mca.mixin.json"
+        mixin 'mca.mixin.json'
     }
-
     fabric {
-        jarLocation = "build/libs/${rootProject.name}-${rootProject.version}.jar"
-    }
-
-    quilt {
         jarLocation = "build/libs/${rootProject.name}-${rootProject.version}.jar"
     }
 }

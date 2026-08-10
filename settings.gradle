@@ -1,38 +1,30 @@
 pluginManagement {
     repositories {
-        maven {
-            name = 'JitPack'
-            url = 'https://jitpack.io'
-        }
+        gradlePluginPortal()
+        mavenCentral()
         maven {
             name = 'Fabric'
             url = 'https://maven.fabricmc.net/'
         }
         maven {
-            name = 'Architectury'
-            url = "https://maven.architectury.dev/"
+            name = 'NeoForge'
+            url = 'https://maven.neoforged.net/releases/'
         }
         maven {
             name = 'Forge'
-            url = "https://files.minecraftforge.net/maven/"
+            url = 'https://maven.minecraftforge.net/'
         }
-        gradlePluginPortal()
     }
+}
 
-    /*resolutionStrategy {
-        eachPlugin {
-            if (requested.id.id == 'architectury-plugin') {
-                useModule('com.github.Mikulasz12.architectury-plugin:architectury-plugin.gradle.plugin:e3d53cc')
-            }
-        }
-    }*/
+plugins {
+    id 'org.gradle.toolchains.foojay-resolver-convention' version '1.0.0'
 }
 
 include('common')
 include('fabric')
-include('quilt')
 include('forge')
 
-enableFeaturePreview("NO_IMPLICIT_LOOKUP_IN_PARENT_PROJECTS")
+enableFeaturePreview('NO_IMPLICIT_LOOKUP_IN_PARENT_PROJECTS')
 
 rootProject.name = 'minecraft-comes-alive'

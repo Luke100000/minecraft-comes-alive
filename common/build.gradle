@@ -1,38 +1,55 @@
-def publicationArtifactId = providers.gradleProperty('artifactId').get()
-def publicationGroupId = providers.gradleProperty('groupId').get()
-def publicationVersion = version.toString()
-def enabledPlatforms = providers.gradleProperty('enabled_platforms').get()
-def loaderVersion = providers.gradleProperty('loader_version').get()
-def architecturyVersion = providers.gradleProperty('architectury_version').get()
+import net.mca.build.GenerateAccessTransformer
 
-architectury {
-  common enabledPlatforms.split(',')
+plugins {
+    id 'multiloader-common'
+    id 'net.neoforged.moddev.legacyforge'
 }
 
-loom {
-  accessWidenerPath = file("src/main/resources/mca.accesswidener")
+def generateAccessTransformer = tasks.register('generateAccessTransformer', GenerateAccessTransformer) {
+    inputFile = layout.projectDirectory.file('src/main/resources/mca.classtweaker')
+    outputFile = layout.buildDirectory.file('generated/accesstransformer.cfg')
+}
+
+legacyForge {
+    mcpVersion = minecraft_version
+    parchment {
+        minecraftVersion = parchment_minecraft
+        mappingsVersion = parchment_version
+    }
+    accessTransformers.from(generateAccessTransformer)
 }
 
 dependencies {
-  // We depend on Fabric Loader here to use the Fabric @Environment annotations,
-  // which get remapped to the correct annotations on each platform.
-  // Do NOT use other classes from Fabric Loader.
-  modImplementation "net.fabricmc:fabric-loader:${loaderVersion}"
-
-  // Architectury API. This is optional, and you can comment it out if you don't need it.
-  modImplementation "dev.architectury:architectury:${architecturyVersion}"
-
-  // Loader modules provide the runtime; common only needs the API and annotation processor.
-  compileOnly(annotationProcessor("io.github.llamalad7:mixinextras-common:${mixin_extras_version}"))
+    compileOnly 'org.spongepowered:mixin:0.8.5'
+    compileOnly(annotationProcessor("io.github.llamalad7:mixinextras-common:${mixin_extras_version}"))
 }
 
-publishing {
-  publications {
-    mavenCommon(MavenPublication) {
-      artifactId = publicationArtifactId
-      groupId = publicationGroupId
-      version = publicationVersion + "+common"
-      from components.java
+configurations {
+    commonJava {
+        canBeResolved = false
+        canBeConsumed = true
     }
-  }
+    commonResources {
+        canBeResolved = false
+        canBeConsumed = true
+    }
+}
+
+sourceSets.main.resources {
+    srcDir 'src/generated/resources'
+}
+
+def commonResourcesOutput = layout.buildDirectory.dir('commonResources')
+
+tasks.register('prepareCommonResources', Sync) {
+    from(sourceSets.main.resources)
+    into(commonResourcesOutput)
+    duplicatesStrategy = DuplicatesStrategy.FAIL
+}
+
+artifacts {
+    commonJava sourceSets.main.java.sourceDirectories.singleFile
+    commonResources(commonResourcesOutput) {
+        builtBy tasks.named('prepareCommonResources')
+    }
 }
