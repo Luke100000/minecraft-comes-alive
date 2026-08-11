@@ -109,7 +109,7 @@ public class VillageTaxesManager {
         }
 
         if (moodImpact != 0) {
-            village.pushMood(moodImpact * village.getPopulation());
+            village.pushMood(moodImpact);
         }
 
         deliverTaxes(world);

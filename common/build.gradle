@@ -3,60 +3,13 @@ plugins {
     id 'net.neoforged.moddev.legacyforge'
 }
 
-tasks.register('generateAccessTransformer') {
-    def classTweaker = file('src/main/resources/mca.classtweaker')
-    def outputFile = layout.buildDirectory.file('generated/accesstransformer.cfg')
-
-    inputs.file(classTweaker)
-    outputs.file(outputFile)
-
-    doLast {
-        def atLines = []
-
-        for (line in classTweaker.readLines('UTF-8')) {
-            line = line.trim()
-            if (line.isEmpty() || line.startsWith('#')) {
-                atLines << line
-                continue
-            }
-
-            def lower = line.toLowerCase(Locale.ROOT)
-            if (lower.startsWith('classtweaker') || lower.startsWith('accesswidener')) {
-                atLines << "# ${line}"
-                continue
-            }
-
-            def parts = line.split('\\s+')
-            if (parts.length < 3) {
-                continue
-            }
-
-            def atAccess = parts[0] in ['extendable', 'mutable'] ? 'public-f' : 'public'
-            def type = parts[1]
-            def className = parts[2].replace('/', '.')
-
-            if (type == 'class') {
-                atLines << "${atAccess} ${className}"
-            } else if (type == 'field') {
-                atLines << "${atAccess} ${className} ${parts[3]}"
-            } else if (type == 'method') {
-                atLines << "${atAccess} ${className} ${parts[3]}${parts[4..-1].join('')}"
-            }
-        }
-
-        def generatedFile = outputFile.get().asFile
-        generatedFile.parentFile.mkdirs()
-        generatedFile.write(atLines.join('\n'), 'UTF-8')
-    }
-}
-
 legacyForge {
     mcpVersion = minecraft_version
     parchment {
         minecraftVersion = parchment_minecraft
         mappingsVersion = parchment_version
     }
-    accessTransformers.from(tasks.named('generateAccessTransformer'))
+    accessTransformers.from(file('src/main/legacyForge/accesstransformer.cfg'))
 }
 
 dependencies {

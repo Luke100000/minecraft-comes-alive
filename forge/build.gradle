@@ -23,7 +23,7 @@ mixin {
 legacyForge {
     version = forge_version
     validateAccessTransformers = true
-    accessTransformers.from(project(':common').tasks.named('generateAccessTransformer'))
+    accessTransformers.from(project(':common').file('src/main/legacyForge/accesstransformer.cfg'))
 
     parchment {
         minecraftVersion = parchment_minecraft
@@ -44,8 +44,7 @@ legacyForge {
 }
 
 tasks.named('processResources', ProcessResources) {
-    dependsOn(project(':common').tasks.named('generateAccessTransformer'))
-    from(project(':common').layout.buildDirectory.file('generated/accesstransformer.cfg')) {
+    from(project(':common').file('src/main/legacyForge/accesstransformer.cfg')) {
         into 'META-INF'
     }
     filesMatching('mca.mixin.json') {

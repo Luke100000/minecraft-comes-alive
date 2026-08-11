@@ -89,7 +89,7 @@
 * Updated translations/dialogues.
 * Updated supporters/translators.
 * Cleaned up code.
-
+* Fixed -9999999999 hearts/other integer related issues from occuring.
 # 7.6.28-beta.10
 
 * Fix villagers being positioned wrong on horses/boats.

@@ -148,23 +148,8 @@ public class Residency {
             }
         }
 
-        //slowly inject village boni
         if (entity.tickCount % 1200 == 0) {
             getHomeVillage().ifPresentOrElse(village -> {
-                //fetch mood from the village storage
-                int mood = village.popMood();
-                if (mood != 0) {
-                    entity.getVillagerBrain().modifyMoodValue(mood);
-                }
-
-                //fetch hearts
-                entity.level().players().forEach(player -> {
-                    int rep = village.popHearts(player);
-                    if (rep != 0) {
-                        entity.getVillagerBrain().getMemoriesForPlayer(player).modHearts(rep);
-                    }
-                });
-
                 //update the reputation
                 entity.level().players().forEach(player -> {
                     //currently, only hearts are considered, maybe additional factors can affect that too

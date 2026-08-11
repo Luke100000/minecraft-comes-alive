@@ -174,7 +174,6 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         if (sender.getPopulation() == 0) {
             //the village has been wiped out, lets send one last wave
             sender.cleanReputation();
-            sender.resetHearts(player);
 
             count *= 2;
         } else {

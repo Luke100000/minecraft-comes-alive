@@ -4,7 +4,6 @@ import com.mojang.authlib.GameProfile;
 import com.mojang.serialization.Dynamic;
 import net.mca.*;
 import net.mca.advancement.criterion.CriterionMCA;
-import net.mca.cobalt.network.NetworkHandler;
 import net.mca.entity.ai.*;
 import net.mca.entity.ai.brain.VillagerBrain;
 import net.mca.entity.ai.brain.VillagerTasksMCA;
@@ -13,7 +12,6 @@ import net.mca.entity.ai.navigation.MCAGroundPathNavigation;
 import net.mca.entity.ai.relationship.*;
 import net.mca.entity.interaction.VillagerCommandHandler;
 import net.mca.item.ItemsMCA;
-import net.mca.network.c2s.InteractionVillagerMessage;
 import net.mca.resources.Names;
 import net.mca.resources.Rank;
 import net.mca.resources.Tasks;
@@ -454,23 +452,6 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     public final InteractionResult interactAt(Player player, Vec3 pos, @NotNull InteractionHand hand) {
         // This allows hitbox interactions to be ignored if the player is carrying a child villager.
         if (getVehicle() != null && getVehicle().equals(player)) return InteractionResult.PASS;
-
-        ItemStack stack = player.getItemInHand(hand);
-        boolean isOnBlacklist = Config.getInstance().villagerInteractionItemBlacklist.contains(BuiltInRegistries.ITEM.getKey(stack.getItem()).toString());
-        if (hand.equals(InteractionHand.MAIN_HAND) && !isOnBlacklist && !stack.is(TagsMCA.Items.VILLAGER_EGGS) && canInteractWithItemStackInHand(stack) && !getVillagerBrain().isPanicking()) {
-            //make sure dialogueType is synced in case the client needs it
-            getDialogueType(player);
-
-            if (player.isShiftKeyDown()) {
-                if (player instanceof ServerPlayer e) {
-                    NetworkHandler.sendToPlayer(new InteractionVillagerMessage("trade", uuid), e);
-                }
-            } else {
-                playWelcomeSound();
-                interactedWith = true;
-                return interactions.interactAt(player, pos, hand);
-            }
-        }
         return super.interactAt(player, pos, hand);
     }
 
@@ -480,6 +461,20 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         if (getVehicle() != null && getVehicle().equals(player)) return InteractionResult.PASS;
 
         ItemStack stack = player.getItemInHand(hand);
+        boolean isOnBlacklist = Config.getInstance().villagerInteractionItemBlacklist.contains(BuiltInRegistries.ITEM.getKey(stack.getItem()).toString());
+        if (hand == InteractionHand.MAIN_HAND
+                && !player.isShiftKeyDown()
+                && !isOnBlacklist
+                && !stack.is(TagsMCA.Items.VILLAGER_EGGS)
+                && canInteractWithItemStackInHand(stack)
+                && !getVillagerBrain().isPanicking()) {
+            // Make sure dialogueType is synced in case the client needs it.
+            getDialogueType(player);
+            playWelcomeSound();
+            interactedWith = true;
+            return interactions.interactAt(player, Vec3.ZERO, hand);
+        }
+
         if (!stack.is(TagsMCA.Items.VILLAGER_EGGS) && isAlive() && !isTrading() && !isSleeping() && canInteractWithItemStackInHand(stack) && !getVillagerBrain().isPanicking()) {
             if (isBaby()) {
                 setUnhappy();
@@ -1092,12 +1087,9 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         //alert family and nearby villagers
         relations.onDeath(cause);
 
-        //distribute the hearts across the other villagers
-        //this prevents rapid drops in village reputation as well as bounty hunters to know what you did
         Optional<Village> village = residency.getHomeVillage();
         if (village.isPresent()) {
             ServerLevel servRef = (ServerLevel) level();
-            Map<UUID, Memories> memories = mcaBrain.getMemories();
 
             //iterate through all players for fate system
             if (cause.getEntity() != null) {
@@ -1106,10 +1098,6 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
                     ResourceLocation causeId = EntityType.getKey(cause.getEntity().getType());
                     CriterionMCA.FATE.trigger(player, causeId, relationToVillage);
                 });
-            }
-
-            for (Map.Entry<UUID, Memories> entry : memories.entrySet()) {
-                village.get().pushHearts(entry.getKey(), entry.getValue().getHearts());
             }
         }
 
