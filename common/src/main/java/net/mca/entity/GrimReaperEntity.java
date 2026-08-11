@@ -117,17 +117,22 @@ public class GrimReaperEntity extends PathfinderMob implements CTrackedEntity<Gr
 
     @Override
     protected PathNavigation createNavigation(Level world) {
-        FlyingPathNavigation navigator = new FlyingPathNavigation(this, world) {
-            @Override
-            public boolean isStableDestination(BlockPos pos) {
-                return true;
-            }
-
-        };
+        FlyingPathNavigation navigator = new GrimReaperFlyingPathNavigation(this, world);
         navigator.setCanOpenDoors(false);
         navigator.setCanFloat(false);
         navigator.setCanPassDoors(true);
         return navigator;
+    }
+
+    private static class GrimReaperFlyingPathNavigation extends FlyingPathNavigation {
+        private GrimReaperFlyingPathNavigation(GrimReaperEntity mob, Level level) {
+            super(mob, level);
+        }
+
+        @Override
+        public boolean isStableDestination(BlockPos pos) {
+            return true;
+        }
     }
 
     @Override

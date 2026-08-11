@@ -1,4 +1,4 @@
-# 7.7.0-beta.1
+# 7.7.0-alpha.1
 ## **Architectury API is no longer required.**
 
 
