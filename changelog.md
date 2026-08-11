@@ -1,3 +1,8 @@
+# 7.7.0-beta.2
+
+* Fix baby age bug
+* Fix Forge Startup crash
+
 # 7.7.0-beta.1
 ## **Architectury API is no longer required.**
 
