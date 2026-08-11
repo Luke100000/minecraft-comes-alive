@@ -44,6 +44,9 @@ jobs:
       - name: Build Artifacts with Gradle
         run: ./gradlew build --build-cache --configuration-cache --console=plain --non-interactive
 
+      - name: Merge Universal Jar
+        run: ./gradlew mergeJars --no-configuration-cache --console=plain --non-interactive
+
       # Standard glob matching for the root build output folder
       - name: Upload Universal Jars
         uses: actions/upload-artifact@v7

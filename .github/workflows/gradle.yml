@@ -32,6 +32,8 @@ jobs:
           cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
       - name: Build Artifacts with Gradle
         run: ./gradlew build --build-cache --configuration-cache --console=plain --non-interactive
+      - name: Merge Universal Jar
+        run: ./gradlew mergeJars --no-configuration-cache --console=plain --non-interactive
       - name: Publish to Maven
         run: ./gradlew publish --build-cache --configuration-cache --console=plain --non-interactive
       - name: Get tag
@@ -57,7 +59,7 @@ jobs:
           name: "[Universal ${{steps.split.outputs._1}}] MCA Reborn - ${{steps.split.outputs._0}}"
           changelog-file: changelog.md
           version-type: ${{ contains(steps.split.outputs._0, 'beta') && 'beta' || contains(steps.split.outputs._0, 'alpha') && 'alpha' || 'release' }}
-          files: build/libs/*-@(universal).jar
+          files: build/libs/*-universal.jar
           loaders: |
             fabric
             forge
