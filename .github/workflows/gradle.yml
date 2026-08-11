@@ -47,7 +47,7 @@ jobs:
           msg: ${{steps.tag.outputs.tag}}
       - name: "Upload to Distributors"
         uses: Kir-Antipov/mc-publish@v3.3.1
-        if: ${{ success() && startsWith(github.ref, 'refs/tags/') }}
+        if: ${{ false }}
         with:
           modrinth-id: 1W98a849
           modrinth-token: ${{ env.MODRINTH_TOKEN }}
