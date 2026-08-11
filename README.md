@@ -27,7 +27,6 @@ https://www.curseforge.com/minecraft/mc-mods/minecraft-comes-alive-reborn
 
 MCA has no external dependencies other than Minecraft Forge or Fabric, except for the following:
 
-- Architectury API is required on Minecraft 1.18.2 and above
 - Fabric API is required for Fabric users
 
 ## Compatibilities
