@@ -155,8 +155,8 @@ public class BabyItem extends Item {
         }
 
         // update
-        if (world.getGameTime() % 1200 == 0) {
-            getBabyNbt(stack).putInt("age", getBabyNbt(stack).getInt("age") + 1200);
+        if (world.getGameTime() % 100 == 0) {
+            getBabyNbt(stack).putInt("age", getBabyNbt(stack).getInt("age") + 100);
         }
     }
 
@@ -252,7 +252,7 @@ public class BabyItem extends Item {
     @Override
     public void appendHoverText(ItemStack stack, @Nullable Level world, List<Component> tooltip, TooltipFlag flag) {
         Player player = ClientProxy.getClientPlayer();
-        int age = getBabyNbt(stack).getInt("age") + (int)(world == null ? 0 : world.getGameTime() % 1200);
+        int age = getBabyNbt(stack).getInt("age");
 
         // Name
         if (getBabyNbt(stack).contains("babyName")) {
