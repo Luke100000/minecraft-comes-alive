@@ -12,6 +12,7 @@ import net.conczin.mca.entity.interaction.ZombieCommandHandler;
 import net.conczin.mca.registry.TagsMCA;
 import net.conczin.mca.util.InventoryUtils;
 import net.conczin.mca.util.network.datasync.CDataManager;
+import net.minecraft.ChatFormatting;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.syncher.EntityDataAccessor;
@@ -115,6 +116,11 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
         if (cleaned != null) {
             setName(cleaned.getString());
         }
+    }
+
+    @Override
+    public Component getDisplayName() {
+        return super.getDisplayName().copy().withStyle(ChatFormatting.RED);
     }
 
     @Override
