@@ -51,7 +51,7 @@ public abstract class MixinPlayerEntityRenderer extends LivingEntityRenderer<Abs
     @Inject(method = "<init>(Lnet/minecraft/client/renderer/entity/EntityRendererProvider$Context;Z)V", at = @At("TAIL"))
     private void init(EntityRendererProvider.Context ctx, boolean slim, CallbackInfo ci) {
         if (MCAClient.isPlayerRendererAllowed()) {
-            mca$villagerModel = mca$createModel(VillagerEntityModelMCA.bodyData(new CubeDeformation(0.0F), slim));
+            mca$villagerModel = mca$createModel(VillagerEntityModelMCA.bodyData(new CubeDeformation(0.0F), slim), slim);
             mca$vanillaModel = model;
 
             mca$skinLayer = new SkinLayer<>(this, mca$createModel(VillagerEntityModelMCA.bodyData(new CubeDeformation(0.0F))));
@@ -69,6 +69,36 @@ public abstract class MixinPlayerEntityRenderer extends LivingEntityRenderer<Abs
         return new PlayerEntityExtendedModel<>(LayerDefinition.create(data, 64, 64).bakeRoot());
     }
 
+    @Unique
+    private static PlayerEntityExtendedModel<AbstractClientPlayer> mca$createModel(MeshDefinition data, boolean slim) {
+        return new PlayerEntityExtendedModel<>(LayerDefinition.create(data, 64, 64).bakeRoot(), slim);
+    }
+
+    @Unique
+    private void mca$selectModel(AbstractClientPlayer player) {
+        if (!MCAClient.isPlayerRendererAllowed()) {
+            return;
+        }
+
+        model = MCAClient.useGeneticsRenderer(player.getUUID()) ? mca$villagerModel : mca$vanillaModel;
+    }
+
+    @Inject(method = "render(Lnet/minecraft/client/player/AbstractClientPlayer;FFLcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;I)V", at = @At("HEAD"))
+    private void mca$selectThirdPersonModel(AbstractClientPlayer player, float yaw, float tickDelta, PoseStack matrices, MultiBufferSource vertexConsumers, int light, CallbackInfo ci) {
+        mca$selectModel(player);
+    }
+
+    @Inject(
+            method = {
+                    "renderRightHand(Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;ILnet/minecraft/client/player/AbstractClientPlayer;)V",
+                    "renderLeftHand(Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;ILnet/minecraft/client/player/AbstractClientPlayer;)V"
+            },
+            at = @At("HEAD")
+    )
+    private void mca$selectFirstPersonModel(PoseStack matrices, MultiBufferSource vertexConsumers, int light, AbstractClientPlayer player, CallbackInfo ci) {
+        mca$selectModel(player);
+    }
+
     @Inject(method = "scale(Lnet/minecraft/client/player/AbstractClientPlayer;Lcom/mojang/blaze3d/vertex/PoseStack;F)V", at = @At("TAIL"))
     private void injectScale(AbstractClientPlayer player, PoseStack matrices, float f, CallbackInfo ci) {
         if (MCAClient.useGeneticsRenderer(player.getUUID())) {
@@ -78,12 +108,6 @@ public abstract class MixinPlayerEntityRenderer extends LivingEntityRenderer<Abs
             if (CommonVillagerModel.getVillager(player).getAgeState() == AgeState.BABY && !player.isPassenger()) {
                 matrices.translate(0, 0.6F, 0);
             }
-
-            // switch to mca model
-            model = mca$villagerModel;
-        } else if (MCAClient.isPlayerRendererAllowed()) {
-            // switch to vanilla model
-            model = mca$vanillaModel;
         }
     }
 
