@@ -2,6 +2,7 @@ plugins {
     id 'fabric-loom' version '1.17.17' apply false
     id 'net.neoforged.moddev.legacyforge' version '2.0.142' apply false
     id 'io.github.pacifistmc.forgix' version '1.2.9'
+    id 'maven-publish'
 }
 
 def getAppVersion = { ->
@@ -17,13 +18,13 @@ def getAppVersion = { ->
 } as Object
 
 allprojects {
-    group = providers.gradleProperty('groupId').get()
+    group = providers.gradleProperty('group').get()
     description = providers.gradleProperty('description').get()
     version = getAppVersion()
 }
 
 forgix {
-    group = providers.gradleProperty('groupId').get()
+    group = providers.gradleProperty('group').get()
     mergedJarName = "${rootProject.name}-${rootProject.version}-universal.jar"
     outputDir = 'build/libs'
 
@@ -33,5 +34,30 @@ forgix {
     }
     fabric {
         jarLocation = "build/libs/${rootProject.name}-${rootProject.version}.jar"
+    }
+}
+
+publishing {
+    publications {
+        register('universal', MavenPublication) {
+            artifactId = providers.gradleProperty('artifactId').get()
+            artifact(layout.buildDirectory.file("libs/${rootProject.name}-${rootProject.version}-universal.jar")) {
+                builtBy tasks.named('mergeJars')
+                classifier = null
+            }
+            pom {
+                packaging = 'jar'
+            }
+        }
+    }
+    repositories {
+        maven {
+            name = 'reposiliteRepository'
+            url = uri('https://maven.conczin.net/Artifacts')
+            credentials {
+                username = System.getenv('MAVEN_USERNAME')
+                password = System.getenv('MAVEN_TOKEN')
+            }
+        }
     }
 }

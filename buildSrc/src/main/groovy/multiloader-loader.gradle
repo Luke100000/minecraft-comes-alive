@@ -40,9 +40,3 @@ tasks.named('sourcesJar', Jar) {
     dependsOn(configurations.commonResources)
     from(configurations.commonResources)
 }
-
-publishing {
-    publications.named('mavenJava') {
-        version = "${project.version}+${project.name}"
-    }
-}

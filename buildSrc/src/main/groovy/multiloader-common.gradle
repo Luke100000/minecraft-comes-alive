@@ -3,7 +3,7 @@ plugins {
     id 'maven-publish'
 }
 
-group = providers.gradleProperty('groupId').get()
+group = providers.gradleProperty('group').get()
 description = providers.gradleProperty('description').get()
 
 base {
@@ -86,9 +86,11 @@ jar {
 
 publishing {
     publications {
-        register('mavenJava', MavenPublication) {
-            artifactId = providers.gradleProperty('artifactId').get()
-            from components.java
+        if (project.name != 'common') {
+            register('mavenJava', MavenPublication) {
+                artifactId = "${providers.gradleProperty('artifactId').get()}-${project.name}"
+                from components.java
+            }
         }
     }
     repositories {

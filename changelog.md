@@ -1,3 +1,19 @@
+# 7.7.1-alpha.1
+**NOTE:**
+
+* All addons using MCA code will be broken
+* Backup your world before using.
+* Fixed an integrated-server race that could crash while MCA building type data was being refreshed and read at the same time.
+
+
+## Developer / Addon Changes
+
+* MCA's 1.20.1 Java namespace is now `net.conczin.mca`, matching 1.21.1.
+* MCA's Maven group is now `net.conczin.mca`, matching 1.21.1.
+* The 1.20.1 universal jar is now published to Maven as `net.conczin.mca:mca:7.7.1-alpha.1+1.20.1`
+* Loader-specific development artifacts are published as `net.conczin.mca:mca-forge:7.7.1-alpha.1+1.20.1` and `net.conczin.mca:mca-fabric:7.7.1-alpha.1+1.20.1`.
+* The common-only Maven artifact is no longer published.
+
 # 7.7.0-beta.2
 
 * Fix baby age bug
