@@ -103,14 +103,17 @@ public class Pregnancy {
         }).orElse(false);
     }
 
+    static int getNaturalChildStartingAge() {
+        return AgeState.TODDLER.toAge();
+    }
+
     public VillagerEntityMCA createChild(Gender gender, VillagerEntityMCA partner) {
         VillagerEntityMCA child = Objects.requireNonNull(gender.getVillagerType().create(mother.level()));
 
         child.getGenetics().combine(partner.getGenetics(), mother.getGenetics());
         child.getTraits().inherit(partner.getTraits());
         child.getTraits().inherit(mother.getTraits());
-        child.setBaby(true);
-        child.setAgeState(AgeState.TODDLER);
+        child.setAge(getNaturalChildStartingAge());
         child.getRelationships().getFamilyEntry().replaceParents(mother.getRelationships(), partner.getRelationships());
 
         // advancement
