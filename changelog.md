@@ -5,6 +5,7 @@
 * More bed fixes
 * Fixed baby age corruption bug
 * Fixed gender potions.
+* Fixed rare crash in blueprint screen
 
 # 7.7.35
 
