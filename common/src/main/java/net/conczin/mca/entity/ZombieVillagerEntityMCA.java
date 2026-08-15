@@ -3,6 +3,7 @@ package net.conczin.mca.entity;
 import net.conczin.mca.Config;
 import net.conczin.mca.MCA;
 import net.conczin.mca.TagsMCA;
+import net.conczin.mca.datafix.McaDataFixers;
 import net.conczin.mca.entity.ai.Genetics;
 import net.conczin.mca.entity.ai.Relationship;
 import net.conczin.mca.entity.ai.Traits;
@@ -15,7 +16,6 @@ import net.conczin.mca.util.InventoryUtils;
 import net.conczin.mca.util.network.datasync.CDataManager;
 import net.minecraft.ChatFormatting;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.server.level.ServerPlayer;
@@ -283,33 +283,24 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
 
     @Override
     public void readAdditionalSaveData(CompoundTag nbt) {
-        super.readAdditionalSaveData(nbt);
-        getTypeDataManager().load(this, nbt);
-        relations.readFromNbt(nbt);
-        chatAIPrompt = nbt.getString(VillagerEntityMCA.CHAT_AI_PROMPT_KEY);
-        nicknameData = nbt.getCompound(VillagerEntityMCA.NICKNAMES_KEY).copy();
+        CompoundTag data = McaDataFixers.update(nbt);
+        super.readAdditionalSaveData(data);
+        getTypeDataManager().load(this, data);
+        relations.readFromNbt(data);
+        chatAIPrompt = data.getString(VillagerEntityMCA.CHAT_AI_PROMPT_KEY);
+        nicknameData = data.getCompound(VillagerEntityMCA.NICKNAMES_KEY).copy();
 
         updateAttributes();
 
         inventory.clearContent();
-        InventoryUtils.readFromNBT(inventory, nbt);
+        InventoryUtils.readFromNBT(inventory, data);
 
         validateClothes();
     }
 
     @Override
     public void readAdditionalSaveDataForEditor(CompoundTag nbt) {
-        CompoundTag merged = nbt.copy();
-        if (merged.contains(VillagerEntityMCA.MCA_DATA_KEY, Tag.TAG_COMPOUND)) {
-            CompoundTag mcaData = merged.getCompound(VillagerEntityMCA.MCA_DATA_KEY);
-            for (String key : mcaData.getAllKeys()) {
-                Tag value = mcaData.get(key);
-                if (value != null) {
-                    merged.put(key, value.copy());
-                }
-            }
-        }
-        readAdditionalSaveData(merged);
+        readAdditionalSaveData(nbt);
     }
 
     @Override

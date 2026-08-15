@@ -1,7 +1,6 @@
 package net.conczin.mca.item;
 
 import net.conczin.mca.cobalt.network.NetworkHandler;
-import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.entity.ai.Genetics;
 import net.conczin.mca.entity.ai.relationship.Gender;
@@ -10,7 +9,6 @@ import net.conczin.mca.server.world.data.FamilyTree;
 import net.conczin.mca.server.world.data.FamilyTreeNode;
 import net.conczin.mca.server.world.data.PlayerSaveData;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.nbt.Tag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
@@ -37,11 +35,9 @@ public class PotionOfMetamorphosisItem extends TooltippedItem {
             // set gender
             PlayerSaveData data = PlayerSaveData.get(serverPlayer);
             CompoundTag villagerData = data.getEntityData();
-            CompoundTag mcaData = villagerData.contains(VillagerEntityMCA.MCA_DATA_KEY, Tag.TAG_COMPOUND)
-                    ? villagerData.getCompound(VillagerEntityMCA.MCA_DATA_KEY)
-                    : villagerData;
-            Genetics.writeGender(mcaData, gender);
+            Genetics.writeGender(villagerData, gender);
             data.setEntityData(villagerData);
+            data.setEntityDataSet(true);
 
             common(serverPlayer);
 

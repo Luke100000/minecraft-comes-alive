@@ -3,6 +3,7 @@ package net.conczin.mca.entity;
 import com.mojang.authlib.GameProfile;
 import com.mojang.serialization.Dynamic;
 import net.conczin.mca.*;
+import net.conczin.mca.datafix.McaDataFixers;
 import net.conczin.mca.entity.ai.*;
 import net.conczin.mca.entity.ai.relationship.*;
 import net.conczin.mca.*;
@@ -33,7 +34,6 @@ import net.minecraft.core.particles.ParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.resources.ResourceLocation;
@@ -107,7 +107,6 @@ import java.util.function.Predicate;
 import static net.conczin.mca.client.model.CommonVillagerModel.getVillager;
 
 public class VillagerEntityMCA extends Villager implements VillagerLike<VillagerEntityMCA>, MenuProvider, CompassionateEntity<BreedableRelationship>, CrossbowAttackMob {
-    public static final String MCA_DATA_KEY = "MCAData";
     public static final int MAX_NICKNAME_LENGTH = 32;
     static final String CHAT_AI_PROMPT_KEY = "ChatAIPrompt";
     static final String NICKNAMES_KEY = "nicknames";
@@ -1472,8 +1471,8 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
     @Override
     public void readAdditionalSaveData(CompoundTag nbt) {
-        CompoundTag data = flattenMcaData(nbt);
-        super.readAdditionalSaveData(nbt);
+        CompoundTag data = McaDataFixers.update(nbt);
+        super.readAdditionalSaveData(data);
         getTypeDataManager().load(this, data);
         relations.readFromNbt(data);
         longTermMemory.readFromNbt(data);
@@ -1507,21 +1506,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
     @Override
     public void readAdditionalSaveDataForEditor(CompoundTag nbt) {
-        readAdditionalSaveData(flattenMcaData(nbt));
-    }
-
-    private CompoundTag flattenMcaData(CompoundTag nbt) {
-        CompoundTag merged = nbt.copy();
-        if (merged.contains(MCA_DATA_KEY, Tag.TAG_COMPOUND)) {
-            CompoundTag mcaData = merged.getCompound(MCA_DATA_KEY);
-            for (String key : mcaData.getAllKeys()) {
-                Tag value = mcaData.get(key);
-                if (value != null) {
-                    merged.put(key, value.copy());
-                }
-            }
-        }
-        return merged;
+        readAdditionalSaveData(nbt);
     }
 
     public String getChatAIPrompt() {

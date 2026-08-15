@@ -63,24 +63,18 @@ public final class PlayerDimensions {
     }
 
     private static Scale fromEntityData(CompoundTag entityData) {
-        CompoundTag mcaData = entityData.contains(VillagerEntityMCA.MCA_DATA_KEY, 10)
-                ? entityData.getCompound(VillagerEntityMCA.MCA_DATA_KEY)
-                : entityData;
-        if (getPlayerModel(entityData, mcaData) == VillagerLike.PlayerModel.VANILLA) {
+        if (getPlayerModel(entityData) == VillagerLike.PlayerModel.VANILLA) {
             return VANILLA_SCALE;
         }
-        CompoundTag traits = mcaData.contains("Traits", 10) ? mcaData.getCompound("Traits") : new CompoundTag();
+        CompoundTag traits = entityData.contains("Traits", 10) ? entityData.getCompound("Traits") : new CompoundTag();
         AgeScale age = getAgeScale(entityData);
-        Gender gender = Genetics.readGender(mcaData);
-        if (gender == Gender.UNASSIGNED && mcaData != entityData) {
-            gender = Genetics.readGender(entityData);
-        }
+        Gender gender = Genetics.readGender(entityData);
 
-        float width = geneScale(entityData, mcaData, Genetics.WIDTH)
+        float width = geneScale(entityData, Genetics.WIDTH)
                 * getTraitsHorizontalScaleFactor(traits)
                 * age.width()
                 * gender.getHorizontalScaleFactor();
-        float height = geneScale(entityData, mcaData, Genetics.SIZE)
+        float height = geneScale(entityData, Genetics.SIZE)
                 * getTraitsVerticalScaleFactor(traits)
                 * age.height()
                 * gender.getScaleFactor();
@@ -88,11 +82,8 @@ public final class PlayerDimensions {
         return new Scale(width, height);
     }
 
-    private static VillagerLike.PlayerModel getPlayerModel(CompoundTag entityData, CompoundTag mcaData) {
-        CompoundTag modelData = mcaData.contains("PlayerModel") || mcaData.contains("playerModel")
-                ? mcaData
-                : entityData;
-        int id = modelData.contains("PlayerModel") ? modelData.getInt("PlayerModel") : modelData.getInt("playerModel");
+    private static VillagerLike.PlayerModel getPlayerModel(CompoundTag entityData) {
+        int id = entityData.contains("PlayerModel") ? entityData.getInt("PlayerModel") : entityData.getInt("playerModel");
         return VillagerLike.PlayerModel.byId(id);
     }
 
@@ -140,11 +131,9 @@ public final class PlayerDimensions {
         }
     }
 
-    private static float geneScale(CompoundTag entityData, CompoundTag mcaData, Genetics.GeneType gene) {
+    private static float geneScale(CompoundTag entityData, Genetics.GeneType gene) {
         String key = "Gene" + gene.key();
-        float value = mcaData.contains(key)
-                ? mcaData.getFloat(key)
-                : entityData.contains(key) ? entityData.getFloat(key) : 0.5F;
+        float value = entityData.contains(key) ? entityData.getFloat(key) : 0.5F;
         return 0.75F + value / 2.0F;
     }
 

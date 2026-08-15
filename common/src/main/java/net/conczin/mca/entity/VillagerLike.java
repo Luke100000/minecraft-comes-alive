@@ -770,10 +770,7 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
         CompoundTag villagerData = player.getEntityData();
         Gender gender = player.getGender();
         if (gender != Gender.UNASSIGNED) {
-            CompoundTag mcaData = villagerData.contains(VillagerEntityMCA.MCA_DATA_KEY, 10)
-                    ? villagerData.getCompound(VillagerEntityMCA.MCA_DATA_KEY)
-                    : villagerData;
-            Genetics.writeGender(mcaData, gender);
+            Genetics.writeGender(villagerData, gender);
         }
         VillagerEntityMCA villager = EntitiesMCA.MALE_VILLAGER.get().create(player.getWorld());
         if (villager == null) {

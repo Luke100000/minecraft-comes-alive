@@ -87,7 +87,7 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
 
         if (nbt.contains("entityData")) {
             CompoundTag storedEntityData = nbt.getCompound("entityData");
-            entityData = McaDataFixers.update(storedEntityData);
+            entityData = normalizeEntityData(storedEntityData);
             if (!entityData.equals(storedEntityData)) {
                 setDirty();
             }
@@ -150,7 +150,7 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
     }
 
     public void setEntityData(CompoundTag entityData) {
-        CompoundTag copy = McaDataFixers.update(entityData.copy());
+        CompoundTag copy = normalizeEntityData(entityData);
         if (copy.equals(this.entityData)) {
             return;
         }
@@ -158,6 +158,10 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
         dimensionsScale = PlayerDimensions.fromPlayerData(this);
         setDirty();
         refreshPlayerDimensions();
+    }
+
+    private static CompoundTag normalizeEntityData(CompoundTag entityData) {
+        return McaDataFixers.update(entityData.copy());
     }
 
     private void refreshPlayerDimensions() {
@@ -267,14 +271,6 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
 
     @Override
     public Gender getGender() {
-        CompoundTag entityData = getEntityData();
-        CompoundTag mcaData = entityData.contains(VillagerEntityMCA.MCA_DATA_KEY, Tag.TAG_COMPOUND)
-                ? entityData.getCompound(VillagerEntityMCA.MCA_DATA_KEY)
-                : entityData;
-        Gender gender = Genetics.readGender(mcaData);
-        if (gender != Gender.UNASSIGNED || mcaData == entityData) {
-            return gender;
-        }
         return Genetics.readGender(entityData);
     }
 
