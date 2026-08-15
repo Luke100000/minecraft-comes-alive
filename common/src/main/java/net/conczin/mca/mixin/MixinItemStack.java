@@ -1,0 +1,29 @@
+package net.conczin.mca.mixin;
+
+import net.conczin.mca.server.world.data.VillageManager;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.InteractionResult;
+import net.minecraft.world.item.FlintAndSteelItem;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.context.UseOnContext;
+import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
+
+@Mixin(ItemStack.class)
+public abstract class MixinItemStack {
+    @Inject(
+            method = "useOn(Lnet/minecraft/world/item/context/UseOnContext;)Lnet/minecraft/world/InteractionResult;",
+            at = @At("RETURN")
+    )
+    private void mca$trySpawnReaper(UseOnContext context, CallbackInfoReturnable<InteractionResult> cir) {
+        if (context.getItemInHand().getItem() instanceof FlintAndSteelItem
+                && cir.getReturnValue().consumesAction()
+                && context.getLevel() instanceof ServerLevel serverWorld) {
+            VillageManager.get(serverWorld)
+                    .getReaperSpawner()
+                    .trySpawnReaper(serverWorld, context.getClickedPos());
+        }
+    }
+}

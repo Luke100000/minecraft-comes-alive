@@ -22,13 +22,13 @@
   "environment": "*",
   "entrypoints": {
     "main": [
-      "net.mca.fabric.MCAFabric"
+      "net.conczin.mca.fabric.MCAFabric"
     ],
     "client": [
-      "net.mca.fabric.MCAFabricClient"
+      "net.conczin.mca.fabric.MCAFabricClient"
     ],
     "fabric-datagen": [
-      "net.mca.fabric.datagen.CribDatagen"
+      "net.conczin.mca.fabric.datagen.CribDatagen"
     ]
   },
   "mixins": [
