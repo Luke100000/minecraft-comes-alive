@@ -84,7 +84,7 @@ import net.minecraft.world.item.ProjectileWeaponItem;
 import net.minecraft.world.item.component.Consumable;
 import net.minecraft.world.item.component.SuspiciousStewEffects;
 import net.minecraft.world.item.consume_effects.ApplyStatusEffectsConsumeEffect;
-import net.minecraft.world.item.trading.MerchantOffer;
+import net.minecraft.world.item.trading.MerchantOffers;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.pathfinder.PathType;
 import net.minecraft.world.level.ServerLevelAccessor;
@@ -528,6 +528,20 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
     public boolean hasTradeOffers() {
         return !getOffers().isEmpty();
+    }
+
+    @Override
+    public MerchantOffers getOffers() {
+        MerchantOffers offers = super.getOffers();
+        int previousSize = offers.size();
+        offers.removeIf(offer -> offer.getResult().isEmpty());
+
+        int removed = previousSize - offers.size();
+        if (removed > 0) {
+            MCA.LOGGER.warn("Removed {} invalid villager trade(s) with empty result for villager {} (profession {}, level {})",
+                    removed, getUUID(), getProfessionId(), getVillagerData().level());
+        }
+        return offers;
     }
 
     @Override

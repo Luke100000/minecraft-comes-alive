@@ -16,6 +16,8 @@ import net.minecraft.world.entity.player.Player;
 import java.util.Optional;
 
 public final class PlayerDimensions {
+    private static final Scale VANILLA_SCALE = new Scale(1.0F, 1.0F);
+
     private PlayerDimensions() {
     }
 
@@ -37,11 +39,18 @@ public final class PlayerDimensions {
     }
 
     public static Scale fromVillager(VillagerLike<?> villager) {
+        if (villager.getPlayerModel() == VillagerLike.PlayerModel.VANILLA) {
+            return VANILLA_SCALE;
+        }
         return new Scale(villager.getRawHorizontalScaleFactor(), villager.getRawVerticalScaleFactor());
     }
 
     public static Scale fromEntityData(CompoundTag entityData) {
         CompoundTag mcaData = NbtHelper.getCompoundOrSelf(entityData, VillagerEntityMCA.MCA_DATA_KEY);
+        CompoundTag modelData = mcaData.contains("PlayerModel") ? mcaData : entityData;
+        if (VillagerLike.PlayerModel.byId(modelData.getInt("PlayerModel").orElse(VillagerLike.PlayerModel.VILLAGER.ordinal())) == VillagerLike.PlayerModel.VANILLA) {
+            return VANILLA_SCALE;
+        }
         CompoundTag traits = mcaData.getCompound("Traits").orElseGet(CompoundTag::new);
         AgeScale age = getAgeScale(entityData);
         Gender gender = Gender.byId(mcaData.getInt("Gender").orElse(Gender.UNASSIGNED.ordinal()));
