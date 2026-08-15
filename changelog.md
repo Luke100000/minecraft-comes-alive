@@ -7,6 +7,7 @@
 * Fixed invalid villager trades with empty results.
 * Fixed baby age corruption.
 * Fixed gender potions.
+* Fixed rare crash in blueprint screen
 
 # 8.1.7
 
