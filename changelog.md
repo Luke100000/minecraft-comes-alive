@@ -1,13 +1,20 @@
+# 8.1.9
+
+* Improved save-data migration when upgrading MCA worlds from Minecraft 1.21.1 to 26.1.2.
+* Fixed player gender and model data persistence, including gender potions and vanilla-model hitbox scaling.
+* Improved villager home-bed residency and migration behavior.
+* Further improved villager bed pathfinding reliability.
+* Fixed invalid villager trades with empty results.
+* Fixed MCA zombie villager nameplates not rendering red.
+* Fixed baby age corruption.
+* Fixed rare crash in blueprint screen.
+* Updated translations.
+
 # 8.1.8
 
 * Fixed villagers being unable to move.
 * Improved villager bed pathing and sleep reliability.
 * Fixed using the Comb, Needle and Thread, or Villager Editor wiping villager inventories.
-* Improved villager migration behavior.
-* Fixed invalid villager trades with empty results.
-* Fixed baby age corruption.
-* Fixed gender potions.
-* Fixed rare crash in blueprint screen
 
 # 8.1.7
 
