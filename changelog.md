@@ -1,19 +1,19 @@
 # 7.7.1-alpha.1
-**NOTE:**
+**Note:**
 
-* All addons using MCA code will be broken
+* Incompatible with previous builds
 * Backup your world before using.
+* All addons using MCA code will be broken, except Townstead 0.77 Release - 1
 * Fixed an integrated-server race that could crash while MCA building type data was being refreshed and read at the same time.
-
+* Improved data saving
+* Internal improvements
 
 ## Developer / Addon Changes
 
-* MCA's 1.20.1 source/development Java namespace is now `net.conczin.mca`, matching 1.21.1.
+* MCA's 1.20.1 Java namespace is now `net.conczin.mca`, matching 1.21.1.
 * MCA's Maven group is now `net.conczin.mca`, matching 1.21.1.
 * The 1.20.1 universal jar is now published to Maven as `net.conczin.mca:mca:7.7.1-alpha.1+1.20.1`
 * Loader-specific development artifacts are published as `net.conczin.mca:mca-forge:7.7.1-alpha.1+1.20.1` and `net.conczin.mca:mca-fabric:7.7.1-alpha.1+1.20.1`.
-  * These loader-specific artifacts expose the canonical `net.conczin.mca` namespace and are the preferred compile dependencies for addons.
-  * The Forgix universal jar remains loader-isolated internally because Forge and Fabric use different production Minecraft mappings; addons targeting the universal runtime must still account for Forgix's loader relocation in their final bytecode.
 * The common-only Maven artifact is no longer published.
 
 # 7.7.0-beta.2
