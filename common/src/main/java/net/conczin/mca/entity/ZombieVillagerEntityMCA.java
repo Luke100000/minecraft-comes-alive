@@ -1,6 +1,7 @@
 package net.conczin.mca.entity;
 
 import net.conczin.mca.Config;
+import net.conczin.mca.datafix.McaDataFixers;
 import net.conczin.mca.entity.ai.Genetics;
 import net.conczin.mca.entity.ai.Relationship;
 import net.conczin.mca.entity.ai.Traits;
@@ -263,30 +264,24 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
 
     @Override
     public void readAdditionalSaveData(CompoundTag nbt) {
-        super.readAdditionalSaveData(nbt);
-        getTypeDataManager().load(this, nbt);
-        relations.readFromNbt(nbt);
-        chatAIPrompt = nbt.getString(VillagerEntityMCA.CHAT_AI_PROMPT_KEY);
-        nicknameData = nbt.getCompound(VillagerEntityMCA.NICKNAMES_KEY).copy();
+        CompoundTag data = McaDataFixers.update(nbt);
+        super.readAdditionalSaveData(data);
+        getTypeDataManager().load(this, data);
+        relations.readFromNbt(data);
+        chatAIPrompt = data.getString(VillagerEntityMCA.CHAT_AI_PROMPT_KEY);
+        nicknameData = data.getCompound(VillagerEntityMCA.NICKNAMES_KEY).copy();
 
         updateAttributes();
 
         inventory.clearContent();
-        InventoryUtils.readFromNBT(this.registryAccess(), inventory, nbt);
+        InventoryUtils.readFromNBT(this.registryAccess(), inventory, data);
 
         validateClothes();
     }
 
     @Override
     public void readAdditionalSaveDataForEditor(CompoundTag nbt) {
-        CompoundTag merged = nbt.copy();
-        if (merged.contains(VillagerEntityMCA.MCA_DATA_KEY, 10)) {
-            CompoundTag mcaData = merged.getCompound(VillagerEntityMCA.MCA_DATA_KEY);
-            for (String key : mcaData.getAllKeys()) {
-                merged.put(key, mcaData.get(key).copy());
-            }
-        }
-        readAdditionalSaveData(merged);
+        readAdditionalSaveData(nbt);
     }
 
     @Override

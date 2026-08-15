@@ -1,16 +1,17 @@
 # 7.7.36
+* Recommended to ***__backup__*** your world.
+* This release won't be backwards compatible with 7.7.35 and below due to internal saving changes.
 
 * More bed fixes
+* Fixed baby age corruption bug
+* Fixed gender potions.
 
 # 7.7.35
 
 * Improve mob compatibility
 * Improve villager migration behaviour
 
-## **IMPORTANT**
-* Recommended to ***__backup__*** your world.
-* This release won't be backwards compatible with 7.7.32 and below due to internal changes with how traits and personalities are saved
-* This release works with 26.1.2/26.2 - >=8.1.7
+# 7.7.34
 
 * Fixed villagers being stuck and not able to move
   * sleeping should be more reliable 

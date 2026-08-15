@@ -10,6 +10,8 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtOps;
 import net.minecraft.nbt.Tag;
 
+import java.util.Objects;
+
 /**
  * MCA-owned DataFixerUpper pipeline for persisted MCA entity data.
  *
@@ -32,9 +34,10 @@ public final class McaDataFixers {
      * Upgrades MCA entity data to the current version.
      *
      * <p>Both the current flat representation and the former nested
-     * {@code MCAData} representation are handled. Current payloads are returned
-     * unchanged, while payloads from a future MCA version are copied without
-     * modification.</p>
+     * {@code MCAData} representation are handled. Legacy nested data is
+     * normalized into the current flat entity-save shape. Current payloads are
+     * returned unchanged, while payloads from a future MCA version are copied
+     * without modification.</p>
      */
     public static CompoundTag update(CompoundTag input) {
         if (getVersion(input) > CURRENT_VERSION) {
@@ -47,16 +50,17 @@ public final class McaDataFixers {
         }
 
         CompoundTag nested = updated.getCompound(LEGACY_MCA_DATA_KEY);
-        CompoundTag migratedNested = updatePayload(nested);
-        if (migratedNested == nested) {
-            return updated;
+        if (getVersion(nested) > CURRENT_VERSION) {
+            return updated == input ? input.copy() : updated;
         }
 
-        if (updated == input) {
-            updated = input.copy();
+        CompoundTag migratedNested = updatePayload(nested);
+        CompoundTag flattened = updated == input ? input.copy() : updated;
+        flattened.remove(LEGACY_MCA_DATA_KEY);
+        for (String key : migratedNested.getAllKeys()) {
+            flattened.put(key, Objects.requireNonNull(migratedNested.get(key)).copy());
         }
-        updated.put(LEGACY_MCA_DATA_KEY, migratedNested);
-        return updated;
+        return flattened;
     }
 
     /**
@@ -68,11 +72,6 @@ public final class McaDataFixers {
         }
 
         stampPayload(output);
-        if (output.contains(LEGACY_MCA_DATA_KEY, Tag.TAG_COMPOUND)) {
-            CompoundTag nested = output.getCompound(LEGACY_MCA_DATA_KEY);
-            stampPayload(nested);
-            output.put(LEGACY_MCA_DATA_KEY, nested);
-        }
     }
 
     private static CompoundTag updatePayload(CompoundTag input) {

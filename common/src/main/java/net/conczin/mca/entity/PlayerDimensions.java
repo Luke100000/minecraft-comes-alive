@@ -61,22 +61,18 @@ public final class PlayerDimensions {
     }
 
     private static Scale fromEntityData(CompoundTag entityData) {
-        CompoundTag mcaData = entityData.contains(VillagerEntityMCA.MCA_DATA_KEY, 10)
-                ? entityData.getCompound(VillagerEntityMCA.MCA_DATA_KEY)
-                : entityData;
-        CompoundTag modelData = mcaData.contains("PlayerModel") ? mcaData : entityData;
-        if (VillagerLike.PlayerModel.byId(modelData.getInt("PlayerModel")) == VillagerLike.PlayerModel.VANILLA) {
+        if (VillagerLike.PlayerModel.byId(entityData.getInt("PlayerModel")) == VillagerLike.PlayerModel.VANILLA) {
             return VANILLA_SCALE;
         }
-        CompoundTag traits = mcaData.contains("Traits", 10) ? mcaData.getCompound("Traits") : new CompoundTag();
+        CompoundTag traits = entityData.contains("Traits", 10) ? entityData.getCompound("Traits") : new CompoundTag();
         AgeScale age = getAgeScale(entityData);
-        Gender gender = Gender.byId(mcaData.contains("Gender") ? mcaData.getInt("Gender") : Gender.UNASSIGNED.ordinal());
+        Gender gender = Gender.byId(entityData.contains("Gender") ? entityData.getInt("Gender") : Gender.UNASSIGNED.ordinal());
 
-        float width = geneScale(mcaData, Genetics.WIDTH)
+        float width = geneScale(entityData, Genetics.WIDTH)
                 * getTraitsHorizontalScaleFactor(traits)
                 * age.width()
                 * gender.getHorizontalScaleFactor();
-        float height = geneScale(mcaData, Genetics.SIZE)
+        float height = geneScale(entityData, Genetics.SIZE)
                 * getTraitsVerticalScaleFactor(traits)
                 * age.height()
                 * gender.getScaleFactor();

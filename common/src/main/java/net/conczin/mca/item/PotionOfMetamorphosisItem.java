@@ -36,6 +36,7 @@ public class PotionOfMetamorphosisItem extends TooltippedItem {
             CompoundTag villagerData = data.getEntityData();
             villagerData.putInt("Gender", gender.ordinal());
             data.setEntityData(villagerData);
+            data.setEntityDataSet(true);
 
             common(serverPlayer);
 
