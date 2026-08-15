@@ -31,8 +31,9 @@ public final class McaDataFixers {
     /**
      * Upgrades MCA entity data to the current version.
      *
-     * <p>Both the current flat representation and the former nested
-     * {@code MCAData} representation are handled. Current payloads are returned
+     * <p>Both legacy flat payloads and the current nested {@code MCAData}
+     * representation are handled. The storage shape is preserved here; this
+     * fixer only upgrades MCA payload contents. Current payloads are returned
      * unchanged, while payloads from a future MCA version are copied without
      * modification.</p>
      */

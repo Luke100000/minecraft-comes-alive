@@ -74,7 +74,7 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
         Optional<CompoundTag> storedEntityData = nbt.getCompound("entityData");
         if (storedEntityData.isPresent()) {
             CompoundTag stored = storedEntityData.get();
-            entityData = McaDataFixers.update(stored);
+            entityData = normalizeEntityData(stored);
             if (!entityData.equals(stored)) {
                 setDirty();
             }
@@ -150,7 +150,7 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
     }
 
     public void setEntityData(CompoundTag entityData) {
-        CompoundTag copy = McaDataFixers.update(entityData.copy());
+        CompoundTag copy = normalizeEntityData(entityData);
         if (copy.equals(this.entityData)) {
             return;
         }
@@ -158,6 +158,10 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
         dimensionsScale = PlayerDimensions.fromEntityData(copy);
         setDirty();
         refreshPlayerDimensions();
+    }
+
+    private static CompoundTag normalizeEntityData(CompoundTag entityData) {
+        return McaDataFixers.update(entityData.copy());
     }
 
     private void refreshPlayerDimensions() {
@@ -251,7 +255,14 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
 
     @Override
     public Gender getGender() {
-        return Gender.byId(NbtHelper.getCompoundOrSelf(entityData, VillagerEntityMCA.MCA_DATA_KEY).getInt("Gender").orElse(0));
+        CompoundTag mcaData = NbtHelper.getCompoundOrSelf(entityData, VillagerEntityMCA.MCA_DATA_KEY);
+        if (mcaData.contains("Gender")) {
+            return Gender.byId(mcaData.getInt("Gender").orElse(Gender.UNASSIGNED.ordinal()));
+        }
+        if (entityData.contains("gender")) {
+            return Gender.byId(entityData.getInt("gender").orElse(Gender.UNASSIGNED.ordinal()));
+        }
+        return Gender.UNASSIGNED;
     }
 
     @Override

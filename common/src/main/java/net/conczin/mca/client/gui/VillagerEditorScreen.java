@@ -2356,8 +2356,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                 if (tag.contains("PlayerModel")) {
                     int modelVal = tag.getInt("PlayerModel").orElse(0);
                     if (villagerData != null) {
-                        CompoundTag parentMca = getOrCreateMcaData(villagerData);
-                        parentMca.putInt("PlayerModel", modelVal);
+                        getOrCreateMcaData(villagerData).putInt("PlayerModel", modelVal);
                     }
                 }
 

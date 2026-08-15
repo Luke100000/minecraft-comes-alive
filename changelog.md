@@ -3,6 +3,10 @@
 * Fixed villagers being unable to move.
 * Improved villager bed pathing and sleep reliability.
 * Fixed using the Comb, Needle and Thread, or Villager Editor wiping villager inventories.
+* Improved villager migration behavior.
+* Fixed invalid villager trades with empty results.
+* Fixed baby age corruption.
+* Fixed gender potions.
 
 # 8.1.7
 
