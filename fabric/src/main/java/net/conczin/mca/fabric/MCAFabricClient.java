@@ -16,7 +16,7 @@ import net.conczin.mca.block.BlocksMCA;
 import net.conczin.mca.client.particle.InteractionParticle;
 import net.conczin.mca.entity.EntitiesMCA;
 import net.conczin.mca.fabric.client.gui.FabricMCAScreens;
-import net.mca.fabric.resources.*;
+import net.conczin.mca.fabric.resources.*;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.blockentity.BlockEntityRenderers;

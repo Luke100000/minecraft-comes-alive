@@ -1,7 +1,7 @@
 package net.conczin.mca.network;
 
 import net.conczin.mca.network.s2c.*;
-import net.mca.network.s2c.*;
+import net.conczin.mca.network.s2c.*;
 
 public interface ClientInteractionManager {
     void handleGuiRequest(OpenGuiRequest message);

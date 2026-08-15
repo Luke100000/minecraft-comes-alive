@@ -9,7 +9,7 @@ import net.conczin.mca.MCA;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.Relationship;
 import net.conczin.mca.entity.ai.chatAI.modules.*;
-import net.mca.entity.ai.chatAI.modules.*;
+import net.conczin.mca.entity.ai.chatAI.modules.*;
 import net.conczin.mca.entity.ai.relationship.AgeState;
 import net.conczin.mca.server.world.data.Village;
 import net.minecraft.ChatFormatting;

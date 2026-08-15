@@ -7,7 +7,7 @@ import net.conczin.mca.client.model.CommonVillagerModel;
 import net.conczin.mca.client.model.PlayerEntityExtendedModel;
 import net.conczin.mca.client.model.VillagerEntityModelMCA;
 import net.conczin.mca.client.render.layer.*;
-import net.mca.client.render.layer.*;
+import net.conczin.mca.client.render.layer.*;
 import net.conczin.mca.entity.ai.relationship.AgeState;
 import net.minecraft.client.model.PlayerModel;
 import net.minecraft.client.model.geom.ModelPart;

@@ -3,8 +3,8 @@ package net.conczin.mca.network;
 import net.conczin.mca.cobalt.network.NetworkHandler;
 import net.conczin.mca.network.c2s.*;
 import net.conczin.mca.network.s2c.*;
-import net.mca.network.c2s.*;
-import net.mca.network.s2c.*;
+import net.conczin.mca.network.c2s.*;
+import net.conczin.mca.network.s2c.*;
 
 public interface MessagesMCA {
     static void bootstrap() {

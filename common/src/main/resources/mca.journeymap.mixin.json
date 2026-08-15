@@ -1,11 +1,11 @@
 {
   "required": false,
   "minVersion": "0.7",
-  "package": "net.mca.mixin",
+  "package": "net.conczin.mca.mixin",
   "compatibilityLevel": "JAVA_17",
   "client": [
-    "net.conczin.mca.mixin.client.journeymap.MixinDrawEntityStep",
-    "net.conczin.mca.mixin.client.journeymap.MixinEntityDTO"
+    "client.journeymap.MixinDrawEntityStep",
+    "client.journeymap.MixinEntityDTO"
   ],
   "injectors": {
     "defaultRequire": 0

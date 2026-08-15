@@ -2,7 +2,7 @@ package net.conczin.mca.resources;
 
 import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.resources.data.skin.*;
-import net.mca.resources.data.skin.*;
+import net.conczin.mca.resources.data.skin.*;
 import net.conczin.mca.server.world.data.CustomClothingManager;
 import net.minecraft.resources.ResourceLocation;
 

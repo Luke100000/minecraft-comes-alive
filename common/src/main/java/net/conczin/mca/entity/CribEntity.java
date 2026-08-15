@@ -6,7 +6,7 @@ import net.conczin.mca.item.BabyItem;
 import net.conczin.mca.item.CribItem;
 import net.conczin.mca.item.ItemsMCA;
 import net.conczin.mca.util.network.datasync.*;
-import net.mca.util.network.datasync.*;
+import net.conczin.mca.util.network.datasync.*;
 import net.minecraft.core.particles.BlockParticleOption;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.nbt.CompoundTag;

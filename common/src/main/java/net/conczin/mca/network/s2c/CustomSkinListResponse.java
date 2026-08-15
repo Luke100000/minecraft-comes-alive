@@ -3,7 +3,7 @@ package net.conczin.mca.network.s2c;
 import net.conczin.mca.ClientProxy;
 import net.conczin.mca.cobalt.network.Message;
 import net.conczin.mca.resources.data.skin.*;
-import net.mca.resources.data.skin.*;
+import net.conczin.mca.resources.data.skin.*;
 
 import java.io.Serial;
 import java.util.HashMap;

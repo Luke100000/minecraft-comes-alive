@@ -19,7 +19,7 @@ import net.conczin.mca.entity.EntitiesMCA;
 import net.conczin.mca.entity.ai.ActivityMCA;
 import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
 import net.conczin.mca.fabric.cobalt.network.NetworkHandlerImpl;
-import net.mca.fabric.resources.*;
+import net.conczin.mca.fabric.resources.*;
 import net.conczin.mca.item.ItemsMCA;
 import net.conczin.mca.network.MessagesMCA;
 import net.conczin.mca.server.ServerInteractionManager;

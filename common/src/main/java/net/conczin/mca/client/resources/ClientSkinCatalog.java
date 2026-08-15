@@ -4,7 +4,7 @@ import net.conczin.mca.cobalt.network.NetworkHandler;
 import net.conczin.mca.network.c2s.CustomSkinListRequest;
 import net.conczin.mca.resources.BuiltInSkinCatalog;
 import net.conczin.mca.resources.data.skin.*;
-import net.mca.resources.data.skin.*;
+import net.conczin.mca.resources.data.skin.*;
 
 import java.util.HashMap;
 import java.util.Map;

@@ -16,7 +16,7 @@ import net.conczin.mca.entity.ai.RangedWeaponHelper;
 import net.conczin.mca.entity.ai.SchedulesMCA;
 import net.conczin.mca.entity.ai.brain.sensor.GuardEnemiesSensor;
 import net.conczin.mca.entity.ai.brain.tasks.*;
-import net.mca.entity.ai.brain.tasks.*;
+import net.conczin.mca.entity.ai.brain.tasks.*;
 import net.conczin.mca.entity.ai.brain.tasks.chore.ChoppingTask;
 import net.conczin.mca.entity.ai.brain.tasks.chore.FishingTask;
 import net.conczin.mca.entity.ai.brain.tasks.chore.HarvestingTask;

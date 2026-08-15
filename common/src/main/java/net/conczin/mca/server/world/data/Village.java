@@ -6,7 +6,7 @@ import net.conczin.mca.entity.ai.Memories;
 import net.conczin.mca.resources.API;
 import net.conczin.mca.resources.BuildingTypes;
 import net.conczin.mca.server.world.data.villageComponents.*;
-import net.mca.server.world.data.villageComponents.*;
+import net.conczin.mca.server.world.data.villageComponents.*;
 import net.conczin.mca.util.BlockBoxExtended;
 import net.conczin.mca.util.NbtHelper;
 import net.conczin.mca.util.WorldUtils;

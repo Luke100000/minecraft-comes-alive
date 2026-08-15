@@ -10,7 +10,7 @@ import net.conczin.mca.entity.ai.brain.VillagerBrain;
 import net.conczin.mca.entity.ai.relationship.CompassionateEntity;
 import net.conczin.mca.entity.ai.relationship.RelationshipState;
 import net.conczin.mca.network.c2s.*;
-import net.mca.network.c2s.*;
+import net.conczin.mca.network.c2s.*;
 import net.conczin.mca.resources.data.analysis.Analysis;
 import net.conczin.mca.resources.data.dialogue.Question;
 import net.minecraft.ChatFormatting;

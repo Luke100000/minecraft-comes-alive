@@ -6,7 +6,7 @@ import net.conczin.mca.entity.Status;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.entity.ai.*;
-import net.mca.entity.ai.*;
+import net.conczin.mca.entity.ai.*;
 import net.conczin.mca.entity.ai.relationship.AgeState;
 import net.conczin.mca.entity.ai.relationship.Personality;
 import net.conczin.mca.util.network.datasync.CDataManager;
