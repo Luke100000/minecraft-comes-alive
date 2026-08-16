@@ -1,6 +1,5 @@
 package net.conczin.mca.entity.ai.chatAI.inworldAIModules.api;
 
-import net.conczin.mca.Config;
 import net.conczin.mca.MCA;
 
 import javax.net.ssl.HttpsURLConnection;
@@ -13,14 +12,17 @@ import java.nio.charset.StandardCharsets;
 import java.util.Optional;
 
 public class Requests {
+    private static final int HTTP_CONNECT_TIMEOUT_MS = 15_000;
+    private static final int HTTP_READ_TIMEOUT_MS = 120_000;
+
     /**
-     * Same as {@link #makeRequest(String, String, String) below} but without a session ID
+     * Same as {@link #makeRequest(String, String, String, String) below} but without a session ID
      *
      * @param urlString The URL to which the request is to be sent.
      * @param body      The body of the request, which is sent as a string.
      */
-    public static Optional<String> makeRequest(String urlString, String body) {
-        return makeRequest(urlString, body, "");
+    public static Optional<String> makeRequest(String urlString, String body, String apiToken) {
+        return makeRequest(urlString, body, apiToken, "");
     }
 
     /**
@@ -30,18 +32,22 @@ public class Requests {
      *
      * @param urlString     The URL to which the request is to be sent.
      * @param body          The body of the request, which is sent as a string.
+     * @param apiToken      Inworld API token captured on the server thread.
      * @param sessionIDAuth The session ID used for authentication, which is sent as a string.
      */
-    public static Optional<String> makeRequest(String urlString, String body, String sessionIDAuth) {
+    public static Optional<String> makeRequest(String urlString, String body, String apiToken, String sessionIDAuth) {
         String responseString = "No response";
+        HttpsURLConnection con = null;
         try {
             URL url = URI.create(urlString).toURL();
 
             // Create connection
-            HttpsURLConnection con = (HttpsURLConnection) url.openConnection();
+            con = (HttpsURLConnection) url.openConnection();
             con.setRequestMethod("POST");
             con.setRequestProperty("Content-Type", "application/json");
-            con.setRequestProperty("authorization", "Basic " + Config.getInstance().inworldAIToken);
+            con.setRequestProperty("authorization", "Basic " + apiToken);
+            con.setConnectTimeout(HTTP_CONNECT_TIMEOUT_MS);
+            con.setReadTimeout(HTTP_READ_TIMEOUT_MS);
             // Set second header if necessary
             if (!sessionIDAuth.isEmpty()) {
                 con.setRequestProperty("Grpc-Metadata-session-id", sessionIDAuth);
@@ -55,8 +61,9 @@ public class Requests {
             }
 
             // Get response
-            InputStream response = con.getInputStream();
-            responseString = new String(response.readAllBytes(), StandardCharsets.UTF_8);
+            try (InputStream response = con.getInputStream()) {
+                responseString = new String(response.readAllBytes(), StandardCharsets.UTF_8);
+            }
 
 
             return Optional.of(responseString);
@@ -66,6 +73,10 @@ public class Requests {
             MCA.LOGGER.error("InworldAI: Received %s".formatted(responseString));
             MCA.LOGGER.error(e);
             return Optional.empty();
+        } finally {
+            if (con != null) {
+                con.disconnect();
+            }
         }
     }
 
