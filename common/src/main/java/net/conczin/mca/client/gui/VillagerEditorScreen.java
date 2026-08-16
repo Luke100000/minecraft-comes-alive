@@ -726,11 +726,9 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                 }) {
                     MutableComponent text = Component.translatable("entity.minecraft.villager." + p);
                     ButtonWidget widget = addRenderableWidget(new ButtonWidget(width / 2 + (right ? DATA_WIDTH / 2 : 0), y, DATA_WIDTH / 2, 20, text, b -> {
-                        CompoundTag compound = new CompoundTag();
+                        CompoundTag compound = VillagerEditorSyncRequest.createEditorPatch(createEditorData());
                         compound.putString("profession", BuiltInRegistries.VILLAGER_PROFESSION.getKey(p).toString());
-                        syncVillagerData();
                         Network.sendToServer(new VillagerEditorSyncRequest("profession", villagerUUID, compound));
-                        requestVillagerData();
                         professionButtons.forEach(button -> button.active = true);
                         b.active = false;
                     }));
