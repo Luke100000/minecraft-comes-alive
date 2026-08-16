@@ -1,3 +1,12 @@
+# 7.7.36-beta.3
+* Recommended to ***__backup__*** your world.
+* This release won't be backwards compatible with 7.7.35 and below due to internal saving changes.
+
+* More bed fixes
+* Fixed baby age corruption bug
+* Fixed gender potions.
+* Fixed rare crash in blueprint screen
+
 # 7.7.35-beta.3
 ## **IMPORTANT**
 * Recommended to ***__backup__*** your world.
@@ -7,7 +16,7 @@
 * Improve villager migration behaviour
 * Fix bugs
 
-# 7.7.34-beta.3
+# 7.7.34
 
 * Fixed villagers being stuck and not able to move
   * sleeping should be more reliable
@@ -18,11 +27,6 @@
 * Fixed auto scan.
 
 # 7.7.33
-
-**IMPORTANT**
-* Recommended to ***__backup__*** your world.
-* This release won't be backwards compatible with previous MCA versions due to internal changes with how traits and personalities are saved
-* This release won't work with 26.1.2 or 26.2 until version 8.1.7 is released.
 
 * Improved backend code for compatibility with other mods
 * Added nicknames to /mca chatAI context menu so you can have roleplay names (thanks tranthienlong675!)

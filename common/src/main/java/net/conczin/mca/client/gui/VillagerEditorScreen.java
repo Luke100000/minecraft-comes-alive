@@ -27,7 +27,6 @@ import net.conczin.mca.resources.data.skin.Clothing;
 import net.conczin.mca.resources.data.skin.HairStyle;
 import net.conczin.mca.resources.data.skin.LayeredHair;
 import net.conczin.mca.resources.data.skin.SkinListEntry;
-import net.conczin.mca.util.NbtHelper;
 import net.conczin.mca.util.compat.ButtonWidget;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
@@ -67,25 +66,6 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     private static final float STEVE_RAW_WIDTH_SCALE = 1.0F;
     private static final float STEVE_RAW_HEIGHT_SCALE = 0.9F;
     private static final ResourceLocation PREVIEW_MOUSE_FOLLOW_TEXTURE = MCA.locate("textures/gui/preview_mouse_follow.png");
-    private static final String[] MCA_VISUAL_KEYS = {
-            "Gender",
-            "Clothes",
-            "ClothingLocked",
-            "Skin",
-            "Hair",
-            "HairStyle",
-            "HairBase",
-            "HairBangs",
-            "HairBack",
-            "HairFront",
-            "HairExtra",
-            "SkinColor",
-            "HairColor",
-            "EyeColor",
-            "EyeColorLeft",
-            "AgeState",
-            "PlayerModel"
-    };
     protected final VillagerEntityMCA villager = Objects.requireNonNull(EntitiesMCA.MALE_VILLAGER.create(Objects.requireNonNull(Minecraft.getInstance().level)));
     protected final VillagerEntityMCA villagerVisualization = Objects.requireNonNull(EntitiesMCA.MALE_VILLAGER.create(Objects.requireNonNull(Minecraft.getInstance().level)));
     final UUID villagerUUID;
@@ -2131,7 +2111,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                 "FamilyTreeNewSpouseName",
                 "VillagerDataFinalized"
         );
-        copyEditorMcaFields(nbt, "PlayerModel");
+        copyEditorFields(nbt, "PlayerModel");
         nbt.putInt("Age", villagerBreedingAge);
         return nbt;
     }
@@ -2161,12 +2141,12 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         if (villagerData == null) {
             return VillagerLike.PlayerModel.VILLAGER;
         }
-        return VillagerLike.PlayerModel.byId(getMcaData(villagerData).getInt("PlayerModel"));
+        return VillagerLike.PlayerModel.byId(villagerData.getInt("PlayerModel"));
     }
 
     private void setSelectedPlayerModel(VillagerLike.PlayerModel playerModel) {
         if (villagerData != null) {
-            getOrCreateMcaData(villagerData).putInt("PlayerModel", playerModel.ordinal());
+            villagerData.putInt("PlayerModel", playerModel.ordinal());
         }
     }
 
@@ -2179,35 +2159,6 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                 target.put(key, Objects.requireNonNull(villagerData.get(key)).copy());
             }
         }
-    }
-
-    private void copyEditorMcaFields(CompoundTag target, String... keys) {
-        if (villagerData == null) {
-            return;
-        }
-        CompoundTag source = getMcaData(villagerData);
-        for (String key : keys) {
-            if (source.contains(key)) {
-                getOrCreateMcaData(target).put(key, Objects.requireNonNull(source.get(key)).copy());
-            }
-        }
-    }
-
-    private CompoundTag getMcaData(CompoundTag data) {
-        return NbtHelper.getCompoundOrSelf(data, VillagerEntityMCA.MCA_DATA_KEY);
-    }
-
-    private CompoundTag getOrCreateMcaData(CompoundTag data) {
-        boolean hadMcaData = data.contains(VillagerEntityMCA.MCA_DATA_KEY, 10);
-        CompoundTag mcaData = NbtHelper.getOrCreateCompound(data, VillagerEntityMCA.MCA_DATA_KEY);
-        if (!hadMcaData) {
-            for (String key : MCA_VISUAL_KEYS) {
-                if (data.contains(key)) {
-                    mcaData.put(key, Objects.requireNonNull(data.get(key)).copy());
-                }
-            }
-        }
-        return mcaData;
     }
 
     private CompoundTag saveEntityData(VillagerEntityMCA entity) {
@@ -2290,11 +2241,8 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
             CompoundTag tag = saveEntityData(villager);
             
             // Extract PlayerModel from villagerData NBT if present
-            if (villagerData != null) {
-                CompoundTag parentMca = getMcaData(villagerData);
-                if (parentMca != null && parentMca.contains("PlayerModel")) {
-                    tag.putInt("PlayerModel", parentMca.getInt("PlayerModel"));
-                }
+            if (villagerData != null && villagerData.contains("PlayerModel")) {
+                tag.putInt("PlayerModel", villagerData.getInt("PlayerModel"));
             }
 
             File file = new File(presetsDir, name + ".json");
@@ -2367,8 +2315,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                 if (tag.contains("PlayerModel")) {
                     int modelVal = tag.getInt("PlayerModel");
                     if (villagerData != null) {
-                        CompoundTag parentMca = getOrCreateMcaData(villagerData);
-                        parentMca.putInt("PlayerModel", modelVal);
+                        villagerData.putInt("PlayerModel", modelVal);
                     }
                 }
                 

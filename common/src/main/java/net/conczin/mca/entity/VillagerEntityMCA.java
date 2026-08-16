@@ -5,6 +5,7 @@ import net.conczin.mca.Config;
 import net.conczin.mca.MCA;
 import net.conczin.mca.MCAClient;
 import net.conczin.mca.client.model.CommonVillagerModel;
+import net.conczin.mca.datafix.McaDataFixers;
 import net.conczin.mca.entity.ai.*;
 import net.conczin.mca.entity.ai.brain.VillagerBrain;
 import net.conczin.mca.entity.ai.brain.VillagerTasksMCA;
@@ -100,7 +101,6 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     private static final CDataParameter<Float> INFECTION_PROGRESS = CParameter.create("InfectionProgress", 0.0f);
     private static final CDataParameter<Integer> GROWTH_AMOUNT = CParameter.create("GrowthAmount", -AgeState.getMaxAge());
     private static final float VEHICLE_ATTACHMENT_Y = 0.6F;
-    public static final String MCA_DATA_KEY = "MCAData";
     public static final int MAX_NICKNAME_LENGTH = 32;
     static final String CHAT_AI_PROMPT_KEY = "ChatAIPrompt";
     static final String NICKNAMES_KEY = "nicknames";
@@ -1465,8 +1465,8 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
     @Override
     public void readAdditionalSaveData(CompoundTag nbt) {
-        CompoundTag data = flattenMcaData(nbt);
-        super.readAdditionalSaveData(nbt);
+        CompoundTag data = McaDataFixers.update(nbt);
+        super.readAdditionalSaveData(data);
 
         getTypeDataManager().load(this, data);
         relations.readFromNbt(data);
@@ -1500,18 +1500,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
     @Override
     public void readAdditionalSaveDataForEditor(CompoundTag nbt) {
-        readAdditionalSaveData(flattenMcaData(nbt));
-    }
-
-    private CompoundTag flattenMcaData(CompoundTag nbt) {
-        CompoundTag merged = nbt.copy();
-        if (merged.contains(MCA_DATA_KEY, 10)) {
-            CompoundTag mcaData = merged.getCompound(MCA_DATA_KEY);
-            for (String key : mcaData.getAllKeys()) {
-                merged.put(key, Objects.requireNonNull(mcaData.get(key)).copy());
-            }
-        }
-        return merged;
+        readAdditionalSaveData(nbt);
     }
 
     public String getChatAIPrompt() {
