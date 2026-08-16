@@ -29,7 +29,6 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
 
 public class OpenAIChatAI extends AbstractChatAIStrategy {
     private static final int MAX_MEMORY = 768;
@@ -37,8 +36,8 @@ public class OpenAIChatAI extends AbstractChatAIStrategy {
     private static final int HTTP_CONNECT_TIMEOUT_MS = 15_000;
     private static final int HTTP_READ_TIMEOUT_MS = 120_000;
 
-    private static final Map<UUID, List<DialogueEntry>> memory = new ConcurrentHashMap<>();
-    private static final Map<UUID, Long> lastInteractions = new ConcurrentHashMap<>();
+    private static final Map<UUID, List<DialogueEntry>> memory = new HashMap<>();
+    private static final Map<UUID, Long> lastInteractions = new HashMap<>();
 
     public static String translate(String phrase) {
         return phrase.replace("_", " ").toLowerCase(Locale.ROOT).replace("mca.", "");
