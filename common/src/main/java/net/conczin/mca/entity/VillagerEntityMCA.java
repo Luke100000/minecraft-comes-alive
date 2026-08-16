@@ -11,6 +11,7 @@ import net.conczin.mca.advancement.criterion.CriterionMCA;
 import net.conczin.mca.entity.ai.*;
 import net.conczin.mca.entity.ai.brain.VillagerBrain;
 import net.conczin.mca.entity.ai.brain.VillagerTasksMCA;
+import net.conczin.mca.entity.ai.chatAI.ChatAI;
 import net.conczin.mca.entity.ai.chatAI.ChatAIContext;
 import net.conczin.mca.entity.ai.navigation.MCAGroundPathNavigation;
 import net.conczin.mca.entity.ai.relationship.*;
@@ -473,6 +474,9 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
             getDialogueType(player);
             playWelcomeSound();
             interactedWith = true;
+            if (player instanceof ServerPlayer serverPlayer) {
+                ChatAI.selectVillagerForConversation(serverPlayer, this);
+            }
             return interactions.interactAt(player, Vec3.ZERO, hand);
         }
 

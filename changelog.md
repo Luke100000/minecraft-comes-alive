@@ -1,3 +1,15 @@
+# 7.7.1-alpha.2
+
+## ChatAI
+
+* Fixed ChatAI sometimes picking the wrong nearby villager, especially with longer messages.
+* Villagers now keep track of who they are talking to much more reliably.
+* Villagers can remember recent conversations with multiple players without mixing up who said what.
+* Fixed normal ChatAI replies sometimes being reported as errors in the log even though they worked correctly.
+* Improved reliability when sending several messages quickly.
+* AI replies and actions are handled more safely if a player disconnects, changes dimension, or the villager is no longer available.
+* Improved ChatAI and InworldAI connection handling so failed or stuck requests recover more cleanly.
+
 # 7.7.1-alpha.1
 **Note:**
 

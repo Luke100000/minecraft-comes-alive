@@ -9,7 +9,6 @@ import net.conczin.mca.MCA;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.Relationship;
 import net.conczin.mca.entity.ai.chatAI.modules.*;
-import net.conczin.mca.entity.ai.chatAI.modules.*;
 import net.conczin.mca.entity.ai.relationship.AgeState;
 import net.conczin.mca.server.world.data.Village;
 import net.minecraft.ChatFormatting;
@@ -17,8 +16,8 @@ import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.HoverEvent;
 import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.util.Tuple;
 import org.apache.commons.io.IOUtils;
 import org.jetbrains.annotations.Nullable;
 
@@ -29,13 +28,17 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 
-public class OpenAIChatAI implements ChatAIStrategy {
+public class OpenAIChatAI extends AbstractChatAIStrategy {
     private static final int MAX_MEMORY = 768;
     private static final int MAX_MEMORY_TIME = 20 * 60 * 45;
+    private static final int HTTP_CONNECT_TIMEOUT_MS = 15_000;
+    private static final int HTTP_READ_TIMEOUT_MS = 120_000;
 
-    private static final Map<UUID, List<Tuple<String, String>>> memory = new HashMap<>();
-    private static final Map<UUID, Long> lastInteractions = new HashMap<>();
+    private static final Map<UUID, List<DialogueEntry>> memory = new ConcurrentHashMap<>();
+    private static final Map<UUID, Long> lastInteractions = new ConcurrentHashMap<>();
 
     public static String translate(String phrase) {
         return phrase.replace("_", " ").toLowerCase(Locale.ROOT).replace("mca.", "");
@@ -55,44 +58,59 @@ public class OpenAIChatAI implements ChatAIStrategy {
         con.setRequestProperty("Content-Type", "application/json");
         con.setRequestProperty("Accept", "application/json");
         con.setRequestProperty("Authorization", "Bearer " + token);
+        con.setConnectTimeout(HTTP_CONNECT_TIMEOUT_MS);
+        con.setReadTimeout(HTTP_READ_TIMEOUT_MS);
 
         // Enable input and output streams
         con.setDoOutput(true);
         return con;
     }
 
-    private static Answer parseAnswer(String body) {
+    static Answer parseAnswer(String body) {
         JsonObject map = JsonParser.parseString(body).getAsJsonObject();
         String message = map.has("choices") ? map.getAsJsonArray("choices").get(0).getAsJsonObject().getAsJsonObject("message").getAsJsonPrimitive("content").getAsString() : null;
         String error = map.has("error") ? map.get("error").getAsString().trim().replace("\n", " ") : null;
 
         if (message != null) {
-            // Parse json further
-            message = message.replaceAll("```", "");
-            int bracketStart = message.indexOf("{");
-            int bracketEnd = message.lastIndexOf("}");
-            if (bracketEnd > bracketStart && bracketStart != -1) {
-                // We have json! Include the brackets.
-                message = message.substring(bracketStart, bracketEnd + 1);
-            }
+            message = stripCodeFence(message);
         }
 
         StructuredResponse structuredReply;
-        try {
-            structuredReply = new Gson().fromJson(message, StructuredResponse.class);
-        } catch (JsonSyntaxException e) {
-            MCA.LOGGER.warn("Error parsing answer: {} ({})", message, e.getMessage());
-
-            // just treat the message as normal
+        if (message == null) {
+            structuredReply = null;
+        } else if (!message.stripLeading().startsWith("{")) {
             structuredReply = new StructuredResponse(cleanupAnswer(message), "");
+        } else {
+            try {
+                structuredReply = new Gson().fromJson(message, StructuredResponse.class);
+            } catch (JsonSyntaxException e) {
+                MCA.LOGGER.warn("Error parsing answer: {} ({})", message, e.getMessage());
+
+                // just treat malformed structured content as normal text
+                structuredReply = new StructuredResponse(cleanupAnswer(message), "");
+            }
         }
 
         return new Answer(structuredReply, error);
     }
 
+    private static String stripCodeFence(String message) {
+        String trimmed = message.trim();
+        if (trimmed.startsWith("```json")) {
+            trimmed = trimmed.substring("```json".length()).stripLeading();
+        } else if (trimmed.startsWith("```")) {
+            trimmed = trimmed.substring("```".length()).stripLeading();
+        }
+        if (trimmed.endsWith("```")) {
+            trimmed = trimmed.substring(0, trimmed.length() - "```".length()).stripTrailing();
+        }
+        return trimmed;
+    }
+
     public static Answer post(String url, String requestBody, String token) {
+        HttpURLConnection con = null;
         try {
-            HttpURLConnection con = getHttpURLConnection(url, token);
+            con = getHttpURLConnection(url, token);
 
             // Write the request body to the connection
             try (DataOutputStream wr = new DataOutputStream(con.getOutputStream())) {
@@ -100,23 +118,34 @@ public class OpenAIChatAI implements ChatAIStrategy {
                 wr.flush();
             }
 
-            InputStream response = con.getInputStream();
-            String body = IOUtils.toString(response, StandardCharsets.UTF_8);
+            String body;
+            try (InputStream response = con.getInputStream()) {
+                body = IOUtils.toString(response, StandardCharsets.UTF_8);
+            }
 
             return parseAnswer(body);
         } catch (Exception e) {
             MCA.LOGGER.error(e);
             return new Answer(null, "Unknown error, check log!");
+        } finally {
+            if (con != null) {
+                con.disconnect();
+            }
         }
     }
 
     public static String verify(String encodedURL) {
+        HttpURLConnection con = null;
         try {
             // receive
-            HttpURLConnection con = (HttpURLConnection) (new URL(encodedURL)).openConnection();
+            con = (HttpURLConnection) (new URL(encodedURL)).openConnection();
             con.setRequestProperty("Accept-Charset", StandardCharsets.UTF_8.toString());
-            InputStream response = con.getInputStream();
-            String body = IOUtils.toString(response, StandardCharsets.UTF_8);
+            con.setConnectTimeout(HTTP_CONNECT_TIMEOUT_MS);
+            con.setReadTimeout(HTTP_READ_TIMEOUT_MS);
+            String body;
+            try (InputStream response = con.getInputStream()) {
+                body = IOUtils.toString(response, StandardCharsets.UTF_8);
+            }
 
             // parse json
             JsonObject map = JsonParser.parseString(body).getAsJsonObject();
@@ -124,185 +153,198 @@ public class OpenAIChatAI implements ChatAIStrategy {
         } catch (Exception e) {
             MCA.LOGGER.error(e);
             return "error";
+        } finally {
+            if (con != null) {
+                con.disconnect();
+            }
         }
     }
 
-    public Optional<String> answer(ServerPlayer player, VillagerEntityMCA villager, String msg) {
+    @Override
+    protected CompletableFuture<Optional<String>> requestAndApply(ServerPlayer player, VillagerEntityMCA villager, String msg, MinecraftServer server) {
+        final PreparedRequest request;
         try {
-            Config config = Config.getInstance();
-            boolean isInHouse = config.villagerChatAIEndpoint.contains("conczin.net");
-
-            String playerName = player.getName().getString();
-            String villagerName = villager.getName().getString();
-
-            // forgot about last conversation if it's too long ago
-            long time = villager.level().getGameTime();
-            if (time > lastInteractions.getOrDefault(villager.getUUID(), 0L) + MAX_MEMORY_TIME) {
-                memory.remove(villager.getUUID());
-            }
-            lastInteractions.put(villager.getUUID(), time);
-
-            // remember phrase
-            List<Tuple<String, String>> pastDialogue = memory.computeIfAbsent(villager.getUUID(), key -> new LinkedList<>());
-            while (pastDialogue.stream().mapToInt(v -> (v.getB().length() / 4)).sum() > MAX_MEMORY) {
-                pastDialogue.remove(0);
-            }
-
-            // construct context
-            List<String> input = new LinkedList<>();
-            PersonalityModule.apply(input, villager, player);
-            TraitsModule.apply(input, villager, player);
-            RelationModule.apply(input, villager, player);
-            VillageModule.apply(input, villager, player);
-            EnvironmentModule.apply(input, villager, player);
-            PlayerModule.apply(input, villager, player);
-
-            // gather variables
-            Map<String, String> variables = Map.of(
-                    "player", playerName,
-                    "villager", villagerName
-            );
-
-            // construct system message
-            StringBuilder sb = new StringBuilder();
-
-            // add control variables
-            if (isInHouse || config.villagerChatAIIncludeSessionInformation) {
-                long seed = player.serverLevel().getSeed();
-                sb.append("[world_id:").append(seed).append("]");
-
-                sb.append("[player_id:").append(player.getUUID()).append("]");
-                sb.append("[character_id:").append(villager.getUUID()).append("]");
-
-                if (config.villagerChatAIUseLongTermMemory) {
-                    sb.append("[use_memory:true]");
-                }
-                if (config.villagerChatAIUseSharedLongTermMemory) {
-                    sb.append("[shared_memory:true]");
-                }
-            }
-
-            if (!config.villagerChatAISystemPrompt.isEmpty()) {
-                // add user specified prompt
-                sb.append(config.villagerChatAISystemPrompt);
-                sb.append("\n");
-            } else if (!isInHouse) {
-                // when not using conczin.net, use some default prompt
-                String defaultPrompt = "You are a Minecraft villager, fully immersed in their virtual world, unaware of its artificial nature. You respond based on your description, your role, and your knowledge of the world. You have no knowledge of the real world, and do not realize that you are within Minecraft. You are no assistant! You can be sarcastic, funny, or even rude when appropriate.";
-                sb.append(defaultPrompt);
-                sb.append("\n");
-
-            }
-
-            ChatAIContext.appendPrompts(sb, player, villager, Village.findNearest(villager).orElse(null));
-
-            // fill in variables and add to system message
-            for (String s : input) {
-                for (Map.Entry<String, String> entry : variables.entrySet()) {
-                    s = s.replaceAll("\\$" + entry.getKey(), entry.getValue());
-                }
-                sb.append(s);
-            }
-
-            if (villager.getAgeState() == AgeState.BABY || villager.getAgeState() == AgeState.TODDLER || villager.getAgeState() == AgeState.CHILD) {
-                sb.append("You are a child/baby and MUST NOT flirt with the player or use any romantic or suggestive language. Keep your responses innocent, child-like, and age-appropriate.\n");
-            } else if (Relationship.IS_RELATIVE.test(villager, player)) {
-                sb.append("You are related to the player and MUST NOT flirt with them or use romantic/suggestive language. Keep your responses strictly familial.\n");
-            }
-
-            // try to match player language
-            if (MCA.language != null) {
-                sb.append("Match the language of the player, and use ").append(MCA.language).append(" when unsure.");
-            }
-
-            // structure and commands (if available)
-            List<TriggerCommandInfo> validCommands;
-            if (config.villagerChatAIUseTools) {
-                validCommands = TriggerCommandInfos.triggerCommands.stream()
-                        .filter(c -> c.isActive == null || c.isActive.test(player, villager))
-                        .toList();
-                MCA.LOGGER.info("Valid commands: {}", validCommands.stream().map(c -> c.command).toList());
-            } else {
-                validCommands = List.of();
-            }
-            if (!validCommands.isEmpty()) {
-                String structureExample = new Gson().toJson(new StructuredResponse("example message to say", validCommands.get(0).command));
-                sb.append("\n\n");
-                sb.append("The reply MUST be in this JSON format: ").append(structureExample).append("\n");
-                sb.append("The following commands are valid:\n");
-                for (TriggerCommandInfo command : validCommands) {
-                    sb.append("  * ").append(command.command).append(": ").append(command.description).append("\n");
-                }
-                sb.append("Only use a command when the player asks for it.");
-            }
-
-            String system = sb.toString();
-
-            // construct body
-            StringBuilder body = new StringBuilder();
-            body.append("{");
-            body.append("\"model\": \"").append(config.villagerChatAIModel).append("\",");
-            // START Messages
-            body.append("\"messages\": [");
-            // System Message
-            body.append("{\"role\": \"system\", \"content\": ").append(jsonStringQuote(system)).append("},");
-            for (Tuple<String, String> pair : pastDialogue) {
-                String role = pair.getA();
-                String content = pair.getB();
-                String name = role.equals("user") ? playerName : villagerName;
-                body.append("{\"role\": \"").append(role)
-                        .append("\", \"name\": \"").append(name)
-                        .append("\", \"content\": ").append(jsonStringQuote(content)).append("},");
-            }
-            // User Message
-            body.append("{\"role\": \"user\", \"name\": \"").append(playerName).append("\", \"content\": ").append(jsonStringQuote(msg)).append("}");
-            // END Messages
-            body.append("]");
-            body.append("}");
-
-            // get access token
-            String token = config.villagerChatAIToken;
-            if (token.isEmpty() || config.villagerChatAIEndpoint.contains("conczin.net")) {
-                token = player.getName().getString();
-            }
-
-            // encode and create url
-            Answer message = post(config.villagerChatAIEndpoint, body.toString(), token);
-
-            if (message.error == null) {
-                if (message.answer != null) {
-                    // remember
-                    pastDialogue.add(new Tuple<>("user", msg));
-                    pastDialogue.add(new Tuple<>("assistant", message.answer.message != null ? message.answer.message : "..."));
-
-                    // act
-                    if (message.answer.optionalCommand() != null && !message.answer.optionalCommand().isEmpty()) {
-                        Optional<TriggerCommandInfo> command = TriggerCommandInfos.findCommand(message.answer.optionalCommand(), player, villager);
-                        command.ifPresent(triggerCommandInfo -> triggerCommandInfo.call.accept(player, villager));
-                    }
-                }
-
-                return Optional.ofNullable(message.answer != null ? message.answer.message : null);
-            } else if (message.error.equals("invalid_model")) {
-                player.displayClientMessage(Component.literal("Invalid model!").withStyle(ChatFormatting.RED), false);
-            } else if (message.error.equals("limit")) {
-                MutableComponent styled = (Component.translatable("mca.limit.patreon")).withStyle(s -> s
-                        .withColor(ChatFormatting.GOLD)
-                        .withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, "https://github.com/Luke100000/minecraft-comes-alive/wiki/GPT3-based-conversations#increase-conversation-limit"))
-                        .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Component.translatable("mca.limit.patreon.hover"))));
-
-                player.displayClientMessage(styled, false);
-            } else if (message.error.equals("limit_premium")) {
-                player.displayClientMessage(Component.translatable("mca.limit.premium").withStyle(ChatFormatting.RED), false);
-            } else {
-                player.displayClientMessage(Component.literal(message.error).withStyle(ChatFormatting.RED), false);
-            }
+            request = prepareRequest(player, villager, msg);
         } catch (Exception e) {
-            MCA.LOGGER.error("Failed to parse LLM response!", e);
-            player.displayClientMessage(Component.translatable("mca.ai_broken").withStyle(ChatFormatting.RED), false);
+            handleFailure(player, "Failed to prepare LLM request!", e);
+            return CompletableFuture.completedFuture(Optional.empty());
+        }
+
+        return CompletableFuture
+                .supplyAsync(() -> post(request.url(), request.body(), request.token()))
+                .thenApplyAsync(message -> {
+                    if (!isConversationValid(player, villager)) {
+                        return Optional.empty();
+                    }
+
+                    try {
+                        return applyAnswer(player, villager, msg, message);
+                    } catch (Exception e) {
+                        handleFailure(player, "Failed to apply LLM response!", e);
+                        return Optional.empty();
+                    }
+                }, server);
+    }
+
+    private PreparedRequest prepareRequest(ServerPlayer player, VillagerEntityMCA villager, String msg) {
+        Config config = Config.getInstance();
+        boolean isInHouse = config.villagerChatAIEndpoint.contains("conczin.net");
+
+        String playerName = player.getName().getString();
+        String villagerName = villager.getName().getString();
+        UUID memoryKey = villager.getUUID();
+
+        long time = villager.level().getGameTime();
+        if (time > lastInteractions.getOrDefault(memoryKey, 0L) + MAX_MEMORY_TIME) {
+            memory.remove(memoryKey);
+        }
+        lastInteractions.put(memoryKey, time);
+
+        List<DialogueEntry> pastDialogue = memory.computeIfAbsent(memoryKey, key -> new LinkedList<>());
+        int estimatedTokens = pastDialogue.stream().mapToInt(v -> v.content().length() / 4).sum();
+        while (estimatedTokens > MAX_MEMORY && !pastDialogue.isEmpty()) {
+            estimatedTokens -= pastDialogue.remove(0).content().length() / 4;
+        }
+
+        List<String> input = new LinkedList<>();
+        PersonalityModule.apply(input, villager, player);
+        TraitsModule.apply(input, villager, player);
+        RelationModule.apply(input, villager, player);
+        VillageModule.apply(input, villager, player);
+        EnvironmentModule.apply(input, villager, player);
+        PlayerModule.apply(input, villager, player);
+
+        Map<String, String> variables = Map.of(
+                "player", playerName,
+                "villager", villagerName
+        );
+
+        StringBuilder sb = new StringBuilder();
+        if (isInHouse || config.villagerChatAIIncludeSessionInformation) {
+            long seed = player.serverLevel().getSeed();
+            sb.append("[world_id:").append(seed).append("]");
+            sb.append("[player_id:").append(player.getUUID()).append("]");
+            sb.append("[character_id:").append(villager.getUUID()).append("]");
+
+            if (config.villagerChatAIUseLongTermMemory) {
+                sb.append("[use_memory:true]");
+            }
+            if (config.villagerChatAIUseSharedLongTermMemory) {
+                sb.append("[shared_memory:true]");
+            }
+        }
+
+        if (!config.villagerChatAISystemPrompt.isEmpty()) {
+            sb.append(config.villagerChatAISystemPrompt).append("\n");
+        } else if (!isInHouse) {
+            String defaultPrompt = "You are a Minecraft villager, fully immersed in their virtual world, unaware of its artificial nature. You respond based on your description, your role, and your knowledge of the world. You have no knowledge of the real world, and do not realize that you are within Minecraft. You are no assistant! You can be sarcastic, funny, or even rude when appropriate.";
+            sb.append(defaultPrompt).append("\n");
+        }
+
+        ChatAIContext.appendPrompts(sb, player, villager, Village.findNearest(villager).orElse(null));
+
+        for (String s : input) {
+            for (Map.Entry<String, String> entry : variables.entrySet()) {
+                s = s.replace("$" + entry.getKey(), entry.getValue());
+            }
+            sb.append(s);
+        }
+
+        if (villager.getAgeState() == AgeState.BABY || villager.getAgeState() == AgeState.TODDLER || villager.getAgeState() == AgeState.CHILD) {
+            sb.append("You are a child/baby and MUST NOT flirt with the player or use any romantic or suggestive language. Keep your responses innocent, child-like, and age-appropriate.\n");
+        } else if (Relationship.IS_RELATIVE.test(villager, player)) {
+            sb.append("You are related to the player and MUST NOT flirt with them or use romantic/suggestive language. Keep your responses strictly familial.\n");
+        }
+
+        if (MCA.language != null) {
+            sb.append("Match the language of the player, and use ").append(MCA.language).append(" when unsure.");
+        }
+
+        List<TriggerCommandInfo> validCommands;
+        if (config.villagerChatAIUseTools) {
+            validCommands = TriggerCommandInfos.triggerCommands.stream()
+                    .filter(c -> c.isActive == null || c.isActive.test(player, villager))
+                    .toList();
+            MCA.LOGGER.info("Valid commands: {}", validCommands.stream().map(c -> c.command).toList());
+        } else {
+            validCommands = List.of();
+        }
+        if (!validCommands.isEmpty()) {
+            String structureExample = new Gson().toJson(new StructuredResponse("example message to say", validCommands.get(0).command));
+            sb.append("\n\n");
+            sb.append("The reply MUST be in this JSON format: ").append(structureExample).append("\n");
+            sb.append("The following commands are valid:\n");
+            for (TriggerCommandInfo command : validCommands) {
+                sb.append("  * ").append(command.command).append(": ").append(command.description).append("\n");
+            }
+            sb.append("Only use a command when the player asks for it.");
+        }
+
+        StringBuilder body = new StringBuilder();
+        body.append("{");
+        body.append("\"model\": \"").append(config.villagerChatAIModel).append("\",");
+        body.append("\"messages\": [");
+        body.append("{\"role\": \"system\", \"content\": ").append(jsonStringQuote(sb.toString())).append("},");
+        for (DialogueEntry entry : pastDialogue) {
+            body.append("{\"role\": \"").append(entry.role())
+                    .append("\", \"name\": \"").append(entry.speakerName())
+                    .append("\", \"content\": ").append(jsonStringQuote(entry.content())).append("},");
+        }
+        body.append("{\"role\": \"user\", \"name\": \"").append(playerName).append("\", \"content\": ").append(jsonStringQuote(msg)).append("}");
+        body.append("]");
+        body.append("}");
+
+        String token = config.villagerChatAIToken;
+        if (token.isEmpty() || config.villagerChatAIEndpoint.contains("conczin.net")) {
+            token = playerName;
+        }
+
+        return new PreparedRequest(config.villagerChatAIEndpoint, body.toString(), token);
+    }
+
+    private Optional<String> applyAnswer(ServerPlayer player, VillagerEntityMCA villager, String msg, Answer message) {
+        if (message.error == null) {
+            if (message.answer != null) {
+                UUID memoryKey = villager.getUUID();
+                List<DialogueEntry> pastDialogue = memory.computeIfAbsent(memoryKey, key -> new LinkedList<>());
+                pastDialogue.add(new DialogueEntry("user", player.getName().getString(), msg));
+                pastDialogue.add(new DialogueEntry("assistant", villager.getName().getString(), message.answer.message != null ? message.answer.message : "..."));
+
+                if (message.answer.optionalCommand() != null && !message.answer.optionalCommand().isEmpty()) {
+                    TriggerCommandInfos.findCommand(message.answer.optionalCommand(), player, villager)
+                            .ifPresent(triggerCommandInfo -> triggerCommandInfo.call.accept(player, villager));
+                }
+            }
+
+            return Optional.ofNullable(message.answer != null ? message.answer.message : null);
+        } else if (message.error.equals("invalid_model")) {
+            player.displayClientMessage(Component.literal("Invalid model!").withStyle(ChatFormatting.RED), false);
+        } else if (message.error.equals("limit")) {
+            MutableComponent styled = (Component.translatable("mca.limit.patreon")).withStyle(s -> s
+                    .withColor(ChatFormatting.GOLD)
+                    .withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, "https://github.com/Luke100000/minecraft-comes-alive/wiki/GPT3-based-conversations#increase-conversation-limit"))
+                    .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Component.translatable("mca.limit.patreon.hover"))));
+            player.displayClientMessage(styled, false);
+        } else if (message.error.equals("limit_premium")) {
+            player.displayClientMessage(Component.translatable("mca.limit.premium").withStyle(ChatFormatting.RED), false);
+        } else {
+            player.displayClientMessage(Component.literal(message.error).withStyle(ChatFormatting.RED), false);
         }
 
         return Optional.empty();
+    }
+
+    private void handleFailure(ServerPlayer player, String logMessage, Exception exception) {
+        MCA.LOGGER.error(logMessage, exception);
+        if (!player.isRemoved()) {
+            player.displayClientMessage(Component.translatable("mca.ai_broken").withStyle(ChatFormatting.RED), false);
+        }
+    }
+
+    private record PreparedRequest(String url, String body, String token) {
+    }
+
+    private record DialogueEntry(String role, String speakerName, String content) {
     }
 
     static String jsonStringQuote(String string) {
