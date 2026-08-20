@@ -923,12 +923,14 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
                 if (playerData != null) {
                     float height = playerData.getRawVerticalScaleFactor();
                     offset = offset.multiply(1.0f, height, 1.0f);
-                    offset = offset.add(0, (height - 1) * 1.5 - 0.7, 0);
+                    offset = offset.add(0, (height - 1) * 1.5, 0);
                 }
             }
 
+            offset = offset.add(0, -0.7, 0);
+
             Vec3 pos = this.position();
-            this.setPosRaw(pos.x() + offset.x(), pos.y() + offset.y(), pos.z() + offset.z());
+            this.setPos(pos.x() + offset.x(), pos.y() + offset.y(), pos.z() + offset.z());
 
             if (vehicle.isShiftKeyDown()) {
                 stopRiding();
