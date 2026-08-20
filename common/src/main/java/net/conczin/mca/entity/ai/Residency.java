@@ -31,6 +31,7 @@ import java.util.stream.Stream;
  */
 public class Residency {
     private static final CDataParameter<Integer> VILLAGE = CParameter.create("HomeVillage", -1);
+    private static final int WORKPLACE_SEARCH_RADIUS = 8;
     private final VillagerEntityMCA entity;
 
     public Residency(VillagerEntityMCA entity) {
@@ -43,30 +44,29 @@ public class Residency {
 
     public BlockPos getWorkplace() {
         return entity.getBrain()
-                .getMemoryInternal(MemoryModuleType.JOB_SITE)
+                .getMemory(MemoryModuleType.JOB_SITE)
                 .map(GlobalPos::pos)
                 .orElse(BlockPos.ZERO);
     }
 
     public void setWorkplace(ServerPlayer player) {
-        ServerLevel level = (ServerLevel) player.level();
-        PoiManager pointOfInterestStorage = level.getPoiManager();
-        VillagerProfession noneProfession = BuiltInRegistries.VILLAGER_PROFESSION.getValueOrThrow(VillagerProfession.NONE);
-        Optional<BlockPos> freeSite = pointOfInterestStorage.findClosest(
-                noneProfession.acquirableJobSite(),
+        ServerLevel level = player.level();
+        PoiManager poiManager = level.getPoiManager();
+        Optional<BlockPos> freeSite = poiManager.findClosest(
+                VillagerProfession.ALL_ACQUIRABLE_JOBS,
                 a -> true,
                 entity.blockPosition(),
-                8,
+                WORKPLACE_SEARCH_RADIUS,
                 PoiManager.Occupancy.HAS_SPACE
         );
-        Optional<BlockPos> potentialJobSite = getOwnedWorkplace(level, MemoryModuleType.POTENTIAL_JOB_SITE, noneProfession);
-        Optional<BlockPos> currentJobSite = getOwnedWorkplace(level, MemoryModuleType.JOB_SITE, noneProfession);
+        Optional<BlockPos> potentialJobSite = getRememberedWorkplace(level, MemoryModuleType.POTENTIAL_JOB_SITE);
+        Optional<BlockPos> currentJobSite = getRememberedWorkplace(level, MemoryModuleType.JOB_SITE);
 
         selectWorkplaceCandidate(entity.blockPosition(), freeSite, potentialJobSite, currentJobSite).ifPresentOrElse(blockPos -> {
             boolean alreadyOwned = potentialJobSite.filter(blockPos::equals).isPresent()
                     || currentJobSite.filter(blockPos::equals).isPresent();
-            if (!alreadyOwned && pointOfInterestStorage.take(
-                    noneProfession.acquirableJobSite(),
+            if (!alreadyOwned && poiManager.take(
+                    VillagerProfession.ALL_ACQUIRABLE_JOBS,
                     (registryEntry, candidatePos) -> candidatePos.equals(blockPos),
                     blockPos,
                     1
@@ -81,11 +81,9 @@ public class Residency {
             entity.getBrain().setMemory(MemoryModuleType.JOB_SITE, globalPos);
             level.broadcastEntityEvent(entity, (byte) 14);
 
-            pointOfInterestStorage.getType(blockPos).flatMap(registryEntry -> {
-                return BuiltInRegistries.VILLAGER_PROFESSION.stream().filter(profession -> {
-                    return profession.heldJobSite().test(registryEntry);
-                }).findFirst();
-            }).ifPresent(profession -> {
+            poiManager.getType(blockPos).flatMap(registryEntry -> BuiltInRegistries.VILLAGER_PROFESSION.stream().filter(profession -> {
+                return profession.heldJobSite().test(registryEntry);
+            }).findFirst()).ifPresent(profession -> {
                 VillagerProfession oldProfession = entity.getVillagerData().profession().value();
                 if (oldProfession == profession) {
                     return;
@@ -119,28 +117,20 @@ public class Residency {
         return potentialJobSite.or(() -> freeSite).or(() -> currentJobSite);
     }
 
-    private Optional<BlockPos> getOwnedWorkplace(
+    private Optional<BlockPos> getRememberedWorkplace(
             ServerLevel level,
-            MemoryModuleType<GlobalPos> memoryType,
-            VillagerProfession noneProfession
+            MemoryModuleType<GlobalPos> memoryType
     ) {
-        Optional<GlobalPos> memory = entity.getBrain().getMemoryInternal(memoryType);
-        if (memory == null) {
-            return Optional.empty();
-        }
-
-        return memory
+        return entity.getBrain().getMemory(memoryType)
                 .filter(globalPos -> globalPos.dimension().equals(level.dimension()))
                 .map(GlobalPos::pos)
-                .filter(pos -> pos.distSqr(entity.blockPosition()) <= 64.0D)
-                .filter(pos -> level.getPoiManager().getType(pos)
-                        .filter(noneProfession.acquirableJobSite())
-                        .isPresent());
+                .filter(pos -> pos.distSqr(entity.blockPosition()) <= (double) WORKPLACE_SEARCH_RADIUS * WORKPLACE_SEARCH_RADIUS)
+                .filter(pos -> level.getPoiManager().exists(pos, VillagerProfession.ALL_ACQUIRABLE_JOBS));
     }
 
     private void clearWorkplaceMemory(MemoryModuleType<GlobalPos> memoryType, GlobalPos selectedWorkplace) {
-        Optional<GlobalPos> memory = entity.getBrain().getMemoryInternal(memoryType);
-        if (memory != null && memory.isPresent() && !memory.get().equals(selectedWorkplace)) {
+        if (entity.getBrain().hasMemoryValue(memoryType)
+                && !entity.getBrain().isMemoryValue(memoryType, selectedWorkplace)) {
             entity.releasePoi(memoryType);
         }
         entity.getBrain().eraseMemory(memoryType);
