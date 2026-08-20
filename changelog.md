@@ -1,3 +1,8 @@
+# 8.2.0
+
+* Fixed specific eye height/dimension scaling issues
+* Fixed villagers not being able to find a workplace
+
 # 8.1.9
 
 * Improved save-data migration when upgrading MCA worlds from Minecraft 1.21.1 to 26.1.2.
