@@ -61,6 +61,11 @@ public class ForgeBusEvents {
     }
 
     @SubscribeEvent
+    public static void onPlayerRespawnEvent(PlayerEvent.PlayerRespawnEvent event) {
+        ServerInteractionManager.getInstance().onPlayerRespawn((ServerPlayer)event.getEntity());
+    }
+
+    @SubscribeEvent
     public static void onParticleFactoryRegistration(TickEvent.ClientTickEvent event) {
         MCAClient.tickClient(Minecraft.getInstance());
     }

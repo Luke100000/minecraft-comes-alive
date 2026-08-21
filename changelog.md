@@ -1,7 +1,9 @@
 # 7.7.1-alpha.2
+ 
+* Improved loading of translations
+* Fixed custom player hitbox scaling being reset/lost on death
 
 ## ChatAI
-
 * Fixed ChatAI sometimes picking the wrong nearby villager, especially with longer messages.
 * Villagers now keep track of who they are talking to much more reliably.
 * Villagers can remember recent conversations with multiple players without mixing up who said what.

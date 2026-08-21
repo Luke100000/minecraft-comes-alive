@@ -31,8 +31,12 @@ abstract class MixinTranslationStorage extends Language {
     private PooledTranslationStorage mca$pool;
 
     @Unique
+    private Map<String, String> mca$poolStorage;
+
+    @Unique
     private PooledTranslationStorage mca$getPool() {
-        if (mca$pool == null) {
+        if (mca$pool == null || mca$poolStorage != storage) {
+            mca$poolStorage = storage;
             mca$pool = new PooledTranslationStorage(storage);
             MCA.translations = storage;
             MCA.language = Minecraft.getInstance().options.languageCode;
