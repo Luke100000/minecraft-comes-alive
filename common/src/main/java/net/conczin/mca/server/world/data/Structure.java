@@ -13,9 +13,6 @@ import java.util.*;
 public final class Structure implements VillageBuilding {
     private int id;
     private int logicalBuildingId;
-    private int mainRoomId = -1;
-    private boolean mainRoomAutomatic = true;
-    private int surfaceReferenceY;
     private int nextFloorId;
     private BlockPos source;
     private BlockPos min;
@@ -28,7 +25,6 @@ public final class Structure implements VillageBuilding {
         this.source = source.immutable();
         this.min = min.immutable();
         this.max = max.immutable();
-        surfaceReferenceY = source.getY();
         for (StructureFloor floor : floors) {
             this.floors.put(floor.id(), floor);
             nextFloorId = Math.max(nextFloorId, floor.id() + 1);
@@ -38,11 +34,8 @@ public final class Structure implements VillageBuilding {
     public Structure(CompoundTag tag) {
         id = tag.getInt("id");
         logicalBuildingId = tag.contains("buildingId") ? tag.getInt("buildingId") : id;
-        mainRoomId = tag.contains("mainRoomId") ? tag.getInt("mainRoomId") : -1;
-        mainRoomAutomatic = !tag.contains("mainRoomAutomatic") || tag.getBoolean("mainRoomAutomatic");
         nextFloorId = tag.getInt("nextFloorId");
         source = NbtHelper.decodeBlockPos(tag.get("source"));
-        surfaceReferenceY = tag.contains("surfaceReferenceY") ? tag.getInt("surfaceReferenceY") : source.getY();
         min = NbtHelper.decodeBlockPos(tag.get("min"));
         max = NbtHelper.decodeBlockPos(tag.get("max"));
         for (StructureFloor floor : NbtHelper.toList(tag.getList("floors", Tag.TAG_COMPOUND),
@@ -56,9 +49,6 @@ public final class Structure implements VillageBuilding {
         CompoundTag tag = new CompoundTag();
         tag.putInt("id", id);
         tag.putInt("buildingId", getLogicalBuildingId());
-        tag.putInt("mainRoomId", mainRoomId);
-        tag.putBoolean("mainRoomAutomatic", mainRoomAutomatic);
-        tag.putInt("surfaceReferenceY", surfaceReferenceY);
         tag.putInt("nextFloorId", nextFloorId);
         tag.put("source", NbtHelper.encodeBlockPos(source));
         tag.put("min", NbtHelper.encodeBlockPos(min));
@@ -177,37 +167,6 @@ public final class Structure implements VillageBuilding {
     record InteractionPosition(StructureFloor floor, Building room, boolean physical) {
     }
 
-    int getMainRoomId() {
-        return mainRoomId;
-    }
-
-    boolean isMainRoomAutomatic() {
-        return mainRoomAutomatic;
-    }
-
-    void setManualMainRoom(int roomId) {
-        mainRoomId = roomId;
-        mainRoomAutomatic = false;
-    }
-
-    void setAutomaticMainRoom(int roomId) {
-        mainRoomId = roomId;
-        mainRoomAutomatic = true;
-    }
-
-    void clearMainRoom() {
-        mainRoomId = -1;
-        mainRoomAutomatic = true;
-    }
-
-    int getSurfaceReferenceY() {
-        return surfaceReferenceY;
-    }
-
-    void setSurfaceReferenceY(int surfaceReferenceY) {
-        this.surfaceReferenceY = surfaceReferenceY;
-    }
-
     void setFloorNumber(int floorId, int floorNumber) {
         StructureFloor floor = floors.get(floorId);
         if (floor != null && floor.floorNumber() != floorNumber) {
@@ -227,7 +186,6 @@ public final class Structure implements VillageBuilding {
         source = scan.source();
         min = scan.min();
         max = scan.max();
-        surfaceReferenceY = scan.surfaceReferenceY();
         return true;
     }
 

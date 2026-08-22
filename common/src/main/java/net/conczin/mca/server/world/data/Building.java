@@ -34,8 +34,8 @@ public class Building implements VillageBuilding {
     private List<BuildingFloorRegion> floorRegions = List.of();
     private String type = "house";
     private boolean typeForced;
-    /** Whether this Room contributes to and visually inherits from its Main Room. */
-    private boolean inheritanceEnabled = true;
+    /** Whether this Room contributes to and visually inherits from its explicit Main Room. */
+    private boolean contributesToMain = true;
     private int size;
     private int pos0X, pos0Y, pos0Z;
     private int pos1X, pos1Y, pos1Z;
@@ -78,7 +78,9 @@ public class Building implements VillageBuilding {
         floorId = tag.getInt("floorId");
         typeForced = tag.getBoolean("isTypeForced");
         type = tag.getString("type");
-        inheritanceEnabled = tag.getBoolean("inheritanceEnabled");
+        contributesToMain = tag.contains("contributesToMain")
+                ? tag.getBoolean("contributesToMain")
+                : !tag.contains("inheritanceEnabled") || tag.getBoolean("inheritanceEnabled");
         blocks.putAll(NbtHelper.toMap(tag.getCompound("blocks2"),
                 ResourceLocation::parse,
                 value -> NbtHelper.toStream(value, Building::loadBlockPos)
@@ -103,7 +105,7 @@ public class Building implements VillageBuilding {
         tag.putInt("floorId", floorId);
         tag.putBoolean("isTypeForced", typeForced);
         tag.putString("type", type);
-        tag.putBoolean("inheritanceEnabled", inheritanceEnabled);
+        tag.putBoolean("contributesToMain", contributesToMain);
         tag.put("floorRegions", NbtHelper.fromList(floorRegions, BuildingFloorRegion::save));
         CompoundTag blockTag = new CompoundTag();
         NbtHelper.fromMap(blockTag, blocks, ResourceLocation::toString,
@@ -219,13 +221,6 @@ public class Building implements VillageBuilding {
         if (s != null && floorId >= 0) {
             Optional<StructureFloor> f = s.getFloor(floorId);
             if (f.isPresent()) return f.get().floorNumber();
-        }
-        if (s != null) {
-            int surfaceY = s.getSurfaceReferenceY();
-            int roomY = getFloorY();
-            if (roomY < surfaceY) {
-                return (roomY - surfaceY) / 4 - 1;
-            }
         }
         return 0;
     }
@@ -343,12 +338,12 @@ public class Building implements VillageBuilding {
         typeForced = forced;
     }
 
-    public boolean isInheritanceEnabled() {
-        return inheritanceEnabled;
+    public boolean contributesToMain() {
+        return contributesToMain;
     }
 
-    public void setInheritanceEnabled(boolean enabled) {
-        inheritanceEnabled = enabled;
+    void setContributesToMain(boolean contributesToMain) {
+        this.contributesToMain = contributesToMain;
     }
 
     public BuildingType getBuildingType() {

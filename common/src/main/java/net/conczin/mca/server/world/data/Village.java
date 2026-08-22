@@ -30,6 +30,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public class Village implements Iterable<Building> {
+    static final int BUILDING_DATA_VERSION = 1;
     public static final int PLAYER_BORDER_MARGIN = 32;
     public static final int BORDER_MARGIN = 48;
     public static final int MERGE_MARGIN = 64;
@@ -43,6 +44,7 @@ public class Village implements Iterable<Building> {
     private final Map<Integer, Building> buildings = new HashMap<>();
     private final Map<Integer, ExternalBuilding> externalBuildings = new HashMap<>();
     private final Map<Integer, Structure> structures = new HashMap<>();
+    private final Map<Integer, LogicalBuilding> logicalBuildings = new HashMap<>();
     private final int id;
     private final VillageGuardsManager villageGuardsManager = new VillageGuardsManager(this);
     private final VillageInnManager villageInnManager = new VillageInnManager(this);
@@ -84,11 +86,37 @@ public class Village implements Iterable<Building> {
         autoScan = tag.contains("autoScan") ? tag.getBoolean("autoScan") : true;
         this.world = world;
 
-        RoomDFU.Result data = RoomDFU.load(tag);
-        buildings.putAll(data.buildings());
-        externalBuildings.putAll(data.externalBuildings());
-        structures.putAll(data.structures());
-        normalizeLogicalBuildings();
+        if (tag.contains("buildingDataVersion")) {
+            if (tag.getInt("buildingDataVersion") != BUILDING_DATA_VERSION) {
+                throw new IllegalArgumentException("Unsupported MCA buildingDataVersion: "
+                        + tag.getInt("buildingDataVersion"));
+            }
+            for (Tag value : tag.getList("buildings", Tag.TAG_COMPOUND)) {
+                Building room = new Building((CompoundTag) value);
+                buildings.put(room.getId(), room);
+            }
+            for (Tag value : tag.getList("externalBuildings", Tag.TAG_COMPOUND)) {
+                ExternalBuilding building = new ExternalBuilding((CompoundTag) value);
+                externalBuildings.put(building.getId(), building);
+            }
+            for (Tag value : tag.getList("structures", Tag.TAG_COMPOUND)) {
+                Structure structure = new Structure((CompoundTag) value);
+                structures.put(structure.getId(), structure);
+            }
+            for (Tag value : tag.getList("logicalBuildings", Tag.TAG_COMPOUND)) {
+                LogicalBuilding logical = new LogicalBuilding((CompoundTag) value);
+                logicalBuildings.put(logical.id(), logical);
+            }
+            validateBuildingData();
+            logicalBuildings.values().forEach(this::applyFloorNumbers);
+        } else {
+            RoomDFU.Result data = RoomDFU.migrate(tag);
+            buildings.putAll(data.buildings());
+            externalBuildings.putAll(data.externalBuildings());
+            structures.putAll(data.structures());
+            logicalBuildings.putAll(data.logicalBuildings());
+            refreshLogicalBuildings();
+        }
         if (!buildings.isEmpty() || !externalBuildings.isEmpty() || !structures.isEmpty()) calculateDimensions();
     }
 
@@ -156,6 +184,17 @@ public class Village implements Iterable<Building> {
         return getStructure(structureId).map(Structure::getLogicalBuildingId).orElse(structureId);
     }
 
+    Optional<LogicalBuilding> getLogicalBuilding(int buildingId) {
+        return Optional.ofNullable(logicalBuildings.get(buildingId));
+    }
+
+    void registerStructure(Structure structure, Building room) {
+        structures.put(structure.getId(), structure);
+        buildings.put(room.getId(), room);
+        logicalBuildings.computeIfAbsent(structure.getLogicalBuildingId(), id ->
+                new LogicalBuilding(id, structure.getId(), room.getFloorId(), room.getId(), true));
+    }
+
     List<Structure> getBuildingStructures(int buildingId) {
         return structures.values().stream()
                 .filter(structure -> structure.getLogicalBuildingId() == buildingId)
@@ -164,6 +203,8 @@ public class Village implements Iterable<Building> {
     }
 
     public void removeBuilding(int id) {
+        Building room = buildings.get(id);
+        if (room != null && isMainRoom(room)) return;
         boolean roomRemoved = buildings.remove(id) != null;
         boolean externalRemoved = externalBuildings.remove(id) != null;
         if (!roomRemoved && !externalRemoved) return;
@@ -175,27 +216,20 @@ public class Village implements Iterable<Building> {
     public void removeStructure(int structureId) {
         Structure removed = structures.remove(structureId);
         if (removed == null) return;
-        buildings.values().removeIf(building -> building.isFunctionalRoom() && building.getStructureId() == structureId);
-
         int buildingId = removed.getLogicalBuildingId();
-        List<Structure> remaining = getBuildingStructures(buildingId);
-        if (structureId == buildingId && !remaining.isEmpty()) {
-            int replacementId = remaining.getFirst().getId();
-            remaining.forEach(structure -> structure.setLogicalBuildingId(replacementId));
-            buildingId = replacementId;
-        }
-        refreshLogicalBuildings();
+        buildings.values().removeIf(room -> room.getStructureId() == structureId);
+        if (getBuildingStructures(buildingId).isEmpty()) logicalBuildings.remove(buildingId);
+        else reconcileLogicalBuilding(buildingId);
         calculateDimensions();
         markDirty();
     }
 
     void removeLogicalBuilding(int buildingId) {
-        Set<Integer> memberIds = getBuildingStructures(buildingId).stream()
-                .map(Structure::getId)
-                .collect(Collectors.toSet());
-        if (memberIds.isEmpty()) return;
-        buildings.values().removeIf(building -> memberIds.contains(building.getStructureId()));
-        memberIds.forEach(structures::remove);
+        Set<Integer> structureIds = getBuildingStructures(buildingId).stream()
+                .map(Structure::getId).collect(Collectors.toSet());
+        buildings.values().removeIf(room -> structureIds.contains(room.getStructureId()));
+        structureIds.forEach(structures::remove);
+        logicalBuildings.remove(buildingId);
     }
 
     public Stream<Building> getBuildingsOfType(String type) {
@@ -405,9 +439,11 @@ public class Village implements Iterable<Building> {
         tag.put("residentHomes", NbtHelper.fromMap(new CompoundTag(), residentHomes, Object::toString, LongTag::valueOf));
         tag.putFloat("populationThresholdFloat", populationThreshold);
         tag.putFloat("marriageThresholdFloat", marriageThreshold);
-        tag.put("buildings", NbtHelper.fromList(getRooms().toList(), Building::save));
+        tag.putInt("buildingDataVersion", BUILDING_DATA_VERSION);
+        tag.put("buildings", NbtHelper.fromList(buildings.values(), Building::save));
         tag.put("externalBuildings", NbtHelper.fromList(externalBuildings.values(), Building::save));
         tag.put("structures", NbtHelper.fromList(structures.values(), Structure::save));
+        tag.put("logicalBuildings", NbtHelper.fromList(logicalBuildings.values(), LogicalBuilding::save));
         tag.putBoolean("autoScan", autoScan);
         return tag;
     }
@@ -416,7 +452,8 @@ public class Village implements Iterable<Building> {
         buildings.putAll(village.buildings);
         externalBuildings.putAll(village.externalBuildings);
         structures.putAll(village.structures);
-        normalizeLogicalBuildings();
+        logicalBuildings.putAll(village.logicalBuildings);
+        refreshLogicalBuildings();
         calculateDimensions();
     }
 
@@ -434,7 +471,7 @@ public class Village implements Iterable<Building> {
             Building room = resolved.get().position().room();
             if (room != null) return RoomScanPlan.updateRoom(room, source);
             return RoomScanPlan.addRoom(
-                    getMainRoomForStructure(resolved.get().structure().getId()).orElse(null), source);
+                    getMainRoom(resolved.get().structure()).orElse(null), source);
         }
 
         return attachmentPlan(level, source).orElseGet(() -> RoomScanPlan.addBuilding(source));
@@ -517,21 +554,12 @@ public class Village implements Iterable<Building> {
                         .thenComparingInt(resolved -> resolved.structure().getId()));
     }
 
-    private Optional<Building> getMainRoomForStructure(int structureId) {
-        Structure structure = getStructure(structureId).orElse(null);
-        if (structure == null) return Optional.empty();
-        for (Structure member : getBuildingStructures(structure.getLogicalBuildingId())) {
-            int mainRoomId = member.getMainRoomId();
-            if (mainRoomId < 0) continue;
-            Building room = buildings.get(mainRoomId);
-            if (room != null && room.isFunctionalRoom()) return Optional.of(room);
-        }
-        return Optional.empty();
-    }
-
     public Optional<Building> getMainRoom(Structure structure) {
         if (structure == null) return Optional.empty();
-        return getMainRoomForStructure(structure.getId());
+        LogicalBuilding logical = logicalBuildings.get(structure.getLogicalBuildingId());
+        if (logical == null || logical.mainRoomId() < 0) return Optional.empty();
+        Building room = buildings.get(logical.mainRoomId());
+        return room != null && room.isFunctionalRoom() ? Optional.of(room) : Optional.empty();
     }
 
     public Optional<Building> getFunctionalRoomAt(Vec3i pos) {
@@ -568,44 +596,111 @@ public class Village implements Iterable<Building> {
     public boolean setMainRoom(Building room) {
         Structure structure = getStructureFor(room).orElse(null);
         if (structure == null) return false;
-        boolean changed = MainRoomSelector.setManual(
-                getBuildingStructures(structure.getLogicalBuildingId()), getRooms().toList(), room.getId());
-        if (!changed) return false;
+        LogicalBuilding logical = logicalBuildings.get(structure.getLogicalBuildingId());
+        if (logical == null || logical.mainRoomId() == room.getId()
+                || !belongsToLogicalBuilding(room, logical.id())) return false;
+        logical.setMainRoomId(room.getId());
         markDirty();
         return true;
     }
 
-    public boolean useAutomaticMainRoom(Structure structure) {
-        if (structure == null || !structures.containsKey(structure.getId())) return false;
-        boolean changed = MainRoomSelector.useAutomatic(
-                getBuildingStructures(structure.getLogicalBuildingId()), getRooms().toList());
-        if (!changed) return false;
+    public boolean setBuildingInheritanceEnabled(Building room, boolean enabled) {
+        Structure structure = getStructureFor(room).orElse(null);
+        if (structure == null) return false;
+        LogicalBuilding logical = logicalBuildings.get(structure.getLogicalBuildingId());
+        if (logical == null || logical.inheritanceEnabled() == enabled) return false;
+        logical.setInheritanceEnabled(enabled);
         markDirty();
         return true;
     }
 
-    public boolean isMainRoomAutomatic(Structure structure) {
-        if (structure == null) return true;
-        return getBuildingStructures(structure.getLogicalBuildingId()).stream()
-                .filter(member -> member.getMainRoomId() >= 0)
-                .findFirst()
-                .map(Structure::isMainRoomAutomatic)
-                .orElse(true);
+    public boolean setRoomContributesToMain(Building room, boolean contributes) {
+        if (room == null || !buildings.containsKey(room.getId())
+                || room.contributesToMain() == contributes) return false;
+        room.setContributesToMain(contributes);
+        markDirty();
+        return true;
     }
 
-    void replaceMainRoom(Structure structure, Building replacement) {
-        MainRoomSelector.replace(
-                getBuildingStructures(structure.getLogicalBuildingId()), replacement);
+    public boolean isBuildingInheritanceEnabled(Building room) {
+        Structure structure = getStructureFor(room).orElse(null);
+        if (structure == null) return false;
+        return getLogicalBuilding(structure.getLogicalBuildingId())
+                .map(LogicalBuilding::inheritanceEnabled).orElse(false);
     }
 
     void refreshLogicalBuildings() {
-        Map<Integer, List<Structure>> byBuilding = structures.values().stream()
-                .collect(Collectors.groupingBy(Structure::getLogicalBuildingId));
-        byBuilding.forEach((buildingId, members) -> floorNumbers(members, buildingId)
-                .forEach((ref, number) -> ref.structure().setFloorNumber(ref.floor().id(), number)));
+        logicalBuildings.keySet().stream().toList().forEach(this::reconcileLogicalBuilding);
+    }
 
-        List<Building> rooms = getRooms().toList();
-        byBuilding.values().forEach(members -> MainRoomSelector.ensureValid(members, rooms));
+    private void reconcileLogicalBuilding(int buildingId) {
+        List<Structure> members = getBuildingStructures(buildingId);
+        if (members.isEmpty()) {
+            logicalBuildings.remove(buildingId);
+            return;
+        }
+        LogicalBuilding logical = logicalBuildings.get(buildingId);
+        if (logical == null) return;
+
+        Structure ground = structures.get(logical.groundStructureId());
+        if (ground == null || ground.getLogicalBuildingId() != buildingId
+                || ground.getFloor(logical.groundFloorId()).isEmpty()) {
+            Structure replacement = members.getFirst();
+            replacement.getFloors().stream().findFirst().ifPresent(
+                    floor -> logical.setGroundFloor(replacement.getId(), floor.id()));
+        }
+        if (!validMainRoom(logical)) logical.setMainRoomId(lowestRoomId(buildingId));
+        applyFloorNumbers(logical);
+    }
+
+    private boolean validMainRoom(LogicalBuilding logical) {
+        if (logical.mainRoomId() < 0) return lowestRoomId(logical.id()) < 0;
+        return belongsToLogicalBuilding(buildings.get(logical.mainRoomId()), logical.id());
+    }
+
+    private boolean belongsToLogicalBuilding(Building room, int buildingId) {
+        Structure structure = room == null ? null : structures.get(room.getStructureId());
+        return structure != null && structure.getLogicalBuildingId() == buildingId
+                && structure.getFloor(room.getFloorId()).isPresent();
+    }
+
+    private int lowestRoomId(int buildingId) {
+        return buildings.values().stream()
+                .filter(Building::isFunctionalRoom)
+                .filter(room -> belongsToLogicalBuilding(room, buildingId))
+                .mapToInt(Building::getId).min().orElse(-1);
+    }
+
+    private void applyFloorNumbers(LogicalBuilding logical) {
+        floorNumbers(getBuildingStructures(logical.id()), logical).forEach(
+                (ref, number) -> ref.structure().setFloorNumber(ref.floor().id(), number));
+    }
+
+    private void validateBuildingData() {
+        for (Structure structure : structures.values()) {
+            if (!logicalBuildings.containsKey(structure.getLogicalBuildingId())) {
+                throw new IllegalArgumentException("Structure " + structure.getId()
+                        + " references missing logical building " + structure.getLogicalBuildingId());
+            }
+        }
+        for (Building room : buildings.values()) {
+            Structure structure = structures.get(room.getStructureId());
+            if (!room.isFunctionalRoom() || structure == null || structure.getFloor(room.getFloorId()).isEmpty()) {
+                throw new IllegalArgumentException("Room " + room.getId() + " references missing Structure/Floor");
+            }
+        }
+        for (LogicalBuilding logical : logicalBuildings.values()) {
+            Structure ground = structures.get(logical.groundStructureId());
+            if (ground == null || ground.getLogicalBuildingId() != logical.id()
+                    || ground.getFloor(logical.groundFloorId()).isEmpty()) {
+                throw new IllegalArgumentException("Logical building " + logical.id()
+                        + " has invalid Ground Floor " + logical.groundStructureId() + ":" + logical.groundFloorId());
+            }
+            if (!validMainRoom(logical)) {
+                throw new IllegalArgumentException("Logical building " + logical.id()
+                        + " has invalid Main Room " + logical.mainRoomId());
+            }
+        }
     }
 
     static final int MAX_FLOOR_ATTACHMENT_GAP = 4;
@@ -650,11 +745,12 @@ public class Village implements Iterable<Building> {
                                Structure candidate,
                                StructureFloor candidateFloor) {
         List<Structure> members = new ArrayList<>(getBuildingStructures(buildingId));
-        if (members.isEmpty() || candidate == null || candidateFloor == null) {
+        LogicalBuilding logical = logicalBuildings.get(buildingId);
+        if (members.isEmpty() || logical == null || candidate == null || candidateFloor == null) {
             return Integer.MIN_VALUE;
         }
         members.add(candidate);
-        return floorNumbers(members, buildingId)
+        return floorNumbers(members, logical)
                 .getOrDefault(new FloorRef(candidate, candidateFloor), Integer.MIN_VALUE);
     }
 
@@ -690,7 +786,7 @@ public class Village implements Iterable<Building> {
         return above == null ? Integer.MIN_VALUE : above.floorNumber() - 1;
     }
 
-    private Map<FloorRef, Integer> floorNumbers(Collection<Structure> members, int rootStructureId) {
+    private Map<FloorRef, Integer> floorNumbers(Collection<Structure> members, LogicalBuilding logical) {
         List<FloorRef> floors = new ArrayList<>();
         for (Structure structure : members) {
             for (StructureFloor floor : structure.getFloors()) {
@@ -713,25 +809,13 @@ public class Village implements Iterable<Building> {
             band.add(ref);
         }
 
-        Structure root = getStructure(rootStructureId).orElseGet(() -> members.stream()
-                .filter(structure -> structure.getId() >= 0)
-                .min(Comparator.comparingInt(Structure::getId))
-                .orElseGet(() -> members.stream().findFirst().orElseThrow()));
-
-        FloorRef establishedGround = establishedGroundFloor(members, root, tolerance);
-        int groundBand = establishedGround == null ? -1 : java.util.stream.IntStream.range(0, bands.size())
-                .filter(index -> bands.get(index).contains(establishedGround))
+        int groundBand = java.util.stream.IntStream.range(0, bands.size())
+                .filter(index -> bands.get(index).stream().anyMatch(ref ->
+                        ref.structure().getId() == logical.groundStructureId()
+                                && ref.floor().id() == logical.groundFloorId()))
                 .findFirst()
                 .orElse(-1);
-        if (groundBand < 0) {
-            FloorRef sourceGround = root.physicalFloorAt(root.getSource())
-                    .map(floor -> new FloorRef(root, floor))
-                    .orElse(floors.getFirst());
-            groundBand = java.util.stream.IntStream.range(0, bands.size())
-                    .filter(index -> bands.get(index).contains(sourceGround))
-                    .findFirst()
-                    .orElse(0);
-        }
+        if (groundBand < 0) return Map.of();
 
         Map<FloorRef, Integer> numbers = new HashMap<>();
         for (int bandIndex = 0; bandIndex < bands.size(); bandIndex++) {
@@ -739,61 +823,6 @@ public class Village implements Iterable<Building> {
             for (FloorRef ref : bands.get(bandIndex)) numbers.put(ref, floorNumber);
         }
         return Map.copyOf(numbers);
-    }
-
-    /**
-     * Keep a canonical persisted Ground Floor stable. Fresh multi-floor scans initially have 0 on
-     * every detected Floor, so multiple zero Floors only count as established when they occupy the
-     * same logical height band. Prospective negative-ID Structures are deliberately ignored.
-     */
-    private static FloorRef establishedGroundFloor(Collection<Structure> members,
-                                                   Structure root,
-                                                   int tolerance) {
-        List<FloorRef> candidates = members.stream()
-                .filter(structure -> structure.getId() >= 0)
-                .sorted(Comparator.comparing((Structure structure) -> structure.getId() != root.getId())
-                        .thenComparingInt(Structure::getId))
-                .flatMap(structure -> structure.getFloors().stream()
-                        .filter(floor -> floor.floorNumber() == 0)
-                        .map(floor -> new FloorRef(structure, floor)))
-                .toList();
-        if (candidates.isEmpty()) return null;
-
-        int minY = candidates.stream().mapToInt(candidate -> candidate.floor().anchorY()).min().orElseThrow();
-        int maxY = candidates.stream().mapToInt(candidate -> candidate.floor().anchorY()).max().orElseThrow();
-        return maxY - minY <= tolerance ? candidates.getFirst() : null;
-    }
-
-    private void normalizeLogicalBuildings() {
-        for (Structure structure : structures.values()) {
-            int buildingId = structure.getLogicalBuildingId();
-            if (buildingId < 0
-                    || (buildingId != structure.getId() && !structures.containsKey(buildingId))) {
-                structure.setLogicalBuildingId(structure.getId());
-            }
-        }
-        Map<Integer, Integer> canonicalIds = new HashMap<>();
-        structures.values().stream()
-                .sorted(Comparator.comparingInt(Structure::getId))
-                .forEach(structure -> canonicalIds.put(
-                        structure.getId(), resolveBuildingRoot(structure)));
-        canonicalIds.forEach((structureId, buildingId) ->
-                structures.get(structureId).setLogicalBuildingId(buildingId));
-
-        refreshLogicalBuildings();
-    }
-
-    private int resolveBuildingRoot(Structure start) {
-        Set<Integer> visited = new HashSet<>();
-        int currentId = start.getId();
-        while (visited.add(currentId)) {
-            Structure current = structures.get(currentId);
-            if (current == null) return start.getId();
-            int nextId = current.getLogicalBuildingId();
-            if (nextId == currentId) return currentId;
-            currentId = nextId;
-        }
-        return start.getId();
     }
 
 

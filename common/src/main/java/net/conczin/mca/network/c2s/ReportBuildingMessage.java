@@ -113,18 +113,13 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
             player.displayClientMessage(Component.translatable("blueprint.noRoomOnFloor"), true);
             return;
         }
-        Structure structure = village.getStructureFor(room).orElse(null);
-        if (structure == null) {
+        if (village.getStructureFor(room).isEmpty()) {
             player.displayClientMessage(Component.translatable("blueprint.mainRoomNoStructure"), true);
             return;
         }
-        boolean changeToAutomatic = !village.isMainRoomAutomatic(structure);
-        boolean changed = changeToAutomatic
-                ? village.useAutomaticMainRoom(structure)
-                : village.setMainRoom(room);
+        boolean changed = village.setMainRoom(room);
         if (changed) {
-            player.displayClientMessage(Component.translatable(changeToAutomatic
-                    ? "blueprint.mainRoomAutomatic" : "blueprint.mainRoomSet"), true);
+            player.displayClientMessage(Component.translatable("blueprint.mainRoomSet"), true);
         }
     }
 
@@ -135,9 +130,11 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
         if (village == null) return;
         Building room = village.getFunctionalRoomAt(player.serverLevel(), player.blockPosition()).orElse(null);
         if (room == null) return;
-        if (room.isInheritanceEnabled() == enabled) return;
-        room.setInheritanceEnabled(enabled);
-        village.markDirty();
+        if (village.isMainRoom(room)) {
+            village.setBuildingInheritanceEnabled(room, enabled);
+        } else {
+            village.setRoomContributesToMain(room, enabled);
+        }
     }
 
     static void updateRoom(VillageManager manager, ServerPlayer player, BlockPos source, String forcedType) {

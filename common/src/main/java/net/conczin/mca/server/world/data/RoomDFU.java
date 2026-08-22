@@ -8,30 +8,38 @@ import net.minecraft.nbt.Tag;
 
 import java.util.*;
 
-/** One-time compatibility boundary for released origin/1.21.1 village data. */
+/** One-time compatibility boundary for released origin/1.21.1 and public floor-beta village data. */
 final class RoomDFU {
     private RoomDFU() {
     }
 
-    static Result load(CompoundTag villageTag) {
+    static Result migrate(CompoundTag villageTag) {
         boolean legacyInheritance = villageTag.contains("roomInheritance")
                 && villageTag.getBoolean("roomInheritance");
         if (villageTag.contains("structures", Tag.TAG_LIST)) {
-            return loadCurrent(villageTag, legacyInheritance);
+            return migratePublicBeta(villageTag, legacyInheritance);
         }
 
-        return migrateOrigin(villageTag.getList("buildings", Tag.TAG_COMPOUND), legacyInheritance);
+        return migrateOrigin(villageTag.getList("buildings", Tag.TAG_COMPOUND));
     }
 
-    private static Result loadCurrent(CompoundTag villageTag, boolean legacyInheritance) {
+    private static Result migratePublicBeta(CompoundTag villageTag, boolean legacyInheritance) {
         Map<Integer, Building> rooms = new HashMap<>();
         Map<Integer, ExternalBuilding> external = new HashMap<>();
         Map<Integer, Structure> structures = new HashMap<>();
+        Map<Integer, LogicalBuilding> logicalBuildings = new HashMap<>();
+        Map<Integer, Boolean> inheritanceByRoom = new HashMap<>();
         Map<Integer, Integer> legacyManualMainByStructure = new HashMap<>();
         for (Tag value : villageTag.getList("buildings", Tag.TAG_COMPOUND)) {
             CompoundTag roomTag = (CompoundTag) value;
-            Building room = loadRoom(roomTag, legacyInheritance);
+            CompoundTag normalized = normalizeRoomTag(roomTag);
+            boolean inheritance = normalized.contains("inheritanceEnabled")
+                    ? normalized.getBoolean("inheritanceEnabled") : legacyInheritance;
+            normalized.remove("inheritanceEnabled");
+            normalized.putBoolean("contributesToMain", inheritance);
+            Building room = new Building(normalized);
             rooms.put(room.getId(), room);
+            inheritanceByRoom.put(room.getId(), inheritance);
             if (roomTag.getBoolean("layoutOverride")) {
                 legacyManualMainByStructure.merge(room.getStructureId(), room.getId(), Math::min);
             }
@@ -40,6 +48,7 @@ final class RoomDFU {
             ExternalBuilding building = new ExternalBuilding(normalizeRoomTag((CompoundTag) value));
             external.put(building.getId(), building);
         }
+        Map<Integer, Integer> mainRoomByLogicalBuilding = new HashMap<>();
         for (Tag value : villageTag.getList("structures", Tag.TAG_COMPOUND)) {
             CompoundTag source = (CompoundTag) value;
             CompoundTag tag = source.copy();
@@ -50,28 +59,31 @@ final class RoomDFU {
                 int mainRoomId = manualMain != null ? manualMain : oldRoot == null ? -1 : oldRoot.getId();
                 tag.putInt("mainRoomId", mainRoomId);
             }
-            if (!tag.contains("mainRoomAutomatic")) {
-                tag.putBoolean("mainRoomAutomatic", manualMain == null
-                        && !tag.getBoolean("groundAnchorExplicit"));
-            }
-            if (!tag.contains("surfaceReferenceY")) {
-                int referenceY = tag.contains("groundReferenceY")
-                        ? tag.getInt("groundReferenceY")
-                        : NbtHelper.decodeBlockPos(tag.get("source")).getY();
-                tag.putInt("surfaceReferenceY", referenceY);
-            }
             Structure structure = new Structure(tag);
             structures.put(structure.getId(), structure);
+            if (tag.getInt("mainRoomId") >= 0) {
+                mainRoomByLogicalBuilding.putIfAbsent(structure.getLogicalBuildingId(), tag.getInt("mainRoomId"));
+            }
         }
-        return new Result(rooms, external, structures);
-    }
 
-    private static Building loadRoom(CompoundTag tag, boolean legacyInheritance) {
-        CompoundTag normalized = normalizeRoomTag(tag);
-        if (!normalized.contains("inheritanceEnabled")) {
-            normalized.putBoolean("inheritanceEnabled", legacyInheritance);
+        Map<Integer, List<Structure>> structuresByLogicalBuilding = new HashMap<>();
+        for (Structure structure : structures.values()) {
+            structuresByLogicalBuilding.computeIfAbsent(structure.getLogicalBuildingId(), ignored -> new ArrayList<>())
+                    .add(structure);
         }
-        return new Building(normalized);
+        for (Map.Entry<Integer, List<Structure>> entry : structuresByLogicalBuilding.entrySet()) {
+            List<Structure> members = entry.getValue().stream()
+                    .sorted(Comparator.comparingInt(Structure::getId)).toList();
+            FloorSelection ground = betaGroundFloor(members);
+            if (ground == null) continue;
+            int mainRoomId = mainRoomByLogicalBuilding.getOrDefault(entry.getKey(), lowestRoomId(
+                    entry.getKey(), structures, rooms));
+            boolean inheritanceEnabled = mainRoomId >= 0
+                    && inheritanceByRoom.getOrDefault(mainRoomId, legacyInheritance);
+            logicalBuildings.put(entry.getKey(), new LogicalBuilding(entry.getKey(),
+                    ground.structureId(), ground.floorId(), mainRoomId, inheritanceEnabled));
+        }
+        return new Result(rooms, external, structures, logicalBuildings);
     }
 
     private static CompoundTag normalizeRoomTag(CompoundTag source) {
@@ -120,13 +132,17 @@ final class RoomDFU {
         return NbtHelper.decodeBlockPos(value);
     }
 
-    private static Result migrateOrigin(ListTag legacy, boolean legacyInheritance) {
+    private static Result migrateOrigin(ListTag legacy) {
         Map<Integer, Building> rooms = new HashMap<>();
         Map<Integer, ExternalBuilding> external = new HashMap<>();
         Map<Integer, Structure> structures = new HashMap<>();
+        Map<Integer, LogicalBuilding> logicalBuildings = new HashMap<>();
         for (Tag value : legacy) {
             CompoundTag tag = (CompoundTag) value;
-            Building room = loadRoom(tag, legacyInheritance);
+            CompoundTag normalized = normalizeRoomTag(tag);
+            normalized.remove("inheritanceEnabled");
+            normalized.putBoolean("contributesToMain", true);
+            Building room = new Building(normalized);
             if (room.getBuildingType().grouped()) {
                 ExternalBuilding building = new ExternalBuilding(normalizeRoomTag(tag));
                 external.put(building.getId(), building);
@@ -135,9 +151,11 @@ final class RoomDFU {
             migrateOriginBuilding(room).ifPresent(structure -> {
                 rooms.put(room.getId(), room);
                 structures.put(structure.getId(), structure);
+                logicalBuildings.put(structure.getLogicalBuildingId(), new LogicalBuilding(
+                        structure.getLogicalBuildingId(), structure.getId(), room.getFloorId(), room.getId(), true));
             });
         }
-        return new Result(rooms, external, structures);
+        return new Result(rooms, external, structures, logicalBuildings);
     }
 
     private static Optional<Structure> migrateOriginBuilding(Building room) {
@@ -151,13 +169,43 @@ final class RoomDFU {
                 List.of(floor));
         room.setStructureId(structure.getId());
         room.setFloorId(floor.id());
-        structure.setAutomaticMainRoom(room.getId());
         return Optional.of(structure);
+    }
+
+    private static FloorSelection betaGroundFloor(List<Structure> members) {
+        return members.stream()
+                .flatMap(structure -> structure.getFloors().stream()
+                        .filter(floor -> floor.floorNumber() == 0)
+                        .map(floor -> new FloorSelection(structure.getId(), floor.id(), floor.anchorY())))
+                .min(Comparator.comparingInt(FloorSelection::anchorY)
+                        .thenComparingInt(FloorSelection::structureId)
+                        .thenComparingInt(FloorSelection::floorId))
+                .orElseGet(() -> members.stream().findFirst()
+                        .flatMap(structure -> structure.getFloors().stream().findFirst()
+                                .map(floor -> new FloorSelection(structure.getId(), floor.id(), floor.anchorY())))
+                        .orElse(null));
+    }
+
+    private static int lowestRoomId(int logicalBuildingId,
+                                    Map<Integer, Structure> structures,
+                                    Map<Integer, Building> rooms) {
+        return rooms.values().stream()
+                .filter(Building::isFunctionalRoom)
+                .filter(room -> {
+                    Structure structure = structures.get(room.getStructureId());
+                    return structure != null && structure.getLogicalBuildingId() == logicalBuildingId;
+                })
+                .mapToInt(Building::getId)
+                .min().orElse(-1);
+    }
+
+    private record FloorSelection(int structureId, int floorId, int anchorY) {
     }
 
     record Result(
             Map<Integer, Building> buildings,
             Map<Integer, ExternalBuilding> externalBuildings,
-            Map<Integer, Structure> structures) {
+            Map<Integer, Structure> structures,
+            Map<Integer, LogicalBuilding> logicalBuildings) {
     }
 }

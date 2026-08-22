@@ -887,7 +887,8 @@ public class BlueprintScreen extends ExtendedScreen {
         if (room == null) return;
 
         boolean mainRoom = roomTypeResolver.resolve(room).isMainRoom();
-        boolean enable = !room.isInheritanceEnabled();
+        boolean enabled = mainRoom ? village.isBuildingInheritanceEnabled(room) : room.contributesToMain();
+        boolean enable = !enabled;
         String labelKey;
         String tooltipKey;
         if (enable) {
@@ -904,11 +905,8 @@ public class BlueprintScreen extends ExtendedScreen {
         }
 
         column.addTooltip(Component.translatable(labelKey), Component.translatable(tooltipKey), button -> {
-            room.setInheritanceEnabled(enable);
-            setVillage(village);
             Network.sendToServer(new ReportBuildingMessage(
                     ReportBuildingMessage.Action.SET_ROOM_INHERITANCE, Boolean.toString(enable)));
-            setPage(page);
         });
     }
 
@@ -949,14 +947,10 @@ public class BlueprintScreen extends ExtendedScreen {
         }
         Optional<Building> room = village == null ? Optional.empty() : scanContext.functionalRoom();
         Structure structure = room.flatMap(village::getStructureFor).orElse(null);
-        boolean changeToAutomatic = structure != null && !village.isMainRoomAutomatic(structure);
-        mainRoomButton.active = room.isPresent() && structure != null;
-        mainRoomButton.setMessage(Component.translatable(changeToAutomatic
-                ? "gui.blueprint.useAutomaticMainRoom"
-                : "gui.blueprint.setMainRoom"));
-        mainRoomButton.setTooltip(Tooltip.create(Component.translatable(changeToAutomatic
-                ? "gui.blueprint.useAutomaticMainRoom.tooltip"
-                : "gui.blueprint.setMainRoom.tooltip")));
+        mainRoomButton.active = room.isPresent() && structure != null
+                && !roomTypeResolver.resolve(room.orElse(null)).isMainRoom();
+        mainRoomButton.setMessage(Component.translatable("gui.blueprint.setMainRoom"));
+        mainRoomButton.setTooltip(Tooltip.create(Component.translatable("gui.blueprint.setMainRoom.tooltip")));
     }
 
     private void renderTasks(GuiGraphics context) {

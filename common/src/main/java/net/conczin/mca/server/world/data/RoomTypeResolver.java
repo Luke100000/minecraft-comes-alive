@@ -60,15 +60,18 @@ public final class RoomTypeResolver {
 
     Context resolve(Building room, Building mainRoom) {
         Map<ResourceLocation, List<BlockPos>> own = room == null ? Map.of() : room.getBlocks();
-        if (village == null || room == null || !room.isFunctionalRoom()
-                || mainRoom == null || !sameRoom(mainRoom, room) || !mainRoom.isInheritanceEnabled()) {
-            return new Context(room, mainRoom == null ? room : mainRoom, own, Map.of(), own, List.of());
+        LogicalBuilding logicalBuilding = logicalBuilding(room);
+        boolean inheritanceEnabled = logicalBuilding != null && logicalBuilding.inheritanceEnabled();
+        if (room == null || !room.isFunctionalRoom()
+                || mainRoom == null || !sameRoom(mainRoom, room) || !inheritanceEnabled) {
+            return new Context(room, mainRoom == null ? room : mainRoom,
+                    own, Map.of(), own, List.of(), inheritanceEnabled);
         }
 
         List<Building> contributors = roomsByBuilding.getOrDefault(logicalBuildingId(room), List.of()).stream()
                 .filter(Building::isFunctionalRoom)
                 .filter(candidate -> !sameRoom(candidate, room))
-                .filter(Building::isInheritanceEnabled)
+                .filter(Building::contributesToMain)
                 .filter(candidate -> !candidate.getBlocks().isEmpty())
                 .sorted(Comparator.comparingInt(Building::getId))
                 .toList();
@@ -79,7 +82,7 @@ public final class RoomTypeResolver {
 
         Map<ResourceLocation, LinkedHashSet<BlockPos>> effective = mutable(own);
         merge(effective, inheritedPoi);
-        return new Context(room, mainRoom, own, inheritedPoi, toLists(effective), contributors);
+        return new Context(room, mainRoom, own, inheritedPoi, toLists(effective), contributors, true);
     }
 
     private static boolean sameRoom(Building first, Building second) {
@@ -88,14 +91,13 @@ public final class RoomTypeResolver {
     }
 
     private Building findMainRoom(Building room) {
-        if (village == null || room == null) return room;
-        int mainRoomId = village.getStructure(room.getStructureId())
-                .flatMap(village::getMainRoom)
-                .map(Building::getId)
-                .orElse(room.getId());
+        if (room == null) return null;
+        LogicalBuilding logicalBuilding = logicalBuilding(room);
+        int mainRoomId = logicalBuilding == null ? room.getId() : logicalBuilding.mainRoomId();
         if (room.getId() == mainRoomId) return room;
         Building snapshotRoom = roomsById.get(mainRoomId);
         if (snapshotRoom != null) return snapshotRoom;
+        if (village == null) return room;
         return village.getBuilding(mainRoomId).filter(Building::isFunctionalRoom).orElse(room);
     }
 
@@ -103,6 +105,12 @@ public final class RoomTypeResolver {
         if (room == null) return -1;
         return village == null ? room.getStructureId()
                 : village.getLogicalBuildingId(room.getStructureId());
+    }
+
+    private LogicalBuilding logicalBuilding(Building room) {
+        if (room == null) return null;
+        if (village == null) return null;
+        return village.getLogicalBuilding(logicalBuildingId(room)).orElse(null);
     }
 
     private static Map<ResourceLocation, List<BlockPos>> snapshot(Map<ResourceLocation, List<BlockPos>> source) {
@@ -133,7 +141,8 @@ public final class RoomTypeResolver {
                           Map<ResourceLocation, List<BlockPos>> ownPoi,
                           Map<ResourceLocation, List<BlockPos>> inheritedPoi,
                           Map<ResourceLocation, List<BlockPos>> effectivePoi,
-                          List<Building> contributors) {
+                          List<Building> contributors,
+                          boolean inheritanceEnabled) {
         public Context {
             boolean effectiveIsOwn = effectivePoi == ownPoi;
             ownPoi = snapshot(ownPoi);
@@ -147,8 +156,8 @@ public final class RoomTypeResolver {
         }
 
         public boolean contributesToMain() {
-            return room != null && room.isFunctionalRoom() && room.isInheritanceEnabled()
-                    && mainRoom != null && mainRoom.isInheritanceEnabled() && !isMainRoom();
+            return room != null && room.isFunctionalRoom() && room.contributesToMain()
+                    && inheritanceEnabled && mainRoom != null && !isMainRoom();
         }
 
         public Map<ResourceLocation, List<BlockPos>> classificationPoi() {

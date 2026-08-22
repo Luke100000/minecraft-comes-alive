@@ -73,7 +73,17 @@ dependencies {
     compileOnly 'org.spongepowered:mixin:0.8.5'
     // Loader modules provide the runtime; common only needs the API and processor.
     compileOnly(annotationProcessor("io.github.llamalad7:mixinextras-common:${mixin_extras_version}"))
+    testImplementation platform('org.junit:junit-bom:5.10.2')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
+
+tasks.withType(Test).configureEach {
+    useJUnitPlatform()
+}
+
+sourceSets.test.compileClasspath += sourceSets.main.compileClasspath
+sourceSets.test.runtimeClasspath += sourceSets.main.runtimeClasspath
 
 configurations {
     commonJava {

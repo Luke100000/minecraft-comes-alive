@@ -6,7 +6,6 @@ import net.minecraft.core.Direction;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.levelgen.Heightmap;
 
 import java.util.*;
 
@@ -16,7 +15,6 @@ final class StructureScanner {
             Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST
     };
     private static final int ROOF_SEARCH = 16;
-    private static final int SURFACE_SAMPLE_MARGIN = 3;
 
     private StructureScanner() {
     }
@@ -171,14 +169,13 @@ final class StructureScanner {
                 volume.stream().mapToInt(BlockPos::getY).max().orElse(seed.getY()),
                 volume.stream().mapToInt(BlockPos::getZ).max().orElse(seed.getZ()));
         Structure candidate = new Structure(ignoredStructureId, seed, min, max, floors);
-        int surfaceReferenceY = detectSurfaceReferenceY(world, volume, floors, seed);
 
         for (Structure other : existing) {
             if (other.getId() != ignoredStructureId && candidate.intersects(other)) {
                 return Result.failure(Building.validationResult.OVERLAP, source);
             }
         }
-        return new Result(Building.validationResult.SUCCESS, seed, min, max, floors, surfaceReferenceY);
+        return new Result(Building.validationResult.SUCCESS, seed, min, max, floors);
     }
 
     /** New Structure discovery accepts only the enclosed interior occupied by the player. */
@@ -597,51 +594,6 @@ final class StructureScanner {
         return examined.size();
     }
 
-    private static int detectSurfaceReferenceY(Level world,
-                                               Collection<BlockPos> volume,
-                                               List<StructureFloor> floors,
-                                               BlockPos fallback) {
-        if (volume.isEmpty() || floors.isEmpty()) return fallback.getY();
-        int minX = volume.stream().mapToInt(BlockPos::getX).min().orElse(fallback.getX())
-                - SURFACE_SAMPLE_MARGIN;
-        int maxX = volume.stream().mapToInt(BlockPos::getX).max().orElse(fallback.getX())
-                + SURFACE_SAMPLE_MARGIN;
-        int minZ = volume.stream().mapToInt(BlockPos::getZ).min().orElse(fallback.getZ())
-                - SURFACE_SAMPLE_MARGIN;
-        int maxZ = volume.stream().mapToInt(BlockPos::getZ).max().orElse(fallback.getZ())
-                + SURFACE_SAMPLE_MARGIN;
-        int minRelevantY = floors.stream().mapToInt(StructureFloor::anchorY).min().orElse(fallback.getY())
-                - ROOF_SEARCH;
-        int maxRelevantY = floors.stream().mapToInt(StructureFloor::ceilingY).max().orElse(fallback.getY())
-                + ROOF_SEARCH;
-
-        List<Integer> samples = new ArrayList<>();
-        for (int x = minX; x <= maxX; x++) {
-            addSurfaceSample(world, samples, x, minZ, minRelevantY, maxRelevantY);
-            if (maxZ != minZ) addSurfaceSample(world, samples, x, maxZ, minRelevantY, maxRelevantY);
-        }
-        for (int z = minZ + 1; z < maxZ; z++) {
-            addSurfaceSample(world, samples, minX, z, minRelevantY, maxRelevantY);
-            if (maxX != minX) addSurfaceSample(world, samples, maxX, z, minRelevantY, maxRelevantY);
-        }
-        if (samples.isEmpty()) return fallback.getY();
-        samples.sort(Integer::compareTo);
-        int middle = samples.size() / 2;
-        return samples.size() % 2 == 1
-                ? samples.get(middle)
-                : Math.floorDiv(samples.get(middle - 1) + samples.get(middle), 2);
-    }
-
-    private static void addSurfaceSample(Level world,
-                                         Collection<Integer> samples,
-                                         int x,
-                                         int z,
-                                         int minRelevantY,
-                                         int maxRelevantY) {
-        int y = world.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z);
-        if (y >= minRelevantY && y <= maxRelevantY) samples.add(y);
-    }
-
     private static int horizontalDistance(BlockPos a, BlockPos b) {
         return Math.abs(a.getX() - b.getX()) + Math.abs(a.getZ() - b.getZ());
     }
@@ -665,14 +617,13 @@ final class StructureScanner {
                   BlockPos source,
                   BlockPos min,
                   BlockPos max,
-                  List<StructureFloor> floors,
-                  int surfaceReferenceY) {
+                  List<StructureFloor> floors) {
         Result {
             floors = List.copyOf(floors);
         }
 
         static Result failure(Building.validationResult result, BlockPos source) {
-            return new Result(result, source, source, source, List.of(), source.getY());
+            return new Result(result, source, source, source, List.of());
         }
 
         Structure toStructure(int id) {
@@ -681,9 +632,7 @@ final class StructureScanner {
                 StructureFloor floor = floors.get(i);
                 assigned.add(new StructureFloor(i, floor.anchorY(), floor.ceilingY(), floor.region()));
             }
-            Structure structure = new Structure(id, source, min, max, assigned);
-            structure.setSurfaceReferenceY(surfaceReferenceY);
-            return structure;
+            return new Structure(id, source, min, max, assigned);
         }
     }
 }

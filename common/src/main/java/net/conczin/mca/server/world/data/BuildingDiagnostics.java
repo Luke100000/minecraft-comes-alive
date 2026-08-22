@@ -62,12 +62,13 @@ public final class BuildingDiagnostics {
                     inspected.getId(), inspected.getLogicalBuildingId(), inspected.getSource(),
                     inspected.getRawPos0(), inspected.getRawPos1(),
                     contains, attaches, floor(logicalFloor), floor(physicalFloor));
-            Building logicalMainRoom = village.getMainRoom(inspected).orElse(null);
-            log(traceId, "persistentFloors={} surfaceReferenceY={} logicalMainRoomId={} logicalMainRoomMode={}",
+            LogicalBuilding logicalBuilding = village.getLogicalBuilding(inspected.getLogicalBuildingId()).orElse(null);
+            log(traceId, "persistentFloors={} groundFloorStructureId={} groundFloorId={} logicalMainRoomId={} inheritanceEnabled={}",
                     floors(inspected.getFloors()),
-                    inspected.getSurfaceReferenceY(),
-                    logicalMainRoom == null ? "none" : logicalMainRoom.getId(),
-                    village.isMainRoomAutomatic(inspected) ? "AUTOMATIC" : "MANUAL");
+                    logicalBuilding == null ? "none" : logicalBuilding.groundStructureId(),
+                    logicalBuilding == null ? "none" : logicalBuilding.groundFloorId(),
+                    logicalBuilding == null ? "none" : logicalBuilding.mainRoomId(),
+                    logicalBuilding != null && logicalBuilding.inheritanceEnabled());
 
             if (room != null) {
                 StructureFloor roomFloor = inspected.getFloor(room.getFloorId()).orElse(null);
@@ -87,9 +88,9 @@ public final class BuildingDiagnostics {
             freshPlayerFloor = scan.result() == Building.validationResult.SUCCESS
                     ? floorAt(scan.floors(), pos)
                     : null;
-            log(traceId, "freshStructureScan result={} scanSeed={} bounds={}..{} floors={} surfaceReferenceY={} playerFloor={}",
+            log(traceId, "freshStructureScan result={} scanSeed={} bounds={}..{} floors={} playerFloor={}",
                     scan.result(), scan.source(), scan.min(), scan.max(), floors(scan.floors()),
-                    scan.surfaceReferenceY(), floor(freshPlayerFloor));
+                    floor(freshPlayerFloor));
             logFloorDifference(traceId, inspected.getFloors(), scan.floors(), verbose);
         }
 
