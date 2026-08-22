@@ -60,8 +60,14 @@ public class BlueprintScreen extends ExtendedScreen {
     private static final int PLAYER_HEAD_ICON_SIZE = 16;
     private static final int MAP_SIDE_CONTROL_GUTTER = 14;
     private static final int MAP_SIDE_CONTROL_WIDTH = 132;
+    private static final float MAP_MIN_SCALE = 0.5F;
+    private static final float MAP_MAX_SCALE = 4.0F;
+    private static final double MAP_ZOOM_FACTOR = 1.1D;
+    private static final double MAP_DRAG_THRESHOLD = 3.0D;
+    private static final float[] MAP_SCALE_PRESETS = {0.5F, 1.0F, 2.0F, 3.0F, 4.0F};
     private static Integer rememberedFloorOrdinal;
-    private static MapScaleMode rememberedMapScaleMode = MapScaleMode.FIT;
+    private static boolean rememberedMapScaleFit = true;
+    private static float rememberedMapScale = 1.0F;
     private static boolean rememberedPlayerCentered;
     private static boolean rememberedShowPlayerHead = true;
     // 1.19.3: This needs to be the MC type, DO NOT TOUCH !!!
@@ -91,7 +97,8 @@ public class BlueprintScreen extends ExtendedScreen {
     private TooltipButtonWidget removeRoomButton;
     private ButtonWidget removeBuildingButton;
     private Integer selectedFloorOrdinal = rememberedFloorOrdinal;
-    private MapScaleMode mapScaleMode = rememberedMapScaleMode;
+    private boolean mapScaleFit = rememberedMapScaleFit;
+    private float mapScale = rememberedMapScale;
     private boolean playerCentered = rememberedPlayerCentered;
     private boolean showPlayerHead = rememberedShowPlayerHead;
     private boolean selectPlayerFloorOnNextVillageResponse;
@@ -103,6 +110,10 @@ public class BlueprintScreen extends ExtendedScreen {
     private BlueprintTooltipFactory tooltipFactory = BlueprintTooltipFactory.empty();
     private BlueprintMapGeometry mapGeometry = BlueprintMapGeometry.empty();
     private final BlueprintMapRenderer mapRenderer = new BlueprintMapRenderer();
+    private final MapPanState mapPanState = new MapPanState();
+    private Integer mapCenterVillageId;
+    private double mapCenterX;
+    private double mapCenterZ;
     private BuildingType selectedBuilding;
     private UUID selectedVillager;
     private BlockPos lastRoomScanPosition;
@@ -245,7 +256,7 @@ public class BlueprintScreen extends ExtendedScreen {
                 int scaleControlX = terrainControlX + MAP_TERRAIN_BUTTON_WIDTH + MAP_CONTROL_GAP;
                 mapScaleButton = addRenderableWidget(new ButtonWidget(
                         scaleControlX, mapControlY, MAP_SCALE_BUTTON_WIDTH, 20,
-                        Component.literal(mapScaleMode.label), b -> cycleMapScale(1), getMapScaleTooltip()));
+                        Component.literal(getMapScaleLabel()), b -> cycleMapScale(1), getMapScaleTooltip()));
 
                 playerCenteredButton = addRenderableWidget(new ButtonWidget(
                         bx, floorControlY, PLAYER_CENTERED_BUTTON_WIDTH, 20,
@@ -619,17 +630,17 @@ public class BlueprintScreen extends ExtendedScreen {
         LocalPlayer player = minecraft == null ? null : minecraft.player;
         double playerRenderX = player == null ? 0.0D : Mth.lerp(partialTick, player.xo, player.getX());
         double playerRenderZ = player == null ? 0.0D : Mth.lerp(partialTick, player.zo, player.getZ());
-        double villageCenterX = (village.getBox().minX() + village.getBox().maxX() + 1) / 2.0D;
-        double villageCenterZ = (village.getBox().minZ() + village.getBox().maxZ() + 1) / 2.0D;
-        double requestedMapCenterX = playerCentered && player != null ? playerRenderX : villageCenterX;
-        double requestedMapCenterZ = playerCentered && player != null ? playerRenderZ : villageCenterZ;
+        if (playerCentered && player != null) {
+            mapCenterX = playerRenderX;
+            mapCenterZ = playerRenderZ;
+        }
 
         BlueprintMapViewport viewport = BlueprintMapViewport.create(
                 centerX,
                 centerY,
                 MAP_HALF_SIZE,
-                requestedMapCenterX,
-                requestedMapCenterZ,
+                mapCenterX,
+                mapCenterZ,
                 getMapScale()
         );
         BlueprintMapRenderer.RenderResult renderResult = mapRenderer.render(
@@ -699,6 +710,9 @@ public class BlueprintScreen extends ExtendedScreen {
     private void togglePlayerCentered() {
         playerCentered = !playerCentered;
         rememberedPlayerCentered = playerCentered;
+        if (!playerCentered) {
+            centerMapOnVillage();
+        }
         updatePlayerCenteredControl();
     }
 
@@ -721,59 +735,110 @@ public class BlueprintScreen extends ExtendedScreen {
     }
 
     private float getMapScale() {
-        return switch (mapScaleMode) {
-            case FIT -> {
-                int horizontalSpan = Math.max(village.getBox().getXSpan(), village.getBox().getZSpan());
-                int usablePixels = (MAP_HALF_SIZE - MAP_INNER_MARGIN) * 2;
-                yield Math.min((float) usablePixels / Math.max(1, horizontalSpan), MAP_MAX_FIT_SCALE);
-            }
-            case HALF_TO_ONE -> 0.5F;
-            case ONE_TO_ONE -> 1.0F;
-            case TWO_TO_ONE -> 2.0F;
-            case THREE_TO_ONE -> 3.0F;
-            case FOUR_TO_ONE -> 4.0F;
-        };
+        if (!mapScaleFit) return mapScale;
+        int horizontalSpan = Math.max(village.getBox().getXSpan(), village.getBox().getZSpan());
+        int usablePixels = (MAP_HALF_SIZE - MAP_INNER_MARGIN) * 2;
+        return Math.min((float) usablePixels / Math.max(1, horizontalSpan), MAP_MAX_FIT_SCALE);
     }
 
     private void cycleMapScale(int direction) {
-        mapScaleMode = mapScaleMode.step(direction);
-        rememberedMapScaleMode = mapScaleMode;
+        if (mapScaleFit) {
+            mapScaleFit = false;
+            mapScale = direction > 0 ? MAP_SCALE_PRESETS[0] : MAP_SCALE_PRESETS[MAP_SCALE_PRESETS.length - 1];
+        } else {
+            float snapped = snapMapScale(mapScale, direction);
+            boolean wrapsToFit = direction > 0 && mapScale >= MAP_MAX_SCALE
+                    || direction < 0 && mapScale <= MAP_MIN_SCALE;
+            mapScaleFit = wrapsToFit;
+            if (!wrapsToFit) mapScale = snapped;
+        }
+        rememberMapScale();
         updateMapScaleControl();
     }
 
     private Component getMapScaleTooltip() {
-        return mapScaleMode.tooltipKey == null
-                ? Component.literal("Map scale: " + mapScaleMode.label)
-                : Component.translatable(mapScaleMode.tooltipKey);
+        return mapScaleFit
+                ? Component.translatable("gui.blueprint.mapScale.fit.tooltip")
+                : Component.literal("Map scale: " + formatMapScale(mapScale));
     }
 
     private void updateMapScaleControl() {
         if (mapScaleButton != null) {
-            mapScaleButton.setMessage(Component.literal(mapScaleMode.label));
+            mapScaleButton.setMessage(Component.literal(getMapScaleLabel()));
             mapScaleButton.setTooltip(Tooltip.create(getMapScaleTooltip()));
         }
     }
 
-    private enum MapScaleMode {
-        FIT("Fit", "gui.blueprint.mapScale.fit.tooltip"),
-        HALF_TO_ONE("0.5:1", null),
-        ONE_TO_ONE("1:1", "gui.blueprint.mapScale.oneToOne.tooltip"),
-        TWO_TO_ONE("2:1", "gui.blueprint.mapScale.twoToOne.tooltip"),
-        THREE_TO_ONE("3:1", "gui.blueprint.mapScale.threeToOne.tooltip"),
-        FOUR_TO_ONE("4:1", "gui.blueprint.mapScale.fourToOne.tooltip");
+    private String getMapScaleLabel() {
+        return mapScaleFit ? "Fit" : formatMapScale(mapScale);
+    }
 
-        private final String label;
-        private final String tooltipKey;
+    private void rememberMapScale() {
+        rememberedMapScaleFit = mapScaleFit;
+        rememberedMapScale = mapScale;
+    }
 
-        MapScaleMode(String label, String tooltipKey) {
-            this.label = label;
-            this.tooltipKey = tooltipKey;
+    private void centerMapOnVillage() {
+        if (village == null) return;
+        mapCenterX = (village.getBox().minX() + village.getBox().maxX() + 1) / 2.0D;
+        mapCenterZ = (village.getBox().minZ() + village.getBox().maxZ() + 1) / 2.0D;
+    }
+
+    private boolean isMouseOverMap(double mouseX, double mouseY) {
+        int centerX = width / 2;
+        int centerY = height / 2 + 8;
+        return mouseX >= centerX - MAP_HALF_SIZE && mouseX < centerX + MAP_HALF_SIZE
+                && mouseY >= centerY - MAP_HALF_SIZE && mouseY < centerY + MAP_HALF_SIZE;
+    }
+
+    static float snapMapScale(float currentScale, int direction) {
+        if (direction > 0) {
+            for (float preset : MAP_SCALE_PRESETS) {
+                if (preset > currentScale) return preset;
+            }
+            return MAP_MAX_SCALE;
+        }
+        for (int i = MAP_SCALE_PRESETS.length - 1; i >= 0; i--) {
+            if (MAP_SCALE_PRESETS[i] < currentScale) return MAP_SCALE_PRESETS[i];
+        }
+        return MAP_MIN_SCALE;
+    }
+
+    static float zoomMapScale(float currentScale, double scrollY) {
+        double zoomed = currentScale * Math.pow(MAP_ZOOM_FACTOR, scrollY);
+        return (float) Math.max(MAP_MIN_SCALE, Math.min(MAP_MAX_SCALE, zoomed));
+    }
+
+    static String formatMapScale(float scale) {
+        return String.format(Locale.ROOT, "%.2f:1", scale);
+    }
+
+    static final class MapPanState {
+        private double startX;
+        private double startY;
+        private boolean active;
+        private boolean panning;
+
+        void begin(double x, double y) {
+            startX = x;
+            startY = y;
+            active = true;
+            panning = false;
         }
 
+        boolean update(double x, double y) {
+            if (!active) return false;
+            if (!panning) {
+                panning = Math.hypot(x - startX, y - startY) >= MAP_DRAG_THRESHOLD;
+            }
+            return panning;
+        }
 
-        MapScaleMode step(int direction) {
-            MapScaleMode[] values = values();
-            return values[Math.floorMod(ordinal() + direction, values.length)];
+        boolean end() {
+            boolean wasPanning = active && panning;
+            active = false;
+            panning = false;
+            return wasPanning;
         }
     }
 
@@ -1109,6 +1174,11 @@ public class BlueprintScreen extends ExtendedScreen {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (button == 0 && isMouseOverMap(mouseX, mouseY) && ("map".equals(page) || "advanced".equals(page))) {
+            mapPanState.begin(mouseX, mouseY);
+            return true;
+        }
+
         if (button == 1 && mapScaleButton != null && mapScaleButton.visible && mapScaleButton.active
                 && mapScaleButton.isMouseOver(mouseX, mouseY)) {
             cycleMapScale(-1);
@@ -1121,6 +1191,39 @@ public class BlueprintScreen extends ExtendedScreen {
         }
 
         return super.mouseClicked(mouseX, mouseY, button);
+    }
+
+    @Override
+    public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
+        if (button == 0 && mapPanState.update(mouseX, mouseY)) {
+            float scale = getMapScale();
+            mapCenterX -= dragX / scale;
+            mapCenterZ -= dragY / scale;
+            playerCentered = false;
+            rememberedPlayerCentered = false;
+            updatePlayerCenteredControl();
+            return true;
+        }
+        return super.mouseDragged(mouseX, mouseY, button, dragX, dragY);
+    }
+
+    @Override
+    public boolean mouseReleased(double mouseX, double mouseY, int button) {
+        if (button == 0 && mapPanState.end()) return true;
+        return super.mouseReleased(mouseX, mouseY, button);
+    }
+
+    @Override
+    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+        if (scrollY != 0.0D && isMouseOverMap(mouseX, mouseY) && ("map".equals(page) || "advanced".equals(page))) {
+            float currentScale = getMapScale();
+            mapScaleFit = false;
+            mapScale = zoomMapScale(currentScale, scrollY);
+            rememberMapScale();
+            updateMapScaleControl();
+            return true;
+        }
+        return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
     }
 
     protected boolean isMouseWithin(int x, int y, int w, int h) {
@@ -1137,6 +1240,12 @@ public class BlueprintScreen extends ExtendedScreen {
         this.village = village;
         lastRoomScanPosition = null;
         cachedRoomScanPlan = null;
+        if (village == null) {
+            mapCenterVillageId = null;
+        } else if (!Objects.equals(mapCenterVillageId, village.getId())) {
+            mapCenterVillageId = village.getId();
+            centerMapOnVillage();
+        }
         TreeSet<Integer> availableFloors = new TreeSet<>();
         if (village != null) {
             for (Structure s : village.getStructures().values()) {
