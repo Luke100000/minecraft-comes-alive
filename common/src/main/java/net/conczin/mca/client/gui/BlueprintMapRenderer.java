@@ -90,9 +90,17 @@ final class BlueprintMapRenderer implements AutoCloseable {
         List<MapStructureLayer> structureLayers = geometry.structureLayers();
         List<MapIconLayer> footprintIconLayers = geometry.iconLayers();
         List<MapFootprintLayer> roomHitTestLayers = frontToBack(footprintLayers);
-        int hoveredLogicalBuildingId = hoveredLogicalBuildingId(
+        int structuredHoveredBuildingId = hoveredLogicalBuildingId(
                 roomHitTestLayers, structureLayers, hoveredMapCell, mouseX, mouseY,
                 viewport, selectedFloor, mouseInsideMap);
+        int hoveredLogicalBuildingId = structuredHoveredBuildingId >= 0
+                ? structuredHoveredBuildingId
+                : hoveredGroupedBuildingId(geometry.groupedBuildings(), hoveredMapCell, mouseInsideMap);
+        boolean concreteRoomHovered = hoveredLogicalBuildingId >= 0 && roomHitTestLayers.stream()
+                .filter(layer -> layer.logicalBuildingId() == hoveredLogicalBuildingId)
+                .anyMatch(layer -> isInsideBuildingOutline(structureLayers, layer.logicalBuildingId(), hoveredMapCell)
+                        && isRoomHovered(layer, hoveredMapCell, mouseX, mouseY,
+                        viewport, selectedFloor == null));
         List<MapFootprintLayer> roomRenderLayers = new ArrayList<>(footprintLayers);
         roomRenderLayers.sort(Comparator.comparingInt(
                 layer -> layer.logicalBuildingId() == hoveredLogicalBuildingId ? 1 : 0));
@@ -125,19 +133,15 @@ final class BlueprintMapRenderer implements AutoCloseable {
 
             BlockPos min = building.getRawPos0();
             BlockPos max = building.getRawPos1();
-            int hoverMargin = 1;
-            boolean hovering = mouseInsideMap
-                    && hoveredMapCell.x() >= min.getX() - hoverMargin
-                    && hoveredMapCell.x() <= max.getX() + hoverMargin
-                    && hoveredMapCell.z() >= min.getZ() - hoverMargin
-                    && hoveredMapCell.z() <= max.getZ() + hoverMargin;
+            boolean hit = mouseInsideMap && isGroupedBuildingHovered(building, hoveredMapCell);
+            boolean hovering = hit && building.getId() == hoveredLogicalBuildingId;
 
             renderRoomRegion(
                     context,
                     min.getX(), min.getZ(), max.getX(), max.getZ(),
                     buildingType.getColor(), selectedFloor != null, hovering
             );
-            if (hovering) {
+            if (hit) {
                 addRoomHover(hoverTargets, building, selectedFloor, building.getId(), building.getCenter().getY());
             }
         }
@@ -149,7 +153,7 @@ final class BlueprintMapRenderer implements AutoCloseable {
                     context,
                     layer.shellSpans(),
                     STRUCTURE_BASE_COLOR,
-                    layer.logicalBuildingId() == hoveredLogicalBuildingId,
+                    false,
                     viewport
             );
         }
@@ -160,7 +164,7 @@ final class BlueprintMapRenderer implements AutoCloseable {
                     context,
                     layer.borderEdges(),
                     STRUCTURE_BASE_COLOR,
-                    layer.logicalBuildingId() == hoveredLogicalBuildingId,
+                    !concreteRoomHovered && layer.logicalBuildingId() == hoveredLogicalBuildingId,
                     viewport
             );
         }
@@ -174,7 +178,8 @@ final class BlueprintMapRenderer implements AutoCloseable {
                 // for tooltip stacking, while only the frontmost Room in a Structure gets the
                 // visual hover highlight.
                 int buildingId = layer.logicalBuildingId();
-                if (!hasRoomHoverForBuilding(hoverTargets, buildingId)
+                if (buildingId == hoveredLogicalBuildingId
+                        && !hasRoomHoverForBuilding(hoverTargets, buildingId)
                         && isInsideBuildingOutline(structureLayers, buildingId, hoveredMapCell)) {
                     hoveredFootprintLayers.add(layer);
                 }
@@ -534,6 +539,31 @@ final class BlueprintMapRenderer implements AutoCloseable {
         return hovered.stream().findFirst().orElse(-1);
     }
 
+    private static int hoveredGroupedBuildingId(List<Building> groupedBuildings,
+                                                BlueprintMapFootprint.Cell hoveredMapCell,
+                                                boolean mouseInsideMap) {
+        if (!mouseInsideMap) return -1;
+        return groupedBuildings.stream()
+                .filter(building -> !building.getBuildingType().isIcon())
+                .filter(building -> isGroupedBuildingHovered(building, hoveredMapCell))
+                .sorted(Comparator.comparingInt((Building building) -> building.getCenter().getY()).reversed()
+                        .thenComparing(Comparator.comparingInt(Building::getId).reversed()))
+                .map(Building::getId)
+                .findFirst()
+                .orElse(-1);
+    }
+
+    private static boolean isGroupedBuildingHovered(Building building,
+                                                    BlueprintMapFootprint.Cell hoveredMapCell) {
+        BlockPos min = building.getRawPos0();
+        BlockPos max = building.getRawPos1();
+        int hoverMargin = 1;
+        return hoveredMapCell.x() >= min.getX() - hoverMargin
+                && hoveredMapCell.x() <= max.getX() + hoverMargin
+                && hoveredMapCell.z() >= min.getZ() - hoverMargin
+                && hoveredMapCell.z() <= max.getZ() + hoverMargin;
+    }
+
     private static boolean isInsideBuildingOutline(List<MapStructureLayer> structureLayers,
                                                    int logicalBuildingId,
                                                    BlueprintMapFootprint.Cell cell) {
@@ -553,15 +583,12 @@ final class BlueprintMapRenderer implements AutoCloseable {
                                           int buildingId,
                                           Integer floorOrdinal,
                                           int anchorY) {
-        // On a selected Floor, keep the concrete Room tooltip instead of replacing it
-        // with the logical-building aggregate for that same Floor.
-        if (floorOrdinal != null && hoverTargets.stream().anyMatch(target -> !target.structure()
-                && target.logicalBuildingId() == buildingId
-                && Objects.equals(target.floorOrdinal(), floorOrdinal))) {
+        // A visible concrete Room is the user's target. The Building shell is only a
+        // fallback where no Room for this logical Building is under the pointer.
+        if (hoverTargets.stream().anyMatch(target -> !target.structure()
+                && target.logicalBuildingId() == buildingId)) {
             return;
         }
-        hoverTargets.removeIf(target -> !target.structure()
-                && target.logicalBuildingId() == buildingId);
         HoverTarget target = new HoverTarget(mainRoom, floorOrdinal, true, buildingId, anchorY);
         if (!hoverTargets.contains(target)) hoverTargets.add(target);
     }
