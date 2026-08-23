@@ -15,13 +15,14 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.GsonHelper;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /** Shared JSON-to-catalog conversion for bundled and datapack skin resources. */
-final class SkinCatalogLoader {
+final class AppearanceCatalogLoader {
     private static final Codec<Map<String, HairStyle.Definition>> HAIR_STYLE_FILE_CODEC = Codec.unboundedMap(Codec.STRING, HairStyle.DEFINITION_CODEC);
 
-    private SkinCatalogLoader() {
+    private AppearanceCatalogLoader() {
     }
 
     static void addClothing(Map<String, Clothing> clothing, ResourceLocation id, JsonElement file) {
@@ -63,6 +64,38 @@ final class SkinCatalogLoader {
 
     static void addLayeredHair(Map<String, LayeredHair> layeredHair, ResourceLocation id, JsonElement file) {
         addLayeredHair(layeredHair, id, SkinListJson.textureCollection(id, file));
+    }
+
+    static void addEyes(Map<ResourceLocation, EyeDefinition> eyes, ResourceLocation id, JsonElement file) {
+        addEyes(eyes, id, SkinListJson.textureEntryCollection(id, file));
+    }
+
+    static void addEyes(Map<ResourceLocation, EyeDefinition> eyes, ResourceLocation id, List<SkinListJson.Entry> entries) {
+        String variant = id.getPath().toLowerCase(Locale.ROOT);
+        for (SkinListJson.Entry entry : entries) {
+            ResourceLocation texture;
+            try {
+                texture = ResourceLocation.parse(entry.identifier());
+            } catch (ResourceLocationException exception) {
+                MCA.LOGGER.warn("Invalid eye texture identifier {}", entry.identifier(), exception);
+                continue;
+            }
+            if (!SkinVisualIds.isEyeTexturePath(texture)) {
+                MCA.LOGGER.warn("Invalid eye texture path {}", entry.identifier());
+                continue;
+            }
+
+            Gender gender = SkinListJson.resolveGender(null, entry);
+            if (gender == Gender.UNASSIGNED) {
+                gender = Gender.NEUTRAL;
+            }
+            try {
+                EyeDefinition definition = EyeDefinition.parse(texture, variant, gender, entry.metadata());
+                eyes.put(texture, definition);
+            } catch (IllegalArgumentException exception) {
+                MCA.LOGGER.warn("Invalid eye definition {}", texture, exception);
+            }
+        }
     }
 
     static void addLayeredHair(Map<String, LayeredHair> layeredHair, ResourceLocation id, List<String> textures) {

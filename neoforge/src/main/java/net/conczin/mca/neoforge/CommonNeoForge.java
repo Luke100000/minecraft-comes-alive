@@ -10,6 +10,7 @@ import net.conczin.mca.entity.interaction.gifts.GiftLoader;
 import net.conczin.mca.network.HandleablePayload;
 import net.conczin.mca.network.MessagesMCA;
 import net.conczin.mca.network.Network;
+import net.conczin.mca.network.s2c.AppearanceCatalogSync;
 import net.conczin.mca.registry.*;
 import net.conczin.mca.resources.*;
 import net.conczin.mca.server.ServerInteractionManager;
@@ -33,6 +34,7 @@ import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.neoforge.event.AddReloadListenerEvent;
+import net.neoforged.neoforge.event.OnDatapackSyncEvent;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
 import net.neoforged.neoforge.event.entity.EntityAttributeCreationEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
@@ -103,6 +105,7 @@ public final class CommonNeoForge {
         event.addListener(new ClothingList());
         event.addListener(new HairStyleList());
         event.addListener(new LayeredHairList());
+        event.addListener(new EyeCatalog());
         event.addListener(new GiftLoader());
         event.addListener(new Dialogues());
         event.addListener(new Tasks());
@@ -139,6 +142,15 @@ public final class CommonNeoForge {
     public static void onServerTick(ServerTickEvent.Post event) {
         ServerInteractionManager.getInstance().tick();
         MCA.setServer(event.getServer());
+    }
+
+    @SubscribeEvent
+    public static void onDatapackSync(OnDatapackSyncEvent event) {
+        EyeCatalog eyeCatalog = EyeCatalog.getInstance();
+        if (event.getPlayer() == null && eyeCatalog != null) {
+            eyeCatalog.repairLoaded(event.getPlayerList().getServer());
+        }
+        event.getRelevantPlayers().forEach(AppearanceCatalogSync::send);
     }
 
     @SubscribeEvent

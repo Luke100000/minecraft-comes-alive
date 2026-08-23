@@ -2,26 +2,71 @@ package net.conczin.mca.resources;
 
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import io.netty.buffer.ByteBuf;
 import net.conczin.mca.entity.ai.relationship.Gender;
+import net.conczin.mca.resources.data.skin.SkinListEntry;
+import net.minecraft.network.codec.ByteBufCodecs;
+import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.GsonHelper;
 
 import java.util.LinkedHashMap;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 
 public record EyeDefinition(
         ResourceLocation id,
+        String variant,
         Gender gender,
+        float chance,
         boolean fixedColor,
         Map<Integer, Tones> toneOverrides
 ) {
+    public static final StreamCodec<ByteBuf, EyeDefinition> STREAM_CODEC = StreamCodec.of(
+            (out, value) -> {
+                ResourceLocation.STREAM_CODEC.encode(out, value.id());
+                ByteBufCodecs.STRING_UTF8.encode(out, value.variant());
+                SkinListEntry.GENDER_STREAM_CODEC.encode(out, value.gender());
+                ByteBufCodecs.FLOAT.encode(out, value.chance());
+                ByteBufCodecs.BOOL.encode(out, value.fixedColor());
+                ByteBufCodecs.VAR_INT.encode(out, value.toneOverrides().size());
+                value.toneOverrides().forEach((color, tones) -> {
+                    out.writeInt(color);
+                    out.writeInt(tones.shadow());
+                    out.writeInt(tones.primary());
+                    out.writeInt(tones.highlight());
+                });
+            },
+            in -> {
+                ResourceLocation id = ResourceLocation.STREAM_CODEC.decode(in);
+                String variant = ByteBufCodecs.STRING_UTF8.decode(in);
+                Gender gender = SkinListEntry.GENDER_STREAM_CODEC.decode(in);
+                float chance = ByteBufCodecs.FLOAT.decode(in);
+                boolean fixedColor = ByteBufCodecs.BOOL.decode(in);
+                int overrideCount = ByteBufCodecs.VAR_INT.decode(in);
+                Map<Integer, Tones> overrides = new LinkedHashMap<>();
+                for (int i = 0; i < overrideCount; i++) {
+                    overrides.put(in.readInt(), new Tones(in.readInt(), in.readInt(), in.readInt()));
+                }
+                return new EyeDefinition(id, variant, gender, chance, fixedColor, overrides);
+            }
+    );
+
     public EyeDefinition {
+        id = Objects.requireNonNull(id);
+        variant = Objects.requireNonNull(variant).toLowerCase(Locale.ROOT);
+        gender = gender == null || gender == Gender.UNASSIGNED ? Gender.NEUTRAL : gender;
+        chance = chance <= 0.0F ? 1.0F : chance;
         toneOverrides = Map.copyOf(toneOverrides);
     }
 
-    public static EyeDefinition parse(ResourceLocation id, Gender gender, JsonObject metadata) {
+    public static EyeDefinition parse(ResourceLocation id, String variant, Gender gender, JsonObject metadata) {
         return new EyeDefinition(
                 id,
+                variant,
                 gender,
+                GsonHelper.getAsFloat(metadata, "chance", 1.0F),
                 optionalBoolean(metadata, "fixed_color", false),
                 parseToneOverrides(metadata.get("tone_overrides"))
         );

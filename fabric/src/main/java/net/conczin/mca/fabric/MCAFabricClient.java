@@ -18,7 +18,6 @@ import net.conczin.mca.registry.BlocksMCA;
 import net.conczin.mca.registry.EntitiesMCA;
 import net.conczin.mca.registry.ModelPredicatesMCA;
 import net.conczin.mca.registry.ParticleTypesMCA;
-import net.conczin.mca.resources.FaceList;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.blockrenderlayer.v1.BlockRenderLayerMap;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
@@ -72,13 +71,15 @@ public final class MCAFabricClient extends ClientProxyAbstractImpl implements Cl
         managerHelper.registerReloadListener(new FabricColorPaletteLoader());
         managerHelper.registerReloadListener(new FabricSupportersLoader());
         managerHelper.registerReloadListener(new ApiIdentifiableReloadListener());
-        registerReloadListener(managerHelper, FaceList.ID, new FaceList());
         registerReloadListener(managerHelper, GeneratedEyeTextureReloadListener.ID, GeneratedEyeTextureReloadListener.INSTANCE);
 
         ModelPredicatesMCA.setup(ItemProperties::register);
 
         ClientPlayConnectionEvents.JOIN.register((handler, sender, server) ->
                 MCAClient.onLogin()
+        );
+        ClientPlayConnectionEvents.DISCONNECT.register((handler, client) ->
+                MCAClient.onLogout()
         );
 
         BlockRenderLayerMap.INSTANCE.putBlock(BlocksMCA.INFERNAL_FLAME, RenderType.cutout());

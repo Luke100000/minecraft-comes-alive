@@ -4,6 +4,7 @@ import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.conczin.mca.MCA;
 import net.conczin.mca.client.model.CommonVillagerModel;
+import net.conczin.mca.client.resources.ClientAppearanceCatalog;
 import net.conczin.mca.client.resources.EyeTintPixel;
 import net.conczin.mca.client.resources.EyeTextureLayers;
 import net.conczin.mca.client.resources.EyeToneRendering;
@@ -11,7 +12,6 @@ import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.entity.ai.Genetics;
 import net.conczin.mca.entity.ai.Traits;
 import net.conczin.mca.resources.EyeDefinition;
-import net.conczin.mca.resources.FaceList;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.model.HumanoidModel;
 import net.minecraft.client.renderer.MultiBufferSource;
@@ -21,8 +21,6 @@ import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.FastColor;
 import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.entity.animal.Sheep;
-import net.minecraft.world.item.DyeColor;
 
 import java.io.InputStream;
 import java.util.ArrayList;
@@ -68,11 +66,7 @@ public class FaceLayer<T extends LivingEntity, M extends HumanoidModel<T>> exten
         }
 
         if (canUse(skin)) {
-            VillagerLike<?> villagerLike = getVillager(villager);
-            FaceList list = FaceList.getInstance();
-            EyeDefinition definition = list == null
-                    ? new EyeDefinition(skin, villagerLike.getGenetics().getGender(), false, Map.of())
-                    : list.definition(skin);
+            EyeDefinition definition = ClientAppearanceCatalog.eyeDefinition(skin);
             EyeLayerTextures layers = getOrGenerateEyeLayers(skin, definition);
             if (layers.modern()) {
                 renderModern(transform, provider, light, villager, tickDelta, visible, glowing, overlay, definition, layers);
@@ -124,12 +118,8 @@ public class FaceLayer<T extends LivingEntity, M extends HumanoidModel<T>> exten
 
     @Override
     public ResourceLocation getSkin(T villager) {
-        FaceList list = FaceList.getInstance();
-        if (list == null) {
-            return getBlinkSkin();
-        }
         VillagerLike<?> villagerLike = getVillager(villager);
-        return list.pick(variant, villagerLike.getGenetics().getGender(), villagerLike.getGenetics().getGene(Genetics.FACE));
+        return ClientAppearanceCatalog.resolveEye(variant, villagerLike.getEyeTexture());
     }
 
     private ResourceLocation getBlinkSkin() {
@@ -193,7 +183,7 @@ public class FaceLayer<T extends LivingEntity, M extends HumanoidModel<T>> exten
                     continue;
                 }
                 EyeTintPixel.Mask decoded = EyeTintPixel.decodeMarkedMask(pixel);
-                int tone = decoded.tone().ordinal(), neutral = EyeTextureLayers.neutralMaskPixel(decoded);
+                int tone = decoded.tone().ordinal(), neutral = EyeToneRendering.neutralMaskPixel(decoded);
                 full[tone].setPixelRGBA(x, y, neutral);
                 (x >= splitX ? left[tone] : right[tone]).setPixelRGBA(x, y, neutral);
             }
@@ -251,13 +241,7 @@ public class FaceLayer<T extends LivingEntity, M extends HumanoidModel<T>> exten
     }
 
     private int baseEyeColor(T villager, float tickDelta, boolean left) {
-        VillagerLike<?> villagerLike = getVillager(villager);
-        if (!villagerLike.getTraits().hasTrait(Traits.RAINBOW_EYES)) {
-            return EyeTextureLayers.getStaticEyeColor(villagerLike, left);
-        }
-        int offset = left && villagerLike.getTraits().hasTrait(Traits.HETEROCHROMIA) ? (25 * DyeColor.values().length) / 2 : 0;
-        int ticks = Math.abs(villager.tickCount) + offset, count = DyeColor.values().length, first = (ticks / 25 + villager.getId()) % count;
-        return FastColor.ARGB32.lerp(((float) (ticks % 25) + tickDelta) / 25.0F, Sheep.getColor(DyeColor.byId(first)), Sheep.getColor(DyeColor.byId((first + 1) % count)));
+        return EyeTextureLayers.getBaseEyeColor(getVillager(villager), left, tickDelta);
     }
 
     private int legacyEyeColor(T villager, float tickDelta, boolean left) {

@@ -39,7 +39,7 @@ public class ClothingList extends SimpleJsonResourceReloadListener {
     protected void apply(Map<ResourceLocation, JsonElement> data, ResourceManager manager, ProfilerFiller profiler) {
         clothing.clear();
 
-        data.forEach((id, file) -> SkinCatalogLoader.addClothing(clothing, id, file));
+        data.forEach((id, file) -> AppearanceCatalogLoader.addClothing(clothing, id, file));
     }
 
     /**

@@ -6,6 +6,9 @@ import net.conczin.mca.entity.ai.Genetics;
 import net.conczin.mca.entity.ai.Traits;
 import net.minecraft.util.FastColor;
 import net.minecraft.util.Mth;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.animal.Sheep;
+import net.minecraft.world.item.DyeColor;
 
 public final class EyeTextureLayers {
     private static final int SCLERA_MIN_CHANNEL = 160;
@@ -29,12 +32,32 @@ public final class EyeTextureLayers {
         return dye != NATURAL_DYE ? dye : getGeneticEyeColor(villager, left && heterochromia);
     }
 
+    public static int getBaseEyeColor(VillagerLike<?> villager, boolean left, float tickDelta) {
+        if (!villager.getTraits().hasTrait(Traits.RAINBOW_EYES)) {
+            return getStaticEyeColor(villager, left);
+        }
+
+        int colorCount = DyeColor.values().length;
+        int offset = left && villager.getTraits().hasTrait(Traits.HETEROCHROMIA)
+                ? (25 * colorCount) / 2
+                : 0;
+        Entity entity = villager.asEntity();
+        int ticks = Math.abs(entity.tickCount) + offset;
+        int first = (ticks / 25 + entity.getId()) % colorCount;
+        float mix = ((float)(ticks % 25) + tickDelta) / 25.0F;
+        return FastColor.ARGB32.lerp(
+                mix,
+                Sheep.getColor(DyeColor.byId(first)),
+                Sheep.getColor(DyeColor.byId((first + 1) % colorCount))
+        );
+    }
+
     private static int getGeneticEyeColor(VillagerLike<?> villager, boolean shifted) {
         if (villager.getTraits().hasTrait(Traits.ALBINISM)) {
             return ALBINISM_EYE_COLOR;
         }
 
-        float eyeColor = Mth.frac(villager.getGenetics().getGene(Genetics.FACE) + (shifted ? 0.43F : 0.0F));
+        float eyeColor = Mth.frac(villager.getGenetics().getGene(Genetics.EYE_COLOR) + (shifted ? 0.43F : 0.0F));
         if (eyeColor < 0.35F) {
             return FastColor.ARGB32.lerp(eyeColor / 0.35F, BLUE_EYE_COLOR, GREEN_EYE_COLOR);
         }
@@ -57,10 +80,6 @@ public final class EyeTextureLayers {
             }
         }
         return false;
-    }
-
-    public static int neutralMaskPixel(EyeTintPixel.Mask mask) {
-        return FastColor.ABGR32.color(255, mask.intensity(), mask.intensity(), mask.intensity());
     }
 
     public static Bounds findBounds(NativeImage image) {

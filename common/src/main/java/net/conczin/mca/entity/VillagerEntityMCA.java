@@ -1493,9 +1493,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
             this.interactedWith = data.getBoolean("InteractedWith");
         }
 
-        if (data.contains("Clothes")) {
-            validateClothes();
-        }
+        validateAppearance();
 
         if (getVillagerBrain().getPersonality() == Personality.UNASSIGNED) {
             getVillagerBrain().randomize();

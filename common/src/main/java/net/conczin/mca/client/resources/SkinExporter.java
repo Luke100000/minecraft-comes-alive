@@ -7,9 +7,8 @@ import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.entity.ai.Genetics;
 import net.conczin.mca.entity.ai.Traits;
-import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.resources.EyeDefinition;
-import net.conczin.mca.resources.FaceList;
+import net.conczin.mca.resources.EyeStyles;
 import net.conczin.mca.resources.data.skin.LayeredHair;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
@@ -106,12 +105,7 @@ public class SkinExporter {
     }
 
     public static ResourceLocation getFace(VillagerLike<?> villager) {
-        Gender gender = villager.getGenetics().getGender();
-        FaceList list = FaceList.getInstance();
-        if (list == null) {
-            return MCA.locate("skins/face/normal/0.png");
-        }
-        return list.pick("normal", gender, villager.getGenetics().getGene(Genetics.FACE));
+        return ClientAppearanceCatalog.resolveEye(EyeStyles.DEFAULT_VARIANT, villager.getEyeTexture());
     }
 
     public static ResourceLocation getClothes(VillagerLike<?> villager) {
@@ -233,10 +227,7 @@ public class SkinExporter {
     }
 
     public static void compositeFace(NativeImage base, ResourceLocation faceId, VillagerLike<?> villager) {
-        FaceList list = FaceList.getInstance();
-        EyeDefinition definition = list == null
-                ? new EyeDefinition(faceId, villager.getGenetics().getGender(), false, Map.of())
-                : list.definition(faceId);
+        EyeDefinition definition = ClientAppearanceCatalog.eyeDefinition(faceId);
 
         NativeImage face = loadTexture(faceId);
         if (face == null) {
@@ -357,11 +348,7 @@ public class SkinExporter {
     }
 
     private static int getBaseEyeColor(VillagerLike<?> villager, boolean left) {
-        if (villager.getTraits().hasTrait(Traits.RAINBOW_EYES)) {
-            int offset = left && villager.getTraits().hasTrait(Traits.HETEROCHROMIA) ? (25 * DyeColor.values().length) / 2 : 0;
-            return getRainbow(villager, offset);
-        }
-        return EyeTextureLayers.getStaticEyeColor(villager, left);
+        return EyeTextureLayers.getBaseEyeColor(villager, left, 0.0F);
     }
 
     private static int getRainbow(VillagerLike<?> villager, int offset) {

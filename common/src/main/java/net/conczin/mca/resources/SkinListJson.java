@@ -106,6 +106,12 @@ public final class SkinListJson {
         return textureCollections(manager, directory, SkinListJson::entries);
     }
 
+    public static List<Entry> textureEntryCollection(ResourceLocation id, JsonElement file) {
+        List<Entry> textures = new ArrayList<>();
+        appendTextureCollection(id, file, textures, SkinListJson::entries);
+        return textures;
+    }
+
     private static <T> Map<ResourceLocation, List<T>> textureCollections(
             ResourceManager manager,
             String directory,

@@ -1,6 +1,7 @@
 package net.conczin.mca.client.resources;
 
 import net.conczin.mca.resources.EyeDefinition;
+import net.minecraft.util.Mth;
 
 public final class EyeToneRendering {
     private EyeToneRendering() {
@@ -20,10 +21,13 @@ public final class EyeToneRendering {
     }
 
     public static int modernMaskPixel(EyeTintPixel.Mask mask, int toneArgb) {
+        return multiplyPixel(neutralMaskPixel(mask), toneArgb);
+    }
+
+    public static int neutralMaskPixel(EyeTintPixel.Mask mask) {
         int alpha = 255;
         int intensity = mask.intensity();
-        int neutralMask = (alpha << 24) | (intensity << 16) | (intensity << 8) | intensity;
-        return multiplyPixel(neutralMask, toneArgb);
+        return (alpha << 24) | (intensity << 16) | (intensity << 8) | intensity;
     }
 
     public static int multiplyPixel(int packedAbgr, int tintArgb) {
@@ -40,7 +44,7 @@ public final class EyeToneRendering {
     }
 
     public static int applyBrightness(int argb, float brightness) {
-        float factor = 0.5F + clamp(brightness, 0.0F, 1.0F);
+        float factor = 0.5F + Mth.clamp(brightness, 0.0F, 1.0F);
         int alpha = (argb >>> 24) & 0xFF;
         int red = scaleChannel((argb >>> 16) & 0xFF, factor);
         int green = scaleChannel((argb >>> 8) & 0xFF, factor);
@@ -49,14 +53,6 @@ public final class EyeToneRendering {
     }
 
     private static int scaleChannel(int channel, float factor) {
-        return clamp(Math.round(channel * factor), 0, 255);
-    }
-
-    private static float clamp(float value, float min, float max) {
-        return Math.max(min, Math.min(max, value));
-    }
-
-    private static int clamp(int value, int min, int max) {
-        return Math.max(min, Math.min(max, value));
+        return Mth.clamp(Math.round(channel * factor), 0, 255);
     }
 }
