@@ -44,7 +44,12 @@ public record AppearanceCatalogSync(
     );
 
     public static AppearanceCatalogSync current(MinecraftServer server) {
-        HashMap<String, Clothing> clothing = copy(ClothingList.getInstance() == null ? Map.of() : ClothingList.getInstance().clothing);
+        ClothingList clothingList = ClothingList.getInstance();
+        BodySkinList bodySkinList = BodySkinList.getInstance();
+        LayeredHairList layeredHairList = LayeredHairList.getInstance();
+        EyeCatalog eyeCatalog = EyeCatalog.getInstance();
+
+        HashMap<String, Clothing> clothing = copy(clothingList == null ? Map.of() : clothingList.clothing);
         clothing.putAll(CustomClothingManager.getClothing(server).getEntries());
 
         HashMap<String, Hair> hair = copy(CustomClothingManager.getHair(server).getEntries());
@@ -53,10 +58,9 @@ public record AppearanceCatalogSync(
                 ? new HashMap<>()
                 : hairStyleList.getAllStyles(hair);
 
-        HashMap<String, BodySkin> bodySkins = copy(BodySkinList.getInstance() == null ? Map.of() : BodySkinList.getInstance().skins);
-        HashMap<String, LayeredHair> layeredHair = copy(LayeredHairList.getInstance() == null ? Map.of() : LayeredHairList.getInstance().hair);
-        EyeCatalog eyeCatalog = EyeCatalog.getInstance();
-        HashMap<ResourceLocation, EyeDefinition> eyes = copy(eyeCatalog == null ? Map.of() : eyeCatalog.enabledDefinitions());
+        HashMap<String, BodySkin> bodySkins = copy(bodySkinList == null ? Map.of() : bodySkinList.skins);
+        HashMap<String, LayeredHair> layeredHair = copy(layeredHairList == null ? Map.of() : layeredHairList.hair);
+        HashMap<ResourceLocation, EyeDefinition> eyes = copy(eyeCatalog == null ? Map.of() : eyeCatalog.effectiveDefinitions());
 
         return new AppearanceCatalogSync(clothing, bodySkins, layeredHair, hairStyles, hair, eyes);
     }

@@ -45,7 +45,7 @@ public class EyeCatalog extends SimplePreparableReloadListener<Map<ResourceLocat
 
     private void refreshDisabledEyes() {
         Set<ResourceLocation> disabled = new HashSet<>();
-        List<String> configured = Config.getServerConfig().disabledEyeTextures;
+        List<String> configured = Config.getInstance().disabledEyeTextures;
         if (configured != null) {
             for (String identifier : configured) {
                 try {
@@ -92,14 +92,17 @@ public class EyeCatalog extends SimplePreparableReloadListener<Map<ResourceLocat
     }
 
     public ResourceLocation resolve(String variant, ResourceLocation eye) {
-        List<ResourceLocation> pool = catalog(variant);
-        if (pool.isEmpty()) {
+        String variantKey = key(variant);
+        List<EyeDefinition> entries = activeByVariant.get(variantKey);
+        if (entries == null || entries.isEmpty()) {
             return EyeStyles.DEFAULT;
         }
-        if (pool.contains(eye)) {
+
+        EyeDefinition current = activeDefinitions.get(eye);
+        if (current != null && current.variant().equals(variantKey)) {
             return eye;
         }
-        return pool.get(Math.floorMod(eye.hashCode(), pool.size()));
+        return entries.get(Math.floorMod(eye.hashCode(), entries.size())).id();
     }
 
     public ResourceLocation pick(String variant, Gender gender) {
@@ -124,14 +127,8 @@ public class EyeCatalog extends SimplePreparableReloadListener<Map<ResourceLocat
         return activeDefinitions.containsKey(eye);
     }
 
-    public Map<ResourceLocation, EyeDefinition> enabledDefinitions() {
+    public Map<ResourceLocation, EyeDefinition> effectiveDefinitions() {
         return Map.copyOf(activeDefinitions);
-    }
-
-    public List<ResourceLocation> catalog(String variant) {
-        return activeByVariant.getOrDefault(key(variant), List.of()).stream()
-                .map(EyeDefinition::id)
-                .toList();
     }
 
     public void repair(VillagerLike<?> villager) {

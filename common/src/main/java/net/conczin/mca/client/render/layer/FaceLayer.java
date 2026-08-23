@@ -187,12 +187,12 @@ public class FaceLayer<T extends LivingEntity, M extends HumanoidModel<T>> exten
                 full[tone].setPixelRGBA(x, y, neutral);
                 (x >= splitX ? left[tone] : right[tone]).setPixelRGBA(x, y, neutral);
             }
-            ResourceLocation fixedId = register(id, "fixed", EyeTextureLayers.Side.FULL, fixed, images, registered);
+            ResourceLocation fixedId = registerIfVisible(id, "fixed", EyeTextureLayers.Side.FULL, fixed, images, registered);
             return new EyeLayerTextures(true,
                     fixedId,
-                    register(id, "shadow", EyeTextureLayers.Side.FULL, full[0], images, registered), register(id, "primary", EyeTextureLayers.Side.FULL, full[1], images, registered), register(id, "highlight", EyeTextureLayers.Side.FULL, full[2], images, registered),
-                    register(id, "shadow", EyeTextureLayers.Side.LEFT, left[0], images, registered), register(id, "primary", EyeTextureLayers.Side.LEFT, left[1], images, registered), register(id, "highlight", EyeTextureLayers.Side.LEFT, left[2], images, registered),
-                    register(id, "shadow", EyeTextureLayers.Side.RIGHT, right[0], images, registered), register(id, "primary", EyeTextureLayers.Side.RIGHT, right[1], images, registered), register(id, "highlight", EyeTextureLayers.Side.RIGHT, right[2], images, registered), null, null, null, null);
+                    registerIfVisible(id, "shadow", EyeTextureLayers.Side.FULL, full[0], images, registered), registerIfVisible(id, "primary", EyeTextureLayers.Side.FULL, full[1], images, registered), registerIfVisible(id, "highlight", EyeTextureLayers.Side.FULL, full[2], images, registered),
+                    registerIfVisible(id, "shadow", EyeTextureLayers.Side.LEFT, left[0], images, registered), registerIfVisible(id, "primary", EyeTextureLayers.Side.LEFT, left[1], images, registered), registerIfVisible(id, "highlight", EyeTextureLayers.Side.LEFT, left[2], images, registered),
+                    registerIfVisible(id, "shadow", EyeTextureLayers.Side.RIGHT, right[0], images, registered), registerIfVisible(id, "primary", EyeTextureLayers.Side.RIGHT, right[1], images, registered), registerIfVisible(id, "highlight", EyeTextureLayers.Side.RIGHT, right[2], images, registered), null, null, null, null);
         } catch (RuntimeException exception) {
             registered.forEach(Minecraft.getInstance().getTextureManager()::release);
             throw exception;
@@ -216,8 +216,8 @@ public class FaceLayer<T extends LivingEntity, M extends HumanoidModel<T>> exten
                     case IRIS -> { full.setPixelRGBA(x, y, pixel); (x >= splitX ? left : right).setPixelRGBA(x, y, pixel); }
                 }
             }
-            return new EyeLayerTextures(false, register(id, "sclera", EyeTextureLayers.Side.FULL, sclera, images, registered), null, null, null, null, null, null, null, null, null,
-                    register(id, "details", EyeTextureLayers.Side.FULL, details, images, registered), register(id, "iris", EyeTextureLayers.Side.FULL, full, images, registered), register(id, "iris", EyeTextureLayers.Side.LEFT, left, images, registered), register(id, "iris", EyeTextureLayers.Side.RIGHT, right, images, registered));
+            return new EyeLayerTextures(false, registerIfVisible(id, "sclera", EyeTextureLayers.Side.FULL, sclera, images, registered), null, null, null, null, null, null, null, null, null,
+                    registerIfVisible(id, "details", EyeTextureLayers.Side.FULL, details, images, registered), registerIfVisible(id, "iris", EyeTextureLayers.Side.FULL, full, images, registered), registerIfVisible(id, "iris", EyeTextureLayers.Side.LEFT, left, images, registered), registerIfVisible(id, "iris", EyeTextureLayers.Side.RIGHT, right, images, registered));
         } catch (RuntimeException exception) {
             registered.forEach(Minecraft.getInstance().getTextureManager()::release);
             throw exception;
@@ -230,6 +230,17 @@ public class FaceLayer<T extends LivingEntity, M extends HumanoidModel<T>> exten
         NativeImage image = new NativeImage(width, height, true);
         images.add(image);
         return image;
+    }
+
+    private static ResourceLocation registerIfVisible(ResourceLocation original, String material, EyeTextureLayers.Side side, NativeImage image, List<NativeImage> pending, List<ResourceLocation> registered) {
+        for (int x = 0; x < image.getWidth(); x++) {
+            for (int y = 0; y < image.getHeight(); y++) {
+                if (FastColor.ABGR32.alpha(image.getPixelRGBA(x, y)) != 0) {
+                    return register(original, material, side, image, pending, registered);
+                }
+            }
+        }
+        return null;
     }
 
     private static ResourceLocation register(ResourceLocation original, String material, EyeTextureLayers.Side side, NativeImage image, List<NativeImage> pending, List<ResourceLocation> registered) {
