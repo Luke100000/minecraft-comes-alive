@@ -44,14 +44,14 @@ public final class EyeTextureLayers {
         return FastColor.ARGB32.lerp((eyeColor - 0.70F) / 0.30F, HAZEL_EYE_COLOR, BROWN_EYE_COLOR);
     }
 
-    public static boolean hasExplicitLayerMarker(int pixel) {
-        return EyeTintPixel.isLayerMarker(FastColor.ABGR32.alpha(pixel));
+    public static boolean hasExplicitTintMarker(int pixel) {
+        return EyeTintPixel.isIrisMarker(FastColor.ABGR32.alpha(pixel));
     }
 
-    public static boolean hasExplicitLayerMarker(NativeImage image) {
+    public static boolean hasExplicitTintMarker(NativeImage image) {
         for (int x = 0; x < image.getWidth(); x++) {
             for (int y = 0; y < image.getHeight(); y++) {
-                if (hasExplicitLayerMarker(image.getPixelRGBA(x, y))) {
+                if (hasExplicitTintMarker(image.getPixelRGBA(x, y))) {
                     return true;
                 }
             }
@@ -123,9 +123,6 @@ public final class EyeTextureLayers {
 
         if (EyeTintPixel.isIrisMarker(alpha)) {
             return Layer.IRIS;
-        }
-        if (EyeTintPixel.isFixedMarker(alpha)) {
-            return Layer.SCLERA;
         }
 
         boolean sclera = isScleraPixel(pixel);

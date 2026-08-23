@@ -11,6 +11,7 @@ import java.util.Map;
 public record EyeDefinition(
         ResourceLocation id,
         Gender gender,
+        boolean fixedColor,
         Map<Integer, Tones> toneOverrides
 ) {
     public EyeDefinition {
@@ -18,7 +19,12 @@ public record EyeDefinition(
     }
 
     public static EyeDefinition parse(ResourceLocation id, Gender gender, JsonObject metadata) {
-        return new EyeDefinition(id, gender, parseToneOverrides(metadata.get("tone_overrides")));
+        return new EyeDefinition(
+                id,
+                gender,
+                optionalBoolean(metadata, "fixed_color", false),
+                parseToneOverrides(metadata.get("tone_overrides"))
+        );
     }
 
     public Tones tones(int selectedArgb) {
@@ -74,6 +80,17 @@ public record EyeDefinition(
             throw new IllegalArgumentException("Eye definition field '" + name + "' must be a string");
         }
         return value.getAsString();
+    }
+
+    private static boolean optionalBoolean(JsonObject object, String name, boolean fallback) {
+        JsonElement value = object.get(name);
+        if (value == null) {
+            return fallback;
+        }
+        if (!value.isJsonPrimitive() || !value.getAsJsonPrimitive().isBoolean()) {
+            throw new IllegalArgumentException("Eye definition field '" + name + "' must be a boolean");
+        }
+        return value.getAsBoolean();
     }
 
     private static int shadow(int channel) {

@@ -235,7 +235,7 @@ public class SkinExporter {
     public static void compositeFace(NativeImage base, ResourceLocation faceId, VillagerLike<?> villager) {
         FaceList list = FaceList.getInstance();
         EyeDefinition definition = list == null
-                ? new EyeDefinition(faceId, villager.getGenetics().getGender(), Map.of())
+                ? new EyeDefinition(faceId, villager.getGenetics().getGender(), false, Map.of())
                 : list.definition(faceId);
 
         NativeImage face = loadTexture(faceId);
@@ -244,7 +244,7 @@ public class SkinExporter {
         }
 
         try {
-            if (EyeTextureLayers.hasExplicitLayerMarker(face)) {
+            if (definition.fixedColor() || EyeTextureLayers.hasExplicitTintMarker(face)) {
                 compositeMarkedFace(base, face, definition, villager);
             } else {
                 compositeLegacyFace(base, face, villager);
@@ -256,7 +256,9 @@ public class SkinExporter {
 
     private static void compositeMarkedFace(NativeImage base, NativeImage face, EyeDefinition definition, VillagerLike<?> villager) {
         EyeTextureLayers.Bounds bounds = EyeTextureLayers.findBounds(face);
-        compositeModernMask(base, face, definition, villager, bounds);
+        if (!definition.fixedColor()) {
+            compositeModernMask(base, face, definition, villager, bounds);
+        }
 
         int width = Math.min(base.getWidth(), face.getWidth());
         int height = Math.min(base.getHeight(), face.getHeight());
@@ -264,9 +266,8 @@ public class SkinExporter {
             for (int y = 0; y < height; y++) {
                 int pixel = face.getPixelRGBA(x, y);
                 int alpha = FastColor.ABGR32.alpha(pixel);
-                if (alpha != 0 && !EyeTintPixel.isIrisMarker(alpha)) {
-                    int fixedPixel = EyeTintPixel.isFixedMarker(alpha) ? EyeTintPixel.makeOpaque(pixel) : pixel;
-                    compositePixel(base, x, y, fixedPixel, 0xFFFFFFFF);
+                if (alpha != 0 && (definition.fixedColor() || !EyeTintPixel.isIrisMarker(alpha))) {
+                    compositePixel(base, x, y, pixel, 0xFFFFFFFF);
                 }
             }
         }

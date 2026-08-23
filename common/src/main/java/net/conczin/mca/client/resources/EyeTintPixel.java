@@ -4,25 +4,12 @@ import net.minecraft.util.FastColor;
 
 public final class EyeTintPixel {
     public static final int IRIS_MARKER_ALPHA = 254;
-    public static final int FIXED_MARKER_ALPHA = 253;
 
     private EyeTintPixel() {
     }
 
-    public static int makeOpaque(int packedColor) {
-        return FastColor.ABGR32.opaque(packedColor);
-    }
-
     public static boolean isIrisMarker(int alpha) {
         return alpha == IRIS_MARKER_ALPHA;
-    }
-
-    public static boolean isFixedMarker(int alpha) {
-        return alpha == FIXED_MARKER_ALPHA;
-    }
-
-    public static boolean isLayerMarker(int alpha) {
-        return isIrisMarker(alpha) || isFixedMarker(alpha);
     }
 
     public static Mask decodeMarkedMask(int packedColor) {

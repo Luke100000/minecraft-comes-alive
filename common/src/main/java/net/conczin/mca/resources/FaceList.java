@@ -126,7 +126,7 @@ public class FaceList extends SimplePreparableReloadListener<Map<ResourceLocatio
         EyeDefinition definition = definitions.get(id);
         return definition != null
                 ? definition
-                : new EyeDefinition(id, Gender.NEUTRAL, Map.of());
+                : new EyeDefinition(id, Gender.NEUTRAL, false, Map.of());
     }
 
     private List<ResourceLocation> getPool(String variant, Gender gender) {

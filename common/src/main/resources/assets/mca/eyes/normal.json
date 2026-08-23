@@ -74,7 +74,10 @@
     "mca:skins/face/normal/6.png",
     "mca:skins/face/normal/7.png",
     "mca:skins/face/normal/8.png",
-    "mca:skins/face/normal/9.png",
+    {
+      "id": "mca:skins/face/normal/9.png",
+      "fixed_color": true
+    },
     "mca:skins/face/normal/10.png",
     {
       "id": "mca:skins/face/normal/female/11.png",

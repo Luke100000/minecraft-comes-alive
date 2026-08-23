@@ -71,9 +71,9 @@ public class FaceLayer<T extends LivingEntity, M extends HumanoidModel<T>> exten
             VillagerLike<?> villagerLike = getVillager(villager);
             FaceList list = FaceList.getInstance();
             EyeDefinition definition = list == null
-                    ? new EyeDefinition(skin, villagerLike.getGenetics().getGender(), Map.of())
+                    ? new EyeDefinition(skin, villagerLike.getGenetics().getGender(), false, Map.of())
                     : list.definition(skin);
-            EyeLayerTextures layers = getOrGenerateEyeLayers(skin);
+            EyeLayerTextures layers = getOrGenerateEyeLayers(skin, definition);
             if (layers.modern()) {
                 renderModern(transform, provider, light, villager, tickDelta, visible, glowing, overlay, definition, layers);
             } else {
@@ -151,28 +151,30 @@ public class FaceLayer<T extends LivingEntity, M extends HumanoidModel<T>> exten
         EYE_TEXTURE_CACHE.clear();
     }
 
-    private EyeLayerTextures getOrGenerateEyeLayers(ResourceLocation id) {
-        return EYE_TEXTURE_CACHE.computeIfAbsent(id, this::generateEyeLayers);
+    private EyeLayerTextures getOrGenerateEyeLayers(ResourceLocation id, EyeDefinition definition) {
+        return EYE_TEXTURE_CACHE.computeIfAbsent(id, key -> generateEyeLayers(key, definition));
     }
 
-    private EyeLayerTextures generateEyeLayers(ResourceLocation id) {
+    private EyeLayerTextures generateEyeLayers(ResourceLocation id, EyeDefinition definition) {
         try {
-            return generateSingle(id);
+            return generateSingle(id, definition);
         } catch (Exception exception) {
             MCA.LOGGER.warn("Failed to generate eye texture layers for {}", id, exception);
             return EyeLayerTextures.invalid();
         }
     }
 
-    private EyeLayerTextures generateSingle(ResourceLocation id) throws Exception {
+    private EyeLayerTextures generateSingle(ResourceLocation id, EyeDefinition definition) throws Exception {
         var resource = Minecraft.getInstance().getResourceManager().getResource(id).orElseThrow(() -> new IllegalStateException("Missing eye texture " + id));
         try (InputStream stream = resource.open(); NativeImage image = NativeImage.read(stream)) {
             EyeTextureLayers.Bounds bounds = EyeTextureLayers.findBounds(image);
-            return EyeTextureLayers.hasExplicitLayerMarker(image) ? generateModern(id, image, bounds) : generateLegacy(id, image, bounds);
+            return definition.fixedColor() || EyeTextureLayers.hasExplicitTintMarker(image)
+                    ? generateModern(id, image, bounds, definition.fixedColor())
+                    : generateLegacy(id, image, bounds);
         }
     }
 
-    private EyeLayerTextures generateModern(ResourceLocation id, NativeImage mask, EyeTextureLayers.Bounds bounds) {
+    private EyeLayerTextures generateModern(ResourceLocation id, NativeImage mask, EyeTextureLayers.Bounds bounds, boolean fixedColor) {
         List<NativeImage> images = new ArrayList<>();
         List<ResourceLocation> registered = new ArrayList<>();
         try {
@@ -186,8 +188,8 @@ public class FaceLayer<T extends LivingEntity, M extends HumanoidModel<T>> exten
                 if (alpha == 0) {
                     continue;
                 }
-                if (!EyeTintPixel.isIrisMarker(alpha)) {
-                    fixed.setPixelRGBA(x, y, EyeTintPixel.isFixedMarker(alpha) ? EyeTintPixel.makeOpaque(pixel) : pixel);
+                if (fixedColor || !EyeTintPixel.isIrisMarker(alpha)) {
+                    fixed.setPixelRGBA(x, y, pixel);
                     continue;
                 }
                 EyeTintPixel.Mask decoded = EyeTintPixel.decodeMarkedMask(pixel);
