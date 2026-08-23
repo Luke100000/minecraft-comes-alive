@@ -4,10 +4,13 @@ import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.conczin.mca.MCA;
 import net.conczin.mca.client.model.CommonVillagerModel;
+import net.conczin.mca.client.resources.EyeTintPixel;
 import net.conczin.mca.client.resources.EyeTextureLayers;
+import net.conczin.mca.client.resources.EyeToneRendering;
 import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.entity.ai.Genetics;
 import net.conczin.mca.entity.ai.Traits;
+import net.conczin.mca.resources.EyeDefinition;
 import net.conczin.mca.resources.FaceList;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.model.HumanoidModel;
@@ -17,21 +20,22 @@ import net.minecraft.client.renderer.entity.RenderLayerParent;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.FastColor;
-import net.minecraft.util.Mth;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.animal.Sheep;
 import net.minecraft.world.item.DyeColor;
 
 import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Stream;
 
 public class FaceLayer<T extends LivingEntity, M extends HumanoidModel<T>> extends VillagerLayer<T, M> {
     private static final int OPAQUE_WHITE = 0xFFFFFFFF;
-    private static final Map<EyeLayerKey, ResourceLocation> EYE_TEXTURE_CACHE = new ConcurrentHashMap<>();
-
+    private static final Map<ResourceLocation, EyeLayerTextures> EYE_TEXTURE_CACHE = new ConcurrentHashMap<>();
     private final String variant;
 
     public FaceLayer(RenderLayerParent<T, M> renderer, M model, String variant) {
@@ -43,7 +47,6 @@ public class FaceLayer<T extends LivingEntity, M extends HumanoidModel<T>> exten
     public void render(PoseStack transform, MultiBufferSource provider, int light, T villager, float limbAngle, float limbDistance, float tickDelta, float animationProgress, float headYaw, float headPitch) {
         model.setAllVisible(false);
         model.head.visible = true;
-
         super.render(transform, provider, light, villager, limbAngle, limbDistance, tickDelta, animationProgress, headYaw, headPitch);
     }
 
@@ -56,7 +59,6 @@ public class FaceLayer<T extends LivingEntity, M extends HumanoidModel<T>> exten
     public void renderFinal(PoseStack transform, MultiBufferSource provider, int light, T villager, float tickDelta, boolean visible, boolean glowing) {
         int overlay = LivingEntityRenderer.getOverlayCoords(villager, 0);
         ResourceLocation skin = getSkin(villager);
-
         if (isBlinking(villager)) {
             ResourceLocation blink = getBlinkSkin();
             if (canUse(blink)) {
@@ -65,16 +67,17 @@ public class FaceLayer<T extends LivingEntity, M extends HumanoidModel<T>> exten
             return;
         }
 
-        VillagerLike<?> villagerLike = getVillager(villager);
         if (canUse(skin)) {
-            renderModel(transform, provider, light, model, OPAQUE_WHITE, getOrGenerateEyeLayer(skin, EyeTextureLayers.Layer.SCLERA, EyeTextureLayers.Side.FULL), overlay, visible, glowing);
-            renderModel(transform, provider, light, model, EyeTextureLayers.DETAILS_TINT, getOrGenerateEyeLayer(skin, EyeTextureLayers.Layer.DETAILS, EyeTextureLayers.Side.FULL), overlay, visible, glowing);
-
-            if (villagerLike.getTraits().hasTrait(Traits.HETEROCHROMIA)) {
-                renderModel(transform, provider, light, model, getEyeColor(villager, tickDelta, true), getOrGenerateEyeLayer(skin, EyeTextureLayers.Layer.IRIS, EyeTextureLayers.Side.LEFT), overlay, visible, glowing);
-                renderModel(transform, provider, light, model, getEyeColor(villager, tickDelta, false), getOrGenerateEyeLayer(skin, EyeTextureLayers.Layer.IRIS, EyeTextureLayers.Side.RIGHT), overlay, visible, glowing);
+            VillagerLike<?> villagerLike = getVillager(villager);
+            FaceList list = FaceList.getInstance();
+            EyeDefinition definition = list == null
+                    ? new EyeDefinition(skin, villagerLike.getGenetics().getGender(), Map.of())
+                    : list.definition(skin);
+            EyeLayerTextures layers = getOrGenerateEyeLayers(skin);
+            if (layers.modern()) {
+                renderModern(transform, provider, light, villager, tickDelta, visible, glowing, overlay, definition, layers);
             } else {
-                renderModel(transform, provider, light, model, getEyeColor(villager, tickDelta, false), getOrGenerateEyeLayer(skin, EyeTextureLayers.Layer.IRIS, EyeTextureLayers.Side.FULL), overlay, visible, glowing);
+                renderLegacy(transform, provider, light, villager, tickDelta, visible, glowing, overlay, layers);
             }
         }
 
@@ -84,13 +87,49 @@ public class FaceLayer<T extends LivingEntity, M extends HumanoidModel<T>> exten
         }
     }
 
+    private void renderLegacy(PoseStack transform, MultiBufferSource provider, int light, T villager, float tickDelta, boolean visible, boolean glowing, int overlay, EyeLayerTextures layers) {
+        renderEyeModel(transform, provider, light, OPAQUE_WHITE, layers.fixed(), overlay, visible, glowing);
+        renderEyeModel(transform, provider, light, EyeTextureLayers.DETAILS_TINT, layers.details(), overlay, visible, glowing);
+        boolean heterochromia = getVillager(villager).getTraits().hasTrait(Traits.HETEROCHROMIA);
+        if (heterochromia) {
+            renderEyeModel(transform, provider, light, legacyEyeColor(villager, tickDelta, true), layers.primary(EyeTextureLayers.Side.LEFT), overlay, visible, glowing);
+            renderEyeModel(transform, provider, light, legacyEyeColor(villager, tickDelta, false), layers.primary(EyeTextureLayers.Side.RIGHT), overlay, visible, glowing);
+        } else {
+            renderEyeModel(transform, provider, light, legacyEyeColor(villager, tickDelta, false), layers.primary(EyeTextureLayers.Side.FULL), overlay, visible, glowing);
+        }
+    }
+
+    private void renderModern(PoseStack transform, MultiBufferSource provider, int light, T villager, float tickDelta, boolean visible, boolean glowing, int overlay, EyeDefinition definition, EyeLayerTextures layers) {
+        boolean heterochromia = getVillager(villager).getTraits().hasTrait(Traits.HETEROCHROMIA);
+        if (heterochromia) {
+            renderTones(transform, provider, light, visible, glowing, overlay, layers, tones(villager, tickDelta, true, definition), EyeTextureLayers.Side.LEFT);
+            renderTones(transform, provider, light, visible, glowing, overlay, layers, tones(villager, tickDelta, false, definition), EyeTextureLayers.Side.RIGHT);
+        } else {
+            renderTones(transform, provider, light, visible, glowing, overlay, layers, tones(villager, tickDelta, false, definition), EyeTextureLayers.Side.FULL);
+        }
+        renderEyeModel(transform, provider, light, OPAQUE_WHITE, layers.fixed(), overlay, visible, glowing);
+    }
+
+    private void renderTones(PoseStack transform, MultiBufferSource provider, int light, boolean visible, boolean glowing, int overlay, EyeLayerTextures layers, EyeDefinition.Tones tones, EyeTextureLayers.Side side) {
+        renderEyeModel(transform, provider, light, tones.shadow(), layers.shadow(side), overlay, visible, glowing);
+        renderEyeModel(transform, provider, light, tones.primary(), layers.primary(side), overlay, visible, glowing);
+        renderEyeModel(transform, provider, light, tones.highlight(), layers.highlight(side), overlay, visible, glowing);
+    }
+
+    private void renderEyeModel(PoseStack transform, MultiBufferSource provider, int light, int color, ResourceLocation texture, int overlay, boolean visible, boolean glowing) {
+        if (texture != null) {
+            renderModel(transform, provider, light, model, color, texture, overlay, visible, glowing);
+        }
+    }
+
     @Override
     public ResourceLocation getSkin(T villager) {
         FaceList list = FaceList.getInstance();
         if (list == null) {
             return getBlinkSkin();
         }
-        return list.pick(variant, getVillager(villager).getGenetics().getGene(Genetics.FACE));
+        VillagerLike<?> villagerLike = getVillager(villager);
+        return list.pick(variant, villagerLike.getGenetics().getGender(), villagerLike.getGenetics().getGene(Genetics.FACE));
     }
 
     private ResourceLocation getBlinkSkin() {
@@ -103,95 +142,132 @@ public class FaceLayer<T extends LivingEntity, M extends HumanoidModel<T>> exten
     }
 
     public static void clearGeneratedEyeTextureCache() {
-        var textureManager = Minecraft.getInstance().getTextureManager();
-        EYE_TEXTURE_CACHE.values().forEach(id -> {
-            if (id != null && id.getNamespace().equals(MCA.MOD_ID) && id.getPath().startsWith("dynamic/eye/")) {
-                textureManager.release(id);
+        var textures = Minecraft.getInstance().getTextureManager();
+        EYE_TEXTURE_CACHE.values().stream().flatMap(EyeLayerTextures::ids).distinct().forEach(id -> {
+            if (id.getNamespace().equals(MCA.MOD_ID) && id.getPath().startsWith("dynamic/eye/")) {
+                textures.release(id);
             }
         });
         EYE_TEXTURE_CACHE.clear();
     }
 
-    private ResourceLocation getOrGenerateEyeLayer(ResourceLocation original, EyeTextureLayers.Layer layer, EyeTextureLayers.Side side) {
-        return EYE_TEXTURE_CACHE.computeIfAbsent(new EyeLayerKey(original, layer, side), key -> {
-            try {
-                ResourceLocation id = key.texture();
-                var resource = Minecraft.getInstance().getResourceManager().getResource(id);
-                if (resource.isEmpty()) {
-                    return id;
-                }
-
-                try (InputStream stream = resource.get().open(); NativeImage originalImage = NativeImage.read(stream)) {
-                    int width = originalImage.getWidth();
-                    int height = originalImage.getHeight();
-                    EyeTextureLayers.Bounds bounds = EyeTextureLayers.findBounds(originalImage);
-                    if (key.side() != EyeTextureLayers.Side.FULL && bounds.width() % 2 != 0) {
-                        throw new IllegalStateException("Face eye texture width must be divisible by 2 for heterochromia: " + id + " bounds=" + bounds);
-                    }
-                    int splitX = bounds.minX() + bounds.width() / 2;
-                    NativeImage newImage = new NativeImage(width, height, true);
-
-                    try {
-                        for (int x = 0; x < width; x++) {
-                            for (int y = 0; y < height; y++) {
-                                int pixel = originalImage.getPixelRGBA(x, y);
-                                int alpha = FastColor.ABGR32.alpha(pixel);
-                                if (alpha == 0) {
-                                    continue;
-                                }
-                                if (!EyeTextureLayers.isInSide(x, splitX, key.side())) {
-                                    continue;
-                                }
-
-                                if (EyeTextureLayers.isPixelForLayer(key.layer(), alpha,
-                                        FastColor.ABGR32.red(pixel), FastColor.ABGR32.green(pixel), FastColor.ABGR32.blue(pixel))) {
-                                    newImage.setPixelRGBA(x, y, pixel);
-                                }
-                            }
-                        }
-
-                        ResourceLocation newId = ResourceLocation.fromNamespaceAndPath(
-                                MCA.MOD_ID,
-                                "dynamic/eye/" + key.side().name().toLowerCase(Locale.ROOT) + "/" + key.layer().name().toLowerCase(Locale.ROOT) + "/" + id.getNamespace() + "_" + id.getPath().replace("/", "_")
-                        );
-                        Minecraft.getInstance().getTextureManager().register(newId, new DynamicTexture(newImage));
-                        return newId;
-                    } catch (Exception exception) {
-                        newImage.close();
-                        throw exception;
-                    }
-                }
-            } catch (Exception exception) {
-                MCA.LOGGER.warn("Failed to generate eye texture layer for {}", key.texture(), exception);
-                return key.texture();
-            }
-        });
+    private EyeLayerTextures getOrGenerateEyeLayers(ResourceLocation id) {
+        return EYE_TEXTURE_CACHE.computeIfAbsent(id, this::generateEyeLayers);
     }
 
-    private int getEyeColor(T villager, float tickDelta, boolean left) {
-        VillagerLike<?> villagerLike = getVillager(villager);
-        int color;
-        if (villagerLike.getTraits().hasTrait(Traits.RAINBOW_EYES)) {
-            int offset = left && villagerLike.getTraits().hasTrait(Traits.HETEROCHROMIA) ? (25 * DyeColor.values().length) / 2 : 0;
-            color = getRainbow(villager, tickDelta, offset);
-        } else {
-            color = EyeTextureLayers.getStaticEyeColor(villagerLike, left);
+    private EyeLayerTextures generateEyeLayers(ResourceLocation id) {
+        try {
+            return generateSingle(id);
+        } catch (Exception exception) {
+            MCA.LOGGER.warn("Failed to generate eye texture layers for {}", id, exception);
+            return EyeLayerTextures.invalid();
         }
-        return EyeTextureLayers.applyBrightness(color, villagerLike.getGenetics().getGene(Genetics.EYE_BRIGHTNESS));
     }
 
-    private int getRainbow(T villager, float tickDelta, int offset) {
-        int ticks = Math.abs(villager.tickCount) + offset;
-        int block = ticks / 25 + villager.getId();
-        int count = DyeColor.values().length;
-        int first = block % count;
-        int second = (block + 1) % count;
-        float mix = ((float)(ticks % 25) + tickDelta) / 25.0F;
-        return FastColor.ARGB32.lerp(mix, Sheep.getColor(DyeColor.byId(first)), Sheep.getColor(DyeColor.byId(second)));
+    private EyeLayerTextures generateSingle(ResourceLocation id) throws Exception {
+        var resource = Minecraft.getInstance().getResourceManager().getResource(id).orElseThrow(() -> new IllegalStateException("Missing eye texture " + id));
+        try (InputStream stream = resource.open(); NativeImage image = NativeImage.read(stream)) {
+            EyeTextureLayers.Bounds bounds = EyeTextureLayers.findBounds(image);
+            return EyeTextureLayers.hasExplicitLayerMarker(image) ? generateModern(id, image, bounds) : generateLegacy(id, image, bounds);
+        }
+    }
+
+    private EyeLayerTextures generateModern(ResourceLocation id, NativeImage mask, EyeTextureLayers.Bounds bounds) {
+        List<NativeImage> images = new ArrayList<>();
+        List<ResourceLocation> registered = new ArrayList<>();
+        try {
+            int width = mask.getWidth(), height = mask.getHeight(), splitX = bounds.minX() + bounds.width() / 2;
+            NativeImage fixed = image(images, width, height);
+            NativeImage[] full = {image(images, width, height), image(images, width, height), image(images, width, height)};
+            NativeImage[] left = {image(images, width, height), image(images, width, height), image(images, width, height)};
+            NativeImage[] right = {image(images, width, height), image(images, width, height), image(images, width, height)};
+            for (int x = 0; x < width; x++) for (int y = 0; y < height; y++) {
+                int pixel = mask.getPixelRGBA(x, y), alpha = FastColor.ABGR32.alpha(pixel);
+                if (alpha == 0) {
+                    continue;
+                }
+                if (!EyeTintPixel.isIrisMarker(alpha)) {
+                    fixed.setPixelRGBA(x, y, EyeTintPixel.isFixedMarker(alpha) ? EyeTintPixel.makeOpaque(pixel) : pixel);
+                    continue;
+                }
+                EyeTintPixel.Mask decoded = EyeTintPixel.decodeMarkedMask(pixel);
+                int tone = decoded.tone().ordinal(), neutral = EyeTextureLayers.neutralMaskPixel(decoded);
+                full[tone].setPixelRGBA(x, y, neutral);
+                (x >= splitX ? left[tone] : right[tone]).setPixelRGBA(x, y, neutral);
+            }
+            ResourceLocation fixedId = register(id, "fixed", EyeTextureLayers.Side.FULL, fixed, images, registered);
+            return new EyeLayerTextures(true,
+                    fixedId,
+                    register(id, "shadow", EyeTextureLayers.Side.FULL, full[0], images, registered), register(id, "primary", EyeTextureLayers.Side.FULL, full[1], images, registered), register(id, "highlight", EyeTextureLayers.Side.FULL, full[2], images, registered),
+                    register(id, "shadow", EyeTextureLayers.Side.LEFT, left[0], images, registered), register(id, "primary", EyeTextureLayers.Side.LEFT, left[1], images, registered), register(id, "highlight", EyeTextureLayers.Side.LEFT, left[2], images, registered),
+                    register(id, "shadow", EyeTextureLayers.Side.RIGHT, right[0], images, registered), register(id, "primary", EyeTextureLayers.Side.RIGHT, right[1], images, registered), register(id, "highlight", EyeTextureLayers.Side.RIGHT, right[2], images, registered), null, null, null, null);
+        } catch (RuntimeException exception) {
+            registered.forEach(Minecraft.getInstance().getTextureManager()::release);
+            throw exception;
+        } finally {
+            images.forEach(NativeImage::close);
+        }
+    }
+
+    private EyeLayerTextures generateLegacy(ResourceLocation id, NativeImage image, EyeTextureLayers.Bounds bounds) {
+        List<NativeImage> images = new ArrayList<>();
+        List<ResourceLocation> registered = new ArrayList<>();
+        try {
+            int width = image.getWidth(), height = image.getHeight(), splitX = bounds.minX() + bounds.width() / 2;
+            NativeImage sclera = image(images, width, height), details = image(images, width, height), full = image(images, width, height), left = image(images, width, height), right = image(images, width, height);
+            for (int x = 0; x < width; x++) for (int y = 0; y < height; y++) {
+                int pixel = image.getPixelRGBA(x, y); EyeTextureLayers.Layer layer = EyeTextureLayers.layerForPixel(pixel);
+                if (layer == null) continue;
+                switch (layer) {
+                    case SCLERA -> sclera.setPixelRGBA(x, y, pixel);
+                    case DETAILS -> details.setPixelRGBA(x, y, pixel);
+                    case IRIS -> { full.setPixelRGBA(x, y, pixel); (x >= splitX ? left : right).setPixelRGBA(x, y, pixel); }
+                }
+            }
+            return new EyeLayerTextures(false, register(id, "sclera", EyeTextureLayers.Side.FULL, sclera, images, registered), null, null, null, null, null, null, null, null, null,
+                    register(id, "details", EyeTextureLayers.Side.FULL, details, images, registered), register(id, "iris", EyeTextureLayers.Side.FULL, full, images, registered), register(id, "iris", EyeTextureLayers.Side.LEFT, left, images, registered), register(id, "iris", EyeTextureLayers.Side.RIGHT, right, images, registered));
+        } catch (RuntimeException exception) {
+            registered.forEach(Minecraft.getInstance().getTextureManager()::release);
+            throw exception;
+        } finally {
+            images.forEach(NativeImage::close);
+        }
+    }
+
+    private static NativeImage image(List<NativeImage> images, int width, int height) {
+        NativeImage image = new NativeImage(width, height, true);
+        images.add(image);
+        return image;
+    }
+
+    private static ResourceLocation register(ResourceLocation original, String material, EyeTextureLayers.Side side, NativeImage image, List<NativeImage> pending, List<ResourceLocation> registered) {
+        ResourceLocation id = ResourceLocation.fromNamespaceAndPath(MCA.MOD_ID, "dynamic/eye/" + side.name().toLowerCase(Locale.ROOT) + "/" + material + "/" + original.getNamespace() + "_" + original.getPath().replace("/", "_"));
+        Minecraft.getInstance().getTextureManager().register(id, new DynamicTexture(image));
+        pending.remove(image);
+        registered.add(id);
+        return id;
+    }
+
+    private int baseEyeColor(T villager, float tickDelta, boolean left) {
+        VillagerLike<?> villagerLike = getVillager(villager);
+        if (!villagerLike.getTraits().hasTrait(Traits.RAINBOW_EYES)) {
+            return EyeTextureLayers.getStaticEyeColor(villagerLike, left);
+        }
+        int offset = left && villagerLike.getTraits().hasTrait(Traits.HETEROCHROMIA) ? (25 * DyeColor.values().length) / 2 : 0;
+        int ticks = Math.abs(villager.tickCount) + offset, count = DyeColor.values().length, first = (ticks / 25 + villager.getId()) % count;
+        return FastColor.ARGB32.lerp(((float) (ticks % 25) + tickDelta) / 25.0F, Sheep.getColor(DyeColor.byId(first)), Sheep.getColor(DyeColor.byId((first + 1) % count)));
+    }
+
+    private int legacyEyeColor(T villager, float tickDelta, boolean left) {
+        return EyeToneRendering.legacyColor(baseEyeColor(villager, tickDelta, left), getVillager(villager).getGenetics().getGene(Genetics.EYE_BRIGHTNESS));
+    }
+
+    private EyeDefinition.Tones tones(T villager, float tickDelta, boolean left, EyeDefinition definition) {
+        return EyeToneRendering.resolve(definition, baseEyeColor(villager, tickDelta, left), getVillager(villager).getGenetics().getGene(Genetics.EYE_BRIGHTNESS));
     }
 
     private boolean isBlinking(T villager) {
-        int time = villager.tickCount / 2 + (int)(getVillager(villager).getGenetics().getGene(Genetics.HEMOGLOBIN) * 65536);
+        int time = villager.tickCount / 2 + (int) (getVillager(villager).getGenetics().getGene(Genetics.HEMOGLOBIN) * 65536);
         return time % 50 == 1 || time % 57 == 1 || villager.isSleeping() || villager.isDeadOrDying();
     }
 
@@ -199,6 +275,33 @@ public class FaceLayer<T extends LivingEntity, M extends HumanoidModel<T>> exten
         return CommonVillagerModel.getVillager(villager);
     }
 
-    private record EyeLayerKey(ResourceLocation texture, EyeTextureLayers.Layer layer, EyeTextureLayers.Side side) {
+    private record EyeLayerTextures(boolean modern, ResourceLocation fixed, ResourceLocation shadowFull, ResourceLocation primaryFull, ResourceLocation highlightFull, ResourceLocation shadowLeft, ResourceLocation primaryLeft, ResourceLocation highlightLeft, ResourceLocation shadowRight, ResourceLocation primaryRight, ResourceLocation highlightRight, ResourceLocation details, ResourceLocation irisFull, ResourceLocation irisLeft, ResourceLocation irisRight) {
+        ResourceLocation shadow(EyeTextureLayers.Side side) {
+            return side(side, shadowFull, shadowLeft, shadowRight);
+        }
+
+        ResourceLocation primary(EyeTextureLayers.Side side) {
+            return side(side, primaryFull, primaryLeft, primaryRight);
+        }
+
+        ResourceLocation highlight(EyeTextureLayers.Side side) {
+            return side(side, highlightFull, highlightLeft, highlightRight);
+        }
+
+        Stream<ResourceLocation> ids() {
+            return Stream.of(fixed, shadowFull, primaryFull, highlightFull, shadowLeft, primaryLeft, highlightLeft, shadowRight, primaryRight, highlightRight, details, irisFull, irisLeft, irisRight).filter(Objects::nonNull);
+        }
+
+        static EyeLayerTextures invalid() {
+            return new EyeLayerTextures(true, null, null, null, null, null, null, null, null, null, null, null, null, null, null);
+        }
+
+        private static ResourceLocation side(EyeTextureLayers.Side side, ResourceLocation full, ResourceLocation left, ResourceLocation right) {
+            return switch (side) {
+                case FULL -> full;
+                case LEFT -> left;
+                case RIGHT -> right;
+            };
+        }
     }
 }

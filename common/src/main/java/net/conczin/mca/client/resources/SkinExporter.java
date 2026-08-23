@@ -8,6 +8,7 @@ import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.entity.ai.Genetics;
 import net.conczin.mca.entity.ai.Traits;
 import net.conczin.mca.entity.ai.relationship.Gender;
+import net.conczin.mca.resources.EyeDefinition;
 import net.conczin.mca.resources.FaceList;
 import net.conczin.mca.resources.data.skin.LayeredHair;
 import net.minecraft.ChatFormatting;
@@ -23,6 +24,7 @@ import net.minecraft.world.item.DyeColor;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.InputStream;
+import java.util.Map;
 
 public class SkinExporter {
     public static boolean export(VillagerEntityMCA villager) {
@@ -107,10 +109,9 @@ public class SkinExporter {
         Gender gender = villager.getGenetics().getGender();
         FaceList list = FaceList.getInstance();
         if (list == null) {
-            int index = (int) Math.min(21, Math.max(0, villager.getGenetics().getGene(Genetics.FACE) * 22));
-            return ResourceLocation.fromNamespaceAndPath("mca", "skins/face/normal/" + gender.getDataName() + "/" + index + ".png");
+            return MCA.locate("skins/face/normal/0.png");
         }
-        return list.pick("normal", villager.getGenetics().getGene(Genetics.FACE));
+        return list.pick("normal", gender, villager.getGenetics().getGene(Genetics.FACE));
     }
 
     public static ResourceLocation getClothes(VillagerLike<?> villager) {
@@ -232,25 +233,94 @@ public class SkinExporter {
     }
 
     public static void compositeFace(NativeImage base, ResourceLocation faceId, VillagerLike<?> villager) {
+        FaceList list = FaceList.getInstance();
+        EyeDefinition definition = list == null
+                ? new EyeDefinition(faceId, villager.getGenetics().getGender(), Map.of())
+                : list.definition(faceId);
+
         NativeImage face = loadTexture(faceId);
         if (face == null) {
             return;
         }
 
         try {
-            EyeTextureLayers.Bounds bounds = EyeTextureLayers.findBounds(face);
-            int splitX = bounds.minX() + bounds.width() / 2;
-            compositeEyeLayer(base, face, EyeTextureLayers.Layer.SCLERA, EyeTextureLayers.Side.FULL, splitX, 0xFFFFFFFF);
-            compositeEyeLayer(base, face, EyeTextureLayers.Layer.DETAILS, EyeTextureLayers.Side.FULL, splitX, EyeTextureLayers.DETAILS_TINT);
-            if (villager.getTraits().hasTrait(Traits.HETEROCHROMIA)) {
-                compositeEyeLayer(base, face, EyeTextureLayers.Layer.IRIS, EyeTextureLayers.Side.LEFT, splitX, getEyeColor(villager, true));
-                compositeEyeLayer(base, face, EyeTextureLayers.Layer.IRIS, EyeTextureLayers.Side.RIGHT, splitX, getEyeColor(villager, false));
+            if (EyeTextureLayers.hasExplicitLayerMarker(face)) {
+                compositeMarkedFace(base, face, definition, villager);
             } else {
-                compositeEyeLayer(base, face, EyeTextureLayers.Layer.IRIS, EyeTextureLayers.Side.FULL, splitX, getEyeColor(villager, false));
+                compositeLegacyFace(base, face, villager);
             }
         } finally {
             face.close();
         }
+    }
+
+    private static void compositeMarkedFace(NativeImage base, NativeImage face, EyeDefinition definition, VillagerLike<?> villager) {
+        EyeTextureLayers.Bounds bounds = EyeTextureLayers.findBounds(face);
+        compositeModernMask(base, face, definition, villager, bounds);
+
+        int width = Math.min(base.getWidth(), face.getWidth());
+        int height = Math.min(base.getHeight(), face.getHeight());
+        for (int x = 0; x < width; x++) {
+            for (int y = 0; y < height; y++) {
+                int pixel = face.getPixelRGBA(x, y);
+                int alpha = FastColor.ABGR32.alpha(pixel);
+                if (alpha != 0 && !EyeTintPixel.isIrisMarker(alpha)) {
+                    int fixedPixel = EyeTintPixel.isFixedMarker(alpha) ? EyeTintPixel.makeOpaque(pixel) : pixel;
+                    compositePixel(base, x, y, fixedPixel, 0xFFFFFFFF);
+                }
+            }
+        }
+    }
+
+    private static void compositeModernMask(
+            NativeImage base,
+            NativeImage maskImage,
+            EyeDefinition definition,
+            VillagerLike<?> villager,
+            EyeTextureLayers.Bounds bounds
+    ) {
+        int splitX = bounds.minX() + bounds.width() / 2;
+        boolean heterochromia = villager.getTraits().hasTrait(Traits.HETEROCHROMIA);
+        EyeDefinition.Tones rightTones = getEyeTones(villager, false, definition);
+        EyeDefinition.Tones leftTones = heterochromia ? getEyeTones(villager, true, definition) : rightTones;
+        int width = Math.min(base.getWidth(), maskImage.getWidth());
+        int height = Math.min(base.getHeight(), maskImage.getHeight());
+
+        for (int x = 0; x < width; x++) {
+            EyeDefinition.Tones tones = heterochromia && x >= splitX ? leftTones : rightTones;
+            for (int y = 0; y < height; y++) {
+                int pixel = maskImage.getPixelRGBA(x, y);
+                int alpha = FastColor.ABGR32.alpha(pixel);
+                if (!EyeTintPixel.isIrisMarker(alpha)) {
+                    continue;
+                }
+                EyeTintPixel.Mask mask = EyeTintPixel.decodeMarkedMask(pixel);
+                int toneColor = toneColor(tones, mask.tone());
+                int tintedPixel = EyeToneRendering.modernMaskPixel(mask, toneColor);
+                compositePixel(base, x, y, tintedPixel, 0xFFFFFFFF);
+            }
+        }
+    }
+
+    private static void compositeLegacyFace(NativeImage base, NativeImage face, VillagerLike<?> villager) {
+        EyeTextureLayers.Bounds bounds = EyeTextureLayers.findBounds(face);
+        int splitX = bounds.minX() + bounds.width() / 2;
+        compositeEyeLayer(base, face, EyeTextureLayers.Layer.SCLERA, EyeTextureLayers.Side.FULL, splitX, 0xFFFFFFFF);
+        compositeEyeLayer(base, face, EyeTextureLayers.Layer.DETAILS, EyeTextureLayers.Side.FULL, splitX, EyeTextureLayers.DETAILS_TINT);
+        if (villager.getTraits().hasTrait(Traits.HETEROCHROMIA)) {
+            compositeEyeLayer(base, face, EyeTextureLayers.Layer.IRIS, EyeTextureLayers.Side.LEFT, splitX, getEyeColor(villager, true));
+            compositeEyeLayer(base, face, EyeTextureLayers.Layer.IRIS, EyeTextureLayers.Side.RIGHT, splitX, getEyeColor(villager, false));
+        } else {
+            compositeEyeLayer(base, face, EyeTextureLayers.Layer.IRIS, EyeTextureLayers.Side.FULL, splitX, getEyeColor(villager, false));
+        }
+    }
+
+    private static int toneColor(EyeDefinition.Tones tones, EyeTintPixel.Tone tone) {
+        return switch (tone) {
+            case SHADOW -> tones.shadow();
+            case PRIMARY -> tones.primary();
+            case HIGHLIGHT -> tones.highlight();
+        };
     }
 
     public static void compositeEyeLayer(NativeImage base, NativeImage face, EyeTextureLayers.Layer layer, EyeTextureLayers.Side side, int splitX, int tintColor) {
@@ -262,8 +332,7 @@ public class SkinExporter {
             }
             for (int y = 0; y < height; y++) {
                 int pixel = face.getPixelRGBA(x, y); // ABGR
-                int alpha = (pixel >> 24) & 0xFF;
-                if (!EyeTextureLayers.isPixelForLayer(layer, alpha, pixel & 0xFF, (pixel >> 8) & 0xFF, (pixel >> 16) & 0xFF)) {
+                if (!EyeTextureLayers.isPixelForLayer(layer, pixel)) {
                     continue;
                 }
                 compositePixel(base, x, y, pixel, tintColor);
@@ -272,14 +341,26 @@ public class SkinExporter {
     }
 
     public static int getEyeColor(VillagerLike<?> villager, boolean left) {
-        int color;
+        return EyeToneRendering.legacyColor(
+                getBaseEyeColor(villager, left),
+                villager.getGenetics().getGene(Genetics.EYE_BRIGHTNESS)
+        );
+    }
+
+    private static EyeDefinition.Tones getEyeTones(VillagerLike<?> villager, boolean left, EyeDefinition definition) {
+        return EyeToneRendering.resolve(
+                definition,
+                getBaseEyeColor(villager, left),
+                villager.getGenetics().getGene(Genetics.EYE_BRIGHTNESS)
+        );
+    }
+
+    private static int getBaseEyeColor(VillagerLike<?> villager, boolean left) {
         if (villager.getTraits().hasTrait(Traits.RAINBOW_EYES)) {
             int offset = left && villager.getTraits().hasTrait(Traits.HETEROCHROMIA) ? (25 * DyeColor.values().length) / 2 : 0;
-            color = getRainbow(villager, offset);
-        } else {
-            color = EyeTextureLayers.getStaticEyeColor(villager, left);
+            return getRainbow(villager, offset);
         }
-        return EyeTextureLayers.applyBrightness(color, villager.getGenetics().getGene(Genetics.EYE_BRIGHTNESS));
+        return EyeTextureLayers.getStaticEyeColor(villager, left);
     }
 
     private static int getRainbow(VillagerLike<?> villager, int offset) {
@@ -293,22 +374,14 @@ public class SkinExporter {
     }
 
     public static void compositePixel(NativeImage base, int x, int y, int overPixel, int tintColor) {
-        int tr = (tintColor >> 16) & 0xFF;
-        int tg = (tintColor >> 8) & 0xFF;
-        int tb = tintColor & 0xFF;
-        int ta = (tintColor >> 24) & 0xFF;
-        
-        int overAlpha = (overPixel >> 24) & 0xFF;
+        int tintedPixel = EyeToneRendering.multiplyPixel(overPixel, tintColor);
+        int overAlpha = (tintedPixel >> 24) & 0xFF;
         if (overAlpha == 0) return;
-        
-        int overR = ((overPixel & 0xFF) * tr) / 255;
-        int overG = (((overPixel >> 8) & 0xFF) * tg) / 255;
-        int overB = (((overPixel >> 16) & 0xFF) * tb) / 255;
-        int overA = (overAlpha * ta) / 255;
-        
-        if (overA == 0) {
-            return;
-        } else if (overA == 255) {
+        int overR = tintedPixel & 0xFF;
+        int overG = (tintedPixel >> 8) & 0xFF;
+        int overB = (tintedPixel >> 16) & 0xFF;
+
+        if (overAlpha == 255) {
             base.setPixelRGBA(x, y, 0xFF000000 | (overB << 16) | (overG << 8) | overR);
         } else {
             int basePixel = base.getPixelRGBA(x, y);
@@ -317,11 +390,11 @@ public class SkinExporter {
             int baseG = (basePixel >> 8) & 0xFF;
             int baseB = (basePixel >> 16) & 0xFF;
             
-            int outAlpha = overA + (baseAlpha * (255 - overA)) / 255;
+            int outAlpha = overAlpha + (baseAlpha * (255 - overAlpha)) / 255;
             if (outAlpha > 0) {
-                int outR = (overR * overA + baseR * baseAlpha * (255 - overA) / 255) / outAlpha;
-                int outG = (overG * overA + baseG * baseAlpha * (255 - overA) / 255) / outAlpha;
-                int outB = (overB * overA + baseB * baseAlpha * (255 - overA) / 255) / outAlpha;
+                int outR = (overR * overAlpha + baseR * baseAlpha * (255 - overAlpha) / 255) / outAlpha;
+                int outG = (overG * overAlpha + baseG * baseAlpha * (255 - overAlpha) / 255) / outAlpha;
+                int outB = (overB * overAlpha + baseB * baseAlpha * (255 - overAlpha) / 255) / outAlpha;
                 base.setPixelRGBA(x, y, (outAlpha << 24) | (outB << 16) | (outG << 8) | outR);
             }
         }

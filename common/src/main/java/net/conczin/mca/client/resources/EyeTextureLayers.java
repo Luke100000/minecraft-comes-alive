@@ -44,17 +44,23 @@ public final class EyeTextureLayers {
         return FastColor.ARGB32.lerp((eyeColor - 0.70F) / 0.30F, HAZEL_EYE_COLOR, BROWN_EYE_COLOR);
     }
 
-    public static int applyBrightness(int argb, float brightness) {
-        float factor = 0.5F + Mth.clamp(brightness, 0.0F, 1.0F);
-        int alpha = (argb >>> 24) & 0xFF;
-        int red = scaleChannel((argb >>> 16) & 0xFF, factor);
-        int green = scaleChannel((argb >>> 8) & 0xFF, factor);
-        int blue = scaleChannel(argb & 0xFF, factor);
-        return (alpha << 24) | (red << 16) | (green << 8) | blue;
+    public static boolean hasExplicitLayerMarker(int pixel) {
+        return EyeTintPixel.isLayerMarker(FastColor.ABGR32.alpha(pixel));
     }
 
-    private static int scaleChannel(int channel, float factor) {
-        return Mth.clamp(Math.round(channel * factor), 0, 255);
+    public static boolean hasExplicitLayerMarker(NativeImage image) {
+        for (int x = 0; x < image.getWidth(); x++) {
+            for (int y = 0; y < image.getHeight(); y++) {
+                if (hasExplicitLayerMarker(image.getPixelRGBA(x, y))) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    public static int neutralMaskPixel(EyeTintPixel.Mask mask) {
+        return FastColor.ABGR32.color(255, mask.intensity(), mask.intensity(), mask.intensity());
     }
 
     public static Bounds findBounds(NativeImage image) {
@@ -66,7 +72,7 @@ public final class EyeTextureLayers {
         for (int x = 0; x < image.getWidth(); x++) {
             for (int y = 0; y < image.getHeight(); y++) {
                 int pixel = image.getPixelRGBA(x, y);
-                int alpha = (pixel >> 24) & 0xFF;
+                int alpha = FastColor.ABGR32.alpha(pixel);
                 if (alpha == 0) {
                     continue;
                 }
@@ -91,31 +97,46 @@ public final class EyeTextureLayers {
         };
     }
 
-    public static boolean isScleraPixel(int alpha, int red, int green, int blue) {
-        if (alpha == 1) {
-            return true;
-        }
+    private static boolean isScleraPixel(int pixel) {
+        int alpha = FastColor.ABGR32.alpha(pixel);
         if (alpha != 255) {
             return false;
         }
 
+        int red = FastColor.ABGR32.red(pixel);
+        int green = FastColor.ABGR32.green(pixel);
+        int blue = FastColor.ABGR32.blue(pixel);
         int min = Math.min(red, Math.min(green, blue));
         int max = Math.max(red, Math.max(green, blue));
         return min >= SCLERA_MIN_CHANNEL && max - min <= SCLERA_MAX_CHANNEL_SPREAD;
     }
 
-    public static boolean isPixelForLayer(Layer layer, int alpha, int red, int green, int blue) {
+    public static boolean isPixelForLayer(Layer layer, int pixel) {
+        return layer == layerForPixel(pixel);
+    }
+
+    public static Layer layerForPixel(int pixel) {
+        int alpha = FastColor.ABGR32.alpha(pixel);
         if (alpha == 0) {
-            return false;
+            return null;
         }
 
-        boolean sclera = isScleraPixel(alpha, red, green, blue);
+        if (EyeTintPixel.isIrisMarker(alpha)) {
+            return Layer.IRIS;
+        }
+        if (EyeTintPixel.isFixedMarker(alpha)) {
+            return Layer.SCLERA;
+        }
+
+        boolean sclera = isScleraPixel(pixel);
+        int red = FastColor.ABGR32.red(pixel);
+        int green = FastColor.ABGR32.green(pixel);
+        int blue = FastColor.ABGR32.blue(pixel);
         int max = Math.max(red, Math.max(green, blue));
-        return switch (layer) {
-            case SCLERA -> sclera;
-            case IRIS -> !sclera && max >= IRIS_MIN_CHANNEL;
-            case DETAILS -> !sclera && max < IRIS_MIN_CHANNEL;
-        };
+        if (sclera) {
+            return Layer.SCLERA;
+        }
+        return max >= IRIS_MIN_CHANNEL ? Layer.IRIS : Layer.DETAILS;
     }
 
     public enum Side {

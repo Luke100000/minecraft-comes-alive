@@ -22,6 +22,7 @@ import net.conczin.mca.network.c2s.VillagerNameRequest;
 import net.conczin.mca.registry.EntitiesMCA;
 import net.conczin.mca.registry.ProfessionsMCA;
 import net.conczin.mca.resources.FaceList;
+import net.conczin.mca.resources.FaceSelection;
 import net.conczin.mca.resources.SkinSelection;
 import net.conczin.mca.resources.data.skin.Clothing;
 import net.conczin.mca.resources.data.skin.HairStyle;
@@ -96,6 +97,8 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     private List<String> filteredHairStyles = new LinkedList<>();
     private List<String> filteredBodySkins = new LinkedList<>();
     private List<String> filteredLayeredHair = new LinkedList<>();
+    private List<FaceSelection.Indexed<ResourceLocation>> eyeCatalogEntries = List.of();
+    private List<FaceSelection.Indexed<ResourceLocation>> filteredEyes = List.of();
     private Gender filterGender = Gender.NEUTRAL;
     private String searchString = "";
     private int hoveredClothingId;
@@ -773,7 +776,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                     setPage("hair_style");
                 }));
             }
-            case "clothing", "hair", "skin", "hair_base", "hair_bangs", "hair_back", "hair_front", "hair_extra" -> {
+            case "clothing", "hair", "skin", "eyes_catalog", "hair_base", "hair_bangs", "hair_back", "hair_front", "hair_extra" -> {
                 filterGender = villager.getGenetics().getGender();
                 searchString = "";
 
@@ -801,6 +804,8 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                         setPage("clothing_style");
                     } else if (page.equals("skin")) {
                         setPage("body");
+                    } else if (page.equals("eyes_catalog")) {
+                        setPage("eyes");
                     } else if (isLayeredHairPage()) {
                         setPage("hair_advanced");
                     } else {
@@ -812,20 +817,22 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                         Minecraft.getInstance().setScreen(new SkinLibraryScreen(this, villagerVisualization));
                     }));
                 }
-                widgetMasculine = addRenderableWidget(new ButtonWidget(width / 2 - 32 - 96 - 64, y, 64, 20, Component.translatable("gui.villager_editor.masculine"), b -> {
-                    filterGender = Gender.MALE;
-                    filter();
-                    widgetMasculine.active = false;
-                    widgetFeminine.active = true;
-                }));
-                widgetMasculine.active = filterGender != Gender.MALE;
-                widgetFeminine = addRenderableWidget(new ButtonWidget(width / 2 - 32 - 96 - 64 + 64, y, 64, 20, Component.translatable("gui.villager_editor.feminine"), b -> {
-                    filterGender = Gender.FEMALE;
-                    filter();
-                    widgetMasculine.active = true;
-                    widgetFeminine.active = false;
-                }));
-                widgetFeminine.active = filterGender != Gender.FEMALE;
+                if (!page.equals("eyes_catalog")) {
+                    widgetMasculine = addRenderableWidget(new ButtonWidget(width / 2 - 32 - 96 - 64, y, 64, 20, Component.translatable("gui.villager_editor.masculine"), b -> {
+                        filterGender = Gender.MALE;
+                        filter();
+                        widgetMasculine.active = false;
+                        widgetFeminine.active = true;
+                    }));
+                    widgetMasculine.active = filterGender != Gender.MALE;
+                    widgetFeminine = addRenderableWidget(new ButtonWidget(width / 2 - 32 - 96 - 64 + 64, y, 64, 20, Component.translatable("gui.villager_editor.feminine"), b -> {
+                        filterGender = Gender.FEMALE;
+                        filter();
+                        widgetMasculine.active = true;
+                        widgetFeminine.active = false;
+                    }));
+                    widgetFeminine.active = filterGender != Gender.FEMALE;
+                }
                 filter();
             }
             case "presets" -> {
@@ -1051,25 +1058,29 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         int bw = 22;
         Genetics genetics = villager.getGenetics();
         float val = genetics.getGene(gene);
-        int currentIndex = Math.max(0, Math.min(maxCount - 1, (int) (val * maxCount)));
+        int currentIndex = FaceSelection.indexForGene(val, maxCount);
 
         addRenderableWidget(new ButtonWidget(width / 2, y, bw, 20, Component.literal("<"), b -> {
             int prevIndex = (currentIndex - 1 + maxCount) % maxCount;
-            genetics.setGene(gene, (prevIndex + 0.5f) / (float) maxCount);
+            genetics.setGene(gene, FaceSelection.geneForIndex(prevIndex, maxCount));
             init();
         }));
 
         addRenderableWidget(new ButtonWidget(width / 2 + bw, y, DATA_WIDTH - bw * 2, 20,
                 Component.literal(Component.translatable(gene.getTranslationKey()).getString() + ": " + (currentIndex + 1)),
                 b -> {
-                    int nextIndex = (currentIndex + 1) % maxCount;
-                    genetics.setGene(gene, (nextIndex + 0.5f) / (float) maxCount);
-                    init();
+                    if (gene == Genetics.FACE) {
+                        setPage("eyes_catalog");
+                    } else {
+                        int nextIndex = (currentIndex + 1) % maxCount;
+                        genetics.setGene(gene, FaceSelection.geneForIndex(nextIndex, maxCount));
+                        init();
+                    }
                 }));
 
         addRenderableWidget(new ButtonWidget(width / 2 + DATA_WIDTH - bw, y, bw, 20, Component.literal(">"), b -> {
             int nextIndex = (currentIndex + 1) % maxCount;
-            genetics.setGene(gene, (nextIndex + 0.5f) / (float) maxCount);
+            genetics.setGene(gene, FaceSelection.geneForIndex(nextIndex, maxCount));
             init();
         }));
 
@@ -1081,7 +1092,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         if (faceList == null) {
             throw new IllegalStateException("Face textures are not loaded yet");
         }
-        return faceList.count("normal");
+        return faceList.count("normal", villager.getGenetics().getGender());
     }
 
     private void addCharacterSubpageTabs(int y, String selectedPage) {
@@ -1422,6 +1433,25 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     }
 
     private void filter() {
+        if (Objects.equals(page, "eyes_catalog")) {
+            FaceList faceList = FaceList.getInstance();
+            if (faceList == null) {
+                eyeCatalogEntries = List.of();
+                filteredEyes = List.of();
+            } else {
+                Gender gender = villager.getGenetics().getGender();
+                eyeCatalogEntries = FaceSelection.indexed(faceList.catalog("normal", gender));
+                filteredEyes = eyeCatalogEntries.stream()
+                        .filter(entry -> MCA.isBlankString(searchString) || entry.value().toString().contains(searchString))
+                        .toList();
+            }
+
+            clothingPageCount = Math.max(1, (int)Math.ceil(filteredEyes.size() / (float)getSelectionItemsPerPage()));
+            clothingPage = Math.max(0, Math.min(clothingPage, clothingPageCount - 1));
+            updateClothingPageWidget();
+            return;
+        }
+
         ClientSkinCatalog.sync();
         if (Objects.equals(page, "clothing")) {
             filteredClothing = filter(ClientSkinCatalog.clothing());
@@ -1470,15 +1500,26 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     }
 
     private boolean isSelectionPage() {
-        return page.equals("clothing") || page.equals("hair") || page.equals("skin") || isLayeredHairPage();
+        return page.equals("clothing") || page.equals("hair") || page.equals("skin") || page.equals("eyes_catalog") || isLayeredHairPage();
     }
 
-    private List<String> getFilteredSelection() {
+    private int getFilteredSelectionSize() {
         return switch (page) {
-            case "clothing" -> filteredClothing;
-            case "hair" -> filteredHairStyles;
-            case "skin" -> filteredBodySkins;
-            default -> filteredLayeredHair;
+            case "clothing" -> filteredClothing.size();
+            case "hair" -> filteredHairStyles.size();
+            case "skin" -> filteredBodySkins.size();
+            case "eyes_catalog" -> filteredEyes.size();
+            default -> filteredLayeredHair.size();
+        };
+    }
+
+    private String getFilteredSelectionIdentifier(int index) {
+        return switch (page) {
+            case "clothing" -> filteredClothing.get(index);
+            case "hair" -> filteredHairStyles.get(index);
+            case "skin" -> filteredBodySkins.get(index);
+            case "eyes_catalog" -> filteredEyes.get(index).value().toString();
+            default -> filteredLayeredHair.get(index);
         };
     }
 
@@ -1691,6 +1732,15 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
             return true;
         }
 
+        if (page.equals("eyes_catalog") && (hoveredClothingId >= 0 && filteredEyes.size() > hoveredClothingId)) {
+            FaceSelection.Indexed<ResourceLocation> selection = filteredEyes.get(hoveredClothingId);
+            if (!eyeCatalogEntries.isEmpty()) {
+                villager.getGenetics().setGene(Genetics.FACE, FaceSelection.geneForIndex(selection.index(), eyeCatalogEntries.size()));
+                setPage("eyes");
+                return true;
+            }
+        }
+
         if (isLayeredHairPage() && (hoveredClothingId >= 0 && filteredLayeredHair.size() > hoveredClothingId)) {
             String selectedLayerPage = page;
             villager.setHair("");
@@ -1885,11 +1935,16 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
             villagerVisualization.refreshDimensions();
 
             hoveredClothingId = -1;
-            List<String> selection = getFilteredSelection();
             int itemsPerPage = getSelectionItemsPerPage();
-            int totalOnPage = Math.min(itemsPerPage, Math.max(0, selection.size() - clothingPage * itemsPerPage));
+            int totalOnPage = Math.min(itemsPerPage, Math.max(0, getFilteredSelectionSize() - clothingPage * itemsPerPage));
             int row0Count = Math.min(totalOnPage, isLayeredHairPage() ? LAYERED_HAIR_PER_PAGE : CLOTHES_H);
             int row1Count = Math.max(0, totalOnPage - row0Count);
+            int previewRightEyeColor = page.equals("eyes_catalog")
+                    ? EyeTextureLayers.getStaticEyeColor(villager, false)
+                    : 0;
+            int previewLeftEyeColor = page.equals("eyes_catalog")
+                    ? EyeTextureLayers.getStaticEyeColor(villager, true)
+                    : 0;
 
             for (int i = 0; i < totalOnPage; i++) {
                 int index = clothingPage * itemsPerPage + i;
@@ -1898,21 +1953,33 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                 int countInRow = row == 0 ? row0Count : row1Count;
 
                 switch (page) {
-                    case "clothing" -> villagerVisualization.setClothes(selection.get(index));
-                    case "hair" -> applyHairStyle(villagerVisualization, selection.get(index));
-                    case "skin" -> villagerVisualization.setSkin(selection.get(index));
+                    case "clothing" -> villagerVisualization.setClothes(getFilteredSelectionIdentifier(index));
+                    case "hair" -> applyHairStyle(villagerVisualization, getFilteredSelectionIdentifier(index));
+                    case "skin" -> villagerVisualization.setSkin(getFilteredSelectionIdentifier(index));
+                    case "eyes_catalog" -> {
+                        FaceSelection.Indexed<ResourceLocation> eye = filteredEyes.get(index);
+                        if (!eyeCatalogEntries.isEmpty()) {
+                            villagerVisualization.getGenetics().setGene(
+                                    Genetics.FACE,
+                                    FaceSelection.geneForIndex(eye.index(), eyeCatalogEntries.size())
+                            );
+                            villagerVisualization.setEyeDye(previewRightEyeColor);
+                            villagerVisualization.setEyeLeftDye(previewLeftEyeColor);
+                        }
+                    }
                     default -> {
                         villagerVisualization.setHair("");
-                        villagerVisualization.setLayeredHair(getLayeredHairCategory(), selection.get(index));
+                        villagerVisualization.setLayeredHair(getLayeredHairCategory(), getFilteredSelectionIdentifier(index));
                     }
                 }
 
                 boolean layeredHairSelection = isLayeredHairPage();
-                int spacing = layeredHairSelection ? 56 : 40;
+                boolean eyeSelection = page.equals("eyes_catalog");
+                int spacing = layeredHairSelection ? 56 : eyeSelection ? 42 : 40;
                 int cx = width / 2 + (int) ((column - countInRow / 2.0 + 0.5 - 0.5 * (row % 2)) * spacing);
                 int cy = layeredHairSelection ? height / 2 + 8 : height / 2 + (int) ((row - CLOTHES_V / 2.0 + 0.5) * 65) + 10;
 
-                int rx = layeredHairSelection ? 25 : 20;
+                int rx = layeredHairSelection ? 25 : eyeSelection ? 21 : 20;
                 int ry0 = layeredHairSelection ? 60 : 35;
                 int ry1 = layeredHairSelection ? 60 : 45;
 
@@ -1928,18 +1995,24 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
 
                 int previewPadding = (hoveredClothingId == index) ? 5 : 0;
                 float rotationOffset = layeredHairSelection && getLayeredHairCategory() == LayeredHair.Category.BACK ? 180.0F : 0.0F;
+                int previewSize = eyeSelection
+                        ? ((hoveredClothingId == index) ? 50 : 45)
+                        : ((hoveredClothingId == index) ? (layeredHairSelection ? 45 : 35) : (layeredHairSelection ? 40 : 30));
                 renderPreviewEntity(
                         context,
                         x0 - previewPadding,
                         y0 - previewPadding,
                         x1 + previewPadding,
                         y1 + previewPadding,
-                        (hoveredClothingId == index) ? (layeredHairSelection ? 45 : 35) : (layeredHairSelection ? 40 : 30),
+                        previewSize,
                         mouseX,
                         mouseY,
                         villagerVisualization,
                         rotationOffset
                 );
+                if (eyeSelection) {
+                    context.drawCenteredString(font, Integer.toString(filteredEyes.get(index).index() + 1), cx, y1 - 10, 0xFFFFFFFF);
+                }
             }
         }
 
@@ -2014,6 +2087,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                        "clothing_style",
                        "hair_style",
                        "eyes",
+                       "eyes_catalog",
                        "hair_advanced",
                        "skin",
                        "clothing",

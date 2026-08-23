@@ -5,6 +5,7 @@ import net.conczin.mca.MCAClient;
 import net.conczin.mca.client.book.Book;
 import net.conczin.mca.client.book.CivilRegistryBook;
 import net.conczin.mca.client.gui.*;
+import net.conczin.mca.client.render.DynamicSkinCache;
 import net.conczin.mca.client.resources.ClientSkinCatalog;
 import net.conczin.mca.client.tts.SpeechManager;
 import net.conczin.mca.entity.VillagerEntityMCA;
@@ -14,6 +15,7 @@ import net.conczin.mca.item.ExtendedWrittenBookItem;
 import net.conczin.mca.network.s2c.*;
 import net.conczin.mca.registry.EntitiesMCA;
 import net.conczin.mca.resources.BuildingTypes;
+import net.conczin.mca.resources.FaceList;
 import net.conczin.mca.server.world.data.Village;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.toasts.SystemToast;
@@ -237,6 +239,14 @@ public class ClientHandlerImpl implements ClientHandler {
     @Override
     public void handleConfigResponse(ConfigResponse message) {
         Config.setServerConfig(message.getConfig());
+        FaceList faceList = FaceList.getInstance();
+        if (faceList != null) {
+            faceList.refreshDisabledEyes();
+        }
+        DynamicSkinCache.clear();
+        if (client.screen instanceof SkinListUpdateListener listener) {
+            listener.skinListUpdatedCallback();
+        }
         MCAClient.refreshPlayerDataDependentDimensions();
     }
 
