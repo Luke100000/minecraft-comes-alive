@@ -22,7 +22,11 @@ public final class BuiltInAppearanceCatalog {
     private static final List<String> BODY_SKIN_FILES = List.of("skins", "female", "male");
     private static final List<String> GENDERED_SKIN_FILES = List.of("female", "male", "neutral");
     private static final List<String> HAIR_LAYER_FILES = List.of("back", "bangs", "base", "extra", "front");
-    private static final List<String> EYE_FILES = List.of(EyeStyles.DEFAULT_VARIANT);
+    private static final List<String> EYE_FILES = List.of(
+            EyeStyles.DEFAULT_VARIANT,
+            "female",
+            "male"
+    );
     private static final Catalog CATALOG = load();
 
     private BuiltInAppearanceCatalog() {
