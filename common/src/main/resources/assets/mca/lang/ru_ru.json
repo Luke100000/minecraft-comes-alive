@@ -1052,7 +1052,7 @@
   "chat.mca.skin_export_failure": "[MCA] Не удалось экспортировать скин: %s",
   "chat.mca.open_image": "[Открыть изображение]",
   "chat.mca.open_folder": "[Открыть папку]",
-  "gui.mca.trait_shaders": "Trait Shaders: %s",
+  "gui.mca.trait_shaders": "Шейдеры свойств: %s",
   "gui.mca.trait_shaders.on": "ВКЛ",
   "gui.mca.trait_shaders.off": "ВЫКЛ"
 }
