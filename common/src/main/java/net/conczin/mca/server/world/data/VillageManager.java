@@ -280,12 +280,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
      */
     public BuildingScanResult analyzeBuilding(BlockPos pos, boolean strictScan) {
         BuildingBlockedResult blockResult = getBlockedResult(pos);
-        Building building;
-        if (blockResult.existingBuilding() != null) {
-            building = new Building(blockResult.existingBuilding().getSourceBlock(), blockResult.existingBuilding().isStrictScan());
-        } else {
-            building = new Building(pos, strictScan);
-        }
+        Building building = new Building(pos, strictScan);
         Building.validationResult result = building.validateBuilding(world, blockResult.blocked());
         List<String> matchingTypes = new ArrayList<>();
         if (result == Building.validationResult.SUCCESS) {

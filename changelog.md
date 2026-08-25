@@ -1,3 +1,12 @@
+# Alpha Branch Note:
+
+* Incompatible with previous builds
+* Backup your world before using.
+* Some addons may not work/crash, if so either use 7.6.28-beta or 7.7.0-beta.2
+# 7.7.1-alpha.3
+
+* Fixed bug with not being able to add a Room building type category if you have overlapping structures.
+
 # 7.7.1-alpha.2
  
 * Improved loading of translations
@@ -13,11 +22,6 @@
 * Improved ChatAI and InworldAI connection handling so failed or stuck requests recover more cleanly.
 
 # 7.7.1-alpha.1
-**Note:**
-
-* Incompatible with previous builds
-* Backup your world before using.
-* All addons using MCA code will be broken, except Townstead 0.77 Release - 1
 * Fixed an integrated-server race that could crash while MCA building type data was being refreshed and read at the same time.
 * Improved data saving
 * Internal improvements
