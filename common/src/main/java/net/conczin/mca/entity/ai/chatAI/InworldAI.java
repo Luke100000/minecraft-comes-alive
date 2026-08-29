@@ -1,5 +1,7 @@
 package net.conczin.mca.entity.ai.chatAI;
 
+import net.conczin.mca.Config;
+import net.conczin.mca.MCA;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.chatAI.inworldAIModules.EmotionModule;
 import net.conczin.mca.entity.ai.chatAI.inworldAIModules.RelationshipModule;
@@ -7,13 +9,17 @@ import net.conczin.mca.entity.ai.chatAI.inworldAIModules.SessionModule;
 import net.conczin.mca.entity.ai.chatAI.inworldAIModules.TriggerModule;
 import net.conczin.mca.entity.ai.chatAI.inworldAIModules.api.Interaction;
 import net.conczin.mca.entity.ai.chatAI.inworldAIModules.api.TriggerEvent;
+import net.conczin.mca.server.world.data.PlayerSaveData;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 
 import java.util.Optional;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 
-public class InworldAI implements ChatAIStrategy {
+public class InworldAI extends AbstractChatAIStrategy {
     private final SessionModule sessionModule;
     private final RelationshipModule relationshipModule;
     private final TriggerModule triggerModule;
@@ -34,15 +40,37 @@ public class InworldAI implements ChatAIStrategy {
      * @param msg      The message
      * @return {@code Optional.EMPTY} on error, Optional containing the answer to a message on success
      */
-    public Optional<String> answer(ServerPlayer player, VillagerEntityMCA villager, String msg) {
-
+    @Override
+    protected CompletableFuture<Optional<String>> requestAndApply(ServerPlayer player, VillagerEntityMCA villager, String msg, MinecraftServer server) {
         // Create status update event for Character (Includes relationship and current emotional state)
         TriggerEvent.Parameter relationshipTrigger = relationshipModule.getRelationshipTriggerParameter(player, villager);
         TriggerEvent.Parameter emotionTrigger = emotionModule.getEmotionTriggerParameter(villager);
         TriggerEvent event = new TriggerEvent("status-update", new TriggerEvent.Parameter[]{relationshipTrigger, emotionTrigger});
 
-        // Get response
-        Optional<Interaction> optionalResponse = sessionModule.getResponse(player, msg, event);
+        UUID playerId = player.getUUID();
+        String playerName = player.getName().getString();
+        String playerGender = PlayerSaveData.get(player).getGender().getDataName();
+        String apiToken = Config.getInstance().inworldAIToken;
+
+        return CompletableFuture
+                .supplyAsync(() -> sessionModule.getResponse(playerId, playerName, playerGender, apiToken, msg, event))
+                .handleAsync((optionalResponse, throwable) -> {
+                    if (throwable != null) {
+                        MCA.LOGGER.error("InworldAI request failed", throwable);
+                        if (isConversationValid(player, villager)) {
+                            player.sendSystemMessage(Component.translatable("mca.ai_broken").withStyle(ChatFormatting.RED));
+                        }
+                        return Optional.empty();
+                    }
+                    return applyResponse(optionalResponse, player, villager);
+                }, server);
+    }
+
+    private Optional<String> applyResponse(Optional<Interaction> optionalResponse, ServerPlayer player, VillagerEntityMCA villager) {
+        if (!isConversationValid(player, villager)) {
+            return Optional.empty();
+        }
+
         if (optionalResponse.isPresent()) {
             Interaction response = optionalResponse.get();
 

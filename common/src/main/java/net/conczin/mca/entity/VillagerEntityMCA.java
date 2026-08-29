@@ -4,9 +4,11 @@ import com.mojang.serialization.MapCodec;
 import net.conczin.mca.Config;
 import net.conczin.mca.MCA;
 import net.conczin.mca.MCAClient;
+import net.conczin.mca.datafix.McaDataFixers;
 import net.conczin.mca.entity.ai.*;
 import net.conczin.mca.entity.ai.brain.VillagerBrain;
 import net.conczin.mca.entity.ai.brain.VillagerTasksMCA;
+import net.conczin.mca.entity.ai.chatAI.ChatAI;
 import net.conczin.mca.entity.ai.chatAI.ChatAIContext;
 import net.conczin.mca.entity.ai.navigation.MCAGroundPathNavigation;
 import net.conczin.mca.entity.ai.relationship.*;
@@ -401,6 +403,11 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     }
 
     @Override
+    protected int getBabyStartAge() {
+        return -AgeState.getMaxAge();
+    }
+
+    @Override
     public void setAge(int age) {
         super.setAge(age);
 
@@ -418,6 +425,28 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
                 dimensions.set(current);
             }
         }
+    }
+
+    @Override
+    protected void setAgeLocked(boolean locked) {
+        super.setAgeLocked(locked);
+        if (locked) {
+            getTraits().addTrait(Traits.NO_AGING);
+        } else {
+            getTraits().removeTrait(Traits.NO_AGING);
+        }
+    }
+
+    @Override
+    public void onTraitChanged(Traits.Trait trait, boolean active) {
+        if (trait == Traits.NO_AGING && super.isAgeLocked() != active) {
+            super.setAgeLocked(active);
+        }
+    }
+
+    @Override
+    public void onTraitsLoaded() {
+        super.setAgeLocked(getTraits().hasTrait(Traits.NO_AGING));
     }
 
     @Override
@@ -492,6 +521,9 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
             } else {
                 playWelcomeSound();
                 interactedWith = true;
+                if (player instanceof ServerPlayer serverPlayer) {
+                    ChatAI.selectVillagerForConversation(serverPlayer, this);
+                }
                 return interactions.interactAt(player, pos, hand);
             }
         }
@@ -707,14 +739,9 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
     @Override
     public void aiStep() {
-        int oldAge = getAge();
         updateSwingTime();
 
         super.aiStep();
-
-        if (getTraits().hasTrait(Traits.NO_AGING)) {
-            setAge(oldAge);
-        }
 
         burned--;
         if (isOnFire()) {
@@ -1362,10 +1389,12 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
     @Override
     public void readAdditionalSaveData(ValueInput input) {
-        CompoundTag nbt = readMcaSaveData(input);
+        CompoundTag nbt = McaDataFixers.update(readMcaSaveData(input));
         super.readAdditionalSaveData(input);
+        boolean vanillaAgeLocked = super.isAgeLocked();
 
         getTypeDataManager().load(this, nbt);
+        setAgeLocked(vanillaAgeLocked || nbt.getBooleanOr(McaDataFixers.AGE_LOCKED_MIGRATION_KEY, false));
         relations.readFromNbt(nbt);
         longTermMemory.readFromNbt(nbt);
         readNicknames(nbt);
@@ -1397,7 +1426,11 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
     @Override
     public void readAdditionalSaveDataForEditor(CompoundTag nbt) {
+        CompoundTag mcaData = McaDataFixers.update(nbt.getCompound(MCA_DATA_KEY).orElse(nbt));
+        CompoundTag traitData = mcaData.getCompound("Traits").orElseGet(CompoundTag::new);
+        boolean noAging = traitData.contains(Traits.NO_AGING.getId().toString());
         readAdditionalSaveData(TagValueInput.create(ProblemReporter.DISCARDING, registryAccess(), nbt));
+        setAgeLocked(noAging);
     }
 
     @Override

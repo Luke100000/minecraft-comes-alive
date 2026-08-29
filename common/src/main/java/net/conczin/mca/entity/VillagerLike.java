@@ -103,6 +103,12 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
 
     Traits getTraits();
 
+    default void onTraitChanged(Traits.Trait trait, boolean active) {
+    }
+
+    default void onTraitsLoaded() {
+    }
+
     VillagerBrain<?> getVillagerBrain();
 
     EntityCommandHandler<?> getInteractions();
@@ -622,6 +628,7 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
     default void readNbtForConversion(CompoundTag input) {
         this.getTypeDataManager().load((E) asEntity(), input);
         readAdditionalConversionData(input);
+        onTraitsLoaded();
     }
 
     default void writeAdditionalConversionData(CompoundTag output) {

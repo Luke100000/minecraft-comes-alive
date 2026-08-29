@@ -22,6 +22,7 @@ import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.creativetab.v1.FabricCreativeModeTab;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
@@ -130,6 +131,8 @@ public final class MCAFabric implements ModInitializer {
         Registry.register(BuiltInRegistries.CREATIVE_MODE_TAB, mcaTab, build);
 
         // Register events
+        ServerLifecycleEvents.SERVER_STARTING.register(server -> MCA.startExecutorService());
+        ServerLifecycleEvents.SERVER_STOPPING.register(server -> MCA.shutdownExecutorService());
         ServerTickEvents.END_LEVEL_TICK.register(w -> VillageManager.get(w).tick());
         ServerTickEvents.END_SERVER_TICK.register(s -> ServerInteractionManager.getInstance().tick());
         ServerTickEvents.END_SERVER_TICK.register(MCA::setServer);

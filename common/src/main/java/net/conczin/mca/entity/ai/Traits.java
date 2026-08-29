@@ -115,9 +115,12 @@ public class Traits {
             return;
         }
 
-        CompoundTag traits = entity.getTrackedValue(TRAITS).copy();
-        traits.putBoolean(trait.getId().toString(), true);
-        entity.setTrackedValue(TRAITS, traits);
+        if (!hasTrait(trait)) {
+            CompoundTag traits = entity.getTrackedValue(TRAITS).copy();
+            traits.putBoolean(trait.getId().toString(), true);
+            entity.setTrackedValue(TRAITS, traits);
+        }
+        entity.onTraitChanged(trait, true);
     }
 
     public void removeTrait(Trait trait) {
@@ -125,9 +128,12 @@ public class Traits {
             return;
         }
 
-        CompoundTag traits = entity.getTrackedValue(TRAITS).copy();
-        traits.remove(trait.getId().toString());
-        entity.setTrackedValue(TRAITS, traits);
+        if (hasTrait(trait)) {
+            CompoundTag traits = entity.getTrackedValue(TRAITS).copy();
+            traits.remove(trait.getId().toString());
+            entity.setTrackedValue(TRAITS, traits);
+        }
+        entity.onTraitChanged(trait, false);
     }
 
     //initializes the genes with random numbers
