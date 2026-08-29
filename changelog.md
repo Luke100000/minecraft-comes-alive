@@ -3,6 +3,7 @@
 * Fixed specific eye height/dimension scaling issues
 * Fixed villagers not being able to find a workplace
 * Fixed carrying children position
+* Ported the latest ChatAI, villager editor, server lifecycle, and pathfinding fixes from 1.21.1.
 
 # 8.1.9
 

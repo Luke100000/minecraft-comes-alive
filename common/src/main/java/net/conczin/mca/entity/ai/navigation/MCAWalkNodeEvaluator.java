@@ -7,6 +7,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.tags.FluidTags;
+import net.minecraft.util.Mth;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.pathfinder.Node;
 import net.minecraft.world.level.pathfinder.PathComputationType;
@@ -14,21 +15,25 @@ import net.minecraft.world.level.pathfinder.PathType;
 import net.minecraft.world.level.pathfinder.PathfindingContext;
 import net.minecraft.world.level.pathfinder.WalkNodeEvaluator;
 import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
 
 public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
     private static final int MAX_CLIMBABLE_VERTICAL_OFFSET = 2;
     private static final double FLOOR_EPSILON = 1.0E-3D;
     private static final double BOX_EPSILON = 1.0E-7D;
+    private static final double RAISED_START_EPSILON = 1.0E-3D;
     private final Long2BooleanMap clearanceCache = new Long2BooleanOpenHashMap();
     private final Long2BooleanMap climbableCache = new Long2BooleanOpenHashMap();
     private final BlockPos.MutableBlockPos climbablePos = new BlockPos.MutableBlockPos();
     private final BlockPos.MutableBlockPos collisionPos = new BlockPos.MutableBlockPos();
+    private Node startNode;
 
     @Override
     public void done() {
         this.clearanceCache.clear();
         this.climbableCache.clear();
+        this.startNode = null;
         super.done();
     }
 
@@ -45,12 +50,12 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
             while (state.getFluidState().is(FluidTags.WATER)) {
                 state = this.currentContext.getBlockState(pos.set(this.mob.getX(), ++y, this.mob.getZ()));
             }
-            return this.getStartNodeAtY(pos, y - 1);
+            return captureStartNode(correctRaisedStartNode(this.getStartNodeAtY(pos, y - 1)));
         }
 
         BlockPos mobPos = this.mob.blockPosition();
         if (isClimbable(mobPos)) {
-            return getClimbableNode(mobPos);
+            return captureStartNode(correctRaisedStartNode(getClimbableNode(mobPos)));
         }
 
         if (this.mob.onClimbable()) {
@@ -58,7 +63,7 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
                 BlockPos candidate = mobPos.below(drop);
 
                 if (isClimbable(candidate)) {
-                    return getClimbableNode(candidate);
+                    return captureStartNode(correctRaisedStartNode(getClimbableNode(candidate)));
                 }
 
                 if (!this.currentContext.getBlockState(candidate)
@@ -68,7 +73,31 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
             }
         }
 
-        return super.getStart();
+        return captureStartNode(correctRaisedStartNode(super.getStart()));
+    }
+
+    private Node correctRaisedStartNode(Node selectedStart) {
+        if (selectedStart == null || !this.mob.onGround() || this.mob.onClimbable()) {
+            return selectedStart;
+        }
+
+        BlockPos mobPos = this.mob.blockPosition();
+        AABB startBox = this.mob.getBoundingBox();
+        double modeledFloor = this.getFloorLevel(mobPos);
+        if (!selectedStart.asBlockPos().equals(mobPos)
+            && startBox.minY > modeledFloor + RAISED_START_EPSILON
+            && !canSweepStartBoxTo(selectedStart, startBox)) {
+            // Vanilla can choose a raised bounding-box corner as the start node on partial blocks. If the mob's
+            // real raised box cannot physically sweep to that corner, start from the mob cell so A* can evaluate
+            // the real exits instead of accepting an impossible first transition.
+            return this.getStartNode(mobPos);
+        }
+        return selectedStart;
+    }
+
+    private Node captureStartNode(Node selectedStart) {
+        this.startNode = selectedStart;
+        return selectedStart;
     }
 
     private Node getStartNodeAtY(BlockPos.MutableBlockPos pos, int y) {
@@ -89,6 +118,7 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
     @Override
     public int getNeighbors(Node[] nodes, Node origin) {
         int nodeCount = super.getNeighbors(nodes, origin);
+        nodeCount = rejectBlockedRaisedStartTransitions(nodes, nodeCount, origin);
         if (!isClimbable(origin.x, origin.y, origin.z)) {
             return nodeCount;
         }
@@ -109,6 +139,31 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
         }
 
         return nodeCount;
+    }
+
+    private int rejectBlockedRaisedStartTransitions(Node[] nodes, int nodeCount, Node origin) {
+        if (origin != this.startNode || !this.mob.onGround() || this.mob.onClimbable()) {
+            return nodeCount;
+        }
+
+        AABB startBox = this.mob.getBoundingBox();
+        double modeledFloor = this.getFloorLevel(origin.asBlockPos());
+        if (startBox.minY <= modeledFloor + RAISED_START_EPSILON) {
+            return nodeCount;
+        }
+
+        int writeIndex = 0;
+        for (int readIndex = 0; readIndex < nodeCount; readIndex++) {
+            Node candidate = nodes[readIndex];
+            if (candidate != null && canSweepStartBoxTo(candidate, startBox)) {
+                nodes[writeIndex++] = candidate;
+            }
+        }
+
+        for (int index = writeIndex; index < nodeCount; index++) {
+            nodes[index] = null;
+        }
+        return writeIndex;
     }
 
     private int removeLargeVerticalTransitions(Node[] nodes, int nodeCount, Node origin) {
@@ -266,6 +321,33 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
                 node.z + 0.5D - centerZ
         );
     }
+    private boolean canSweepStartBoxTo(Node candidate, AABB startBox) {
+        AABB destinationBox = getMobBoxAt(candidate);
+        if (destinationBox.minY > startBox.minY + RAISED_START_EPSILON) {
+            return true;
+        }
+
+        Vec3 travel = new Vec3(
+                destinationBox.minX - startBox.minX,
+                0.0D,
+                destinationBox.minZ - startBox.minZ
+        );
+        int steps = Mth.ceil(travel.length() / startBox.getSize());
+        if (steps <= 0) {
+            return true;
+        }
+
+        Vec3 step = travel.scale(1.0D / steps);
+        AABB sweepBox = startBox;
+        for (int index = 0; index < steps; index++) {
+            sweepBox = sweepBox.move(step);
+            if (!this.currentContext.level().noBlockCollision(this.mob, sweepBox)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     private static int floorMin(double value) {
         return (int)Math.floor(value);
     }
