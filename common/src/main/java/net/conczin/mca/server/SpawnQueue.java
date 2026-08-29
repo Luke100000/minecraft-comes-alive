@@ -6,6 +6,7 @@ import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerFactory;
 import net.conczin.mca.entity.ZombieVillagerEntityMCA;
 import net.conczin.mca.entity.ZombieVillagerFactory;
+import net.conczin.mca.entity.ai.relationship.AgeState;
 import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.server.world.data.Nationality;
 import net.minecraft.core.Holder;
@@ -91,6 +92,11 @@ public class SpawnQueue {
     }
 
     private void copyPastaIntensifies(PathfinderMob villager, PathfinderMob entity) {
+        if (villager instanceof ZombieVillagerEntityMCA zombieVillager && entity instanceof Zombie zombie && zombie.isBaby()) {
+            zombieVillager.setBaby(true);
+            zombieVillager.setAgeState(AgeState.TODDLER);
+        }
+
         if (entity.isPersistenceRequired()) {
             villager.setPersistenceRequired();
         }

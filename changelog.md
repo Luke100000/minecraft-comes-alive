@@ -1,9 +1,15 @@
+# 8.1.11
+
+* Merged the latest fixes from 1.20.1, including ChatAI reliability, improved networking and internal fixes..
+* Integrated Minecraft 26.1.2's age-lock system and Golden Dandelion behavior with MCA's No Aging trait.
+* Fixed villagers increasing in size even with No Aging Trait
+* Preserved baby state when vanilla zombie villagers are converted into MCA zombie villagers.
+
 # 8.1.10
 
 * Fixed specific eye height/dimension scaling issues
 * Fixed villagers not being able to find a workplace
 * Fixed carrying children position
-* Ported the latest ChatAI, villager editor, server lifecycle, and pathfinding fixes from 1.21.1.
 
 # 8.1.9
 

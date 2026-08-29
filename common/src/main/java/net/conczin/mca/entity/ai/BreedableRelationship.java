@@ -19,6 +19,7 @@ import net.minecraft.core.component.DataComponents;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.Mth;
 import net.minecraft.world.InteractionResult;
+import net.minecraft.world.entity.AgeableMob;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.food.FoodProperties;
@@ -245,6 +246,17 @@ public class BreedableRelationship extends Relationship<VillagerEntityMCA> {
         if (item == Items.WET_SPONGE) {
             entity.clearHairDye();
             stack.shrink(1);
+            return true;
+        }
+
+        if (AgeableMob.canUseGoldenDandelion(stack, entity.isBaby(), entity.ageLockParticleTimer, entity)) {
+            AgeableMob.setAgeLocked(
+                    entity,
+                    entity::isAgeLocked,
+                    player,
+                    stack,
+                    mob -> entity.setAgeLockedData()
+            );
             return true;
         }
 
