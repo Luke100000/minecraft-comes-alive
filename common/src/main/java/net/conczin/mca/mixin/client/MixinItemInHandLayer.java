@@ -1,5 +1,6 @@
 package net.conczin.mca.mixin.client;
 
+import com.llamalad7.mixinextras.injector.ModifyReturnValue;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.conczin.mca.client.render.VillagerStateHolder;
 import net.minecraft.client.model.ArmedModel;
@@ -26,6 +27,14 @@ public abstract class MixinItemInHandLayer<S extends ArmedEntityRenderState, M e
             SubmitNodeCollector submitNodeCollector,
             int lightCoords
     );
+
+    @ModifyReturnValue(method = "useBabyOffset", at = @At("RETURN"))
+    private boolean mca$useBabyOffset(boolean original, S state) {
+        if (state instanceof VillagerStateHolder holder && holder.mca$getVillagerRenderData() != null) {
+            return false;
+        }
+        return original;
+    }
 
     @Inject(
             method = "submit(Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/SubmitNodeCollector;ILnet/minecraft/client/renderer/entity/state/ArmedEntityRenderState;FF)V",
