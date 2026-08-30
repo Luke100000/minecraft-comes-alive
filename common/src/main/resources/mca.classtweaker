@@ -10,10 +10,6 @@ accessible method net/minecraft/world/entity/schedule/Activity <init> (Ljava/lan
 accessible method net/minecraft/world/entity/npc/villager/Villager startTrading (Lnet/minecraft/world/entity/player/Player;)V
 accessible method net/minecraft/world/entity/npc/villager/Villager setUnhappy ()V
 
-# Reuse AgeableMob's complete Golden Dandelion lifecycle from MCA's gift interaction.
-accessible field net/minecraft/world/entity/AgeableMob ageLockParticleTimer I
-accessible method net/minecraft/world/entity/AgeableMob setAgeLockedData ()V
-
 # Widen AdvancementRewards.loot to allow temporary modification without an accessor mixin.
 accessible field net/minecraft/advancements/AdvancementRewards loot Ljava/util/List;
 mutable field net/minecraft/advancements/AdvancementRewards loot Ljava/util/List;

@@ -249,13 +249,13 @@ public class BreedableRelationship extends Relationship<VillagerEntityMCA> {
             return true;
         }
 
-        if (AgeableMob.canUseGoldenDandelion(stack, entity.isBaby(), entity.ageLockParticleTimer, entity)) {
+        if (entity.canToggleAgeLockWith(stack)) {
             AgeableMob.setAgeLocked(
                     entity,
                     entity::isAgeLocked,
                     player,
                     stack,
-                    mob -> entity.setAgeLockedData()
+                    mob -> entity.toggleAgeLockedAtCurrentAge()
             );
             return true;
         }

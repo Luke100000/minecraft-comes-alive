@@ -53,7 +53,6 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
             "HairColor",
             "EyeColor",
             "EyeColorLeft",
-            "AgeState",
             "PlayerModel"
     };
 
