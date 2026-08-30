@@ -8,6 +8,31 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class BlueprintScreenMapInteractionTest {
     @Test
+    void viewportPreservesFractionalRequestedCenter() {
+        BlueprintMapViewport viewport = BlueprintMapViewport.create(
+                100, 120, 80, -305.25D, -1653.75D, 1.37F);
+
+        assertEquals(-305.25D, viewport.mapCenterX(), 0.0000001D);
+        assertEquals(-1653.75D, viewport.mapCenterZ(), 0.0000001D);
+        assertEquals(100.3425D, viewport.screenX(-305.0D), 0.0001D);
+    }
+
+    @Test
+    void zoomAroundPointerKeepsCursorWorldPositionInvariant() {
+        BlueprintMapViewport before = BlueprintMapViewport.create(
+                100, 120, 80, -305.25D, -1653.75D, 1.37F);
+        double mouseX = 137.5D;
+        double mouseY = 91.25D;
+        double worldX = before.worldX(mouseX);
+        double worldZ = before.worldZ(mouseY);
+
+        BlueprintMapViewport after = before.zoomedAround(mouseX, mouseY, 2.36F);
+
+        assertEquals(worldX, after.worldX(mouseX), 0.0000001D);
+        assertEquals(worldZ, after.worldZ(mouseY), 0.0000001D);
+    }
+
+    @Test
     void customScaleSnapsToTheNextPresetInEitherDirection() {
         assertEquals(2.0F, BlueprintScreen.snapMapScale(1.37F, 1));
         assertEquals(3.0F, BlueprintScreen.snapMapScale(2.0F, 1));

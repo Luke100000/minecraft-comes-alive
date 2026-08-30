@@ -1217,8 +1217,19 @@ public class BlueprintScreen extends ExtendedScreen {
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
         if (scrollY != 0.0D && isMouseOverMap(mouseX, mouseY) && ("map".equals(page) || "advanced".equals(page))) {
             float currentScale = getMapScale();
+            float newScale = zoomMapScale(currentScale, scrollY);
+            BlueprintMapViewport currentViewport = BlueprintMapViewport.create(
+                    width / 2, height / 2 + 8, MAP_HALF_SIZE,
+                    mapCenterX, mapCenterZ, currentScale);
+            BlueprintMapViewport zoomedViewport = currentViewport.zoomedAround(mouseX, mouseY, newScale);
+
             mapScaleFit = false;
-            mapScale = zoomMapScale(currentScale, scrollY);
+            mapScale = newScale;
+            mapCenterX = zoomedViewport.mapCenterX();
+            mapCenterZ = zoomedViewport.mapCenterZ();
+            playerCentered = false;
+            rememberedPlayerCentered = false;
+            updatePlayerCenteredControl();
             rememberMapScale();
             updateMapScaleControl();
             return true;

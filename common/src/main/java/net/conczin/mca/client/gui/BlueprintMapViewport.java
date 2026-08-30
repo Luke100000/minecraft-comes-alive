@@ -3,9 +3,8 @@ package net.conczin.mca.client.gui;
 /**
  * Immutable per-frame map viewport shared by every Blueprint render layer.
  *
- * <p>All world/screen conversions use the same pixel-locked map center so terrain,
- * rooms, outlines, icons, hover tests and the player marker cannot drift apart from
- * independent rounding.</p>
+ * <p>All world/screen conversions use the same exact map center so terrain, rooms,
+ * outlines, icons, hover tests and the player marker share one projection.</p>
  */
 record BlueprintMapViewport(int centerX,
                             int centerY,
@@ -26,10 +25,6 @@ record BlueprintMapViewport(int centerX,
             throw new IllegalArgumentException("scale must be positive");
         }
 
-        double mapOriginX = Math.rint(centerX - requestedMapCenterX * scale);
-        double mapOriginZ = Math.rint(centerY - requestedMapCenterZ * scale);
-        double mapCenterX = (centerX - mapOriginX) / scale;
-        double mapCenterZ = (centerY - mapOriginZ) / scale;
         return new BlueprintMapViewport(
                 centerX,
                 centerY,
@@ -37,8 +32,8 @@ record BlueprintMapViewport(int centerX,
                 centerY - halfSize,
                 centerX + halfSize,
                 centerY + halfSize,
-                mapCenterX,
-                mapCenterZ,
+                requestedMapCenterX,
+                requestedMapCenterZ,
                 scale
         );
     }
@@ -51,10 +46,27 @@ record BlueprintMapViewport(int centerX,
         return centerY + (worldZ - mapCenterZ) * scale;
     }
 
+    double worldX(double screenX) {
+        return mapCenterX + (screenX - centerX) / scale;
+    }
+
+    double worldZ(double screenY) {
+        return mapCenterZ + (screenY - centerY) / scale;
+    }
+
     BlueprintMapFootprint.Cell screenToCell(double screenX, double screenY) {
-        int worldX = (int) Math.floor((screenX - centerX) / scale + mapCenterX);
-        int worldZ = (int) Math.floor((screenY - centerY) / scale + mapCenterZ);
-        return new BlueprintMapFootprint.Cell(worldX, worldZ);
+        return new BlueprintMapFootprint.Cell(
+                (int) Math.floor(worldX(screenX)),
+                (int) Math.floor(worldZ(screenY))
+        );
+    }
+
+    BlueprintMapViewport zoomedAround(double screenX, double screenY, float newScale) {
+        double cursorWorldX = worldX(screenX);
+        double cursorWorldZ = worldZ(screenY);
+        double newCenterX = cursorWorldX - (screenX - centerX) / newScale;
+        double newCenterZ = cursorWorldZ - (screenY - centerY) / newScale;
+        return create(centerX, centerY, halfSize(), newCenterX, newCenterZ, newScale);
     }
 
     boolean containsInner(double screenX, double screenY) {
