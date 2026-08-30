@@ -23,6 +23,7 @@ final class StructureScanner {
                                    BlockPos source,
                                    Collection<Structure> existing) {
         return scan(world, source, existing, -1,
+                PersistedFloorBoundary.none(),
                 (roof, maxRadius) -> resolveExactSeed(world, source, roof, maxRadius));
     }
 
@@ -30,6 +31,7 @@ final class StructureScanner {
                                         BlockPos source,
                                         Collection<Structure> existing) {
         return scan(world, source, existing, -1,
+                PersistedFloorBoundary.none(),
                 (roof, maxRadius) -> resolveReportedSeed(world, source, roof, maxRadius));
     }
 
@@ -37,6 +39,7 @@ final class StructureScanner {
                                        RoomScanPlan plan,
                                        Collection<Structure> existing) {
         return scan(world, plan.interactionSource(), existing, -1,
+                PersistedFloorBoundary.forAttachment(plan.scanSeed().getY(), existing),
                 (roof, maxRadius) -> resolveExactSeed(world, plan.scanSeed(), roof, maxRadius));
     }
 
@@ -44,6 +47,7 @@ final class StructureScanner {
                                   Structure structure,
                                   Collection<Structure> existing) {
         return scan(world, structure.getSource(), existing, structure.getId(),
+                PersistedFloorBoundary.none(),
                 (roof, maxRadius) -> resolvePersistedSeed(world, structure, roof, maxRadius));
     }
 
@@ -51,6 +55,7 @@ final class StructureScanner {
                                BlockPos source,
                                Collection<Structure> existing,
                                int ignoredStructureId,
+                               PersistedFloorBoundary boundary,
                                SeedResolver seedResolver) {
         int maxSize = Config.getInstance().maxBuildingSize;
         int maxRadius = Config.getInstance().maxBuildingRadius;
@@ -117,9 +122,11 @@ final class StructureScanner {
                     continue;
                 }
 
-                if (StructureConnector.isConnector(nextState)
+                boolean exitsVerticalConnector = StructureConnector.isVertical(currentState);
+                boolean entersOwnedStorey = exitsVerticalConnector && boundary.blocks(next);
+                if (!entersOwnedStorey && (StructureConnector.isConnector(nextState)
                         || isWalkableAnchor(world, next, nextState, roof)
-                        || nextFloorObstacle) {
+                        || nextFloorObstacle)) {
                     enqueueTraversal(seed, next, visited, queue, maxRadius);
                 }
             }
@@ -128,7 +135,8 @@ final class StructureScanner {
             // usually occupies the hole below a storey, so the air directly above it is not a
             // supported walkable anchor; entering/exiting therefore happens diagonally between
             // the connector column and an adjacent supported cell one block up/down.
-            enqueueConnectorHandoffs(world, seed, current, currentState, visited, queue, roof, maxRadius);
+            enqueueConnectorHandoffs(
+                    world, seed, current, currentState, visited, queue, roof, maxRadius, boundary);
 
             if (walkable) {
                 // Collision-aware one-block diagonal transitions connect stair/slab-like geometry
@@ -146,13 +154,16 @@ final class StructureScanner {
                 if (!(StructureConnector.isVertical(currentState) || StructureConnector.isVertical(nextState))) {
                     continue;
                 }
+                if (boundary.blocks(next)) continue;
                 if (StructureConnector.isConnector(nextState) || isWalkableAnchor(world, next, nextState, roof)) {
                     enqueueTraversal(seed, next, visited, queue, maxRadius);
                 }
             }
         }
 
-        floorCells.addAll(StructureConnector.associatedFloorCells(world, connectorCells, floorCells));
+        Set<BuildingFloorRegionDetector.FloorCell> associated =
+                StructureConnector.associatedFloorCells(world, connectorCells, floorCells);
+        boundary.addPermittedAssociated(floorCells, associated);
         List<BuildingFloorRegion> regions = BuildingFloorRegionDetector.detect(floorCells);
         int scannedEnvelopeSize = scannedEnvelopeSize(volume);
         if (regions.isEmpty() || scannedEnvelopeSize <= minSize) {
@@ -452,7 +463,8 @@ final class StructureScanner {
                                                  Set<BlockPos> visited,
                                                  ArrayDeque<BlockPos> queue,
                                                  Map<BlockPos, Boolean> roof,
-                                                 int maxRadius) {
+                                                 int maxRadius,
+                                                 PersistedFloorBoundary boundary) {
         boolean fromVerticalConnector = StructureConnector.isVertical(currentState);
         for (Direction direction : HORIZONTAL) {
             BlockPos horizontal = current.relative(direction);
@@ -460,7 +472,8 @@ final class StructureScanner {
                 BlockPos candidate = horizontal.offset(0, dy, 0);
                 BlockState state = world.getBlockState(candidate);
                 if (fromVerticalConnector) {
-                    if (isWalkableAnchor(world, candidate, state, roof)) {
+                    if (!boundary.blocks(candidate)
+                            && isWalkableAnchor(world, candidate, state, roof)) {
                         enqueueTraversal(source, candidate, visited, queue, maxRadius);
                     }
                 } else if (StructureConnector.isVertical(state)) {
@@ -600,6 +613,49 @@ final class StructureScanner {
 
     private static int manhattanDistance(BlockPos a, BlockPos b) {
         return horizontalDistance(a, b) + Math.abs(a.getY() - b.getY());
+    }
+
+    record PersistedFloorBoundary(
+            int seedY,
+            Set<BuildingFloorRegionDetector.FloorCell> persistedFloorCells) {
+        private static PersistedFloorBoundary none() {
+            return new PersistedFloorBoundary(0, Set.of());
+        }
+
+        static PersistedFloorBoundary forAttachment(
+                int seedY, Collection<Structure> existing) {
+            LinkedHashSet<BuildingFloorRegionDetector.FloorCell> cells = new LinkedHashSet<>();
+            for (Structure structure : existing) {
+                for (StructureFloor floor : structure.getFloors()) {
+                    if (floor.region() == null) continue;
+                    for (BlockPos cell : floor.region().cells()) {
+                        cells.add(new BuildingFloorRegionDetector.FloorCell(
+                                cell.getX(), cell.getY(), cell.getZ()));
+                    }
+                }
+            }
+            return new PersistedFloorBoundary(seedY, Set.copyOf(cells));
+        }
+
+        boolean blocks(BlockPos destination) {
+            return isOtherStorey(destination.getY()) && persistedFloorCells.contains(
+                    new BuildingFloorRegionDetector.FloorCell(
+                            destination.getX(), destination.getY(), destination.getZ()));
+        }
+
+        void addPermittedAssociated(
+                Set<BuildingFloorRegionDetector.FloorCell> discovered,
+                Collection<BuildingFloorRegionDetector.FloorCell> associated) {
+            for (BuildingFloorRegionDetector.FloorCell cell : associated) {
+                if (!isOtherStorey(cell.y()) || !persistedFloorCells.contains(cell)) {
+                    discovered.add(cell);
+                }
+            }
+        }
+
+        private boolean isOtherStorey(int y) {
+            return Math.abs(y - seedY) > BuildingFloorRegionDetector.FLOOR_CLUSTER_TOLERANCE;
+        }
     }
 
     @FunctionalInterface
