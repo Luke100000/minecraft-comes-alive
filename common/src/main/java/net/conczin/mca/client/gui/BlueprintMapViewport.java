@@ -101,13 +101,13 @@ record BlueprintMapViewport(int centerX,
             factor = Math.min(xFactor, yFactor);
         }
 
-        int x = (int) Math.round(centerX + dx * factor);
-        int y = (int) Math.round(centerY + dy * factor);
-        x = Math.max((int) Math.ceil(minCenterX), Math.min((int) Math.floor(maxCenterX), x));
-        y = Math.max((int) Math.ceil(minCenterY), Math.min((int) Math.floor(maxCenterY), y));
+        double x = centerX + dx * factor;
+        double y = centerY + dy * factor;
+        x = Math.max(minCenterX, Math.min(maxCenterX, x));
+        y = Math.max(minCenterY, Math.min(maxCenterY, y));
         return new ScreenPoint(x, y);
     }
 
-    record ScreenPoint(int x, int y) {
+    record ScreenPoint(double x, double y) {
     }
 }

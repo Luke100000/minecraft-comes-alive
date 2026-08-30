@@ -1,6 +1,12 @@
 package net.conczin.mca.client.gui;
 
 import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.vertex.BufferBuilder;
+import com.mojang.blaze3d.vertex.BufferUploader;
+import com.mojang.blaze3d.vertex.DefaultVertexFormat;
+import com.mojang.blaze3d.vertex.Tesselator;
+import com.mojang.blaze3d.vertex.VertexFormat;
 import net.conczin.mca.MCA;
 import net.conczin.mca.MCAClient;
 import net.conczin.mca.client.gui.BlueprintMapGeometry.MapFootprintLayer;
@@ -16,8 +22,10 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.PlayerFaceRenderer;
 import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
+import org.joml.Matrix4f;
 
 import java.util.*;
 
@@ -146,28 +154,24 @@ final class BlueprintMapRenderer implements AutoCloseable {
             }
         }
 
-        matrices.popPose();
-
+        List<OutlineLayer> structureOutlineLayers = new ArrayList<>();
         for (MapStructureLayer layer : structureRenderLayers) {
+            boolean active = !concreteRoomHovered && layer.logicalBuildingId() == hoveredLogicalBuildingId;
             renderStructureShade(
                     context,
                     layer.shellSpans(),
                     STRUCTURE_BASE_COLOR,
-                    false,
-                    viewport
+                    false
             );
+            int outlineColor = withAlpha(
+                    scaleColor(STRUCTURE_BASE_COLOR,
+                            active ? BUILDING_BORDER_ACTIVE_FACTOR : BUILDING_BORDER_DARKEN_FACTOR),
+                    active ? BUILDING_BORDER_ALPHA_ACTIVE : BUILDING_BORDER_ALPHA
+            );
+            structureOutlineLayers.add(new OutlineLayer(layer.borderEdges(), outlineColor));
         }
-
         // The one neutral Building border stays behind the selected Room presentation.
-        for (MapStructureLayer layer : structureRenderLayers) {
-            renderStructureOutlineScreenSpace(
-                    context,
-                    layer.borderEdges(),
-                    STRUCTURE_BASE_COLOR,
-                    !concreteRoomHovered && layer.logicalBuildingId() == hoveredLogicalBuildingId,
-                    viewport
-            );
-        }
+        renderOutlineBatch(context, structureOutlineLayers, viewport.scale());
 
         Set<MapFootprintLayer> hoveredFootprintLayers = new HashSet<>();
         for (MapFootprintLayer layer : roomHitTestLayers) {
@@ -188,6 +192,7 @@ final class BlueprintMapRenderer implements AutoCloseable {
         }
 
         // Paint back-to-front, moving the hovered logical building last.
+        List<OutlineLayer> roomOutlineLayers = new ArrayList<>();
         for (MapFootprintLayer layer : roomRenderLayers) {
             boolean hovering = hoveredFootprintLayers.contains(layer);
             renderRoomFootprint(
@@ -195,18 +200,18 @@ final class BlueprintMapRenderer implements AutoCloseable {
                     layer.fillSpans(),
                     layer.presentationType().getColor(),
                     selectedFloor != null,
-                    hovering,
-                    viewport
+                    hovering
             );
-            renderRoomOutlineScreenSpace(
-                    context,
-                    layer.outlineEdges(),
-                    layer.presentationType().getColor(),
-                    selectedFloor != null,
-                    hovering,
-                    viewport
+            int outlineAlpha = hovering
+                    ? ROOM_BORDER_ALPHA_HOVERED
+                    : selectedFloor != null ? ROOM_BORDER_ALPHA_SELECTED_FLOOR : ROOM_BORDER_ALPHA_ALL_FLOORS;
+            int outlineColor = withAlpha(
+                    scaleColor(layer.presentationType().getColor(), ROOM_BORDER_BRIGHTEN_FACTOR),
+                    outlineAlpha
             );
+            roomOutlineLayers.add(new OutlineLayer(layer.outlineEdges(), outlineColor));
         }
+        renderOutlineBatch(context, roomOutlineLayers, viewport.scale());
 
         // The shell/outline is an authoritative whole-Building hit region. Collect the hit
         // now, then resolve it after Room hit testing so basement/upper Room geometry cannot steal
@@ -220,7 +225,6 @@ final class BlueprintMapRenderer implements AutoCloseable {
             }
         }
 
-        pushWorldTransform(matrices, viewport);
         if (showBuildingIcons) {
             for (Building building : groupedIconBuildings) {
                 BuildingType buildingType = building.getBuildingType();
@@ -327,69 +331,59 @@ final class BlueprintMapRenderer implements AutoCloseable {
                                             List<BlueprintMapFootprint.RowSpan> spans,
                                             int baseColor,
                                             boolean selectedFloor,
-                                            boolean hovered,
-                                            BlueprintMapViewport viewport) {
+                                            boolean hovered) {
         int fillAlpha = hovered
                 ? ROOM_FILL_ALPHA_HOVERED
                 : selectedFloor ? ROOM_FILL_ALPHA_SELECTED_FLOOR : ROOM_FILL_ALPHA_ALL_FLOORS;
         int color = withAlpha(scaleColor(baseColor, ROOM_FILL_BRIGHTEN_FACTOR), fillAlpha);
-        renderCellSpansScreenSpace(context, spans, color, viewport);
-    }
-
-    private static void renderRoomOutlineScreenSpace(GuiGraphics context,
-                                                     List<BlueprintMapFootprint.Edge> edges,
-                                                     int baseColor,
-                                                     boolean selectedFloor,
-                                                     boolean hovered,
-                                                     BlueprintMapViewport viewport) {
-        int outlineAlpha = hovered
-                ? ROOM_BORDER_ALPHA_HOVERED
-                : selectedFloor ? ROOM_BORDER_ALPHA_SELECTED_FLOOR : ROOM_BORDER_ALPHA_ALL_FLOORS;
-        int outlineColor = withAlpha(scaleColor(baseColor, ROOM_BORDER_BRIGHTEN_FACTOR), outlineAlpha);
-        renderOutlineScreenSpace(context, edges, outlineColor, viewport);
-    }
-
-    private static void renderStructureOutlineScreenSpace(GuiGraphics context,
-                                                          List<BlueprintMapFootprint.Edge> edges,
-                                                          int baseColor,
-                                                          boolean active,
-                                                          BlueprintMapViewport viewport) {
-        int outlineColor = withAlpha(
-                scaleColor(baseColor, active ? BUILDING_BORDER_ACTIVE_FACTOR : BUILDING_BORDER_DARKEN_FACTOR),
-                active ? BUILDING_BORDER_ALPHA_ACTIVE : BUILDING_BORDER_ALPHA
-        );
-        renderOutlineScreenSpace(context, edges, outlineColor, viewport);
+        renderCellSpansMapSpace(context, spans, color);
     }
 
     private static void renderStructureShade(GuiGraphics context,
                                              List<BlueprintMapFootprint.RowSpan> shadeSpans,
                                              int baseColor,
-                                             boolean active,
-                                             BlueprintMapViewport viewport) {
+                                             boolean active) {
         int color = withAlpha(baseColor, active ? BUILDING_SHADE_ALPHA_ACTIVE : BUILDING_SHADE_ALPHA);
-        renderCellSpansScreenSpace(context, shadeSpans, color, viewport);
+        renderCellSpansMapSpace(context, shadeSpans, color);
     }
 
-    private static void renderOutlineScreenSpace(GuiGraphics context,
-                                                 List<BlueprintMapFootprint.Edge> edges,
-                                                 int color,
-                                                 BlueprintMapViewport viewport) {
-        for (BlueprintMapFootprint.Edge edge : edges) {
-            int x0 = (int) Math.round(viewport.screenX(edge.x0()));
-            int z0 = (int) Math.round(viewport.screenY(edge.z0()));
-            int x1 = (int) Math.round(viewport.screenX(edge.x1()));
-            int z1 = (int) Math.round(viewport.screenY(edge.z1()));
+    static OutlineQuad outlineQuad(BlueprintMapFootprint.Edge edge, float scale) {
+        float halfWidth = 0.5F / scale;
+        if (edge.z0() == edge.z1()) {
+            float minX = Math.min(edge.x0(), edge.x1()) - halfWidth;
+            float maxX = Math.max(edge.x0(), edge.x1()) + halfWidth;
+            return new OutlineQuad(minX, edge.z0() - halfWidth, maxX, edge.z0() + halfWidth);
+        }
+        float minZ = Math.min(edge.z0(), edge.z1()) - halfWidth;
+        float maxZ = Math.max(edge.z0(), edge.z1()) + halfWidth;
+        return new OutlineQuad(edge.x0() - halfWidth, minZ, edge.x0() + halfWidth, maxZ);
+    }
 
-            if (edge.z0() == edge.z1()) {
-                int minX = Math.min(x0, x1);
-                int maxX = Math.max(x0, x1);
-                context.fill(minX, z0, Math.max(minX + 1, maxX + 1), z0 + 1, color);
-            } else {
-                int minZ = Math.min(z0, z1);
-                int maxZ = Math.max(z0, z1);
-                context.fill(x0, minZ, x0 + 1, Math.max(minZ + 1, maxZ + 1), color);
+    private static void renderOutlineBatch(GuiGraphics context,
+                                           List<OutlineLayer> layers,
+                                           float scale) {
+        if (layers.stream().allMatch(layer -> layer.edges().isEmpty())) return;
+
+        context.flush();
+        RenderSystem.enableBlend();
+        RenderSystem.defaultBlendFunc();
+        RenderSystem.setShader(GameRenderer::getPositionColorShader);
+        BufferBuilder builder = Tesselator.getInstance().begin(
+                VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_COLOR);
+        Matrix4f matrix = context.pose().last().pose();
+
+        for (OutlineLayer layer : layers) {
+            for (BlueprintMapFootprint.Edge edge : layer.edges()) {
+                OutlineQuad quad = outlineQuad(edge, scale);
+                builder.addVertex(matrix, quad.minX(), quad.maxZ(), 0.0F).setColor(layer.color());
+                builder.addVertex(matrix, quad.maxX(), quad.maxZ(), 0.0F).setColor(layer.color());
+                builder.addVertex(matrix, quad.maxX(), quad.minZ(), 0.0F).setColor(layer.color());
+                builder.addVertex(matrix, quad.minX(), quad.minZ(), 0.0F).setColor(layer.color());
             }
         }
+
+        BufferUploader.drawWithShader(builder.buildOrThrow());
+        RenderSystem.disableBlend();
     }
 
     private static boolean isRoomHovered(MapFootprintLayer layer,
@@ -410,44 +404,23 @@ final class BlueprintMapRenderer implements AutoCloseable {
                                             int mouseScreenX,
                                             int mouseScreenY,
                                             BlueprintMapViewport viewport) {
+        double worldX = viewport.worldX(mouseScreenX);
+        double worldZ = viewport.worldZ(mouseScreenY);
         for (BlueprintMapFootprint.Edge edge : edges) {
-            int x0 = (int) Math.round(viewport.screenX(edge.x0()));
-            int z0 = (int) Math.round(viewport.screenY(edge.z0()));
-            int x1 = (int) Math.round(viewport.screenX(edge.x1()));
-            int z1 = (int) Math.round(viewport.screenY(edge.z1()));
-            if (edge.z0() == edge.z1()) {
-                int minX = Math.min(x0, x1);
-                int maxX = Math.max(minX + 1, Math.max(x0, x1) + 1);
-                if (mouseScreenY == z0 && mouseScreenX >= minX && mouseScreenX < maxX) {
-                    return true;
-                }
-            } else {
-                int minZ = Math.min(z0, z1);
-                int maxZ = Math.max(minZ + 1, Math.max(z0, z1) + 1);
-                if (mouseScreenX == x0 && mouseScreenY >= minZ && mouseScreenY < maxZ) {
-                    return true;
-                }
+            OutlineQuad quad = outlineQuad(edge, viewport.scale());
+            if (worldX >= quad.minX() && worldX <= quad.maxX()
+                    && worldZ >= quad.minZ() && worldZ <= quad.maxZ()) {
+                return true;
             }
         }
         return false;
     }
 
-    private static void renderCellSpansScreenSpace(GuiGraphics context,
-                                                   List<BlueprintMapFootprint.RowSpan> spans,
-                                                   int color,
-                                                   BlueprintMapViewport viewport) {
+    private static void renderCellSpansMapSpace(GuiGraphics context,
+                                                List<BlueprintMapFootprint.RowSpan> spans,
+                                                int color) {
         for (BlueprintMapFootprint.RowSpan span : spans) {
-            int x0 = (int) Math.round(viewport.screenX(span.minX()));
-            int z0 = (int) Math.round(viewport.screenY(span.z()));
-            int x1 = (int) Math.round(viewport.screenX(span.maxX() + 1));
-            int z1 = (int) Math.round(viewport.screenY(span.z() + 1));
-            context.fill(
-                    Math.min(x0, x1),
-                    Math.min(z0, z1),
-                    Math.max(Math.min(x0, x1) + 1, Math.max(x0, x1)),
-                    Math.max(Math.min(z0, z1) + 1, Math.max(z0, z1)),
-                    color
-            );
+            context.fill(span.minX(), span.z(), span.maxX() + 1, span.z() + 1, color);
         }
     }
 
@@ -484,15 +457,13 @@ final class BlueprintMapRenderer implements AutoCloseable {
                 PLAYER_MARKER_SIZE,
                 PLAYER_MARKER_EDGE_PADDING
         );
-        int markerX = markerCenter.x() - PLAYER_MARKER_SIZE / 2;
-        int markerY = markerCenter.y() - PLAYER_MARKER_SIZE / 2;
-
-        context.fill(
-                markerX - 1, markerY - 1,
-                markerX + PLAYER_MARKER_SIZE + 1, markerY + PLAYER_MARKER_SIZE + 1,
-                0xc0000000
-        );
-        renderCurrentPlayerFace(context, player, markerX, markerY, PLAYER_MARKER_SIZE);
+        double markerX = markerCenter.x() - PLAYER_MARKER_SIZE / 2.0D;
+        double markerY = markerCenter.y() - PLAYER_MARKER_SIZE / 2.0D;
+        context.pose().pushPose();
+        context.pose().translate(markerX, markerY, 0.0D);
+        context.fill(-1, -1, PLAYER_MARKER_SIZE + 1, PLAYER_MARKER_SIZE + 1, 0xc0000000);
+        renderCurrentPlayerFace(context, player, 0, 0, PLAYER_MARKER_SIZE);
+        context.pose().popPose();
     }
 
     static void renderCurrentPlayerFace(GuiGraphics context,
@@ -641,6 +612,12 @@ final class BlueprintMapRenderer implements AutoCloseable {
         RenderResult {
             hoverTargets = List.copyOf(hoverTargets);
         }
+    }
+
+    record OutlineQuad(float minX, float minZ, float maxX, float maxZ) {
+    }
+
+    private record OutlineLayer(List<BlueprintMapFootprint.Edge> edges, int color) {
     }
 
     record HoverTarget(Building building, Integer floorOrdinal,
