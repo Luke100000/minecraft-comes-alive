@@ -35,6 +35,7 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.syncher.EntityDataAccessor;
+import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
@@ -109,7 +110,7 @@ import java.util.function.Predicate;
 public class VillagerEntityMCA extends Villager implements VillagerLike<VillagerEntityMCA>, MenuProvider, CompassionateEntity<BreedableRelationship>, CrossbowAttackMob {
     private static final float FRIENDLY_ARROW_UNCERTAINTY = 2.0F;
     private static final CDataParameter<Float> INFECTION_PROGRESS = CParameter.create("InfectionProgress", 0.0f);
-    private static final CDataParameter<Integer> GROWTH_AMOUNT = CParameter.create("GrowthAmount", -AgeState.getMaxAge());
+    private static final EntityDataAccessor<Long> DATA_VISUAL_AGE_ANCHOR = SynchedEntityData.defineId(VillagerEntityMCA.class, EntityDataSerializers.LONG);
     private static final float VEHICLE_ATTACHMENT_Y = 0.6F;
     public static final String MCA_DATA_KEY = "MCAData";
     public static final int MAX_NICKNAME_LENGTH = 32;
@@ -119,7 +120,6 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
             VillagerEntityMCA.class,
             serializer -> SynchedEntityData.defineId(VillagerEntityMCA.class, serializer)
     )).build();
-    private static final int RECALCULATE_DIMENSIONS_EVERY_N_TICKS = 100;
     public final ConversationManager conversationManager = new ConversationManager(this);
     private String chatAIPrompt = "";
     final Identifier EXTRA_HEALTH_EFFECT_ID = MCA.locate("trait_health");
@@ -138,7 +138,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     private int despawnDelay;
     private int burned;
     private long lastHit = 0;
-    private int prevGrowthAmount;
+    private boolean ageStateEventsEnabled;
     private boolean interactedWith;
     private int lastAppliedHealthLevel = Integer.MIN_VALUE;
     private double lastAppliedHealthBonus = Double.NaN;
@@ -183,7 +183,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     }
 
     public static <E extends Entity> CDataManager.Builder<E> createTrackedData(CDataManager.Builder<E> builder) {
-        return VillagerLike.createTrackedData(builder).addAll(INFECTION_PROGRESS, GROWTH_AMOUNT)
+        return VillagerLike.createTrackedData(builder).addAll(INFECTION_PROGRESS)
                 .add(Residency::createTrackedData)
                 .add(BreedableRelationship::createTrackedData);
     }
@@ -263,6 +263,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     protected void defineSynchedData(SynchedEntityData.Builder builder) {
         super.defineSynchedData(builder);
 
+        builder.define(DATA_VISUAL_AGE_ANCHOR, 0L);
         getTypeDataManager().register(builder);
     }
 
@@ -338,8 +339,6 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
         initialize(spawnType);
 
-        setAgeState(AgeState.byCurrentAge(getAge()));
-
         FamilyTreeNode entry = getRelationships().getFamilyEntry();
         if (!FamilyTreeNode.isValid(entry.father()) && !FamilyTreeNode.isValid(entry.mother())) {
             FamilyTree tree = FamilyTree.get(level.getLevel());
@@ -351,6 +350,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
             entry.setMother(mother);
         }
 
+        ageStateEventsEnabled = true;
         return data;
     }
 
@@ -408,28 +408,67 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     }
 
     @Override
+    public AgeState getAgeState() {
+        return AgeState.byCurrentAge(getVisualAge());
+    }
+
+    @Override
     public void setAge(int age) {
+        AgeState previousState = getAgeState();
         super.setAge(age);
+        syncVisualAgeAnchor(age);
 
-        // high quality iguana tweaks reborn LivestockSlowdownFeature fix
-        if (age != -2) {
-            setTrackedValue(GROWTH_AMOUNT, age);
-            setAgeState(AgeState.byCurrentAge(age));
-
-            AgeState current = getAgeState();
-
-            AgeState next = current.getNext();
-            if (current != next) {
-                dimensions.interpolate(current, next, AgeState.getDelta(age));
-            } else {
-                dimensions.set(current);
+        AgeState current = AgeState.byCurrentAge(age);
+        if (current != previousState) {
+            refreshDimensions();
+            updateAttributes();
+            if (ageStateEventsEnabled && !level().isClientSide()) {
+                onAgeStateChanged(current);
             }
         }
     }
 
+    public int getVisualAge() {
+        if (!level().isClientSide()) {
+            return super.getAge();
+        }
+
+        long anchor = entityData.get(DATA_VISUAL_AGE_ANCHOR);
+        if (anchor <= 0L) {
+            return (int) anchor;
+        }
+        return (int) Mth.clamp(level().getGameTime() - anchor, Integer.MIN_VALUE, 0L);
+    }
+
+    private long createVisualAgeAnchor(int age) {
+        int lifecycleAge = Math.min(age, 0);
+        if (lifecycleAge == 0) {
+            return 0L;
+        }
+        if (isAgeLocked()) {
+            return lifecycleAge;
+        }
+        return level().getGameTime() - (long) lifecycleAge;
+    }
+
+    private void syncVisualAgeAnchor(int age) {
+        entityData.set(DATA_VISUAL_AGE_ANCHOR, createVisualAgeAnchor(age));
+    }
+
+    public boolean canToggleAgeLockWith(ItemStack stack) {
+        return AgeableMob.canUseGoldenDandelion(stack, isBaby(), ageLockParticleTimer, this);
+    }
+
+    public void toggleAgeLockedAtCurrentAge() {
+        setAgeLocked(!isAgeLocked());
+        ageLockParticleTimer = AGE_LOCK_COOLDOWN_TICKS;
+    }
+
     @Override
     protected void setAgeLocked(boolean locked) {
+        int age = getVisualAge();
         super.setAgeLocked(locked);
+        syncVisualAgeAnchor(age);
         if (locked) {
             getTraits().addTrait(Traits.NO_AGING);
         } else {
@@ -440,13 +479,17 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     @Override
     public void onTraitChanged(Traits.Trait trait, boolean active) {
         if (trait == Traits.NO_AGING && super.isAgeLocked() != active) {
+            int age = getVisualAge();
             super.setAgeLocked(active);
+            syncVisualAgeAnchor(age);
         }
     }
 
     @Override
     public void onTraitsLoaded() {
+        int age = getVisualAge();
         super.setAgeLocked(getTraits().hasTrait(Traits.NO_AGING));
+        syncVisualAgeAnchor(age);
     }
 
     @Override
@@ -816,13 +859,6 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         super.tick();
         mcaBrain.tickPanicAnimation();
 
-        // update visual age
-        int age = getTrackedValue(GROWTH_AMOUNT);
-        if (age / RECALCULATE_DIMENSIONS_EVERY_N_TICKS != prevGrowthAmount / RECALCULATE_DIMENSIONS_EVERY_N_TICKS) {
-            prevGrowthAmount = age;
-            refreshDimensions();
-        }
-
         if (level().isClientSide()) {
             // procreate anim
             if (relations.isProcreating()) {
@@ -901,15 +937,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
     @Override
     public void refreshDimensions() {
-        AgeState current = getAgeState();
-        AgeState next = current.getNext();
-
-        // either interpolate or set if final age is reached
-        if (next != current) {
-            dimensions.interpolate(current, next, AgeState.getDelta(getTrackedValue(GROWTH_AMOUNT)));
-        } else {
-            dimensions.set(current);
-        }
+        updateDimensionsForAge(getVisualAge());
 
         // todo calculateDimensions call move, move sets some flags, but since it's a "fake" move no collision happen
         // without collision the pathfinder skips the frame, causing children to not move
@@ -1256,45 +1284,55 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
     @Override
     public VillagerDimensions getVillagerDimensions() {
+        updateDimensionsForAge(getVisualAge());
         return dimensions;
+    }
+
+    private void updateDimensionsForAge(int age) {
+        AgeState current = AgeState.byCurrentAge(age);
+        AgeState next = current.getNext();
+        if (next != current) {
+            dimensions.interpolate(current, next, AgeState.getDelta(age));
+        } else {
+            dimensions.set(current);
+        }
     }
 
     @Override
     public boolean setAgeState(AgeState state) {
-        if (VillagerLike.super.setAgeState(state)) {
-            if (!level().isClientSide()) {
-                // trigger grow up advancements
-                relations.getParents()
-                        .filter(ServerPlayer.class::isInstance)
-                        .map(ServerPlayer.class::cast).forEach(
-                                e -> CriterionMCA.CHILD_AGE_STATE_CHANGE.trigger(e, state.name())
-                        );
-
-                if (state == AgeState.ADULT) {
-                    // Notify player parents of the age up and set correct dialogue type.
-                    relations.getParents()
-                            .filter(Player.class::isInstance)
-                            .map(Player.class::cast).forEach(
-                                    p -> sendEventMessage(Component.translatable("notify.child.grownup", getName()), p)
-                            );
-                }
-
-                refreshBrain((ServerLevel) level());
-
-                getVillagerBrain().randomize(state);
-
-                // set age specific clothes
-                randomizeClothes();
-            }
-            return true;
+        if (state == AgeState.UNASSIGNED || state == getAgeState()) {
+            return false;
         }
 
-        return false;
+        setAge(state.toAge());
+        return true;
+    }
+
+    private void onAgeStateChanged(AgeState state) {
+        // trigger grow up advancements
+        relations.getParents()
+                .filter(ServerPlayer.class::isInstance)
+                .map(ServerPlayer.class::cast).forEach(
+                        e -> CriterionMCA.CHILD_AGE_STATE_CHANGE.trigger(e, state.name())
+                );
+
+        if (state == AgeState.ADULT) {
+            // Notify player parents of the age up and set correct dialogue type.
+            relations.getParents()
+                    .filter(Player.class::isInstance)
+                    .map(Player.class::cast).forEach(
+                            p -> sendEventMessage(Component.translatable("notify.child.grownup", getName()), p)
+                    );
+        }
+
+        refreshBrain((ServerLevel) level());
+        getVillagerBrain().randomize(state);
+        randomizeClothes();
     }
 
     @Override
     public void onSyncedDataUpdated(EntityDataAccessor<?> par) {
-        if (getTypeDataManager().isParam(AGE_STATE, par)
+        if (DATA_VISUAL_AGE_ANCHOR.equals(par)
                 || getTypeDataManager().isParam(Genetics.SIZE.getParam(), par)
                 || getTypeDataManager().isParam(Genetics.WIDTH.getParam(), par)) {
             refreshDimensions();
@@ -1381,6 +1419,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
             if (mob instanceof ZombieVillagerEntityMCA zombie) {
                 zombie.setInventory(inventory);
+                zombie.setAgeState(getAgeState());
             }
 
             this.discard();
@@ -1389,11 +1428,15 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
     @Override
     public void readAdditionalSaveData(ValueInput input) {
+        Optional<Integer> savedVanillaAge = input.getInt("Age");
         CompoundTag nbt = McaDataFixers.update(readMcaSaveData(input));
         super.readAdditionalSaveData(input);
         boolean vanillaAgeLocked = super.isAgeLocked();
 
         getTypeDataManager().load(this, nbt);
+        if (savedVanillaAge.isEmpty()) {
+            migrateLegacyLifecycleAge(nbt);
+        }
         setAgeLocked(vanillaAgeLocked || nbt.getBooleanOr(McaDataFixers.AGE_LOCKED_MIGRATION_KEY, false));
         relations.readFromNbt(nbt);
         longTermMemory.readFromNbt(nbt);
@@ -1422,6 +1465,21 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         if (getVillagerBrain().getPersonality() == Personality.UNASSIGNED) {
             getVillagerBrain().randomize();
         }
+
+        ageStateEventsEnabled = true;
+    }
+
+    private void migrateLegacyLifecycleAge(CompoundTag nbt) {
+        Optional<Integer> growthAmount = nbt.getInt("GrowthAmount");
+        if (growthAmount.isPresent()) {
+            setAge(growthAmount.get());
+            return;
+        }
+
+        nbt.getInt("AgeState")
+                .map(AgeState::byId)
+                .filter(state -> state != AgeState.UNASSIGNED)
+                .ifPresent(state -> setAge(state.toAge()));
     }
 
     @Override

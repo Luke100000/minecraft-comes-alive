@@ -65,15 +65,13 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
     CDataParameter<Integer> HAIR_COLOR = CParameter.create("HairColor", 0xFF000000);
     CDataParameter<Integer> EYE_COLOR = CParameter.create("EyeColor", 0xFFFFFFFF);
     CDataParameter<Integer> EYE_COLOR_LEFT = CParameter.create("EyeColorLeft", 0xFFFFFFFF);
-    CEnumParameter<AgeState> AGE_STATE = CParameter.create("AgeState", AgeState.UNASSIGNED);
-
     Identifier SPEED_ID = MCA.locate("trait_speed");
     Identifier DAMAGE_ID = MCA.locate("trait_damage");
 
     static <E extends Entity> CDataManager.Builder<E> createTrackedData(CDataManager.Builder<E> builder) {
         return builder
                 .addAll(CLOTHES, SKIN, HAIR, HAIR_STYLE, HAIR_BASE, HAIR_BANGS, HAIR_BACK, HAIR_FRONT, HAIR_EXTRA,
-                        SKIN_COLOR, HAIR_COLOR, EYE_COLOR, EYE_COLOR_LEFT, AGE_STATE, CLOTHING_LOCKED)
+                        SKIN_COLOR, HAIR_COLOR, EYE_COLOR, EYE_COLOR_LEFT, CLOTHING_LOCKED)
                 .add(Genetics::createTrackedData)
                 .add(Traits::createTrackedData)
                 .add(VillagerBrain::createTrackedData);
@@ -384,9 +382,7 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
         setHairDye(components);
     }
 
-    default AgeState getAgeState() {
-        return getTrackedValue(AGE_STATE);
-    }
+    AgeState getAgeState();
 
     default VillagerDimensions getVillagerDimensions() {
         return getAgeState();
@@ -427,18 +423,7 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
         }
     }
 
-    default boolean setAgeState(AgeState state) {
-        AgeState old = getAgeState();
-        if (state == old) {
-            return false;
-        }
-
-        setTrackedValue(AGE_STATE, state);
-        asEntity().refreshDimensions();
-        updateAttributes();
-
-        return old != AgeState.UNASSIGNED;
-    }
+    boolean setAgeState(AgeState state);
 
     default float getHorizontalScaleFactor() {
         if (getGenetics() == null || Config.getInstance().useSquidwardModels) {

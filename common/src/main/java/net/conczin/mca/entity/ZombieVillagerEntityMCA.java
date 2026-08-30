@@ -12,6 +12,8 @@ import net.conczin.mca.entity.interaction.ZombieCommandHandler;
 import net.conczin.mca.registry.TagsMCA;
 import net.conczin.mca.util.InventoryUtils;
 import net.conczin.mca.util.network.datasync.CDataManager;
+import net.conczin.mca.util.network.datasync.CEnumParameter;
+import net.conczin.mca.util.network.datasync.CParameter;
 import net.minecraft.ChatFormatting;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
@@ -38,10 +40,11 @@ import org.jetbrains.annotations.Nullable;
 import java.util.UUID;
 
 public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerLike<ZombieVillagerEntityMCA>, CompassionateEntity<Relationship<ZombieVillagerEntityMCA>> {
+    private static final CEnumParameter<AgeState> AGE_STATE = CParameter.create("AgeState", AgeState.UNASSIGNED);
     private static final CDataManager<ZombieVillagerEntityMCA> DATA = VillagerEntityMCA.createTrackedData(new CDataManager.Builder<>(
             ZombieVillagerEntityMCA.class,
             serializer -> SynchedEntityData.defineId(ZombieVillagerEntityMCA.class, serializer)
-    )).build();
+    )).addAll(AGE_STATE).build();
     private static final float VEHICLE_ATTACHMENT_Y = 0.6F;
     private final VillagerBrain<ZombieVillagerEntityMCA> mcaBrain = new VillagerBrain<>(this);
 
@@ -91,6 +94,24 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
     @Override
     public ZombieCommandHandler getInteractions() {
         return interactions;
+    }
+
+    @Override
+    public AgeState getAgeState() {
+        return getTrackedValue(AGE_STATE);
+    }
+
+    @Override
+    public boolean setAgeState(AgeState state) {
+        AgeState old = getAgeState();
+        if (state == old) {
+            return false;
+        }
+
+        setTrackedValue(AGE_STATE, state);
+        refreshDimensions();
+        updateAttributes();
+        return old != AgeState.UNASSIGNED;
     }
 
     @Override

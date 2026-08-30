@@ -1,3 +1,9 @@
+# 8.1.12
+
+* Fixed duplicate villager residency, villagers should actually occupy one bed now.
+* Golden dandelion doesn't reset back to Baby Age
+* Internal Changes: MCA Age is now calculated using GameTime instead of syncing every tick.
+
 # 8.1.11
 
 * Merged the latest fixes from 1.20.1, including ChatAI reliability, villager editor profession syncing, server lifecycle handling, and raised-start pathfinding improvements.
