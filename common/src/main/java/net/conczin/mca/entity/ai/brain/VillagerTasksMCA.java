@@ -227,7 +227,7 @@ public class VillagerTasksMCA {
                 Pair.of(3, new InteractTask(speedModifier)),
                 Pair.of(10, new ExtendedFindPointOfInterestTask(registryEntry -> registryEntry.is(PoiTypes.HOME), MemoryModuleType.HOME, false, Optional.of((byte) 14), (villager) -> {
                     // update villagers home/bed position
-                    villager.getResidency().seekHome();
+                    villager.getResidency().seekHomeAfterClaim();
                 }, (entity, pos) -> {
                     // verify that this bed is not blocked
                     VillageManager manager = VillageManager.get((ServerLevel) entity.level());
@@ -249,7 +249,7 @@ public class VillagerTasksMCA {
                 Pair.of(5, GoToWantedItem.create(speedModifier, false, 4)),
                 Pair.of(10, new ExtendedFindPointOfInterestTask(registryEntry -> registryEntry.is(PoiTypes.HOME), MemoryModuleType.HOME, false, Optional.of((byte) 14), (villager) -> {
                     // update villagers home/bed position
-                    villager.getResidency().seekHome();
+                    villager.getResidency().seekHomeAfterClaim();
                 }, (entity, pos) -> {
                     // verify that this bed is not blocked
                     VillageManager manager = VillageManager.get((ServerLevel) entity.level());
@@ -521,13 +521,8 @@ public class VillagerTasksMCA {
                     v.getResidency().seekHome();
                 })),
                 //verify the bed, occupancies state and similar
-                Pair.of(3, new ConditionalSingleTickTask<>(ExtendedForgetCompletedPointOfInterestTask.create(
-                        registryEntry -> registryEntry.is(PoiTypes.HOME), MemoryModuleType.HOME, (entity) -> {
-                            // update villagers home/bed position
-                            if (entity instanceof VillagerEntityMCA villager) {
-                                villager.getResidency().seekHome();
-                            }
-                        }), (v) -> {
+                Pair.of(3, new ConditionalTask<>(ValidateNearbyPoi.create(
+                        registryEntry -> registryEntry.is(PoiTypes.HOME), MemoryModuleType.HOME), (v) -> {
                     Optional<Boolean> memory = v.getBrain().getMemoryInternal(MemoryModuleTypeMCA.FORCED_HOME);
                     //noinspection OptionalAssignedToNull
                     return memory == null || memory.isEmpty();

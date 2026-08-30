@@ -1,3 +1,7 @@
+# 8.1.12
+
+* Fixed duplicate villager residency, villagers should actually occupy one bed now.
+
 # 8.1.11
 
 * Merged the latest fixes from 1.20.1, including ChatAI reliability, improved networking and internal fixes.

@@ -60,6 +60,9 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         ListTag villageList = nbt.getList("villages").orElseGet(ListTag::new);
         for (int i = 0; i < villageList.size(); i++) {
             Village village = new Village(villageList.getCompound(i).orElseGet(CompoundTag::new), world);
+            if (village.repairDuplicateResidentHomes()) {
+                setDirty();
+            }
             if (village.getBuildings().isEmpty()) {
                 MCA.LOGGER.warn("Empty village detected ({}), removing...", village.getName());
                 setDirty();

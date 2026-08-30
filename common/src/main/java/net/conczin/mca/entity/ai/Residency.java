@@ -145,6 +145,14 @@ public class Residency {
      * Joins the closest village, if in range
      */
     public void seekHome() {
+        seekHome(false);
+    }
+
+    public void seekHomeAfterClaim() {
+        seekHome(true);
+    }
+
+    private void seekHome(boolean authoritativeHomeClaim) {
         if (entity.requiresHome()) {
             VillageManager manager = VillageManager.get((ServerLevel) entity.level());
             Optional<Village> current = getHomeVillage();
@@ -158,7 +166,13 @@ public class Residency {
                 if (current.filter(existing -> existing.getId() == v.getId()).isEmpty()) {
                     leaveHome();
                 }
-                v.updateResident(entity);
+                if (authoritativeHomeClaim) {
+                    v.updateResidentAfterClaim(entity);
+                } else if (!v.updateResident(entity)) {
+                    // A duplicate memory does not own this position's POI ticket. Forget it without
+                    // releasing the ticket retained for the canonical resident.
+                    entity.getBrain().eraseMemory(MemoryModuleType.HOME);
+                }
                 entity.setTrackedValue(VILLAGE, v.getId());
             });
         }
@@ -180,8 +194,7 @@ public class Residency {
                 reportBuildings();
             }
 
-            //seek a home
-            if (village.isEmpty()) {
+            if (village.filter(v -> v.isResidentHomeCurrent(entity)).isEmpty()) {
                 seekHome();
             }
         }
@@ -263,7 +276,7 @@ public class Residency {
             entity.getBrain().setMemory(MemoryModuleType.HOME, GlobalPos.of(level.dimension(), claimedHome));
             entity.getBrain().setMemory(MemoryModuleTypeMCA.FORCED_HOME, true);
 
-            seekHome();
+            seekHomeAfterClaim();
         }, () -> {
             entity.getBrain().eraseMemory(MemoryModuleTypeMCA.FORCED_HOME);
 
