@@ -14,6 +14,12 @@ final class BuildingRoomScanner {
     private static final Direction[] HORIZONTAL = {
             Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST
     };
+    private static final Comparator<BuildingFloorRegion.Component> COMPONENT_OWNER_ORDER =
+            Comparator.comparingInt(BuildingFloorRegion.Component::area).reversed()
+                    .thenComparingInt(BuildingFloorRegion.Component::minX)
+                    .thenComparingInt(BuildingFloorRegion.Component::minZ)
+                    .thenComparingInt(BuildingFloorRegion.Component::maxX)
+                    .thenComparingInt(BuildingFloorRegion.Component::maxZ);
 
     private BuildingRoomScanner() {
     }
@@ -89,7 +95,7 @@ final class BuildingRoomScanner {
         footprint.addAll(partition.functionalPoiCells().getOrDefault(component, Set.of()));
         for (BlockPos connectorCell : partition.floorConnectors().keySet()) {
             List<BuildingFloorRegion.Component> adjacent = adjacentComponents(connectorCell, partition.components());
-            if (component.equals(connectorOwner(adjacent))) footprint.add(connectorCell);
+            if (component.equals(componentOwner(adjacent))) footprint.add(connectorCell);
         }
 
         if (footprint.size() > maxSize) return Result.failure(Status.BLOCK_LIMIT, source);
@@ -205,7 +211,7 @@ final class BuildingRoomScanner {
             for (BlockPos cell : cells) {
                 adjacentRooms.addAll(adjacentComponents(cell, roomComponents));
             }
-            BuildingFloorRegion.Component owner = connectorOwner(adjacentRooms);
+            BuildingFloorRegion.Component owner = componentOwner(adjacentRooms);
             if (owner != null) {
                 attached.computeIfAbsent(owner, ignored -> new LinkedHashSet<>()).addAll(cells);
             }
@@ -235,9 +241,9 @@ final class BuildingRoomScanner {
         return Map.copyOf(result);
     }
 
-    private static BuildingFloorRegion.Component selectComponent(BlockPos source, StructureFloor floor,
-                                                                  Set<BlockPos> connectorCells,
-                                                                  List<BuildingFloorRegion.Component> components) {
+    static BuildingFloorRegion.Component selectComponent(BlockPos source, StructureFloor floor,
+                                                         Set<BlockPos> connectorCells,
+                                                         List<BuildingFloorRegion.Component> components) {
         BuildingFloorRegion.Component direct = components.stream()
                 .filter(component -> component.containsHorizontally(source.getX(), source.getZ()))
                 .findFirst().orElse(null);
@@ -245,7 +251,7 @@ final class BuildingRoomScanner {
 
         BlockPos floorCell = new BlockPos(source.getX(), floor.anchorY(), source.getZ());
         List<BuildingFloorRegion.Component> adjacent = adjacentComponents(floorCell, components);
-        if (connectorCells.contains(floorCell) && adjacent.size() == 1) return adjacent.getFirst();
+        if (connectorCells.contains(floorCell)) return componentOwner(adjacent);
         return adjacent.stream().min(Comparator.comparingInt(BuildingFloorRegion.Component::minX)
                 .thenComparingInt(BuildingFloorRegion.Component::minZ)).orElse(null);
     }
@@ -257,12 +263,10 @@ final class BuildingRoomScanner {
                         cell.getZ() + direction.getStepZ()))).toList();
     }
 
-    /** Every connector Floor cell has at most one Room owner so Room footprints stay disjoint. */
-    private static BuildingFloorRegion.Component connectorOwner(Collection<BuildingFloorRegion.Component> adjacent) {
-        return adjacent.stream().min(Comparator.comparingInt(BuildingFloorRegion.Component::minX)
-                .thenComparingInt(BuildingFloorRegion.Component::minZ)
-                .thenComparingInt(BuildingFloorRegion.Component::maxX)
-                .thenComparingInt(BuildingFloorRegion.Component::maxZ)).orElse(null);
+    /** Every connector/functional cell has one stable Room owner so Room footprints stay disjoint. */
+    static BuildingFloorRegion.Component componentOwner(
+            Collection<BuildingFloorRegion.Component> adjacent) {
+        return adjacent.stream().min(COMPONENT_OWNER_ORDER).orElse(null);
     }
 
     private static BlockPos nearestCell(BlockPos source, Collection<BlockPos> cells) {
