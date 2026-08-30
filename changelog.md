@@ -1,3 +1,7 @@
+# 7.7.37
+
+* Fix bugs
+
 # 7.7.36
 * Recommended to ***__backup__*** your world.
 * This release won't be backwards compatible with 7.7.35 and below due to internal saving changes.

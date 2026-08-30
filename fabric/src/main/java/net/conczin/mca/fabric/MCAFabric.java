@@ -136,6 +136,8 @@ public final class MCAFabric implements ModInitializer {
         });
 
         // Register events
+        ServerLifecycleEvents.SERVER_STARTING.register(server -> MCA.startExecutorService());
+        ServerLifecycleEvents.SERVER_STOPPING.register(server -> MCA.shutdownExecutorService());
         ServerTickEvents.END_WORLD_TICK.register(w -> VillageManager.get(w).tick());
         ServerTickEvents.END_SERVER_TICK.register(s -> ServerInteractionManager.getInstance().tick());
         ServerTickEvents.END_SERVER_TICK.register(MCA::setServer);
