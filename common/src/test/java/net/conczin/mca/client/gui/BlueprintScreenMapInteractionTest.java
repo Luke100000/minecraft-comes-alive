@@ -54,10 +54,11 @@ class BlueprintScreenMapInteractionTest {
     }
 
     @Test
-    void numericScaleLabelAlwaysUsesTwoDecimals() {
+    void numericScaleLabelUsesAtMostTwoDecimalsWithoutTrailingZeroes() {
         assertEquals("1.37:1", BlueprintScreen.formatMapScale(1.37F));
-        assertEquals("2.00:1", BlueprintScreen.formatMapScale(2.0F));
-        assertEquals("0.50:1", BlueprintScreen.formatMapScale(0.5F));
+        assertEquals("2:1", BlueprintScreen.formatMapScale(2.0F));
+        assertEquals("0.5:1", BlueprintScreen.formatMapScale(0.5F));
+        assertEquals("2.36:1", BlueprintScreen.formatMapScale(2.356F));
     }
 
     @Test

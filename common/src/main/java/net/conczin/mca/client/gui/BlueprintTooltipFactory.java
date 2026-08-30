@@ -82,8 +82,11 @@ final class BlueprintTooltipFactory {
                     .withStyle(ChatFormatting.DARK_AQUA), detailLevel));
         }
 
-        village.getResidents(room.getId()).forEach(name ->
-                lines.add(indent(Component.literal(name).withStyle(ChatFormatting.GRAY), detailLevel)));
+        LinkedHashSet<String> residents = new LinkedHashSet<>();
+        village.getResidents(room.getId()).forEach(residents::add);
+        if (!residents.isEmpty()) {
+            lines.add(indent(residentLabel(residents), detailLevel));
+        }
 
         appendPoi(lines, resolved.ownPoi(), Component.translatable("gui.blueprint.roomTooltip.roomPoi")
                 .withStyle(ChatFormatting.GRAY, ChatFormatting.ITALIC), detailLevel);
@@ -113,7 +116,7 @@ final class BlueprintTooltipFactory {
         lines.add(typeLabel(titleType));
         lines.add(indent(floorStatusLabel(floorOrdinal,
                 rooms.stream().map(roomTypeResolver::resolve).anyMatch(RoomTypeResolver.Context::isMainRoom)), 1));
-        appendAggregateRooms(lines, rooms);
+        appendAggregateRooms(lines, rooms, titleType);
         return List.copyOf(lines);
     }
 
@@ -133,13 +136,14 @@ final class BlueprintTooltipFactory {
             lines.add(indent(floorStatusLabel(floorOrdinal,
                     floorRooms.stream().map(roomTypeResolver::resolve)
                             .anyMatch(RoomTypeResolver.Context::isMainRoom)), 1));
-            appendAggregateRooms(lines, floorRooms);
+            appendAggregateRooms(lines, floorRooms, titleType);
         }
         return List.copyOf(lines);
     }
 
     private void appendAggregateRooms(List<Component> lines,
-                                      List<Building> rooms) {
+                                      List<Building> rooms,
+                                      BuildingType titleType) {
         List<RoomTypeResolver.Context> resolvedRooms = rooms.stream()
                 .map(roomTypeResolver::resolve)
                 .toList();
@@ -151,24 +155,38 @@ final class BlueprintTooltipFactory {
             grouped.computeIfAbsent(presentationType, k -> new ArrayList<>()).add(resolved);
         }
 
+        boolean suppressOnlyHeading = grouped.size() == 1 && grouped.containsKey(titleType);
         for (Map.Entry<BuildingType, List<RoomTypeResolver.Context>> entry : grouped.entrySet()) {
-            BuildingType type = entry.getKey();
-            List<RoomTypeResolver.Context> typeRooms = entry.getValue();
-
-            lines.add(indent(typeLabel(type), 2));
-
-            Set<String> residents = new LinkedHashSet<>();
-            typeRooms.forEach(ctx -> village.getResidents(ctx.room().getId()).forEach(residents::add));
-            residents.forEach(name ->
-                    lines.add(indent(Component.literal(name).withStyle(ChatFormatting.GRAY), 3)));
-
-            Map<ResourceLocation, List<BlockPos>> combinedPoi = new LinkedHashMap<>();
-            typeRooms.forEach(ctx -> ctx.ownPoi().forEach((k, v) ->
-                    combinedPoi.computeIfAbsent(k, key -> new ArrayList<>()).addAll(v)));
-
-            appendPoi(lines, combinedPoi, Component.translatable("gui.blueprint.roomTooltip.roomPoi")
-                    .withStyle(ChatFormatting.GRAY, ChatFormatting.ITALIC), 3);
+            int detailLevel = suppressOnlyHeading ? 1 : 3;
+            if (!suppressOnlyHeading) lines.add(indent(typeLabel(entry.getKey()), 2));
+            appendAggregateRoomDetails(lines, entry.getValue(), detailLevel);
         }
+    }
+
+    private void appendAggregateRoomDetails(List<Component> lines,
+                                            List<RoomTypeResolver.Context> rooms,
+                                            int detailLevel) {
+        LinkedHashSet<String> residents = new LinkedHashSet<>();
+        rooms.forEach(context -> village.getResidents(context.room().getId())
+                .forEach(residents::add));
+        if (!residents.isEmpty()) lines.add(indent(residentLabel(residents), detailLevel));
+
+        Map<ResourceLocation, List<BlockPos>> combinedPoi = new LinkedHashMap<>();
+        rooms.forEach(context -> context.ownPoi().forEach((id, positions) ->
+                combinedPoi.computeIfAbsent(id, ignored -> new ArrayList<>()).addAll(positions)));
+        appendPoi(lines, combinedPoi,
+                Component.translatable("gui.blueprint.roomTooltip.roomPoi")
+                        .withStyle(ChatFormatting.GRAY, ChatFormatting.ITALIC),
+                detailLevel);
+    }
+
+    static Component residentLabel(Collection<String> names) {
+        List<String> residents = new ArrayList<>(new LinkedHashSet<>(names));
+        String key = residents.size() == 1
+                ? "gui.blueprint.roomTooltip.resident"
+                : "gui.blueprint.roomTooltip.residents";
+        return Component.translatable(key, String.join(", ", residents))
+                .withStyle(ChatFormatting.GRAY);
     }
 
     private List<Building> structureTooltipBuildings(Building building) {
@@ -192,8 +210,7 @@ final class BlueprintTooltipFactory {
                                   int detailLevel) {
         if (poi.isEmpty()) return;
         lines.add(indent(title, detailLevel));
-        poiLines(poi).forEach(item -> lines.add(indent(
-                Component.literal("- ").append(item), detailLevel + 1)));
+        poiLines(poi).forEach(item -> lines.add(indent(item, detailLevel + 1)));
     }
 
     private static Component indent(Component component, int level) {
@@ -229,7 +246,7 @@ final class BlueprintTooltipFactory {
     private static List<Component> poiLines(Map<ResourceLocation, List<BlockPos>> poi) {
         return poi.entrySet().stream()
                 .filter(entry -> !entry.getValue().isEmpty())
-                .<Component>map(entry -> Component.literal(entry.getValue().size() + " x ")
+                .<Component>map(entry -> Component.literal(entry.getValue().size() + " × ")
                         .append(blockName(entry.getKey())).withStyle(ChatFormatting.DARK_GRAY))
                 .toList();
     }

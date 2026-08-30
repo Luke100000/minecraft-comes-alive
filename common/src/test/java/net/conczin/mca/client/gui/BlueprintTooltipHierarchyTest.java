@@ -10,7 +10,10 @@ import net.conczin.mca.server.world.data.StructureFloor;
 import net.conczin.mca.server.world.data.Village;
 import net.minecraft.SharedConstants;
 import net.minecraft.core.BlockPos;
+import net.minecraft.locale.Language;
+import net.minecraft.network.chat.FormattedText;
 import net.minecraft.server.Bootstrap;
+import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.world.level.block.Blocks;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -24,9 +27,11 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class BlueprintTooltipHierarchyTest {
     private Map<String, BuildingType> previousBuildingTypes;
+    private Language previousLanguage;
 
     @BeforeAll
     static void bootstrapMinecraft() {
@@ -42,11 +47,19 @@ class BlueprintTooltipHierarchyTest {
                 "house", new BuildingType("house", new JsonObject()),
                 "bedroom", new BuildingType("bedroom", new JsonObject())
         ));
+        previousLanguage = Language.getInstance();
+        Language.inject(new TestLanguage(previousLanguage, Map.of(
+                "buildingType.house", "House",
+                "buildingType.bedroom", "Bedroom",
+                "gui.blueprint.roomTooltip.resident", "Resident: %1$s",
+                "gui.blueprint.roomTooltip.residents", "Residents: %1$s"
+        )));
     }
 
     @AfterEach
     void restoreBuildingTypes() {
         BuildingTypes.getInstance().setBuildingTypes(previousBuildingTypes);
+        Language.inject(previousLanguage);
     }
 
     @Test
@@ -59,7 +72,7 @@ class BlueprintTooltipHierarchyTest {
                 .map(component -> component.getString())
                 .toList();
 
-        assertEquals(List.of(0, 2, 4, 2, 4, 6, 8), lines.stream()
+        assertEquals(List.of(0, 2, 2, 2, 4), lines.stream()
                 .map(BlueprintTooltipHierarchyTest::leadingSpaces)
                 .toList());
     }
@@ -88,6 +101,32 @@ class BlueprintTooltipHierarchyTest {
         String compact = factory.compactTooltip(fixture.upperRoom(), 1, 1).getString();
 
         assertFalse(compact.startsWith(" "));
+    }
+
+    @Test
+    void soleTitleMatchingRoomDoesNotRepeatBuildingType() throws Exception {
+        Fixture fixture = fixture();
+        fixture.groundRoom().addBlock(Blocks.YELLOW_BED, BlockPos.ZERO);
+        BlueprintTooltipFactory factory = BlueprintTooltipFactory.create(
+                fixture.village(), RoomTypeResolver.create(fixture.village()));
+
+        List<String> lines = factory.tooltip(fixture.groundRoom(), 0, true).stream()
+                .map(component -> component.getString())
+                .toList();
+
+        assertEquals(1L, lines.stream().filter("House"::equals).count());
+        assertEquals(List.of(0, 2, 2, 4), lines.stream()
+                .map(BlueprintTooltipHierarchyTest::leadingSpaces)
+                .toList());
+        assertTrue(lines.stream().anyMatch(line -> line.contains("1 × Yellow Bed")));
+    }
+
+    @Test
+    void residentLabelsAreExplicitAndPluralized() {
+        assertEquals("Resident: Hye-Sook",
+                BlueprintTooltipFactory.residentLabel(List.of("Hye-Sook")).getString());
+        assertEquals("Residents: Hye-Sook, Alex",
+                BlueprintTooltipFactory.residentLabel(List.of("Hye-Sook", "Alex")).getString());
     }
 
     @Test
@@ -139,6 +178,7 @@ class BlueprintTooltipHierarchyTest {
         room.setStructureId(structureId);
         room.setFloorId(floorId);
         room.setType(type);
+        room.setTypeForced(true);
         return room;
     }
 
@@ -149,5 +189,35 @@ class BlueprintTooltipHierarchyTest {
     }
 
     private record Fixture(Village village, Building groundRoom, Building upperRoom) {
+    }
+
+    private static final class TestLanguage extends Language {
+        private final Language delegate;
+        private final Map<String, String> overrides;
+
+        private TestLanguage(Language delegate, Map<String, String> overrides) {
+            this.delegate = delegate;
+            this.overrides = overrides;
+        }
+
+        @Override
+        public String getOrDefault(String key, String fallback) {
+            return overrides.getOrDefault(key, delegate.getOrDefault(key, fallback));
+        }
+
+        @Override
+        public boolean has(String key) {
+            return overrides.containsKey(key) || delegate.has(key);
+        }
+
+        @Override
+        public boolean isDefaultRightToLeft() {
+            return delegate.isDefaultRightToLeft();
+        }
+
+        @Override
+        public FormattedCharSequence getVisualOrder(FormattedText text) {
+            return delegate.getVisualOrder(text);
+        }
     }
 }

@@ -38,6 +38,8 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.Block;
 
+import java.text.DecimalFormat;
+import java.text.DecimalFormatSymbols;
 import java.util.*;
 import java.util.function.Consumer;
 
@@ -810,7 +812,10 @@ public class BlueprintScreen extends ExtendedScreen {
     }
 
     static String formatMapScale(float scale) {
-        return String.format(Locale.ROOT, "%.2f:1", scale);
+        DecimalFormat formatter = new DecimalFormat(
+                "0.##", DecimalFormatSymbols.getInstance(Locale.ROOT));
+        formatter.setGroupingUsed(false);
+        return formatter.format(scale) + ":1";
     }
 
     static final class MapPanState {
