@@ -408,49 +408,36 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     }
 
     @Override
-    public int getAge() {
-        return level().isClientSide() ? getVisualAgeFromAnchor() : super.getAge();
-    }
-
-    @Override
     public AgeState getAgeState() {
-        return AgeState.byCurrentAge(getAge());
+        return AgeState.byCurrentAge(getVisualAge());
     }
 
     @Override
     public void setAge(int age) {
-        int previousAge = getAge();
-        AgeState previousState = AgeState.byCurrentAge(previousAge);
+        AgeState previousState = getAgeState();
         super.setAge(age);
-
         syncVisualAgeAnchor(age);
 
         AgeState current = AgeState.byCurrentAge(age);
-        updateDimensionsForAge(age);
-
         if (current != previousState) {
             refreshDimensions();
             updateAttributes();
-            if (ageStateEventsEnabled) {
+            if (ageStateEventsEnabled && !level().isClientSide()) {
                 onAgeStateChanged(current);
             }
         }
     }
 
-    private int getVisualAgeFromAnchor() {
-        long anchor = entityData.get(DATA_VISUAL_AGE_ANCHOR);
-        if (anchor == 0L) {
-            return 0;
-        }
-        if (anchor < 0L) {
-            return (int) Math.max(anchor, Integer.MIN_VALUE);
+    public int getVisualAge() {
+        if (!level().isClientSide()) {
+            return super.getAge();
         }
 
-        long age = level().getGameTime() - anchor;
-        if (age >= 0L) {
-            return 0;
+        long anchor = entityData.get(DATA_VISUAL_AGE_ANCHOR);
+        if (anchor <= 0L) {
+            return (int) anchor;
         }
-        return (int) Math.max(age, Integer.MIN_VALUE);
+        return (int) Mth.clamp(level().getGameTime() - anchor, Integer.MIN_VALUE, 0L);
     }
 
     private long createVisualAgeAnchor(int age) {
@@ -479,8 +466,9 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
     @Override
     protected void setAgeLocked(boolean locked) {
+        int age = getVisualAge();
         super.setAgeLocked(locked);
-        syncVisualAgeAnchor(level().isClientSide() ? getVisualAgeFromAnchor() : super.getAge());
+        syncVisualAgeAnchor(age);
         if (locked) {
             getTraits().addTrait(Traits.NO_AGING);
         } else {
@@ -491,15 +479,17 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     @Override
     public void onTraitChanged(Traits.Trait trait, boolean active) {
         if (trait == Traits.NO_AGING && super.isAgeLocked() != active) {
+            int age = getVisualAge();
             super.setAgeLocked(active);
-            syncVisualAgeAnchor(super.getAge());
+            syncVisualAgeAnchor(age);
         }
     }
 
     @Override
     public void onTraitsLoaded() {
+        int age = getVisualAge();
         super.setAgeLocked(getTraits().hasTrait(Traits.NO_AGING));
-        syncVisualAgeAnchor(super.getAge());
+        syncVisualAgeAnchor(age);
     }
 
     @Override
@@ -947,7 +937,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
     @Override
     public void refreshDimensions() {
-        updateDimensionsForAge(getAge());
+        updateDimensionsForAge(getVisualAge());
 
         // todo calculateDimensions call move, move sets some flags, but since it's a "fake" move no collision happen
         // without collision the pathfinder skips the frame, causing children to not move
@@ -1294,7 +1284,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
     @Override
     public VillagerDimensions getVillagerDimensions() {
-        updateDimensionsForAge(getAge());
+        updateDimensionsForAge(getVisualAge());
         return dimensions;
     }
 
@@ -1319,10 +1309,6 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     }
 
     private void onAgeStateChanged(AgeState state) {
-        if (level().isClientSide()) {
-            return;
-        }
-
         // trigger grow up advancements
         relations.getParents()
                 .filter(ServerPlayer.class::isInstance)

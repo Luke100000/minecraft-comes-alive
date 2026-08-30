@@ -313,7 +313,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         if (villager != null && !keepSelectedPresetPreview) {
             CompoundTag nbt = saveEntityData(villager);
             villagerVisualization.load(TagValueInput.create(ProblemReporter.DISCARDING, villagerVisualization.registryAccess(), nbt));
-            villagerVisualization.setAge(villager.getAge());
+            villagerVisualization.setAge(villager.getVisualAge());
             villagerVisualization.refreshDimensions();
         }
         if (page.equals("presets") && prevPage != null && !prevPage.equals("presets") && !prevPage.equals("loading")) {
@@ -1588,7 +1588,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
 
     private void syncVisualizationFromEditor(CompoundTag commandData) {
         villagerVisualization.readAdditionalSaveDataForEditor(commandData);
-        villagerVisualization.setAge(villager.getAge());
+        villagerVisualization.setAge(villager.getVisualAge());
         villagerVisualization.refreshDimensions();
     }
 
@@ -1866,7 +1866,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         if (isSelectionPage()) {
             CompoundTag nbt = saveEntityData(villager);
             villagerVisualization.load(TagValueInput.create(ProblemReporter.DISCARDING, villagerVisualization.registryAccess(), nbt));
-            villagerVisualization.setAge(villager.getAge());
+            villagerVisualization.setAge(villager.getVisualAge());
             villagerVisualization.refreshDimensions();
 
             hoveredClothingId = -1;

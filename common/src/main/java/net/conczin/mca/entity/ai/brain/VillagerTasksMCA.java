@@ -114,7 +114,7 @@ public class VillagerTasksMCA {
 
     public static Brain<VillagerEntityMCA> initializeTasks(VillagerEntityMCA villager, Brain<VillagerEntityMCA> brain) {
         VillagerProfession profession = villager.getVillagerData().profession().value();
-        AgeState age = AgeState.byCurrentAge(villager.getAge());
+        AgeState age = villager.getAgeState();
 
         boolean noDefault = false;
 
