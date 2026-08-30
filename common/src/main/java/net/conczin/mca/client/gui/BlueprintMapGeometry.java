@@ -3,7 +3,6 @@ package net.conczin.mca.client.gui;
 import net.conczin.mca.resources.data.BuildingType;
 import net.conczin.mca.server.world.data.Building;
 import net.conczin.mca.server.world.data.RoomTypeResolver;
-import net.conczin.mca.server.world.data.Structure;
 import net.conczin.mca.server.world.data.StructureFloor;
 import net.conczin.mca.server.world.data.Village;
 import net.minecraft.core.BlockPos;
@@ -21,6 +20,8 @@ final class BlueprintMapGeometry {
     private final Village village;
     private final RoomTypeResolver roomTypeResolver;
     private final Map<Integer, MapGeometry> cache = new HashMap<>();
+    private List<MapFootprintLayer> allRoomLayers;
+    private List<MapStructureLayer> buildingLayers;
 
     private BlueprintMapGeometry(Village village, RoomTypeResolver roomTypeResolver) {
         this.village = village;
@@ -39,19 +40,37 @@ final class BlueprintMapGeometry {
         if (village == null) return MapGeometry.empty();
         int key = selectedFloor == null ? ALL_FLOORS_KEY : selectedFloor;
         return cache.computeIfAbsent(key, ignored -> {
-            List<MapFootprintLayer> rooms = buildRoomLayers(selectedFloor);
-            Map<Integer, List<MapFootprintLayer>> roomsByBuilding = groupRoomLayers(rooms);
-            List<MapStructureLayer> structures = buildStructureLayers(roomsByBuilding);
-            List<MapIconLayer> icons = buildIconLayers(roomsByBuilding, selectedFloor);
+            List<MapFootprintLayer> allRooms = allRoomLayers();
+            List<MapFootprintLayer> visibleRooms = selectedFloor == null
+                    ? allRooms
+                    : allRooms.stream()
+                    .filter(layer -> Objects.equals(layer.floorOrdinal(), selectedFloor))
+                    .toList();
+            Map<Integer, List<MapFootprintLayer>> visibleRoomsByBuilding = groupRoomLayers(visibleRooms);
+            List<MapStructureLayer> structures = buildingLayers();
+            List<MapIconLayer> icons = buildIconLayers(visibleRoomsByBuilding, selectedFloor);
             List<Building> grouped = village.getExternalBuildings().filter(Building::isComplete)
                     .filter(building -> selectedFloor == null || selectedFloor == 0)
                     .sorted(Comparator.comparingInt(Building::getId)).map(Building.class::cast).toList();
-            return new MapGeometry(rooms, structures, icons, grouped);
+            return new MapGeometry(visibleRooms, structures, icons, grouped);
         });
+    }
+
+    private List<MapFootprintLayer> allRoomLayers() {
+        if (allRoomLayers == null) allRoomLayers = buildRoomLayers(null);
+        return allRoomLayers;
+    }
+
+    private List<MapStructureLayer> buildingLayers() {
+        if (buildingLayers == null) {
+            buildingLayers = buildStructureLayers(groupRoomLayers(allRoomLayers()));
+        }
+        return buildingLayers;
     }
 
     private List<MapFootprintLayer> buildRoomLayers(Integer selectedFloor) {
         List<Building> rooms = village.getRooms()
+                .filter(Building::isComplete)
                 .sorted(Comparator.comparingInt((Building room) ->
                                 village.getLogicalBuildingId(room.getStructureId()))
                         .thenComparingInt(Building::getId))
@@ -89,82 +108,51 @@ final class BlueprintMapGeometry {
         return resolved == null ? room.getBuildingType() : resolved;
     }
 
+    static BuildingShape buildBuildingShape(
+            Collection<? extends Collection<BlueprintMapFootprint.Cell>> roomFootprints) {
+        LinkedHashSet<BlueprintMapFootprint.Cell> roomCells = new LinkedHashSet<>();
+        roomFootprints.forEach(roomCells::addAll);
+        if (roomCells.isEmpty()) {
+            BlueprintMapFootprint.Shape empty = BlueprintMapFootprint.shape(Set.of());
+            return new BuildingShape(empty, empty);
+        }
+
+        Set<BlueprintMapFootprint.Cell> outlineCells =
+                BlueprintMapFootprint.expand(roomCells, BUILDING_OUTLINE_WIDTH);
+        LinkedHashSet<BlueprintMapFootprint.Cell> shellCells = new LinkedHashSet<>(outlineCells);
+        shellCells.removeAll(roomCells);
+        return new BuildingShape(
+                BlueprintMapFootprint.shape(outlineCells),
+                BlueprintMapFootprint.shape(shellCells));
+    }
+
     private List<MapStructureLayer> buildStructureLayers(
             Map<Integer, List<MapFootprintLayer>> roomsByBuilding) {
-        Map<Integer, List<Structure>> byBuilding = village.getStructures().values().stream()
-                .collect(java.util.stream.Collectors.groupingBy(
-                        structure -> village.getLogicalBuildingId(structure.getId()),
-                        TreeMap::new, java.util.stream.Collectors.toList()));
         List<MapStructureLayer> layers = new ArrayList<>();
-        for (Map.Entry<Integer, List<Structure>> entry : byBuilding.entrySet()) {
-            List<Structure> members = entry.getValue().stream()
-                    .sorted(Comparator.comparingInt(Structure::getId))
-                    .toList();
-            LinkedHashSet<BlueprintMapFootprint.Cell> outlineBaseCells = new LinkedHashSet<>();
-            int groundAnchorY = Integer.MAX_VALUE;
-            int lowestNonBasementY = Integer.MAX_VALUE;
-            for (Structure structure : members) {
-                for (StructureFloor floor : structure.getFloors()) {
-                    if (floor.floorNumber() >= 0 && floor.region() != null) {
-                        outlineBaseCells.addAll(BlueprintMapFootprint.fromFloorRegions(List.of(floor.region())));
-                        lowestNonBasementY = Math.min(lowestNonBasementY, floor.anchorY());
-                        if (floor.floorNumber() == 0) {
-                            groundAnchorY = Math.min(groundAnchorY, floor.anchorY());
-                        }
-                    }
-                }
-            }
-            if (outlineBaseCells.isEmpty()) continue;
-            int anchorY = groundAnchorY != Integer.MAX_VALUE ? groundAnchorY : lowestNonBasementY;
+        for (Map.Entry<Integer, List<MapFootprintLayer>> entry : roomsByBuilding.entrySet()) {
+            List<MapFootprintLayer> rooms = entry.getValue();
+            BuildingShape shape = buildBuildingShape(
+                    rooms.stream().map(MapFootprintLayer::footprintCells).toList());
+            if (shape.outline().cells().isEmpty()) continue;
 
-            // Keep the intentional one-cell neutral shell around the canonical physical
-            // building footprint. Room geometry remains exact; subtracting visible rooms
-            // leaves the padded shade while both paths still use the same Shape conversion.
-            Set<BlueprintMapFootprint.Cell> filteredBase =
-                    outlineBaseWithoutEntranceProtrusions(outlineBaseCells);
-            if (filteredBase.isEmpty()) filteredBase = Set.copyOf(outlineBaseCells);
-            Set<BlueprintMapFootprint.Cell> outlineCells = BlueprintMapFootprint.expand(
-                    filteredBase, BUILDING_OUTLINE_WIDTH);
-
-            LinkedHashSet<BlueprintMapFootprint.Cell> visibleRoomCells = new LinkedHashSet<>();
-            roomsByBuilding.getOrDefault(entry.getKey(), List.of())
-                    .forEach(layer -> visibleRoomCells.addAll(layer.footprintCells()));
-
-            LinkedHashSet<BlueprintMapFootprint.Cell> shellCells = new LinkedHashSet<>(outlineCells);
-            shellCells.removeAll(visibleRoomCells);
-            BlueprintMapFootprint.Shape shellShape = BlueprintMapFootprint.shape(shellCells);
-            BlueprintMapFootprint.Shape outlineShape = BlueprintMapFootprint.shape(outlineCells);
-
-            Structure root = village.getStructure(entry.getKey()).orElse(members.getFirst());
+            MapFootprintLayer mainLayer = rooms.stream()
+                    .filter(layer -> village.isMainRoom(layer.building()))
+                    .findFirst()
+                    .orElse(rooms.getFirst());
+            int anchorY = rooms.stream().mapToInt(MapFootprintLayer::anchorY)
+                    .min().orElse(mainLayer.anchorY());
             layers.add(new MapStructureLayer(
                     entry.getKey(),
-                    village.getMainRoom(root).orElse(null),
+                    mainLayer.building(),
                     anchorY,
-                    outlineShape.cells(),
-                    shellShape.cells(),
-                    shellShape.spans(),
-                    outlineShape.edges()));
+                    shape.outline().cells(),
+                    shape.shell().cells(),
+                    shape.shell().spans(),
+                    shape.outline().edges()));
         }
         layers.sort(Comparator.comparingInt(MapStructureLayer::anchorY)
                 .thenComparingInt(MapStructureLayer::logicalBuildingId));
         return List.copyOf(layers);
-    }
-
-    private static Set<BlueprintMapFootprint.Cell> outlineBaseWithoutEntranceProtrusions(
-            Set<BlueprintMapFootprint.Cell> physicalCells) {
-        return physicalCells.stream()
-                .filter(cell -> cardinalNeighborCount(physicalCells, cell) != 1)
-                .collect(java.util.stream.Collectors.toUnmodifiableSet());
-    }
-
-    private static int cardinalNeighborCount(Set<BlueprintMapFootprint.Cell> cells,
-                                             BlueprintMapFootprint.Cell cell) {
-        int count = 0;
-        if (cells.contains(new BlueprintMapFootprint.Cell(cell.x() + 1, cell.z()))) count++;
-        if (cells.contains(new BlueprintMapFootprint.Cell(cell.x() - 1, cell.z()))) count++;
-        if (cells.contains(new BlueprintMapFootprint.Cell(cell.x(), cell.z() + 1))) count++;
-        if (cells.contains(new BlueprintMapFootprint.Cell(cell.x(), cell.z() - 1))) count++;
-        return count;
     }
 
     private static Map<Integer, List<MapFootprintLayer>> groupRoomLayers(
@@ -256,6 +244,10 @@ final class BlueprintMapGeometry {
 
     record MapIconLayer(Building building, BuildingType presentationType, Integer floorOrdinal,
                         double iconX, double iconZ, float iconScale) {
+    }
+
+    record BuildingShape(BlueprintMapFootprint.Shape outline,
+                         BlueprintMapFootprint.Shape shell) {
     }
 
     private record Center(double x, double z) {
