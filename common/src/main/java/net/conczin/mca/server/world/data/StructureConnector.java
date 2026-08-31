@@ -52,41 +52,6 @@ final class StructureConnector {
         return isConnector(state) && !(state.getBlock() instanceof DoorBlock);
     }
 
-    /** Legacy projection used until StructureScanner is migrated to exact FloorSurface cells. */
-    static Set<BuildingFloorRegionDetector.FloorCell> associatedLegacyFloorCells(
-            Level world, Collection<BlockPos> connectors,
-            Collection<BuildingFloorRegionDetector.FloorCell> ordinaryFloorCells) {
-        if (connectors.isEmpty() || ordinaryFloorCells.isEmpty()) return Set.of();
-        Set<BlockPos> ordinary = ordinaryFloorCells.stream()
-                .map(cell -> new BlockPos(cell.x(), cell.y(), cell.z()))
-                .collect(java.util.stream.Collectors.toSet());
-        LinkedHashSet<BuildingFloorRegionDetector.FloorCell> result = new LinkedHashSet<>();
-        for (BlockPos connector : connectors) {
-            BlockState state = world.getBlockState(connector);
-            if (!ownsFloorCell(state)) continue;
-            if (isVertical(state)) {
-                for (BlockPos handoff : handoffs(connector)) {
-                    if (ordinary.contains(handoff)) {
-                        result.add(new BuildingFloorRegionDetector.FloorCell(
-                                connector.getX(), handoff.getY(), connector.getZ()));
-                    }
-                }
-            } else {
-                for (Direction direction : HORIZONTAL) {
-                    BlockPos side = connector.relative(direction);
-                    for (int dy = -1; dy <= 1; dy++) {
-                        BlockPos landing = side.offset(0, dy, 0);
-                        if (ordinary.contains(landing)) {
-                            result.add(new BuildingFloorRegionDetector.FloorCell(
-                                    connector.getX(), landing.getY(), connector.getZ()));
-                        }
-                    }
-                }
-            }
-        }
-        return Set.copyOf(result);
-    }
-
     /** Associates connector positions with exact cells on the already selected semantic floor. */
     static Map<BlockPos, BlockPos> associatedFloorCells(
             Level world, Collection<BlockPos> connectors, Collection<FloorSurface.Cell> surfaceCells) {
