@@ -168,7 +168,7 @@ class BlueprintTooltipHierarchyTest {
                 "registerStructure", Structure.class, Building.class);
         registerStructure.setAccessible(true);
         registerStructure.invoke(village, structure, ground);
-        village.getBuildings().put(upper.getId(), upper);
+        village.registerRoom(upper);
         return new Fixture(village, ground, upper);
     }
 

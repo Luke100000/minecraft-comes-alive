@@ -18,19 +18,18 @@ final class BlueprintMapFootprint {
         return cells;
     }
 
-    static Set<Cell> fromFloorRegions(Collection<BuildingFloorRegion> regions) {
+    static Set<Cell> fromFloorRegion(BuildingFloorRegion region) {
+        if (region == null) return Set.of();
         LinkedHashSet<Cell> cells = new LinkedHashSet<>();
-        for (BuildingFloorRegion region : regions) {
-            for (BuildingFloorRegion.Component component : region.components()) {
-                cells.addAll(fromComponent(component));
-            }
+        for (BuildingFloorRegion.Component component : region.components()) {
+            cells.addAll(fromComponent(component));
         }
         return cells;
     }
 
     static Set<Cell> fromComponent(BuildingFloorRegion.Component component) {
         if (component.spans().isEmpty()) {
-            return rectangle(component.minX(), component.minZ(), component.maxX(), component.maxZ());
+            return Set.of();
         }
 
         LinkedHashSet<Cell> cells = new LinkedHashSet<>();

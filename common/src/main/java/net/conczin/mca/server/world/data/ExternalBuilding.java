@@ -57,6 +57,6 @@ public final class ExternalBuilding extends Building {
         int n = positions.size();
         // External sites use their grouped POIs as display geometry; a one-cell footprint is enough.
         setGeometry(new BlockPos(center.getX() / n, center.getY() / n, center.getZ() / n),
-                new BlockPos(center.getX() / n, center.getY() / n, center.getZ() / n), n, null);
+                new BlockPos(center.getX() / n, center.getY() / n, center.getZ() / n), null);
     }
 }

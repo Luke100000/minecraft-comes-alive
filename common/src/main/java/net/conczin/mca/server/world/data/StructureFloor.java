@@ -16,12 +16,17 @@ public record StructureFloor(int id, int anchorY, int ceilingY, int floorNumber,
         return region == null ? 0 : region.area();
     }
 
+    int verticalGapTo(StructureFloor other) {
+        if (ceilingY <= other.anchorY) return other.anchorY - ceilingY;
+        if (other.ceilingY <= anchorY) return anchorY - other.ceilingY;
+        return -1;
+    }
+
     public CompoundTag save() {
         CompoundTag tag = new CompoundTag();
         tag.putInt("id", id);
         tag.putInt("anchorY", anchorY);
         tag.putInt("ceilingY", ceilingY);
-        tag.putInt("floorNumber", floorNumber);
         if (region != null) {
             tag.put("region", region.save());
         }

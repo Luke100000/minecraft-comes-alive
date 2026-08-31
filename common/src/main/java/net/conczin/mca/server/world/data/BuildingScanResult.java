@@ -21,15 +21,15 @@ public record BuildingScanResult(
     }
 
     public BuildingScanResult {
-        matchingTypes = List.copyOf(matchingTypes);
+        matchingTypes = matchingTypes == null ? List.of() : List.copyOf(matchingTypes);
     }
 
     public boolean isAmbiguous() {
-        return matchingTypes.size() > 1;
+        return RoomTypeResolver.requiresTypeChoice(matchingTypes);
     }
 
     public boolean matchesType(String type) {
-        return matchingTypes.contains(type);
+        return RoomTypeResolver.matchesTypeChoice(matchingTypes, type);
     }
 
     BuildingScanResult withPendingStructure(Structure structure) {

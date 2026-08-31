@@ -51,21 +51,22 @@ class RegisteredRoomUpdateLineageTest {
     }
 
     @Test
-    void structureFloorGrowthKeepsExistingCellsAndFloorNumber() {
+    void structureFloorReplacementUsesFreshGeometryAndKeepsFloorNumber() {
         BuildingFloorRegion original = BuildingFloorRegion.fromFootprint(64, List.of(
                 new BlockPos(0, 64, 0), new BlockPos(1, 64, 0)));
         Structure structure = new Structure(1, new BlockPos(0, 64, 0),
                 new BlockPos(0, 64, 0), new BlockPos(1, 67, 0),
                 List.of(new StructureFloor(7, 64, 68, 3, original)));
-        BuildingFloorRegion expandedRoom = BuildingFloorRegion.fromFootprint(64, List.of(
+        BuildingFloorRegion fresh = BuildingFloorRegion.fromFootprint(64, List.of(
                 new BlockPos(1, 64, 0), new BlockPos(2, 64, 0)));
 
-        assertTrue(structure.ensureFloorContains(7, expandedRoom, 72));
+        assertTrue(structure.replaceFloorGeometry(7,
+                new StructureFloor(0, 64, 72, fresh)));
 
         StructureFloor floor = structure.getFloor(7).orElseThrow();
         assertEquals(3, floor.floorNumber());
         assertEquals(72, floor.ceilingY());
-        assertTrue(floor.region().containsHorizontally(0, 0));
+        assertTrue(!floor.region().containsHorizontally(0, 0));
         assertTrue(floor.region().containsHorizontally(2, 0));
     }
 
@@ -91,8 +92,7 @@ class RegisteredRoomUpdateLineageTest {
         room.setId(id);
         room.setStructureId(1);
         room.setFloorId(0);
-        room.setGeometry(new BlockPos(minX, 64, 0), new BlockPos(maxX, 68, 0),
-                maxX - minX + 1, footprint);
+        room.setGeometry(new BlockPos(minX, 64, 0), new BlockPos(maxX, 68, 0), footprint);
         return room;
     }
 }

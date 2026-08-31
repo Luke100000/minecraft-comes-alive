@@ -36,6 +36,21 @@ public final class RoomTypeResolver {
         return new RoomTypeResolver(village, rooms);
     }
 
+    static boolean requiresTypeChoice(List<String> eligibleTypes) {
+        return eligibleTypes != null && eligibleTypes.size() > 1;
+    }
+
+    static boolean matchesTypeChoice(List<String> eligibleTypes, String type) {
+        return type != null && eligibleTypes != null && eligibleTypes.contains(type);
+    }
+
+    static String resolveTypeChoice(List<String> eligibleTypes, String forcedType, String fallback) {
+        List<String> types = eligibleTypes == null ? List.of() : eligibleTypes;
+        if (forcedType != null) return types.contains(forcedType) ? forcedType : null;
+        if (types.isEmpty()) return fallback;
+        return types.size() == 1 ? types.getFirst() : null;
+    }
+
     public Context resolve(Building room) {
         if (room == null || room.getId() < 0 || roomsById.get(room.getId()) != room) {
             return resolve(room, findMainRoom(room));

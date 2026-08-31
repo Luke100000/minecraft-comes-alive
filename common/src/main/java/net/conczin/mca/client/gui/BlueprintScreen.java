@@ -67,11 +67,11 @@ public class BlueprintScreen extends ExtendedScreen {
     private static final double MAP_ZOOM_FACTOR = 1.1D;
     private static final double MAP_DRAG_THRESHOLD = 3.0D;
     private static final float[] MAP_SCALE_PRESETS = {0.5F, 1.0F, 2.0F, 3.0F, 4.0F};
-    private static Integer rememberedFloorOrdinal;
-    private static boolean rememberedMapScaleFit = true;
-    private static float rememberedMapScale = 1.0F;
-    private static boolean rememberedPlayerCentered;
-    private static boolean rememberedShowPlayerHead = true;
+    private static Integer selectedFloorOrdinal;
+    private static boolean mapScaleFit = true;
+    private static float mapScale = 1.0F;
+    private static boolean playerCentered;
+    private static boolean showPlayerHead = true;
     // 1.19.3: This needs to be the MC type, DO NOT TOUCH !!!
     private final List<net.minecraft.client.gui.components.Button> catalogButtons = new LinkedList<>();
     private Village village;
@@ -99,11 +99,6 @@ public class BlueprintScreen extends ExtendedScreen {
     private TooltipButtonWidget attachmentScanButton;
     private TooltipButtonWidget removeRoomButton;
     private ButtonWidget removeBuildingButton;
-    private Integer selectedFloorOrdinal = rememberedFloorOrdinal;
-    private boolean mapScaleFit = rememberedMapScaleFit;
-    private float mapScale = rememberedMapScale;
-    private boolean playerCentered = rememberedPlayerCentered;
-    private boolean showPlayerHead = rememberedShowPlayerHead;
     private boolean selectPlayerFloorOnNextVillageResponse;
     private boolean showBuildingIcons = true;
     private boolean showTerrain = true;
@@ -714,7 +709,6 @@ public class BlueprintScreen extends ExtendedScreen {
 
     private void togglePlayerCentered() {
         playerCentered = !playerCentered;
-        rememberedPlayerCentered = playerCentered;
         if (!playerCentered) {
             centerMapOnVillage();
         }
@@ -723,7 +717,6 @@ public class BlueprintScreen extends ExtendedScreen {
 
     private void togglePlayerHead() {
         showPlayerHead = !showPlayerHead;
-        rememberedShowPlayerHead = showPlayerHead;
     }
 
     private Component getPlayerCenteredLabel() {
@@ -748,16 +741,17 @@ public class BlueprintScreen extends ExtendedScreen {
 
     private void cycleMapScale(int direction) {
         if (mapScaleFit) {
+            float scale = direction > 0 ? MAP_SCALE_PRESETS[0] : MAP_SCALE_PRESETS[MAP_SCALE_PRESETS.length - 1];
+            mapScale = scale;
             mapScaleFit = false;
-            mapScale = direction > 0 ? MAP_SCALE_PRESETS[0] : MAP_SCALE_PRESETS[MAP_SCALE_PRESETS.length - 1];
         } else {
-            float snapped = snapMapScale(mapScale, direction);
-            boolean wrapsToFit = direction > 0 && mapScale >= MAP_MAX_SCALE
-                    || direction < 0 && mapScale <= MAP_MIN_SCALE;
+            float currentScale = mapScale;
+            float snapped = snapMapScale(currentScale, direction);
+            boolean wrapsToFit = direction > 0 && currentScale >= MAP_MAX_SCALE
+                    || direction < 0 && currentScale <= MAP_MIN_SCALE;
+            mapScale = wrapsToFit ? currentScale : snapped;
             mapScaleFit = wrapsToFit;
-            if (!wrapsToFit) mapScale = snapped;
         }
-        rememberMapScale();
         updateMapScaleControl();
     }
 
@@ -776,11 +770,6 @@ public class BlueprintScreen extends ExtendedScreen {
 
     private String getMapScaleLabel() {
         return mapScaleFit ? "Fit" : formatMapScale(mapScale);
-    }
-
-    private void rememberMapScale() {
-        rememberedMapScaleFit = mapScaleFit;
-        rememberedMapScale = mapScale;
     }
 
     private void centerMapOnVillage() {
@@ -875,7 +864,6 @@ public class BlueprintScreen extends ExtendedScreen {
 
     private void selectFloor(Integer ordinal) {
         selectedFloorOrdinal = ordinal;
-        rememberedFloorOrdinal = ordinal;
         updateFloorControls();
     }
 
@@ -888,15 +876,16 @@ public class BlueprintScreen extends ExtendedScreen {
 
         List<Integer> floors = getFloorNavigationOrder(ordinals);
         boolean canChangeFloors = ordinals.size() > 1;
-        int selectedIndex = floors.isEmpty() ? -1 : floors.indexOf(selectedFloorOrdinal);
+        Integer selectedFloor = selectedFloorOrdinal;
+        int selectedIndex = floors.isEmpty() ? -1 : floors.indexOf(selectedFloor);
         Component tooltip = getFloorControlTooltip(ordinals);
         floorPreviousButton.active = canChangeFloors && selectedIndex > 0;
         floorNextButton.active = canChangeFloors && selectedIndex >= 0 && selectedIndex < floors.size() - 1;
-        floorLabelButton.active = canChangeFloors && selectedFloorOrdinal != null;
+        floorLabelButton.active = canChangeFloors && selectedFloor != null;
         // Keep floor-navigation help on the central label only; the arrow buttons are self-explanatory.
         floorLabelButton.setTooltip(Tooltip.create(tooltip));
 
-        floorLabelButton.setMessage(getFloorLabel(selectedFloorOrdinal));
+        floorLabelButton.setMessage(getFloorLabel(selectedFloor));
     }
 
     private List<Integer> getFloorNavigationOrder(List<Integer> ordinals) {
@@ -935,13 +924,12 @@ public class BlueprintScreen extends ExtendedScreen {
     private void reconcileSelectedFloor(List<Integer> ordinals) {
         if (ordinals.isEmpty()) {
             selectedFloorOrdinal = null;
-            rememberedFloorOrdinal = null;
-        } else if (selectedFloorOrdinal != null && !ordinals.contains(selectedFloorOrdinal)) {
+        } else if (selectedFloorOrdinal != null
+                && !ordinals.contains(selectedFloorOrdinal)) {
             int previous = selectedFloorOrdinal;
             selectedFloorOrdinal = ordinals.stream()
                     .min(Comparator.comparingInt(ordinal -> Math.abs(ordinal - previous)))
                     .orElse(null);
-            rememberedFloorOrdinal = selectedFloorOrdinal;
         }
     }
 
@@ -1232,7 +1220,6 @@ public class BlueprintScreen extends ExtendedScreen {
             mapCenterX -= dragX / scale;
             mapCenterZ -= dragY / scale;
             playerCentered = false;
-            rememberedPlayerCentered = false;
             updatePlayerCenteredControl();
             return true;
         }
@@ -1255,14 +1242,12 @@ public class BlueprintScreen extends ExtendedScreen {
                     mapCenterX, mapCenterZ, currentScale);
             BlueprintMapViewport zoomedViewport = currentViewport.zoomedAround(mouseX, mouseY, newScale);
 
-            mapScaleFit = false;
             mapScale = newScale;
+            mapScaleFit = false;
             mapCenterX = zoomedViewport.mapCenterX();
             mapCenterZ = zoomedViewport.mapCenterZ();
             playerCentered = false;
-            rememberedPlayerCentered = false;
             updatePlayerCenteredControl();
-            rememberMapScale();
             updateMapScaleControl();
             return true;
         }
@@ -1322,7 +1307,6 @@ public class BlueprintScreen extends ExtendedScreen {
                 .ifPresent(room -> {
                     int ordinal = room.getFloorNumber(village);
                     selectedFloorOrdinal = ordinal;
-                    rememberedFloorOrdinal = ordinal;
                 });
     }
 

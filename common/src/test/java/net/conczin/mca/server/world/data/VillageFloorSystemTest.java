@@ -42,6 +42,25 @@ class VillageFloorSystemTest {
     }
 
     @Test
+    void floorNumbersAreRebuiltFromLogicalGroundAfterSaveLoad() {
+        Village village = new Village(1, null);
+        Structure low = structure(10, 77, floor(0, 40), floor(1, 44));
+        Structure high = structure(11, 77, floor(0, 48));
+        village.registerStructure(low, room(100, 10, 1, true));
+        village.registerStructure(high, room(101, 11, 0, true));
+        village.refreshLogicalBuildings();
+
+        Village reloaded = new Village(village.save(), null);
+
+        assertEquals(-1, reloaded.getStructure(10).orElseThrow()
+                .getFloor(0).orElseThrow().floorNumber());
+        assertEquals(0, reloaded.getStructure(10).orElseThrow()
+                .getFloor(1).orElseThrow().floorNumber());
+        assertEquals(1, reloaded.getStructure(11).orElseThrow()
+                .getFloor(0).orElseThrow().floorNumber());
+    }
+
+    @Test
     void explicitRemovalRejectsCurrentMainRoom() {
         Village village = populatedVillage();
 
@@ -158,7 +177,7 @@ class VillageFloorSystemTest {
     }
 
     @Test
-    void refreshingOneFloorDoesNotRenumberManualNeighboringFloors() {
+    void replacingOneFloorGeometryDoesNotRenumberNeighboringFloors() {
         Village village = new Village(1, null);
         Structure structure = structure(10, 77,
                 new StructureFloor(3, 64, 70, -1, region(64)),
@@ -166,27 +185,13 @@ class VillageFloorSystemTest {
                 new StructureFloor(9, 84, 90, 1, region(84)));
         village.registerStructure(structure, room(100, 10, 7, true));
 
-        assertTrue(structure.ensureFloorContains(7, region(75), 82));
+        assertTrue(structure.replaceFloorGeometry(7,
+                new StructureFloor(0, 75, 82, region(75))));
 
         assertEquals(-1, structure.getFloor(3).orElseThrow().floorNumber());
         assertEquals(0, structure.getFloor(7).orElseThrow().floorNumber());
         assertEquals(1, structure.getFloor(9).orElseThrow().floorNumber());
-    }
-
-    @Test
-    void manualAttachmentRejectsAResultContainingMoreThanOneFreshFloor() {
-        StructureScanner.Result scan = new StructureScanner.Result(
-                Building.validationResult.SUCCESS,
-                BlockPos.ZERO,
-                BlockPos.ZERO,
-                new BlockPos(1, 80, 1),
-                List.of(
-                        new StructureFloor(0, 74, 78, region(74)),
-                        new StructureFloor(1, 84, 88, region(84))),
-                new FloorSurface(Set.of(
-                        new FloorSurface.Cell(new BlockPos(0, 74, 0), 74.0D, 78)), Map.of()));
-
-        assertNull(VillageManager.singleScannedFloor(scan));
+        assertEquals(75, structure.getFloor(7).orElseThrow().anchorY());
     }
 
     @Test
@@ -199,8 +204,8 @@ class VillageFloorSystemTest {
     private static Village populatedVillage() {
         Village village = new Village(1, null);
         village.registerStructure(structure(10, 10), room(1, 10, 0, true));
-        village.getBuildings().put(2, room(2, 10, 0, true));
-        village.getBuildings().put(3, room(3, 10, 0, false));
+        village.registerRoom(room(2, 10, 0, true));
+        village.registerRoom(room(3, 10, 0, false));
         village.refreshLogicalBuildings();
         return village;
     }

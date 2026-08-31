@@ -31,12 +31,11 @@ public class Building implements VillageBuilding {
     public static final int PLAYER_POSITION_VERTICAL_MARGIN = 2;
 
     protected final Map<ResourceLocation, List<BlockPos>> blocks = new HashMap<>();
-    private List<BuildingFloorRegion> floorRegions = List.of();
+    private BuildingFloorRegion floorRegion;
     private String type = "house";
     private boolean typeForced;
     /** Whether this Room contributes to and visually inherits from its explicit Main Room. */
     private boolean contributesToMain = true;
-    private int size;
     private int pos0X, pos0Y, pos0Z;
     private int pos1X, pos1Y, pos1Z;
     private int posX, posY, posZ;
@@ -45,15 +44,7 @@ public class Building implements VillageBuilding {
     private int id = -1;
     private long lastScan;
 
-    public Building() {
-    }
-
     public Building(BlockPos pos) {
-        this(pos, true);
-    }
-
-    /** Kept as a source-compatible constructor; registered Buildings are always Rooms. */
-    public Building(BlockPos pos, boolean ignoredStrictScan) {
         pos0X = pos1X = posX = pos.getX();
         pos0Y = pos1Y = posY = pos.getY();
         pos0Z = pos1Z = posZ = pos.getZ();
@@ -61,7 +52,6 @@ public class Building implements VillageBuilding {
 
     public Building(CompoundTag tag) {
         id = tag.getInt("id");
-        size = tag.getInt("size");
         pos0X = tag.getInt("pos0X");
         pos0Y = tag.getInt("pos0Y");
         pos0Z = tag.getInt("pos0Z");
@@ -71,16 +61,15 @@ public class Building implements VillageBuilding {
         posX = tag.getInt("posX");
         posY = tag.getInt("posY");
         posZ = tag.getInt("posZ");
-        floorRegions = List.copyOf(NbtHelper.toList(
+        List<BuildingFloorRegion> loadedRegions = NbtHelper.toList(
                 tag.getList("floorRegions", Tag.TAG_COMPOUND),
-                value -> BuildingFloorRegion.load((CompoundTag) value)));
+                value -> BuildingFloorRegion.load((CompoundTag) value));
+        floorRegion = loadedRegions.isEmpty() ? null : loadedRegions.getFirst();
         structureId = tag.getInt("structureId");
         floorId = tag.getInt("floorId");
         typeForced = tag.getBoolean("isTypeForced");
         type = tag.getString("type");
-        contributesToMain = tag.contains("contributesToMain")
-                ? tag.getBoolean("contributesToMain")
-                : !tag.contains("inheritanceEnabled") || tag.getBoolean("inheritanceEnabled");
+        contributesToMain = tag.getBoolean("contributesToMain");
         blocks.putAll(NbtHelper.toMap(tag.getCompound("blocks2"),
                 ResourceLocation::parse,
                 value -> NbtHelper.toStream(value, Building::loadBlockPos)
@@ -91,7 +80,6 @@ public class Building implements VillageBuilding {
     public CompoundTag save() {
         CompoundTag tag = new CompoundTag();
         tag.putInt("id", id);
-        tag.putInt("size", size);
         tag.putInt("pos0X", pos0X);
         tag.putInt("pos0Y", pos0Y);
         tag.putInt("pos0Z", pos0Z);
@@ -106,7 +94,8 @@ public class Building implements VillageBuilding {
         tag.putBoolean("isTypeForced", typeForced);
         tag.putString("type", type);
         tag.putBoolean("contributesToMain", contributesToMain);
-        tag.put("floorRegions", NbtHelper.fromList(floorRegions, BuildingFloorRegion::save));
+        tag.put("floorRegions", NbtHelper.fromList(
+                floorRegion == null ? List.of() : List.of(floorRegion), BuildingFloorRegion::save));
         CompoundTag blockTag = new CompoundTag();
         NbtHelper.fromMap(blockTag, blocks, ResourceLocation::toString,
                 positions -> NbtHelper.fromList(positions, NbtHelper::encodeBlockPos));
@@ -120,16 +109,7 @@ public class Building implements VillageBuilding {
 
     Building.validationResult applyRoomScan(Level world,
                                              BuildingRoomScanner.Result scan) {
-        validationResult failure = switch (scan.status()) {
-            case SUCCESS -> validationResult.SUCCESS;
-            case OVERLAP -> validationResult.OVERLAP;
-            case BLOCK_LIMIT -> validationResult.BLOCK_LIMIT;
-            case SIZE_LIMIT -> validationResult.SIZE_LIMIT;
-            case TOO_SMALL -> validationResult.TOO_SMALL;
-        };
-        if (failure != validationResult.SUCCESS) {
-            return failure;
-        }
+        if (scan.status() != validationResult.SUCCESS) return scan.status();
 
         blocks.clear();
         for (BlockPos pos : scan.poiCells()) {
@@ -139,29 +119,28 @@ public class Building implements VillageBuilding {
         posX = seed.getX();
         posY = seed.getY();
         posZ = seed.getZ();
-        setGeometry(scan.min(), scan.max(), scan.footprintCells().size(),
+        setGeometry(scan.min(), scan.max(),
                 BuildingFloorRegion.fromFootprint(scan.floorY(), scan.footprintCells()));
         lastScan = world.getGameTime();
         return validationResult.SUCCESS;
     }
 
-    void setGeometry(BlockPos min, BlockPos max, int size, BuildingFloorRegion footprint) {
+    void setGeometry(BlockPos min, BlockPos max, BuildingFloorRegion footprint) {
         pos0X = min.getX();
         pos0Y = min.getY();
         pos0Z = min.getZ();
         pos1X = max.getX();
         pos1Y = max.getY();
         pos1Z = max.getZ();
-        this.size = size;
-        floorRegions = footprint == null ? List.of() : List.of(footprint);
+        floorRegion = footprint;
     }
 
-    public List<BuildingFloorRegion> getFloorRegions() {
-        return floorRegions;
+    public Optional<BuildingFloorRegion> getFloorRegion() {
+        return Optional.ofNullable(floorRegion);
     }
 
     public int getFloorY() {
-        return floorRegions.isEmpty() ? posY : floorRegions.getFirst().anchorY();
+        return floorRegion == null ? posY : floorRegion.anchorY();
     }
 
     public int getFloorDistanceTo(Vec3i pos) {
@@ -169,27 +148,27 @@ public class Building implements VillageBuilding {
     }
 
     public boolean containsFloorPosition(Vec3i pos) {
-        return getFloorDistanceTo(pos) <= BuildingFloorRegionDetector.FLOOR_CLUSTER_TOLERANCE
+        return getFloorDistanceTo(pos) <= FloorSurface.BAND_TOLERANCE
                 && containsFloorColumn(pos.getX(), pos.getZ());
     }
 
     boolean containsFloorColumn(int x, int z) {
-        if (floorRegions.isEmpty()) {
+        if (floorRegion == null) {
             return x >= pos0X && x <= pos1X && z >= pos0Z && z <= pos1Z;
         }
-        return floorRegions.getFirst().containsHorizontally(x, z);
+        return floorRegion.containsHorizontally(x, z);
     }
 
     public long getFloorFootprintArea() {
-        return floorRegions.isEmpty() ? getHorizontalArea() : floorRegions.getFirst().area();
+        return floorRegion == null ? getHorizontalArea() : floorRegion.area();
     }
 
     public long getFloorFootprintIntersectionArea(Building other) {
         if (other == null) {
             return 0L;
         }
-        if (!floorRegions.isEmpty() && !other.floorRegions.isEmpty()) {
-            return floorRegions.getFirst().intersectionArea(other.floorRegions.getFirst());
+        if (floorRegion != null && other.floorRegion != null) {
+            return floorRegion.intersectionArea(other.floorRegion);
         }
         int x = Math.min(pos1X, other.pos1X) - Math.max(pos0X, other.pos0X) + 1;
         int z = Math.min(pos1Z, other.pos1Z) - Math.max(pos0Z, other.pos0Z) + 1;
@@ -416,26 +395,20 @@ public class Building implements VillageBuilding {
         return Math.max(1, pos1X - pos0X + 1) * Math.max(1, pos1Z - pos0Z + 1);
     }
 
-    public int getSize() {
-        return size;
-    }
-
-
-    public void copyScannedGeometryFrom(Building scanned, Level world, boolean preserveFloorClassification) {
+    void copyScannedGeometryFrom(Building scanned, Level world) {
         int oldFloorId = floorId;
         int oldStructureId = structureId;
         String oldType = type;
         boolean oldForced = typeForced;
         BlockPos oldSource = getSourceBlock();
 
-        size = scanned.size;
         pos0X = scanned.pos0X;
         pos0Y = scanned.pos0Y;
         pos0Z = scanned.pos0Z;
         pos1X = scanned.pos1X;
         pos1Y = scanned.pos1Y;
         pos1Z = scanned.pos1Z;
-        floorRegions = scanned.floorRegions;
+        floorRegion = scanned.floorRegion;
         lastScan = scanned.lastScan;
         blocks.clear();
         scanned.blocks.forEach((key, value) -> blocks.put(key, new ArrayList<>(value)));

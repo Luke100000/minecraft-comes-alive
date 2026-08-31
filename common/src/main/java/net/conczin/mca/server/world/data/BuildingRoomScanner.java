@@ -23,12 +23,12 @@ final class BuildingRoomScanner {
                        StructureFloor floor,
                        FloorSurface surface) {
         if (floor == null || surface == null || surface.cells().isEmpty()) {
-            return Result.failure(Status.TOO_SMALL, source);
+            return Result.failure(Building.validationResult.TOO_SMALL, source);
         }
         List<FloorSurfacePartitioner.Component> components = FloorSurfacePartitioner.partition(surface);
         FloorSurfacePartitioner.Component selected = FloorSurfacePartitioner.select(source, surface, components);
         return selected == null
-                ? Result.failure(Status.TOO_SMALL, source)
+                ? Result.failure(Building.validationResult.TOO_SMALL, source)
                 : materializeComponent(world, source, blocked, maxSize, floor, surface, components, selected);
     }
 
@@ -74,10 +74,10 @@ final class BuildingRoomScanner {
             List<FloorSurfacePartitioner.Component> components,
             FloorSurfacePartitioner.Component component) {
         Set<BlockPos> footprint = footprintForComponent(surface, components, component, floor.anchorY());
-        if (footprint.size() > maxSize) return Result.failure(Status.BLOCK_LIMIT, source);
+        if (footprint.size() > maxSize) return Result.failure(Building.validationResult.BLOCK_LIMIT, source);
         Set<BlockPos> blockedCells = blocked == null ? Set.of() : blocked;
-        if (footprint.stream().anyMatch(blockedCells::contains)) return Result.failure(Status.OVERLAP, source);
-        if (footprint.size() < MIN_INTERIOR_AREA) return Result.failure(Status.TOO_SMALL, source);
+        if (footprint.stream().anyMatch(blockedCells::contains)) return Result.failure(Building.validationResult.OVERLAP, source);
+        if (footprint.size() < MIN_INTERIOR_AREA) return Result.failure(Building.validationResult.TOO_SMALL, source);
 
         BlockPos seed = nearestCell(source, component.cells());
         Set<BlockPos> ownedConnectorCells = ownedConnectorCells(surface, components, component);
@@ -88,7 +88,7 @@ final class BuildingRoomScanner {
         int maxZ = footprint.stream().mapToInt(BlockPos::getZ).max().orElse(source.getZ());
         int maxY = component.cells().stream().mapToInt(cell -> cell.ceilingY() - 1)
                 .max().orElse(Math.max(floor.anchorY(), floor.ceilingY() - 1));
-        return new Result(Status.SUCCESS, seed, floor.id(), floor.anchorY(), footprint, poi,
+        return new Result(Building.validationResult.SUCCESS, seed, floor.id(), floor.anchorY(), footprint, poi,
                 new BlockPos(minX, floor.anchorY(), minZ),
                 new BlockPos(maxX, maxY, maxZ));
     }
@@ -120,9 +120,7 @@ final class BuildingRoomScanner {
                 .orElse(source);
     }
 
-    enum Status { SUCCESS, OVERLAP, BLOCK_LIMIT, SIZE_LIMIT, TOO_SMALL }
-
-    record Result(Status status,
+    record Result(Building.validationResult status,
                   BlockPos seed,
                   int floorId,
                   int floorY,
@@ -135,7 +133,7 @@ final class BuildingRoomScanner {
             poiCells = Set.copyOf(poiCells);
         }
 
-        static Result failure(Status status, BlockPos seed) {
+        static Result failure(Building.validationResult status, BlockPos seed) {
             return new Result(status, seed, -1, seed.getY(), Set.of(), Set.of(), seed, seed);
         }
     }

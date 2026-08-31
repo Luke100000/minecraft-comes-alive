@@ -92,8 +92,8 @@ class RoomDFUTest {
     }
 
     @Test
-    void betaGlobalInheritanceStateAndPerRoomPreferencesAreSeparated() {
-        CompoundTag village = betaVillage(false);
+    void previousBranchInheritanceBecomesLogicalAndRoomState() {
+        CompoundTag village = previousBranchVillage(false);
 
         RoomDFU.Result migrated = RoomDFU.migrate(village);
 
@@ -105,8 +105,8 @@ class RoomDFUTest {
     }
 
     @Test
-    void betaGroundFloorZeroBecomesExplicitGroundReference() {
-        RoomDFU.Result migrated = RoomDFU.migrate(betaVillage(true));
+    void previousBranchGroundFloorZeroBecomesExplicitGroundReference() {
+        RoomDFU.Result migrated = RoomDFU.migrate(previousBranchVillage(true));
 
         LogicalBuilding logical = migrated.logicalBuildings().get(20);
         assertEquals(20, logical.groundStructureId());
@@ -115,17 +115,20 @@ class RoomDFUTest {
 
     @Test
     void normalizedSavesDoNotEmitLegacyAutomaticOrRoomInheritanceFields() {
-        RoomDFU.Result migrated = RoomDFU.migrate(betaVillage(true));
+        RoomDFU.Result migrated = RoomDFU.migrate(previousBranchVillage(true));
 
         CompoundTag roomTag = migrated.buildings().get(11).save();
         CompoundTag structureTag = migrated.structures().get(20).save();
         CompoundTag logicalTag = migrated.logicalBuildings().get(20).save();
-
+        CompoundTag floorTag = structureTag.getList("floors", net.minecraft.nbt.Tag.TAG_COMPOUND)
+                .getCompound(0);
         assertTrue(roomTag.contains("contributesToMain"));
         assertFalse(roomTag.contains("inheritanceEnabled"));
+        assertFalse(roomTag.contains("size"));
         assertFalse(structureTag.contains("mainRoomId"));
         assertFalse(structureTag.contains("mainRoomAutomatic"));
         assertFalse(structureTag.contains("surfaceReferenceY"));
+        assertFalse(floorTag.contains("floorNumber"));
         assertTrue(logicalTag.contains("mainRoomId"));
         assertTrue(logicalTag.contains("inheritanceEnabled"));
     }
@@ -145,7 +148,7 @@ class RoomDFUTest {
         room.setStructureId(20);
         room.setFloorId(0);
         room.setType("house");
-        room.setGeometry(new BlockPos(0, 64, 0), new BlockPos(1, 69, 1), 4, footprint);
+        room.setGeometry(new BlockPos(0, 64, 0), new BlockPos(1, 69, 1), footprint);
         room.addBlock(Blocks.BELL, new BlockPos(0, 65, 0));
 
         Structure reloadedStructure = new Structure(structure.save());
@@ -155,32 +158,36 @@ class RoomDFUTest {
         assertEquals(structure.getLogicalBuildingId(), reloadedStructure.getLogicalBuildingId());
         assertEquals(structure.getFloor(0).orElseThrow().floorNumber(),
                 reloadedStructure.getFloor(0).orElseThrow().floorNumber());
-        assertEquals(room.getFloorRegions(), reloadedRoom.getFloorRegions());
+        assertEquals(room.getFloorRegion(), reloadedRoom.getFloorRegion());
         assertEquals(room.getStructureId(), reloadedRoom.getStructureId());
         assertEquals(room.getFloorId(), reloadedRoom.getFloorId());
         assertEquals(room.getBlocks(), reloadedRoom.getBlocks());
     }
 
-    private static CompoundTag betaVillage(boolean mainInheritanceEnabled) {
+    private static CompoundTag previousBranchVillage(boolean mainInheritanceEnabled) {
         CompoundTag village = new CompoundTag();
-        CompoundTag main = betaRoom(10, mainInheritanceEnabled);
-        CompoundTag inherited = betaRoom(11, true);
-        CompoundTag independent = betaRoom(12, false);
+        CompoundTag main = previousBranchRoom(10, mainInheritanceEnabled);
+        CompoundTag inherited = previousBranchRoom(11, true);
+        CompoundTag independent = previousBranchRoom(12, false);
         village.put("buildings", list(main, inherited, independent));
         village.put("externalBuildings", new ListTag());
-        village.put("structures", list(betaStructure(20)));
+        village.put("structures", list(previousBranchStructure(20)));
         return village;
     }
 
-    private static CompoundTag betaRoom(int id, boolean inheritanceEnabled) {
+    private static CompoundTag previousBranchRoom(int id, boolean inheritanceEnabled) {
         CompoundTag room = originBuilding(id, "house");
         room.putInt("structureId", 20);
         room.putInt("floorId", 0);
         room.putBoolean("inheritanceEnabled", inheritanceEnabled);
+        room.put("floorRegions", NbtHelper.fromList(List.of(
+                BuildingFloorRegion.fromFootprint(64, List.of(
+                        new BlockPos(0, 64, 0), new BlockPos(1, 64, 0)))),
+                BuildingFloorRegion::save));
         return room;
     }
 
-    private static CompoundTag betaStructure(int id) {
+    private static CompoundTag previousBranchStructure(int id) {
         CompoundTag structure = new CompoundTag();
         structure.putInt("id", id);
         structure.putInt("buildingId", id);
@@ -192,9 +199,15 @@ class RoomDFUTest {
         structure.put("max", NbtHelper.encodeBlockPos(new BlockPos(4, 72, 4)));
         structure.putInt("surfaceReferenceY", 64);
         structure.put("floors", list(
-                floor(0, 64, 68, 0).save(),
-                floor(1, 68, 72, 1).save()));
+                legacyFloor(0, 64, 68, 0),
+                legacyFloor(1, 68, 72, 1)));
         return structure;
+    }
+
+    private static CompoundTag legacyFloor(int id, int anchorY, int ceilingY, int number) {
+        CompoundTag tag = floor(id, anchorY, ceilingY, number).save();
+        tag.putInt("floorNumber", number);
+        return tag;
     }
 
     private static StructureFloor floor(int id, int anchorY, int ceilingY, int number) {

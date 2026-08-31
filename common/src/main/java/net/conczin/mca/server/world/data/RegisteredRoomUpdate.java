@@ -21,7 +21,7 @@ public record RegisteredRoomUpdate(
     public RegisteredRoomUpdate {
         previousRoomIds = List.copyOf(previousRoomIds);
         assignments = List.copyOf(assignments);
-        playerMatchingTypes = List.copyOf(playerMatchingTypes);
+        playerMatchingTypes = playerMatchingTypes == null ? List.of() : List.copyOf(playerMatchingTypes);
     }
 
     static RegisteredRoomUpdate failure(Building.validationResult result,
@@ -32,7 +32,7 @@ public record RegisteredRoomUpdate(
     }
 
     public boolean isAmbiguous() {
-        return playerMatchingTypes.size() > 1;
+        return RoomTypeResolver.requiresTypeChoice(playerMatchingTypes);
     }
 
     public boolean requiresTypeSelection() {
@@ -40,6 +40,6 @@ public record RegisteredRoomUpdate(
     }
 
     public boolean matchesType(String type) {
-        return playerMatchingTypes.contains(type);
+        return RoomTypeResolver.matchesTypeChoice(playerMatchingTypes, type);
     }
 }

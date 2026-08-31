@@ -18,7 +18,6 @@ import java.util.Set;
 
 /** Discovers one selected semantic floor while retaining exact Minecraft surface heights. */
 final class SelectedFloorScanner {
-    private static final double VANILLA_DEFAULT_JUMP_HEIGHT = 1.125D;
     private static final Direction[] HORIZONTAL = {
             Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST
     };
@@ -67,11 +66,11 @@ final class SelectedFloorScanner {
     }
 
     static boolean canStep(double fromSurfaceY, double toSurfaceY) {
-        return Math.abs(toSurfaceY - fromSurfaceY) <= VANILLA_DEFAULT_JUMP_HEIGHT;
+        return FloorSurface.canStep(fromSurfaceY, toSurfaceY);
     }
 
     static boolean withinSelectedFloorBand(int seedY, int candidateY) {
-        return Math.abs(candidateY - seedY) <= BuildingFloorRegionDetector.FLOOR_CLUSTER_TOLERANCE;
+        return FloorSurface.withinBand(seedY, candidateY);
     }
 
     static Optional<FloorSurface.Cell> inspectSurfaceCell(

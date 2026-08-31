@@ -68,8 +68,8 @@ class RoomTypeResolverTest {
         structure.setLogicalBuildingId(10);
         Village village = new Village(1, null);
         village.registerStructure(structure, main);
-        village.getBuildings().put(contributor.getId(), contributor);
-        village.getBuildings().put(independent.getId(), independent);
+        village.registerRoom(contributor);
+        village.registerRoom(independent);
         LogicalBuilding logical = village.getLogicalBuilding(10).orElseThrow();
         logical.setInheritanceEnabled(inheritanceEnabled);
         return new Fixture(village, logical, List.of(main, contributor, independent), main, contributor, independent);

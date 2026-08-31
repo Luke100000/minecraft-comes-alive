@@ -106,7 +106,7 @@ class BlueprintScreenMapInteractionTest {
         Building main = room(1);
         registerStructure(village, structure, main);
         Building sideRoom = room(2);
-        village.getBuildings().put(sideRoom.getId(), sideRoom);
+        village.registerRoom(sideRoom);
 
         BlueprintScreen.InheritanceControlState before =
                 BlueprintScreen.inheritanceControlState(village, sideRoom);

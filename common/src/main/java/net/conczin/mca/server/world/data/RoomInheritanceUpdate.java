@@ -11,7 +11,7 @@ public record RoomInheritanceUpdate(
         List<String> matchingTypes
 ) {
     public RoomInheritanceUpdate {
-        matchingTypes = List.copyOf(matchingTypes);
+        matchingTypes = matchingTypes == null ? List.of() : List.copyOf(matchingTypes);
     }
 
     static RoomInheritanceUpdate invalid(boolean enabled) {
@@ -23,10 +23,11 @@ public record RoomInheritanceUpdate(
     }
 
     public boolean requiresTypeSelection() {
-        return valid() && previousEnabled && !enabled && matchingTypes.size() > 1;
+        return valid() && previousEnabled && !enabled
+                && RoomTypeResolver.requiresTypeChoice(matchingTypes);
     }
 
     public boolean matchesType(String type) {
-        return matchingTypes.contains(type);
+        return RoomTypeResolver.matchesTypeChoice(matchingTypes, type);
     }
 }

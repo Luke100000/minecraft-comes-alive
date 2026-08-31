@@ -29,11 +29,11 @@ final class StructureScanner {
         Result exact = scanAtSeed(world, source, source, existing, -1);
         if (exact.result() == Building.validationResult.SUCCESS) return exact;
 
-        BlockPos connectorSeed = resolveVerticalConnectorFloorSeed(
+        StructureConnector.FloorHandoff handoff = StructureConnector.resolveVerticalFloorHandoff(
                 world, source, Config.getInstance()).orElse(null);
-        return connectorSeed == null
+        return handoff == null
                 ? exact
-                : scanAtSeed(world, source, connectorSeed, existing, -1);
+                : scanAtSeed(world, source, handoff.seed(), existing, -1);
     }
 
     static Result scanReportedStructure(Level world,
@@ -72,13 +72,17 @@ final class StructureScanner {
 
     static Optional<AttachmentSeed> resolveAttachmentSeed(Level world, BlockPos source) {
         Config config = Config.getInstance();
-        if (SelectedFloorScanner.scan(world, source, config.maxBuildingSize, config.maxBuildingRadius)
-                .result() == Building.validationResult.SUCCESS) {
-            return Optional.of(new AttachmentSeed(source, false));
+        SelectedFloorScanner.Result exact = SelectedFloorScanner.scan(
+                world, source, config.maxBuildingSize, config.maxBuildingRadius);
+        if (exact.result() == Building.validationResult.SUCCESS && exact.surface() != null) {
+            return Optional.of(new AttachmentSeed(source, exact.surface()));
         }
 
-        Optional<BlockPos> vertical = resolveVerticalConnectorFloorSeed(world, source, config);
-        if (vertical.isPresent()) return Optional.of(new AttachmentSeed(vertical.get(), false));
+        Optional<StructureConnector.FloorHandoff> vertical =
+                StructureConnector.resolveVerticalFloorHandoff(world, source, config);
+        if (vertical.isPresent()) {
+            return Optional.of(new AttachmentSeed(vertical.get().seed(), vertical.get().surface()));
+        }
 
         List<AttachmentSeed> candidates = new ArrayList<>();
         for (Direction direction : HORIZONTAL) {
@@ -88,34 +92,11 @@ final class StructureScanner {
             BlockPos candidate = StructureConnector.normalize(connector, state).relative(direction);
             SelectedFloorScanner.Result scan = SelectedFloorScanner.scan(
                     world, candidate, config.maxBuildingSize, config.maxBuildingRadius);
-            if (scan.result() == Building.validationResult.SUCCESS) {
-                candidates.add(new AttachmentSeed(candidate, true));
+            if (scan.result() == Building.validationResult.SUCCESS && scan.surface() != null) {
+                candidates.add(new AttachmentSeed(candidate, scan.surface()));
             }
         }
         return candidates.size() == 1 ? Optional.of(candidates.getFirst()) : Optional.empty();
-    }
-
-    private static Optional<BlockPos> resolveVerticalConnectorFloorSeed(
-            Level world, BlockPos source, Config config) {
-        if (!StructureConnector.isVertical(world.getBlockState(source))) return Optional.empty();
-
-        BlockPos selectedSeed = null;
-        Set<BlockPos> selectedFloor = null;
-        for (Direction direction : HORIZONTAL) {
-            BlockPos candidate = source.relative(direction);
-            SelectedFloorScanner.Result scan = SelectedFloorScanner.scan(
-                    world, candidate, config.maxBuildingSize, config.maxBuildingRadius);
-            if (scan.result() != Building.validationResult.SUCCESS || scan.surface() == null) continue;
-
-            Set<BlockPos> candidateFloor = scan.surface().projectedCells();
-            if (selectedSeed == null) {
-                selectedSeed = candidate.immutable();
-                selectedFloor = candidateFloor;
-            } else if (!selectedFloor.equals(candidateFloor)) {
-                return Optional.empty();
-            }
-        }
-        return Optional.ofNullable(selectedSeed);
     }
 
     static boolean isWalkableAnchor(Level world, BlockPos pos) {
@@ -141,16 +122,15 @@ final class StructureScanner {
 
         FloorSurface surface = selected.surface();
         StructureFloor floor = persistedFloor(surface);
-        List<StructureFloor> floors = List.of(floor);
         Structure candidate = new Structure(
-                ignoredStructureId, scanSeed.immutable(), selected.min(), selected.max(), floors);
+                ignoredStructureId, scanSeed.immutable(), selected.min(), selected.max(), List.of(floor));
         for (Structure other : existing) {
             if (other.getId() != ignoredStructureId && candidate.intersects(other)) {
                 return Result.failure(Building.validationResult.OVERLAP, interactionSource);
             }
         }
         return new Result(Building.validationResult.SUCCESS, scanSeed.immutable(),
-                selected.min(), selected.max(), floors, surface);
+                selected.min(), selected.max(), floor, surface);
     }
 
     private static Optional<BlockPos> resolveExistingSeed(
@@ -177,7 +157,7 @@ final class StructureScanner {
                 + Math.abs(first.getZ() - second.getZ());
     }
 
-    record AttachmentSeed(BlockPos seed, boolean crossedHorizontalConnector) {
+    record AttachmentSeed(BlockPos seed, FloorSurface surface) {
         AttachmentSeed {
             seed = seed.immutable();
         }
@@ -187,24 +167,18 @@ final class StructureScanner {
                   BlockPos source,
                   BlockPos min,
                   BlockPos max,
-                  List<StructureFloor> floors,
+                  StructureFloor floor,
                   FloorSurface surface) {
-        Result {
-            floors = List.copyOf(floors);
-        }
-
         static Result failure(Building.validationResult result, BlockPos source) {
-            return new Result(result, source, source, source, List.of(),
+            return new Result(result, source, source, source, null,
                     new FloorSurface(Set.of(), Map.of()));
         }
 
         Structure toStructure(int id) {
-            List<StructureFloor> assigned = new ArrayList<>();
-            for (int i = 0; i < floors.size(); i++) {
-                StructureFloor floor = floors.get(i);
-                assigned.add(new StructureFloor(i, floor.anchorY(), floor.ceilingY(), floor.region()));
-            }
-            return new Structure(id, source, min, max, assigned);
+            if (floor == null) throw new IllegalStateException("Cannot materialize a failed Structure scan");
+            StructureFloor assigned = new StructureFloor(
+                    0, floor.anchorY(), floor.ceilingY(), floor.region());
+            return new Structure(id, source, min, max, List.of(assigned));
         }
     }
 }

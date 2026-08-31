@@ -36,6 +36,12 @@ public class Village implements Iterable<Building> {
     public static final int MERGE_MARGIN = 64;
     private static final int MOVE_IN_COOLDOWN = 1200;
     private static final long BED_SYNC_TIME = 200;
+    private static final int MAX_FLOOR_ATTACHMENT_GAP = 4;
+    private static final Comparator<AttachmentTarget> ATTACHMENT_TARGET_ORDER = Comparator
+            .comparingInt(AttachmentTarget::gap)
+            .thenComparingInt(AttachmentTarget::buildingId)
+            .thenComparingInt(AttachmentTarget::structureId)
+            .thenComparingInt(AttachmentTarget::floorId);
 
     public final List<ItemStack> storageBuffer = new LinkedList<>();
 
@@ -148,11 +154,11 @@ public class Village implements Iterable<Building> {
     }
 
     public Map<Integer, Building> getBuildings() {
-        return buildings;
+        return Collections.unmodifiableMap(buildings);
     }
 
     public Map<Integer, Structure> getStructures() {
-        return structures;
+        return Collections.unmodifiableMap(structures);
     }
 
     public Stream<Building> getRooms() {
@@ -164,7 +170,7 @@ public class Village implements Iterable<Building> {
     }
 
     public Map<Integer, ExternalBuilding> getExternalBuildingMap() {
-        return externalBuildings;
+        return Collections.unmodifiableMap(externalBuildings);
     }
 
     public Optional<Building> getBuilding(int id) {
@@ -188,11 +194,44 @@ public class Village implements Iterable<Building> {
         return Optional.ofNullable(logicalBuildings.get(buildingId));
     }
 
-    void registerStructure(Structure structure, Building room) {
+    public void registerStructure(Structure structure, Building room) {
         structures.put(structure.getId(), structure);
         buildings.put(room.getId(), room);
         logicalBuildings.computeIfAbsent(structure.getLogicalBuildingId(), id ->
                 new LogicalBuilding(id, structure.getId(), room.getFloorId(), room.getId(), true));
+    }
+
+    public void registerRoom(Building room) {
+        if (room == null || !room.isFunctionalRoom()) {
+            throw new IllegalArgumentException("Only functional Rooms can be registered");
+        }
+        Structure structure = structures.get(room.getStructureId());
+        if (structure == null || structure.getFloor(room.getFloorId()).isEmpty()) {
+            throw new IllegalArgumentException("Room references missing Structure/Floor");
+        }
+        buildings.put(room.getId(), room);
+    }
+
+    void registerExternalBuilding(ExternalBuilding building) {
+        externalBuildings.put(building.getId(), building);
+    }
+
+    void replaceStructure(Structure structure) {
+        if (structure == null || !structures.containsKey(structure.getId())) {
+            throw new IllegalArgumentException("Cannot replace an unregistered Structure");
+        }
+        structures.put(structure.getId(), structure);
+    }
+
+    void removeRooms(Collection<Integer> roomIds) {
+        roomIds.forEach(buildings::remove);
+    }
+
+    void restoreBuildingData(Collection<Building> rooms, Collection<Structure> restoredStructures) {
+        buildings.clear();
+        rooms.forEach(room -> buildings.put(room.getId(), room));
+        structures.clear();
+        restoredStructures.forEach(structure -> structures.put(structure.getId(), structure));
     }
 
     List<Structure> getBuildingStructures(int buildingId) {
@@ -482,58 +521,41 @@ public class Village implements Iterable<Building> {
                 StructureScanner.resolveAttachmentSeed(level, source).orElse(null);
         if (attachmentSeed == null) return Optional.empty();
 
-        List<AttachmentTarget> targets = structures.values().stream()
-                .flatMap(structure -> structure.getFloors().stream()
-                        .map(floor -> attachmentTarget(structure, floor, attachmentSeed)))
-                .filter(Objects::nonNull)
-                .filter(target -> target.gap() <= MAX_FLOOR_ATTACHMENT_GAP)
-                .toList();
-        AttachmentTarget target = targets.stream()
-                .min(Comparator.comparingInt(AttachmentTarget::gap)
-                        .thenComparingInt(AttachmentTarget::targetBuildingId)
-                        .thenComparingInt(AttachmentTarget::targetStructureId)
-                        .thenComparingInt(AttachmentTarget::floorId))
-                .orElse(null);
+        StructureFloor candidateFloor = StructureScanner.persistedFloor(attachmentSeed.surface());
+        AttachmentTarget target = resolveAttachmentTarget(candidateFloor).orElse(null);
         if (target == null) return Optional.empty();
-        if (targets.stream().anyMatch(candidate -> candidate.gap() == target.gap()
-                && candidate.targetBuildingId() != target.targetBuildingId())) {
-            return Optional.empty();
-        }
 
-        int floorNumber = prospectiveFloorNumber(
-                target.targetBuildingId(), attachmentSeed.seed().getY());
+        Structure candidate = new Structure(-1, attachmentSeed.seed(), attachmentSeed.seed(),
+                attachmentSeed.seed(), List.of(candidateFloor));
+        int floorNumber = prospectiveFloorNumber(target.buildingId(), candidate, candidateFloor);
         if (floorNumber == Integer.MIN_VALUE) return Optional.empty();
         return Optional.of(RoomScanPlan.attachment(
-                target.targetBuildingId(), floorNumber, source, attachmentSeed.seed()));
+                target.buildingId(), floorNumber, source, attachmentSeed.seed()));
     }
 
-    private static AttachmentTarget attachmentTarget(Structure structure,
-                                                       StructureFloor floor,
-                                                       StructureScanner.AttachmentSeed seed) {
-        if (floor.region() == null || !touchesAttachmentFloor(floor, seed)) return null;
-        BlockPos pos = seed.seed();
-        int gap;
-        if (pos.getY() >= floor.ceilingY()) {
-            gap = pos.getY() - floor.ceilingY();
-        } else if (pos.getY() < floor.anchorY()) {
-            gap = floor.anchorY() - pos.getY();
-        } else {
-            return null;
+    Optional<AttachmentTarget> resolveAttachmentTarget(StructureFloor candidate) {
+        if (candidate == null || candidate.region() == null) return Optional.empty();
+
+        Map<Integer, AttachmentTarget> nearestByBuilding = new HashMap<>();
+        for (Structure structure : structures.values()) {
+            for (StructureFloor floor : structure.getFloors()) {
+                if (floor.region() == null || !candidate.region().touchesHorizontally(floor.region())) continue;
+                int gap = candidate.verticalGapTo(floor);
+                if (gap < 0 || gap > MAX_FLOOR_ATTACHMENT_GAP) continue;
+                AttachmentTarget target = new AttachmentTarget(
+                        structure.getLogicalBuildingId(), structure.getId(), floor.id(), gap);
+                nearestByBuilding.merge(target.buildingId(), target,
+                        (first, second) -> ATTACHMENT_TARGET_ORDER.compare(first, second) <= 0 ? first : second);
+            }
         }
-        return new AttachmentTarget(structure.getLogicalBuildingId(), structure.getId(), floor.id(), gap);
-    }
 
-    private static boolean touchesAttachmentFloor(StructureFloor floor,
-                                                  StructureScanner.AttachmentSeed seed) {
-        BlockPos pos = seed.seed();
-        int x = pos.getX();
-        int z = pos.getZ();
-        if (floor.contains(x, z)) return true;
-        return !seed.crossedHorizontalConnector()
-                && (floor.contains(x + 1, z)
-                || floor.contains(x - 1, z)
-                || floor.contains(x, z + 1)
-                || floor.contains(x, z - 1));
+        AttachmentTarget nearest = nearestByBuilding.values().stream()
+                .min(ATTACHMENT_TARGET_ORDER).orElse(null);
+        if (nearest == null) return Optional.empty();
+        return nearestByBuilding.values().stream()
+                .anyMatch(target -> target.buildingId() != nearest.buildingId()
+                        && target.gap() == nearest.gap())
+                ? Optional.empty() : Optional.of(nearest);
     }
 
     Optional<Structure> getInteractionStructureAt(Level level, BlockPos pos) {
@@ -762,15 +784,10 @@ public class Village implements Iterable<Building> {
         }
     }
 
-    static final int MAX_FLOOR_ATTACHMENT_GAP = 4;
-
-    private record AttachmentTarget(int targetBuildingId,
-                                    int targetStructureId,
-                                    int floorId,
-                                    int gap) {
+    private record FloorRef(Structure structure, StructureFloor floor) {
     }
 
-    private record FloorRef(Structure structure, StructureFloor floor) {
+    record AttachmentTarget(int buildingId, int structureId, int floorId, int gap) {
     }
 
     public enum RoomScanMode {
@@ -813,38 +830,6 @@ public class Village implements Iterable<Building> {
                 .getOrDefault(new FloorRef(candidate, candidateFloor), Integer.MIN_VALUE);
     }
 
-    private int prospectiveFloorNumber(int buildingId, int queryY) {
-        List<StructureFloor> floors = getBuildingStructures(buildingId).stream()
-                .flatMap(structure -> structure.getFloors().stream())
-                .sorted(Comparator.comparingInt(StructureFloor::anchorY)
-                        .thenComparingInt(StructureFloor::floorNumber)
-                        .thenComparingInt(StructureFloor::id))
-                .toList();
-        if (floors.isEmpty()) return Integer.MIN_VALUE;
-
-        int tolerance = BuildingFloorRegionDetector.FLOOR_CLUSTER_TOLERANCE;
-        StructureFloor nearest = floors.stream()
-                .min(Comparator.comparingInt((StructureFloor floor) -> Math.abs(floor.anchorY() - queryY))
-                        .thenComparingInt(StructureFloor::anchorY)
-                        .thenComparingInt(StructureFloor::id))
-                .orElseThrow();
-        if (Math.abs(nearest.anchorY() - queryY) <= tolerance) return nearest.floorNumber();
-
-        StructureFloor below = floors.stream()
-                .filter(floor -> floor.anchorY() < queryY)
-                .max(Comparator.comparingInt(StructureFloor::anchorY)
-                        .thenComparingInt(StructureFloor::floorNumber))
-                .orElse(null);
-        if (below != null) return below.floorNumber() + 1;
-
-        StructureFloor above = floors.stream()
-                .filter(floor -> floor.anchorY() > queryY)
-                .min(Comparator.comparingInt(StructureFloor::anchorY)
-                        .thenComparingInt(StructureFloor::floorNumber))
-                .orElse(null);
-        return above == null ? Integer.MIN_VALUE : above.floorNumber() - 1;
-    }
-
     private Map<FloorRef, Integer> floorNumbers(Collection<Structure> members, LogicalBuilding logical) {
         List<FloorRef> floors = new ArrayList<>();
         for (Structure structure : members) {
@@ -857,7 +842,7 @@ public class Village implements Iterable<Building> {
                 .thenComparingInt(ref -> ref.floor().id()));
         if (floors.isEmpty()) return Map.of();
 
-        int tolerance = BuildingFloorRegionDetector.FLOOR_CLUSTER_TOLERANCE;
+        int tolerance = FloorSurface.BAND_TOLERANCE;
         List<List<FloorRef>> bands = new ArrayList<>();
         for (FloorRef ref : floors) {
             List<FloorRef> band = bands.isEmpty() ? null : bands.getLast();

@@ -15,7 +15,6 @@ import java.util.stream.Collectors;
 
 /** Pure Room topology over one exact transient floor surface. */
 final class FloorSurfacePartitioner {
-    private static final double MAX_STEP_HEIGHT = 1.125D;
     private static final Direction[] HORIZONTAL = {
             Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST
     };
@@ -73,7 +72,7 @@ final class FloorSurfacePartitioner {
     private static boolean connected(FloorSurface.Cell first, FloorSurface.Cell second) {
         int dx = Math.abs(first.feet().getX() - second.feet().getX());
         int dz = Math.abs(first.feet().getZ() - second.feet().getZ());
-        return dx + dz == 1 && Math.abs(first.surfaceY() - second.surfaceY()) <= MAX_STEP_HEIGHT;
+        return dx + dz == 1 && FloorSurface.canStep(first.surfaceY(), second.surfaceY());
     }
 
     static Component owner(Collection<Component> adjacent) {

@@ -12,10 +12,11 @@ import java.util.stream.Collectors;
 public record BuildingFloorRegion(int anchorY, int area, List<Component> components) {
     public BuildingFloorRegion {
         components = List.copyOf(components);
+        area = components.stream().mapToInt(Component::area).sum();
     }
 
     static BuildingFloorRegion load(CompoundTag tag) {
-        return new BuildingFloorRegion(tag.getInt("anchorY"), tag.getInt("area"),
+        return new BuildingFloorRegion(tag.getInt("anchorY"), 0,
                 NbtHelper.toList(tag.getList("components", Tag.TAG_COMPOUND),
                         value -> Component.load((CompoundTag) value)));
     }
@@ -50,8 +51,7 @@ public record BuildingFloorRegion(int anchorY, int area, List<Component> compone
                 .map(pos -> new Cell(pos.getX(), pos.getZ()))
                 .collect(Collectors.toCollection(LinkedHashSet::new));
         List<Component> components = splitComponents(cells);
-        return new BuildingFloorRegion(anchorY,
-                components.stream().mapToInt(Component::area).sum(), components);
+        return new BuildingFloorRegion(anchorY, 0, components);
     }
 
     private static List<Component> splitComponents(Set<Cell> cells) {
@@ -83,24 +83,13 @@ public record BuildingFloorRegion(int anchorY, int area, List<Component> compone
         Map<Integer, TreeSet<Integer>> xsByZ = new TreeMap<>();
         for (Cell cell : cells) xsByZ.computeIfAbsent(cell.z(), ignored -> new TreeSet<>()).add(cell.x());
         List<Span> spans = new ArrayList<>();
-        int minX = Integer.MAX_VALUE, minZ = Integer.MAX_VALUE;
-        int maxX = Integer.MIN_VALUE, maxZ = Integer.MIN_VALUE;
-        int area = 0;
         for (Map.Entry<Integer, TreeSet<Integer>> entry : xsByZ.entrySet()) {
             int z = entry.getKey();
             Iterator<Integer> xs = entry.getValue().iterator();
             if (!xs.hasNext()) continue;
-            minZ = Math.min(minZ, z);
-            maxZ = Math.max(maxZ, z);
             int start = xs.next(), previous = start;
-            minX = Math.min(minX, start);
-            maxX = Math.max(maxX, start);
-            area++;
             while (xs.hasNext()) {
                 int x = xs.next();
-                minX = Math.min(minX, x);
-                maxX = Math.max(maxX, x);
-                area++;
                 if (x != previous + 1) {
                     spans.add(new Span(z, start, previous));
                     start = x;
@@ -109,7 +98,7 @@ public record BuildingFloorRegion(int anchorY, int area, List<Component> compone
             }
             spans.add(new Span(z, start, previous));
         }
-        return new Component(minX, minZ, maxX, maxZ, area, spans);
+        return new Component(spans);
     }
 
     public int intersectionArea(BuildingFloorRegion other) {
@@ -120,22 +109,47 @@ public record BuildingFloorRegion(int anchorY, int area, List<Component> compone
         return intersection;
     }
 
+    boolean touchesHorizontally(BuildingFloorRegion other) {
+        if (other == null || intersectionArea(other) > 0) return other != null;
+        for (BlockPos cell : cells()) {
+            int x = cell.getX();
+            int z = cell.getZ();
+            if (other.containsHorizontally(x + 1, z)
+                    || other.containsHorizontally(x - 1, z)
+                    || other.containsHorizontally(x, z + 1)
+                    || other.containsHorizontally(x, z - 1)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private record Cell(int x, int z) {
     }
 
     public record Component(int minX, int minZ, int maxX, int maxZ, int area, List<Span> spans) {
         public Component {
-            spans = spans == null || spans.isEmpty()
-                    ? rectangleSpans(minX, minZ, maxX, maxZ)
-                    : spans.stream()
-                            .sorted(Comparator.comparingInt(Span::z).thenComparingInt(Span::minX))
-                            .toList();
+            spans = spans == null ? List.of() : spans.stream()
+                    .sorted(Comparator.comparingInt(Span::z).thenComparingInt(Span::minX))
+                    .toList();
+            if (!spans.isEmpty()) {
+                minX = spans.stream().mapToInt(Span::minX).min().orElse(0);
+                minZ = spans.stream().mapToInt(Span::z).min().orElse(0);
+                maxX = spans.stream().mapToInt(Span::maxX).max().orElse(0);
+                maxZ = spans.stream().mapToInt(Span::z).max().orElse(0);
+                area = spans.stream().mapToInt(span -> span.maxX() - span.minX() + 1).sum();
+            }
+        }
+
+        private Component(List<Span> spans) {
+            this(0, 0, 0, 0, 0, spans);
         }
 
         private static Component load(CompoundTag tag) {
-            return new Component(tag.getInt("minX"), tag.getInt("minZ"), tag.getInt("maxX"), tag.getInt("maxZ"),
-                    tag.getInt("area"), NbtHelper.toList(tag.getList("spans", Tag.TAG_COMPOUND),
-                    value -> Span.load((CompoundTag) value)));
+            return new Component(tag.getInt("minX"), tag.getInt("minZ"),
+                    tag.getInt("maxX"), tag.getInt("maxZ"), tag.getInt("area"),
+                    NbtHelper.toList(tag.getList("spans", Tag.TAG_COMPOUND),
+                            value -> Span.load((CompoundTag) value)));
         }
 
         private CompoundTag save() {
@@ -201,11 +215,6 @@ public record BuildingFloorRegion(int anchorY, int area, List<Component> compone
             return end;
         }
 
-        private static List<Span> rectangleSpans(int minX, int minZ, int maxX, int maxZ) {
-            List<Span> spans = new ArrayList<>();
-            for (int z = minZ; z <= maxZ; z++) spans.add(new Span(z, minX, maxX));
-            return List.copyOf(spans);
-        }
     }
 
     public record Span(int z, int minX, int maxX) {

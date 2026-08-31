@@ -29,6 +29,7 @@ public final class Structure implements VillageBuilding {
             this.floors.put(floor.id(), floor);
             nextFloorId = Math.max(nextFloorId, floor.id() + 1);
         }
+        recomputeBoundsFromFloors();
     }
 
     public Structure(CompoundTag tag) {
@@ -43,6 +44,7 @@ public final class Structure implements VillageBuilding {
             floors.put(floor.id(), floor);
             nextFloorId = Math.max(nextFloorId, floor.id() + 1);
         }
+        recomputeBoundsFromFloors();
     }
 
     public CompoundTag save() {
@@ -121,39 +123,15 @@ public final class Structure implements VillageBuilding {
         Collection<Building> localRooms = structureRooms == null ? List.of() : structureRooms;
         StructureFloor floor = physicalFloorAt(pos).orElse(null);
         boolean physical = floor != null;
-        int roomX = pos.getX();
-        int roomZ = pos.getZ();
-        if (floor == null) {
-            floor = floorAtHeight(pos.getY()).orElse(null);
-            if (floor == null) return Optional.empty();
-            if (!StructureConnector.attachesToStructure(world, this, pos)) {
-                BlockPos adjacent = adjacentInteractionFloorCell(world, pos, floor);
-                if (adjacent == null) return Optional.empty();
-                roomX = adjacent.getX();
-                roomZ = adjacent.getZ();
-            }
-        }
+        if (floor == null) floor = floorAtHeight(pos.getY()).orElse(null);
+        if (floor == null) return Optional.empty();
+
+        BlockPos floorCell = physical
+                ? new BlockPos(pos.getX(), floor.anchorY(), pos.getZ())
+                : StructureConnector.resolveFloorCell(world, this, floor, pos);
+        if (floorCell == null) return Optional.empty();
         return Optional.of(new InteractionPosition(floor,
-                roomAtColumn(localRooms, floor, roomX, roomZ), physical));
-    }
-
-    private BlockPos adjacentInteractionFloorCell(Level world, BlockPos pos, StructureFloor floor) {
-        if (!StructureConnector.isPassageCell(world, pos)) return null;
-
-        boolean insideEnvelope = pos.getX() >= min.getX() && pos.getX() <= max.getX()
-                && pos.getY() >= min.getY() && pos.getY() <= max.getY()
-                && pos.getZ() >= min.getZ() && pos.getZ() <= max.getZ();
-        if (!insideEnvelope || !StructureScanner.isWalkableAnchor(world, pos)) return null;
-
-        for (int dx = -1; dx <= 1; dx++) {
-            for (int dz = -1; dz <= 1; dz++) {
-                if (Math.abs(dx) + Math.abs(dz) != 1) continue;
-                int x = pos.getX() + dx;
-                int z = pos.getZ() + dz;
-                if (floor.contains(x, z)) return new BlockPos(x, floor.anchorY(), z);
-            }
-        }
-        return null;
+                roomAtColumn(localRooms, floor, floorCell.getX(), floorCell.getZ()), physical));
     }
 
     private static Building roomAtColumn(Collection<Building> rooms, StructureFloor floor, int x, int z) {
@@ -174,19 +152,22 @@ public final class Structure implements VillageBuilding {
         }
     }
 
-    boolean ensureFloorContains(int floorId, BuildingFloorRegion roomRegion, int roomCeilingY) {
-        StructureFloor existing = floors.get(floorId);
-        if (existing == null || existing.region() == null || roomRegion == null) return false;
+    Structure copy() {
+        Structure copy = new Structure(id, source, min, max, getFloors());
+        copy.logicalBuildingId = logicalBuildingId;
+        copy.nextFloorId = nextFloorId;
+        return copy;
+    }
 
-        LinkedHashSet<BlockPos> union = new LinkedHashSet<>(existing.region().cells());
-        union.addAll(roomRegion.cells());
-        BuildingFloorRegion expanded = BuildingFloorRegion.fromFootprint(existing.anchorY(), union);
+    boolean replaceFloorGeometry(int floorId, StructureFloor scannedFloor) {
+        StructureFloor existing = floors.get(floorId);
+        if (existing == null || scannedFloor == null || scannedFloor.region() == null) return false;
         floors.put(floorId, new StructureFloor(
                 floorId,
-                existing.anchorY(),
-                Math.max(existing.ceilingY(), roomCeilingY),
+                scannedFloor.anchorY(),
+                scannedFloor.ceilingY(),
                 existing.floorNumber(),
-                expanded));
+                scannedFloor.region()));
         recomputeBoundsFromFloors();
         return true;
     }
@@ -261,6 +242,13 @@ public final class Structure implements VillageBuilding {
 
     public boolean containsPosHorizontally(Vec3i pos) {
         return pos != null && pos.getX() >= min.getX() && pos.getX() <= max.getX()
+                && pos.getZ() >= min.getZ() && pos.getZ() <= max.getZ();
+    }
+
+    boolean containsEnvelope(Vec3i pos) {
+        return pos != null
+                && pos.getX() >= min.getX() && pos.getX() <= max.getX()
+                && pos.getY() >= min.getY() && pos.getY() <= max.getY()
                 && pos.getZ() >= min.getZ() && pos.getZ() <= max.getZ();
     }
 

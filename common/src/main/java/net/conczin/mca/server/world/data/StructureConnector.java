@@ -1,5 +1,6 @@
 package net.conczin.mca.server.world.data;
 
+import net.conczin.mca.Config;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.Level;
@@ -84,15 +85,6 @@ final class StructureConnector {
         return Map.copyOf(result);
     }
 
-    static boolean attachesToStructure(Level world, Structure structure, BlockPos pos) {
-        if (structure.containsPos(pos)) return true;
-        BlockPos connector = verticalSeed(world, structure, pos);
-        if (connector == null) return false;
-        return structure.getFloors().stream().anyMatch(floor -> handoffs(connector).stream()
-                .filter(handoff -> handoff.getY() >= floor.anchorY() && handoff.getY() < floor.ceilingY())
-                .anyMatch(handoff -> floor.contains(handoff.getX(), handoff.getZ())));
-    }
-
     /** Current Y first, then downward only. */
     private static BlockPos verticalSeed(Level world, Structure structure, BlockPos pos) {
         int minY = structure.getFloors().stream()
@@ -128,5 +120,62 @@ final class StructureConnector {
                 || state.getBlock() instanceof TrapDoorBlock) return false;
         return state.getBlock() instanceof LadderBlock || state.isAir() || state.canBeReplaced()
                 || state.getCollisionShape(world, pos).isEmpty();
+    }
+
+    static BlockPos resolveFloorCell(Level world,
+                                     Structure structure,
+                                     StructureFloor floor,
+                                     BlockPos pos) {
+        BlockPos connector = verticalSeed(world, structure, pos);
+        if (connector != null) {
+            BlockPos handoff = handoffs(connector).stream()
+                    .filter(candidate -> candidate.getY() >= floor.anchorY()
+                            && candidate.getY() < floor.ceilingY())
+                    .filter(candidate -> floor.contains(candidate.getX(), candidate.getZ()))
+                    .findFirst().orElse(null);
+            if (handoff != null) {
+                return new BlockPos(handoff.getX(), floor.anchorY(), handoff.getZ());
+            }
+        }
+
+        if (!isPassageCell(world, pos) || !structure.containsEnvelope(pos)
+                || !StructureScanner.isWalkableAnchor(world, pos)) {
+            return null;
+        }
+        for (Direction direction : HORIZONTAL) {
+            int x = pos.getX() + direction.getStepX();
+            int z = pos.getZ() + direction.getStepZ();
+            if (floor.contains(x, z)) return new BlockPos(x, floor.anchorY(), z);
+        }
+        return null;
+    }
+
+    static Optional<FloorHandoff> resolveVerticalFloorHandoff(
+            Level world, BlockPos source, Config config) {
+        if (!isVertical(world.getBlockState(source))) return Optional.empty();
+
+        FloorHandoff selected = null;
+        Set<BlockPos> selectedFloor = null;
+        for (Direction direction : HORIZONTAL) {
+            BlockPos candidate = source.relative(direction);
+            SelectedFloorScanner.Result scan = SelectedFloorScanner.scan(
+                    world, candidate, config.maxBuildingSize, config.maxBuildingRadius);
+            if (scan.result() != Building.validationResult.SUCCESS || scan.surface() == null) continue;
+
+            Set<BlockPos> candidateFloor = scan.surface().projectedCells();
+            if (selected == null) {
+                selected = new FloorHandoff(candidate.immutable(), scan.surface());
+                selectedFloor = candidateFloor;
+            } else if (!selectedFloor.equals(candidateFloor)) {
+                return Optional.empty();
+            }
+        }
+        return Optional.ofNullable(selected);
+    }
+
+    record FloorHandoff(BlockPos seed, FloorSurface surface) {
+        FloorHandoff {
+            seed = seed.immutable();
+        }
     }
 }

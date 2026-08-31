@@ -85,13 +85,11 @@ class BlueprintMapGeometryTest {
 
         Structure upperStructure = structure(12, 10, 68, 1);
         Building upperRoom = room(3, 12, 0, new BlockPos(2, 68, 0));
-        village.getStructures().put(12, upperStructure);
-        village.getBuildings().put(3, upperRoom);
+        village.registerStructure(upperStructure, upperRoom);
 
         Structure basementStructure = structure(11, 10, 60, -1);
         Building basementRoom = room(2, 11, 0, new BlockPos(1, 60, 0));
-        village.getStructures().put(11, basementStructure);
-        village.getBuildings().put(2, basementRoom);
+        village.registerStructure(basementStructure, basementRoom);
 
         BlueprintMapGeometry map = BlueprintMapGeometry.build(village, null);
         BlueprintMapGeometry.MapGeometry basement = map.get(-1);

@@ -195,7 +195,9 @@ final class BlueprintMapGeometry {
     }
 
     private static Set<BlueprintMapFootprint.Cell> roomFootprint(Building building) {
-        Set<BlueprintMapFootprint.Cell> cells = BlueprintMapFootprint.fromFloorRegions(building.getFloorRegions());
+        Set<BlueprintMapFootprint.Cell> cells = building.getFloorRegion()
+                .map(BlueprintMapFootprint::fromFloorRegion)
+                .orElseGet(Set::of);
         if (!cells.isEmpty()) return cells;
         BlockPos min = building.getRawPos0();
         BlockPos max = building.getRawPos1();
