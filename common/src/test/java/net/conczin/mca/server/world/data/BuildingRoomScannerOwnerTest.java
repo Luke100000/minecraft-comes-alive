@@ -5,9 +5,12 @@ import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class BuildingRoomScannerOwnerTest {
     @Test
@@ -37,6 +40,29 @@ class BuildingRoomScannerOwnerTest {
                 cell(1, 64, 0), cell(2, 64, 0)));
 
         assertEquals(first, FloorSurfacePartitioner.owner(List.of(second, first)));
+    }
+
+    @Test
+    void connectorCellIsAssignedAfterPartitionToOneDeterministicRoom() {
+        BlockPos connector = new BlockPos(1, 64, 0);
+        FloorSurface surface = new FloorSurface(Set.of(
+                cell(0, 64, 0), cell(1, 64, 0),
+                cell(2, 64, 0), cell(3, 64, 0)),
+                Map.of(connector, connector));
+        List<FloorSurfacePartitioner.Component> components = FloorSurfacePartitioner.partition(surface);
+        FloorSurfacePartitioner.Component owner = FloorSurfacePartitioner.owner(
+                FloorSurfacePartitioner.adjacent(connector, components));
+
+        Set<BlockPos> ownerFootprint = BuildingRoomScanner.footprintForComponent(
+                surface, components, owner, 64);
+        FloorSurfacePartitioner.Component other = components.stream()
+                .filter(component -> !component.equals(owner))
+                .findFirst().orElseThrow();
+        Set<BlockPos> otherFootprint = BuildingRoomScanner.footprintForComponent(
+                surface, components, other, 64);
+
+        assertTrue(ownerFootprint.contains(connector));
+        assertFalse(otherFootprint.contains(connector));
     }
 
     private static FloorSurface.Cell cell(int x, int y, int z) {

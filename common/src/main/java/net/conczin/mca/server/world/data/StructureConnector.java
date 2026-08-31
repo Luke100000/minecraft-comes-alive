@@ -47,11 +47,6 @@ final class StructureConnector {
         return half == DoubleBlockHalf.UPPER ? pos.below() : pos;
     }
 
-    /** Doors are traversal boundaries only; unlike other connectors, they never own a Floor cell. */
-    static boolean ownsFloorCell(BlockState state) {
-        return isConnector(state) && !(state.getBlock() instanceof DoorBlock);
-    }
-
     /** Associates connector positions with exact cells on the already selected semantic floor. */
     static Map<BlockPos, BlockPos> associatedFloorCells(
             Level world, Collection<BlockPos> connectors, Collection<FloorSurface.Cell> surfaceCells) {

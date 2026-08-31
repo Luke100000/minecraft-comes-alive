@@ -281,7 +281,8 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         }
 
         candidate.setLogicalBuildingId(plan.targetBuildingId());
-        return scanRoom(village, candidate, plan.scanSeed(), -1)
+        return scanResolvedRoom(village, candidate, plan.scanSeed(), -1,
+                attachmentFloor, structureScan.surface(), Set.of())
                 .withSource(source)
                 .withPendingStructure(candidate);
     }
@@ -369,7 +370,9 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         }
 
         Structure candidate = structureScan.toStructure(-1);
-        return scanRoom(village, candidate, structureScan.source(), -1).withPendingStructure(candidate);
+        StructureFloor floor = candidate.getFloors().getFirst();
+        return scanResolvedRoom(village, candidate, structureScan.source(), -1,
+                floor, structureScan.surface(), Set.of()).withPendingStructure(candidate);
     }
 
     public BuildingScanResult analyzeRoom(BlockPos pos) {
@@ -379,7 +382,15 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         if (village.getFunctionalRoomAt(world, pos).isPresent()) {
             return failedRoom(Building.validationResult.IDENTICAL, pos, village);
         }
-        return scanRoom(village, structure, pos, -1).withSource(pos);
+        StructureFloor floor = resolveRoomFloor(village, structure, pos, -1);
+        if (floor == null) return failedRoom(Building.validationResult.TOO_SMALL, pos, village);
+        StructureScanner.Result fresh = StructureScanner.scanExistingFloor(
+                world, structure, floor, pos, village.getStructures().values());
+        if (fresh.result() != Building.validationResult.SUCCESS) {
+            return failedRoom(fresh.result(), pos, village);
+        }
+        return scanResolvedRoom(village, structure, pos, -1, floor, fresh.surface(),
+                registeredRoomCells(village, structure.getId(), floor.id(), -1)).withSource(pos);
     }
 
 
@@ -443,16 +454,6 @@ public class VillageManager extends SavedData implements Iterable<Village> {
                 playerComponent, matchingTypes);
     }
 
-    private BuildingScanResult scanRoom(Village village,
-                                        Structure structure,
-                                        BlockPos pos,
-                                        int existingRoomId) {
-        StructureFloor floor = resolveRoomFloor(village, structure, pos, existingRoomId);
-        if (floor == null) return failedRoom(Building.validationResult.TOO_SMALL, pos, village);
-        return scanResolvedRoom(village, structure, pos, existingRoomId, floor,
-                registeredRoomCells(village, structure.getId(), floor.id(), existingRoomId));
-    }
-
     private static StructureFloor resolveRoomFloor(Village village,
                                                    Structure structure,
                                                    BlockPos pos,
@@ -482,9 +483,10 @@ public class VillageManager extends SavedData implements Iterable<Village> {
                                                 BlockPos pos,
                                                 int existingRoomId,
                                                 StructureFloor floor,
+                                                FloorSurface surface,
                                                 Set<BlockPos> blocked) {
         BuildingRoomScanner.Result geometry = BuildingRoomScanner.scan(
-                world, pos, blocked, Config.getInstance().maxBuildingSize, floor);
+                world, pos, blocked, Config.getInstance().maxBuildingSize, floor, surface);
         return roomResultFromGeometry(village, structure, floor, geometry, existingRoomId);
     }
 
