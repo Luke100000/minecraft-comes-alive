@@ -1,17 +1,22 @@
 package net.conczin.mca.client.gui;
 
+import com.google.gson.JsonObject;
+import net.conczin.mca.resources.data.BuildingType;
 import net.conczin.mca.server.world.data.Building;
 import net.conczin.mca.server.world.data.Structure;
 import net.conczin.mca.server.world.data.StructureFloor;
 import net.conczin.mca.server.world.data.Village;
 import net.minecraft.SharedConstants;
 import net.minecraft.core.BlockPos;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.Bootstrap;
+import net.minecraft.world.level.block.Blocks;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Method;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -119,6 +124,24 @@ class BlueprintScreenMapInteractionTest {
                 BlueprintScreen.inheritanceControlState(village, sideRoom);
         assertEquals("gui.blueprint.roomInheritance.enable", after.labelKey());
         assertTrue(after.nextEnabled());
+    }
+
+    @Test
+    void catalogRequirementProgressUsesSelectedTypeRequirementsAndCurrentRoomPoi() {
+        JsonObject blocks = new JsonObject();
+        blocks.addProperty("minecraft:note_block", 3);
+        blocks.addProperty("minecraft:jukebox", 1);
+        JsonObject definition = new JsonObject();
+        definition.add("blocks", blocks);
+        BuildingType musicStore = new BuildingType("music_store", definition);
+        Building room = new Building(BlockPos.ZERO);
+        room.addBlock(Blocks.NOTE_BLOCK, BlockPos.ZERO);
+
+        Map<ResourceLocation, Integer> counts =
+                BlueprintScreen.catalogRequirementCounts(musicStore, room.getBlocks());
+
+        assertEquals(1, counts.get(ResourceLocation.parse("minecraft:note_block")));
+        assertEquals(0, counts.getOrDefault(ResourceLocation.parse("minecraft:jukebox"), 0));
     }
 
     private static Building room(int id) {

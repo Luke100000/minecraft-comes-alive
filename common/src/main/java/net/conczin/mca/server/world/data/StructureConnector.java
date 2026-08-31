@@ -120,10 +120,8 @@ final class StructureConnector {
 
     static boolean isPassageCell(Level world, BlockPos pos) {
         BlockState state = world.getBlockState(pos);
-        if (!state.getFluidState().isEmpty()) return false;
-        if (state.getBlock() instanceof DoorBlock || state.getBlock() instanceof FenceGateBlock
-                || state.getBlock() instanceof TrapDoorBlock) return false;
-        return state.getBlock() instanceof LadderBlock || state.isAir() || state.canBeReplaced()
+        if (!state.getFluidState().isEmpty() || isConnector(state)) return false;
+        return state.isAir() || state.canBeReplaced()
                 || state.getCollisionShape(world, pos).isEmpty();
     }
 
@@ -133,18 +131,21 @@ final class StructureConnector {
                                      BlockPos pos) {
         BlockPos connector = bottomVerticalConnector(world, pos).orElse(null);
         if (connector != null) {
-            BlockPos handoff = handoffs(connector).stream()
-                    .filter(candidate -> candidate.getY() >= floor.anchorY()
-                            && candidate.getY() < floor.ceilingY())
-                    .filter(candidate -> floor.contains(candidate.getX(), candidate.getZ()))
-                    .findFirst().orElse(null);
+            BlockPos handoff = floorHandoff(floor, connector);
             if (handoff != null) {
                 return new BlockPos(handoff.getX(), floor.anchorY(), handoff.getZ());
             }
         }
 
-        if (!isPassageCell(world, pos) || !structure.containsEnvelope(pos)
-                || !StructureScanner.isWalkableAnchor(world, pos)) {
+        BlockState state = world.getBlockState(pos);
+        if (isConnector(state)) {
+            BlockPos handoff = floorHandoff(floor, normalize(pos, state));
+            if (handoff != null) {
+                return new BlockPos(handoff.getX(), floor.anchorY(), handoff.getZ());
+            }
+        }
+
+        if (!isPassageCell(world, pos) || !structure.containsEnvelope(pos)) {
             return null;
         }
         for (Direction direction : HORIZONTAL) {
@@ -153,6 +154,14 @@ final class StructureConnector {
             if (floor.contains(x, z)) return new BlockPos(x, floor.anchorY(), z);
         }
         return null;
+    }
+
+    private static BlockPos floorHandoff(StructureFloor floor, BlockPos connector) {
+        return handoffs(connector).stream()
+                .filter(candidate -> candidate.getY() >= floor.anchorY()
+                        && candidate.getY() < floor.ceilingY())
+                .filter(candidate -> floor.contains(candidate.getX(), candidate.getZ()))
+                .findFirst().orElse(null);
     }
 
     static Optional<FloorHandoff> resolveVerticalFloorHandoff(

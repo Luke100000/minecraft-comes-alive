@@ -128,17 +128,19 @@ public final class Structure implements VillageBuilding {
                                                              BlockPos pos,
                                                              Collection<Building> structureRooms) {
         Collection<Building> localRooms = structureRooms == null ? List.of() : structureRooms;
-        boolean physical = physicalFloorAt(pos).isPresent();
         BlockPos floorQuery = StructureConnector.bottomVerticalConnector(world, pos).orElse(pos);
         StructureFloor floor = resolveFloorAt(world, pos).orElse(null);
         if (floor == null) return Optional.empty();
 
-        BlockPos floorCell = physical
+        boolean directFloorColumn = floor.contains(pos.getX(), pos.getZ())
+                && pos.getY() >= floor.anchorY() - 1
+                && pos.getY() < floor.ceilingY();
+        BlockPos floorCell = directFloorColumn
                 ? new BlockPos(pos.getX(), floor.anchorY(), pos.getZ())
                 : StructureConnector.resolveFloorCell(world, this, floor, floorQuery);
         if (floorCell == null) return Optional.empty();
         return Optional.of(new InteractionPosition(floor,
-                roomAtColumn(localRooms, floor, floorCell.getX(), floorCell.getZ()), physical));
+                roomAtColumn(localRooms, floor, floorCell.getX(), floorCell.getZ()), directFloorColumn));
     }
 
     private static Building roomAtColumn(Collection<Building> rooms, StructureFloor floor, int x, int z) {

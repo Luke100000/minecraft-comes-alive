@@ -1074,6 +1074,12 @@ public class BlueprintScreen extends ExtendedScreen {
         int x = width / 2 + 35;
         int y = height / 2 - 50;
         if (selectedBuilding != null) {
+            Building currentRoom = selectedBuilding.grouped()
+                    ? null : getPlayerRoomScanPlan().functionalRoom().orElse(null);
+            Map<ResourceLocation, Integer> requirementCounts = currentRoom == null
+                    ? Map.of() : catalogRequirementCounts(
+                    selectedBuilding, roomTypeResolver.resolve(currentRoom).classificationPoi());
+
             //name
             context.drawString(font, Component.translatable("buildingType." + selectedBuilding.name()), x, y, selectedBuilding.getColor());
             y += 12;
@@ -1088,7 +1094,12 @@ public class BlueprintScreen extends ExtendedScreen {
 
             //required blocks
             for (Map.Entry<ResourceLocation, Integer> b : selectedBuilding.getGroups().entrySet()) {
-                Component count = Component.literal(b.getValue() + "x");
+                int current = requirementCounts.getOrDefault(b.getKey(), 0);
+                Component count = currentRoom == null
+                        ? Component.literal(b.getValue() + "x")
+                        : Component.literal(current + "/" + b.getValue()).withStyle(
+                        current >= b.getValue() ? ChatFormatting.GREEN
+                                : current > 0 ? ChatFormatting.YELLOW : ChatFormatting.GRAY);
                 int textY = y + 4;
 
                 context.drawString(font, count, x, textY, 0xffffffff);
@@ -1111,6 +1122,14 @@ public class BlueprintScreen extends ExtendedScreen {
                 y += 10;
             }
         }
+    }
+
+    static Map<ResourceLocation, Integer> catalogRequirementCounts(
+            BuildingType type, Map<ResourceLocation, List<BlockPos>> roomBlocks) {
+        if (type == null || roomBlocks == null || roomBlocks.isEmpty()) return Map.of();
+        Map<ResourceLocation, Integer> counts = new HashMap<>();
+        type.getGroups(roomBlocks).forEach((group, positions) -> counts.put(group, positions.size()));
+        return Map.copyOf(counts);
     }
 
     private void renderVillagers(GuiGraphics context) {
