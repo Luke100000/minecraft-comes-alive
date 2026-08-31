@@ -4,21 +4,32 @@ import com.google.gson.JsonObject;
 import net.conczin.mca.resources.BuildingTypes;
 import net.conczin.mca.resources.data.BuildingType;
 import net.conczin.mca.util.NbtHelper;
+import net.minecraft.SharedConstants;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.Bootstrap;
+import net.minecraft.world.level.block.Blocks;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class RoomDFUTest {
+    @BeforeAll
+    static void bootstrapMinecraft() {
+        SharedConstants.tryDetectVersion();
+        Bootstrap.bootStrap();
+    }
+
     @BeforeEach
     void installBuildingTypes() {
         BuildingTypes types = new BuildingTypes();
@@ -117,6 +128,37 @@ class RoomDFUTest {
         assertFalse(structureTag.contains("surfaceReferenceY"));
         assertTrue(logicalTag.contains("mainRoomId"));
         assertTrue(logicalTag.contains("inheritanceEnabled"));
+    }
+
+    @Test
+    void currentRoomAndStructureGeometryRoundTripsWithoutNewSaveFormat() {
+        BuildingFloorRegion footprint = BuildingFloorRegion.fromFootprint(64, Set.of(
+                new BlockPos(0, 64, 0), new BlockPos(1, 64, 0),
+                new BlockPos(0, 64, 1), new BlockPos(1, 64, 1)));
+        StructureFloor floor = new StructureFloor(0, 64, 70, 0, footprint);
+        Structure structure = new Structure(20, new BlockPos(0, 64, 0),
+                new BlockPos(0, 64, 0), new BlockPos(1, 69, 1), List.of(floor));
+        structure.setLogicalBuildingId(77);
+
+        Building room = new Building(new BlockPos(0, 64, 0));
+        room.setId(10);
+        room.setStructureId(20);
+        room.setFloorId(0);
+        room.setType("house");
+        room.setGeometry(new BlockPos(0, 64, 0), new BlockPos(1, 69, 1), 4, footprint);
+        room.addBlock(Blocks.BELL, new BlockPos(0, 65, 0));
+
+        Structure reloadedStructure = new Structure(structure.save());
+        Building reloadedRoom = new Building(room.save());
+
+        assertEquals(structure.getId(), reloadedStructure.getId());
+        assertEquals(structure.getLogicalBuildingId(), reloadedStructure.getLogicalBuildingId());
+        assertEquals(structure.getFloor(0).orElseThrow().floorNumber(),
+                reloadedStructure.getFloor(0).orElseThrow().floorNumber());
+        assertEquals(room.getFloorRegions(), reloadedRoom.getFloorRegions());
+        assertEquals(room.getStructureId(), reloadedRoom.getStructureId());
+        assertEquals(room.getFloorId(), reloadedRoom.getFloorId());
+        assertEquals(room.getBlocks(), reloadedRoom.getBlocks());
     }
 
     private static CompoundTag betaVillage(boolean mainInheritanceEnabled) {

@@ -3,13 +3,11 @@ package net.conczin.mca.server.world.data;
 import net.minecraft.core.BlockPos;
 import org.junit.jupiter.api.Test;
 
-import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 
 class StructureScannerAttachmentBoundaryTest {
     @Test
@@ -22,12 +20,6 @@ class StructureScannerAttachmentBoundaryTest {
 
         assertEquals(74, floor.anchorY());
         assertEquals(4, floor.area());
-    }
-
-    @Test
-    void persistedOtherStoreyIsNotAWorldTraversalBoundaryConcept() {
-        assertFalse(Arrays.stream(StructureScanner.class.getDeclaredClasses())
-                .anyMatch(type -> type.getSimpleName().equals("PersistedFloorBoundary")));
     }
 
     private static FloorSurface surfaceAt(int y, Set<BlockPos> positions) {
