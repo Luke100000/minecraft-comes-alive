@@ -1,12 +1,29 @@
 package net.conczin.mca.client.gui;
 
+import net.conczin.mca.server.world.data.Building;
+import net.conczin.mca.server.world.data.Structure;
+import net.conczin.mca.server.world.data.StructureFloor;
+import net.conczin.mca.server.world.data.Village;
+import net.minecraft.SharedConstants;
+import net.minecraft.core.BlockPos;
+import net.minecraft.server.Bootstrap;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+
+import java.lang.reflect.Method;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class BlueprintScreenMapInteractionTest {
+    @BeforeAll
+    static void bootstrapMinecraft() {
+        SharedConstants.tryDetectVersion();
+        Bootstrap.bootStrap();
+    }
+
     @Test
     void viewportPreservesFractionalRequestedCenter() {
         BlueprintMapViewport viewport = BlueprintMapViewport.create(
@@ -79,5 +96,42 @@ class BlueprintScreenMapInteractionTest {
         pan.begin(10.0D, 10.0D);
         assertFalse(pan.update(11.0D, 11.0D));
         assertFalse(pan.end());
+    }
+
+    @Test
+    void inheritanceControlStateTracksRefreshedVillageWithoutRebuildingPage() throws Exception {
+        Village village = new Village(1, null);
+        Structure structure = new Structure(10, BlockPos.ZERO, BlockPos.ZERO, BlockPos.ZERO,
+                List.of(new StructureFloor(0, 64, 68, null)));
+        Building main = room(1);
+        registerStructure(village, structure, main);
+        Building sideRoom = room(2);
+        village.getBuildings().put(sideRoom.getId(), sideRoom);
+
+        BlueprintScreen.InheritanceControlState before =
+                BlueprintScreen.inheritanceControlState(village, sideRoom);
+        assertEquals("gui.blueprint.roomInheritance.remove", before.labelKey());
+        assertFalse(before.nextEnabled());
+
+        assertTrue(village.setRoomContributesToMain(sideRoom, false));
+
+        BlueprintScreen.InheritanceControlState after =
+                BlueprintScreen.inheritanceControlState(village, sideRoom);
+        assertEquals("gui.blueprint.roomInheritance.enable", after.labelKey());
+        assertTrue(after.nextEnabled());
+    }
+
+    private static Building room(int id) {
+        Building room = new Building(BlockPos.ZERO);
+        room.setId(id);
+        room.setStructureId(10);
+        room.setFloorId(0);
+        return room;
+    }
+
+    private static void registerStructure(Village village, Structure structure, Building room) throws Exception {
+        Method register = Village.class.getDeclaredMethod("registerStructure", Structure.class, Building.class);
+        register.setAccessible(true);
+        register.invoke(village, structure, room);
     }
 }

@@ -21,7 +21,6 @@ final class BlueprintMapGeometry {
     private final RoomTypeResolver roomTypeResolver;
     private final Map<Integer, MapGeometry> cache = new HashMap<>();
     private List<MapFootprintLayer> allRoomLayers;
-    private List<MapStructureLayer> buildingLayers;
 
     private BlueprintMapGeometry(Village village, RoomTypeResolver roomTypeResolver) {
         this.village = village;
@@ -47,7 +46,11 @@ final class BlueprintMapGeometry {
                     .filter(layer -> Objects.equals(layer.floorOrdinal(), selectedFloor))
                     .toList();
             Map<Integer, List<MapFootprintLayer>> visibleRoomsByBuilding = groupRoomLayers(visibleRooms);
-            List<MapStructureLayer> structures = buildingLayers();
+            Map<Integer, List<MapFootprintLayer>> outlineRoomsByBuilding = groupRoomLayers(allRooms.stream()
+                    .filter(layer -> layer.floorOrdinal() >= 0)
+                    .toList());
+            List<MapStructureLayer> structures = buildStructureLayers(
+                    outlineRoomsByBuilding, visibleRoomsByBuilding);
             List<MapIconLayer> icons = buildIconLayers(visibleRoomsByBuilding, selectedFloor);
             List<Building> grouped = village.getExternalBuildings().filter(Building::isComplete)
                     .filter(building -> selectedFloor == null || selectedFloor == 0)
@@ -59,13 +62,6 @@ final class BlueprintMapGeometry {
     private List<MapFootprintLayer> allRoomLayers() {
         if (allRoomLayers == null) allRoomLayers = buildRoomLayers(null);
         return allRoomLayers;
-    }
-
-    private List<MapStructureLayer> buildingLayers() {
-        if (buildingLayers == null) {
-            buildingLayers = buildStructureLayers(groupRoomLayers(allRoomLayers()));
-        }
-        return buildingLayers;
     }
 
     private List<MapFootprintLayer> buildRoomLayers(Integer selectedFloor) {
@@ -127,13 +123,20 @@ final class BlueprintMapGeometry {
     }
 
     private List<MapStructureLayer> buildStructureLayers(
-            Map<Integer, List<MapFootprintLayer>> roomsByBuilding) {
+            Map<Integer, List<MapFootprintLayer>> outlineRoomsByBuilding,
+            Map<Integer, List<MapFootprintLayer>> visibleRoomsByBuilding) {
         List<MapStructureLayer> layers = new ArrayList<>();
-        for (Map.Entry<Integer, List<MapFootprintLayer>> entry : roomsByBuilding.entrySet()) {
+        for (Map.Entry<Integer, List<MapFootprintLayer>> entry : outlineRoomsByBuilding.entrySet()) {
             List<MapFootprintLayer> rooms = entry.getValue();
             BuildingShape shape = buildBuildingShape(
                     rooms.stream().map(MapFootprintLayer::footprintCells).toList());
             if (shape.outline().cells().isEmpty()) continue;
+
+            LinkedHashSet<BlueprintMapFootprint.Cell> shellCells =
+                    new LinkedHashSet<>(shape.outline().cells());
+            visibleRoomsByBuilding.getOrDefault(entry.getKey(), List.of())
+                    .forEach(layer -> shellCells.removeAll(layer.footprintCells()));
+            BlueprintMapFootprint.Shape shell = BlueprintMapFootprint.shape(shellCells);
 
             MapFootprintLayer mainLayer = rooms.stream()
                     .filter(layer -> village.isMainRoom(layer.building()))
@@ -146,8 +149,8 @@ final class BlueprintMapGeometry {
                     mainLayer.building(),
                     anchorY,
                     shape.outline().cells(),
-                    shape.shell().cells(),
-                    shape.shell().spans(),
+                    shell.cells(),
+                    shell.spans(),
                     shape.outline().edges()));
         }
         layers.sort(Comparator.comparingInt(MapStructureLayer::anchorY)

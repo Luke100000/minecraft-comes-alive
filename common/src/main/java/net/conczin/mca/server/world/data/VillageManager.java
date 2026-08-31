@@ -758,6 +758,11 @@ public class VillageManager extends SavedData implements Iterable<Village> {
             if (selectedType == null) return Building.validationResult.INVALID_TYPE;
             playerComponent.setType(selectedType);
             playerComponent.setTypeForced(true);
+        } else if (update.playerMatchingTypes().size() <= 1) {
+            String selectedType = resolver.resolve(playerComponent, prospectiveMain).updatedType(null);
+            if (selectedType == null) return Building.validationResult.INVALID_TYPE;
+            playerComponent.setType(selectedType);
+            playerComponent.setTypeForced(false);
         }
         for (RegisteredRoomReconciler.Assignment assignment : assignments) {
             if (!assignment.createsRoom()) continue;

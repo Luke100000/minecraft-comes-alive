@@ -35,6 +35,10 @@ public record RegisteredRoomUpdate(
         return playerMatchingTypes.size() > 1;
     }
 
+    public boolean requiresTypeSelection() {
+        return result == Building.validationResult.SUCCESS && isAmbiguous();
+    }
+
     public boolean matchesType(String type) {
         return playerMatchingTypes.contains(type);
     }

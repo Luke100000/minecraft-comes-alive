@@ -9,7 +9,6 @@ import net.minecraft.world.level.block.state.BlockState;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -27,7 +26,14 @@ final class StructureScanner {
     static Result scanNewStructure(Level world,
                                    BlockPos source,
                                    Collection<Structure> existing) {
-        return scanAtSeed(world, source, source, existing, -1);
+        Result exact = scanAtSeed(world, source, source, existing, -1);
+        if (exact.result() == Building.validationResult.SUCCESS) return exact;
+
+        BlockPos connectorSeed = resolveVerticalConnectorFloorSeed(
+                world, source, Config.getInstance()).orElse(null);
+        return connectorSeed == null
+                ? exact
+                : scanAtSeed(world, source, connectorSeed, existing, -1);
     }
 
     static Result scanReportedStructure(Level world,
@@ -71,6 +77,9 @@ final class StructureScanner {
             return Optional.of(new AttachmentSeed(source, false));
         }
 
+        Optional<BlockPos> vertical = resolveVerticalConnectorFloorSeed(world, source, config);
+        if (vertical.isPresent()) return Optional.of(new AttachmentSeed(vertical.get(), false));
+
         List<AttachmentSeed> candidates = new ArrayList<>();
         for (Direction direction : HORIZONTAL) {
             BlockPos connector = source.relative(direction);
@@ -84,6 +93,29 @@ final class StructureScanner {
             }
         }
         return candidates.size() == 1 ? Optional.of(candidates.getFirst()) : Optional.empty();
+    }
+
+    private static Optional<BlockPos> resolveVerticalConnectorFloorSeed(
+            Level world, BlockPos source, Config config) {
+        if (!StructureConnector.isVertical(world.getBlockState(source))) return Optional.empty();
+
+        BlockPos selectedSeed = null;
+        Set<BlockPos> selectedFloor = null;
+        for (Direction direction : HORIZONTAL) {
+            BlockPos candidate = source.relative(direction);
+            SelectedFloorScanner.Result scan = SelectedFloorScanner.scan(
+                    world, candidate, config.maxBuildingSize, config.maxBuildingRadius);
+            if (scan.result() != Building.validationResult.SUCCESS || scan.surface() == null) continue;
+
+            Set<BlockPos> candidateFloor = scan.surface().projectedCells();
+            if (selectedSeed == null) {
+                selectedSeed = candidate.immutable();
+                selectedFloor = candidateFloor;
+            } else if (!selectedFloor.equals(candidateFloor)) {
+                return Optional.empty();
+            }
+        }
+        return Optional.ofNullable(selectedSeed);
     }
 
     static boolean isWalkableAnchor(Level world, BlockPos pos) {
@@ -108,10 +140,6 @@ final class StructureScanner {
         }
 
         FloorSurface surface = selected.surface();
-        if (scannedEnvelopeSize(surface) <= config.minBuildingSize) {
-            return Result.failure(Building.validationResult.TOO_SMALL, interactionSource);
-        }
-
         StructureFloor floor = persistedFloor(surface);
         List<StructureFloor> floors = List.of(floor);
         Structure candidate = new Structure(
@@ -141,19 +169,6 @@ final class StructureScanner {
                 .filter(candidate -> isWalkableAnchor(world, candidate))
                 .map(BlockPos::immutable)
                 .findFirst();
-    }
-
-    private static int scannedEnvelopeSize(FloorSurface surface) {
-        Set<BlockPos> examined = new HashSet<>();
-        for (FloorSurface.Cell cell : surface.cells()) {
-            examined.add(cell.feet());
-            for (Direction direction : Direction.values()) examined.add(cell.feet().relative(direction));
-        }
-        for (BlockPos connector : surface.connectorByFloorCell().keySet()) {
-            examined.add(connector);
-            for (Direction direction : Direction.values()) examined.add(connector.relative(direction));
-        }
-        return examined.size();
     }
 
     private static int manhattanDistance(BlockPos first, BlockPos second) {

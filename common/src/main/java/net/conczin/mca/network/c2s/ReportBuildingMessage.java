@@ -80,6 +80,8 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
                         manager.analyzeAttachedRoom(source, mode, expectedTargetId), forcedType, action);
             }
             case UPDATE_ROOM -> updateRoom(manager, player, source, forcedType, expectedTargetId);
+            case SET_ROOM_INHERITANCE -> confirmRoomInheritance(
+                    manager, player, source, forcedType, expectedTargetId);
             default -> MCA.LOGGER.warn("Ignoring invalid building scan action {} from {}", action, player);
         }
     }
@@ -130,11 +132,32 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
         if (village == null) return;
         Building room = village.getFunctionalRoomAt(player.serverLevel(), player.blockPosition()).orElse(null);
         if (room == null) return;
-        if (village.isMainRoom(room)) {
-            village.setBuildingInheritanceEnabled(room, enabled);
-        } else {
-            village.setRoomContributesToMain(room, enabled);
+        RoomInheritanceUpdate update = village.analyzeRoomInheritanceUpdate(room, enabled);
+        if (!update.valid() || update.previousEnabled() == enabled) return;
+        if (update.requiresTypeSelection()) {
+            requestType(update.matchingTypes(), player.blockPosition(), player,
+                    Action.SET_ROOM_INHERITANCE, room.getId());
+            return;
         }
+        Building.validationResult result = village.commitRoomInheritanceUpdate(update, null);
+        if (result != Building.validationResult.SUCCESS) displayScanResult(player, result);
+    }
+
+    private static void confirmRoomInheritance(VillageManager manager,
+                                               ServerPlayer player,
+                                               BlockPos source,
+                                               String forcedType,
+                                               int expectedRoomId) {
+        Village village = manager.findNearestVillage(source, Village.MERGE_MARGIN).orElse(null);
+        Building room = village == null ? null
+                : village.getFunctionalRoomAt(player.serverLevel(), source).orElse(null);
+        if (room == null || room.getId() != expectedRoomId) {
+            player.displayClientMessage(Component.translatable("blueprint.roomUpdateConflict"), true);
+            return;
+        }
+        RoomInheritanceUpdate update = village.analyzeRoomInheritanceUpdate(room, false);
+        Building.validationResult result = village.commitRoomInheritanceUpdate(update, forcedType);
+        if (result != Building.validationResult.SUCCESS) displayScanResult(player, result);
     }
 
     static void updateRoom(VillageManager manager, ServerPlayer player, BlockPos source, String forcedType) {
@@ -164,7 +187,7 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
             displayScanResult(player, update.result());
             return;
         }
-        if (forcedType == null && update.isAmbiguous()) {
+        if (forcedType == null && update.requiresTypeSelection()) {
             requestType(update.playerMatchingTypes(), update.source(), player,
                     Action.UPDATE_ROOM, expectedRoomId);
             return;

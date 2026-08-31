@@ -1,8 +1,12 @@
 package net.conczin.mca.server.world.data;
 
+import com.google.gson.JsonObject;
+import net.conczin.mca.resources.BuildingTypes;
+import net.conczin.mca.resources.data.BuildingType;
 import net.minecraft.core.BlockPos;
 import net.minecraft.SharedConstants;
 import net.minecraft.server.Bootstrap;
+import net.minecraft.world.level.block.Blocks;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -61,6 +65,65 @@ class VillageFloorSystemTest {
         assertTrue(village.isBuildingInheritanceEnabled(main));
         assertTrue(village.getBuildings().get(2).contributesToMain());
         assertFalse(village.getBuildings().get(3).contributesToMain());
+    }
+
+    @Test
+    void disablingSharingWithOneEligibleTypeAutoResolvesWithoutPolymorph() {
+        Map<String, BuildingType> previous = installSingleWorkshopType();
+        try {
+            Village village = populatedVillage();
+            Building room = village.getBuildings().get(2);
+            room.addBlock(Blocks.CRAFTING_TABLE, BlockPos.ZERO);
+
+            RoomInheritanceUpdate update = village.analyzeRoomInheritanceUpdate(room, false);
+
+            assertEquals(List.of("workshop"), update.matchingTypes());
+            assertFalse(update.requiresTypeSelection());
+            assertEquals(Building.validationResult.SUCCESS,
+                    village.commitRoomInheritanceUpdate(update, null));
+            assertFalse(room.contributesToMain());
+            assertEquals("workshop", room.getType());
+            assertFalse(room.isTypeForced());
+        } finally {
+            BuildingTypes.getInstance().setBuildingTypes(previous);
+        }
+    }
+
+    @Test
+    void invalidPolymorphChoiceDoesNotDisableRoomSharing() {
+        Map<String, BuildingType> previous = installSingleWorkshopType();
+        try {
+            Village village = populatedVillage();
+            Building room = village.getBuildings().get(2);
+            room.addBlock(Blocks.CRAFTING_TABLE, BlockPos.ZERO);
+            RoomInheritanceUpdate update = village.analyzeRoomInheritanceUpdate(room, false);
+
+            assertEquals(Building.validationResult.INVALID_TYPE,
+                    village.commitRoomInheritanceUpdate(update, "not_eligible"));
+            assertTrue(room.contributesToMain());
+        } finally {
+            BuildingTypes.getInstance().setBuildingTypes(previous);
+        }
+    }
+
+    @Test
+    void ambiguousInheritancePolymorphAppliesSharingAndSelectedTypeAtomically() {
+        Map<String, BuildingType> previous = installAmbiguousWorkshopTypes();
+        try {
+            Village village = populatedVillage();
+            Building room = village.getBuildings().get(2);
+            room.addBlock(Blocks.CRAFTING_TABLE, BlockPos.ZERO);
+            RoomInheritanceUpdate update = village.analyzeRoomInheritanceUpdate(room, false);
+
+            assertTrue(update.requiresTypeSelection());
+            assertEquals(Building.validationResult.SUCCESS,
+                    village.commitRoomInheritanceUpdate(update, "workshop"));
+            assertFalse(room.contributesToMain());
+            assertEquals("workshop", room.getType());
+            assertTrue(room.isTypeForced());
+        } finally {
+            BuildingTypes.getInstance().setBuildingTypes(previous);
+        }
     }
 
     @Test
@@ -140,6 +203,30 @@ class VillageFloorSystemTest {
         village.getBuildings().put(3, room(3, 10, 0, false));
         village.refreshLogicalBuildings();
         return village;
+    }
+
+    private static Map<String, BuildingType> installSingleWorkshopType() {
+        BuildingTypes types = BuildingTypes.getInstance();
+        Map<String, BuildingType> previous = types.getBuildingTypes();
+        types.setBuildingTypes(Map.of("workshop", craftingTableType("workshop")));
+        return previous;
+    }
+
+    private static Map<String, BuildingType> installAmbiguousWorkshopTypes() {
+        BuildingTypes types = BuildingTypes.getInstance();
+        Map<String, BuildingType> previous = types.getBuildingTypes();
+        types.setBuildingTypes(Map.of(
+                "music_store", craftingTableType("music_store"),
+                "workshop", craftingTableType("workshop")));
+        return previous;
+    }
+
+    private static BuildingType craftingTableType(String name) {
+        JsonObject blocks = new JsonObject();
+        blocks.addProperty("minecraft:crafting_table", 1);
+        JsonObject type = new JsonObject();
+        type.add("blocks", blocks);
+        return new BuildingType(name, type);
     }
 
     private static Structure structure(int id, int logicalId, StructureFloor... floors) {

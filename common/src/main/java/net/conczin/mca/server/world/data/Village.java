@@ -622,6 +622,65 @@ public class Village implements Iterable<Building> {
         return true;
     }
 
+    public RoomInheritanceUpdate analyzeRoomInheritanceUpdate(Building room, boolean enabled) {
+        if (room == null || !room.isFunctionalRoom() || buildings.get(room.getId()) != room) {
+            return RoomInheritanceUpdate.invalid(enabled);
+        }
+        boolean mainRoom = isMainRoom(room);
+        boolean previousEnabled = mainRoom
+                ? isBuildingInheritanceEnabled(room)
+                : room.contributesToMain();
+        List<String> matchingTypes = enabled ? List.of() : getMatchingRoomTypes(room).stream()
+                .map(BuildingType::name)
+                .toList();
+        return new RoomInheritanceUpdate(
+                room.getId(), mainRoom, previousEnabled, enabled, matchingTypes);
+    }
+
+    public Building.validationResult commitRoomInheritanceUpdate(
+            RoomInheritanceUpdate update, String forcedType) {
+        if (update == null || !update.valid()) return Building.validationResult.NOT_IN_BUILDING;
+        Building room = buildings.get(update.roomId());
+        if (room == null || !room.isFunctionalRoom() || isMainRoom(room) != update.mainRoom()) {
+            return Building.validationResult.OVERLAP;
+        }
+
+        boolean currentEnabled = update.mainRoom()
+                ? isBuildingInheritanceEnabled(room)
+                : room.contributesToMain();
+        if (currentEnabled != update.previousEnabled()) return Building.validationResult.OVERLAP;
+        if (forcedType != null && !update.matchesType(forcedType)) {
+            return Building.validationResult.INVALID_TYPE;
+        }
+        if (update.requiresTypeSelection() && forcedType == null) {
+            return Building.validationResult.INVALID_TYPE;
+        }
+        if (currentEnabled == update.enabled()) return Building.validationResult.SUCCESS;
+
+        String automaticType = null;
+        if (!update.enabled() && forcedType == null) {
+            automaticType = RoomTypeResolver.create(this).resolve(room).updatedType(null);
+            if (automaticType == null) return Building.validationResult.INVALID_TYPE;
+        }
+
+        boolean changed = update.mainRoom()
+                ? setBuildingInheritanceEnabled(room, update.enabled())
+                : setRoomContributesToMain(room, update.enabled());
+        if (!changed) return Building.validationResult.OVERLAP;
+
+        if (!update.enabled()) {
+            if (forcedType != null) {
+                room.setType(forcedType);
+                room.setTypeForced(true);
+            } else {
+                room.setType(automaticType);
+                room.setTypeForced(false);
+            }
+            markDirty();
+        }
+        return Building.validationResult.SUCCESS;
+    }
+
     public boolean isBuildingInheritanceEnabled(Building room) {
         Structure structure = getStructureFor(room).orElse(null);
         if (structure == null) return false;

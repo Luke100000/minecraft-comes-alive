@@ -575,7 +575,7 @@
   "gui.blueprint.rename": "Rename",
   "gui.blueprint.cancel": "Cancel",
   "gui.building_polymorph.title": "Choose Room Type",
-  "gui.building_polymorph.desc": "This room matches more than one type. Choose one:",
+  "gui.building_polymorph.desc": "Choose an eligible room type:",
   "gui.blueprint.catalogFull": "Building Catalog",
   "gui.blueprint.catalogHint": "Build special buildings by fulfilling those conditions!",
   "gui.blueprint.autoScanDisabled": "Enable auto-scan under Advanced, or add rooms manually!",

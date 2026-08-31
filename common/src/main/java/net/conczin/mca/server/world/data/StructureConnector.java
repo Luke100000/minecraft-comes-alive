@@ -87,8 +87,10 @@ final class StructureConnector {
     static boolean attachesToStructure(Level world, Structure structure, BlockPos pos) {
         if (structure.containsPos(pos)) return true;
         BlockPos connector = verticalSeed(world, structure, pos);
-        return connector != null && structure.getFloors().stream()
-                .anyMatch(floor -> floor.contains(connector.getX(), connector.getZ()));
+        if (connector == null) return false;
+        return structure.getFloors().stream().anyMatch(floor -> handoffs(connector).stream()
+                .filter(handoff -> handoff.getY() >= floor.anchorY() && handoff.getY() < floor.ceilingY())
+                .anyMatch(handoff -> floor.contains(handoff.getX(), handoff.getZ())));
     }
 
     /** Current Y first, then downward only. */

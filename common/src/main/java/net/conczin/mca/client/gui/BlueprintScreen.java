@@ -93,6 +93,7 @@ public class BlueprintScreen extends ExtendedScreen {
     private ButtonWidget mapScaleButton;
     private ButtonWidget playerCenteredButton;
     private ButtonWidget playerHeadButton;
+    private TooltipButtonWidget inheritanceButton;
     private TooltipButtonWidget mainRoomButton;
     private TooltipButtonWidget structureScanButton;
     private TooltipButtonWidget attachmentScanButton;
@@ -191,6 +192,7 @@ public class BlueprintScreen extends ExtendedScreen {
         mapScaleButton = null;
         playerCenteredButton = null;
         playerHeadButton = null;
+        inheritanceButton = null;
         mainRoomButton = null;
         structureScanButton = null;
         attachmentScanButton = null;
@@ -527,6 +529,7 @@ public class BlueprintScreen extends ExtendedScreen {
         updateMapScaleControl();
         updateStructureScanControl(scanContext);
         updateRemoveRoomControl(scanContext);
+        updateInheritanceControl(scanContext);
         updateMainRoomControl(scanContext);
     }
 
@@ -955,29 +958,53 @@ public class BlueprintScreen extends ExtendedScreen {
     private void addInheritanceControl(SideControlColumn column) {
         Building room = getPlayerRoomScanPlan().functionalRoom().orElse(null);
         if (room == null) return;
-
-        boolean mainRoom = roomTypeResolver.resolve(room).isMainRoom();
-        boolean enabled = mainRoom ? village.isBuildingInheritanceEnabled(room) : room.contributesToMain();
-        boolean enable = !enabled;
-        String labelKey;
-        String tooltipKey;
-        if (enable) {
-            labelKey = "gui.blueprint.roomInheritance.enable";
-            tooltipKey = mainRoom
-                    ? "gui.blueprint.roomInheritance.enableMain.tooltip"
-                    : "gui.blueprint.roomInheritance.enable.tooltip";
-        } else if (mainRoom) {
-            labelKey = "gui.blueprint.roomInheritance.disable";
-            tooltipKey = "gui.blueprint.roomInheritance.disable.tooltip";
-        } else {
-            labelKey = "gui.blueprint.roomInheritance.remove";
-            tooltipKey = "gui.blueprint.roomInheritance.remove.tooltip";
-        }
-
-        column.addTooltip(Component.translatable(labelKey), Component.translatable(tooltipKey), button -> {
+        InheritanceControlState state = inheritanceControlState(village, room);
+        inheritanceButton = column.addTooltip(
+                Component.translatable(state.labelKey()),
+                Component.translatable(state.tooltipKey()), button -> {
+            Building currentRoom = getPlayerRoomScanPlan().functionalRoom().orElse(null);
+            if (currentRoom == null) return;
+            InheritanceControlState current = inheritanceControlState(village, currentRoom);
             Network.sendToServer(new ReportBuildingMessage(
-                    ReportBuildingMessage.Action.SET_ROOM_INHERITANCE, Boolean.toString(enable)));
+                    ReportBuildingMessage.Action.SET_ROOM_INHERITANCE,
+                    Boolean.toString(current.nextEnabled())));
         });
+    }
+
+    static InheritanceControlState inheritanceControlState(Village village, Building room) {
+        boolean mainRoom = village != null && village.isMainRoom(room);
+        boolean enabled = room != null && (mainRoom
+                ? village.isBuildingInheritanceEnabled(room)
+                : room.contributesToMain());
+        boolean nextEnabled = !enabled;
+        if (nextEnabled) {
+            return new InheritanceControlState(
+                    "gui.blueprint.roomInheritance.enable",
+                    mainRoom
+                            ? "gui.blueprint.roomInheritance.enableMain.tooltip"
+                            : "gui.blueprint.roomInheritance.enable.tooltip",
+                    true);
+        }
+        return mainRoom
+                ? new InheritanceControlState(
+                "gui.blueprint.roomInheritance.disable",
+                "gui.blueprint.roomInheritance.disable.tooltip", false)
+                : new InheritanceControlState(
+                "gui.blueprint.roomInheritance.remove",
+                "gui.blueprint.roomInheritance.remove.tooltip", false);
+    }
+
+    record InheritanceControlState(String labelKey, String tooltipKey, boolean nextEnabled) {
+    }
+
+    private void updateInheritanceControl(RoomScanPlan scanContext) {
+        if (inheritanceButton == null) return;
+        Building room = scanContext.functionalRoom().orElse(null);
+        inheritanceButton.active = room != null;
+        if (room == null) return;
+        InheritanceControlState state = inheritanceControlState(village, room);
+        inheritanceButton.setMessage(Component.translatable(state.labelKey()));
+        inheritanceButton.setTooltip(Tooltip.create(Component.translatable(state.tooltipKey())));
     }
 
     private final class SideControlColumn {
