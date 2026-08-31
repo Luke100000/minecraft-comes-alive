@@ -104,7 +104,8 @@ final class BuildingRoomScanner {
         if (footprint.size() < MIN_INTERIOR_AREA) return Result.failure(Status.TOO_SMALL, source);
 
         BlockPos seed = nearestCell(source, component.cells());
-        Set<BlockPos> poi = collectPoiCells(world, footprint, floor, surface);
+        Set<BlockPos> ownedConnectorCells = ownedConnectorCells(surface, components, component);
+        Set<BlockPos> poi = RoomPoiEvidence.candidates(surface, component, ownedConnectorCells);
         int minX = footprint.stream().mapToInt(BlockPos::getX).min().orElse(source.getX());
         int minZ = footprint.stream().mapToInt(BlockPos::getZ).min().orElse(source.getZ());
         int maxX = footprint.stream().mapToInt(BlockPos::getX).max().orElse(source.getX());
@@ -135,22 +136,18 @@ final class BuildingRoomScanner {
         return new FloorSurface(cells, associated);
     }
 
-    private static Set<BlockPos> collectPoiCells(
-            Level world, Set<BlockPos> footprint, StructureFloor floor, FloorSurface surface) {
-        LinkedHashSet<BlockPos> poi = new LinkedHashSet<>();
-        BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
-        for (BlockPos cell : footprint) {
-            cursor.set(cell.getX(), floor.anchorY() - 1, cell.getZ());
-            if (!world.getBlockState(cursor).isAir()) poi.add(cursor.immutable());
-            int ceilingY = surface.cellAtColumn(cell.getX(), cell.getZ())
-                    .map(FloorSurface.Cell::ceilingY)
-                    .orElse(floor.ceilingY());
-            for (int y = floor.anchorY(); y < ceilingY; y++) {
-                cursor.set(cell.getX(), y, cell.getZ());
-                if (!world.getBlockState(cursor).isAir()) poi.add(cursor.immutable());
+    private static Set<BlockPos> ownedConnectorCells(
+            FloorSurface surface,
+            Collection<FloorSurfacePartitioner.Component> components,
+            FloorSurfacePartitioner.Component selected) {
+        LinkedHashSet<BlockPos> owned = new LinkedHashSet<>();
+        for (BlockPos connectorCell : surface.connectorByFloorCell().keySet()) {
+            if (selected.equals(FloorSurfacePartitioner.owner(
+                    FloorSurfacePartitioner.adjacent(connectorCell, components)))) {
+                owned.add(connectorCell);
             }
         }
-        return Set.copyOf(poi);
+        return Set.copyOf(owned);
     }
 
     private static BlockPos nearestCell(BlockPos source, Collection<FloorSurface.Cell> cells) {
