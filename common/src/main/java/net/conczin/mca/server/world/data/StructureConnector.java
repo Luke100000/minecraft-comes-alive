@@ -8,6 +8,7 @@ import net.minecraft.world.level.block.FenceGateBlock;
 import net.minecraft.world.level.block.LadderBlock;
 import net.minecraft.world.level.block.TrapDoorBlock;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
 
 import java.util.*;
 
@@ -35,13 +36,24 @@ final class StructureConnector {
         return state.getBlock() instanceof DoorBlock || state.getBlock() instanceof FenceGateBlock;
     }
 
+    static BlockPos normalize(BlockPos pos, BlockState state) {
+        if (state.getBlock() instanceof DoorBlock) {
+            return normalizeDoorHalf(pos, state.getValue(DoorBlock.HALF));
+        }
+        return pos;
+    }
+
+    static BlockPos normalizeDoorHalf(BlockPos pos, DoubleBlockHalf half) {
+        return half == DoubleBlockHalf.UPPER ? pos.below() : pos;
+    }
+
     /** Doors are traversal boundaries only; unlike other connectors, they never own a Floor cell. */
     static boolean ownsFloorCell(BlockState state) {
         return isConnector(state) && !(state.getBlock() instanceof DoorBlock);
     }
 
-    /** Projects connector columns onto ordinary Floor Y levels before storey detection. */
-    static Set<BuildingFloorRegionDetector.FloorCell> associatedFloorCells(
+    /** Legacy projection used until StructureScanner is migrated to exact FloorSurface cells. */
+    static Set<BuildingFloorRegionDetector.FloorCell> associatedLegacyFloorCells(
             Level world, Collection<BlockPos> connectors,
             Collection<BuildingFloorRegionDetector.FloorCell> ordinaryFloorCells) {
         if (connectors.isEmpty() || ordinaryFloorCells.isEmpty()) return Set.of();
@@ -73,6 +85,43 @@ final class StructureConnector {
             }
         }
         return Set.copyOf(result);
+    }
+
+    /** Associates connector positions with exact cells on the already selected semantic floor. */
+    static Map<BlockPos, BlockPos> associatedFloorCells(
+            Level world, Collection<BlockPos> connectors, Collection<FloorSurface.Cell> surfaceCells) {
+        if (connectors.isEmpty() || surfaceCells.isEmpty()) return Map.of();
+
+        Set<BlockPos> surfaceFeet = surfaceCells.stream()
+                .map(FloorSurface.Cell::feet)
+                .collect(java.util.stream.Collectors.toSet());
+        LinkedHashMap<BlockPos, BlockPos> result = new LinkedHashMap<>();
+        for (BlockPos rawConnector : connectors) {
+            BlockState rawState = world.getBlockState(rawConnector);
+            BlockPos connector = normalize(rawConnector, rawState);
+            BlockState state = world.getBlockState(connector);
+            if (!isConnector(state)) continue;
+
+            if (isVertical(state)) {
+                for (BlockPos handoff : handoffs(connector)) {
+                    if (!surfaceFeet.contains(handoff)) continue;
+                    result.putIfAbsent(
+                            new BlockPos(connector.getX(), handoff.getY(), connector.getZ()), connector);
+                }
+                continue;
+            }
+
+            for (Direction direction : HORIZONTAL) {
+                BlockPos side = connector.relative(direction);
+                for (int dy = -1; dy <= 1; dy++) {
+                    BlockPos landing = side.offset(0, dy, 0);
+                    if (!surfaceFeet.contains(landing)) continue;
+                    result.putIfAbsent(
+                            new BlockPos(connector.getX(), landing.getY(), connector.getZ()), connector);
+                }
+            }
+        }
+        return Map.copyOf(result);
     }
 
     static boolean attachesToStructure(Level world, Structure structure, BlockPos pos) {

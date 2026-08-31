@@ -162,7 +162,7 @@ final class StructureScanner {
         }
 
         Set<BuildingFloorRegionDetector.FloorCell> associated =
-                StructureConnector.associatedFloorCells(world, connectorCells, floorCells);
+                StructureConnector.associatedLegacyFloorCells(world, connectorCells, floorCells);
         boundary.addPermittedAssociated(floorCells, associated);
         List<BuildingFloorRegion> regions = BuildingFloorRegionDetector.detect(floorCells);
         int scannedEnvelopeSize = scannedEnvelopeSize(volume);

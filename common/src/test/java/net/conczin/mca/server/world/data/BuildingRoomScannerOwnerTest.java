@@ -1,50 +1,49 @@
 package net.conczin.mca.server.world.data;
 
 import net.minecraft.core.BlockPos;
-import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class BuildingRoomScannerOwnerTest {
     @Test
-    void doorsAreTraversalOnlyAndNeverOwnFloorCells() {
-        assertFalse(StructureConnector.ownsFloorCell(Blocks.OAK_DOOR.defaultBlockState()));
-        assertTrue(StructureConnector.ownsFloorCell(Blocks.OAK_FENCE_GATE.defaultBlockState()));
-        assertTrue(StructureConnector.ownsFloorCell(Blocks.OAK_TRAPDOOR.defaultBlockState()));
-        assertTrue(StructureConnector.ownsFloorCell(Blocks.LADDER.defaultBlockState()));
+    void upperDoorHalfNormalizesToOneLowerConnector() {
+        BlockPos upper = new BlockPos(4, 65, 7);
+
+        assertEquals(new BlockPos(4, 64, 7),
+                StructureConnector.normalizeDoorHalf(upper, DoubleBlockHalf.UPPER));
+        assertEquals(upper,
+                StructureConnector.normalizeDoorHalf(upper, DoubleBlockHalf.LOWER));
     }
 
     @Test
-    void connectorSourceChoosesLargestAdjacentInterior() {
-        BuildingFloorRegion.Component outside = component(-2, 0, -1, 0);
-        BuildingFloorRegion.Component interior = component(1, 0, 5, 3);
-        BlockPos doorCell = new BlockPos(0, 88, 0);
-        StructureFloor floor = new StructureFloor(0, 88, 94, 0, null);
+    void connectorOwnerChoosesLargestAdjacentInterior() {
+        FloorSurfacePartitioner.Component outside = component(Set.of(cell(-1, 64, 0)));
+        FloorSurfacePartitioner.Component interior = component(Set.of(
+                cell(1, 64, 0), cell(2, 64, 0), cell(3, 64, 0)));
 
-        BuildingFloorRegion.Component selected = BuildingRoomScanner.selectComponent(
-                doorCell, floor, Set.of(doorCell), List.of(outside, interior));
-
-        assertEquals(interior, selected);
-        assertEquals(interior, BuildingRoomScanner.componentOwner(List.of(outside, interior)));
+        assertEquals(interior, FloorSurfacePartitioner.owner(List.of(outside, interior)));
     }
 
     @Test
     void equalAreaComponentsUseStableBoundsTieBreak() {
-        BuildingFloorRegion.Component first = component(-4, 0, -3, 1);
-        BuildingFloorRegion.Component second = component(1, 0, 2, 1);
+        FloorSurfacePartitioner.Component first = component(Set.of(
+                cell(-4, 64, 0), cell(-3, 64, 0)));
+        FloorSurfacePartitioner.Component second = component(Set.of(
+                cell(1, 64, 0), cell(2, 64, 0)));
 
-        assertEquals(first, BuildingRoomScanner.componentOwner(List.of(second, first)));
+        assertEquals(first, FloorSurfacePartitioner.owner(List.of(second, first)));
     }
 
-    private static BuildingFloorRegion.Component component(
-            int minX, int minZ, int maxX, int maxZ) {
-        int area = (maxX - minX + 1) * (maxZ - minZ + 1);
-        return new BuildingFloorRegion.Component(minX, minZ, maxX, maxZ, area, List.of());
+    private static FloorSurface.Cell cell(int x, int y, int z) {
+        return new FloorSurface.Cell(new BlockPos(x, y, z), y, y + 4);
+    }
+
+    private static FloorSurfacePartitioner.Component component(Set<FloorSurface.Cell> cells) {
+        return new FloorSurfacePartitioner.Component(cells);
     }
 }
