@@ -406,50 +406,99 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         return analyzeRegisteredFloor(village, structure, expected, pos);
     }
 
+    static Optional<List<Building>> updateLineage(Building selected,
+                                                  Collection<Building> freshComponents,
+                                                  Collection<Building> otherRooms) {
+        List<Building> lineage = freshComponents.stream()
+                .filter(component -> component.getFloorFootprintIntersectionArea(selected) > 0)
+                .sorted(Comparator.comparingInt((Building room) -> room.getRawPos0().getX())
+                        .thenComparingInt(room -> room.getRawPos0().getZ())
+                        .thenComparingInt(room -> room.getRawPos1().getX())
+                        .thenComparingInt(room -> room.getRawPos1().getZ()))
+                .toList();
+        if (lineage.isEmpty()) return Optional.empty();
+        for (Building component : lineage) {
+            for (Building other : otherRooms) {
+                if (component.getFloorFootprintIntersectionArea(other) > 0) return Optional.empty();
+            }
+        }
+        return Optional.of(lineage);
+    }
+
+    static boolean lineageOverlapsRegisteredRooms(
+            Collection<RegisteredRoomReconciler.Assignment> assignments,
+            Collection<Building> otherRooms) {
+        for (RegisteredRoomReconciler.Assignment assignment : assignments) {
+            Building component = assignment.component();
+            for (Building other : otherRooms) {
+                if (component.getFloorFootprintIntersectionArea(other) > 0) return true;
+            }
+        }
+        return false;
+    }
+
     private RegisteredRoomUpdate analyzeRegisteredFloor(Village village,
                                                         Structure structure,
                                                         Building expected,
                                                         BlockPos pos) {
-        StructureFloor floor = structure.getFloor(expected.getFloorId()).orElse(null);
-        if (floor == null) {
+        StructureFloor persistedFloor = structure.getFloor(expected.getFloorId()).orElse(null);
+        if (persistedFloor == null) {
             return RegisteredRoomUpdate.failure(Building.validationResult.OVERLAP, pos, village);
         }
 
-        List<Building> previousRooms = village.getRooms()
-                .filter(room -> room.getStructureId() == structure.getId())
-                .filter(room -> room.getFloorId() == floor.id())
-                .sorted(Comparator.comparingInt(Building::getId))
-                .toList();
-        Set<BlockPos> registeredCells = previousRooms.stream()
-                .flatMap(room -> room.getFloorRegions().stream())
-                .flatMap(region -> region.cells().stream())
-                .collect(java.util.stream.Collectors.toSet());
-        List<BuildingScanResult> scanned = BuildingRoomScanner.partitionRegistered(
+        StructureScanner.Result fresh = StructureScanner.scanExistingFloor(
+                world, structure, persistedFloor, pos, village.getStructures().values());
+        if (fresh.result() != Building.validationResult.SUCCESS) {
+            return RegisteredRoomUpdate.failure(fresh.result(), pos, village);
+        }
+
+        List<Building> freshComponents = BuildingRoomScanner.partition(
                         world, pos, Config.getInstance().maxBuildingSize,
-                        floor, registeredCells).stream()
-                .map(geometry -> roomResultFromGeometry(village, structure, floor, geometry, -1))
+                        persistedFloor, fresh.surface()).stream()
+                .map(geometry -> roomResultFromGeometry(
+                        village, structure, persistedFloor, geometry, -1))
+                .filter(scan -> scan.result() == Building.validationResult.SUCCESS)
+                .map(BuildingScanResult::building)
                 .toList();
-        if (scanned.isEmpty()) {
+        if (freshComponents.isEmpty()) {
             return RegisteredRoomUpdate.failure(Building.validationResult.TOO_SMALL, pos, village);
         }
-        BuildingScanResult failure = scanned.stream()
-                .filter(scan -> scan.result() != Building.validationResult.SUCCESS)
-                .findFirst().orElse(null);
-        if (failure != null) return RegisteredRoomUpdate.failure(failure.result(), pos, village);
+
+        List<Building> otherRooms = village.getRooms()
+                .filter(room -> room.getStructureId() == structure.getId())
+                .filter(room -> room.getFloorId() == persistedFloor.id())
+                .filter(room -> room.getId() != expected.getId())
+                .toList();
+
+        List<Building> lineage = updateLineage(expected, freshComponents, otherRooms).orElse(null);
+        if (lineage == null || lineage.isEmpty()) {
+            return RegisteredRoomUpdate.failure(Building.validationResult.OVERLAP, pos, village);
+        }
 
         int mainRoomId = village.getMainRoom(structure).map(Building::getId).orElse(-1);
         RegisteredRoomReconciler.Result reconciled = RegisteredRoomReconciler.reconcile(
-                pos, expected.getId(), mainRoomId, previousRooms,
-                scanned.stream().map(BuildingScanResult::building).toList()).orElse(null);
+                pos, expected.getId(), mainRoomId, List.of(expected), lineage).orElse(null);
         if (reconciled == null) {
             return RegisteredRoomUpdate.failure(Building.validationResult.OVERLAP, pos, village);
         }
+
+        Structure refreshed = new Structure(structure.save());
+        for (RegisteredRoomReconciler.Assignment assignment : reconciled.assignments()) {
+            Building component = assignment.component();
+            if (component.getFloorRegions().isEmpty()
+                    || !refreshed.ensureFloorContains(
+                    persistedFloor.id(), component.getFloorRegions().getFirst(),
+                    component.getRawPos1().getY() + 1)) {
+                return RegisteredRoomUpdate.failure(Building.validationResult.OVERLAP, pos, village);
+            }
+        }
+
         Building playerComponent = reconciled.playerComponent();
         List<String> matchingTypes = village.getMatchingRoomTypes(playerComponent).stream()
                 .map(BuildingType::name)
                 .toList();
         return new RegisteredRoomUpdate(Building.validationResult.SUCCESS, pos, village,
-                structure.getId(), floor.id(), expected.getId(),
+                refreshed, structure.getId(), persistedFloor.id(), expected.getId(),
                 reconciled.previousRoomIds(), reconciled.assignments(),
                 playerComponent, matchingTypes);
     }
@@ -610,14 +659,17 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         if (structure == null || structure.getFloor(update.floorId()).isEmpty()) {
             return Building.validationResult.NOT_IN_BUILDING;
         }
+        if (update.refreshedStructure() == null
+                || update.refreshedStructure().getId() != update.structureId()
+                || update.refreshedStructure().getFloor(update.floorId()).isEmpty()
+                || !update.previousRoomIds().equals(List.of(update.expectedPlayerRoomId()))) {
+            return Building.validationResult.OVERLAP;
+        }
         List<Building> currentFloorRooms = village.getRooms()
                 .filter(room -> room.getStructureId() == update.structureId())
                 .filter(room -> room.getFloorId() == update.floorId())
                 .sorted(Comparator.comparingInt(Building::getId))
                 .toList();
-        if (!currentFloorRooms.stream().map(Building::getId).toList().equals(update.previousRoomIds())) {
-            return Building.validationResult.OVERLAP;
-        }
         Building playerRoom = village.getBuilding(update.expectedPlayerRoomId()).orElse(null);
         if (playerRoom == null || !currentFloorRooms.contains(playerRoom)) {
             return Building.validationResult.OVERLAP;
@@ -628,6 +680,20 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         }
 
         List<RegisteredRoomReconciler.Assignment> assignments = update.assignments();
+        long previousAssignments = assignments.stream()
+                .filter(assignment -> assignment.previous() != null)
+                .count();
+        if (previousAssignments != 1
+                || assignments.stream().noneMatch(assignment -> assignment.previous() == playerRoom)) {
+            return Building.validationResult.OVERLAP;
+        }
+        List<Building> otherRooms = currentFloorRooms.stream()
+                .filter(room -> room != playerRoom)
+                .toList();
+        if (lineageOverlapsRegisteredRooms(assignments, otherRooms)) {
+            return Building.validationResult.OVERLAP;
+        }
+
         int nextRoomId = lastBuildingId;
         for (RegisteredRoomReconciler.Assignment assignment : assignments) {
             Building component = assignment.component();
@@ -694,6 +760,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
             component.setTypeForced(false);
         }
 
+        village.getStructures().put(update.structureId(), update.refreshedStructure());
         for (RegisteredRoomReconciler.Assignment assignment : assignments) {
             if (assignment.previous() == null) continue;
             Building existing = assignment.previous();
@@ -708,7 +775,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
                 .map(RegisteredRoomReconciler.Assignment::component)
                 .forEach(room -> village.getBuildings().put(room.getId(), room));
         if (replacementMain != null) {
-            village.getLogicalBuilding(structure.getLogicalBuildingId())
+            village.getLogicalBuilding(update.refreshedStructure().getLogicalBuildingId())
                     .ifPresent(logical -> logical.setMainRoomId(replacementMain.getId()));
         }
         village.refreshLogicalBuildings();

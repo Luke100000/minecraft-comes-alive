@@ -4,11 +4,12 @@ import net.minecraft.core.BlockPos;
 
 import java.util.List;
 
-/** Detached, fully analyzed update for one registered Structure Floor. */
+/** Detached, fully analyzed update for one selected registered Room lineage. */
 public record RegisteredRoomUpdate(
         Building.validationResult result,
         BlockPos source,
         Village village,
+        Structure refreshedStructure,
         int structureId,
         int floorId,
         int expectedPlayerRoomId,
@@ -26,7 +27,7 @@ public record RegisteredRoomUpdate(
     static RegisteredRoomUpdate failure(Building.validationResult result,
                                         BlockPos source,
                                         Village village) {
-        return new RegisteredRoomUpdate(result, source, village, -1, -1, -1,
+        return new RegisteredRoomUpdate(result, source, village, null, -1, -1, -1,
                 List.of(), List.of(), null, List.of());
     }
 

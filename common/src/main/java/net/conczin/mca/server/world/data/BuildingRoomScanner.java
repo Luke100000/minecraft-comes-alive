@@ -1,16 +1,12 @@
 package net.conczin.mca.server.world.data;
 
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
 import net.minecraft.world.level.Level;
 
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
-import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 /** Materializes Room geometry from one exact selected FloorSurface. */
@@ -49,26 +45,6 @@ final class BuildingRoomScanner {
                         world, source, Set.of(), maxSize, floor, surface, components, component))
                 .sorted(Comparator.comparingInt((Result result) -> result.min().getX())
                         .thenComparingInt(result -> result.min().getZ()))
-                .toList();
-    }
-
-    /** Compatibility path for registered-room updates until they are moved to fresh world surfaces. */
-    static List<Result> partitionRegistered(Level world,
-                                            BlockPos source,
-                                            int maxSize,
-                                            StructureFloor floor,
-                                            Set<BlockPos> registeredCells) {
-        if (floor == null || floor.region() == null || registeredCells == null || registeredCells.isEmpty()) {
-            return List.of();
-        }
-        FloorSurface surface = persistedSurface(world, floor);
-        Set<Long> registeredColumns = registeredCells.stream()
-                .map(BuildingRoomScanner::columnKey)
-                .collect(java.util.stream.Collectors.toUnmodifiableSet());
-        return partition(world, source, maxSize, floor, surface).stream()
-                .filter(result -> result.footprintCells().stream()
-                        .map(BuildingRoomScanner::columnKey)
-                        .anyMatch(registeredColumns::contains))
                 .toList();
     }
 
@@ -117,25 +93,6 @@ final class BuildingRoomScanner {
                 new BlockPos(maxX, maxY, maxZ));
     }
 
-    private static FloorSurface persistedSurface(Level world, StructureFloor floor) {
-        LinkedHashSet<FloorSurface.Cell> cells = new LinkedHashSet<>();
-        LinkedHashSet<BlockPos> connectors = new LinkedHashSet<>();
-        for (BlockPos projected : floor.region().cells()) {
-            BlockPos feet = new BlockPos(projected.getX(), floor.anchorY(), projected.getZ());
-            cells.add(new FloorSurface.Cell(feet, floor.anchorY(), floor.ceilingY()));
-            for (int y = floor.anchorY() - BuildingFloorRegionDetector.FLOOR_CLUSTER_TOLERANCE;
-                 y < floor.ceilingY(); y++) {
-                BlockPos candidate = new BlockPos(feet.getX(), y, feet.getZ());
-                if (StructureConnector.isConnector(world.getBlockState(candidate))) {
-                    connectors.add(candidate);
-                    break;
-                }
-            }
-        }
-        Map<BlockPos, BlockPos> associated = StructureConnector.associatedFloorCells(world, connectors, cells);
-        return new FloorSurface(cells, associated);
-    }
-
     private static Set<BlockPos> ownedConnectorCells(
             FloorSurface surface,
             Collection<FloorSurfacePartitioner.Component> components,
@@ -161,10 +118,6 @@ final class BuildingRoomScanner {
                         .thenComparingInt(BlockPos::getY)
                         .thenComparingInt(BlockPos::getZ))
                 .orElse(source);
-    }
-
-    private static long columnKey(BlockPos pos) {
-        return ((long) pos.getX() << 32) ^ (pos.getZ() & 0xffffffffL);
     }
 
     enum Status { SUCCESS, OVERLAP, BLOCK_LIMIT, SIZE_LIMIT, TOO_SMALL }

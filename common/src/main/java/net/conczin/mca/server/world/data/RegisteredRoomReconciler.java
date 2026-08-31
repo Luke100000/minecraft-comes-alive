@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-/** Matches one complete registered-Floor partition back to stable Room identities. */
+/** Matches a caller-provided Room lineage back to stable Room identities. */
 final class RegisteredRoomReconciler {
     private RegisteredRoomReconciler() {
     }

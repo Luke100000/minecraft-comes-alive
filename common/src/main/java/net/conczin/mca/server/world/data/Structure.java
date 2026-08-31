@@ -174,6 +174,43 @@ public final class Structure implements VillageBuilding {
         }
     }
 
+    boolean ensureFloorContains(int floorId, BuildingFloorRegion roomRegion, int roomCeilingY) {
+        StructureFloor existing = floors.get(floorId);
+        if (existing == null || existing.region() == null || roomRegion == null) return false;
+
+        LinkedHashSet<BlockPos> union = new LinkedHashSet<>(existing.region().cells());
+        union.addAll(roomRegion.cells());
+        BuildingFloorRegion expanded = BuildingFloorRegion.fromFootprint(existing.anchorY(), union);
+        floors.put(floorId, new StructureFloor(
+                floorId,
+                existing.anchorY(),
+                Math.max(existing.ceilingY(), roomCeilingY),
+                existing.floorNumber(),
+                expanded));
+        recomputeBoundsFromFloors();
+        return true;
+    }
+
+    private void recomputeBoundsFromFloors() {
+        List<StructureFloor> current = getFloors();
+        if (current.isEmpty()) return;
+
+        List<BlockPos> cells = current.stream()
+                .filter(floor -> floor.region() != null)
+                .flatMap(floor -> floor.region().cells().stream())
+                .toList();
+        if (cells.isEmpty()) return;
+
+        int minX = cells.stream().mapToInt(BlockPos::getX).min().orElse(source.getX());
+        int minZ = cells.stream().mapToInt(BlockPos::getZ).min().orElse(source.getZ());
+        int maxX = cells.stream().mapToInt(BlockPos::getX).max().orElse(source.getX());
+        int maxZ = cells.stream().mapToInt(BlockPos::getZ).max().orElse(source.getZ());
+        int minY = current.stream().mapToInt(StructureFloor::anchorY).min().orElse(source.getY());
+        int maxY = current.stream().mapToInt(floor -> floor.ceilingY() - 1).max().orElse(source.getY());
+        min = new BlockPos(minX, minY, minZ);
+        max = new BlockPos(maxX, maxY, maxZ);
+    }
+
 
     boolean applyScan(StructureScanner.Result scan, Collection<Building> rooms) {
         StructureFloorMatcher.Result match = StructureFloorMatcher.match(
