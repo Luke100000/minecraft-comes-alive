@@ -31,8 +31,13 @@ final class BuildingRoomScanner {
         }
 
         PartitionData partition = partitionData(world, floor);
+        LinkedHashSet<BlockPos> connectorCells = new LinkedHashSet<>(partition.floorConnectors().keySet());
+        BlockPos sourceFloorCell = new BlockPos(source.getX(), floor.anchorY(), source.getZ());
+        if (connectorInColumn(world, floor, sourceFloorCell) != null) {
+            connectorCells.add(sourceFloorCell);
+        }
         BuildingFloorRegion.Component selected = selectComponent(
-                source, floor, partition.floorConnectors().keySet(), partition.components());
+                source, floor, connectorCells, partition.components());
         return selected == null ? Result.failure(Status.TOO_SMALL, source)
                 : materializeComponent(world, source, blocked, maxSize, floor, partition, selected);
     }
@@ -93,7 +98,9 @@ final class BuildingRoomScanner {
         Set<BlockPos> componentCells = component.cells(floor.anchorY());
         LinkedHashSet<BlockPos> footprint = new LinkedHashSet<>(componentCells);
         footprint.addAll(partition.functionalPoiCells().getOrDefault(component, Set.of()));
-        for (BlockPos connectorCell : partition.floorConnectors().keySet()) {
+        for (Map.Entry<BlockPos, BlockPos> connector : partition.floorConnectors().entrySet()) {
+            BlockPos connectorCell = connector.getKey();
+            if (!StructureConnector.ownsFloorCell(world.getBlockState(connector.getValue()))) continue;
             List<BuildingFloorRegion.Component> adjacent = adjacentComponents(connectorCell, partition.components());
             if (component.equals(componentOwner(adjacent))) footprint.add(connectorCell);
         }
@@ -263,7 +270,7 @@ final class BuildingRoomScanner {
                         cell.getZ() + direction.getStepZ()))).toList();
     }
 
-    /** Every connector/functional cell has one stable Room owner so Room footprints stay disjoint. */
+    /** Every floor-owning connector/functional cell has one stable Room owner so footprints stay disjoint. */
     static BuildingFloorRegion.Component componentOwner(
             Collection<BuildingFloorRegion.Component> adjacent) {
         return adjacent.stream().min(COMPONENT_OWNER_ORDER).orElse(null);

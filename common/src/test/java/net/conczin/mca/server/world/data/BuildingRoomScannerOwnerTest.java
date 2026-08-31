@@ -1,14 +1,25 @@
 package net.conczin.mca.server.world.data;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.block.Blocks;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class BuildingRoomScannerOwnerTest {
+    @Test
+    void doorsAreTraversalOnlyAndNeverOwnFloorCells() {
+        assertFalse(StructureConnector.ownsFloorCell(Blocks.OAK_DOOR.defaultBlockState()));
+        assertTrue(StructureConnector.ownsFloorCell(Blocks.OAK_FENCE_GATE.defaultBlockState()));
+        assertTrue(StructureConnector.ownsFloorCell(Blocks.OAK_TRAPDOOR.defaultBlockState()));
+        assertTrue(StructureConnector.ownsFloorCell(Blocks.LADDER.defaultBlockState()));
+    }
+
     @Test
     void connectorSourceChoosesLargestAdjacentInterior() {
         BuildingFloorRegion.Component outside = component(-2, 0, -1, 0);

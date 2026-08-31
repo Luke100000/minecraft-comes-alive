@@ -35,6 +35,11 @@ final class StructureConnector {
         return state.getBlock() instanceof DoorBlock || state.getBlock() instanceof FenceGateBlock;
     }
 
+    /** Doors are traversal boundaries only; unlike other connectors, they never own a Floor cell. */
+    static boolean ownsFloorCell(BlockState state) {
+        return isConnector(state) && !(state.getBlock() instanceof DoorBlock);
+    }
+
     /** Projects connector columns onto ordinary Floor Y levels before storey detection. */
     static Set<BuildingFloorRegionDetector.FloorCell> associatedFloorCells(
             Level world, Collection<BlockPos> connectors,
@@ -46,7 +51,7 @@ final class StructureConnector {
         LinkedHashSet<BuildingFloorRegionDetector.FloorCell> result = new LinkedHashSet<>();
         for (BlockPos connector : connectors) {
             BlockState state = world.getBlockState(connector);
-            if (!isConnector(state)) continue;
+            if (!ownsFloorCell(state)) continue;
             if (isVertical(state)) {
                 for (BlockPos handoff : handoffs(connector)) {
                     if (ordinary.contains(handoff)) {
