@@ -212,20 +212,6 @@ public final class Structure implements VillageBuilding {
     }
 
 
-    boolean applyScan(StructureScanner.Result scan, Collection<Building> rooms) {
-        StructureFloorMatcher.Result match = StructureFloorMatcher.match(
-                getFloors(), nextFloorId, scan.floors(), rooms).orElse(null);
-        if (match == null) return false;
-
-        floors.clear();
-        floors.putAll(match.floors());
-        nextFloorId = match.nextFloorId();
-        source = scan.source();
-        min = scan.min();
-        max = scan.max();
-        return true;
-    }
-
     @Override
     public int getId() {
         return id;

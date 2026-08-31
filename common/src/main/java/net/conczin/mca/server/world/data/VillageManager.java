@@ -272,9 +272,13 @@ public class VillageManager extends SavedData implements Iterable<Village> {
             return failedRoom(structureScan.result(), source, village);
         }
 
+        StructureFloor scannedFloor = singleScannedFloor(structureScan);
+        if (scannedFloor == null) {
+            return failedRoom(Building.validationResult.AMBIGUOUS_STRUCTURE, source, village);
+        }
+
         Structure candidate = structureScan.toStructure(-1);
-        StructureFloor attachmentFloor = resolveRoomFloor(
-                village, candidate, plan.scanSeed(), -1);
+        StructureFloor attachmentFloor = candidate.getFloor(scannedFloor.id()).orElse(null);
         if (attachmentFloor == null || !validAttachment(
                 village, candidate, attachmentFloor, plan.targetBuildingId(), requestedMode)) {
             return failedRoom(Building.validationResult.NOT_IN_BUILDING, source, village);
@@ -423,6 +427,10 @@ public class VillageManager extends SavedData implements Iterable<Village> {
             }
         }
         return Optional.of(lineage);
+    }
+
+    static StructureFloor singleScannedFloor(StructureScanner.Result scan) {
+        return scan != null && scan.floors().size() == 1 ? scan.floors().getFirst() : null;
     }
 
     static boolean lineageOverlapsRegisteredRooms(
@@ -796,68 +804,54 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         return scan.matchingTypes().getFirst();
     }
 
-    public Building.validationResult fullScan(Village village) {
-        if (village == null) return Building.validationResult.NOT_IN_BUILDING;
-        Building.validationResult result = Building.validationResult.SUCCESS;
-        List<Integer> ids = village.getStructures().keySet().stream().sorted().toList();
-        for (int id : ids) {
-            Building.validationResult scanned = rescanStructure(village, id);
-            if (result == Building.validationResult.SUCCESS && scanned != Building.validationResult.SUCCESS) {
-                result = scanned;
-            }
-        }
-        return result;
+    static List<Integer> fullScanRoomIds(Village village) {
+        if (village == null) return List.of();
+        return village.getRooms().map(Building::getId).sorted().toList();
     }
 
-    public Building.validationResult rescanStructure(Village village, int structureId) {
-        Structure structure = village == null ? null : village.getStructure(structureId).orElse(null);
-        if (structure == null) return Building.validationResult.NOT_IN_BUILDING;
-        StructureScanner.Result scan = StructureScanner.rescanStructure(
-                world, structure, village.getStructures().values());
-        if (scan.result() != Building.validationResult.SUCCESS) return scan.result();
-        List<Building> rooms = village.getRooms().filter(room -> room.getStructureId() == structureId).toList();
-
-        // Rescan into a detached copy first so physical geometry and automatic Ground evidence
-        // commit together. A failed match leaves the persisted Structure untouched.
-        Structure updated = new Structure(structure.save());
-        if (!updated.applyScan(scan, rooms)) return Building.validationResult.OVERLAP;
-
-        List<RegisteredRoomUpdate> roomUpdates = new ArrayList<>();
-        Map<Integer, List<Building>> roomsByFloor = rooms.stream()
-                .collect(java.util.stream.Collectors.groupingBy(Building::getFloorId));
-        for (Map.Entry<Integer, List<Building>> entry : roomsByFloor.entrySet().stream()
-                .sorted(Map.Entry.comparingByKey()).toList()) {
-            Building expected = entry.getValue().stream()
-                    .min(Comparator.comparingInt(Building::getId))
-                    .orElseThrow();
-            RegisteredRoomUpdate update = analyzeRegisteredFloor(
-                    village, updated, expected, expected.getSourceBlock());
-            if (update.result() != Building.validationResult.SUCCESS) return update.result();
-            roomUpdates.add(update);
-        }
-
-        List<Building> roomSnapshots = rooms.stream()
-                .map(room -> new Building(room.save()))
+    public Building.validationResult fullScan(Village village) {
+        if (village == null) return Building.validationResult.NOT_IN_BUILDING;
+        List<Building> buildingSnapshots = village.getBuildings().values().stream()
+                .map(building -> new Building(building.save()))
                 .toList();
         Map<Integer, Structure> structureSnapshots = village.getStructures().values().stream()
                 .collect(java.util.stream.Collectors.toMap(
                         Structure::getId,
                         value -> new Structure(value.save())));
         int previousLastBuildingId = lastBuildingId;
-        village.getStructures().put(structureId, updated);
-        for (RegisteredRoomUpdate update : roomUpdates) {
+
+        for (int roomId : fullScanRoomIds(village)) {
+            Building room = village.getBuilding(roomId).orElse(null);
+            if (room == null) continue;
+            RegisteredRoomUpdate update = analyzeRegisteredRoomUpdate(
+                    village, roomId, room.getSourceBlock());
+            if (update.result() != Building.validationResult.SUCCESS) {
+                restoreFullScanSnapshots(
+                        village, buildingSnapshots, structureSnapshots, previousLastBuildingId);
+                return update.result();
+            }
             Building.validationResult result = applyRegisteredRoomUpdate(update, null, false);
             if (result == Building.validationResult.SUCCESS) continue;
 
-            village.getBuildings().values().removeIf(room -> room.getStructureId() == structureId);
-            roomSnapshots.forEach(room -> village.getBuildings().put(room.getId(), room));
-            structureSnapshots.forEach((id, snapshot) -> village.getStructures().put(id, snapshot));
-            village.refreshLogicalBuildings();
-            lastBuildingId = previousLastBuildingId;
+            restoreFullScanSnapshots(
+                    village, buildingSnapshots, structureSnapshots, previousLastBuildingId);
             return result;
         }
         finalizeVillageMutation(village);
         return Building.validationResult.SUCCESS;
+    }
+
+    private void restoreFullScanSnapshots(
+            Village village,
+            Collection<Building> buildingSnapshots,
+            Map<Integer, Structure> structureSnapshots,
+            int previousLastBuildingId) {
+        village.getBuildings().clear();
+        buildingSnapshots.forEach(building -> village.getBuildings().put(building.getId(), building));
+        village.getStructures().clear();
+        structureSnapshots.forEach((id, snapshot) -> village.getStructures().put(id, snapshot));
+        village.refreshLogicalBuildings();
+        lastBuildingId = previousLastBuildingId;
     }
 
 

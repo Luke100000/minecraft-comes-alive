@@ -83,15 +83,26 @@ public final class BuildingDiagnostics {
                         resolved.effectivePoi().values().stream().mapToInt(List::size).sum(), sameColumn, elevatedWithinBand);
             }
 
-            StructureScanner.Result scan = StructureScanner.rescanStructure(
-                    world, inspected, village.getStructures().values());
+            StructureFloor selectedFloor = room != null
+                    ? inspected.getFloor(room.getFloorId()).orElse(null)
+                    : physicalFloor != null
+                    ? physicalFloor
+                    : inspected.nearestFloorAtColumn(pos)
+                    .or(() -> inspected.floorAtHeight(pos.getY()))
+                    .orElse(null);
+            StructureScanner.Result scan = selectedFloor == null
+                    ? StructureScanner.Result.failure(Building.validationResult.NOT_IN_BUILDING, pos)
+                    : StructureScanner.scanExistingFloor(
+                    world, inspected, selectedFloor, pos, village.getStructures().values());
             freshPlayerFloor = scan.result() == Building.validationResult.SUCCESS
-                    ? floorAt(scan.floors(), pos)
+                    ? VillageManager.singleScannedFloor(scan)
                     : null;
-            log(traceId, "freshStructureScan result={} scanSeed={} bounds={}..{} floors={} playerFloor={}",
-                    scan.result(), scan.source(), scan.min(), scan.max(), floors(scan.floors()),
+            log(traceId, "freshFloorScan persistedFloor={} result={} scanSeed={} bounds={}..{} freshFloor={}",
+                    floor(selectedFloor), scan.result(), scan.source(), scan.min(), scan.max(),
                     floor(freshPlayerFloor));
-            logFloorDifference(traceId, inspected.getFloors(), scan.floors(), verbose);
+            logFloorDifference(traceId,
+                    selectedFloor == null ? List.of() : List.of(selectedFloor),
+                    scan.floors(), verbose);
         }
 
         Building.validationResult analysis = switch (plan.mode()) {

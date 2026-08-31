@@ -64,20 +64,6 @@ final class StructureScanner {
         return scanAtSeed(world, source, seed, existing, structure.getId());
     }
 
-    static Result rescanStructure(Level world,
-                                  Structure structure,
-                                  Collection<Structure> existing) {
-        if (structure == null || structure.getFloors().isEmpty()) {
-            return Result.failure(Building.validationResult.NOT_IN_BUILDING, BlockPos.ZERO);
-        }
-        StructureFloor floor = structure.nearestFloorAtColumn(structure.getSource())
-                .orElseGet(() -> structure.getFloors().stream()
-                        .min(Comparator.comparingInt(candidate ->
-                                Math.abs(candidate.anchorY() - structure.getSource().getY())))
-                        .orElse(null));
-        return scanExistingFloor(world, structure, floor, structure.getSource(), existing);
-    }
-
     static Optional<AttachmentSeed> resolveAttachmentSeed(Level world, BlockPos source) {
         Config config = Config.getInstance();
         if (SelectedFloorScanner.scan(world, source, config.maxBuildingSize, config.maxBuildingRadius)

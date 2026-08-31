@@ -7,9 +7,12 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class VillageFloorSystemTest {
@@ -91,6 +94,45 @@ class VillageFloorSystemTest {
         assertFalse(village.setRoomContributesToMain(room(99, 10, 0, false), true));
     }
 
+    @Test
+    void refreshingOneFloorDoesNotRenumberManualNeighboringFloors() {
+        Village village = new Village(1, null);
+        Structure structure = structure(10, 77,
+                new StructureFloor(3, 64, 70, -1, region(64)),
+                new StructureFloor(7, 74, 80, 0, region(74)),
+                new StructureFloor(9, 84, 90, 1, region(84)));
+        village.registerStructure(structure, room(100, 10, 7, true));
+
+        assertTrue(structure.ensureFloorContains(7, region(75), 82));
+
+        assertEquals(-1, structure.getFloor(3).orElseThrow().floorNumber());
+        assertEquals(0, structure.getFloor(7).orElseThrow().floorNumber());
+        assertEquals(1, structure.getFloor(9).orElseThrow().floorNumber());
+    }
+
+    @Test
+    void manualAttachmentRejectsAResultContainingMoreThanOneFreshFloor() {
+        StructureScanner.Result scan = new StructureScanner.Result(
+                Building.validationResult.SUCCESS,
+                BlockPos.ZERO,
+                BlockPos.ZERO,
+                new BlockPos(1, 80, 1),
+                List.of(
+                        new StructureFloor(0, 74, 78, region(74)),
+                        new StructureFloor(1, 84, 88, region(84))),
+                new FloorSurface(Set.of(
+                        new FloorSurface.Cell(new BlockPos(0, 74, 0), 74.0D, 78)), Map.of()));
+
+        assertNull(VillageManager.singleScannedFloor(scan));
+    }
+
+    @Test
+    void fullMaintenanceTargetsRegisteredRoomsInStableIdOrder() {
+        Village village = populatedVillage();
+
+        assertEquals(List.of(1, 2, 3), VillageManager.fullScanRoomIds(village));
+    }
+
     private static Village populatedVillage() {
         Village village = new Village(1, null);
         village.registerStructure(structure(10, 10), room(1, 10, 0, true));
@@ -111,6 +153,12 @@ class VillageFloorSystemTest {
 
     private static StructureFloor floor(int id, int y) {
         return new StructureFloor(id, y, y + 4, null);
+    }
+
+    private static BuildingFloorRegion region(int y) {
+        return BuildingFloorRegion.fromFootprint(y, Set.of(
+                new BlockPos(0, y, 0), new BlockPos(1, y, 0),
+                new BlockPos(0, y, 1), new BlockPos(1, y, 1)));
     }
 
     private static Building room(int id, int structureId, int floorId, boolean contributes) {
