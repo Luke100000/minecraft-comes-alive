@@ -254,23 +254,31 @@ public class Residency {
         ServerLevel level = (ServerLevel) player.level();
         PoiManager poiManager = level.getPoiManager();
         Optional<GlobalPos> previousHome = entity.getBrain().getMemoryInternal(MemoryModuleType.HOME);
-        poiManager.take(
+        Optional<BlockPos> rememberedHome = previousHome
+                .filter(home -> home.dimension().equals(level.dimension()))
+                .map(GlobalPos::pos)
+                .filter(home -> home.distSqr(player.blockPosition()) <= 64.0D)
+                .filter(home -> poiManager.exists(home, type -> type.is(PoiTypes.HOME)))
+                .filter(home -> validateBedPoi(level, home));
+
+        Optional<BlockPos> claimedHome = poiManager.take(
                 registryEntry -> registryEntry.is(PoiTypes.HOME),
                 (registryEntry, blockPos) -> validateBedPoi(level, blockPos),
                 player.blockPosition(),
                 8
-        ).ifPresentOrElse(claimedHome -> {
+        );
+        claimedHome.or(() -> rememberedHome).ifPresentOrElse(selectedHome -> {
             entity.sendChatMessage(player, "interaction.sethome.success");
 
             boolean reclaimedSameHome = previousHome
-                    .map(home -> home.dimension().equals(level.dimension()) && home.pos().equals(claimedHome))
+                    .map(home -> home.dimension().equals(level.dimension()) && home.pos().equals(selectedHome))
                     .orElse(false);
             if (!reclaimedSameHome) {
                 entity.releasePoi(MemoryModuleType.HOME);
             }
             entity.getBrain().eraseMemory(MemoryModuleType.HOME);
 
-            entity.getBrain().setMemory(MemoryModuleType.HOME, GlobalPos.of(level.dimension(), claimedHome));
+            entity.getBrain().setMemory(MemoryModuleType.HOME, GlobalPos.of(level.dimension(), selectedHome));
             entity.getBrain().setMemory(MemoryModuleTypeMCA.FORCED_HOME, true);
 
             seekHomeAfterClaim();
