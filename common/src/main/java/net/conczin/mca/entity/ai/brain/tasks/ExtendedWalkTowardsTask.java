@@ -1,6 +1,7 @@
 package net.conczin.mca.entity.ai.brain.tasks;
 
 import net.conczin.mca.entity.VillagerEntityMCA;
+import net.conczin.mca.entity.ai.navigation.MultiTargetPositionTracker;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.server.level.ServerLevel;
@@ -104,7 +105,11 @@ public final class ExtendedWalkTowardsTask {
                                             walkTarget.set(new WalkTarget(targetPos, speed, targetCompletionRange));
                                         }
                                     } else {
-                                        walkTarget.set(new WalkTarget(finalTarget.orElseThrow(), speed, 0));
+                                        PositionTracker tracker = finalTarget.orElseThrow();
+                                        if (!(tracker instanceof MultiTargetPositionTracker multiTarget)
+                                                || !multiTarget.isReached(entity, 0)) {
+                                            walkTarget.set(new WalkTarget(tracker, speed, 0));
+                                        }
                                     }
                                 }
                             } else {

@@ -176,9 +176,15 @@ public class Village implements Iterable<Building> {
     }
 
     public List<String> getResidents(int building) {
-        return getBuilding(building).map(value -> residentHomes.entrySet().stream().filter(e -> {
-            return value.getBlockPosStream().anyMatch(pos -> pos.asLong() == e.getValue());
-        }).map(k -> residentNames.getOrDefault(k.getKey(), "Unknown")).collect(Collectors.toList())).orElseGet(List::of);
+        return getBuilding(building).map(value -> {
+            Set<Long> buildingPositions = value.getBlockPosStream()
+                    .map(BlockPos::asLong)
+                    .collect(Collectors.toSet());
+            return residentHomes.entrySet().stream()
+                    .filter(entry -> buildingPositions.contains(entry.getValue()))
+                    .map(entry -> residentNames.getOrDefault(entry.getKey(), "Unknown"))
+                    .collect(Collectors.toList());
+        }).orElseGet(List::of);
     }
 
     public float getTaxes() {
@@ -424,7 +430,7 @@ public class Village implements Iterable<Building> {
 
         Optional<GlobalPos> home = e.getResidency().getHome();
         boolean accepted = true;
-        if (home.isPresent()) {
+        if (home.isPresent() && home.get().dimension() == world.dimension()) {
             long homePosition = home.get().pos().asLong();
             if (authoritativeHomeClaim) {
                 ResidentHomeAssignments.claimAuthoritatively(residentHomes, resident, homePosition);
