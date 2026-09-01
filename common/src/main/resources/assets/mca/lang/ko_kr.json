@@ -501,7 +501,7 @@
   "gui.button.special": "특수",
   "gui.button.work": "일",
   "gui.button.inventory": "보관함",
-  "gui.button.sethome": "집으로 지정",
+  "gui.button.sethome": "Set Home",
   "gui.button.gohome": "귀가",
   "gui.button.setworkplace": "일터로 지정",
   "gui.button.sethangout": "휴식처로 지정",
