@@ -5,7 +5,6 @@ import com.google.common.collect.Sets;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.world.entity.Entity;
@@ -18,6 +17,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.DoorBlock;
 import net.minecraft.world.level.block.FenceGateBlock;
+import net.minecraft.world.level.block.TrapDoorBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.gameevent.GameEvent;
@@ -43,21 +43,44 @@ public class SmarterOpenDoorsTask extends Behavior<LivingEntity> {
     }
 
     public static boolean setOpen(@Nullable Entity entity, Level world, BlockState state, BlockPos pos, boolean open) {
-        if (state.hasProperty(BlockStateProperties.OPEN) && state.getValue(BlockStateProperties.OPEN) != open) {
-            world.setBlock(pos, state.setValue(BlockStateProperties.OPEN, open), Block.UPDATE_CLIENTS | Block.UPDATE_IMMEDIATE);
-            world.gameEvent(entity, open ? GameEvent.BLOCK_OPEN : GameEvent.BLOCK_CLOSE, pos);
-            playOpenCloseSound(entity, world, pos, open);
-            return true;
-        } else {
+        if (!state.hasProperty(BlockStateProperties.OPEN) || state.getValue(BlockStateProperties.OPEN) == open) {
             return false;
         }
+
+        if (state.getBlock() instanceof DoorBlock door) {
+            door.setOpen(entity, world, state, pos, open);
+            return true;
+        }
+
+        if (state.getBlock() instanceof TrapDoorBlock trapDoor) {
+            if (!trapDoor.getType().canOpenByHand()) {
+                return false;
+            }
+            trapDoor.toggle(state, world, pos, null);
+            return true;
+        }
+
+        if (state.getBlock() instanceof FenceGateBlock fenceGate) {
+            world.setBlock(pos, state.setValue(BlockStateProperties.OPEN, open), Block.UPDATE_CLIENTS | Block.UPDATE_IMMEDIATE);
+            world.gameEvent(entity, open ? GameEvent.BLOCK_OPEN : GameEvent.BLOCK_CLOSE, pos);
+            world.playSound(
+                    entity,
+                    pos,
+                    open ? fenceGate.type.fenceGateOpen() : fenceGate.type.fenceGateClose(),
+                    SoundSource.BLOCKS,
+                    1.0F,
+                    world.getRandom().nextFloat() * 0.1F + 0.9F
+            );
+            return true;
+        }
+
+        return false;
     }
 
-    private static void playOpenCloseSound(@Nullable Entity entity, Level world, BlockPos pos, boolean open) {
-        world.playSound(entity, pos, open ? SoundEvents.WOODEN_DOOR_OPEN : SoundEvents.WOODEN_DOOR_CLOSE, SoundSource.BLOCKS, 0.75F, world.getRandom().nextFloat() * 0.1F + 0.9F);
-    }
-
-    private static boolean isDoor(BlockState blockState) {
+    private static boolean isOpenable(BlockState blockState) {
+        if (blockState.getBlock() instanceof TrapDoorBlock trapDoor) {
+            return trapDoor.getType().canOpenByHand();
+        }
         return blockState.is(BlockTags.MOB_INTERACTABLE_DOORS, state -> state.getBlock() instanceof DoorBlock)
                || blockState.is(BlockTags.FENCE_GATES, state -> state.getBlock() instanceof FenceGateBlock);
     }
@@ -83,7 +106,7 @@ public class SmarterOpenDoorsTask extends Behavior<LivingEntity> {
 
                 // That's no door
                 BlockState blockState = world.getBlockState(blockPos);
-                if (!isDoor(blockState)) {
+                if (!isOpenable(blockState)) {
                     iterator.remove();
                     continue;
                 }
@@ -91,6 +114,15 @@ public class SmarterOpenDoorsTask extends Behavior<LivingEntity> {
                 // Door isn't even open
                 if (blockState.hasProperty(BlockStateProperties.OPEN) && !blockState.getValue(BlockStateProperties.OPEN)) {
                     iterator.remove();
+                    continue;
+                }
+
+                // Path nodes can advance before the entity's full body has cleared a
+                // gate/door. Never close a remembered toggleable around this villager.
+                if (entity.getBoundingBox().intersects(
+                        blockPos.getX(), blockPos.getY(), blockPos.getZ(),
+                        blockPos.getX() + 1.0D, blockPos.getY() + 1.0D, blockPos.getZ() + 1.0D
+                )) {
                     continue;
                 }
 
@@ -160,11 +192,19 @@ public class SmarterOpenDoorsTask extends Behavior<LivingEntity> {
         return this.ticks == 0;
     }
 
-    private void openDoor(ServerLevel world, LivingEntity entity, Node pathNode) {
+    private void openDoor(ServerLevel world, LivingEntity entity, Node pathNode, @Nullable Node adjacentNode) {
         if (pathNode != null) {
             BlockPos blockPos = pathNode.asBlockPos();
             BlockState blockState = world.getBlockState(blockPos);
-            if (isDoor(blockState) && setOpen(entity, world, blockState, blockPos, true)) {
+            if (blockState.getBlock() instanceof TrapDoorBlock
+                    && (adjacentNode == null || adjacentNode.y == pathNode.y)) {
+                // A closed trapdoor can be valid floor. Only open it when the path is
+                // actually crossing vertically through that block; otherwise opening
+                // it underneath the villager would create the obstacle ourselves.
+                return;
+            }
+
+            if (isOpenable(blockState) && setOpen(entity, world, blockState, blockPos, true)) {
                 this.rememberToCloseDoor(world, entity, blockPos);
             }
         }
@@ -176,10 +216,12 @@ public class SmarterOpenDoorsTask extends Behavior<LivingEntity> {
         Path path = entity.getBrain().getMemoryInternal(MemoryModuleType.PATH).get();
         this.pathNode = path.getNextNode();
 
-        openDoor(world, entity, path.getPreviousNode());
-        openDoor(world, entity, path.getNextNode());
+        Node previousNode = path.getPreviousNode();
+        Node nextNode = path.getNextNode();
+        openDoor(world, entity, previousNode, nextNode);
+        openDoor(world, entity, nextNode, previousNode);
 
-        closeDoors(world, entity, path.getPreviousNode(), path.getNextNode());
+        closeDoors(world, entity, previousNode, nextNode);
     }
 
     private void rememberToCloseDoor(ServerLevel world, LivingEntity entity, BlockPos pos) {

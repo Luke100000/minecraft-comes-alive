@@ -8,7 +8,9 @@ import net.minecraft.core.Direction;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.tags.FluidTags;
 import net.minecraft.util.Mth;
+import net.minecraft.world.level.block.FenceGateBlock;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.pathfinder.Node;
 import net.minecraft.world.level.pathfinder.PathComputationType;
 import net.minecraft.world.level.pathfinder.PathType;
@@ -215,9 +217,21 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
 
     @Override
     public PathType getPathType(PathfindingContext context, int x, int y, int z) {
-        return isClimbable(context, x, y, z)
-                ? PathType.WALKABLE
-                : super.getPathType(context, x, y, z);
+        if (isClimbable(context, x, y, z)) {
+            return PathType.WALKABLE;
+        }
+
+        BlockState state = context.getBlockState(this.climbablePos.set(x, y, z));
+        if (state.is(BlockTags.FENCE_GATES)
+                && state.getBlock() instanceof FenceGateBlock
+                && !state.getValue(BlockStateProperties.OPEN)) {
+            // Vanilla treats closed fence gates as FENCE, so a path can never contain
+            // the gate node for SmarterOpenDoorsTask to open. Treat hand-operated gates
+            // like walkable doors: path through them, then let the brain toggle them.
+            return PathType.WALKABLE_DOOR;
+        }
+
+        return super.getPathType(context, x, y, z);
     }
 
     private boolean isClimbable(BlockPos pos) {
