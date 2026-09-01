@@ -501,7 +501,7 @@
   "gui.button.special": "Spécial",
   "gui.button.work": "Travailler",
   "gui.button.inventory": "Inventaire",
-  "gui.button.sethome": "Attribuer une maison",
+  "gui.button.sethome": "Set Home",
   "gui.button.gohome": "Rentrer à la maison",
   "gui.button.setworkplace": "Lieu de travail",
   "gui.button.sethangout": "Sortir",
