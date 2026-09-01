@@ -501,7 +501,7 @@
   "gui.button.special": "Erityinen",
   "gui.button.work": "Työ",
   "gui.button.inventory": "Tavaraluettelo",
-  "gui.button.sethome": "Aseta Koti",
+  "gui.button.sethome": "Set Home",
   "gui.button.gohome": "Mene kotiin",
   "gui.button.setworkplace": "Työpaikka",
   "gui.button.sethangout": "Kantapaikka",
