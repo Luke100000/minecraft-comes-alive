@@ -501,7 +501,7 @@
   "gui.button.special": "Özel",
   "gui.button.work": "Çalış",
   "gui.button.inventory": "Envanter",
-  "gui.button.sethome": "Ev Ayarla",
+  "gui.button.sethome": "Set Home",
   "gui.button.gohome": "Eve Git",
   "gui.button.setworkplace": "Çalışma Yeri",
   "gui.button.sethangout": "Bekle",
