@@ -126,13 +126,47 @@ class BlueprintMapGeometryTest {
                 .contains(new BlueprintMapFootprint.Cell(1, 0)));
     }
 
-    private static Structure structure(int id, int buildingId, int y, int floorNumber) throws Exception {
+    @Test
+    void connectorMarkersAreVisibleOnlyForTheSelectedFloor() throws Exception {
+        Village village = new Village(1, null);
+        Structure groundStructure = structure(10, 10, 64, 0,
+                new StructureFloor.ConnectorMarker(
+                        new BlockPos(0, 64, 0), StructureFloor.ConnectorType.LADDER));
+        Building groundRoom = room(1, 10, 0, new BlockPos(0, 64, 0));
+        registerStructure(village, groundStructure, groundRoom);
+
+        Structure basementStructure = structure(11, 10, 60, -1,
+                new StructureFloor.ConnectorMarker(
+                        new BlockPos(0, 60, 0), StructureFloor.ConnectorType.LADDER),
+                new StructureFloor.ConnectorMarker(
+                        new BlockPos(1, 60, 0), StructureFloor.ConnectorType.DOOR));
+        Building basementRoom = room(2, 11, 0, new BlockPos(1, 60, 0));
+        village.registerStructure(basementStructure, basementRoom);
+
+        BlueprintMapGeometry map = BlueprintMapGeometry.build(village, null);
+        BlueprintMapGeometry.MapGeometry allFloors = map.get(null);
+        BlueprintMapGeometry.MapGeometry ground = map.get(0);
+        BlueprintMapGeometry.MapGeometry basement = map.get(-1);
+
+        assertEquals(0, allFloors.connectorLayers().size());
+        assertEquals(1, ground.connectorLayers().size());
+        assertEquals(BlueprintMapGeometry.VerticalDirection.DOWN,
+                ground.connectorLayers().getFirst().verticalDirection());
+        assertEquals(2, basement.connectorLayers().size());
+        assertEquals(BlueprintMapGeometry.VerticalDirection.UP,
+                basement.connectorLayers().stream()
+                        .filter(layer -> layer.marker().type() == StructureFloor.ConnectorType.LADDER)
+                        .findFirst().orElseThrow().verticalDirection());
+    }
+
+    private static Structure structure(int id, int buildingId, int y, int floorNumber,
+                                       StructureFloor.ConnectorMarker... connectors) throws Exception {
         Structure structure = new Structure(
                 id,
                 new BlockPos(0, y, 0),
                 new BlockPos(0, y, 0),
                 new BlockPos(0, y + 2, 0),
-                List.of(new StructureFloor(0, y, y + 3, floorNumber, null)));
+                List.of(new StructureFloor(0, y, y + 3, floorNumber, null, List.of(connectors))));
         Method setter = Structure.class.getDeclaredMethod("setLogicalBuildingId", int.class);
         setter.setAccessible(true);
         setter.invoke(structure, buildingId);

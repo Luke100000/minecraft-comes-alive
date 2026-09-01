@@ -13,7 +13,7 @@ import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
 
 import java.util.*;
 
-/** Connector mechanics: classification, Floor-cell projection and downward Structure attachment. */
+/** Connector mechanics: classification, Floor-cell projection and connector-relative Floor handoff. */
 final class StructureConnector {
     private static final Direction[] HORIZONTAL = {
             Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST
@@ -29,12 +29,48 @@ final class StructureConnector {
                 || state.getBlock() instanceof LadderBlock;
     }
 
-    static boolean isVertical(BlockState state) {
-        return state.getBlock() instanceof LadderBlock || state.getBlock() instanceof TrapDoorBlock;
-    }
-
     static boolean isHorizontalBoundary(BlockState state) {
         return state.getBlock() instanceof DoorBlock || state.getBlock() instanceof FenceGateBlock;
+    }
+
+    /**
+     * A ladder is inherently traversable vertically. A trapdoor only joins that semantic connector
+     * when it is part of the same contiguous column as a ladder; standalone decorative trapdoors
+     * remain ordinary boundaries and cannot create a Floor transition by themselves.
+     */
+    static boolean isVertical(Level world, BlockPos pos) {
+        return isVerticalElement(world.getBlockState(pos))
+                && !verticalColumnFromConnector(world, pos).isEmpty();
+    }
+
+    static boolean isVerticalInteraction(Level world, BlockPos pos) {
+        return !verticalColumn(world, pos).isEmpty();
+    }
+
+    static List<StructureFloor.ConnectorMarker> floorMarkers(Level world, FloorSurface surface) {
+        if (world == null || surface == null || surface.connectorByFloorCell().isEmpty()) return List.of();
+        LinkedHashSet<StructureFloor.ConnectorMarker> markers = new LinkedHashSet<>();
+        int anchorY = surface.anchorY();
+        for (Map.Entry<BlockPos, BlockPos> entry : surface.connectorByFloorCell().entrySet()) {
+            StructureFloor.ConnectorType type = connectorType(world.getBlockState(entry.getValue()));
+            if (type == null) continue;
+            BlockPos floorCell = entry.getKey();
+            markers.add(new StructureFloor.ConnectorMarker(
+                    new BlockPos(floorCell.getX(), anchorY, floorCell.getZ()), type));
+        }
+        return markers.stream()
+                .sorted(Comparator.comparingInt((StructureFloor.ConnectorMarker marker) -> marker.pos().getX())
+                        .thenComparingInt(marker -> marker.pos().getZ())
+                        .thenComparing(marker -> marker.type().serializedName()))
+                .toList();
+    }
+
+    private static StructureFloor.ConnectorType connectorType(BlockState state) {
+        if (state.getBlock() instanceof LadderBlock) return StructureFloor.ConnectorType.LADDER;
+        if (state.getBlock() instanceof TrapDoorBlock) return StructureFloor.ConnectorType.TRAPDOOR;
+        if (state.getBlock() instanceof DoorBlock) return StructureFloor.ConnectorType.DOOR;
+        if (state.getBlock() instanceof FenceGateBlock) return StructureFloor.ConnectorType.GATE;
+        return null;
     }
 
     static BlockPos normalize(BlockPos pos, BlockState state) {
@@ -63,7 +99,7 @@ final class StructureConnector {
             BlockState state = world.getBlockState(connector);
             if (!isConnector(state)) continue;
 
-            if (isVertical(state)) {
+            if (isVertical(world, connector)) {
                 for (BlockPos handoff : handoffs(connector)) {
                     if (!surfaceFeet.contains(handoff)) continue;
                     result.putIfAbsent(
@@ -71,6 +107,8 @@ final class StructureConnector {
                 }
                 continue;
             }
+
+            if (!isHorizontalBoundary(state)) continue;
 
             for (Direction direction : HORIZONTAL) {
                 BlockPos side = connector.relative(direction);
@@ -85,24 +123,47 @@ final class StructureConnector {
         return Map.copyOf(result);
     }
 
-    /** Vertical connector interactions always resolve from the bottom of the connected column. */
-    static Optional<BlockPos> bottomVerticalConnector(Level world, BlockPos pos) {
-        BlockPos connector = verticalConnectorAt(world, pos);
-        if (connector == null) return Optional.empty();
-
-        while (isVertical(world.getBlockState(connector.below()))) {
-            connector = connector.below();
-        }
-        return Optional.of(connector.immutable());
+    /** Returns the vertical connector column for an occupied connector or its immediate open top-exit cell. */
+    private static List<BlockPos> verticalColumn(Level world, BlockPos pos) {
+        BlockPos connector = verticalInteractionConnector(world, pos);
+        return connector == null ? List.of() : verticalColumnFromConnector(world, connector);
     }
 
-    private static BlockPos verticalConnectorAt(Level world, BlockPos pos) {
-        if (isVertical(world.getBlockState(pos))) return pos;
-        for (Direction direction : HORIZONTAL) {
-            BlockPos side = pos.relative(direction);
-            if (isVertical(world.getBlockState(side))) return side;
+    private static BlockPos verticalInteractionConnector(Level world, BlockPos pos) {
+        if (isVerticalElement(world.getBlockState(pos))) return pos;
+        if (!world.getBlockState(pos).getCollisionShape(world, pos).isEmpty()) return null;
+
+        BlockPos below = pos.below();
+        return isVerticalElement(world.getBlockState(below)) ? below : null;
+    }
+
+    private static List<BlockPos> verticalColumnFromConnector(Level world, BlockPos connector) {
+        if (!isVerticalElement(world.getBlockState(connector))) return List.of();
+
+        BlockPos bottom = connector;
+        while (isVerticalElement(world.getBlockState(bottom.below()))) bottom = bottom.below();
+        BlockPos top = connector;
+        while (isVerticalElement(world.getBlockState(top.above()))) top = top.above();
+
+        List<BlockPos> column = new ArrayList<>(top.getY() - bottom.getY() + 1);
+        boolean traversable = false;
+        for (int y = bottom.getY(); y <= top.getY(); y++) {
+            BlockPos element = new BlockPos(connector.getX(), y, connector.getZ());
+            column.add(element);
+            traversable |= world.getBlockState(element).getBlock() instanceof LadderBlock;
         }
-        return null;
+        return traversable ? List.copyOf(column) : List.of();
+    }
+
+    private static boolean isVerticalElement(BlockState state) {
+        return state.getBlock() instanceof LadderBlock || state.getBlock() instanceof TrapDoorBlock;
+    }
+
+    private static List<BlockPos> verticalHandoffCandidates(Level world, BlockPos source) {
+        return verticalColumn(world, source).stream()
+                .flatMap(connector -> handoffs(connector).stream())
+                .distinct()
+                .toList();
     }
 
     static List<BlockPos> handoffs(BlockPos pos) {
@@ -129,14 +190,6 @@ final class StructureConnector {
                                      Structure structure,
                                      StructureFloor floor,
                                      BlockPos pos) {
-        BlockPos connector = bottomVerticalConnector(world, pos).orElse(null);
-        if (connector != null) {
-            BlockPos handoff = floorHandoff(floor, connector);
-            if (handoff != null) {
-                return new BlockPos(handoff.getX(), floor.anchorY(), handoff.getZ());
-            }
-        }
-
         BlockState state = world.getBlockState(pos);
         if (isConnector(state)) {
             BlockPos handoff = floorHandoff(floor, normalize(pos, state));
@@ -156,6 +209,24 @@ final class StructureConnector {
         return null;
     }
 
+    /**
+     * Projects an occupied vertical connector onto one registered Floor, but only while the
+     * interaction Y belongs to that Floor's storey band. The whole connected column is used only
+     * to prove/find the handoff; it never changes the player's Y to the column bottom.
+     */
+    static BlockPos resolveVerticalFloorCell(Level world, StructureFloor floor, BlockPos source) {
+        if (source.getY() < floor.anchorY() - 1 || source.getY() >= floor.ceilingY()) return null;
+        return verticalHandoffCandidates(world, source).stream()
+                .filter(candidate -> floor.contains(candidate.getX(), candidate.getZ()))
+                .min(Comparator
+                        .comparingInt((BlockPos candidate) -> Math.abs(candidate.getY() - floor.anchorY()))
+                        .thenComparingInt(BlockPos::getY)
+                        .thenComparingInt(BlockPos::getX)
+                        .thenComparingInt(BlockPos::getZ))
+                .map(candidate -> new BlockPos(candidate.getX(), floor.anchorY(), candidate.getZ()))
+                .orElse(null);
+    }
+
     private static BlockPos floorHandoff(StructureFloor floor, BlockPos connector) {
         return handoffs(connector).stream()
                 .filter(candidate -> candidate.getY() >= floor.anchorY()
@@ -166,13 +237,27 @@ final class StructureConnector {
 
     static Optional<FloorHandoff> resolveVerticalFloorHandoff(
             Level world, BlockPos source, Config config) {
-        BlockPos connector = bottomVerticalConnector(world, source).orElse(null);
-        if (connector == null) return Optional.empty();
+        FloorCeilingResolver ceilings = new FloorCeilingResolver(world);
+        List<BlockPos> candidates = verticalHandoffCandidates(world, source).stream()
+                .filter(candidate -> SelectedFloorScanner.inspectSurfaceCell(world, candidate, ceilings).isPresent())
+                .sorted(Comparator
+                        .comparingInt((BlockPos candidate) -> Math.abs(candidate.getY() - source.getY()))
+                        .thenComparingInt(BlockPos::getY)
+                        .thenComparingInt(BlockPos::getX)
+                        .thenComparingInt(BlockPos::getZ))
+                .toList();
 
         FloorHandoff selected = null;
         Set<BlockPos> selectedFloor = null;
-        for (Direction direction : HORIZONTAL) {
-            BlockPos candidate = connector.relative(direction);
+        int selectedDistance = Integer.MAX_VALUE;
+        int selectedY = Integer.MAX_VALUE;
+        for (BlockPos candidate : candidates) {
+            int distance = Math.abs(candidate.getY() - source.getY());
+            if (selected != null && (distance > selectedDistance
+                    || distance == selectedDistance && candidate.getY() > selectedY)) {
+                break;
+            }
+
             SelectedFloorScanner.Result scan = SelectedFloorScanner.scan(
                     world, candidate, config.maxBuildingSize, config.maxBuildingRadius);
             if (scan.result() != Building.validationResult.SUCCESS || scan.surface() == null) continue;
@@ -181,6 +266,8 @@ final class StructureConnector {
             if (selected == null) {
                 selected = new FloorHandoff(candidate.immutable(), scan.surface());
                 selectedFloor = candidateFloor;
+                selectedDistance = distance;
+                selectedY = candidate.getY();
             } else if (!selectedFloor.equals(candidateFloor)) {
                 return Optional.empty();
             }

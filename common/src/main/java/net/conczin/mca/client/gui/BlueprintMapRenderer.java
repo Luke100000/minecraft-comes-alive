@@ -12,18 +12,21 @@ import net.conczin.mca.MCAClient;
 import net.conczin.mca.client.gui.BlueprintMapGeometry.MapFootprintLayer;
 import net.conczin.mca.client.gui.BlueprintMapGeometry.MapGeometry;
 import net.conczin.mca.client.gui.BlueprintMapGeometry.MapIconLayer;
+import net.conczin.mca.client.gui.BlueprintMapGeometry.MapConnectorLayer;
 import net.conczin.mca.client.gui.BlueprintMapGeometry.MapStructureLayer;
 import net.conczin.mca.client.gui.widget.WidgetUtils;
 import net.conczin.mca.client.render.JourneyMapIconBridge;
 import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.resources.data.BuildingType;
 import net.conczin.mca.server.world.data.Building;
+import net.conczin.mca.server.world.data.StructureFloor;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.PlayerFaceRenderer;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.core.BlockPos;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import org.joml.Matrix4f;
 
@@ -42,6 +45,8 @@ final class BlueprintMapRenderer implements AutoCloseable {
     private static final int ROOM_SHADOW_COLOR = 0x50000000;
     private static final int PLAYER_MARKER_SIZE = 6;
     private static final int PLAYER_MARKER_EDGE_PADDING = 2;
+    private static final float CONNECTOR_GLYPH_CELL_FRACTION = 0.8F;
+    private static final int CONNECTOR_MARKER_TEXT = 0xfff4f6f8;
     private static final int ROOM_FILL_ALPHA_ALL_FLOORS = 0x60;
     private static final int ROOM_FILL_ALPHA_SELECTED_FLOOR = 0x70;
     private static final float ROOM_FILL_BRIGHTEN_FACTOR = 1.15f;
@@ -249,6 +254,7 @@ final class BlueprintMapRenderer implements AutoCloseable {
                 );
             }
         }
+        renderConnectorMarkers(context, geometry.connectorLayers());
         matrices.popPose();
 
         // Resolve canonical Building hits last. On the shell, the user's intent is the whole
@@ -271,6 +277,46 @@ final class BlueprintMapRenderer implements AutoCloseable {
         );
 
         return new RenderResult(hoverTargets, hoveredLogicalBuildingId);
+    }
+
+    private static void renderConnectorMarkers(GuiGraphics context,
+                                               List<MapConnectorLayer> connectorLayers) {
+        if (connectorLayers.isEmpty()) return;
+        var font = Minecraft.getInstance().font;
+        for (MapConnectorLayer layer : connectorLayers) {
+            BlockPos pos = layer.marker().pos();
+            String glyph = connectorGlyph(layer);
+            float scale = connectorGlyphScale(font.width(glyph), font.lineHeight);
+            PoseStack matrices = context.pose();
+            matrices.pushPose();
+            matrices.translate(pos.getX() + 0.5D, pos.getZ() + 0.5D, 0.0D);
+            matrices.scale(scale, scale, 1.0F);
+            context.drawCenteredString(font, Component.literal(glyph),
+                    0, -font.lineHeight / 2, CONNECTOR_MARKER_TEXT);
+            matrices.popPose();
+        }
+    }
+
+    static float connectorGlyphScale(int glyphWidth, int lineHeight) {
+        return CONNECTOR_GLYPH_CELL_FRACTION / Math.max(1, Math.max(glyphWidth, lineHeight));
+    }
+
+    static String connectorGlyph(MapConnectorLayer layer) {
+        StructureFloor.ConnectorType type = layer.marker().type();
+        return switch (type) {
+            case LADDER -> switch (layer.verticalDirection()) {
+                case UP -> "↑";
+                case DOWN -> "↓";
+                case BOTH, NONE -> "↕";
+            };
+            case TRAPDOOR -> switch (layer.verticalDirection()) {
+                case UP -> "△";
+                case DOWN -> "▽";
+                case BOTH, NONE -> "◇";
+            };
+            case DOOR -> "▯";
+            case GATE -> "═";
+        };
     }
 
     private static void pushWorldTransform(PoseStack matrices, BlueprintMapViewport viewport) {

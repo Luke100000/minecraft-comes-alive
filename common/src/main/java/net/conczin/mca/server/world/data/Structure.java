@@ -6,6 +6,7 @@ import net.minecraft.core.Vec3i;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.*;
 
@@ -99,11 +100,10 @@ public final class Structure implements VillageBuilding {
                         .thenComparingInt(StructureFloor::id));
     }
 
-    /** One floor-resolution rule for direct positions and vertical-connector interactions. */
-    Optional<StructureFloor> resolveFloorAt(Level world, BlockPos pos) {
+    /** One floor-resolution rule for direct positions. Vertical connectors are ranked separately by landing proximity. */
+    Optional<StructureFloor> resolveFloorAt(BlockPos pos) {
         if (pos == null) return Optional.empty();
-        BlockPos query = StructureConnector.bottomVerticalConnector(world, pos).orElse(pos);
-        return nearestFloorAtColumn(query).or(() -> floorAtHeight(query.getY()));
+        return nearestFloorAtColumn(pos).or(() -> floorAtHeight(pos.getY()));
     }
 
 
@@ -128,19 +128,52 @@ public final class Structure implements VillageBuilding {
                                                              BlockPos pos,
                                                              Collection<Building> structureRooms) {
         Collection<Building> localRooms = structureRooms == null ? List.of() : structureRooms;
-        BlockPos floorQuery = StructureConnector.bottomVerticalConnector(world, pos).orElse(pos);
-        StructureFloor floor = resolveFloorAt(world, pos).orElse(null);
+        BlockState state = world.getBlockState(pos);
+        if (StructureConnector.isVerticalInteraction(world, pos)) {
+            StructureFloor connectorFloor = null;
+            BlockPos connectorFloorCell = null;
+            for (StructureFloor candidate : getFloors()) {
+                BlockPos floorCell = StructureConnector.resolveVerticalFloorCell(world, candidate, pos);
+                if (floorCell == null) continue;
+                if (connectorFloor == null
+                        || Math.abs(candidate.anchorY() - pos.getY())
+                        < Math.abs(connectorFloor.anchorY() - pos.getY())
+                        || Math.abs(candidate.anchorY() - pos.getY())
+                        == Math.abs(connectorFloor.anchorY() - pos.getY())
+                        && candidate.anchorY() < connectorFloor.anchorY()) {
+                    connectorFloor = candidate;
+                    connectorFloorCell = floorCell;
+                }
+            }
+            if (connectorFloor == null) return Optional.empty();
+            return Optional.of(new InteractionPosition(
+                    connectorFloor,
+                    roomAtColumn(localRooms, connectorFloor, connectorFloorCell.getX(), connectorFloorCell.getZ()),
+                    true,
+                    Math.abs(connectorFloor.anchorY() - pos.getY()),
+                    true));
+        }
+
+        StructureFloor floor = resolveFloorAt(pos).orElse(null);
         if (floor == null) return Optional.empty();
+
+        if (StructureConnector.isHorizontalBoundary(state)) {
+            Building connectorOwner = roomAtColumn(localRooms, floor, pos.getX(), pos.getZ());
+            if (connectorOwner != null) {
+                return Optional.of(new InteractionPosition(floor, connectorOwner, true, 0, false));
+            }
+        }
 
         boolean directFloorColumn = floor.contains(pos.getX(), pos.getZ())
                 && pos.getY() >= floor.anchorY() - 1
                 && pos.getY() < floor.ceilingY();
         BlockPos floorCell = directFloorColumn
                 ? new BlockPos(pos.getX(), floor.anchorY(), pos.getZ())
-                : StructureConnector.resolveFloorCell(world, this, floor, floorQuery);
+                : StructureConnector.resolveFloorCell(world, this, floor, pos);
         if (floorCell == null) return Optional.empty();
         return Optional.of(new InteractionPosition(floor,
-                roomAtColumn(localRooms, floor, floorCell.getX(), floorCell.getZ()), directFloorColumn));
+                roomAtColumn(localRooms, floor, floorCell.getX(), floorCell.getZ()),
+                directFloorColumn, 0, false));
     }
 
     private static Building roomAtColumn(Collection<Building> rooms, StructureFloor floor, int x, int z) {
@@ -151,7 +184,11 @@ public final class Structure implements VillageBuilding {
                 .orElse(null);
     }
 
-    record InteractionPosition(StructureFloor floor, Building room, boolean physical) {
+    record InteractionPosition(StructureFloor floor,
+                               Building room,
+                               boolean physical,
+                               int verticalDistance,
+                               boolean verticalConnector) {
     }
 
     void setFloorNumber(int floorId, int floorNumber) {
@@ -176,7 +213,8 @@ public final class Structure implements VillageBuilding {
                 scannedFloor.anchorY(),
                 scannedFloor.ceilingY(),
                 existing.floorNumber(),
-                scannedFloor.region()));
+                scannedFloor.region(),
+                scannedFloor.connectors()));
         recomputeBoundsFromFloors();
         return true;
     }

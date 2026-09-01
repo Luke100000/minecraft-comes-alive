@@ -571,7 +571,10 @@ public class Village implements Iterable<Building> {
                                 roomsByStructure.getOrDefault(structure.getId(), List.of())).orElse(null)))
                 .filter(resolved -> resolved.position() != null)
                 .min(Comparator
-                        .comparing((ResolvedInteraction resolved) -> !resolved.position().physical())
+                        .comparingInt((ResolvedInteraction resolved) -> resolved.position().verticalDistance())
+                        .thenComparingInt(resolved -> resolved.position().verticalConnector()
+                                ? resolved.position().floor().anchorY() : 0)
+                        .thenComparing(resolved -> !resolved.position().physical())
                         .thenComparing(resolved -> resolved.position().room() == null)
                         .thenComparingInt(resolved -> resolved.structure().getId()));
     }

@@ -31,9 +31,14 @@ final class StructureScanner {
 
         StructureConnector.FloorHandoff handoff = StructureConnector.resolveVerticalFloorHandoff(
                 world, source, Config.getInstance()).orElse(null);
-        return handoff == null
+        if (handoff != null) {
+            return scanAtSeed(world, source, handoff.seed(), existing, -1);
+        }
+
+        BlockPos standingSeed = resolveStandingSurfaceSeed(world, source).orElse(null);
+        return standingSeed == null || standingSeed.equals(source)
                 ? exact
-                : scanAtSeed(world, source, handoff.seed(), existing, -1);
+                : scanAtSeed(world, source, standingSeed, existing, -1);
     }
 
     static Result scanReportedStructure(Level world,
@@ -84,6 +89,15 @@ final class StructureScanner {
             return Optional.of(new AttachmentSeed(vertical.get().seed(), vertical.get().surface()));
         }
 
+        BlockPos standingSeed = resolveStandingSurfaceSeed(world, source).orElse(null);
+        if (standingSeed != null && !standingSeed.equals(source)) {
+            SelectedFloorScanner.Result standing = SelectedFloorScanner.scan(
+                    world, standingSeed, config.maxBuildingSize, config.maxBuildingRadius);
+            if (standing.result() == Building.validationResult.SUCCESS && standing.surface() != null) {
+                return Optional.of(new AttachmentSeed(standingSeed, standing.surface()));
+            }
+        }
+
         List<AttachmentSeed> candidates = new ArrayList<>();
         for (Direction direction : HORIZONTAL) {
             BlockPos connector = source.relative(direction);
@@ -104,8 +118,28 @@ final class StructureScanner {
                 world, pos, new FloorCeilingResolver(world)).isPresent();
     }
 
+    /**
+     * Player block positions can lie inside partial-height collision blocks such as slabs or stairs.
+     * Fresh discovery still needs an open feet cell, so normalize that interaction to the supported
+     * cell immediately above without teaching the scanner about individual block classes.
+     */
+    private static Optional<BlockPos> resolveStandingSurfaceSeed(Level world, BlockPos source) {
+        if (isWalkableAnchor(world, source)) return Optional.of(source.immutable());
+        if (world.getBlockState(source).getCollisionShape(world, source).isEmpty()) return Optional.empty();
+
+        BlockPos above = source.above();
+        return isWalkableAnchor(world, above)
+                ? Optional.of(above.immutable())
+                : Optional.empty();
+    }
+
     static StructureFloor persistedFloor(FloorSurface surface) {
-        return new StructureFloor(0, surface.anchorY(), surface.maxCeilingY(), surface.persistedRegion());
+        return persistedFloor(null, surface);
+    }
+
+    static StructureFloor persistedFloor(Level world, FloorSurface surface) {
+        return new StructureFloor(0, surface.anchorY(), surface.maxCeilingY(), 0,
+                surface.persistedRegion(), StructureConnector.floorMarkers(world, surface));
     }
 
     private static Result scanAtSeed(Level world,
@@ -121,7 +155,7 @@ final class StructureScanner {
         }
 
         FloorSurface surface = selected.surface();
-        StructureFloor floor = persistedFloor(surface);
+        StructureFloor floor = persistedFloor(world, surface);
         Structure candidate = new Structure(
                 ignoredStructureId, scanSeed.immutable(), selected.min(), selected.max(), List.of(floor));
         for (Structure other : existing) {
@@ -177,7 +211,7 @@ final class StructureScanner {
         Structure toStructure(int id) {
             if (floor == null) throw new IllegalStateException("Cannot materialize a failed Structure scan");
             StructureFloor assigned = new StructureFloor(
-                    0, floor.anchorY(), floor.ceilingY(), floor.region());
+                    0, floor.anchorY(), floor.ceilingY(), floor.floorNumber(), floor.region(), floor.connectors());
             return new Structure(id, source, min, max, List.of(assigned));
         }
     }

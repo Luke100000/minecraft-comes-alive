@@ -56,7 +56,7 @@ public final class BuildingDiagnostics {
         if (inspected != null) {
             boolean contains = inspected.containsPos(pos);
             boolean attaches = inspected.resolveInteractionPosition(world, pos, List.of()).isPresent();
-            StructureFloor resolvedFloor = inspected.resolveFloorAt(world, pos).orElse(null);
+            StructureFloor resolvedFloor = inspected.resolveFloorAt(pos).orElse(null);
             StructureFloor physicalFloor = inspected.physicalFloorAt(pos).orElse(null);
             log(traceId, "structure id={} logicalBuildingId={} source={} bounds={}..{} containsPos={} connectorAttaches={} resolvedFloor={} physicalFloor={}",
                     inspected.getId(), inspected.getLogicalBuildingId(), inspected.getSource(),
@@ -85,7 +85,7 @@ public final class BuildingDiagnostics {
 
             StructureFloor selectedFloor = room != null
                     ? inspected.getFloor(room.getFloorId()).orElse(null)
-                    : inspected.resolveFloorAt(world, pos).orElse(null);
+                    : inspected.resolveFloorAt(pos).orElse(null);
             StructureScanner.Result scan = selectedFloor == null
                     ? StructureScanner.Result.failure(Building.validationResult.NOT_IN_BUILDING, pos)
                     : StructureScanner.scanExistingFloor(

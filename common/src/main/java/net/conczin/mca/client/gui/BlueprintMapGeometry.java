@@ -3,6 +3,7 @@ package net.conczin.mca.client.gui;
 import net.conczin.mca.resources.data.BuildingType;
 import net.conczin.mca.server.world.data.Building;
 import net.conczin.mca.server.world.data.RoomTypeResolver;
+import net.conczin.mca.server.world.data.Structure;
 import net.conczin.mca.server.world.data.StructureFloor;
 import net.conczin.mca.server.world.data.Village;
 import net.minecraft.core.BlockPos;
@@ -52,10 +53,11 @@ final class BlueprintMapGeometry {
             List<MapStructureLayer> structures = buildStructureLayers(
                     outlineRoomsByBuilding, visibleRoomsByBuilding);
             List<MapIconLayer> icons = buildIconLayers(visibleRoomsByBuilding, selectedFloor);
+            List<MapConnectorLayer> connectors = buildConnectorLayers(selectedFloor);
             List<Building> grouped = village.getExternalBuildings().filter(Building::isComplete)
                     .filter(building -> selectedFloor == null || selectedFloor == 0)
                     .sorted(Comparator.comparingInt(Building::getId)).map(Building.class::cast).toList();
-            return new MapGeometry(visibleRooms, structures, icons, grouped);
+            return new MapGeometry(visibleRooms, structures, icons, connectors, grouped);
         });
     }
 
@@ -194,6 +196,59 @@ final class BlueprintMapGeometry {
         return List.copyOf(icons);
     }
 
+    private List<MapConnectorLayer> buildConnectorLayers(Integer selectedFloor) {
+        if (selectedFloor == null) return List.of();
+
+        LinkedHashMap<ConnectorLayerKey, MapConnectorLayer> layers = new LinkedHashMap<>();
+        village.getStructures().values().stream()
+                .sorted(Comparator.comparingInt(Structure::getId))
+                .forEach(structure -> {
+                    int logicalBuildingId = village.getLogicalBuildingId(structure.getId());
+                    for (StructureFloor floor : structure.getFloors()) {
+                        if (floor.floorNumber() != selectedFloor) continue;
+                        for (StructureFloor.ConnectorMarker marker : floor.connectors()) {
+                            ConnectorLayerKey key = new ConnectorLayerKey(
+                                    logicalBuildingId, marker.pos().getX(), marker.pos().getZ(), marker.type());
+                            layers.putIfAbsent(key, new MapConnectorLayer(
+                                    logicalBuildingId,
+                                    marker,
+                                    verticalDirection(logicalBuildingId, selectedFloor, marker)));
+                        }
+                    }
+                });
+        return List.copyOf(layers.values());
+    }
+
+    private VerticalDirection verticalDirection(int logicalBuildingId,
+                                                int selectedFloor,
+                                                StructureFloor.ConnectorMarker marker) {
+        if (!isVertical(marker.type())) return VerticalDirection.NONE;
+        boolean above = false;
+        boolean below = false;
+        for (Structure structure : village.getStructures().values()) {
+            if (village.getLogicalBuildingId(structure.getId()) != logicalBuildingId) continue;
+            for (StructureFloor floor : structure.getFloors()) {
+                if (floor.floorNumber() == selectedFloor) continue;
+                boolean sameColumn = floor.connectors().stream()
+                        .filter(other -> isVertical(other.type()))
+                        .anyMatch(other -> other.pos().getX() == marker.pos().getX()
+                                && other.pos().getZ() == marker.pos().getZ());
+                if (!sameColumn) continue;
+                if (floor.floorNumber() > selectedFloor) above = true;
+                if (floor.floorNumber() < selectedFloor) below = true;
+            }
+        }
+        if (above && below) return VerticalDirection.BOTH;
+        if (above) return VerticalDirection.UP;
+        if (below) return VerticalDirection.DOWN;
+        return VerticalDirection.NONE;
+    }
+
+    private static boolean isVertical(StructureFloor.ConnectorType type) {
+        return type == StructureFloor.ConnectorType.LADDER
+                || type == StructureFloor.ConnectorType.TRAPDOOR;
+    }
+
     private static Set<BlueprintMapFootprint.Cell> roomFootprint(Building building) {
         Set<BlueprintMapFootprint.Cell> cells = building.getFloorRegion()
                 .map(BlueprintMapFootprint::fromFloorRegion)
@@ -226,8 +281,11 @@ final class BlueprintMapGeometry {
     record MapGeometry(List<MapFootprintLayer> footprintLayers,
                        List<MapStructureLayer> structureLayers,
                        List<MapIconLayer> iconLayers,
+                       List<MapConnectorLayer> connectorLayers,
                        List<Building> groupedBuildings) {
-        static MapGeometry empty() { return new MapGeometry(List.of(), List.of(), List.of(), List.of()); }
+        static MapGeometry empty() {
+            return new MapGeometry(List.of(), List.of(), List.of(), List.of(), List.of());
+        }
     }
 
     record MapFootprintLayer(Building building,
@@ -251,10 +309,26 @@ final class BlueprintMapGeometry {
                         double iconX, double iconZ, float iconScale) {
     }
 
+    record MapConnectorLayer(int logicalBuildingId,
+                             StructureFloor.ConnectorMarker marker,
+                             VerticalDirection verticalDirection) {
+    }
+
+    enum VerticalDirection {
+        NONE,
+        UP,
+        DOWN,
+        BOTH
+    }
+
     record BuildingShape(BlueprintMapFootprint.Shape outline,
                          BlueprintMapFootprint.Shape shell) {
     }
 
     private record Center(double x, double z) {
+    }
+
+    private record ConnectorLayerKey(int logicalBuildingId, int x, int z,
+                                     StructureFloor.ConnectorType type) {
     }
 }

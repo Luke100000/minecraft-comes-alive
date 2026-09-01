@@ -189,7 +189,7 @@ final class SelectedFloorScanner {
             BlockPos candidate = base.offset(0, dy, 0);
             if (!withinSelectedFloorBand(seedY, candidate.getY())) continue;
             BlockState state = world.getBlockState(candidate);
-            if (StructureConnector.isVertical(state)) {
+            if (StructureConnector.isVertical(world, candidate)) {
                 connectors.add(StructureConnector.normalize(candidate, state));
             }
         }

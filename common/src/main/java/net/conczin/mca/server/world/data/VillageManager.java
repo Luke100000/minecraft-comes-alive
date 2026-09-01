@@ -341,7 +341,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         if (village.getFunctionalRoomAt(world, pos).isPresent()) {
             return failedRoom(Building.validationResult.IDENTICAL, pos, village);
         }
-        StructureFloor floor = structure.resolveFloorAt(world, pos).orElse(null);
+        StructureFloor floor = structure.resolveFloorAt(pos).orElse(null);
         if (floor == null) return failedRoom(Building.validationResult.TOO_SMALL, pos, village);
         StructureScanner.Result fresh = StructureScanner.scanExistingFloor(
                 world, structure, floor, pos, village.getStructures().values());
