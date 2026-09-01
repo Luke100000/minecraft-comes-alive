@@ -501,7 +501,7 @@
   "gui.button.special": "พิเศษ",
   "gui.button.work": "ทำงาน",
   "gui.button.inventory": "ช่องเก็บของ",
-  "gui.button.sethome": "บ้าน",
+  "gui.button.sethome": "Set Home",
   "gui.button.gohome": "กลับบ้าน",
   "gui.button.setworkplace": "ที่ทำงาน",
   "gui.button.sethangout": "ออกไปเที่ยว",
