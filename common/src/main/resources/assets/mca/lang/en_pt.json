@@ -501,7 +501,7 @@
   "gui.button.special": "Special",
   "gui.button.work": "Work",
   "gui.button.inventory": "Loot",
-  "gui.button.sethome": "'ome",
+  "gui.button.sethome": "Set Home",
   "gui.button.gohome": "Go 'ome",
   "gui.button.setworkplace": "Workplace",
   "gui.button.sethangout": "Hangout",
