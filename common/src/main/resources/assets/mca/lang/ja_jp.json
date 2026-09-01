@@ -501,7 +501,7 @@
   "gui.button.special": "特別",
   "gui.button.work": "作業",
   "gui.button.inventory": "持ち物",
-  "gui.button.sethome": "家に設定",
+  "gui.button.sethome": "Set Home",
   "gui.button.gohome": "帰宅",
   "gui.button.setworkplace": "仕事場に設定",
   "gui.button.sethangout": "遊ぶ",
