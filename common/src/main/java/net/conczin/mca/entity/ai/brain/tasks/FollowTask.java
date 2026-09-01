@@ -45,24 +45,29 @@ public class FollowTask extends Behavior<VillagerEntityMCA> {
                 return;
             }
 
-            float distance = villager.distanceTo(playerToFollow) - 2.0F;
-            float speed = Math.min(1.0F, Math.max(0.6F, distance * 0.1F));
-            float speedModifier = (villager.isPassenger() ? 1.7F : 0.8F) * speed;
-            BlockPos followPosition = getFollowPosition(playerToFollow);
-
-            int verticalDistance = Math.abs(villager.getBlockY() - followPosition.getY());
-            int closeEnoughDistance = verticalDistance > 1 ? 0 : 2;
-            boolean climbing = villager.onClimbable()
-                    || villager.getNavigation() instanceof MCAGroundPathNavigation navigation
-                    && navigation.isControllingClimbable();
-            if (climbing) {
-                closeEnoughDistance = 0;
-            }
-
             villager.getBrain().setMemory(
                     MemoryModuleType.LOOK_TARGET,
                     new EntityTracker(playerToFollow, true)
             );
+
+            BlockPos followPosition = getFollowPosition(playerToFollow);
+
+            // Keep the path that got us onto the ladder until navigation hands the
+            // villager to a safe node boundary. Retargeting a moving/flying player
+            // mid-segment can replace that path with a new partial path and fight
+            // ladder control, but an opposite-direction target may repath once at an
+            // interior ladder waypoint.
+            if (villager.getNavigation() instanceof MCAGroundPathNavigation navigation
+                    && navigation.isControllingClimbable()
+                    && !navigation.canRetargetClimbableFollow(followPosition.getY())) {
+                return;
+            }
+
+            float distance = villager.distanceTo(playerToFollow) - 2.0F;
+            float speed = Math.min(1.0F, Math.max(0.6F, distance * 0.1F));
+            float speedModifier = (villager.isPassenger() ? 1.7F : 0.8F) * speed;
+            int verticalDistance = Math.abs(villager.getBlockY() - followPosition.getY());
+            int closeEnoughDistance = verticalDistance > 1 || villager.onClimbable() ? 0 : 2;
             villager.getBrain().setMemory(
                     MemoryModuleType.WALK_TARGET,
                     new WalkTarget(

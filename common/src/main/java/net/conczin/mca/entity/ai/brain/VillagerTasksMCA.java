@@ -18,6 +18,7 @@ import net.conczin.mca.entity.ai.brain.tasks.chore.ChoppingTask;
 import net.conczin.mca.entity.ai.brain.tasks.chore.FishingTask;
 import net.conczin.mca.entity.ai.brain.tasks.chore.HarvestingTask;
 import net.conczin.mca.entity.ai.brain.tasks.chore.HuntingTask;
+import net.conczin.mca.entity.ai.navigation.BedApproachTarget;
 import net.conczin.mca.entity.ai.relationship.AgeState;
 import net.conczin.mca.registry.EntitiesMCA;
 import net.conczin.mca.registry.ProfessionsMCA;
@@ -220,7 +221,7 @@ public class VillagerTasksMCA {
                 Pair.of(3, new InteractTask(speedModifier)),
                 Pair.of(10, new ExtendedFindPointOfInterestTask(registryEntry -> registryEntry.is(PoiTypes.HOME), MemoryModuleType.HOME, false, Optional.of((byte) 14), (villager) -> {
                     // update villagers home/bed position
-                    villager.getResidency().seekHome();
+                    villager.getResidency().seekHomeAfterClaim();
                 }, (entity, pos) -> {
                     // verify that this bed is not blocked
                     VillageManager manager = VillageManager.get((ServerLevel) entity.level());
@@ -242,7 +243,7 @@ public class VillagerTasksMCA {
                 Pair.of(5, GoToWantedItem.create(speedModifier, false, 4)),
                 Pair.of(10, new ExtendedFindPointOfInterestTask(registryEntry -> registryEntry.is(PoiTypes.HOME), MemoryModuleType.HOME, false, Optional.of((byte) 14), (villager) -> {
                     // update villagers home/bed position
-                    villager.getResidency().seekHome();
+                    villager.getResidency().seekHomeAfterClaim();
                 }, (entity, pos) -> {
                     // verify that this bed is not blocked
                     VillageManager manager = VillageManager.get((ServerLevel) entity.level());
@@ -505,7 +506,7 @@ public class VillagerTasksMCA {
     public static ImmutableList<Pair<Integer, ? extends BehaviorControl<? super VillagerEntityMCA>>> getRestPackage(float speed) {
         return ImmutableList.of(
                 // try to reach the bed, and if not a set home, forget if out of range
-                Pair.of(2, ExtendedWalkTowardsTask.create(MemoryModuleType.HOME, speed, 1, Config.getInstance().getVillagerPathfindingDistance(), 1200, (v) -> {
+                Pair.of(2, ExtendedWalkTowardsTask.createWithFinalTarget(MemoryModuleType.HOME, speed, 1, Config.getInstance().getVillagerPathfindingDistance(), 1200, (v) -> {
                     Optional<Boolean> memory = v.getBrain().getMemoryInternal(MemoryModuleTypeMCA.FORCED_HOME);
                     boolean forced = memory != null && memory.isPresent();
                     if (forced) {
@@ -514,15 +515,12 @@ public class VillagerTasksMCA {
                     return !forced;
                 }, v -> {
                     v.getResidency().seekHome();
-                })),
+                }, (world, villager, home) -> villager.isSleeping()
+                        ? Optional.empty()
+                        : BedApproachTarget.create(world, home.pos()))),
                 //verify the bed, occupancies state and similar
-                Pair.of(3, new ConditionalSingleTickTask<>(ExtendedForgetCompletedPointOfInterestTask.create(
-                        registryEntry -> registryEntry.is(PoiTypes.HOME), MemoryModuleType.HOME, (entity) -> {
-                            // update villagers home/bed position
-                            if (entity instanceof VillagerEntityMCA villager) {
-                                villager.getResidency().seekHome();
-                            }
-                        }), (v) -> {
+                Pair.of(3, new ConditionalTask<>(ValidateNearbyPoi.create(
+                        registryEntry -> registryEntry.is(PoiTypes.HOME), MemoryModuleType.HOME), (v) -> {
                     Optional<Boolean> memory = v.getBrain().getMemoryInternal(MemoryModuleTypeMCA.FORCED_HOME);
                     //noinspection OptionalAssignedToNull
                     return memory == null || memory.isEmpty();

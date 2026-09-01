@@ -17,7 +17,7 @@ class MCAMoveControl extends MoveControl {
 
     protected final boolean isClimbNavigationActive() {
         return this.mob.getNavigation() instanceof MCAGroundPathNavigation navigation
-                && navigation.isControllingClimbable();
+                && navigation.isControllingClimbableMovement();
     }
 
     @Override

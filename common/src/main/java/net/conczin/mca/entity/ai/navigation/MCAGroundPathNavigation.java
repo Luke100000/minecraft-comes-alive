@@ -23,8 +23,8 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
     private static final double LADDER_ENTRY_OFFSET = 0.1D;
     private static final double ASCENT_NODE_TOLERANCE = 0.20D;
     private static final double DESCENT_NODE_TOLERANCE = 0.08D;
-    private static final double EXIT_HEIGHT_TOLERANCE = 0.25D;
-    private static final double EXIT_VERTICAL_BIAS = 0.08D;
+    private static final double FOLLOW_REVERSAL_MIN_VERTICAL_DISTANCE = 1.0D;
+    private int lastClimbNodeAdvanceTick = Integer.MIN_VALUE;
 
     public MCAGroundPathNavigation(Mob mob, Level level) {
         super(mob, level);
@@ -32,6 +32,49 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
 
     public boolean isControllingClimbable() {
         return getClimbContext() != null;
+    }
+
+    public boolean isControllingClimbableMovement() {
+        ClimbContext context = getClimbContext();
+        return context != null && context.pathTargetsClimbable();
+    }
+
+    public boolean canRetargetClimbableFollow(int targetY) {
+        if (this.lastClimbNodeAdvanceTick != this.tick) {
+            return false;
+        }
+
+        ClimbContext context = getClimbContext();
+        if (context == null || context.verticalDirection() == 0) {
+            return false;
+        }
+
+        double verticalDelta = targetY - this.mob.getY();
+        if (Math.abs(verticalDelta) <= FOLLOW_REVERSAL_MIN_VERTICAL_DISTANCE) {
+            return false;
+        }
+
+        int targetDirection = verticalDelta > 0.0D ? 1 : -1;
+        return targetDirection == -context.verticalDirection();
+    }
+
+    public double getControlledClimbableVelocity() {
+        ClimbContext context = getClimbContext();
+        if (context == null) {
+            return Double.NaN;
+        }
+
+        if (!context.pathTargetsClimbable()) {
+            return getControlledVerticalVelocity(context);
+        }
+
+        boolean continuingUpwardExit = !this.mob.onClimbable()
+                && isContinuingUpwardExit(context);
+        if (!this.mob.onClimbable() && !continuingUpwardExit) {
+            return Double.NaN;
+        }
+
+        return getControlledVerticalVelocity(context);
     }
 
     @Override
@@ -93,17 +136,69 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
             return;
         }
 
+        if (!context.pathTargetsClimbable()) {
+            super.followThePath();
+            return;
+        }
+
         Vec3 position = this.getTempMobPos();
-        if (context.pathTargetsClimbable() && this.mob.onClimbable()) {
-            double tolerance = context.verticalDirection() < 0
-                    ? DESCENT_NODE_TOLERANCE
-                    : ASCENT_NODE_TOLERANCE;
-            if (hasReachedHeight(context.targetNode().y, context.verticalDirection(), tolerance)) {
-                this.path.advance();
+        if (hasReachedPartialHeightClimbable(context)) {
+            advanceClimbPath(context);
+            this.doStuckDetection(position);
+            return;
+        }
+
+        if (this.mob.onClimbable() || hasLeftClimbableUpward(context)) {
+            boolean finalClimbableNode = context.exitsClimbable()
+                    || this.path.getNextNodeIndex() + 1 >= this.path.getNodeCount();
+            boolean reached;
+            if (context.exitsClimbable()) {
+                reached = hasReachedHeight(
+                        context.targetNode().y,
+                        context.verticalDirection(),
+                        0.0D
+                );
+            } else {
+                double tolerance = finalClimbableNode
+                        ? 0.0D
+                        : context.verticalDirection() < 0
+                        ? DESCENT_NODE_TOLERANCE
+                        : ASCENT_NODE_TOLERANCE;
+                reached = hasReachedHeight(context.targetNode().y, context.verticalDirection(), tolerance);
+            }
+
+            if (reached) {
+                advanceClimbPath(context);
             }
         }
 
         this.doStuckDetection(position);
+    }
+
+    private void advanceClimbPath(ClimbContext context) {
+        this.path.advance();
+        if (!context.exitsClimbable() && context.verticalDirection() != 0) {
+            this.lastClimbNodeAdvanceTick = this.tick;
+        }
+    }
+
+    private boolean hasReachedPartialHeightClimbable(ClimbContext context) {
+        if (this.mob.onClimbable() || !this.mob.onGround()) {
+            return false;
+        }
+
+        Node climbableNode = context.climbableNode();
+        if (this.mob.blockPosition().getY() >= climbableNode.y
+                || Mth.floor(this.mob.getY() + 0.5D) != climbableNode.y
+                || Math.abs(this.mob.getY() - climbableNode.y) >= 1.0D) {
+            return false;
+        }
+
+        double maxDistanceToWaypoint = this.mob.getBbWidth() > 0.75F
+                ? this.mob.getBbWidth() / 2.0F
+                : 0.75F - this.mob.getBbWidth() / 2.0F;
+        return Math.abs(this.mob.getX() - (climbableNode.x + 0.5D)) < maxDistanceToWaypoint
+                && Math.abs(this.mob.getZ() - (climbableNode.z + 0.5D)) < maxDistanceToWaypoint;
     }
 
     @Override
@@ -117,8 +212,12 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
 
     private ClimbContext getClimbContext() {
         Path path = this.path;
-        if (path == null || path.isDone()) {
+        if (path == null || path.getNodeCount() == 0) {
             return null;
+        }
+
+        if (path.isDone()) {
+            return getCompletedClimbContext(path);
         }
 
         int nextNodeIndex = path.getNextNodeIndex();
@@ -142,7 +241,7 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
             );
         }
 
-        if (this.mob.onClimbable() && nextNodeIndex > 0) {
+        if (nextNodeIndex > 0) {
             Node previousNode = path.getNode(nextNodeIndex - 1);
             if (isClimbable(previousNode.asBlockPos())) {
                 return new ClimbContext(
@@ -153,6 +252,26 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
                         getVerticalDirection(path, nextNodeIndex - 1)
                 );
             }
+        }
+
+        return null;
+    }
+
+    private ClimbContext getCompletedClimbContext(Path path) {
+        if (!this.mob.onClimbable()) {
+            return null;
+        }
+
+        int endNodeIndex = path.getNodeCount() - 1;
+        Node endNode = path.getNode(endNodeIndex);
+        if (isClimbable(endNode.asBlockPos())) {
+            return new ClimbContext(
+                    endNode,
+                    endNode,
+                    true,
+                    false,
+                    getVerticalDirection(path, endNodeIndex)
+            );
         }
 
         return null;
@@ -170,17 +289,35 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
 
         if (climbableNodeIndex > 0) {
             Node previousNode = path.getNode(climbableNodeIndex - 1);
-            return Integer.compare(climbableNode.y, previousNode.y);
+            int direction = Integer.compare(climbableNode.y, previousNode.y);
+            if (direction != 0) {
+                return direction;
+            }
         }
 
-        return 0;
+        // A partial path can terminate on a single climbable height. Preserve the
+        // path's intended vertical direction instead of deriving it from overshoot.
+        return Integer.compare(path.getTarget().getY(), climbableNode.y);
     }
 
     private void applyClimbableMotion(ClimbContext context) {
+        if (!context.pathTargetsClimbable()) {
+            Vec3 movement = this.mob.getDeltaMovement();
+            this.mob.setDeltaMovement(
+                    movement.x(),
+                    getControlledVerticalVelocity(context),
+                    movement.z()
+            );
+            return;
+        }
+
         BlockPos climbablePos = findAttachedClimbable(context.climbableNode().asBlockPos());
         Vec3 anchor = getClimbableAnchor(climbablePos);
+        double targetY = context.targetNode().y;
+        boolean continuingUpwardExit = !this.mob.onClimbable()
+                && isContinuingUpwardExit(context);
 
-        if (!this.mob.onClimbable()) {
+        if (!this.mob.onClimbable() && !continuingUpwardExit) {
             this.mob.getMoveControl().setWantedPosition(
                     anchor.x(), this.mob.getY(), anchor.z(), this.speedModifier
             );
@@ -193,17 +330,19 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
             return;
         }
 
+        this.mob.getMoveControl().setWantedPosition(anchor.x(), targetY, anchor.z(), this.speedModifier);
+
+        this.mob.setXxa(0.0F);
+        this.mob.setZza(0.0F);
+        this.mob.setDeltaMovement(
+                horizontalVelocity(anchor.x() - this.mob.getX()),
+                getControlledVerticalVelocity(context),
+                horizontalVelocity(anchor.z() - this.mob.getZ())
+        );
+    }
+
+    private double getControlledVerticalVelocity(ClimbContext context) {
         double targetY = context.targetNode().y;
-        boolean atExitHeight = context.exitsClimbable() && isAtExitHeight(context, targetY);
-        double targetX = anchor.x();
-        double targetZ = anchor.z();
-        if (context.exitsClimbable() && (!context.pathTargetsClimbable() || atExitHeight)) {
-            targetX = context.targetNode().x + 0.5D;
-            targetZ = context.targetNode().z + 0.5D;
-        }
-
-        this.mob.getMoveControl().setWantedPosition(targetX, targetY, targetZ, this.speedModifier);
-
         double verticalDelta = targetY - this.mob.getY();
         double controlledY;
         if (context.verticalDirection() > 0) {
@@ -214,23 +353,7 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
             controlledY = Mth.clamp(verticalDelta, -CLIMB_VERTICAL_SPEED, CLIMB_VERTICAL_SPEED);
         }
 
-        if (atExitHeight && context.verticalDirection() != 0) {
-            controlledY = context.verticalDirection() > 0
-                    ? Math.max(controlledY, EXIT_VERTICAL_BIAS)
-                    : Math.min(controlledY, -EXIT_VERTICAL_BIAS);
-        }
-
-        this.mob.setXxa(0.0F);
-        this.mob.setZza(0.0F);
-        this.mob.setDeltaMovement(
-                horizontalVelocity(targetX - this.mob.getX()),
-                controlledY,
-                horizontalVelocity(targetZ - this.mob.getZ())
-        );
-    }
-
-    private boolean isAtExitHeight(ClimbContext context, double targetY) {
-        return hasReachedHeight(targetY, context.verticalDirection(), EXIT_HEIGHT_TOLERANCE);
+        return controlledY;
     }
 
     private boolean hasReachedHeight(double targetY, int verticalDirection, double tolerance) {
@@ -241,6 +364,18 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
             return this.mob.getY() <= targetY + tolerance;
         }
         return Math.abs(targetY - this.mob.getY()) <= tolerance;
+    }
+
+    private boolean hasLeftClimbableUpward(ClimbContext context) {
+        return context.exitsClimbable()
+                && context.verticalDirection() > 0
+                && context.targetNode().y > context.climbableNode().y
+                && this.mob.getY() > context.climbableNode().y;
+    }
+
+    private boolean isContinuingUpwardExit(ClimbContext context) {
+        return hasLeftClimbableUpward(context)
+                && this.mob.getY() <= context.targetNode().y;
     }
 
     private Vec3 getClimbableAnchor(BlockPos pos) {

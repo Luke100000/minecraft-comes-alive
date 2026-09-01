@@ -177,7 +177,7 @@ public class Village implements Iterable<Building> {
 
     public List<String> getResidents(int building) {
         return getBuilding(building).map(value -> residentHomes.entrySet().stream().filter(e -> {
-            return value.containsPos(BlockPos.of(e.getValue()));
+            return value.getBlockPosStream().anyMatch(pos -> pos.asLong() == e.getValue());
         }).map(k -> residentNames.getOrDefault(k.getKey(), "Unknown")).collect(Collectors.toList())).orElseGet(List::of);
     }
 
@@ -408,15 +408,51 @@ public class Village implements Iterable<Building> {
         return getBuildings().size() >= Config.getInstance().minimumBuildingsToBeConsideredAVillage;
     }
 
-    public void updateResident(VillagerEntityMCA e) {
-        residentNames.put(e.getUUID(), e.getName().getString());
+    public boolean updateResident(VillagerEntityMCA e) {
+        return updateResident(e, false);
+    }
+
+    public void updateResidentAfterClaim(VillagerEntityMCA e) {
+        updateResident(e, true);
+    }
+
+    private boolean updateResident(VillagerEntityMCA e, boolean authoritativeHomeClaim) {
+        UUID resident = e.getUUID();
+        String residentName = e.getName().getString();
+        String previousName = residentNames.put(resident, residentName);
+        Long previousHome = residentHomes.get(resident);
 
         Optional<GlobalPos> home = e.getResidency().getHome();
+        boolean accepted = true;
         if (home.isPresent()) {
-            residentHomes.put(e.getUUID(), home.get().pos().asLong());
+            long homePosition = home.get().pos().asLong();
+            if (authoritativeHomeClaim) {
+                ResidentHomeAssignments.claimAuthoritatively(residentHomes, resident, homePosition);
+            } else {
+                accepted = ResidentHomeAssignments.claim(residentHomes, resident, homePosition);
+            }
         } else {
-            residentHomes.remove(e.getUUID());
+            residentHomes.remove(resident);
         }
+
+        if (!Objects.equals(previousName, residentName) || !Objects.equals(previousHome, residentHomes.get(resident))) {
+            markDirty();
+        }
+        return accepted;
+    }
+
+    public boolean isResidentHomeCurrent(VillagerEntityMCA resident) {
+        Optional<GlobalPos> home = resident.getResidency().getHome();
+        if (home.isEmpty()) {
+            return !residentHomes.containsKey(resident.getUUID());
+        }
+        GlobalPos currentHome = home.get();
+        return currentHome.dimension() == world.dimension()
+                && Objects.equals(residentHomes.get(resident.getUUID()), currentHome.pos().asLong());
+    }
+
+    boolean repairDuplicateResidentHomes() {
+        return ResidentHomeAssignments.deduplicate(residentHomes) > 0;
     }
 
     public Map<UUID, String> getResidentNames() {
