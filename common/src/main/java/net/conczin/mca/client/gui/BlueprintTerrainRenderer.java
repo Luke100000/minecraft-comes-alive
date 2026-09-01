@@ -48,11 +48,12 @@ final class BlueprintTerrainRenderer implements AutoCloseable {
         long gameTime = minecraft.level.getGameTime();
         for (int minX = tileMin(visibleMinX); minX <= visibleMaxX; minX += TILE_BLOCK_SIZE) {
             for (int minZ = tileMin(visibleMinZ); minZ <= visibleMaxZ; minZ += TILE_BLOCK_SIZE) {
-                TileKey key = new TileKey(minX, minZ, sampleStep);
+                TileKey key = new TileKey(minX, minZ);
                 TerrainTile tile = tiles.get(key);
-                if (tile == null || tile.shouldRefresh(gameTime)) {
-                    if (tile != null) releaseTexture(tile);
-                    tile = TerrainTile.sample(minecraft.level, minX, minZ, sampleStep, gameTime);
+                if (tile == null || tile.sampleStep != sampleStep || tile.shouldRefresh(gameTime)) {
+                    TerrainTile previous = tile;
+                    tile = TerrainTile.sample(minecraft.level, minX, minZ, sampleStep, gameTime, previous);
+                    if (previous != null) releaseTexture(previous);
                     tiles.put(key, tile);
                 }
                 renderTile(context, tile);
@@ -186,7 +187,7 @@ final class BlueprintTerrainRenderer implements AutoCloseable {
         tiles.clear();
     }
 
-    private record TileKey(int minX, int minZ, int sampleStep) {
+    private record TileKey(int minX, int minZ) {
     }
 
     private static final class TerrainTile {
@@ -233,11 +234,23 @@ final class BlueprintTerrainRenderer implements AutoCloseable {
             return cells[x][z].height;
         }
 
+        private Cell cellAtBlock(int blockX, int blockZ) {
+            int firstCellX = Math.floorDiv(minX, sampleStep) * sampleStep - sampleStep;
+            int firstCellZ = Math.floorDiv(minZ, sampleStep) * sampleStep - sampleStep;
+            int cellX = Math.floorDiv(blockX - firstCellX, sampleStep);
+            int cellZ = Math.floorDiv(blockZ - firstCellZ, sampleStep);
+            if (cellX < 0 || cellZ < 0 || cellX >= cells.length || cellZ >= cells[cellX].length) {
+                return null;
+            }
+            return cells[cellX][cellZ];
+        }
+
         private static TerrainTile sample(ClientLevel level,
                                           int minX,
                                           int minZ,
                                           int sampleStep,
-                                          long gameTime) {
+                                          long gameTime,
+                                          TerrainTile previous) {
             int maxX = minX + TILE_BLOCK_SIZE;
             int maxZ = minZ + TILE_BLOCK_SIZE;
             int minBuildHeight = level.getMinBuildHeight();
@@ -260,6 +273,10 @@ final class BlueprintTerrainRenderer implements AutoCloseable {
                     //noinspection deprecation
                     if (!level.hasChunkAt(sampleX, sampleZ)) {
                         complete = false;
+                        Cell cached = previous == null ? null : previous.cellAtBlock(sampleX, sampleZ);
+                        if (cached != null) {
+                            cells[cellX][cellZ] = new Cell(x, z, cached.height, cached.baseColor);
+                        }
                         continue;
                     }
 
