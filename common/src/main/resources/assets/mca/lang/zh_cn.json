@@ -501,7 +501,7 @@
   "gui.button.special": "特殊",
   "gui.button.work": "工作",
   "gui.button.inventory": "物品栏",
-  "gui.button.sethome": "安家此地",
+  "gui.button.sethome": "Set Home",
   "gui.button.gohome": "回家",
   "gui.button.setworkplace": "工作区域",
   "gui.button.sethangout": "闲逛",
