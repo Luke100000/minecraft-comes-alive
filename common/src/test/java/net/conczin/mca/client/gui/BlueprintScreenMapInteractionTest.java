@@ -14,6 +14,7 @@ import net.minecraft.world.level.block.Blocks;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Array;
 import java.lang.reflect.Method;
 import java.util.List;
 import java.util.Map;
@@ -101,6 +102,69 @@ class BlueprintScreenMapInteractionTest {
         pan.begin(10.0D, 10.0D);
         assertFalse(pan.update(11.0D, 11.0D));
         assertFalse(pan.end());
+    }
+
+    @Test
+    void terrainTileOriginsStayAnchoredToWorldCoordinates() throws Exception {
+        Method tileMin = BlueprintTerrainRenderer.class.getDeclaredMethod("tileMin", int.class);
+        tileMin.setAccessible(true);
+
+        assertEquals(0, tileMin.invoke(null, 0));
+        assertEquals(0, tileMin.invoke(null, 127));
+        assertEquals(128, tileMin.invoke(null, 128));
+        assertEquals(-128, tileMin.invoke(null, -1));
+        assertEquals(-128, tileMin.invoke(null, -128));
+        assertEquals(-256, tileMin.invoke(null, -129));
+    }
+
+    @Test
+    void terrainContourSpacingDoesNotChangeWhenCacheReliefChanges() throws Exception {
+        Method contourInterval = BlueprintTerrainRenderer.class.getDeclaredMethod("contourInterval", int.class);
+        contourInterval.setAccessible(true);
+
+        assertEquals(contourInterval.invoke(null, 2), contourInterval.invoke(null, 30));
+    }
+
+    @Test
+    void terrainUsesFullResolutionFromOneToFourTimesZoom() {
+        assertEquals(4, BlueprintTerrainRenderer.sampleStep(0.5F));
+        assertEquals(3, BlueprintTerrainRenderer.sampleStep(0.75F));
+        assertEquals(3, BlueprintTerrainRenderer.sampleStep(0.99F));
+        assertEquals(1, BlueprintTerrainRenderer.sampleStep(1.0F));
+        assertEquals(1, BlueprintTerrainRenderer.sampleStep(2.0F));
+        assertEquals(1, BlueprintTerrainRenderer.sampleStep(4.0F));
+    }
+
+    @Test
+    void terrainTileCacheIdentityDoesNotChangeWithSamplingResolution() throws Exception {
+        Class<?> tileKey = Class.forName(BlueprintTerrainRenderer.class.getName() + "$TileKey");
+
+        assertEquals(2, tileKey.getRecordComponents().length);
+        assertEquals("minX", tileKey.getRecordComponents()[0].getName());
+        assertEquals("minZ", tileKey.getRecordComponents()[1].getName());
+    }
+
+    @Test
+    void terrainTileCanReuseCoarserCachedSampleForFinerResampling() throws Exception {
+        Class<?> tileClass = Class.forName(BlueprintTerrainRenderer.class.getName() + "$TerrainTile");
+        Class<?> cellClass = Class.forName(BlueprintTerrainRenderer.class.getName() + "$TerrainTile$Cell");
+
+        var cellConstructor = cellClass.getDeclaredConstructor(int.class, int.class, int.class, int.class);
+        cellConstructor.setAccessible(true);
+        Object cachedCell = cellConstructor.newInstance(0, 0, 72, 0x486a3d);
+
+        Object cells = Array.newInstance(cellClass, 3, 3);
+        Array.set(Array.get(cells, 1), 1, cachedCell);
+
+        var tileConstructor = tileClass.getDeclaredConstructor(
+                int.class, int.class, int.class, long.class, boolean.class, cells.getClass());
+        tileConstructor.setAccessible(true);
+        Object coarseTile = tileConstructor.newInstance(0, 0, 2, 0L, true, cells);
+
+        Method cellAtBlock = tileClass.getDeclaredMethod("cellAtBlock", int.class, int.class);
+        cellAtBlock.setAccessible(true);
+
+        assertEquals(cachedCell, cellAtBlock.invoke(coarseTile, 1, 1));
     }
 
     @Test
