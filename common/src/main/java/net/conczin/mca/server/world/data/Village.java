@@ -1,6 +1,5 @@
 package net.conczin.mca.server.world.data;
 
-import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import net.conczin.mca.Config;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.Memories;
@@ -560,7 +559,6 @@ public class Village implements Iterable<Building> {
                 + (int) externalBuildings.values().stream().filter(Building::isComplete).count();
     }
 
-
     public RoomScanPlan getRoomScanPlan(Level level, BlockPos pos) {
         BlockPos source = pos == null ? BlockPos.ZERO : pos.immutable();
         if (level == null || pos == null) return RoomScanPlan.addBuilding(source);
@@ -848,17 +846,31 @@ public class Village implements Iterable<Building> {
         }
     }
 
-    private record FloorRef(Structure structure, StructureFloor floor) {
+    public boolean updateResident(VillagerEntityMCA e) {
+        return updateResident(e, false);
     }
 
-    record AttachmentTarget(int buildingId, int structureId, int floorId, int gap) {
+    public void updateResidentAfterClaim(VillagerEntityMCA e) {
+        updateResident(e, true);
     }
 
-    public enum RoomScanMode {
-        ADD_BUILDING, ADD_ROOM, UPDATE_ROOM, ADD_FLOOR, ADD_BASEMENT;
+    private boolean updateResident(VillagerEntityMCA e, boolean authoritativeHomeClaim) {
+        UUID resident = e.getUUID();
+        String residentName = e.getName().getString();
+        String previousName = residentNames.put(resident, residentName);
+        Long previousHome = residentHomes.get(resident);
 
-        public boolean isAttachment() {
-            return this == ADD_FLOOR || this == ADD_BASEMENT;
+        Optional<GlobalPos> home = e.getResidency().getHome();
+        boolean accepted = true;
+        if (home.isPresent() && home.get().dimension() == world.dimension()) {
+            long homePosition = home.get().pos().asLong();
+            if (authoritativeHomeClaim) {
+                ResidentHomeAssignments.claimAuthoritatively(residentHomes, resident, homePosition);
+            } else {
+                accepted = ResidentHomeAssignments.claim(residentHomes, resident, homePosition);
+            }
+        } else {
+            residentHomes.remove(resident);
         }
 
         if (!Objects.equals(previousName, residentName) || !Objects.equals(previousHome, residentHomes.get(resident))) {
@@ -879,6 +891,20 @@ public class Village implements Iterable<Building> {
 
     boolean repairDuplicateResidentHomes() {
         return ResidentHomeAssignments.deduplicate(residentHomes) > 0;
+    }
+
+    private record FloorRef(Structure structure, StructureFloor floor) {
+    }
+
+    record AttachmentTarget(int buildingId, int structureId, int floorId, int gap) {
+    }
+
+    public enum RoomScanMode {
+        ADD_BUILDING, ADD_ROOM, UPDATE_ROOM, ADD_FLOOR, ADD_BASEMENT;
+
+        public boolean isAttachment() {
+            return this == ADD_FLOOR || this == ADD_BASEMENT;
+        }
     }
 
     int prospectiveFloorNumber(int buildingId,
@@ -936,13 +962,6 @@ public class Village implements Iterable<Building> {
 
     public boolean isVillage() {
         return getStructureCount() >= Config.getInstance().minimumBuildingsToBeConsideredAVillage;
-    }
-
-    public void updateResident(VillagerEntityMCA entity) {
-        residentNames.put(entity.getUUID(), entity.getName().getString());
-        Optional<GlobalPos> home = entity.getResidency().getHome();
-        if (home.isPresent()) residentHomes.put(entity.getUUID(), home.get().pos().asLong());
-        else residentHomes.remove(entity.getUUID());
     }
 
     public Map<UUID, String> getResidentNames() { return residentNames; }

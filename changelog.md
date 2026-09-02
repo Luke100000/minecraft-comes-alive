@@ -1,4 +1,16 @@
-# 7.7.36-beta.3
+# 7.7.37
+
+* Improved villager bed pathfinding and sleeping reliability.
+* Improved ladder climbing and ladder-to-floor transitions.
+* Fixed workplace assignment and job POI ownership.
+* Fixed duplicate villager residency and bed ownership.
+* Improved HOME POI validation and repaired invalid resident-home assignments.
+* Fixed residents being assigned to the wrong building.
+* Fixed villager age scaling at growth-stage boundaries.
+
+# 7.7.36
+* Recommended to ***__backup__*** your world.
+* This release won't be backwards compatible with 7.7.35 and below due to internal saving changes.
 
 * More bed fixes
 * Fixed baby age corruption bug
