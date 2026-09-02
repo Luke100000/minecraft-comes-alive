@@ -45,6 +45,7 @@ final class BlueprintMapRenderer implements AutoCloseable {
     private static final int ROOM_SHADOW_COLOR = 0x50000000;
     private static final int PLAYER_MARKER_SIZE = 6;
     private static final int PLAYER_MARKER_EDGE_PADDING = 2;
+    private static final float PLAYER_MARKER_Z = 100.0F;
     private static final float CONNECTOR_GLYPH_CELL_FRACTION = 1.2F;
     private static final int CONNECTOR_MARKER_TEXT = 0xfff4f6f8;
     private static final int ROOM_FILL_ALPHA_ALL_FLOORS = 0x60;
@@ -506,7 +507,7 @@ final class BlueprintMapRenderer implements AutoCloseable {
         double markerX = markerCenter.x() - PLAYER_MARKER_SIZE / 2.0D;
         double markerY = markerCenter.y() - PLAYER_MARKER_SIZE / 2.0D;
         context.pose().pushPose();
-        context.pose().translate(markerX, markerY, 0.0D);
+        context.pose().translate(markerX, markerY, PLAYER_MARKER_Z);
         context.fill(-1, -1, PLAYER_MARKER_SIZE + 1, PLAYER_MARKER_SIZE + 1, 0xc0000000);
         renderCurrentPlayerFace(context, player, 0, 0, PLAYER_MARKER_SIZE);
         context.pose().popPose();
