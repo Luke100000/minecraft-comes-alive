@@ -61,8 +61,11 @@ This section is normative. It exists specifically to prevent overengineering.
 
 ### 3.1 At most one new production workflow class
 
-The implementation may add **one** package-private production class for Room workflow orchestration,
-named `RoomWorkflow` unless an existing class proves to be a better fit during implementation.
+The implementation may add **one** production class for Room workflow orchestration, named
+`RoomWorkflow` unless an existing class proves to be a better fit during implementation. It should
+use the narrowest visibility compatible with direct packet delegation. Because MCA's network packet
+classes and world-data classes are separate Java packages, making `RoomWorkflow` public is preferable
+to adding a redundant public `VillageManager` facade solely to hide a package-private workflow.
 
 Do not add:
 

@@ -45,7 +45,7 @@ final class BlueprintMapRenderer implements AutoCloseable {
     private static final int ROOM_SHADOW_COLOR = 0x50000000;
     private static final int PLAYER_MARKER_SIZE = 6;
     private static final int PLAYER_MARKER_EDGE_PADDING = 2;
-    private static final float CONNECTOR_GLYPH_CELL_FRACTION = 0.8F;
+    private static final float CONNECTOR_GLYPH_CELL_FRACTION = 1.2F;
     private static final int CONNECTOR_MARKER_TEXT = 0xfff4f6f8;
     private static final int ROOM_FILL_ALPHA_ALL_FLOORS = 0x60;
     private static final int ROOM_FILL_ALPHA_SELECTED_FLOOR = 0x70;

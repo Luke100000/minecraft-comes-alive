@@ -14,7 +14,6 @@ import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.server.level.ServerPlayer;
 
 import java.util.Locale;
-import java.util.Optional;
 
 public record ReportBuildingMessage(Action action, String data) implements HandleablePayload {
     public static final CustomPacketPayload.Type<ReportBuildingMessage> TYPE =
@@ -31,59 +30,49 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
     @Override
     public void handleServer(ServerPlayer player) {
         VillageManager manager = VillageManager.get(player.serverLevel());
+        RoomWorkflow workflow = new RoomWorkflow(manager, player.serverLevel());
         try {
             switch (action) {
                 case ADD_ROOM, ADD_BUILDING, ADD_FLOOR, ADD_BASEMENT, UPDATE_ROOM ->
-                        executeScanAction(manager, player, player.blockPosition(), null,
+                        executeScanAction(workflow, player, player.blockPosition(), null,
                                 action, parseTargetBuildingId(data));
                 case SET_MAIN_ROOM -> updateMainRoom(manager, player);
                 case AUTO_SCAN -> manager.findNearestVillage(player).ifPresent(Village::toggleAutoScan);
-                case FULL_SCAN -> fullScan(manager, player);
+                case FULL_SCAN -> fullScan(workflow, manager, player);
                 case FORCE_TYPE -> displayEditResult(player,
                         manager.forceRoomType(player.blockPosition(), data), null);
                 case REMOVE_ROOM -> displayEditResult(player,
                         manager.removeRoom(player.blockPosition()), "blueprint.roomRemoved");
                 case REMOVE -> displayEditResult(player,
                         manager.removeBuilding(player.blockPosition()), "blueprint.buildingRemoved");
-                case SET_ROOM_INHERITANCE -> setRoomInheritance(manager, player, data);
+                case SET_ROOM_INHERITANCE -> setRoomInheritance(workflow, player, data);
             }
         } finally {
             GetVillageRequest.sendResponse(player);
         }
     }
 
-    static void executeScanAction(VillageManager manager,
+    static void executeScanAction(RoomWorkflow workflow,
                                   ServerPlayer player,
                                   BlockPos source,
                                   String forcedType,
                                   Action action,
                                   int expectedTargetId) {
-        switch (action) {
-            case ADD_ROOM -> {
-                BuildingScanResult scan = manager.analyzeRoom(source);
-                if (scan.result() == Building.validationResult.IDENTICAL) {
-                    player.displayClientMessage(Component.translatable("blueprint.roomAlreadyAdded"), true);
-                    return;
-                }
-                commitRoomAddition(manager, player, scan, forcedType, action);
-            }
-            case ADD_BUILDING -> commitRoomAddition(manager, player,
-                    manager.analyzeBuildingAddition(source), forcedType, action);
-            case ADD_FLOOR, ADD_BASEMENT -> {
-                if (expectedTargetId < 0) {
-                    displayScanResult(player, Building.validationResult.NOT_IN_BUILDING);
-                    return;
-                }
-                Village.RoomScanMode mode = action == Action.ADD_BASEMENT
-                        ? Village.RoomScanMode.ADD_BASEMENT : Village.RoomScanMode.ADD_FLOOR;
-                commitRoomAddition(manager, player,
-                        manager.analyzeAttachedRoom(source, mode, expectedTargetId), forcedType, action);
-            }
-            case UPDATE_ROOM -> updateRoom(manager, player, source, forcedType, expectedTargetId);
-            case SET_ROOM_INHERITANCE -> confirmRoomInheritance(
-                    manager, player, source, forcedType, expectedTargetId);
-            default -> MCA.LOGGER.warn("Ignoring invalid building scan action {} from {}", action, player);
+        RoomWorkflow.Outcome outcome = switch (action) {
+            case ADD_ROOM -> workflow.addRoom(source, forcedType);
+            case ADD_BUILDING -> workflow.addBuilding(source, forcedType);
+            case ADD_FLOOR -> workflow.addFloor(source, expectedTargetId, forcedType);
+            case ADD_BASEMENT -> workflow.addBasement(source, expectedTargetId, forcedType);
+            case UPDATE_ROOM -> workflow.updateRoom(source, expectedTargetId, forcedType);
+            case SET_ROOM_INHERITANCE -> workflow.updateInheritance(
+                    source, expectedTargetId, false, forcedType);
+            default -> null;
+        };
+        if (outcome == null) {
+            MCA.LOGGER.warn("Ignoring invalid building scan action {} from {}", action, player);
+            return;
         }
+        displayWorkflowOutcome(player, outcome, action);
     }
 
     private static int parseTargetBuildingId(String value) {
@@ -95,13 +84,13 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
         }
     }
 
-    private static void fullScan(VillageManager manager, ServerPlayer player) {
+    private static void fullScan(RoomWorkflow workflow, VillageManager manager, ServerPlayer player) {
         Village village = manager.findNearestVillage(player).orElse(null);
         if (village == null) {
             player.displayClientMessage(Component.translatable("blueprint.noBuilding"), true);
             return;
         }
-        displayScanResult(player, manager.fullScan(village), "blueprint.refreshed");
+        displayScanResult(player, workflow.fullScan(village), "blueprint.refreshed");
     }
 
     private static void updateMainRoom(VillageManager manager, ServerPlayer player) {
@@ -125,95 +114,52 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
         }
     }
 
-    private static void setRoomInheritance(VillageManager manager, ServerPlayer player, String data) {
+    private static void setRoomInheritance(RoomWorkflow workflow, ServerPlayer player, String data) {
         if (!"true".equals(data) && !"false".equals(data)) return;
         boolean enabled = Boolean.parseBoolean(data);
-        Village village = manager.findNearestVillage(player).orElse(null);
-        if (village == null) return;
-        Building room = village.getFunctionalRoomAt(player.serverLevel(), player.blockPosition()).orElse(null);
-        if (room == null) return;
-        RoomInheritanceUpdate update = village.analyzeRoomInheritanceUpdate(room, enabled);
-        if (!update.valid() || update.previousEnabled() == enabled) return;
-        if (update.requiresTypeSelection()) {
-            requestType(update.matchingTypes(), player.blockPosition(), player,
-                    Action.SET_ROOM_INHERITANCE, room.getId());
+        RoomWorkflow.Outcome outcome = workflow.updateInheritance(
+                player.blockPosition(), -1, enabled, null);
+        if (outcome.status() == RoomWorkflow.Status.FAILED
+                && outcome.result() == Building.validationResult.NOT_IN_BUILDING) {
             return;
         }
-        Building.validationResult result = village.commitRoomInheritanceUpdate(update, null);
-        if (result != Building.validationResult.SUCCESS) displayScanResult(player, result);
+        displayWorkflowOutcome(player, outcome, Action.SET_ROOM_INHERITANCE);
     }
 
-    private static void confirmRoomInheritance(VillageManager manager,
-                                               ServerPlayer player,
-                                               BlockPos source,
-                                               String forcedType,
-                                               int expectedRoomId) {
-        Village village = manager.findNearestVillage(source, Village.MERGE_MARGIN).orElse(null);
-        Building room = village == null ? null
-                : village.getFunctionalRoomAt(player.serverLevel(), source).orElse(null);
-        if (room == null || room.getId() != expectedRoomId) {
-            player.displayClientMessage(Component.translatable("blueprint.roomUpdateConflict"), true);
+    private static void displayWorkflowOutcome(ServerPlayer player,
+                                               RoomWorkflow.Outcome outcome,
+                                               Action action) {
+        if (outcome.status() == RoomWorkflow.Status.REQUIRES_TYPE_SELECTION) {
+            requestType(outcome.matchingTypes(), outcome.source(), player, action, outcome.expectedTargetId());
             return;
         }
-        RoomInheritanceUpdate update = village.analyzeRoomInheritanceUpdate(room, false);
-        Building.validationResult result = village.commitRoomInheritanceUpdate(update, forcedType);
-        if (result != Building.validationResult.SUCCESS) displayScanResult(player, result);
-    }
-
-    static void updateRoom(VillageManager manager, ServerPlayer player, BlockPos source, String forcedType) {
-        updateRoom(manager, player, source, forcedType, -1);
-    }
-
-    static void updateRoom(VillageManager manager,
-                           ServerPlayer player,
-                           BlockPos source,
-                           String forcedType,
-                           int originalExpectedRoomId) {
-        Village village = manager.findNearestVillage(source, Village.MERGE_MARGIN).orElse(null);
-        Building existing = village == null ? null
-                : village.getFunctionalRoomAt(player.serverLevel(), source).orElse(null);
-        if (originalExpectedRoomId >= 0 && (existing == null || existing.getId() != originalExpectedRoomId)) {
-            player.displayClientMessage(Component.translatable("blueprint.roomUpdateConflict"), true);
-            return;
-        }
-        if (existing == null) {
-            player.displayClientMessage(Component.translatable("blueprint.noRoomOnFloor"), true);
+        if (outcome.status() == RoomWorkflow.Status.FAILED) {
+            if (action == Action.ADD_ROOM && outcome.result() == Building.validationResult.IDENTICAL) {
+                player.displayClientMessage(Component.translatable("blueprint.roomAlreadyAdded"), true);
+                return;
+            }
+            if ((action == Action.UPDATE_ROOM || action == Action.SET_ROOM_INHERITANCE)
+                    && outcome.result() == Building.validationResult.NOT_IN_BUILDING) {
+                if (outcome.expectedTargetId() >= 0) {
+                    player.displayClientMessage(Component.translatable("blueprint.roomUpdateConflict"), true);
+                } else if (action == Action.UPDATE_ROOM) {
+                    player.displayClientMessage(Component.translatable("blueprint.noRoomOnFloor"), true);
+                }
+                return;
+            }
+            displayScanResult(player, outcome.result());
             return;
         }
 
-        int expectedRoomId = existing.getId();
-        RegisteredRoomUpdate update = manager.analyzeRegisteredRoomUpdate(village, expectedRoomId, source);
-        if (update.result() != Building.validationResult.SUCCESS) {
-            displayScanResult(player, update.result());
-            return;
-        }
-        if (forcedType == null && update.requiresTypeSelection()) {
-            requestType(update.playerMatchingTypes(), update.source(), player,
-                    Action.UPDATE_ROOM, expectedRoomId);
-            return;
-        }
-        displayScanResult(player, manager.commitRegisteredRoomUpdate(update, forcedType),
-                "blueprint.roomUpdated");
-    }
-
-    private static void commitRoomAddition(VillageManager manager,
-                                           ServerPlayer player,
-                                           BuildingScanResult scan,
-                                           String forcedType,
-                                           Action action) {
-        if (forcedType == null && scan.result() == Building.validationResult.SUCCESS && scan.isAmbiguous()) {
-            int expectedTarget = action == Action.ADD_FLOOR || action == Action.ADD_BASEMENT
-                    ? scan.targetBuildingId() : -1;
-            requestType(scan.matchingTypes(), scan.source(), player, action, expectedTarget);
-            return;
-        }
         String successKey = switch (action) {
             case ADD_BUILDING -> "blueprint.buildingAdded";
             case ADD_FLOOR -> "blueprint.floorAdded";
             case ADD_BASEMENT -> "blueprint.basementAdded";
-            default -> "blueprint.roomAdded";
+            case UPDATE_ROOM -> "blueprint.roomUpdated";
+            case ADD_ROOM -> "blueprint.roomAdded";
+            default -> null;
         };
-        displayScanResult(player, manager.commitRoomAddition(scan, forcedType), successKey);
+        if (successKey != null) displayScanResult(player, Building.validationResult.SUCCESS, successKey);
     }
 
 

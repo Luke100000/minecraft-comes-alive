@@ -101,7 +101,7 @@ final class StructureConnector {
 
             if (isVertical(world, connector)) {
                 for (BlockPos handoff : handoffs(connector)) {
-                    if (!surfaceFeet.contains(handoff)) continue;
+                    if (!matchesSurfaceHandoff(surfaceFeet, handoff)) continue;
                     result.putIfAbsent(
                             new BlockPos(connector.getX(), handoff.getY(), connector.getZ()), connector);
                 }
@@ -123,13 +123,19 @@ final class StructureConnector {
         return Map.copyOf(result);
     }
 
+    private static boolean matchesSurfaceHandoff(Set<BlockPos> surfaceFeet, BlockPos handoff) {
+        return surfaceFeet.contains(handoff)
+                || surfaceFeet.contains(handoff.above())
+                || surfaceFeet.contains(handoff.below());
+    }
+
     /** Returns the vertical connector column for an occupied connector or its immediate open top-exit cell. */
     private static List<BlockPos> verticalColumn(Level world, BlockPos pos) {
         BlockPos connector = verticalInteractionConnector(world, pos);
         return connector == null ? List.of() : verticalColumnFromConnector(world, connector);
     }
 
-    private static BlockPos verticalInteractionConnector(Level world, BlockPos pos) {
+    static BlockPos verticalInteractionConnector(Level world, BlockPos pos) {
         if (isVerticalElement(world.getBlockState(pos))) return pos;
         if (!world.getBlockState(pos).getCollisionShape(world, pos).isEmpty()) return null;
 

@@ -49,14 +49,14 @@ class BlueprintMapRendererTest {
     }
 
     @Test
-    void connectorGlyphScaleFitsInsideOneMapCell() {
+    void connectorGlyphScaleUsesMostOfTheVisibleMapCell() {
         float tallGlyph = BlueprintMapRenderer.connectorGlyphScale(5, 9);
         float wideGlyph = BlueprintMapRenderer.connectorGlyphScale(12, 9);
 
-        assertTrue(9.0F * tallGlyph <= 0.8001F);
-        assertTrue(5.0F * tallGlyph <= 0.8001F);
-        assertTrue(12.0F * wideGlyph <= 0.8001F);
-        assertTrue(9.0F * wideGlyph <= 0.8001F);
+        assertEquals(1.2F, 9.0F * tallGlyph, 0.0001F);
+        assertTrue(5.0F * tallGlyph < 1.0F);
+        assertEquals(1.2F, 12.0F * wideGlyph, 0.0001F);
+        assertTrue(9.0F * wideGlyph < 1.0F);
     }
 
     private static BlueprintMapGeometry.MapConnectorLayer connector(

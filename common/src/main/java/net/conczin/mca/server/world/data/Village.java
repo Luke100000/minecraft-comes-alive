@@ -227,11 +227,36 @@ public class Village implements Iterable<Building> {
         roomIds.forEach(buildings::remove);
     }
 
-    void restoreBuildingData(Collection<Building> rooms, Collection<Structure> restoredStructures) {
+    BuildingStateSnapshot snapshotBuildingState() {
+        return new BuildingStateSnapshot(
+                buildings.values().stream().map(Building::copy).toList(),
+                structures.values().stream().map(Structure::copy).toList(),
+                logicalBuildings.values().stream().map(LogicalBuilding::copy).toList());
+    }
+
+    void restoreBuildingState(BuildingStateSnapshot snapshot) {
+        Objects.requireNonNull(snapshot, "snapshot");
         buildings.clear();
-        rooms.forEach(room -> buildings.put(room.getId(), room));
+        snapshot.rooms.forEach(room -> buildings.put(room.getId(), room));
         structures.clear();
-        restoredStructures.forEach(structure -> structures.put(structure.getId(), structure));
+        snapshot.structures.forEach(structure -> structures.put(structure.getId(), structure));
+        logicalBuildings.clear();
+        snapshot.logicalBuildings.forEach(logical -> logicalBuildings.put(logical.id(), logical));
+        calculateDimensions();
+    }
+
+    static final class BuildingStateSnapshot {
+        private final List<Building> rooms;
+        private final List<Structure> structures;
+        private final List<LogicalBuilding> logicalBuildings;
+
+        private BuildingStateSnapshot(List<Building> rooms,
+                                      List<Structure> structures,
+                                      List<LogicalBuilding> logicalBuildings) {
+            this.rooms = List.copyOf(rooms);
+            this.structures = List.copyOf(structures);
+            this.logicalBuildings = List.copyOf(logicalBuildings);
+        }
     }
 
     List<Structure> getBuildingStructures(int buildingId) {

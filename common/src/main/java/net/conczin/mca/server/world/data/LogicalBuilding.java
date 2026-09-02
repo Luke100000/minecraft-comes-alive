@@ -63,6 +63,11 @@ final class LogicalBuilding {
         this.inheritanceEnabled = inheritanceEnabled;
     }
 
+    LogicalBuilding copy() {
+        return new LogicalBuilding(
+                id, groundStructureId, groundFloorId, mainRoomId, inheritanceEnabled);
+    }
+
     CompoundTag save() {
         CompoundTag tag = new CompoundTag();
         tag.putInt("id", id);

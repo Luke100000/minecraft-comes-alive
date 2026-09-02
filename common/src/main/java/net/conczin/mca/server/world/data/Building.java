@@ -427,6 +427,29 @@ public class Building implements VillageBuilding {
         }
     }
 
+    Building copy() {
+        Building copy = new Building(getSourceBlock());
+        copy.id = id;
+        copy.structureId = structureId;
+        copy.floorId = floorId;
+        copy.type = type;
+        copy.typeForced = typeForced;
+        copy.contributesToMain = contributesToMain;
+        copy.pos0X = pos0X;
+        copy.pos0Y = pos0Y;
+        copy.pos0Z = pos0Z;
+        copy.pos1X = pos1X;
+        copy.pos1Y = pos1Y;
+        copy.pos1Z = pos1Z;
+        copy.posX = posX;
+        copy.posY = posY;
+        copy.posZ = posZ;
+        copy.floorRegion = floorRegion;
+        copy.lastScan = lastScan;
+        blocks.forEach((key, value) -> copy.blocks.put(key, new ArrayList<>(value)));
+        return copy;
+    }
+
     @Override
     public int getId() {
         return id;

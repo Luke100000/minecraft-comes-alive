@@ -231,13 +231,6 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         return Building.validationResult.SUCCESS;
     }
 
-    public BuildingScanResult analyzeRoomAddition(BlockPos pos) {
-        BuildingScanResult existingRoom = analyzeRoom(pos);
-        return existingRoom.result() == Building.validationResult.NOT_IN_BUILDING
-                ? analyzeBuildingAddition(pos)
-                : existingRoom;
-    }
-
     public BuildingScanResult analyzeAttachedRoom(BlockPos pos,
                                                   Village.RoomScanMode requestedMode,
                                                   int expectedTargetBuildingId) {
@@ -741,13 +734,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
 
     public Building.validationResult fullScan(Village village) {
         if (village == null) return Building.validationResult.NOT_IN_BUILDING;
-        List<Building> buildingSnapshots = village.getBuildings().values().stream()
-                .map(building -> new Building(building.save()))
-                .toList();
-        Map<Integer, Structure> structureSnapshots = village.getStructures().values().stream()
-                .collect(java.util.stream.Collectors.toMap(
-                        Structure::getId,
-                        Structure::copy));
+        Village.BuildingStateSnapshot snapshot = village.snapshotBuildingState();
         int previousLastBuildingId = lastBuildingId;
 
         for (int roomId : fullScanRoomIds(village)) {
@@ -756,28 +743,24 @@ public class VillageManager extends SavedData implements Iterable<Village> {
             RegisteredRoomUpdate update = analyzeRegisteredRoomUpdate(
                     village, roomId, room.getSourceBlock());
             if (update.result() != Building.validationResult.SUCCESS) {
-                restoreFullScanSnapshots(
-                        village, buildingSnapshots, structureSnapshots, previousLastBuildingId);
+                restoreFullScanSnapshot(village, snapshot, previousLastBuildingId);
                 return update.result();
             }
             Building.validationResult result = applyRegisteredRoomUpdate(update, null, false);
             if (result == Building.validationResult.SUCCESS) continue;
 
-            restoreFullScanSnapshots(
-                    village, buildingSnapshots, structureSnapshots, previousLastBuildingId);
+            restoreFullScanSnapshot(village, snapshot, previousLastBuildingId);
             return result;
         }
         finalizeVillageMutation(village);
         return Building.validationResult.SUCCESS;
     }
 
-    private void restoreFullScanSnapshots(
+    private void restoreFullScanSnapshot(
             Village village,
-            Collection<Building> buildingSnapshots,
-            Map<Integer, Structure> structureSnapshots,
+            Village.BuildingStateSnapshot snapshot,
             int previousLastBuildingId) {
-        village.restoreBuildingData(buildingSnapshots, structureSnapshots.values());
-        village.refreshLogicalBuildings();
+        village.restoreBuildingState(snapshot);
         lastBuildingId = previousLastBuildingId;
     }
 

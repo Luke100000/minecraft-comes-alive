@@ -2,6 +2,7 @@ package net.conczin.mca.network.c2s;
 
 import net.conczin.mca.MCA;
 import net.conczin.mca.network.HandleablePayload;
+import net.conczin.mca.server.world.data.RoomWorkflow;
 import net.conczin.mca.server.world.data.VillageManager;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.FriendlyByteBuf;
@@ -27,8 +28,9 @@ public record ConfirmBuildingPolymorphMessage(BlockPos source,
     @Override
     public void handleServer(ServerPlayer player) {
         try {
+            VillageManager manager = VillageManager.get(player.serverLevel());
             ReportBuildingMessage.executeScanAction(
-                    VillageManager.get(player.serverLevel()), player, source,
+                    new RoomWorkflow(manager, player.serverLevel()), player, source,
                     chosenType, action, expectedTargetId);
         } finally {
             GetVillageRequest.sendResponse(player);
