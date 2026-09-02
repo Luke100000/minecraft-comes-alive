@@ -30,10 +30,6 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
         return this.climbTraversal.controlledVerticalVelocity(this.tick);
     }
 
-    public boolean shouldKeepCurrentClimbPathForFollowTarget(int targetY) {
-        return this.climbTraversal.shouldKeepCurrentPathForFollowTarget(this.path, targetY);
-    }
-
     @Override
     protected PathFinder createPathFinder(int maxVisitedNodes) {
         this.nodeEvaluator = new MCAWalkNodeEvaluator();

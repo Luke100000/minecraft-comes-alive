@@ -7,26 +7,62 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.behavior.MoveToTargetSink;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
+import net.minecraft.world.entity.ai.memory.WalkTarget;
 import net.minecraft.world.level.pathfinder.PathType;
+import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.level.pathfinder.WalkNodeEvaluator;
 
 public class WanderOrTeleportToTargetTask extends MoveToTargetSink {
-    // Stagger expensive path checks across villagers while preserving the existing seven-check interval.
-    private static final int PATHFINDING_INTERVAL = 7;
-    private int pathfindingCooldown = -1;
+    private static final int FAILED_PATH_RETRY_INTERVAL = 7;
+    private static final long UNREACHABLE_PATH_RETRY_TICKS = 20L;
+    private int failedPathRetryCooldown;
 
     @Override
-    protected boolean checkExtraStartConditions(ServerLevel serverWorld, Mob mobEntity) {
-        if (this.pathfindingCooldown < 0) {
-            this.pathfindingCooldown = Math.floorMod(mobEntity.getId(), PATHFINDING_INTERVAL);
-        }
-        if (this.pathfindingCooldown > 0) {
-            this.pathfindingCooldown--;
+    protected boolean checkExtraStartConditions(ServerLevel world, Mob entity) {
+        if (this.failedPathRetryCooldown > 0) {
+            this.failedPathRetryCooldown--;
             return false;
         }
 
-        this.pathfindingCooldown = PATHFINDING_INTERVAL - 1;
-        return super.checkExtraStartConditions(serverWorld, mobEntity);
+        boolean canStart = super.checkExtraStartConditions(world, entity);
+        if (!canStart && entity.getBrain().hasMemoryValue(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE)) {
+            this.failedPathRetryCooldown = FAILED_PATH_RETRY_INTERVAL - 1;
+        }
+        return canStart;
+    }
+
+    @Override
+    protected boolean canStillUse(ServerLevel world, Mob entity, long gameTime) {
+        boolean vanillaCanContinue = super.canStillUse(world, entity, gameTime);
+        WalkTarget walkTarget = entity.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET).orElse(null);
+        var path = entity.getNavigation().getPath();
+        if (walkTarget == null || path == null || pathEndSatisfiesWalkTarget(path, walkTarget)) {
+            return vanillaCanContinue;
+        }
+
+        long unreachableSince = entity.getBrain()
+                .getMemoryInternal(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE)
+                .orElseGet(() -> {
+                    entity.getBrain().setMemory(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE, gameTime);
+                    return gameTime;
+                });
+        if (gameTime - unreachableSince > UNREACHABLE_PATH_RETRY_TICKS) {
+            return false;
+        }
+
+        // A normalized path can already be "done" from vanilla's perspective while its terminal cell is outside
+        // the WalkTarget's completion range. Keep this owner alive only for the same short retry window so the
+        // CANT_REACH timestamp survives long enough for the destination producer to make the terminal decision.
+        return true;
+    }
+
+    private static boolean pathEndSatisfiesWalkTarget(Path path, WalkTarget walkTarget) {
+        var end = path.getEndNode();
+        if (end == null) {
+            return false;
+        }
+        BlockPos endPos = new BlockPos(end.x, end.y, end.z);
+        return endPos.distManhattan(walkTarget.getTarget().currentBlockPosition()) <= walkTarget.getCloseEnoughDist();
     }
 
     @Override

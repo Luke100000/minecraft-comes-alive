@@ -1,6 +1,7 @@
 package net.conczin.mca.entity.ai;
 
 import net.conczin.mca.entity.ai.navigation.MCAGroundPathNavigation;
+import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.control.MoveControl;
 
@@ -40,6 +41,15 @@ class MCAMoveControl extends MoveControl {
                 this.operation = Operation.JUMPING;
             }
             return;
+        }
+
+        if (this.operation == Operation.MOVE_TO) {
+            double dx = this.wantedX - this.mob.getX();
+            double dz = this.wantedZ - this.mob.getZ();
+            if (dx * dx + dz * dz > MIN_SPEED_SQR) {
+                float wantedYaw = (float)(Mth.atan2(dz, dx) * 180.0F / (float)Math.PI) - 90.0F;
+                this.mob.setYRot(this.rotlerp(this.mob.getYRot(), wantedYaw, MAX_TURN));
+            }
         }
 
         this.operation = Operation.WAIT;

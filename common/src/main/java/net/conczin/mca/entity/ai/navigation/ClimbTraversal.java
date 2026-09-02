@@ -59,21 +59,6 @@ final class ClimbTraversal {
                 : Double.NaN;
     }
 
-    boolean shouldKeepCurrentPathForFollowTarget(@Nullable Path path, int targetY) {
-        Context context = resolve(path);
-        if (context == null || context.verticalDirection() == 0) {
-            return false;
-        }
-
-        double verticalDelta = targetY - this.mob.getY();
-        if (Math.abs(verticalDelta) <= 1.0D) {
-            return true;
-        }
-
-        int targetDirection = verticalDelta > 0.0D ? 1 : -1;
-        return targetDirection == context.verticalDirection();
-    }
-
     void tick(@Nullable Path path, double speedModifier, int navigationTick) {
         Context context = resolve(path);
         if (context == null) {
@@ -240,24 +225,6 @@ final class ClimbTraversal {
             return;
         }
 
-        if (isApproachingClimbableExitNode(context)) {
-            Vec3 pathAnchor = getClimbableAnchor(context.climbableNode().asBlockPos());
-            this.mob.getMoveControl().setWantedPosition(
-                    pathAnchor.x(),
-                    context.climbableNode().y,
-                    pathAnchor.z(),
-                    speedModifier
-            );
-            this.mob.setXxa(0.0F);
-            this.mob.setZza(0.0F);
-            this.mob.setDeltaMovement(
-                    horizontalVelocity(pathAnchor.x() - this.mob.getX()),
-                    controlledY,
-                    horizontalVelocity(pathAnchor.z() - this.mob.getZ())
-            );
-            return;
-        }
-
         BlockPos climbablePos = findAttachedClimbable(context.climbableNode().asBlockPos());
         Vec3 anchor = getClimbableAnchor(climbablePos);
         double targetY = context.targetNode().y;
@@ -279,13 +246,14 @@ final class ClimbTraversal {
             return;
         }
 
-        boolean atExitHeight = context.exitsClimbable() && isAtExitHeight(context, targetY);
+        boolean readyForHorizontalExit = isReadyForHorizontalExit(context, targetY);
+        boolean needsEarlyDownwardClearance = isLowerExit(context);
         double targetX = anchor.x();
         double targetZ = anchor.z();
         if (context.exitsClimbable()
                 && (!context.pathTargetsClimbable()
-                || atExitHeight
-                || context.verticalDirection() < 0)) {
+                || readyForHorizontalExit
+                || needsEarlyDownwardClearance)) {
             targetX = context.targetNode().x + 0.5D;
             targetZ = context.targetNode().z + 0.5D;
         }
@@ -301,10 +269,6 @@ final class ClimbTraversal {
     }
 
     private double calculateVerticalVelocity(Context context) {
-        if (isApproachingClimbableExitNode(context)) {
-            return 0.0D;
-        }
-
         boolean continuingUpwardExit = !this.mob.onClimbable() && isContinuingUpwardExit(context);
         boolean continuingDownwardExit = isContinuingDownwardExit(context);
         if (!this.mob.onClimbable() && !continuingUpwardExit && !continuingDownwardExit) {
@@ -341,7 +305,7 @@ final class ClimbTraversal {
                         ? EXIT_VERTICAL_BIAS
                         : UPWARD_EXIT_CLEARANCE_SPEED;
                 controlledY = Math.max(controlledY, minimumUpwardSpeed);
-            } else {
+            } else if (isLowerExit(context)) {
                 controlledY = Math.min(controlledY, -EXIT_VERTICAL_BIAS);
             }
         }
@@ -363,24 +327,23 @@ final class ClimbTraversal {
                 && isHorizontallyAlignedWithClimbable(context.climbableNode());
     }
 
-    private boolean isApproachingClimbableExitNode(Context context) {
-        return this.mob.onClimbable()
-                && context.pathTargetsClimbable()
-                && context.exitsClimbable()
-                && !isHorizontallyAlignedWithClimbable(context.climbableNode())
-                && !hasPassedClimbableTowardExit(context);
-    }
-
     private boolean hasPassedClimbableTowardExit(Context context) {
-        double climbX = context.climbableNode().x + 0.5D;
-        double climbZ = context.climbableNode().z + 0.5D;
-        double exitDx = context.targetNode().x + 0.5D - climbX;
-        double exitDz = context.targetNode().z + 0.5D - climbZ;
-        return (this.mob.getX() - climbX) * exitDx + (this.mob.getZ() - climbZ) * exitDz > 0.0D;
+        return progressTowardExit(context) > 0.0D;
     }
 
     private boolean isAtExitHeight(Context context, double targetY) {
         return hasReachedHeight(targetY, context.verticalDirection(), EXIT_HEIGHT_TOLERANCE);
+    }
+
+    private boolean isReadyForHorizontalExit(Context context, double targetY) {
+        if (!context.exitsClimbable()) {
+            return false;
+        }
+        if (context.verticalDirection() < 0
+                && context.targetNode().y == context.climbableNode().y) {
+            return hasReachedHeight(targetY, context.verticalDirection(), DESCENT_NODE_TOLERANCE);
+        }
+        return isAtExitHeight(context, targetY);
     }
 
     private boolean hasReachedHeight(double targetY, int verticalDirection, double tolerance) {
@@ -395,15 +358,21 @@ final class ClimbTraversal {
 
     private boolean hasCompletedClimbableExit(Context context) {
         if (context.targetNode().y == context.climbableNode().y) {
-            double tolerance = context.verticalDirection() < 0
-                    ? EXIT_CROSSING_TOLERANCE
-                    : ASCENT_NODE_TOLERANCE;
-            return hasReachedHeight(context.targetNode().y, context.verticalDirection(), tolerance);
+            if (context.verticalDirection() < 0) {
+                return hasReachedHeight(
+                        context.targetNode().y,
+                        context.verticalDirection(),
+                        EXIT_CROSSING_TOLERANCE
+                ) && hasClearedClimbableSupportTowardExit(context);
+            }
+            return hasReachedHeight(
+                    context.targetNode().y,
+                    context.verticalDirection(),
+                    ASCENT_NODE_TOLERANCE
+            );
         }
 
-        if (context.verticalDirection() < 0
-                && context.targetNode().y < context.climbableNode().y
-                && hasClearedClimbableSupportTowardExit(context)) {
+        if (isLowerExit(context) && hasClearedClimbableSupportTowardExit(context)) {
             return true;
         }
 
@@ -411,6 +380,10 @@ final class ClimbTraversal {
     }
 
     private boolean hasClearedClimbableSupportTowardExit(Context context) {
+        return progressTowardExit(context) >= 0.5D + this.mob.getBbWidth() / 2.0D;
+    }
+
+    private double progressTowardExit(Context context) {
         double climbX = context.climbableNode().x + 0.5D;
         double climbZ = context.climbableNode().z + 0.5D;
         double exitX = context.targetNode().x + 0.5D;
@@ -419,12 +392,16 @@ final class ClimbTraversal {
         double dz = exitZ - climbZ;
         double distance = Math.sqrt(dx * dx + dz * dz);
         if (distance <= 1.0E-6D) {
-            return false;
+            return 0.0D;
         }
 
-        double progress = ((this.mob.getX() - climbX) * dx + (this.mob.getZ() - climbZ) * dz) / distance;
-        double halfWidth = this.mob.getBbWidth() / 2.0D;
-        return progress >= 0.5D + halfWidth;
+        return ((this.mob.getX() - climbX) * dx + (this.mob.getZ() - climbZ) * dz) / distance;
+    }
+
+    private static boolean isLowerExit(Context context) {
+        return context.exitsClimbable()
+                && context.verticalDirection() < 0
+                && context.targetNode().y < context.climbableNode().y;
     }
 
     private boolean hasCrossedHeight(double targetY, int verticalDirection) {
@@ -453,7 +430,8 @@ final class ClimbTraversal {
         return !this.mob.onClimbable()
                 && context.exitsClimbable()
                 && context.verticalDirection() < 0
-                && isAtExitHeight(context, context.targetNode().y);
+                && (isAtExitHeight(context, context.targetNode().y)
+                || hasPassedClimbableTowardExit(context));
     }
 
     private Vec3 getClimbableAnchor(BlockPos pos) {
