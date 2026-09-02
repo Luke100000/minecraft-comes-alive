@@ -149,9 +149,17 @@ public final class Structure implements VillageBuilding {
             return Optional.of(new InteractionPosition(
                     connectorFloor,
                     roomAtColumn(localRooms, connectorFloor, connectorFloorCell.getX(), connectorFloorCell.getZ()),
-                    true,
-                    Math.abs(connectorFloor.anchorY() - pos.getY()),
-                    true));
+                    InteractionKind.VERTICAL_CONNECTOR,
+                    Math.abs(connectorFloor.anchorY() - pos.getY())));
+        }
+
+        StructureFloor physicalFloor = physicalFloorAt(pos).orElse(null);
+        if (physicalFloor != null) {
+            return Optional.of(new InteractionPosition(
+                    physicalFloor,
+                    roomAtColumn(localRooms, physicalFloor, pos.getX(), pos.getZ()),
+                    InteractionKind.PHYSICAL,
+                    0));
         }
 
         StructureFloor floor = resolveFloorAt(pos).orElse(null);
@@ -160,20 +168,29 @@ public final class Structure implements VillageBuilding {
         if (StructureConnector.isHorizontalBoundary(state)) {
             Building connectorOwner = roomAtColumn(localRooms, floor, pos.getX(), pos.getZ());
             if (connectorOwner != null) {
-                return Optional.of(new InteractionPosition(floor, connectorOwner, true, 0, false));
+                return Optional.of(new InteractionPosition(
+                        floor, connectorOwner, InteractionKind.HORIZONTAL_CONNECTOR,
+                        verticalDistance(floor, pos.getY())));
             }
         }
 
-        boolean directFloorColumn = floor.contains(pos.getX(), pos.getZ())
-                && pos.getY() >= floor.anchorY() - 1
-                && pos.getY() < floor.ceilingY();
-        BlockPos floorCell = directFloorColumn
-                ? new BlockPos(pos.getX(), floor.anchorY(), pos.getZ())
-                : StructureConnector.resolveFloorCell(world, this, floor, pos);
+        int distance = verticalDistance(floor, pos.getY());
+        if (floor.contains(pos.getX(), pos.getZ())
+                && distance == 1
+                && StructureScanner.isWalkableAnchor(world, pos)) {
+            return Optional.of(new InteractionPosition(
+                    floor,
+                    roomAtColumn(localRooms, floor, pos.getX(), pos.getZ()),
+                    InteractionKind.LANDING_HANDOFF,
+                    distance));
+        }
+
+        BlockPos floorCell = StructureConnector.resolveFloorCell(world, this, floor, pos);
         if (floorCell == null) return Optional.empty();
         return Optional.of(new InteractionPosition(floor,
                 roomAtColumn(localRooms, floor, floorCell.getX(), floorCell.getZ()),
-                directFloorColumn, 0, false));
+                InteractionKind.HORIZONTAL_CONNECTOR,
+                verticalDistance(floor, pos.getY())));
     }
 
     private static Building roomAtColumn(Collection<Building> rooms, StructureFloor floor, int x, int z) {
@@ -184,11 +201,34 @@ public final class Structure implements VillageBuilding {
                 .orElse(null);
     }
 
+    enum InteractionKind {
+        PHYSICAL(0),
+        HORIZONTAL_CONNECTOR(1),
+        VERTICAL_CONNECTOR(2),
+        LANDING_HANDOFF(3);
+
+        private final int priority;
+
+        InteractionKind(int priority) {
+            this.priority = priority;
+        }
+
+        int priority() {
+            return priority;
+        }
+    }
+
     record InteractionPosition(StructureFloor floor,
                                Building room,
-                               boolean physical,
-                               int verticalDistance,
-                               boolean verticalConnector) {
+                               InteractionKind kind,
+                               int verticalDistance) {
+        boolean physical() {
+            return kind == InteractionKind.PHYSICAL;
+        }
+
+        boolean verticalConnector() {
+            return kind == InteractionKind.VERTICAL_CONNECTOR;
+        }
     }
 
     void setFloorNumber(int floorId, int floorNumber) {
