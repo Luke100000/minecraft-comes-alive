@@ -195,6 +195,78 @@ class VillageFloorSystemTest {
     }
 
     @Test
+    void onlyOutermostEmptyUpperAndBasementFloorsAreRemovable() {
+        Village village = new Village(1, null);
+        Structure structure = structure(10, 10,
+                new StructureFloor(1, 64, 68, -2, region(64)),
+                new StructureFloor(2, 68, 72, -1, region(68)),
+                new StructureFloor(3, 72, 76, 0, region(72)),
+                new StructureFloor(4, 76, 80, 1, region(76)),
+                new StructureFloor(5, 80, 84, 2, region(80)));
+        Building main = room(100, 10, 3, true);
+        village.registerStructure(structure, main);
+        village.refreshLogicalBuildings();
+
+        assertTrue(village.canRemoveFloor(10, 1));
+        assertFalse(village.canRemoveFloor(10, 2));
+        assertFalse(village.canRemoveFloor(10, 3));
+        assertFalse(village.canRemoveFloor(10, 4));
+        assertTrue(village.canRemoveFloor(10, 5));
+
+        assertTrue(village.removeFloor(10, 5));
+        assertTrue(structure.getFloor(5).isEmpty());
+        assertTrue(village.canRemoveFloor(10, 4));
+
+        assertTrue(village.removeFloor(10, 1));
+        assertTrue(structure.getFloor(1).isEmpty());
+        assertTrue(village.canRemoveFloor(10, 2));
+        assertEquals(main, village.getBuilding(100).orElseThrow());
+        assertEquals(0, structure.getFloor(3).orElseThrow().floorNumber());
+    }
+
+    @Test
+    void removingLastRoomFromTerminalFloorKeepsFloorAvailableForExplicitRemoval() {
+        Village village = new Village(1, null);
+        Structure structure = structure(10, 10,
+                new StructureFloor(0, 64, 68, 0, region(64)),
+                new StructureFloor(1, 72, 76, 1, region(72)));
+        Building main = room(100, 10, 0, true);
+        Building upperRoom = room(101, 10, 1, true);
+        village.registerStructure(structure, main);
+        village.registerRoom(upperRoom);
+        village.refreshLogicalBuildings();
+
+        village.removeBuilding(101);
+
+        assertTrue(village.getBuilding(101).isEmpty());
+        assertTrue(structure.getFloor(1).isPresent());
+        assertTrue(village.canRemoveFloor(10, 1));
+        assertTrue(structure.getFloor(0).isPresent());
+        assertEquals(main, village.getBuilding(100).orElseThrow());
+    }
+
+    @Test
+    void removingLastRoomFromMiddleFloorKeepsTheFloor() {
+        Village village = new Village(1, null);
+        Structure structure = structure(10, 10,
+                new StructureFloor(0, 64, 68, 0, region(64)),
+                new StructureFloor(1, 72, 76, 1, region(72)),
+                new StructureFloor(2, 80, 84, 2, region(80)));
+        Building main = room(100, 10, 0, true);
+        Building middleRoom = room(101, 10, 1, true);
+        village.registerStructure(structure, main);
+        village.registerRoom(middleRoom);
+        village.refreshLogicalBuildings();
+
+        village.removeBuilding(101);
+
+        assertTrue(village.getBuilding(101).isEmpty());
+        assertTrue(structure.getFloor(1).isPresent());
+        assertTrue(structure.getFloor(2).isPresent());
+        assertEquals(main, village.getBuilding(100).orElseThrow());
+    }
+
+    @Test
     void fullMaintenanceTargetsRegisteredRoomsInStableIdOrder() {
         Village village = populatedVillage();
 

@@ -266,6 +266,34 @@ public class Village implements Iterable<Building> {
                 .toList();
     }
 
+    public boolean canRemoveFloor(int structureId, int floorId) {
+        Structure structure = structures.get(structureId);
+        StructureFloor floor = structure == null ? null : structure.getFloor(floorId).orElse(null);
+        if (floor == null || floor.floorNumber() == 0) return false;
+
+        boolean hasRooms = buildings.values().stream().anyMatch(room ->
+                room.getStructureId() == structureId && room.getFloorId() == floorId);
+        if (hasRooms) return false;
+
+        int floorNumber = floor.floorNumber();
+        return getBuildingStructures(structure.getLogicalBuildingId()).stream()
+                .flatMap(member -> member.getFloors().stream())
+                .noneMatch(candidate -> floorNumber > 0
+                        ? candidate.floorNumber() > floorNumber
+                        : candidate.floorNumber() < floorNumber);
+    }
+
+    boolean removeFloor(int structureId, int floorId) {
+        if (!canRemoveFloor(structureId, floorId)) return false;
+        Structure structure = structures.get(structureId);
+        if (structure.getFloors().size() == 1) structures.remove(structureId);
+        else structure.removeFloor(floorId);
+        refreshLogicalBuildings();
+        calculateDimensions();
+        markDirty();
+        return true;
+    }
+
     public void removeBuilding(int id) {
         Building room = buildings.get(id);
         if (room != null && isMainRoom(room)) return;
