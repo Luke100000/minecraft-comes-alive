@@ -32,14 +32,13 @@ public final class RoomWorkflow {
     }
 
     public Outcome updateRoom(BlockPos source, int expectedRoomId, String selectedType) {
-        Village village = manager.findNearestVillage(source, Village.MERGE_MARGIN).orElse(null);
-        Building room = village == null || world == null
-                ? null : village.getFunctionalRoomAt(world, source).orElse(null);
-        if (room == null || expectedRoomId >= 0 && room.getId() != expectedRoomId) {
+        ResolvedRoom resolved = resolveRoom(source, expectedRoomId);
+        if (resolved == null) {
             return Outcome.failed(Building.validationResult.NOT_IN_BUILDING, source, expectedRoomId);
         }
 
-        RegisteredRoomUpdate update = manager.analyzeRegisteredRoomUpdate(village, room.getId(), source);
+        Building room = resolved.room();
+        RegisteredRoomUpdate update = manager.analyzeRegisteredRoomUpdate(resolved.village(), room.getId(), source);
         if (update.result() != Building.validationResult.SUCCESS) {
             return Outcome.failed(update.result(), source, room.getId());
         }
@@ -54,13 +53,13 @@ public final class RoomWorkflow {
                                      int expectedRoomId,
                                      boolean enabled,
                                      String selectedType) {
-        Village village = manager.findNearestVillage(source, Village.MERGE_MARGIN).orElse(null);
-        Building room = village == null || world == null
-                ? null : village.getFunctionalRoomAt(world, source).orElse(null);
-        if (room == null || expectedRoomId >= 0 && room.getId() != expectedRoomId) {
+        ResolvedRoom resolved = resolveRoom(source, expectedRoomId);
+        if (resolved == null) {
             return Outcome.failed(Building.validationResult.NOT_IN_BUILDING, source, expectedRoomId);
         }
 
+        Village village = resolved.village();
+        Building room = resolved.room();
         RoomInheritanceUpdate update = village.analyzeRoomInheritanceUpdate(room, enabled);
         if (!update.valid()) {
             return Outcome.failed(Building.validationResult.NOT_IN_BUILDING, source, room.getId());
@@ -72,10 +71,6 @@ public final class RoomWorkflow {
             return Outcome.requiresTypeSelection(source, update.matchingTypes(), room.getId());
         }
         return committed(village.commitRoomInheritanceUpdate(update, selectedType), source, room.getId());
-    }
-
-    public Building.validationResult fullScan(Village village) {
-        return manager.fullScan(village);
     }
 
     private Outcome addAttachedRoom(BlockPos source,
@@ -104,6 +99,14 @@ public final class RoomWorkflow {
                 manager.commitRoomAddition(scan, selectedType), scan.source(), scan.targetBuildingId());
     }
 
+    private ResolvedRoom resolveRoom(BlockPos source, int expectedRoomId) {
+        if (world == null) return null;
+        Village village = manager.findNearestVillage(source, Village.MERGE_MARGIN).orElse(null);
+        Building room = village == null ? null : village.getFunctionalRoomAt(world, source).orElse(null);
+        if (room == null || expectedRoomId >= 0 && room.getId() != expectedRoomId) return null;
+        return new ResolvedRoom(village, room);
+    }
+
     private static Outcome committed(Building.validationResult result, BlockPos source, int expectedTargetId) {
         return result == Building.validationResult.SUCCESS
                 ? Outcome.committed(source, expectedTargetId)
@@ -114,6 +117,9 @@ public final class RoomWorkflow {
         COMMITTED,
         REQUIRES_TYPE_SELECTION,
         FAILED
+    }
+
+    private record ResolvedRoom(Village village, Building room) {
     }
 
     public record Outcome(Status status,

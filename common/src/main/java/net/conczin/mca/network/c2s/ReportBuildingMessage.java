@@ -38,7 +38,7 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
                                 action, parseTargetBuildingId(data));
                 case SET_MAIN_ROOM -> updateMainRoom(manager, player);
                 case AUTO_SCAN -> manager.findNearestVillage(player).ifPresent(Village::toggleAutoScan);
-                case FULL_SCAN -> fullScan(workflow, manager, player);
+                case FULL_SCAN -> fullScan(manager, player);
                 case FORCE_TYPE -> displayEditResult(player,
                         manager.forceRoomType(player.blockPosition(), data), null);
                 case REMOVE_ROOM -> displayEditResult(player,
@@ -86,13 +86,13 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
         }
     }
 
-    private static void fullScan(RoomWorkflow workflow, VillageManager manager, ServerPlayer player) {
+    private static void fullScan(VillageManager manager, ServerPlayer player) {
         Village village = manager.findNearestVillage(player).orElse(null);
         if (village == null) {
             player.displayClientMessage(Component.translatable("blueprint.noBuilding"), true);
             return;
         }
-        displayScanResult(player, workflow.fullScan(village), "blueprint.refreshed");
+        displayScanResult(player, manager.fullScan(village), "blueprint.refreshed");
     }
 
     private static void updateMainRoom(VillageManager manager, ServerPlayer player) {
