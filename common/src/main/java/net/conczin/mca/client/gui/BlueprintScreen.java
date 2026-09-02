@@ -67,7 +67,7 @@ public class BlueprintScreen extends ExtendedScreen {
     private static final double MAP_ZOOM_FACTOR = 1.1D;
     private static final double MAP_DRAG_THRESHOLD = 3.0D;
     private static final float[] MAP_SCALE_PRESETS = {0.5F, 1.0F, 2.0F, 3.0F, 4.0F};
-    private static Integer selectedFloorOrdinal;
+    private static Integer selectedFloorOrdinal = 0;
     private static boolean mapScaleFit = true;
     private static float mapScale = 1.0F;
     private static boolean playerCentered;
