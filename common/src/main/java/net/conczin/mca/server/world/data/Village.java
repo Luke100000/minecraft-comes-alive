@@ -566,10 +566,12 @@ public class Village implements Iterable<Building> {
         if (level == null || pos == null) return RoomScanPlan.addBuilding(source);
         Optional<ResolvedInteraction> resolved = resolveInteractionPosition(level, pos);
         if (resolved.isPresent()) {
-            Building room = resolved.get().position().room();
+            ResolvedInteraction interaction = resolved.get();
+            Building room = interaction.position().room();
             if (room != null) return RoomScanPlan.updateRoom(room, source);
             return RoomScanPlan.addRoom(
-                    getMainRoom(resolved.get().structure()).orElse(null), source);
+                    getMainRoom(interaction.structure()).orElse(null),
+                    interaction.structure().getId(), interaction.position().floor().id(), source);
         }
 
         return attachmentPlan(level, source).orElseGet(() -> RoomScanPlan.addBuilding(source));
