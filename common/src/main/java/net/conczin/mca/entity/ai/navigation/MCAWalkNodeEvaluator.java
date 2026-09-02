@@ -3,12 +3,12 @@ package net.conczin.mca.entity.ai.navigation;
 import it.unimi.dsi.fastutil.longs.Long2BooleanMap;
 import it.unimi.dsi.fastutil.longs.Long2BooleanOpenHashMap;
 import net.conczin.mca.Config;
+import net.conczin.mca.entity.ai.PathingBlockInteraction;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.tags.FluidTags;
 import net.minecraft.util.Mth;
-import net.minecraft.world.level.block.FenceGateBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.pathfinder.Node;
@@ -122,7 +122,7 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
         int nodeCount = super.getNeighbors(nodes, origin);
         nodeCount = rejectBlockedRaisedStartTransitions(nodes, nodeCount, origin);
         if (!isClimbable(origin.x, origin.y, origin.z)) {
-            return nodeCount;
+            return addDescendingClimbableEntries(nodes, nodeCount, origin.asBlockPos());
         }
 
         nodeCount = removeLargeVerticalTransitions(nodes, nodeCount, origin);
@@ -140,6 +140,28 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
             nodeCount = addClimbableNode(nodes, nodeCount, below);
         }
 
+        return nodeCount;
+    }
+
+    private int addDescendingClimbableEntries(Node[] nodes, int nodeCount, BlockPos origin) {
+        for (Direction direction : Direction.Plane.HORIZONTAL) {
+            BlockPos edge = origin.relative(direction);
+            for (int drop = 1; drop <= MAX_CLIMBABLE_VERTICAL_OFFSET; drop++) {
+                BlockPos candidate = edge.below(drop);
+                if (isClimbable(candidate)) {
+                    nodeCount = addClimbableNode(nodes, nodeCount, candidate);
+                    break;
+                }
+
+                BlockState state = this.currentContext.getBlockState(candidate);
+                if (PathingBlockInteraction.isHandOpenableTrapDoor(state)) {
+                    continue;
+                }
+                if (!state.isPathfindable(PathComputationType.LAND)) {
+                    break;
+                }
+            }
+        }
         return nodeCount;
     }
 
@@ -222,8 +244,7 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
         }
 
         BlockState state = context.getBlockState(this.climbablePos.set(x, y, z));
-        if (state.is(BlockTags.FENCE_GATES)
-                && state.getBlock() instanceof FenceGateBlock
+        if (PathingBlockInteraction.isFenceGate(state)
                 && !state.getValue(BlockStateProperties.OPEN)) {
             // Vanilla treats closed fence gates as FENCE, so a path can never contain
             // the gate node for SmarterOpenDoorsTask to open. Treat hand-operated gates

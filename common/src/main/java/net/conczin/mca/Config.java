@@ -369,7 +369,10 @@ public final class Config extends CommonConfig {
     /**
      * Enables smarter villager door AI,
      * allowing them to open gates as well.
+     * <p>
+     * <b>DEPRECATED</b> Automatically enabled due to improvements in the pathfinding system
      */
+    @Deprecated(since = "02/09/2026", forRemoval = true)
     public boolean useSmarterDoorAI = false;
 
     /**
