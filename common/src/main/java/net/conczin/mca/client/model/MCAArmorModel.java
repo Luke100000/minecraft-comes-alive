@@ -54,9 +54,4 @@ public class MCAArmorModel<T extends LivingEntity> extends HumanoidModel<T> impl
         young = wasYoung;
     }
 
-    @Override
-    public void setupAnim(T entity, float limbAngle, float limbDistance, float animationProgress, float headYaw, float headPitch) {
-        super.setupAnim(entity, limbAngle, limbDistance, animationProgress, headYaw, headPitch);
-        applyVillagerDimensions(CommonVillagerModel.getVillager(entity));
-    }
 }

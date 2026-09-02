@@ -63,12 +63,15 @@ public abstract class VillagerLayer<T extends LivingEntity, M extends HumanoidMo
             return;
         }
 
+        getParentModel().copyPropertiesTo(model);
+
         // Primarily restores compatibility with Armourers Workshop.
         if (model instanceof CommonVillagerModel<?> layer) {
+            if (!(getParentModel() instanceof CommonVillagerModel<?>)) {
+                layer.applyVillagerDimensions(CommonVillagerModel.getVillager(villager));
+            }
             layer.copyVisibility(getParentModel());
         }
-
-        getParentModel().copyPropertiesTo(model);
 
         Minecraft client = Minecraft.getInstance();
         boolean visible = !villager.isInvisible();
