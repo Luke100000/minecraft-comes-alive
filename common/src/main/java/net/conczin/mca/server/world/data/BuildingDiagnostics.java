@@ -55,13 +55,20 @@ public final class BuildingDiagnostics {
         StructureFloor freshPlayerFloor = null;
         if (inspected != null) {
             boolean contains = inspected.containsPos(pos);
-            boolean attaches = inspected.resolveInteractionPosition(world, pos, List.of()).isPresent();
+            Structure.InteractionPosition interaction = inspected
+                    .resolveInteractionPosition(world, pos, List.of()).orElse(null);
+            boolean attaches = interaction != null;
             StructureFloor resolvedFloor = inspected.resolveFloorAt(pos).orElse(null);
             StructureFloor physicalFloor = inspected.physicalFloorAt(pos).orElse(null);
             log(traceId, "structure id={} logicalBuildingId={} source={} bounds={}..{} containsPos={} connectorAttaches={} resolvedFloor={} physicalFloor={}",
                     inspected.getId(), inspected.getLogicalBuildingId(), inspected.getSource(),
                     inspected.getRawPos0(), inspected.getRawPos1(),
                     contains, attaches, floor(resolvedFloor), floor(physicalFloor));
+            log(traceId, "interactionKind={} interactionFloorId={} interactionFloorNumber={} verticalDistance={}",
+                    interaction == null ? "none" : interaction.kind(),
+                    interaction == null ? "none" : interaction.floor().id(),
+                    interaction == null ? "none" : interaction.floor().floorNumber(),
+                    interaction == null ? "none" : interaction.verticalDistance());
             LogicalBuilding logicalBuilding = village.getLogicalBuilding(inspected.getLogicalBuildingId()).orElse(null);
             log(traceId, "persistentFloors={} groundFloorStructureId={} groundFloorId={} logicalMainRoomId={} inheritanceEnabled={}",
                     floors(inspected.getFloors()),
@@ -140,7 +147,7 @@ public final class BuildingDiagnostics {
             boolean contains = structure.containsPos(pos);
             boolean attaches = structure.resolveInteractionPosition(world, pos, List.of()).isPresent();
             return "NO_INTERACTION_STRUCTURE: UI uses " + uiAction + "; containsPos=" + contains
-                    + ", verticalConnectorAttachment=" + attaches + ", analysis=" + analysis;
+                    + ", interactionAttachment=" + attaches + ", analysis=" + analysis;
         }
         if (analysis != Building.validationResult.SUCCESS) {
             return "ANALYSIS_FAILED: " + uiAction + " returned " + analysis;
