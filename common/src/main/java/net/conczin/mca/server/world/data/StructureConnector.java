@@ -243,14 +243,39 @@ final class StructureConnector {
 
     static Optional<FloorHandoff> resolveVerticalFloorHandoff(
             Level world, BlockPos source, Config config) {
-        FloorCeilingResolver ceilings = new FloorCeilingResolver(world);
         List<BlockPos> candidates = verticalHandoffCandidates(world, source).stream()
-                .filter(candidate -> SelectedFloorScanner.inspectSurfaceCell(world, candidate, ceilings).isPresent())
                 .sorted(Comparator
                         .comparingInt((BlockPos candidate) -> Math.abs(candidate.getY() - source.getY()))
                         .thenComparingInt(BlockPos::getY)
                         .thenComparingInt(BlockPos::getX)
                         .thenComparingInt(BlockPos::getZ))
+                .toList();
+
+        return resolveFloorHandoff(world, source, candidates, config);
+    }
+
+    static Optional<FloorHandoff> resolveHorizontalFloorHandoff(
+            Level world, BlockPos source, Config config) {
+        BlockState sourceState = world.getBlockState(source);
+        if (!isHorizontalBoundary(sourceState)) return Optional.empty();
+
+        BlockPos connector = normalize(source, sourceState);
+        List<BlockPos> candidates = Arrays.stream(HORIZONTAL)
+                .map(connector::relative)
+                .sorted(Comparator
+                        .comparingInt((BlockPos candidate) -> candidate.getY())
+                        .thenComparingInt(BlockPos::getX)
+                        .thenComparingInt(BlockPos::getZ))
+                .toList();
+
+        return resolveFloorHandoff(world, source, candidates, config);
+    }
+
+    private static Optional<FloorHandoff> resolveFloorHandoff(
+            Level world, BlockPos source, List<BlockPos> rawCandidates, Config config) {
+        FloorCeilingResolver ceilings = new FloorCeilingResolver(world);
+        List<BlockPos> candidates = rawCandidates.stream()
+                .filter(candidate -> SelectedFloorScanner.inspectSurfaceCell(world, candidate, ceilings).isPresent())
                 .toList();
 
         FloorHandoff selected = null;

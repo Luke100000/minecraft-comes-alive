@@ -791,6 +791,17 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         return BuildingEditResult.SUCCESS;
     }
 
+    public BuildingEditResult removeFloor(BlockPos pos) {
+        Village village = findNearestVillage(pos, Village.PLAYER_BORDER_MARGIN).orElse(null);
+        if (village == null) return BuildingEditResult.NO_BUILDING;
+
+        RoomScanPlan plan = village.getRoomScanPlan(world, pos);
+        int structureId = plan.interactionStructureId();
+        int floorId = plan.interactionFloorId();
+        return village.removeFloor(structureId, floorId)
+                ? BuildingEditResult.SUCCESS : BuildingEditResult.NO_FLOOR;
+    }
+
     public BuildingEditResult removeBuilding(BlockPos pos) {
         Village village = findNearestVillage(pos, Village.PLAYER_BORDER_MARGIN).orElse(null);
         if (village == null) return BuildingEditResult.NO_BUILDING;
@@ -865,6 +876,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         SUCCESS,
         NO_BUILDING,
         NO_ROOM,
+        NO_FLOOR,
         MAIN_ROOM
     }
 

@@ -43,6 +43,8 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
                         manager.forceRoomType(player.blockPosition(), data), null);
                 case REMOVE_ROOM -> displayEditResult(player,
                         manager.removeRoom(player.blockPosition()), "blueprint.roomRemoved");
+                case REMOVE_FLOOR -> displayEditResult(player,
+                        manager.removeFloor(player.blockPosition()), "blueprint.floorRemoved");
                 case REMOVE -> displayEditResult(player,
                         manager.removeBuilding(player.blockPosition()), "blueprint.buildingRemoved");
                 case SET_ROOM_INHERITANCE -> setRoomInheritance(workflow, player, data);
@@ -192,6 +194,7 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
             case SUCCESS -> successKey;
             case NO_BUILDING -> "blueprint.noBuilding";
             case NO_ROOM -> "blueprint.noRoomOnFloor";
+            case NO_FLOOR -> "blueprint.noFloor";
             case MAIN_ROOM -> "blueprint.cannotRemoveMainRoom";
         };
         if (key != null) player.displayClientMessage(Component.translatable(key), true);
@@ -214,7 +217,8 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
         SET_ROOM_INHERITANCE,
         ADD_BUILDING,
         ADD_FLOOR,
-        ADD_BASEMENT;
+        ADD_BASEMENT,
+        REMOVE_FLOOR;
 
         public static final Action[] VALUES = values();
     }

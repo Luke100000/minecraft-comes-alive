@@ -2,7 +2,9 @@ package net.conczin.mca.client.gui;
 
 import com.google.gson.JsonObject;
 import net.conczin.mca.resources.data.BuildingType;
+import net.conczin.mca.network.c2s.ReportBuildingMessage;
 import net.conczin.mca.server.world.data.Building;
+import net.conczin.mca.server.world.data.RoomScanPlan;
 import net.conczin.mca.server.world.data.Structure;
 import net.conczin.mca.server.world.data.StructureFloor;
 import net.conczin.mca.server.world.data.Village;
@@ -18,6 +20,7 @@ import java.lang.reflect.Array;
 import java.lang.reflect.Method;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -188,6 +191,62 @@ class BlueprintScreenMapInteractionTest {
                 BlueprintScreen.inheritanceControlState(village, sideRoom);
         assertEquals("gui.blueprint.roomInheritance.enable", after.labelKey());
         assertTrue(after.nextEnabled());
+    }
+
+    @Test
+    void emptyInteractionFloorUsesRemoveFloorAction() throws Exception {
+        Village village = new Village(1, null);
+        Structure structure = new Structure(10, BlockPos.ZERO, BlockPos.ZERO, BlockPos.ZERO,
+                List.of(
+                        new StructureFloor(0, 64, 68, 0, null),
+                        new StructureFloor(1, 72, 76, 1, null)));
+        Building main = room(1);
+        registerStructure(village, structure, main);
+
+        RoomScanPlan plan = new RoomScanPlan(Optional.of(main), Village.RoomScanMode.ADD_ROOM,
+                -1, Integer.MIN_VALUE, BlockPos.ZERO, BlockPos.ZERO, 10, 1);
+
+        BlueprintScreen.RemovalControlState state = BlueprintScreen.removalControlState(village, plan);
+
+        assertTrue(state.visible());
+        assertTrue(state.active());
+        assertEquals(ReportBuildingMessage.Action.REMOVE_FLOOR, state.action());
+        assertEquals("gui.blueprint.removeFloor", state.labelKey());
+    }
+
+    @Test
+    void unregisteredAreaOnOccupiedFloorDoesNotOfferFloorRemoval() throws Exception {
+        Village village = new Village(1, null);
+        Structure structure = new Structure(10, BlockPos.ZERO, BlockPos.ZERO, BlockPos.ZERO,
+                List.of(new StructureFloor(0, 64, 68, 0, null)));
+        Building main = room(1);
+        registerStructure(village, structure, main);
+
+        RoomScanPlan plan = new RoomScanPlan(Optional.of(main), Village.RoomScanMode.ADD_ROOM,
+                -1, Integer.MIN_VALUE, BlockPos.ZERO, BlockPos.ZERO, 10, 0);
+
+        BlueprintScreen.RemovalControlState state = BlueprintScreen.removalControlState(village, plan);
+
+        assertFalse(state.visible());
+    }
+
+    @Test
+    void emptyMiddleFloorDoesNotOfferFloorRemoval() throws Exception {
+        Village village = new Village(1, null);
+        Structure structure = new Structure(10, BlockPos.ZERO, BlockPos.ZERO, BlockPos.ZERO,
+                List.of(
+                        new StructureFloor(0, 64, 68, 0, null),
+                        new StructureFloor(1, 72, 76, 1, null),
+                        new StructureFloor(2, 80, 84, 2, null)));
+        Building main = room(1);
+        registerStructure(village, structure, main);
+
+        RoomScanPlan plan = new RoomScanPlan(Optional.of(main), Village.RoomScanMode.ADD_ROOM,
+                -1, Integer.MIN_VALUE, BlockPos.ZERO, BlockPos.ZERO, 10, 1);
+
+        BlueprintScreen.RemovalControlState state = BlueprintScreen.removalControlState(village, plan);
+
+        assertFalse(state.visible());
     }
 
     @Test

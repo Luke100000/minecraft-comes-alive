@@ -14,15 +14,21 @@ import java.util.Optional;
  * @param prospectiveFloorNumber attachment floor-number preview, when applicable
  * @param interactionSource original player or diagnostic position
  * @param scanSeed exact enclosed position selected for physical scanning
+ * @param interactionStructureId persisted Structure resolved at the interaction position, or {@code -1}
+ * @param interactionFloorId persisted Floor resolved at the interaction position, or {@code -1}
  */
 public record RoomScanPlan(Optional<Building> building,
                            Village.RoomScanMode mode,
                            int targetBuildingId,
                            int prospectiveFloorNumber,
                            BlockPos interactionSource,
-                           BlockPos scanSeed) {
+                           BlockPos scanSeed,
+                           int interactionStructureId,
+                           int interactionFloorId) {
     private static final int NO_TARGET_BUILDING = -1;
     private static final int NO_PROSPECTIVE_FLOOR = Integer.MIN_VALUE;
+    private static final int NO_INTERACTION_STRUCTURE = -1;
+    private static final int NO_INTERACTION_FLOOR = -1;
 
     public RoomScanPlan {
         building = building == null ? Optional.empty() : building;
@@ -32,17 +38,19 @@ public record RoomScanPlan(Optional<Building> building,
 
     public static RoomScanPlan addBuilding(BlockPos source) {
         return new RoomScanPlan(Optional.empty(), Village.RoomScanMode.ADD_BUILDING,
-                NO_TARGET_BUILDING, NO_PROSPECTIVE_FLOOR, source, source);
+                NO_TARGET_BUILDING, NO_PROSPECTIVE_FLOOR, source, source,
+                NO_INTERACTION_STRUCTURE, NO_INTERACTION_FLOOR);
     }
 
     static RoomScanPlan updateRoom(Building room, BlockPos source) {
         return new RoomScanPlan(Optional.of(room), Village.RoomScanMode.UPDATE_ROOM,
-                NO_TARGET_BUILDING, NO_PROSPECTIVE_FLOOR, source, source);
+                NO_TARGET_BUILDING, NO_PROSPECTIVE_FLOOR, source, source,
+                room.getStructureId(), room.getFloorId());
     }
 
-    static RoomScanPlan addRoom(Building mainRoom, BlockPos source) {
+    static RoomScanPlan addRoom(Building mainRoom, int structureId, int floorId, BlockPos source) {
         return new RoomScanPlan(Optional.ofNullable(mainRoom), Village.RoomScanMode.ADD_ROOM,
-                NO_TARGET_BUILDING, NO_PROSPECTIVE_FLOOR, source, source);
+                NO_TARGET_BUILDING, NO_PROSPECTIVE_FLOOR, source, source, structureId, floorId);
     }
 
     static RoomScanPlan attachment(int targetBuildingId,
@@ -51,7 +59,8 @@ public record RoomScanPlan(Optional<Building> building,
                                    BlockPos scanSeed) {
         Village.RoomScanMode mode = floorNumber < 0
                 ? Village.RoomScanMode.ADD_BASEMENT : Village.RoomScanMode.ADD_FLOOR;
-        return new RoomScanPlan(Optional.empty(), mode, targetBuildingId, floorNumber, source, scanSeed);
+        return new RoomScanPlan(Optional.empty(), mode, targetBuildingId, floorNumber, source, scanSeed,
+                NO_INTERACTION_STRUCTURE, NO_INTERACTION_FLOOR);
     }
 
     public Optional<Building> functionalRoom() {

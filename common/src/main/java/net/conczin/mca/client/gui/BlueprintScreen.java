@@ -321,8 +321,12 @@ public class BlueprintScreen extends ExtendedScreen {
                             "gui.blueprint.addBuilding", b -> requestPrimaryStructureScan());
                     attachmentScanButton = column.addTooltip(
                             "gui.blueprint.addFloor", b -> requestAttachmentScan());
-                    removeRoomButton = column.addTooltip("gui.blueprint.removeRoom", b ->
-                            Network.sendToServer(new ReportBuildingMessage(ReportBuildingMessage.Action.REMOVE_ROOM)));
+                    removeRoomButton = column.addTooltip("gui.blueprint.removeRoom", b -> {
+                        RemovalControlState state = removalControlState(village, getPlayerRoomScanPlan());
+                        if (state.visible() && state.active() && state.action() != null) {
+                            Network.sendToServer(new ReportBuildingMessage(state.action()));
+                        }
+                    });
                     removeBuildingButton = column.addButton(
                             Component.translatable("gui.blueprint.removeBuilding"), b ->
                                     Network.sendToServer(new ReportBuildingMessage(
@@ -523,7 +527,6 @@ public class BlueprintScreen extends ExtendedScreen {
         updateToggleControl(terrainButton, "gui.blueprint.terrain", showTerrain);
         updateMapScaleControl();
         updateStructureScanControl(scanContext);
-        updateRemoveRoomControl(scanContext);
         updateInheritanceControl(scanContext);
         updateMainRoomControl(scanContext);
     }
@@ -536,6 +539,7 @@ public class BlueprintScreen extends ExtendedScreen {
                 ? Village.RoomScanMode.ADD_BUILDING : scanContext.mode();
         boolean roomRegistered = scanContext.mode() == Village.RoomScanMode.UPDATE_ROOM;
         boolean insideBuilding = roomRegistered || scanContext.mode() == Village.RoomScanMode.ADD_ROOM;
+        RemovalControlState removalState = removalControlState(village, scanContext);
         int y = height / 2 - 56 + 22 * 3;
 
         structureScanButton.setMessage(getStructureScanTranslationKey(primaryMode));
@@ -562,7 +566,10 @@ public class BlueprintScreen extends ExtendedScreen {
         }
 
         if (removeRoomButton != null) {
-            removeRoomButton.visible = roomRegistered;
+            removeRoomButton.visible = removalState.visible();
+            removeRoomButton.active = removalState.active();
+            removeRoomButton.setMessage(Component.translatable(removalState.labelKey()));
+            removeRoomButton.setTooltip(Tooltip.create(Component.translatable(removalState.tooltipKey())));
             removeRoomButton.setY(y);
             if (removeRoomButton.visible) y += 22;
         }
@@ -574,19 +581,32 @@ public class BlueprintScreen extends ExtendedScreen {
         }
     }
 
-    private void updateRemoveRoomControl(RoomScanPlan scanContext) {
-        if (removeRoomButton == null) {
-            return;
+    static RemovalControlState removalControlState(Village village, RoomScanPlan scanContext) {
+        if (village == null || scanContext == null) return RemovalControlState.hidden();
+
+        Building room = scanContext.functionalRoom().orElse(null);
+        if (room != null) {
+            boolean mainRoom = village.isMainRoom(room);
+            return new RemovalControlState(true, !mainRoom, ReportBuildingMessage.Action.REMOVE_ROOM,
+                    "gui.blueprint.removeRoom",
+                    mainRoom ? "gui.blueprint.removeRoom.disabled.mainRoom"
+                            : "gui.blueprint.removeRoom.tooltip");
         }
 
-        boolean onMainRoom = village != null
-                && scanContext.functionalRoom()
-                .filter(village::isMainRoom)
-                .isPresent();
-        removeRoomButton.active = removeRoomButton.visible && !onMainRoom;
-        removeRoomButton.setTooltip(Tooltip.create(Component.translatable(onMainRoom
-                ? "gui.blueprint.removeRoom.disabled.mainRoom"
-                : "gui.blueprint.removeRoom.tooltip")));
+        int structureId = scanContext.interactionStructureId();
+        int floorId = scanContext.interactionFloorId();
+        if (!village.canRemoveFloor(structureId, floorId)) return RemovalControlState.hidden();
+
+        return new RemovalControlState(true, true, ReportBuildingMessage.Action.REMOVE_FLOOR,
+                "gui.blueprint.removeFloor", "gui.blueprint.removeFloor.tooltip");
+    }
+
+    record RemovalControlState(boolean visible, boolean active, ReportBuildingMessage.Action action,
+                               String labelKey, String tooltipKey) {
+        private static RemovalControlState hidden() {
+            return new RemovalControlState(false, false, null,
+                    "gui.blueprint.removeRoom", "gui.blueprint.removeRoom.tooltip");
+        }
     }
 
     private void renderName(GuiGraphics context) {

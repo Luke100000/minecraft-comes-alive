@@ -219,6 +219,12 @@ public final class Structure implements VillageBuilding {
         return true;
     }
 
+    boolean removeFloor(int floorId) {
+        if (floors.remove(floorId) == null) return false;
+        if (!floors.isEmpty()) recomputeBoundsFromFloors();
+        return true;
+    }
+
     private void recomputeBoundsFromFloors() {
         List<StructureFloor> current = getFloors();
         if (current.isEmpty()) return;

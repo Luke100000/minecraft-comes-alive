@@ -35,6 +35,12 @@ final class StructureScanner {
             return scanAtSeed(world, source, handoff.seed(), existing, -1);
         }
 
+        handoff = StructureConnector.resolveHorizontalFloorHandoff(
+                world, source, Config.getInstance()).orElse(null);
+        if (handoff != null) {
+            return scanAtSeed(world, source, handoff.seed(), existing, -1);
+        }
+
         BlockPos standingSeed = resolveStandingSurfaceSeed(world, source).orElse(null);
         return standingSeed == null || standingSeed.equals(source)
                 ? exact
