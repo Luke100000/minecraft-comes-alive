@@ -5,7 +5,9 @@ import net.conczin.mca.MCAClient;
 import net.conczin.mca.client.book.Book;
 import net.conczin.mca.client.book.CivilRegistryBook;
 import net.conczin.mca.client.gui.*;
-import net.conczin.mca.client.resources.ClientSkinCatalog;
+import net.conczin.mca.client.render.DynamicSkinCache;
+import net.conczin.mca.client.render.layer.FaceLayer;
+import net.conczin.mca.client.resources.ClientAppearanceCatalog;
 import net.conczin.mca.client.tts.SpeechManager;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerLike;
@@ -221,11 +223,20 @@ public class ClientHandlerImpl implements ClientHandler {
     }
 
     @Override
-    public void handleCustomSkinListResponse(CustomSkinListResponse message) {
+    public void handleAppearanceCatalogSync(AppearanceCatalogSync message) {
         Screen screen = client.screen;
-        ClientSkinCatalog.installServerDelta(message.clothing(), message.bodySkins(), message.layeredHair(), message.hairStyles(), message.hair());
-        if (screen instanceof SkinListUpdateListener gui) {
-            gui.skinListUpdatedCallback();
+        ClientAppearanceCatalog.installServerSnapshot(
+                message.clothing(),
+                message.bodySkins(),
+                message.layeredHair(),
+                message.hairStyles(),
+                message.hair(),
+                message.eyes()
+        );
+        FaceLayer.clearGeneratedEyeTextureCache();
+        DynamicSkinCache.clear();
+        if (screen instanceof AppearanceCatalogUpdateListener gui) {
+            gui.appearanceCatalogUpdated();
         }
     }
 
@@ -245,14 +256,6 @@ public class ClientHandlerImpl implements ClientHandler {
         MutableComponent full = message.prefix().copy().append(message.message());
         client.getChatListener().handleSystemMessage(full, false);
         SpeechManager.INSTANCE.onChatMessage(message.message(), message.uuid());
-    }
-
-    @Override
-    public void handleCustomSkinsChangedMessage(CustomSkinsChangedMessage message) {
-        ClientSkinCatalog.markCustomSkinsOutdated();
-        if (client.screen instanceof SkinListUpdateListener) {
-            ClientSkinCatalog.sync();
-        }
     }
 
     @Override

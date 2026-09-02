@@ -30,7 +30,6 @@ public interface MessagesMCA {
         c.register(ReportBuildingMessage.TYPE, ReportBuildingMessage.STREAM_CODEC, true);
         c.register(SaveVillageMessage.TYPE, SaveVillageMessage.STREAM_CODEC, true);
         c.register(SetTargetMessage.TYPE, SetTargetMessage.STREAM_CODEC, true);
-        c.register(CustomSkinListRequest.TYPE, CustomSkinListRequest.STREAM_CODEC, true);
         c.register(VillagerEditorSyncRequest.TYPE, VillagerEditorSyncRequest.STREAM_CODEC, true);
         c.register(VillagerNameRequest.TYPE, VillagerNameRequest.STREAM_CODEC, true);
         c.register(ConfirmBuildingPolymorphMessage.TYPE, ConfirmBuildingPolymorphMessage.STREAM_CODEC, true);
@@ -40,7 +39,6 @@ public interface MessagesMCA {
         c.register(ChatAIContextResponse.TYPE, ChatAIContextResponse.STREAM_CODEC, false);
         c.register(CivilRegistryResponse.TYPE, CivilRegistryResponse.STREAM_CODEC, false);
         c.register(ConfigResponse.TYPE, ConfigResponse.STREAM_CODEC, false);
-        c.register(CustomSkinsChangedMessage.TYPE, CustomSkinsChangedMessage.STREAM_CODEC, false);
         c.register(FamilyTreeUUIDResponse.TYPE, FamilyTreeUUIDResponse.STREAM_CODEC, false);
         c.register(GetFamilyResponse.TYPE, GetFamilyResponse.STREAM_CODEC, false);
         c.register(GetFamilyTreeResponse.TYPE, GetFamilyTreeResponse.STREAM_CODEC, false);
@@ -54,7 +52,7 @@ public interface MessagesMCA {
         c.register(OpenGuiRequest.TYPE, OpenGuiRequest.STREAM_CODEC, false);
         c.register(PlayerDataMessage.TYPE, PlayerDataMessage.STREAM_CODEC, false);
         c.register(ShowToastRequest.TYPE, ShowToastRequest.STREAM_CODEC, false);
-        c.register(CustomSkinListResponse.TYPE, CustomSkinListResponse.STREAM_CODEC, false);
+        c.register(AppearanceCatalogSync.TYPE, AppearanceCatalogSync.STREAM_CODEC, false);
         c.register(VillagerMessage.TYPE, VillagerMessage.STREAM_CODEC, false);
         c.register(VillagerNameResponse.TYPE, VillagerNameResponse.STREAM_CODEC, false);
         c.register(BuildingPolymorphMessage.TYPE, BuildingPolymorphMessage.STREAM_CODEC, false);

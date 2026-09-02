@@ -33,7 +33,7 @@ public interface ClientHandler {
 
     void handlePlayerDataMessage(PlayerDataMessage response);
 
-    void handleCustomSkinListResponse(CustomSkinListResponse response);
+    void handleAppearanceCatalogSync(AppearanceCatalogSync response);
 
     void handleDestinyGuiRequest(OpenDestinyGuiRequest request);
 
@@ -42,8 +42,6 @@ public interface ClientHandler {
     void handleConfigResponse(ConfigResponse response);
 
     void handleVillagerMessage(VillagerMessage message);
-
-    void handleCustomSkinsChangedMessage(CustomSkinsChangedMessage message);
 
     void handleCivilRegistryResponse(CivilRegistryResponse response);
 

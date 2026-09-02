@@ -1,7 +1,7 @@
 package net.conczin.mca;
 
 import net.conczin.mca.client.gui.SkinLibraryScreen;
-import net.conczin.mca.client.resources.ClientSkinCatalog;
+import net.conczin.mca.client.resources.ClientAppearanceCatalog;
 import net.conczin.mca.client.tts.SpeechManager;
 import net.conczin.mca.entity.PlayerDimensions;
 import net.conczin.mca.entity.VillagerEntityMCA;
@@ -27,9 +27,13 @@ public class MCAClient {
     public static void onLogin() {
         playerData.clear();
         playerDataRequests.clear();
-        ClientSkinCatalog.clear();
         Network.sendToServer(new ConfigRequest());
-        ClientSkinCatalog.sync();
+    }
+
+    public static void onLogout() {
+        playerData.clear();
+        playerDataRequests.clear();
+        ClientAppearanceCatalog.clear();
     }
 
     public static Optional<VillagerLike<?>> getPlayerData(UUID uuid) {
