@@ -177,7 +177,7 @@ public final class Structure implements VillageBuilding {
         int distance = verticalDistance(floor, pos.getY());
         if (floor.contains(pos.getX(), pos.getZ())
                 && distance == 1
-                && StructureScanner.isWalkableAnchor(world, pos)) {
+                && StructureScanner.resolveStandingSurfaceSeed(world, pos).isPresent()) {
             return Optional.of(new InteractionPosition(
                     floor,
                     roomAtColumn(localRooms, floor, pos.getX(), pos.getZ()),

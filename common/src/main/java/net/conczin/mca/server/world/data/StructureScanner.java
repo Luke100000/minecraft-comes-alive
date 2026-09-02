@@ -129,7 +129,7 @@ final class StructureScanner {
      * Fresh discovery still needs an open feet cell, so normalize that interaction to the supported
      * cell immediately above without teaching the scanner about individual block classes.
      */
-    private static Optional<BlockPos> resolveStandingSurfaceSeed(Level world, BlockPos source) {
+    static Optional<BlockPos> resolveStandingSurfaceSeed(Level world, BlockPos source) {
         if (isWalkableAnchor(world, source)) return Optional.of(source.immutable());
         if (world.getBlockState(source).getCollisionShape(world, source).isEmpty()) return Optional.empty();
 
