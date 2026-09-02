@@ -18,7 +18,7 @@ public final class MCA {
     public static final String MOD_ID = "mca";
     public static final Logger LOGGER = LogManager.getLogger();
 
-    public static final ExecutorService executorService = Executors.newSingleThreadExecutor();
+    public static volatile ExecutorService executorService = createExecutorService();
     public static Map<String, String> storage = new HashMap<>();
     public static String language;
     public static PlatformHelper platformHelper = new PlatformHelper();
@@ -38,6 +38,24 @@ public final class MCA {
 
     public static void setServer(MinecraftServer server) {
         MCA.server = server;
+    }
+
+    private static ExecutorService createExecutorService() {
+        return Executors.newSingleThreadExecutor(runnable -> {
+            Thread thread = new Thread(runnable, "MCA-Structure-Locator");
+            thread.setDaemon(true);
+            return thread;
+        });
+    }
+
+    public static synchronized void startExecutorService() {
+        if (executorService.isShutdown()) {
+            executorService = createExecutorService();
+        }
+    }
+
+    public static synchronized void shutdownExecutorService() {
+        executorService.shutdownNow();
     }
 
     public interface RegisterHelper<T> {

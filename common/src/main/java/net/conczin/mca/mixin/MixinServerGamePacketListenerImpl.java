@@ -4,7 +4,8 @@ import net.conczin.mca.Config;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.chatAI.ChatAI;
 import net.minecraft.network.chat.Component;
-import net.minecraft.network.protocol.game.ServerboundChatPacket;
+import net.minecraft.network.chat.PlayerChatMessage;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.ServerGamePacketListenerImpl;
 import org.apache.commons.lang3.StringUtils;
@@ -16,32 +17,43 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import java.util.Optional;
-import java.util.concurrent.CompletableFuture;
 
 @Mixin(ServerGamePacketListenerImpl.class)
 public class MixinServerGamePacketListenerImpl {
     @Shadow
     public ServerPlayer player;
 
-    @Inject(method = "handleChat", at = @At("HEAD"))
-    public void mca$injectHandleChat(ServerboundChatPacket message, CallbackInfo ci) {
-        if (Config.getInstance().enableVillagerChatAI) {
-            String msg = StringUtils.normalizeSpace(message.message());
-            if (!msg.startsWith("/")) {
-                // Check if there's an eligible villager for the conversation
-                Optional<VillagerEntityMCA> villager = ChatAI.getVillagerForConversation(player, msg);
-                // Yes? => Talk to it
-                villager.ifPresent(villagerEntityMCA -> mca$runAsyncAnswerRequest(player, villagerEntityMCA, msg));
-            }
+    @Inject(method = "broadcastChatMessage", at = @At("HEAD"))
+    private void mca$handleAcceptedChat(PlayerChatMessage message, CallbackInfo ci) {
+        if (!Config.getInstance().enableVillagerChatAI) {
+            return;
+        }
+
+        String msg = StringUtils.normalizeSpace(message.signedContent());
+        MinecraftServer server = player.getServer();
+        if (server != null) {
+            mca$handleChatAI(player, msg, server);
         }
     }
 
     @Unique
-    private void mca$runAsyncAnswerRequest(ServerPlayer player, VillagerEntityMCA villager, String msg) {
-        CompletableFuture.runAsync(() -> {
-            Optional<String> answer = ChatAI.answer(player, villager, msg);
-            answer.ifPresent(a -> villager.conversationManager.addMessage(player, Component.literal(a)));
-        });
+    private void mca$handleChatAI(ServerPlayer player, String msg, MinecraftServer server) {
+        if (player.isRemoved()) {
+            return;
+        }
+
+        Optional<VillagerEntityMCA> villager = ChatAI.getVillagerForConversation(player, msg);
+        villager.ifPresent(villagerEntityMCA -> mca$runAsyncAnswerRequest(player, villagerEntityMCA, msg, server));
+    }
+
+    @Unique
+    private void mca$runAsyncAnswerRequest(ServerPlayer player, VillagerEntityMCA villager, String msg, MinecraftServer server) {
+        ChatAI.selectVillagerForConversation(player, villager);
+        ChatAI.answerAsync(player, villager, msg).thenAcceptAsync(answer -> {
+            if (!player.isRemoved() && !villager.isRemoved() && player.level() == villager.level()) {
+                answer.ifPresent(a -> villager.conversationManager.addMessage(player, Component.literal(a)));
+            }
+        }, server);
     }
 }
 

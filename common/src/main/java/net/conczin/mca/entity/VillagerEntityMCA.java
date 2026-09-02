@@ -9,6 +9,7 @@ import net.conczin.mca.datafix.McaDataFixers;
 import net.conczin.mca.entity.ai.*;
 import net.conczin.mca.entity.ai.brain.VillagerBrain;
 import net.conczin.mca.entity.ai.brain.VillagerTasksMCA;
+import net.conczin.mca.entity.ai.chatAI.ChatAI;
 import net.conczin.mca.entity.ai.chatAI.ChatAIContext;
 import net.conczin.mca.entity.ai.navigation.MCAGroundPathNavigation;
 import net.conczin.mca.entity.ai.relationship.*;
@@ -170,10 +171,22 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     }
 
     @Override
+    public Vec3 handleRelativeFrictionAndCalculateMovement(Vec3 input, float friction) {
+        Vec3 movement = super.handleRelativeFrictionAndCalculateMovement(input, friction);
+        if (getNavigation() instanceof MCAGroundPathNavigation navigation) {
+            double controlledY = navigation.getControlledClimbableVelocity();
+            if (!Double.isNaN(controlledY)) {
+                return new Vec3(movement.x(), controlledY, movement.z());
+            }
+        }
+        return movement;
+    }
+
+    @Override
     public void setJumping(boolean jumping) {
         boolean navigationControlsClimb = this.getNavigation() instanceof MCAGroundPathNavigation navigation
-                && navigation.isControllingClimbable();
-        super.setJumping(jumping && !navigationControlsClimb);
+                && navigation.isControllingClimbableMovement();
+        super.setJumping(jumping && !this.onClimbable() && !navigationControlsClimb);
     }
 
     public static AttributeSupplier.Builder createAttributes() {
@@ -439,6 +452,9 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
             } else {
                 playWelcomeSound();
                 interactedWith = true;
+                if (player instanceof ServerPlayer serverPlayer) {
+                    ChatAI.selectVillagerForConversation(serverPlayer, this);
+                }
                 return interactions.interactAt(player, pos, hand);
             }
         }

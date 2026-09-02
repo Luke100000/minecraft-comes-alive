@@ -127,7 +127,14 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
             case "profession" -> {
                 if (entity instanceof VillagerEntityMCA villager) {
                     VillagerProfession profession = BuiltInRegistries.VILLAGER_PROFESSION.get(ResourceLocation.parse(data.getString("profession")));
-                    villager.setProfession(profession);
+                    if (profession != null) {
+                        CompoundTag merged = applyVillagerPatch(player, entity, data.copy());
+                        villager.setProfession(profession);
+                        if (merged != null) {
+                            CompoundTag fresh = GetVillagerRequest.getVillagerData(entity);
+                            Network.sendToPlayer(new GetVillagerResponse(fresh != null ? fresh : merged), player);
+                        }
+                    }
                 }
             }
         }
@@ -150,26 +157,35 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
             return;
         }
 
-        if (entity instanceof VillagerLike<?> villagerLike) {
-            CompoundTag serverData = GetVillagerRequest.getVillagerData(entity);
-            if (serverData == null) {
-                return;
-            }
-
-            CompoundTag merged = mergeAllowedEditorPatch(serverData, patch);
-            sanitizeVisualIdentifiers(entity, merged);
-
-            villagerLike.syncFromEditor(merged);
-            entity.refreshDimensions();
-            syncFamilyTree(player, entity, merged);
-
-            if (entity instanceof VillagerEntityMCA villager) {
-                villager.getResidency().getHomeVillage().ifPresent(b -> b.updateResident(villager));
-            }
-
+        CompoundTag merged = applyVillagerPatch(player, entity, patch);
+        if (merged != null) {
             CompoundTag fresh = GetVillagerRequest.getVillagerData(entity);
             Network.sendToPlayer(new GetVillagerResponse(fresh != null ? fresh : merged), player);
         }
+    }
+
+    private CompoundTag applyVillagerPatch(ServerPlayer player, Entity entity, CompoundTag patch) {
+        if (!(entity instanceof VillagerLike<?> villagerLike)) {
+            return null;
+        }
+
+        CompoundTag serverData = GetVillagerRequest.getVillagerData(entity);
+        if (serverData == null) {
+            return null;
+        }
+
+        CompoundTag merged = mergeAllowedEditorPatch(serverData, patch);
+        sanitizeVisualIdentifiers(entity, merged);
+
+        villagerLike.syncFromEditor(merged);
+        entity.refreshDimensions();
+        syncFamilyTree(player, entity, merged);
+
+        if (entity instanceof VillagerEntityMCA villager) {
+            villager.getResidency().getHomeVillage().ifPresent(b -> b.updateResident(villager));
+        }
+
+        return merged;
     }
 
     private void sanitizeVisualIdentifiers(Entity entity, CompoundTag villagerData) {

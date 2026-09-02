@@ -102,23 +102,27 @@ public class ExtendedFindPointOfInterestTask extends Behavior<VillagerEntityMCA>
         if (path != null && path.canReach()) {
             BlockPos blockPos2 = path.getTarget();
             pointOfInterestStorage.getType(blockPos2).ifPresent(pointOfInterestType -> {
-                pointOfInterestStorage.take(this.poiType, (typeRegistryEntry, otherPos) -> {
+                Optional<BlockPos> claimedPosition = pointOfInterestStorage.take(this.poiType, (typeRegistryEntry, otherPos) -> {
                     return otherPos.equals(blockPos2);
                 }, blockPos2, 1);
 
-                villager.getBrain().setMemory(this.targetMemoryModuleType, GlobalPos.of(serverWorld.dimension(), blockPos2));
-                this.entityStatus.ifPresent(statusByte -> serverWorld.broadcastEntityEvent(villager, statusByte));
-                this.foundPositionsToExpiry.clear();
-                DebugPackets.sendPoiTicketCountPacket(serverWorld, blockPos2);
-
-                // on finish callback
-                onFinish.accept(villager);
+                finishClaim(claimedPosition, claimedPos -> {
+                    villager.getBrain().setMemory(this.targetMemoryModuleType, GlobalPos.of(serverWorld.dimension(), claimedPos));
+                    this.entityStatus.ifPresent(statusByte -> serverWorld.broadcastEntityEvent(villager, statusByte));
+                    this.foundPositionsToExpiry.clear();
+                    DebugPackets.sendPoiTicketCountPacket(serverWorld, claimedPos);
+                    onFinish.accept(villager);
+                });
             });
         } else {
             for (Pair<Holder<PoiType>, BlockPos> blockPos2 : set) {
                 this.foundPositionsToExpiry.computeIfAbsent(blockPos2.getSecond().asLong(), m -> new RetryMarker(villager.level().random, l));
             }
         }
+    }
+
+    static void finishClaim(Optional<BlockPos> claimedPosition, Consumer<BlockPos> onClaimed) {
+        claimedPosition.ifPresent(onClaimed);
     }
 
     //todo this check is not necessary in vanilla, but since the 1.19.2 port of 7.4.0 it is requires as occupied beds are used

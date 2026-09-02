@@ -56,7 +56,8 @@ public enum AgeState implements VillagerDimensions {
      * Returns a float ranging from 0 to 1 representing the progress between stages.
      */
     public static float getDelta(float age) {
-        return 1 - (-age % getStageDuration()) / getStageDuration();
+        float stageDuration = getStageDuration();
+        return Mth.positiveModulo(age + getMaxAge(), stageDuration) / stageDuration;
     }
 
     public static int getId(int age) {

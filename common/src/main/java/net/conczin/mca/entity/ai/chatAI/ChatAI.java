@@ -7,7 +7,9 @@ import net.minecraft.server.level.ServerPlayer;
 
 import java.text.Normalizer;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Predicate;
 import java.util.regex.Pattern;
 
 public class ChatAI {
@@ -46,16 +48,19 @@ public class ChatAI {
      * @param msg      Message in question
      * @return {@code Optional.EMPTY} if answer couldn't be generated, Optional containing answer String otherwise.
      */
-    public static Optional<String> answer(ServerPlayer player, VillagerEntityMCA villager, String msg) {
+    public static CompletableFuture<Optional<String>> answerAsync(ServerPlayer player, VillagerEntityMCA villager, String msg) {
         // Get villager-specific strategy
         ChatAIStrategy strategy = computeStrategyIfAbsent(villager.getUUID());
 
-        // Update the current conversation
-        long time = villager.level().getGameTime();
-        currentConversations.put(player.getUUID(), new OpenConversation(villager.getUUID(), time));
-
         // Get answer
-        return strategy.answer(player, villager, msg);
+        return strategy.answerAsync(player, villager, msg);
+    }
+
+    /**
+     * Selects the exact villager a player is currently talking to.
+     */
+    public static void selectVillagerForConversation(ServerPlayer player, VillagerEntityMCA villager) {
+        currentConversations.put(player.getUUID(), new OpenConversation(villager.getUUID(), villager.level().getGameTime()));
     }
 
     /**
@@ -85,8 +90,9 @@ public class ChatAI {
     }
 
     /**
-     * Checks if the message contains the name of any specific villagers and that villager is nearby. First match.
-     * If not, checks if the player has a valid active conversation with a nearby villager.
+     * Resolves a nearby villager for chat. An explicit full name or nickname may switch the target;
+     * otherwise the current conversation UUID is preferred. A unique partial name is only used to
+     * bootstrap a conversation when no valid UUID target exists.
      *
      * @param player The player in the conversation
      * @param msg    The message
@@ -97,36 +103,44 @@ public class ChatAI {
         // Get nearby villagers
         List<VillagerEntityMCA> nearbyVillagers = WorldUtils.getCloseEntities(player.level(), player, VILLAGER_SEARCH_RANGE, VillagerEntityMCA.class);
 
-        // Find name in message
+        // An explicit full name or nickname can switch the current conversation.
         String normalizedMsg = normalizeString(msg);
-        for (VillagerEntityMCA villager : nearbyVillagers) {
+        Optional<VillagerEntityMCA> explicitlyMentionedVillager = findUniqueVillager(nearbyVillagers, villager -> {
             String nickname = villager.getNickname(playerUUID);
-
-            if (!nickname.isEmpty() &&
-                    containsWholeWord(normalizedMsg, normalizeString(nickname))) {
-                return Optional.of(villager);
-            }
-
-            String normalizedName = getName(villager);
-            String[] nameParts = normalizedName.split(" ");
-            for (String part : nameParts) {
-                if (containsWholeWord(normalizedMsg, part)) {
-                    return Optional.of(villager);
-                }
-            }
+            return (!nickname.isEmpty() && containsWholeWord(normalizedMsg, normalizeString(nickname)))
+                    || containsWholeWord(normalizedMsg, getName(villager));
+        });
+        if (explicitlyMentionedVillager.isPresent()) {
+            return explicitlyMentionedVillager;
         }
 
-        // Otherwise get current open conversation of player
+        // Prefer the already-selected villager by UUID. This is set by direct villager interaction
+        // and refreshed whenever a ChatAI request starts.
         OpenConversation conv = currentConversations.getOrDefault(playerUUID, new OpenConversation(playerUUID, 0L));
-
-        // Find first nearby villager matching the UUID of the conversation
         Optional<VillagerEntityMCA> optionalVillager = nearbyVillagers.stream().filter(v -> conv.villagerUUID.equals(v.getUUID())).findFirst();
-        // Return if found
         if (optionalVillager.isPresent() && isInConversationWith(player, optionalVillager.get())) {
             return optionalVillager;
         }
 
-        return Optional.empty();
+        // With no selected villager, a unique partial name can bootstrap a conversation. If a
+        // message happens to contain parts of multiple nearby names, do not guess based on entity
+        // iteration order.
+        return findUniqueVillager(nearbyVillagers, villager -> Arrays.stream(getName(villager).split(" "))
+                .anyMatch(part -> containsWholeWord(normalizedMsg, part)));
+    }
+
+    private static Optional<VillagerEntityMCA> findUniqueVillager(List<VillagerEntityMCA> villagers, Predicate<VillagerEntityMCA> predicate) {
+        VillagerEntityMCA match = null;
+        for (VillagerEntityMCA villager : villagers) {
+            if (!predicate.test(villager)) {
+                continue;
+            }
+            if (match != null && match != villager) {
+                return Optional.empty();
+            }
+            match = villager;
+        }
+        return Optional.ofNullable(match);
     }
 
     private static boolean containsWholeWord(String text, String word) {
