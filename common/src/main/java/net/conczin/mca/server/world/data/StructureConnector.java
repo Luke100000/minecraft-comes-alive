@@ -86,12 +86,9 @@ final class StructureConnector {
 
     /** Associates connector positions with exact cells on the already selected semantic floor. */
     static Map<BlockPos, BlockPos> associatedFloorCells(
-            Level world, Collection<BlockPos> connectors, Collection<FloorSurface.Cell> surfaceCells) {
-        if (connectors.isEmpty() || surfaceCells.isEmpty()) return Map.of();
+            Level world, Collection<BlockPos> connectors, FloorSurface surface) {
+        if (connectors.isEmpty() || surface.cells().isEmpty()) return Map.of();
 
-        Set<BlockPos> surfaceFeet = surfaceCells.stream()
-                .map(FloorSurface.Cell::feet)
-                .collect(java.util.stream.Collectors.toSet());
         LinkedHashMap<BlockPos, BlockPos> result = new LinkedHashMap<>();
         for (BlockPos rawConnector : connectors) {
             BlockState rawState = world.getBlockState(rawConnector);
@@ -101,9 +98,10 @@ final class StructureConnector {
 
             if (isVertical(world, connector)) {
                 for (BlockPos handoff : handoffs(connector)) {
-                    if (!matchesSurfaceHandoff(surfaceFeet, handoff)) continue;
+                    FloorSurface.Cell landing = surface.cellAtColumn(handoff.getX(), handoff.getZ()).orElse(null);
+                    if (landing == null) continue;
                     result.putIfAbsent(
-                            new BlockPos(connector.getX(), handoff.getY(), connector.getZ()), connector);
+                            new BlockPos(connector.getX(), landing.feet().getY(), connector.getZ()), connector);
                 }
                 continue;
             }
@@ -112,21 +110,13 @@ final class StructureConnector {
 
             for (Direction direction : HORIZONTAL) {
                 BlockPos side = connector.relative(direction);
-                for (int dy = -1; dy <= 1; dy++) {
-                    BlockPos landing = side.offset(0, dy, 0);
-                    if (!surfaceFeet.contains(landing)) continue;
-                    result.putIfAbsent(
-                            new BlockPos(connector.getX(), landing.getY(), connector.getZ()), connector);
-                }
+                FloorSurface.Cell landing = surface.cellAtColumn(side.getX(), side.getZ()).orElse(null);
+                if (landing == null) continue;
+                result.putIfAbsent(
+                        new BlockPos(connector.getX(), landing.feet().getY(), connector.getZ()), connector);
             }
         }
         return Map.copyOf(result);
-    }
-
-    private static boolean matchesSurfaceHandoff(Set<BlockPos> surfaceFeet, BlockPos handoff) {
-        return surfaceFeet.contains(handoff)
-                || surfaceFeet.contains(handoff.above())
-                || surfaceFeet.contains(handoff.below());
     }
 
     /** Returns the vertical connector column for an occupied connector or its immediate open top-exit cell. */

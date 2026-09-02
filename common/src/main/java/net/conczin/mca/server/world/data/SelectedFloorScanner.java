@@ -59,9 +59,9 @@ final class SelectedFloorScanner {
             }
         }
 
-        Map<BlockPos, BlockPos> associated = StructureConnector.associatedFloorCells(
-                world, connectors, cells.values());
-        FloorSurface surface = new FloorSurface(Set.copyOf(cells.values()), associated);
+        FloorSurface surface = new FloorSurface(Set.copyOf(cells.values()), Map.of());
+        surface = surface.withConnectors(StructureConnector.associatedFloorCells(
+                world, connectors, surface));
         return success(seed, surface);
     }
 

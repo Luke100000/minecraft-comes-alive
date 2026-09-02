@@ -41,6 +41,10 @@ record FloorSurface(Set<Cell> cells,
         return Optional.ofNullable(cellsByColumn.get(columnKey(x, z)));
     }
 
+    FloorSurface withConnectors(Map<BlockPos, BlockPos> connectors) {
+        return new FloorSurface(cells, connectors, cellsByColumn);
+    }
+
     static boolean canStep(double fromSurfaceY, double toSurfaceY) {
         return Math.abs(toSurfaceY - fromSurfaceY) <= MAX_STEP_HEIGHT;
     }
