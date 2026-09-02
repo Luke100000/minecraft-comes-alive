@@ -240,6 +240,24 @@ final class ClimbTraversal {
             return;
         }
 
+        if (isApproachingClimbableExitNode(context)) {
+            Vec3 pathAnchor = getClimbableAnchor(context.climbableNode().asBlockPos());
+            this.mob.getMoveControl().setWantedPosition(
+                    pathAnchor.x(),
+                    context.climbableNode().y,
+                    pathAnchor.z(),
+                    speedModifier
+            );
+            this.mob.setXxa(0.0F);
+            this.mob.setZza(0.0F);
+            this.mob.setDeltaMovement(
+                    horizontalVelocity(pathAnchor.x() - this.mob.getX()),
+                    controlledY,
+                    horizontalVelocity(pathAnchor.z() - this.mob.getZ())
+            );
+            return;
+        }
+
         BlockPos climbablePos = findAttachedClimbable(context.climbableNode().asBlockPos());
         Vec3 anchor = getClimbableAnchor(climbablePos);
         double targetY = context.targetNode().y;
@@ -264,7 +282,10 @@ final class ClimbTraversal {
         boolean atExitHeight = context.exitsClimbable() && isAtExitHeight(context, targetY);
         double targetX = anchor.x();
         double targetZ = anchor.z();
-        if (context.exitsClimbable() && (!context.pathTargetsClimbable() || atExitHeight)) {
+        if (context.exitsClimbable()
+                && (!context.pathTargetsClimbable()
+                || atExitHeight
+                || context.verticalDirection() < 0)) {
             targetX = context.targetNode().x + 0.5D;
             targetZ = context.targetNode().z + 0.5D;
         }
@@ -280,6 +301,10 @@ final class ClimbTraversal {
     }
 
     private double calculateVerticalVelocity(Context context) {
+        if (isApproachingClimbableExitNode(context)) {
+            return 0.0D;
+        }
+
         boolean continuingUpwardExit = !this.mob.onClimbable() && isContinuingUpwardExit(context);
         boolean continuingDownwardExit = isContinuingDownwardExit(context);
         if (!this.mob.onClimbable() && !continuingUpwardExit && !continuingDownwardExit) {
@@ -338,6 +363,22 @@ final class ClimbTraversal {
                 && isHorizontallyAlignedWithClimbable(context.climbableNode());
     }
 
+    private boolean isApproachingClimbableExitNode(Context context) {
+        return this.mob.onClimbable()
+                && context.pathTargetsClimbable()
+                && context.exitsClimbable()
+                && !isHorizontallyAlignedWithClimbable(context.climbableNode())
+                && !hasPassedClimbableTowardExit(context);
+    }
+
+    private boolean hasPassedClimbableTowardExit(Context context) {
+        double climbX = context.climbableNode().x + 0.5D;
+        double climbZ = context.climbableNode().z + 0.5D;
+        double exitDx = context.targetNode().x + 0.5D - climbX;
+        double exitDz = context.targetNode().z + 0.5D - climbZ;
+        return (this.mob.getX() - climbX) * exitDx + (this.mob.getZ() - climbZ) * exitDz > 0.0D;
+    }
+
     private boolean isAtExitHeight(Context context, double targetY) {
         return hasReachedHeight(targetY, context.verticalDirection(), EXIT_HEIGHT_TOLERANCE);
     }
@@ -360,7 +401,30 @@ final class ClimbTraversal {
             return hasReachedHeight(context.targetNode().y, context.verticalDirection(), tolerance);
         }
 
+        if (context.verticalDirection() < 0
+                && context.targetNode().y < context.climbableNode().y
+                && hasClearedClimbableSupportTowardExit(context)) {
+            return true;
+        }
+
         return hasCrossedHeight(context.targetNode().y, context.verticalDirection());
+    }
+
+    private boolean hasClearedClimbableSupportTowardExit(Context context) {
+        double climbX = context.climbableNode().x + 0.5D;
+        double climbZ = context.climbableNode().z + 0.5D;
+        double exitX = context.targetNode().x + 0.5D;
+        double exitZ = context.targetNode().z + 0.5D;
+        double dx = exitX - climbX;
+        double dz = exitZ - climbZ;
+        double distance = Math.sqrt(dx * dx + dz * dz);
+        if (distance <= 1.0E-6D) {
+            return false;
+        }
+
+        double progress = ((this.mob.getX() - climbX) * dx + (this.mob.getZ() - climbZ) * dz) / distance;
+        double halfWidth = this.mob.getBbWidth() / 2.0D;
+        return progress >= 0.5D + halfWidth;
     }
 
     private boolean hasCrossedHeight(double targetY, int verticalDirection) {
