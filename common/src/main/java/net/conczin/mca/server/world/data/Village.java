@@ -294,15 +294,21 @@ public class Village implements Iterable<Building> {
         return true;
     }
 
-    public void removeBuilding(int id) {
-        Building room = buildings.get(id);
-        if (room != null && isMainRoom(room)) return;
-        boolean roomRemoved = buildings.remove(id) != null;
-        boolean externalRemoved = externalBuildings.remove(id) != null;
-        if (!roomRemoved && !externalRemoved) return;
-        if (roomRemoved) refreshLogicalBuildings();
+    public boolean removeRoom(int roomId) {
+        Building room = buildings.get(roomId);
+        if (room == null || isMainRoom(room)) return false;
+        buildings.remove(roomId);
+        refreshLogicalBuildings();
         calculateDimensions();
         markDirty();
+        return true;
+    }
+
+    public boolean removeExternalBuilding(int buildingId) {
+        if (externalBuildings.remove(buildingId) == null) return false;
+        calculateDimensions();
+        markDirty();
+        return true;
     }
 
     public void removeStructure(int structureId) {

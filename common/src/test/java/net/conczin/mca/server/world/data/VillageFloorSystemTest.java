@@ -64,10 +64,34 @@ class VillageFloorSystemTest {
     void explicitRemovalRejectsCurrentMainRoom() {
         Village village = populatedVillage();
 
-        village.removeBuilding(1);
+        assertFalse(village.removeRoom(1));
 
         assertTrue(village.getBuildings().containsKey(1));
         assertEquals(1, village.getLogicalBuilding(10).orElseThrow().mainRoomId());
+    }
+
+    @Test
+    void explicitRoomRemovalReturnsFalseForUnknownRoom() {
+        Village village = populatedVillage();
+
+        assertFalse(village.removeRoom(999));
+        assertEquals(3, village.getBuildings().size());
+    }
+
+    @Test
+    void explicitExternalRemovalDoesNotTouchFunctionalRooms() {
+        Village village = populatedVillage();
+        ExternalBuilding external = new ExternalBuilding(new BlockPos(20, 64, 20));
+        external.setId(50);
+        external.setType("town_center");
+        village.registerExternalBuilding(external);
+
+        assertTrue(village.removeExternalBuilding(50));
+
+        assertTrue(village.getBuilding(50).isEmpty());
+        assertTrue(village.getBuilding(1).isPresent());
+        assertTrue(village.getBuilding(2).isPresent());
+        assertFalse(village.removeExternalBuilding(50));
     }
 
     @Test
@@ -236,7 +260,7 @@ class VillageFloorSystemTest {
         village.registerRoom(upperRoom);
         village.refreshLogicalBuildings();
 
-        village.removeBuilding(101);
+        assertTrue(village.removeRoom(101));
 
         assertTrue(village.getBuilding(101).isEmpty());
         assertTrue(structure.getFloor(1).isPresent());
@@ -258,7 +282,7 @@ class VillageFloorSystemTest {
         village.registerRoom(middleRoom);
         village.refreshLogicalBuildings();
 
-        village.removeBuilding(101);
+        assertTrue(village.removeRoom(101));
 
         assertTrue(village.getBuilding(101).isEmpty());
         assertTrue(structure.getFloor(1).isPresent());

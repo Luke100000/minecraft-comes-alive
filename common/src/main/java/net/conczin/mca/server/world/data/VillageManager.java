@@ -787,8 +787,8 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         if (room == null) return village.getRoomScanPlan(world, pos).mode() == Village.RoomScanMode.ADD_ROOM
                 ? BuildingEditResult.NO_ROOM : BuildingEditResult.NO_BUILDING;
         if (village.isMainRoom(room)) return BuildingEditResult.MAIN_ROOM;
-        village.removeBuilding(room.getId());
-        return BuildingEditResult.SUCCESS;
+        return village.removeRoom(room.getId())
+                ? BuildingEditResult.SUCCESS : BuildingEditResult.NO_ROOM;
     }
 
     public BuildingEditResult removeFloor(BlockPos pos) {
@@ -807,8 +807,8 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         if (village == null) return BuildingEditResult.NO_BUILDING;
         Building target = village.getBuildingAt(pos).orElse(null);
         if (target instanceof ExternalBuilding) {
-            village.removeBuilding(target.getId());
-            return BuildingEditResult.SUCCESS;
+            return village.removeExternalBuilding(target.getId())
+                    ? BuildingEditResult.SUCCESS : BuildingEditResult.NO_BUILDING;
         }
         if (target != null && target.isFunctionalRoom() && village.getStructure(target.getStructureId()).isEmpty()) {
             int orphanedStructureId = target.getStructureId();
@@ -816,8 +816,8 @@ public class VillageManager extends SavedData implements Iterable<Village> {
                     .filter(building -> building.getStructureId() == orphanedStructureId)
                     .map(Building::getId)
                     .toList();
-            if (orphanedRoomIds.isEmpty()) village.removeBuilding(target.getId());
-            else orphanedRoomIds.forEach(village::removeBuilding);
+            if (orphanedRoomIds.isEmpty()) village.removeRoom(target.getId());
+            else orphanedRoomIds.forEach(village::removeRoom);
             setDirty();
             return BuildingEditResult.SUCCESS;
         }
@@ -842,11 +842,6 @@ public class VillageManager extends SavedData implements Iterable<Village> {
 
     public void removeStructure(Village village, int structureId) {
         if (village == null) return;
-        List<Integer> roomIdsToRemove = village.getBuildings().values().stream()
-                .filter(b -> b.getStructureId() == structureId)
-                .map(Building::getId)
-                .toList();
-        roomIdsToRemove.forEach(village::removeBuilding);
         village.removeStructure(structureId);
         if (village.getBuildings().isEmpty() && village.getExternalBuildingMap().isEmpty()
                 && village.getStructures().isEmpty()) removeVillage(village.getId());
