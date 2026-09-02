@@ -1,5 +1,6 @@
 package net.conczin.mca.server.world.data;
 
+import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import net.conczin.mca.Config;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.Memories;
@@ -177,11 +178,10 @@ public class Village implements Iterable<Building> {
 
     public List<String> getResidents(int building) {
         return getBuilding(building).map(value -> {
-            Set<Long> buildingPositions = value.getBlockPosStream()
-                    .map(BlockPos::asLong)
-                    .collect(Collectors.toSet());
+            LongOpenHashSet buildingPositions = new LongOpenHashSet(value.getBlockCount());
+            value.getBlockPosStream().forEach(pos -> buildingPositions.add(pos.asLong()));
             return residentHomes.entrySet().stream()
-                    .filter(entry -> buildingPositions.contains(entry.getValue()))
+                    .filter(entry -> buildingPositions.contains(entry.getValue().longValue()))
                     .map(entry -> residentNames.getOrDefault(entry.getKey(), "Unknown"))
                     .collect(Collectors.toList());
         }).orElseGet(List::of);
