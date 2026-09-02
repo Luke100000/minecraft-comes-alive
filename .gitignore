@@ -21,7 +21,6 @@ build
 # other
 eclipse
 run
-/neoforge/run-gametest/
 backup
 
 # Files from Forge MDK
