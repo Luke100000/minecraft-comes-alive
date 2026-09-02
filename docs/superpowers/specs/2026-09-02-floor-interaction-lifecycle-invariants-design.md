@@ -1,4 +1,4 @@
-# Floor Interaction, Lifecycle, and Structure Invariants Design
+# Floor Interaction, Lifecycle, and Building Identity Design
 
 ## Scope
 
@@ -6,8 +6,9 @@ This design implements the selected follow-up priorities from the floor-system r
 
 1. make Floor interaction semantics explicit and fix boundary handoff without weakening exact
    physical membership;
-2. finish the `Structure` model so one runtime `Structure` means one independently rescannable
-   physical storey/section;
+2. preserve the existing player-facing building identity model: Add Building creates a separate
+   building, while Add Floor/Add Basement extend an existing building even when another building
+   could occupy the same X/Z at a different Y;
 3. keep Room, Floor, external-site, and logical-building deletion as explicit independent
    mutations;
 4. turn the regression suite into an invariant matrix that covers complete Floor lifecycles, not
@@ -36,56 +37,82 @@ The following sources were checked while preparing this design:
   therefore walkability/landing decisions should derive from Minecraft collision semantics rather
   than block-name special cases.
 
-## 1. Canonical model
+## 1. Canonical player model
 
-The runtime model becomes:
+The player-facing model remains:
 
 ```text
 LogicalBuilding
-  -> one or more Structures
-       -> exactly one StructureFloor each
-            -> zero or more Rooms
+  -> one or more Floors
+       -> zero or more Rooms
 ```
 
-The meanings are deliberately narrow:
+`Structure` remains an internal scan/persistence ownership detail beneath that model. This design
+does **not** impose a new one-Floor-per-Structure or multi-Floor-per-Structure invariant. Existing
+saves and the current single-selected-Floor scanner remain valid without a save-format migration.
+
+The user-visible meanings are deliberately narrow:
 
 - `LogicalBuilding` owns identity shared by a whole building, the canonical Ground Floor, Main
   Room, and inheritance state.
-- `Structure` is one independently discovered/rescannable physical storey or detached physical
-  section. A normal runtime Structure contains exactly one `StructureFloor`.
-- `StructureFloor` is the persisted geometry and floor number for that Structure.
+- `StructureFloor` is persisted geometry and the logical floor number used by that building.
 - `Room` is functional topology on that persisted Floor and can be added/removed without changing
   the Floor itself.
+- `Structure` is an internal physical scan/persistence owner used to keep floor geometry and Room
+  references stable. Its exact floor cardinality is not a player concept and is not changed here.
 
-New scans already naturally produce this shape, so the change removes a residual compatibility
-model rather than introducing a new scanning concept.
+### 1.1 Explicit player intent defines building identity
 
-### 1.1 Compatibility boundary
+Physical stacking must never silently decide semantic building identity. The Blueprint actions are
+the contract:
 
-Old branch saves may contain a single `Structure` with multiple `StructureFloor`s. They remain
-loadable, but are normalized during migration before entering the normal runtime model.
+```text
+Add Building
+  -> create a new LogicalBuilding
+  -> create its own Main Room/inheritance scope
 
-The current persisted `buildingDataVersion` is bumped. Loading the previous version performs a
-deterministic split:
+Add Room
+  -> add another Room to the current Floor/building
+  -> contributes to the Main Room by default
 
-1. group each multi-floor Structure's floors by their existing floor record;
-2. retain the original Structure ID for the canonical Ground Floor when that Structure owns it;
-   otherwise retain it for the first floor by anchor-Y/id order;
-3. create one new Structure ID for every other floor;
-4. each normalized Structure receives one Floor, normalized to local floor ID `0`, while preserving
-   anchor, ceiling, logical floor number, exact region, and connector cells;
-5. rewrite Room `structureId`/`floorId` references to the normalized owner;
-6. rewrite `LogicalBuilding.groundStructureId`/`groundFloorId` if necessary while preserving the
-   logical-building ID and Main Room ID;
-7. recompute Structure bounds from the single Floor;
-8. validate that every Room references an existing Structure/Floor and every LogicalBuilding has a
-   valid Ground Floor.
+Add Floor / Add Basement
+  -> scan exactly one selected physical storey
+  -> attach that Floor to the explicitly selected existing LogicalBuilding
+  -> the first/new Rooms on that Floor contribute to the same Main Room by default
+```
 
-ID allocation during migration must never collide with Rooms, Structures, or external Buildings.
-After villages load, `VillageManager.lastBuildingId` is clamped to at least one greater than every
-persisted/generated building-domain ID. The saved counter remains a lower bound, not an assumption.
+This supports both common and mixed-use constructions without extra prompts:
 
-No compatibility-only multi-floor Structure may be saved back in the new format.
+```text
+Inn
+  Ground: Reception [Main], Kitchen
+  Floor 1: Guest Rooms
+  Floor 2: Guest Rooms
+
+Restaurant directly above the Inn
+  created with Add Building, therefore a separate LogicalBuilding
+  Dining [Main], Kitchen, Cashier
+```
+
+The Inn's upstairs Rooms inherit/contribute across floors because inheritance is scoped to the
+LogicalBuilding, not to a Floor or Structure. The Restaurant does not inherit from the Inn even if
+its geometry is directly stacked above it.
+
+### 1.2 Inheritance is orthogonal to geometry
+
+Rooms contribute to their LogicalBuilding's Main Room according to the existing
+`contributesToMain`/building inheritance rules. A single Floor may contain both inherited and
+independent Rooms. No Floor-level inheritance state is introduced.
+
+This means a multi-floor Inn works by default, while an unusual Room can opt out without splitting
+the physical floor or changing building geometry.
+
+### 1.3 Compatibility boundary
+
+No building-data version bump or Structure migration is part of this work. Existing released and
+branch save compatibility stays exactly at the current boundary. The scanner continues to discover
+one selected physical Floor at a time; this design changes interaction/lifecycle rules, not save
+shape.
 
 ## 2. Physical membership versus interaction ownership
 
@@ -163,7 +190,7 @@ The desired domain operations are conceptually:
 
 ```text
 removeRoom(roomId)
-removeFloor(structureId)            // one Structure == one Floor after normalization
+removeFloor(structureId, floorId)
 removeExternalBuilding(id)
 removeLogicalBuilding(buildingId)
 ```
@@ -185,14 +212,10 @@ must not remain an ambiguous method that sometimes means Room and sometimes exte
 - Ground Floor is never removable;
 - an upper Floor is removable only when no higher positive Floor exists in the LogicalBuilding;
 - a basement is removable only when no lower/more-negative Floor exists;
-- removing a Floor removes its now-empty one-floor Structure;
+- removing a Floor removes only that persisted Floor; an internal Structure may disappear only if
+  it becomes empty as an implementation detail;
 - after removing the outer Floor, the next inward empty Floor becomes eligible;
 - no Room mutation invokes Floor removal implicitly.
-
-With the one-Floor Structure invariant, `Structure.removeFloor(...)` is no longer normal runtime
-behavior. Floor deletion becomes Structure deletion after eligibility validation. Compatibility
-code may temporarily need helpers while old saves are normalized, but that path must not leak into
-normal mutations.
 
 ### 3.3 Logical-building removal
 
@@ -217,18 +240,19 @@ Add or retain focused tests for:
 | Area | Required invariant |
 | --- | --- |
 | Physical band | `anchorY` is inclusive and `ceilingY` is exclusive. |
-| Structure shape | every new-format runtime Structure has exactly one Floor. |
-| References | every Room references an existing Structure and its sole Floor. |
+| Building intent | Add Building creates a separate LogicalBuilding even when stacked above/below another building. |
+| Floor intent | Add Floor/Add Basement extends the selected LogicalBuilding instead of creating a new inheritance scope. |
+| References | every Room references an existing persisted Floor/Structure owner. |
 | Ground Floor | every LogicalBuilding has exactly one valid canonical Ground Floor. |
 | Numbering | Floor numbers are stable around the canonical Ground Floor and ordered by height bands. |
+| Multi-floor inheritance | contributing Rooms on upper/lower Floors participate in the same Main Room classification. |
+| Stacked independence | a separate stacked building has its own Main Room and does not contribute POIs across the building boundary. |
 | Room removal | removing the last Room leaves the Floor/Structure intact. |
 | Upper removal | only the highest empty positive Floor is removable. |
 | Basement removal | only the lowest empty negative Floor is removable. |
 | Ground removal | Ground Floor is never removable. |
 | Cascade | only explicit logical-building removal removes all storeys. |
-| Migration | previous multi-floor Structures normalize to one-Floor Structures without losing Room identity, floor geometry, connector geometry, Main Room, or Ground Floor. |
-| ID safety | migration cannot cause `lastBuildingId` reuse/collision. |
-| Save round-trip | normalized data reloads with the same topology and no compatibility-only multi-floor Structure. |
+| Save round-trip | building identity, Main Room, inheritance, Floors, Rooms, and removal eligibility survive reload. |
 
 ### 4.2 Interaction unit tests
 
@@ -258,6 +282,9 @@ Use real GameTests for behavior requiring actual blocks/collision:
 - door boundary ownership remains on the correct interior Room;
 - slabs/stairs/partial-height walkable cells obey Minecraft collision semantics;
 - irregular/cave Floors keep exact footprint ownership;
+- a multi-floor Inn keeps one Main Room/inheritance scope across Ground/upper/basement Rooms;
+- a Restaurant created with Add Building directly above that Inn remains a separate logical
+  building and inheritance scope;
 - full lifecycle: add upper floor(s), add basement(s), remove a Room, verify Floor persists, verify
   inner Remove Floor is unavailable, peel outer Floors in order, and confirm the Ground Floor
   survives;
@@ -298,16 +325,15 @@ Implementation follows TDD and keeps each stage independently green:
 1. lock the exact-ceiling Basement regression and candidate-priority rules with failing tests;
 2. introduce explicit interaction kinds and the one-block landing-handoff rule without changing
    physical membership;
-3. add the complete Room/Floor removal lifecycle matrix and consolidate mutation APIs;
-4. add new-format single-Floor Structure invariant tests;
-5. implement previous-version migration/splitting and ID-counter repair;
-6. update callers to rely on one-Floor Structures and delete normal-runtime multi-floor mutation
-   helpers;
-7. update diagnostics;
-8. run focused tests, all common tests, NeoForge compilation, and the applicable GameTest suite.
+3. add the complete Room/Floor removal lifecycle matrix and consolidate mutation APIs without
+   changing save shape;
+4. add building-intent/inheritance coverage for multi-floor Inns and independently stacked
+   buildings;
+5. update diagnostics;
+6. run focused tests, all common tests, NeoForge compilation, and the applicable GameTest suite.
 
 The work should be committed in coherent slices rather than one catch-all commit: interaction
-contract, explicit mutations/tests, Structure normalization/migration, then diagnostics/integration
+contract, explicit mutations/tests, then building-identity/inheritance and diagnostics/integration
 coverage.
 
 ## 7. Non-goals
@@ -317,6 +343,9 @@ coverage.
 - no Blueprint visual redesign;
 - no generic service/repository/event-sourcing architecture;
 - no inclusive `ceilingY` physical membership workaround;
+- no new one-Floor-per-Structure or multi-Floor-per-Structure invariant;
+- no building-data version bump or Structure migration;
+- no inference that vertically stacked geometry must belong to one building;
 - no deletion of released-world compatibility;
 - no speculative generalized spatial-query framework.
 
@@ -327,12 +356,14 @@ The work is complete only when all of the following are true:
 1. the known Basement exact-ceiling position resolves to the intended persisted Floor through an
    explicit interaction handoff while `physicalFloorAt` remains half-open;
 2. physical/connector owners deterministically outrank generic landing handoffs;
-3. normal runtime data contains exactly one Floor per Structure;
-4. previous branch multi-floor saves load, normalize, and save in the new one-Floor format without
-   losing Room/LogicalBuilding identity or geometry;
-5. Remove Room never removes a Floor;
-6. Remove Floor peels only the empty outermost upper/basement storey and never Ground Floor;
-7. explicit whole-building removal is the only all-storey cascade;
-8. invariant unit tests and Minecraft GameTests cover the matrix above;
-9. all existing floor/Room/Blueprint regression tests remain green;
-10. unrelated dirty navigation/UI work in the current worktree is preserved.
+3. Add Floor/Add Basement preserves the selected LogicalBuilding/Main Room/inheritance scope;
+4. Add Building can create an independent logical building directly above/below another one;
+5. multi-floor inherited Rooms contribute across Floors while independent stacked buildings never
+   contribute across their logical-building boundary;
+6. Remove Room never removes a Floor;
+7. Remove Floor peels only the empty outermost upper/basement storey and never Ground Floor;
+8. explicit whole-building removal is the only all-storey cascade;
+9. no save-format migration or Structure-cardinality rewrite is introduced;
+10. invariant unit tests and Minecraft GameTests cover the matrix above;
+11. all existing floor/Room/Blueprint regression tests remain green;
+12. unrelated dirty navigation work in the current worktree is preserved.
