@@ -1,5 +1,7 @@
 package net.conczin.mca.mixin;
 
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.registry.ProfessionsMCA;
 import net.minecraft.world.damagesource.DamageSource;
@@ -9,21 +11,25 @@ import net.minecraft.world.entity.projectile.AbstractArrow;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Redirect;
 
 @Mixin(AbstractArrow.class)
 abstract class MixinAbstractArrow {
-    @Redirect(
+    @WrapOperation(
             method = "onHitEntity",
             at = @At(
                     value = "INVOKE",
                     target = "Lnet/minecraft/world/entity/Entity;hurt(Lnet/minecraft/world/damagesource/DamageSource;F)Z"
             )
     )
-    private boolean mca$allowMcaArcherArrowsThroughHurtCooldown(Entity target, DamageSource source, float damage) {
+    private boolean mca$allowMcaArcherArrowsThroughHurtCooldown(
+            Entity target,
+            DamageSource source,
+            float damage,
+            Operation<Boolean> original
+    ) {
         VillagerEntityMCA archer = mca$getMcaArcherOwner();
         if (!(target instanceof LivingEntity livingTarget) || archer == null) {
-            return target.hurt(source, damage);
+            return original.call(target, source, damage);
         }
 
         if (target.level().isClientSide()) {
@@ -31,7 +37,7 @@ abstract class MixinAbstractArrow {
         }
 
         livingTarget.invulnerableTime = 0;
-        boolean hurt = target.hurt(source, damage);
+        boolean hurt = original.call(target, source, damage);
         if (hurt) {
             archer.onRangedAttackLanded(target);
         }

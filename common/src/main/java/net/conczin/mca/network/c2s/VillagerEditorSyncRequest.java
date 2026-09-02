@@ -13,7 +13,6 @@ import net.conczin.mca.resources.data.skin.LayeredHair;
 import net.conczin.mca.server.world.data.FamilyTree;
 import net.conczin.mca.server.world.data.FamilyTreeNode;
 import net.conczin.mca.server.world.data.PlayerSaveData;
-import net.conczin.mca.util.NbtHelper;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -102,29 +101,9 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
     public static CompoundTag createEditorPatch(CompoundTag sourceNbt) {
         CompoundTag patch = new CompoundTag();
         for (String key : sourceNbt.getAllKeys()) {
-            if (isAllowedTopLevelKey(key)) {
+            if (isAllowedTopLevelKey(key) || isAllowedMcaKey(key)) {
                 patch.put(key, Objects.requireNonNull(sourceNbt.get(key)).copy());
             }
-        }
-
-        CompoundTag mcaPatch = new CompoundTag();
-        for (String key : sourceNbt.getAllKeys()) {
-            if (isAllowedMcaKey(key)) {
-                mcaPatch.put(key, Objects.requireNonNull(sourceNbt.get(key)).copy());
-            }
-        }
-
-        if (sourceNbt.contains("MCAData", 10)) {
-            CompoundTag sourceMca = sourceNbt.getCompound("MCAData");
-            for (String key : sourceMca.getAllKeys()) {
-                if (isAllowedMcaKey(key)) {
-                    mcaPatch.put(key, Objects.requireNonNull(sourceMca.get(key)).copy());
-                }
-            }
-        }
-
-        if (!mcaPatch.isEmpty()) {
-            patch.put("MCAData", mcaPatch);
         }
         return patch;
     }
@@ -132,28 +111,8 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
     public static CompoundTag mergeAllowedEditorPatch(CompoundTag serverData, CompoundTag patch) {
         CompoundTag merged = serverData.copy();
         for (String key : patch.getAllKeys()) {
-            if (isAllowedTopLevelKey(key)) {
+            if (isAllowedTopLevelKey(key) || isAllowedMcaKey(key)) {
                 merged.put(key, Objects.requireNonNull(patch.get(key)).copy());
-            }
-        }
-
-        if (patch.contains("MCAData", 10)) {
-            CompoundTag patchMca = patch.getCompound("MCAData");
-            CompoundTag mergedMca = NbtHelper.getOrCreateCompound(merged, "MCAData");
-            for (String key : patchMca.getAllKeys()) {
-                if (isAllowedMcaKey(key)) {
-                    mergedMca.put(key, Objects.requireNonNull(patchMca.get(key)).copy());
-                }
-            }
-        }
-
-        // Defensive preservation:
-        String[] preservedKeys = {"Offers", "Gossips", "Inventory", "VillagerXp", "UUID", "UUIDMost", "UUIDLeast"};
-        for (String key : preservedKeys) {
-            if (serverData.contains(key)) {
-                merged.put(key, Objects.requireNonNull(serverData.get(key)).copy());
-            } else {
-                merged.remove(key);
             }
         }
         return merged;
@@ -168,7 +127,14 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
             case "profession" -> {
                 if (entity instanceof VillagerEntityMCA villager) {
                     VillagerProfession profession = BuiltInRegistries.VILLAGER_PROFESSION.get(ResourceLocation.parse(data.getString("profession")));
-                    villager.setProfession(profession);
+                    if (profession != null) {
+                        CompoundTag merged = applyVillagerPatch(player, entity, data.copy());
+                        villager.setProfession(profession);
+                        if (merged != null) {
+                            CompoundTag fresh = GetVillagerRequest.getVillagerData(entity);
+                            Network.sendToPlayer(new GetVillagerResponse(fresh != null ? fresh : merged), player);
+                        }
+                    }
                 }
             }
         }
@@ -191,40 +157,48 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
             return;
         }
 
-        if (entity instanceof VillagerLike<?> villagerLike) {
-            CompoundTag serverData = GetVillagerRequest.getVillagerData(entity);
-            if (serverData == null) {
-                return;
-            }
-
-            CompoundTag merged = mergeAllowedEditorPatch(serverData, patch);
-            sanitizeVisualIdentifiers(entity, merged);
-
-            villagerLike.syncFromEditor(merged);
-            entity.refreshDimensions();
-            syncFamilyTree(player, entity, merged);
-
-            if (entity instanceof VillagerEntityMCA villager) {
-                villager.getResidency().getHomeVillage().ifPresent(b -> b.updateResident(villager));
-            }
-
+        CompoundTag merged = applyVillagerPatch(player, entity, patch);
+        if (merged != null) {
             CompoundTag fresh = GetVillagerRequest.getVillagerData(entity);
             Network.sendToPlayer(new GetVillagerResponse(fresh != null ? fresh : merged), player);
         }
     }
 
+    private CompoundTag applyVillagerPatch(ServerPlayer player, Entity entity, CompoundTag patch) {
+        if (!(entity instanceof VillagerLike<?> villagerLike)) {
+            return null;
+        }
+
+        CompoundTag serverData = GetVillagerRequest.getVillagerData(entity);
+        if (serverData == null) {
+            return null;
+        }
+
+        CompoundTag merged = mergeAllowedEditorPatch(serverData, patch);
+        sanitizeVisualIdentifiers(entity, merged);
+
+        villagerLike.syncFromEditor(merged);
+        entity.refreshDimensions();
+        syncFamilyTree(player, entity, merged);
+
+        if (entity instanceof VillagerEntityMCA villager) {
+            villager.getResidency().getHomeVillage().ifPresent(b -> b.updateResident(villager));
+        }
+
+        return merged;
+    }
+
     private void sanitizeVisualIdentifiers(Entity entity, CompoundTag villagerData) {
-        CompoundTag mcaData = normalizeVisualData(villagerData);
-        migrateLegacyHairStyle(mcaData);
+        migrateLegacyHairStyle(villagerData);
         CompoundTag fallbackData = GetVillagerRequest.getVillagerData(entity);
-        CompoundTag fallbackMcaData = fallbackData == null ? new CompoundTag() : getMcaData(fallbackData);
+        CompoundTag fallback = fallbackData == null ? new CompoundTag() : fallbackData;
         Gender gender = getGender(villagerData);
-        clearInvalidIdentifier(mcaData, fallbackMcaData, "Skin", identifier -> SkinVisualIds.isBodySkin(identifier, gender));
-        clearInvalidIdentifier(mcaData, fallbackMcaData, "Clothes", identifier -> SkinVisualIds.isClothing(identifier, gender));
-        clearInvalidIdentifier(mcaData, fallbackMcaData, "Hair", identifier -> SkinVisualIds.isHairStyle(identifier, gender));
-        clearInvalidIdentifier(mcaData, fallbackMcaData, "HairStyle", identifier -> SkinVisualIds.isHairStyle(identifier, gender));
+        clearInvalidIdentifier(villagerData, fallback, "Skin", identifier -> SkinVisualIds.isBodySkin(identifier, gender));
+        clearInvalidIdentifier(villagerData, fallback, "Clothes", identifier -> SkinVisualIds.isClothing(identifier, gender));
+        clearInvalidIdentifier(villagerData, fallback, "Hair", identifier -> SkinVisualIds.isHairStyle(identifier, gender));
+        clearInvalidIdentifier(villagerData, fallback, "HairStyle", identifier -> SkinVisualIds.isHairStyle(identifier, gender));
         for (LayeredHair.Category category : LayeredHair.Category.values()) {
-            clearInvalidIdentifier(mcaData, fallbackMcaData, category.getDataKey(), identifier -> SkinVisualIds.isHairLayer(identifier, category, gender));
+            clearInvalidIdentifier(villagerData, fallback, category.getDataKey(), identifier -> SkinVisualIds.isHairLayer(identifier, category, gender));
         }
     }
 
@@ -237,24 +211,6 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
         }
     }
 
-    private CompoundTag normalizeVisualData(CompoundTag villagerData) {
-        CompoundTag source = getOrCreateMcaData(villagerData);
-        CompoundTag sanitized = new CompoundTag();
-        for (String key : MCA_VISUAL_KEYS) {
-            if (!source.contains(key) && villagerData.contains(key)) {
-                source.put(key, Objects.requireNonNull(villagerData.get(key)).copy());
-            }
-            villagerData.remove(key);
-        }
-        for (String key : source.getAllKeys()) {
-            if (isAllowedMcaKey(key)) {
-                sanitized.put(key, Objects.requireNonNull(source.get(key)).copy());
-            }
-        }
-        villagerData.put(VillagerEntityMCA.MCA_DATA_KEY, sanitized);
-        return sanitized;
-    }
-
     private void clearInvalidIdentifier(CompoundTag mcaData, CompoundTag fallbackMcaData, String key, Predicate<String> validator) {
         String identifier = mcaData.getString(key);
         if (!MCA.isBlankString(identifier) && !validator.test(identifier)) {
@@ -265,31 +221,10 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
     }
 
     private Gender getGender(CompoundTag villagerData) {
-        CompoundTag mcaData = getMcaData(villagerData);
-        if (mcaData.contains("Gender")) {
-            return Gender.byId(mcaData.getInt("Gender"));
-        }
         if (villagerData.contains("Gender")) {
             return Gender.byId(villagerData.getInt("Gender"));
         }
         return Gender.UNASSIGNED;
-    }
-
-    private CompoundTag getMcaData(CompoundTag villagerData) {
-        return NbtHelper.getCompoundOrSelf(villagerData, VillagerEntityMCA.MCA_DATA_KEY);
-    }
-
-    private CompoundTag getOrCreateMcaData(CompoundTag villagerData) {
-        boolean hadMcaData = villagerData.contains(VillagerEntityMCA.MCA_DATA_KEY, 10);
-        CompoundTag mcaData = NbtHelper.getOrCreateCompound(villagerData, VillagerEntityMCA.MCA_DATA_KEY);
-        if (!hadMcaData) {
-            for (String key : MCA_VISUAL_KEYS) {
-                if (villagerData.contains(key)) {
-                    mcaData.put(key, Objects.requireNonNull(villagerData.get(key)).copy());
-                }
-            }
-        }
-        return mcaData;
     }
 
     private Optional<FamilyTreeNode> getFamilyNode(ServerPlayer player, FamilyTree tree, String name, Gender gender) {

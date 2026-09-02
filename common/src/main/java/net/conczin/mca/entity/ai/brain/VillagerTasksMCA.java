@@ -11,12 +11,14 @@ import net.conczin.mca.entity.ai.ActivitiesMCA;
 import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
 import net.conczin.mca.entity.ai.SchedulesMCA;
 import net.conczin.mca.entity.ai.SensorsMCA;
+import net.conczin.mca.entity.ai.RangedWeaponHelper;
 import net.conczin.mca.entity.ai.brain.sensor.GuardEnemiesSensor;
 import net.conczin.mca.entity.ai.brain.tasks.*;
 import net.conczin.mca.entity.ai.brain.tasks.chore.ChoppingTask;
 import net.conczin.mca.entity.ai.brain.tasks.chore.FishingTask;
 import net.conczin.mca.entity.ai.brain.tasks.chore.HarvestingTask;
 import net.conczin.mca.entity.ai.brain.tasks.chore.HuntingTask;
+import net.conczin.mca.entity.ai.navigation.BedApproachTarget;
 import net.conczin.mca.entity.ai.relationship.AgeState;
 import net.conczin.mca.registry.EntitiesMCA;
 import net.conczin.mca.registry.ProfessionsMCA;
@@ -211,7 +213,7 @@ public class VillagerTasksMCA {
     public static ImmutableList<Pair<Integer, ? extends BehaviorControl<? super VillagerEntityMCA>>> getImportantCorePackage(float speedModifier) {
         return ImmutableList.of(
                 Pair.of(0, new Swim(0.8F)),
-                Config.getInstance().useSmarterDoorAI ? Pair.of(0, new SmarterOpenDoorsTask()) : Pair.of(0, InteractWithDoor.create()),
+                Pair.of(0, new SmarterOpenDoorsTask()),
                 Pair.of(0, new LookAtTargetSink(45, 90)),
                 Pair.of(0, WakeUp.create()),
                 Pair.of(0, new DeliverMessageTask()),
@@ -219,7 +221,7 @@ public class VillagerTasksMCA {
                 Pair.of(3, new InteractTask(speedModifier)),
                 Pair.of(10, new ExtendedFindPointOfInterestTask(registryEntry -> registryEntry.is(PoiTypes.HOME), MemoryModuleType.HOME, false, Optional.of((byte) 14), (villager) -> {
                     // update villagers home/bed position
-                    villager.getResidency().seekHome();
+                    villager.getResidency().seekHomeAfterClaim();
                 }, (entity, pos) -> {
                     // verify that this bed is not blocked
                     VillageManager manager = VillageManager.get((ServerLevel) entity.level());
@@ -241,7 +243,7 @@ public class VillagerTasksMCA {
                 Pair.of(5, GoToWantedItem.create(speedModifier, false, 4)),
                 Pair.of(10, new ExtendedFindPointOfInterestTask(registryEntry -> registryEntry.is(PoiTypes.HOME), MemoryModuleType.HOME, false, Optional.of((byte) 14), (villager) -> {
                     // update villagers home/bed position
-                    villager.getResidency().seekHome();
+                    villager.getResidency().seekHomeAfterClaim();
                 }, (entity, pos) -> {
                     // verify that this bed is not blocked
                     VillageManager manager = VillageManager.get((ServerLevel) entity.level());
@@ -326,7 +328,7 @@ public class VillagerTasksMCA {
                         new ExtendedMeleeAttackTask(20, 2.0F),
                         (VillagerEntityMCA v) -> !VillagerTasksMCA.isHoldingRangedWeapon(v)
                 )),
-                Pair.of(9, new CrossbowAttack<VillagerEntityMCA, VillagerEntityMCA>())
+                Pair.of(9, new ExtendedCrossbowAttackTask<VillagerEntityMCA, VillagerEntityMCA>())
         );
     }
 
@@ -388,7 +390,8 @@ public class VillagerTasksMCA {
     }
 
     private static boolean shouldRespondToGuardEnemy(VillagerEntityMCA villager, LivingEntity target) {
-        return GuardEnemiesSensor.isGuardEnemy(target, villager)
+        return shouldKeepAttackTarget(villager, target)
+               && GuardEnemiesSensor.isGuardEnemy(target, villager)
                && shouldRespondToAttackTarget(villager, target);
     }
 
@@ -421,7 +424,7 @@ public class VillagerTasksMCA {
     }
 
     private static boolean isHoldingRangedWeapon(VillagerEntityMCA villager) {
-        return villager.isHolding(Items.BOW) || villager.isHolding(Items.CROSSBOW);
+        return RangedWeaponHelper.isHoldingSupportedWeapon(villager);
     }
 
     public static boolean isInDanger(VillagerEntityMCA villager) {
@@ -503,7 +506,7 @@ public class VillagerTasksMCA {
     public static ImmutableList<Pair<Integer, ? extends BehaviorControl<? super VillagerEntityMCA>>> getRestPackage(float speed) {
         return ImmutableList.of(
                 // try to reach the bed, and if not a set home, forget if out of range
-                Pair.of(2, ExtendedWalkTowardsTask.create(MemoryModuleType.HOME, speed, 1, Config.getInstance().getVillagerPathfindingDistance(), 1200, (v) -> {
+                Pair.of(2, ExtendedWalkTowardsTask.createWithFinalTarget(MemoryModuleType.HOME, speed, 1, Config.getInstance().getVillagerPathfindingDistance(), 1200, (v) -> {
                     Optional<Boolean> memory = v.getBrain().getMemoryInternal(MemoryModuleTypeMCA.FORCED_HOME);
                     boolean forced = memory != null && memory.isPresent();
                     if (forced) {
@@ -512,15 +515,12 @@ public class VillagerTasksMCA {
                     return !forced;
                 }, v -> {
                     v.getResidency().seekHome();
-                }, ExtendedWalkTowardsTask::findBedStandPosition)),
+                }, (world, villager, home) -> villager.isSleeping()
+                        ? Optional.empty()
+                        : BedApproachTarget.create(world, home.pos()))),
                 //verify the bed, occupancies state and similar
-                Pair.of(3, new ConditionalSingleTickTask<>(ExtendedForgetCompletedPointOfInterestTask.create(
-                        registryEntry -> registryEntry.is(PoiTypes.HOME), MemoryModuleType.HOME, (entity) -> {
-                            // update villagers home/bed position
-                            if (entity instanceof VillagerEntityMCA villager) {
-                                villager.getResidency().seekHome();
-                            }
-                        }), (v) -> {
+                Pair.of(3, new ConditionalTask<>(ValidateNearbyPoi.create(
+                        registryEntry -> registryEntry.is(PoiTypes.HOME), MemoryModuleType.HOME), (v) -> {
                     Optional<Boolean> memory = v.getBrain().getMemoryInternal(MemoryModuleTypeMCA.FORCED_HOME);
                     //noinspection OptionalAssignedToNull
                     return memory == null || memory.isEmpty();

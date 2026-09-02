@@ -1,7 +1,7 @@
 package net.conczin.mca.client.gui;
 
-import io.netty.buffer.ByteBuf;
 import net.conczin.mca.MCA;
+import net.conczin.mca.network.FamilyTreeSearchEntry;
 import net.conczin.mca.network.Network;
 import net.conczin.mca.network.c2s.FamilyTreeUUIDLookup;
 import net.conczin.mca.util.compat.ButtonWidget;
@@ -10,10 +10,7 @@ import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.Renderable;
 import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.core.UUIDUtil;
 import net.minecraft.network.chat.Component;
-import net.minecraft.network.codec.ByteBufCodecs;
-import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.util.FormattedCharSequence;
 
 import java.util.LinkedList;
@@ -26,11 +23,11 @@ public class FamilyTreeSearchScreen extends Screen {
     private static final int RESULT_ROW_GAP = 1;
     private static final int RESULTS_PER_PAGE = 5;
 
-    private List<Entry> list = new LinkedList<>();
+    private List<FamilyTreeSearchEntry> list = new LinkedList<>();
     private ButtonWidget buttonPage;
     private int pageNumber;
 
-    private Entry selectedVillager;
+    private FamilyTreeSearchEntry selectedVillager;
 
     private int mouseX;
     private int mouseY;
@@ -102,13 +99,13 @@ public class FamilyTreeSearchScreen extends Screen {
             if (index < list.size()) {
                 int y = height / 2 - 52 + i * (RESULT_ROW_HEIGHT + RESULT_ROW_GAP);
                 boolean hover = isMouseWithin(width / 2 - DATA_WIDTH / 2, y - 1, DATA_WIDTH, RESULT_ROW_HEIGHT);
-                Entry entry = list.get(index);
+                FamilyTreeSearchEntry entry = list.get(index);
 
                 if (hover) {
                     selectedVillager = entry;
                 }
 
-                List<FormattedCharSequence> lines = font.split(entry.relationshipLabel(), DATA_WIDTH);
+                List<FormattedCharSequence> lines = font.split(relationshipLabel(entry), DATA_WIDTH);
                 int textY = y + Math.max(1, (RESULT_ROW_HEIGHT - Math.min(2, lines.size()) * font.lineHeight) / 2);
                 for (int lineIndex = 0; lineIndex < Math.min(2, lines.size()); lineIndex++) {
                     context.drawCenteredString(font, lines.get(lineIndex), width / 2, textY + lineIndex * font.lineHeight, hover ? 0xFFD7D784 : 0xFFFFFFFF);
@@ -125,7 +122,7 @@ public class FamilyTreeSearchScreen extends Screen {
         }
     }
 
-    public void setList(List<Entry> list) {
+    public void setList(List<FamilyTreeSearchEntry> list) {
         this.list = list;
         pageNumber = Math.min(pageNumber, pageCount() - 1);
     }
@@ -137,7 +134,7 @@ public class FamilyTreeSearchScreen extends Screen {
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         if (selectedVillager != null) {
-            selectVillager(selectedVillager.name, selectedVillager.uuid);
+            selectVillager(selectedVillager.name(), selectedVillager.uuid());
         }
 
         return super.mouseClicked(mouseX, mouseY, button);
@@ -152,29 +149,19 @@ public class FamilyTreeSearchScreen extends Screen {
         return Math.max(1, (int) Math.ceil(list.size() / (double) RESULTS_PER_PAGE));
     }
 
-    public record Entry(UUID uuid, String name, String father, String mother) {
-        public static final StreamCodec<ByteBuf, Entry> STREAM_CODEC = StreamCodec.composite(
-                UUIDUtil.STREAM_CODEC, Entry::uuid,
-                ByteBufCodecs.STRING_UTF8, Entry::name,
-                ByteBufCodecs.STRING_UTF8, Entry::father,
-                ByteBufCodecs.STRING_UTF8, Entry::mother,
-                Entry::new
-        );
+    private Component relationshipLabel(FamilyTreeSearchEntry entry) {
+        return Component.literal(entry.name()).append(" - ").append(childOfLabel(entry));
+    }
 
-        private Component relationshipLabel() {
-            return Component.literal(name).append(" - ").append(childOfLabel());
-        }
-
-        private Component childOfLabel() {
-            if (MCA.isBlankString(mother) && MCA.isBlankString(father)) {
-                return Component.translatable("gui.family_tree.child_of_0");
-            } else if (MCA.isBlankString(mother)) {
-                return Component.translatable("gui.family_tree.child_of_1", father);
-            } else if (MCA.isBlankString(father)) {
-                return Component.translatable("gui.family_tree.child_of_1", mother);
-            } else {
-                return Component.translatable("gui.family_tree.child_of_2", father, mother);
-            }
+    private Component childOfLabel(FamilyTreeSearchEntry entry) {
+        if (MCA.isBlankString(entry.mother()) && MCA.isBlankString(entry.father())) {
+            return Component.translatable("gui.family_tree.child_of_0");
+        } else if (MCA.isBlankString(entry.mother())) {
+            return Component.translatable("gui.family_tree.child_of_1", entry.father());
+        } else if (MCA.isBlankString(entry.father())) {
+            return Component.translatable("gui.family_tree.child_of_1", entry.mother());
+        } else {
+            return Component.translatable("gui.family_tree.child_of_2", entry.father(), entry.mother());
         }
     }
 }

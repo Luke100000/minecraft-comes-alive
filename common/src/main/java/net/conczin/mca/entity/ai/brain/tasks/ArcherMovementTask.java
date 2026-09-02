@@ -4,6 +4,7 @@ import com.google.common.collect.ImmutableMap;
 import net.conczin.mca.MCA;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.ArcherMoveControl;
+import net.conczin.mca.entity.ai.RangedWeaponHelper;
 import net.conczin.mca.entity.ai.brain.sensor.GuardEnemiesSensor;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.LivingEntity;
@@ -13,10 +14,7 @@ import net.minecraft.world.entity.ai.behavior.Behavior;
 import net.minecraft.world.entity.ai.behavior.EntityTracker;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.MemoryStatus;
-import net.minecraft.world.entity.ai.memory.NearestVisibleLivingEntities;
 import net.minecraft.world.entity.ai.util.LandRandomPos;
-import net.minecraft.world.item.BowItem;
-import net.minecraft.world.item.CrossbowItem;
 import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.phys.Vec3;
 
@@ -68,12 +66,14 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
 
     @Override
     protected boolean checkExtraStartConditions(ServerLevel level, E entity) {
-        return hasValidTarget(getAttackTarget(entity)) && isHoldingRangedWeapon(entity);
+        return RangedWeaponHelper.isValidAttackTarget(entity, getAttackTarget(entity))
+               && RangedWeaponHelper.isHoldingSupportedWeapon(entity);
     }
 
     @Override
     protected boolean canStillUse(ServerLevel level, E entity, long gameTime) {
-        return hasValidTarget(getAttackTarget(entity)) && isHoldingRangedWeapon(entity);
+        return RangedWeaponHelper.isValidAttackTarget(entity, getAttackTarget(entity))
+               && RangedWeaponHelper.isHoldingSupportedWeapon(entity);
     }
 
     @Override
@@ -86,7 +86,7 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
     @Override
     protected void tick(ServerLevel level, E entity, long gameTime) {
         LivingEntity target = getAttackTarget(entity);
-        if (!hasValidTarget(target)) {
+        if (!RangedWeaponHelper.isValidAttackTarget(entity, target)) {
             return;
         }
 
@@ -106,7 +106,8 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
         double targetDistanceSquared = entity.distanceToSqr(target);
         double threatDistanceSquared = entity.distanceToSqr(movementThreat);
         double threatVerticalDistance = Math.abs(entity.getY() - movementThreat.getY());
-        MovementState nextState = selectState(targetDistanceSquared, threatDistanceSquared, threatVerticalDistance);
+        double attackRangeSquared = RangedWeaponHelper.getAttackRangeSquared(entity, this.maximumRangeSquared);
+        MovementState nextState = selectState(targetDistanceSquared, threatDistanceSquared, threatVerticalDistance, attackRangeSquared);
         enterState(entity, nextState);
 
         ArcherMoveControl moveControl = entity.getArcherMoveControl();
@@ -161,7 +162,8 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
         this.blockedStrafeTicks = 0;
     }
 
-    private MovementState selectState(double targetDistanceSquared, double threatDistanceSquared, double threatVerticalDistance) {
+    private MovementState selectState(double targetDistanceSquared, double threatDistanceSquared,
+                                      double threatVerticalDistance, double attackRangeSquared) {
         boolean closeRangeThreat = threatVerticalDistance <= CLOSE_RANGE_VERTICAL_THREAT_DISTANCE;
         boolean wasEmergencyFleeing = this.state == MovementState.EMERGENCY_FLEE;
         double emergencyThreshold = wasEmergencyFleeing ? EMERGENCY_EXIT_DISTANCE_SQUARED : EMERGENCY_ENTER_DISTANCE_SQUARED;
@@ -175,7 +177,7 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
             return MovementState.KITE;
         }
 
-        if (targetDistanceSquared > this.maximumRangeSquared || this.seeTime < -LOST_SIGHT_BEFORE_APPROACH) {
+        if (targetDistanceSquared > attackRangeSquared || this.seeTime < -LOST_SIGHT_BEFORE_APPROACH) {
             return MovementState.APPROACH;
         }
 
@@ -423,12 +425,12 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
         );
     }
 
-    private static LivingEntity getNearestMovementThreat(LivingEntity entity, LivingEntity fallback) {
-        return entity.getBrain().getMemoryInternal(MemoryModuleType.NEAREST_VISIBLE_LIVING_ENTITIES)
-                .flatMap(visible -> visible.find(ArcherMovementTask::hasValidTarget)
-                        .filter(candidate -> Math.abs(entity.getY() - candidate.getY()) <= CLOSE_RANGE_VERTICAL_THREAT_DISTANCE)
-                        .filter(candidate -> GuardEnemiesSensor.isGuardEnemy(candidate, entity))
-                        .findFirst())
+    private static LivingEntity getNearestMovementThreat(Mob entity, LivingEntity fallback) {
+        return entity.getBrain().getMemory(MemoryModuleType.NEAREST_VISIBLE_LIVING_ENTITIES)
+                .flatMap(visible -> visible.findClosest(candidate ->
+                        RangedWeaponHelper.isValidAttackTarget(entity, candidate)
+                        && Math.abs(entity.getY() - candidate.getY()) <= CLOSE_RANGE_VERTICAL_THREAT_DISTANCE
+                        && GuardEnemiesSensor.isGuardEnemy(candidate, entity)))
                 .orElse(fallback);
     }
 
@@ -442,14 +444,6 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
 
     private static LivingEntity getAttackTarget(LivingEntity entity) {
         return entity.getBrain().getMemoryInternal(MemoryModuleType.ATTACK_TARGET).orElse(null);
-    }
-
-    private static boolean hasValidTarget(LivingEntity target) {
-        return target != null && target.isAlive() && !target.isRemoved();
-    }
-
-    private static boolean isHoldingRangedWeapon(Mob entity) {
-        return entity.isHolding(stack -> stack.getItem() instanceof BowItem || stack.getItem() instanceof CrossbowItem);
     }
 
     private enum MovementState {

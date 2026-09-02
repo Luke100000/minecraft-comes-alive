@@ -16,7 +16,7 @@ public class BuildingTypes extends SimpleJsonResourceReloadListener implements I
     protected static final ResourceLocation ID = MCA.locate("building_types");
     private static BuildingTypes INSTANCE = new BuildingTypes();
     private final Map<String, BuildingType> buildingTypes = new HashMap<>();
-    private final Map<String, BuildingType> buildingTypesClient = new HashMap<>();
+    private volatile Map<String, BuildingType> buildingTypesClient = Map.of();
 
     public BuildingTypes() {
         super(Resources.GSON, ID.getPath());
@@ -46,8 +46,7 @@ public class BuildingTypes extends SimpleJsonResourceReloadListener implements I
 
     // Provide the client with building types
     public void setBuildingTypes(Map<String, BuildingType> buildingTypes) {
-        buildingTypesClient.clear();
-        buildingTypesClient.putAll(buildingTypes);
+        buildingTypesClient = Map.copyOf(buildingTypes);
     }
 
     public BuildingType getBuildingType(String type) {

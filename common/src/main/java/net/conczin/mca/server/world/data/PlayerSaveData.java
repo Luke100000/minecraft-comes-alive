@@ -4,6 +4,7 @@ import com.mojang.serialization.Codec;
 import com.mojang.serialization.DynamicOps;
 import net.conczin.mca.Config;
 import net.conczin.mca.MCA;
+import net.conczin.mca.datafix.McaDataFixers;
 import net.conczin.mca.entity.PlayerDimensions;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.relationship.EntityRelationship;
@@ -70,7 +71,11 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
         chatAIPrompt = nbt.getString("chatAIPrompt");
 
         if (nbt.contains("entityData")) {
-            entityData = nbt.getCompound("entityData");
+            CompoundTag storedEntityData = nbt.getCompound("entityData");
+            entityData = normalizeEntityData(storedEntityData);
+            if (!entityData.equals(storedEntityData)) {
+                setDirty();
+            }
         } else {
             resetEntityData();
         }
@@ -149,7 +154,7 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
     }
 
     public void setEntityData(CompoundTag entityData) {
-        CompoundTag copy = entityData.copy();
+        CompoundTag copy = normalizeEntityData(entityData);
         if (copy.equals(this.entityData)) {
             return;
         }
@@ -157,6 +162,10 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
         dimensionsScale = PlayerDimensions.fromPlayerData(this);
         setDirty();
         refreshPlayerDimensions();
+    }
+
+    private static CompoundTag normalizeEntityData(CompoundTag entityData) {
+        return McaDataFixers.update(entityData.copy());
     }
 
     private void refreshPlayerDimensions() {
@@ -252,10 +261,8 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
 
     @Override
     public Gender getGender() {
-        CompoundTag entityData = getEntityData();
-        CompoundTag mcaData = entityData.contains(VillagerEntityMCA.MCA_DATA_KEY, 10) ? entityData.getCompound(VillagerEntityMCA.MCA_DATA_KEY) : entityData;
-        if (mcaData.contains("Gender")) {
-            return Gender.byId(mcaData.getInt("Gender"));
+        if (entityData.contains("Gender")) {
+            return Gender.byId(entityData.getInt("Gender"));
         }
         if (entityData.contains("gender")) {
             return Gender.byId(entityData.getInt("gender"));
@@ -279,6 +286,7 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
     @Override
     public CompoundTag save(CompoundTag nbt, HolderLookup.Provider provider) {
         lastSeenVillage.ifPresent(id -> nbt.putInt("lastSeenVillage", id));
+        McaDataFixers.stampCurrentVersion(entityData);
         nbt.put("entityData", entityData);
         nbt.putBoolean("entityDataSet", entityDataSet);
         nbt.putBoolean("overrideVillageRequirements", overrideVillageRequirements);

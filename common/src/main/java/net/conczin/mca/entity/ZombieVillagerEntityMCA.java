@@ -1,6 +1,7 @@
 package net.conczin.mca.entity;
 
 import net.conczin.mca.Config;
+import net.conczin.mca.datafix.McaDataFixers;
 import net.conczin.mca.entity.ai.Genetics;
 import net.conczin.mca.entity.ai.Relationship;
 import net.conczin.mca.entity.ai.Traits;
@@ -12,6 +13,7 @@ import net.conczin.mca.entity.interaction.ZombieCommandHandler;
 import net.conczin.mca.registry.TagsMCA;
 import net.conczin.mca.util.InventoryUtils;
 import net.conczin.mca.util.network.datasync.CDataManager;
+import net.minecraft.ChatFormatting;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.syncher.EntityDataAccessor;
@@ -47,6 +49,7 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
     private final UpdatableInventory inventory = new UpdatableInventory(27);
 
     private String chatAIPrompt = "";
+    private CompoundTag nicknameData = new CompoundTag();
     private int burned;
 
     public ZombieVillagerEntityMCA(EntityType<? extends ZombieVillager> type, Level world, Gender gender) {
@@ -114,6 +117,11 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
         if (cleaned != null) {
             setName(cleaned.getString());
         }
+    }
+
+    @Override
+    public Component getDisplayName() {
+        return super.getDisplayName().copy().withStyle(ChatFormatting.RED);
     }
 
     @Override
@@ -245,38 +253,35 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
     @Override
     public void writeAdditionalConversionData(CompoundTag output) {
         output.putString(VillagerEntityMCA.CHAT_AI_PROMPT_KEY, chatAIPrompt);
+        output.put(VillagerEntityMCA.NICKNAMES_KEY, nicknameData.copy());
     }
 
     @Override
     public void readAdditionalConversionData(CompoundTag input) {
         chatAIPrompt = input.getString(VillagerEntityMCA.CHAT_AI_PROMPT_KEY);
+        nicknameData = input.getCompound(VillagerEntityMCA.NICKNAMES_KEY).copy();
     }
 
     @Override
     public void readAdditionalSaveData(CompoundTag nbt) {
-        super.readAdditionalSaveData(nbt);
-        getTypeDataManager().load(this, nbt);
-        relations.readFromNbt(nbt);
-        chatAIPrompt = nbt.getString(VillagerEntityMCA.CHAT_AI_PROMPT_KEY);
+        CompoundTag data = McaDataFixers.update(nbt);
+        super.readAdditionalSaveData(data);
+        getTypeDataManager().load(this, data);
+        relations.readFromNbt(data);
+        chatAIPrompt = data.getString(VillagerEntityMCA.CHAT_AI_PROMPT_KEY);
+        nicknameData = data.getCompound(VillagerEntityMCA.NICKNAMES_KEY).copy();
 
         updateAttributes();
 
         inventory.clearContent();
-        InventoryUtils.readFromNBT(this.registryAccess(), inventory, nbt);
+        InventoryUtils.readFromNBT(this.registryAccess(), inventory, data);
 
         validateClothes();
     }
 
     @Override
     public void readAdditionalSaveDataForEditor(CompoundTag nbt) {
-        CompoundTag merged = nbt.copy();
-        if (merged.contains(VillagerEntityMCA.MCA_DATA_KEY, 10)) {
-            CompoundTag mcaData = merged.getCompound(VillagerEntityMCA.MCA_DATA_KEY);
-            for (String key : mcaData.getAllKeys()) {
-                merged.put(key, mcaData.get(key).copy());
-            }
-        }
-        readAdditionalSaveData(merged);
+        readAdditionalSaveData(nbt);
     }
 
     @Override
@@ -286,6 +291,7 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
         relations.writeToNbt(nbt);
         InventoryUtils.saveToNBT(this.registryAccess(), inventory, nbt);
         nbt.putString(VillagerEntityMCA.CHAT_AI_PROMPT_KEY, chatAIPrompt);
+        nbt.put(VillagerEntityMCA.NICKNAMES_KEY, nicknameData.copy());
     }
 
     @Override

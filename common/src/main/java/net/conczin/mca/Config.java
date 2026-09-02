@@ -369,7 +369,10 @@ public final class Config extends CommonConfig {
     /**
      * Enables smarter villager door AI,
      * allowing them to open gates as well.
+     * <p>
+     * <b>DEPRECATED</b> Automatically enabled due to improvements in the pathfinding system
      */
+    @Deprecated(since = "02/09/2026", forRemoval = true)
     public boolean useSmarterDoorAI = false;
 
     /**
@@ -772,7 +775,7 @@ public final class Config extends CommonConfig {
     public boolean allowLimitedPlayerEditor = true;
 
     /**
-     * Allows full access to the player editor including clothing and hair.
+     * Allows full access to player editor including clothing and hair.
      */
     public boolean allowFullPlayerEditor = false;
 
@@ -961,8 +964,20 @@ public final class Config extends CommonConfig {
     }
 
     public void autocomplete() {
-        for (Traits.Trait trait : Traits.Trait.values()) {
-            enabledTraits.putIfAbsent(trait.id(), true);
+        for (Traits.Trait trait : Traits.all()) {
+            String canonicalId = trait.getId().toString();
+            String legacyId = trait.getId().getNamespace().equals(MCA.MOD_ID)
+                    ? trait.getId().getPath()
+                    : canonicalId;
+
+            Boolean canonicalValue = enabledTraits.get(canonicalId);
+            Boolean legacyValue = enabledTraits.get(legacyId);
+            enabledTraits.put(canonicalId,
+                    canonicalValue != null ? canonicalValue : legacyValue != null ? legacyValue : true);
+
+            if (!canonicalId.equals(legacyId)) {
+                enabledTraits.remove(legacyId);
+            }
         }
     }
 

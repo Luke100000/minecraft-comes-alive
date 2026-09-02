@@ -5,9 +5,11 @@ import net.conczin.mca.Config;
 import net.conczin.mca.MCA;
 import net.conczin.mca.MCAClient;
 import net.conczin.mca.client.model.CommonVillagerModel;
+import net.conczin.mca.datafix.McaDataFixers;
 import net.conczin.mca.entity.ai.*;
 import net.conczin.mca.entity.ai.brain.VillagerBrain;
 import net.conczin.mca.entity.ai.brain.VillagerTasksMCA;
+import net.conczin.mca.entity.ai.chatAI.ChatAI;
 import net.conczin.mca.entity.ai.chatAI.ChatAIContext;
 import net.conczin.mca.entity.ai.navigation.MCAGroundPathNavigation;
 import net.conczin.mca.entity.ai.relationship.*;
@@ -32,7 +34,6 @@ import net.minecraft.core.particles.ParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.nbt.NbtOps;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.SynchedEntityData;
@@ -74,11 +75,12 @@ import net.minecraft.world.entity.projectile.ProjectileUtil;
 import net.minecraft.world.food.FoodProperties;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.ChestMenu;
+import net.minecraft.world.item.BowItem;
 import net.minecraft.world.item.CrossbowItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.ProjectileWeaponItem;
-import net.minecraft.world.item.trading.MerchantOffer;
+import net.minecraft.world.item.trading.MerchantOffers;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.ServerLevelAccessor;
 import net.minecraft.world.level.pathfinder.PathType;
@@ -87,7 +89,9 @@ import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
@@ -98,8 +102,9 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     private static final CDataParameter<Float> INFECTION_PROGRESS = CParameter.create("InfectionProgress", 0.0f);
     private static final CDataParameter<Integer> GROWTH_AMOUNT = CParameter.create("GrowthAmount", -AgeState.getMaxAge());
     private static final float VEHICLE_ATTACHMENT_Y = 0.6F;
-    public static final String MCA_DATA_KEY = "MCAData";
+    public static final int MAX_NICKNAME_LENGTH = 32;
     static final String CHAT_AI_PROMPT_KEY = "ChatAIPrompt";
+    static final String NICKNAMES_KEY = "nicknames";
     private static final CDataManager<VillagerEntityMCA> DATA = createTrackedData(VillagerEntityMCA.class).build();
     private static final int RECALCULATE_DIMENSIONS_EVERY_N_TICKS = 100;
     public final ConversationManager conversationManager = new ConversationManager(this);
@@ -129,6 +134,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     private boolean recoveryFoodFromInventory;
     private int recoveryFoodUseTicks;
     private ItemStack recoveryPreviousMainHand = ItemStack.EMPTY;
+    private final Map<UUID, String> nicknames = new HashMap<>();
 
     public VillagerEntityMCA(EntityType<VillagerEntityMCA> type, Level w, Gender gender) {
         super(type, w);
@@ -165,10 +171,22 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     }
 
     @Override
+    public Vec3 handleRelativeFrictionAndCalculateMovement(Vec3 input, float friction) {
+        Vec3 movement = super.handleRelativeFrictionAndCalculateMovement(input, friction);
+        if (getNavigation() instanceof MCAGroundPathNavigation navigation) {
+            double controlledY = navigation.getControlledClimbableVelocity();
+            if (!Double.isNaN(controlledY)) {
+                return new Vec3(movement.x(), controlledY, movement.z());
+            }
+        }
+        return movement;
+    }
+
+    @Override
     public void setJumping(boolean jumping) {
         boolean navigationControlsClimb = this.getNavigation() instanceof MCAGroundPathNavigation navigation
-                && navigation.isControllingClimbable();
-        super.setJumping(jumping && !navigationControlsClimb);
+                && navigation.isControllingClimbableMovement();
+        super.setJumping(jumping && !this.onClimbable() && !navigationControlsClimb);
     }
 
     public static AttributeSupplier.Builder createAttributes() {
@@ -434,6 +452,9 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
             } else {
                 playWelcomeSound();
                 interactedWith = true;
+                if (player instanceof ServerPlayer serverPlayer) {
+                    ChatAI.selectVillagerForConversation(serverPlayer, this);
+                }
                 return interactions.interactAt(player, pos, hand);
             }
         }
@@ -448,19 +469,19 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         ItemStack stack = player.getItemInHand(hand);
         if (!stack.is(TagsMCA.Items.VILLAGER_EGGS) && isAlive() && !isTrading() && !isSleeping() && canInteractWithItemStackInHand(stack) && !getVillagerBrain().isPanicking()) {
             if (isBaby()) {
-                copiedSayNo();
+                setUnhappy();
             } else if (!level().isClientSide) {
                 boolean hasOffers = hasTradeOffers();
                 if (hand == InteractionHand.MAIN_HAND) {
                     if (!hasOffers && !level().isClientSide) {
-                        copiedSayNo();
+                        setUnhappy();
                     }
 
                     player.awardStat(Stats.TALKED_TO_VILLAGER);
                 }
 
                 if (hasOffers && !level().isClientSide) {
-                    copiedBeginTradeWith(player);
+                    startTrading(player);
                 }
             }
             return InteractionResult.sidedSuccess(level().isClientSide);
@@ -468,46 +489,22 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         return InteractionResult.PASS;
     }
 
-    private void copiedSayNo() {
-        this.setUnhappyCounter(40);
-        if (!this.level().isClientSide()) {
-            this.playSound(this.getNoSound(), this.getSoundVolume(), this.getVoicePitch());
-        }
-    }
-
     public boolean hasTradeOffers() {
         return !getOffers().isEmpty();
     }
 
-    public void startTrading(Player customer) {
-        copiedBeginTradeWith(customer);
-    }
+    @Override
+    public MerchantOffers getOffers() {
+        MerchantOffers offers = super.getOffers();
+        int previousSize = offers.size();
+        offers.removeIf(offer -> offer.getResult().isEmpty());
 
-    private void copiedBeginTradeWith(Player customer) {
-        this.copiedPrepareOffersFor(customer);
-        this.setTradingPlayer(customer);
-        this.openTradingScreen(customer, this.getDisplayName(), this.getVillagerData().getLevel());
-    }
-
-    private void copiedPrepareOffersFor(Player player) {
-        int reputation = this.getPlayerReputation(player);
-        if (reputation != 0) {
-            for (MerchantOffer tradeOffer : this.getOffers()) {
-                tradeOffer.addToSpecialPriceDiff(-Mth.floor((float) reputation * tradeOffer.getPriceMultiplier()));
-            }
+        int removed = previousSize - offers.size();
+        if (removed > 0) {
+            MCA.LOGGER.warn("Removed {} invalid villager trade(s) with empty result for villager {} (profession {}, level {})",
+                    removed, getUUID(), getProfessionId(), getVillagerData().getLevel());
         }
-
-        if (player.hasEffect(MobEffects.HERO_OF_THE_VILLAGE)) {
-            MobEffectInstance statusEffect = player.getEffect(MobEffects.HERO_OF_THE_VILLAGE);
-            //noinspection ConstantConditions
-            int amplifier = statusEffect.getAmplifier();
-
-            for (MerchantOffer tradeOffer2 : this.getOffers()) {
-                double d = 0.3 + 0.0625 * (double) amplifier;
-                int k = (int) Math.floor(d * (double) tradeOffer2.getBaseCostA().getCount());
-                tradeOffer2.addToSpecialPriceDiff(-Math.max(k, 1));
-            }
-        }
+        return offers;
     }
 
     @Override
@@ -1089,8 +1086,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
             return SLEEPING_DIMENSIONS;
         }
 
-        boolean useRawDimensions = getAgeState() == AgeState.TEEN || getAgeState() == AgeState.ADULT;
-        float height = (useRawDimensions ? getRawVerticalScaleFactor() : getVerticalScaleFactor()) * 2.0F;
+        float height = getVerticalScaleFactor() * 2.0F;
         float width = getHorizontalScaleFactor() * 0.6F;
 
         return EntityDimensions.scalable(width, height).withAttachments(EntityAttachments.builder()
@@ -1474,21 +1470,24 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     @Override
     public void writeAdditionalConversionData(CompoundTag output) {
         output.putString(CHAT_AI_PROMPT_KEY, getChatAIPrompt());
+        writeNicknames(output);
     }
 
     @Override
     public void readAdditionalConversionData(CompoundTag input) {
         chatAIPrompt = input.getString(CHAT_AI_PROMPT_KEY);
+        readNicknames(input);
     }
 
     @Override
     public void readAdditionalSaveData(CompoundTag nbt) {
-        CompoundTag data = flattenMcaData(nbt);
-        super.readAdditionalSaveData(nbt);
+        CompoundTag data = McaDataFixers.update(nbt);
+        super.readAdditionalSaveData(data);
 
         getTypeDataManager().load(this, data);
         relations.readFromNbt(data);
         longTermMemory.readFromNbt(data);
+        readNicknames(data);
         chatAIPrompt = data.getString(CHAT_AI_PROMPT_KEY);
 
         playerModel = PlayerModel.byId(data.getInt("PlayerModel"));
@@ -1517,18 +1516,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
     @Override
     public void readAdditionalSaveDataForEditor(CompoundTag nbt) {
-        readAdditionalSaveData(flattenMcaData(nbt));
-    }
-
-    private CompoundTag flattenMcaData(CompoundTag nbt) {
-        CompoundTag merged = nbt.copy();
-        if (merged.contains(MCA_DATA_KEY, 10)) {
-            CompoundTag mcaData = merged.getCompound(MCA_DATA_KEY);
-            for (String key : mcaData.getAllKeys()) {
-                merged.put(key, Objects.requireNonNull(mcaData.get(key)).copy());
-            }
-        }
-        return merged;
+        readAdditionalSaveData(nbt);
     }
 
     public String getChatAIPrompt() {
@@ -1542,12 +1530,36 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         this.chatAIPrompt = chatAIPrompt;
     }
 
+    private boolean isCarriedByPlayer() {
+        return getVehicle() instanceof Player;
+    }
+
+    /**
+     * Vanilla excludes passengers from entity chunk storage. MCA children riding
+     * players are not restored from player data, so they must remain save roots.
+     */
+    @Override
+    public boolean shouldBeSaved() {
+        if (!isCarriedByPlayer()) {
+            return super.shouldBeSaved();
+        }
+
+        Entity.RemovalReason removalReason = getRemovalReason();
+        return removalReason == null || removalReason.shouldSave();
+    }
+
+    @Override
+    public boolean save(CompoundTag nbt) {
+        return isCarriedByPlayer() ? saveAsPassenger(nbt) : super.save(nbt);
+    }
+
     @Override
     public final void addAdditionalSaveData(CompoundTag nbt) {
         super.addAdditionalSaveData(nbt);
 
         relations.writeToNbt(nbt);
         longTermMemory.writeToNbt(nbt);
+        writeNicknames(nbt);
 
         getTypeDataManager().save(this, nbt);
         InventoryUtils.saveToNBT(this.registryAccess(), inventory, nbt);
@@ -1593,14 +1605,29 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
     @Override
     public void performRangedAttack(LivingEntity target, float pullProgress) {
-        setTarget(target);
+        InteractionHand weaponHand = RangedWeaponHelper.getWeaponHoldingHand(this);
+        if (weaponHand == null) {
+            return;
+        }
 
-        if (isHolding(Items.CROSSBOW)) {
-            this.performCrossbowAttack(this, 1.75F);
-        } else if (isHolding(Items.BOW)) {
-            ItemStack bow = this.getItemInHand(getMainHandItem().is(Items.BOW) ? InteractionHand.MAIN_HAND : InteractionHand.OFF_HAND);
-            ItemStack arrow = this.getProjectile(bow);
-            AbstractArrow persistentProjectileEntity = ProjectileUtil.getMobArrow(this, arrow, pullProgress, bow);
+        ItemStack weaponStack = this.getItemInHand(weaponHand);
+        if (weaponStack.getItem() instanceof CrossbowItem crossbow) {
+            crossbow.performShooting(
+                    this.level(),
+                    this,
+                    weaponHand,
+                    weaponStack,
+                    1.75F,
+                    14 - this.level().getDifficulty().getId() * 4,
+                    target
+            );
+            this.onCrossbowAttackPerformed();
+            return;
+        }
+
+        if (weaponStack.getItem() instanceof BowItem) {
+            ItemStack arrow = this.getProjectile(weaponStack);
+            AbstractArrow persistentProjectileEntity = ProjectileUtil.getMobArrow(this, arrow, pullProgress, weaponStack);
             double x = target.getX() - this.getX();
             double y = target.getY(0.3333333333333333D) - persistentProjectileEntity.getY();
             double z = target.getZ() - this.getZ();
@@ -1656,5 +1683,41 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     public void customLevelUp() {
         this.setVillagerData(this.getVillagerData().setLevel(this.getVillagerData().getLevel() + 1));
         this.updateTrades();
+    }
+
+    public String getNickname(UUID playerUUID) {
+        return nicknames.getOrDefault(playerUUID, "");
+    }
+
+    public void setNickname(UUID playerUUID, String nickname) {
+        String value = nickname.strip();
+        if (value.length() > MAX_NICKNAME_LENGTH) {
+            return;
+        }
+
+        if (value.isEmpty()) {
+            nicknames.remove(playerUUID);
+        } else {
+            nicknames.put(playerUUID, value);
+        }
+    }
+
+    private void readNicknames(CompoundTag nbt) {
+        nicknames.clear();
+
+        CompoundTag data = nbt.getCompound(NICKNAMES_KEY);
+        for (String playerUUID : data.getAllKeys()) {
+            try {
+                setNickname(UUID.fromString(playerUUID), data.getString(playerUUID));
+            } catch (IllegalArgumentException exception) {
+                MCA.LOGGER.warn("Ignoring invalid nickname player UUID '{}'", playerUUID);
+            }
+        }
+    }
+
+    private void writeNicknames(CompoundTag nbt) {
+        CompoundTag data = new CompoundTag();
+        nicknames.forEach((playerUUID, nickname) -> data.putString(playerUUID.toString(), nickname));
+        nbt.put(NICKNAMES_KEY, data);
     }
 }

@@ -2,6 +2,7 @@ package net.conczin.mca.entity.ai.brain.tasks;
 
 import com.google.common.collect.ImmutableMap;
 import net.conczin.mca.MCA;
+import net.conczin.mca.entity.ai.RangedWeaponHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.LivingEntity;
@@ -12,7 +13,6 @@ import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.MemoryStatus;
 import net.minecraft.world.entity.monster.CrossbowAttackMob;
 import net.minecraft.world.item.BowItem;
-import net.minecraft.world.item.Item;
 
 public class BowTask<E extends Mob & CrossbowAttackMob> extends Behavior<E> {
     private static final int DRAW_TICKS = 20;
@@ -36,12 +36,14 @@ public class BowTask<E extends Mob & CrossbowAttackMob> extends Behavior<E> {
 
     @Override
     protected boolean checkExtraStartConditions(ServerLevel level, E entity) {
-        return hasValidTarget(getAttackTarget(entity)) && isHoldingBow(entity);
+        return RangedWeaponHelper.isValidAttackTarget(entity, getAttackTarget(entity))
+               && RangedWeaponHelper.getBowHoldingHand(entity) != null;
     }
 
     @Override
     protected boolean canStillUse(ServerLevel level, E entity, long gameTime) {
-        return hasValidTarget(getAttackTarget(entity)) && isHoldingBow(entity);
+        return RangedWeaponHelper.isValidAttackTarget(entity, getAttackTarget(entity))
+               && RangedWeaponHelper.getBowHoldingHand(entity) != null;
     }
 
     @Override
@@ -55,7 +57,8 @@ public class BowTask<E extends Mob & CrossbowAttackMob> extends Behavior<E> {
     @Override
     protected void tick(ServerLevel level, E entity, long gameTime) {
         LivingEntity target = getAttackTarget(entity);
-        if (!hasValidTarget(target)) {
+        InteractionHand bowHand = RangedWeaponHelper.getBowHoldingHand(entity);
+        if (!RangedWeaponHelper.isValidAttackTarget(entity, target) || bowHand == null) {
             if (entity.isUsingItem()) {
                 logAction(entity, target, false, 0.0, "stop_using", "invalid_target");
                 entity.stopUsingItem();
@@ -83,6 +86,7 @@ public class BowTask<E extends Mob & CrossbowAttackMob> extends Behavior<E> {
 
         boolean visible = entity.getSensing().hasLineOfSight(target);
         double distanceSquared = entity.distanceToSqr(target);
+        double attackRangeSquared = RangedWeaponHelper.getAttackRangeSquared(entity, bowHand, this.rangeSquared);
 
         entity.getBrain().setMemory(MemoryModuleType.LOOK_TARGET, new EntityTracker(target, true));
         entity.getLookControl().setLookAt(target, LOOK_SPEED, LOOK_SPEED);
@@ -112,9 +116,9 @@ public class BowTask<E extends Mob & CrossbowAttackMob> extends Behavior<E> {
                 logAction(entity, target, visible, distanceSquared, "release", "draw_complete");
             }
         } else if (visible
-                && distanceSquared <= this.rangeSquared
+                && distanceSquared <= attackRangeSquared
                 && this.attackCooldown <= 0) {
-            entity.startUsingItem(getBowHoldingHand(entity));
+            entity.startUsingItem(bowHand);
             logAction(entity, target, visible, distanceSquared, "start_using", "ready");
         }
     }
@@ -162,30 +166,9 @@ public class BowTask<E extends Mob & CrossbowAttackMob> extends Behavior<E> {
         return entity.getBrain().getMemoryInternal(MemoryModuleType.ATTACK_TARGET).orElse(null);
     }
 
-    private static boolean hasValidTarget(LivingEntity target) {
-        return target != null && target.isAlive() && !target.isRemoved();
-    }
-
-    private static boolean isHoldingBow(Mob entity) {
-        return entity.isHolding(stack -> isBowItem(stack.getItem()));
-    }
-
-    private static boolean isBowItem(Item item) {
-        return item instanceof BowItem;
-    }
-
-    private static InteractionHand getBowHoldingHand(Mob entity) {
-        return isBowItem(entity.getMainHandItem().getItem()) ? InteractionHand.MAIN_HAND : InteractionHand.OFF_HAND;
-    }
-
     private static String getBowHoldingHandName(Mob entity) {
-        if (isBowItem(entity.getMainHandItem().getItem())) {
-            return InteractionHand.MAIN_HAND.name();
-        }
-        if (isBowItem(entity.getOffhandItem().getItem())) {
-            return InteractionHand.OFF_HAND.name();
-        }
-        return "none";
+        InteractionHand hand = RangedWeaponHelper.getBowHoldingHand(entity);
+        return hand == null ? "none" : hand.name();
     }
 
     private static boolean isEmergencyFleeing(Mob entity) {
