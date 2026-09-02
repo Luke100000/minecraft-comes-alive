@@ -44,3 +44,5 @@ forge*changelog.txt
 /scripts/TTS/temp.pcm
 /immersiveLibraryToken
 /common/src/generated/resources/.cache/
+
+neoforge/run-gametest
