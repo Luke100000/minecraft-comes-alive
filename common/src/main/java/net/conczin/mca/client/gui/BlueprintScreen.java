@@ -659,26 +659,15 @@ public class BlueprintScreen extends ExtendedScreen {
         );
         renderPlayerHeadButtonIcon(context, player);
 
-        List<BlueprintMapRenderer.HoverTarget> hoverTargets = new ArrayList<>(renderResult.hoverTargets());
-        hoverTargets.sort(Comparator.comparingInt(BlueprintMapRenderer.HoverTarget::anchorY).reversed()
-                .thenComparing(Comparator.comparingInt(
-                        BlueprintMapRenderer.HoverTarget::logicalBuildingId).reversed()));
+        List<BlueprintMapRenderer.HoverTarget> hoverTargets = tooltipTargets(
+                renderResult.hoverTargets(), renderResult.hoveredLogicalBuildingId());
+        if (hoverTargets.isEmpty()) return;
 
-        Map<Integer, BlueprintMapRenderer.HoverTarget> uniqueTargets = new LinkedHashMap<>();
-        for (BlueprintMapRenderer.HoverTarget target : hoverTargets) {
-            uniqueTargets.putIfAbsent(target.logicalBuildingId(), target);
-        }
-        if (uniqueTargets.isEmpty()) return;
-
-        BlueprintMapRenderer.HoverTarget preferred = uniqueTargets.get(renderResult.hoveredLogicalBuildingId());
-        BlueprintMapRenderer.HoverTarget active = preferred != null
-                ? preferred : uniqueTargets.values().iterator().next();
+        BlueprintMapRenderer.HoverTarget active = hoverTargets.getFirst();
 
         List<Component> tooltip = new ArrayList<>(tooltipFactory.tooltip(
                 active.building(), active.floorOrdinal(), active.structure()));
-        List<BlueprintMapRenderer.HoverTarget> alternatives = uniqueTargets.values().stream()
-                .filter(target -> target.logicalBuildingId() != active.logicalBuildingId())
-                .toList();
+        List<BlueprintMapRenderer.HoverTarget> alternatives = hoverTargets.subList(1, hoverTargets.size());
         if (!alternatives.isEmpty()) {
             tooltip.add(Component.empty());
             tooltip.add(Component.translatable("gui.blueprint.roomTooltip.alsoHere")
@@ -692,6 +681,21 @@ public class BlueprintScreen extends ExtendedScreen {
 
         int tooltipY = mouseY - getTooltipHeight(tooltip) / 2 + 12;
         context.renderComponentTooltip(font, tooltip, mouseX, tooltipY);
+    }
+
+    static List<BlueprintMapRenderer.HoverTarget> tooltipTargets(
+            List<BlueprintMapRenderer.HoverTarget> hoverTargets,
+            int preferredLogicalBuildingId) {
+        List<BlueprintMapRenderer.HoverTarget> ordered = new ArrayList<>(hoverTargets);
+        ordered.sort(Comparator.comparingInt(BlueprintMapRenderer.HoverTarget::anchorY).reversed()
+                .thenComparing(Comparator.comparingInt(
+                        BlueprintMapRenderer.HoverTarget::logicalBuildingId).reversed()));
+        for (int i = 0; i < ordered.size(); i++) {
+            if (ordered.get(i).logicalBuildingId() != preferredLogicalBuildingId) continue;
+            if (i > 0) ordered.addFirst(ordered.remove(i));
+            break;
+        }
+        return List.copyOf(ordered);
     }
 
     private void renderPlayerHeadButtonIcon(GuiGraphics context, LocalPlayer player) {

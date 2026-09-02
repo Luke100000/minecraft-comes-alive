@@ -104,6 +104,21 @@ class BlueprintTooltipHierarchyTest {
     }
 
     @Test
+    void overlappingFloorsInSameBuildingRemainTooltipAlternatives() {
+        Building ground = room(1, 10, 0, "house");
+        Building basement = room(2, 10, 1, "bedroom");
+        BlueprintMapRenderer.HoverTarget groundTarget = new BlueprintMapRenderer.HoverTarget(
+                ground, 0, false, 10, 64);
+        BlueprintMapRenderer.HoverTarget basementTarget = new BlueprintMapRenderer.HoverTarget(
+                basement, -1, false, 10, 60);
+
+        List<BlueprintMapRenderer.HoverTarget> targets = BlueprintScreen.tooltipTargets(
+                List.of(basementTarget, groundTarget), 10);
+
+        assertEquals(List.of(groundTarget, basementTarget), targets);
+    }
+
+    @Test
     void soleTitleMatchingRoomDoesNotRepeatBuildingType() throws Exception {
         Fixture fixture = fixture();
         fixture.groundRoom().addBlock(Blocks.YELLOW_BED, BlockPos.ZERO);

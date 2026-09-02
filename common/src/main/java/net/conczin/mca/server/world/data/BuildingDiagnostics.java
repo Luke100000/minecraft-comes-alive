@@ -56,12 +56,12 @@ public final class BuildingDiagnostics {
         if (inspected != null) {
             boolean contains = inspected.containsPos(pos);
             boolean attaches = inspected.resolveInteractionPosition(world, pos, List.of()).isPresent();
-            StructureFloor logicalFloor = inspected.resolveFloor(pos.getY()).orElse(null);
+            StructureFloor resolvedFloor = inspected.resolveFloorAt(world, pos).orElse(null);
             StructureFloor physicalFloor = inspected.physicalFloorAt(pos).orElse(null);
-            log(traceId, "structure id={} logicalBuildingId={} source={} bounds={}..{} containsPos={} connectorAttaches={} logicalFloor={} physicalFloor={}",
+            log(traceId, "structure id={} logicalBuildingId={} source={} bounds={}..{} containsPos={} connectorAttaches={} resolvedFloor={} physicalFloor={}",
                     inspected.getId(), inspected.getLogicalBuildingId(), inspected.getSource(),
                     inspected.getRawPos0(), inspected.getRawPos1(),
-                    contains, attaches, floor(logicalFloor), floor(physicalFloor));
+                    contains, attaches, floor(resolvedFloor), floor(physicalFloor));
             LogicalBuilding logicalBuilding = village.getLogicalBuilding(inspected.getLogicalBuildingId()).orElse(null);
             log(traceId, "persistentFloors={} groundFloorStructureId={} groundFloorId={} logicalMainRoomId={} inheritanceEnabled={}",
                     floors(inspected.getFloors()),
@@ -85,11 +85,7 @@ public final class BuildingDiagnostics {
 
             StructureFloor selectedFloor = room != null
                     ? inspected.getFloor(room.getFloorId()).orElse(null)
-                    : physicalFloor != null
-                    ? physicalFloor
-                    : inspected.nearestFloorAtColumn(pos)
-                    .or(() -> inspected.floorAtHeight(pos.getY()))
-                    .orElse(null);
+                    : inspected.resolveFloorAt(world, pos).orElse(null);
             StructureScanner.Result scan = selectedFloor == null
                     ? StructureScanner.Result.failure(Building.validationResult.NOT_IN_BUILDING, pos)
                     : StructureScanner.scanExistingFloor(

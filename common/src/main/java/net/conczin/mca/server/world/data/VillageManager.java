@@ -341,7 +341,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         if (village.getFunctionalRoomAt(world, pos).isPresent()) {
             return failedRoom(Building.validationResult.IDENTICAL, pos, village);
         }
-        StructureFloor floor = resolveRoomFloor(village, structure, pos, -1);
+        StructureFloor floor = structure.resolveFloorAt(world, pos).orElse(null);
         if (floor == null) return failedRoom(Building.validationResult.TOO_SMALL, pos, village);
         StructureScanner.Result fresh = StructureScanner.scanExistingFloor(
                 world, structure, floor, pos, village.getStructures().values());
@@ -456,16 +456,6 @@ public class VillageManager extends SavedData implements Iterable<Village> {
                 playerComponent, matchingTypes);
     }
 
-    private static StructureFloor resolveRoomFloor(Village village,
-                                                   Structure structure,
-                                                   BlockPos pos,
-                                                   int existingRoomId) {
-        return existingRoomId >= 0 && village != null
-                ? village.getBuilding(existingRoomId).flatMap(room -> structure.getFloor(room.getFloorId())).orElse(null)
-                : structure.nearestFloorAtColumn(pos)
-                .or(() -> structure.floorAtHeight(pos.getY()))
-                .orElse(null);
-    }
     private static Set<BlockPos> registeredRoomCells(Village village,
                                                      int structureId,
                                                      int floorId,

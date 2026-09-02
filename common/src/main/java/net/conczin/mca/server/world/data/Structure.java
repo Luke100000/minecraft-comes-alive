@@ -78,25 +78,32 @@ public final class Structure implements VillageBuilding {
     }
 
     /** Logical Floor selection is gravity-like: choose the highest Floor at or below the query Y. */
-    public Optional<StructureFloor> resolveFloor(int queryY) {
+    private Optional<StructureFloor> resolveFloor(int queryY) {
         return getFloors().stream()
                 .filter(floor -> floor.anchorY() <= queryY)
                 .max(Comparator.comparingInt(StructureFloor::anchorY));
     }
 
     /** Exact vertical-band membership; unlike resolveFloor, this never falls through above a Floor ceiling. */
-    public Optional<StructureFloor> floorAtHeight(int queryY) {
+    private Optional<StructureFloor> floorAtHeight(int queryY) {
         return resolveFloor(queryY).filter(floor -> queryY < floor.ceilingY());
     }
 
     /** Chooses the nearest Floor whose exact footprint contains the query X/Z column. */
-    Optional<StructureFloor> nearestFloorAtColumn(Vec3i pos) {
+    private Optional<StructureFloor> nearestFloorAtColumn(Vec3i pos) {
         if (pos == null || !containsPosHorizontally(pos)) return Optional.empty();
         return getFloors().stream()
                 .filter(floor -> floor.contains(pos.getX(), pos.getZ()))
                 .min(Comparator.comparingInt((StructureFloor floor) -> verticalDistance(floor, pos.getY()))
                         .thenComparingInt(StructureFloor::anchorY)
                         .thenComparingInt(StructureFloor::id));
+    }
+
+    /** One floor-resolution rule for direct positions and vertical-connector interactions. */
+    Optional<StructureFloor> resolveFloorAt(Level world, BlockPos pos) {
+        if (pos == null) return Optional.empty();
+        BlockPos query = StructureConnector.bottomVerticalConnector(world, pos).orElse(pos);
+        return nearestFloorAtColumn(query).or(() -> floorAtHeight(query.getY()));
     }
 
 
@@ -121,14 +128,14 @@ public final class Structure implements VillageBuilding {
                                                              BlockPos pos,
                                                              Collection<Building> structureRooms) {
         Collection<Building> localRooms = structureRooms == null ? List.of() : structureRooms;
-        StructureFloor floor = physicalFloorAt(pos).orElse(null);
-        boolean physical = floor != null;
-        if (floor == null) floor = floorAtHeight(pos.getY()).orElse(null);
+        boolean physical = physicalFloorAt(pos).isPresent();
+        BlockPos floorQuery = StructureConnector.bottomVerticalConnector(world, pos).orElse(pos);
+        StructureFloor floor = resolveFloorAt(world, pos).orElse(null);
         if (floor == null) return Optional.empty();
 
         BlockPos floorCell = physical
                 ? new BlockPos(pos.getX(), floor.anchorY(), pos.getZ())
-                : StructureConnector.resolveFloorCell(world, this, floor, pos);
+                : StructureConnector.resolveFloorCell(world, this, floor, floorQuery);
         if (floorCell == null) return Optional.empty();
         return Optional.of(new InteractionPosition(floor,
                 roomAtColumn(localRooms, floor, floorCell.getX(), floorCell.getZ()), physical));
