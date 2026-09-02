@@ -58,6 +58,64 @@ class RoomTypeResolverTest {
         assertFalse(context.contributors().contains(fixture.independent()));
     }
 
+    @Test
+    void contributingRoomOnAnotherFloorSharesPoiThroughLogicalBuilding() {
+        Building main = room(1, true, new BlockPos(1, 64, 1));
+        Building upper = room(2, true, new BlockPos(2, 72, 2));
+        upper.setStructureId(11);
+
+        Structure groundStructure = new Structure(10, BlockPos.ZERO, BlockPos.ZERO, BlockPos.ZERO,
+                List.of(new StructureFloor(0, 64, 68, null)));
+        Structure upperStructure = new Structure(11, BlockPos.ZERO, BlockPos.ZERO, BlockPos.ZERO,
+                List.of(new StructureFloor(0, 72, 76, null)));
+        groundStructure.setLogicalBuildingId(10);
+        upperStructure.setLogicalBuildingId(10);
+
+        Village village = new Village(1, null);
+        village.registerStructure(groundStructure, main);
+        village.registerStructure(upperStructure, upper);
+        village.refreshLogicalBuildings();
+
+        RoomTypeResolver.Context context = RoomTypeResolver.create(village).resolve(main);
+
+        assertEquals(List.of(upper), context.contributors());
+        assertEquals(List.of(new BlockPos(2, 72, 2)), context.inheritedPoi().get(BELL));
+        assertEquals(10, village.getLogicalBuildingId(upper.getStructureId()));
+    }
+
+    @Test
+    void verticallyStackedIndependentBuildingDoesNotContributeAcrossLogicalBuildingBoundary() {
+        Building innMain = room(1, true, new BlockPos(1, 64, 1));
+        Building innUpper = room(2, true, new BlockPos(2, 72, 2));
+        innUpper.setStructureId(11);
+        Building restaurantMain = room(3, true, new BlockPos(3, 80, 3));
+        restaurantMain.setStructureId(20);
+
+        Structure innGround = new Structure(10, BlockPos.ZERO, BlockPos.ZERO, BlockPos.ZERO,
+                List.of(new StructureFloor(0, 64, 68, null)));
+        Structure innUpperStructure = new Structure(11, BlockPos.ZERO, BlockPos.ZERO, BlockPos.ZERO,
+                List.of(new StructureFloor(0, 72, 76, null)));
+        Structure restaurant = new Structure(20, BlockPos.ZERO, BlockPos.ZERO, BlockPos.ZERO,
+                List.of(new StructureFloor(0, 80, 84, null)));
+        innGround.setLogicalBuildingId(10);
+        innUpperStructure.setLogicalBuildingId(10);
+        restaurant.setLogicalBuildingId(20);
+
+        Village village = new Village(1, null);
+        village.registerStructure(innGround, innMain);
+        village.registerStructure(innUpperStructure, innUpper);
+        village.registerStructure(restaurant, restaurantMain);
+        village.refreshLogicalBuildings();
+
+        RoomTypeResolver.Context context = RoomTypeResolver.create(village).resolve(innMain);
+
+        assertEquals(List.of(innUpper), context.contributors());
+        assertFalse(context.contributors().contains(restaurantMain));
+        assertFalse(context.inheritedPoi().getOrDefault(BELL, List.of())
+                .contains(new BlockPos(3, 80, 3)));
+        assertEquals(3, village.getLogicalBuilding(20).orElseThrow().mainRoomId());
+    }
+
     private static Fixture fixture(boolean inheritanceEnabled, boolean mainPreference) {
         Building main = room(1, true, new BlockPos(1, 64, 1));
         main.setContributesToMain(mainPreference);
