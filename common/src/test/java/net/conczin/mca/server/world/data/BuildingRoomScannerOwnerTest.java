@@ -136,6 +136,15 @@ class BuildingRoomScannerOwnerTest {
         assertEquals(Set.of(new BlockPos(1, 64, 0)), cells);
     }
 
+    @Test
+    void connectorOnAnotherStoreyCannotClaimFloorByColumnAlone() {
+        BlockPos upperDoor = new BlockPos(-303, 91, -1623);
+        FloorSurface lowerFloor = new FloorSurface(Set.of(
+                cell(-302, 88, -1623), cell(-301, 88, -1623)), Map.of());
+
+        assertTrue(StructureConnector.floorMembershipCells(upperDoor, lowerFloor).isEmpty());
+    }
+
     private static FloorSurface.Cell cell(int x, int y, int z) {
         return new FloorSurface.Cell(new BlockPos(x, y, z), y, y + 4);
     }

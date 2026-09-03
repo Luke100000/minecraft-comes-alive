@@ -6,6 +6,7 @@ import net.minecraft.server.level.ServerLevel;
 
 import java.util.*;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Supplier;
 
 /** Read-only diagnostics for Structure/Floor/Room lookup and traversal decisions. */
 public final class BuildingDiagnostics {
@@ -21,9 +22,21 @@ public final class BuildingDiagnostics {
         long traceId = NEXT_TRACE_ID.incrementAndGet();
         VillageManager manager = VillageManager.get(world);
         Village village = manager.findNearestVillage(pos, Village.MERGE_MARGIN).orElse(null);
-        RoomScanPlan plan = village == null
+        PlanAttempt planAttempt = planAttempt(() -> village == null
                 ? RoomScanPlan.addBuilding(pos)
-                : village.getRoomScanPlan(world, pos);
+                : village.getRoomScanPlan(world, pos));
+        if (planAttempt.failure() != null) {
+            RuntimeException failure = planAttempt.failure();
+            log(traceId, "roomPlanFailure position={} dimension={} village={} type={} message={}",
+                    pos, world.dimension().location(), village == null ? "none" : village.getId(),
+                    failure.getClass().getSimpleName(), failure.getMessage());
+            logPersistentState(traceId, village, pos);
+            String verdict = "ROOM_PLAN_SCAN_FAILED: " + failure.getClass().getSimpleName()
+                    + ": " + failure.getMessage();
+            log(traceId, "verdict={}", verdict);
+            return new Result(traceId, StructuralPosition.OUTSIDE, "SCAN_FAILED", verdict);
+        }
+        RoomScanPlan plan = planAttempt.plan();
         StructuralPosition position = structuralPosition(plan);
         String uiAction = uiAction(plan.mode());
 
@@ -123,6 +136,33 @@ public final class BuildingDiagnostics {
         String verdict = verdict(position, uiAction, analysis, inspected, room, freshPlayerFloor, pos, world);
         log(traceId, "verdict={}", verdict);
         return new Result(traceId, position, uiAction, verdict);
+    }
+
+    static PlanAttempt planAttempt(Supplier<RoomScanPlan> supplier) {
+        try {
+            return new PlanAttempt(supplier.get(), null);
+        } catch (RuntimeException failure) {
+            return new PlanAttempt(null, failure);
+        }
+    }
+
+    private static void logPersistentState(long traceId, Village village, BlockPos pos) {
+        if (village == null) {
+            log(traceId, "persistentState village=none");
+            return;
+        }
+
+        Building physicalRoom = village.findPhysicalRoomAt(pos).orElse(null);
+        log(traceId, "persistentState physicalRoom={} structures={}",
+                physicalRoom == null ? "none" : physicalRoom.getId(), village.getStructures().size());
+        village.getStructures().values().stream()
+                .sorted(Comparator.comparingLong(structure -> distanceSquared(structure.getCenter(), pos)))
+                .limit(5)
+                .forEach(structure -> log(traceId,
+                        "persistentStructure id={} logicalBuildingId={} source={} bounds={}..{} containsPos={} floors={}",
+                        structure.getId(), structure.getLogicalBuildingId(), structure.getSource(),
+                        structure.getRawPos0(), structure.getRawPos1(), structure.containsPos(pos),
+                        floors(structure.getFloors())));
     }
 
     private static StructuralPosition structuralPosition(RoomScanPlan plan) {
@@ -277,6 +317,9 @@ public final class BuildingDiagnostics {
                          StructuralPosition position,
                          String uiAction,
                          String verdict) {
+    }
+
+    record PlanAttempt(RoomScanPlan plan, RuntimeException failure) {
     }
 
     public enum StructuralPosition {

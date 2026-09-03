@@ -34,6 +34,12 @@ record FloorSurface(Set<Cell> cells,
             int ceilingY = reference == null ? connectorCell.getY() + 2 : reference.ceilingY();
             topologyCells.add(new Cell(connectorCell, surfaceY, ceilingY));
         }
+        int minCellY = topologyCells.stream().mapToInt(cell -> cell.feet().getY()).min().orElse(0);
+        int maxCellY = topologyCells.stream().mapToInt(cell -> cell.feet().getY()).max().orElse(minCellY);
+        if (maxCellY - minCellY > BAND_TOLERANCE) {
+            throw new IllegalArgumentException("FloorSurface spans multiple semantic floor bands: "
+                    + minCellY + ".." + maxCellY);
+        }
         cells = Set.copyOf(topologyCells);
         cellsByColumn = indexByColumn(cells);
     }
@@ -86,7 +92,8 @@ record FloorSurface(Set<Cell> cells,
             Cell previous = indexed.putIfAbsent(key, cell);
             if (previous != null && !previous.equals(cell)) {
                 throw new IllegalArgumentException("FloorSurface has multiple cells in one X/Z column: "
-                        + cell.feet().getX() + "," + cell.feet().getZ());
+                        + cell.feet().getX() + "," + cell.feet().getZ()
+                        + " first=" + previous + " second=" + cell);
             }
         }
         return Map.copyOf(indexed);

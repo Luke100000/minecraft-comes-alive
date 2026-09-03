@@ -102,7 +102,7 @@ final class StructureConnector {
         LinkedHashSet<BlockPos> cells = new LinkedHashSet<>();
         for (BlockPos handoff : handoffs(connector)) {
             FloorSurface.Cell landing = surface.cellAtColumn(handoff.getX(), handoff.getZ()).orElse(null);
-            if (landing == null) continue;
+            if (landing == null || landing.feet().getY() != handoff.getY()) continue;
             cells.add(new BlockPos(connector.getX(), landing.feet().getY(), connector.getZ()));
         }
         return Set.copyOf(cells);

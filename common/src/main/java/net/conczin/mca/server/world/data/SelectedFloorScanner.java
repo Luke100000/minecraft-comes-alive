@@ -7,17 +7,23 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.pathfinder.WalkNodeEvaluator;
 
 import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalDouble;
 import java.util.OptionalInt;
 import java.util.Set;
+import java.util.TreeMap;
 
 /** Discovers one selected semantic floor while retaining exact Minecraft surface heights. */
 final class SelectedFloorScanner {
+    private static final int MIN_MEANINGFUL_HEIGHT_SLICE_AREA = 4;
     private static final Direction[] HORIZONTAL = {
             Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST
     };
@@ -59,7 +65,17 @@ final class SelectedFloorScanner {
             }
         }
 
-        FloorSurface surface = new FloorSurface(Set.copyOf(cells.values()), Map.of());
+        Set<FloorSurface.Cell> selectedCells = selectFloorBand(cells.values(), seedCell.feet().getY());
+        FloorSurface surface;
+        try {
+            surface = new FloorSurface(selectedCells, Map.of());
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("SelectedFloorScanner seed=" + seed
+                    + " discoveredCells=" + cells.size()
+                    + " selectedCells=" + selectedCells.size()
+                    + " connectors=" + connectors.size()
+                    + ": " + e.getMessage(), e);
+        }
         surface = surface.withConnectorTypes(StructureConnector.associatedFloorCells(
                 world, connectors, surface));
         return success(seed, surface);
@@ -71,6 +87,58 @@ final class SelectedFloorScanner {
 
     static boolean withinSelectedFloorBand(int seedY, int candidateY) {
         return FloorSurface.withinBand(seedY, candidateY);
+    }
+
+    /**
+     * The walkability flood may see both sides of a staircase. A semantic Floor still follows the
+     * original storey rule: meaningful surface slices no more than two blocks above one another
+     * belong to one band; the next meaningful slice starts the next Floor. Sparse stair steps are
+     * retained inside the selected band but do not move its boundary by themselves.
+     */
+    static Set<FloorSurface.Cell> selectFloorBand(Collection<FloorSurface.Cell> discovered, int seedY) {
+        if (discovered == null || discovered.isEmpty()) return Set.of();
+
+        TreeMap<Integer, List<FloorSurface.Cell>> cellsByY = new TreeMap<>();
+        for (FloorSurface.Cell cell : new LinkedHashSet<>(discovered)) {
+            cellsByY.computeIfAbsent(cell.feet().getY(), ignored -> new ArrayList<>()).add(cell);
+        }
+
+        List<HeightBand> bands = new ArrayList<>();
+        for (Map.Entry<Integer, List<FloorSurface.Cell>> entry : cellsByY.entrySet()) {
+            if (!meaningfulHeightSlice(entry.getKey(), entry.getValue())) continue;
+            HeightBand current = bands.isEmpty() ? null : bands.getLast();
+            if (current == null || entry.getKey() - current.minY() > FloorSurface.BAND_TOLERANCE) {
+                bands.add(new HeightBand(entry.getKey()));
+            }
+        }
+
+        HeightBand selected = bands.stream()
+                .filter(band -> band.contains(seedY))
+                .findFirst()
+                .orElseGet(() -> bands.stream()
+                        .min(Comparator.comparingInt((HeightBand band) -> band.distanceTo(seedY))
+                                .thenComparingInt(HeightBand::minY))
+                        .orElse(null));
+        if (selected == null) {
+            int fallbackMinY = cellsByY.keySet().stream()
+                    .filter(y -> y <= seedY && seedY - y <= FloorSurface.BAND_TOLERANCE)
+                    .min(Integer::compareTo)
+                    .orElse(seedY);
+            selected = new HeightBand(fallbackMinY);
+        }
+
+        HeightBand finalSelected = selected;
+        return discovered.stream()
+                .filter(cell -> finalSelected.contains(cell.feet().getY()))
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+    }
+
+    private static boolean meaningfulHeightSlice(int y, Collection<FloorSurface.Cell> cells) {
+        Set<BlockPos> footprint = cells.stream()
+                .map(cell -> new BlockPos(cell.feet().getX(), y, cell.feet().getZ()))
+                .collect(java.util.stream.Collectors.toSet());
+        return BuildingFloorRegion.fromFootprint(y, footprint).components().stream()
+                .anyMatch(component -> component.area() >= MIN_MEANINGFUL_HEIGHT_SLICE_AREA);
     }
 
     static Optional<FloorSurface.Cell> inspectSurfaceCell(
@@ -233,6 +301,17 @@ final class SelectedFloorScanner {
     }
 
     private record SurfaceProbe(BlockPos feet, double surfaceY) {
+    }
+
+    private record HeightBand(int minY) {
+        boolean contains(int y) {
+            return y >= minY && y <= minY + FloorSurface.BAND_TOLERANCE;
+        }
+
+        int distanceTo(int y) {
+            if (contains(y)) return 0;
+            return y < minY ? minY - y : y - (minY + FloorSurface.BAND_TOLERANCE);
+        }
     }
 
     record Result(Building.validationResult result, FloorSurface surface, BlockPos min, BlockPos max) {
