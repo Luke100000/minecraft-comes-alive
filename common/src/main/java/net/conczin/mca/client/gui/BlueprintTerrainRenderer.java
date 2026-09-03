@@ -4,9 +4,11 @@ import com.mojang.blaze3d.platform.NativeImage;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.client.renderer.BiomeColors;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.tags.FluidTags;
 import net.minecraft.util.FastColor;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.Heightmap;
@@ -25,10 +27,12 @@ final class BlueprintTerrainRenderer implements AutoCloseable {
     private static final int TERRAIN_ALPHA = 0xff;
     private static final int CONTOUR_COLOR = 0x66000000;
     private static final int CONTOUR_INTERVAL = 4;
-    private static final float BASE_BRIGHTNESS = MapColor.Brightness.NORMAL.modifier / 255.0f;
-    private static final float SLOPE_BRIGHTNESS_PER_BLOCK = 0.055f;
-    private static final float MIN_BRIGHTNESS = 0.58f;
-    private static final float MAX_BRIGHTNESS = 1.15f;
+    private static final float MIN_BRIGHTNESS = 0.62f;
+    private static final float MAX_BRIGHTNESS = 1.18f;
+    private static final float MAX_RELIEF_DELTA = 0.18f;
+    private static final float WATER_BASE_OPACITY = 0.48f;
+    private static final float WATER_DEPTH_OPACITY_PER_BLOCK = 0.025f;
+    private static final float WATER_MAX_OPACITY = 0.86f;
 
     private final LinkedHashMap<TileKey, TerrainTile> tiles = new LinkedHashMap<>(16, 0.75f, true);
 
@@ -98,9 +102,9 @@ final class BlueprintTerrainRenderer implements AutoCloseable {
                 int southHeight = tile.heightAt(cellX, cellZ + 1, cell.height);
                 int westHeight = tile.heightAt(cellX - 1, cellZ, cell.height);
                 int eastHeight = tile.heightAt(cellX + 1, cellZ, cell.height);
-                float slopeDelta = ((westHeight - eastHeight) + (northHeight - southHeight)) * 0.25f;
 
-                int color = shadeColor(cell.baseColor, slopeDelta);
+                int color = shadeColor(cell.surfaceColor(),
+                        hillshadeBrightness(westHeight, eastHeight, northHeight, southHeight));
                 int nativeColor = FastColor.ABGR32.fromArgb32(color);
                 int minPixelX = Math.max(cell.minX, tile.minX) - tile.minX;
                 int minPixelZ = Math.max(cell.minZ, tile.minZ) - tile.minZ;
@@ -156,10 +160,43 @@ final class BlueprintTerrainRenderer implements AutoCloseable {
         return CONTOUR_INTERVAL;
     }
 
-    private static int shadeColor(int baseColor, float slopeDelta) {
-        float brightness = BASE_BRIGHTNESS + slopeDelta * SLOPE_BRIGHTNESS_PER_BLOCK;
-        brightness = Math.max(MIN_BRIGHTNESS, Math.min(MAX_BRIGHTNESS, brightness));
+    static float hillshadeBrightness(int westHeight, int eastHeight, int northHeight, int southHeight) {
+        float xGradient = (westHeight - eastHeight) * 0.5f;
+        float zGradient = (northHeight - southHeight) * 0.5f;
+        float magnitude = (float) Math.sqrt(xGradient * xGradient + zGradient * zGradient);
+        if (magnitude < 0.0001f) return 1.0f;
 
+        float directional = (xGradient + zGradient) / ((float) Math.sqrt(2.0f) * magnitude);
+        float strength = 1.0f - (float) Math.exp(-magnitude * 0.18f);
+        return Math.max(MIN_BRIGHTNESS,
+                Math.min(MAX_BRIGHTNESS, 1.0f + directional * MAX_RELIEF_DELTA * strength));
+    }
+
+    static int multiplyTint(int baseColor, int tintColor) {
+        int red = (((baseColor >> 16) & 0xff) * ((tintColor >> 16) & 0xff)) / 255;
+        int green = (((baseColor >> 8) & 0xff) * ((tintColor >> 8) & 0xff)) / 255;
+        int blue = ((baseColor & 0xff) * (tintColor & 0xff)) / 255;
+        return 0xff000000 | (red << 16) | (green << 8) | blue;
+    }
+
+    static int waterColor(int groundColor, int biomeWaterColor, int depth) {
+        float opacity = Math.min(WATER_MAX_OPACITY,
+                WATER_BASE_OPACITY + Math.max(0, depth) * WATER_DEPTH_OPACITY_PER_BLOCK);
+        return blendOpaque(groundColor, biomeWaterColor, opacity);
+    }
+
+    private static int blendOpaque(int baseColor, int overlayColor, float opacity) {
+        float inverse = 1.0f - opacity;
+        int red = Math.round(((baseColor >> 16) & 0xff) * inverse
+                + ((overlayColor >> 16) & 0xff) * opacity);
+        int green = Math.round(((baseColor >> 8) & 0xff) * inverse
+                + ((overlayColor >> 8) & 0xff) * opacity);
+        int blue = Math.round((baseColor & 0xff) * inverse
+                + (overlayColor & 0xff) * opacity);
+        return 0xff000000 | (red << 16) | (green << 8) | blue;
+    }
+
+    private static int shadeColor(int baseColor, float brightness) {
         int red = Math.min(255, Math.round(((baseColor >> 16) & 0xff) * brightness));
         int green = Math.min(255, Math.round(((baseColor >> 8) & 0xff) * brightness));
         int blue = Math.min(255, Math.round((baseColor & 0xff) * brightness));
@@ -245,6 +282,7 @@ final class BlueprintTerrainRenderer implements AutoCloseable {
             return cells[cellX][cellZ];
         }
 
+        @SuppressWarnings("deprecation")
         private static TerrainTile sample(ClientLevel level,
                                           int minX,
                                           int minZ,
@@ -275,7 +313,7 @@ final class BlueprintTerrainRenderer implements AutoCloseable {
                         complete = false;
                         Cell cached = previous == null ? null : previous.cellAtBlock(sampleX, sampleZ);
                         if (cached != null) {
-                            cells[cellX][cellZ] = new Cell(x, z, cached.height, cached.baseColor);
+                            cells[cellX][cellZ] = cached.withOrigin(x, z);
                         }
                         continue;
                     }
@@ -300,11 +338,47 @@ final class BlueprintTerrainRenderer implements AutoCloseable {
                     }
 
                     int baseColor = mapColor == MapColor.NONE ? FALLBACK_COLOR : mapColor.col;
-                    cells[cellX][cellZ] = new Cell(x, z, terrainHeight, baseColor);
+                    baseColor = biomeTintedColor(level, surfacePos, mapColor, baseColor);
+
+                    int waterDepth = 0;
+                    int waterTint = 0;
+                    if (surfaceState.getFluidState().is(FluidTags.WATER)) {
+                        int oceanFloorHeight = level.getHeight(Heightmap.Types.OCEAN_FLOOR, sampleX, sampleZ);
+                        waterDepth = Math.max(1, surfaceHeight - oceanFloorHeight);
+                        waterTint = BiomeColors.getAverageWaterColor(level, surfacePos);
+
+                        if (oceanFloorHeight > minBuildHeight) {
+                            BlockPos.MutableBlockPos groundPos = new BlockPos.MutableBlockPos(
+                                    sampleX, oceanFloorHeight - 1, sampleZ);
+                            BlockState groundState = level.getBlockState(groundPos);
+                            MapColor groundMapColor = groundState.getMapColor(level, groundPos);
+                            while (groundMapColor == MapColor.NONE && groundPos.getY() > minBuildHeight) {
+                                groundPos.move(0, -1, 0);
+                                groundState = level.getBlockState(groundPos);
+                                groundMapColor = groundState.getMapColor(level, groundPos);
+                            }
+                            if (groundMapColor != MapColor.NONE) {
+                                baseColor = biomeTintedColor(level, groundPos, groundMapColor, groundMapColor.col);
+                                terrainHeight = groundPos.getY() + 1;
+                            }
+                        }
+                    }
+
+                    cells[cellX][cellZ] = new Cell(x, z, terrainHeight, baseColor, waterDepth, waterTint);
                 }
             }
 
             return new TerrainTile(minX, minZ, sampleStep, gameTime, complete, cells);
+        }
+
+        private static int biomeTintedColor(ClientLevel level, BlockPos pos, MapColor mapColor, int baseColor) {
+            if (mapColor == MapColor.GRASS) {
+                return multiplyTint(baseColor, BiomeColors.getAverageGrassColor(level, pos));
+            }
+            if (mapColor == MapColor.PLANT) {
+                return multiplyTint(baseColor, BiomeColors.getAverageFoliageColor(level, pos));
+            }
+            return 0xff000000 | (baseColor & 0x00ffffff);
         }
 
         private static final class Cell {
@@ -312,12 +386,28 @@ final class BlueprintTerrainRenderer implements AutoCloseable {
             private final int minZ;
             private final int height;
             private final int baseColor;
+            private final int waterDepth;
+            private final int waterColor;
 
             private Cell(int minX, int minZ, int height, int baseColor) {
+                this(minX, minZ, height, baseColor, 0, 0);
+            }
+
+            private Cell(int minX, int minZ, int height, int baseColor, int waterDepth, int waterColor) {
                 this.minX = minX;
                 this.minZ = minZ;
                 this.height = height;
                 this.baseColor = baseColor;
+                this.waterDepth = waterDepth;
+                this.waterColor = waterColor;
+            }
+
+            private Cell withOrigin(int minX, int minZ) {
+                return new Cell(minX, minZ, height, baseColor, waterDepth, waterColor);
+            }
+
+            private int surfaceColor() {
+                return waterDepth > 0 ? waterColor(baseColor, waterColor, waterDepth) : baseColor;
             }
         }
     }

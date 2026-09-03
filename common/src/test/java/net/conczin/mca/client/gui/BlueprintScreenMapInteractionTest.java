@@ -154,6 +154,37 @@ class BlueprintScreenMapInteractionTest {
     }
 
     @Test
+    void terrainBiomeTintMultipliesSurfaceColorWithoutChangingAlpha() {
+        assertEquals(0xff207030,
+                BlueprintTerrainRenderer.multiplyTint(0xff408060, 0x80e080));
+    }
+
+    @Test
+    void deeperWaterUsesMoreBiomeWaterColorThanShallowWater() {
+        int ground = 0xff75654f;
+        int water = 0x3f76e4;
+
+        int shallow = BlueprintTerrainRenderer.waterColor(ground, water, 1);
+        int deep = BlueprintTerrainRenderer.waterColor(ground, water, 12);
+
+        assertTrue(colorDistance(deep, water) < colorDistance(shallow, water));
+        assertEquals(0xff000000, deep & 0xff000000);
+    }
+
+    @Test
+    void normalizedHillshadeKeepsFlatTerrainNeutralAndSteepTerrainBounded() {
+        assertEquals(1.0F, BlueprintTerrainRenderer.hillshadeBrightness(64, 64, 64, 64), 0.0001F);
+
+        float litSlope = BlueprintTerrainRenderer.hillshadeBrightness(72, 56, 72, 56);
+        float shadowSlope = BlueprintTerrainRenderer.hillshadeBrightness(56, 72, 56, 72);
+
+        assertTrue(litSlope > 1.0F);
+        assertTrue(shadowSlope < 1.0F);
+        assertTrue(litSlope <= 1.18F);
+        assertTrue(shadowSlope >= 0.62F);
+    }
+
+    @Test
     void terrainTileCacheIdentityDoesNotChangeWithSamplingResolution() throws Exception {
         Class<?> tileKey = Class.forName(BlueprintTerrainRenderer.class.getName() + "$TileKey");
 
@@ -183,6 +214,23 @@ class BlueprintScreenMapInteractionTest {
         cellAtBlock.setAccessible(true);
 
         assertEquals(cachedCell, cellAtBlock.invoke(coarseTile, 1, 1));
+    }
+
+    @Test
+    void relocatedCachedWaterCellKeepsDepthAwareSurfaceColor() throws Exception {
+        Class<?> cellClass = Class.forName(BlueprintTerrainRenderer.class.getName() + "$TerrainTile$Cell");
+        var constructor = cellClass.getDeclaredConstructor(
+                int.class, int.class, int.class, int.class, int.class, int.class);
+        constructor.setAccessible(true);
+        Object waterCell = constructor.newInstance(0, 0, 54, 0xff75654f, 8, 0x3f76e4);
+
+        Method surfaceColor = cellClass.getDeclaredMethod("surfaceColor");
+        surfaceColor.setAccessible(true);
+        Method withOrigin = cellClass.getDeclaredMethod("withOrigin", int.class, int.class);
+        withOrigin.setAccessible(true);
+
+        Object relocated = withOrigin.invoke(waterCell, 128, -128);
+        assertEquals(surfaceColor.invoke(waterCell), surfaceColor.invoke(relocated));
     }
 
     @Test
@@ -387,6 +435,13 @@ class BlueprintScreenMapInteractionTest {
         room.setStructureId(10);
         room.setFloorId(0);
         return room;
+    }
+
+    private static int colorDistance(int argb, int rgb) {
+        int red = ((argb >> 16) & 0xff) - ((rgb >> 16) & 0xff);
+        int green = ((argb >> 8) & 0xff) - ((rgb >> 8) & 0xff);
+        int blue = (argb & 0xff) - (rgb & 0xff);
+        return red * red + green * green + blue * blue;
     }
 
     private static void setSelectedFloorOrdinal(Integer ordinal) throws Exception {
