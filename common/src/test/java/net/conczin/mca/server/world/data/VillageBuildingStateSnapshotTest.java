@@ -55,8 +55,6 @@ class VillageBuildingStateSnapshotTest {
 
         LogicalBuilding logical = village.getLogicalBuilding(10).orElseThrow();
         assertEquals(20, logical.mainRoomId());
-        assertEquals(10, logical.groundStructureId());
-        assertEquals(0, logical.groundFloorId());
         assertTrue(logical.inheritanceEnabled());
     }
 

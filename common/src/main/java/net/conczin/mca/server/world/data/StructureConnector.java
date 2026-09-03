@@ -175,36 +175,6 @@ final class StructureConnector {
         return result;
     }
 
-    static boolean isPassageCell(Level world, BlockPos pos) {
-        BlockState state = world.getBlockState(pos);
-        if (!state.getFluidState().isEmpty() || isConnector(state)) return false;
-        return state.isAir() || state.canBeReplaced()
-                || state.getCollisionShape(world, pos).isEmpty();
-    }
-
-    static BlockPos resolveFloorCell(Level world,
-                                     Structure structure,
-                                     StructureFloor floor,
-                                     BlockPos pos) {
-        BlockState state = world.getBlockState(pos);
-        if (isConnector(state)) {
-            BlockPos handoff = floorHandoff(floor, normalize(pos, state));
-            if (handoff != null) {
-                return new BlockPos(handoff.getX(), floor.anchorY(), handoff.getZ());
-            }
-        }
-
-        if (!isPassageCell(world, pos) || !structure.containsEnvelope(pos)) {
-            return null;
-        }
-        for (Direction direction : HORIZONTAL) {
-            int x = pos.getX() + direction.getStepX();
-            int z = pos.getZ() + direction.getStepZ();
-            if (floor.contains(x, z)) return new BlockPos(x, floor.anchorY(), z);
-        }
-        return null;
-    }
-
     /**
      * Projects an occupied vertical connector onto one registered Floor, but only while the
      * interaction Y belongs to that Floor's storey band. The whole connected column is used only

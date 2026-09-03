@@ -324,7 +324,10 @@ public class BlueprintScreen extends ExtendedScreen {
                     removeRoomButton = column.addTooltip("gui.blueprint.removeRoom", b -> {
                         RemovalControlState state = removalControlState(village, getPlayerRoomScanPlan());
                         if (state.visible() && state.active() && state.action() != null) {
-                            Network.sendToServer(new ReportBuildingMessage(state.action()));
+                            ReportBuildingMessage message = state.action() == ReportBuildingMessage.Action.REMOVE_FLOOR
+                                    ? new ReportBuildingMessage(state.action(), String.valueOf(selectedFloorOrdinal))
+                                    : new ReportBuildingMessage(state.action());
+                            Network.sendToServer(message);
                         }
                     });
                     removeBuildingButton = column.addButton(
@@ -584,21 +587,21 @@ public class BlueprintScreen extends ExtendedScreen {
     static RemovalControlState removalControlState(Village village, RoomScanPlan scanContext) {
         if (village == null || scanContext == null) return RemovalControlState.hidden();
 
-        Building room = scanContext.functionalRoom().orElse(null);
-        if (room != null) {
-            boolean mainRoom = village.isMainRoom(room);
-            return new RemovalControlState(true, !mainRoom, ReportBuildingMessage.Action.REMOVE_ROOM,
-                    "gui.blueprint.removeRoom",
-                    mainRoom ? "gui.blueprint.removeRoom.disabled.mainRoom"
-                            : "gui.blueprint.removeRoom.tooltip");
+        Building room = scanContext.currentRoom().orElse(null);
+        if (room == null) return RemovalControlState.hidden();
+
+        Integer selectedFloor = selectedFloorOrdinal;
+        if (selectedFloor != null
+                && village.canRemoveFloor(village.getLogicalBuildingId(room.getStructureId()), selectedFloor)) {
+            return new RemovalControlState(true, true, ReportBuildingMessage.Action.REMOVE_FLOOR,
+                    "gui.blueprint.removeFloor", "gui.blueprint.removeFloor.tooltip");
         }
 
-        int structureId = scanContext.interactionStructureId();
-        int floorId = scanContext.interactionFloorId();
-        if (!village.canRemoveFloor(structureId, floorId)) return RemovalControlState.hidden();
-
-        return new RemovalControlState(true, true, ReportBuildingMessage.Action.REMOVE_FLOOR,
-                "gui.blueprint.removeFloor", "gui.blueprint.removeFloor.tooltip");
+        boolean mainRoom = village.isMainRoom(room);
+        return new RemovalControlState(true, !mainRoom, ReportBuildingMessage.Action.REMOVE_ROOM,
+                "gui.blueprint.removeRoom",
+                mainRoom ? "gui.blueprint.removeRoom.disabled.mainRoom"
+                        : "gui.blueprint.removeRoom.tooltip");
     }
 
     record RemovalControlState(boolean visible, boolean active, ReportBuildingMessage.Action action,
@@ -968,13 +971,13 @@ public class BlueprintScreen extends ExtendedScreen {
     }
 
     private void addInheritanceControl(SideControlColumn column) {
-        Building room = getPlayerRoomScanPlan().functionalRoom().orElse(null);
+        Building room = getPlayerRoomScanPlan().currentRoom().orElse(null);
         if (room == null) return;
         InheritanceControlState state = inheritanceControlState(village, room);
         inheritanceButton = column.addTooltip(
                 Component.translatable(state.labelKey()),
                 Component.translatable(state.tooltipKey()), button -> {
-            Building currentRoom = getPlayerRoomScanPlan().functionalRoom().orElse(null);
+            Building currentRoom = getPlayerRoomScanPlan().currentRoom().orElse(null);
             if (currentRoom == null) return;
             InheritanceControlState current = inheritanceControlState(village, currentRoom);
             Network.sendToServer(new ReportBuildingMessage(
@@ -1011,7 +1014,7 @@ public class BlueprintScreen extends ExtendedScreen {
 
     private void updateInheritanceControl(RoomScanPlan scanContext) {
         if (inheritanceButton == null) return;
-        Building room = scanContext.functionalRoom().orElse(null);
+        Building room = scanContext.currentRoom().orElse(null);
         inheritanceButton.active = room != null;
         if (room == null) return;
         InheritanceControlState state = inheritanceControlState(village, room);
@@ -1054,7 +1057,7 @@ public class BlueprintScreen extends ExtendedScreen {
         if (mainRoomButton == null) {
             return;
         }
-        Optional<Building> room = village == null ? Optional.empty() : scanContext.functionalRoom();
+        Optional<Building> room = village == null ? Optional.empty() : scanContext.currentRoom();
         Structure structure = room.flatMap(village::getStructureFor).orElse(null);
         mainRoomButton.active = room.isPresent() && structure != null
                 && !roomTypeResolver.resolve(room.orElse(null)).isMainRoom();
@@ -1095,7 +1098,7 @@ public class BlueprintScreen extends ExtendedScreen {
         int y = height / 2 - 50;
         if (selectedBuilding != null) {
             Building currentRoom = selectedBuilding.grouped()
-                    ? null : getPlayerRoomScanPlan().functionalRoom().orElse(null);
+                    ? null : getPlayerRoomScanPlan().currentRoom().orElse(null);
             Map<ResourceLocation, Integer> requirementCounts = currentRoom == null
                     ? Map.of() : catalogRequirementCounts(
                     selectedBuilding, roomTypeResolver.resolve(currentRoom).classificationPoi());
@@ -1346,7 +1349,7 @@ public class BlueprintScreen extends ExtendedScreen {
     }
 
     private void selectPlayerFloor(RoomScanPlan scanContext) {
-        scanContext.functionalRoom()
+        scanContext.currentRoom()
                 .ifPresent(room -> {
                     int ordinal = room.getFloorNumber(village);
                     selectedFloorOrdinal = ordinal;

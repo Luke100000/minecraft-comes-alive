@@ -794,14 +794,17 @@ public class VillageManager extends SavedData implements Iterable<Village> {
                 ? BuildingEditResult.SUCCESS : BuildingEditResult.NO_ROOM;
     }
 
-    public BuildingEditResult removeFloor(BlockPos pos) {
+    public BuildingEditResult removeFloor(BlockPos pos, int floorNumber) {
         Village village = findNearestVillage(pos, Village.PLAYER_BORDER_MARGIN).orElse(null);
         if (village == null) return BuildingEditResult.NO_BUILDING;
+        if (floorNumber == Integer.MIN_VALUE) return BuildingEditResult.NO_FLOOR;
 
-        RoomScanPlan plan = village.getRoomScanPlan(world, pos);
-        int structureId = plan.interactionStructureId();
-        int floorId = plan.interactionFloorId();
-        return village.removeFloor(structureId, floorId)
+        Building room = village.getFunctionalRoomAt(world, pos).orElse(null);
+        if (room == null) return BuildingEditResult.NO_ROOM;
+        Structure structure = village.getStructureFor(room).orElse(null);
+        if (structure == null) return BuildingEditResult.NO_BUILDING;
+
+        return village.removeFloor(structure.getLogicalBuildingId(), floorNumber)
                 ? BuildingEditResult.SUCCESS : BuildingEditResult.NO_FLOOR;
     }
 

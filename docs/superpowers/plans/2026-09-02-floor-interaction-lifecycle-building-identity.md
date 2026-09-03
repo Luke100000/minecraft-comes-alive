@@ -1,5 +1,8 @@
 # Floor Interaction, Lifecycle, and Building Identity Implementation Plan
 
+> **Superseded 2026-09-03:** do not execute the interaction-kind/landing-handoff tasks below.
+> Continue from `docs/superpowers/plans/2026-09-03-floor-room-single-source-simplification.md`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Fix exact-boundary Floor interaction, make Room/Floor/external deletion APIs explicit, and lock the existing Add Building vs Add Floor/inheritance UX with durable tests without changing save shape or Structure cardinality.

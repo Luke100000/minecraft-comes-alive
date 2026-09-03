@@ -44,7 +44,7 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
                 case REMOVE_ROOM -> displayEditResult(player,
                         manager.removeRoom(player.blockPosition()), "blueprint.roomRemoved");
                 case REMOVE_FLOOR -> displayEditResult(player,
-                        manager.removeFloor(player.blockPosition()), "blueprint.floorRemoved");
+                        manager.removeFloor(player.blockPosition(), parseFloorNumber(data)), "blueprint.floorRemoved");
                 case REMOVE -> displayEditResult(player,
                         manager.removeBuilding(player.blockPosition()), "blueprint.buildingRemoved");
                 case SET_ROOM_INHERITANCE -> setRoomInheritance(workflow, player, data);
@@ -78,11 +78,19 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
     }
 
     private static int parseTargetBuildingId(String value) {
-        if (value == null) return -1;
+        return parseInt(value, -1);
+    }
+
+    private static int parseFloorNumber(String value) {
+        return parseInt(value, Integer.MIN_VALUE);
+    }
+
+    private static int parseInt(String value, int fallback) {
+        if (value == null) return fallback;
         try {
             return Integer.parseInt(value);
         } catch (NumberFormatException ignored) {
-            return -1;
+            return fallback;
         }
     }
 

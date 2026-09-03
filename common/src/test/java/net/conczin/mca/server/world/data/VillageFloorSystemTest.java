@@ -5,6 +5,8 @@ import net.conczin.mca.resources.BuildingTypes;
 import net.conczin.mca.resources.data.BuildingType;
 import net.minecraft.core.BlockPos;
 import net.minecraft.SharedConstants;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.Tag;
 import net.minecraft.server.Bootstrap;
 import net.minecraft.world.level.block.Blocks;
 import org.junit.jupiter.api.BeforeAll;
@@ -182,6 +184,78 @@ class VillageFloorSystemTest {
     }
 
     @Test
+    void changingMainRoomAlsoMakesItsFloorTheGroundFloor() {
+        Village village = new Village(1, null);
+        Structure structure = structure(10, 10,
+                new StructureFloor(0, 64, 68, -1, region(64)),
+                new StructureFloor(1, 72, 76, 0, region(72)),
+                new StructureFloor(2, 80, 84, 1, region(80)));
+        Building originalMain = room(100, 10, 1, true);
+        Building upperRoom = room(101, 10, 2, true);
+        village.registerStructure(structure, originalMain);
+        village.registerRoom(upperRoom);
+        village.refreshLogicalBuildings();
+
+        assertTrue(village.setMainRoom(upperRoom));
+
+        LogicalBuilding logical = village.getLogicalBuilding(10).orElseThrow();
+        assertEquals(101, logical.mainRoomId());
+        assertEquals(-2, structure.getFloor(0).orElseThrow().floorNumber());
+        assertEquals(-1, structure.getFloor(1).orElseThrow().floorNumber());
+        assertEquals(0, structure.getFloor(2).orElseThrow().floorNumber());
+    }
+
+    @Test
+    void logicalBuildingPersistsMainRoomAsTheOnlyGroundFloorAnchor() {
+        Village village = populatedVillage();
+
+        CompoundTag saved = village.save();
+        CompoundTag logical = saved.getList("logicalBuildings", Tag.TAG_COMPOUND).getCompound(0);
+
+        assertTrue(logical.contains("mainRoomId"));
+        assertFalse(logical.contains("groundStructureId"));
+        assertFalse(logical.contains("groundFloorId"));
+    }
+
+    @Test
+    void missingStructureDoesNotPretendToBeItsOwnLogicalBuilding() {
+        Village village = populatedVillage();
+
+        assertEquals(-1, village.getLogicalBuildingId(999));
+    }
+
+    @Test
+    void logicalBuildingWithoutRoomsIsDeletedWithItsPersistedStructures() {
+        Village village = new Village(1, null);
+        Structure structure = structure(10, 10,
+                new StructureFloor(0, 64, 68, 0, region(64)));
+        Building main = room(100, 10, 0, true);
+        village.registerStructure(structure, main);
+
+        village.removeRooms(List.of(main.getId()));
+        village.refreshLogicalBuildings();
+
+        assertTrue(village.getLogicalBuilding(10).isEmpty());
+        assertTrue(village.getStructure(10).isEmpty());
+    }
+
+    @Test
+    void floorAttachmentRequiresSharedVerticalConnectorInsteadOfArbitraryHeightGap() {
+        Village village = new Village(1, null);
+        StructureFloor existingFloor = new StructureFloor(0, 64, 68, 0, region(64), List.of(
+                new StructureFloor.ConnectorMarker(new BlockPos(0, 64, 0), StructureFloor.ConnectorType.LADDER)));
+        Structure structure = structure(10, 10, existingFloor);
+        village.registerStructure(structure, room(100, 10, 0, true));
+
+        StructureFloor connectedHighFloor = new StructureFloor(1, 76, 80, 0, region(76), List.of(
+                new StructureFloor.ConnectorMarker(new BlockPos(0, 76, 0), StructureFloor.ConnectorType.LADDER)));
+        StructureFloor nearbyButDisconnected = new StructureFloor(2, 70, 74, 0, region(70));
+
+        assertEquals(10, village.resolveAttachmentTarget(connectedHighFloor).orElseThrow().buildingId());
+        assertTrue(village.resolveAttachmentTarget(nearbyButDisconnected).isEmpty());
+    }
+
+    @Test
     void invalidMainRoomRepairsToLowestSurvivingRoomId() {
         Village village = populatedVillage();
         village.getLogicalBuilding(10).orElseThrow().setMainRoomId(99);
@@ -231,21 +305,62 @@ class VillageFloorSystemTest {
         village.registerStructure(structure, main);
         village.refreshLogicalBuildings();
 
-        assertTrue(village.canRemoveFloor(10, 1));
-        assertFalse(village.canRemoveFloor(10, 2));
-        assertFalse(village.canRemoveFloor(10, 3));
-        assertFalse(village.canRemoveFloor(10, 4));
-        assertTrue(village.canRemoveFloor(10, 5));
-
-        assertTrue(village.removeFloor(10, 5));
-        assertTrue(structure.getFloor(5).isEmpty());
-        assertTrue(village.canRemoveFloor(10, 4));
-
-        assertTrue(village.removeFloor(10, 1));
-        assertTrue(structure.getFloor(1).isEmpty());
+        assertTrue(village.canRemoveFloor(10, -2));
+        assertFalse(village.canRemoveFloor(10, -1));
+        assertFalse(village.canRemoveFloor(10, 0));
+        assertFalse(village.canRemoveFloor(10, 1));
         assertTrue(village.canRemoveFloor(10, 2));
+
+        assertTrue(village.removeFloor(10, 2));
+        assertTrue(structure.getFloor(5).isEmpty());
+        assertTrue(village.canRemoveFloor(10, 1));
+
+        assertTrue(village.removeFloor(10, -2));
+        assertTrue(structure.getFloor(1).isEmpty());
+        assertTrue(village.canRemoveFloor(10, -1));
         assertEquals(main, village.getBuilding(100).orElseThrow());
         assertEquals(0, structure.getFloor(3).orElseThrow().floorNumber());
+    }
+
+    @Test
+    void removingFloorRemovesEveryStructureSliceInTheLogicalFloor() {
+        Village village = new Village(1, null);
+        Structure first = structure(10, 10,
+                new StructureFloor(0, 60, 64, -1, region(60)),
+                new StructureFloor(1, 64, 68, 0, region(64)));
+        Structure second = structure(11, 10,
+                new StructureFloor(0, 60, 64, -1, region(60)),
+                new StructureFloor(1, 64, 68, 0, region(64)));
+        village.registerStructure(first, room(100, 10, 1, true));
+        village.registerStructure(second, room(101, 11, 1, true));
+        village.refreshLogicalBuildings();
+
+        assertTrue(village.canRemoveFloor(10, -1));
+        assertTrue(village.removeFloor(10, -1));
+
+        assertTrue(first.getFloor(0).isEmpty());
+        assertTrue(second.getFloor(0).isEmpty());
+        assertTrue(first.getFloor(1).isPresent());
+        assertTrue(second.getFloor(1).isPresent());
+    }
+
+    @Test
+    void removingSelectedOrdinalOnlyAffectsPlayersLogicalBuilding() {
+        Village village = new Village(1, null);
+        Structure first = structure(10, 10,
+                new StructureFloor(0, 64, 68, 0, region(64)),
+                new StructureFloor(1, 72, 76, 1, region(72)));
+        Structure second = structure(20, 20,
+                new StructureFloor(0, 64, 68, 0, region(64)),
+                new StructureFloor(1, 72, 76, 1, region(72)));
+        village.registerStructure(first, room(100, 10, 0, true));
+        village.registerStructure(second, room(200, 20, 0, true));
+        village.refreshLogicalBuildings();
+
+        assertTrue(village.removeFloor(10, 1));
+
+        assertTrue(first.getFloor(1).isEmpty());
+        assertTrue(second.getFloor(1).isPresent());
     }
 
     @Test

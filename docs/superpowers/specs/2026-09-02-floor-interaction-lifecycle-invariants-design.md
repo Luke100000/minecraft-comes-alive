@@ -1,5 +1,10 @@
 # Floor Interaction, Lifecycle, and Building Identity Design
 
+> **Superseded 2026-09-03:** the later architecture review rejected the explicit
+> `InteractionKind` / landing-handoff model and the duplicated persisted Ground Floor identity.
+> The canonical design is now
+> `docs/superpowers/specs/2026-09-03-floor-room-single-source-simplification.md`.
+
 ## Scope
 
 This design implements the selected follow-up priorities from the floor-system review:

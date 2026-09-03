@@ -64,17 +64,8 @@ final class RoomDFU {
                             .thenComparingInt(Structure::getId))
                     .orElseThrow();
             int mainRoomId = structureTags.get(root.getId()).getInt("mainRoomId");
-            FloorRef ground = members.stream()
-                    .sorted(Comparator.comparing((Structure structure) -> structure.getId() != buildingId)
-                            .thenComparingInt(Structure::getId))
-                    .flatMap(structure -> structure.getFloors().stream()
-                            .filter(floor -> floor.floorNumber() == 0)
-                            .map(floor -> new FloorRef(structure.getId(), floor.id())))
-                    .findFirst()
-                    .orElseThrow(() -> new IllegalArgumentException(
-                            "Previous branch save has no Ground Floor for logical building " + buildingId));
             logicalBuildings.put(buildingId, new LogicalBuilding(
-                    buildingId, ground.structureId(), ground.floorId(), mainRoomId,
+                    buildingId, mainRoomId,
                     inheritanceByRoom.getOrDefault(mainRoomId, true)));
         });
         return new Result(rooms, external, structures, logicalBuildings);
@@ -97,7 +88,7 @@ final class RoomDFU {
                 rooms.put(room.getId(), room);
                 structures.put(structure.getId(), structure);
                 logicalBuildings.put(structure.getId(), new LogicalBuilding(
-                        structure.getId(), structure.getId(), room.getFloorId(), room.getId(), true));
+                        structure.getId(), room.getId(), true));
             });
         }
         return new Result(rooms, external, structures, logicalBuildings);
@@ -149,9 +140,6 @@ final class RoomDFU {
         room.setStructureId(structure.getId());
         room.setFloorId(floor.id());
         return Optional.of(structure);
-    }
-
-    private record FloorRef(int structureId, int floorId) {
     }
 
     record Result(

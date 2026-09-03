@@ -7,31 +7,30 @@ import java.util.Optional;
 /**
  * Canonical action and identity plan shared by Blueprint projection and server execution.
  *
- * @param building registered Room at the interaction position, or the interaction
- *                 Structure's Main Room when the component is not registered yet
+ * @param currentRoom registered Room physically selected at the interaction position, or empty
  * @param mode action derived from the current world and persisted Village state
  * @param targetBuildingId logical building receiving an attachment, or {@code -1}
  * @param prospectiveFloorNumber attachment floor-number preview, when applicable
  * @param interactionSource original player or diagnostic position
  * @param scanSeed exact enclosed position selected for physical scanning
- * @param interactionStructureId persisted Structure resolved at the interaction position, or {@code -1}
- * @param interactionFloorId persisted Floor resolved at the interaction position, or {@code -1}
+ * @param targetStructureId persisted Structure receiving an in-Structure Room operation, or {@code -1}
+ * @param targetFloorId persisted Floor receiving an in-Structure Room operation, or {@code -1}
  */
-public record RoomScanPlan(Optional<Building> building,
+public record RoomScanPlan(Optional<Building> currentRoom,
                            Village.RoomScanMode mode,
                            int targetBuildingId,
                            int prospectiveFloorNumber,
                            BlockPos interactionSource,
                            BlockPos scanSeed,
-                           int interactionStructureId,
-                           int interactionFloorId) {
+                           int targetStructureId,
+                           int targetFloorId) {
     private static final int NO_TARGET_BUILDING = -1;
     private static final int NO_PROSPECTIVE_FLOOR = Integer.MIN_VALUE;
     private static final int NO_INTERACTION_STRUCTURE = -1;
     private static final int NO_INTERACTION_FLOOR = -1;
 
     public RoomScanPlan {
-        building = building == null ? Optional.empty() : building;
+        currentRoom = currentRoom == null ? Optional.empty() : currentRoom;
         interactionSource = interactionSource.immutable();
         scanSeed = scanSeed.immutable();
     }
@@ -48,8 +47,8 @@ public record RoomScanPlan(Optional<Building> building,
                 room.getStructureId(), room.getFloorId());
     }
 
-    static RoomScanPlan addRoom(Building mainRoom, int structureId, int floorId, BlockPos source) {
-        return new RoomScanPlan(Optional.ofNullable(mainRoom), Village.RoomScanMode.ADD_ROOM,
+    static RoomScanPlan addRoom(int structureId, int floorId, BlockPos source) {
+        return new RoomScanPlan(Optional.empty(), Village.RoomScanMode.ADD_ROOM,
                 NO_TARGET_BUILDING, NO_PROSPECTIVE_FLOOR, source, source, structureId, floorId);
     }
 
@@ -63,7 +62,4 @@ public record RoomScanPlan(Optional<Building> building,
                 NO_INTERACTION_STRUCTURE, NO_INTERACTION_FLOOR);
     }
 
-    public Optional<Building> functionalRoom() {
-        return mode == Village.RoomScanMode.UPDATE_ROOM ? building : Optional.empty();
-    }
 }

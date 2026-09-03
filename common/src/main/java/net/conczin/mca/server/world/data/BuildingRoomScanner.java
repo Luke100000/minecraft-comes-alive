@@ -81,7 +81,7 @@ final class BuildingRoomScanner {
 
         BlockPos seed = nearestCell(source, component.cells());
         Set<BlockPos> ownedConnectorCells = ownedConnectorCells(surface, components, component);
-        Set<BlockPos> poi = RoomPoiEvidence.candidates(surface, component, ownedConnectorCells);
+        Set<BlockPos> poi = RoomPoiEvidence.candidates(surface, components, component, ownedConnectorCells);
         int minX = footprint.stream().mapToInt(BlockPos::getX).min().orElse(source.getX());
         int minZ = footprint.stream().mapToInt(BlockPos::getZ).min().orElse(source.getZ());
         int maxX = footprint.stream().mapToInt(BlockPos::getX).max().orElse(source.getX());

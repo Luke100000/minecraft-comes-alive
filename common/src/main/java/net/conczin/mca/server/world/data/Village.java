@@ -35,7 +35,6 @@ public class Village implements Iterable<Building> {
     public static final int MERGE_MARGIN = 64;
     private static final int MOVE_IN_COOLDOWN = 1200;
     private static final long BED_SYNC_TIME = 200;
-    private static final int MAX_FLOOR_ATTACHMENT_GAP = 4;
     private static final Comparator<AttachmentTarget> ATTACHMENT_TARGET_ORDER = Comparator
             .comparingInt(AttachmentTarget::gap)
             .thenComparingInt(AttachmentTarget::buildingId)
@@ -186,7 +185,7 @@ public class Village implements Iterable<Building> {
     }
 
     public int getLogicalBuildingId(int structureId) {
-        return getStructure(structureId).map(Structure::getLogicalBuildingId).orElse(structureId);
+        return getStructure(structureId).map(Structure::getLogicalBuildingId).orElse(-1);
     }
 
     Optional<LogicalBuilding> getLogicalBuilding(int buildingId) {
@@ -197,7 +196,7 @@ public class Village implements Iterable<Building> {
         structures.put(structure.getId(), structure);
         buildings.put(room.getId(), room);
         logicalBuildings.computeIfAbsent(structure.getLogicalBuildingId(), id ->
-                new LogicalBuilding(id, structure.getId(), room.getFloorId(), room.getId(), true));
+                new LogicalBuilding(id, room.getId(), true));
     }
 
     public void registerRoom(Building room) {
@@ -265,28 +264,45 @@ public class Village implements Iterable<Building> {
                 .toList();
     }
 
-    public boolean canRemoveFloor(int structureId, int floorId) {
-        Structure structure = structures.get(structureId);
-        StructureFloor floor = structure == null ? null : structure.getFloor(floorId).orElse(null);
-        if (floor == null || floor.floorNumber() == 0) return false;
+    public boolean canRemoveFloor(int buildingId, int floorNumber) {
+        if (floorNumber == 0) return false;
+
+        List<Structure> members = getBuildingStructures(buildingId);
+        if (members.stream().flatMap(structure -> structure.getFloors().stream())
+                .noneMatch(floor -> floor.floorNumber() == floorNumber)) {
+            return false;
+        }
 
         boolean hasRooms = buildings.values().stream().anyMatch(room ->
-                room.getStructureId() == structureId && room.getFloorId() == floorId);
+                structures.containsKey(room.getStructureId())
+                        && structures.get(room.getStructureId()).getLogicalBuildingId() == buildingId
+                        && structures.get(room.getStructureId()).getFloor(room.getFloorId())
+                        .map(floor -> floor.floorNumber() == floorNumber)
+                        .orElse(false));
         if (hasRooms) return false;
 
-        int floorNumber = floor.floorNumber();
-        return getBuildingStructures(structure.getLogicalBuildingId()).stream()
+        return members.stream()
                 .flatMap(member -> member.getFloors().stream())
                 .noneMatch(candidate -> floorNumber > 0
                         ? candidate.floorNumber() > floorNumber
                         : candidate.floorNumber() < floorNumber);
     }
 
-    boolean removeFloor(int structureId, int floorId) {
-        if (!canRemoveFloor(structureId, floorId)) return false;
-        Structure structure = structures.get(structureId);
-        if (structure.getFloors().size() == 1) structures.remove(structureId);
-        else structure.removeFloor(floorId);
+    boolean removeFloor(int buildingId, int floorNumber) {
+        if (!canRemoveFloor(buildingId, floorNumber)) return false;
+
+        for (Structure structure : getBuildingStructures(buildingId)) {
+            List<Integer> floorIds = structure.getFloors().stream()
+                    .filter(floor -> floor.floorNumber() == floorNumber)
+                    .map(StructureFloor::id)
+                    .toList();
+            if (floorIds.isEmpty()) continue;
+            if (floorIds.size() == structure.getFloors().size()) {
+                structures.remove(structure.getId());
+            } else {
+                floorIds.forEach(structure::removeFloor);
+            }
+        }
         refreshLogicalBuildings();
         calculateDimensions();
         markDirty();
@@ -568,7 +584,6 @@ public class Village implements Iterable<Building> {
             Building room = interaction.position().room();
             if (room != null) return RoomScanPlan.updateRoom(room, source);
             return RoomScanPlan.addRoom(
-                    getMainRoom(interaction.structure()).orElse(null),
                     interaction.structure().getId(), interaction.position().floor().id(), source);
         }
 
@@ -580,7 +595,7 @@ public class Village implements Iterable<Building> {
                 StructureScanner.resolveAttachmentSeed(level, source).orElse(null);
         if (attachmentSeed == null) return Optional.empty();
 
-        StructureFloor candidateFloor = StructureScanner.persistedFloor(attachmentSeed.surface());
+        StructureFloor candidateFloor = StructureScanner.persistedFloor(level, attachmentSeed.surface());
         AttachmentTarget target = resolveAttachmentTarget(candidateFloor).orElse(null);
         if (target == null) return Optional.empty();
 
@@ -598,9 +613,8 @@ public class Village implements Iterable<Building> {
         Map<Integer, AttachmentTarget> nearestByBuilding = new HashMap<>();
         for (Structure structure : structures.values()) {
             for (StructureFloor floor : structure.getFloors()) {
-                if (floor.region() == null || !candidate.region().touchesHorizontally(floor.region())) continue;
-                int gap = candidate.verticalGapTo(floor);
-                if (gap < 0 || gap > MAX_FLOOR_ATTACHMENT_GAP) continue;
+                if (!sharesVerticalConnector(candidate, floor)) continue;
+                int gap = Math.abs(candidate.anchorY() - floor.anchorY());
                 AttachmentTarget target = new AttachmentTarget(
                         structure.getLogicalBuildingId(), structure.getId(), floor.id(), gap);
                 nearestByBuilding.merge(target.buildingId(), target,
@@ -617,6 +631,20 @@ public class Village implements Iterable<Building> {
                 ? Optional.empty() : Optional.of(nearest);
     }
 
+    private static boolean sharesVerticalConnector(StructureFloor first, StructureFloor second) {
+        return first.connectors().stream()
+                .filter(marker -> isVerticalConnector(marker.type()))
+                .anyMatch(firstMarker -> second.connectors().stream()
+                        .filter(marker -> isVerticalConnector(marker.type()))
+                        .anyMatch(secondMarker -> firstMarker.pos().getX() == secondMarker.pos().getX()
+                                && firstMarker.pos().getZ() == secondMarker.pos().getZ()));
+    }
+
+    private static boolean isVerticalConnector(StructureFloor.ConnectorType type) {
+        return type == StructureFloor.ConnectorType.LADDER
+                || type == StructureFloor.ConnectorType.TRAPDOOR;
+    }
+
     Optional<Structure> getInteractionStructureAt(Level level, BlockPos pos) {
         return resolveInteractionPosition(level, pos).map(ResolvedInteraction::structure);
     }
@@ -630,11 +658,7 @@ public class Village implements Iterable<Building> {
                                 roomsByStructure.getOrDefault(structure.getId(), List.of())).orElse(null)))
                 .filter(resolved -> resolved.position() != null)
                 .min(Comparator
-                        .comparingInt((ResolvedInteraction resolved) -> resolved.position().kind().priority())
-                        .thenComparingInt(resolved -> resolved.position().verticalDistance())
-                        .thenComparingInt(resolved -> resolved.position().verticalConnector()
-                                ? resolved.position().floor().anchorY() : 0)
-                        .thenComparing(resolved -> resolved.position().room() == null)
+                        .comparing((ResolvedInteraction resolved) -> resolved.position().room() == null)
                         .thenComparingInt(resolved -> resolved.structure().getId()));
     }
 
@@ -684,6 +708,7 @@ public class Village implements Iterable<Building> {
         if (logical == null || logical.mainRoomId() == room.getId()
                 || !belongsToLogicalBuilding(room, logical.id())) return false;
         logical.setMainRoomId(room.getId());
+        applyFloorNumbers(logical);
         markDirty();
         return true;
     }
@@ -785,14 +810,11 @@ public class Village implements Iterable<Building> {
         LogicalBuilding logical = logicalBuildings.get(buildingId);
         if (logical == null) return;
 
-        Structure ground = structures.get(logical.groundStructureId());
-        if (ground == null || ground.getLogicalBuildingId() != buildingId
-                || ground.getFloor(logical.groundFloorId()).isEmpty()) {
-            Structure replacement = members.getFirst();
-            replacement.getFloors().stream().findFirst().ifPresent(
-                    floor -> logical.setGroundFloor(replacement.getId(), floor.id()));
-        }
         if (!validMainRoom(logical)) logical.setMainRoomId(lowestRoomId(buildingId));
+        if (logical.mainRoomId() < 0) {
+            removeLogicalBuilding(buildingId);
+            return;
+        }
         applyFloorNumbers(logical);
     }
 
@@ -833,15 +855,13 @@ public class Village implements Iterable<Building> {
             }
         }
         for (LogicalBuilding logical : logicalBuildings.values()) {
-            Structure ground = structures.get(logical.groundStructureId());
-            if (ground == null || ground.getLogicalBuildingId() != logical.id()
-                    || ground.getFloor(logical.groundFloorId()).isEmpty()) {
-                throw new IllegalArgumentException("Logical building " + logical.id()
-                        + " has invalid Ground Floor " + logical.groundStructureId() + ":" + logical.groundFloorId());
-            }
             if (!validMainRoom(logical)) {
                 throw new IllegalArgumentException("Logical building " + logical.id()
                         + " has invalid Main Room " + logical.mainRoomId());
+            }
+            if (groundFloor(logical).isEmpty()) {
+                throw new IllegalArgumentException("Logical building " + logical.id()
+                        + " cannot derive Ground Floor from Main Room " + logical.mainRoomId());
             }
         }
     }
@@ -943,10 +963,12 @@ public class Village implements Iterable<Building> {
             band.add(ref);
         }
 
+        FloorRef ground = groundFloor(logical).orElse(null);
+        if (ground == null) return Map.of();
         int groundBand = java.util.stream.IntStream.range(0, bands.size())
                 .filter(index -> bands.get(index).stream().anyMatch(ref ->
-                        ref.structure().getId() == logical.groundStructureId()
-                                && ref.floor().id() == logical.groundFloorId()))
+                        ref.structure().getId() == ground.structure().getId()
+                                && ref.floor().id() == ground.floor().id()))
                 .findFirst()
                 .orElse(-1);
         if (groundBand < 0) return Map.of();
@@ -957,6 +979,14 @@ public class Village implements Iterable<Building> {
             for (FloorRef ref : bands.get(bandIndex)) numbers.put(ref, floorNumber);
         }
         return Map.copyOf(numbers);
+    }
+
+    private Optional<FloorRef> groundFloor(LogicalBuilding logical) {
+        if (logical == null || logical.mainRoomId() < 0) return Optional.empty();
+        Building main = buildings.get(logical.mainRoomId());
+        if (!belongsToLogicalBuilding(main, logical.id())) return Optional.empty();
+        Structure structure = structures.get(main.getStructureId());
+        return structure.getFloor(main.getFloorId()).map(floor -> new FloorRef(structure, floor));
     }
 
 

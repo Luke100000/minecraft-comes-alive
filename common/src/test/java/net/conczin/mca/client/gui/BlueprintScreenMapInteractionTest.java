@@ -14,6 +14,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.Bootstrap;
 import net.minecraft.world.level.block.Blocks;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Array;
@@ -32,6 +33,11 @@ class BlueprintScreenMapInteractionTest {
     static void bootstrapMinecraft() {
         SharedConstants.tryDetectVersion();
         Bootstrap.bootStrap();
+    }
+
+    @BeforeEach
+    void resetSelectedFloor() throws Exception {
+        setSelectedFloorOrdinal(0);
     }
 
     @Test
@@ -203,7 +209,54 @@ class BlueprintScreenMapInteractionTest {
     }
 
     @Test
-    void emptyInteractionFloorUsesRemoveFloorAction() throws Exception {
+    void selectedFloorRemovalUsesLogicalBuildingOfRoomPlayerIsStandingIn() throws Exception {
+        Village village = new Village(1, null);
+        Structure current = new Structure(10, BlockPos.ZERO, BlockPos.ZERO, BlockPos.ZERO,
+                List.of(
+                        new StructureFloor(0, 64, 68, 0, null),
+                        new StructureFloor(1, 72, 76, 1, null)));
+        Building currentRoom = room(1);
+        registerStructure(village, current, currentRoom);
+
+        Structure other = new Structure(20, BlockPos.ZERO, BlockPos.ZERO, BlockPos.ZERO,
+                List.of(new StructureFloor(0, 64, 68, 0, null)));
+        Building otherRoom = room(2);
+        otherRoom.setStructureId(20);
+        registerStructure(village, other, otherRoom);
+
+        RoomScanPlan plan = new RoomScanPlan(Optional.of(currentRoom), Village.RoomScanMode.UPDATE_ROOM,
+                -1, Integer.MIN_VALUE, BlockPos.ZERO, BlockPos.ZERO, 10, 0);
+        setSelectedFloorOrdinal(1);
+
+        BlueprintScreen.RemovalControlState state = BlueprintScreen.removalControlState(village, plan);
+
+        assertTrue(state.visible());
+        assertTrue(state.active());
+        assertEquals(ReportBuildingMessage.Action.REMOVE_FLOOR, state.action());
+    }
+
+    @Test
+    void floorRemovalIsUnavailableWhenPlayerIsNotStandingInARoom() throws Exception {
+        Village village = new Village(1, null);
+        Structure structure = new Structure(10, BlockPos.ZERO, BlockPos.ZERO, BlockPos.ZERO,
+                List.of(
+                        new StructureFloor(0, 60, 64, -1, null),
+                        new StructureFloor(1, 64, 68, 0, null)));
+        Building main = room(1);
+        main.setFloorId(1);
+        registerStructure(village, structure, main);
+
+        RoomScanPlan plan = new RoomScanPlan(Optional.empty(), Village.RoomScanMode.ADD_BASEMENT,
+                10, -1, BlockPos.ZERO, BlockPos.ZERO, -1, -1);
+        setSelectedFloorOrdinal(-1);
+
+        BlueprintScreen.RemovalControlState state = BlueprintScreen.removalControlState(village, plan);
+
+        assertFalse(state.visible());
+    }
+
+    @Test
+    void selectedEmptyTerminalFloorUsesRemoveFloorActionFromCurrentRoom() throws Exception {
         Village village = new Village(1, null);
         Structure structure = new Structure(10, BlockPos.ZERO, BlockPos.ZERO, BlockPos.ZERO,
                 List.of(
@@ -212,8 +265,9 @@ class BlueprintScreenMapInteractionTest {
         Building main = room(1);
         registerStructure(village, structure, main);
 
-        RoomScanPlan plan = new RoomScanPlan(Optional.of(main), Village.RoomScanMode.ADD_ROOM,
-                -1, Integer.MIN_VALUE, BlockPos.ZERO, BlockPos.ZERO, 10, 1);
+        RoomScanPlan plan = new RoomScanPlan(Optional.of(main), Village.RoomScanMode.UPDATE_ROOM,
+                -1, Integer.MIN_VALUE, BlockPos.ZERO, BlockPos.ZERO, 10, 0);
+        setSelectedFloorOrdinal(1);
 
         BlueprintScreen.RemovalControlState state = BlueprintScreen.removalControlState(village, plan);
 
@@ -224,23 +278,26 @@ class BlueprintScreenMapInteractionTest {
     }
 
     @Test
-    void unregisteredAreaOnOccupiedFloorDoesNotOfferFloorRemoval() throws Exception {
+    void occupiedGroundFloorFallsBackToMainRoomRemovalControl() throws Exception {
         Village village = new Village(1, null);
         Structure structure = new Structure(10, BlockPos.ZERO, BlockPos.ZERO, BlockPos.ZERO,
                 List.of(new StructureFloor(0, 64, 68, 0, null)));
         Building main = room(1);
         registerStructure(village, structure, main);
 
-        RoomScanPlan plan = new RoomScanPlan(Optional.of(main), Village.RoomScanMode.ADD_ROOM,
+        RoomScanPlan plan = new RoomScanPlan(Optional.of(main), Village.RoomScanMode.UPDATE_ROOM,
                 -1, Integer.MIN_VALUE, BlockPos.ZERO, BlockPos.ZERO, 10, 0);
+        setSelectedFloorOrdinal(0);
 
         BlueprintScreen.RemovalControlState state = BlueprintScreen.removalControlState(village, plan);
 
-        assertFalse(state.visible());
+        assertTrue(state.visible());
+        assertFalse(state.active());
+        assertEquals(ReportBuildingMessage.Action.REMOVE_ROOM, state.action());
     }
 
     @Test
-    void emptyMiddleFloorDoesNotOfferFloorRemoval() throws Exception {
+    void emptyMiddleFloorFallsBackToMainRoomRemovalControl() throws Exception {
         Village village = new Village(1, null);
         Structure structure = new Structure(10, BlockPos.ZERO, BlockPos.ZERO, BlockPos.ZERO,
                 List.of(
@@ -250,16 +307,19 @@ class BlueprintScreenMapInteractionTest {
         Building main = room(1);
         registerStructure(village, structure, main);
 
-        RoomScanPlan plan = new RoomScanPlan(Optional.of(main), Village.RoomScanMode.ADD_ROOM,
-                -1, Integer.MIN_VALUE, BlockPos.ZERO, BlockPos.ZERO, 10, 1);
+        RoomScanPlan plan = new RoomScanPlan(Optional.of(main), Village.RoomScanMode.UPDATE_ROOM,
+                -1, Integer.MIN_VALUE, BlockPos.ZERO, BlockPos.ZERO, 10, 0);
+        setSelectedFloorOrdinal(1);
 
         BlueprintScreen.RemovalControlState state = BlueprintScreen.removalControlState(village, plan);
 
-        assertFalse(state.visible());
+        assertTrue(state.visible());
+        assertFalse(state.active());
+        assertEquals(ReportBuildingMessage.Action.REMOVE_ROOM, state.action());
     }
 
     @Test
-    void emptyInnerBasementDoesNotOfferFloorRemoval() throws Exception {
+    void emptyInnerBasementFallsBackToMainRoomRemovalControl() throws Exception {
         Village village = new Village(1, null);
         Structure structure = new Structure(10, BlockPos.ZERO, BlockPos.ZERO, BlockPos.ZERO,
                 List.of(
@@ -270,12 +330,15 @@ class BlueprintScreenMapInteractionTest {
         main.setFloorId(2);
         registerStructure(village, structure, main);
 
-        RoomScanPlan plan = new RoomScanPlan(Optional.of(main), Village.RoomScanMode.ADD_ROOM,
-                -1, Integer.MIN_VALUE, BlockPos.ZERO, BlockPos.ZERO, 10, 1);
+        RoomScanPlan plan = new RoomScanPlan(Optional.of(main), Village.RoomScanMode.UPDATE_ROOM,
+                -1, Integer.MIN_VALUE, BlockPos.ZERO, BlockPos.ZERO, 10, 2);
+        setSelectedFloorOrdinal(-1);
 
         BlueprintScreen.RemovalControlState state = BlueprintScreen.removalControlState(village, plan);
 
-        assertFalse(state.visible());
+        assertTrue(state.visible());
+        assertFalse(state.active());
+        assertEquals(ReportBuildingMessage.Action.REMOVE_ROOM, state.action());
     }
 
     @Test
@@ -290,8 +353,9 @@ class BlueprintScreenMapInteractionTest {
         main.setFloorId(2);
         registerStructure(village, structure, main);
 
-        RoomScanPlan plan = new RoomScanPlan(Optional.of(main), Village.RoomScanMode.ADD_ROOM,
-                -1, Integer.MIN_VALUE, BlockPos.ZERO, BlockPos.ZERO, 10, 0);
+        RoomScanPlan plan = new RoomScanPlan(Optional.of(main), Village.RoomScanMode.UPDATE_ROOM,
+                -1, Integer.MIN_VALUE, BlockPos.ZERO, BlockPos.ZERO, 10, 2);
+        setSelectedFloorOrdinal(-2);
 
         BlueprintScreen.RemovalControlState state = BlueprintScreen.removalControlState(village, plan);
 
@@ -323,6 +387,12 @@ class BlueprintScreenMapInteractionTest {
         room.setStructureId(10);
         room.setFloorId(0);
         return room;
+    }
+
+    private static void setSelectedFloorOrdinal(Integer ordinal) throws Exception {
+        Field selectedFloor = BlueprintScreen.class.getDeclaredField("selectedFloorOrdinal");
+        selectedFloor.setAccessible(true);
+        selectedFloor.set(null, ordinal);
     }
 
     private static void registerStructure(Village village, Structure structure, Building room) throws Exception {

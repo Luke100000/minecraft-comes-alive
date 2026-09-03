@@ -65,6 +65,40 @@ class BuildingRoomScannerOwnerTest {
         assertFalse(otherFootprint.contains(connector));
     }
 
+    @Test
+    void outerConnectorSourceSelectsItsOnlyAdjacentRoom() {
+        BlockPos connector = new BlockPos(0, 64, 0);
+        FloorSurface surface = new FloorSurface(Set.of(
+                cell(0, 64, 0), cell(1, 64, 0), cell(2, 64, 0), cell(3, 64, 0), cell(4, 64, 0)),
+                Map.of(connector, connector));
+        List<FloorSurfacePartitioner.Component> components = FloorSurfacePartitioner.partition(surface);
+
+        FloorSurfacePartitioner.Component selected = FloorSurfacePartitioner.select(connector, surface, components);
+
+        assertEquals(1, components.size());
+        assertEquals(components.getFirst(), selected);
+        assertTrue(BuildingRoomScanner.footprintForComponent(surface, components, selected, 64)
+                .contains(connector));
+    }
+
+    @Test
+    void sharedConnectorSourceSelectsTheSameDeterministicOwnerAsItsFloorCell() {
+        BlockPos connector = new BlockPos(2, 64, 0);
+        FloorSurface surface = new FloorSurface(Set.of(
+                cell(0, 64, 0), cell(1, 64, 0), cell(2, 64, 0),
+                cell(3, 64, 0), cell(4, 64, 0), cell(5, 64, 0), cell(6, 64, 0)),
+                Map.of(connector, connector));
+        List<FloorSurfacePartitioner.Component> components = FloorSurfacePartitioner.partition(surface);
+        FloorSurfacePartitioner.Component owner = FloorSurfacePartitioner.owner(
+                FloorSurfacePartitioner.adjacent(connector, components));
+
+        FloorSurfacePartitioner.Component selected = FloorSurfacePartitioner.select(connector, surface, components);
+
+        assertEquals(owner, selected);
+        assertTrue(BuildingRoomScanner.footprintForComponent(surface, components, selected, 64)
+                .contains(connector));
+    }
+
     private static FloorSurface.Cell cell(int x, int y, int z) {
         return new FloorSurface.Cell(new BlockPos(x, y, z), y, y + 4);
     }

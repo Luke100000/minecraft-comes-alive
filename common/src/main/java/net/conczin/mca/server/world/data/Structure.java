@@ -6,7 +6,6 @@ import net.minecraft.core.Vec3i;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.*;
 
@@ -90,27 +89,10 @@ public final class Structure implements VillageBuilding {
         return resolveFloor(queryY).filter(floor -> queryY < floor.ceilingY());
     }
 
-    /** Chooses the nearest Floor whose exact footprint contains the query X/Z column. */
-    private Optional<StructureFloor> nearestFloorAtColumn(Vec3i pos) {
-        if (pos == null || !containsPosHorizontally(pos)) return Optional.empty();
-        return getFloors().stream()
-                .filter(floor -> floor.contains(pos.getX(), pos.getZ()))
-                .min(Comparator.comparingInt((StructureFloor floor) -> verticalDistance(floor, pos.getY()))
-                        .thenComparingInt(StructureFloor::anchorY)
-                        .thenComparingInt(StructureFloor::id));
-    }
-
-    /** One floor-resolution rule for direct positions. Vertical connectors are ranked separately by landing proximity. */
+    /** Direct positions resolve by vertical Floor band. Connector handoffs are resolved separately. */
     Optional<StructureFloor> resolveFloorAt(BlockPos pos) {
         if (pos == null) return Optional.empty();
-        return nearestFloorAtColumn(pos).or(() -> floorAtHeight(pos.getY()));
-    }
-
-
-    private static int verticalDistance(StructureFloor floor, int queryY) {
-        if (queryY < floor.anchorY()) return floor.anchorY() - queryY;
-        if (queryY >= floor.ceilingY()) return queryY - Math.max(floor.anchorY(), floor.ceilingY() - 1);
-        return 0;
+        return floorAtHeight(pos.getY());
     }
 
     /** Exact physical membership is the canonical Floor footprint extruded through its vertical band. */
@@ -128,69 +110,19 @@ public final class Structure implements VillageBuilding {
                                                              BlockPos pos,
                                                              Collection<Building> structureRooms) {
         Collection<Building> localRooms = structureRooms == null ? List.of() : structureRooms;
-        BlockState state = world.getBlockState(pos);
-        if (StructureConnector.isVerticalInteraction(world, pos)) {
-            StructureFloor connectorFloor = null;
-            BlockPos connectorFloorCell = null;
-            for (StructureFloor candidate : getFloors()) {
-                BlockPos floorCell = StructureConnector.resolveVerticalFloorCell(world, candidate, pos);
-                if (floorCell == null) continue;
-                if (connectorFloor == null
-                        || Math.abs(candidate.anchorY() - pos.getY())
-                        < Math.abs(connectorFloor.anchorY() - pos.getY())
-                        || Math.abs(candidate.anchorY() - pos.getY())
-                        == Math.abs(connectorFloor.anchorY() - pos.getY())
-                        && candidate.anchorY() < connectorFloor.anchorY()) {
-                    connectorFloor = candidate;
-                    connectorFloorCell = floorCell;
-                }
-            }
-            if (connectorFloor == null) return Optional.empty();
-            return Optional.of(new InteractionPosition(
-                    connectorFloor,
-                    roomAtColumn(localRooms, connectorFloor, connectorFloorCell.getX(), connectorFloorCell.getZ()),
-                    InteractionKind.VERTICAL_CONNECTOR,
-                    Math.abs(connectorFloor.anchorY() - pos.getY())));
-        }
-
-        StructureFloor physicalFloor = physicalFloorAt(pos).orElse(null);
-        if (physicalFloor != null) {
-            return Optional.of(new InteractionPosition(
-                    physicalFloor,
-                    roomAtColumn(localRooms, physicalFloor, pos.getX(), pos.getZ()),
-                    InteractionKind.PHYSICAL,
-                    0));
-        }
-
         StructureFloor floor = resolveFloorAt(pos).orElse(null);
         if (floor == null) return Optional.empty();
-
-        if (StructureConnector.isHorizontalBoundary(state)) {
-            Building connectorOwner = roomAtColumn(localRooms, floor, pos.getX(), pos.getZ());
-            if (connectorOwner != null) {
-                return Optional.of(new InteractionPosition(
-                        floor, connectorOwner, InteractionKind.HORIZONTAL_CONNECTOR,
-                        verticalDistance(floor, pos.getY())));
-            }
+        int x = pos.getX();
+        int z = pos.getZ();
+        if (!floor.contains(x, z)) {
+            BlockPos connectorCell = StructureConnector.isVerticalInteraction(world, pos)
+                    ? StructureConnector.resolveVerticalFloorCell(world, floor, pos)
+                    : null;
+            if (connectorCell == null) return Optional.empty();
+            x = connectorCell.getX();
+            z = connectorCell.getZ();
         }
-
-        int distance = verticalDistance(floor, pos.getY());
-        if (floor.contains(pos.getX(), pos.getZ())
-                && distance == 1
-                && StructureScanner.resolveStandingSurfaceSeed(world, pos).isPresent()) {
-            return Optional.of(new InteractionPosition(
-                    floor,
-                    roomAtColumn(localRooms, floor, pos.getX(), pos.getZ()),
-                    InteractionKind.LANDING_HANDOFF,
-                    distance));
-        }
-
-        BlockPos floorCell = StructureConnector.resolveFloorCell(world, this, floor, pos);
-        if (floorCell == null) return Optional.empty();
-        return Optional.of(new InteractionPosition(floor,
-                roomAtColumn(localRooms, floor, floorCell.getX(), floorCell.getZ()),
-                InteractionKind.HORIZONTAL_CONNECTOR,
-                verticalDistance(floor, pos.getY())));
+        return Optional.of(new InteractionPosition(floor, roomAtColumn(localRooms, floor, x, z)));
     }
 
     private static Building roomAtColumn(Collection<Building> rooms, StructureFloor floor, int x, int z) {
@@ -201,34 +133,8 @@ public final class Structure implements VillageBuilding {
                 .orElse(null);
     }
 
-    enum InteractionKind {
-        PHYSICAL(0),
-        HORIZONTAL_CONNECTOR(1),
-        VERTICAL_CONNECTOR(2),
-        LANDING_HANDOFF(3);
-
-        private final int priority;
-
-        InteractionKind(int priority) {
-            this.priority = priority;
-        }
-
-        int priority() {
-            return priority;
-        }
-    }
-
     record InteractionPosition(StructureFloor floor,
-                               Building room,
-                               InteractionKind kind,
-                               int verticalDistance) {
-        boolean physical() {
-            return kind == InteractionKind.PHYSICAL;
-        }
-
-        boolean verticalConnector() {
-            return kind == InteractionKind.VERTICAL_CONNECTOR;
-        }
+                               Building room) {
     }
 
     void setFloorNumber(int floorId, int floorNumber) {

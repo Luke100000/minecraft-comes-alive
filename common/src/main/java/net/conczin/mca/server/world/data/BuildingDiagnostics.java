@@ -45,7 +45,7 @@ public final class BuildingDiagnostics {
         Structure inspected = interactionStructure != null
                 ? interactionStructure
                 : structureAt != null ? structureAt : nearestStructure;
-        Building room = plan.functionalRoom().orElse(null);
+        Building room = plan.currentRoom().orElse(null);
         RoomTypeResolver roomTypeResolver = RoomTypeResolver.create(village);
 
         log(traceId, "lookup structureAt={} interactionStructure={} nearestStructure={} lookupBuilding={} lookupBuildingFloor={}",
@@ -64,16 +64,17 @@ public final class BuildingDiagnostics {
                     inspected.getId(), inspected.getLogicalBuildingId(), inspected.getSource(),
                     inspected.getRawPos0(), inspected.getRawPos1(),
                     contains, attaches, floor(resolvedFloor), floor(physicalFloor));
-            log(traceId, "interactionKind={} interactionFloorId={} interactionFloorNumber={} verticalDistance={}",
-                    interaction == null ? "none" : interaction.kind(),
+            log(traceId, "interactionFloorId={} interactionFloorNumber={} interactionRoomId={}",
                     interaction == null ? "none" : interaction.floor().id(),
                     interaction == null ? "none" : interaction.floor().floorNumber(),
-                    interaction == null ? "none" : interaction.verticalDistance());
+                    interaction == null || interaction.room() == null ? "none" : interaction.room().getId());
             LogicalBuilding logicalBuilding = village.getLogicalBuilding(inspected.getLogicalBuildingId()).orElse(null);
+            Building logicalMain = logicalBuilding == null
+                    ? null : village.getBuilding(logicalBuilding.mainRoomId()).orElse(null);
             log(traceId, "persistentFloors={} groundFloorStructureId={} groundFloorId={} logicalMainRoomId={} inheritanceEnabled={}",
                     floors(inspected.getFloors()),
-                    logicalBuilding == null ? "none" : logicalBuilding.groundStructureId(),
-                    logicalBuilding == null ? "none" : logicalBuilding.groundFloorId(),
+                    logicalMain == null ? "none" : logicalMain.getStructureId(),
+                    logicalMain == null ? "none" : logicalMain.getFloorId(),
                     logicalBuilding == null ? "none" : logicalBuilding.mainRoomId(),
                     logicalBuilding != null && logicalBuilding.inheritanceEnabled());
 

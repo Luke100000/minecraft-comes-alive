@@ -53,8 +53,6 @@ class RoomDFUTest {
         assertEquals(7, room.getStructureId());
         assertEquals(0, room.getFloorId());
         LogicalBuilding logical = migrated.logicalBuildings().get(7);
-        assertEquals(7, logical.groundStructureId());
-        assertEquals(0, logical.groundFloorId());
         assertEquals(7, logical.mainRoomId());
         assertTrue(logical.inheritanceEnabled());
     }
@@ -105,12 +103,13 @@ class RoomDFUTest {
     }
 
     @Test
-    void previousBranchGroundFloorZeroBecomesExplicitGroundReference() {
+    void previousBranchGroundFloorIsDerivedFromMigratedMainRoom() {
         RoomDFU.Result migrated = RoomDFU.migrate(previousBranchVillage(true));
 
         LogicalBuilding logical = migrated.logicalBuildings().get(20);
-        assertEquals(20, logical.groundStructureId());
-        assertEquals(0, logical.groundFloorId());
+        assertEquals(10, logical.mainRoomId());
+        assertEquals(20, migrated.buildings().get(logical.mainRoomId()).getStructureId());
+        assertEquals(0, migrated.buildings().get(logical.mainRoomId()).getFloorId());
     }
 
     @Test
@@ -131,6 +130,8 @@ class RoomDFUTest {
         assertFalse(floorTag.contains("floorNumber"));
         assertTrue(logicalTag.contains("mainRoomId"));
         assertTrue(logicalTag.contains("inheritanceEnabled"));
+        assertFalse(logicalTag.contains("groundStructureId"));
+        assertFalse(logicalTag.contains("groundFloorId"));
     }
 
     @Test
