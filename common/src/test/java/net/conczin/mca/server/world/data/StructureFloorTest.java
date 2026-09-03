@@ -63,6 +63,14 @@ class StructureFloorTest {
     }
 
     @Test
+    void canonicalFloorRequiresNonEmptyRegion() {
+        BuildingFloorRegion empty = BuildingFloorRegion.fromFootprint(64, Set.of());
+
+        assertThrows(IllegalArgumentException.class,
+                () -> new StructureFloor(3, 64, 70, 0, empty, List.of()));
+    }
+
+    @Test
     void currentFloorLoadRejectsMissingRegion() {
         CompoundTag tag = new CompoundTag();
         tag.putInt("id", 3);
