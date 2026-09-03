@@ -519,13 +519,13 @@ class VillageFloorSystemTest {
         List<StructureFloor> structureFloors = floors.length == 0
                 ? List.of(floor(0, 64))
                 : List.of(floors);
-        Structure structure = new Structure(id, BlockPos.ZERO, BlockPos.ZERO, BlockPos.ZERO, structureFloors);
+        Structure structure = new Structure(id, BlockPos.ZERO, structureFloors);
         structure.setLogicalBuildingId(logicalId);
         return structure;
     }
 
     private static StructureFloor floor(int id, int y) {
-        return new StructureFloor(id, y, y + 4, null);
+        return new StructureFloor(id, y, y + 4, region(y));
     }
 
     private static BuildingFloorRegion region(int y) {

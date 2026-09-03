@@ -8,6 +8,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -64,10 +65,8 @@ class RoomTypeResolverTest {
         Building upper = room(2, true, new BlockPos(2, 72, 2));
         upper.setStructureId(11);
 
-        Structure groundStructure = new Structure(10, BlockPos.ZERO, BlockPos.ZERO, BlockPos.ZERO,
-                List.of(new StructureFloor(0, 64, 68, null)));
-        Structure upperStructure = new Structure(11, BlockPos.ZERO, BlockPos.ZERO, BlockPos.ZERO,
-                List.of(new StructureFloor(0, 72, 76, null)));
+        Structure groundStructure = new Structure(10, BlockPos.ZERO, List.of(floor(64, 68)));
+        Structure upperStructure = new Structure(11, BlockPos.ZERO, List.of(floor(72, 76)));
         groundStructure.setLogicalBuildingId(10);
         upperStructure.setLogicalBuildingId(10);
 
@@ -91,12 +90,9 @@ class RoomTypeResolverTest {
         Building restaurantMain = room(3, true, new BlockPos(3, 80, 3));
         restaurantMain.setStructureId(20);
 
-        Structure innGround = new Structure(10, BlockPos.ZERO, BlockPos.ZERO, BlockPos.ZERO,
-                List.of(new StructureFloor(0, 64, 68, null)));
-        Structure innUpperStructure = new Structure(11, BlockPos.ZERO, BlockPos.ZERO, BlockPos.ZERO,
-                List.of(new StructureFloor(0, 72, 76, null)));
-        Structure restaurant = new Structure(20, BlockPos.ZERO, BlockPos.ZERO, BlockPos.ZERO,
-                List.of(new StructureFloor(0, 80, 84, null)));
+        Structure innGround = new Structure(10, BlockPos.ZERO, List.of(floor(64, 68)));
+        Structure innUpperStructure = new Structure(11, BlockPos.ZERO, List.of(floor(72, 76)));
+        Structure restaurant = new Structure(20, BlockPos.ZERO, List.of(floor(80, 84)));
         innGround.setLogicalBuildingId(10);
         innUpperStructure.setLogicalBuildingId(10);
         restaurant.setLogicalBuildingId(20);
@@ -121,8 +117,7 @@ class RoomTypeResolverTest {
         main.setContributesToMain(mainPreference);
         Building contributor = room(2, true, new BlockPos(2, 64, 2));
         Building independent = room(3, false, new BlockPos(3, 64, 3));
-        Structure structure = new Structure(10, BlockPos.ZERO, BlockPos.ZERO, BlockPos.ZERO,
-                List.of(new StructureFloor(0, 64, 68, null)));
+        Structure structure = new Structure(10, BlockPos.ZERO, List.of(floor(64, 68)));
         structure.setLogicalBuildingId(10);
         Village village = new Village(1, null);
         village.registerStructure(structure, main);
@@ -141,6 +136,11 @@ class RoomTypeResolverTest {
         room.setContributesToMain(contributes);
         room.getBlocks().put(BELL, List.of(poi));
         return room;
+    }
+
+    private static StructureFloor floor(int anchorY, int ceilingY) {
+        return new StructureFloor(0, anchorY, ceilingY,
+                BuildingFloorRegion.fromFootprint(anchorY, Set.of(new BlockPos(0, anchorY, 0))));
     }
 
     private record Fixture(Village village,

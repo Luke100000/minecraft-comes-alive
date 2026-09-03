@@ -141,8 +141,7 @@ class RoomDFUTest {
                 new BlockPos(0, 64, 0), new BlockPos(1, 64, 0),
                 new BlockPos(0, 64, 1), new BlockPos(1, 64, 1)));
         StructureFloor floor = new StructureFloor(0, 64, 70, 0, footprint);
-        Structure structure = new Structure(20, new BlockPos(0, 64, 0),
-                new BlockPos(0, 64, 0), new BlockPos(1, 69, 1), List.of(floor));
+        Structure structure = new Structure(20, new BlockPos(0, 64, 0), List.of(floor));
         structure.setLogicalBuildingId(77);
 
         Building room = new Building(new BlockPos(0, 64, 0));

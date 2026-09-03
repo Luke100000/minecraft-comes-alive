@@ -183,13 +183,21 @@ class BlueprintMapGeometryTest {
         Structure structure = new Structure(
                 id,
                 new BlockPos(0, y, 0),
-                new BlockPos(0, y, 0),
-                new BlockPos(0, y + 2, 0),
-                List.of(new StructureFloor(0, y, y + 3, floorNumber, null, List.of(connectors))));
+                List.of(new StructureFloor(0, y, y + 3, floorNumber,
+                        region(y),
+                        List.of(connectors))));
         Method setter = Structure.class.getDeclaredMethod("setLogicalBuildingId", int.class);
         setter.setAccessible(true);
         setter.invoke(structure, buildingId);
         return structure;
+    }
+
+    private static BuildingFloorRegion region(int anchorY) throws Exception {
+        Method fromFootprint = BuildingFloorRegion.class.getDeclaredMethod(
+                "fromFootprint", int.class, java.util.Collection.class);
+        fromFootprint.setAccessible(true);
+        return (BuildingFloorRegion) fromFootprint.invoke(null, anchorY,
+                Set.of(new BlockPos(0, anchorY, 0)));
     }
 
     private static Building room(int id, int structureId, int floorId, BlockPos source) {

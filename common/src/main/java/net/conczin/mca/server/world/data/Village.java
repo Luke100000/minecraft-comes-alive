@@ -615,10 +615,10 @@ public class Village implements Iterable<Building> {
     Optional<AttachmentTarget> selectAttachmentTarget(
             StructureFloor candidate,
             Collection<StructureConnector.VerticalConnection> connections) {
-        if (candidate == null || candidate.region() == null) return Optional.empty();
+        if (candidate == null) return Optional.empty();
         boolean overlapsRegisteredFloor = structures.values().stream()
                 .flatMap(structure -> structure.getFloors().stream())
-                .filter(floor -> floor.region() != null && candidate.verticalGapTo(floor) < 0)
+                .filter(floor -> candidate.verticalGapTo(floor) < 0)
                 .anyMatch(floor -> candidate.region().intersectionArea(floor.region()) > 0);
         if (overlapsRegisteredFloor) return Optional.empty();
 

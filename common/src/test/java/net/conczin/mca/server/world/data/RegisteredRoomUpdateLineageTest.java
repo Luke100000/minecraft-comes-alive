@@ -55,7 +55,6 @@ class RegisteredRoomUpdateLineageTest {
         BuildingFloorRegion original = BuildingFloorRegion.fromFootprint(64, List.of(
                 new BlockPos(0, 64, 0), new BlockPos(1, 64, 0)));
         Structure structure = new Structure(1, new BlockPos(0, 64, 0),
-                new BlockPos(0, 64, 0), new BlockPos(1, 67, 0),
                 List.of(new StructureFloor(7, 64, 68, 3, original)));
         BuildingFloorRegion fresh = BuildingFloorRegion.fromFootprint(64, List.of(
                 new BlockPos(1, 64, 0), new BlockPos(2, 64, 0)));

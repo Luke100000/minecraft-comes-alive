@@ -25,11 +25,11 @@ public record StructureFloor(int id, int anchorY, int ceilingY, int floorNumber,
     }
 
     public boolean contains(int x, int z) {
-        return region != null && region.containsHorizontally(x, z);
+        return region.containsHorizontally(x, z);
     }
 
     public int area() {
-        return region == null ? 0 : region.area();
+        return region.area();
     }
 
     int verticalGapTo(StructureFloor other) {
@@ -43,9 +43,7 @@ public record StructureFloor(int id, int anchorY, int ceilingY, int floorNumber,
         tag.putInt("id", id);
         tag.putInt("anchorY", anchorY);
         tag.putInt("ceilingY", ceilingY);
-        if (region != null) {
-            tag.put("region", region.save());
-        }
+        tag.put("region", region.save());
         if (!connectors.isEmpty()) {
             tag.put("connectors", NbtHelper.fromList(connectors, ConnectorMarker::save));
         }

@@ -4,6 +4,7 @@ import com.google.gson.JsonObject;
 import net.conczin.mca.resources.data.BuildingType;
 import net.conczin.mca.network.c2s.ReportBuildingMessage;
 import net.conczin.mca.server.world.data.Building;
+import net.conczin.mca.server.world.data.BuildingFloorRegion;
 import net.conczin.mca.server.world.data.RoomScanPlan;
 import net.conczin.mca.server.world.data.Structure;
 import net.conczin.mca.server.world.data.StructureFloor;
@@ -23,6 +24,7 @@ import java.lang.reflect.Method;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -211,8 +213,7 @@ class BlueprintScreenMapInteractionTest {
     @Test
     void inheritanceControlStateTracksRefreshedVillageWithoutRebuildingPage() throws Exception {
         Village village = new Village(1, null);
-        Structure structure = new Structure(10, BlockPos.ZERO, BlockPos.ZERO, BlockPos.ZERO,
-                List.of(new StructureFloor(0, 64, 68, null)));
+        Structure structure = new Structure(10, BlockPos.ZERO, List.of(floor(0, 64, 68, 0)));
         Building main = room(1);
         registerStructure(village, structure, main);
         Building sideRoom = room(2);
@@ -234,15 +235,14 @@ class BlueprintScreenMapInteractionTest {
     @Test
     void selectedFloorRemovalUsesLogicalBuildingOfRoomPlayerIsStandingIn() throws Exception {
         Village village = new Village(1, null);
-        Structure current = new Structure(10, BlockPos.ZERO, BlockPos.ZERO, BlockPos.ZERO,
+        Structure current = new Structure(10, BlockPos.ZERO,
                 List.of(
-                        new StructureFloor(0, 64, 68, 0, null),
-                        new StructureFloor(1, 72, 76, 1, null)));
+                        floor(0, 64, 68, 0),
+                        floor(1, 72, 76, 1)));
         Building currentRoom = room(1);
         registerStructure(village, current, currentRoom);
 
-        Structure other = new Structure(20, BlockPos.ZERO, BlockPos.ZERO, BlockPos.ZERO,
-                List.of(new StructureFloor(0, 64, 68, 0, null)));
+        Structure other = new Structure(20, BlockPos.ZERO, List.of(floor(0, 64, 68, 0)));
         Building otherRoom = room(2);
         otherRoom.setStructureId(20);
         registerStructure(village, other, otherRoom);
@@ -261,10 +261,10 @@ class BlueprintScreenMapInteractionTest {
     @Test
     void floorRemovalIsUnavailableWhenPlayerIsNotStandingInARoom() throws Exception {
         Village village = new Village(1, null);
-        Structure structure = new Structure(10, BlockPos.ZERO, BlockPos.ZERO, BlockPos.ZERO,
+        Structure structure = new Structure(10, BlockPos.ZERO,
                 List.of(
-                        new StructureFloor(0, 60, 64, -1, null),
-                        new StructureFloor(1, 64, 68, 0, null)));
+                        floor(0, 60, 64, -1),
+                        floor(1, 64, 68, 0)));
         Building main = room(1);
         main.setFloorId(1);
         registerStructure(village, structure, main);
@@ -281,10 +281,10 @@ class BlueprintScreenMapInteractionTest {
     @Test
     void selectedEmptyTerminalFloorUsesRemoveFloorActionFromCurrentRoom() throws Exception {
         Village village = new Village(1, null);
-        Structure structure = new Structure(10, BlockPos.ZERO, BlockPos.ZERO, BlockPos.ZERO,
+        Structure structure = new Structure(10, BlockPos.ZERO,
                 List.of(
-                        new StructureFloor(0, 64, 68, 0, null),
-                        new StructureFloor(1, 72, 76, 1, null)));
+                        floor(0, 64, 68, 0),
+                        floor(1, 72, 76, 1)));
         Building main = room(1);
         registerStructure(village, structure, main);
 
@@ -303,8 +303,7 @@ class BlueprintScreenMapInteractionTest {
     @Test
     void occupiedGroundFloorFallsBackToMainRoomRemovalControl() throws Exception {
         Village village = new Village(1, null);
-        Structure structure = new Structure(10, BlockPos.ZERO, BlockPos.ZERO, BlockPos.ZERO,
-                List.of(new StructureFloor(0, 64, 68, 0, null)));
+        Structure structure = new Structure(10, BlockPos.ZERO, List.of(floor(0, 64, 68, 0)));
         Building main = room(1);
         registerStructure(village, structure, main);
 
@@ -322,11 +321,11 @@ class BlueprintScreenMapInteractionTest {
     @Test
     void emptyMiddleFloorFallsBackToMainRoomRemovalControl() throws Exception {
         Village village = new Village(1, null);
-        Structure structure = new Structure(10, BlockPos.ZERO, BlockPos.ZERO, BlockPos.ZERO,
+        Structure structure = new Structure(10, BlockPos.ZERO,
                 List.of(
-                        new StructureFloor(0, 64, 68, 0, null),
-                        new StructureFloor(1, 72, 76, 1, null),
-                        new StructureFloor(2, 80, 84, 2, null)));
+                        floor(0, 64, 68, 0),
+                        floor(1, 72, 76, 1),
+                        floor(2, 80, 84, 2)));
         Building main = room(1);
         registerStructure(village, structure, main);
 
@@ -344,11 +343,11 @@ class BlueprintScreenMapInteractionTest {
     @Test
     void emptyInnerBasementFallsBackToMainRoomRemovalControl() throws Exception {
         Village village = new Village(1, null);
-        Structure structure = new Structure(10, BlockPos.ZERO, BlockPos.ZERO, BlockPos.ZERO,
+        Structure structure = new Structure(10, BlockPos.ZERO,
                 List.of(
-                        new StructureFloor(0, 56, 60, -2, null),
-                        new StructureFloor(1, 60, 64, -1, null),
-                        new StructureFloor(2, 64, 68, 0, null)));
+                        floor(0, 56, 60, -2),
+                        floor(1, 60, 64, -1),
+                        floor(2, 64, 68, 0)));
         Building main = room(1);
         main.setFloorId(2);
         registerStructure(village, structure, main);
@@ -367,11 +366,11 @@ class BlueprintScreenMapInteractionTest {
     @Test
     void emptyLowestBasementUsesRemoveFloorAction() throws Exception {
         Village village = new Village(1, null);
-        Structure structure = new Structure(10, BlockPos.ZERO, BlockPos.ZERO, BlockPos.ZERO,
+        Structure structure = new Structure(10, BlockPos.ZERO,
                 List.of(
-                        new StructureFloor(0, 56, 60, -2, null),
-                        new StructureFloor(1, 60, 64, -1, null),
-                        new StructureFloor(2, 64, 68, 0, null)));
+                        floor(0, 56, 60, -2),
+                        floor(1, 60, 64, -1),
+                        floor(2, 64, 68, 0)));
         Building main = room(1);
         main.setFloorId(2);
         registerStructure(village, structure, main);
@@ -410,6 +409,19 @@ class BlueprintScreenMapInteractionTest {
         room.setStructureId(10);
         room.setFloorId(0);
         return room;
+    }
+
+    private static StructureFloor floor(int id, int anchorY, int ceilingY, int floorNumber) throws Exception {
+        return new StructureFloor(id, anchorY, ceilingY, floorNumber,
+                region(anchorY));
+    }
+
+    private static BuildingFloorRegion region(int anchorY) throws Exception {
+        Method fromFootprint = BuildingFloorRegion.class.getDeclaredMethod(
+                "fromFootprint", int.class, java.util.Collection.class);
+        fromFootprint.setAccessible(true);
+        return (BuildingFloorRegion) fromFootprint.invoke(null, anchorY,
+                Set.of(new BlockPos(0, anchorY, 0)));
     }
 
     private static void setSelectedFloorOrdinal(Integer ordinal) throws Exception {

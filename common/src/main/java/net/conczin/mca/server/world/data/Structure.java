@@ -29,13 +29,6 @@ public final class Structure implements VillageBuilding {
         recomputeBoundsFromFloors();
     }
 
-    /** @deprecated bounds are derived from Floor geometry; callers should not provide them. */
-    @Deprecated(forRemoval = true)
-    public Structure(int id, BlockPos source, BlockPos ignoredMin, BlockPos ignoredMax,
-                     Collection<StructureFloor> floors) {
-        this(id, source, floors);
-    }
-
     public Structure(CompoundTag tag) {
         id = tag.getInt("id");
         logicalBuildingId = tag.contains("buildingId") ? tag.getInt("buildingId") : id;

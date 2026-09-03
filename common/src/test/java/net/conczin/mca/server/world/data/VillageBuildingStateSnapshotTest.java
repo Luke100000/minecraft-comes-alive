@@ -30,8 +30,7 @@ class VillageBuildingStateSnapshotTest {
                         new BlockPos(1, 8, 0),
                         new BlockPos(0, 8, 1),
                         new BlockPos(1, 8, 1))));
-        Structure structure = new Structure(
-                10, new BlockPos(0, 9, 0), new BlockPos(0, 8, 0), new BlockPos(1, 11, 1), List.of(floor));
+        Structure structure = new Structure(10, new BlockPos(0, 9, 0), List.of(floor));
         Building main = room(20, 10, 0, new BlockPos(0, 9, 0));
         main.setLastScan(1234L);
         village.registerStructure(structure, main);

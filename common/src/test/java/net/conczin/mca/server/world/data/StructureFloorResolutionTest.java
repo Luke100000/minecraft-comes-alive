@@ -77,10 +77,8 @@ class StructureFloorResolutionTest {
                 BuildingFloorRegion.fromFootprint(88, Set.of(connectorColumn)),
                 List.of(new StructureFloor.ConnectorMarker(
                         connectorColumn, StructureFloor.ConnectorType.TRAPDOOR)));
-        Structure basement = new Structure(10, new BlockPos(0, 84, 0),
-                new BlockPos(0, 84, 0), new BlockPos(0, 86, 0), List.of(basementFloor));
-        Structure ground = new Structure(11, connectorColumn,
-                connectorColumn, new BlockPos(0, 91, 0), List.of(groundFloor));
+        Structure basement = new Structure(10, new BlockPos(0, 84, 0), List.of(basementFloor));
+        Structure ground = new Structure(11, connectorColumn, List.of(groundFloor));
         basement.setLogicalBuildingId(10);
         ground.setLogicalBuildingId(10);
 
@@ -110,8 +108,7 @@ class StructureFloorResolutionTest {
         Set<BlockPos> roomFootprint = BuildingRoomScanner.footprintForComponent(owner, 64);
 
         StructureFloor persistedFloor = StructureScanner.persistedFloor(surface);
-        Structure structure = new Structure(10, new BlockPos(1, 64, 0),
-                new BlockPos(0, 64, 0), new BlockPos(4, 67, 0), List.of(persistedFloor));
+        Structure structure = new Structure(10, new BlockPos(1, 64, 0), List.of(persistedFloor));
         Building room = new Building(new BlockPos(1, 64, 0));
         room.setId(100);
         room.setStructureId(10);
@@ -140,8 +137,7 @@ class StructureFloorResolutionTest {
                         new BlockPos(3, 64, 0), new BlockPos(4, 64, 0))),
                 List.of(new StructureFloor.ConnectorMarker(
                         connector, StructureFloor.ConnectorType.DOOR)));
-        Structure structure = new Structure(10, BlockPos.ZERO,
-                new BlockPos(0, 64, 0), new BlockPos(4, 67, 0), List.of(floor));
+        Structure structure = new Structure(10, BlockPos.ZERO, List.of(floor));
         Building room = new Building(new BlockPos(2, 64, 0));
         room.setId(100);
         room.setStructureId(10);
@@ -168,8 +164,7 @@ class StructureFloorResolutionTest {
                         new BlockPos(3, 64, 0), new BlockPos(4, 64, 0), new BlockPos(5, 64, 0))),
                 List.of(new StructureFloor.ConnectorMarker(
                         connector, StructureFloor.ConnectorType.DOOR)));
-        Structure structure = new Structure(10, BlockPos.ZERO,
-                new BlockPos(0, 64, 0), new BlockPos(5, 67, 0), List.of(floor));
+        Structure structure = new Structure(10, BlockPos.ZERO, List.of(floor));
         Building smaller = room(100, 10, 0, Set.of(
                 new BlockPos(0, 64, 0), new BlockPos(1, 64, 0)));
         Building larger = room(101, 10, 0, Set.of(
@@ -186,7 +181,7 @@ class StructureFloorResolutionTest {
     }
 
     private static Structure structure(StructureFloor... floors) {
-        return new Structure(10, new BlockPos(0, 64, 0), BlockPos.ZERO, BlockPos.ZERO, List.of(floors));
+        return new Structure(10, new BlockPos(0, 64, 0), List.of(floors));
     }
 
     private static StructureFloor floor(int id, int anchorY, int ceilingY) {

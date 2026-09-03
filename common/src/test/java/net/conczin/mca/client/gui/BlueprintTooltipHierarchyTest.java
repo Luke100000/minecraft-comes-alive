@@ -4,6 +4,7 @@ import com.google.gson.JsonObject;
 import net.conczin.mca.resources.BuildingTypes;
 import net.conczin.mca.resources.data.BuildingType;
 import net.conczin.mca.server.world.data.Building;
+import net.conczin.mca.server.world.data.BuildingFloorRegion;
 import net.conczin.mca.server.world.data.RoomTypeResolver;
 import net.conczin.mca.server.world.data.Structure;
 import net.conczin.mca.server.world.data.StructureFloor;
@@ -24,6 +25,7 @@ import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -164,11 +166,9 @@ class BlueprintTooltipHierarchyTest {
         Structure structure = new Structure(
                 10,
                 BlockPos.ZERO,
-                BlockPos.ZERO,
-                BlockPos.ZERO,
                 List.of(
-                        new StructureFloor(0, 64, 67, 0, null),
-                        new StructureFloor(1, 68, 71, 1, null)
+                        floor(0, 64, 67, 0),
+                        floor(1, 68, 71, 1)
                 )
         );
         Method setLogicalBuildingId = Structure.class.getDeclaredMethod("setLogicalBuildingId", int.class);
@@ -185,6 +185,19 @@ class BlueprintTooltipHierarchyTest {
         registerStructure.invoke(village, structure, ground);
         village.registerRoom(upper);
         return new Fixture(village, ground, upper);
+    }
+
+    private static StructureFloor floor(int id, int anchorY, int ceilingY, int floorNumber) throws Exception {
+        return new StructureFloor(id, anchorY, ceilingY, floorNumber,
+                region(anchorY));
+    }
+
+    private static BuildingFloorRegion region(int anchorY) throws Exception {
+        Method fromFootprint = BuildingFloorRegion.class.getDeclaredMethod(
+                "fromFootprint", int.class, java.util.Collection.class);
+        fromFootprint.setAccessible(true);
+        return (BuildingFloorRegion) fromFootprint.invoke(null, anchorY,
+                Set.of(new BlockPos(0, anchorY, 0)));
     }
 
     private static Building room(int id, int structureId, int floorId, String type) {

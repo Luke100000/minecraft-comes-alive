@@ -190,7 +190,7 @@ public final class BuildingDiagnostics {
             StructureFloor freshFloor = fresh.stream()
                     .filter(candidate -> candidate.anchorY() == persistentFloor.anchorY())
                     .findFirst().orElse(null);
-            if (freshFloor == null || persistentFloor.region() == null || freshFloor.region() == null) continue;
+            if (freshFloor == null) continue;
 
             Set<BlockPos> persistentCells = persistentFloor.region().cells();
             Set<BlockPos> freshCells = freshFloor.region().cells();
