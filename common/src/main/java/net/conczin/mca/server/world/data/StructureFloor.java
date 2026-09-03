@@ -13,6 +13,9 @@ public record StructureFloor(int id, int anchorY, int ceilingY, int floorNumber,
                              BuildingFloorRegion region, List<ConnectorMarker> connectors) {
     public StructureFloor {
         region = Objects.requireNonNull(region, "region");
+        if (region.area() == 0) {
+            throw new IllegalArgumentException("StructureFloor requires non-empty region geometry");
+        }
         connectors = connectors == null ? List.of() : List.copyOf(connectors);
     }
 
