@@ -135,8 +135,7 @@ final class RoomDFU {
         if (region == null) return Optional.empty();
         StructureFloor floor = new StructureFloor(0, region.anchorY(),
                 Math.max(region.anchorY() + 1, room.getRawPos1().getY() + 1), region);
-        Structure structure = new Structure(room.getId(), room.getSourceBlock(), room.getRawPos0(), room.getRawPos1(),
-                List.of(floor));
+        Structure structure = new Structure(room.getId(), room.getSourceBlock(), List.of(floor));
         room.setStructureId(structure.getId());
         room.setFloorId(floor.id());
         return Optional.of(structure);

@@ -18,12 +18,10 @@ public final class Structure implements VillageBuilding {
     private BlockPos max;
     private final Map<Integer, StructureFloor> floors = new HashMap<>();
 
-    public Structure(int id, BlockPos source, BlockPos min, BlockPos max, Collection<StructureFloor> floors) {
+    public Structure(int id, BlockPos source, Collection<StructureFloor> floors) {
         this.id = id;
         logicalBuildingId = id;
         this.source = source.immutable();
-        this.min = min.immutable();
-        this.max = max.immutable();
         for (StructureFloor floor : floors) {
             this.floors.put(floor.id(), floor);
             nextFloorId = Math.max(nextFloorId, floor.id() + 1);
@@ -31,13 +29,18 @@ public final class Structure implements VillageBuilding {
         recomputeBoundsFromFloors();
     }
 
+    /** @deprecated bounds are derived from Floor geometry; callers should not provide them. */
+    @Deprecated(forRemoval = true)
+    public Structure(int id, BlockPos source, BlockPos ignoredMin, BlockPos ignoredMax,
+                     Collection<StructureFloor> floors) {
+        this(id, source, floors);
+    }
+
     public Structure(CompoundTag tag) {
         id = tag.getInt("id");
         logicalBuildingId = tag.contains("buildingId") ? tag.getInt("buildingId") : id;
         nextFloorId = tag.getInt("nextFloorId");
         source = NbtHelper.decodeBlockPos(tag.get("source"));
-        min = NbtHelper.decodeBlockPos(tag.get("min"));
-        max = NbtHelper.decodeBlockPos(tag.get("max"));
         for (StructureFloor floor : NbtHelper.toList(tag.getList("floors", Tag.TAG_COMPOUND),
                 value -> StructureFloor.load((CompoundTag) value))) {
             floors.put(floor.id(), floor);
@@ -52,8 +55,6 @@ public final class Structure implements VillageBuilding {
         tag.putInt("buildingId", getLogicalBuildingId());
         tag.putInt("nextFloorId", nextFloorId);
         tag.put("source", NbtHelper.encodeBlockPos(source));
-        tag.put("min", NbtHelper.encodeBlockPos(min));
-        tag.put("max", NbtHelper.encodeBlockPos(max));
         tag.put("floors", NbtHelper.fromList(getFloors(), StructureFloor::save));
         return tag;
     }
@@ -147,7 +148,7 @@ public final class Structure implements VillageBuilding {
     }
 
     Structure copy() {
-        Structure copy = new Structure(id, source, min, max, getFloors());
+        Structure copy = new Structure(id, source, getFloors());
         copy.logicalBuildingId = logicalBuildingId;
         copy.nextFloorId = nextFloorId;
         return copy;
@@ -155,7 +156,7 @@ public final class Structure implements VillageBuilding {
 
     boolean replaceFloorGeometry(int floorId, StructureFloor scannedFloor) {
         StructureFloor existing = floors.get(floorId);
-        if (existing == null || scannedFloor == null || scannedFloor.region() == null) return false;
+        if (existing == null || scannedFloor == null) return false;
         floors.put(floorId, new StructureFloor(
                 floorId,
                 scannedFloor.anchorY(),
@@ -178,7 +179,6 @@ public final class Structure implements VillageBuilding {
         if (current.isEmpty()) return;
 
         List<BlockPos> cells = current.stream()
-                .filter(floor -> floor.region() != null)
                 .flatMap(floor -> floor.region().cells().stream())
                 .toList();
         if (cells.isEmpty()) return;
@@ -264,8 +264,7 @@ public final class Structure implements VillageBuilding {
             for (StructureFloor candidate : other.getFloors()) {
                 boolean verticalOverlap = floor.anchorY() < candidate.ceilingY()
                         && candidate.anchorY() < floor.ceilingY();
-                if (verticalOverlap && floor.region() != null && candidate.region() != null
-                        && floor.region().intersectionArea(candidate.region()) > 0) {
+                if (verticalOverlap && floor.region().intersectionArea(candidate.region()) > 0) {
                     return true;
                 }
             }

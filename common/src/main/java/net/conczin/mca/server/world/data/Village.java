@@ -600,8 +600,7 @@ public class Village implements Iterable<Building> {
         AttachmentTarget target = resolveAttachmentTarget(level, candidateFloor).orElse(null);
         if (target == null) return Optional.empty();
 
-        Structure candidate = new Structure(-1, attachmentSeed.seed(), attachmentSeed.seed(),
-                attachmentSeed.seed(), List.of(candidateFloor));
+        Structure candidate = new Structure(-1, attachmentSeed.seed(), List.of(candidateFloor));
         int floorNumber = prospectiveFloorNumber(target.buildingId(), candidate, candidateFloor);
         if (floorNumber == Integer.MIN_VALUE) return Optional.empty();
         return Optional.of(RoomScanPlan.attachment(

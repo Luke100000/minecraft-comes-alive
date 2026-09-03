@@ -72,7 +72,7 @@ final class StructureScanner {
                                     StructureFloor floor,
                                     BlockPos source,
                                     Collection<Structure> existing) {
-        if (structure == null || floor == null || floor.region() == null) {
+        if (structure == null || floor == null) {
             return Result.failure(Building.validationResult.NOT_IN_BUILDING, source);
         }
 
@@ -158,8 +158,7 @@ final class StructureScanner {
 
         FloorSurface surface = selected.surface();
         StructureFloor floor = persistedFloor(surface);
-        Structure candidate = new Structure(
-                ignoredStructureId, scanSeed.immutable(), selected.min(), selected.max(), List.of(floor));
+        Structure candidate = new Structure(ignoredStructureId, scanSeed.immutable(), List.of(floor));
         for (Structure other : existing) {
             if (other.getId() != ignoredStructureId && candidate.intersects(other)) {
                 return Result.failure(Building.validationResult.OVERLAP, interactionSource);
@@ -214,7 +213,7 @@ final class StructureScanner {
             if (floor == null) throw new IllegalStateException("Cannot materialize a failed Structure scan");
             StructureFloor assigned = new StructureFloor(
                     0, floor.anchorY(), floor.ceilingY(), floor.floorNumber(), floor.region(), floor.connectors());
-            return new Structure(id, source, min, max, List.of(assigned));
+            return new Structure(id, source, List.of(assigned));
         }
     }
 }
