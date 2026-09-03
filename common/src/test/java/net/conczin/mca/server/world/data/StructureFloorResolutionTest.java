@@ -11,6 +11,7 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class StructureFloorResolutionTest {
@@ -18,6 +19,19 @@ class StructureFloorResolutionTest {
     static void bootstrapMinecraft() {
         SharedConstants.tryDetectVersion();
         Bootstrap.bootStrap();
+    }
+
+    @Test
+    void structureBoundsAreDerivedFromFloorGeometryAndNotPersistedSeparately() {
+        StructureFloor floor = new StructureFloor(0, 64, 70, 0,
+                BuildingFloorRegion.fromFootprint(64, Set.of(
+                        new BlockPos(2, 64, 3), new BlockPos(5, 64, 7))));
+        Structure structure = new Structure(10, new BlockPos(2, 64, 3), List.of(floor));
+
+        assertEquals(new BlockPos(2, 64, 3), structure.getRawPos0());
+        assertEquals(new BlockPos(5, 69, 7), structure.getRawPos1());
+        assertFalse(structure.save().contains("min"));
+        assertFalse(structure.save().contains("max"));
     }
 
     @Test
