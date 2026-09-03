@@ -187,7 +187,7 @@ final class StructureConnector {
     static List<VerticalConnection> verticalConnections(Level world,
                                                         StructureFloor candidate,
                                                         Collection<Structure> existing) {
-        if (world == null || candidate == null || candidate.region() == null || existing == null) {
+        if (world == null || candidate == null || existing == null) {
             return List.of();
         }
 
@@ -195,7 +195,7 @@ final class StructureConnector {
         LinkedHashSet<VerticalConnection> connections = new LinkedHashSet<>();
         for (StructureFloor.ConnectorMarker marker : candidate.connectors()) {
             if (!marker.type().vertical()) continue;
-            List<BlockPos> column = verticalColumnAtFloorCell(world, marker.pos());
+            List<BlockPos> column = verticalColumnAtFloorCell(world, candidate, marker.pos());
             if (column.isEmpty()) continue;
             BlockPos connector = column.getFirst();
             long columnKey = FloorSurface.columnKey(connector.getX(), connector.getZ());
@@ -215,8 +215,19 @@ final class StructureConnector {
                 .toList();
     }
 
-    private static List<BlockPos> verticalColumnAtFloorCell(Level world, BlockPos floorCell) {
-        for (BlockPos probe : List.of(floorCell, floorCell.below(), floorCell.above())) {
+    static List<BlockPos> verticalProbePositions(StructureFloor floor, BlockPos floorCell) {
+        if (floor == null || floorCell == null) return List.of();
+        List<BlockPos> probes = new ArrayList<>(Math.max(0, floor.ceilingY() - floor.anchorY() + 1));
+        for (int y = floor.anchorY() - 1; y < floor.ceilingY(); y++) {
+            probes.add(new BlockPos(floorCell.getX(), y, floorCell.getZ()));
+        }
+        return List.copyOf(probes);
+    }
+
+    private static List<BlockPos> verticalColumnAtFloorCell(Level world,
+                                                             StructureFloor floor,
+                                                             BlockPos floorCell) {
+        for (BlockPos probe : verticalProbePositions(floor, floorCell)) {
             List<BlockPos> column = verticalColumnFromConnector(world, probe);
             if (!column.isEmpty()) return column;
         }
