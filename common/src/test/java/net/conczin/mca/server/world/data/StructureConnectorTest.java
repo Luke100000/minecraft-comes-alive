@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 import java.util.Set;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -22,6 +23,16 @@ class StructureConnectorTest {
 
         assertTrue(StructureConnector.connectsFloors(actualConnectorColumn, candidate, connectedBelow));
         assertFalse(StructureConnector.connectsFloors(actualConnectorColumn, candidate, distantBelow));
+    }
+
+    @Test
+    void verticalConnectorProbeSpansEntireFloorBandIncludingSupportBlock() {
+        StructureFloor floor = floor(64, 68);
+
+        assertEquals(List.of(63, 64, 65, 66, 67),
+                StructureConnector.verticalProbePositions(floor, new BlockPos(0, 64, 0)).stream()
+                        .map(BlockPos::getY)
+                        .toList());
     }
 
     private static StructureFloor floor(int anchorY, int ceilingY) {
