@@ -12,6 +12,7 @@ import java.util.Objects;
 public record StructureFloor(int id, int anchorY, int ceilingY, int floorNumber,
                              BuildingFloorRegion region, List<ConnectorMarker> connectors) {
     public StructureFloor {
+        region = Objects.requireNonNull(region, "region");
         connectors = connectors == null ? List.of() : List.copyOf(connectors);
     }
 
@@ -52,9 +53,10 @@ public record StructureFloor(int id, int anchorY, int ceilingY, int floorNumber,
     }
 
     public static StructureFloor load(CompoundTag tag) {
-        BuildingFloorRegion region = tag.contains("region")
-                ? BuildingFloorRegion.load(tag.getCompound("region"))
-                : new BuildingFloorRegion(tag.getInt("anchorY"), 0, java.util.List.of());
+        if (!tag.contains("region", Tag.TAG_COMPOUND)) {
+            throw new IllegalArgumentException("StructureFloor is missing required region geometry");
+        }
+        BuildingFloorRegion region = BuildingFloorRegion.load(tag.getCompound("region"));
         List<ConnectorMarker> connectors = tag.contains("connectors", Tag.TAG_LIST)
                 ? NbtHelper.toList(tag.getList("connectors", Tag.TAG_COMPOUND),
                 value -> ConnectorMarker.load((CompoundTag) value)).stream()

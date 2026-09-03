@@ -10,13 +10,15 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class StructureFloorTest {
     @Test
     void connectorMarkersRoundTripAndRemainOptionalForOldSaves() {
         StructureFloor.ConnectorMarker marker = new StructureFloor.ConnectorMarker(
                 new BlockPos(4, 64, 7), StructureFloor.ConnectorType.TRAPDOOR);
-        StructureFloor floor = new StructureFloor(3, 64, 70, 0, null, List.of(marker));
+        StructureFloor floor = new StructureFloor(3, 64, 70, 0,
+                BuildingFloorRegion.fromFootprint(64, Set.of(new BlockPos(4, 64, 7))), List.of(marker));
 
         CompoundTag saved = floor.save();
         assertEquals(List.of(marker), StructureFloor.load(saved).connectors());
@@ -52,5 +54,21 @@ class StructureFloorTest {
         saved.putInt("floorNumber", 7);
 
         assertEquals(0, StructureFloor.load(saved).floorNumber());
+    }
+
+    @Test
+    void canonicalFloorRequiresPersistedRegion() {
+        assertThrows(NullPointerException.class,
+                () -> new StructureFloor(3, 64, 70, 0, null, List.of()));
+    }
+
+    @Test
+    void currentFloorLoadRejectsMissingRegion() {
+        CompoundTag tag = new CompoundTag();
+        tag.putInt("id", 3);
+        tag.putInt("anchorY", 64);
+        tag.putInt("ceilingY", 70);
+
+        assertThrows(IllegalArgumentException.class, () -> StructureFloor.load(tag));
     }
 }
