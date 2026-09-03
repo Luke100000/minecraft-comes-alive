@@ -140,12 +140,8 @@ final class StructureScanner {
     }
 
     static StructureFloor persistedFloor(FloorSurface surface) {
-        return persistedFloor(null, surface);
-    }
-
-    static StructureFloor persistedFloor(Level world, FloorSurface surface) {
         return new StructureFloor(0, surface.anchorY(), surface.maxCeilingY(), 0,
-                surface.persistedRegion(), StructureConnector.floorMarkers(world, surface));
+                surface.persistedRegion(), StructureConnector.floorMarkers(surface));
     }
 
     private static Result scanAtSeed(Level world,
@@ -161,7 +157,7 @@ final class StructureScanner {
         }
 
         FloorSurface surface = selected.surface();
-        StructureFloor floor = persistedFloor(world, surface);
+        StructureFloor floor = persistedFloor(surface);
         Structure candidate = new Structure(
                 ignoredStructureId, scanSeed.immutable(), selected.min(), selected.max(), List.of(floor));
         for (Structure other : existing) {

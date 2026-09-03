@@ -55,7 +55,6 @@ public record StructureFloor(int id, int anchorY, int ceilingY, int floorNumber,
         BuildingFloorRegion region = tag.contains("region")
                 ? BuildingFloorRegion.load(tag.getCompound("region"))
                 : new BuildingFloorRegion(tag.getInt("anchorY"), 0, java.util.List.of());
-        int floorNumber = tag.contains("floorNumber") ? tag.getInt("floorNumber") : 0;
         List<ConnectorMarker> connectors = tag.contains("connectors", Tag.TAG_LIST)
                 ? NbtHelper.toList(tag.getList("connectors", Tag.TAG_COMPOUND),
                 value -> ConnectorMarker.load((CompoundTag) value)).stream()
@@ -63,7 +62,7 @@ public record StructureFloor(int id, int anchorY, int ceilingY, int floorNumber,
                 .toList()
                 : List.of();
         return new StructureFloor(tag.getInt("id"), tag.getInt("anchorY"), tag.getInt("ceilingY"),
-                floorNumber, region, connectors);
+                0, region, connectors);
     }
 
     public StructureFloor withGeometry(int anchorY, int ceilingY, BuildingFloorRegion region) {
@@ -111,6 +110,14 @@ public record StructureFloor(int id, int anchorY, int ceilingY, int floorNumber,
             return serializedName;
         }
 
+        public boolean vertical() {
+            return this == LADDER || this == TRAPDOOR;
+        }
+
+        public boolean roomBoundary() {
+            return this == DOOR || this == GATE;
+        }
+
         static ConnectorType fromSerializedName(String name) {
             for (ConnectorType type : values()) {
                 if (type.serializedName.equals(name)) return type;
@@ -118,4 +125,5 @@ public record StructureFloor(int id, int anchorY, int ceilingY, int floorNumber,
             return null;
         }
     }
+
 }

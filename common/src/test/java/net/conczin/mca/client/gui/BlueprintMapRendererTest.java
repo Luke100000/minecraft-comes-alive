@@ -33,19 +33,11 @@ class BlueprintMapRendererTest {
     }
 
     @Test
-    void connectorGlyphsStayCompactAndEncodeVerticalDirection() {
-        assertEquals("↑", BlueprintMapRenderer.connectorGlyph(connector(
-                StructureFloor.ConnectorType.LADDER, BlueprintMapGeometry.VerticalDirection.UP)));
-        assertEquals("↓", BlueprintMapRenderer.connectorGlyph(connector(
-                StructureFloor.ConnectorType.LADDER, BlueprintMapGeometry.VerticalDirection.DOWN)));
-        assertEquals("↕", BlueprintMapRenderer.connectorGlyph(connector(
-                StructureFloor.ConnectorType.LADDER, BlueprintMapGeometry.VerticalDirection.BOTH)));
-        assertEquals("◇", BlueprintMapRenderer.connectorGlyph(connector(
-                StructureFloor.ConnectorType.TRAPDOOR, BlueprintMapGeometry.VerticalDirection.BOTH)));
-        assertEquals("▯", BlueprintMapRenderer.connectorGlyph(connector(
-                StructureFloor.ConnectorType.DOOR, BlueprintMapGeometry.VerticalDirection.NONE)));
-        assertEquals("═", BlueprintMapRenderer.connectorGlyph(connector(
-                StructureFloor.ConnectorType.GATE, BlueprintMapGeometry.VerticalDirection.NONE)));
+    void connectorGlyphsStayCompactWithoutInferringPersistedVerticalDestinations() {
+        assertEquals("↕", BlueprintMapRenderer.connectorGlyph(connector(StructureFloor.ConnectorType.LADDER)));
+        assertEquals("↕", BlueprintMapRenderer.connectorGlyph(connector(StructureFloor.ConnectorType.TRAPDOOR)));
+        assertEquals("▯", BlueprintMapRenderer.connectorGlyph(connector(StructureFloor.ConnectorType.DOOR)));
+        assertEquals("═", BlueprintMapRenderer.connectorGlyph(connector(StructureFloor.ConnectorType.GATE)));
     }
 
     @Test
@@ -59,12 +51,9 @@ class BlueprintMapRendererTest {
         assertTrue(9.0F * wideGlyph < 1.0F);
     }
 
-    private static BlueprintMapGeometry.MapConnectorLayer connector(
-            StructureFloor.ConnectorType type,
-            BlueprintMapGeometry.VerticalDirection direction) {
+    private static BlueprintMapGeometry.MapConnectorLayer connector(StructureFloor.ConnectorType type) {
         return new BlueprintMapGeometry.MapConnectorLayer(
                 1,
-                new StructureFloor.ConnectorMarker(BlockPos.ZERO, type),
-                direction);
+                new StructureFloor.ConnectorMarker(BlockPos.ZERO, type));
     }
 }

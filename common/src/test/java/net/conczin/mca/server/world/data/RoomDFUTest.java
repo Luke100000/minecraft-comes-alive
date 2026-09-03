@@ -21,6 +21,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class RoomDFUTest {
@@ -163,6 +164,22 @@ class RoomDFUTest {
         assertEquals(room.getStructureId(), reloadedRoom.getStructureId());
         assertEquals(room.getFloorId(), reloadedRoom.getFloorId());
         assertEquals(room.getBlocks(), reloadedRoom.getBlocks());
+    }
+
+    @Test
+    void currentVillageSaveUsesVersionTwo() {
+        Village village = new Village(1, null);
+
+        assertEquals(2, village.save().getInt("buildingDataVersion"));
+    }
+
+    @Test
+    void versionOneIntermediateSaveIsRejectedInsteadOfMigrated() {
+        Village village = new Village(1, null);
+        CompoundTag unsupported = village.save();
+        unsupported.putInt("buildingDataVersion", 1);
+
+        assertThrows(IllegalArgumentException.class, () -> new Village(unsupported, null));
     }
 
     private static CompoundTag previousBranchVillage(boolean mainInheritanceEnabled) {

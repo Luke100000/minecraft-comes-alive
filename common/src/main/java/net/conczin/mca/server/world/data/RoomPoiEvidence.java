@@ -14,8 +14,7 @@ final class RoomPoiEvidence {
 
     static Set<BlockPos> candidates(FloorSurface surface,
                                     Collection<FloorSurfacePartitioner.Component> components,
-                                    FloorSurfacePartitioner.Component component,
-                                    Set<BlockPos> ownedConnectorCells) {
+                                    FloorSurfacePartitioner.Component component) {
         LinkedHashSet<BlockPos> result = new LinkedHashSet<>();
         int floorMinY = surface.anchorY() - 1;
         int floorCeilingY = surface.maxCeilingY();
@@ -35,8 +34,6 @@ final class RoomPoiEvidence {
                 }
             }
         }
-
-        result.addAll(ownedConnectorCells);
         return Set.copyOf(result);
     }
 

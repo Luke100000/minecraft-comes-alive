@@ -209,44 +209,11 @@ final class BlueprintMapGeometry {
                         for (StructureFloor.ConnectorMarker marker : floor.connectors()) {
                             ConnectorLayerKey key = new ConnectorLayerKey(
                                     logicalBuildingId, marker.pos().getX(), marker.pos().getZ(), marker.type());
-                            layers.putIfAbsent(key, new MapConnectorLayer(
-                                    logicalBuildingId,
-                                    marker,
-                                    verticalDirection(logicalBuildingId, selectedFloor, marker)));
+                            layers.putIfAbsent(key, new MapConnectorLayer(logicalBuildingId, marker));
                         }
                     }
                 });
         return List.copyOf(layers.values());
-    }
-
-    private VerticalDirection verticalDirection(int logicalBuildingId,
-                                                int selectedFloor,
-                                                StructureFloor.ConnectorMarker marker) {
-        if (!isVertical(marker.type())) return VerticalDirection.NONE;
-        boolean above = false;
-        boolean below = false;
-        for (Structure structure : village.getStructures().values()) {
-            if (village.getLogicalBuildingId(structure.getId()) != logicalBuildingId) continue;
-            for (StructureFloor floor : structure.getFloors()) {
-                if (floor.floorNumber() == selectedFloor) continue;
-                boolean sameColumn = floor.connectors().stream()
-                        .filter(other -> isVertical(other.type()))
-                        .anyMatch(other -> other.pos().getX() == marker.pos().getX()
-                                && other.pos().getZ() == marker.pos().getZ());
-                if (!sameColumn) continue;
-                if (floor.floorNumber() > selectedFloor) above = true;
-                if (floor.floorNumber() < selectedFloor) below = true;
-            }
-        }
-        if (above && below) return VerticalDirection.BOTH;
-        if (above) return VerticalDirection.UP;
-        if (below) return VerticalDirection.DOWN;
-        return VerticalDirection.NONE;
-    }
-
-    private static boolean isVertical(StructureFloor.ConnectorType type) {
-        return type == StructureFloor.ConnectorType.LADDER
-                || type == StructureFloor.ConnectorType.TRAPDOOR;
     }
 
     private static Set<BlueprintMapFootprint.Cell> roomFootprint(Building building) {
@@ -310,15 +277,7 @@ final class BlueprintMapGeometry {
     }
 
     record MapConnectorLayer(int logicalBuildingId,
-                             StructureFloor.ConnectorMarker marker,
-                             VerticalDirection verticalDirection) {
-    }
-
-    enum VerticalDirection {
-        NONE,
-        UP,
-        DOWN,
-        BOTH
+                             StructureFloor.ConnectorMarker marker) {
     }
 
     record BuildingShape(BlueprintMapFootprint.Shape outline,

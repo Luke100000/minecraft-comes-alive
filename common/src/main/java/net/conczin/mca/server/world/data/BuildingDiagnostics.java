@@ -40,7 +40,7 @@ public final class BuildingDiagnostics {
         }
 
         Structure structureAt = village.getExactStructureAt(pos).orElse(null);
-        Structure interactionStructure = village.getInteractionStructureAt(world, pos).orElse(null);
+        Structure interactionStructure = village.getInteractionStructureAt(pos).orElse(null);
         Structure nearestStructure = nearestStructure(village, pos);
         Structure inspected = interactionStructure != null
                 ? interactionStructure
@@ -56,7 +56,7 @@ public final class BuildingDiagnostics {
         if (inspected != null) {
             boolean contains = inspected.containsPos(pos);
             Structure.InteractionPosition interaction = inspected
-                    .resolveInteractionPosition(world, pos, List.of()).orElse(null);
+                    .resolveInteractionPosition(pos, List.of()).orElse(null);
             boolean attaches = interaction != null;
             StructureFloor resolvedFloor = inspected.resolveFloorAt(pos).orElse(null);
             StructureFloor physicalFloor = inspected.physicalFloorAt(pos).orElse(null);
@@ -146,7 +146,7 @@ public final class BuildingDiagnostics {
         }
         if (position == StructuralPosition.OUTSIDE) {
             boolean contains = structure.containsPos(pos);
-            boolean attaches = structure.resolveInteractionPosition(world, pos, List.of()).isPresent();
+            boolean attaches = structure.resolveInteractionPosition(pos, List.of()).isPresent();
             return "NO_INTERACTION_STRUCTURE: UI uses " + uiAction + "; containsPos=" + contains
                     + ", interactionAttachment=" + attaches + ", analysis=" + analysis;
         }

@@ -240,7 +240,7 @@ class VillageFloorSystemTest {
     }
 
     @Test
-    void floorAttachmentRequiresSharedVerticalConnectorInsteadOfArbitraryHeightGap() {
+    void floorAttachmentRequiresProvenVerticalConnectionInsteadOfArbitraryHeightGap() {
         Village village = new Village(1, null);
         StructureFloor existingFloor = new StructureFloor(0, 64, 68, 0, region(64), List.of(
                 new StructureFloor.ConnectorMarker(new BlockPos(0, 64, 0), StructureFloor.ConnectorType.LADDER)));
@@ -250,9 +250,79 @@ class VillageFloorSystemTest {
         StructureFloor connectedHighFloor = new StructureFloor(1, 76, 80, 0, region(76), List.of(
                 new StructureFloor.ConnectorMarker(new BlockPos(0, 76, 0), StructureFloor.ConnectorType.LADDER)));
         StructureFloor nearbyButDisconnected = new StructureFloor(2, 70, 74, 0, region(70));
+        StructureConnector.VerticalConnection connection = new StructureConnector.VerticalConnection(
+                structure, existingFloor);
 
-        assertEquals(10, village.resolveAttachmentTarget(connectedHighFloor).orElseThrow().buildingId());
-        assertTrue(village.resolveAttachmentTarget(nearbyButDisconnected).isEmpty());
+        assertEquals(10, village.selectAttachmentTarget(connectedHighFloor, List.of(connection))
+                .orElseThrow().buildingId());
+        assertTrue(village.selectAttachmentTarget(nearbyButDisconnected, List.of()).isEmpty());
+    }
+
+    @Test
+    void floorAttachmentRejectsAnOverlappingCopyOfTheRegisteredFloor() {
+        Village village = new Village(1, null);
+        StructureFloor existingFloor = new StructureFloor(0, 64, 68, 0, region(64), List.of(
+                new StructureFloor.ConnectorMarker(new BlockPos(0, 64, 0), StructureFloor.ConnectorType.LADDER)));
+        Structure structure = structure(10, 10, existingFloor);
+        village.registerStructure(structure, room(100, 10, 0, true));
+
+        StructureFloor rescannedSameFloor = new StructureFloor(1, 64, 68, 0, region(64), List.of(
+                new StructureFloor.ConnectorMarker(new BlockPos(0, 64, 0), StructureFloor.ConnectorType.LADDER)));
+
+        StructureConnector.VerticalConnection falseConnection = new StructureConnector.VerticalConnection(
+                structure, existingFloor);
+
+        assertTrue(village.selectAttachmentTarget(rescannedSameFloor, List.of(falseConnection)).isEmpty(),
+                "a rescan of an existing floor cannot become Add Floor 0 just because it sees the same ladder");
+    }
+
+    @Test
+    void floorAttachmentRejectsExistingGroundFloorEvenWhenBasementWouldAcceptIt() {
+        Village village = new Village(1, null);
+        StructureFloor groundFloor = new StructureFloor(0, 64, 68, 0, region(64), List.of(
+                new StructureFloor.ConnectorMarker(new BlockPos(0, 64, 0), StructureFloor.ConnectorType.LADDER)));
+        StructureFloor basementFloor = new StructureFloor(0, 60, 64, -1, region(60), List.of(
+                new StructureFloor.ConnectorMarker(new BlockPos(0, 60, 0), StructureFloor.ConnectorType.LADDER)));
+        village.registerStructure(structure(10, 10, groundFloor), room(100, 10, 0, true));
+        village.registerStructure(structure(11, 10, basementFloor), room(101, 11, 0, true));
+        village.refreshLogicalBuildings();
+
+        StructureFloor rescannedGroundFloor = new StructureFloor(1, 64, 68, 0, region(64), List.of(
+                new StructureFloor.ConnectorMarker(new BlockPos(0, 64, 0), StructureFloor.ConnectorType.LADDER)));
+
+        StructureConnector.VerticalConnection falseConnection = new StructureConnector.VerticalConnection(
+                village.getStructure(11).orElseThrow(), basementFloor);
+
+        assertTrue(village.selectAttachmentTarget(rescannedGroundFloor, List.of(falseConnection)).isEmpty(),
+                "an already registered ground floor cannot reattach through its basement as Add Floor 0");
+    }
+
+    @Test
+    void interactionRoomLookupFallsBackToPhysicalRoomGeometryWithoutRecursing() {
+        Village village = new Village(1, null);
+        Structure structure = structure(10, 10,
+                new StructureFloor(0, 64, 68, 0, region(64)));
+        Building room = room(100, 10, 0, true);
+        BuildingFloorRegion legacyRegion = BuildingFloorRegion.fromFootprint(64, Set.of(
+                new BlockPos(10, 64, 10)));
+        room.setGeometry(new BlockPos(10, 64, 10), new BlockPos(10, 67, 10), legacyRegion);
+        village.registerStructure(structure, room);
+
+        assertEquals(room, village.findInteractionRoomAt(new BlockPos(10, 64, 10)).orElseThrow());
+    }
+
+    @Test
+    void physicalRoomLookupDoesNotUseInteractionSupportBand() {
+        Village village = new Village(1, null);
+        StructureFloor floor = new StructureFloor(0, 64, 68, 0, region(64));
+        Structure structure = structure(10, 10, floor);
+        Building room = room(100, 10, 0, true);
+        room.setGeometry(new BlockPos(0, 64, 0), new BlockPos(1, 67, 1), region(64));
+        village.registerStructure(structure, room);
+
+        BlockPos supportBlock = new BlockPos(0, 63, 0);
+        assertTrue(village.findPhysicalRoomAt(supportBlock).isEmpty());
+        assertEquals(room, village.findInteractionRoomAt(supportBlock).orElseThrow());
     }
 
     @Test

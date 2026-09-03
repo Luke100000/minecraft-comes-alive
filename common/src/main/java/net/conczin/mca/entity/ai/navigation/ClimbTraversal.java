@@ -88,6 +88,10 @@ final class ClimbTraversal {
             return true;
         }
 
+        if (!ownsMotion(context)) {
+            return false;
+        }
+
         if (this.mob.onClimbable()
                 || hasLeftClimbableUpward(context)
                 || isContinuingDownwardExit(context)) {
@@ -430,8 +434,8 @@ final class ClimbTraversal {
         return !this.mob.onClimbable()
                 && context.exitsClimbable()
                 && context.verticalDirection() < 0
-                && (isAtExitHeight(context, context.targetNode().y)
-                || hasPassedClimbableTowardExit(context));
+                && (hasPassedClimbableTowardExit(context)
+                || isLowerExit(context) && isAtExitHeight(context, context.targetNode().y));
     }
 
     private Vec3 getClimbableAnchor(BlockPos pos) {

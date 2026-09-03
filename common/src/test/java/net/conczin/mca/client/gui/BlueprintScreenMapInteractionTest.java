@@ -136,13 +136,8 @@ class BlueprintScreenMapInteractionTest {
     }
 
     @Test
-    void terrainUsesFullResolutionFromOneToFourTimesZoom() {
-        assertEquals(4, BlueprintTerrainRenderer.sampleStep(0.5F));
-        assertEquals(3, BlueprintTerrainRenderer.sampleStep(0.75F));
-        assertEquals(3, BlueprintTerrainRenderer.sampleStep(0.99F));
-        assertEquals(1, BlueprintTerrainRenderer.sampleStep(1.0F));
-        assertEquals(1, BlueprintTerrainRenderer.sampleStep(2.0F));
-        assertEquals(1, BlueprintTerrainRenderer.sampleStep(4.0F));
+    void terrainUsesOneWorldSamplePerBlock() {
+        assertEquals(1, BlueprintTerrainRenderer.sampleStep());
     }
 
     @Test
@@ -163,6 +158,10 @@ class BlueprintScreenMapInteractionTest {
         assertTrue((shallow >>> 24) > 0);
         assertTrue((deep >>> 24) > (shallow >>> 24));
         assertTrue((deep >>> 24) < 0xff);
+        assertTrue((shallow >>> 24) <= Math.round(0.40F * 255.0F),
+                "shallow water must leave most of the underlying terrain visible");
+        assertTrue((deep >>> 24) <= Math.round(0.60F * 255.0F),
+                "deep water must leave at least 40% of the underlying terrain visible");
     }
 
     @Test
@@ -178,7 +177,7 @@ class BlueprintScreenMapInteractionTest {
     }
 
     @Test
-    void terrainTileCacheIdentityDoesNotChangeWithSamplingResolution() throws Exception {
+    void terrainTileCacheIdentityIsOnlyWorldTilePosition() throws Exception {
         Class<?> tileKey = Class.forName(BlueprintTerrainRenderer.class.getName() + "$TileKey");
 
         assertEquals(2, tileKey.getRecordComponents().length);
@@ -187,7 +186,7 @@ class BlueprintScreenMapInteractionTest {
     }
 
     @Test
-    void terrainTileCanReuseCoarserCachedSampleForFinerResampling() throws Exception {
+    void terrainTileCanReuseCachedCellForIncompleteRefresh() throws Exception {
         Class<?> tileClass = Class.forName(BlueprintTerrainRenderer.class.getName() + "$TerrainTile");
         Class<?> cellClass = Class.forName(BlueprintTerrainRenderer.class.getName() + "$TerrainTile$Cell");
 
@@ -201,12 +200,12 @@ class BlueprintScreenMapInteractionTest {
         var tileConstructor = tileClass.getDeclaredConstructor(
                 int.class, int.class, int.class, long.class, boolean.class, cells.getClass());
         tileConstructor.setAccessible(true);
-        Object coarseTile = tileConstructor.newInstance(0, 0, 2, 0L, true, cells);
+        Object cachedTile = tileConstructor.newInstance(0, 0, 1, 0L, true, cells);
 
         Method cellAtBlock = tileClass.getDeclaredMethod("cellAtBlock", int.class, int.class);
         cellAtBlock.setAccessible(true);
 
-        assertEquals(cachedCell, cellAtBlock.invoke(coarseTile, 1, 1));
+        assertEquals(cachedCell, cellAtBlock.invoke(cachedTile, 0, 0));
     }
 
     @Test

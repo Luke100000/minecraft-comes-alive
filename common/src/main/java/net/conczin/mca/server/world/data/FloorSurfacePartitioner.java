@@ -29,9 +29,12 @@ final class FloorSurfacePartitioner {
     }
 
     static List<Component> partition(FloorSurface surface) {
-        Set<BlockPos> connectorCells = surface.connectorByFloorCell().keySet();
+        Set<BlockPos> boundaryCells = surface.connectorTypesByFloorCell().entrySet().stream()
+                .filter(entry -> entry.getValue().roomBoundary())
+                .map(java.util.Map.Entry::getKey)
+                .collect(Collectors.toSet());
         Set<BlockPos> visited = new HashSet<>();
-        List<Component> result = new ArrayList<>();
+        List<Component> openComponents = new ArrayList<>();
 
         List<FloorSurface.Cell> seeds = surface.cells().stream()
                 .sorted(Comparator.comparingInt((FloorSurface.Cell cell) -> cell.feet().getX())
@@ -39,7 +42,7 @@ final class FloorSurfacePartitioner {
                         .thenComparingInt(cell -> cell.feet().getY()))
                 .toList();
         for (FloorSurface.Cell seed : seeds) {
-            if (connectorCells.contains(seed.feet()) || !visited.add(seed.feet())) continue;
+            if (boundaryCells.contains(seed.feet()) || !visited.add(seed.feet())) continue;
             LinkedHashSet<FloorSurface.Cell> componentCells = new LinkedHashSet<>();
             ArrayDeque<FloorSurface.Cell> queue = new ArrayDeque<>();
             queue.addLast(seed);
@@ -51,7 +54,7 @@ final class FloorSurfacePartitioner {
                     int x = current.feet().getX() + direction.getStepX();
                     int z = current.feet().getZ() + direction.getStepZ();
                     FloorSurface.Cell next = surface.cellAtColumn(x, z).orElse(null);
-                    if (next == null || connectorCells.contains(next.feet())
+                    if (next == null || boundaryCells.contains(next.feet())
                             || visited.contains(next.feet()) || !connected(current, next)) {
                         continue;
                     }
@@ -59,13 +62,70 @@ final class FloorSurfacePartitioner {
                     queue.addLast(next);
                 }
             }
-            result.add(new Component(componentCells));
+            openComponents.add(new Component(componentCells));
         }
 
+        List<Component> result = assignBoundaryClusters(surface, boundaryCells, openComponents);
         result.sort(Comparator.comparingInt(Component::minX)
                 .thenComparingInt(Component::minZ)
                 .thenComparingInt(Component::maxX)
                 .thenComparingInt(Component::maxZ));
+        return List.copyOf(result);
+    }
+
+    private static List<Component> assignBoundaryClusters(FloorSurface surface,
+                                                           Set<BlockPos> boundaryCells,
+                                                           List<Component> openComponents) {
+        if (boundaryCells.isEmpty()) return new ArrayList<>(openComponents);
+
+        List<Set<FloorSurface.Cell>> clusters = boundaryClusters(surface, boundaryCells);
+        java.util.Map<Component, LinkedHashSet<FloorSurface.Cell>> additions = new java.util.HashMap<>();
+        List<Component> unowned = new ArrayList<>();
+        for (Set<FloorSurface.Cell> cluster : clusters) {
+            LinkedHashSet<Component> adjacent = new LinkedHashSet<>();
+            for (FloorSurface.Cell cell : cluster) {
+                adjacent.addAll(adjacent(cell.feet(), openComponents));
+            }
+            Component owner = owner(adjacent);
+            if (owner == null) {
+                unowned.add(new Component(cluster));
+            } else {
+                additions.computeIfAbsent(owner, ignored -> new LinkedHashSet<>()).addAll(cluster);
+            }
+        }
+
+        List<Component> result = new ArrayList<>();
+        for (Component component : openComponents) {
+            LinkedHashSet<FloorSurface.Cell> cells = new LinkedHashSet<>(component.cells());
+            cells.addAll(additions.getOrDefault(component, new LinkedHashSet<>()));
+            result.add(new Component(cells));
+        }
+        result.addAll(unowned);
+        return result;
+    }
+
+    private static List<Set<FloorSurface.Cell>> boundaryClusters(FloorSurface surface, Set<BlockPos> boundaryCells) {
+        Set<BlockPos> visited = new HashSet<>();
+        List<Set<FloorSurface.Cell>> result = new ArrayList<>();
+        for (BlockPos seed : boundaryCells.stream()
+                .sorted(Comparator.comparingInt((BlockPos pos) -> pos.getX())
+                        .thenComparingInt(pos -> pos.getZ())
+                        .thenComparingInt(pos -> pos.getY()))
+                .toList()) {
+            if (!visited.add(seed)) continue;
+            LinkedHashSet<FloorSurface.Cell> cluster = new LinkedHashSet<>();
+            ArrayDeque<BlockPos> queue = new ArrayDeque<>();
+            queue.addLast(seed);
+            while (!queue.isEmpty()) {
+                BlockPos current = queue.removeFirst();
+                surface.cellAtColumn(current.getX(), current.getZ()).ifPresent(cluster::add);
+                for (Direction direction : HORIZONTAL) {
+                    BlockPos next = current.relative(direction);
+                    if (boundaryCells.contains(next) && visited.add(next)) queue.addLast(next);
+                }
+            }
+            if (!cluster.isEmpty()) result.add(Set.copyOf(cluster));
+        }
         return List.copyOf(result);
     }
 
@@ -102,13 +162,7 @@ final class FloorSurfacePartitioner {
         BlockPos sourceCell = surface.cellAtColumn(source.getX(), source.getZ())
                 .map(FloorSurface.Cell::feet)
                 .orElse(new BlockPos(source.getX(), surface.anchorY(), source.getZ()));
-        List<Component> adjacent = adjacent(sourceCell, components);
-        boolean connectorColumn = surface.connectorByFloorCell().keySet().stream()
-                .anyMatch(cell -> cell.getX() == source.getX() && cell.getZ() == source.getZ());
-        if (connectorColumn) return owner(adjacent);
-        return adjacent.stream()
-                .min(Comparator.comparingInt(Component::minX).thenComparingInt(Component::minZ))
-                .orElse(null);
+        return owner(adjacent(sourceCell, components));
     }
 
     record Component(Set<FloorSurface.Cell> cells) {

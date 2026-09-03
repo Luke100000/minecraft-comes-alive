@@ -11,6 +11,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.tags.FluidTags;
 import net.minecraft.util.FastColor;
+import net.minecraft.world.level.ColorResolver;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.material.MapColor;
@@ -21,7 +22,7 @@ import java.util.Map;
 
 /** Owns world-derived Blueprint terrain sampling, texture creation and cache lifecycle. */
 final class BlueprintTerrainRenderer implements AutoCloseable {
-    private static final int TARGET_CELL_PIXELS = 2;
+    private static final int SAMPLE_STEP = 1;
     private static final int TILE_BLOCK_SIZE = 128;
     private static final int MAX_CACHED_TILES = 96;
     private static final long INCOMPLETE_TILE_RETRY_TICKS = 20L;
@@ -32,9 +33,9 @@ final class BlueprintTerrainRenderer implements AutoCloseable {
     private static final float SLOPE_BRIGHTNESS_PER_BLOCK = 0.055f;
     private static final float MIN_BRIGHTNESS = 0.58f;
     private static final float MAX_BRIGHTNESS = 1.15f;
-    private static final float WATER_BASE_OPACITY = 0.48f;
-    private static final float WATER_DEPTH_OPACITY_PER_BLOCK = 0.025f;
-    private static final float WATER_MAX_OPACITY = 0.86f;
+    private static final float WATER_BASE_OPACITY = 0.35f;
+    private static final float WATER_DEPTH_OPACITY_PER_BLOCK = 0.015f;
+    private static final float WATER_MAX_OPACITY = 0.60f;
 
     private final LinkedHashMap<TileKey, TerrainTile> tiles = new LinkedHashMap<>(16, 0.75f, true);
 
@@ -45,7 +46,7 @@ final class BlueprintTerrainRenderer implements AutoCloseable {
         int centerBlockX = (int) Math.floor(viewport.mapCenterX());
         int centerBlockZ = (int) Math.floor(viewport.mapCenterZ());
         int radius = Math.max(1, (int) Math.ceil((viewport.halfSize() - 1) / viewport.scale()) + 1);
-        int sampleStep = sampleStep(viewport.scale());
+        int sampleStep = sampleStep();
         int visibleMinX = centerBlockX - radius;
         int visibleMaxX = centerBlockX + radius;
         int visibleMinZ = centerBlockZ - radius;
@@ -56,10 +57,12 @@ final class BlueprintTerrainRenderer implements AutoCloseable {
             for (int minZ = tileMin(visibleMinZ); minZ <= visibleMaxZ; minZ += TILE_BLOCK_SIZE) {
                 TileKey key = new TileKey(minX, minZ);
                 TerrainTile tile = tiles.get(key);
-                if (tile == null || tile.sampleStep != sampleStep || tile.shouldRefresh(gameTime)) {
+                if (tile == null || tile.shouldRefresh(gameTime)) {
                     TerrainTile previous = tile;
-                    tile = TerrainTile.sample(minecraft.level, minX, minZ, sampleStep, gameTime, previous);
-                    if (previous != null) releaseTexture(previous);
+                    TerrainTile sampled = TerrainTile.sample(
+                            minecraft.level, minX, minZ, sampleStep, gameTime, previous);
+                    if (tile != null) releaseTexture(tile);
+                    tile = sampled;
                     tiles.put(key, tile);
                 }
                 renderTile(context, tile);
@@ -72,10 +75,8 @@ final class BlueprintTerrainRenderer implements AutoCloseable {
         return Math.floorDiv(blockCoordinate, TILE_BLOCK_SIZE) * TILE_BLOCK_SIZE;
     }
 
-    static int sampleStep(float scale) {
-        return scale >= 1.0F
-                ? 1
-                : Math.max(1, (int) Math.ceil((double) TARGET_CELL_PIXELS / scale));
+    static int sampleStep() {
+        return SAMPLE_STEP;
     }
 
     private void renderTile(GuiGraphics context, TerrainTile tile) {
@@ -365,7 +366,7 @@ final class BlueprintTerrainRenderer implements AutoCloseable {
                     if (surfaceState.getFluidState().is(FluidTags.WATER)) {
                         int oceanFloorHeight = level.getHeight(Heightmap.Types.OCEAN_FLOOR, sampleX, sampleZ);
                         int waterDepth = Math.max(1, surfaceHeight - oceanFloorHeight);
-                        int waterTint = BiomeColors.getAverageWaterColor(level, surfacePos);
+                        int waterTint = unblendedBiomeColor(level, surfacePos, BiomeColors.WATER_COLOR_RESOLVER);
 
                         if (oceanFloorHeight > minBuildHeight) {
                             BlockPos.MutableBlockPos groundPos = new BlockPos.MutableBlockPos(
@@ -394,12 +395,18 @@ final class BlueprintTerrainRenderer implements AutoCloseable {
 
         private static int biomeTintedColor(ClientLevel level, BlockPos pos, MapColor mapColor, int baseColor) {
             if (mapColor == MapColor.GRASS) {
-                return multiplyTint(baseColor, BiomeColors.getAverageGrassColor(level, pos));
+                return multiplyTint(baseColor,
+                        unblendedBiomeColor(level, pos, BiomeColors.GRASS_COLOR_RESOLVER));
             }
             if (mapColor == MapColor.PLANT) {
-                return multiplyTint(baseColor, BiomeColors.getAverageFoliageColor(level, pos));
+                return multiplyTint(baseColor,
+                        unblendedBiomeColor(level, pos, BiomeColors.FOLIAGE_COLOR_RESOLVER));
             }
             return 0xff000000 | (baseColor & 0x00ffffff);
+        }
+
+        private static int unblendedBiomeColor(ClientLevel level, BlockPos pos, ColorResolver resolver) {
+            return resolver.getColor(level.getBiome(pos).value(), pos.getX(), pos.getZ());
         }
 
         private record Cell(int height, int groundColor, int waterOverlayColor) {

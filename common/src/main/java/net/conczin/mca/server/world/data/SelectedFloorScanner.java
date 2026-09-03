@@ -60,7 +60,7 @@ final class SelectedFloorScanner {
         }
 
         FloorSurface surface = new FloorSurface(Set.copyOf(cells.values()), Map.of());
-        surface = surface.withConnectors(StructureConnector.associatedFloorCells(
+        surface = surface.withConnectorTypes(StructureConnector.associatedFloorCells(
                 world, connectors, surface));
         return success(seed, surface);
     }
@@ -219,8 +219,7 @@ final class SelectedFloorScanner {
     }
 
     private static Result success(BlockPos seed, FloorSurface surface) {
-        Set<BlockPos> footprint = new LinkedHashSet<>(surface.projectedCells());
-        footprint.addAll(surface.connectorByFloorCell().keySet());
+        Set<BlockPos> footprint = surface.projectedCells();
         int minX = footprint.stream().mapToInt(BlockPos::getX).min().orElse(seed.getX());
         int minZ = footprint.stream().mapToInt(BlockPos::getZ).min().orElse(seed.getZ());
         int maxX = footprint.stream().mapToInt(BlockPos::getX).max().orElse(seed.getX());

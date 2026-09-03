@@ -5,6 +5,7 @@ import net.conczin.mca.entity.ai.navigation.MultiTargetPositionTracker;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.ai.behavior.BlockPosTracker;
 import net.minecraft.world.entity.ai.behavior.OneShot;
 import net.minecraft.world.entity.ai.behavior.PositionTracker;
 import net.minecraft.world.entity.ai.behavior.declarative.BehaviorBuilder;
@@ -58,11 +59,17 @@ public final class ExtendedWalkTowardsTask {
         return BehaviorBuilder.create((context) -> {
             return context.group(
                     context.registered(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE),
-                    context.absent(MemoryModuleType.WALK_TARGET),
+                    context.registered(MemoryModuleType.WALK_TARGET),
                     context.present(destination)).apply(context,
                     (cantReachWalkTargetSince, walkTarget, destinationResult) -> {
                         return (world, entity, time) -> {
                             if (!shouldWalk.test(entity)) {
+                                return true;
+                            }
+
+                            Optional<WalkTarget> currentWalkTarget = context.tryGet(walkTarget);
+                            if (currentWalkTarget.isPresent()
+                                    && !(currentWalkTarget.orElseThrow().getTarget() instanceof IntermediateWalkTargetTracker)) {
                                 return true;
                             }
 
@@ -76,6 +83,9 @@ public final class ExtendedWalkTowardsTask {
                                 BlockPos targetPos = resolvedTarget.orElse(globalPos.pos());
                                 int targetCompletionRange = resolvedTarget.isPresent() ? 0 : completionRange;
                                 if (targetPos.distManhattan(entity.blockPosition()) > maxDistance) {
+                                    if (currentWalkTarget.isPresent()) {
+                                        return true;
+                                    }
                                     Vec3 vec3d = null;
                                     for (int tries = 0; tries < MAX_RANDOM_POS_ATTEMPTS; tries++) {
                                         Vec3 candidate = DefaultRandomPos.getPosTowards(entity, 15, 7, Vec3.atBottomCenterOf(targetPos), 1.5707963705062866);
@@ -97,22 +107,29 @@ public final class ExtendedWalkTowardsTask {
                                         return true;
                                     }
 
-                                    walkTarget.set(new WalkTarget(vec3d, speed, completionRange));
+                                    walkTarget.set(new WalkTarget(new IntermediateWalkTargetTracker(vec3d), speed, completionRange));
                                 } else {
                                     Optional<? extends PositionTracker> finalTarget = finalTargetResolver.resolve(world, entity, globalPos);
                                     if (finalTarget.isEmpty()) {
                                         if (targetPos.distManhattan(entity.blockPosition()) > targetCompletionRange) {
                                             walkTarget.set(new WalkTarget(targetPos, speed, targetCompletionRange));
+                                        } else if (currentWalkTarget.isPresent()) {
+                                            walkTarget.erase();
                                         }
                                     } else {
                                         PositionTracker tracker = finalTarget.orElseThrow();
                                         if (!(tracker instanceof MultiTargetPositionTracker multiTarget)
                                                 || !multiTarget.isReached(entity, 0)) {
                                             walkTarget.set(new WalkTarget(tracker, speed, 0));
+                                        } else if (currentWalkTarget.isPresent()) {
+                                            walkTarget.erase();
                                         }
                                     }
                                 }
                             } else {
+                                if (currentWalkTarget.isPresent()) {
+                                    walkTarget.erase();
+                                }
                                 if (canGiveUp.test(entity)) {
                                     entity.releasePoi(destination);
                                     destinationResult.erase();
@@ -127,5 +144,12 @@ public final class ExtendedWalkTowardsTask {
                         };
                     });
         });
+    }
+
+    /** Marks only the long-distance segment produced by this task, so it can safely supersede its own segment. */
+    private static final class IntermediateWalkTargetTracker extends BlockPosTracker {
+        private IntermediateWalkTargetTracker(Vec3 position) {
+            super(position);
+        }
     }
 }

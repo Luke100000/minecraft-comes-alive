@@ -5,7 +5,6 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Vec3i;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
-import net.minecraft.world.level.Level;
 
 import java.util.*;
 
@@ -95,6 +94,18 @@ public final class Structure implements VillageBuilding {
         return floorAtHeight(pos.getY());
     }
 
+    private Optional<StructureFloor> resolveInteractionFloorAt(BlockPos pos) {
+        if (pos == null) return Optional.empty();
+        int x = pos.getX();
+        int z = pos.getZ();
+        return getFloors().stream()
+                .filter(floor -> pos.getY() >= floor.anchorY() - 1 && pos.getY() < floor.ceilingY())
+                .filter(floor -> floor.contains(x, z))
+                .min(Comparator.comparingInt((StructureFloor floor) -> Math.abs(floor.anchorY() - pos.getY()))
+                        .thenComparingInt(StructureFloor::anchorY)
+                        .thenComparingInt(StructureFloor::id));
+    }
+
     /** Exact physical membership is the canonical Floor footprint extruded through its vertical band. */
     Optional<StructureFloor> physicalFloorAt(Vec3i pos) {
         if (pos.getX() < min.getX() || pos.getX() > max.getX()
@@ -106,22 +117,13 @@ public final class Structure implements VillageBuilding {
                 .filter(floor -> floor.contains(pos.getX(), pos.getZ()));
     }
 
-    Optional<InteractionPosition> resolveInteractionPosition(Level world,
-                                                             BlockPos pos,
+    Optional<InteractionPosition> resolveInteractionPosition(BlockPos pos,
                                                              Collection<Building> structureRooms) {
         Collection<Building> localRooms = structureRooms == null ? List.of() : structureRooms;
-        StructureFloor floor = resolveFloorAt(pos).orElse(null);
+        StructureFloor floor = resolveInteractionFloorAt(pos).orElse(null);
         if (floor == null) return Optional.empty();
         int x = pos.getX();
         int z = pos.getZ();
-        if (!floor.contains(x, z)) {
-            BlockPos connectorCell = StructureConnector.isVerticalInteraction(world, pos)
-                    ? StructureConnector.resolveVerticalFloorCell(world, floor, pos)
-                    : null;
-            if (connectorCell == null) return Optional.empty();
-            x = connectorCell.getX();
-            z = connectorCell.getZ();
-        }
         return Optional.of(new InteractionPosition(floor, roomAtColumn(localRooms, floor, x, z)));
     }
 

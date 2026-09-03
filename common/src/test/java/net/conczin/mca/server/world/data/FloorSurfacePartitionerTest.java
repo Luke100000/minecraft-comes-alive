@@ -24,13 +24,17 @@ class FloorSurfacePartitionerTest {
     }
 
     @Test
-    void connectorCellSeparatesTwoRoomComponents() {
+    void doorCellBelongsToOneRoomWithoutConnectingBothRooms() {
         BlockPos connectorCell = new BlockPos(1, 64, 0);
         FloorSurface surface = surface(Set.of(
                 cell(0, 64, 0), cell(1, 64, 0), cell(2, 64, 0)),
-                Map.of(connectorCell, connectorCell));
+                Map.of(connectorCell, StructureFloor.ConnectorType.DOOR));
 
-        assertEquals(2, FloorSurfacePartitioner.partition(surface).size());
+        List<FloorSurfacePartitioner.Component> components = FloorSurfacePartitioner.partition(surface);
+
+        assertEquals(2, components.size());
+        assertEquals(1, components.stream().filter(component -> component.containsColumn(1, 0)).count());
+        assertEquals(3, components.stream().mapToInt(FloorSurfacePartitioner.Component::area).sum());
     }
 
     @Test
@@ -42,7 +46,7 @@ class FloorSurfacePartitionerTest {
     }
 
     private static FloorSurface surface(Set<FloorSurface.Cell> cells,
-                                        Map<BlockPos, BlockPos> connectors) {
+                                        Map<BlockPos, StructureFloor.ConnectorType> connectors) {
         return new FloorSurface(cells, connectors);
     }
 

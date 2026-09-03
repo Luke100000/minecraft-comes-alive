@@ -4,6 +4,7 @@ import net.minecraft.core.BlockPos;
 
 import java.util.Comparator;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -11,20 +12,30 @@ import java.util.stream.Collectors;
 
 /** Exact transient geometry for one selected semantic floor. */
 record FloorSurface(Set<Cell> cells,
-                    Map<BlockPos, BlockPos> connectorByFloorCell,
+                    Map<BlockPos, StructureFloor.ConnectorType> connectorTypesByFloorCell,
                     Map<Long, Cell> cellsByColumn) {
     /** Matches Minecraft 1.21.1 WalkNodeEvaluator.DEFAULT_MOB_JUMP_HEIGHT. */
     static final double MAX_STEP_HEIGHT = 1.125D;
     static final int BAND_TOLERANCE = 2;
 
-    FloorSurface(Set<Cell> cells, Map<BlockPos, BlockPos> connectorByFloorCell) {
-        this(Set.copyOf(cells), Map.copyOf(connectorByFloorCell), indexByColumn(cells));
+    FloorSurface(Set<Cell> cells, Map<BlockPos, StructureFloor.ConnectorType> connectorTypesByFloorCell) {
+        this(cells, connectorTypesByFloorCell, Map.of());
     }
 
     FloorSurface {
-        cells = Set.copyOf(cells);
-        connectorByFloorCell = Map.copyOf(connectorByFloorCell);
-        cellsByColumn = Map.copyOf(cellsByColumn);
+        LinkedHashSet<Cell> topologyCells = new LinkedHashSet<>(cells);
+        connectorTypesByFloorCell = Map.copyOf(connectorTypesByFloorCell);
+        Map<Long, Cell> ordinaryByColumn = indexByColumn(topologyCells);
+        for (BlockPos connectorCell : connectorTypesByFloorCell.keySet()) {
+            long key = columnKey(connectorCell.getX(), connectorCell.getZ());
+            if (ordinaryByColumn.containsKey(key)) continue;
+            Cell reference = nearestReferenceCell(connectorCell, topologyCells).orElse(null);
+            double surfaceY = reference == null ? connectorCell.getY() : reference.surfaceY();
+            int ceilingY = reference == null ? connectorCell.getY() + 2 : reference.ceilingY();
+            topologyCells.add(new Cell(connectorCell, surfaceY, ceilingY));
+        }
+        cells = Set.copyOf(topologyCells);
+        cellsByColumn = indexByColumn(cells);
     }
 
     int anchorY() {
@@ -41,8 +52,8 @@ record FloorSurface(Set<Cell> cells,
         return Optional.ofNullable(cellsByColumn.get(columnKey(x, z)));
     }
 
-    FloorSurface withConnectors(Map<BlockPos, BlockPos> connectors) {
-        return new FloorSurface(cells, connectors, cellsByColumn);
+    FloorSurface withConnectorTypes(Map<BlockPos, StructureFloor.ConnectorType> connectors) {
+        return new FloorSurface(cells, connectors);
     }
 
     static boolean canStep(double fromSurfaceY, double toSurfaceY) {
@@ -79,6 +90,15 @@ record FloorSurface(Set<Cell> cells,
             }
         }
         return Map.copyOf(indexed);
+    }
+
+    private static Optional<Cell> nearestReferenceCell(BlockPos connectorCell, Set<Cell> cells) {
+        return cells.stream().min(Comparator
+                .comparingInt((Cell cell) -> Math.abs(cell.feet().getX() - connectorCell.getX())
+                        + Math.abs(cell.feet().getZ() - connectorCell.getZ()))
+                .thenComparingInt(cell -> Math.abs(cell.feet().getY() - connectorCell.getY()))
+                .thenComparingInt(cell -> cell.feet().getX())
+                .thenComparingInt(cell -> cell.feet().getZ()));
     }
 
     static long columnKey(int x, int z) {

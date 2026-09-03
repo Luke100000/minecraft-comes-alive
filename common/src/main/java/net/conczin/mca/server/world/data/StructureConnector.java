@@ -43,20 +43,14 @@ final class StructureConnector {
                 && !verticalColumnFromConnector(world, pos).isEmpty();
     }
 
-    static boolean isVerticalInteraction(Level world, BlockPos pos) {
-        return !verticalColumn(world, pos).isEmpty();
-    }
-
-    static List<StructureFloor.ConnectorMarker> floorMarkers(Level world, FloorSurface surface) {
-        if (world == null || surface == null || surface.connectorByFloorCell().isEmpty()) return List.of();
+    static List<StructureFloor.ConnectorMarker> floorMarkers(FloorSurface surface) {
+        if (surface == null || surface.connectorTypesByFloorCell().isEmpty()) return List.of();
         LinkedHashSet<StructureFloor.ConnectorMarker> markers = new LinkedHashSet<>();
         int anchorY = surface.anchorY();
-        for (Map.Entry<BlockPos, BlockPos> entry : surface.connectorByFloorCell().entrySet()) {
-            StructureFloor.ConnectorType type = connectorType(world.getBlockState(entry.getValue()));
-            if (type == null) continue;
+        for (Map.Entry<BlockPos, StructureFloor.ConnectorType> entry : surface.connectorTypesByFloorCell().entrySet()) {
             BlockPos floorCell = entry.getKey();
             markers.add(new StructureFloor.ConnectorMarker(
-                    new BlockPos(floorCell.getX(), anchorY, floorCell.getZ()), type));
+                    new BlockPos(floorCell.getX(), anchorY, floorCell.getZ()), entry.getValue()));
         }
         return markers.stream()
                 .sorted(Comparator.comparingInt((StructureFloor.ConnectorMarker marker) -> marker.pos().getX())
@@ -85,38 +79,33 @@ final class StructureConnector {
     }
 
     /** Associates connector positions with exact cells on the already selected semantic floor. */
-    static Map<BlockPos, BlockPos> associatedFloorCells(
+    static Map<BlockPos, StructureFloor.ConnectorType> associatedFloorCells(
             Level world, Collection<BlockPos> connectors, FloorSurface surface) {
         if (connectors.isEmpty() || surface.cells().isEmpty()) return Map.of();
 
-        LinkedHashMap<BlockPos, BlockPos> result = new LinkedHashMap<>();
+        LinkedHashMap<BlockPos, StructureFloor.ConnectorType> result = new LinkedHashMap<>();
         for (BlockPos rawConnector : connectors) {
             BlockState rawState = world.getBlockState(rawConnector);
             BlockPos connector = normalize(rawConnector, rawState);
             BlockState state = world.getBlockState(connector);
             if (!isConnector(state)) continue;
-
-            if (isVertical(world, connector)) {
-                for (BlockPos handoff : handoffs(connector)) {
-                    FloorSurface.Cell landing = surface.cellAtColumn(handoff.getX(), handoff.getZ()).orElse(null);
-                    if (landing == null) continue;
-                    result.putIfAbsent(
-                            new BlockPos(connector.getX(), landing.feet().getY(), connector.getZ()), connector);
-                }
-                continue;
-            }
-
-            if (!isHorizontalBoundary(state)) continue;
-
-            for (Direction direction : HORIZONTAL) {
-                BlockPos side = connector.relative(direction);
-                FloorSurface.Cell landing = surface.cellAtColumn(side.getX(), side.getZ()).orElse(null);
-                if (landing == null) continue;
-                result.putIfAbsent(
-                        new BlockPos(connector.getX(), landing.feet().getY(), connector.getZ()), connector);
-            }
+            StructureFloor.ConnectorType type = connectorType(state);
+            if (type == null) continue;
+            floorMembershipCells(connector, surface)
+                    .forEach(floorCell -> result.putIfAbsent(floorCell, type));
         }
         return Map.copyOf(result);
+    }
+
+    static Set<BlockPos> floorMembershipCells(BlockPos connector, FloorSurface surface) {
+        if (connector == null || surface == null || surface.cells().isEmpty()) return Set.of();
+        LinkedHashSet<BlockPos> cells = new LinkedHashSet<>();
+        for (BlockPos handoff : handoffs(connector)) {
+            FloorSurface.Cell landing = surface.cellAtColumn(handoff.getX(), handoff.getZ()).orElse(null);
+            if (landing == null) continue;
+            cells.add(new BlockPos(connector.getX(), landing.feet().getY(), connector.getZ()));
+        }
+        return Set.copyOf(cells);
     }
 
     /** Returns the vertical connector column for an occupied connector or its immediate open top-exit cell. */
@@ -175,30 +164,63 @@ final class StructureConnector {
         return result;
     }
 
-    /**
-     * Projects an occupied vertical connector onto one registered Floor, but only while the
-     * interaction Y belongs to that Floor's storey band. The whole connected column is used only
-     * to prove/find the handoff; it never changes the player's Y to the column bottom.
-     */
-    static BlockPos resolveVerticalFloorCell(Level world, StructureFloor floor, BlockPos source) {
-        if (source.getY() < floor.anchorY() - 1 || source.getY() >= floor.ceilingY()) return null;
-        return verticalHandoffCandidates(world, source).stream()
-                .filter(candidate -> floor.contains(candidate.getX(), candidate.getZ()))
-                .min(Comparator
-                        .comparingInt((BlockPos candidate) -> Math.abs(candidate.getY() - floor.anchorY()))
-                        .thenComparingInt(BlockPos::getY)
-                        .thenComparingInt(BlockPos::getX)
-                        .thenComparingInt(BlockPos::getZ))
-                .map(candidate -> new BlockPos(candidate.getX(), floor.anchorY(), candidate.getZ()))
-                .orElse(null);
-    }
-
     private static BlockPos floorHandoff(StructureFloor floor, BlockPos connector) {
         return handoffs(connector).stream()
                 .filter(candidate -> candidate.getY() >= floor.anchorY()
                         && candidate.getY() < floor.ceilingY())
                 .filter(candidate -> floor.contains(candidate.getX(), candidate.getZ()))
                 .findFirst().orElse(null);
+    }
+
+    static boolean connectsFloors(List<BlockPos> connectorColumn,
+                                  StructureFloor first,
+                                  StructureFloor second) {
+        if (connectorColumn == null || connectorColumn.isEmpty() || first == null || second == null
+                || first.verticalGapTo(second) < 0) {
+            return false;
+        }
+        boolean touchesFirst = connectorColumn.stream().anyMatch(connector -> floorHandoff(first, connector) != null);
+        boolean touchesSecond = connectorColumn.stream().anyMatch(connector -> floorHandoff(second, connector) != null);
+        return touchesFirst && touchesSecond;
+    }
+
+    static List<VerticalConnection> verticalConnections(Level world,
+                                                        StructureFloor candidate,
+                                                        Collection<Structure> existing) {
+        if (world == null || candidate == null || candidate.region() == null || existing == null) {
+            return List.of();
+        }
+
+        LinkedHashSet<Long> visitedColumns = new LinkedHashSet<>();
+        LinkedHashSet<VerticalConnection> connections = new LinkedHashSet<>();
+        for (StructureFloor.ConnectorMarker marker : candidate.connectors()) {
+            if (!marker.type().vertical()) continue;
+            List<BlockPos> column = verticalColumnAtFloorCell(world, marker.pos());
+            if (column.isEmpty()) continue;
+            BlockPos connector = column.getFirst();
+            long columnKey = FloorSurface.columnKey(connector.getX(), connector.getZ());
+            if (!visitedColumns.add(columnKey)) continue;
+
+            for (Structure structure : existing) {
+                for (StructureFloor floor : structure.getFloors()) {
+                    if (connectsFloors(column, candidate, floor)) {
+                        connections.add(new VerticalConnection(structure, floor));
+                    }
+                }
+            }
+        }
+        return connections.stream().sorted(Comparator
+                .comparingInt((VerticalConnection connection) -> connection.structure().getId())
+                .thenComparingInt(connection -> connection.floor().id()))
+                .toList();
+    }
+
+    private static List<BlockPos> verticalColumnAtFloorCell(Level world, BlockPos floorCell) {
+        for (BlockPos probe : List.of(floorCell, floorCell.below(), floorCell.above())) {
+            List<BlockPos> column = verticalColumnFromConnector(world, probe);
+            if (!column.isEmpty()) return column;
+        }
+        return List.of();
     }
 
     static Optional<FloorHandoff> resolveVerticalFloorHandoff(
@@ -269,6 +291,13 @@ final class StructureConnector {
     record FloorHandoff(BlockPos seed, FloorSurface surface) {
         FloorHandoff {
             seed = seed.immutable();
+        }
+    }
+
+    record VerticalConnection(Structure structure, StructureFloor floor) {
+        VerticalConnection {
+            Objects.requireNonNull(structure, "structure");
+            Objects.requireNonNull(floor, "floor");
         }
     }
 }

@@ -29,7 +29,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public class Village implements Iterable<Building> {
-    static final int BUILDING_DATA_VERSION = 1;
+    static final int BUILDING_DATA_VERSION = 2;
     public static final int PLAYER_BORDER_MARGIN = 32;
     public static final int BORDER_MARGIN = 48;
     public static final int MERGE_MARGIN = 64;
@@ -358,7 +358,7 @@ public class Village implements Iterable<Building> {
     }
 
     public Optional<Building> getBuildingAt(Vec3i pos) {
-        return getFunctionalRoomAt(pos).or(() -> getExternalBuildings()
+        return findPhysicalRoomAt(pos).or(() -> getExternalBuildings()
                 .filter(building -> building.containsPos(pos))
                 .min(Comparator.comparingInt(Building::getId)));
     }
@@ -404,7 +404,7 @@ public class Village implements Iterable<Building> {
         return getBuilding(building).map(value -> residentHomes.entrySet().stream().filter(entry -> {
             BlockPos homePos = BlockPos.of(entry.getValue());
             if (value.isFunctionalRoom()) {
-                return getFunctionalRoomAt(homePos).map(room -> room.getId() == value.getId()).orElse(false);
+                return findPhysicalRoomAt(homePos).map(room -> room.getId() == value.getId()).orElse(false);
             }
             return value.containsPos(homePos);
         }).map(entry -> residentNames.getOrDefault(entry.getKey(), "Unknown")).collect(Collectors.toList())).orElseGet(List::of);
@@ -577,8 +577,8 @@ public class Village implements Iterable<Building> {
 
     public RoomScanPlan getRoomScanPlan(Level level, BlockPos pos) {
         BlockPos source = pos == null ? BlockPos.ZERO : pos.immutable();
-        if (level == null || pos == null) return RoomScanPlan.addBuilding(source);
-        Optional<ResolvedInteraction> resolved = resolveInteractionPosition(level, pos);
+        if (pos == null) return RoomScanPlan.addBuilding(source);
+        Optional<ResolvedInteraction> resolved = resolveInteractionPosition(pos);
         if (resolved.isPresent()) {
             ResolvedInteraction interaction = resolved.get();
             Building room = interaction.position().room();
@@ -587,6 +587,7 @@ public class Village implements Iterable<Building> {
                     interaction.structure().getId(), interaction.position().floor().id(), source);
         }
 
+        if (level == null) return RoomScanPlan.addBuilding(source);
         return attachmentPlan(level, source).orElseGet(() -> RoomScanPlan.addBuilding(source));
     }
 
@@ -595,8 +596,8 @@ public class Village implements Iterable<Building> {
                 StructureScanner.resolveAttachmentSeed(level, source).orElse(null);
         if (attachmentSeed == null) return Optional.empty();
 
-        StructureFloor candidateFloor = StructureScanner.persistedFloor(level, attachmentSeed.surface());
-        AttachmentTarget target = resolveAttachmentTarget(candidateFloor).orElse(null);
+        StructureFloor candidateFloor = StructureScanner.persistedFloor(attachmentSeed.surface());
+        AttachmentTarget target = resolveAttachmentTarget(level, candidateFloor).orElse(null);
         if (target == null) return Optional.empty();
 
         Structure candidate = new Structure(-1, attachmentSeed.seed(), attachmentSeed.seed(),
@@ -607,19 +608,32 @@ public class Village implements Iterable<Building> {
                 target.buildingId(), floorNumber, source, attachmentSeed.seed()));
     }
 
-    Optional<AttachmentTarget> resolveAttachmentTarget(StructureFloor candidate) {
+    Optional<AttachmentTarget> resolveAttachmentTarget(Level level, StructureFloor candidate) {
+        return selectAttachmentTarget(candidate,
+                StructureConnector.verticalConnections(level, candidate, structures.values()));
+    }
+
+    Optional<AttachmentTarget> selectAttachmentTarget(
+            StructureFloor candidate,
+            Collection<StructureConnector.VerticalConnection> connections) {
         if (candidate == null || candidate.region() == null) return Optional.empty();
+        boolean overlapsRegisteredFloor = structures.values().stream()
+                .flatMap(structure -> structure.getFloors().stream())
+                .filter(floor -> floor.region() != null && candidate.verticalGapTo(floor) < 0)
+                .anyMatch(floor -> candidate.region().intersectionArea(floor.region()) > 0);
+        if (overlapsRegisteredFloor) return Optional.empty();
 
         Map<Integer, AttachmentTarget> nearestByBuilding = new HashMap<>();
-        for (Structure structure : structures.values()) {
-            for (StructureFloor floor : structure.getFloors()) {
-                if (!sharesVerticalConnector(candidate, floor)) continue;
-                int gap = Math.abs(candidate.anchorY() - floor.anchorY());
-                AttachmentTarget target = new AttachmentTarget(
-                        structure.getLogicalBuildingId(), structure.getId(), floor.id(), gap);
-                nearestByBuilding.merge(target.buildingId(), target,
-                        (first, second) -> ATTACHMENT_TARGET_ORDER.compare(first, second) <= 0 ? first : second);
-            }
+        for (StructureConnector.VerticalConnection connection : connections) {
+            Structure structure = connection.structure();
+            StructureFloor floor = connection.floor();
+            if (structures.get(structure.getId()) != structure) continue;
+            int gap = candidate.verticalGapTo(floor);
+            if (gap < 0) continue;
+            AttachmentTarget target = new AttachmentTarget(
+                    structure.getLogicalBuildingId(), structure.getId(), floor.id(), gap);
+            nearestByBuilding.merge(target.buildingId(), target,
+                    (first, second) -> ATTACHMENT_TARGET_ORDER.compare(first, second) <= 0 ? first : second);
         }
 
         AttachmentTarget nearest = nearestByBuilding.values().stream()
@@ -631,30 +645,16 @@ public class Village implements Iterable<Building> {
                 ? Optional.empty() : Optional.of(nearest);
     }
 
-    private static boolean sharesVerticalConnector(StructureFloor first, StructureFloor second) {
-        return first.connectors().stream()
-                .filter(marker -> isVerticalConnector(marker.type()))
-                .anyMatch(firstMarker -> second.connectors().stream()
-                        .filter(marker -> isVerticalConnector(marker.type()))
-                        .anyMatch(secondMarker -> firstMarker.pos().getX() == secondMarker.pos().getX()
-                                && firstMarker.pos().getZ() == secondMarker.pos().getZ()));
+    Optional<Structure> getInteractionStructureAt(BlockPos pos) {
+        return resolveInteractionPosition(pos).map(ResolvedInteraction::structure);
     }
 
-    private static boolean isVerticalConnector(StructureFloor.ConnectorType type) {
-        return type == StructureFloor.ConnectorType.LADDER
-                || type == StructureFloor.ConnectorType.TRAPDOOR;
-    }
-
-    Optional<Structure> getInteractionStructureAt(Level level, BlockPos pos) {
-        return resolveInteractionPosition(level, pos).map(ResolvedInteraction::structure);
-    }
-
-    private Optional<ResolvedInteraction> resolveInteractionPosition(Level level, BlockPos pos) {
+    private Optional<ResolvedInteraction> resolveInteractionPosition(BlockPos pos) {
         Map<Integer, List<Building>> roomsByStructure = getRooms()
                 .collect(Collectors.groupingBy(Building::getStructureId));
         return structures.values().stream()
                 .map(structure -> new ResolvedInteraction(structure,
-                        structure.resolveInteractionPosition(level, pos,
+                        structure.resolveInteractionPosition(pos,
                                 roomsByStructure.getOrDefault(structure.getId(), List.of())).orElse(null)))
                 .filter(resolved -> resolved.position() != null)
                 .min(Comparator
@@ -670,10 +670,12 @@ public class Village implements Iterable<Building> {
         return room != null && room.isFunctionalRoom() ? Optional.of(room) : Optional.empty();
     }
 
-    public Optional<Building> getFunctionalRoomAt(Vec3i pos) {
+    public Optional<Building> findPhysicalRoomAt(Vec3i pos) {
         Optional<Structure> structure = getExactStructureAt(pos);
         if (structure.isEmpty()) {
-            return getRooms().filter(room -> room.containsFloorPosition(pos))
+            return getRooms()
+                    .filter(room -> room.containsPos(pos))
+                    .filter(room -> room.containsFloorColumn(pos.getX(), pos.getZ()))
                     .min(Comparator.comparingInt(Building::getId));
         }
         StructureFloor floor = structure.get().physicalFloorAt(pos).orElse(null);
@@ -684,11 +686,11 @@ public class Village implements Iterable<Building> {
                 .min(Comparator.comparingInt(Building::getId));
     }
 
-    public Optional<Building> getFunctionalRoomAt(Level level, BlockPos pos) {
-        return resolveInteractionPosition(level, pos)
+    public Optional<Building> findInteractionRoomAt(BlockPos pos) {
+        return resolveInteractionPosition(pos)
                 .map(ResolvedInteraction::position)
                 .map(Structure.InteractionPosition::room)
-                .or(() -> getFunctionalRoomAt(pos));
+                .or(() -> findPhysicalRoomAt(pos));
     }
 
     private record ResolvedInteraction(Structure structure, Structure.InteractionPosition position) {

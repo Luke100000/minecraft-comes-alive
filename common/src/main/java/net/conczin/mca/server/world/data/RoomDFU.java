@@ -14,18 +14,18 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
-/** Compatibility boundary for released origin/1.21.1 and this branch's previous save format. */
+/** Compatibility boundary for origin/1.21.1 and origin/feature/1.21.1-floor-clean-squash. */
 final class RoomDFU {
     private RoomDFU() {
     }
 
     static Result migrate(CompoundTag villageTag) {
         return villageTag.contains("structures", Tag.TAG_LIST)
-                ? migratePreviousBranch(villageTag)
+                ? migrateFloorCleanSquash(villageTag)
                 : migrateOrigin(villageTag.getList("buildings", Tag.TAG_COMPOUND));
     }
 
-    private static Result migratePreviousBranch(CompoundTag villageTag) {
+    private static Result migrateFloorCleanSquash(CompoundTag villageTag) {
         Map<Integer, Building> rooms = new HashMap<>();
         Map<Integer, Boolean> inheritanceByRoom = new HashMap<>();
         for (Tag value : villageTag.getList("buildings", Tag.TAG_COMPOUND)) {

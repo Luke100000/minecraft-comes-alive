@@ -35,6 +35,21 @@ class FloorSurfaceTest {
         assertEquals(64, surface.anchorY());
     }
 
+    @Test
+    void persistedRegionIncludesConnectorFloorCells() {
+        BlockPos connector = new BlockPos(1, 64, 0);
+        FloorSurface surface = new FloorSurface(Set.of(
+                cell(0, 64, 0), cell(2, 64, 0)),
+                Map.of(connector, StructureFloor.ConnectorType.TRAPDOOR));
+
+        BuildingFloorRegion persisted = surface.persistedRegion();
+
+        assertTrue(persisted.containsHorizontally(0, 0));
+        assertTrue(persisted.containsHorizontally(1, 0));
+        assertTrue(persisted.containsHorizontally(2, 0));
+        assertEquals(3, persisted.area());
+    }
+
     private static FloorSurface.Cell cell(int x, int y, int z) {
         return new FloorSurface.Cell(new BlockPos(x, y, z), y, y + 4);
     }

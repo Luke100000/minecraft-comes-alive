@@ -4,6 +4,7 @@ import com.google.gson.JsonObject;
 import net.conczin.mca.resources.BuildingTypes;
 import net.conczin.mca.resources.data.BuildingType;
 import net.conczin.mca.server.world.data.Building;
+import net.conczin.mca.server.world.data.BuildingFloorRegion;
 import net.conczin.mca.server.world.data.Structure;
 import net.conczin.mca.server.world.data.StructureFloor;
 import net.conczin.mca.server.world.data.Village;
@@ -150,13 +151,31 @@ class BlueprintMapGeometryTest {
 
         assertEquals(0, allFloors.connectorLayers().size());
         assertEquals(1, ground.connectorLayers().size());
-        assertEquals(BlueprintMapGeometry.VerticalDirection.DOWN,
-                ground.connectorLayers().getFirst().verticalDirection());
+        assertEquals(StructureFloor.ConnectorType.LADDER,
+                ground.connectorLayers().getFirst().marker().type());
         assertEquals(2, basement.connectorLayers().size());
-        assertEquals(BlueprintMapGeometry.VerticalDirection.UP,
+        assertEquals(StructureFloor.ConnectorType.LADDER,
                 basement.connectorLayers().stream()
                         .filter(layer -> layer.marker().type() == StructureFloor.ConnectorType.LADDER)
-                        .findFirst().orElseThrow().verticalDirection());
+                        .findFirst().orElseThrow().marker().type());
+    }
+
+    @Test
+    void connectorOwnedByRoomIsPartOfBlueprintFloorShade() throws Exception {
+        Village village = new Village(1, null);
+        Structure structure = structure(10, 10, 64, 0,
+                new StructureFloor.ConnectorMarker(
+                        new BlockPos(1, 64, 0), StructureFloor.ConnectorType.TRAPDOOR));
+        Building room = room(1, 10, 0, new BlockPos(0, 64, 0));
+        setRoomFootprint(room, Set.of(new BlockPos(0, 64, 0), new BlockPos(1, 64, 0)));
+        registerStructure(village, structure, room);
+
+        BlueprintMapGeometry.MapGeometry ground = BlueprintMapGeometry.build(village, null).get(0);
+
+        assertEquals(Set.of(
+                        new BlueprintMapFootprint.Cell(0, 0),
+                        new BlueprintMapFootprint.Cell(1, 0)),
+                ground.footprintLayers().getFirst().footprintCells());
     }
 
     private static Structure structure(int id, int buildingId, int y, int floorNumber,
@@ -187,5 +206,16 @@ class BlueprintMapGeometryTest {
         Method register = Village.class.getDeclaredMethod("registerStructure", Structure.class, Building.class);
         register.setAccessible(true);
         register.invoke(village, structure, room);
+    }
+
+    private static void setRoomFootprint(Building room, Set<BlockPos> cells) throws Exception {
+        Method fromFootprint = BuildingFloorRegion.class.getDeclaredMethod(
+                "fromFootprint", int.class, java.util.Collection.class);
+        fromFootprint.setAccessible(true);
+        BuildingFloorRegion region = (BuildingFloorRegion) fromFootprint.invoke(null, 64, cells);
+        Method setGeometry = Building.class.getDeclaredMethod(
+                "setGeometry", BlockPos.class, BlockPos.class, BuildingFloorRegion.class);
+        setGeometry.setAccessible(true);
+        setGeometry.invoke(room, new BlockPos(0, 64, 0), new BlockPos(1, 67, 0), region);
     }
 }

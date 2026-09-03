@@ -305,16 +305,7 @@ final class BlueprintMapRenderer implements AutoCloseable {
     static String connectorGlyph(MapConnectorLayer layer) {
         StructureFloor.ConnectorType type = layer.marker().type();
         return switch (type) {
-            case LADDER -> switch (layer.verticalDirection()) {
-                case UP -> "↑";
-                case DOWN -> "↓";
-                case BOTH, NONE -> "↕";
-            };
-            case TRAPDOOR -> switch (layer.verticalDirection()) {
-                case UP -> "△";
-                case DOWN -> "▽";
-                case BOTH, NONE -> "◇";
-            };
+            case LADDER, TRAPDOOR -> "↕";
             case DOOR -> "▯";
             case GATE -> "═";
         };

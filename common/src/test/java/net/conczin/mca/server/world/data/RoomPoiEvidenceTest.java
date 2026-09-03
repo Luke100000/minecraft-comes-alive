@@ -17,7 +17,7 @@ class RoomPoiEvidenceTest {
         FloorSurface surface = new FloorSurface(Set.of(interior), Map.of());
         var component = new FloorSurfacePartitioner.Component(Set.of(interior));
 
-        Set<BlockPos> candidates = RoomPoiEvidence.candidates(surface, Set.of(component), component, Set.of());
+        Set<BlockPos> candidates = RoomPoiEvidence.candidates(surface, Set.of(component), component);
 
         assertTrue(candidates.contains(new BlockPos(0, 65, 1)));
         assertTrue(candidates.contains(new BlockPos(1, 63, 1)));
@@ -32,7 +32,7 @@ class RoomPoiEvidenceTest {
         var surface = new FloorSurface(Set.of(low, middle, high), Map.of());
         var component = new FloorSurfacePartitioner.Component(Set.of(low, middle, high));
 
-        Set<BlockPos> candidates = RoomPoiEvidence.candidates(surface, Set.of(component), component, Set.of());
+        Set<BlockPos> candidates = RoomPoiEvidence.candidates(surface, Set.of(component), component);
 
         assertTrue(candidates.contains(new BlockPos(2, 71, 1)));
     }
@@ -44,7 +44,7 @@ class RoomPoiEvidenceTest {
         var surface = new FloorSurface(Set.of(floorAnchor, raised), Map.of());
         var component = new FloorSurfacePartitioner.Component(Set.of(raised));
 
-        Set<BlockPos> candidates = RoomPoiEvidence.candidates(surface, Set.of(component), component, Set.of());
+        Set<BlockPos> candidates = RoomPoiEvidence.candidates(surface, Set.of(component), component);
 
         assertTrue(candidates.contains(new BlockPos(1, 64, 1)),
                 "a POI below stairs should still belong to the Room column when Y is inside the selected Floor band");
@@ -60,8 +60,8 @@ class RoomPoiEvidenceTest {
         BlockPos sharedWallPoi = new BlockPos(1, 65, 0);
 
         List<FloorSurfacePartitioner.Component> components = List.of(leftRoom, rightRoom);
-        Set<BlockPos> leftCandidates = RoomPoiEvidence.candidates(surface, components, leftRoom, Set.of());
-        Set<BlockPos> rightCandidates = RoomPoiEvidence.candidates(surface, components, rightRoom, Set.of());
+        Set<BlockPos> leftCandidates = RoomPoiEvidence.candidates(surface, components, leftRoom);
+        Set<BlockPos> rightCandidates = RoomPoiEvidence.candidates(surface, components, rightRoom);
 
         assertTrue(leftCandidates.contains(sharedWallPoi),
                 "stable bounds should make the left Room the deterministic owner for equal-sized Rooms");

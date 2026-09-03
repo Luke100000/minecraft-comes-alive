@@ -109,7 +109,7 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
             player.displayClientMessage(Component.translatable("blueprint.noBuilding"), true);
             return;
         }
-        Building room = village.getFunctionalRoomAt(player.serverLevel(), player.blockPosition()).orElse(null);
+            Building room = village.findInteractionRoomAt(player.blockPosition()).orElse(null);
         if (room == null) {
             player.displayClientMessage(Component.translatable("blueprint.noRoomOnFloor"), true);
             return;
