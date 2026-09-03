@@ -8,6 +8,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FloorSurfaceTest {
@@ -33,6 +34,18 @@ class FloorSurfaceTest {
                 cell(0, 64, 1), cell(1, 64, 1)), Map.of());
 
         assertEquals(64, surface.anchorY());
+    }
+
+    @Test
+    void duplicateColumnFailureReportsBothCompetingSurfaceCells() {
+        FloorSurface.Cell lower = cell(2, 64, 3);
+        FloorSurface.Cell upper = cell(2, 65, 3);
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> new FloorSurface(Set.of(lower, upper), Map.of()));
+
+        assertTrue(error.getMessage().contains(lower.toString()));
+        assertTrue(error.getMessage().contains(upper.toString()));
     }
 
     @Test
