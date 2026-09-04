@@ -119,10 +119,6 @@ final class FloorGeometry {
         return BuildingFloorRegion.fromFootprint(y, projected);
     }
 
-    FloorGeometry withConnectorTypes(Map<BlockPos, FloorConnector.Type> connectors) {
-        return new FloorGeometry(cells, connectors);
-    }
-
     List<FloorConnector.Marker> connectorMarkers() {
         return connectorTypesByCell.entrySet().stream()
                 .map(entry -> new FloorConnector.Marker(entry.getKey(), entry.getValue()))

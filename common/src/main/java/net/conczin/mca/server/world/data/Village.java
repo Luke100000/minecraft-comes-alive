@@ -640,10 +640,6 @@ public class Village implements Iterable<Building> {
         return RoomScanPlanner.plan(this, level, pos);
     }
 
-    Optional<AttachmentTarget> resolveAttachmentTarget(Level level, StructureFloor candidate) {
-        return resolveAttachmentTarget(level, candidate, List.of());
-    }
-
     Optional<AttachmentTarget> resolveAttachmentTarget(
             Level level,
             StructureFloor candidate,

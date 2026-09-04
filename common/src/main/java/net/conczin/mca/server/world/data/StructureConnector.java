@@ -43,10 +43,6 @@ final class StructureConnector {
                 && !verticalColumnFromConnector(world, pos).isEmpty();
     }
 
-    static List<FloorConnector.Marker> floorMarkers(FloorGeometry geometry) {
-        return geometry == null ? List.of() : geometry.connectorMarkers();
-    }
-
     private static FloorConnector.Type connectorType(BlockState state) {
         if (state.getBlock() instanceof LadderBlock) return FloorConnector.Type.LADDER;
         if (state.getBlock() instanceof TrapDoorBlock) return FloorConnector.Type.TRAPDOOR;

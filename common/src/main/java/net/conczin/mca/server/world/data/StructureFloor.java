@@ -121,10 +121,6 @@ public record StructureFloor(int id, int floorNumber, FloorGeometry geometry) {
                 new FloorGeometry(cells, connectorMap(tag, cells)));
     }
 
-    StructureFloor withGeometry(FloorGeometry newGeometry) {
-        return new StructureFloor(id, floorNumber, newGeometry);
-    }
-
     public StructureFloor withFloorNumber(int newFloorNumber) {
         return new StructureFloor(id, newFloorNumber, geometry);
     }

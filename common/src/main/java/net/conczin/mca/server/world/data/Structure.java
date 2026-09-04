@@ -257,13 +257,6 @@ public final class Structure implements VillageBuilding {
                 && pos.getZ() >= min.getZ() && pos.getZ() <= max.getZ();
     }
 
-    boolean containsEnvelope(Vec3i pos) {
-        return pos != null
-                && pos.getX() >= min.getX() && pos.getX() <= max.getX()
-                && pos.getY() >= min.getY() && pos.getY() <= max.getY()
-                && pos.getZ() >= min.getZ() && pos.getZ() <= max.getZ();
-    }
-
     public boolean intersects(Structure other) {
         if (other == null
                 || max.getX() < other.min.getX() || min.getX() > other.max.getX()

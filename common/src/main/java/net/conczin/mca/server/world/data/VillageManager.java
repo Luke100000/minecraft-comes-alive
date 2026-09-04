@@ -234,25 +234,6 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         return Building.validationResult.SUCCESS;
     }
 
-    public BuildingScanResult analyzeAttachedRoom(BlockPos pos,
-                                                  Village.RoomScanMode requestedMode,
-                                                  int expectedTargetBuildingId) {
-        return new RoomWorkflow(this, world).analyzeAttachedRoom(
-                pos, requestedMode, expectedTargetBuildingId);
-    }
-
-    public BuildingScanResult analyzeBuildingAddition(BlockPos pos) {
-        return new RoomWorkflow(this, world).analyzeBuildingAddition(pos);
-    }
-
-    public BuildingScanResult analyzeRoom(BlockPos pos) {
-        return new RoomWorkflow(this, world).analyzeRoom(pos);
-    }
-
-    public RegisteredRoomUpdate analyzeRegisteredRoomUpdate(Village village, int buildingId, BlockPos pos) {
-        return new RoomWorkflow(this, world).analyzeRegisteredRoomUpdate(village, buildingId, pos);
-    }
-
     static boolean lineageOverlapsRegisteredRooms(
             Collection<RegisteredRoomReconciler.Assignment> assignments,
             Collection<Building> otherRooms) {
