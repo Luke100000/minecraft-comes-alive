@@ -29,7 +29,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public class Village implements Iterable<Building> {
-    static final int BUILDING_DATA_VERSION = 2;
+    static final int BUILDING_DATA_VERSION = 1;
     public static final int PLAYER_BORDER_MARGIN = 32;
     public static final int BORDER_MARGIN = 48;
     public static final int MERGE_MARGIN = 64;
@@ -90,37 +90,13 @@ public class Village implements Iterable<Building> {
         autoScan = tag.contains("autoScan") ? tag.getBoolean("autoScan") : true;
         this.world = world;
 
-        if (tag.contains("buildingDataVersion")) {
-            if (tag.getInt("buildingDataVersion") != BUILDING_DATA_VERSION) {
-                throw new IllegalArgumentException("Unsupported MCA buildingDataVersion: "
-                        + tag.getInt("buildingDataVersion"));
-            }
-            for (Tag value : tag.getList("buildings", Tag.TAG_COMPOUND)) {
-                Building room = new Building((CompoundTag) value);
-                buildings.put(room.getId(), room);
-            }
-            for (Tag value : tag.getList("externalBuildings", Tag.TAG_COMPOUND)) {
-                ExternalBuilding building = new ExternalBuilding((CompoundTag) value);
-                externalBuildings.put(building.getId(), building);
-            }
-            for (Tag value : tag.getList("structures", Tag.TAG_COMPOUND)) {
-                Structure structure = new Structure((CompoundTag) value);
-                structures.put(structure.getId(), structure);
-            }
-            for (Tag value : tag.getList("logicalBuildings", Tag.TAG_COMPOUND)) {
-                LogicalBuilding logical = new LogicalBuilding((CompoundTag) value);
-                logicalBuildings.put(logical.id(), logical);
-            }
-            validateBuildingData();
-            logicalBuildings.values().forEach(this::applyFloorNumbers);
-        } else {
-            RoomDFU.Result data = RoomDFU.migrate(tag);
-            buildings.putAll(data.buildings());
-            externalBuildings.putAll(data.externalBuildings());
-            structures.putAll(data.structures());
-            logicalBuildings.putAll(data.logicalBuildings());
-            refreshLogicalBuildings();
-        }
+        RoomDFU.Result data = RoomDFU.load(tag);
+        buildings.putAll(data.buildings());
+        externalBuildings.putAll(data.externalBuildings());
+        structures.putAll(data.structures());
+        logicalBuildings.putAll(data.logicalBuildings());
+        validateBuildingData();
+        logicalBuildings.values().forEach(this::applyFloorNumbers);
         if (!buildings.isEmpty() || !externalBuildings.isEmpty() || !structures.isEmpty()) calculateDimensions();
     }
 

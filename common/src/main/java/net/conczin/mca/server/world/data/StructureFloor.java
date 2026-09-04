@@ -134,24 +134,13 @@ public record StructureFloor(int id, int floorNumber, FloorGeometry geometry) {
     }
 
     public static StructureFloor load(CompoundTag tag) {
-        if (tag.contains("cells", Tag.TAG_LIST)) {
-            List<FloorGeometry.Cell> cells = NbtHelper.toList(
-                    tag.getList("cells", Tag.TAG_COMPOUND), value -> loadCell((CompoundTag) value));
-            return new StructureFloor(tag.getInt("id"), 0,
-                    new FloorGeometry(cells, connectorMap(tag, cells)));
-        }
-
-        // Transitional loader; Task 7 moves this old-shape interpretation into RoomDFU only.
-        if (!tag.contains("region", Tag.TAG_COMPOUND)) {
+        if (!tag.contains("cells", Tag.TAG_LIST)) {
             throw new IllegalArgumentException("StructureFloor is missing required geometry");
         }
-        BuildingFloorRegion region = BuildingFloorRegion.load(tag.getCompound("region"));
-        int ceilingY = tag.getInt("ceilingY");
-        BuildingFloorRegion boundary = tag.contains("ceilingBoundaryRegion", Tag.TAG_COMPOUND)
-                ? BuildingFloorRegion.load(tag.getCompound("ceilingBoundaryRegion")).withAnchorY(ceilingY)
-                : null;
-        return new StructureFloor(tag.getInt("id"), region.anchorY(), ceilingY, 0,
-                region, boundary, loadMarkers(tag));
+        List<FloorGeometry.Cell> cells = NbtHelper.toList(
+                tag.getList("cells", Tag.TAG_COMPOUND), value -> loadCell((CompoundTag) value));
+        return new StructureFloor(tag.getInt("id"), 0,
+                new FloorGeometry(cells, connectorMap(tag, cells)));
     }
 
     StructureFloor withGeometry(FloorGeometry newGeometry) {

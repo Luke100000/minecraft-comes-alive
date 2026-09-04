@@ -47,7 +47,7 @@ class RoomDFUTest {
         CompoundTag village = new CompoundTag();
         village.put("buildings", list(originBuilding(7, "house")));
 
-        RoomDFU.Result migrated = RoomDFU.migrate(village);
+        RoomDFU.Result migrated = RoomDFU.load(village);
 
         Building room = migrated.buildings().get(7);
         assertEquals(7, room.getId());
@@ -63,7 +63,7 @@ class RoomDFUTest {
         CompoundTag village = new CompoundTag();
         village.put("buildings", list(originBuilding(8, "graveyard")));
 
-        RoomDFU.Result migrated = RoomDFU.migrate(village);
+        RoomDFU.Result migrated = RoomDFU.load(village);
 
         assertTrue(migrated.buildings().isEmpty());
         assertTrue(migrated.structures().isEmpty());
@@ -84,17 +84,17 @@ class RoomDFUTest {
         CompoundTag village = new CompoundTag();
         village.put("buildings", list(building));
 
-        Building room = RoomDFU.migrate(village).buildings().get(9);
+        Building room = RoomDFU.load(village).buildings().get(9);
 
         assertEquals(List.of(new BlockPos(2, 65, 3)),
                 room.getBlocks().get(ResourceLocation.parse("minecraft:bell")));
     }
 
     @Test
-    void previousBranchInheritanceBecomesLogicalAndRoomState() {
-        CompoundTag village = previousBranchVillage(false);
+    void upstreamFloorCleanSquashInheritanceBecomesLogicalAndRoomState() {
+        CompoundTag village = upstreamFloorCleanSquashVillage(false);
 
-        RoomDFU.Result migrated = RoomDFU.migrate(village);
+        RoomDFU.Result migrated = RoomDFU.load(village);
 
         LogicalBuilding logical = migrated.logicalBuildings().get(20);
         assertEquals(10, logical.mainRoomId());
@@ -104,8 +104,8 @@ class RoomDFUTest {
     }
 
     @Test
-    void previousBranchGroundFloorIsDerivedFromMigratedMainRoom() {
-        RoomDFU.Result migrated = RoomDFU.migrate(previousBranchVillage(true));
+    void upstreamFloorCleanSquashGroundFloorIsDerivedFromMigratedMainRoom() {
+        RoomDFU.Result migrated = RoomDFU.load(upstreamFloorCleanSquashVillage(true));
 
         LogicalBuilding logical = migrated.logicalBuildings().get(20);
         assertEquals(10, logical.mainRoomId());
@@ -114,8 +114,20 @@ class RoomDFUTest {
     }
 
     @Test
+    void upstreamFloorCleanSquashMigratesProjectedRegionsToExactFlatCells() {
+        RoomDFU.Result migrated = RoomDFU.load(upstreamFloorCleanSquashVillage(true));
+        StructureFloor floor = migrated.structures().get(20).getFloor(0).orElseThrow();
+        Set<BlockPos> expected = Set.of(new BlockPos(0, 64, 0), new BlockPos(1, 64, 0));
+
+        assertEquals(expected, floor.geometry().cells().stream()
+                .map(FloorGeometry.Cell::feet)
+                .collect(java.util.stream.Collectors.toSet()));
+        assertEquals(expected, migrated.buildings().get(10).getFloorCells());
+    }
+
+    @Test
     void normalizedSavesDoNotEmitLegacyAutomaticOrRoomInheritanceFields() {
-        RoomDFU.Result migrated = RoomDFU.migrate(previousBranchVillage(true));
+        RoomDFU.Result migrated = RoomDFU.load(upstreamFloorCleanSquashVillage(true));
 
         CompoundTag roomTag = migrated.buildings().get(11).save();
         CompoundTag structureTag = migrated.structures().get(20).save();
@@ -136,7 +148,7 @@ class RoomDFUTest {
     }
 
     @Test
-    void currentRoomAndStructureGeometryRoundTripsWithoutNewSaveFormat() {
+    void canonicalRoomAndStructureGeometryRoundTripsExactly() {
         BuildingFloorRegion footprint = BuildingFloorRegion.fromFootprint(64, Set.of(
                 new BlockPos(0, 64, 0), new BlockPos(1, 64, 0),
                 new BlockPos(0, 64, 1), new BlockPos(1, 64, 1)));
@@ -159,40 +171,60 @@ class RoomDFUTest {
         assertEquals(structure.getLogicalBuildingId(), reloadedStructure.getLogicalBuildingId());
         assertEquals(structure.getFloor(0).orElseThrow().floorNumber(),
                 reloadedStructure.getFloor(0).orElseThrow().floorNumber());
-        assertEquals(room.getFloorRegion(), reloadedRoom.getFloorRegion());
+        assertEquals(room.getFloorCells(), reloadedRoom.getFloorCells());
         assertEquals(room.getStructureId(), reloadedRoom.getStructureId());
         assertEquals(room.getFloorId(), reloadedRoom.getFloorId());
         assertEquals(room.getBlocks(), reloadedRoom.getBlocks());
     }
 
     @Test
-    void currentVillageSaveUsesVersionTwo() {
+    void canonicalVillageSaveUsesVersionOne() {
         Village village = new Village(1, null);
 
-        assertEquals(2, village.save().getInt("buildingDataVersion"));
+        assertEquals(1, village.save().getInt("buildingDataVersion"));
     }
 
     @Test
-    void versionOneIntermediateSaveIsRejectedInsteadOfMigrated() {
+    void canonicalVillageLoadsThroughRoomDfu() {
         Village village = new Village(1, null);
-        CompoundTag unsupported = village.save();
-        unsupported.putInt("buildingDataVersion", 1);
+        StructureFloor floor = floor(0, 64, 68, 0);
+        Structure structure = new Structure(20, new BlockPos(0, 64, 0), List.of(floor));
+        Building room = new Building(new BlockPos(0, 64, 0));
+        room.setId(10);
+        room.setStructureId(20);
+        room.setFloorId(0);
+        room.setGeometry(new BlockPos(0, 64, 0), new BlockPos(1, 67, 0),
+                Set.of(new BlockPos(0, 64, 0), new BlockPos(1, 64, 0)));
+        village.registerStructure(structure, room);
 
-        assertThrows(IllegalArgumentException.class, () -> new Village(unsupported, null));
+        RoomDFU.Result loaded = RoomDFU.load(village.save());
+
+        assertEquals(room.getFloorCells(), loaded.buildings().get(10).getFloorCells());
+        assertEquals(floor.geometry().cells(), loaded.structures().get(20)
+                .getFloor(0).orElseThrow().geometry().cells());
     }
 
-    private static CompoundTag previousBranchVillage(boolean mainInheritanceEnabled) {
+    @Test
+    void unsupportedCanonicalVersionIsRejectedInsteadOfMigrated() {
+        Village village = new Village(1, null);
+        CompoundTag unsupported = village.save();
+        unsupported.putInt("buildingDataVersion", 2);
+
+        assertThrows(IllegalArgumentException.class, () -> RoomDFU.load(unsupported));
+    }
+
+    private static CompoundTag upstreamFloorCleanSquashVillage(boolean mainInheritanceEnabled) {
         CompoundTag village = new CompoundTag();
-        CompoundTag main = previousBranchRoom(10, mainInheritanceEnabled);
-        CompoundTag inherited = previousBranchRoom(11, true);
-        CompoundTag independent = previousBranchRoom(12, false);
+        CompoundTag main = upstreamFloorCleanSquashRoom(10, mainInheritanceEnabled);
+        CompoundTag inherited = upstreamFloorCleanSquashRoom(11, true);
+        CompoundTag independent = upstreamFloorCleanSquashRoom(12, false);
         village.put("buildings", list(main, inherited, independent));
         village.put("externalBuildings", new ListTag());
-        village.put("structures", list(previousBranchStructure(20)));
+        village.put("structures", list(upstreamFloorCleanSquashStructure(20)));
         return village;
     }
 
-    private static CompoundTag previousBranchRoom(int id, boolean inheritanceEnabled) {
+    private static CompoundTag upstreamFloorCleanSquashRoom(int id, boolean inheritanceEnabled) {
         CompoundTag room = originBuilding(id, "house");
         room.putInt("structureId", 20);
         room.putInt("floorId", 0);
@@ -204,7 +236,7 @@ class RoomDFUTest {
         return room;
     }
 
-    private static CompoundTag previousBranchStructure(int id) {
+    private static CompoundTag upstreamFloorCleanSquashStructure(int id) {
         CompoundTag structure = new CompoundTag();
         structure.putInt("id", id);
         structure.putInt("buildingId", id);
@@ -216,14 +248,20 @@ class RoomDFUTest {
         structure.put("max", NbtHelper.encodeBlockPos(new BlockPos(4, 72, 4)));
         structure.putInt("surfaceReferenceY", 64);
         structure.put("floors", list(
-                legacyFloor(0, 64, 68, 0),
-                legacyFloor(1, 68, 72, 1)));
+                upstreamFloor(0, 64, 68, 0),
+                upstreamFloor(1, 68, 72, 1)));
         return structure;
     }
 
-    private static CompoundTag legacyFloor(int id, int anchorY, int ceilingY, int number) {
-        CompoundTag tag = floor(id, anchorY, ceilingY, number).save();
+    private static CompoundTag upstreamFloor(int id, int anchorY, int ceilingY, int number) {
+        CompoundTag tag = new CompoundTag();
+        tag.putInt("id", id);
+        tag.putInt("anchorY", anchorY);
+        tag.putInt("ceilingY", ceilingY);
         tag.putInt("floorNumber", number);
+        tag.put("region", BuildingFloorRegion.fromFootprint(anchorY, List.of(
+                new BlockPos(0, anchorY, 0), new BlockPos(1, anchorY, 0))).save());
+        tag.put("connectors", new ListTag());
         return tag;
     }
 

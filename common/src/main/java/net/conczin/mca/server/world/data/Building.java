@@ -69,14 +69,6 @@ public class Building implements VillageBuilding {
                     .filter(Objects::nonNull)
                     .map(BlockPos::immutable)
                     .collect(Collectors.toUnmodifiableSet());
-        } else {
-            // Transitional compatibility until RoomDFU owns all old-format interpretation.
-            List<BuildingFloorRegion> loadedRegions = NbtHelper.toList(
-                    tag.getList("floorRegions", Tag.TAG_COMPOUND),
-                    value -> BuildingFloorRegion.load((CompoundTag) value));
-            floorCells = loadedRegions.isEmpty()
-                    ? Set.of()
-                    : Set.copyOf(loadedRegions.getFirst().cells());
         }
         structureId = tag.getInt("structureId");
         floorId = tag.getInt("floorId");
