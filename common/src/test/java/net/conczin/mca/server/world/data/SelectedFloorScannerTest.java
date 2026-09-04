@@ -25,14 +25,14 @@ class SelectedFloorScannerTest {
 
     @Test
     void floorBandSelectionSplitsThreeBlockStoreysAcrossWalkableStairs() {
-        Set<FloorSurface.Cell> cells = Set.of(
+        Set<FloorGeometry.Cell> cells = Set.of(
                 cell(0, 88, 0), cell(1, 88, 0), cell(2, 88, 0), cell(3, 88, 0),
                 cell(3, 89, 1),
                 cell(3, 90, 2),
                 cell(0, 91, 3), cell(1, 91, 3), cell(2, 91, 3), cell(3, 91, 3));
 
-        Set<FloorSurface.Cell> lower = SelectedFloorScanner.selectFloorBand(cells, 90);
-        Set<FloorSurface.Cell> upper = SelectedFloorScanner.selectFloorBand(cells, 91);
+        Set<FloorGeometry.Cell> lower = SelectedFloorScanner.selectFloorBand(cells, 90);
+        Set<FloorGeometry.Cell> upper = SelectedFloorScanner.selectFloorBand(cells, 91);
 
         assertEquals(Set.of(88, 89, 90), lower.stream()
                 .map(cell -> cell.feet().getY()).collect(java.util.stream.Collectors.toSet()));
@@ -42,7 +42,7 @@ class SelectedFloorScannerTest {
 
     @Test
     void floorSelectionUsesNextMeaningfulBandAsSemanticCeiling() {
-        Set<FloorSurface.Cell> cells = Set.of(
+        Set<FloorGeometry.Cell> cells = Set.of(
                 cell(0, 88, 0), cell(1, 88, 0), cell(2, 88, 0), cell(3, 88, 0),
                 cell(3, 89, 1),
                 cell(3, 90, 2),
@@ -51,13 +51,13 @@ class SelectedFloorScannerTest {
         ScannedFloor floor = SelectedFloorScanner.floorSelection(cells, new BlockPos(0, 88, 0)).selected();
 
         assertEquals(91, floor.semanticCeilingY());
-        assertEquals(Set.of(88, 89, 90), floor.surface().cells().stream()
+        assertEquals(Set.of(88, 89, 90), floor.geometry().cells().stream()
                 .map(cell -> cell.feet().getY()).collect(java.util.stream.Collectors.toSet()));
     }
 
     @Test
     void connectedBandsRetainWalkableStoreyEvidenceForAttachments() {
-        Set<FloorSurface.Cell> cells = Set.of(
+        Set<FloorGeometry.Cell> cells = Set.of(
                 cell(0, 88, 0), cell(1, 88, 0), cell(2, 88, 0), cell(3, 88, 0),
                 cell(3, 89, 1),
                 cell(3, 90, 2),
@@ -75,7 +75,7 @@ class SelectedFloorScannerTest {
     void topStairAtNextStoreyHeightStaysWithLowerBandAcrossDoorGap() {
         BlockPos topStair = new BlockPos(6, 91, 0);
         BlockPos upperRoom = new BlockPos(8, 91, 0);
-        Set<FloorSurface.Cell> cells = Set.of(
+        Set<FloorGeometry.Cell> cells = Set.of(
                 cell(0, 88, 0), cell(1, 88, 0), cell(2, 88, 0), cell(3, 88, 0),
                 cell(4, 89, 0),
                 cell(5, 90, 0),
@@ -89,19 +89,19 @@ class SelectedFloorScannerTest {
 
         assertEquals(88, lower.anchorY());
         assertEquals(91, lower.semanticCeilingY());
-        assertTrue(lower.surface().cellAtColumn(topStair.getX(), topStair.getZ()).isPresent());
-        assertTrue(lower.surface().cellAtColumn(upperRoom.getX(), upperRoom.getZ()).isEmpty());
+        assertFalse(lower.geometry().cellsAtColumn(topStair.getX(), topStair.getZ()).isEmpty());
+        assertTrue(lower.geometry().cellsAtColumn(upperRoom.getX(), upperRoom.getZ()).isEmpty());
         assertEquals(7, lower.region().area());
 
         assertEquals(91, upper.anchorY());
-        assertTrue(upper.surface().cellAtColumn(topStair.getX(), topStair.getZ()).isEmpty());
-        assertTrue(upper.surface().cellAtColumn(upperRoom.getX(), upperRoom.getZ()).isPresent());
+        assertTrue(upper.geometry().cellsAtColumn(topStair.getX(), topStair.getZ()).isEmpty());
+        assertFalse(upper.geometry().cellsAtColumn(upperRoom.getX(), upperRoom.getZ()).isEmpty());
         assertEquals(4, upper.region().area());
     }
 
     @Test
     void floorBandSelectionKeepsLegitimateTwoBlockSurfaceVariationTogether() {
-        Set<FloorSurface.Cell> cells = Set.of(
+        Set<FloorGeometry.Cell> cells = Set.of(
                 cell(0, 64, 0), cell(1, 64, 0), cell(2, 64, 0), cell(3, 64, 0),
                 cell(3, 65, 1),
                 cell(3, 66, 2));
@@ -109,7 +109,30 @@ class SelectedFloorScannerTest {
         assertEquals(cells, SelectedFloorScanner.selectFloorBand(cells, 65));
     }
 
-    private static FloorSurface.Cell cell(int x, int y, int z) {
-        return new FloorSurface.Cell(new BlockPos(x, y, z), y, y + 4);
+    @Test
+    void stackedTopStairColumnStaysOnLowerFloorWithoutLosingUpperRoom() {
+        BlockPos stackedColumn = new BlockPos(6, 91, 0);
+        BlockPos upperRoom = new BlockPos(8, 91, 0);
+        Set<FloorGeometry.Cell> cells = Set.of(
+                cell(0, 88, 0), cell(1, 88, 0), cell(2, 88, 0), cell(3, 88, 0),
+                cell(6, 88, 0),
+                cell(4, 89, 0),
+                cell(5, 90, 0),
+                cell(6, 91, 0),
+                cell(8, 91, 0), cell(9, 91, 0), cell(10, 91, 0), cell(11, 91, 0));
+
+        ScannedFloor lower = SelectedFloorScanner.floorSelection(cells, stackedColumn).selected();
+        ScannedFloor upper = SelectedFloorScanner.floorSelection(cells, upperRoom).selected();
+
+        assertEquals(List.of(88, 91), lower.geometry().cellsAtColumn(6, 0).stream()
+                .map(cell -> cell.feet().getY()).toList());
+        assertEquals(88, lower.geometry().anchorY());
+        assertEquals(91, lower.semanticCeilingY());
+        assertTrue(upper.geometry().cellAt(upperRoom).isPresent());
+        assertTrue(upper.geometry().cellAt(stackedColumn).isEmpty());
+    }
+
+    private static FloorGeometry.Cell cell(int x, int y, int z) {
+        return new FloorGeometry.Cell(new BlockPos(x, y, z), y, y + 4);
     }
 }

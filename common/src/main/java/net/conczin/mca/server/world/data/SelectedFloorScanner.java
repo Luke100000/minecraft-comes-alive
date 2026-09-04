@@ -34,21 +34,21 @@ final class SelectedFloorScanner {
 
     static Result scan(Level world, BlockPos seed, int maxSize, int maxRadius) {
         FloorCeilingResolver ceilings = new FloorCeilingResolver(world);
-        FloorSurface.Cell seedCell = inspectSurfaceCell(world, seed, ceilings).orElse(null);
+        FloorGeometry.Cell seedCell = inspectSurfaceCell(world, seed, ceilings).orElse(null);
         if (seedCell == null) return Result.failure(Building.validationResult.NOT_IN_BUILDING, seed);
         if (reachesExterior(world, seedCell, seed.getY(), ceilings, maxRadius, null)) {
             return Result.failure(Building.validationResult.NOT_IN_BUILDING, seed);
         }
 
-        ArrayDeque<FloorSurface.Cell> queue = new ArrayDeque<>();
+        ArrayDeque<FloorGeometry.Cell> queue = new ArrayDeque<>();
         Set<BlockPos> visited = new HashSet<>();
-        LinkedHashMap<BlockPos, FloorSurface.Cell> cells = new LinkedHashMap<>();
+        LinkedHashMap<BlockPos, FloorGeometry.Cell> cells = new LinkedHashMap<>();
         LinkedHashSet<BlockPos> connectors = new LinkedHashSet<>();
         queue.addLast(seedCell);
         visited.add(seedCell.feet());
 
         while (!queue.isEmpty()) {
-            FloorSurface.Cell current = queue.removeFirst();
+            FloorGeometry.Cell current = queue.removeFirst();
             if (horizontalDistance(current.feet(), seed) >= maxRadius) {
                 return Result.failure(Building.validationResult.SIZE_LIMIT, seed);
             }
@@ -75,10 +75,10 @@ final class SelectedFloorScanner {
                     + ": " + e.getMessage(), e);
         }
         ScannedFloor floor = selection.selected();
-        FloorSurface surface = floor.surface();
-        surface = surface.withConnectorTypes(StructureConnector.associatedFloorCells(
-                world, connectors, surface));
-        floor = new ScannedFloor(surface, floor.semanticCeilingY());
+        FloorGeometry geometry = floor.geometry();
+        geometry = geometry.withConnectorTypes(StructureConnector.associatedFloorCells(
+                world, connectors, geometry));
+        floor = new ScannedFloor(geometry, floor.semanticCeilingY());
         List<ScannedFloor> connectedFloors = new ArrayList<>(selection.connected().size());
         for (ScannedFloor connected : selection.connected()) {
             connectedFloors.add(connected == selection.selected() ? floor : connected);
@@ -87,7 +87,7 @@ final class SelectedFloorScanner {
     }
 
     static boolean canStep(double fromSurfaceY, double toSurfaceY) {
-        return FloorSurface.canStep(fromSurfaceY, toSurfaceY);
+        return FloorGeometry.canStep(fromSurfaceY, toSurfaceY);
     }
 
     static boolean withinSelectedFloorBand(int seedY, int candidateY) {
@@ -101,7 +101,7 @@ final class SelectedFloorScanner {
                 .min();
     }
 
-    static FloorSelection floorSelection(Collection<FloorSurface.Cell> discovered, BlockPos seed) {
+    static FloorSelection floorSelection(Collection<FloorGeometry.Cell> discovered, BlockPos seed) {
         if (discovered == null || discovered.isEmpty() || seed == null) {
             return new FloorSelection(null, List.of());
         }
@@ -112,7 +112,7 @@ final class SelectedFloorScanner {
 
         LinkedHashMap<HeightBand, ScannedFloor> floors = new LinkedHashMap<>();
         for (HeightBand band : semantic.bands()) {
-            Set<FloorSurface.Cell> cells = discovered.stream()
+            Set<FloorGeometry.Cell> cells = discovered.stream()
                     .filter(cell -> band.equals(semantic.ownerByCell().get(cell.feet())))
                     .collect(java.util.stream.Collectors.toUnmodifiableSet());
             if (cells.isEmpty()) continue;
@@ -121,11 +121,11 @@ final class SelectedFloorScanner {
         return new FloorSelection(floors.get(selectedBand), List.copyOf(floors.values()));
     }
 
-    private static ScannedFloor createSelectedFloor(Set<FloorSurface.Cell> selectedCells, OptionalInt nextBandY) {
-        FloorSurface surface = new FloorSurface(selectedCells, Map.of());
+    private static ScannedFloor createSelectedFloor(Set<FloorGeometry.Cell> selectedCells, OptionalInt nextBandY) {
+        FloorGeometry geometry = new FloorGeometry(selectedCells, Map.of());
         return nextBandY.isPresent()
-                ? new ScannedFloor(surface, nextBandY.getAsInt())
-                : ScannedFloor.physical(surface);
+                ? new ScannedFloor(geometry, nextBandY.getAsInt())
+                : ScannedFloor.physical(geometry);
     }
 
     /**
@@ -134,7 +134,7 @@ final class SelectedFloorScanner {
      * belong to one band; the next meaningful slice starts the next Floor. Sparse stair steps are
      * retained inside the selected band but do not move its boundary by themselves.
      */
-    static Set<FloorSurface.Cell> selectFloorBand(Collection<FloorSurface.Cell> discovered, int seedY) {
+    static Set<FloorGeometry.Cell> selectFloorBand(Collection<FloorGeometry.Cell> discovered, int seedY) {
         if (discovered == null || discovered.isEmpty()) return Set.of();
         SemanticBands semantic = semanticBands(discovered);
         HeightBand selected = selectHeightBand(semantic.bands(), semantic.discoveredHeights(), seedY);
@@ -143,7 +143,7 @@ final class SelectedFloorScanner {
         return cellsOwnedBy(discovered, semantic, selected);
     }
 
-    static Set<FloorSurface.Cell> selectFloorBand(Collection<FloorSurface.Cell> discovered, BlockPos seed) {
+    static Set<FloorGeometry.Cell> selectFloorBand(Collection<FloorGeometry.Cell> discovered, BlockPos seed) {
         if (discovered == null || discovered.isEmpty() || seed == null) return Set.of();
         SemanticBands semantic = semanticBands(discovered);
         HeightBand selected = semantic.owner(seed).orElseGet(() ->
@@ -153,7 +153,7 @@ final class SelectedFloorScanner {
         return cellsOwnedBy(discovered, semantic, selected);
     }
 
-    private static Set<FloorSurface.Cell> cellsOwnedBy(Collection<FloorSurface.Cell> discovered,
+    private static Set<FloorGeometry.Cell> cellsOwnedBy(Collection<FloorGeometry.Cell> discovered,
                                                        SemanticBands semantic,
                                                        HeightBand selected) {
         return discovered.stream()
@@ -161,8 +161,8 @@ final class SelectedFloorScanner {
                 .collect(java.util.stream.Collectors.toUnmodifiableSet());
     }
 
-    private static SemanticBands semanticBands(Collection<FloorSurface.Cell> discovered) {
-        TreeMap<Integer, List<FloorSurface.Cell>> cellsByY = cellsByHeight(discovered);
+    private static SemanticBands semanticBands(Collection<FloorGeometry.Cell> discovered) {
+        TreeMap<Integer, List<FloorGeometry.Cell>> cellsByY = cellsByHeight(discovered);
         List<HeightBand> bands = heightBands(cellsByY);
         if (bands.isEmpty()) {
             int fallbackY = cellsByY.firstKey();
@@ -170,22 +170,22 @@ final class SelectedFloorScanner {
         }
 
         Map<BlockPos, HeightBand> owners = new LinkedHashMap<>();
-        Map<Long, List<FloorSurface.Cell>> byColumn = cellsByColumn(discovered);
+        Map<Long, List<FloorGeometry.Cell>> byColumn = cellsByColumn(discovered);
 
-        for (Map.Entry<Integer, List<FloorSurface.Cell>> entry : cellsByY.entrySet()) {
+        for (Map.Entry<Integer, List<FloorGeometry.Cell>> entry : cellsByY.entrySet()) {
             int y = entry.getKey();
             HeightBand nominal = selectHeightBand(bands, cellsByY.keySet(), y);
-            for (Set<FloorSurface.Cell> component : sliceComponents(entry.getValue())) {
+            for (Set<FloorGeometry.Cell> component : sliceComponents(entry.getValue())) {
                 if (component.size() >= MIN_MEANINGFUL_HEIGHT_SLICE_AREA) {
                     component.forEach(cell -> owners.put(cell.feet(), nominal));
                 }
             }
         }
 
-        for (Map.Entry<Integer, List<FloorSurface.Cell>> entry : cellsByY.entrySet()) {
+        for (Map.Entry<Integer, List<FloorGeometry.Cell>> entry : cellsByY.entrySet()) {
             int y = entry.getKey();
             HeightBand nominal = selectHeightBand(bands, cellsByY.keySet(), y);
-            for (Set<FloorSurface.Cell> component : sliceComponents(entry.getValue())) {
+            for (Set<FloorGeometry.Cell> component : sliceComponents(entry.getValue())) {
                 if (component.stream().allMatch(cell -> owners.containsKey(cell.feet()))) continue;
 
                 HeightBand lowerOwner = component.stream()
@@ -207,33 +207,33 @@ final class SelectedFloorScanner {
         return new SemanticBands(bands, Set.copyOf(cellsByY.keySet()), Map.copyOf(owners));
     }
 
-    private static Map<Long, List<FloorSurface.Cell>> cellsByColumn(Collection<FloorSurface.Cell> cells) {
-        Map<Long, List<FloorSurface.Cell>> indexed = new LinkedHashMap<>();
-        for (FloorSurface.Cell cell : cells) {
-            indexed.computeIfAbsent(FloorSurface.columnKey(cell.feet().getX(), cell.feet().getZ()),
+    private static Map<Long, List<FloorGeometry.Cell>> cellsByColumn(Collection<FloorGeometry.Cell> cells) {
+        Map<Long, List<FloorGeometry.Cell>> indexed = new LinkedHashMap<>();
+        for (FloorGeometry.Cell cell : cells) {
+            indexed.computeIfAbsent(FloorGeometry.columnKey(cell.feet().getX(), cell.feet().getZ()),
                     ignored -> new ArrayList<>()).add(cell);
         }
         indexed.replaceAll((ignored, column) -> List.copyOf(column));
         return Map.copyOf(indexed);
     }
 
-    private static List<Set<FloorSurface.Cell>> sliceComponents(Collection<FloorSurface.Cell> cells) {
-        Map<Long, FloorSurface.Cell> byColumn = cells.stream().collect(java.util.stream.Collectors.toMap(
-                cell -> FloorSurface.columnKey(cell.feet().getX(), cell.feet().getZ()),
+    private static List<Set<FloorGeometry.Cell>> sliceComponents(Collection<FloorGeometry.Cell> cells) {
+        Map<Long, FloorGeometry.Cell> byColumn = cells.stream().collect(java.util.stream.Collectors.toMap(
+                cell -> FloorGeometry.columnKey(cell.feet().getX(), cell.feet().getZ()),
                 cell -> cell,
                 (first, ignored) -> first));
         Set<BlockPos> visited = new HashSet<>();
-        List<Set<FloorSurface.Cell>> components = new ArrayList<>();
-        for (FloorSurface.Cell seed : cells) {
+        List<Set<FloorGeometry.Cell>> components = new ArrayList<>();
+        for (FloorGeometry.Cell seed : cells) {
             if (!visited.add(seed.feet())) continue;
-            LinkedHashSet<FloorSurface.Cell> component = new LinkedHashSet<>();
-            ArrayDeque<FloorSurface.Cell> queue = new ArrayDeque<>();
+            LinkedHashSet<FloorGeometry.Cell> component = new LinkedHashSet<>();
+            ArrayDeque<FloorGeometry.Cell> queue = new ArrayDeque<>();
             queue.addLast(seed);
             while (!queue.isEmpty()) {
-                FloorSurface.Cell current = queue.removeFirst();
+                FloorGeometry.Cell current = queue.removeFirst();
                 component.add(current);
                 for (Direction direction : HORIZONTAL) {
-                    FloorSurface.Cell next = byColumn.get(FloorSurface.columnKey(
+                    FloorGeometry.Cell next = byColumn.get(FloorGeometry.columnKey(
                             current.feet().getX() + direction.getStepX(),
                             current.feet().getZ() + direction.getStepZ()));
                     if (next == null || visited.contains(next.feet())
@@ -247,33 +247,33 @@ final class SelectedFloorScanner {
         return List.copyOf(components);
     }
 
-    private static List<FloorSurface.Cell> adjacentWalkableCells(
-            FloorSurface.Cell cell,
-            Map<Long, List<FloorSurface.Cell>> byColumn) {
-        List<FloorSurface.Cell> adjacent = new ArrayList<>();
+    private static List<FloorGeometry.Cell> adjacentWalkableCells(
+            FloorGeometry.Cell cell,
+            Map<Long, List<FloorGeometry.Cell>> byColumn) {
+        List<FloorGeometry.Cell> adjacent = new ArrayList<>();
         for (Direction direction : HORIZONTAL) {
-            long key = FloorSurface.columnKey(
+            long key = FloorGeometry.columnKey(
                     cell.feet().getX() + direction.getStepX(),
                     cell.feet().getZ() + direction.getStepZ());
-            for (FloorSurface.Cell candidate : byColumn.getOrDefault(key, List.of())) {
+            for (FloorGeometry.Cell candidate : byColumn.getOrDefault(key, List.of())) {
                 if (canStep(cell.surfaceY(), candidate.surfaceY())) adjacent.add(candidate);
             }
         }
         return List.copyOf(adjacent);
     }
 
-    private static TreeMap<Integer, List<FloorSurface.Cell>> cellsByHeight(
-            Collection<FloorSurface.Cell> discovered) {
-        TreeMap<Integer, List<FloorSurface.Cell>> cellsByY = new TreeMap<>();
-        for (FloorSurface.Cell cell : new LinkedHashSet<>(discovered)) {
+    private static TreeMap<Integer, List<FloorGeometry.Cell>> cellsByHeight(
+            Collection<FloorGeometry.Cell> discovered) {
+        TreeMap<Integer, List<FloorGeometry.Cell>> cellsByY = new TreeMap<>();
+        for (FloorGeometry.Cell cell : new LinkedHashSet<>(discovered)) {
             cellsByY.computeIfAbsent(cell.feet().getY(), ignored -> new ArrayList<>()).add(cell);
         }
         return cellsByY;
     }
 
-    private static List<HeightBand> heightBands(Map<Integer, List<FloorSurface.Cell>> cellsByY) {
+    private static List<HeightBand> heightBands(Map<Integer, List<FloorGeometry.Cell>> cellsByY) {
         List<HeightBand> bands = new ArrayList<>();
-        for (Map.Entry<Integer, List<FloorSurface.Cell>> entry : cellsByY.entrySet()) {
+        for (Map.Entry<Integer, List<FloorGeometry.Cell>> entry : cellsByY.entrySet()) {
             if (!meaningfulHeightSlice(entry.getKey(), entry.getValue())) continue;
             HeightBand current = bands.isEmpty() ? null : bands.getLast();
             if (current == null || entry.getKey() - current.minY() > StructureFloor.BAND_TOLERANCE) {
@@ -299,28 +299,28 @@ final class SelectedFloorScanner {
         return new HeightBand(fallbackMinY);
     }
 
-    private static boolean meaningfulHeightSlice(int y, Collection<FloorSurface.Cell> cells) {
+    private static boolean meaningfulHeightSlice(int y, Collection<FloorGeometry.Cell> cells) {
         return sliceComponents(cells).stream()
                 .anyMatch(component -> component.size() >= MIN_MEANINGFUL_HEIGHT_SLICE_AREA);
     }
 
-    static Optional<FloorSurface.Cell> inspectSurfaceCell(
+    static Optional<FloorGeometry.Cell> inspectSurfaceCell(
             Level world, BlockPos feet, FloorCeilingResolver ceilings) {
         OptionalDouble surfaceY = supportedSurfaceY(world, feet);
         if (surfaceY.isEmpty()) return Optional.empty();
         OptionalInt ceiling = ceilings.ceilingY(feet);
         if (ceiling.isEmpty()) return Optional.empty();
-        return Optional.of(new FloorSurface.Cell(feet, surfaceY.getAsDouble(), ceiling.getAsInt()));
+        return Optional.of(new FloorGeometry.Cell(feet, surfaceY.getAsDouble(), ceiling.getAsInt()));
     }
 
     private static void enqueueHorizontalLanding(
             Level world,
             BlockPos seed,
-            FloorSurface.Cell current,
+            FloorGeometry.Cell current,
             Direction direction,
             int maxRadius,
             Set<BlockPos> visited,
-            ArrayDeque<FloorSurface.Cell> queue,
+            ArrayDeque<FloorGeometry.Cell> queue,
             Set<BlockPos> connectors,
             FloorCeilingResolver ceilings) {
         BlockPos horizontal = current.feet().relative(direction);
@@ -334,7 +334,7 @@ final class SelectedFloorScanner {
             connectors.add(connector);
             if (!StructureConnector.isHorizontalBoundary(state)) return;
 
-            FloorSurface.Cell farSide = findLanding(
+            FloorGeometry.Cell farSide = findLanding(
                     world, current.surfaceY(), connector.relative(direction), ceilings)
                     .orElse(null);
             if (farSide == null || visited.contains(farSide.feet())) return;
@@ -345,7 +345,7 @@ final class SelectedFloorScanner {
             return;
         }
 
-        FloorSurface.Cell landing = findLanding(
+        FloorGeometry.Cell landing = findLanding(
                 world, current.surfaceY(), horizontal, ceilings).orElse(null);
         if (landing == null || visited.contains(landing.feet())) return;
         if (horizontalDistance(landing.feet(), seed) >= maxRadius) return;
@@ -353,14 +353,14 @@ final class SelectedFloorScanner {
         queue.addLast(landing);
     }
 
-    private static Optional<FloorSurface.Cell> findLanding(
+    private static Optional<FloorGeometry.Cell> findLanding(
             Level world,
             double currentSurfaceY,
             BlockPos horizontal,
             FloorCeilingResolver ceilings) {
         for (int dy : LANDING_Y_OFFSETS) {
             BlockPos candidate = horizontal.offset(0, dy, 0);
-            FloorSurface.Cell cell = inspectSurfaceCell(world, candidate, ceilings).orElse(null);
+            FloorGeometry.Cell cell = inspectSurfaceCell(world, candidate, ceilings).orElse(null);
             if (cell != null && canStep(currentSurfaceY, cell.surfaceY())) return Optional.of(cell);
         }
         return Optional.empty();
@@ -368,7 +368,7 @@ final class SelectedFloorScanner {
 
     private static boolean reachesExterior(
             Level world,
-            FloorSurface.Cell start,
+            FloorGeometry.Cell start,
             int seedY,
             FloorCeilingResolver ceilings,
             int maxRadius,
@@ -450,15 +450,15 @@ final class SelectedFloorScanner {
     private static Result success(BlockPos seed,
                                   ScannedFloor floor,
                                   List<ScannedFloor> connectedFloors) {
-        FloorSurface surface = floor.surface();
-        Set<BlockPos> footprint = surface.projectedCells();
+        FloorGeometry geometry = floor.geometry();
+        Set<BlockPos> footprint = geometry.projection().cells();
         int minX = footprint.stream().mapToInt(BlockPos::getX).min().orElse(seed.getX());
         int minZ = footprint.stream().mapToInt(BlockPos::getZ).min().orElse(seed.getZ());
         int maxX = footprint.stream().mapToInt(BlockPos::getX).max().orElse(seed.getX());
         int maxZ = footprint.stream().mapToInt(BlockPos::getZ).max().orElse(seed.getZ());
-        int minY = surface.cells().stream().mapToInt(cell -> cell.feet().getY() - 1)
+        int minY = geometry.cells().stream().mapToInt(cell -> cell.feet().getY() - 1)
                 .min().orElse(seed.getY() - 1);
-        int maxY = surface.cells().stream().mapToInt(cell -> cell.ceilingY() - 1)
+        int maxY = geometry.cells().stream().mapToInt(cell -> cell.ceilingY() - 1)
                 .max().orElse(seed.getY());
         return new Result(Building.validationResult.SUCCESS, floor,
                 new BlockPos(minX, minY, minZ), new BlockPos(maxX, maxY, maxZ), connectedFloors);
