@@ -136,11 +136,11 @@ final class RoomDFU {
                 .toList();
         Set<BlockPos> cellPositions = cells.stream().map(FloorGeometry.Cell::feet)
                 .collect(Collectors.toSet());
-        Map<BlockPos, StructureFloor.ConnectorType> connectors = new LinkedHashMap<>();
+        Map<BlockPos, FloorConnector.Type> connectors = new LinkedHashMap<>();
         for (Tag value : oldFloor.getList("connectors", Tag.TAG_COMPOUND)) {
             CompoundTag oldConnector = (CompoundTag) value;
             BlockPos pos = decodeCompatibleBlockPos(oldConnector.get("pos"));
-            StructureFloor.ConnectorType type = StructureFloor.ConnectorType.fromSerializedName(
+            FloorConnector.Type type = FloorConnector.Type.fromSerializedName(
                     oldConnector.getString("type"));
             if (pos != null && type != null && cellPositions.contains(pos)) connectors.put(pos, type);
         }

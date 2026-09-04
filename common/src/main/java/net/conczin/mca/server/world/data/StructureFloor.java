@@ -33,7 +33,7 @@ public record StructureFloor(int id, int floorNumber, FloorGeometry geometry) {
 
     /** Flat compatibility constructor used by fixtures and legacy migration only. */
     public StructureFloor(int id, int anchorY, int ceilingY, int floorNumber,
-                          BuildingFloorRegion region, List<ConnectorMarker> connectors) {
+                          BuildingFloorRegion region, List<FloorConnector.Marker> connectors) {
         this(id, floorNumber, geometryFromRegion(region, ceilingY, connectors));
     }
 
@@ -97,7 +97,7 @@ public record StructureFloor(int id, int floorNumber, FloorGeometry geometry) {
         return Math.max(0, verticalGapTo(other));
     }
 
-    public List<ConnectorMarker> connectors() {
+    public List<FloorConnector.Marker> connectors() {
         return geometry.connectorMarkers();
     }
 
@@ -120,7 +120,7 @@ public record StructureFloor(int id, int floorNumber, FloorGeometry geometry) {
                         .thenComparingInt(cell -> cell.feet().getY()))
                 .toList(), StructureFloor::saveCell));
         if (!connectors().isEmpty()) {
-            tag.put("connectors", NbtHelper.fromList(connectors(), ConnectorMarker::save));
+            tag.put("connectors", NbtHelper.fromList(connectors(), FloorConnector.Marker::save));
         }
         return tag;
     }
@@ -145,7 +145,7 @@ public record StructureFloor(int id, int floorNumber, FloorGeometry geometry) {
 
     private static FloorGeometry geometryFromRegion(BuildingFloorRegion region,
                                                     int ceilingY,
-                                                    Collection<ConnectorMarker> markers) {
+                                                    Collection<FloorConnector.Marker> markers) {
         Objects.requireNonNull(region, "region");
         if (region.area() == 0) {
             throw new IllegalArgumentException("StructureFloor requires non-empty region geometry");
@@ -154,9 +154,9 @@ public record StructureFloor(int id, int floorNumber, FloorGeometry geometry) {
         for (BlockPos pos : region.cells()) {
             cells.put(pos, new FloorGeometry.Cell(pos, pos.getY(), ceilingY));
         }
-        Map<BlockPos, ConnectorType> connectors = new LinkedHashMap<>();
+        Map<BlockPos, FloorConnector.Type> connectors = new LinkedHashMap<>();
         if (markers != null) {
-            for (ConnectorMarker marker : markers) {
+            for (FloorConnector.Marker marker : markers) {
                 if (cells.containsKey(marker.pos())) connectors.put(marker.pos(), marker.type());
             }
         }
@@ -177,77 +177,24 @@ public record StructureFloor(int id, int floorNumber, FloorGeometry geometry) {
         return new FloorGeometry.Cell(pos, tag.getDouble("surfaceY"), tag.getInt("ceilingY"));
     }
 
-    private static Map<BlockPos, ConnectorType> connectorMap(CompoundTag tag,
-                                                             Collection<FloorGeometry.Cell> cells) {
+    private static Map<BlockPos, FloorConnector.Type> connectorMap(CompoundTag tag,
+                                                                   Collection<FloorGeometry.Cell> cells) {
         Set<BlockPos> positions = cells.stream().map(FloorGeometry.Cell::feet)
                 .collect(java.util.stream.Collectors.toUnmodifiableSet());
-        Map<BlockPos, ConnectorType> result = new LinkedHashMap<>();
-        for (ConnectorMarker marker : loadMarkers(tag)) {
+        Map<BlockPos, FloorConnector.Type> result = new LinkedHashMap<>();
+        for (FloorConnector.Marker marker : loadMarkers(tag)) {
             if (positions.contains(marker.pos())) result.put(marker.pos(), marker.type());
         }
         return Map.copyOf(result);
     }
 
-    private static List<ConnectorMarker> loadMarkers(CompoundTag tag) {
+    private static List<FloorConnector.Marker> loadMarkers(CompoundTag tag) {
         if (!tag.contains("connectors", Tag.TAG_LIST)) return List.of();
-        List<ConnectorMarker> result = new ArrayList<>();
-        for (ConnectorMarker marker : NbtHelper.toList(tag.getList("connectors", Tag.TAG_COMPOUND),
-                value -> ConnectorMarker.load((CompoundTag) value))) {
+        List<FloorConnector.Marker> result = new ArrayList<>();
+        for (FloorConnector.Marker marker : NbtHelper.toList(tag.getList("connectors", Tag.TAG_COMPOUND),
+                value -> FloorConnector.Marker.load((CompoundTag) value))) {
             if (marker != null) result.add(marker);
         }
         return List.copyOf(result);
-    }
-
-    public record ConnectorMarker(BlockPos pos, ConnectorType type) {
-        public ConnectorMarker {
-            pos = pos.immutable();
-            Objects.requireNonNull(type, "type");
-        }
-
-        CompoundTag save() {
-            CompoundTag tag = new CompoundTag();
-            tag.put("pos", NbtHelper.encodeBlockPos(pos));
-            tag.putString("type", type.serializedName());
-            return tag;
-        }
-
-        static ConnectorMarker load(CompoundTag tag) {
-            if (!tag.contains("pos") || !tag.contains("type")) return null;
-            BlockPos pos = NbtHelper.decodeBlockPos(tag.get("pos"));
-            ConnectorType type = ConnectorType.fromSerializedName(tag.getString("type"));
-            return pos == null || type == null ? null : new ConnectorMarker(pos, type);
-        }
-    }
-
-    public enum ConnectorType {
-        LADDER("ladder"),
-        TRAPDOOR("trapdoor"),
-        DOOR("door"),
-        GATE("gate");
-
-        private final String serializedName;
-
-        ConnectorType(String serializedName) {
-            this.serializedName = serializedName;
-        }
-
-        public String serializedName() {
-            return serializedName;
-        }
-
-        public boolean vertical() {
-            return this == LADDER || this == TRAPDOOR;
-        }
-
-        public boolean roomBoundary() {
-            return this == DOOR || this == GATE;
-        }
-
-        static ConnectorType fromSerializedName(String name) {
-            for (ConnectorType type : values()) {
-                if (type.serializedName.equals(name)) return type;
-            }
-            return null;
-        }
     }
 }

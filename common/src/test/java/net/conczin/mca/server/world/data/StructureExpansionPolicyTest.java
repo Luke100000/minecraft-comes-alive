@@ -74,7 +74,7 @@ class StructureExpansionPolicyTest {
                 cell(0, 64, 0), cell(1, 64, 0), cell(2, 64, 0), cell(3, 64, 0),
                 cell(4, 64, 0),
                 cell(5, 64, 0), cell(6, 64, 0), cell(7, 64, 0), cell(8, 64, 0)),
-                Map.of(doorCell, StructureFloor.ConnectorType.DOOR));
+                Map.of(doorCell, FloorConnector.Type.DOOR));
 
         assertTrue(StructureExpansionPolicy.registeredRoomForFreshComponent(
                 target, fresh, newRoomCell, List.of(existing)).isEmpty());
@@ -95,7 +95,7 @@ class StructureExpansionPolicyTest {
                 cell(4, 64, 0),
                 cell(5, 64, 0), cell(6, 64, 0), cell(7, 64, 0), cell(8, 64, 0),
                 cell(9, 64, 0), cell(10, 64, 0)),
-                Map.of(doorCell, StructureFloor.ConnectorType.DOOR));
+                Map.of(doorCell, FloorConnector.Type.DOOR));
 
         assertTrue(StructureExpansionPolicy.registeredRoomForFreshComponent(
                 target, fresh, newRoomCell, List.of(existing)).isEmpty());

@@ -18,12 +18,12 @@ final class FloorGeometry {
     static final double MAX_STEP_HEIGHT = 1.125D;
 
     private final Set<Cell> cells;
-    private final Map<BlockPos, StructureFloor.ConnectorType> connectorTypesByCell;
+    private final Map<BlockPos, FloorConnector.Type> connectorTypesByCell;
     private final Map<Long, List<Cell>> cellsByColumn;
     private final Map<BlockPos, Cell> cellsByPosition;
 
     FloorGeometry(Collection<Cell> cells,
-                  Map<BlockPos, StructureFloor.ConnectorType> connectorTypesByCell) {
+                  Map<BlockPos, FloorConnector.Type> connectorTypesByCell) {
         LinkedHashMap<BlockPos, Cell> positions = new LinkedHashMap<>();
         for (Cell cell : cells) {
             Cell previous = positions.putIfAbsent(cell.feet(), cell);
@@ -34,7 +34,7 @@ final class FloorGeometry {
         this.cellsByPosition = Map.copyOf(positions);
         this.cells = Set.copyOf(positions.values());
 
-        Map<BlockPos, StructureFloor.ConnectorType> connectors = connectorTypesByCell == null
+        Map<BlockPos, FloorConnector.Type> connectors = connectorTypesByCell == null
                 ? Map.of() : Map.copyOf(connectorTypesByCell);
         if (!this.cellsByPosition.keySet().containsAll(connectors.keySet())) {
             throw new IllegalArgumentException("Connector cell is not part of FloorGeometry");
@@ -47,7 +47,7 @@ final class FloorGeometry {
         return cells;
     }
 
-    Map<BlockPos, StructureFloor.ConnectorType> connectorTypesByCell() {
+    Map<BlockPos, FloorConnector.Type> connectorTypesByCell() {
         return connectorTypesByCell;
     }
 
@@ -99,14 +99,14 @@ final class FloorGeometry {
         return BuildingFloorRegion.fromFootprint(y, projected);
     }
 
-    FloorGeometry withConnectorTypes(Map<BlockPos, StructureFloor.ConnectorType> connectors) {
+    FloorGeometry withConnectorTypes(Map<BlockPos, FloorConnector.Type> connectors) {
         return new FloorGeometry(cells, connectors);
     }
 
-    List<StructureFloor.ConnectorMarker> connectorMarkers() {
+    List<FloorConnector.Marker> connectorMarkers() {
         return connectorTypesByCell.entrySet().stream()
-                .map(entry -> new StructureFloor.ConnectorMarker(entry.getKey(), entry.getValue()))
-                .sorted(Comparator.comparingInt((StructureFloor.ConnectorMarker marker) -> marker.pos().getX())
+                .map(entry -> new FloorConnector.Marker(entry.getKey(), entry.getValue()))
+                .sorted(Comparator.comparingInt((FloorConnector.Marker marker) -> marker.pos().getX())
                         .thenComparingInt(marker -> marker.pos().getZ())
                         .thenComparingInt(marker -> marker.pos().getY())
                         .thenComparing(marker -> marker.type().serializedName()))

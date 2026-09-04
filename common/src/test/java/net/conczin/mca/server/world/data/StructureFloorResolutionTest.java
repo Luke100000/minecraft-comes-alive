@@ -91,12 +91,12 @@ class StructureFloorResolutionTest {
         BlockPos connectorColumn = new BlockPos(0, 88, 0);
         StructureFloor basementFloor = new StructureFloor(0, 84, 87, -1,
                 BuildingFloorRegion.fromFootprint(84, Set.of(new BlockPos(0, 84, 0))),
-                List.of(new StructureFloor.ConnectorMarker(
-                        new BlockPos(0, 84, 0), StructureFloor.ConnectorType.TRAPDOOR)));
+                List.of(new FloorConnector.Marker(
+                        new BlockPos(0, 84, 0), FloorConnector.Type.TRAPDOOR)));
         StructureFloor groundFloor = new StructureFloor(0, 88, 92, 0,
                 BuildingFloorRegion.fromFootprint(88, Set.of(connectorColumn)),
-                List.of(new StructureFloor.ConnectorMarker(
-                        connectorColumn, StructureFloor.ConnectorType.TRAPDOOR)));
+                List.of(new FloorConnector.Marker(
+                        connectorColumn, FloorConnector.Type.TRAPDOOR)));
         Structure basement = new Structure(10, new BlockPos(0, 84, 0), List.of(basementFloor));
         Structure ground = new Structure(11, connectorColumn, List.of(groundFloor));
         basement.setLogicalBuildingId(10);
@@ -121,7 +121,7 @@ class StructureFloorResolutionTest {
         FloorGeometry geometry = new FloorGeometry(Set.of(
                 geometryCell(0, 64, 0), geometryCell(1, 64, 0), geometryCell(2, 64, 0),
                 geometryCell(3, 64, 0), geometryCell(4, 64, 0)),
-                Map.of(connector, StructureFloor.ConnectorType.DOOR));
+                Map.of(connector, FloorConnector.Type.DOOR));
         List<RoomPartitioner.Component> components = RoomPartitioner.partition(geometry);
         RoomPartitioner.Component owner = components.stream()
                 .filter(component -> component.contains(connector))
@@ -172,8 +172,8 @@ class StructureFloorResolutionTest {
                 BuildingFloorRegion.fromFootprint(64, Set.of(
                         new BlockPos(0, 64, 0), connector, new BlockPos(2, 64, 0),
                         new BlockPos(3, 64, 0), new BlockPos(4, 64, 0))),
-                List.of(new StructureFloor.ConnectorMarker(
-                        connector, StructureFloor.ConnectorType.DOOR)));
+                List.of(new FloorConnector.Marker(
+                        connector, FloorConnector.Type.DOOR)));
         Structure structure = new Structure(10, BlockPos.ZERO, List.of(floor));
         Building room = new Building(new BlockPos(2, 64, 0));
         room.setId(100);
@@ -199,8 +199,8 @@ class StructureFloorResolutionTest {
                 BuildingFloorRegion.fromFootprint(64, Set.of(
                         new BlockPos(0, 64, 0), new BlockPos(1, 64, 0), connector,
                         new BlockPos(3, 64, 0), new BlockPos(4, 64, 0), new BlockPos(5, 64, 0))),
-                List.of(new StructureFloor.ConnectorMarker(
-                        connector, StructureFloor.ConnectorType.DOOR)));
+                List.of(new FloorConnector.Marker(
+                        connector, FloorConnector.Type.DOOR)));
         Structure structure = new Structure(10, BlockPos.ZERO, List.of(floor));
         Building smaller = room(100, 10, 0, Set.of(
                 new BlockPos(0, 64, 0), new BlockPos(1, 64, 0)));

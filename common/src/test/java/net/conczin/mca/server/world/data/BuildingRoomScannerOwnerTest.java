@@ -50,7 +50,7 @@ class BuildingRoomScannerOwnerTest {
         FloorGeometry geometry = new FloorGeometry(Set.of(
                 cell(0, 64, 0), cell(1, 64, 0),
                 cell(2, 64, 0), cell(3, 64, 0)),
-                Map.of(connector, StructureFloor.ConnectorType.DOOR));
+                Map.of(connector, FloorConnector.Type.DOOR));
         List<RoomPartitioner.Component> components = RoomPartitioner.partition(geometry);
         RoomPartitioner.Component owner = components.stream()
                 .filter(component -> component.contains(connector)).findFirst().orElseThrow();
@@ -70,7 +70,7 @@ class BuildingRoomScannerOwnerTest {
         BlockPos connector = new BlockPos(1, 64, 0);
         FloorGeometry geometry = new FloorGeometry(Set.of(
                 cell(0, 64, 0), cell(1, 64, 0), cell(2, 64, 0), cell(3, 64, 0)),
-                Map.of(connector, StructureFloor.ConnectorType.TRAPDOOR));
+                Map.of(connector, FloorConnector.Type.TRAPDOOR));
 
         List<RoomPartitioner.Component> components = RoomPartitioner.partition(geometry);
 
@@ -86,7 +86,7 @@ class BuildingRoomScannerOwnerTest {
         BlockPos connector = new BlockPos(0, 64, 0);
         FloorGeometry geometry = new FloorGeometry(Set.of(
                 cell(0, 64, 0), cell(1, 64, 0), cell(2, 64, 0), cell(3, 64, 0), cell(4, 64, 0)),
-                Map.of(connector, StructureFloor.ConnectorType.DOOR));
+                Map.of(connector, FloorConnector.Type.DOOR));
         List<RoomPartitioner.Component> components = RoomPartitioner.partition(geometry);
 
         RoomPartitioner.Component selected = RoomPartitioner.select(connector, geometry, components);
@@ -103,7 +103,7 @@ class BuildingRoomScannerOwnerTest {
         FloorGeometry geometry = new FloorGeometry(Set.of(
                 cell(0, 64, 0), cell(1, 64, 0), cell(2, 64, 0),
                 cell(3, 64, 0), cell(4, 64, 0), cell(5, 64, 0), cell(6, 64, 0)),
-                Map.of(connector, StructureFloor.ConnectorType.DOOR));
+                Map.of(connector, FloorConnector.Type.DOOR));
         List<RoomPartitioner.Component> components = RoomPartitioner.partition(geometry);
         RoomPartitioner.Component owner = components.stream()
                 .filter(component -> component.contains(connector)).findFirst().orElseThrow();

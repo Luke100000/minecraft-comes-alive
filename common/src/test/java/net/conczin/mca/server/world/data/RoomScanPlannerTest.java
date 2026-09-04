@@ -49,7 +49,7 @@ class RoomScanPlannerTest {
         FloorGeometry fresh = new FloorGeometry(Set.of(
                 cell(0, 64), cell(1, 64), cell(2, 64), cell(3, 64), cell(4, 64),
                 cell(5, 64), cell(6, 64), cell(7, 64), cell(8, 64)),
-                Map.of(door, StructureFloor.ConnectorType.DOOR));
+                Map.of(door, FloorConnector.Type.DOOR));
 
         RoomScanPlan plan = RoomScanPlanner.planFresh(
                 village, source, observation(source, fresh, List.of()));

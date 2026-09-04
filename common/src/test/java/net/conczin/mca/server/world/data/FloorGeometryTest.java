@@ -59,14 +59,14 @@ class FloorGeometryTest {
         BlockPos connector = new BlockPos(1, 64, 0);
         FloorGeometry geometry = new FloorGeometry(Set.of(
                 cell(0, 64, 0), cell(1, 64, 0)),
-                Map.of(connector, StructureFloor.ConnectorType.DOOR));
+                Map.of(connector, FloorConnector.Type.DOOR));
 
         assertTrue(geometry.connectorTypesByCell().containsKey(connector));
-        assertEquals(List.of(new StructureFloor.ConnectorMarker(
-                connector, StructureFloor.ConnectorType.DOOR)), geometry.connectorMarkers());
+        assertEquals(List.of(new FloorConnector.Marker(
+                connector, FloorConnector.Type.DOOR)), geometry.connectorMarkers());
 
         assertThrows(IllegalArgumentException.class, () -> new FloorGeometry(
-                Set.of(cell(0, 64, 0)), Map.of(connector, StructureFloor.ConnectorType.DOOR)));
+                Set.of(cell(0, 64, 0)), Map.of(connector, FloorConnector.Type.DOOR)));
     }
 
     private static FloorGeometry.Cell cell(int x, int y, int z) {

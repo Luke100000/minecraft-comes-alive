@@ -2,6 +2,7 @@ package net.conczin.mca.client.gui;
 
 import net.conczin.mca.resources.data.BuildingType;
 import net.conczin.mca.server.world.data.Building;
+import net.conczin.mca.server.world.data.FloorConnector;
 import net.conczin.mca.server.world.data.RoomTypeResolver;
 import net.conczin.mca.server.world.data.Structure;
 import net.conczin.mca.server.world.data.StructureFloor;
@@ -205,7 +206,7 @@ final class BlueprintMapGeometry {
                     int logicalBuildingId = village.getLogicalBuildingId(structure.getId());
                     for (StructureFloor floor : structure.getFloors()) {
                         if (floor.floorNumber() != selectedFloor) continue;
-                        for (StructureFloor.ConnectorMarker marker : floor.connectors()) {
+                        for (FloorConnector.Marker marker : floor.connectors()) {
                             ConnectorLayerKey key = new ConnectorLayerKey(
                                     logicalBuildingId, marker.pos().getX(), marker.pos().getZ(), marker.type());
                             layers.putIfAbsent(key, new MapConnectorLayer(logicalBuildingId, marker));
@@ -276,7 +277,7 @@ final class BlueprintMapGeometry {
     }
 
     record MapConnectorLayer(int logicalBuildingId,
-                             StructureFloor.ConnectorMarker marker) {
+                             FloorConnector.Marker marker) {
     }
 
     record BuildingShape(BlueprintMapFootprint.Shape outline,
@@ -287,6 +288,6 @@ final class BlueprintMapGeometry {
     }
 
     private record ConnectorLayerKey(int logicalBuildingId, int x, int z,
-                                     StructureFloor.ConnectorType type) {
+                                     FloorConnector.Type type) {
     }
 }

@@ -243,12 +243,12 @@ class VillageFloorSystemTest {
     void floorAttachmentRequiresProvenVerticalConnectionInsteadOfArbitraryHeightGap() {
         Village village = new Village(1, null);
         StructureFloor existingFloor = new StructureFloor(0, 64, 68, 0, region(64), List.of(
-                new StructureFloor.ConnectorMarker(new BlockPos(0, 64, 0), StructureFloor.ConnectorType.LADDER)));
+                new FloorConnector.Marker(new BlockPos(0, 64, 0), FloorConnector.Type.LADDER)));
         Structure structure = structure(10, 10, existingFloor);
         village.registerStructure(structure, room(100, 10, 0, true));
 
         StructureFloor connectedHighFloor = new StructureFloor(1, 76, 80, 0, region(76), List.of(
-                new StructureFloor.ConnectorMarker(new BlockPos(0, 76, 0), StructureFloor.ConnectorType.LADDER)));
+                new FloorConnector.Marker(new BlockPos(0, 76, 0), FloorConnector.Type.LADDER)));
         StructureFloor nearbyButDisconnected = new StructureFloor(2, 70, 74, 0, region(70));
         StructureConnector.VerticalConnection connection = new StructureConnector.VerticalConnection(
                 structure, existingFloor);
@@ -262,12 +262,12 @@ class VillageFloorSystemTest {
     void floorAttachmentRejectsAnOverlappingCopyOfTheRegisteredFloor() {
         Village village = new Village(1, null);
         StructureFloor existingFloor = new StructureFloor(0, 64, 68, 0, region(64), List.of(
-                new StructureFloor.ConnectorMarker(new BlockPos(0, 64, 0), StructureFloor.ConnectorType.LADDER)));
+                new FloorConnector.Marker(new BlockPos(0, 64, 0), FloorConnector.Type.LADDER)));
         Structure structure = structure(10, 10, existingFloor);
         village.registerStructure(structure, room(100, 10, 0, true));
 
         StructureFloor rescannedSameFloor = new StructureFloor(1, 64, 68, 0, region(64), List.of(
-                new StructureFloor.ConnectorMarker(new BlockPos(0, 64, 0), StructureFloor.ConnectorType.LADDER)));
+                new FloorConnector.Marker(new BlockPos(0, 64, 0), FloorConnector.Type.LADDER)));
 
         StructureConnector.VerticalConnection falseConnection = new StructureConnector.VerticalConnection(
                 structure, existingFloor);
@@ -280,12 +280,12 @@ class VillageFloorSystemTest {
     void floorAttachmentAcceptsDistinctBandWhenLegacyCeilingOverlaps() {
         Village village = new Village(1, null);
         StructureFloor staleLower = new StructureFloor(0, 88, 93, 0, region(88), List.of(
-                new StructureFloor.ConnectorMarker(new BlockPos(0, 88, 0), StructureFloor.ConnectorType.LADDER)));
+                new FloorConnector.Marker(new BlockPos(0, 88, 0), FloorConnector.Type.LADDER)));
         Structure structure = structure(10, 10, staleLower);
         village.registerStructure(structure, room(100, 10, 0, true));
 
         StructureFloor upper = new StructureFloor(1, 91, 94, 0, region(91), List.of(
-                new StructureFloor.ConnectorMarker(new BlockPos(0, 91, 0), StructureFloor.ConnectorType.LADDER)));
+                new FloorConnector.Marker(new BlockPos(0, 91, 0), FloorConnector.Type.LADDER)));
         StructureConnector.VerticalConnection connection = new StructureConnector.VerticalConnection(
                 structure, staleLower);
 
@@ -348,15 +348,15 @@ class VillageFloorSystemTest {
     void floorAttachmentRejectsExistingGroundFloorEvenWhenBasementWouldAcceptIt() {
         Village village = new Village(1, null);
         StructureFloor groundFloor = new StructureFloor(0, 64, 68, 0, region(64), List.of(
-                new StructureFloor.ConnectorMarker(new BlockPos(0, 64, 0), StructureFloor.ConnectorType.LADDER)));
+                new FloorConnector.Marker(new BlockPos(0, 64, 0), FloorConnector.Type.LADDER)));
         StructureFloor basementFloor = new StructureFloor(0, 60, 64, -1, region(60), List.of(
-                new StructureFloor.ConnectorMarker(new BlockPos(0, 60, 0), StructureFloor.ConnectorType.LADDER)));
+                new FloorConnector.Marker(new BlockPos(0, 60, 0), FloorConnector.Type.LADDER)));
         village.registerStructure(structure(10, 10, groundFloor), room(100, 10, 0, true));
         village.registerStructure(structure(11, 10, basementFloor), room(101, 11, 0, true));
         village.refreshLogicalBuildings();
 
         StructureFloor rescannedGroundFloor = new StructureFloor(1, 64, 68, 0, region(64), List.of(
-                new StructureFloor.ConnectorMarker(new BlockPos(0, 64, 0), StructureFloor.ConnectorType.LADDER)));
+                new FloorConnector.Marker(new BlockPos(0, 64, 0), FloorConnector.Type.LADDER)));
 
         StructureConnector.VerticalConnection falseConnection = new StructureConnector.VerticalConnection(
                 village.getStructure(11).orElseThrow(), basementFloor);

@@ -15,8 +15,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 class StructureFloorTest {
     @Test
     void connectorMarkersRoundTripAndRemainOptionalForOldSaves() {
-        StructureFloor.ConnectorMarker marker = new StructureFloor.ConnectorMarker(
-                new BlockPos(4, 64, 7), StructureFloor.ConnectorType.TRAPDOOR);
+        FloorConnector.Marker marker = new FloorConnector.Marker(
+                new BlockPos(4, 64, 7), FloorConnector.Type.TRAPDOOR);
         StructureFloor floor = new StructureFloor(3, 64, 70, 0,
                 BuildingFloorRegion.fromFootprint(64, Set.of(new BlockPos(4, 64, 7))), List.of(marker));
 
@@ -30,8 +30,8 @@ class StructureFloorTest {
     @Test
     void connectorMetadataDoesNotManufactureFloorRegionMembership() {
         BlockPos connector = new BlockPos(1, 64, 0);
-        StructureFloor.ConnectorMarker marker = new StructureFloor.ConnectorMarker(
-                connector, StructureFloor.ConnectorType.DOOR);
+        FloorConnector.Marker marker = new FloorConnector.Marker(
+                connector, FloorConnector.Type.DOOR);
         StructureFloor legacy = new StructureFloor(3, 64, 70, 0,
                 BuildingFloorRegion.fromFootprint(64, Set.of(
                         new BlockPos(0, 64, 0), new BlockPos(2, 64, 0))));

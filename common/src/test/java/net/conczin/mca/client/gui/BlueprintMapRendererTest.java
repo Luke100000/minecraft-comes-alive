@@ -1,6 +1,6 @@
 package net.conczin.mca.client.gui;
 
-import net.conczin.mca.server.world.data.StructureFloor;
+import net.conczin.mca.server.world.data.FloorConnector;
 import net.minecraft.core.BlockPos;
 import org.junit.jupiter.api.Test;
 
@@ -34,10 +34,10 @@ class BlueprintMapRendererTest {
 
     @Test
     void connectorGlyphsStayCompactWithoutInferringPersistedVerticalDestinations() {
-        assertEquals("↕", BlueprintMapRenderer.connectorGlyph(connector(StructureFloor.ConnectorType.LADDER)));
-        assertEquals("↕", BlueprintMapRenderer.connectorGlyph(connector(StructureFloor.ConnectorType.TRAPDOOR)));
-        assertEquals("▯", BlueprintMapRenderer.connectorGlyph(connector(StructureFloor.ConnectorType.DOOR)));
-        assertEquals("═", BlueprintMapRenderer.connectorGlyph(connector(StructureFloor.ConnectorType.GATE)));
+        assertEquals("↕", BlueprintMapRenderer.connectorGlyph(connector(FloorConnector.Type.LADDER)));
+        assertEquals("↕", BlueprintMapRenderer.connectorGlyph(connector(FloorConnector.Type.TRAPDOOR)));
+        assertEquals("▯", BlueprintMapRenderer.connectorGlyph(connector(FloorConnector.Type.DOOR)));
+        assertEquals("═", BlueprintMapRenderer.connectorGlyph(connector(FloorConnector.Type.GATE)));
     }
 
     @Test
@@ -51,9 +51,9 @@ class BlueprintMapRendererTest {
         assertTrue(9.0F * wideGlyph < 1.0F);
     }
 
-    private static BlueprintMapGeometry.MapConnectorLayer connector(StructureFloor.ConnectorType type) {
+    private static BlueprintMapGeometry.MapConnectorLayer connector(FloorConnector.Type type) {
         return new BlueprintMapGeometry.MapConnectorLayer(
                 1,
-                new StructureFloor.ConnectorMarker(BlockPos.ZERO, type));
+                new FloorConnector.Marker(BlockPos.ZERO, type));
     }
 }

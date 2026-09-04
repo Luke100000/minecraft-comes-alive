@@ -105,10 +105,10 @@ class StructureConnectorTest {
                 new FloorGeometry.Cell(right, 64, 68)), java.util.Map.of());
 
         FloorGeometry augmented = StructureConnector.withConnectorAssociations(
-                geometry, java.util.Map.of(connector, StructureFloor.ConnectorType.DOOR));
+                geometry, java.util.Map.of(connector, FloorConnector.Type.DOOR));
 
         assertTrue(augmented.cellAt(connector).isPresent());
-        assertEquals(StructureFloor.ConnectorType.DOOR,
+        assertEquals(FloorConnector.Type.DOOR,
                 augmented.connectorTypesByCell().get(connector));
     }
 
@@ -119,7 +119,7 @@ class StructureConnectorTest {
                         new BlockPos(1, anchorY, 0),
                         new BlockPos(0, anchorY, 1),
                         new BlockPos(1, anchorY, 1))),
-                List.of(new StructureFloor.ConnectorMarker(
-                        new BlockPos(0, anchorY, 0), StructureFloor.ConnectorType.LADDER)));
+                List.of(new FloorConnector.Marker(
+                        new BlockPos(0, anchorY, 0), FloorConnector.Type.LADDER)));
     }
 }

@@ -37,7 +37,7 @@ final class StructureExpansionPolicy {
         Set<BlockPos> floorCells = BuildingRoomScanner.floorCellsForComponent(selected);
         Set<BlockPos> identityCells = floorCells.stream()
                 .filter(cell -> {
-                    StructureFloor.ConnectorType connector = geometry.connectorTypesByCell().get(cell);
+                    FloorConnector.Type connector = geometry.connectorTypesByCell().get(cell);
                     return connector == null || !connector.roomBoundary();
                 })
                 .collect(java.util.stream.Collectors.toUnmodifiableSet());

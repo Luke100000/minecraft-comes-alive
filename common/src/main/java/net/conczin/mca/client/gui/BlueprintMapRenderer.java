@@ -19,7 +19,7 @@ import net.conczin.mca.client.render.JourneyMapIconBridge;
 import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.resources.data.BuildingType;
 import net.conczin.mca.server.world.data.Building;
-import net.conczin.mca.server.world.data.StructureFloor;
+import net.conczin.mca.server.world.data.FloorConnector;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.PlayerFaceRenderer;
@@ -303,7 +303,7 @@ final class BlueprintMapRenderer implements AutoCloseable {
     }
 
     static String connectorGlyph(MapConnectorLayer layer) {
-        StructureFloor.ConnectorType type = layer.marker().type();
+        FloorConnector.Type type = layer.marker().type();
         return switch (type) {
             case LADDER, TRAPDOOR -> "↕";
             case DOOR -> "▯";

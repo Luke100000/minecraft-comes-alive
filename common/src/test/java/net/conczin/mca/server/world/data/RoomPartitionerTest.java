@@ -64,7 +64,7 @@ class RoomPartitionerTest {
         BlockPos connectorCell = new BlockPos(1, 64, 0);
         FloorGeometry geometry = geometry(Set.of(
                 cell(0, 64, 0), cell(1, 64, 0), cell(2, 64, 0)),
-                Map.of(connectorCell, StructureFloor.ConnectorType.DOOR));
+                Map.of(connectorCell, FloorConnector.Type.DOOR));
 
         List<RoomPartitioner.Component> components = RoomPartitioner.partition(geometry);
 
@@ -82,7 +82,7 @@ class RoomPartitionerTest {
     }
 
     private static FloorGeometry geometry(Set<FloorGeometry.Cell> cells,
-                                          Map<BlockPos, StructureFloor.ConnectorType> connectors) {
+                                          Map<BlockPos, FloorConnector.Type> connectors) {
         return new FloorGeometry(cells, connectors);
     }
 
