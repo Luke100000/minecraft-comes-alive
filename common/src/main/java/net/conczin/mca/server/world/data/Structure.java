@@ -101,15 +101,15 @@ public final class Structure implements VillageBuilding {
         return floorAtHeight(pos.getY());
     }
 
-    private Optional<StructureFloor> resolveInteractionFloorAt(BlockPos pos) {
+    private Optional<FloorCell> resolveInteractionFloorCell(BlockPos pos) {
         if (pos == null) return Optional.empty();
-        int x = pos.getX();
-        int z = pos.getZ();
         return getFloors().stream()
-                .filter(floor -> floor.containsInteractionPosition(x, pos.getY(), z))
-                .min(Comparator.comparingInt((StructureFloor floor) -> Math.abs(floor.anchorY() - pos.getY()))
-                        .thenComparing(Comparator.comparingInt(StructureFloor::anchorY).reversed())
-                        .thenComparingInt(StructureFloor::id));
+                .flatMap(floor -> floor.geometry().interactionCellAt(pos.getX(), pos.getY(), pos.getZ())
+                        .stream().map(cell -> new FloorCell(floor, cell)))
+                .max(Comparator
+                        .comparingInt((FloorCell resolved) -> resolved.cell().feet().getY())
+                        .thenComparingInt(resolved -> resolved.floor().anchorY())
+                        .thenComparingInt(resolved -> resolved.floor().id()));
     }
 
     Optional<FloorCell> resolvePhysicalFloorCell(Vec3i pos) {
@@ -136,17 +136,16 @@ public final class Structure implements VillageBuilding {
     Optional<InteractionPosition> resolveInteractionPosition(BlockPos pos,
                                                              Collection<Building> structureRooms) {
         Collection<Building> localRooms = structureRooms == null ? List.of() : structureRooms;
-        StructureFloor floor = resolveInteractionFloorAt(pos).orElse(null);
-        if (floor == null) return Optional.empty();
-        int x = pos.getX();
-        int z = pos.getZ();
-        return Optional.of(new InteractionPosition(floor, roomAtColumn(localRooms, floor, x, z)));
+        FloorCell resolved = resolveInteractionFloorCell(pos).orElse(null);
+        if (resolved == null) return Optional.empty();
+        return Optional.of(new InteractionPosition(
+                resolved.floor(), roomAtCell(localRooms, resolved.floor(), resolved.cell().feet())));
     }
 
-    private static Building roomAtColumn(Collection<Building> rooms, StructureFloor floor, int x, int z) {
+    private static Building roomAtCell(Collection<Building> rooms, StructureFloor floor, BlockPos feet) {
         return rooms.stream()
                 .filter(room -> room.getFloorId() == floor.id())
-                .filter(room -> room.containsFloorColumn(x, z))
+                .filter(room -> room.ownsFloorCell(feet))
                 .min(Comparator.comparingInt(Building::getId))
                 .orElse(null);
     }

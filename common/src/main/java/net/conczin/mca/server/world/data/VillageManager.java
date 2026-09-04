@@ -483,8 +483,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
                 .filter(room -> room.getId() != excludedRoomId)
                 .filter(room -> room.getStructureId() == structureId)
                 .filter(room -> room.getFloorId() == floorId)
-                .flatMap(room -> room.getFloorRegion().stream())
-                .flatMap(region -> region.cells().stream())
+                .flatMap(room -> room.getFloorCells().stream())
                 .collect(java.util.stream.Collectors.toSet());
     }
 

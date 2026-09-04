@@ -54,6 +54,26 @@ class StructureFloorResolutionTest {
     }
 
     @Test
+    void roomsCanOwnDifferentExactCellsInTheSameFloorColumn() {
+        BlockPos lowerCell = new BlockPos(2, 88, 3);
+        BlockPos upperCell = new BlockPos(2, 91, 3);
+        FloorGeometry geometry = new FloorGeometry(Set.of(
+                new FloorGeometry.Cell(lowerCell, 88, 90),
+                new FloorGeometry.Cell(upperCell, 91, 93)), Map.of());
+        StructureFloor floor = new StructureFloor(0, 0, geometry);
+        Structure structure = new Structure(10, lowerCell, List.of(floor));
+        Building lower = room(100, 10, 0, Set.of(lowerCell));
+        Building upper = room(101, 10, 0, Set.of(upperCell));
+
+        assertEquals(lower, structure.resolveInteractionPosition(lowerCell, List.of(lower, upper))
+                .orElseThrow().room());
+        assertEquals(upper, structure.resolveInteractionPosition(upperCell, List.of(lower, upper))
+                .orElseThrow().room());
+        assertTrue(lower.ownsFloorCell(lowerCell));
+        assertFalse(lower.ownsFloorCell(upperCell));
+    }
+
+    @Test
     void interactionOnSupportBlockImmediatelyBelowFloorUsesPersistedFloorGeometry() {
         StructureFloor floor = floor(0, 64, 68);
         Structure structure = structure(floor);
@@ -290,8 +310,9 @@ class StructureFloorResolutionTest {
         int maxX = footprint.stream().mapToInt(BlockPos::getX).max().orElseThrow();
         int minZ = footprint.stream().mapToInt(BlockPos::getZ).min().orElseThrow();
         int maxZ = footprint.stream().mapToInt(BlockPos::getZ).max().orElseThrow();
-        room.setGeometry(new BlockPos(minX, 64, minZ), new BlockPos(maxX, 67, maxZ),
-                BuildingFloorRegion.fromFootprint(64, footprint));
+        int minY = footprint.stream().mapToInt(BlockPos::getY).min().orElseThrow();
+        int maxY = footprint.stream().mapToInt(BlockPos::getY).max().orElseThrow() + 3;
+        room.setGeometry(new BlockPos(minX, minY, minZ), new BlockPos(maxX, maxY, maxZ), footprint);
         return room;
     }
 }

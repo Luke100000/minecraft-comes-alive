@@ -204,7 +204,8 @@ public class Village implements Iterable<Building> {
             throw new IllegalArgumentException("Only functional Rooms can be registered");
         }
         Structure structure = structures.get(room.getStructureId());
-        if (structure == null || structure.getFloor(room.getFloorId()).isEmpty()) {
+        StructureFloor floor = structure == null ? null : structure.getFloor(room.getFloorId()).orElse(null);
+        if (floor == null || !floorContainsRoomCells(floor, room)) {
             throw new IllegalArgumentException("Room references missing Structure/Floor");
         }
         buildings.put(room.getId(), room);
@@ -229,9 +230,7 @@ public class Village implements Iterable<Building> {
         if (room.getStructureId() != refreshed.getId()) return false;
 
         StructureFloor floor = refreshed.getFloor(room.getFloorId()).orElse(null);
-        BuildingFloorRegion roomRegion = room.getFloorRegion().orElse(null);
-        if (floor == null || roomRegion == null || roomRegion.area() == 0
-                || floor.region().intersectionArea(roomRegion) != roomRegion.area()) {
+        if (floor == null || room.getFloorCells().isEmpty() || !floorContainsRoomCells(floor, room)) {
             return false;
         }
         boolean overlapsRegisteredRoom = buildings.values().stream()
@@ -800,16 +799,17 @@ public class Village implements Iterable<Building> {
     public Optional<Building> findPhysicalRoomAt(Vec3i pos) {
         Optional<Structure> structure = getExactStructureAt(pos);
         if (structure.isEmpty()) {
+            BlockPos query = new BlockPos(pos.getX(), pos.getY(), pos.getZ());
             return getRooms()
                     .filter(room -> room.containsPos(pos))
-                    .filter(room -> room.containsFloorColumn(pos.getX(), pos.getZ()))
+                    .filter(room -> room.getFloorCells().isEmpty() || room.ownsFloorCell(query))
                     .min(Comparator.comparingInt(Building::getId));
         }
-        StructureFloor floor = structure.get().physicalFloorAt(pos).orElse(null);
-        if (floor == null) return Optional.empty();
+        Structure.FloorCell resolved = structure.get().resolvePhysicalFloorCell(pos).orElse(null);
+        if (resolved == null) return Optional.empty();
         return getRooms().filter(room -> room.getStructureId() == structure.get().getId())
-                .filter(room -> room.getFloorId() == floor.id())
-                .filter(room -> room.containsFloorColumn(pos.getX(), pos.getZ()))
+                .filter(room -> room.getFloorId() == resolved.floor().id())
+                .filter(room -> room.ownsFloorCell(resolved.cell().feet()))
                 .min(Comparator.comparingInt(Building::getId));
     }
 
@@ -979,7 +979,8 @@ public class Village implements Iterable<Building> {
         }
         for (Building room : buildings.values()) {
             Structure structure = structures.get(room.getStructureId());
-            if (!room.isFunctionalRoom() || structure == null || structure.getFloor(room.getFloorId()).isEmpty()) {
+            StructureFloor floor = structure == null ? null : structure.getFloor(room.getFloorId()).orElse(null);
+            if (!room.isFunctionalRoom() || floor == null || !floorContainsRoomCells(floor, room)) {
                 throw new IllegalArgumentException("Room " + room.getId() + " references missing Structure/Floor");
             }
         }
@@ -1043,6 +1044,10 @@ public class Village implements Iterable<Building> {
     }
 
     private record FloorRef(Structure structure, StructureFloor floor) {
+    }
+
+    private static boolean floorContainsRoomCells(StructureFloor floor, Building room) {
+        return room.getFloorCells().stream().allMatch(cell -> floor.geometry().cellAt(cell).isPresent());
     }
 
     private record AttachmentConnection(Structure structure, StructureFloor floor) {

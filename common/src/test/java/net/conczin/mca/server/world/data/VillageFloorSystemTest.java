@@ -309,7 +309,7 @@ class VillageFloorSystemTest {
     }
 
     @Test
-    void logicalRefreshCapsLegacyLowerCeilingAtNextOverlappingBand() {
+    void logicalRefreshDoesNotRewritePhysicalCeilingsAcrossSeparateStructures() {
         Village village = new Village(1, null);
         Structure lower = structure(10, 10,
                 new StructureFloor(0, 88, 93, 0, region(88)));
@@ -320,8 +320,12 @@ class VillageFloorSystemTest {
 
         village.refreshLogicalBuildings();
 
-        assertEquals(91, lower.getFloor(0).orElseThrow().ceilingY());
-        assertEquals(94, upper.getFloor(0).orElseThrow().ceilingY());
+        StructureFloor refreshedLower = lower.getFloor(0).orElseThrow();
+        StructureFloor refreshedUpper = upper.getFloor(0).orElseThrow();
+        assertEquals(93, lower.semanticCeilingY(refreshedLower));
+        assertEquals(94, upper.semanticCeilingY(refreshedUpper));
+        assertEquals(0, refreshedLower.floorNumber());
+        assertEquals(1, refreshedUpper.floorNumber());
     }
 
     @Test
