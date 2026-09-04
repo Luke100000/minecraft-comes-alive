@@ -12,39 +12,36 @@ final class RoomPoiEvidence {
     private RoomPoiEvidence() {
     }
 
-    static Set<BlockPos> candidates(FloorSurface surface,
-                                    Collection<FloorSurfacePartitioner.Component> components,
-                                    FloorSurfacePartitioner.Component component) {
+    static Set<BlockPos> candidates(FloorGeometry geometry,
+                                    Collection<RoomPartitioner.Component> components,
+                                    RoomPartitioner.Component component) {
         LinkedHashSet<BlockPos> result = new LinkedHashSet<>();
-        int floorMinY = surface.anchorY() - 1;
-        int floorCeilingY = surface.maxCeilingY();
-        Set<Long> componentColumns = component.cells().stream()
-                .map(cell -> FloorSurface.columnKey(cell.feet().getX(), cell.feet().getZ()))
-                .collect(java.util.stream.Collectors.toSet());
 
-        for (FloorSurface.Cell cell : component.cells()) {
+        for (FloorGeometry.Cell cell : component.cells()) {
             addColumn(result, cell.feet().getX(), cell.feet().getZ(),
-                    floorMinY, floorCeilingY);
+                    cell.feet().getY() - 1, cell.ceilingY());
             for (Direction direction : Direction.Plane.HORIZONTAL) {
                 int x = cell.feet().getX() + direction.getStepX();
                 int z = cell.feet().getZ() + direction.getStepZ();
-                if (!componentColumns.contains(FloorSurface.columnKey(x, z))
-                        && ownsPerimeterColumn(component, components, x, z)) {
-                    addColumn(result, x, z, floorMinY, floorCeilingY);
+                if (!component.containsColumn(x, z)
+                        && ownsPerimeterColumn(component, components, cell, x, z)) {
+                    addColumn(result, x, z, cell.feet().getY() - 1, cell.ceilingY());
                 }
             }
         }
         return Set.copyOf(result);
     }
 
-    private static boolean ownsPerimeterColumn(FloorSurfacePartitioner.Component component,
-                                               Collection<FloorSurfacePartitioner.Component> components,
+    private static boolean ownsPerimeterColumn(RoomPartitioner.Component component,
+                                               Collection<RoomPartitioner.Component> components,
+                                               FloorGeometry.Cell sourceCell,
                                                int x,
                                                int z) {
         if (components.stream().anyMatch(candidate -> candidate.containsColumn(x, z))) return false;
-        BlockPos perimeter = new BlockPos(x, 0, z);
-        return component.equals(FloorSurfacePartitioner.owner(
-                FloorSurfacePartitioner.adjacent(perimeter, components)));
+        FloorGeometry.Cell perimeter = new FloorGeometry.Cell(
+                new BlockPos(x, sourceCell.feet().getY(), z),
+                sourceCell.surfaceY(), sourceCell.ceilingY());
+        return component.equals(RoomPartitioner.owner(RoomPartitioner.adjacent(perimeter, components)));
     }
 
     private static void addColumn(Set<BlockPos> result, int x, int z, int minY, int ceilingY) {

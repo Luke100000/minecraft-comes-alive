@@ -98,16 +98,17 @@ class StructureFloorResolutionTest {
     @Test
     void persistedConnectorColumnKeepsRoomPlanOnExistingBuilding() {
         BlockPos connector = new BlockPos(0, 64, 0);
-        FloorSurface surface = new FloorSurface(Set.of(
-                cell(1, 64, 0), cell(2, 64, 0), cell(3, 64, 0), cell(4, 64, 0)),
+        FloorGeometry geometry = new FloorGeometry(Set.of(
+                geometryCell(0, 64, 0), geometryCell(1, 64, 0), geometryCell(2, 64, 0),
+                geometryCell(3, 64, 0), geometryCell(4, 64, 0)),
                 Map.of(connector, StructureFloor.ConnectorType.DOOR));
-        List<FloorSurfacePartitioner.Component> components = FloorSurfacePartitioner.partition(surface);
-        FloorSurfacePartitioner.Component owner = components.stream()
-                .filter(component -> component.containsColumn(connector.getX(), connector.getZ()))
+        List<RoomPartitioner.Component> components = RoomPartitioner.partition(geometry);
+        RoomPartitioner.Component owner = components.stream()
+                .filter(component -> component.contains(connector))
                 .findFirst().orElseThrow();
-        Set<BlockPos> roomFootprint = BuildingRoomScanner.footprintForComponent(owner, 64);
+        Set<BlockPos> roomFootprint = BuildingRoomScanner.floorCellsForComponent(owner);
 
-        StructureFloor persistedFloor = ScannedFloor.physical(surface).persistedFloor();
+        StructureFloor persistedFloor = ScannedFloor.physical(geometry).persistedFloor();
         Structure structure = new Structure(10, new BlockPos(1, 64, 0), List.of(persistedFloor));
         Building room = new Building(new BlockPos(1, 64, 0));
         room.setId(100);
@@ -267,6 +268,10 @@ class StructureFloorResolutionTest {
 
     private static FloorSurface.Cell cell(int x, int y, int z) {
         return new FloorSurface.Cell(new BlockPos(x, y, z), y, y + 4);
+    }
+
+    private static FloorGeometry.Cell geometryCell(int x, int y, int z) {
+        return new FloorGeometry.Cell(new BlockPos(x, y, z), y, y + 4);
     }
 
     private static Building room(int id, int structureId, int floorId, Set<BlockPos> footprint) {

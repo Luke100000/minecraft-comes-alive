@@ -44,22 +44,21 @@ final class StructureExpansionPolicy {
                                                                BlockPos source,
                                                                Collection<Building> rooms) {
         if (target == null || floor == null || source == null || rooms == null) return Optional.empty();
-        FloorSurface surface = floor.surface();
-        List<FloorSurfacePartitioner.Component> components = FloorSurfacePartitioner.partition(surface);
-        FloorSurfacePartitioner.Component selected = FloorSurfacePartitioner.select(source, surface, components);
+        FloorGeometry geometry = floor.geometry();
+        List<RoomPartitioner.Component> components = RoomPartitioner.partition(geometry);
+        RoomPartitioner.Component selected = RoomPartitioner.select(source, geometry, components);
         if (selected == null) return Optional.empty();
 
-        Set<BlockPos> footprint = BuildingRoomScanner.footprintForComponent(
-                selected, floor.anchorY());
-        Set<BlockPos> identityFootprint = footprint.stream()
+        Set<BlockPos> floorCells = BuildingRoomScanner.floorCellsForComponent(selected);
+        Set<BlockPos> identityCells = floorCells.stream()
                 .filter(cell -> {
-                    StructureFloor.ConnectorType connector = surface.connectorTypesByFloorCell().get(cell);
+                    StructureFloor.ConnectorType connector = geometry.connectorTypesByCell().get(cell);
                     return connector == null || !connector.roomBoundary();
                 })
                 .collect(java.util.stream.Collectors.toUnmodifiableSet());
-        if (identityFootprint.isEmpty()) return Optional.empty();
+        if (identityCells.isEmpty()) return Optional.empty();
         BuildingFloorRegion componentRegion = BuildingFloorRegion.fromFootprint(
-                floor.anchorY(), identityFootprint);
+                floor.anchorY(), identityCells);
         List<Building> matches = rooms.stream()
                 .filter(Building::isFunctionalRoom)
                 .filter(room -> room.getStructureId() == target.structure().getId())
