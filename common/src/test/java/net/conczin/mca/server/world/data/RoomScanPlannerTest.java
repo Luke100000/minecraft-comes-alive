@@ -79,6 +79,20 @@ class RoomScanPlannerTest {
         assertEquals(1, plan.prospectiveFloorNumber());
     }
 
+    @Test
+    void persistedInteractionPlanDoesNotRequireFreshWorldObservation() {
+        Structure persisted = structure(20, 20, floor(0, 64, 68, 0, 3));
+        Building room = room(100, 20, 0, Set.of(
+                new BlockPos(0, 64, 0), new BlockPos(1, 64, 0),
+                new BlockPos(2, 64, 0), new BlockPos(3, 64, 0)));
+        Village village = village(persisted, room);
+
+        RoomScanPlan plan = RoomScanPlanner.plan(village, null, new BlockPos(2, 64, 0));
+
+        assertEquals(Village.RoomScanMode.UPDATE_ROOM, plan.mode());
+        assertEquals(room, plan.currentRoom().orElseThrow());
+    }
+
     private static Village village(Structure structure, Building room) {
         Village village = new Village(1, null);
         village.registerStructure(structure, room);

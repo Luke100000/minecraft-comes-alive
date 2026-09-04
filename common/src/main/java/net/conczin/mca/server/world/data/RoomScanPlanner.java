@@ -1,6 +1,7 @@
 package net.conczin.mca.server.world.data;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.Level;
 
 import java.util.List;
 import java.util.Optional;
@@ -8,6 +9,37 @@ import java.util.Optional;
 /** Pure planning over one already-observed fresh Floor. */
 final class RoomScanPlanner {
     private RoomScanPlanner() {
+    }
+
+    static RoomScanPlan plan(Village village, Level level, BlockPos pos) {
+        BlockPos source = pos == null ? BlockPos.ZERO : pos.immutable();
+        if (village == null || pos == null) return RoomScanPlan.addBuilding(source);
+
+        Village.ResolvedInteraction resolved = village.resolveInteractionPosition(pos).orElse(null);
+        if (resolved != null) {
+            if (level != null
+                    && source.getY() > resolved.position().floor().anchorY() + StructureFloor.BAND_TOLERANCE) {
+                StructureScanner.FloorObservation fresh = StructureScanner.observeFloor(
+                        level, source, village.getStructures().values()).orElse(null);
+                if (fresh != null) {
+                    StructureFloor freshFloor = new StructureFloor(0, 0, fresh.floor());
+                    if (!StructureFloor.sameSemanticBand(
+                            freshFloor.anchorY(), resolved.position().floor().anchorY())) {
+                        return attachmentPlan(village, source, fresh)
+                                .orElseGet(() -> RoomScanPlan.addBuilding(source));
+                    }
+                }
+            }
+            Building room = resolved.position().room();
+            if (room != null) return RoomScanPlan.updateRoom(room, source);
+            return RoomScanPlan.addRoom(
+                    resolved.structure().getId(), resolved.position().floor().id(), source);
+        }
+
+        if (level == null) return RoomScanPlan.addBuilding(source);
+        StructureScanner.FloorObservation observation = StructureScanner.observeFloor(
+                level, source, village.getStructures().values()).orElse(null);
+        return planFresh(village, source, observation);
     }
 
     static RoomScanPlan planFresh(Village village,

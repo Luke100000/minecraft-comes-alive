@@ -21,6 +21,7 @@ public final class BuildingDiagnostics {
     public static Result diagnose(ServerLevel world, BlockPos pos, boolean verbose) {
         long traceId = NEXT_TRACE_ID.incrementAndGet();
         VillageManager manager = VillageManager.get(world);
+        RoomWorkflow roomWorkflow = new RoomWorkflow(manager, world);
         Village village = manager.findNearestVillage(pos, Village.MERGE_MARGIN).orElse(null);
         PlanAttempt planAttempt = planAttempt(() -> village == null
                 ? RoomScanPlan.addBuilding(pos)
@@ -45,7 +46,7 @@ public final class BuildingDiagnostics {
                 position, uiAction, plan.targetBuildingId(), verbose);
 
         if (village == null) {
-            Building.validationResult analysis = manager.analyzeBuildingAddition(pos).result();
+            Building.validationResult analysis = roomWorkflow.analyzeBuildingAddition(pos).result();
             String verdict = "NO_NEARBY_VILLAGE: UI uses " + uiAction + "; initial structure analysis=" + analysis;
             log(traceId, "analysis action={} result={}", uiAction, analysis);
             log(traceId, "verdict={}", verdict);
@@ -123,13 +124,13 @@ public final class BuildingDiagnostics {
         }
 
         Building.validationResult analysis = switch (plan.mode()) {
-            case ADD_BUILDING -> manager.analyzeBuildingAddition(pos).result();
-            case ADD_ROOM -> manager.analyzeRoom(pos).result();
-            case ADD_FLOOR, ADD_BASEMENT -> manager.analyzeAttachedRoom(
+            case ADD_BUILDING -> roomWorkflow.analyzeBuildingAddition(pos).result();
+            case ADD_ROOM -> roomWorkflow.analyzeRoom(pos).result();
+            case ADD_FLOOR, ADD_BASEMENT -> roomWorkflow.analyzeAttachedRoom(
                     village, plan, plan.mode(), plan.targetBuildingId()).result();
             case UPDATE_ROOM -> room == null
                     ? Building.validationResult.NOT_IN_BUILDING
-                    : manager.analyzeRegisteredRoomUpdate(village, room.getId(), pos).result();
+                    : roomWorkflow.analyzeRegisteredRoomUpdate(village, room.getId(), pos).result();
         };
         log(traceId, "analysis action={} result={}", uiAction, analysis);
 

@@ -637,34 +637,7 @@ public class Village implements Iterable<Building> {
     }
 
     public RoomScanPlan getRoomScanPlan(Level level, BlockPos pos) {
-        BlockPos source = pos == null ? BlockPos.ZERO : pos.immutable();
-        if (pos == null) return RoomScanPlan.addBuilding(source);
-        Optional<ResolvedInteraction> resolved = resolveInteractionPosition(pos);
-        if (resolved.isPresent()) {
-            ResolvedInteraction interaction = resolved.get();
-            if (level != null
-                    && source.getY() > interaction.position().floor().anchorY() + StructureFloor.BAND_TOLERANCE) {
-                StructureScanner.FloorObservation fresh = StructureScanner.observeFloor(
-                        level, source, structures.values()).orElse(null);
-                if (fresh != null) {
-                    StructureFloor freshFloor = new StructureFloor(0, 0, fresh.floor());
-                    if (!StructureFloor.sameSemanticBand(
-                            freshFloor.anchorY(), interaction.position().floor().anchorY())) {
-                        return RoomScanPlanner.attachmentPlan(this, source, fresh)
-                                .orElseGet(() -> RoomScanPlan.addBuilding(source));
-                    }
-                }
-            }
-            Building room = interaction.position().room();
-            if (room != null) return RoomScanPlan.updateRoom(room, source);
-            return RoomScanPlan.addRoom(
-                    interaction.structure().getId(), interaction.position().floor().id(), source);
-        }
-
-        if (level == null) return RoomScanPlan.addBuilding(source);
-        StructureScanner.FloorObservation observation = StructureScanner.observeFloor(
-                level, source, structures.values()).orElse(null);
-        return RoomScanPlanner.planFresh(this, source, observation);
+        return RoomScanPlanner.plan(this, level, pos);
     }
 
     Optional<AttachmentTarget> resolveAttachmentTarget(Level level, StructureFloor candidate) {
@@ -765,7 +738,7 @@ public class Village implements Iterable<Building> {
         return resolveInteractionPosition(pos).map(ResolvedInteraction::structure);
     }
 
-    private Optional<ResolvedInteraction> resolveInteractionPosition(BlockPos pos) {
+    Optional<ResolvedInteraction> resolveInteractionPosition(BlockPos pos) {
         Map<Integer, List<Building>> roomsByStructure = getRooms()
                 .collect(Collectors.groupingBy(Building::getStructureId));
         return structures.values().stream()
@@ -810,7 +783,7 @@ public class Village implements Iterable<Building> {
                 .or(() -> findPhysicalRoomAt(pos));
     }
 
-    private record ResolvedInteraction(Structure structure, Structure.InteractionPosition position) {
+    record ResolvedInteraction(Structure structure, Structure.InteractionPosition position) {
     }
 
     public boolean isMainRoom(Building room) {
