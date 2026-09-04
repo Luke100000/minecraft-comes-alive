@@ -34,7 +34,7 @@ final class StructureExpansionPolicy {
         RoomPartitioner.Component selected = RoomPartitioner.select(source, geometry, components);
         if (selected == null) return Optional.empty();
 
-        Set<BlockPos> floorCells = BuildingRoomScanner.floorCellsForComponent(selected);
+        Set<BlockPos> floorCells = selected.floorCells();
         Set<BlockPos> identityCells = floorCells.stream()
                 .filter(cell -> {
                     FloorConnector.Type connector = geometry.connectorTypesByCell().get(cell);

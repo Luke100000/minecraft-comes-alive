@@ -253,9 +253,5 @@ final class RoomPartitioner {
         Set<BlockPos> floorCells() {
             return cells.stream().map(FloorGeometry.Cell::feet).collect(Collectors.toUnmodifiableSet());
         }
-
-        BuildingFloorRegion projection(int anchorY) {
-            return BuildingFloorRegion.fromFootprint(anchorY, floorCells());
-        }
     }
 }

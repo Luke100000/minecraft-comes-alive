@@ -31,7 +31,7 @@ public final class Structure implements VillageBuilding {
 
     public Structure(CompoundTag tag) {
         id = tag.getInt("id");
-        logicalBuildingId = tag.contains("buildingId") ? tag.getInt("buildingId") : id;
+        logicalBuildingId = tag.getInt("buildingId");
         nextFloorId = tag.getInt("nextFloorId");
         source = NbtHelper.decodeBlockPos(tag.get("source"));
         for (StructureFloor floor : NbtHelper.toList(tag.getList("floors", Tag.TAG_COMPOUND),

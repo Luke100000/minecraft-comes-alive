@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -37,6 +38,8 @@ final class RoomDFU {
     }
 
     private static Result loadCurrent(CompoundTag villageTag) {
+        validateCurrentShape(villageTag);
+
         Map<Integer, Building> rooms = new HashMap<>();
         for (Tag value : villageTag.getList("buildings", Tag.TAG_COMPOUND)) {
             Building room = new Building((CompoundTag) value);
@@ -128,7 +131,7 @@ final class RoomDFU {
     }
 
     private static StructureFloor migrateUpstreamFloor(CompoundTag oldFloor) {
-        BuildingFloorRegion region = BuildingFloorRegion.load(oldFloor.getCompound("region"));
+        LegacyFloorRegion region = loadLegacyFloorRegion(oldFloor.getCompound("region"));
         int ceilingY = oldFloor.getInt("ceilingY");
         List<FloorGeometry.Cell> cells = region.cells().stream()
                 .map(pos -> new FloorGeometry.Cell(
@@ -152,12 +155,67 @@ final class RoomDFU {
     private static Set<BlockPos> upstreamRoomCells(CompoundTag oldRoom, StructureFloor floor) {
         ListTag regions = oldRoom.getList("floorRegions", Tag.TAG_COMPOUND);
         if (regions.isEmpty()) return Set.of();
-        BuildingFloorRegion oldRegion = BuildingFloorRegion.load(regions.getCompound(0));
+        LegacyFloorRegion oldRegion = loadLegacyFloorRegion(regions.getCompound(0));
         return floor.geometry().cells().stream()
                 .map(FloorGeometry.Cell::feet)
                 .filter(pos -> oldRegion.containsHorizontally(pos.getX(), pos.getZ()))
                 .map(BlockPos::immutable)
                 .collect(Collectors.toUnmodifiableSet());
+    }
+
+    private static LegacyFloorRegion loadLegacyFloorRegion(CompoundTag tag) {
+        int anchorY = tag.getInt("anchorY");
+        Set<BlockPos> cells = new LinkedHashSet<>();
+        for (Tag componentValue : tag.getList("components", Tag.TAG_COMPOUND)) {
+            CompoundTag component = (CompoundTag) componentValue;
+            for (Tag spanValue : component.getList("spans", Tag.TAG_COMPOUND)) {
+                CompoundTag span = (CompoundTag) spanValue;
+                int z = span.getInt("z");
+                int minX = span.getInt("minX");
+                int maxX = span.getInt("maxX");
+                for (int x = minX; x <= maxX; x++) cells.add(new BlockPos(x, anchorY, z));
+            }
+        }
+        return new LegacyFloorRegion(Set.copyOf(cells));
+    }
+
+    private static void validateCurrentShape(CompoundTag villageTag) {
+        for (Tag value : villageTag.getList("buildings", Tag.TAG_COMPOUND)) {
+            requireCurrentBuildingShape((CompoundTag) value, "Room");
+        }
+        for (Tag value : villageTag.getList("externalBuildings", Tag.TAG_COMPOUND)) {
+            requireCurrentBuildingShape((CompoundTag) value, "External building");
+        }
+        for (Tag value : villageTag.getList("structures", Tag.TAG_COMPOUND)) {
+            CompoundTag structure = (CompoundTag) value;
+            require(structure, "buildingId", Tag.TAG_INT, "Structure");
+            require(structure, "source", "Structure");
+            require(structure, "floors", Tag.TAG_LIST, "Structure");
+        }
+        for (Tag value : villageTag.getList("logicalBuildings", Tag.TAG_COMPOUND)) {
+            CompoundTag logical = (CompoundTag) value;
+            require(logical, "mainRoomId", Tag.TAG_INT, "Logical building");
+            require(logical, "inheritanceEnabled", Tag.TAG_BYTE, "Logical building");
+        }
+    }
+
+    private static void requireCurrentBuildingShape(CompoundTag building, String kind) {
+        require(building, "floorCells", Tag.TAG_LIST, kind);
+        require(building, "contributesToMain", Tag.TAG_BYTE, kind);
+        require(building, "structureId", Tag.TAG_INT, kind);
+        require(building, "floorId", Tag.TAG_INT, kind);
+    }
+
+    private static void require(CompoundTag tag, String key, int type, String kind) {
+        if (!tag.contains(key, type)) {
+            throw new IllegalArgumentException(kind + " is missing required canonical field " + key);
+        }
+    }
+
+    private static void require(CompoundTag tag, String key, String kind) {
+        if (!tag.contains(key)) {
+            throw new IllegalArgumentException(kind + " is missing required canonical field " + key);
+        }
     }
 
     private static Result migrateOrigin(ListTag legacy) {
@@ -249,5 +307,11 @@ final class RoomDFU {
             Map<Integer, ExternalBuilding> externalBuildings,
             Map<Integer, Structure> structures,
             Map<Integer, LogicalBuilding> logicalBuildings) {
+    }
+
+    private record LegacyFloorRegion(Set<BlockPos> cells) {
+        boolean containsHorizontally(int x, int z) {
+            return cells.stream().anyMatch(pos -> pos.getX() == x && pos.getZ() == z);
+        }
     }
 }

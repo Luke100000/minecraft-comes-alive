@@ -64,7 +64,7 @@ class RegisteredRoomUpdateLineageTest {
 
         StructureFloor floor = structure.getFloor(7).orElseThrow();
         assertEquals(3, floor.floorNumber());
-        assertEquals(72, floor.ceilingY());
+        assertEquals(72, floor.maxPhysicalCeilingY());
         assertTrue(!floor.region().containsHorizontally(0, 0));
         assertTrue(floor.region().containsHorizontally(2, 0));
     }

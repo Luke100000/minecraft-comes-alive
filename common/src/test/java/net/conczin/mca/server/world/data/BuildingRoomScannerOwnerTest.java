@@ -55,11 +55,11 @@ class BuildingRoomScannerOwnerTest {
         RoomPartitioner.Component owner = components.stream()
                 .filter(component -> component.contains(connector)).findFirst().orElseThrow();
 
-        Set<BlockPos> ownerFootprint = BuildingRoomScanner.floorCellsForComponent(owner);
+        Set<BlockPos> ownerFootprint = owner.floorCells();
         RoomPartitioner.Component other = components.stream()
                 .filter(component -> !component.equals(owner))
                 .findFirst().orElseThrow();
-        Set<BlockPos> otherFootprint = BuildingRoomScanner.floorCellsForComponent(other);
+        Set<BlockPos> otherFootprint = other.floorCells();
 
         assertTrue(ownerFootprint.contains(connector));
         assertFalse(otherFootprint.contains(connector));
@@ -77,7 +77,7 @@ class BuildingRoomScannerOwnerTest {
         assertEquals(1, components.size());
         RoomPartitioner.Component component = components.getFirst();
         assertTrue(component.containsColumn(connector.getX(), connector.getZ()));
-        assertTrue(BuildingRoomScanner.floorCellsForComponent(component)
+        assertTrue(component.floorCells()
                 .contains(connector));
     }
 
@@ -93,7 +93,7 @@ class BuildingRoomScannerOwnerTest {
 
         assertEquals(1, components.size());
         assertEquals(components.getFirst(), selected);
-        assertTrue(BuildingRoomScanner.floorCellsForComponent(selected)
+        assertTrue(selected.floorCells()
                 .contains(connector));
     }
 
@@ -111,7 +111,7 @@ class BuildingRoomScannerOwnerTest {
         RoomPartitioner.Component selected = RoomPartitioner.select(connector, geometry, components);
 
         assertEquals(owner, selected);
-        assertTrue(BuildingRoomScanner.floorCellsForComponent(selected)
+        assertTrue(selected.floorCells()
                 .contains(connector));
     }
 

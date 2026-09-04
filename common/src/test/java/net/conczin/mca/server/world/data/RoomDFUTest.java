@@ -186,16 +186,9 @@ class RoomDFUTest {
 
     @Test
     void canonicalVillageLoadsThroughRoomDfu() {
-        Village village = new Village(1, null);
-        StructureFloor floor = floor(0, 64, 68, 0);
-        Structure structure = new Structure(20, new BlockPos(0, 64, 0), List.of(floor));
-        Building room = new Building(new BlockPos(0, 64, 0));
-        room.setId(10);
-        room.setStructureId(20);
-        room.setFloorId(0);
-        room.setGeometry(new BlockPos(0, 64, 0), new BlockPos(1, 67, 0),
-                Set.of(new BlockPos(0, 64, 0), new BlockPos(1, 64, 0)));
-        village.registerStructure(structure, room);
+        Village village = canonicalVillage();
+        Building room = village.getBuilding(10).orElseThrow();
+        StructureFloor floor = village.getStructure(20).orElseThrow().getFloor(0).orElseThrow();
 
         RoomDFU.Result loaded = RoomDFU.load(village.save());
 
@@ -211,6 +204,24 @@ class RoomDFUTest {
         unsupported.putInt("buildingDataVersion", 2);
 
         assertThrows(IllegalArgumentException.class, () -> RoomDFU.load(unsupported));
+    }
+
+    @Test
+    void canonicalStructureMissingBuildingIdIsRejectedAtDfuBoundary() {
+        CompoundTag malformed = canonicalVillage().save();
+        malformed.getList("structures", net.minecraft.nbt.Tag.TAG_COMPOUND)
+                .getCompound(0).remove("buildingId");
+
+        assertThrows(IllegalArgumentException.class, () -> RoomDFU.load(malformed));
+    }
+
+    @Test
+    void canonicalLogicalBuildingMissingInheritanceIsRejectedAtDfuBoundary() {
+        CompoundTag malformed = canonicalVillage().save();
+        malformed.getList("logicalBuildings", net.minecraft.nbt.Tag.TAG_COMPOUND)
+                .getCompound(0).remove("inheritanceEnabled");
+
+        assertThrows(IllegalArgumentException.class, () -> RoomDFU.load(malformed));
     }
 
     private static CompoundTag upstreamFloorCleanSquashVillage(boolean mainInheritanceEnabled) {
@@ -229,10 +240,8 @@ class RoomDFUTest {
         room.putInt("structureId", 20);
         room.putInt("floorId", 0);
         room.putBoolean("inheritanceEnabled", inheritanceEnabled);
-        room.put("floorRegions", NbtHelper.fromList(List.of(
-                BuildingFloorRegion.fromFootprint(64, List.of(
-                        new BlockPos(0, 64, 0), new BlockPos(1, 64, 0)))),
-                BuildingFloorRegion::save));
+        room.put("floorRegions", list(legacyRegion(64, Set.of(
+                new BlockPos(0, 64, 0), new BlockPos(1, 64, 0)))));
         return room;
     }
 
@@ -259,8 +268,8 @@ class RoomDFUTest {
         tag.putInt("anchorY", anchorY);
         tag.putInt("ceilingY", ceilingY);
         tag.putInt("floorNumber", number);
-        tag.put("region", BuildingFloorRegion.fromFootprint(anchorY, List.of(
-                new BlockPos(0, anchorY, 0), new BlockPos(1, anchorY, 0))).save());
+        tag.put("region", legacyRegion(anchorY, Set.of(
+                new BlockPos(0, anchorY, 0), new BlockPos(1, anchorY, 0))));
         tag.put("connectors", new ListTag());
         return tag;
     }
@@ -269,6 +278,20 @@ class RoomDFUTest {
         BuildingFloorRegion region = BuildingFloorRegion.fromFootprint(
                 anchorY, List.of(new BlockPos(0, anchorY, 0), new BlockPos(1, anchorY, 0)));
         return new StructureFloor(id, anchorY, ceilingY, number, region);
+    }
+
+    private static Village canonicalVillage() {
+        Village village = new Village(1, null);
+        StructureFloor floor = floor(0, 64, 68, 0);
+        Structure structure = new Structure(20, new BlockPos(0, 64, 0), List.of(floor));
+        Building room = new Building(new BlockPos(0, 64, 0));
+        room.setId(10);
+        room.setStructureId(20);
+        room.setFloorId(0);
+        room.setGeometry(new BlockPos(0, 64, 0), new BlockPos(1, 67, 0),
+                Set.of(new BlockPos(0, 64, 0), new BlockPos(1, 64, 0)));
+        village.registerStructure(structure, room);
+        return village;
     }
 
     private static CompoundTag originBuilding(int id, String type) {
@@ -294,5 +317,33 @@ class RoomDFUTest {
         ListTag list = new ListTag();
         for (CompoundTag tag : tags) list.add(tag);
         return list;
+    }
+
+    private static CompoundTag legacyRegion(int anchorY, Set<BlockPos> cells) {
+        BuildingFloorRegion region = BuildingFloorRegion.fromFootprint(anchorY, cells);
+        CompoundTag tag = new CompoundTag();
+        tag.putInt("anchorY", anchorY);
+        tag.putInt("area", region.area());
+        ListTag components = new ListTag();
+        for (BuildingFloorRegion.Component component : region.components()) {
+            CompoundTag componentTag = new CompoundTag();
+            componentTag.putInt("minX", component.minX());
+            componentTag.putInt("minZ", component.minZ());
+            componentTag.putInt("maxX", component.maxX());
+            componentTag.putInt("maxZ", component.maxZ());
+            componentTag.putInt("area", component.area());
+            ListTag spans = new ListTag();
+            for (BuildingFloorRegion.Span span : component.spans()) {
+                CompoundTag spanTag = new CompoundTag();
+                spanTag.putInt("z", span.z());
+                spanTag.putInt("minX", span.minX());
+                spanTag.putInt("maxX", span.maxX());
+                spans.add(spanTag);
+            }
+            componentTag.put("spans", spans);
+            components.add(componentTag);
+        }
+        tag.put("components", components);
+        return tag;
     }
 }

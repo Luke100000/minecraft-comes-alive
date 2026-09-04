@@ -126,7 +126,7 @@ class StructureFloorResolutionTest {
         RoomPartitioner.Component owner = components.stream()
                 .filter(component -> component.contains(connector))
                 .findFirst().orElseThrow();
-        Set<BlockPos> roomFootprint = BuildingRoomScanner.floorCellsForComponent(owner);
+        Set<BlockPos> roomFootprint = owner.floorCells();
 
         StructureFloor persistedFloor = new StructureFloor(0, 0, geometry);
         Structure structure = new Structure(10, new BlockPos(1, 64, 0), List.of(persistedFloor));

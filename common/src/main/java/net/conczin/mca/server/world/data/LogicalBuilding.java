@@ -18,8 +18,8 @@ final class LogicalBuilding {
 
     LogicalBuilding(CompoundTag tag) {
         this(tag.getInt("id"),
-                tag.contains("mainRoomId") ? tag.getInt("mainRoomId") : -1,
-                !tag.contains("inheritanceEnabled") || tag.getBoolean("inheritanceEnabled"));
+                tag.getInt("mainRoomId"),
+                tag.getBoolean("inheritanceEnabled"));
     }
 
     int id() {

@@ -97,7 +97,7 @@ public final class BuildingDiagnostics {
                 boolean sameColumn = room.containsFloorColumn(pos.getX(), pos.getZ());
                 boolean elevatedWithinBand = roomFloor != null
                         && pos.getY() > roomFloor.anchorY() + StructureFloor.BAND_TOLERANCE
-                        && pos.getY() < roomFloor.ceilingY();
+                        && pos.getY() < roomFloor.maxPhysicalCeilingY();
                 RoomTypeResolver.Context resolved = roomTypeResolver.resolve(room);
                 log(traceId, "room id={} directType={} effectiveType={} structureId={} floorId={} floor={} footprintArea={} ownPoi={} effectivePoi={} containsColumn={} elevatedWithinSameFloorBand={}",
                         room.getId(), room.getType(), resolved.effectiveType().name(), room.getStructureId(), room.getFloorId(), floor(roomFloor),
@@ -204,7 +204,7 @@ public final class BuildingDiagnostics {
             }
             if (persistentRoomFloor != null
                     && pos.getY() > persistentRoomFloor.anchorY() + StructureFloor.BAND_TOLERANCE
-                    && pos.getY() < persistentRoomFloor.ceilingY()) {
+                    && pos.getY() < persistentRoomFloor.maxPhysicalCeilingY()) {
                 return "ELEVATED_POSITION_IN_SAME_FLOOR_BAND: no separate StructureFloor anchor currently owns this Y, "
                         + "so Room lookup remains on Floor " + room.getFloorId() + " @" + persistentRoomFloor.anchorY();
             }
@@ -283,7 +283,8 @@ public final class BuildingDiagnostics {
 
     private static StructureFloor floorAt(List<StructureFloor> floors, BlockPos pos) {
         return floors.stream()
-                .filter(candidate -> candidate.anchorY() <= pos.getY() && pos.getY() < candidate.ceilingY())
+                .filter(candidate -> candidate.anchorY() <= pos.getY()
+                        && pos.getY() < candidate.maxPhysicalCeilingY())
                 .filter(candidate -> candidate.contains(pos.getX(), pos.getZ()))
                 .max(Comparator.comparingInt(StructureFloor::anchorY))
                 .orElse(null);
@@ -296,7 +297,7 @@ public final class BuildingDiagnostics {
     private static String floor(StructureFloor floor) {
         return floor == null ? "none"
                 : "id=" + floor.id() + " number=" + floor.floorNumber() + " @"
-                + floor.anchorY() + ".." + floor.ceilingY() + " area=" + floor.area();
+                + floor.anchorY() + ".." + floor.maxPhysicalCeilingY() + " area=" + floor.area();
     }
 
     private static String id(Structure structure) {

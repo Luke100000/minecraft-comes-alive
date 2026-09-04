@@ -24,9 +24,8 @@ final class BuildingRoomScanner {
         if (floor == null || floor.cells().isEmpty()) {
             return Result.failure(Building.validationResult.TOO_SMALL, source);
         }
-        FloorGeometry geometry = floor;
-        List<RoomPartitioner.Component> components = RoomPartitioner.partition(geometry);
-        RoomPartitioner.Component selected = RoomPartitioner.select(source, geometry, components);
+        List<RoomPartitioner.Component> components = RoomPartitioner.partition(floor);
+        RoomPartitioner.Component selected = RoomPartitioner.select(source, floor, components);
         return selected == null
                 ? Result.failure(Building.validationResult.TOO_SMALL, source)
                 : materializeComponent(world, source, blocked, maxSize,
@@ -40,22 +39,13 @@ final class BuildingRoomScanner {
                                   int floorId,
                                   FloorGeometry floor) {
         if (floor == null || floor.cells().isEmpty()) return List.of();
-        FloorGeometry geometry = floor;
-        List<RoomPartitioner.Component> components = RoomPartitioner.partition(geometry);
+        List<RoomPartitioner.Component> components = RoomPartitioner.partition(floor);
         return components.stream()
                 .map(component -> materializeComponent(
                         world, source, Set.of(), maxSize, floorId, floor, components, component))
                 .sorted(Comparator.comparingInt((Result result) -> result.min().getX())
                         .thenComparingInt(result -> result.min().getZ()))
                 .toList();
-    }
-
-    static Set<BlockPos> floorCellsForComponent(RoomPartitioner.Component selected) {
-        return selected.floorCells();
-    }
-
-    static Set<BlockPos> footprintForComponent(RoomPartitioner.Component selected, int anchorY) {
-        return selected.projection(anchorY).cells();
     }
 
     private static Result materializeComponent(
@@ -67,15 +57,14 @@ final class BuildingRoomScanner {
             FloorGeometry floor,
             List<RoomPartitioner.Component> components,
             RoomPartitioner.Component component) {
-        FloorGeometry geometry = floor;
-        Set<BlockPos> floorCells = floorCellsForComponent(component);
+        Set<BlockPos> floorCells = component.floorCells();
         if (floorCells.size() > maxSize) return Result.failure(Building.validationResult.BLOCK_LIMIT, source);
         Set<BlockPos> blockedCells = blocked == null ? Set.of() : blocked;
         if (floorCells.stream().anyMatch(blockedCells::contains)) return Result.failure(Building.validationResult.OVERLAP, source);
         if (floorCells.size() < MIN_INTERIOR_AREA) return Result.failure(Building.validationResult.TOO_SMALL, source);
 
         BlockPos seed = nearestCell(source, component.cells());
-        Set<BlockPos> poi = RoomPoiEvidence.candidates(geometry, components, component);
+        Set<BlockPos> poi = RoomPoiEvidence.candidates(floor, components, component);
         int minX = floorCells.stream().mapToInt(BlockPos::getX).min().orElse(source.getX());
         int minY = floorCells.stream().mapToInt(BlockPos::getY).min().orElse(source.getY());
         int minZ = floorCells.stream().mapToInt(BlockPos::getZ).min().orElse(source.getZ());
@@ -112,11 +101,6 @@ final class BuildingRoomScanner {
         Result {
             floorCells = Set.copyOf(floorCells);
             poiCells = Set.copyOf(poiCells);
-        }
-
-        /** Transitional alias for callers moved to exact floorCells in Task 5. */
-        Set<BlockPos> footprintCells() {
-            return floorCells;
         }
 
         static Result failure(Building.validationResult status, BlockPos seed) {

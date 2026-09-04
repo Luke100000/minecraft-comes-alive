@@ -25,16 +25,15 @@ public record StructureFloor(int id, int floorNumber, FloorGeometry geometry) {
         }
     }
 
-    /** Flat compatibility constructor used by fixtures and legacy migration only. */
+    /** Source-compatible flat constructor; canonical code should pass exact {@link FloorGeometry}. */
     public StructureFloor(int id, int anchorY, int ceilingY, int floorNumber,
                           BuildingFloorRegion region) {
-        this(id, floorNumber, geometryFromRegion(region, ceilingY, List.of()));
+        this(id, floorNumber, FloorGeometry.flat(region, ceilingY, List.of()));
     }
 
-    /** Flat compatibility constructor used by fixtures and legacy migration only. */
     public StructureFloor(int id, int anchorY, int ceilingY, int floorNumber,
                           BuildingFloorRegion region, List<FloorConnector.Marker> connectors) {
-        this(id, floorNumber, geometryFromRegion(region, ceilingY, connectors));
+        this(id, floorNumber, FloorGeometry.flat(region, ceilingY, connectors));
     }
 
     public StructureFloor(int id, int anchorY, int ceilingY, BuildingFloorRegion region) {
@@ -56,14 +55,6 @@ public record StructureFloor(int id, int floorNumber, FloorGeometry geometry) {
 
     public boolean contains(int x, int z) {
         return !geometry.cellsAtColumn(x, z).isEmpty();
-    }
-
-    boolean containsPhysicalPosition(int x, int y, int z) {
-        return geometry.physicalCellAt(x, y, z).isPresent();
-    }
-
-    boolean containsInteractionPosition(int x, int y, int z) {
-        return geometry.interactionCellAt(x, y, z).isPresent();
     }
 
     boolean sameSemanticBand(StructureFloor other) {
@@ -105,11 +96,6 @@ public record StructureFloor(int id, int floorNumber, FloorGeometry geometry) {
         return geometry.maxPhysicalCeilingY();
     }
 
-    /** Transitional physical accessor; semantic ceilings are Structure-level. */
-    public int ceilingY() {
-        return maxPhysicalCeilingY();
-    }
-
     public CompoundTag save() {
         CompoundTag tag = new CompoundTag();
         tag.putInt("id", id);
@@ -141,26 +127,6 @@ public record StructureFloor(int id, int floorNumber, FloorGeometry geometry) {
 
     public StructureFloor withFloorNumber(int newFloorNumber) {
         return new StructureFloor(id, newFloorNumber, geometry);
-    }
-
-    private static FloorGeometry geometryFromRegion(BuildingFloorRegion region,
-                                                    int ceilingY,
-                                                    Collection<FloorConnector.Marker> markers) {
-        Objects.requireNonNull(region, "region");
-        if (region.area() == 0) {
-            throw new IllegalArgumentException("StructureFloor requires non-empty region geometry");
-        }
-        LinkedHashMap<BlockPos, FloorGeometry.Cell> cells = new LinkedHashMap<>();
-        for (BlockPos pos : region.cells()) {
-            cells.put(pos, new FloorGeometry.Cell(pos, pos.getY(), ceilingY));
-        }
-        Map<BlockPos, FloorConnector.Type> connectors = new LinkedHashMap<>();
-        if (markers != null) {
-            for (FloorConnector.Marker marker : markers) {
-                if (cells.containsKey(marker.pos())) connectors.put(marker.pos(), marker.type());
-            }
-        }
-        return new FloorGeometry(cells.values(), connectors);
     }
 
     private static CompoundTag saveCell(FloorGeometry.Cell cell) {

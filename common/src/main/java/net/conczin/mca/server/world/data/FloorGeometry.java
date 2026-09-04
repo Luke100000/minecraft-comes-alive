@@ -8,6 +8,7 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -41,6 +42,25 @@ final class FloorGeometry {
         }
         this.connectorTypesByCell = connectors;
         this.cellsByColumn = indexColumns(this.cells);
+    }
+
+    static FloorGeometry flat(BuildingFloorRegion region,
+                              int ceilingY,
+                              Collection<FloorConnector.Marker> markers) {
+        Objects.requireNonNull(region, "region");
+        if (region.area() == 0) {
+            throw new IllegalArgumentException("FloorGeometry requires non-empty region geometry");
+        }
+        Set<BlockPos> cells = region.cells();
+        Map<BlockPos, FloorConnector.Type> connectors = new LinkedHashMap<>();
+        if (markers != null) {
+            for (FloorConnector.Marker marker : markers) {
+                if (cells.contains(marker.pos())) connectors.put(marker.pos(), marker.type());
+            }
+        }
+        return new FloorGeometry(cells.stream()
+                .map(pos -> new Cell(pos, pos.getY(), ceilingY))
+                .toList(), connectors);
     }
 
     Set<Cell> cells() {

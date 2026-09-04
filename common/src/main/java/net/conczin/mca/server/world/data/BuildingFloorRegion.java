@@ -1,32 +1,15 @@
 package net.conczin.mca.server.world.data;
 
-import net.conczin.mca.util.NbtHelper;
 import net.minecraft.core.BlockPos;
-import net.minecraft.nbt.CompoundTag;
-import net.minecraft.nbt.Tag;
 
 import java.util.*;
 import java.util.stream.Collectors;
 
-/** Compact persistent X/Z footprint for one semantic Floor band. */
+/** Compact derived X/Z projection for one semantic Floor band. */
 public record BuildingFloorRegion(int anchorY, int area, List<Component> components) {
     public BuildingFloorRegion {
         components = List.copyOf(components);
         area = components.stream().mapToInt(Component::area).sum();
-    }
-
-    static BuildingFloorRegion load(CompoundTag tag) {
-        return new BuildingFloorRegion(tag.getInt("anchorY"), 0,
-                NbtHelper.toList(tag.getList("components", Tag.TAG_COMPOUND),
-                        value -> Component.load((CompoundTag) value)));
-    }
-
-    CompoundTag save() {
-        CompoundTag tag = new CompoundTag();
-        tag.putInt("anchorY", anchorY);
-        tag.putInt("area", area);
-        tag.put("components", NbtHelper.fromList(components, Component::save));
-        return tag;
     }
 
     public boolean containsHorizontally(int x, int z) {
@@ -37,10 +20,6 @@ public record BuildingFloorRegion(int anchorY, int area, List<Component> compone
         return components.stream()
                 .flatMap(component -> component.cells(anchorY).stream())
                 .collect(Collectors.toUnmodifiableSet());
-    }
-
-    BuildingFloorRegion withAnchorY(int anchorY) {
-        return this.anchorY == anchorY ? this : new BuildingFloorRegion(anchorY, area, components);
     }
 
     static BuildingFloorRegion fromFootprint(int anchorY, Collection<BlockPos> footprintCells) {
@@ -109,21 +88,6 @@ public record BuildingFloorRegion(int anchorY, int area, List<Component> compone
         return intersection;
     }
 
-    boolean touchesHorizontally(BuildingFloorRegion other) {
-        if (other == null || intersectionArea(other) > 0) return other != null;
-        for (BlockPos cell : cells()) {
-            int x = cell.getX();
-            int z = cell.getZ();
-            if (other.containsHorizontally(x + 1, z)
-                    || other.containsHorizontally(x - 1, z)
-                    || other.containsHorizontally(x, z + 1)
-                    || other.containsHorizontally(x, z - 1)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     private record Cell(int x, int z) {
     }
 
@@ -143,24 +107,6 @@ public record BuildingFloorRegion(int anchorY, int area, List<Component> compone
 
         private Component(List<Span> spans) {
             this(0, 0, 0, 0, 0, spans);
-        }
-
-        private static Component load(CompoundTag tag) {
-            return new Component(tag.getInt("minX"), tag.getInt("minZ"),
-                    tag.getInt("maxX"), tag.getInt("maxZ"), tag.getInt("area"),
-                    NbtHelper.toList(tag.getList("spans", Tag.TAG_COMPOUND),
-                            value -> Span.load((CompoundTag) value)));
-        }
-
-        private CompoundTag save() {
-            CompoundTag tag = new CompoundTag();
-            tag.putInt("minX", minX);
-            tag.putInt("minZ", minZ);
-            tag.putInt("maxX", maxX);
-            tag.putInt("maxZ", maxZ);
-            tag.putInt("area", area);
-            tag.put("spans", NbtHelper.fromList(spans, Span::save));
-            return tag;
         }
 
         public boolean containsHorizontally(int x, int z) {
@@ -218,18 +164,6 @@ public record BuildingFloorRegion(int anchorY, int area, List<Component> compone
     }
 
     public record Span(int z, int minX, int maxX) {
-        private static Span load(CompoundTag tag) {
-            return new Span(tag.getInt("z"), tag.getInt("minX"), tag.getInt("maxX"));
-        }
-
-        private CompoundTag save() {
-            CompoundTag tag = new CompoundTag();
-            tag.putInt("z", z);
-            tag.putInt("minX", minX);
-            tag.putInt("maxX", maxX);
-            return tag;
-        }
-
         public boolean containsHorizontally(int x, int z) {
             return this.z == z && x >= minX && x <= maxX;
         }
