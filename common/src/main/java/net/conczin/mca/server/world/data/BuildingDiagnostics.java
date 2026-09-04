@@ -95,7 +95,7 @@ public final class BuildingDiagnostics {
                 StructureFloor roomFloor = inspected.getFloor(room.getFloorId()).orElse(null);
                 boolean sameColumn = room.containsFloorColumn(pos.getX(), pos.getZ());
                 boolean elevatedWithinBand = roomFloor != null
-                        && pos.getY() > roomFloor.anchorY() + FloorSurface.BAND_TOLERANCE
+                        && pos.getY() > roomFloor.anchorY() + StructureFloor.BAND_TOLERANCE
                         && pos.getY() < roomFloor.ceilingY();
                 RoomTypeResolver.Context resolved = roomTypeResolver.resolve(room);
                 log(traceId, "room id={} directType={} effectiveType={} structureId={} floorId={} floor={} footprintArea={} ownPoi={} effectivePoi={} containsColumn={} elevatedWithinSameFloorBand={}",
@@ -202,7 +202,7 @@ public final class BuildingDiagnostics {
                         + freshPlayerFloor.anchorY();
             }
             if (persistentRoomFloor != null
-                    && pos.getY() > persistentRoomFloor.anchorY() + FloorSurface.BAND_TOLERANCE
+                    && pos.getY() > persistentRoomFloor.anchorY() + StructureFloor.BAND_TOLERANCE
                     && pos.getY() < persistentRoomFloor.ceilingY()) {
                 return "ELEVATED_POSITION_IN_SAME_FLOOR_BAND: no separate StructureFloor anchor currently owns this Y, "
                         + "so Room lookup remains on Floor " + room.getFloorId() + " @" + persistentRoomFloor.anchorY();

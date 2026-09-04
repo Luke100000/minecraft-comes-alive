@@ -35,6 +35,26 @@ class StructureConnectorTest {
                         .toList());
     }
 
+    @Test
+    void verticalColumnStillConnectsDistinctBandsWithLegacyOverlappingCeilings() {
+        StructureFloor staleLower = floor(88, 93);
+        StructureFloor upper = floor(91, 94);
+        List<BlockPos> connectorColumn = List.of(
+                new BlockPos(0, 90, 0),
+                new BlockPos(0, 91, 0));
+
+        assertTrue(StructureConnector.connectsFloors(connectorColumn, upper, staleLower));
+    }
+
+    @Test
+    void legacyCeilingOverlapDoesNotMakeUpperOnlyConnectorReachLowerFloor() {
+        StructureFloor staleLower = floor(88, 93);
+        StructureFloor upper = floor(91, 94);
+
+        assertFalse(StructureConnector.connectsFloors(
+                List.of(new BlockPos(0, 92, 0)), upper, staleLower));
+    }
+
     private static StructureFloor floor(int anchorY, int ceilingY) {
         return new StructureFloor(0, anchorY, ceilingY, 0,
                 BuildingFloorRegion.fromFootprint(anchorY, Set.of(

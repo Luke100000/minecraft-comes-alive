@@ -107,7 +107,7 @@ class StructureFloorResolutionTest {
                 .findFirst().orElseThrow();
         Set<BlockPos> roomFootprint = BuildingRoomScanner.footprintForComponent(owner, 64);
 
-        StructureFloor persistedFloor = StructureScanner.persistedFloor(surface);
+        StructureFloor persistedFloor = ScannedFloor.physical(surface).persistedFloor();
         Structure structure = new Structure(10, new BlockPos(1, 64, 0), List.of(persistedFloor));
         Building room = new Building(new BlockPos(1, 64, 0));
         room.setId(100);
@@ -126,6 +126,18 @@ class StructureFloorResolutionTest {
         assertEquals(room, interaction.room());
         assertEquals(Village.RoomScanMode.UPDATE_ROOM, plan.mode());
         assertEquals(room, plan.currentRoom().orElseThrow());
+    }
+
+    @Test
+    void persistedFloorUsesSemanticCeilingInsteadOfTallPhysicalCeiling() {
+        FloorSurface surface = new FloorSurface(Set.of(
+                cell(0, 88, 0), cell(1, 88, 0), cell(2, 88, 0), cell(3, 88, 0),
+                cell(3, 89, 1), cell(3, 90, 2)), Map.of());
+
+        StructureFloor floor = new ScannedFloor(surface, 91).persistedFloor();
+
+        assertEquals(94, surface.maxCeilingY());
+        assertEquals(91, floor.ceilingY());
     }
 
     @Test
@@ -178,6 +190,69 @@ class StructureFloorResolutionTest {
 
         assertEquals(Village.RoomScanMode.ADD_ROOM, plan.mode());
         assertTrue(plan.currentRoom().isEmpty());
+    }
+
+    @Test
+    void staleSameStoreyExpansionPlansUpdateForExistingComponentAndAddForDoorSeparatedComponent() {
+        StructureFloor floor = new StructureFloor(0, 64, 68, 0,
+                BuildingFloorRegion.fromFootprint(64, Set.of(
+                        new BlockPos(0, 64, 0), new BlockPos(1, 64, 0),
+                        new BlockPos(2, 64, 0), new BlockPos(3, 64, 0))));
+        Structure structure = new Structure(10, BlockPos.ZERO, List.of(floor));
+        Building room = room(100, 10, 0, Set.of(
+                new BlockPos(0, 64, 0), new BlockPos(1, 64, 0),
+                new BlockPos(2, 64, 0), new BlockPos(3, 64, 0)));
+        Village village = new Village(1, null);
+        village.registerStructure(structure, room);
+        StructureExpansionPolicy.FloorTarget target =
+                new StructureExpansionPolicy.FloorTarget(structure, floor);
+
+        BlockPos extension = new BlockPos(4, 64, 0);
+        FloorSurface extendingSurface = new FloorSurface(Set.of(
+                cell(0, 64, 0), cell(1, 64, 0), cell(2, 64, 0), cell(3, 64, 0), cell(4, 64, 0)),
+                Map.of());
+        StructureScanner.Result extendingScan = new StructureScanner.Result(
+                Building.validationResult.SUCCESS, extension, extension, extension,
+                ScannedFloor.physical(extendingSurface), List.of());
+
+        RoomScanPlan update = village.sameStoreyExpansionPlan(extension,
+                new StructureExpansionPolicy.Match(target, extendingScan));
+
+        assertEquals(Village.RoomScanMode.UPDATE_ROOM, update.mode());
+        assertEquals(room, update.currentRoom().orElseThrow());
+
+        BlockPos newRoomCell = new BlockPos(5, 64, 0);
+        FloorSurface separatedSurface = new FloorSurface(Set.of(
+                cell(0, 64, 0), cell(1, 64, 0), cell(2, 64, 0), cell(3, 64, 0),
+                cell(5, 64, 0), cell(6, 64, 0), cell(7, 64, 0), cell(8, 64, 0)),
+                Map.of(new BlockPos(4, 64, 0), StructureFloor.ConnectorType.DOOR));
+        StructureScanner.Result separatedScan = new StructureScanner.Result(
+                Building.validationResult.SUCCESS, newRoomCell, newRoomCell, newRoomCell,
+                ScannedFloor.physical(separatedSurface), List.of());
+
+        RoomScanPlan add = village.sameStoreyExpansionPlan(newRoomCell,
+                new StructureExpansionPolicy.Match(target, separatedScan));
+
+        assertEquals(Village.RoomScanMode.ADD_ROOM, add.mode());
+        assertEquals(10, add.targetStructureId());
+        assertEquals(0, add.targetFloorId());
+    }
+
+    @Test
+    void persistedCeilingBoundaryCellResolvesLowerFloorUnlessUpperFloorOwnsSameColumn() {
+        BuildingFloorRegion lowerRegion = BuildingFloorRegion.fromFootprint(88, Set.of(
+                new BlockPos(0, 88, 0), new BlockPos(1, 88, 0)));
+        BuildingFloorRegion lowerBoundary = BuildingFloorRegion.fromFootprint(91, Set.of(
+                new BlockPos(1, 91, 0)));
+        StructureFloor lower = new StructureFloor(
+                0, 88, 91, 0, lowerRegion, lowerBoundary, List.of());
+        StructureFloor upper = new StructureFloor(
+                1, 91, 94, 1,
+                BuildingFloorRegion.fromFootprint(91, Set.of(new BlockPos(0, 91, 0))));
+        Structure structure = structure(lower, upper);
+
+        assertEquals(lower, structure.physicalFloorAt(new BlockPos(1, 91, 0)).orElseThrow());
+        assertEquals(upper, structure.physicalFloorAt(new BlockPos(0, 91, 0)).orElseThrow());
     }
 
     private static Structure structure(StructureFloor... floors) {

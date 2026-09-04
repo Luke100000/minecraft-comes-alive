@@ -221,6 +221,33 @@ public class Village implements Iterable<Building> {
         structures.put(structure.getId(), structure);
     }
 
+    boolean replaceStructureAndRegisterRoom(Structure refreshed, Building room) {
+        if (refreshed == null || room == null || !room.isFunctionalRoom() || room.getId() < 0) return false;
+        Structure current = structures.get(refreshed.getId());
+        if (current == null || current.getLogicalBuildingId() != refreshed.getLogicalBuildingId()) return false;
+        if (buildings.containsKey(room.getId()) || externalBuildings.containsKey(room.getId())) return false;
+        if (room.getStructureId() != refreshed.getId()) return false;
+
+        StructureFloor floor = refreshed.getFloor(room.getFloorId()).orElse(null);
+        BuildingFloorRegion roomRegion = room.getFloorRegion().orElse(null);
+        if (floor == null || roomRegion == null || roomRegion.area() == 0
+                || floor.region().intersectionArea(roomRegion) != roomRegion.area()) {
+            return false;
+        }
+        boolean overlapsRegisteredRoom = buildings.values().stream()
+                .filter(Building::isFunctionalRoom)
+                .filter(existing -> existing.getStructureId() == refreshed.getId())
+                .filter(existing -> existing.getFloorId() == room.getFloorId())
+                .anyMatch(existing -> existing.getFloorFootprintIntersectionArea(room) > 0);
+        if (overlapsRegisteredRoom) return false;
+
+        structures.put(refreshed.getId(), refreshed);
+        buildings.put(room.getId(), room);
+        reconcileLogicalBuilding(refreshed.getLogicalBuildingId());
+        calculateDimensions();
+        return true;
+    }
+
     void removeRooms(Collection<Integer> roomIds) {
         roomIds.forEach(buildings::remove);
     }
@@ -367,6 +394,20 @@ public class Village implements Iterable<Building> {
         return structures.values().stream()
                 .filter(structure -> structure.containsPos(pos))
                 .min(Comparator.comparingInt(Structure::getId));
+    }
+
+    boolean hasRegisteredFloorOverlap(Structure candidate) {
+        if (candidate == null) return false;
+        for (StructureFloor candidateFloor : candidate.getFloors()) {
+            for (Structure registered : structures.values()) {
+                for (StructureFloor registeredFloor : registered.getFloors()) {
+                    if (candidateFloor.overlapsSameSemanticBand(registeredFloor)) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
     }
 
     public void calculateDimensions() {
@@ -581,6 +622,19 @@ public class Village implements Iterable<Building> {
         Optional<ResolvedInteraction> resolved = resolveInteractionPosition(pos);
         if (resolved.isPresent()) {
             ResolvedInteraction interaction = resolved.get();
+            if (level != null
+                    && source.getY() > interaction.position().floor().anchorY() + StructureFloor.BAND_TOLERANCE) {
+                StructureScanner.AttachmentSeed fresh =
+                        StructureScanner.resolveAttachmentSeed(level, source).orElse(null);
+                if (fresh != null) {
+                    StructureFloor freshFloor = fresh.floor().persistedFloor();
+                    if (!StructureFloor.sameSemanticBand(
+                            freshFloor.anchorY(), interaction.position().floor().anchorY())) {
+                        return attachmentPlan(level, source, fresh)
+                                .orElseGet(() -> RoomScanPlan.addBuilding(source));
+                    }
+                }
+            }
             Building room = interaction.position().room();
             if (room != null) return RoomScanPlan.updateRoom(room, source);
             return RoomScanPlan.addRoom(
@@ -588,16 +642,33 @@ public class Village implements Iterable<Building> {
         }
 
         if (level == null) return RoomScanPlan.addBuilding(source);
+        StructureExpansionPolicy.Match expansion = StructureExpansionPolicy.findSameStoreyTarget(
+                level, structures.values(), source).orElse(null);
+        if (expansion != null) return sameStoreyExpansionPlan(source, expansion);
         return attachmentPlan(level, source).orElseGet(() -> RoomScanPlan.addBuilding(source));
+    }
+
+    RoomScanPlan sameStoreyExpansionPlan(BlockPos source, StructureExpansionPolicy.Match expansion) {
+        StructureExpansionPolicy.FloorTarget target = expansion.target();
+        Building existingRoom = StructureExpansionPolicy.registeredRoomForFreshComponent(
+                target, expansion.scan().scannedFloor(), source, buildings.values()).orElse(null);
+        if (existingRoom != null) return RoomScanPlan.updateRoom(existingRoom, source);
+        return RoomScanPlan.addRoom(target.structure().getId(), target.floor().id(), source);
     }
 
     private Optional<RoomScanPlan> attachmentPlan(Level level, BlockPos source) {
         StructureScanner.AttachmentSeed attachmentSeed =
                 StructureScanner.resolveAttachmentSeed(level, source).orElse(null);
         if (attachmentSeed == null) return Optional.empty();
+        return attachmentPlan(level, source, attachmentSeed);
+    }
 
-        StructureFloor candidateFloor = StructureScanner.persistedFloor(attachmentSeed.surface());
-        AttachmentTarget target = resolveAttachmentTarget(level, candidateFloor).orElse(null);
+    private Optional<RoomScanPlan> attachmentPlan(Level level,
+                                                  BlockPos source,
+                                                  StructureScanner.AttachmentSeed attachmentSeed) {
+        StructureFloor candidateFloor = attachmentSeed.floor().persistedFloor();
+        AttachmentTarget target = resolveAttachmentTarget(
+                level, candidateFloor, attachmentSeed.connectedFloors()).orElse(null);
         if (target == null) return Optional.empty();
 
         Structure candidate = new Structure(-1, attachmentSeed.seed(), List.of(candidateFloor));
@@ -608,26 +679,39 @@ public class Village implements Iterable<Building> {
     }
 
     Optional<AttachmentTarget> resolveAttachmentTarget(Level level, StructureFloor candidate) {
+        return resolveAttachmentTarget(level, candidate, List.of());
+    }
+
+    Optional<AttachmentTarget> resolveAttachmentTarget(
+            Level level,
+            StructureFloor candidate,
+            Collection<ScannedFloor> connectedFloors) {
         return selectAttachmentTarget(candidate,
-                StructureConnector.verticalConnections(level, candidate, structures.values()));
+                StructureConnector.verticalConnections(level, candidate, structures.values()),
+                connectedFloors);
     }
 
     Optional<AttachmentTarget> selectAttachmentTarget(
             StructureFloor candidate,
             Collection<StructureConnector.VerticalConnection> connections) {
+        return selectAttachmentTarget(candidate, connections, List.of());
+    }
+
+    Optional<AttachmentTarget> selectAttachmentTarget(
+            StructureFloor candidate,
+            Collection<StructureConnector.VerticalConnection> verticalConnections,
+            Collection<ScannedFloor> connectedFloors) {
         if (candidate == null) return Optional.empty();
-        boolean overlapsRegisteredFloor = structures.values().stream()
-                .flatMap(structure -> structure.getFloors().stream())
-                .filter(floor -> candidate.verticalGapTo(floor) < 0)
-                .anyMatch(floor -> candidate.region().intersectionArea(floor.region()) > 0);
-        if (overlapsRegisteredFloor) return Optional.empty();
+        Set<AttachmentConnection> connections = attachmentConnections(
+                candidate, verticalConnections, connectedFloors);
+        if (hasUnprovenAttachmentOverlap(candidate, connections)) return Optional.empty();
 
         Map<Integer, AttachmentTarget> nearestByBuilding = new HashMap<>();
-        for (StructureConnector.VerticalConnection connection : connections) {
+        for (AttachmentConnection connection : connections) {
             Structure structure = connection.structure();
             StructureFloor floor = connection.floor();
             if (structures.get(structure.getId()) != structure) continue;
-            int gap = candidate.verticalGapTo(floor);
+            int gap = candidate.attachmentGapTo(floor);
             if (gap < 0) continue;
             AttachmentTarget target = new AttachmentTarget(
                     structure.getLogicalBuildingId(), structure.getId(), floor.id(), gap);
@@ -642,6 +726,49 @@ public class Village implements Iterable<Building> {
                 .anyMatch(target -> target.buildingId() != nearest.buildingId()
                         && target.gap() == nearest.gap())
                 ? Optional.empty() : Optional.of(nearest);
+    }
+
+    private Set<AttachmentConnection> attachmentConnections(
+            StructureFloor candidate,
+            Collection<StructureConnector.VerticalConnection> verticalConnections,
+            Collection<ScannedFloor> connectedFloors) {
+        LinkedHashSet<AttachmentConnection> connections = new LinkedHashSet<>();
+        if (verticalConnections != null) {
+            for (StructureConnector.VerticalConnection connection : verticalConnections) {
+                connections.add(new AttachmentConnection(connection.structure(), connection.floor()));
+            }
+        }
+        if (connectedFloors == null) return Set.copyOf(connections);
+
+        for (ScannedFloor band : connectedFloors) {
+            if (StructureFloor.sameSemanticBand(candidate.anchorY(), band.anchorY())) continue;
+            for (Structure structure : structures.values()) {
+                for (StructureFloor floor : structure.getFloors()) {
+                    if (band.overlapsSameSemanticBand(floor)) {
+                        connections.add(new AttachmentConnection(structure, floor));
+                    }
+                }
+            }
+        }
+        return Set.copyOf(connections);
+    }
+
+    private boolean hasUnprovenAttachmentOverlap(
+            StructureFloor candidate,
+            Set<AttachmentConnection> connections) {
+        for (Structure structure : structures.values()) {
+            for (StructureFloor floor : structure.getFloors()) {
+                if (!candidate.overlapsFootprint(floor)
+                        || candidate.verticalGapTo(floor) >= 0) {
+                    continue;
+                }
+                if (candidate.sameSemanticBand(floor)
+                        || !connections.contains(new AttachmentConnection(structure, floor))) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     Optional<Structure> getInteractionStructureAt(BlockPos pos) {
@@ -816,7 +943,27 @@ public class Village implements Iterable<Building> {
             removeLogicalBuilding(buildingId);
             return;
         }
+        repairSemanticFloorCeilings(buildingId);
         applyFloorNumbers(logical);
+    }
+
+    private void repairSemanticFloorCeilings(int buildingId) {
+        List<FloorRef> floors = getBuildingStructures(buildingId).stream()
+                .flatMap(structure -> structure.getFloors().stream()
+                        .map(floor -> new FloorRef(structure, floor)))
+                .toList();
+        for (FloorRef lower : floors) {
+            int boundary = floors.stream()
+                    .map(FloorRef::floor)
+                    .filter(upper -> upper.anchorY() > lower.floor().anchorY() + StructureFloor.BAND_TOLERANCE)
+                    .filter(lower.floor()::overlapsFootprint)
+                    .mapToInt(StructureFloor::anchorY)
+                    .min()
+                    .orElse(lower.floor().ceilingY());
+            if (boundary >= lower.floor().ceilingY()) continue;
+            lower.structure().replaceFloorGeometry(lower.floor().id(), lower.floor().withGeometry(
+                    lower.floor().anchorY(), boundary, lower.floor().region()));
+        }
     }
 
     private boolean validMainRoom(LogicalBuilding logical) {
@@ -917,6 +1064,9 @@ public class Village implements Iterable<Building> {
     private record FloorRef(Structure structure, StructureFloor floor) {
     }
 
+    private record AttachmentConnection(Structure structure, StructureFloor floor) {
+    }
+
     record AttachmentTarget(int buildingId, int structureId, int floorId, int gap) {
     }
 
@@ -953,7 +1103,7 @@ public class Village implements Iterable<Building> {
                 .thenComparingInt(ref -> ref.floor().id()));
         if (floors.isEmpty()) return Map.of();
 
-        int tolerance = FloorSurface.BAND_TOLERANCE;
+        int tolerance = StructureFloor.BAND_TOLERANCE;
         List<List<FloorRef>> bands = new ArrayList<>();
         for (FloorRef ref : floors) {
             List<FloorRef> band = bands.isEmpty() ? null : bands.getLast();

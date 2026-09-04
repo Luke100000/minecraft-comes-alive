@@ -148,7 +148,7 @@ public class Building implements VillageBuilding {
     }
 
     public boolean containsFloorPosition(Vec3i pos) {
-        return getFloorDistanceTo(pos) <= FloorSurface.BAND_TOLERANCE
+        return getFloorDistanceTo(pos) <= StructureFloor.BAND_TOLERANCE
                 && containsFloorColumn(pos.getX(), pos.getZ());
     }
 

@@ -164,10 +164,15 @@ final class StructureConnector {
         return result;
     }
 
-    private static BlockPos floorHandoff(StructureFloor floor, BlockPos connector) {
+    private static BlockPos floorHandoff(StructureFloor floor,
+                                         StructureFloor other,
+                                         BlockPos connector) {
+        int semanticCeilingY = floor.anchorY() < other.anchorY()
+                ? Math.min(floor.ceilingY(), other.anchorY())
+                : floor.ceilingY();
         return handoffs(connector).stream()
                 .filter(candidate -> candidate.getY() >= floor.anchorY()
-                        && candidate.getY() < floor.ceilingY())
+                        && candidate.getY() < semanticCeilingY)
                 .filter(candidate -> floor.contains(candidate.getX(), candidate.getZ()))
                 .findFirst().orElse(null);
     }
@@ -176,11 +181,13 @@ final class StructureConnector {
                                   StructureFloor first,
                                   StructureFloor second) {
         if (connectorColumn == null || connectorColumn.isEmpty() || first == null || second == null
-                || first.verticalGapTo(second) < 0) {
+                || first.attachmentGapTo(second) < 0) {
             return false;
         }
-        boolean touchesFirst = connectorColumn.stream().anyMatch(connector -> floorHandoff(first, connector) != null);
-        boolean touchesSecond = connectorColumn.stream().anyMatch(connector -> floorHandoff(second, connector) != null);
+        boolean touchesFirst = connectorColumn.stream()
+                .anyMatch(connector -> floorHandoff(first, second, connector) != null);
+        boolean touchesSecond = connectorColumn.stream()
+                .anyMatch(connector -> floorHandoff(second, first, connector) != null);
         return touchesFirst && touchesSecond;
     }
 
@@ -284,11 +291,11 @@ final class StructureConnector {
 
             SelectedFloorScanner.Result scan = SelectedFloorScanner.scan(
                     world, candidate, config.maxBuildingSize, config.maxBuildingRadius);
-            if (scan.result() != Building.validationResult.SUCCESS || scan.surface() == null) continue;
+            if (scan.result() != Building.validationResult.SUCCESS || scan.floor() == null) continue;
 
-            Set<BlockPos> candidateFloor = scan.surface().projectedCells();
+            Set<BlockPos> candidateFloor = scan.floor().surface().projectedCells();
             if (selected == null) {
-                selected = new FloorHandoff(candidate.immutable(), scan.surface());
+                selected = new FloorHandoff(candidate.immutable(), scan.floor(), scan.connectedFloors());
                 selectedFloor = candidateFloor;
                 selectedDistance = distance;
                 selectedY = candidate.getY();
@@ -299,9 +306,12 @@ final class StructureConnector {
         return Optional.ofNullable(selected);
     }
 
-    record FloorHandoff(BlockPos seed, FloorSurface surface) {
+    record FloorHandoff(BlockPos seed,
+                        ScannedFloor floor,
+                        List<ScannedFloor> connectedFloors) {
         FloorHandoff {
             seed = seed.immutable();
+            connectedFloors = connectedFloors == null ? List.of() : List.copyOf(connectedFloors);
         }
     }
 

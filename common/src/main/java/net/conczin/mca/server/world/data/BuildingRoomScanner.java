@@ -19,29 +19,32 @@ final class BuildingRoomScanner {
                        BlockPos source,
                        Set<BlockPos> blocked,
                        int maxSize,
-                       StructureFloor floor,
-                       FloorSurface surface) {
-        if (floor == null || surface == null || surface.cells().isEmpty()) {
+                       int floorId,
+                       ScannedFloor floor) {
+        if (floor == null || floor.surface().cells().isEmpty()) {
             return Result.failure(Building.validationResult.TOO_SMALL, source);
         }
+        FloorSurface surface = floor.surface();
         List<FloorSurfacePartitioner.Component> components = FloorSurfacePartitioner.partition(surface);
         FloorSurfacePartitioner.Component selected = FloorSurfacePartitioner.select(source, surface, components);
         return selected == null
                 ? Result.failure(Building.validationResult.TOO_SMALL, source)
-                : materializeComponent(world, source, blocked, maxSize, floor, surface, components, selected);
+                : materializeComponent(world, source, blocked, maxSize,
+                floorId, floor, components, selected);
     }
 
     /** Materializes every fresh topology component without assigning persistence identity. */
     static List<Result> partition(Level world,
                                   BlockPos source,
                                   int maxSize,
-                                  StructureFloor floor,
-                                  FloorSurface surface) {
-        if (floor == null || surface == null || surface.cells().isEmpty()) return List.of();
+                                  int floorId,
+                                  ScannedFloor floor) {
+        if (floor == null || floor.surface().cells().isEmpty()) return List.of();
+        FloorSurface surface = floor.surface();
         List<FloorSurfacePartitioner.Component> components = FloorSurfacePartitioner.partition(surface);
         return components.stream()
                 .map(component -> materializeComponent(
-                        world, source, Set.of(), maxSize, floor, surface, components, component))
+                        world, source, Set.of(), maxSize, floorId, floor, components, component))
                 .sorted(Comparator.comparingInt((Result result) -> result.min().getX())
                         .thenComparingInt(result -> result.min().getZ()))
                 .toList();
@@ -56,10 +59,11 @@ final class BuildingRoomScanner {
             BlockPos source,
             Set<BlockPos> blocked,
             int maxSize,
-            StructureFloor floor,
-            FloorSurface surface,
+            int floorId,
+            ScannedFloor floor,
             List<FloorSurfacePartitioner.Component> components,
             FloorSurfacePartitioner.Component component) {
+        FloorSurface surface = floor.surface();
         Set<BlockPos> footprint = footprintForComponent(component, floor.anchorY());
         if (footprint.size() > maxSize) return Result.failure(Building.validationResult.BLOCK_LIMIT, source);
         Set<BlockPos> blockedCells = blocked == null ? Set.of() : blocked;
@@ -73,8 +77,8 @@ final class BuildingRoomScanner {
         int maxX = footprint.stream().mapToInt(BlockPos::getX).max().orElse(source.getX());
         int maxZ = footprint.stream().mapToInt(BlockPos::getZ).max().orElse(source.getZ());
         int maxY = component.cells().stream().mapToInt(cell -> cell.ceilingY() - 1)
-                .max().orElse(Math.max(floor.anchorY(), floor.ceilingY() - 1));
-        return new Result(Building.validationResult.SUCCESS, seed, floor.id(), floor.anchorY(), footprint, poi,
+                .max().orElse(Math.max(floor.anchorY(), floor.semanticCeilingY() - 1));
+        return new Result(Building.validationResult.SUCCESS, seed, floorId, floor.anchorY(), footprint, poi,
                 new BlockPos(minX, floor.anchorY(), minZ),
                 new BlockPos(maxX, maxY, maxZ));
     }

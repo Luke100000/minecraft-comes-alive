@@ -49,12 +49,6 @@ class FloorSurfaceTest {
     }
 
     @Test
-    void rejectsGeometryThatSpansMoreThanOneSemanticFloorBand() {
-        assertThrows(IllegalArgumentException.class,
-                () -> new FloorSurface(Set.of(cell(0, 64, 0), cell(1, 67, 0)), Map.of()));
-    }
-
-    @Test
     void persistedRegionIncludesConnectorFloorCells() {
         BlockPos connector = new BlockPos(1, 64, 0);
         FloorSurface surface = new FloorSurface(Set.of(

@@ -79,4 +79,34 @@ class StructureFloorTest {
 
         assertThrows(IllegalArgumentException.class, () -> StructureFloor.load(tag));
     }
+
+    @Test
+    void attachmentGapUsesSemanticBandsWhenLegacyCeilingsOverlap() {
+        BuildingFloorRegion lowerRegion = BuildingFloorRegion.fromFootprint(
+                88, Set.of(new BlockPos(0, 88, 0)));
+        BuildingFloorRegion upperRegion = BuildingFloorRegion.fromFootprint(
+                91, Set.of(new BlockPos(0, 91, 0)));
+        StructureFloor staleLower = new StructureFloor(0, 88, 93, 0, lowerRegion);
+        StructureFloor upper = new StructureFloor(0, 91, 94, 1, upperRegion);
+        StructureFloor sameBand = new StructureFloor(0, 90, 94, 0,
+                BuildingFloorRegion.fromFootprint(90, Set.of(new BlockPos(0, 90, 0))));
+
+        assertEquals(0, upper.attachmentGapTo(staleLower));
+        assertEquals(-1, upper.attachmentGapTo(sameBand));
+    }
+
+    @Test
+    void ceilingBoundaryGeometryRoundTripsAndRemainsOptionalForOldSaves() {
+        BuildingFloorRegion footprint = BuildingFloorRegion.fromFootprint(
+                88, Set.of(new BlockPos(0, 88, 0), new BlockPos(1, 88, 0)));
+        BuildingFloorRegion boundary = BuildingFloorRegion.fromFootprint(
+                91, Set.of(new BlockPos(1, 91, 0)));
+        StructureFloor floor = new StructureFloor(0, 88, 91, 0, footprint, boundary, List.of());
+
+        CompoundTag saved = floor.save();
+        assertEquals(boundary, StructureFloor.load(saved).ceilingBoundaryRegion());
+
+        saved.remove("ceilingBoundaryRegion");
+        assertEquals(0, StructureFloor.load(saved).ceilingBoundaryRegion().area());
+    }
 }

@@ -277,6 +277,70 @@ class VillageFloorSystemTest {
     }
 
     @Test
+    void floorAttachmentAcceptsDistinctBandWhenLegacyCeilingOverlaps() {
+        Village village = new Village(1, null);
+        StructureFloor staleLower = new StructureFloor(0, 88, 93, 0, region(88), List.of(
+                new StructureFloor.ConnectorMarker(new BlockPos(0, 88, 0), StructureFloor.ConnectorType.LADDER)));
+        Structure structure = structure(10, 10, staleLower);
+        village.registerStructure(structure, room(100, 10, 0, true));
+
+        StructureFloor upper = new StructureFloor(1, 91, 94, 0, region(91), List.of(
+                new StructureFloor.ConnectorMarker(new BlockPos(0, 91, 0), StructureFloor.ConnectorType.LADDER)));
+        StructureConnector.VerticalConnection connection = new StructureConnector.VerticalConnection(
+                structure, staleLower);
+
+        assertEquals(10, village.selectAttachmentTarget(upper, List.of(connection))
+                .orElseThrow().buildingId());
+    }
+
+    @Test
+    void walkableStoreyEvidenceCanProveStairFloorAttachment() {
+        Village village = new Village(1, null);
+        StructureFloor lower = new StructureFloor(0, 88, 91, 0, region(88));
+        village.registerStructure(structure(10, 10, lower), room(100, 10, 0, true));
+
+        StructureFloor upper = new StructureFloor(1, 91, 94, 0, region(91));
+        List<ScannedFloor> connectedFloors = List.of(
+                scannedFloor(region(88)),
+                scannedFloor(region(91)));
+
+        assertEquals(10, village.selectAttachmentTarget(upper, List.of(), connectedFloors)
+                .orElseThrow().buildingId());
+    }
+
+    @Test
+    void logicalRefreshCapsLegacyLowerCeilingAtNextOverlappingBand() {
+        Village village = new Village(1, null);
+        Structure lower = structure(10, 10,
+                new StructureFloor(0, 88, 93, 0, region(88)));
+        Structure upper = structure(11, 10,
+                new StructureFloor(0, 91, 94, 0, region(91)));
+        village.registerStructure(lower, room(100, 10, 0, true));
+        village.registerStructure(upper, room(101, 11, 0, true));
+
+        village.refreshLogicalBuildings();
+
+        assertEquals(91, lower.getFloor(0).orElseThrow().ceilingY());
+        assertEquals(94, upper.getFloor(0).orElseThrow().ceilingY());
+    }
+
+    @Test
+    void duplicateCheckUsesSemanticBandInsteadOfLegacyCeilingVolume() {
+        Village village = new Village(1, null);
+        Structure staleLower = structure(10, 10,
+                new StructureFloor(0, 88, 93, 0, region(88)));
+        village.registerStructure(staleLower, room(100, 10, 0, true));
+
+        Structure upper = structure(-1, 10,
+                new StructureFloor(0, 91, 94, 0, region(91)));
+        Structure sameBand = structure(-1, 10,
+                new StructureFloor(0, 90, 94, 0, region(90)));
+
+        assertFalse(village.hasRegisteredFloorOverlap(upper));
+        assertTrue(village.hasRegisteredFloorOverlap(sameBand));
+    }
+
+    @Test
     void floorAttachmentRejectsExistingGroundFloorEvenWhenBasementWouldAcceptIt() {
         Village village = new Village(1, null);
         StructureFloor groundFloor = new StructureFloor(0, 64, 68, 0, region(64), List.of(
@@ -482,6 +546,35 @@ class VillageFloorSystemTest {
         assertEquals(List.of(1, 2, 3), VillageManager.fullScanRoomIds(village));
     }
 
+    @Test
+    void expandedStructureAndNewRoomCommitAgainstOneRefreshedFloorGeometry() {
+        Village village = new Village(1, null);
+        BuildingFloorRegion oldRegion = BuildingFloorRegion.fromFootprint(64, Set.of(
+                new BlockPos(0, 64, 0), new BlockPos(1, 64, 0)));
+        StructureFloor oldFloor = new StructureFloor(0, 64, 68, 0, oldRegion);
+        Structure current = structure(10, 10, oldFloor);
+        Building main = room(100, 10, 0, true);
+        main.setGeometry(new BlockPos(0, 64, 0), new BlockPos(1, 67, 0), oldRegion);
+        village.registerStructure(current, main);
+
+        BuildingFloorRegion freshRegion = BuildingFloorRegion.fromFootprint(64, Set.of(
+                new BlockPos(0, 64, 0), new BlockPos(1, 64, 0),
+                new BlockPos(2, 64, 0), new BlockPos(3, 64, 0)));
+        Structure refreshed = current.copy();
+        assertTrue(refreshed.replaceFloorGeometry(0,
+                new StructureFloor(0, 64, 68, 0, freshRegion)));
+
+        Building added = room(101, 10, 0, true);
+        BuildingFloorRegion addedRegion = BuildingFloorRegion.fromFootprint(64, Set.of(
+                new BlockPos(2, 64, 0), new BlockPos(3, 64, 0)));
+        added.setGeometry(new BlockPos(2, 64, 0), new BlockPos(3, 67, 0), addedRegion);
+
+        assertTrue(village.replaceStructureAndRegisterRoom(refreshed, added));
+        assertEquals(4, village.getStructure(10).orElseThrow().getFloor(0).orElseThrow().area());
+        assertEquals(added, village.getBuilding(101).orElseThrow());
+        assertTrue(village.getStructure(10).orElseThrow().containsPos(new BlockPos(3, 64, 0)));
+    }
+
     private static Village populatedVillage() {
         Village village = new Village(1, null);
         village.registerStructure(structure(10, 10), room(1, 10, 0, true));
@@ -532,6 +625,13 @@ class VillageFloorSystemTest {
         return BuildingFloorRegion.fromFootprint(y, Set.of(
                 new BlockPos(0, y, 0), new BlockPos(1, y, 0),
                 new BlockPos(0, y, 1), new BlockPos(1, y, 1)));
+    }
+
+    private static ScannedFloor scannedFloor(BuildingFloorRegion region) {
+        Set<FloorSurface.Cell> cells = region.cells().stream()
+                .map(pos -> new FloorSurface.Cell(pos, pos.getY(), pos.getY() + 4))
+                .collect(java.util.stream.Collectors.toSet());
+        return ScannedFloor.physical(new FloorSurface(cells, Map.of()));
     }
 
     private static Building room(int id, int structureId, int floorId, boolean contributes) {

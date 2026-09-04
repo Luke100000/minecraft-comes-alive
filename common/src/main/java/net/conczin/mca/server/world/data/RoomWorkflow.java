@@ -102,7 +102,9 @@ public final class RoomWorkflow {
     private ResolvedRoom resolveRoom(BlockPos source, int expectedRoomId) {
         if (world == null) return null;
         Village village = manager.findNearestVillage(source, Village.MERGE_MARGIN).orElse(null);
-        Building room = village == null ? null : village.findInteractionRoomAt(source).orElse(null);
+        RoomScanPlan plan = village == null ? null : village.getRoomScanPlan(world, source);
+        Building room = plan == null || plan.mode() != Village.RoomScanMode.UPDATE_ROOM
+                ? null : plan.currentRoom().orElse(null);
         if (room == null || expectedRoomId >= 0 && room.getId() != expectedRoomId) return null;
         return new ResolvedRoom(village, room);
     }

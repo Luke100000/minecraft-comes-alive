@@ -93,22 +93,24 @@ public final class Structure implements VillageBuilding {
         int x = pos.getX();
         int z = pos.getZ();
         return getFloors().stream()
-                .filter(floor -> pos.getY() >= floor.anchorY() - 1 && pos.getY() < floor.ceilingY())
-                .filter(floor -> floor.contains(x, z))
+                .filter(floor -> floor.containsInteractionPosition(x, pos.getY(), z))
                 .min(Comparator.comparingInt((StructureFloor floor) -> Math.abs(floor.anchorY() - pos.getY()))
-                        .thenComparingInt(StructureFloor::anchorY)
+                        .thenComparing(Comparator.comparingInt(StructureFloor::anchorY).reversed())
                         .thenComparingInt(StructureFloor::id));
     }
 
     /** Exact physical membership is the canonical Floor footprint extruded through its vertical band. */
     Optional<StructureFloor> physicalFloorAt(Vec3i pos) {
-        if (pos.getX() < min.getX() || pos.getX() > max.getX()
+        if (pos == null
+                || pos.getX() < min.getX() || pos.getX() > max.getX()
                 || pos.getY() < min.getY() || pos.getY() > max.getY()
                 || pos.getZ() < min.getZ() || pos.getZ() > max.getZ()) {
             return Optional.empty();
         }
-        return floorAtHeight(pos.getY())
-                .filter(floor -> floor.contains(pos.getX(), pos.getZ()));
+        return getFloors().stream()
+                .filter(floor -> floor.containsPhysicalPosition(pos.getX(), pos.getY(), pos.getZ()))
+                .max(Comparator.comparingInt(StructureFloor::anchorY)
+                        .thenComparingInt(StructureFloor::id));
     }
 
     Optional<InteractionPosition> resolveInteractionPosition(BlockPos pos,
@@ -156,6 +158,7 @@ public final class Structure implements VillageBuilding {
                 scannedFloor.ceilingY(),
                 existing.floorNumber(),
                 scannedFloor.region(),
+                scannedFloor.ceilingBoundaryRegion(),
                 scannedFloor.connectors()));
         recomputeBoundsFromFloors();
         return true;
@@ -181,7 +184,9 @@ public final class Structure implements VillageBuilding {
         int maxX = cells.stream().mapToInt(BlockPos::getX).max().orElse(source.getX());
         int maxZ = cells.stream().mapToInt(BlockPos::getZ).max().orElse(source.getZ());
         int minY = current.stream().mapToInt(StructureFloor::anchorY).min().orElse(source.getY());
-        int maxY = current.stream().mapToInt(floor -> floor.ceilingY() - 1).max().orElse(source.getY());
+        int maxY = current.stream().mapToInt(floor -> floor.ceilingY()
+                        - (floor.ceilingBoundaryRegion().area() > 0 ? 0 : 1))
+                .max().orElse(source.getY());
         min = new BlockPos(minX, minY, minZ);
         max = new BlockPos(maxX, maxY, maxZ);
     }

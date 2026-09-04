@@ -16,7 +16,6 @@ record FloorSurface(Set<Cell> cells,
                     Map<Long, Cell> cellsByColumn) {
     /** Matches Minecraft 1.21.1 WalkNodeEvaluator.DEFAULT_MOB_JUMP_HEIGHT. */
     static final double MAX_STEP_HEIGHT = 1.125D;
-    static final int BAND_TOLERANCE = 2;
 
     FloorSurface(Set<Cell> cells, Map<BlockPos, StructureFloor.ConnectorType> connectorTypesByFloorCell) {
         this(cells, connectorTypesByFloorCell, Map.of());
@@ -33,12 +32,6 @@ record FloorSurface(Set<Cell> cells,
             double surfaceY = reference == null ? connectorCell.getY() : reference.surfaceY();
             int ceilingY = reference == null ? connectorCell.getY() + 2 : reference.ceilingY();
             topologyCells.add(new Cell(connectorCell, surfaceY, ceilingY));
-        }
-        int minCellY = topologyCells.stream().mapToInt(cell -> cell.feet().getY()).min().orElse(0);
-        int maxCellY = topologyCells.stream().mapToInt(cell -> cell.feet().getY()).max().orElse(minCellY);
-        if (maxCellY - minCellY > BAND_TOLERANCE) {
-            throw new IllegalArgumentException("FloorSurface spans multiple semantic floor bands: "
-                    + minCellY + ".." + maxCellY);
         }
         cells = Set.copyOf(topologyCells);
         cellsByColumn = indexByColumn(cells);
@@ -64,10 +57,6 @@ record FloorSurface(Set<Cell> cells,
 
     static boolean canStep(double fromSurfaceY, double toSurfaceY) {
         return Math.abs(toSurfaceY - fromSurfaceY) <= MAX_STEP_HEIGHT;
-    }
-
-    static boolean withinBand(int seedY, int candidateY) {
-        return Math.abs(candidateY - seedY) <= BAND_TOLERANCE;
     }
 
     Set<BlockPos> projectedCells() {
