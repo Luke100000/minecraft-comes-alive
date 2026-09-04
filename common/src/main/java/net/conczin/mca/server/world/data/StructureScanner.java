@@ -119,6 +119,28 @@ final class StructureScanner {
         return candidates.size() == 1 ? Optional.of(candidates.getFirst()) : Optional.empty();
     }
 
+    /** Captures one fresh selected-Floor scan together with all attachment evidence derived from it. */
+    static Optional<FloorObservation> observeFloor(Level world,
+                                                   BlockPos source,
+                                                   Collection<Structure> existing) {
+        AttachmentSeed seed = resolveAttachmentSeed(world, source).orElse(null);
+        if (seed == null) return Optional.empty();
+        StructureFloor candidate = new StructureFloor(0, 0, seed.floor());
+        return Optional.of(new FloorObservation(
+                seed.seed(), seed.floor(), seed.connectedFloors(),
+                StructureConnector.verticalConnections(world, candidate, existing)));
+    }
+
+    static Building.validationResult validateObservation(FloorObservation observation,
+                                                          Collection<Structure> existing,
+                                                          int ignoredStructureId,
+                                                          int attachmentBuildingId) {
+        if (observation == null) return Building.validationResult.NOT_IN_BUILDING;
+        StructureFloor floor = new StructureFloor(0, 0, observation.floor());
+        Structure candidate = new Structure(ignoredStructureId, observation.seed(), List.of(floor));
+        return validateCandidate(candidate, floor, existing, ignoredStructureId, attachmentBuildingId);
+    }
+
     static boolean isWalkableAnchor(Level world, BlockPos pos) {
         return SelectedFloorScanner.inspectSurfaceCell(
                 world, pos, new FloorCeilingResolver(world)).isPresent();
@@ -155,17 +177,26 @@ final class StructureScanner {
         FloorGeometry scannedFloor = selected.floor();
         StructureFloor floor = new StructureFloor(0, 0, scannedFloor);
         Structure candidate = new Structure(ignoredStructureId, scanSeed.immutable(), List.of(floor));
+        Building.validationResult validation = validateCandidate(
+                candidate, floor, existing, ignoredStructureId, attachmentBuildingId);
+        if (validation != Building.validationResult.SUCCESS) return Result.failure(validation, interactionSource);
+        return new Result(Building.validationResult.SUCCESS, scanSeed.immutable(),
+                selected.min(), selected.max(), scannedFloor, selected.connectedFloors());
+    }
+
+    private static Building.validationResult validateCandidate(Structure candidate,
+                                                                StructureFloor floor,
+                                                                Collection<Structure> existing,
+                                                                int ignoredStructureId,
+                                                                int attachmentBuildingId) {
         for (Structure other : existing) {
             if (other.getId() == ignoredStructureId || !candidate.intersects(other)) continue;
             boolean permittedAttachmentStack = attachmentBuildingId >= 0
                     && other.getLogicalBuildingId() == attachmentBuildingId
                     && !hasSameBandOverlap(floor, other);
-            if (!permittedAttachmentStack) {
-                return Result.failure(Building.validationResult.OVERLAP, interactionSource);
-            }
+            if (!permittedAttachmentStack) return Building.validationResult.OVERLAP;
         }
-        return new Result(Building.validationResult.SUCCESS, scanSeed.immutable(),
-                selected.min(), selected.max(), scannedFloor, selected.connectedFloors());
+        return Building.validationResult.SUCCESS;
     }
 
     private static boolean hasSameBandOverlap(StructureFloor candidate, Structure structure) {
@@ -203,6 +234,17 @@ final class StructureScanner {
         AttachmentSeed {
             seed = seed.immutable();
             connectedFloors = connectedFloors == null ? List.of() : List.copyOf(connectedFloors);
+        }
+    }
+
+    record FloorObservation(BlockPos seed,
+                            FloorGeometry floor,
+                            List<FloorGeometry> connectedFloors,
+                            List<StructureConnector.VerticalConnection> verticalConnections) {
+        FloorObservation {
+            seed = seed.immutable();
+            connectedFloors = connectedFloors == null ? List.of() : List.copyOf(connectedFloors);
+            verticalConnections = verticalConnections == null ? List.of() : List.copyOf(verticalConnections);
         }
     }
 

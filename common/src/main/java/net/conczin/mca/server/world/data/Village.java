@@ -644,13 +644,13 @@ public class Village implements Iterable<Building> {
             ResolvedInteraction interaction = resolved.get();
             if (level != null
                     && source.getY() > interaction.position().floor().anchorY() + StructureFloor.BAND_TOLERANCE) {
-                StructureScanner.AttachmentSeed fresh =
-                        StructureScanner.resolveAttachmentSeed(level, source).orElse(null);
+                StructureScanner.FloorObservation fresh = StructureScanner.observeFloor(
+                        level, source, structures.values()).orElse(null);
                 if (fresh != null) {
                     StructureFloor freshFloor = new StructureFloor(0, 0, fresh.floor());
                     if (!StructureFloor.sameSemanticBand(
                             freshFloor.anchorY(), interaction.position().floor().anchorY())) {
-                        return attachmentPlan(level, source, fresh)
+                        return RoomScanPlanner.attachmentPlan(this, source, fresh)
                                 .orElseGet(() -> RoomScanPlan.addBuilding(source));
                     }
                 }
@@ -662,52 +662,9 @@ public class Village implements Iterable<Building> {
         }
 
         if (level == null) return RoomScanPlan.addBuilding(source);
-        StructureExpansionPolicy.FloorTarget expansion = StructureExpansionPolicy.findSameStoreyTarget(
-                level, structures.values(), source).orElse(null);
-        if (expansion != null) {
-            RoomScanPlan expansionPlan = sameStoreyExpansionPlan(level, source, expansion).orElse(null);
-            if (expansionPlan != null) return expansionPlan;
-        }
-        return attachmentPlan(level, source).orElseGet(() -> RoomScanPlan.addBuilding(source));
-    }
-
-    private Optional<RoomScanPlan> sameStoreyExpansionPlan(Level level,
-                                                            BlockPos source,
-                                                            StructureExpansionPolicy.FloorTarget target) {
-        Structure structure = structures.get(target.structureId());
-        StructureFloor floor = structure == null ? null : structure.getFloor(target.floorId()).orElse(null);
-        if (level == null || structure == null || floor == null) return Optional.empty();
-        StructureScanner.Result fresh = StructureScanner.scanExistingFloor(
-                level, structure, floor, source, structures.values());
-        if (fresh.result() != Building.validationResult.SUCCESS || fresh.scannedFloor() == null) {
-            return Optional.empty();
-        }
-        Building existingRoom = StructureExpansionPolicy.registeredRoomForFreshComponent(
-                target, fresh.scannedFloor(), source, buildings.values()).orElse(null);
-        if (existingRoom != null) return Optional.of(RoomScanPlan.updateRoom(existingRoom, source));
-        return Optional.of(RoomScanPlan.addRoom(target.structureId(), target.floorId(), source));
-    }
-
-    private Optional<RoomScanPlan> attachmentPlan(Level level, BlockPos source) {
-        StructureScanner.AttachmentSeed attachmentSeed =
-                StructureScanner.resolveAttachmentSeed(level, source).orElse(null);
-        if (attachmentSeed == null) return Optional.empty();
-        return attachmentPlan(level, source, attachmentSeed);
-    }
-
-    private Optional<RoomScanPlan> attachmentPlan(Level level,
-                                                  BlockPos source,
-                                                  StructureScanner.AttachmentSeed attachmentSeed) {
-        StructureFloor candidateFloor = new StructureFloor(0, 0, attachmentSeed.floor());
-        AttachmentTarget target = resolveAttachmentTarget(
-                level, candidateFloor, attachmentSeed.connectedFloors()).orElse(null);
-        if (target == null) return Optional.empty();
-
-        Structure candidate = new Structure(-1, attachmentSeed.seed(), List.of(candidateFloor));
-        int floorNumber = prospectiveFloorNumber(target.buildingId(), candidate, candidateFloor);
-        if (floorNumber == Integer.MIN_VALUE) return Optional.empty();
-        return Optional.of(RoomScanPlan.attachment(
-                target.buildingId(), floorNumber, source, attachmentSeed.seed()));
+        StructureScanner.FloorObservation observation = StructureScanner.observeFloor(
+                level, source, structures.values()).orElse(null);
+        return RoomScanPlanner.planFresh(this, source, observation);
     }
 
     Optional<AttachmentTarget> resolveAttachmentTarget(Level level, StructureFloor candidate) {

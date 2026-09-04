@@ -1,8 +1,6 @@
 package net.conczin.mca.server.world.data;
 
 import net.minecraft.core.BlockPos;
-import net.minecraft.world.level.Level;
-
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -11,19 +9,6 @@ import java.util.Set;
 /** Recovers the identity of a persisted same-storey Floor whose canonical footprint is stale. */
 final class StructureExpansionPolicy {
     private StructureExpansionPolicy() {
-    }
-
-    static Optional<FloorTarget> findSameStoreyTarget(Level world,
-                                                      Collection<Structure> persistedStructures,
-                                                      BlockPos source) {
-        if (world == null || source == null || persistedStructures == null || persistedStructures.isEmpty()) {
-            return Optional.empty();
-        }
-        StructureScanner.Result scan = StructureScanner.scanNewStructure(world, source, List.of());
-        if (scan.result() != Building.validationResult.SUCCESS || scan.scannedFloor() == null) {
-            return Optional.empty();
-        }
-        return selectSameStoreyTarget(persistedStructures, scan.scannedFloor());
     }
 
     static Optional<FloorTarget> selectSameStoreyTarget(Collection<Structure> persistedStructures,
