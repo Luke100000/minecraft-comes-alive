@@ -1,7 +1,6 @@
 package net.conczin.mca.client.gui;
 
 import com.mojang.blaze3d.platform.NativeImage;
-import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -33,9 +32,7 @@ final class BlueprintTerrainRenderer implements AutoCloseable {
     private static final float SLOPE_BRIGHTNESS_PER_BLOCK = 0.055f;
     private static final float MIN_BRIGHTNESS = 0.58f;
     private static final float MAX_BRIGHTNESS = 1.15f;
-    private static final float WATER_BASE_OPACITY = 0.35f;
-    private static final float WATER_DEPTH_OPACITY_PER_BLOCK = 0.015f;
-    private static final float WATER_MAX_OPACITY = 0.60f;
+    private static final float WATER_BLEND = 0.625f;
 
     private final LinkedHashMap<TileKey, TerrainTile> tiles = new LinkedHashMap<>(16, 0.75f, true);
 
@@ -80,33 +77,20 @@ final class BlueprintTerrainRenderer implements AutoCloseable {
     }
 
     private void renderTile(GuiGraphics context, TerrainTile tile) {
-        if (tile.terrainTextureLocation == null) createTextures(tile);
+        if (tile.terrainTextureLocation == null) createTexture(tile);
         if (tile.terrainTextureLocation == null) return;
 
         context.blit(tile.terrainTextureLocation, tile.minX, tile.minZ,
                 TILE_BLOCK_SIZE, TILE_BLOCK_SIZE, 0.0F, 0.0F,
                 TILE_BLOCK_SIZE, TILE_BLOCK_SIZE, TILE_BLOCK_SIZE, TILE_BLOCK_SIZE);
-
-        if (tile.waterTextureLocation != null) {
-            context.flush();
-            RenderSystem.enableBlend();
-            RenderSystem.defaultBlendFunc();
-            context.blit(tile.waterTextureLocation, tile.minX, tile.minZ,
-                    TILE_BLOCK_SIZE, TILE_BLOCK_SIZE, 0.0F, 0.0F,
-                    TILE_BLOCK_SIZE, TILE_BLOCK_SIZE, TILE_BLOCK_SIZE, TILE_BLOCK_SIZE);
-            context.flush();
-            RenderSystem.disableBlend();
-        }
     }
 
-    private void createTextures(TerrainTile tile) {
+    private void createTexture(TerrainTile tile) {
         Minecraft minecraft = Minecraft.getInstance();
         TerrainTile.Cell[][] cells = tile.cells;
         if (cells.length == 0 || cells[0].length == 0) return;
 
         NativeImage terrainImage = new NativeImage(TILE_BLOCK_SIZE, TILE_BLOCK_SIZE, true);
-        NativeImage waterImage = new NativeImage(TILE_BLOCK_SIZE, TILE_BLOCK_SIZE, true);
-        boolean hasWater = false;
         int firstCellX = TerrainTile.firstCell(tile.minX, tile.sampleStep);
         int firstCellZ = TerrainTile.firstCell(tile.minZ, tile.sampleStep);
 
@@ -120,10 +104,9 @@ final class BlueprintTerrainRenderer implements AutoCloseable {
                 int westHeight = tile.heightAt(cellX - 1, cellZ, cell.height);
                 int eastHeight = tile.heightAt(cellX + 1, cellZ, cell.height);
 
-                int color = shadeColor(cell.groundColor(),
+                int color = shadeColor(cell.surfaceColor(),
                         hillshadeBrightness(westHeight, eastHeight, northHeight, southHeight));
                 int nativeColor = FastColor.ABGR32.fromArgb32(color);
-                int nativeWaterColor = FastColor.ABGR32.fromArgb32(cell.waterOverlayColor());
                 int cellMinX = firstCellX + cellX * tile.sampleStep;
                 int cellMinZ = firstCellZ + cellZ * tile.sampleStep;
                 int minPixelX = Math.max(cellMinX, tile.minX) - tile.minX;
@@ -135,10 +118,6 @@ final class BlueprintTerrainRenderer implements AutoCloseable {
                 for (int pixelX = minPixelX; pixelX < maxPixelX; pixelX++) {
                     for (int pixelZ = minPixelZ; pixelZ < maxPixelZ; pixelZ++) {
                         terrainImage.setPixelRGBA(pixelX, pixelZ, nativeColor);
-                        if (cell.waterOverlayColor() != 0) {
-                            waterImage.setPixelRGBA(pixelX, pixelZ, nativeWaterColor);
-                            hasWater = true;
-                        }
                     }
                 }
 
@@ -166,14 +145,6 @@ final class BlueprintTerrainRenderer implements AutoCloseable {
         DynamicTexture terrainTexture = new DynamicTexture(terrainImage);
         terrainTexture.setFilter(false, false);
         tile.terrainTextureLocation = minecraft.getTextureManager().register("mca_blueprint_terrain", terrainTexture);
-
-        if (hasWater) {
-            DynamicTexture waterTexture = new DynamicTexture(waterImage);
-            waterTexture.setFilter(false, false);
-            tile.waterTextureLocation = minecraft.getTextureManager().register("mca_blueprint_water", waterTexture);
-        } else {
-            waterImage.close();
-        }
     }
 
     private static int blendContour(int baseColor) {
@@ -201,11 +172,19 @@ final class BlueprintTerrainRenderer implements AutoCloseable {
         return 0xff000000 | (red << 16) | (green << 8) | blue;
     }
 
-    static int waterOverlayColor(int biomeWaterColor, int depth) {
-        float opacity = Math.min(WATER_MAX_OPACITY,
-                WATER_BASE_OPACITY + Math.max(0, depth) * WATER_DEPTH_OPACITY_PER_BLOCK);
-        int alpha = Math.round(opacity * 255.0f);
-        return (alpha << 24) | (biomeWaterColor & 0x00ffffff);
+    static int waterColor(int groundColor, int biomeWaterColor) {
+        return blendOpaque(groundColor, biomeWaterColor, WATER_BLEND);
+    }
+
+    private static int blendOpaque(int baseColor, int overlayColor, float opacity) {
+        float inverse = 1.0f - opacity;
+        int red = Math.round(((baseColor >> 16) & 0xff) * inverse
+                + ((overlayColor >> 16) & 0xff) * opacity);
+        int green = Math.round(((baseColor >> 8) & 0xff) * inverse
+                + ((overlayColor >> 8) & 0xff) * opacity);
+        int blue = Math.round((baseColor & 0xff) * inverse
+                + (overlayColor & 0xff) * opacity);
+        return 0xff000000 | (red << 16) | (green << 8) | blue;
     }
 
     private static int shadeColor(int baseColor, float brightness) {
@@ -229,10 +208,6 @@ final class BlueprintTerrainRenderer implements AutoCloseable {
             Minecraft.getInstance().getTextureManager().release(tile.terrainTextureLocation);
             tile.terrainTextureLocation = null;
         }
-        if (tile.waterTextureLocation != null) {
-            Minecraft.getInstance().getTextureManager().release(tile.waterTextureLocation);
-            tile.waterTextureLocation = null;
-        }
     }
 
     @Override
@@ -254,7 +229,6 @@ final class BlueprintTerrainRenderer implements AutoCloseable {
         private final boolean complete;
         private final Cell[][] cells;
         private ResourceLocation terrainTextureLocation;
-        private ResourceLocation waterTextureLocation;
 
         private TerrainTile(int minX,
                             int minZ,
@@ -362,10 +336,9 @@ final class BlueprintTerrainRenderer implements AutoCloseable {
                     int baseColor = mapColor == MapColor.NONE ? FALLBACK_COLOR : mapColor.col;
                     baseColor = biomeTintedColor(level, surfacePos, mapColor, baseColor);
 
-                    int waterOverlayColor = 0;
+                    int surfaceColor = baseColor;
                     if (surfaceState.getFluidState().is(FluidTags.WATER)) {
                         int oceanFloorHeight = level.getHeight(Heightmap.Types.OCEAN_FLOOR, sampleX, sampleZ);
-                        int waterDepth = Math.max(1, surfaceHeight - oceanFloorHeight);
                         int waterTint = unblendedBiomeColor(level, surfacePos, BiomeColors.WATER_COLOR_RESOLVER);
 
                         if (oceanFloorHeight > minBuildHeight) {
@@ -383,10 +356,11 @@ final class BlueprintTerrainRenderer implements AutoCloseable {
                                 terrainHeight = groundPos.getY() + 1;
                             }
                         }
-                        waterOverlayColor = BlueprintTerrainRenderer.waterOverlayColor(waterTint, waterDepth);
+
+                        surfaceColor = BlueprintTerrainRenderer.waterColor(baseColor, waterTint);
                     }
 
-                    cells[cellX][cellZ] = new Cell(terrainHeight, baseColor, waterOverlayColor);
+                    cells[cellX][cellZ] = new Cell(terrainHeight, surfaceColor);
                 }
             }
 
@@ -409,7 +383,7 @@ final class BlueprintTerrainRenderer implements AutoCloseable {
             return resolver.getColor(level.getBiome(pos).value(), pos.getX(), pos.getZ());
         }
 
-        private record Cell(int height, int groundColor, int waterOverlayColor) {
+        private record Cell(int height, int surfaceColor) {
         }
     }
 }

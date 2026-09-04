@@ -28,6 +28,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class BlueprintScreenMapInteractionTest {
@@ -149,21 +150,24 @@ class BlueprintScreenMapInteractionTest {
     }
 
     @Test
-    void waterOverlayStaysTranslucentAndDeepensWithoutBakingInGroundColor() {
+    void underwaterBlockChangesFinalWaterPixel() {
         int water = 0x3f76e4;
+        int sand = 0xffdbd3a0;
+        int stone = 0xff7f7f7f;
 
-        int shallow = BlueprintTerrainRenderer.waterOverlayColor(water, 1);
-        int deep = BlueprintTerrainRenderer.waterOverlayColor(water, 12);
+        int sandPixel = BlueprintTerrainRenderer.waterColor(sand, water);
+        int stonePixel = BlueprintTerrainRenderer.waterColor(stone, water);
 
-        assertEquals(water, shallow & 0x00ffffff);
-        assertEquals(water, deep & 0x00ffffff);
-        assertTrue((shallow >>> 24) > 0);
-        assertTrue((deep >>> 24) > (shallow >>> 24));
-        assertTrue((deep >>> 24) < 0xff);
-        assertTrue((shallow >>> 24) <= Math.round(0.40F * 255.0F),
-                "shallow water must leave most of the underlying terrain visible");
-        assertTrue((deep >>> 24) <= Math.round(0.60F * 255.0F),
-                "deep water must leave at least 40% of the underlying terrain visible");
+        assertNotEquals(sandPixel, stonePixel,
+                "identical water must still reveal which block is underneath");
+        assertEquals(0xff000000, sandPixel & 0xff000000);
+        assertEquals(0xff000000, stonePixel & 0xff000000);
+    }
+
+    @Test
+    void waterColorUsesJourneyMapDefaultEffectiveBlend() {
+        assertEquals(0xff9f9f9f,
+                BlueprintTerrainRenderer.waterColor(0xff000000, 0xffffff));
     }
 
     @Test
@@ -192,9 +196,9 @@ class BlueprintScreenMapInteractionTest {
         Class<?> tileClass = Class.forName(BlueprintTerrainRenderer.class.getName() + "$TerrainTile");
         Class<?> cellClass = Class.forName(BlueprintTerrainRenderer.class.getName() + "$TerrainTile$Cell");
 
-        var cellConstructor = cellClass.getDeclaredConstructor(int.class, int.class, int.class);
+        var cellConstructor = cellClass.getDeclaredConstructor(int.class, int.class);
         cellConstructor.setAccessible(true);
-        Object cachedCell = cellConstructor.newInstance(72, 0xff486a3d, 0);
+        Object cachedCell = cellConstructor.newInstance(72, 0xff486a3d);
 
         Object cells = Array.newInstance(cellClass, 3, 3);
         Array.set(Array.get(cells, 1), 1, cachedCell);
