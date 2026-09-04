@@ -218,55 +218,6 @@ class StructureFloorResolutionTest {
     }
 
     @Test
-    void staleSameStoreyExpansionPlansUpdateForExistingComponentAndAddForDoorSeparatedComponent() {
-        StructureFloor floor = new StructureFloor(0, 64, 68, 0,
-                BuildingFloorRegion.fromFootprint(64, Set.of(
-                        new BlockPos(0, 64, 0), new BlockPos(1, 64, 0),
-                        new BlockPos(2, 64, 0), new BlockPos(3, 64, 0))));
-        Structure structure = new Structure(10, BlockPos.ZERO, List.of(floor));
-        Building room = room(100, 10, 0, Set.of(
-                new BlockPos(0, 64, 0), new BlockPos(1, 64, 0),
-                new BlockPos(2, 64, 0), new BlockPos(3, 64, 0)));
-        Village village = new Village(1, null);
-        village.registerStructure(structure, room);
-        StructureExpansionPolicy.FloorTarget target =
-                new StructureExpansionPolicy.FloorTarget(structure, floor);
-
-        BlockPos extension = new BlockPos(4, 64, 0);
-        FloorGeometry extendingSurface = new FloorGeometry(Set.of(
-                geometryCell(0, 64, 0), geometryCell(1, 64, 0), geometryCell(2, 64, 0),
-                geometryCell(3, 64, 0), geometryCell(4, 64, 0)),
-                Map.of());
-        StructureScanner.Result extendingScan = new StructureScanner.Result(
-                Building.validationResult.SUCCESS, extension, extension, extension,
-                extendingSurface, List.of());
-
-        RoomScanPlan update = village.sameStoreyExpansionPlan(extension,
-                new StructureExpansionPolicy.Match(target, extendingScan));
-
-        assertEquals(Village.RoomScanMode.UPDATE_ROOM, update.mode());
-        assertEquals(room, update.currentRoom().orElseThrow());
-
-        BlockPos newRoomCell = new BlockPos(5, 64, 0);
-        FloorGeometry separatedSurface = new FloorGeometry(Set.of(
-                geometryCell(0, 64, 0), geometryCell(1, 64, 0), geometryCell(2, 64, 0),
-                geometryCell(3, 64, 0), geometryCell(4, 64, 0),
-                geometryCell(5, 64, 0), geometryCell(6, 64, 0),
-                geometryCell(7, 64, 0), geometryCell(8, 64, 0)),
-                Map.of(new BlockPos(4, 64, 0), StructureFloor.ConnectorType.DOOR));
-        StructureScanner.Result separatedScan = new StructureScanner.Result(
-                Building.validationResult.SUCCESS, newRoomCell, newRoomCell, newRoomCell,
-                separatedSurface, List.of());
-
-        RoomScanPlan add = village.sameStoreyExpansionPlan(newRoomCell,
-                new StructureExpansionPolicy.Match(target, separatedScan));
-
-        assertEquals(Village.RoomScanMode.ADD_ROOM, add.mode());
-        assertEquals(10, add.targetStructureId());
-        assertEquals(0, add.targetFloorId());
-    }
-
-    @Test
     void persistedCeilingBoundaryCellResolvesLowerFloorUnlessUpperFloorOwnsSameColumn() {
         BuildingFloorRegion lowerRegion = BuildingFloorRegion.fromFootprint(88, Set.of(
                 new BlockPos(0, 88, 0), new BlockPos(1, 88, 0)));

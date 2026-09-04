@@ -20,8 +20,8 @@ class StructureExpansionPolicyTest {
                 .selectSameStoreyTarget(List.of(persisted), fresh)
                 .orElseThrow();
 
-        assertEquals(20, target.structure().getId());
-        assertEquals(0, target.floor().id());
+        assertEquals(20, target.structureId());
+        assertEquals(0, target.floorId());
     }
 
     @Test
@@ -47,7 +47,7 @@ class StructureExpansionPolicyTest {
     void freshTransitionComponentResolvesExistingRegisteredRoom() {
         Structure persisted = structure(20, 20, floor(0, 88, 91, 0, 3));
         StructureExpansionPolicy.FloorTarget target =
-                new StructureExpansionPolicy.FloorTarget(persisted, persisted.getFloor(0).orElseThrow());
+                new StructureExpansionPolicy.FloorTarget(20, 0);
         Building room = room(100, 20, 0, Set.of(
                 new BlockPos(0, 88, 0), new BlockPos(1, 88, 0),
                 new BlockPos(2, 88, 0), new BlockPos(3, 88, 0)));
@@ -64,7 +64,7 @@ class StructureExpansionPolicyTest {
     void freshComponentAcrossDoorBoundaryRemainsANewRoom() {
         Structure persisted = structure(20, 20, floor(0, 64, 68, 0, 8));
         StructureExpansionPolicy.FloorTarget target =
-                new StructureExpansionPolicy.FloorTarget(persisted, persisted.getFloor(0).orElseThrow());
+                new StructureExpansionPolicy.FloorTarget(20, 0);
         Building existing = room(100, 20, 0, Set.of(
                 new BlockPos(0, 64, 0), new BlockPos(1, 64, 0),
                 new BlockPos(2, 64, 0), new BlockPos(3, 64, 0)));
@@ -84,7 +84,7 @@ class StructureExpansionPolicyTest {
     void sharedDoorCellAloneDoesNotMakeNewComponentAnExistingRoom() {
         Structure persisted = structure(20, 20, floor(0, 64, 68, 0, 8));
         StructureExpansionPolicy.FloorTarget target =
-                new StructureExpansionPolicy.FloorTarget(persisted, persisted.getFloor(0).orElseThrow());
+                new StructureExpansionPolicy.FloorTarget(20, 0);
         BlockPos doorCell = new BlockPos(4, 64, 0);
         Building existing = room(100, 20, 0, Set.of(
                 new BlockPos(0, 64, 0), new BlockPos(1, 64, 0),

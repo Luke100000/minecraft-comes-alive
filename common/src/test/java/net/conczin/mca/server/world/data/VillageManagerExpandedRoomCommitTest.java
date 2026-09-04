@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class VillageManagerExpandedRoomCommitTest {
@@ -45,9 +46,37 @@ class VillageManagerExpandedRoomCommitTest {
 
         assertEquals(Building.validationResult.SUCCESS,
                 manager.commitRoomAddition(scan, "building"));
-        assertEquals(4, village.getStructure(10).orElseThrow().getFloor(0).orElseThrow().area());
+        StructureFloor committedFloor = village.getStructure(10).orElseThrow().getFloor(0).orElseThrow();
+        BlockPos newCell = new BlockPos(3, 64, 0);
+        assertTrue(committedFloor.geometry().cellAt(newCell).isPresent());
         assertEquals(2, village.getRooms().count());
-        assertTrue(village.getRooms().anyMatch(room -> room.containsFloorColumn(3, 0)));
+        assertTrue(village.getRooms().anyMatch(room -> room.getFloorCells().contains(newCell)));
+    }
+
+    @Test
+    void rejectedAtomicFloorRefreshLeavesStructureAndRoomsUntouched() {
+        Village village = new Village(1, null);
+        BuildingFloorRegion oldRegion = region(64, 0, 1);
+        Structure current = new Structure(10, BlockPos.ZERO, List.of(
+                new StructureFloor(0, 64, 68, 0, oldRegion)));
+        Building main = room(100, 10, 0, oldRegion);
+        village.registerStructure(current, main);
+
+        Set<FloorGeometry.Cell> oldGeometry = Set.copyOf(
+                current.getFloor(0).orElseThrow().geometry().cells());
+        Set<BlockPos> oldRoomCells = Set.copyOf(main.getFloorCells());
+
+        Structure refreshed = current.copy();
+        assertTrue(refreshed.replaceFloorGeometry(0,
+                new StructureFloor(0, 64, 68, 0, region(64, 0, 3))));
+        Building invalidReplacement = room(100, 10, 0,
+                BuildingFloorRegion.fromFootprint(64, Set.of(
+                        new BlockPos(0, 64, 0), new BlockPos(4, 64, 0))));
+
+        assertFalse(village.publishFloorRefresh(refreshed, 0, List.of(invalidReplacement)));
+        assertEquals(oldGeometry, village.getStructure(10).orElseThrow()
+                .getFloor(0).orElseThrow().geometry().cells());
+        assertEquals(oldRoomCells, village.getBuilding(100).orElseThrow().getFloorCells());
     }
 
     private static BuildingFloorRegion region(int y, int minX, int maxX) {

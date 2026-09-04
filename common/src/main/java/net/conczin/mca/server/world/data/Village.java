@@ -215,13 +215,6 @@ public class Village implements Iterable<Building> {
         externalBuildings.put(building.getId(), building);
     }
 
-    void replaceStructure(Structure structure) {
-        if (structure == null || !structures.containsKey(structure.getId())) {
-            throw new IllegalArgumentException("Cannot replace an unregistered Structure");
-        }
-        structures.put(structure.getId(), structure);
-    }
-
     boolean replaceStructureAndRegisterRoom(Structure refreshed, Building room) {
         if (refreshed == null || room == null || !room.isFunctionalRoom() || room.getId() < 0) return false;
         Structure current = structures.get(refreshed.getId());
@@ -233,15 +226,67 @@ public class Village implements Iterable<Building> {
         if (floor == null || room.getFloorCells().isEmpty() || !floorContainsRoomCells(floor, room)) {
             return false;
         }
-        boolean overlapsRegisteredRoom = buildings.values().stream()
-                .filter(Building::isFunctionalRoom)
+        List<Building> floorRooms = getRooms()
                 .filter(existing -> existing.getStructureId() == refreshed.getId())
                 .filter(existing -> existing.getFloorId() == room.getFloorId())
-                .anyMatch(existing -> existing.getFloorFootprintIntersectionArea(room) > 0);
-        if (overlapsRegisteredRoom) return false;
+                .collect(Collectors.toCollection(ArrayList::new));
+        floorRooms.add(room);
+        return publishFloorRefresh(refreshed, room.getFloorId(), floorRooms);
+    }
+
+    /**
+     * Atomically validates and publishes one refreshed Floor together with the complete Room set
+     * that owns that Floor. No Village maps are mutated until the replacement state is valid.
+     */
+    boolean publishFloorRefresh(Structure refreshed,
+                                int floorId,
+                                Collection<Building> replacementRooms) {
+        if (refreshed == null || replacementRooms == null) return false;
+        Structure current = structures.get(refreshed.getId());
+        if (current == null || current.getLogicalBuildingId() != refreshed.getLogicalBuildingId()) return false;
+        StructureFloor refreshedFloor = refreshed.getFloor(floorId).orElse(null);
+        if (refreshedFloor == null) return false;
+
+        List<Building> currentFloorRooms = getRooms()
+                .filter(room -> room.getStructureId() == refreshed.getId())
+                .filter(room -> room.getFloorId() == floorId)
+                .toList();
+        Set<Integer> currentFloorRoomIds = currentFloorRooms.stream()
+                .map(Building::getId)
+                .collect(Collectors.toSet());
+        List<Building> replacements = List.copyOf(replacementRooms);
+        Set<Integer> replacementIds = new HashSet<>();
+        Set<BlockPos> ownedCells = new HashSet<>();
+        for (Building room : replacements) {
+            if (room == null || !room.isFunctionalRoom() || room.getId() < 0
+                    || room.getStructureId() != refreshed.getId()
+                    || room.getFloorId() != floorId
+                    || room.getFloorCells().isEmpty()
+                    || !floorContainsRoomCells(refreshedFloor, room)
+                    || !replacementIds.add(room.getId())) {
+                return false;
+            }
+            Building registered = buildings.get(room.getId());
+            if (registered != null && !currentFloorRoomIds.contains(room.getId())) return false;
+            if (externalBuildings.containsKey(room.getId())) return false;
+            for (BlockPos cell : room.getFloorCells()) {
+                if (!ownedCells.add(cell)) return false;
+            }
+        }
+
+        LogicalBuilding logical = logicalBuildings.get(current.getLogicalBuildingId());
+        if (logical != null && currentFloorRoomIds.contains(logical.mainRoomId())
+                && !replacementIds.contains(logical.mainRoomId())) {
+            return false;
+        }
+
+        Map<Integer, Building> nextBuildings = new HashMap<>(buildings);
+        currentFloorRoomIds.forEach(nextBuildings::remove);
+        for (Building room : replacements) nextBuildings.put(room.getId(), room);
 
         structures.put(refreshed.getId(), refreshed);
-        buildings.put(room.getId(), room);
+        buildings.clear();
+        buildings.putAll(nextBuildings);
         reconcileLogicalBuilding(refreshed.getLogicalBuildingId());
         calculateDimensions();
         return true;
@@ -641,18 +686,30 @@ public class Village implements Iterable<Building> {
         }
 
         if (level == null) return RoomScanPlan.addBuilding(source);
-        StructureExpansionPolicy.Match expansion = StructureExpansionPolicy.findSameStoreyTarget(
+        StructureExpansionPolicy.FloorTarget expansion = StructureExpansionPolicy.findSameStoreyTarget(
                 level, structures.values(), source).orElse(null);
-        if (expansion != null) return sameStoreyExpansionPlan(source, expansion);
+        if (expansion != null) {
+            RoomScanPlan expansionPlan = sameStoreyExpansionPlan(level, source, expansion).orElse(null);
+            if (expansionPlan != null) return expansionPlan;
+        }
         return attachmentPlan(level, source).orElseGet(() -> RoomScanPlan.addBuilding(source));
     }
 
-    RoomScanPlan sameStoreyExpansionPlan(BlockPos source, StructureExpansionPolicy.Match expansion) {
-        StructureExpansionPolicy.FloorTarget target = expansion.target();
+    private Optional<RoomScanPlan> sameStoreyExpansionPlan(Level level,
+                                                            BlockPos source,
+                                                            StructureExpansionPolicy.FloorTarget target) {
+        Structure structure = structures.get(target.structureId());
+        StructureFloor floor = structure == null ? null : structure.getFloor(target.floorId()).orElse(null);
+        if (level == null || structure == null || floor == null) return Optional.empty();
+        StructureScanner.Result fresh = StructureScanner.scanExistingFloor(
+                level, structure, floor, source, structures.values());
+        if (fresh.result() != Building.validationResult.SUCCESS || fresh.scannedFloor() == null) {
+            return Optional.empty();
+        }
         Building existingRoom = StructureExpansionPolicy.registeredRoomForFreshComponent(
-                target, expansion.scan().scannedFloor(), source, buildings.values()).orElse(null);
-        if (existingRoom != null) return RoomScanPlan.updateRoom(existingRoom, source);
-        return RoomScanPlan.addRoom(target.structure().getId(), target.floor().id(), source);
+                target, fresh.scannedFloor(), source, buildings.values()).orElse(null);
+        if (existingRoom != null) return Optional.of(RoomScanPlan.updateRoom(existingRoom, source));
+        return Optional.of(RoomScanPlan.addRoom(target.structureId(), target.floorId(), source));
     }
 
     private Optional<RoomScanPlan> attachmentPlan(Level level, BlockPos source) {

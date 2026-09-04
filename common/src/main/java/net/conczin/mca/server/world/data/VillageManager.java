@@ -696,7 +696,9 @@ public class VillageManager extends SavedData implements Iterable<Village> {
             return typeResolution;
         }
 
-        applyRoomAssignments(update, village, structure, assignments, nextRoomId.getAsInt());
+        if (!applyRoomAssignments(update, village, assignments, nextRoomId.getAsInt())) {
+            return Building.validationResult.OVERLAP;
+        }
         return Building.validationResult.SUCCESS;
     }
 
@@ -808,39 +810,25 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         return Building.validationResult.SUCCESS;
     }
 
-    private void applyRoomAssignments(RegisteredRoomUpdate update,
-                                      Village village,
-                                      Structure structure,
-                                      List<RegisteredRoomReconciler.Assignment> assignments,
-                                      int nextRoomId) {
-        Building playerComponent = update.playerComponent();
-        Set<Integer> removedRoomIds = new HashSet<>(update.previousRoomIds());
-        assignments.stream()
-                .map(RegisteredRoomReconciler.Assignment::roomId)
-                .filter(id -> id >= 0)
-                .forEach(removedRoomIds::remove);
-        int mainRoomId = village.getMainRoom(structure).map(Building::getId).orElse(-1);
-        Building replacementMain = removedRoomIds.contains(mainRoomId) ? playerComponent : null;
-
-        village.replaceStructure(update.refreshedStructure());
-        for (RegisteredRoomReconciler.Assignment assignment : assignments) {
-            if (assignment.previous() == null) continue;
-            Building existing = assignment.previous();
-            Building component = assignment.component();
-            existing.copyScannedGeometryFrom(component, world);
-            existing.setType(component.getType());
-            existing.setTypeForced(component.isTypeForced());
-            existing.setContributesToMain(component.contributesToMain());
-        }
-        village.removeRooms(removedRoomIds);
-        assignments.stream().filter(RegisteredRoomReconciler.Assignment::createsRoom)
+    private boolean applyRoomAssignments(RegisteredRoomUpdate update,
+                                         Village village,
+                                         List<RegisteredRoomReconciler.Assignment> assignments,
+                                         int nextRoomId) {
+        Set<Integer> replacedRoomIds = new HashSet<>(update.previousRoomIds());
+        List<Building> replacementRooms = village.getRooms()
+                .filter(room -> room.getStructureId() == update.structureId())
+                .filter(room -> room.getFloorId() == update.floorId())
+                .filter(room -> !replacedRoomIds.contains(room.getId()))
+                .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
+        replacementRooms.addAll(assignments.stream()
                 .map(RegisteredRoomReconciler.Assignment::component)
-                .forEach(village::registerRoom);
-        if (replacementMain != null) {
-            village.setMainRoom(replacementMain);
+                .toList());
+        if (!village.publishFloorRefresh(
+                update.refreshedStructure(), update.floorId(), replacementRooms)) {
+            return false;
         }
-        village.refreshLogicalBuildings();
         lastBuildingId = nextRoomId;
+        return true;
     }
 
     private static String chooseRoomCategory(BuildingScanResult scan, String forcedType) {
