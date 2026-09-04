@@ -108,7 +108,7 @@ class StructureFloorResolutionTest {
                 .findFirst().orElseThrow();
         Set<BlockPos> roomFootprint = BuildingRoomScanner.floorCellsForComponent(owner);
 
-        StructureFloor persistedFloor = ScannedFloor.physical(geometry).persistedFloor();
+        StructureFloor persistedFloor = new StructureFloor(0, 0, geometry);
         Structure structure = new Structure(10, new BlockPos(1, 64, 0), List.of(persistedFloor));
         Building room = new Building(new BlockPos(1, 64, 0));
         room.setId(100);
@@ -130,15 +130,19 @@ class StructureFloorResolutionTest {
     }
 
     @Test
-    void persistedFloorUsesSemanticCeilingInsteadOfTallPhysicalCeiling() {
-        FloorSurface surface = new FloorSurface(Set.of(
-                cell(0, 88, 0), cell(1, 88, 0), cell(2, 88, 0), cell(3, 88, 0),
-                cell(3, 89, 1), cell(3, 90, 2)), Map.of());
+    void semanticCeilingComesFromNextFloorWhilePhysicalCeilingRemainsExact() {
+        FloorGeometry lowerGeometry = new FloorGeometry(Set.of(
+                geometryCell(0, 88, 0), geometryCell(1, 88, 0), geometryCell(2, 88, 0),
+                geometryCell(3, 88, 0), geometryCell(3, 89, 1), geometryCell(3, 90, 2)), Map.of());
+        FloorGeometry upperGeometry = new FloorGeometry(Set.of(
+                geometryCell(0, 91, 3), geometryCell(1, 91, 3),
+                geometryCell(2, 91, 3), geometryCell(3, 91, 3)), Map.of());
+        StructureFloor lower = new StructureFloor(0, 0, lowerGeometry);
+        StructureFloor upper = new StructureFloor(1, 1, upperGeometry);
+        Structure structure = structure(lower, upper);
 
-        StructureFloor floor = new ScannedFloor(surface, 91).persistedFloor();
-
-        assertEquals(94, surface.maxCeilingY());
-        assertEquals(91, floor.ceilingY());
+        assertEquals(94, lower.maxPhysicalCeilingY());
+        assertEquals(91, structure.semanticCeilingY(lower));
     }
 
     @Test
@@ -209,12 +213,13 @@ class StructureFloorResolutionTest {
                 new StructureExpansionPolicy.FloorTarget(structure, floor);
 
         BlockPos extension = new BlockPos(4, 64, 0);
-        FloorSurface extendingSurface = new FloorSurface(Set.of(
-                cell(0, 64, 0), cell(1, 64, 0), cell(2, 64, 0), cell(3, 64, 0), cell(4, 64, 0)),
+        FloorGeometry extendingSurface = new FloorGeometry(Set.of(
+                geometryCell(0, 64, 0), geometryCell(1, 64, 0), geometryCell(2, 64, 0),
+                geometryCell(3, 64, 0), geometryCell(4, 64, 0)),
                 Map.of());
         StructureScanner.Result extendingScan = new StructureScanner.Result(
                 Building.validationResult.SUCCESS, extension, extension, extension,
-                ScannedFloor.physical(extendingSurface), List.of());
+                extendingSurface, List.of());
 
         RoomScanPlan update = village.sameStoreyExpansionPlan(extension,
                 new StructureExpansionPolicy.Match(target, extendingScan));
@@ -223,13 +228,15 @@ class StructureFloorResolutionTest {
         assertEquals(room, update.currentRoom().orElseThrow());
 
         BlockPos newRoomCell = new BlockPos(5, 64, 0);
-        FloorSurface separatedSurface = new FloorSurface(Set.of(
-                cell(0, 64, 0), cell(1, 64, 0), cell(2, 64, 0), cell(3, 64, 0),
-                cell(5, 64, 0), cell(6, 64, 0), cell(7, 64, 0), cell(8, 64, 0)),
+        FloorGeometry separatedSurface = new FloorGeometry(Set.of(
+                geometryCell(0, 64, 0), geometryCell(1, 64, 0), geometryCell(2, 64, 0),
+                geometryCell(3, 64, 0), geometryCell(4, 64, 0),
+                geometryCell(5, 64, 0), geometryCell(6, 64, 0),
+                geometryCell(7, 64, 0), geometryCell(8, 64, 0)),
                 Map.of(new BlockPos(4, 64, 0), StructureFloor.ConnectorType.DOOR));
         StructureScanner.Result separatedScan = new StructureScanner.Result(
                 Building.validationResult.SUCCESS, newRoomCell, newRoomCell, newRoomCell,
-                ScannedFloor.physical(separatedSurface), List.of());
+                separatedSurface, List.of());
 
         RoomScanPlan add = village.sameStoreyExpansionPlan(newRoomCell,
                 new StructureExpansionPolicy.Match(target, separatedScan));

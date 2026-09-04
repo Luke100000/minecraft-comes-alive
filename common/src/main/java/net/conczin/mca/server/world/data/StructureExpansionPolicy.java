@@ -28,11 +28,12 @@ final class StructureExpansionPolicy {
     }
 
     static Optional<FloorTarget> selectSameStoreyTarget(Collection<Structure> persistedStructures,
-                                                        ScannedFloor freshFloor) {
+                                                        FloorGeometry freshFloor) {
         if (persistedStructures == null || freshFloor == null) return Optional.empty();
         List<FloorTarget> matches = persistedStructures.stream()
                 .flatMap(structure -> structure.getFloors().stream()
-                        .filter(freshFloor::overlapsSameSemanticBand)
+                        .filter(floor -> StructureFloor.sameSemanticBand(freshFloor.anchorY(), floor.anchorY()))
+                        .filter(floor -> freshFloor.projection().intersectionArea(floor.region()) > 0)
                         .map(floor -> new FloorTarget(structure, floor)))
                 .limit(2)
                 .toList();
@@ -40,11 +41,11 @@ final class StructureExpansionPolicy {
     }
 
     static Optional<Building> registeredRoomForFreshComponent(FloorTarget target,
-                                                               ScannedFloor floor,
+                                                               FloorGeometry floor,
                                                                BlockPos source,
                                                                Collection<Building> rooms) {
         if (target == null || floor == null || source == null || rooms == null) return Optional.empty();
-        FloorGeometry geometry = floor.geometry();
+        FloorGeometry geometry = floor;
         List<RoomPartitioner.Component> components = RoomPartitioner.partition(geometry);
         RoomPartitioner.Component selected = RoomPartitioner.select(source, geometry, components);
         if (selected == null) return Optional.empty();

@@ -5,65 +5,77 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
 
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
-/** Stable persistent identity for one physical storey in a Structure. */
-public record StructureFloor(int id, int anchorY, int ceilingY, int floorNumber,
-                             BuildingFloorRegion region,
-                             BuildingFloorRegion ceilingBoundaryRegion,
-                             List<ConnectorMarker> connectors) {
+/** Stable persisted identity for one semantic storey around exact 3D geometry. */
+public record StructureFloor(int id, int floorNumber, FloorGeometry geometry) {
     static final int BAND_TOLERANCE = 2;
 
     public StructureFloor {
-        region = Objects.requireNonNull(region, "region");
-        if (region.area() == 0) {
-            throw new IllegalArgumentException("StructureFloor requires non-empty region geometry");
+        geometry = Objects.requireNonNull(geometry, "geometry");
+        if (geometry.cells().isEmpty()) {
+            throw new IllegalArgumentException("StructureFloor requires non-empty geometry");
         }
-        ceilingBoundaryRegion = ceilingBoundaryRegion == null
-                ? BuildingFloorRegion.fromFootprint(ceilingY, List.of())
-                : ceilingBoundaryRegion.withAnchorY(ceilingY);
-        for (BlockPos cell : ceilingBoundaryRegion.cells()) {
-            if (!region.containsHorizontally(cell.getX(), cell.getZ())) {
-                throw new IllegalArgumentException("StructureFloor ceiling boundary must be a subset of its region");
-            }
-        }
-        connectors = connectors == null ? List.of() : List.copyOf(connectors);
     }
 
-    public StructureFloor(int id, int anchorY, int ceilingY, int floorNumber, BuildingFloorRegion region) {
-        this(id, anchorY, ceilingY, floorNumber, region, null, List.of());
+    /** Flat compatibility constructor used by fixtures and legacy migration only. */
+    public StructureFloor(int id, int anchorY, int ceilingY, int floorNumber,
+                          BuildingFloorRegion region) {
+        this(id, floorNumber, geometryFromRegion(region, ceilingY, List.of(), null));
     }
 
+    /** Flat compatibility constructor used by fixtures and legacy migration only. */
     public StructureFloor(int id, int anchorY, int ceilingY, int floorNumber,
                           BuildingFloorRegion region, List<ConnectorMarker> connectors) {
-        this(id, anchorY, ceilingY, floorNumber, region, null, connectors);
+        this(id, floorNumber, geometryFromRegion(region, ceilingY, connectors, null));
+    }
+
+    /** Converts the old sparse semantic-ceiling boundary into ordinary exact cells. */
+    public StructureFloor(int id, int anchorY, int ceilingY, int floorNumber,
+                          BuildingFloorRegion region,
+                          BuildingFloorRegion ceilingBoundaryRegion,
+                          List<ConnectorMarker> connectors) {
+        this(id, floorNumber, geometryFromRegion(region, ceilingY, connectors, ceilingBoundaryRegion));
     }
 
     public StructureFloor(int id, int anchorY, int ceilingY, BuildingFloorRegion region) {
         this(id, anchorY, ceilingY, 0, region);
     }
 
-    public boolean contains(int x, int z) {
-        return region.containsHorizontally(x, z);
+    public int anchorY() {
+        return geometry.anchorY();
+    }
+
+    /** Derived projection only; never authoritative physical topology. */
+    public BuildingFloorRegion region() {
+        return geometry.projection();
     }
 
     public int area() {
-        return region.area();
+        return region().area();
+    }
+
+    public boolean contains(int x, int z) {
+        return !geometry.cellsAtColumn(x, z).isEmpty();
     }
 
     boolean containsPhysicalPosition(int x, int y, int z) {
-        if (!contains(x, z)) return false;
-        return y >= anchorY && y < ceilingY
-                || y == ceilingY && ceilingBoundaryRegion.containsHorizontally(x, z);
+        return geometry.physicalCellAt(x, y, z).isPresent();
     }
 
     boolean containsInteractionPosition(int x, int y, int z) {
-        return contains(x, z) && (y == anchorY - 1 || containsPhysicalPosition(x, y, z));
+        return geometry.interactionCellAt(x, y, z).isPresent();
     }
 
     boolean sameSemanticBand(StructureFloor other) {
-        return other != null && sameSemanticBand(anchorY, other.anchorY);
+        return other != null && sameSemanticBand(anchorY(), other.anchorY());
     }
 
     static boolean sameSemanticBand(int firstAnchorY, int secondAnchorY) {
@@ -71,7 +83,7 @@ public record StructureFloor(int id, int anchorY, int ceilingY, int floorNumber,
     }
 
     boolean overlapsFootprint(StructureFloor other) {
-        return other != null && region.intersectionArea(other.region) > 0;
+        return other != null && region().intersectionArea(other.region()) > 0;
     }
 
     boolean overlapsSameSemanticBand(StructureFloor other) {
@@ -79,8 +91,12 @@ public record StructureFloor(int id, int anchorY, int ceilingY, int floorNumber,
     }
 
     int verticalGapTo(StructureFloor other) {
-        if (ceilingY <= other.anchorY) return other.anchorY - ceilingY;
-        if (other.ceilingY <= anchorY) return anchorY - other.ceilingY;
+        int ownMin = geometry.minFeetY();
+        int ownMax = geometry.maxPhysicalCeilingY();
+        int otherMin = other.geometry.minFeetY();
+        int otherMax = other.geometry.maxPhysicalCeilingY();
+        if (ownMax <= otherMin) return otherMin - ownMax;
+        if (otherMax <= ownMin) return ownMin - otherMax;
         return -1;
     }
 
@@ -89,50 +105,131 @@ public record StructureFloor(int id, int anchorY, int ceilingY, int floorNumber,
         return Math.max(0, verticalGapTo(other));
     }
 
+    public List<ConnectorMarker> connectors() {
+        return geometry.connectorMarkers();
+    }
+
+    int maxPhysicalCeilingY() {
+        return geometry.maxPhysicalCeilingY();
+    }
+
+    /** Transitional physical accessor; semantic ceilings are Structure-level. */
+    public int ceilingY() {
+        return maxPhysicalCeilingY();
+    }
+
     public CompoundTag save() {
         CompoundTag tag = new CompoundTag();
         tag.putInt("id", id);
-        tag.putInt("anchorY", anchorY);
-        tag.putInt("ceilingY", ceilingY);
-        tag.put("region", region.save());
-        if (ceilingBoundaryRegion.area() > 0) {
-            tag.put("ceilingBoundaryRegion", ceilingBoundaryRegion.save());
-        }
-        if (!connectors.isEmpty()) {
-            tag.put("connectors", NbtHelper.fromList(connectors, ConnectorMarker::save));
+        tag.put("cells", NbtHelper.fromList(geometry.cells().stream()
+                .sorted(Comparator
+                        .comparingInt((FloorGeometry.Cell cell) -> cell.feet().getX())
+                        .thenComparingInt(cell -> cell.feet().getZ())
+                        .thenComparingInt(cell -> cell.feet().getY()))
+                .toList(), StructureFloor::saveCell));
+        if (!connectors().isEmpty()) {
+            tag.put("connectors", NbtHelper.fromList(connectors(), ConnectorMarker::save));
         }
         return tag;
     }
 
     public static StructureFloor load(CompoundTag tag) {
+        if (tag.contains("cells", Tag.TAG_LIST)) {
+            List<FloorGeometry.Cell> cells = NbtHelper.toList(
+                    tag.getList("cells", Tag.TAG_COMPOUND), value -> loadCell((CompoundTag) value));
+            return new StructureFloor(tag.getInt("id"), 0,
+                    new FloorGeometry(cells, connectorMap(tag, cells)));
+        }
+
+        // Transitional loader; Task 7 moves this old-shape interpretation into RoomDFU only.
         if (!tag.contains("region", Tag.TAG_COMPOUND)) {
-            throw new IllegalArgumentException("StructureFloor is missing required region geometry");
+            throw new IllegalArgumentException("StructureFloor is missing required geometry");
         }
         BuildingFloorRegion region = BuildingFloorRegion.load(tag.getCompound("region"));
         int ceilingY = tag.getInt("ceilingY");
-        BuildingFloorRegion ceilingBoundaryRegion = tag.contains("ceilingBoundaryRegion", Tag.TAG_COMPOUND)
+        BuildingFloorRegion boundary = tag.contains("ceilingBoundaryRegion", Tag.TAG_COMPOUND)
                 ? BuildingFloorRegion.load(tag.getCompound("ceilingBoundaryRegion")).withAnchorY(ceilingY)
-                : BuildingFloorRegion.fromFootprint(ceilingY, List.of());
-        List<ConnectorMarker> connectors = tag.contains("connectors", Tag.TAG_LIST)
-                ? NbtHelper.toList(tag.getList("connectors", Tag.TAG_COMPOUND),
-                value -> ConnectorMarker.load((CompoundTag) value)).stream()
-                .filter(Objects::nonNull)
-                .toList()
-                : List.of();
-        return new StructureFloor(tag.getInt("id"), tag.getInt("anchorY"), ceilingY,
-                0, region, ceilingBoundaryRegion, connectors);
+                : null;
+        return new StructureFloor(tag.getInt("id"), region.anchorY(), ceilingY, 0,
+                region, boundary, loadMarkers(tag));
     }
 
+    StructureFloor withGeometry(FloorGeometry newGeometry) {
+        return new StructureFloor(id, floorNumber, newGeometry);
+    }
+
+    /** Transitional flat helper for old callers; removed once all scanners carry exact geometry. */
     public StructureFloor withGeometry(int anchorY, int ceilingY, BuildingFloorRegion region) {
-        BuildingFloorRegion boundary = this.ceilingY == ceilingY
-                ? ceilingBoundaryRegion
-                : BuildingFloorRegion.fromFootprint(ceilingY, List.of());
-        return new StructureFloor(id, anchorY, ceilingY, floorNumber, region, boundary, connectors);
+        return new StructureFloor(id, anchorY, ceilingY, floorNumber, region, connectors());
     }
 
     public StructureFloor withFloorNumber(int newFloorNumber) {
-        return new StructureFloor(id, anchorY, ceilingY, newFloorNumber,
-                region, ceilingBoundaryRegion, connectors);
+        return new StructureFloor(id, newFloorNumber, geometry);
+    }
+
+    private static FloorGeometry geometryFromRegion(BuildingFloorRegion region,
+                                                    int ceilingY,
+                                                    Collection<ConnectorMarker> markers,
+                                                    BuildingFloorRegion boundary) {
+        Objects.requireNonNull(region, "region");
+        if (region.area() == 0) {
+            throw new IllegalArgumentException("StructureFloor requires non-empty region geometry");
+        }
+        LinkedHashMap<BlockPos, FloorGeometry.Cell> cells = new LinkedHashMap<>();
+        for (BlockPos pos : region.cells()) {
+            cells.put(pos, new FloorGeometry.Cell(pos, pos.getY(), ceilingY));
+        }
+        if (boundary != null) {
+            for (BlockPos pos : boundary.withAnchorY(ceilingY).cells()) {
+                if (!region.containsHorizontally(pos.getX(), pos.getZ())) {
+                    throw new IllegalArgumentException(
+                            "StructureFloor ceiling boundary must be a subset of its region");
+                }
+                cells.put(pos, new FloorGeometry.Cell(pos, pos.getY(), pos.getY() + 2));
+            }
+        }
+        Map<BlockPos, ConnectorType> connectors = new LinkedHashMap<>();
+        if (markers != null) {
+            for (ConnectorMarker marker : markers) {
+                if (cells.containsKey(marker.pos())) connectors.put(marker.pos(), marker.type());
+            }
+        }
+        return new FloorGeometry(cells.values(), connectors);
+    }
+
+    private static CompoundTag saveCell(FloorGeometry.Cell cell) {
+        CompoundTag tag = new CompoundTag();
+        tag.put("pos", NbtHelper.encodeBlockPos(cell.feet()));
+        tag.putDouble("surfaceY", cell.surfaceY());
+        tag.putInt("ceilingY", cell.ceilingY());
+        return tag;
+    }
+
+    private static FloorGeometry.Cell loadCell(CompoundTag tag) {
+        BlockPos pos = NbtHelper.decodeBlockPos(tag.get("pos"));
+        if (pos == null) throw new IllegalArgumentException("FloorGeometry cell is missing pos");
+        return new FloorGeometry.Cell(pos, tag.getDouble("surfaceY"), tag.getInt("ceilingY"));
+    }
+
+    private static Map<BlockPos, ConnectorType> connectorMap(CompoundTag tag,
+                                                             Collection<FloorGeometry.Cell> cells) {
+        Set<BlockPos> positions = cells.stream().map(FloorGeometry.Cell::feet)
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        Map<BlockPos, ConnectorType> result = new LinkedHashMap<>();
+        for (ConnectorMarker marker : loadMarkers(tag)) {
+            if (positions.contains(marker.pos())) result.put(marker.pos(), marker.type());
+        }
+        return Map.copyOf(result);
+    }
+
+    private static List<ConnectorMarker> loadMarkers(CompoundTag tag) {
+        if (!tag.contains("connectors", Tag.TAG_LIST)) return List.of();
+        List<ConnectorMarker> result = new ArrayList<>();
+        for (ConnectorMarker marker : NbtHelper.toList(tag.getList("connectors", Tag.TAG_COMPOUND),
+                value -> ConnectorMarker.load((CompoundTag) value))) {
+            if (marker != null) result.add(marker);
+        }
+        return List.copyOf(result);
     }
 
     public record ConnectorMarker(BlockPos pos, ConnectorType type) {
@@ -187,5 +284,4 @@ public record StructureFloor(int id, int anchorY, int ceilingY, int floorNumber,
             return null;
         }
     }
-
 }

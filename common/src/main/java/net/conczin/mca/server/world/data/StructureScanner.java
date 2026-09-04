@@ -152,8 +152,8 @@ final class StructureScanner {
             return Result.failure(selected.result(), interactionSource);
         }
 
-        ScannedFloor scannedFloor = selected.floor();
-        StructureFloor floor = scannedFloor.persistedFloor();
+        FloorGeometry scannedFloor = selected.floor();
+        StructureFloor floor = new StructureFloor(0, 0, scannedFloor);
         Structure candidate = new Structure(ignoredStructureId, scanSeed.immutable(), List.of(floor));
         for (Structure other : existing) {
             if (other.getId() == ignoredStructureId || !candidate.intersects(other)) continue;
@@ -198,8 +198,8 @@ final class StructureScanner {
     }
 
     record AttachmentSeed(BlockPos seed,
-                          ScannedFloor floor,
-                          List<ScannedFloor> connectedFloors) {
+                          FloorGeometry floor,
+                          List<FloorGeometry> connectedFloors) {
         AttachmentSeed {
             seed = seed.immutable();
             connectedFloors = connectedFloors == null ? List.of() : List.copyOf(connectedFloors);
@@ -210,8 +210,8 @@ final class StructureScanner {
                   BlockPos source,
                   BlockPos min,
                   BlockPos max,
-                  ScannedFloor scannedFloor,
-                  List<ScannedFloor> connectedFloors) {
+                  FloorGeometry scannedFloor,
+                  List<FloorGeometry> connectedFloors) {
         Result {
             connectedFloors = connectedFloors == null ? List.of() : List.copyOf(connectedFloors);
         }
@@ -221,15 +221,13 @@ final class StructureScanner {
         }
 
         StructureFloor floor() {
-            return scannedFloor == null ? null : scannedFloor.persistedFloor();
+            return scannedFloor == null ? null : new StructureFloor(0, 0, scannedFloor);
         }
 
         Structure toStructure(int id) {
             StructureFloor floor = floor();
             if (floor == null) throw new IllegalStateException("Cannot materialize a failed Structure scan");
-            StructureFloor assigned = new StructureFloor(
-                    0, floor.anchorY(), floor.ceilingY(), floor.floorNumber(),
-                    floor.region(), floor.ceilingBoundaryRegion(), floor.connectors());
+            StructureFloor assigned = new StructureFloor(0, floor.floorNumber(), floor.geometry());
             return new Structure(id, source, List.of(assigned));
         }
     }

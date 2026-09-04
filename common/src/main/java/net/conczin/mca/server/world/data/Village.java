@@ -627,7 +627,7 @@ public class Village implements Iterable<Building> {
                 StructureScanner.AttachmentSeed fresh =
                         StructureScanner.resolveAttachmentSeed(level, source).orElse(null);
                 if (fresh != null) {
-                    StructureFloor freshFloor = fresh.floor().persistedFloor();
+                    StructureFloor freshFloor = new StructureFloor(0, 0, fresh.floor());
                     if (!StructureFloor.sameSemanticBand(
                             freshFloor.anchorY(), interaction.position().floor().anchorY())) {
                         return attachmentPlan(level, source, fresh)
@@ -666,7 +666,7 @@ public class Village implements Iterable<Building> {
     private Optional<RoomScanPlan> attachmentPlan(Level level,
                                                   BlockPos source,
                                                   StructureScanner.AttachmentSeed attachmentSeed) {
-        StructureFloor candidateFloor = attachmentSeed.floor().persistedFloor();
+        StructureFloor candidateFloor = new StructureFloor(0, 0, attachmentSeed.floor());
         AttachmentTarget target = resolveAttachmentTarget(
                 level, candidateFloor, attachmentSeed.connectedFloors()).orElse(null);
         if (target == null) return Optional.empty();
@@ -685,7 +685,7 @@ public class Village implements Iterable<Building> {
     Optional<AttachmentTarget> resolveAttachmentTarget(
             Level level,
             StructureFloor candidate,
-            Collection<ScannedFloor> connectedFloors) {
+            Collection<FloorGeometry> connectedFloors) {
         return selectAttachmentTarget(candidate,
                 StructureConnector.verticalConnections(level, candidate, structures.values()),
                 connectedFloors);
@@ -700,7 +700,7 @@ public class Village implements Iterable<Building> {
     Optional<AttachmentTarget> selectAttachmentTarget(
             StructureFloor candidate,
             Collection<StructureConnector.VerticalConnection> verticalConnections,
-            Collection<ScannedFloor> connectedFloors) {
+            Collection<FloorGeometry> connectedFloors) {
         if (candidate == null) return Optional.empty();
         Set<AttachmentConnection> connections = attachmentConnections(
                 candidate, verticalConnections, connectedFloors);
@@ -731,7 +731,7 @@ public class Village implements Iterable<Building> {
     private Set<AttachmentConnection> attachmentConnections(
             StructureFloor candidate,
             Collection<StructureConnector.VerticalConnection> verticalConnections,
-            Collection<ScannedFloor> connectedFloors) {
+            Collection<FloorGeometry> connectedFloors) {
         LinkedHashSet<AttachmentConnection> connections = new LinkedHashSet<>();
         if (verticalConnections != null) {
             for (StructureConnector.VerticalConnection connection : verticalConnections) {
@@ -740,11 +740,12 @@ public class Village implements Iterable<Building> {
         }
         if (connectedFloors == null) return Set.copyOf(connections);
 
-        for (ScannedFloor band : connectedFloors) {
+        for (FloorGeometry band : connectedFloors) {
             if (StructureFloor.sameSemanticBand(candidate.anchorY(), band.anchorY())) continue;
             for (Structure structure : structures.values()) {
                 for (StructureFloor floor : structure.getFloors()) {
-                    if (band.overlapsSameSemanticBand(floor)) {
+                    if (StructureFloor.sameSemanticBand(band.anchorY(), floor.anchorY())
+                            && band.projection().intersectionArea(floor.region()) > 0) {
                         connections.add(new AttachmentConnection(structure, floor));
                     }
                 }
@@ -943,27 +944,7 @@ public class Village implements Iterable<Building> {
             removeLogicalBuilding(buildingId);
             return;
         }
-        repairSemanticFloorCeilings(buildingId);
         applyFloorNumbers(logical);
-    }
-
-    private void repairSemanticFloorCeilings(int buildingId) {
-        List<FloorRef> floors = getBuildingStructures(buildingId).stream()
-                .flatMap(structure -> structure.getFloors().stream()
-                        .map(floor -> new FloorRef(structure, floor)))
-                .toList();
-        for (FloorRef lower : floors) {
-            int boundary = floors.stream()
-                    .map(FloorRef::floor)
-                    .filter(upper -> upper.anchorY() > lower.floor().anchorY() + StructureFloor.BAND_TOLERANCE)
-                    .filter(lower.floor()::overlapsFootprint)
-                    .mapToInt(StructureFloor::anchorY)
-                    .min()
-                    .orElse(lower.floor().ceilingY());
-            if (boundary >= lower.floor().ceilingY()) continue;
-            lower.structure().replaceFloorGeometry(lower.floor().id(), lower.floor().withGeometry(
-                    lower.floor().anchorY(), boundary, lower.floor().region()));
-        }
     }
 
     private boolean validMainRoom(LogicalBuilding logical) {

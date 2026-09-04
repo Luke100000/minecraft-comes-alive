@@ -165,13 +165,9 @@ final class StructureConnector {
     private static BlockPos floorHandoff(StructureFloor floor,
                                          StructureFloor other,
                                          BlockPos connector) {
-        int semanticCeilingY = floor.anchorY() < other.anchorY()
-                ? Math.min(floor.ceilingY(), other.anchorY())
-                : floor.ceilingY();
         return handoffs(connector).stream()
-                .filter(candidate -> candidate.getY() >= floor.anchorY()
-                        && candidate.getY() < semanticCeilingY)
-                .filter(candidate -> floor.contains(candidate.getX(), candidate.getZ()))
+                .filter(candidate -> floor.geometry().interactionCellAt(
+                        candidate.getX(), candidate.getY(), candidate.getZ()).isPresent())
                 .findFirst().orElse(null);
     }
 
@@ -222,8 +218,10 @@ final class StructureConnector {
 
     static List<BlockPos> verticalProbePositions(StructureFloor floor, BlockPos floorCell) {
         if (floor == null || floorCell == null) return List.of();
-        List<BlockPos> probes = new ArrayList<>(Math.max(0, floor.ceilingY() - floor.anchorY() + 1));
-        for (int y = floor.anchorY() - 1; y < floor.ceilingY(); y++) {
+        FloorGeometry.Cell cell = floor.geometry().cellAt(floorCell).orElse(null);
+        if (cell == null) return List.of();
+        List<BlockPos> probes = new ArrayList<>(Math.max(0, cell.ceilingY() - cell.feet().getY() + 1));
+        for (int y = cell.feet().getY() - 1; y < cell.ceilingY(); y++) {
             probes.add(new BlockPos(floorCell.getX(), y, floorCell.getZ()));
         }
         return List.copyOf(probes);
@@ -291,7 +289,7 @@ final class StructureConnector {
                     world, candidate, config.maxBuildingSize, config.maxBuildingRadius);
             if (scan.result() != Building.validationResult.SUCCESS || scan.floor() == null) continue;
 
-            Set<BlockPos> candidateFloor = scan.floor().geometry().projection().cells();
+            Set<BlockPos> candidateFloor = scan.floor().projection().cells();
             if (selected == null) {
                 selected = new FloorHandoff(candidate.immutable(), scan.floor(), scan.connectedFloors());
                 selectedFloor = candidateFloor;
@@ -305,8 +303,8 @@ final class StructureConnector {
     }
 
     record FloorHandoff(BlockPos seed,
-                        ScannedFloor floor,
-                        List<ScannedFloor> connectedFloors) {
+                        FloorGeometry floor,
+                        List<FloorGeometry> connectedFloors) {
         FloorHandoff {
             seed = seed.immutable();
             connectedFloors = connectedFloors == null ? List.of() : List.copyOf(connectedFloors);

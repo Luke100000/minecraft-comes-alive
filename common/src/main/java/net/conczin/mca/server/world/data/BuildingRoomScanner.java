@@ -20,11 +20,11 @@ final class BuildingRoomScanner {
                        Set<BlockPos> blocked,
                        int maxSize,
                        int floorId,
-                       ScannedFloor floor) {
-        if (floor == null || floor.geometry().cells().isEmpty()) {
+                       FloorGeometry floor) {
+        if (floor == null || floor.cells().isEmpty()) {
             return Result.failure(Building.validationResult.TOO_SMALL, source);
         }
-        FloorGeometry geometry = floor.geometry();
+        FloorGeometry geometry = floor;
         List<RoomPartitioner.Component> components = RoomPartitioner.partition(geometry);
         RoomPartitioner.Component selected = RoomPartitioner.select(source, geometry, components);
         return selected == null
@@ -38,9 +38,9 @@ final class BuildingRoomScanner {
                                   BlockPos source,
                                   int maxSize,
                                   int floorId,
-                                  ScannedFloor floor) {
-        if (floor == null || floor.geometry().cells().isEmpty()) return List.of();
-        FloorGeometry geometry = floor.geometry();
+                                  FloorGeometry floor) {
+        if (floor == null || floor.cells().isEmpty()) return List.of();
+        FloorGeometry geometry = floor;
         List<RoomPartitioner.Component> components = RoomPartitioner.partition(geometry);
         return components.stream()
                 .map(component -> materializeComponent(
@@ -64,10 +64,10 @@ final class BuildingRoomScanner {
             Set<BlockPos> blocked,
             int maxSize,
             int floorId,
-            ScannedFloor floor,
+            FloorGeometry floor,
             List<RoomPartitioner.Component> components,
             RoomPartitioner.Component component) {
-        FloorGeometry geometry = floor.geometry();
+        FloorGeometry geometry = floor;
         Set<BlockPos> floorCells = floorCellsForComponent(component);
         if (floorCells.size() > maxSize) return Result.failure(Building.validationResult.BLOCK_LIMIT, source);
         Set<BlockPos> blockedCells = blocked == null ? Set.of() : blocked;
@@ -82,7 +82,7 @@ final class BuildingRoomScanner {
         int maxX = floorCells.stream().mapToInt(BlockPos::getX).max().orElse(source.getX());
         int maxZ = floorCells.stream().mapToInt(BlockPos::getZ).max().orElse(source.getZ());
         int maxY = component.cells().stream().mapToInt(cell -> cell.ceilingY() - 1)
-                .max().orElse(Math.max(floor.anchorY(), floor.semanticCeilingY() - 1));
+                .max().orElse(floor.maxPhysicalCeilingY() - 1);
         return new Result(Building.validationResult.SUCCESS, seed, floorId, floor.anchorY(), floorCells, poi,
                 new BlockPos(minX, minY, minZ),
                 new BlockPos(maxX, maxY, maxZ));

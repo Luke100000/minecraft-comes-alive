@@ -79,7 +79,20 @@ public final class Structure implements VillageBuilding {
 
     /** Exact vertical-band membership; unlike resolveFloor, this never falls through above a Floor ceiling. */
     private Optional<StructureFloor> floorAtHeight(int queryY) {
-        return resolveFloor(queryY).filter(floor -> queryY < floor.ceilingY());
+        return resolveFloor(queryY).filter(floor -> queryY < semanticCeilingY(floor));
+    }
+
+    /**
+     * Semantic storey boundary. Non-top Floors end at the next semantic Floor anchor;
+     * the top Floor ends at the highest physical ceiling observed in its exact geometry.
+     */
+    int semanticCeilingY(StructureFloor floor) {
+        if (floor == null) return Integer.MIN_VALUE;
+        return getFloors().stream()
+                .filter(candidate -> candidate.anchorY() > floor.anchorY())
+                .mapToInt(StructureFloor::anchorY)
+                .min()
+                .orElse(floor.maxPhysicalCeilingY());
     }
 
     /** Direct positions resolve by vertical Floor band. Connector handoffs are resolved separately. */
@@ -99,8 +112,7 @@ public final class Structure implements VillageBuilding {
                         .thenComparingInt(StructureFloor::id));
     }
 
-    /** Exact physical membership is the canonical Floor footprint extruded through its vertical band. */
-    Optional<StructureFloor> physicalFloorAt(Vec3i pos) {
+    Optional<FloorCell> resolvePhysicalFloorCell(Vec3i pos) {
         if (pos == null
                 || pos.getX() < min.getX() || pos.getX() > max.getX()
                 || pos.getY() < min.getY() || pos.getY() > max.getY()
@@ -108,9 +120,17 @@ public final class Structure implements VillageBuilding {
             return Optional.empty();
         }
         return getFloors().stream()
-                .filter(floor -> floor.containsPhysicalPosition(pos.getX(), pos.getY(), pos.getZ()))
-                .max(Comparator.comparingInt(StructureFloor::anchorY)
-                        .thenComparingInt(StructureFloor::id));
+                .flatMap(floor -> floor.geometry().physicalCellAt(pos.getX(), pos.getY(), pos.getZ())
+                        .stream().map(cell -> new FloorCell(floor, cell)))
+                .max(Comparator
+                        .comparingInt((FloorCell resolved) -> resolved.cell().feet().getY())
+                        .thenComparingInt(resolved -> resolved.floor().anchorY())
+                        .thenComparingInt(resolved -> resolved.floor().id()));
+    }
+
+    /** Exact physical membership resolves through exact Floor cells, never a 2D extrusion. */
+    Optional<StructureFloor> physicalFloorAt(Vec3i pos) {
+        return resolvePhysicalFloorCell(pos).map(FloorCell::floor);
     }
 
     Optional<InteractionPosition> resolveInteractionPosition(BlockPos pos,
@@ -135,6 +155,9 @@ public final class Structure implements VillageBuilding {
                                Building room) {
     }
 
+    record FloorCell(StructureFloor floor, FloorGeometry.Cell cell) {
+    }
+
     void setFloorNumber(int floorId, int floorNumber) {
         StructureFloor floor = floors.get(floorId);
         if (floor != null && floor.floorNumber() != floorNumber) {
@@ -152,14 +175,7 @@ public final class Structure implements VillageBuilding {
     boolean replaceFloorGeometry(int floorId, StructureFloor scannedFloor) {
         StructureFloor existing = floors.get(floorId);
         if (existing == null || scannedFloor == null) return false;
-        floors.put(floorId, new StructureFloor(
-                floorId,
-                scannedFloor.anchorY(),
-                scannedFloor.ceilingY(),
-                existing.floorNumber(),
-                scannedFloor.region(),
-                scannedFloor.ceilingBoundaryRegion(),
-                scannedFloor.connectors()));
+        floors.put(floorId, new StructureFloor(floorId, existing.floorNumber(), scannedFloor.geometry()));
         recomputeBoundsFromFloors();
         return true;
     }
@@ -174,19 +190,17 @@ public final class Structure implements VillageBuilding {
         List<StructureFloor> current = getFloors();
         if (current.isEmpty()) return;
 
-        List<BlockPos> cells = current.stream()
-                .flatMap(floor -> floor.region().cells().stream())
+        List<FloorGeometry.Cell> cells = current.stream()
+                .flatMap(floor -> floor.geometry().cells().stream())
                 .toList();
         if (cells.isEmpty()) return;
 
-        int minX = cells.stream().mapToInt(BlockPos::getX).min().orElse(source.getX());
-        int minZ = cells.stream().mapToInt(BlockPos::getZ).min().orElse(source.getZ());
-        int maxX = cells.stream().mapToInt(BlockPos::getX).max().orElse(source.getX());
-        int maxZ = cells.stream().mapToInt(BlockPos::getZ).max().orElse(source.getZ());
-        int minY = current.stream().mapToInt(StructureFloor::anchorY).min().orElse(source.getY());
-        int maxY = current.stream().mapToInt(floor -> floor.ceilingY()
-                        - (floor.ceilingBoundaryRegion().area() > 0 ? 0 : 1))
-                .max().orElse(source.getY());
+        int minX = cells.stream().mapToInt(cell -> cell.feet().getX()).min().orElse(source.getX());
+        int minZ = cells.stream().mapToInt(cell -> cell.feet().getZ()).min().orElse(source.getZ());
+        int maxX = cells.stream().mapToInt(cell -> cell.feet().getX()).max().orElse(source.getX());
+        int maxZ = cells.stream().mapToInt(cell -> cell.feet().getZ()).max().orElse(source.getZ());
+        int minY = cells.stream().mapToInt(cell -> cell.feet().getY()).min().orElse(source.getY());
+        int maxY = cells.stream().mapToInt(cell -> cell.ceilingY() - 1).max().orElse(source.getY());
         min = new BlockPos(minX, minY, minZ);
         max = new BlockPos(maxX, maxY, maxZ);
     }
@@ -260,9 +274,21 @@ public final class Structure implements VillageBuilding {
         }
         for (StructureFloor floor : getFloors()) {
             for (StructureFloor candidate : other.getFloors()) {
-                boolean verticalOverlap = floor.anchorY() < candidate.ceilingY()
-                        && candidate.anchorY() < floor.ceilingY();
-                if (verticalOverlap && floor.region().intersectionArea(candidate.region()) > 0) {
+                if (floor.region().intersectionArea(candidate.region()) > 0
+                        && exactGeometryOverlaps(floor.geometry(), candidate.geometry())) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private static boolean exactGeometryOverlaps(FloorGeometry first, FloorGeometry second) {
+        for (FloorGeometry.Cell cell : first.cells()) {
+            for (FloorGeometry.Cell candidate : second.cellsAtColumn(
+                    cell.feet().getX(), cell.feet().getZ())) {
+                if (cell.feet().getY() < candidate.ceilingY()
+                        && candidate.feet().getY() < cell.ceilingY()) {
                     return true;
                 }
             }

@@ -12,21 +12,21 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class StructureScannerAttachmentBoundaryTest {
     @Test
     void oneSelectedSurfaceProducesExactlyOnePersistedFloor() {
-        FloorSurface surface = surfaceAt(74, Set.of(
+        FloorGeometry surface = surfaceAt(74, Set.of(
                 new BlockPos(0, 74, 0), new BlockPos(1, 74, 0),
                 new BlockPos(0, 74, 1), new BlockPos(1, 74, 1)));
 
-        StructureFloor floor = ScannedFloor.physical(surface).persistedFloor();
+        StructureFloor floor = new StructureFloor(0, 0, surface);
 
         assertEquals(74, floor.anchorY());
         assertEquals(4, floor.area());
     }
 
-    private static FloorSurface surfaceAt(int y, Set<BlockPos> positions) {
-        LinkedHashSet<FloorSurface.Cell> cells = new LinkedHashSet<>();
+    private static FloorGeometry surfaceAt(int y, Set<BlockPos> positions) {
+        LinkedHashSet<FloorGeometry.Cell> cells = new LinkedHashSet<>();
         for (BlockPos pos : positions) {
-            cells.add(new FloorSurface.Cell(pos, pos.getY(), pos.getY() + 4));
+            cells.add(new FloorGeometry.Cell(pos, pos.getY(), pos.getY() + 4));
         }
-        return new FloorSurface(cells, Map.of());
+        return new FloorGeometry(cells, Map.of());
     }
 }

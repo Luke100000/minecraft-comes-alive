@@ -57,25 +57,21 @@ class StructureFloorTest {
     }
 
     @Test
-    void canonicalFloorRequiresPersistedRegion() {
+    void canonicalFloorRequiresGeometry() {
         assertThrows(NullPointerException.class,
-                () -> new StructureFloor(3, 64, 70, 0, null, List.of()));
+                () -> new StructureFloor(3, 0, null));
     }
 
     @Test
-    void canonicalFloorRequiresNonEmptyRegion() {
-        BuildingFloorRegion empty = BuildingFloorRegion.fromFootprint(64, Set.of());
-
+    void canonicalFloorRequiresNonEmptyGeometry() {
         assertThrows(IllegalArgumentException.class,
-                () -> new StructureFloor(3, 64, 70, 0, empty, List.of()));
+                () -> new StructureFloor(3, 0, new FloorGeometry(Set.of(), java.util.Map.of())));
     }
 
     @Test
-    void currentFloorLoadRejectsMissingRegion() {
+    void currentFloorLoadRejectsMissingGeometry() {
         CompoundTag tag = new CompoundTag();
         tag.putInt("id", 3);
-        tag.putInt("anchorY", 64);
-        tag.putInt("ceilingY", 70);
 
         assertThrows(IllegalArgumentException.class, () -> StructureFloor.load(tag));
     }
@@ -96,17 +92,29 @@ class StructureFloorTest {
     }
 
     @Test
-    void ceilingBoundaryGeometryRoundTripsAndRemainsOptionalForOldSaves() {
-        BuildingFloorRegion footprint = BuildingFloorRegion.fromFootprint(
-                88, Set.of(new BlockPos(0, 88, 0), new BlockPos(1, 88, 0)));
-        BuildingFloorRegion boundary = BuildingFloorRegion.fromFootprint(
-                91, Set.of(new BlockPos(1, 91, 0)));
-        StructureFloor floor = new StructureFloor(0, 88, 91, 0, footprint, boundary, List.of());
+    void stackedExactCellsRoundTripWithoutCeilingBoundarySideChannel() {
+        FloorGeometry.Cell lower = new FloorGeometry.Cell(new BlockPos(1, 88, 0), 88, 90);
+        FloorGeometry.Cell upperTransition = new FloorGeometry.Cell(new BlockPos(1, 91, 0), 91, 93);
+        StructureFloor floor = new StructureFloor(0, 0,
+                new FloorGeometry(Set.of(lower, upperTransition), java.util.Map.of()));
 
         CompoundTag saved = floor.save();
-        assertEquals(boundary, StructureFloor.load(saved).ceilingBoundaryRegion());
+        StructureFloor loaded = StructureFloor.load(saved);
 
-        saved.remove("ceilingBoundaryRegion");
-        assertEquals(0, StructureFloor.load(saved).ceilingBoundaryRegion().area());
+        assertEquals(List.of(88, 91), loaded.geometry().cellsAtColumn(1, 0).stream()
+                .map(cell -> cell.feet().getY()).toList());
+        assertFalse(saved.contains("ceilingBoundaryRegion"));
+    }
+
+    @Test
+    void structureDerivesNonTopSemanticCeilingFromNextFloorAnchor() {
+        StructureFloor lower = new StructureFloor(0, 0, new FloorGeometry(Set.of(
+                new FloorGeometry.Cell(new BlockPos(0, 88, 0), 88, 94)), java.util.Map.of()));
+        StructureFloor upper = new StructureFloor(1, 1, new FloorGeometry(Set.of(
+                new FloorGeometry.Cell(new BlockPos(0, 91, 0), 91, 95)), java.util.Map.of()));
+        Structure structure = new Structure(10, BlockPos.ZERO, List.of(lower, upper));
+
+        assertEquals(91, structure.semanticCeilingY(lower));
+        assertEquals(95, structure.semanticCeilingY(upper));
     }
 }

@@ -41,17 +41,16 @@ class SelectedFloorScannerTest {
     }
 
     @Test
-    void floorSelectionUsesNextMeaningfulBandAsSemanticCeiling() {
+    void floorSelectionReturnsExactSelectedBandWithoutEmbeddingSemanticCeiling() {
         Set<FloorGeometry.Cell> cells = Set.of(
                 cell(0, 88, 0), cell(1, 88, 0), cell(2, 88, 0), cell(3, 88, 0),
                 cell(3, 89, 1),
                 cell(3, 90, 2),
                 cell(0, 91, 3), cell(1, 91, 3), cell(2, 91, 3), cell(3, 91, 3));
 
-        ScannedFloor floor = SelectedFloorScanner.floorSelection(cells, new BlockPos(0, 88, 0)).selected();
+        FloorGeometry floor = SelectedFloorScanner.floorSelection(cells, new BlockPos(0, 88, 0)).selected();
 
-        assertEquals(91, floor.semanticCeilingY());
-        assertEquals(Set.of(88, 89, 90), floor.geometry().cells().stream()
+        assertEquals(Set.of(88, 89, 90), floor.cells().stream()
                 .map(cell -> cell.feet().getY()).collect(java.util.stream.Collectors.toSet()));
     }
 
@@ -63,12 +62,12 @@ class SelectedFloorScannerTest {
                 cell(3, 90, 2),
                 cell(0, 91, 3), cell(1, 91, 3), cell(2, 91, 3), cell(3, 91, 3));
 
-        List<ScannedFloor> bands = SelectedFloorScanner
+        List<FloorGeometry> bands = SelectedFloorScanner
                 .floorSelection(cells, new BlockPos(0, 88, 0)).connected();
 
         assertEquals(List.of(88, 91), bands.stream()
-                .map(ScannedFloor::anchorY).toList());
-        assertTrue(bands.stream().allMatch(band -> band.region().area() >= 4));
+                .map(FloorGeometry::anchorY).toList());
+        assertTrue(bands.stream().allMatch(band -> band.projection().area() >= 4));
     }
 
     @Test
@@ -84,19 +83,18 @@ class SelectedFloorScannerTest {
                 // an ordinary FloorSurface cell.
                 cell(8, 91, 0), cell(9, 91, 0), cell(10, 91, 0), cell(11, 91, 0));
 
-        ScannedFloor lower = SelectedFloorScanner.floorSelection(cells, topStair).selected();
-        ScannedFloor upper = SelectedFloorScanner.floorSelection(cells, upperRoom).selected();
+        FloorGeometry lower = SelectedFloorScanner.floorSelection(cells, topStair).selected();
+        FloorGeometry upper = SelectedFloorScanner.floorSelection(cells, upperRoom).selected();
 
         assertEquals(88, lower.anchorY());
-        assertEquals(91, lower.semanticCeilingY());
-        assertFalse(lower.geometry().cellsAtColumn(topStair.getX(), topStair.getZ()).isEmpty());
-        assertTrue(lower.geometry().cellsAtColumn(upperRoom.getX(), upperRoom.getZ()).isEmpty());
-        assertEquals(7, lower.region().area());
+        assertFalse(lower.cellsAtColumn(topStair.getX(), topStair.getZ()).isEmpty());
+        assertTrue(lower.cellsAtColumn(upperRoom.getX(), upperRoom.getZ()).isEmpty());
+        assertEquals(7, lower.projection().area());
 
         assertEquals(91, upper.anchorY());
-        assertTrue(upper.geometry().cellsAtColumn(topStair.getX(), topStair.getZ()).isEmpty());
-        assertFalse(upper.geometry().cellsAtColumn(upperRoom.getX(), upperRoom.getZ()).isEmpty());
-        assertEquals(4, upper.region().area());
+        assertTrue(upper.cellsAtColumn(topStair.getX(), topStair.getZ()).isEmpty());
+        assertFalse(upper.cellsAtColumn(upperRoom.getX(), upperRoom.getZ()).isEmpty());
+        assertEquals(4, upper.projection().area());
     }
 
     @Test
@@ -121,15 +119,14 @@ class SelectedFloorScannerTest {
                 cell(6, 91, 0),
                 cell(8, 91, 0), cell(9, 91, 0), cell(10, 91, 0), cell(11, 91, 0));
 
-        ScannedFloor lower = SelectedFloorScanner.floorSelection(cells, stackedColumn).selected();
-        ScannedFloor upper = SelectedFloorScanner.floorSelection(cells, upperRoom).selected();
+        FloorGeometry lower = SelectedFloorScanner.floorSelection(cells, stackedColumn).selected();
+        FloorGeometry upper = SelectedFloorScanner.floorSelection(cells, upperRoom).selected();
 
-        assertEquals(List.of(88, 91), lower.geometry().cellsAtColumn(6, 0).stream()
+        assertEquals(List.of(88, 91), lower.cellsAtColumn(6, 0).stream()
                 .map(cell -> cell.feet().getY()).toList());
-        assertEquals(88, lower.geometry().anchorY());
-        assertEquals(91, lower.semanticCeilingY());
-        assertTrue(upper.geometry().cellAt(upperRoom).isPresent());
-        assertTrue(upper.geometry().cellAt(stackedColumn).isEmpty());
+        assertEquals(88, lower.anchorY());
+        assertTrue(upper.cellAt(upperRoom).isPresent());
+        assertTrue(upper.cellAt(stackedColumn).isEmpty());
     }
 
     private static FloorGeometry.Cell cell(int x, int y, int z) {

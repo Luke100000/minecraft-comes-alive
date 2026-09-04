@@ -73,6 +73,24 @@ final class FloorGeometry {
         return cells.stream().mapToInt(Cell::ceilingY).max().orElse(anchorY() + 2);
     }
 
+    int minFeetY() {
+        return cells.stream().mapToInt(cell -> cell.feet().getY()).min().orElse(anchorY());
+    }
+
+    Optional<Cell> physicalCellAt(int x, int y, int z) {
+        return cellsAtColumn(x, z).stream()
+                .filter(cell -> cell.feet().getY() <= y && y < cell.ceilingY())
+                .max(Comparator.comparingInt(cell -> cell.feet().getY()));
+    }
+
+    Optional<Cell> interactionCellAt(int x, int y, int z) {
+        Optional<Cell> physical = physicalCellAt(x, y, z);
+        if (physical.isPresent()) return physical;
+        return cellsAtColumn(x, z).stream()
+                .filter(cell -> y == cell.feet().getY() - 1)
+                .max(Comparator.comparingInt(cell -> cell.feet().getY()));
+    }
+
     BuildingFloorRegion projection() {
         int y = anchorY();
         Set<BlockPos> projected = cells.stream()

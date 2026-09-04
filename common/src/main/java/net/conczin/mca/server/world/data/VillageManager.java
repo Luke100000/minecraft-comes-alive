@@ -291,7 +291,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
     private boolean validAttachment(Village village,
                                     Structure candidate,
                                     StructureFloor playerFloor,
-                                    Collection<ScannedFloor> connectedFloors,
+                                    Collection<FloorGeometry> connectedFloors,
                                     int targetBuildingId,
                                     Village.RoomScanMode requestedMode) {
         Village.AttachmentTarget resolved = village.resolveAttachmentTarget(
@@ -493,7 +493,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
                                                 BlockPos pos,
                                                 int existingRoomId,
                                                 StructureFloor floor,
-                                                ScannedFloor scannedFloor,
+                                                FloorGeometry scannedFloor,
                                                 Set<BlockPos> blocked) {
         BuildingRoomScanner.Result geometry = BuildingRoomScanner.scan(
                 world, pos, blocked, Config.getInstance().maxBuildingSize, floor.id(), scannedFloor);

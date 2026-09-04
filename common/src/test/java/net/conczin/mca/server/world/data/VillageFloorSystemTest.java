@@ -300,7 +300,7 @@ class VillageFloorSystemTest {
         village.registerStructure(structure(10, 10, lower), room(100, 10, 0, true));
 
         StructureFloor upper = new StructureFloor(1, 91, 94, 0, region(91));
-        List<ScannedFloor> connectedFloors = List.of(
+        List<FloorGeometry> connectedFloors = List.of(
                 scannedFloor(region(88)),
                 scannedFloor(region(91)));
 
@@ -627,11 +627,11 @@ class VillageFloorSystemTest {
                 new BlockPos(0, y, 1), new BlockPos(1, y, 1)));
     }
 
-    private static ScannedFloor scannedFloor(BuildingFloorRegion region) {
-        Set<FloorSurface.Cell> cells = region.cells().stream()
-                .map(pos -> new FloorSurface.Cell(pos, pos.getY(), pos.getY() + 4))
+    private static FloorGeometry scannedFloor(BuildingFloorRegion region) {
+        Set<FloorGeometry.Cell> cells = region.cells().stream()
+                .map(pos -> new FloorGeometry.Cell(pos, pos.getY(), pos.getY() + 4))
                 .collect(java.util.stream.Collectors.toSet());
-        return ScannedFloor.physical(new FloorSurface(cells, Map.of()));
+        return new FloorGeometry(cells, Map.of());
     }
 
     private static Building room(int id, int structureId, int floorId, boolean contributes) {

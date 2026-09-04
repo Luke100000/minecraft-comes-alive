@@ -74,13 +74,10 @@ final class SelectedFloorScanner {
                     + " connectors=" + connectors.size()
                     + ": " + e.getMessage(), e);
         }
-        ScannedFloor floor = selection.selected();
-        FloorGeometry geometry = floor.geometry();
-        geometry = geometry.withConnectorTypes(StructureConnector.associatedFloorCells(
-                world, connectors, geometry));
-        floor = new ScannedFloor(geometry, floor.semanticCeilingY());
-        List<ScannedFloor> connectedFloors = new ArrayList<>(selection.connected().size());
-        for (ScannedFloor connected : selection.connected()) {
+        FloorGeometry floor = selection.selected();
+        floor = floor.withConnectorTypes(StructureConnector.associatedFloorCells(world, connectors, floor));
+        List<FloorGeometry> connectedFloors = new ArrayList<>(selection.connected().size());
+        for (FloorGeometry connected : selection.connected()) {
             connectedFloors.add(connected == selection.selected() ? floor : connected);
         }
         return success(seed, floor, connectedFloors);
@@ -94,13 +91,6 @@ final class SelectedFloorScanner {
         return StructureFloor.sameSemanticBand(seedY, candidateY);
     }
 
-    private static OptionalInt nextBandY(List<HeightBand> bands, HeightBand selected) {
-        return bands.stream()
-                .mapToInt(HeightBand::minY)
-                .filter(y -> y > selected.minY())
-                .min();
-    }
-
     static FloorSelection floorSelection(Collection<FloorGeometry.Cell> discovered, BlockPos seed) {
         if (discovered == null || discovered.isEmpty() || seed == null) {
             return new FloorSelection(null, List.of());
@@ -110,22 +100,15 @@ final class SelectedFloorScanner {
                 selectHeightBand(semantic.bands(), semantic.discoveredHeights(), seed.getY()));
         if (selectedBand == null) return new FloorSelection(null, List.of());
 
-        LinkedHashMap<HeightBand, ScannedFloor> floors = new LinkedHashMap<>();
+        LinkedHashMap<HeightBand, FloorGeometry> floors = new LinkedHashMap<>();
         for (HeightBand band : semantic.bands()) {
             Set<FloorGeometry.Cell> cells = discovered.stream()
                     .filter(cell -> band.equals(semantic.ownerByCell().get(cell.feet())))
                     .collect(java.util.stream.Collectors.toUnmodifiableSet());
             if (cells.isEmpty()) continue;
-            floors.put(band, createSelectedFloor(cells, nextBandY(semantic.bands(), band)));
+            floors.put(band, new FloorGeometry(cells, Map.of()));
         }
         return new FloorSelection(floors.get(selectedBand), List.copyOf(floors.values()));
-    }
-
-    private static ScannedFloor createSelectedFloor(Set<FloorGeometry.Cell> selectedCells, OptionalInt nextBandY) {
-        FloorGeometry geometry = new FloorGeometry(selectedCells, Map.of());
-        return nextBandY.isPresent()
-                ? new ScannedFloor(geometry, nextBandY.getAsInt())
-                : ScannedFloor.physical(geometry);
     }
 
     /**
@@ -448,9 +431,9 @@ final class SelectedFloorScanner {
     }
 
     private static Result success(BlockPos seed,
-                                  ScannedFloor floor,
-                                  List<ScannedFloor> connectedFloors) {
-        FloorGeometry geometry = floor.geometry();
+                                  FloorGeometry floor,
+                                  List<FloorGeometry> connectedFloors) {
+        FloorGeometry geometry = floor;
         Set<BlockPos> footprint = geometry.projection().cells();
         int minX = footprint.stream().mapToInt(BlockPos::getX).min().orElse(seed.getX());
         int minZ = footprint.stream().mapToInt(BlockPos::getZ).min().orElse(seed.getZ());
@@ -486,17 +469,17 @@ final class SelectedFloorScanner {
         }
     }
 
-    record FloorSelection(ScannedFloor selected, List<ScannedFloor> connected) {
+    record FloorSelection(FloorGeometry selected, List<FloorGeometry> connected) {
         FloorSelection {
             connected = connected == null ? List.of() : List.copyOf(connected);
         }
     }
 
     record Result(Building.validationResult result,
-                  ScannedFloor floor,
+                  FloorGeometry floor,
                   BlockPos min,
                   BlockPos max,
-                  List<ScannedFloor> connectedFloors) {
+                  List<FloorGeometry> connectedFloors) {
         Result {
             connectedFloors = connectedFloors == null ? List.of() : List.copyOf(connectedFloors);
         }

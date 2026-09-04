@@ -14,7 +14,7 @@ class StructureExpansionPolicyTest {
     @Test
     void selectsUniquePersistedFloorOverlappedByFreshSameStoreyGeometry() {
         Structure persisted = structure(20, 20, floor(0, 64, 68, 0, 1));
-        ScannedFloor fresh = scannedFloor(64, 68, 0, 3);
+        FloorGeometry fresh = scannedFloor(64, 68, 0, 3);
 
         StructureExpansionPolicy.FloorTarget target = StructureExpansionPolicy
                 .selectSameStoreyTarget(List.of(persisted), fresh)
@@ -28,7 +28,7 @@ class StructureExpansionPolicyTest {
     void rejectsAmbiguousExpansionAcrossTwoPersistedStructures() {
         Structure first = structure(20, 20, floor(0, 64, 68, 0, 1));
         Structure second = structure(30, 30, floor(0, 64, 68, 2, 3));
-        ScannedFloor fresh = scannedFloor(64, 68, 0, 4);
+        FloorGeometry fresh = scannedFloor(64, 68, 0, 4);
 
         assertTrue(StructureExpansionPolicy.selectSameStoreyTarget(
                 List.of(first, second), fresh).isEmpty());
@@ -37,7 +37,7 @@ class StructureExpansionPolicyTest {
     @Test
     void doesNotTreatDifferentSemanticBandAsSameStoreyExpansion() {
         Structure persisted = structure(20, 20, floor(0, 64, 68, 0, 3));
-        ScannedFloor freshUpper = scannedFloor(68, 72, 0, 3);
+        FloorGeometry freshUpper = scannedFloor(68, 72, 0, 3);
 
         assertTrue(StructureExpansionPolicy.selectSameStoreyTarget(
                 List.of(persisted), freshUpper).isEmpty());
@@ -52,12 +52,12 @@ class StructureExpansionPolicyTest {
                 new BlockPos(0, 88, 0), new BlockPos(1, 88, 0),
                 new BlockPos(2, 88, 0), new BlockPos(3, 88, 0)));
         BlockPos topStair = new BlockPos(6, 91, 0);
-        FloorSurface fresh = new FloorSurface(Set.of(
+        FloorGeometry fresh = new FloorGeometry(Set.of(
                 cell(0, 88, 0), cell(1, 88, 0), cell(2, 88, 0), cell(3, 88, 0),
                 cell(4, 89, 0), cell(5, 90, 0), cell(6, 91, 0)), Map.of());
 
         assertEquals(room, StructureExpansionPolicy.registeredRoomForFreshComponent(
-                target, new ScannedFloor(fresh, 91), topStair, List.of(room)).orElseThrow());
+                target, fresh, topStair, List.of(room)).orElseThrow());
     }
 
     @Test
@@ -70,13 +70,14 @@ class StructureExpansionPolicyTest {
                 new BlockPos(2, 64, 0), new BlockPos(3, 64, 0)));
         BlockPos doorCell = new BlockPos(4, 64, 0);
         BlockPos newRoomCell = new BlockPos(5, 64, 0);
-        FloorSurface fresh = new FloorSurface(Set.of(
+        FloorGeometry fresh = new FloorGeometry(Set.of(
                 cell(0, 64, 0), cell(1, 64, 0), cell(2, 64, 0), cell(3, 64, 0),
+                cell(4, 64, 0),
                 cell(5, 64, 0), cell(6, 64, 0), cell(7, 64, 0), cell(8, 64, 0)),
                 Map.of(doorCell, StructureFloor.ConnectorType.DOOR));
 
         assertTrue(StructureExpansionPolicy.registeredRoomForFreshComponent(
-                target, ScannedFloor.physical(fresh), newRoomCell, List.of(existing)).isEmpty());
+                target, fresh, newRoomCell, List.of(existing)).isEmpty());
     }
 
     @Test
@@ -89,14 +90,15 @@ class StructureExpansionPolicyTest {
                 new BlockPos(0, 64, 0), new BlockPos(1, 64, 0),
                 new BlockPos(2, 64, 0), new BlockPos(3, 64, 0), doorCell));
         BlockPos newRoomCell = new BlockPos(5, 64, 0);
-        FloorSurface fresh = new FloorSurface(Set.of(
+        FloorGeometry fresh = new FloorGeometry(Set.of(
                 cell(0, 64, 0), cell(1, 64, 0), cell(2, 64, 0), cell(3, 64, 0),
+                cell(4, 64, 0),
                 cell(5, 64, 0), cell(6, 64, 0), cell(7, 64, 0), cell(8, 64, 0),
                 cell(9, 64, 0), cell(10, 64, 0)),
                 Map.of(doorCell, StructureFloor.ConnectorType.DOOR));
 
         assertTrue(StructureExpansionPolicy.registeredRoomForFreshComponent(
-                target, ScannedFloor.physical(fresh), newRoomCell, List.of(existing)).isEmpty());
+                target, fresh, newRoomCell, List.of(existing)).isEmpty());
     }
 
     private static Structure structure(int id, int logicalBuildingId, StructureFloor floor) {
@@ -113,11 +115,11 @@ class StructureExpansionPolicyTest {
                 BuildingFloorRegion.fromFootprint(anchorY, cells));
     }
 
-    private static ScannedFloor scannedFloor(int anchorY, int ceilingY, int minX, int maxX) {
-        Set<FloorSurface.Cell> cells = java.util.stream.IntStream.rangeClosed(minX, maxX)
-                .mapToObj(x -> new FloorSurface.Cell(new BlockPos(x, anchorY, 0), anchorY, ceilingY))
+    private static FloorGeometry scannedFloor(int anchorY, int ceilingY, int minX, int maxX) {
+        Set<FloorGeometry.Cell> cells = java.util.stream.IntStream.rangeClosed(minX, maxX)
+                .mapToObj(x -> new FloorGeometry.Cell(new BlockPos(x, anchorY, 0), anchorY, ceilingY))
                 .collect(java.util.stream.Collectors.toSet());
-        return new ScannedFloor(new FloorSurface(cells, Map.of()), ceilingY);
+        return new FloorGeometry(cells, Map.of());
     }
 
     private static Building room(int id, int structureId, int floorId, Set<BlockPos> footprint) {
@@ -135,7 +137,7 @@ class StructureExpansionPolicyTest {
         return room;
     }
 
-    private static FloorSurface.Cell cell(int x, int y, int z) {
-        return new FloorSurface.Cell(new BlockPos(x, y, z), y, y + 4);
+    private static FloorGeometry.Cell cell(int x, int y, int z) {
+        return new FloorGeometry.Cell(new BlockPos(x, y, z), y, y + 4);
     }
 }
