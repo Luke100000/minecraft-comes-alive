@@ -1,0 +1,123 @@
+package net.conczin.mca.server.world.data;
+
+import net.minecraft.core.BlockPos;
+
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
+
+/** Exact physical geometry for one semantic Floor. */
+final class FloorGeometry {
+    /** Matches Minecraft 1.21.1 WalkNodeEvaluator.DEFAULT_MOB_JUMP_HEIGHT. */
+    static final double MAX_STEP_HEIGHT = 1.125D;
+
+    private final Set<Cell> cells;
+    private final Map<BlockPos, StructureFloor.ConnectorType> connectorTypesByCell;
+    private final Map<Long, List<Cell>> cellsByColumn;
+    private final Map<BlockPos, Cell> cellsByPosition;
+
+    FloorGeometry(Collection<Cell> cells,
+                  Map<BlockPos, StructureFloor.ConnectorType> connectorTypesByCell) {
+        LinkedHashMap<BlockPos, Cell> positions = new LinkedHashMap<>();
+        for (Cell cell : cells) {
+            Cell previous = positions.putIfAbsent(cell.feet(), cell);
+            if (previous != null && !previous.equals(cell)) {
+                throw new IllegalArgumentException("Conflicting FloorGeometry cells at " + cell.feet());
+            }
+        }
+        this.cellsByPosition = Map.copyOf(positions);
+        this.cells = Set.copyOf(positions.values());
+
+        Map<BlockPos, StructureFloor.ConnectorType> connectors = connectorTypesByCell == null
+                ? Map.of() : Map.copyOf(connectorTypesByCell);
+        if (!this.cellsByPosition.keySet().containsAll(connectors.keySet())) {
+            throw new IllegalArgumentException("Connector cell is not part of FloorGeometry");
+        }
+        this.connectorTypesByCell = connectors;
+        this.cellsByColumn = indexColumns(this.cells);
+    }
+
+    Set<Cell> cells() {
+        return cells;
+    }
+
+    Map<BlockPos, StructureFloor.ConnectorType> connectorTypesByCell() {
+        return connectorTypesByCell;
+    }
+
+    List<Cell> cellsAtColumn(int x, int z) {
+        return cellsByColumn.getOrDefault(columnKey(x, z), List.of());
+    }
+
+    Optional<Cell> cellAt(BlockPos feet) {
+        return Optional.ofNullable(cellsByPosition.get(feet));
+    }
+
+    int anchorY() {
+        Map<Integer, Long> counts = cells.stream().collect(Collectors.groupingBy(
+                cell -> cell.feet().getY(), Collectors.counting()));
+        return counts.entrySet().stream()
+                .max(Comparator.<Map.Entry<Integer, Long>>comparingLong(Map.Entry::getValue)
+                        .thenComparing(Comparator.comparingInt(Map.Entry<Integer, Long>::getKey).reversed()))
+                .map(Map.Entry::getKey)
+                .orElse(0);
+    }
+
+    int maxPhysicalCeilingY() {
+        return cells.stream().mapToInt(Cell::ceilingY).max().orElse(anchorY() + 2);
+    }
+
+    BuildingFloorRegion projection() {
+        int y = anchorY();
+        Set<BlockPos> projected = cells.stream()
+                .map(cell -> new BlockPos(cell.feet().getX(), y, cell.feet().getZ()))
+                .collect(Collectors.toUnmodifiableSet());
+        return BuildingFloorRegion.fromFootprint(y, projected);
+    }
+
+    FloorGeometry withConnectorTypes(Map<BlockPos, StructureFloor.ConnectorType> connectors) {
+        return new FloorGeometry(cells, connectors);
+    }
+
+    List<StructureFloor.ConnectorMarker> connectorMarkers() {
+        return connectorTypesByCell.entrySet().stream()
+                .map(entry -> new StructureFloor.ConnectorMarker(entry.getKey(), entry.getValue()))
+                .sorted(Comparator.comparingInt((StructureFloor.ConnectorMarker marker) -> marker.pos().getX())
+                        .thenComparingInt(marker -> marker.pos().getZ())
+                        .thenComparingInt(marker -> marker.pos().getY())
+                        .thenComparing(marker -> marker.type().serializedName()))
+                .toList();
+    }
+
+    static boolean canStep(double fromSurfaceY, double toSurfaceY) {
+        return Math.abs(toSurfaceY - fromSurfaceY) <= MAX_STEP_HEIGHT;
+    }
+
+    static long columnKey(int x, int z) {
+        return ((long) x << 32) ^ (z & 0xffffffffL);
+    }
+
+    private static Map<Long, List<Cell>> indexColumns(Collection<Cell> cells) {
+        Map<Long, List<Cell>> indexed = new LinkedHashMap<>();
+        for (Cell cell : cells) {
+            indexed.computeIfAbsent(columnKey(cell.feet().getX(), cell.feet().getZ()), ignored -> new ArrayList<>())
+                    .add(cell);
+        }
+        indexed.replaceAll((ignored, column) -> column.stream()
+                .sorted(Comparator.comparingInt(cell -> cell.feet().getY()))
+                .toList());
+        return Map.copyOf(indexed);
+    }
+
+    record Cell(BlockPos feet, double surfaceY, int ceilingY) {
+        Cell {
+            feet = feet.immutable();
+        }
+    }
+}
