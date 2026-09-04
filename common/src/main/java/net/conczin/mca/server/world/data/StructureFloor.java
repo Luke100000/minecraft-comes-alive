@@ -28,21 +28,13 @@ public record StructureFloor(int id, int floorNumber, FloorGeometry geometry) {
     /** Flat compatibility constructor used by fixtures and legacy migration only. */
     public StructureFloor(int id, int anchorY, int ceilingY, int floorNumber,
                           BuildingFloorRegion region) {
-        this(id, floorNumber, geometryFromRegion(region, ceilingY, List.of(), null));
+        this(id, floorNumber, geometryFromRegion(region, ceilingY, List.of()));
     }
 
     /** Flat compatibility constructor used by fixtures and legacy migration only. */
     public StructureFloor(int id, int anchorY, int ceilingY, int floorNumber,
                           BuildingFloorRegion region, List<ConnectorMarker> connectors) {
-        this(id, floorNumber, geometryFromRegion(region, ceilingY, connectors, null));
-    }
-
-    /** Converts the old sparse semantic-ceiling boundary into ordinary exact cells. */
-    public StructureFloor(int id, int anchorY, int ceilingY, int floorNumber,
-                          BuildingFloorRegion region,
-                          BuildingFloorRegion ceilingBoundaryRegion,
-                          List<ConnectorMarker> connectors) {
-        this(id, floorNumber, geometryFromRegion(region, ceilingY, connectors, ceilingBoundaryRegion));
+        this(id, floorNumber, geometryFromRegion(region, ceilingY, connectors));
     }
 
     public StructureFloor(int id, int anchorY, int ceilingY, BuildingFloorRegion region) {
@@ -147,19 +139,13 @@ public record StructureFloor(int id, int floorNumber, FloorGeometry geometry) {
         return new StructureFloor(id, floorNumber, newGeometry);
     }
 
-    /** Transitional flat helper for old callers; removed once all scanners carry exact geometry. */
-    public StructureFloor withGeometry(int anchorY, int ceilingY, BuildingFloorRegion region) {
-        return new StructureFloor(id, anchorY, ceilingY, floorNumber, region, connectors());
-    }
-
     public StructureFloor withFloorNumber(int newFloorNumber) {
         return new StructureFloor(id, newFloorNumber, geometry);
     }
 
     private static FloorGeometry geometryFromRegion(BuildingFloorRegion region,
                                                     int ceilingY,
-                                                    Collection<ConnectorMarker> markers,
-                                                    BuildingFloorRegion boundary) {
+                                                    Collection<ConnectorMarker> markers) {
         Objects.requireNonNull(region, "region");
         if (region.area() == 0) {
             throw new IllegalArgumentException("StructureFloor requires non-empty region geometry");
@@ -167,15 +153,6 @@ public record StructureFloor(int id, int floorNumber, FloorGeometry geometry) {
         LinkedHashMap<BlockPos, FloorGeometry.Cell> cells = new LinkedHashMap<>();
         for (BlockPos pos : region.cells()) {
             cells.put(pos, new FloorGeometry.Cell(pos, pos.getY(), ceilingY));
-        }
-        if (boundary != null) {
-            for (BlockPos pos : boundary.withAnchorY(ceilingY).cells()) {
-                if (!region.containsHorizontally(pos.getX(), pos.getZ())) {
-                    throw new IllegalArgumentException(
-                            "StructureFloor ceiling boundary must be a subset of its region");
-                }
-                cells.put(pos, new FloorGeometry.Cell(pos, pos.getY(), pos.getY() + 2));
-            }
         }
         Map<BlockPos, ConnectorType> connectors = new LinkedHashMap<>();
         if (markers != null) {

@@ -218,16 +218,13 @@ class StructureFloorResolutionTest {
     }
 
     @Test
-    void persistedCeilingBoundaryCellResolvesLowerFloorUnlessUpperFloorOwnsSameColumn() {
-        BuildingFloorRegion lowerRegion = BuildingFloorRegion.fromFootprint(88, Set.of(
-                new BlockPos(0, 88, 0), new BlockPos(1, 88, 0)));
-        BuildingFloorRegion lowerBoundary = BuildingFloorRegion.fromFootprint(91, Set.of(
-                new BlockPos(1, 91, 0)));
-        StructureFloor lower = new StructureFloor(
-                0, 88, 91, 0, lowerRegion, lowerBoundary, List.of());
-        StructureFloor upper = new StructureFloor(
-                1, 91, 94, 1,
-                BuildingFloorRegion.fromFootprint(91, Set.of(new BlockPos(0, 91, 0))));
+    void exactTransitionCellResolvesLowerFloorUnlessUpperFloorOwnsSameColumn() {
+        StructureFloor lower = new StructureFloor(0, 0, new FloorGeometry(Set.of(
+                new FloorGeometry.Cell(new BlockPos(0, 88, 0), 88, 91),
+                new FloorGeometry.Cell(new BlockPos(1, 88, 0), 88, 91),
+                new FloorGeometry.Cell(new BlockPos(1, 91, 0), 91, 93)), Map.of()));
+        StructureFloor upper = new StructureFloor(1, 1, new FloorGeometry(Set.of(
+                new FloorGeometry.Cell(new BlockPos(0, 91, 0), 91, 94)), Map.of()));
         Structure structure = structure(lower, upper);
 
         assertEquals(lower, structure.physicalFloorAt(new BlockPos(1, 91, 0)).orElseThrow());
@@ -242,10 +239,6 @@ class StructureFloorResolutionTest {
         BuildingFloorRegion region = BuildingFloorRegion.fromFootprint(
                 anchorY, Set.of(new BlockPos(0, anchorY, 0)));
         return new StructureFloor(id, anchorY, ceilingY, id, region);
-    }
-
-    private static FloorSurface.Cell cell(int x, int y, int z) {
-        return new FloorSurface.Cell(new BlockPos(x, y, z), y, y + 4);
     }
 
     private static FloorGeometry.Cell geometryCell(int x, int y, int z) {

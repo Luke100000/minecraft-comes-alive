@@ -66,7 +66,7 @@ final class StructureConnector {
         return half == DoubleBlockHalf.UPPER ? pos.below() : pos;
     }
 
-    /** Associates connector positions with exact cells on the already selected semantic floor. */
+    /** Associates connector positions with exact handoff heights on the selected semantic floor. */
     static Map<BlockPos, StructureFloor.ConnectorType> associatedFloorCells(
             Level world, Collection<BlockPos> connectors, FloorGeometry geometry) {
         if (connectors.isEmpty() || geometry.cells().isEmpty()) return Map.of();
@@ -97,13 +97,53 @@ final class StructureConnector {
         return Set.copyOf(cells);
     }
 
-    static Set<BlockPos> floorMembershipCells(BlockPos connector, FloorSurface surface) {
-        if (surface == null) return Set.of();
-        Set<FloorGeometry.Cell> cells = surface.cells().stream()
-                .map(cell -> new FloorGeometry.Cell(cell.feet(), cell.surfaceY(), cell.ceilingY()))
-                .collect(java.util.stream.Collectors.toUnmodifiableSet());
-        return floorMembershipCells(connector,
-                new FloorGeometry(cells, surface.connectorTypesByFloorCell()));
+    /**
+     * Materializes connector boundary cells from the exact handoff cells that admitted them.
+     * FloorGeometry itself deliberately refuses to manufacture missing connector cells, so the
+     * scanner must make the connector cell explicit before attaching connector metadata.
+     */
+    static FloorGeometry withConnectorAssociations(
+            FloorGeometry geometry,
+            Map<BlockPos, StructureFloor.ConnectorType> connectorTypesByCell) {
+        Objects.requireNonNull(geometry, "geometry");
+        if (connectorTypesByCell == null || connectorTypesByCell.isEmpty()) return geometry;
+
+        LinkedHashMap<BlockPos, FloorGeometry.Cell> cells = new LinkedHashMap<>();
+        geometry.cells().forEach(cell -> cells.put(cell.feet(), cell));
+        LinkedHashMap<BlockPos, StructureFloor.ConnectorType> connectors =
+                new LinkedHashMap<>(geometry.connectorTypesByCell());
+
+        for (Map.Entry<BlockPos, StructureFloor.ConnectorType> entry : connectorTypesByCell.entrySet()) {
+            BlockPos floorCell = entry.getKey().immutable();
+            if (!cells.containsKey(floorCell)) {
+                FloorGeometry.Cell materialized = connectorBoundaryCell(floorCell, geometry);
+                if (materialized == null) {
+                    throw new IllegalArgumentException(
+                            "Connector association has no exact FloorGeometry handoff at " + floorCell);
+                }
+                cells.put(floorCell, materialized);
+            }
+            connectors.putIfAbsent(floorCell, entry.getValue());
+        }
+        return new FloorGeometry(cells.values(), connectors);
+    }
+
+    private static FloorGeometry.Cell connectorBoundaryCell(BlockPos floorCell, FloorGeometry geometry) {
+        return Arrays.stream(HORIZONTAL)
+                .flatMap(direction -> geometry.cellsAtColumn(
+                        floorCell.getX() + direction.getStepX(),
+                        floorCell.getZ() + direction.getStepZ()).stream())
+                .filter(reference -> reference.feet().getY() == floorCell.getY())
+                .min(Comparator
+                        .comparingDouble((FloorGeometry.Cell reference) ->
+                                Math.abs(reference.surfaceY() - floorCell.getY()))
+                        .thenComparingDouble(FloorGeometry.Cell::surfaceY)
+                        .thenComparingInt(FloorGeometry.Cell::ceilingY)
+                        .thenComparingInt(reference -> reference.feet().getX())
+                        .thenComparingInt(reference -> reference.feet().getZ()))
+                .map(reference -> new FloorGeometry.Cell(
+                        floorCell, reference.surfaceY(), reference.ceilingY()))
+                .orElse(null);
     }
 
     /** Returns the vertical connector column for an occupied connector or its immediate open top-exit cell. */
@@ -165,10 +205,23 @@ final class StructureConnector {
     private static BlockPos floorHandoff(StructureFloor floor,
                                          StructureFloor other,
                                          BlockPos connector) {
-        return handoffs(connector).stream()
-                .filter(candidate -> floor.geometry().interactionCellAt(
-                        candidate.getX(), candidate.getY(), candidate.getZ()).isPresent())
-                .findFirst().orElse(null);
+        for (BlockPos candidate : handoffs(connector)) {
+            FloorGeometry.Cell cell = floor.geometry().interactionCellAt(
+                    candidate.getX(), candidate.getY(), candidate.getZ()).orElse(null);
+            if (cell == null) continue;
+
+            // A stale flat approximation may physically overlap the next semantic Floor. Do not
+            // let that overlap manufacture a connector handoff above the next Floor anchor. An
+            // exact transition cell whose own feet are at that height is still legitimate lower-
+            // Floor geometry and remains eligible.
+            if (floor.anchorY() < other.anchorY()
+                    && candidate.getY() >= other.anchorY()
+                    && cell.feet().getY() < other.anchorY()) {
+                continue;
+            }
+            return candidate;
+        }
+        return null;
     }
 
     static boolean connectsFloors(List<BlockPos> connectorColumn,

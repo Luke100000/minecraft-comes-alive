@@ -184,7 +184,7 @@ class BlueprintMapGeometryTest {
                 id,
                 new BlockPos(0, y, 0),
                 List.of(new StructureFloor(0, y, y + 3, floorNumber,
-                        region(y),
+                        region(y, connectors),
                         List.of(connectors))));
         Method setter = Structure.class.getDeclaredMethod("setLogicalBuildingId", int.class);
         setter.setAccessible(true);
@@ -192,12 +192,18 @@ class BlueprintMapGeometryTest {
         return structure;
     }
 
-    private static BuildingFloorRegion region(int anchorY) throws Exception {
+    private static BuildingFloorRegion region(int anchorY,
+                                              StructureFloor.ConnectorMarker... connectors) throws Exception {
         Method fromFootprint = BuildingFloorRegion.class.getDeclaredMethod(
                 "fromFootprint", int.class, java.util.Collection.class);
         fromFootprint.setAccessible(true);
+        Set<BlockPos> cells = new LinkedHashSet<>();
+        cells.add(new BlockPos(0, anchorY, 0));
+        for (StructureFloor.ConnectorMarker connector : connectors) {
+            cells.add(connector.pos());
+        }
         return (BuildingFloorRegion) fromFootprint.invoke(null, anchorY,
-                Set.of(new BlockPos(0, anchorY, 0)));
+                cells);
     }
 
     private static Building room(int id, int structureId, int floorId, BlockPos source) {

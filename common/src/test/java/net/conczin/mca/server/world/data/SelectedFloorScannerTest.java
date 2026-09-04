@@ -80,7 +80,7 @@ class SelectedFloorScannerTest {
                 cell(5, 90, 0),
                 cell(6, 91, 0),
                 // x=7 is the door boundary: the walkability scan can cross it, but it is not
-                // an ordinary FloorSurface cell.
+                // an ordinary FloorGeometry cell.
                 cell(8, 91, 0), cell(9, 91, 0), cell(10, 91, 0), cell(11, 91, 0));
 
         FloorGeometry lower = SelectedFloorScanner.floorSelection(cells, topStair).selected();

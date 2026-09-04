@@ -55,6 +55,38 @@ class StructureConnectorTest {
                 List.of(new BlockPos(0, 92, 0)), upper, staleLower));
     }
 
+    @Test
+    void connectorMembershipProjectsExactHandoffHeightIntoConnectorColumn() {
+        BlockPos left = new BlockPos(0, 64, 0);
+        BlockPos right = new BlockPos(2, 64, 0);
+        BlockPos connector = new BlockPos(1, 64, 0);
+        FloorGeometry geometry = new FloorGeometry(Set.of(
+                new FloorGeometry.Cell(left, 64, 68),
+                new FloorGeometry.Cell(right, 64, 68)), java.util.Map.of());
+
+        Set<BlockPos> membership = StructureConnector.floorMembershipCells(
+                connector, geometry);
+
+        assertEquals(Set.of(connector), membership);
+    }
+
+    @Test
+    void connectorAssociationsMaterializeBoundaryCellBeforeGeometryValidation() {
+        BlockPos left = new BlockPos(0, 64, 0);
+        BlockPos right = new BlockPos(2, 64, 0);
+        BlockPos connector = new BlockPos(1, 64, 0);
+        FloorGeometry geometry = new FloorGeometry(Set.of(
+                new FloorGeometry.Cell(left, 64, 68),
+                new FloorGeometry.Cell(right, 64, 68)), java.util.Map.of());
+
+        FloorGeometry augmented = StructureConnector.withConnectorAssociations(
+                geometry, java.util.Map.of(connector, StructureFloor.ConnectorType.DOOR));
+
+        assertTrue(augmented.cellAt(connector).isPresent());
+        assertEquals(StructureFloor.ConnectorType.DOOR,
+                augmented.connectorTypesByCell().get(connector));
+    }
+
     private static StructureFloor floor(int anchorY, int ceilingY) {
         return new StructureFloor(0, anchorY, ceilingY, 0,
                 BuildingFloorRegion.fromFootprint(anchorY, Set.of(

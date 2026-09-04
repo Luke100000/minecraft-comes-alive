@@ -75,7 +75,8 @@ final class SelectedFloorScanner {
                     + ": " + e.getMessage(), e);
         }
         FloorGeometry floor = selection.selected();
-        floor = floor.withConnectorTypes(StructureConnector.associatedFloorCells(world, connectors, floor));
+        floor = StructureConnector.withConnectorAssociations(
+                floor, StructureConnector.associatedFloorCells(world, connectors, floor));
         List<FloorGeometry> connectedFloors = new ArrayList<>(selection.connected().size());
         for (FloorGeometry connected : selection.connected()) {
             connectedFloors.add(connected == selection.selected() ? floor : connected);

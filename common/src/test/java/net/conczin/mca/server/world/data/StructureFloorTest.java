@@ -103,7 +103,6 @@ class StructureFloorTest {
 
         assertEquals(List.of(88, 91), loaded.geometry().cellsAtColumn(1, 0).stream()
                 .map(cell -> cell.feet().getY()).toList());
-        assertFalse(saved.contains("ceilingBoundaryRegion"));
     }
 
     @Test
