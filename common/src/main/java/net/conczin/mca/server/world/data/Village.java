@@ -823,21 +823,6 @@ public class Village implements Iterable<Building> {
         return true;
     }
 
-    public RoomInheritanceUpdate analyzeRoomInheritanceUpdate(Building room, boolean enabled) {
-        if (room == null || !room.isFunctionalRoom() || buildings.get(room.getId()) != room) {
-            return RoomInheritanceUpdate.invalid(enabled);
-        }
-        boolean mainRoom = isMainRoom(room);
-        boolean previousEnabled = mainRoom
-                ? isBuildingInheritanceEnabled(room)
-                : room.contributesToMain();
-        List<String> matchingTypes = enabled ? List.of() : getMatchingRoomTypes(room).stream()
-                .map(BuildingType::name)
-                .toList();
-        return new RoomInheritanceUpdate(
-                room.getId(), mainRoom, previousEnabled, enabled, matchingTypes);
-    }
-
     public Building.validationResult commitRoomInheritanceUpdate(
             RoomInheritanceUpdate update, String forcedType) {
         if (update == null || !update.valid()) return Building.validationResult.NOT_IN_BUILDING;

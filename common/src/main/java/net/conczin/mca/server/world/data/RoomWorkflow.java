@@ -337,7 +337,7 @@ public final class RoomWorkflow {
 
         Village village = resolved.village();
         Building room = resolved.room();
-        RoomInheritanceUpdate update = village.analyzeRoomInheritanceUpdate(room, enabled);
+        RoomInheritanceUpdate update = analyzeRoomInheritanceUpdate(village, room, enabled);
         if (!update.valid()) {
             return Outcome.failed(Building.validationResult.NOT_IN_BUILDING, source, room.getId());
         }
@@ -348,6 +348,24 @@ public final class RoomWorkflow {
             return Outcome.requiresTypeSelection(source, update.matchingTypes(), room.getId());
         }
         return committed(village.commitRoomInheritanceUpdate(update, selectedType), source, room.getId());
+    }
+
+    static RoomInheritanceUpdate analyzeRoomInheritanceUpdate(Village village,
+                                                              Building room,
+                                                              boolean enabled) {
+        if (village == null || room == null || !room.isFunctionalRoom()
+                || village.getBuilding(room.getId()).orElse(null) != room) {
+            return RoomInheritanceUpdate.invalid(enabled);
+        }
+        boolean mainRoom = village.isMainRoom(room);
+        boolean previousEnabled = mainRoom
+                ? village.isBuildingInheritanceEnabled(room)
+                : room.contributesToMain();
+        List<String> matchingTypes = enabled ? List.of() : village.getMatchingRoomTypes(room).stream()
+                .map(BuildingType::name)
+                .toList();
+        return new RoomInheritanceUpdate(
+                room.getId(), mainRoom, previousEnabled, enabled, matchingTypes);
     }
 
     private Outcome addAttachedRoom(BlockPos source,

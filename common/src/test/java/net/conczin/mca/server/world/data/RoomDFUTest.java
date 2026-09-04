@@ -216,6 +216,15 @@ class RoomDFUTest {
     }
 
     @Test
+    void canonicalRoomMissingFloorCellsIsRejectedAtDfuBoundary() {
+        CompoundTag malformed = canonicalVillage().save();
+        malformed.getList("buildings", net.minecraft.nbt.Tag.TAG_COMPOUND)
+                .getCompound(0).remove("floorCells");
+
+        assertThrows(IllegalArgumentException.class, () -> RoomDFU.load(malformed));
+    }
+
+    @Test
     void canonicalLogicalBuildingMissingInheritanceIsRejectedAtDfuBoundary() {
         CompoundTag malformed = canonicalVillage().save();
         malformed.getList("logicalBuildings", net.minecraft.nbt.Tag.TAG_COMPOUND)

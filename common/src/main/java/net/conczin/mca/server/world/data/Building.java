@@ -63,13 +63,12 @@ public class Building implements VillageBuilding {
         posX = tag.getInt("posX");
         posY = tag.getInt("posY");
         posZ = tag.getInt("posZ");
-        if (tag.get("floorCells") instanceof ListTag cellsTag) {
-            floorCells = cellsTag.stream()
-                    .map(NbtHelper::decodeBlockPos)
-                    .filter(Objects::nonNull)
-                    .map(BlockPos::immutable)
-                    .collect(Collectors.toUnmodifiableSet());
-        }
+        ListTag cellsTag = (ListTag) tag.get("floorCells");
+        floorCells = cellsTag.stream()
+                .map(NbtHelper::decodeBlockPos)
+                .filter(Objects::nonNull)
+                .map(BlockPos::immutable)
+                .collect(Collectors.toUnmodifiableSet());
         structureId = tag.getInt("structureId");
         floorId = tag.getInt("floorId");
         typeForced = tag.getBoolean("isTypeForced");
