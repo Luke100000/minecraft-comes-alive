@@ -23,6 +23,7 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 class BlueprintMapGeometryTest {
     private Map<String, BuildingType> previousBuildingTypes;
@@ -176,6 +177,29 @@ class BlueprintMapGeometryTest {
                         new BlueprintMapFootprint.Cell(0, 0),
                         new BlueprintMapFootprint.Cell(1, 0)),
                 ground.footprintLayers().getFirst().footprintCells());
+    }
+
+    @Test
+    void registeredRoomRemainsVisibleWhenItsTypeIsTemporarilyIncomplete() throws Exception {
+        JsonObject houseJson = new JsonObject();
+        JsonObject requirements = new JsonObject();
+        requirements.addProperty("#minecraft:beds", 1);
+        houseJson.add("blocks", requirements);
+        BuildingTypes.getInstance().setBuildingTypes(Map.of(
+                "house", new BuildingType("house", houseJson)));
+
+        Village village = new Village(1, null);
+        Structure structure = structure(10, 10, 64, 0);
+        Building room = room(1, 10, 0, new BlockPos(0, 64, 0));
+        setRoomFootprint(room, Set.of(new BlockPos(0, 64, 0)));
+        registerStructure(village, structure, room);
+
+        assertFalse(room.isComplete());
+
+        BlueprintMapGeometry.MapGeometry ground = BlueprintMapGeometry.build(village, null).get(0);
+
+        assertEquals(1, ground.footprintLayers().size());
+        assertEquals(room, ground.footprintLayers().getFirst().building());
     }
 
     private static Structure structure(int id, int buildingId, int y, int floorNumber,

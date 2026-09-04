@@ -68,7 +68,6 @@ final class BlueprintMapGeometry {
 
     private List<MapFootprintLayer> buildRoomLayers(Integer selectedFloor) {
         List<Building> rooms = village.getRooms()
-                .filter(Building::isComplete)
                 .sorted(Comparator.comparingInt((Building room) ->
                                 village.getLogicalBuildingId(room.getStructureId()))
                         .thenComparingInt(Building::getId))

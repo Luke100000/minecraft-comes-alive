@@ -47,6 +47,31 @@ class StructureConnectorTest {
     }
 
     @Test
+    void connectorEndingOneBlockBelowUpperFloorStillConnectsStoreys() {
+        StructureFloor lower = floor(64, 68);
+        StructureFloor upper = floor(69, 73);
+        List<BlockPos> connectorColumn = List.of(
+                new BlockPos(0, 64, 0),
+                new BlockPos(0, 65, 0),
+                new BlockPos(0, 66, 0),
+                new BlockPos(0, 67, 0));
+
+        assertTrue(StructureConnector.connectsFloors(connectorColumn, lower, upper));
+    }
+
+    @Test
+    void connectorOneBlockBelowFloorSupportProjectsToWalkableFeet() {
+        BlockPos connector = new BlockPos(0, 67, 0);
+        BlockPos upperFeet = new BlockPos(1, 69, 0);
+        FloorGeometry upper = new FloorGeometry(Set.of(
+                new FloorGeometry.Cell(upperFeet, 69, 73)), java.util.Map.of());
+
+        Set<BlockPos> membership = StructureConnector.floorMembershipCells(connector, upper);
+
+        assertEquals(Set.of(new BlockPos(0, 69, 0)), membership);
+    }
+
+    @Test
     void legacyCeilingOverlapDoesNotMakeUpperOnlyConnectorReachLowerFloor() {
         StructureFloor staleLower = floor(88, 93);
         StructureFloor upper = floor(91, 94);

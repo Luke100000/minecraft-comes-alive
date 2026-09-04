@@ -90,7 +90,8 @@ final class StructureConnector {
         LinkedHashSet<BlockPos> cells = new LinkedHashSet<>();
         for (BlockPos handoff : handoffs(connector)) {
             geometry.cellsAtColumn(handoff.getX(), handoff.getZ()).stream()
-                    .filter(landing -> landing.feet().getY() == handoff.getY())
+                    .filter(landing -> handoff.getY() == landing.feet().getY()
+                            || handoff.getY() == landing.feet().getY() - 1)
                     .forEach(landing -> cells.add(new BlockPos(
                             connector.getX(), landing.feet().getY(), connector.getZ())));
         }
