@@ -190,14 +190,13 @@ final class BlueprintTerrainRenderer implements AutoCloseable {
                                       int biomeWaterColor,
                                       float brightness,
                                       boolean contour) {
-        int color = biomeWaterColor == NO_WATER_TINT
-                ? terrainColor
-                : waterColor(terrainColor, biomeWaterColor);
-        color = shadeColor(color, brightness);
+        int color = shadeColor(terrainColor, brightness);
         if (contour) {
             color = blendContour(color);
         }
-        return color;
+        return biomeWaterColor == NO_WATER_TINT
+                ? color
+                : waterColor(color, biomeWaterColor);
     }
 
     @SuppressWarnings("deprecation")

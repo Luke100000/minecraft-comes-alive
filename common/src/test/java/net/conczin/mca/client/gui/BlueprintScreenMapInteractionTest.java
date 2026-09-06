@@ -174,10 +174,10 @@ class BlueprintScreenMapInteractionTest {
     }
 
     @Test
-    void waterBlendsWithSeabedBeforeHillshade() {
-        assertEquals(0xff505050,
+    void waterLayerCompositesAfterTerrainStylingToAvoidHardContourStripes() {
+        assertEquals(0xff4466ab,
                 BlueprintTerrainRenderer.composeTerrainAndWater(
-                        0xff000000, 0xffffff, 0.5F, false));
+                        0xff808080, 0x3f76e4, 1.0F, true));
     }
 
     @Test
