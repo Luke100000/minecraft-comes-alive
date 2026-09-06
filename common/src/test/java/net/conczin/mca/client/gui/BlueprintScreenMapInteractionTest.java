@@ -14,6 +14,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.Bootstrap;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.BlockState;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -25,6 +26,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.IntFunction;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -165,9 +167,59 @@ class BlueprintScreenMapInteractionTest {
     }
 
     @Test
-    void waterColorUsesJourneyMapDefaultEffectiveBlend() {
+    void waterColorUsesFixedSeabedVisibleBlend() {
         assertEquals(0xff9f9f9f,
                 BlueprintTerrainRenderer.waterColor(0xff000000, 0xffffff));
+    }
+
+    @Test
+    void waterLayerCompositesAfterTerrainStylingToAvoidHardContourStripes() {
+        assertEquals(0xff4466ab,
+                BlueprintTerrainRenderer.composeTerrainAndWater(
+                        0xff808080, 0x3f76e4, 1.0F, true));
+    }
+
+    @Test
+    void waterColumnJumpsStraightToHeightmapSeabed() {
+        int[] reads = {0};
+        IntFunction<BlockState> deepStoneColumn = y -> {
+            reads[0]++;
+            return y == 40 ? Blocks.STONE.defaultBlockState() : Blocks.WATER.defaultBlockState();
+        };
+
+        BlueprintTerrainRenderer.ColumnLayers layers = BlueprintTerrainRenderer.sampleOceanFloorColumn(
+                deepStoneColumn, 64, 41, -64);
+
+        assertEquals(1, reads[0],
+                "deep water must use the OCEAN_FLOOR height instead of reading every water block");
+        assertEquals(40, layers.terrainY());
+        assertEquals(64, layers.waterY());
+        assertEquals(Blocks.STONE.defaultBlockState(), layers.terrainState());
+    }
+
+    @Test
+    void firstRenderSamplesOnlyOneMissingTerrainTile() {
+        BlueprintTerrainRenderer.TileSamplingBudget budget =
+                new BlueprintTerrainRenderer.TileSamplingBudget();
+
+        assertTrue(budget.tryAcquire());
+        assertFalse(budget.tryAcquire(),
+                "extra visible tiles must be deferred instead of all sampling in the opening frame");
+    }
+
+    @Test
+    void dryTerrainHeightKeepsPreexistingMotionBlockingHeight() throws Exception {
+        Method method;
+        try {
+            method = BlueprintTerrainRenderer.class.getDeclaredMethod(
+                    "dryTerrainHeight", int.class, int.class, int.class);
+        } catch (NoSuchMethodException e) {
+            throw new AssertionError("dry terrain must have an explicit regression-tested height selection", e);
+        }
+        method.setAccessible(true);
+
+        assertEquals(77, method.invoke(null, 77, 80, -64));
+        assertEquals(80, method.invoke(null, -64, 80, -64));
     }
 
     @Test
@@ -196,9 +248,9 @@ class BlueprintScreenMapInteractionTest {
         Class<?> tileClass = Class.forName(BlueprintTerrainRenderer.class.getName() + "$TerrainTile");
         Class<?> cellClass = Class.forName(BlueprintTerrainRenderer.class.getName() + "$TerrainTile$Cell");
 
-        var cellConstructor = cellClass.getDeclaredConstructor(int.class, int.class);
+        var cellConstructor = cellClass.getDeclaredConstructor(int.class, int.class, int.class);
         cellConstructor.setAccessible(true);
-        Object cachedCell = cellConstructor.newInstance(72, 0xff486a3d);
+        Object cachedCell = cellConstructor.newInstance(72, 0xff486a3d, -1);
 
         Object cells = Array.newInstance(cellClass, 3, 3);
         Array.set(Array.get(cells, 1), 1, cachedCell);

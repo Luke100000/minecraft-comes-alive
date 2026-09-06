@@ -14,17 +14,21 @@ import net.minecraft.world.level.ColorResolver;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.material.MapColor;
+import net.minecraft.world.level.material.Fluids;
 
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.function.IntFunction;
 
 /** Owns world-derived Blueprint terrain sampling, texture creation and cache lifecycle. */
 final class BlueprintTerrainRenderer implements AutoCloseable {
     private static final int SAMPLE_STEP = 1;
     private static final int TILE_BLOCK_SIZE = 128;
     private static final int MAX_CACHED_TILES = 96;
+    private static final int MAX_TILE_SAMPLES_PER_FRAME = 1;
     private static final long INCOMPLETE_TILE_RETRY_TICKS = 20L;
+    private static final int MAX_SEABED_COLOR_FALLBACK_DEPTH = 4;
     private static final int TERRAIN_ALPHA = 0xff;
     private static final int CONTOUR_COLOR = 0x66000000;
     private static final int CONTOUR_INTERVAL = 4;
@@ -33,6 +37,7 @@ final class BlueprintTerrainRenderer implements AutoCloseable {
     private static final float MIN_BRIGHTNESS = 0.58f;
     private static final float MAX_BRIGHTNESS = 1.15f;
     private static final float WATER_BLEND = 0.625f;
+    private static final int NO_WATER_TINT = -1;
 
     private final LinkedHashMap<TileKey, TerrainTile> tiles = new LinkedHashMap<>(16, 0.75f, true);
 
@@ -50,11 +55,12 @@ final class BlueprintTerrainRenderer implements AutoCloseable {
         int visibleMaxZ = centerBlockZ + radius;
 
         long gameTime = minecraft.level.getGameTime();
+        TileSamplingBudget samplingBudget = new TileSamplingBudget();
         for (int minX = tileMin(visibleMinX); minX <= visibleMaxX; minX += TILE_BLOCK_SIZE) {
             for (int minZ = tileMin(visibleMinZ); minZ <= visibleMaxZ; minZ += TILE_BLOCK_SIZE) {
                 TileKey key = new TileKey(minX, minZ);
                 TerrainTile tile = tiles.get(key);
-                if (tile == null || tile.shouldRefresh(gameTime)) {
+                if ((tile == null || tile.shouldRefresh(gameTime)) && samplingBudget.tryAcquire()) {
                     TerrainTile previous = tile;
                     TerrainTile sampled = TerrainTile.sample(
                             minecraft.level, minX, minZ, sampleStep, gameTime, previous);
@@ -62,7 +68,9 @@ final class BlueprintTerrainRenderer implements AutoCloseable {
                     tile = sampled;
                     tiles.put(key, tile);
                 }
-                renderTile(context, tile);
+                if (tile != null) {
+                    renderTile(context, tile);
+                }
             }
         }
         trimCache();
@@ -104,8 +112,9 @@ final class BlueprintTerrainRenderer implements AutoCloseable {
                 int westHeight = tile.heightAt(cellX - 1, cellZ, cell.height);
                 int eastHeight = tile.heightAt(cellX + 1, cellZ, cell.height);
 
-                int color = shadeColor(cell.surfaceColor(),
-                        hillshadeBrightness(westHeight, eastHeight, northHeight, southHeight));
+                float brightness = hillshadeBrightness(westHeight, eastHeight, northHeight, southHeight);
+                int color = composeTerrainAndWater(
+                        cell.terrainColor(), cell.waterTint(), brightness, false);
                 int nativeColor = FastColor.ABGR32.fromArgb32(color);
                 int cellMinX = firstCellX + cellX * tile.sampleStep;
                 int cellMinZ = firstCellZ + cellZ * tile.sampleStep;
@@ -127,7 +136,8 @@ final class BlueprintTerrainRenderer implements AutoCloseable {
                 boolean westContour = cellX > 0
                         && Math.floorDiv(cell.height, CONTOUR_INTERVAL)
                         != Math.floorDiv(westHeight, CONTOUR_INTERVAL);
-                int contourColor = FastColor.ABGR32.fromArgb32(blendContour(color));
+                int contourColor = FastColor.ABGR32.fromArgb32(composeTerrainAndWater(
+                        cell.terrainColor(), cell.waterTint(), brightness, true));
 
                 if (northContour && minPixelZ < maxPixelZ) {
                     for (int pixelX = minPixelX; pixelX < maxPixelX; pixelX++) {
@@ -176,6 +186,38 @@ final class BlueprintTerrainRenderer implements AutoCloseable {
         return blendOpaque(groundColor, biomeWaterColor, WATER_BLEND);
     }
 
+    static int composeTerrainAndWater(int terrainColor,
+                                      int biomeWaterColor,
+                                      float brightness,
+                                      boolean contour) {
+        int color = shadeColor(terrainColor, brightness);
+        if (contour) {
+            color = blendContour(color);
+        }
+        return biomeWaterColor == NO_WATER_TINT
+                ? color
+                : waterColor(color, biomeWaterColor);
+    }
+
+    static ColumnLayers sampleOceanFloorColumn(IntFunction<BlockState> stateAtY,
+                                                int waterY,
+                                                int oceanFloorHeight,
+                                                int minY) {
+        int terrainY = oceanFloorHeight - 1;
+        if (terrainY < minY) return null;
+        return new ColumnLayers(terrainY, waterY, stateAtY.apply(terrainY));
+    }
+
+    static int dryTerrainHeight(int motionBlockingHeight, int surfaceHeight, int minBuildHeight) {
+        return motionBlockingHeight > minBuildHeight ? motionBlockingHeight : surfaceHeight;
+    }
+
+    private static boolean isWater(BlockState state) {
+        return state.getFluidState().is(FluidTags.WATER)
+                || state.getFluidState().is(Fluids.WATER)
+                || state.getFluidState().is(Fluids.FLOWING_WATER);
+    }
+
     private static int blendOpaque(int baseColor, int overlayColor, float opacity) {
         float inverse = 1.0f - opacity;
         int red = Math.round(((baseColor >> 16) & 0xff) * inverse
@@ -217,6 +259,19 @@ final class BlueprintTerrainRenderer implements AutoCloseable {
     }
 
     private record TileKey(int minX, int minZ) {
+    }
+
+    static final class TileSamplingBudget {
+        private int remaining = MAX_TILE_SAMPLES_PER_FRAME;
+
+        boolean tryAcquire() {
+            if (remaining <= 0) return false;
+            remaining--;
+            return true;
+        }
+    }
+
+    record ColumnLayers(int terrainY, int waterY, BlockState terrainState) {
     }
 
     private static final class TerrainTile {
@@ -321,6 +376,7 @@ final class BlueprintTerrainRenderer implements AutoCloseable {
 
                     surfacePos.set(sampleX, surfaceHeight - 1, sampleZ);
                     BlockState surfaceState = level.getBlockState(surfacePos);
+                    boolean waterColumn = isWater(surfaceState);
                     MapColor mapColor = surfaceState.getMapColor(level, surfacePos);
                     while (mapColor == MapColor.NONE && surfacePos.getY() > minBuildHeight) {
                         surfacePos.move(0, -1, 0);
@@ -328,39 +384,54 @@ final class BlueprintTerrainRenderer implements AutoCloseable {
                         mapColor = surfaceState.getMapColor(level, surfacePos);
                     }
 
-                    int terrainHeight = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, sampleX, sampleZ);
-                    if (terrainHeight <= minBuildHeight) {
-                        terrainHeight = surfacePos.getY() + 1;
+                    int terrainHeight = surfacePos.getY() + 1;
+                    if (!waterColumn) {
+                        terrainHeight = dryTerrainHeight(
+                                level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, sampleX, sampleZ),
+                                terrainHeight,
+                                minBuildHeight);
                     }
-
                     int baseColor = mapColor == MapColor.NONE ? FALLBACK_COLOR : mapColor.col;
                     baseColor = biomeTintedColor(level, surfacePos, mapColor, baseColor);
 
-                    int surfaceColor = baseColor;
-                    if (surfaceState.getFluidState().is(FluidTags.WATER)) {
-                        int oceanFloorHeight = level.getHeight(Heightmap.Types.OCEAN_FLOOR, sampleX, sampleZ);
-                        int waterTint = unblendedBiomeColor(level, surfacePos, BiomeColors.WATER_COLOR_RESOLVER);
-
-                        if (oceanFloorHeight > minBuildHeight) {
-                            BlockPos.MutableBlockPos groundPos = new BlockPos.MutableBlockPos(
-                                    sampleX, oceanFloorHeight - 1, sampleZ);
-                            BlockState groundState = level.getBlockState(groundPos);
-                            MapColor groundMapColor = groundState.getMapColor(level, groundPos);
-                            while (groundMapColor == MapColor.NONE && groundPos.getY() > minBuildHeight) {
-                                groundPos.move(0, -1, 0);
-                                groundState = level.getBlockState(groundPos);
-                                groundMapColor = groundState.getMapColor(level, groundPos);
-                            }
-                            if (groundMapColor != MapColor.NONE) {
-                                baseColor = biomeTintedColor(level, groundPos, groundMapColor, groundMapColor.col);
-                                terrainHeight = groundPos.getY() + 1;
-                            }
+                    int terrainColor = baseColor;
+                    int waterTint = NO_WATER_TINT;
+                    int oceanFloorHeight = waterColumn
+                            ? level.getHeight(Heightmap.Types.OCEAN_FLOOR, sampleX, sampleZ)
+                            : minBuildHeight;
+                    ColumnLayers layers = waterColumn
+                            ? sampleOceanFloorColumn(y -> {
+                                surfacePos.set(sampleX, y, sampleZ);
+                                return level.getBlockState(surfacePos);
+                            }, surfaceHeight - 1, oceanFloorHeight, minBuildHeight)
+                            : null;
+                    if (layers != null && layers.waterY() != Integer.MIN_VALUE) {
+                        BlockPos.MutableBlockPos groundPos = new BlockPos.MutableBlockPos(
+                                sampleX, layers.terrainY(), sampleZ);
+                        BlockState groundState = layers.terrainState();
+                        MapColor groundMapColor = groundState.getMapColor(level, groundPos);
+                        int fallbackDepth = 0;
+                        while (groundMapColor == MapColor.NONE
+                                && groundPos.getY() > minBuildHeight
+                                && fallbackDepth < MAX_SEABED_COLOR_FALLBACK_DEPTH) {
+                            groundPos.move(0, -1, 0);
+                            groundState = level.getBlockState(groundPos);
+                            groundMapColor = groundState.getMapColor(level, groundPos);
+                            fallbackDepth++;
                         }
 
-                        surfaceColor = BlueprintTerrainRenderer.waterColor(baseColor, waterTint);
+                        if (groundMapColor != MapColor.NONE) {
+                            terrainColor = biomeTintedColor(level, groundPos, groundMapColor, groundMapColor.col);
+                            terrainHeight = groundPos.getY() + 1;
+                        } else {
+                            terrainColor = FALLBACK_COLOR;
+                        }
+
+                        BlockPos waterPos = new BlockPos(sampleX, layers.waterY(), sampleZ);
+                        waterTint = unblendedBiomeColor(level, waterPos, BiomeColors.WATER_COLOR_RESOLVER);
                     }
 
-                    cells[cellX][cellZ] = new Cell(terrainHeight, surfaceColor);
+                    cells[cellX][cellZ] = new Cell(terrainHeight, terrainColor, waterTint);
                 }
             }
 
@@ -383,7 +454,7 @@ final class BlueprintTerrainRenderer implements AutoCloseable {
             return resolver.getColor(level.getBiome(pos).value(), pos.getX(), pos.getZ());
         }
 
-        private record Cell(int height, int surfaceColor) {
+        private record Cell(int height, int terrainColor, int waterTint) {
         }
     }
 }
