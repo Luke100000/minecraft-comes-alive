@@ -36,12 +36,22 @@ final class BlueprintTooltipFactory {
     }
 
     List<Component> tooltip(Building hovered, Integer floorOrdinal, boolean structureHover) {
+        int logicalBuildingId = hovered == null || village == null
+                ? -1
+                : village.getLogicalBuildingId(hovered.getStructureId());
+        return tooltip(hovered, floorOrdinal, structureHover, logicalBuildingId);
+    }
+
+    List<Component> tooltip(Building hovered,
+                            Integer floorOrdinal,
+                            boolean structureHover,
+                            int logicalBuildingId) {
         if (village == null || hovered == null) return List.of();
         if (!hovered.isFunctionalRoom()) return externalBuildingTooltip(hovered);
         if (structureHover) {
             return floorOrdinal == null
-                    ? allFloorsTooltip(hovered)
-                    : structureFloorTooltip(hovered, floorOrdinal);
+                    ? allFloorsTooltip(hovered, logicalBuildingId)
+                    : structureFloorTooltip(hovered, floorOrdinal, logicalBuildingId);
         }
 
         RoomTypeResolver.Context resolved = roomTypeResolver.resolve(hovered);
@@ -106,8 +116,10 @@ final class BlueprintTooltipFactory {
         return List.copyOf(lines);
     }
 
-    private List<Component> structureFloorTooltip(Building structureBuilding, int floorOrdinal) {
-        List<Building> rooms = structureTooltipBuildings(structureBuilding).stream()
+    private List<Component> structureFloorTooltip(Building structureBuilding,
+                                                  int floorOrdinal,
+                                                  int logicalBuildingId) {
+        List<Building> rooms = structureTooltipBuildings(structureBuilding, logicalBuildingId).stream()
                 .filter(room -> room.getFloorNumber(village) == floorOrdinal)
                 .toList();
         RoomTypeResolver.Context titleContext = roomTypeResolver.resolve(structureBuilding);
@@ -120,8 +132,8 @@ final class BlueprintTooltipFactory {
         return List.copyOf(lines);
     }
 
-    private List<Component> allFloorsTooltip(Building structureBuilding) {
-        List<Building> structureRooms = structureTooltipBuildings(structureBuilding);
+    private List<Component> allFloorsTooltip(Building structureBuilding, int logicalBuildingId) {
+        List<Building> structureRooms = structureTooltipBuildings(structureBuilding, logicalBuildingId);
         RoomTypeResolver.Context titleContext = roomTypeResolver.resolve(structureBuilding);
         BuildingType titleType = presentationType(structureBuilding, titleContext);
         List<Component> lines = new LinkedList<>();
@@ -189,16 +201,14 @@ final class BlueprintTooltipFactory {
                 .withStyle(ChatFormatting.GRAY);
     }
 
-    private List<Building> structureTooltipBuildings(Building building) {
+    private List<Building> structureTooltipBuildings(Building building, int logicalBuildingId) {
         if (!building.isFunctionalRoom() || building.getBuildingType().grouped() || village == null) {
             return List.of(building);
         }
 
-        int buildingId = village.getLogicalBuildingId(building.getStructureId());
         return village.getRooms()
-                .filter(Building::isComplete)
                 .filter(candidate -> village.getLogicalBuildingId(
-                        candidate.getStructureId()) == buildingId)
+                        candidate.getStructureId()) == logicalBuildingId)
                 .sorted(Comparator.comparingInt((Building room) -> room.getFloorNumber(village))
                         .thenComparingInt(Building::getId))
                 .toList();

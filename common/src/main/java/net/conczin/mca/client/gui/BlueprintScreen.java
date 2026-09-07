@@ -67,10 +67,10 @@ public class BlueprintScreen extends ExtendedScreen {
     private static final double MAP_ZOOM_FACTOR = 1.1D;
     private static final double MAP_DRAG_THRESHOLD = 3.0D;
     private static final float[] MAP_SCALE_PRESETS = {0.5F, 1.0F, 2.0F, 3.0F, 4.0F};
-    private static Integer selectedFloorOrdinal = 0;
+    private Integer selectedFloorOrdinal = 0;
     private static boolean mapScaleFit = true;
     private static float mapScale = 1.0F;
-    private static boolean playerCentered;
+    private boolean playerCentered;
     private static boolean showPlayerHead = true;
     // 1.19.3: This needs to be the MC type, DO NOT TOUCH !!!
     private final List<net.minecraft.client.gui.components.Button> catalogButtons = new LinkedList<>();
@@ -110,6 +110,7 @@ public class BlueprintScreen extends ExtendedScreen {
     private final BlueprintMapRenderer mapRenderer = new BlueprintMapRenderer();
     private final MapPanState mapPanState = new MapPanState();
     private Integer mapCenterVillageId;
+    private boolean mapCenterAutomatic = true;
     private double mapCenterX;
     private double mapCenterZ;
     private BuildingType selectedBuilding;
@@ -322,7 +323,8 @@ public class BlueprintScreen extends ExtendedScreen {
                     attachmentScanButton = column.addTooltip(
                             "gui.blueprint.addFloor", b -> requestAttachmentScan());
                     removeRoomButton = column.addTooltip("gui.blueprint.removeRoom", b -> {
-                        RemovalControlState state = removalControlState(village, getPlayerRoomScanPlan());
+                        RemovalControlState state = removalControlState(
+                                village, getPlayerRoomScanPlan(), selectedFloorOrdinal);
                         if (state.visible() && state.active() && state.action() != null) {
                             ReportBuildingMessage message = state.action() == ReportBuildingMessage.Action.REMOVE_FLOOR
                                     ? new ReportBuildingMessage(state.action(), String.valueOf(selectedFloorOrdinal))
@@ -542,7 +544,7 @@ public class BlueprintScreen extends ExtendedScreen {
                 ? Village.RoomScanMode.ADD_BUILDING : scanContext.mode();
         boolean roomRegistered = scanContext.mode() == Village.RoomScanMode.UPDATE_ROOM;
         boolean insideBuilding = roomRegistered || scanContext.mode() == Village.RoomScanMode.ADD_ROOM;
-        RemovalControlState removalState = removalControlState(village, scanContext);
+        RemovalControlState removalState = removalControlState(village, scanContext, selectedFloorOrdinal);
         int y = height / 2 - 56 + 22 * 3;
 
         structureScanButton.setMessage(getStructureScanTranslationKey(primaryMode));
@@ -584,13 +586,14 @@ public class BlueprintScreen extends ExtendedScreen {
         }
     }
 
-    static RemovalControlState removalControlState(Village village, RoomScanPlan scanContext) {
+    static RemovalControlState removalControlState(Village village,
+                                                   RoomScanPlan scanContext,
+                                                   Integer selectedFloor) {
         if (village == null || scanContext == null) return RemovalControlState.hidden();
 
         Building room = scanContext.currentRoom().orElse(null);
         if (room == null) return RemovalControlState.hidden();
 
-        Integer selectedFloor = selectedFloorOrdinal;
         if (selectedFloor != null
                 && village.canRemoveFloor(village.getLogicalBuildingId(room.getStructureId()), selectedFloor)) {
             return new RemovalControlState(true, true, ReportBuildingMessage.Action.REMOVE_FLOOR,
@@ -640,8 +643,6 @@ public class BlueprintScreen extends ExtendedScreen {
     }
 
     private void renderMap(GuiGraphics context, float partialTick) {
-        int centerX = width / 2;
-        int centerY = height / 2 + 8;
         Integer selectedFloor = selectedFloorOrdinal;
 
         if (!village.isAutoScan() && structureCount <= 1) {
@@ -658,14 +659,7 @@ public class BlueprintScreen extends ExtendedScreen {
             mapCenterZ = playerRenderZ;
         }
 
-        BlueprintMapViewport viewport = BlueprintMapViewport.create(
-                centerX,
-                centerY,
-                MAP_HALF_SIZE,
-                mapCenterX,
-                mapCenterZ,
-                getMapScale()
-        );
+        BlueprintMapViewport viewport = currentViewport();
         BlueprintMapRenderer.RenderResult renderResult = mapRenderer.render(
                 context,
                 viewport,
@@ -689,7 +683,8 @@ public class BlueprintScreen extends ExtendedScreen {
         BlueprintMapRenderer.HoverTarget active = hoverTargets.getFirst();
 
         List<Component> tooltip = new ArrayList<>(tooltipFactory.tooltip(
-                active.building(), active.floorOrdinal(), active.structure()));
+                active.building(), active.floorOrdinal(), active.structure(),
+                active.logicalBuildingId()));
         List<BlueprintMapRenderer.HoverTarget> alternatives = hoverTargets.subList(1, hoverTargets.size());
         if (!alternatives.isEmpty()) {
             tooltip.add(Component.empty());
@@ -760,7 +755,7 @@ public class BlueprintScreen extends ExtendedScreen {
     }
 
     private float getMapScale() {
-        if (!mapScaleFit) return mapScale;
+        if (!mapScaleFit || village == null) return mapScale;
         int horizontalSpan = Math.max(village.getBox().getXSpan(), village.getBox().getZSpan());
         int usablePixels = (MAP_HALF_SIZE - MAP_INNER_MARGIN) * 2;
         return Math.min((float) usablePixels / Math.max(1, horizontalSpan), MAP_MAX_FIT_SCALE);
@@ -803,13 +798,24 @@ public class BlueprintScreen extends ExtendedScreen {
         if (village == null) return;
         mapCenterX = (village.getBox().minX() + village.getBox().maxX() + 1) / 2.0D;
         mapCenterZ = (village.getBox().minZ() + village.getBox().maxZ() + 1) / 2.0D;
+        mapCenterAutomatic = true;
     }
 
     private boolean isMouseOverMap(double mouseX, double mouseY) {
-        int centerX = width / 2;
-        int centerY = height / 2 + 8;
-        return mouseX >= centerX - MAP_HALF_SIZE && mouseX < centerX + MAP_HALF_SIZE
-                && mouseY >= centerY - MAP_HALF_SIZE && mouseY < centerY + MAP_HALF_SIZE;
+        BlueprintMapViewport viewport = currentViewport();
+        return mouseX >= viewport.left() && mouseX < viewport.right()
+                && mouseY >= viewport.top() && mouseY < viewport.bottom();
+    }
+
+    private BlueprintMapViewport currentViewport() {
+        return BlueprintMapViewport.create(
+                width / 2,
+                height / 2 + 8,
+                MAP_HALF_SIZE,
+                mapCenterX,
+                mapCenterZ,
+                getMapScale()
+        );
     }
 
     static float snapMapScale(float currentScale, int direction) {
@@ -1265,6 +1271,7 @@ public class BlueprintScreen extends ExtendedScreen {
             float scale = getMapScale();
             mapCenterX -= dragX / scale;
             mapCenterZ -= dragY / scale;
+            mapCenterAutomatic = false;
             playerCentered = false;
             updatePlayerCenteredControl();
             return true;
@@ -1281,17 +1288,16 @@ public class BlueprintScreen extends ExtendedScreen {
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
         if (scrollY != 0.0D && isMouseOverMap(mouseX, mouseY) && ("map".equals(page) || "advanced".equals(page))) {
-            float currentScale = getMapScale();
+            BlueprintMapViewport currentViewport = currentViewport();
+            float currentScale = currentViewport.scale();
             float newScale = zoomMapScale(currentScale, scrollY);
-            BlueprintMapViewport currentViewport = BlueprintMapViewport.create(
-                    width / 2, height / 2 + 8, MAP_HALF_SIZE,
-                    mapCenterX, mapCenterZ, currentScale);
             BlueprintMapViewport zoomedViewport = currentViewport.zoomedAround(mouseX, mouseY, newScale);
 
             mapScale = newScale;
             mapScaleFit = false;
             mapCenterX = zoomedViewport.mapCenterX();
             mapCenterZ = zoomedViewport.mapCenterZ();
+            mapCenterAutomatic = false;
             playerCentered = false;
             updatePlayerCenteredControl();
             updateMapScaleControl();
@@ -1318,6 +1324,8 @@ public class BlueprintScreen extends ExtendedScreen {
             mapCenterVillageId = null;
         } else if (!Objects.equals(mapCenterVillageId, village.getId())) {
             mapCenterVillageId = village.getId();
+            centerMapOnVillage();
+        } else if (mapScaleFit && mapCenterAutomatic && !playerCentered) {
             centerMapOnVillage();
         }
         TreeSet<Integer> availableFloors = new TreeSet<>();

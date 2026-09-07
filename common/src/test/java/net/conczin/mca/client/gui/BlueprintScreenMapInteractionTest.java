@@ -1,6 +1,7 @@
 package net.conczin.mca.client.gui;
 
 import com.google.gson.JsonObject;
+import net.conczin.mca.resources.BuildingTypes;
 import net.conczin.mca.resources.data.BuildingType;
 import net.conczin.mca.network.c2s.ReportBuildingMessage;
 import net.conczin.mca.server.world.data.Building;
@@ -16,7 +17,6 @@ import net.minecraft.server.Bootstrap;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Constructor;
@@ -42,17 +42,27 @@ class BlueprintScreenMapInteractionTest {
         Bootstrap.bootStrap();
     }
 
-    @BeforeEach
-    void resetSelectedFloor() throws Exception {
-        setSelectedFloorOrdinal(0);
-    }
-
     @Test
     void freshGameSessionDefaultsBlueprintToGroundFloor() throws Exception {
         Field selectedFloor = BlueprintScreen.class.getDeclaredField("selectedFloorOrdinal");
         selectedFloor.setAccessible(true);
+        BlueprintScreen screen = new BlueprintScreen();
 
-        assertEquals(0, selectedFloor.get(null));
+        assertEquals(0, selectedFloor.get(screen));
+    }
+
+    @Test
+    void selectedFloorAndPlayerCenteringAreLocalToEachBlueprintScreen() throws Exception {
+        BlueprintScreen first = new BlueprintScreen();
+        BlueprintScreen second = new BlueprintScreen();
+
+        setField(first, "selectedFloorOrdinal", 2);
+        setField(first, "playerCentered", true);
+
+        assertEquals(2, getField(first, "selectedFloorOrdinal"));
+        assertEquals(0, getField(second, "selectedFloorOrdinal"));
+        assertEquals(true, getField(first, "playerCentered"));
+        assertEquals(false, getField(second, "playerCentered"));
     }
 
     @Test
@@ -127,6 +137,48 @@ class BlueprintScreenMapInteractionTest {
         pan.begin(10.0D, 10.0D);
         assertFalse(pan.update(11.0D, 11.0D));
         assertFalse(pan.end());
+    }
+
+    @Test
+    void groupedIconHoverUsesLegacySixBlockRadiusAroundIconCenter() throws Exception {
+        BuildingTypes buildingTypes = BuildingTypes.getInstance();
+        Map<String, BuildingType> previous = buildingTypes.getBuildingTypes();
+        JsonObject definition = new JsonObject();
+        definition.addProperty("icon", true);
+        definition.addProperty("grouped", true);
+        buildingTypes.setBuildingTypes(Map.of("marker", new BuildingType("marker", definition)));
+        try {
+            Building building = new Building(new BlockPos(10, 64, 10));
+            building.setId(42);
+            building.setType("marker");
+            building.setTypeForced(true);
+
+            Method hovered = BlueprintMapRenderer.class.getDeclaredMethod(
+                    "isGroupedBuildingHovered", Building.class, BlueprintMapFootprint.Cell.class);
+            hovered.setAccessible(true);
+
+            assertTrue((boolean) hovered.invoke(null, building, new BlueprintMapFootprint.Cell(15, 10)));
+            assertFalse((boolean) hovered.invoke(null, building, new BlueprintMapFootprint.Cell(16, 10)));
+        } finally {
+            buildingTypes.setBuildingTypes(previous);
+        }
+    }
+
+    @Test
+    void fitCenterTracksSameVillageBoundsWhileCenterRemainsAutomatic() throws Exception {
+        BlueprintScreen screen = new BlueprintScreen();
+        setField(screen, "page", "map");
+
+        Village initial = villageWithStructures(1, List.of(new BlockPos(0, 64, 0)));
+        screen.setVillage(initial);
+        assertEquals(0.5D, getDoubleField(screen, "mapCenterX"), 0.0000001D);
+
+        Village expanded = villageWithStructures(1, List.of(
+                new BlockPos(0, 64, 0),
+                new BlockPos(40, 64, 0)));
+        screen.setVillage(expanded);
+
+        assertEquals(20.5D, getDoubleField(screen, "mapCenterX"), 0.0000001D);
     }
 
     @Test
@@ -435,9 +487,7 @@ class BlueprintScreenMapInteractionTest {
 
         RoomScanPlan plan = new RoomScanPlan(Optional.of(currentRoom), Village.RoomScanMode.UPDATE_ROOM,
                 -1, Integer.MIN_VALUE, BlockPos.ZERO, BlockPos.ZERO, 10, 0);
-        setSelectedFloorOrdinal(1);
-
-        BlueprintScreen.RemovalControlState state = BlueprintScreen.removalControlState(village, plan);
+        BlueprintScreen.RemovalControlState state = BlueprintScreen.removalControlState(village, plan, 1);
 
         assertTrue(state.visible());
         assertTrue(state.active());
@@ -457,9 +507,7 @@ class BlueprintScreenMapInteractionTest {
 
         RoomScanPlan plan = new RoomScanPlan(Optional.empty(), Village.RoomScanMode.ADD_BASEMENT,
                 10, -1, BlockPos.ZERO, BlockPos.ZERO, -1, -1);
-        setSelectedFloorOrdinal(-1);
-
-        BlueprintScreen.RemovalControlState state = BlueprintScreen.removalControlState(village, plan);
+        BlueprintScreen.RemovalControlState state = BlueprintScreen.removalControlState(village, plan, -1);
 
         assertFalse(state.visible());
     }
@@ -476,9 +524,7 @@ class BlueprintScreenMapInteractionTest {
 
         RoomScanPlan plan = new RoomScanPlan(Optional.of(main), Village.RoomScanMode.UPDATE_ROOM,
                 -1, Integer.MIN_VALUE, BlockPos.ZERO, BlockPos.ZERO, 10, 0);
-        setSelectedFloorOrdinal(1);
-
-        BlueprintScreen.RemovalControlState state = BlueprintScreen.removalControlState(village, plan);
+        BlueprintScreen.RemovalControlState state = BlueprintScreen.removalControlState(village, plan, 1);
 
         assertTrue(state.visible());
         assertTrue(state.active());
@@ -495,9 +541,7 @@ class BlueprintScreenMapInteractionTest {
 
         RoomScanPlan plan = new RoomScanPlan(Optional.of(main), Village.RoomScanMode.UPDATE_ROOM,
                 -1, Integer.MIN_VALUE, BlockPos.ZERO, BlockPos.ZERO, 10, 0);
-        setSelectedFloorOrdinal(0);
-
-        BlueprintScreen.RemovalControlState state = BlueprintScreen.removalControlState(village, plan);
+        BlueprintScreen.RemovalControlState state = BlueprintScreen.removalControlState(village, plan, 0);
 
         assertTrue(state.visible());
         assertFalse(state.active());
@@ -517,9 +561,7 @@ class BlueprintScreenMapInteractionTest {
 
         RoomScanPlan plan = new RoomScanPlan(Optional.of(main), Village.RoomScanMode.UPDATE_ROOM,
                 -1, Integer.MIN_VALUE, BlockPos.ZERO, BlockPos.ZERO, 10, 0);
-        setSelectedFloorOrdinal(1);
-
-        BlueprintScreen.RemovalControlState state = BlueprintScreen.removalControlState(village, plan);
+        BlueprintScreen.RemovalControlState state = BlueprintScreen.removalControlState(village, plan, 1);
 
         assertTrue(state.visible());
         assertFalse(state.active());
@@ -540,9 +582,7 @@ class BlueprintScreenMapInteractionTest {
 
         RoomScanPlan plan = new RoomScanPlan(Optional.of(main), Village.RoomScanMode.UPDATE_ROOM,
                 -1, Integer.MIN_VALUE, BlockPos.ZERO, BlockPos.ZERO, 10, 2);
-        setSelectedFloorOrdinal(-1);
-
-        BlueprintScreen.RemovalControlState state = BlueprintScreen.removalControlState(village, plan);
+        BlueprintScreen.RemovalControlState state = BlueprintScreen.removalControlState(village, plan, -1);
 
         assertTrue(state.visible());
         assertFalse(state.active());
@@ -563,9 +603,7 @@ class BlueprintScreenMapInteractionTest {
 
         RoomScanPlan plan = new RoomScanPlan(Optional.of(main), Village.RoomScanMode.UPDATE_ROOM,
                 -1, Integer.MIN_VALUE, BlockPos.ZERO, BlockPos.ZERO, 10, 2);
-        setSelectedFloorOrdinal(-2);
-
-        BlueprintScreen.RemovalControlState state = BlueprintScreen.removalControlState(village, plan);
+        BlueprintScreen.RemovalControlState state = BlueprintScreen.removalControlState(village, plan, -2);
 
         assertTrue(state.visible());
         assertEquals(ReportBuildingMessage.Action.REMOVE_FLOOR, state.action());
@@ -597,6 +635,27 @@ class BlueprintScreenMapInteractionTest {
         return room;
     }
 
+    private static Village villageWithStructures(int villageId, List<BlockPos> cells) throws Exception {
+        Village village = new Village(villageId, null);
+        int structureId = 10;
+        int roomId = 1;
+        for (BlockPos cell : cells) {
+            StructureFloor floor = new StructureFloor(0, cell.getY(), cell.getY() + 4, 0,
+                    region(cell));
+            Structure structure = new Structure(structureId, cell, List.of(floor));
+            Building room = new Building(cell);
+            room.setId(roomId);
+            room.setStructureId(structureId);
+            room.setFloorId(0);
+            setRoomGeometry(room, cell);
+            registerStructure(village, structure, room);
+            structureId++;
+            roomId++;
+        }
+        village.calculateDimensions();
+        return village;
+    }
+
     private static BlueprintTerrainRenderer.TileSamplingBudget samplingBudget(
             LongSupplier nanoTime,
             long budgetNanos) throws Exception {
@@ -624,10 +683,36 @@ class BlueprintScreenMapInteractionTest {
                 Set.of(new BlockPos(0, anchorY, 0)));
     }
 
-    private static void setSelectedFloorOrdinal(Integer ordinal) throws Exception {
-        Field selectedFloor = BlueprintScreen.class.getDeclaredField("selectedFloorOrdinal");
-        selectedFloor.setAccessible(true);
-        selectedFloor.set(null, ordinal);
+    private static BuildingFloorRegion region(BlockPos cell) throws Exception {
+        Method fromFootprint = BuildingFloorRegion.class.getDeclaredMethod(
+                "fromFootprint", int.class, java.util.Collection.class);
+        fromFootprint.setAccessible(true);
+        return (BuildingFloorRegion) fromFootprint.invoke(null, cell.getY(), Set.of(cell));
+    }
+
+    private static void setRoomGeometry(Building room, BlockPos cell) throws Exception {
+        Method setGeometry = Building.class.getDeclaredMethod(
+                "setGeometry", BlockPos.class, BlockPos.class, java.util.Collection.class);
+        setGeometry.setAccessible(true);
+        setGeometry.invoke(room, cell, cell, Set.of(cell));
+    }
+
+    private static void setField(Object target, String name, Object value) throws Exception {
+        Field field = target.getClass().getDeclaredField(name);
+        field.setAccessible(true);
+        field.set(target, value);
+    }
+
+    private static double getDoubleField(Object target, String name) throws Exception {
+        Field field = target.getClass().getDeclaredField(name);
+        field.setAccessible(true);
+        return field.getDouble(target);
+    }
+
+    private static Object getField(Object target, String name) throws Exception {
+        Field field = target.getClass().getDeclaredField(name);
+        field.setAccessible(true);
+        return field.get(target);
     }
 
     private static void registerStructure(Village village, Structure structure, Building room) throws Exception {

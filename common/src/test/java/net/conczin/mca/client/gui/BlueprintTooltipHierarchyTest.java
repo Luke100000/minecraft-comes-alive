@@ -12,6 +12,7 @@ import net.conczin.mca.server.world.data.Village;
 import net.minecraft.SharedConstants;
 import net.minecraft.core.BlockPos;
 import net.minecraft.locale.Language;
+import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.FormattedText;
 import net.minecraft.server.Bootstrap;
 import net.minecraft.util.FormattedCharSequence;
@@ -45,14 +46,20 @@ class BlueprintTooltipHierarchyTest {
     void installBuildingTypes() {
         BuildingTypes buildingTypes = BuildingTypes.getInstance();
         previousBuildingTypes = buildingTypes.getBuildingTypes();
+        JsonObject workshopDefinition = new JsonObject();
+        JsonObject workshopBlocks = new JsonObject();
+        workshopBlocks.addProperty("minecraft:jukebox", 2);
+        workshopDefinition.add("blocks", workshopBlocks);
         buildingTypes.setBuildingTypes(Map.of(
                 "house", new BuildingType("house", new JsonObject()),
-                "bedroom", new BuildingType("bedroom", new JsonObject())
+                "bedroom", new BuildingType("bedroom", new JsonObject()),
+                "workshop", new BuildingType("workshop", workshopDefinition)
         ));
         previousLanguage = Language.getInstance();
         Language.inject(new TestLanguage(previousLanguage, Map.of(
                 "buildingType.house", "House",
                 "buildingType.bedroom", "Bedroom",
+                "buildingType.workshop", "Workshop",
                 "gui.blueprint.roomTooltip.resident", "Resident: %1$s",
                 "gui.blueprint.roomTooltip.residents", "Residents: %1$s"
         )));
@@ -161,6 +168,25 @@ class BlueprintTooltipHierarchyTest {
         assertEquals(List.of(roomTarget), targets);
     }
 
+    @Test
+    void aggregateTooltipIncludesRegisteredRoomEvenWhenTypeRequirementsAreIncomplete() throws Exception {
+        Fixture fixture = fixture();
+        Building incomplete = room(3, 10, 1, "workshop");
+        setRoomGeometry(incomplete, new BlockPos(0, 68, 0));
+        incomplete.addBlock(Blocks.JUKEBOX, new BlockPos(0, 69, 0));
+        assertFalse(incomplete.isComplete());
+        fixture.village().registerRoom(incomplete);
+        assertTrue(fixture.village().setRoomContributesToMain(incomplete, false));
+        BlueprintTooltipFactory factory = BlueprintTooltipFactory.create(
+                fixture.village(), RoomTypeResolver.create(fixture.village()));
+
+        List<String> lines = factory.tooltip(fixture.groundRoom(), null, true).stream()
+                .map(Component::getString)
+                .toList();
+
+        assertTrue(lines.stream().anyMatch(line -> line.contains("1 × Jukebox")));
+    }
+
     private static Fixture fixture() throws Exception {
         Village village = new Village(1, null);
         Structure structure = new Structure(
@@ -208,6 +234,13 @@ class BlueprintTooltipHierarchyTest {
         room.setType(type);
         room.setTypeForced(true);
         return room;
+    }
+
+    private static void setRoomGeometry(Building room, BlockPos cell) throws Exception {
+        Method setGeometry = Building.class.getDeclaredMethod(
+                "setGeometry", BlockPos.class, BlockPos.class, java.util.Collection.class);
+        setGeometry.setAccessible(true);
+        setGeometry.invoke(room, cell, cell, Set.of(cell));
     }
 
     private static int leadingSpaces(String value) {

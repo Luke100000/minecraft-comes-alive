@@ -142,6 +142,10 @@ final class BlueprintMapRenderer implements AutoCloseable {
             BuildingType buildingType = building.getBuildingType();
             if (buildingType.isIcon()) {
                 groupedIconBuildings.add(building);
+                if (mouseInsideMap && isGroupedBuildingHovered(building, hoveredMapCell)) {
+                    addRoomHover(hoverTargets, building, selectedFloor,
+                            building.getId(), building.getCenter().getY());
+                }
                 continue;
             }
 
@@ -553,7 +557,6 @@ final class BlueprintMapRenderer implements AutoCloseable {
                                                 boolean mouseInsideMap) {
         if (!mouseInsideMap) return -1;
         return groupedBuildings.stream()
-                .filter(building -> !building.getBuildingType().isIcon())
                 .filter(building -> isGroupedBuildingHovered(building, hoveredMapCell))
                 .sorted(Comparator.comparingInt((Building building) -> building.getCenter().getY()).reversed()
                         .thenComparing(Comparator.comparingInt(Building::getId).reversed()))
@@ -564,6 +567,12 @@ final class BlueprintMapRenderer implements AutoCloseable {
 
     private static boolean isGroupedBuildingHovered(Building building,
                                                     BlueprintMapFootprint.Cell hoveredMapCell) {
+        if (building.getBuildingType().isIcon()) {
+            BlockPos center = building.getCenter();
+            int dx = hoveredMapCell.x() - center.getX();
+            int dz = hoveredMapCell.z() - center.getZ();
+            return dx * dx + dz * dz < 6 * 6;
+        }
         BlockPos min = building.getRawPos0();
         BlockPos max = building.getRawPos1();
         int hoverMargin = 1;
