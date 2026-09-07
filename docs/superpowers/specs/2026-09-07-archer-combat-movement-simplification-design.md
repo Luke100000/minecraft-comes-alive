@@ -8,7 +8,7 @@ Target: `feature/1.21.1-floor-clean-squash`
 
 ## Goal
 
-Make MCA archers move deliberately instead of continuously oscillating left and right. Preserve the useful close-range kite/flee hysteresis, weapon-range support, guard targeting, and MCA navigation behavior while removing the duplicated strafe controller and direct path ownership from archer combat code.
+Make MCA archers move deliberately instead of continuously oscillating left and right. Preserve a restrained amount of skeleton-style strafing, the useful close-range kite/flee hysteresis, weapon-range support, guard targeting, and MCA navigation behavior while removing the duplicated strafe controller and direct path ownership from archer combat code.
 
 The desired combat loop is:
 
@@ -18,9 +18,9 @@ The desired combat loop is:
 
 `in range but sustained bad line of sight -> reposition to a firing position`
 
-`good range + line of sight -> hold, aim, fire`
+`good range + line of sight -> hold, aim, fire, with occasional short lateral strafe bursts`
 
-There is no normal continuous orbit/side-strafe state.
+There is no continuous orbit. Strafing is a bounded tactical micro-movement between stable firing periods.
 
 ## Source-grounded review conclusions
 
@@ -28,23 +28,23 @@ This design applies the Java cleanup review lenses to the fixed review scope of 
 
 ### Reuse
 
-- Vanilla 1.21.1 `RangedBowAttackGoal` already contains the 20-visible-tick transition into strafing and the 20-tick random clockwise/backwards toggles that MCA resembles. That code is useful evidence for where the current pattern came from, but it is not the behavior MCA wants to preserve.
-- Vanilla/MCA Brain movement already has the correct locomotion ownership chain: combat behavior publishes `WALK_TARGET`; `MoveToTargetSink` computes/owns `PATH`; `PathNavigation` and `MoveControl` execute locomotion. Archer combat must reuse that chain instead of calling `navigation.moveTo(...)`, `createPath(...)`, or `moveControl.strafe(...)` itself.
+- Vanilla 1.21.1 `RangedBowAttackGoal` already contains the 20-visible-tick transition into strafing and the 20-tick random clockwise/backwards toggles that MCA resembles. MCA deliberately keeps the recognizable short lateral-strafe feel, but not vanilla's effectively continuous orbit once the target is visible and in range.
+- Vanilla/MCA Brain movement already has the correct locomotion ownership chain: combat behavior publishes `WALK_TARGET`; `MoveToTargetSink` computes/owns `PATH`; `PathNavigation` and `MoveControl` execute locomotion. Archer combat must reuse that chain for approach, kite, flee, and reposition. The only direct `MoveControl` command retained is a bounded `STRAFE` burst, matching vanilla's ownership for non-path lateral movement.
 - Keep `RangedWeaponHelper` as MCA's canonical ranged-weapon/range abstraction. Vanilla `BehaviorUtils.isWithinAttackRange` and `SetWalkTargetFromAttackTargetIfTargetOutOfReach` are not used wholesale because vanilla's predicate is main-hand based while MCA intentionally supports its selected bow/crossbow hand and MCA weapon semantics.
 - Keep the existing nearest-visible-enemy search for close-range movement threats. `MemoryModuleTypeMCA.NEAREST_GUARD_ENEMY` is intentionally not reused for this decision because `GuardEnemiesSensor` ranks target priority before distance; kiting needs the physically nearest valid visible danger.
 - MineColonies is the behavioral reference for positioning: ranged guards move to obtain attack range/line of sight, hold once positioned, and move away when dangerously close. MCA should adapt that principle to its Brain/vanilla navigation architecture rather than port MineColonies pathfinding.
 
 ### Quality
 
-- `ArcherMovementTask` currently owns tactical state, path candidate search, path creation, navigation start/stop, strafe timing, collision reversal, look control, and debug output. The redesigned task owns tactical intent only.
-- `ArcherMoveControl` duplicates vanilla `MoveControl` strafe math and adds archer-only request/result state. Remove that parallel controller rather than tuning more timers into it.
+- `ArcherMovementTask` currently owns tactical state, path candidate search, path creation, navigation start/stop, strafe timing, collision reversal, look control, and debug output. The redesigned task owns tactical intent plus the bounded vanilla strafe micro-input; it does not own path computation or path execution.
+- `ArcherMoveControl` duplicates vanilla `MoveControl` strafe math and adds archer-only request/result state. Remove that parallel controller. Short strafing uses ordinary `MCAMoveControl`/vanilla `MoveControl.strafe(...)` with direction and timing owned only by `ArcherMovementTask`.
 - Use one canonical ranged-combat state shared by movement and weapon behaviors instead of storing emergency tactical state inside `MoveControl`.
 - Keep candidate selection in one small stateless positioning helper so `ArcherMovementTask` remains readable and navigation remains owned by the Brain pipeline.
 
 ### Correctness
 
-- Current sideways movement has competing direction owners: `ArcherMovementTask` flips `strafingClockwise`, while `ArcherMoveControl` can silently reverse `strafeRight`. The redesign has no duplicated lateral-direction state.
-- A horizontal collision can currently reverse the task direction independently of blocked-strafe accounting, creating rapid left/right feedback. Removing continuous strafing removes this failure mode instead of adding another hysteresis timer.
+- Current sideways movement has competing direction owners: `ArcherMovementTask` flips `strafingClockwise`, while `ArcherMoveControl` can silently reverse `strafeRight`. The redesign keeps one lateral-direction owner: `ArcherMovementTask` chooses the burst direction once and never has the move controller silently reverse it.
+- A horizontal collision can currently reverse the task direction independently of blocked-strafe accounting, creating rapid left/right feedback. In the redesign, collision or a rejected strafe ends the burst and returns to `HOLD`; it never causes an immediate opposite-direction burst.
 - Archer combat currently erases `WALK_TARGET`/`CANT_REACH_WALK_TARGET_SINCE` and starts/stops navigation itself. The redesign leaves `CANT_REACH_WALK_TARGET_SINCE`, `PATH`, path retries, obstacle traversal, doors, jumping, climbing, and ordinary navigation lifecycle with vanilla/MCA owners.
 - Bow emergency suppression and crossbow behavior must read the same canonical combat state. They must not infer tactical state independently or depend on the move-control implementation.
 
@@ -61,6 +61,7 @@ Add a runtime-only MCA Brain memory for the current ranged tactical state. It ha
 States:
 
 - `HOLD`
+- `STRAFE`
 - `APPROACH`
 - `REPOSITION`
 - `KITE`
@@ -129,9 +130,29 @@ If no firing candidate is found, publish an ordinary approach `WalkTarget` towar
 
 If the archer is in effective weapon range, has line of sight, and is outside close-range kite/flee bands, use `HOLD`.
 
-`HOLD` is the normal stable firing state. The archer faces the target and does not move merely because it has seen the target for 20 ticks.
+`HOLD` is the normal stable firing state. The archer faces the target and does not immediately begin orbiting merely because it has seen the target for 20 ticks.
 
-There is no `SIDE_STRAFE` state and no periodic random movement-direction toggle.
+After at least 40 consecutive ticks in a valid stable `HOLD`, and only when the strafe cooldown has expired, the archer may begin one short `STRAFE` burst. The next cooldown is randomized between 40 and 80 ticks so groups of archers do not synchronize.
+
+### Strafe
+
+`STRAFE` preserves a small amount of the skeleton-style combat feel without allowing a permanent left/right control loop.
+
+Rules:
+
+- choose left or right once when the burst begins;
+- begin the burst only if the positioning helper confirms the chosen lateral side is locally walkable for the current navigation/path type; if the first side is unsafe, try the opposite side once, otherwise remain in `HOLD` and start the cooldown;
+- use lateral input only: forward component `0.0`, lateral magnitude `0.35`;
+- keep the chosen direction for 8-14 ticks;
+- continue facing/aiming at the attack target while strafing;
+- bow/crossbow attack behavior may continue normally during the burst;
+- immediately end the burst and return to `HOLD` if line of sight is lost, the target leaves effective range, a close threat requires `KITE`/`EMERGENCY_FLEE`, the entity collides horizontally/minor-horizontally, or horizontal motion stalls after the burst has started;
+- after any early cancellation, start the normal cooldown before another strafe is allowed;
+- never reverse direction inside a burst and never start an opposite-direction burst as a collision response.
+
+`ArcherMovementTask` owns the strafe timer, cooldown, and chosen direction. These are transient execution details, not separate tactical state sources. The canonical Brain state remains `STRAFE` for the duration of the burst.
+
+There is no permanent `SIDE_STRAFE`/orbit mode and no periodic in-burst direction toggle.
 
 ## Movement ownership
 
@@ -142,7 +163,8 @@ Rules:
 - no `navigation.moveTo(...)` from ranged-combat movement;
 - no combat-owned `navigation.createPath(...)`;
 - no per-tick `navigation.stop()`;
-- no `moveControl.strafe(...)` or archer-specific strafe request;
+- `moveControl.strafe(...)` is allowed only while the canonical state is `STRAFE`; all path-oriented combat movement still uses `WALK_TARGET`;
+- no archer-specific strafe request API, silent redirection, or second strafe controller;
 - no per-tick erase of `CANT_REACH_WALK_TARGET_SINCE`;
 - do not mutate `PATH` directly;
 - publish/replace `WALK_TARGET` only when entering a movement state, changing target/destination, or retrying after the existing Brain/navigation path lifecycle invalidates the prior target;
@@ -160,6 +182,7 @@ Responsibilities:
 - select the physically nearest visible valid movement threat using the existing guard-enemy predicate;
 - choose an away candidate using `LandRandomPos.getPosAway(...)` without path creation;
 - choose a bounded nearby firing candidate for `REPOSITION` using world collision/line-of-sight checks;
+- validate the immediate left/right lateral step before a `STRAFE` burst using the current navigation node/path-type rules, without owning strafe timing or direction state;
 - return positions/results only; it owns no timers, navigation, Brain memories, or entity mutation.
 
 The helper must not become a MineColonies-style custom pathfinder. MineColonies `PathJobCanSee` is a behavioral reference; MCA's actual path ownership remains vanilla/MCA `MoveToTargetSink`.
@@ -175,14 +198,14 @@ Remove archer tactical behavior from `ArcherMoveControl`:
 
 After those responsibilities are removed, `ArcherMoveControl` is an unnecessary wrapper. Delete it and make `MCAMoveControl` directly usable by `VillagerEntityMCA` (adjust visibility/constructor visibility as narrowly as required). Update `VillagerEntityMCA` to install `MCAMoveControl` directly and remove `getArcherMoveControl()`.
 
-Do not alter `MCAMoveControl`'s existing navigation/climb/jump behavior as part of this work.
+Do not alter `MCAMoveControl`'s existing navigation/climb/jump behavior as part of this work. Its inherited vanilla strafe path is sufficient for the bounded `STRAFE` burst; do not copy the vanilla strafe implementation again.
 
 ## Weapon behavior coordination
 
 `BowTask` and `ExtendedCrossbowAttackTask` read the canonical ranged-combat state.
 
 - In `EMERGENCY_FLEE`, stop any active bow draw or crossbow charge and do not begin another attack cycle.
-- In `KITE`, `HOLD`, `REPOSITION`, or `APPROACH`, weapon behavior continues to use its existing target validity, line-of-sight, draw/charge, cooldown, and effective-range checks. `REPOSITION`/`APPROACH` naturally cannot fire when visibility/range conditions fail.
+- In `KITE`, `HOLD`, `STRAFE`, `REPOSITION`, or `APPROACH`, weapon behavior continues to use its existing target validity, line-of-sight, draw/charge, cooldown, and effective-range checks. `REPOSITION`/`APPROACH` naturally cannot fire when visibility/range conditions fail.
 - Do not duplicate distance hysteresis in weapon tasks.
 - Do not derive attack suppression from move-controller type/state.
 
@@ -211,7 +234,7 @@ Tests must prove observable combat behavior rather than merely asserting that cl
 
 Required behavior coverage:
 
-1. An archer with a stationary visible target in a clear firing lane reaches `HOLD`, remains positionally stable through multiple attack cycles, and does not oscillate left/right.
+1. An archer with a stationary visible target in a clear firing lane spends most combat time in `HOLD`, may perform bounded 8-14 tick lateral `STRAFE` bursts, returns to `HOLD`, and never enters rapid left/right ping-pong.
 2. Brief line-of-sight loss below the grace period does not start movement; sustained in-range LOS loss enters `REPOSITION` and produces one Brain-owned walking intent toward a firing candidate/fallback.
 3. A target moving across the 6/9-block kite band does not cause per-tick state ping-pong; the current hysteresis is preserved.
 4. A target entering the 3.5/5-block emergency band causes escape movement, and both bow and crossbow attack cycles remain suppressed until emergency exit.
@@ -219,6 +242,7 @@ Required behavior coverage:
 6. Combat movement publishes `WALK_TARGET` and allows `MoveToTargetSink`/navigation to own `PATH`; obstacle traversal, doors, jumping, and MCA climb behavior are not replaced by custom archer locomotion.
 7. A blocked/unreachable reposition candidate does not trigger repeated multi-path searches in the archer task; Brain navigation invalidation/retry leads to a bounded new candidate or approach fallback.
 8. Target loss, weapon removal, panic/safety preemption, and combat behavior stop cleanly release ranged-combat state and stale combat movement intent.
+9. A blocked strafe ends the current burst without reversing direction; another strafe cannot begin until the cooldown expires.
 
 Where pure state selection can be tested without world behavior, use focused unit coverage. Movement ownership, LOS repositioning, obstacle traversal, and visible anti-oscillation behavior require an actual server/GameTest or equivalent live integration scenario; do not claim them from compilation alone.
 
@@ -236,7 +260,7 @@ The implementation report must state separately whether an in-game/live movement
 - Replacing MCA guard target selection/threat priorities.
 - Reworking bow/crossbow damage, cooldown, accuracy, equipment, or projectile logic beyond emergency-state coordination.
 - Changing generic MCA climb/jump/navigation semantics.
-- Adding squad tactics, cover systems, formations, predictive dodging, suppression, or player-like combat strafing.
+- Adding squad tactics, cover systems, formations, predictive dodging, suppression, or continuous player-like dodge/orbit strafing.
 - Tuning unrelated melee guard movement.
 
-The intended result is deliberately smaller than the current archer movement implementation: one tactical state owner, one stateless position selector, and the existing Brain/navigation stack doing the actual movement.
+The intended result is deliberately smaller than the current archer movement implementation: one tactical state owner, one stateless position selector, the existing Brain/navigation stack doing path movement, and a short vanilla-style `MoveControl` strafe burst as the only non-path locomotion exception.
