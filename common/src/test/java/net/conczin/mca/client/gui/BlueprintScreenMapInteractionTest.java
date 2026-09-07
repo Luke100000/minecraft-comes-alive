@@ -16,6 +16,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.Bootstrap;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.levelgen.Heightmap;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -26,8 +27,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.function.IntFunction;
-import java.util.function.IntPredicate;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -228,22 +227,9 @@ class BlueprintScreenMapInteractionTest {
     }
 
     @Test
-    void clientWaterFloorSkipsWaterOnlySectionsAndFindsSolidSeabed() {
-        int[] reads = {0};
-        IntFunction<BlockState> column = y -> {
-            reads[0]++;
-            return y > 40 ? Blocks.WATER.defaultBlockState() : Blocks.STONE.defaultBlockState();
-        };
-        IntPredicate sectionMayContainFloor = y -> Math.floorDiv(y, 16) <= 2;
-
-        BlueprintTerrainRenderer.ColumnLayers layers = BlueprintTerrainRenderer.sampleClientOceanFloorColumn(
-                column, sectionMayContainFloor, 64, -64);
-
-        assertEquals(8, reads[0],
-                "the water-only 48..63 section must be skipped without per-block reads");
-        assertEquals(40, layers.terrainY());
-        assertEquals(64, layers.waterY());
-        assertEquals(Blocks.STONE.defaultBlockState(), layers.terrainState());
+    void oceanFloorHeightmapIgnoresWaterAndSelectsSolidSubstrate() {
+        assertFalse(Heightmap.Types.OCEAN_FLOOR.isOpaque().test(Blocks.WATER.defaultBlockState()));
+        assertTrue(Heightmap.Types.OCEAN_FLOOR.isOpaque().test(Blocks.STONE.defaultBlockState()));
     }
 
     @Test
