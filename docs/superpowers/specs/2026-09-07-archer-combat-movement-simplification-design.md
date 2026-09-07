@@ -10,6 +10,8 @@ Target: `feature/1.21.1-floor-clean-squash`
 
 Make MCA archers move deliberately instead of continuously oscillating left and right. Preserve a restrained amount of skeleton-style strafing, the useful close-range kite/flee hysteresis, weapon-range support, guard targeting, and MCA navigation behavior while removing the duplicated strafe controller and direct path ownership from archer combat code.
 
+The reported regression is specifically the old one-block shimmy: an archer can alternate left/right movement repeatedly while making little or no net lateral progress, effectively chattering around the same block instead of committing to a movement decision. This is the primary anti-oscillation behavior the implementation must eliminate.
+
 The desired combat loop is:
 
 `too close -> move away`
@@ -87,7 +89,7 @@ Preserve the current hysteresis:
 - desired retreat distance remains 6 blocks
 - speed modifier remains `0.9`
 
-`EMERGENCY_FLEE` suppresses bow use and crossbow charging/firing until the state exits.
+`EMERGENCY_FLEE` suppresses bow use and crossbow charging/firing until the state exits. It is the higher-priority escape state: it prioritizes physically opening distance over aiming, and the body may fully face the escape route. On leaving emergency range while still inside the kite exit band, transition to `KITE` before returning to ordinary ranged positioning.
 
 ### Kite
 
@@ -101,6 +103,8 @@ Preserve the current hysteresis:
 - speed modifier remains `0.85`
 
 Archers may continue aiming/firing during `KITE` when their weapon behavior's normal range and visibility rules permit it.
+
+`KITE` is normal combat spacing, not panic. It begins when a close threat enters the 6-block band and persists until the threat reaches the 9-block exit distance. Path movement is allowed to turn the body toward the retreat route; unlike `HOLD`/`STRAFE`, target-facing body yaw is not a movement requirement while kiting.
 
 ### Approach
 
@@ -154,6 +158,8 @@ Rules:
 
 There is no permanent `SIDE_STRAFE`/orbit mode and no periodic in-burst direction toggle.
 
+The one-block shimmy is explicitly forbidden. Once a strafe burst begins, it has one lateral sign for the whole burst. A collision or stall ends the burst; it does not produce a corrective opposite input. Repeated alternating lateral inputs while the archer remains inside roughly the same one-block lateral envelope are a regression even if the tactical state itself does not change.
+
 ## Movement ownership
 
 `ArcherMovementTask` publishes intent through Brain memories and does not execute locomotion.
@@ -169,6 +175,11 @@ Rules:
 - do not mutate `PATH` directly;
 - publish/replace `WALK_TARGET` only when entering a movement state, changing target/destination, or retrying after the existing Brain/navigation path lifecycle invalidates the prior target;
 - entering `HOLD` clears stale combat walking intent once, then remains stationary without repeatedly erasing Brain movement state every tick;
+- `WALK_TARGET` owns destination/path intent only; it does not own ranged target look/aim intent;
+- during `HOLD`, `STRAFE`, `APPROACH`, and `REPOSITION`, keep the attack target as `LOOK_TARGET` and continue target-directed `LookControl` updates while the movement state is active;
+- during `KITE` and `EMERGENCY_FLEE`, movement may turn the body toward the retreat/escape route. Weapon behavior may still establish its own look target in `KITE` when firing rules permit, but the movement task does not force target-facing body yaw in either retreat state;
+- do not fight vanilla path locomotion with a custom per-tick body-yaw override. Vanilla 1.21.1 `MoveControl` rotates entity yaw toward `MOVE_TO`, `BodyRotationControl` aligns the moving body to that yaw, and `LookControl` independently tracks/clamps head aim. Therefore target-facing during path-oriented `APPROACH`/`REPOSITION` means retained look/aim ownership, not forcing the torso to ignore its travel direction;
+- while `HOLD`/`STRAFE` are not path-driven, preserve the existing target-facing combat presentation; in particular, `STRAFE` must establish target-facing yaw before applying lateral input so `MoveControl.strafe(0.0F, lateral)` remains lateral relative to the opponent;
 - existing panic, safety, swimming, interaction, and higher-priority activity ownership must continue to preempt guard combat movement through the existing Brain scheduling model.
 
 `MoveToTargetSink`, MCA's existing mixin/extensions, `PathNavigation`, and `MCAMoveControl` remain responsible for route computation and physical movement.
@@ -234,7 +245,7 @@ Tests must prove observable combat behavior rather than merely asserting that cl
 
 Required behavior coverage:
 
-1. An archer with a stationary visible target in a clear firing lane spends most combat time in `HOLD`, may perform bounded 8-14 tick lateral `STRAFE` bursts, returns to `HOLD`, and never enters rapid left/right ping-pong.
+1. An archer with a stationary visible target in a clear firing lane spends most combat time in `HOLD`, may perform bounded 8-14 tick lateral `STRAFE` bursts, returns to `HOLD`, and never enters rapid left/right ping-pong. The regression test must specifically detect repeated alternating lateral motion while the archer remains within the same roughly one-block lateral envelope.
 2. Brief line-of-sight loss below the grace period does not start movement; sustained in-range LOS loss enters `REPOSITION` and produces one Brain-owned walking intent toward a firing candidate/fallback.
 3. A target moving across the 6/9-block kite band does not cause per-tick state ping-pong; the current hysteresis is preserved.
 4. A target entering the 3.5/5-block emergency band causes escape movement, and both bow and crossbow attack cycles remain suppressed until emergency exit.
@@ -243,6 +254,7 @@ Required behavior coverage:
 7. A blocked/unreachable reposition candidate does not trigger repeated multi-path searches in the archer task; Brain navigation invalidation/retry leads to a bounded new candidate or approach fallback.
 8. Target loss, weapon removal, panic/safety preemption, and combat behavior stop cleanly release ranged-combat state and stale combat movement intent.
 9. A blocked strafe ends the current burst without reversing direction; another strafe cannot begin until the cooldown expires.
+10. `WALK_TARGET` pathing does not erase combat look ownership: `HOLD`, `STRAFE`, `APPROACH`, and `REPOSITION` retain target look/aim intent, while `KITE`/`EMERGENCY_FLEE` are allowed to orient the body toward retreat movement. No custom body-yaw loop is added to fight vanilla `MoveControl`/`BodyRotationControl`.
 
 Where pure state selection can be tested without world behavior, use focused unit coverage. Movement ownership, LOS repositioning, obstacle traversal, and visible anti-oscillation behavior require an actual server/GameTest or equivalent live integration scenario; do not claim them from compilation alone.
 

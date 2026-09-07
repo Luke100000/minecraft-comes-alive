@@ -19,7 +19,10 @@
 - Stable `HOLD` must last at least 40 ticks before a strafe may begin.
 - `STRAFE` uses forward `0.0F`, lateral magnitude `0.35F`, lasts 8-14 ticks, then has a randomized 40-80 tick cooldown.
 - A strafe direction is chosen once. Never reverse inside the burst and never immediately launch the opposite direction after collision/stall.
+- The primary regression is the one-block left/right shimmy: do not permit repeated alternating lateral input while the archer makes little net lateral progress inside roughly the same one-block envelope.
 - Path-oriented combat movement publishes `WALK_TARGET`; do not call `navigation.moveTo(...)`, do not mutate `PATH`, and do not erase `CANT_REACH_WALK_TARGET_SINCE` every tick.
+- `WALK_TARGET` does not replace target look/aim ownership. `HOLD`, `STRAFE`, `APPROACH`, and `REPOSITION` retain the attack target as `LOOK_TARGET`; `KITE` and `EMERGENCY_FLEE` may orient the body toward the retreat route.
+- Do not add a custom per-tick body-yaw override to fight vanilla pathing. During path movement vanilla `MoveControl`/`BodyRotationControl` may align the torso to travel while `LookControl` independently tracks/clamps the target. `STRAFE` is the non-path exception and must establish target-facing yaw before applying lateral input.
 - `ArcherMoveControl` must be removed rather than extended with another result/collision state machine.
 - Keep `RangedWeaponHelper` as MCA's selected-hand/range abstraction; do not substitute vanilla main-hand-only range helpers.
 - Keep physically-nearest visible guard enemy logic for close-range movement; do not substitute priority-ranked `NEAREST_GUARD_ENEMY` for kiting distance decisions.
@@ -410,6 +413,7 @@ git commit -m "refactor: add archer ranged positioning helper"
 **Interfaces:**
 - Consumes Task 3 positioning methods.
 - `ArcherMovementTask` publishes `WalkTarget` only; `MoveToTargetSink` owns `PATH` and calls navigation.
+- `ArcherMovementTask` retains combat `LOOK_TARGET`/`LookControl` ownership during `HOLD`, `STRAFE`, `APPROACH`, and `REPOSITION`. `KITE`/`EMERGENCY_FLEE` do not require target-facing body yaw.
 
 - [ ] **Step 1: Add RED GameTests for movement ownership**
 
@@ -421,6 +425,7 @@ Required cases:
 2. `closeThreatPublishesAwayWalkTarget` — threat inside emergency range; assert state is `EMERGENCY_FLEE` and `WALK_TARGET` points farther from the threat than the archer's starting position.
 3. `sustainedBlockedLosPublishesRepositionTarget` — target in range but wall blocks LOS for >10 ticks; assert `REPOSITION` and a positional `WALK_TARGET` appears.
 4. `holdClearsCombatWalkTarget` — after entering valid visible in-range `HOLD`, assert stale combat `WALK_TARGET` is erased and remains absent.
+5. `pathMovementRetainsCombatLookTarget` — exercise `APPROACH` and `REPOSITION`; while each state owns movement, assert `LOOK_TARGET` remains present and its `PositionTracker.currentPosition()` follows the attack target rather than being cleared/replaced by path publication. Do not assert literal torso yaw while `MOVE_TO` is active.
 
 - [ ] **Step 2: Run/compile and verify RED against current direct-navigation code**
 
@@ -458,6 +463,10 @@ For `KITE`/`EMERGENCY_FLEE`, use `RangedCombatPositioning.findAwayPosition(...)`
 
 For `REPOSITION`, use `findFiringPosition(...)`; if absent, publish ordinary approach intent as specified.
 
+For `HOLD`, `STRAFE`, `APPROACH`, and `REPOSITION`, keep using the attack target for `MemoryModuleType.LOOK_TARGET` plus `LookControl.setLookAt(...)`. Do not clear look intent merely because path movement is delegated through `WALK_TARGET`. For `KITE` and `EMERGENCY_FLEE`, allow the path/escape direction to own body orientation; ranged weapon tasks may still publish their own look target during `KITE` when they are actively aiming/firing.
+
+Do not add direct `setYRot`/`setYBodyRot` correction inside path-oriented states. Local vanilla 1.21.1 runs `MoveControl.tick()` before `LookControl.tick()`, and moving mobs use `BodyRotationControl` to align body yaw with travel. The implementation preserves target aim via the look pipeline instead of creating a second yaw controller.
+
 Use one transient `walkTargetRetryCooldown` in `ArcherMovementTask` for Brain-owned movement retries. Set it to `10 + entity.getRandom().nextInt(10)` (10-19 ticks) whenever a combat `WALK_TARGET` is published, preserving the old ordinary repath cadence without preserving custom path ownership. Decrement it once per behavior tick. Republish only on movement-state/target change, or when `WALK_TARGET` has been erased by the Brain/navigation lifecycle and this cooldown has reached zero. Never erase `CANT_REACH_WALK_TARGET_SINCE` to force another attempt.
 
 - [ ] **Step 4: Run focused JUnit plus movement GameTests**
@@ -467,7 +476,7 @@ Use one transient `walkTargetRetryCooldown` in `ArcherMovementTask` for Brain-ow
 .\gradlew.bat :neoforge:runGameTestServer
 ```
 
-Expected: all four movement-ownership cases PASS in the NeoForge GameTest server.
+Expected: all five movement/look-ownership cases PASS in the NeoForge GameTest server.
 
 - [ ] **Step 5: Commit**
 
@@ -510,7 +519,7 @@ assertFalse(shouldCancelStrafe(true, true, false, false, false));
 
 - [ ] **Step 2: Add RED live anti-oscillation tests**
 
-Add two GameTests:
+Add three GameTests:
 
 1. `stableTargetUsesBoundedStrafeBursts` — run a clear-lane archer against a stationary target for at least 240 ticks, sample canonical state and lateral displacement each tick, assert:
    - most ticks are `HOLD` rather than `STRAFE`;
@@ -518,6 +527,7 @@ Add two GameTests:
    - two strafe runs are separated by at least 40 non-strafe ticks;
    - direction sign does not change inside one run.
 2. `blockedStrafeCancelsWithoutDirectionFlip` — wall off the selected lateral side; when collision/stall occurs, assert state returns to `HOLD` and no opposite-direction `STRAFE` begins before cooldown expiry.
+3. `sameBlockLeftRightShimmyDoesNotRecur` — against a stationary visible target on clear flat ground, sample the archer's horizontal delta projected onto the target-relative lateral axis every tick. Track a rolling 20-tick window and the lateral displacement envelope. Fail if the lateral sign alternates more than once while total lateral excursion stays below 1.0 block. This is the explicit regression for the historical left/right chatter around one block, independent of tactical-state labels.
 
 - [ ] **Step 3: Run tests and verify RED**
 
@@ -526,7 +536,7 @@ Add two GameTests:
 .\gradlew.bat :neoforge:runGameTestServer
 ```
 
-Expected: the current continuous-strafe behavior fails the new duration/cooldown/direction GameTest assertions.
+Expected: the current continuous-strafe behavior fails the new duration/cooldown/direction assertions and/or the explicit same-block shimmy regression.
 
 - [ ] **Step 4: Implement bounded strafe fields and lifecycle**
 
@@ -549,6 +559,7 @@ Rules:
 - duration is random inclusive 8-14 ticks;
 - set canonical Brain state to `STRAFE` when the burst starts and back to `HOLD` when it completes/cancels while the base state remains `HOLD`;
 - call `moveControl.strafe(0.0F, strafeDirection * 0.35F)` each active strafe tick;
+- before each active strafe input, keep the target as `LOOK_TARGET` and establish target-facing yaw with the existing target-facing path (`lookAt`/equivalent) so the lateral vector is relative to the opponent, not the previous navigation heading;
 - reset `holdTicks` when the burst begins;
 - cancel to `HOLD` on LOS/range/close-threat invalidation, horizontal/minor-horizontal collision, or post-start horizontal stall;
 - set cooldown 40-80 after normal completion or early cancellation;
@@ -771,6 +782,7 @@ Add these scenarios from the spec:
 4. `panicPreemptsCombatMovement` — give the archer a valid attack target, damage it below `25%` health so `guardTooHurt(...)` applies, and ensure the normal hurt path populates `HURT_BY`; tick until `Activity.PANIC` is active. Assert `RANGED_COMBAT_STATE` is erased and the old combat `WALK_TARGET` is not republished while panic owns movement.
 5. `kiteBandDoesNotPingPong` — move target/threat through 6/9-block band over multiple ticks and assert the canonical state remains `KITE` until the exit threshold is actually reached.
 6. `approachUsesExistingNavigationThroughObstacle` — place an out-of-range target behind a short wall with a usable doorway/one-block step route. Assert the archer publishes `WALK_TARGET`, vanilla/MCA navigation produces movement through the route, and the archer reaches the far side without any combat-owned path API. This is the runtime regression proving ordinary obstacle/door/step navigation is still delegated to `MoveToTargetSink`/`PathNavigation`/`MCAMoveControl`.
+7. `normalRangedPathingKeepsLookOwnership` — while an archer is in `APPROACH` and then `REPOSITION`, assert `LOOK_TARGET.currentPosition()` continues to track the attack target while `WALK_TARGET`/navigation changes independently. In `KITE`/`EMERGENCY_FLEE`, assert only that retreat movement remains valid; do not require torso yaw toward the attack target.
 
 - [ ] **Step 2: Run the new scenarios RED where gaps remain**
 
@@ -828,6 +840,8 @@ Specifically verify:
 - no per-tick erase of `CANT_REACH_WALK_TARGET_SINCE`;
 - no second emergency flag outside canonical Brain state;
 - no direction flip during `STRAFE`;
+- no repeated left/right lateral sign chatter inside a one-block envelope in the stationary-target regression;
+- `LOOK_TARGET` remains independent from `WALK_TARGET` in normal ranged path states, and no custom per-tick body-yaw controller was introduced;
 - `RangedCombatPositioning` owns no mutable state;
 - `MoveToTargetSink` still owns path computation/execution.
 
@@ -877,7 +891,9 @@ Implementation is complete only when all of the following are true:
 - stable visible in-range archers spend most time holding/aiming, not continuously orbiting;
 - short 8-14 tick skeleton-style strafe bursts still occur after stable hold and obey 40-80 tick cooldown;
 - blocked/colliding strafes cancel rather than reverse direction;
+- the historical one-block left/right shimmy regression is covered explicitly and does not recur under a stationary clear-lane target;
 - approach, kite, flee, and LOS reposition publish Brain `WALK_TARGET` instead of driving navigation directly;
+- `HOLD`, `STRAFE`, `APPROACH`, and `REPOSITION` retain attack-target look/aim ownership independently of `WALK_TARGET`; `KITE`/`EMERGENCY_FLEE` may orient body movement toward retreat, and path states do not install a competing body-yaw loop;
 - close-range 3.5/5 and 6/9 hysteresis remains exact;
 - sustained LOS loss repositions after 10 ticks, brief loss does not;
 - nearest physical visible threat controls retreat movement;
