@@ -1,12 +1,14 @@
 # Blueprint Lazy Terrain Streaming Design
 
+> **Superseded 2026-09-07:** Retained for history. The approved implementation direction is the smaller no-thread design in `docs/superpowers/specs/2026-09-07-blueprint-domain-review-remediation-design.md`.
+
 Date: 2026-09-06
 
-Status: design approved in principle; implementation plan not yet written
+Status: approved for implementation
 
 Target: `feature/1.21.1-floor-clean-squash`
 
-Baseline: `0e187ea4d perf: reduce blueprint terrain loading stalls` plus the current uncommitted client-safe underwater-floor correction.
+Baseline: `ea5e3c751 fix: restore client seabed rendering`
 
 ## Problem
 
