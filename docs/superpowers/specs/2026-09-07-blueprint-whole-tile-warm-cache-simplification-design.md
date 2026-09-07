@@ -46,7 +46,7 @@ Each cached tile needs only:
 - its world-space tile coordinates;
 - primitive terrain sample arrays needed to render the tile;
 - one `DynamicTexture`/`NativeImage` and texture location;
-- `sampledAtGameTime` for the last successful whole-tile sample attempt;
+- `sampledAtGameTime` for the last whole-tile sample attempt, whether complete or incomplete;
 - `retryAfterGameTime` when the last sample was incomplete because client chunks were unavailable;
 - a boolean or equivalent completeness marker;
 - no per-slice timestamps, retry arrays, dirty arrays, bitmasks, or dependency state.
@@ -105,8 +105,10 @@ Whole-tile sampling must remain safe when only part of a 128x128 tile is present
 For each sample attempt:
 
 - read only chunks already present in the client cache;
-- sample all available columns in the tile;
-- if a required chunk is unavailable, do not force-load it;
+- sample all available 128x128 core columns in the tile;
+- sample the one-cell neighbor halo used by hillshade opportunistically;
+- if a core chunk is unavailable, do not force-load it and mark the tile incomplete;
+- an unavailable halo-only chunk does not by itself make an otherwise complete tile incomplete;
 - if the tile already has valid cached values for unavailable columns, preserve those prior values;
 - if no prior value exists, leave those columns transparent/unavailable rather than inventing terrain;
 - mark the tile incomplete and set a tile-level retry time using the existing retry interval;
