@@ -59,6 +59,25 @@ class RoomDFUTest {
     }
 
     @Test
+    void originBoundingBoxMigrationUsesRectangularApproximationUntilRescan() {
+        CompoundTag village = new CompoundTag();
+        village.put("buildings", list(originBuilding(7, "house")));
+
+        Building room = RoomDFU.load(village).buildings().get(7);
+
+        assertEquals(Set.of(
+                new BlockPos(0, 64, 0), new BlockPos(0, 64, 1),
+                new BlockPos(0, 64, 2), new BlockPos(0, 64, 3),
+                new BlockPos(1, 64, 0), new BlockPos(1, 64, 1),
+                new BlockPos(1, 64, 2), new BlockPos(1, 64, 3),
+                new BlockPos(2, 64, 0), new BlockPos(2, 64, 1),
+                new BlockPos(2, 64, 2), new BlockPos(2, 64, 3),
+                new BlockPos(3, 64, 0), new BlockPos(3, 64, 1),
+                new BlockPos(3, 64, 2), new BlockPos(3, 64, 3)),
+                room.getFloorCells());
+    }
+
+    @Test
     void originGroupedBuildingBecomesExternalOnly() {
         CompoundTag village = new CompoundTag();
         village.put("buildings", list(originBuilding(8, "graveyard")));

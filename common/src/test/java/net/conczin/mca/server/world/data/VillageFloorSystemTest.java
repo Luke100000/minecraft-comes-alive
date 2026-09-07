@@ -631,6 +631,37 @@ class VillageFloorSystemTest {
         assertTrue(village.getStructure(10).orElseThrow().containsPos(new BlockPos(3, 64, 0)));
     }
 
+    @Test
+    void failedPostPublicationStepRestoresPreviousAggregateState() {
+        ThrowOnceCalculateVillage village = new ThrowOnceCalculateVillage();
+        BuildingFloorRegion oldRegion = BuildingFloorRegion.fromFootprint(64, Set.of(
+                new BlockPos(0, 64, 0), new BlockPos(1, 64, 0)));
+        Structure current = structure(10, 10, new StructureFloor(0, 64, 68, 0, oldRegion));
+        Building main = room(100, 10, 0, true);
+        main.setGeometry(new BlockPos(0, 64, 0), new BlockPos(1, 67, 0), oldRegion);
+        registerStructure(village, current, main);
+
+        BuildingFloorRegion freshRegion = BuildingFloorRegion.fromFootprint(64, Set.of(
+                new BlockPos(0, 64, 0), new BlockPos(1, 64, 0),
+                new BlockPos(2, 64, 0), new BlockPos(3, 64, 0)));
+        Structure refreshed = current.copy();
+        assertTrue(refreshed.replaceFloorGeometry(0,
+                new StructureFloor(0, 64, 68, 0, freshRegion)));
+        Building added = room(101, 10, 0, true);
+        BuildingFloorRegion addedRegion = BuildingFloorRegion.fromFootprint(64, Set.of(
+                new BlockPos(2, 64, 0), new BlockPos(3, 64, 0)));
+        added.setGeometry(new BlockPos(2, 64, 0), new BlockPos(3, 67, 0), addedRegion);
+
+        village.failNextCalculate();
+
+        assertThrows(IllegalStateException.class,
+                () -> village.replaceStructureAndRegisterRoom(refreshed, added));
+        assertEquals(2, village.getStructure(10).orElseThrow().getFloor(0).orElseThrow().area());
+        assertTrue(village.getBuilding(101).isEmpty());
+        assertEquals(Set.of(new BlockPos(0, 64, 0), new BlockPos(1, 64, 0)),
+                village.getBuilding(100).orElseThrow().getFloorCells());
+    }
+
     private static Village populatedVillage() {
         Village village = new Village(1, null);
         registerStructure(village, structure(10, 10), room(1, 10, 0, true));
@@ -638,6 +669,27 @@ class VillageFloorSystemTest {
         registerRoom(village, room(3, 10, 0, false));
         village.refreshLogicalBuildings();
         return village;
+    }
+
+    private static final class ThrowOnceCalculateVillage extends Village {
+        private boolean failNextCalculate;
+
+        private ThrowOnceCalculateVillage() {
+            super(1, null);
+        }
+
+        private void failNextCalculate() {
+            failNextCalculate = true;
+        }
+
+        @Override
+        public void calculateDimensions() {
+            if (failNextCalculate) {
+                failNextCalculate = false;
+                throw new IllegalStateException("forced post-publication failure");
+            }
+            super.calculateDimensions();
+        }
     }
 
     private static Map<String, BuildingType> installSingleWorkshopType() {

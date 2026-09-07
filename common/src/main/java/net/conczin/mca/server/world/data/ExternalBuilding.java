@@ -38,8 +38,13 @@ public final class ExternalBuilding extends Building {
     public void validateBlocks(Level world) {
         setLastScan(world.getGameTime());
         for (Map.Entry<net.minecraft.resources.ResourceLocation, List<BlockPos>> positions : getBlocks().entrySet()) {
-            positions.getValue().removeIf(pos -> !net.minecraft.core.registries.BuiltInRegistries.BLOCK
-                    .getKey(world.getBlockState(pos).getBlock()).equals(positions.getKey()));
+            Block recordedBlock = net.minecraft.core.registries.BuiltInRegistries.BLOCK.get(positions.getKey());
+            for (BlockPos pos : positions.getValue()) {
+                if (!net.minecraft.core.registries.BuiltInRegistries.BLOCK
+                        .getKey(world.getBlockState(pos).getBlock()).equals(positions.getKey())) {
+                    removeBlock(recordedBlock, pos);
+                }
+            }
         }
     }
 

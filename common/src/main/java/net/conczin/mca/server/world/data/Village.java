@@ -282,12 +282,18 @@ public class Village implements Iterable<Building> {
         currentFloorRoomIds.forEach(nextBuildings::remove);
         for (Building room : replacements) nextBuildings.put(room.getId(), room);
 
-        structures.put(refreshed.getId(), refreshed);
-        buildings.clear();
-        buildings.putAll(nextBuildings);
-        reconcileLogicalBuilding(refreshed.getLogicalBuildingId());
-        calculateDimensions();
-        return true;
+        BuildingStateSnapshot snapshot = snapshotBuildingState();
+        try {
+            structures.put(refreshed.getId(), refreshed);
+            buildings.clear();
+            buildings.putAll(nextBuildings);
+            reconcileLogicalBuilding(refreshed.getLogicalBuildingId());
+            calculateDimensions();
+            return true;
+        } catch (RuntimeException exception) {
+            restoreBuildingState(snapshot);
+            throw exception;
+        }
     }
 
     void removeRooms(Collection<Integer> roomIds) {

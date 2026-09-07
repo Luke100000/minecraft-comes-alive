@@ -303,7 +303,9 @@ public class Building implements VillageBuilding {
     }
 
     public Map<ResourceLocation, List<BlockPos>> getBlocks() {
-        return blocks;
+        return blocks.entrySet().stream().collect(Collectors.toUnmodifiableMap(
+                Map.Entry::getKey,
+                entry -> List.copyOf(entry.getValue())));
     }
 
     public void addBlock(Block block, BlockPos pos) {

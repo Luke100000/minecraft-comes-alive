@@ -2,16 +2,41 @@ package net.conczin.mca.server.world.data;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.SharedConstants;
+import net.minecraft.server.Bootstrap;
+import net.minecraft.world.level.block.Blocks;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
-import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class BuildingCopyTest {
+    @BeforeAll
+    static void bootstrapMinecraft() {
+        SharedConstants.tryDetectVersion();
+        Bootstrap.bootStrap();
+    }
+
+    @Test
+    void blockExposureCannotMutatePersistedPoiState() {
+        Building building = new Building(BlockPos.ZERO);
+        BlockPos first = new BlockPos(1, 2, 3);
+        BlockPos second = new BlockPos(4, 5, 6);
+        ResourceLocation bookshelf = ResourceLocation.parse("minecraft:bookshelf");
+        building.addBlock(Blocks.BOOKSHELF, first);
+
+        Map<ResourceLocation, List<BlockPos>> exposed = building.getBlocks();
+
+        assertThrows(UnsupportedOperationException.class, () -> exposed.get(bookshelf).add(second));
+        assertThrows(UnsupportedOperationException.class, () -> exposed.remove(bookshelf));
+        assertEquals(List.of(first), building.getBlocks().get(bookshelf));
+    }
+
     @Test
     void runtimeCopyPreservesStateAndOwnsMutablePoiCollections() throws Exception {
         Building original = new Building(new BlockPos(4, 8, 12));
@@ -31,7 +56,7 @@ class BuildingCopyTest {
                 new BlockPos(3, 8, 11),
                 new BlockPos(6, 13, 14), floorCells);
         ResourceLocation bookshelf = ResourceLocation.parse("minecraft:bookshelf");
-        original.blocks.put(bookshelf, new ArrayList<>(List.of(new BlockPos(3, 9, 11))));
+        original.addBlock(Blocks.BOOKSHELF, new BlockPos(3, 9, 11));
 
         Building copy = original.copy();
 
@@ -52,8 +77,7 @@ class BuildingCopyTest {
                 .map(BlockPos::getY).sorted().toList());
         assertEquals(1234L, copy.getLastScan());
 
-        assertNotSame(original.getBlocks().get(bookshelf), copy.getBlocks().get(bookshelf));
-        copy.getBlocks().get(bookshelf).add(new BlockPos(5, 9, 11));
+        copy.addBlock(Blocks.BOOKSHELF, new BlockPos(5, 9, 11));
         assertEquals(1, original.getBlocks().get(bookshelf).size());
         assertEquals(2, copy.getBlocks().get(bookshelf).size());
     }

@@ -4,6 +4,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.SharedConstants;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.Bootstrap;
+import net.minecraft.world.level.block.Blocks;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -134,7 +135,7 @@ class RoomTypeResolverTest {
         room.setStructureId(10);
         room.setFloorId(0);
         room.setContributesToMain(contributes);
-        room.getBlocks().put(BELL, List.of(poi));
+        room.addBlock(Blocks.BELL, poi);
         return room;
     }
 

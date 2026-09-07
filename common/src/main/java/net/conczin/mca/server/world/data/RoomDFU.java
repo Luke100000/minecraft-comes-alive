@@ -231,6 +231,11 @@ final class RoomDFU {
         }
     }
 
+    /**
+     * Origin-format saves persisted only a building bounding box, not observed Floor cells.
+     * The rectangular cells created here are therefore a compatibility approximation that
+     * remains authoritative only until normal scanning replaces it with observed geometry.
+     */
     private static Result migrateOrigin(ListTag legacy) {
         Map<Integer, Building> rooms = new HashMap<>();
         Map<Integer, ExternalBuilding> external = new HashMap<>();
