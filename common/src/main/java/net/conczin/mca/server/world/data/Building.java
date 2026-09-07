@@ -32,6 +32,7 @@ public class Building implements VillageBuilding {
     public static final int PLAYER_POSITION_VERTICAL_MARGIN = 2;
 
     protected final Map<ResourceLocation, List<BlockPos>> blocks = new HashMap<>();
+    private Map<ResourceLocation, List<BlockPos>> exposedBlocks;
     /** Exact FloorGeometry cell keys owned by this Room. */
     private Set<BlockPos> floorCells = Set.of();
     private String type = "house";
@@ -115,6 +116,7 @@ public class Building implements VillageBuilding {
         if (scan.status() != validationResult.SUCCESS) return scan.status();
 
         blocks.clear();
+        invalidateBlocksView();
         for (BlockPos pos : scan.poiCells()) {
             recordBuildingBlock(world, pos);
         }
@@ -303,20 +305,30 @@ public class Building implements VillageBuilding {
     }
 
     public Map<ResourceLocation, List<BlockPos>> getBlocks() {
-        return blocks.entrySet().stream().collect(Collectors.toUnmodifiableMap(
-                Map.Entry::getKey,
-                entry -> List.copyOf(entry.getValue())));
+        if (exposedBlocks == null) {
+            exposedBlocks = blocks.entrySet().stream().collect(Collectors.toUnmodifiableMap(
+                    Map.Entry::getKey,
+                    entry -> List.copyOf(entry.getValue())));
+        }
+        return exposedBlocks;
     }
 
     public void addBlock(Block block, BlockPos pos) {
         blocks.computeIfAbsent(BuiltInRegistries.BLOCK.getKey(block), ignored -> new ArrayList<>()).add(pos);
+        invalidateBlocksView();
     }
 
     public void removeBlock(Block block, BlockPos pos) {
-        List<BlockPos> positions = blocks.get(BuiltInRegistries.BLOCK.getKey(block));
-        if (positions != null) {
-            positions.remove(pos);
+        ResourceLocation key = BuiltInRegistries.BLOCK.getKey(block);
+        List<BlockPos> positions = blocks.get(key);
+        if (positions != null && positions.remove(pos)) {
+            if (positions.isEmpty()) blocks.remove(key);
+            invalidateBlocksView();
         }
+    }
+
+    protected final void invalidateBlocksView() {
+        exposedBlocks = null;
     }
 
     public int getBlockCount() {
@@ -434,6 +446,7 @@ public class Building implements VillageBuilding {
         lastScan = scanned.lastScan;
         blocks.clear();
         scanned.blocks.forEach((key, value) -> blocks.put(key, new ArrayList<>(value)));
+        invalidateBlocksView();
         structureId = oldStructureId;
         floorId = oldFloorId;
         type = oldType;

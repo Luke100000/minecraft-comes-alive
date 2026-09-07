@@ -324,6 +324,30 @@ class BlueprintScreenMapInteractionTest {
     }
 
     @Test
+    void nearestTerrainSliceStopsAfterFirstLoadedCandidate() {
+        long[] sampledAt = new long[64];
+        long[] retryAfter = new long[64];
+        java.util.Arrays.fill(sampledAt, Long.MIN_VALUE);
+        java.util.Arrays.fill(retryAfter, Long.MIN_VALUE);
+        int[] lookups = {0};
+
+        assertEquals(0, BlueprintTerrainRenderer.nearestReadySlice(
+                0, 0, sampledAt, retryAfter, 0L, 4.0D, 4.0D,
+                (chunkX, chunkZ) -> {
+                    lookups[0]++;
+                    return true;
+                }));
+        assertEquals(1, lookups[0], "nearest loaded slice should not probe the other 63 chunks");
+    }
+
+    @Test
+    void terminalPartialTerrainSampleFlushesDirtyTexture() {
+        assertTrue(BlueprintTerrainRenderer.shouldRefreshTexture(5, false));
+        assertFalse(BlueprintTerrainRenderer.shouldRefreshTexture(5, true));
+        assertTrue(BlueprintTerrainRenderer.shouldRefreshTexture(4, true));
+    }
+
+    @Test
     void terrainTilePriorityUsesCameraPosition() {
         double cameraX = 220.0D;
         double cameraZ = 64.0D;
@@ -333,22 +357,12 @@ class BlueprintScreenMapInteractionTest {
     }
 
     @Test
-    void terrainPrefetchCoversExactlyOneTileRingOutsideViewport() throws Exception {
-        Method method;
-        try {
-            method = BlueprintTerrainRenderer.class.getDeclaredMethod(
-                    "terrainSamplingBand",
-                    int.class, int.class, int.class, int.class, int.class, int.class);
-        } catch (NoSuchMethodException e) {
-            throw new AssertionError("terrain sampling needs a bounded one-tile prefetch ring", e);
-        }
-        method.setAccessible(true);
-
-        assertEquals(0, method.invoke(null, 0, 0, 0, 127, 0, 127));
-        assertEquals(1, method.invoke(null, -128, 0, 0, 127, 0, 127));
-        assertEquals(1, method.invoke(null, 128, 128, 0, 127, 0, 127));
-        assertEquals(2, method.invoke(null, -256, 0, 0, 127, 0, 127));
-        assertEquals(2, method.invoke(null, 0, 256, 0, 127, 0, 127));
+    void terrainPrefetchCoversExactlyOneTileRingOutsideViewport() {
+        assertEquals(0, BlueprintTerrainRenderer.terrainSamplingBand(0, 0, 0, 127, 0, 127));
+        assertEquals(1, BlueprintTerrainRenderer.terrainSamplingBand(-128, 0, 0, 127, 0, 127));
+        assertEquals(1, BlueprintTerrainRenderer.terrainSamplingBand(128, 128, 0, 127, 0, 127));
+        assertEquals(2, BlueprintTerrainRenderer.terrainSamplingBand(-256, 0, 0, 127, 0, 127));
+        assertEquals(2, BlueprintTerrainRenderer.terrainSamplingBand(0, 256, 0, 127, 0, 127));
     }
 
     @Test

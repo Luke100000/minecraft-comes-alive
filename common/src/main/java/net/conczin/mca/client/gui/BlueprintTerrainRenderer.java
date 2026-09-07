@@ -7,6 +7,7 @@ import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.BiomeColors;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.SectionPos;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.tags.FluidTags;
@@ -168,6 +169,10 @@ final class BlueprintTerrainRenderer implements AutoCloseable {
                 || sampledSliceCount % TEXTURE_REFRESH_SLICE_INTERVAL == 0;
     }
 
+    static boolean shouldRefreshTexture(int sampledSliceCount, boolean hasMoreReadySlices) {
+        return shouldRefreshTexture(sampledSliceCount) || !hasMoreReadySlices;
+    }
+
     static double tileDistanceSq(int minX, int minZ, double focusX, double focusZ) {
         double deltaX = minX + TILE_BLOCK_SIZE / 2.0D - focusX;
         double deltaZ = minZ + TILE_BLOCK_SIZE / 2.0D - focusZ;
@@ -194,10 +199,10 @@ final class BlueprintTerrainRenderer implements AutoCloseable {
     }
 
     static boolean tileTouchesLoadedChunk(int minX, int minZ, LoadedChunkLookup loadedChunks) {
-        int minChunkX = Math.floorDiv(minX, 16);
-        int maxChunkX = Math.floorDiv(minX + TILE_BLOCK_SIZE - 1, 16);
-        int minChunkZ = Math.floorDiv(minZ, 16);
-        int maxChunkZ = Math.floorDiv(minZ + TILE_BLOCK_SIZE - 1, 16);
+        int minChunkX = SectionPos.blockToSectionCoord(minX);
+        int maxChunkX = SectionPos.blockToSectionCoord(minX + TILE_BLOCK_SIZE - 1);
+        int minChunkZ = SectionPos.blockToSectionCoord(minZ);
+        int maxChunkZ = SectionPos.blockToSectionCoord(minZ + TILE_BLOCK_SIZE - 1);
 
         for (int chunkX = minChunkX; chunkX <= maxChunkX; chunkX++) {
             for (int chunkZ = minChunkZ; chunkZ <= maxChunkZ; chunkZ++) {
@@ -256,29 +261,43 @@ final class BlueprintTerrainRenderer implements AutoCloseable {
             throw new IllegalArgumentException("expected " + SAMPLE_SLICE_COUNT + " slice states");
         }
 
-        int nearest = -1;
-        double nearestDistanceSq = Double.POSITIVE_INFINITY;
+        long candidates = 0L;
         for (int sliceIndex = 0; sliceIndex < SAMPLE_SLICE_COUNT; sliceIndex++) {
-            if (!sliceNeedsSampling(sampledAtGameTimes[sliceIndex], retryAfterGameTimes[sliceIndex], gameTime)) {
-                continue;
-            }
-
-            SliceBounds bounds = sampleSliceBounds(sliceIndex);
-            int chunkX = Math.floorDiv(tileMinX + bounds.minLocalX(), SAMPLE_SLICE_BLOCK_SIZE);
-            int chunkZ = Math.floorDiv(tileMinZ + bounds.minLocalZ(), SAMPLE_SLICE_BLOCK_SIZE);
-            if (!loadedChunks.test(chunkX, chunkZ)) continue;
-
-            double centerX = tileMinX + (bounds.minLocalX() + bounds.maxLocalX()) / 2.0D;
-            double centerZ = tileMinZ + (bounds.minLocalZ() + bounds.maxLocalZ()) / 2.0D;
-            double deltaX = centerX - focusX;
-            double deltaZ = centerZ - focusZ;
-            double distanceSq = deltaX * deltaX + deltaZ * deltaZ;
-            if (distanceSq < nearestDistanceSq) {
-                nearestDistanceSq = distanceSq;
-                nearest = sliceIndex;
+            if (sliceNeedsSampling(sampledAtGameTimes[sliceIndex], retryAfterGameTimes[sliceIndex], gameTime)) {
+                candidates |= 1L << sliceIndex;
             }
         }
-        return nearest;
+
+        while (candidates != 0L) {
+            int nearest = -1;
+            double nearestDistanceSq = Double.POSITIVE_INFINITY;
+            for (int sliceIndex = 0; sliceIndex < SAMPLE_SLICE_COUNT; sliceIndex++) {
+                if ((candidates & (1L << sliceIndex)) == 0L) continue;
+
+                int sliceX = sliceIndex % SAMPLE_SLICES_PER_AXIS;
+                int sliceZ = sliceIndex / SAMPLE_SLICES_PER_AXIS;
+                double centerX = tileMinX + sliceX * SAMPLE_SLICE_BLOCK_SIZE
+                        + SAMPLE_SLICE_BLOCK_SIZE / 2.0D;
+                double centerZ = tileMinZ + sliceZ * SAMPLE_SLICE_BLOCK_SIZE
+                        + SAMPLE_SLICE_BLOCK_SIZE / 2.0D;
+                double deltaX = centerX - focusX;
+                double deltaZ = centerZ - focusZ;
+                double distanceSq = deltaX * deltaX + deltaZ * deltaZ;
+                if (distanceSq < nearestDistanceSq) {
+                    nearestDistanceSq = distanceSq;
+                    nearest = sliceIndex;
+                }
+            }
+
+            candidates &= ~(1L << nearest);
+            int sliceX = nearest % SAMPLE_SLICES_PER_AXIS;
+            int sliceZ = nearest / SAMPLE_SLICES_PER_AXIS;
+            int chunkX = SectionPos.blockToSectionCoord(tileMinX + sliceX * SAMPLE_SLICE_BLOCK_SIZE);
+            int chunkZ = SectionPos.blockToSectionCoord(tileMinZ + sliceZ * SAMPLE_SLICE_BLOCK_SIZE);
+            if (loadedChunks.test(chunkX, chunkZ)) return nearest;
+        }
+
+        return -1;
     }
 
     static SliceBounds dirtyTextureBounds(int sliceIndex) {
@@ -424,7 +443,7 @@ final class BlueprintTerrainRenderer implements AutoCloseable {
                                                       int minY) {
         int y = waterY - 1;
         while (y >= minY) {
-            int sectionMinY = Math.floorDiv(y, 16) * 16;
+            int sectionMinY = SectionPos.sectionToBlockCoord(SectionPos.blockToSectionCoord(y));
             if (!sectionMayContainFloor.test(y)) {
                 y = sectionMinY - 1;
                 continue;
@@ -451,7 +470,7 @@ final class BlueprintTerrainRenderer implements AutoCloseable {
                                             int minY) {
         int y = motionBlockingHeight - 1;
         while (y >= minY) {
-            int sectionMinY = Math.floorDiv(y, 16) * 16;
+            int sectionMinY = SectionPos.sectionToBlockCoord(SectionPos.blockToSectionCoord(y));
             if (!sectionMayContainBlocking.test(y)) {
                 y = sectionMinY - 1;
                 continue;
@@ -663,6 +682,11 @@ final class BlueprintTerrainRenderer implements AutoCloseable {
             if (sliceIndex < 0) return false;
 
             SliceBounds bounds = sampleSliceBounds(sliceIndex);
+            int sliceChunkX = SectionPos.blockToSectionCoord(minX + bounds.minLocalX());
+            int sliceChunkZ = SectionPos.blockToSectionCoord(minZ + bounds.minLocalZ());
+            LevelChunk sliceChunk = level.getChunkSource().getChunk(
+                    sliceChunkX, sliceChunkZ, ChunkStatus.FULL, false);
+            if (sliceChunk == null) return false;
             int minBuildHeight = level.getMinBuildHeight();
             int firstCellX = firstCell(minX, sampleStep);
             int firstCellZ = firstCell(minZ, sampleStep);
@@ -673,49 +697,54 @@ final class BlueprintTerrainRenderer implements AutoCloseable {
                 for (int localZ = bounds.minLocalZ(); localZ < bounds.maxLocalZ(); localZ++) {
                     samplingSucceeded &= sampleCell(
                             level, firstCellX, firstCellZ, localX + 1, localZ + 1,
-                            minBuildHeight, surfacePos);
+                            minBuildHeight, surfacePos, sliceChunkX, sliceChunkZ, sliceChunk);
                 }
             }
 
             if (samplingSucceeded && bounds.minLocalX() == 0) {
                 for (int localZ = bounds.minLocalZ(); localZ < bounds.maxLocalZ(); localZ++) {
-                    sampleCell(level, firstCellX, firstCellZ, 0, localZ + 1, minBuildHeight, surfacePos);
+                    sampleCell(level, firstCellX, firstCellZ, 0, localZ + 1, minBuildHeight, surfacePos,
+                            sliceChunkX, sliceChunkZ, sliceChunk);
                 }
             }
             if (samplingSucceeded && bounds.maxLocalX() == TILE_BLOCK_SIZE) {
                 int eastCellX = xCellCount - 1;
                 for (int localZ = bounds.minLocalZ(); localZ < bounds.maxLocalZ(); localZ++) {
                     sampleCell(level, firstCellX, firstCellZ, eastCellX, localZ + 1,
-                            minBuildHeight, surfacePos);
+                            minBuildHeight, surfacePos, sliceChunkX, sliceChunkZ, sliceChunk);
                 }
             }
             if (samplingSucceeded && bounds.minLocalZ() == 0) {
                 for (int localX = bounds.minLocalX(); localX < bounds.maxLocalX(); localX++) {
-                    sampleCell(level, firstCellX, firstCellZ, localX + 1, 0, minBuildHeight, surfacePos);
+                    sampleCell(level, firstCellX, firstCellZ, localX + 1, 0, minBuildHeight, surfacePos,
+                            sliceChunkX, sliceChunkZ, sliceChunk);
                 }
             }
             if (samplingSucceeded && bounds.maxLocalZ() == TILE_BLOCK_SIZE) {
                 int southCellZ = zCellCount - 1;
                 for (int localX = bounds.minLocalX(); localX < bounds.maxLocalX(); localX++) {
                     sampleCell(level, firstCellX, firstCellZ, localX + 1, southCellZ,
-                            minBuildHeight, surfacePos);
+                            minBuildHeight, surfacePos, sliceChunkX, sliceChunkZ, sliceChunk);
                 }
             }
 
             if (samplingSucceeded && bounds.minLocalX() == 0 && bounds.minLocalZ() == 0) {
-                sampleCell(level, firstCellX, firstCellZ, 0, 0, minBuildHeight, surfacePos);
+                sampleCell(level, firstCellX, firstCellZ, 0, 0, minBuildHeight, surfacePos,
+                        sliceChunkX, sliceChunkZ, sliceChunk);
             }
             if (samplingSucceeded && bounds.minLocalX() == 0 && bounds.maxLocalZ() == TILE_BLOCK_SIZE) {
-                sampleCell(level, firstCellX, firstCellZ, 0, zCellCount - 1, minBuildHeight, surfacePos);
+                sampleCell(level, firstCellX, firstCellZ, 0, zCellCount - 1, minBuildHeight, surfacePos,
+                        sliceChunkX, sliceChunkZ, sliceChunk);
             }
             if (samplingSucceeded && bounds.maxLocalX() == TILE_BLOCK_SIZE && bounds.minLocalZ() == 0) {
-                sampleCell(level, firstCellX, firstCellZ, xCellCount - 1, 0, minBuildHeight, surfacePos);
+                sampleCell(level, firstCellX, firstCellZ, xCellCount - 1, 0, minBuildHeight, surfacePos,
+                        sliceChunkX, sliceChunkZ, sliceChunk);
             }
             if (samplingSucceeded
                     && bounds.maxLocalX() == TILE_BLOCK_SIZE
                     && bounds.maxLocalZ() == TILE_BLOCK_SIZE) {
                 sampleCell(level, firstCellX, firstCellZ, xCellCount - 1, zCellCount - 1,
-                        minBuildHeight, surfacePos);
+                        minBuildHeight, surfacePos, sliceChunkX, sliceChunkZ, sliceChunk);
             }
 
             boolean wasPending = sampledAtGameTimes[sliceIndex] == Long.MIN_VALUE;
@@ -724,7 +753,11 @@ final class BlueprintTerrainRenderer implements AutoCloseable {
             if (samplingSucceeded) {
                 if (wasPending) sampledSliceCount++;
                 dirtySlices[sliceIndex] = true;
-                textureDirty |= shouldRefreshTexture(sampledSliceCount);
+                boolean regularRefresh = shouldRefreshTexture(sampledSliceCount);
+                boolean hasMoreReadySlices = regularRefresh || nearestReadySlice(
+                        minX, minZ, sampledAtGameTimes, retryAfterGameTimes,
+                        gameTime, focusX, focusZ, loadedChunks) >= 0;
+                textureDirty |= shouldRefreshTexture(sampledSliceCount, hasMoreReadySlices);
             }
             return true;
         }
@@ -736,31 +769,37 @@ final class BlueprintTerrainRenderer implements AutoCloseable {
                                    int cellX,
                                    int cellZ,
                                    int minBuildHeight,
-                                   BlockPos.MutableBlockPos surfacePos) {
+                                   BlockPos.MutableBlockPos surfacePos,
+                                   int sliceChunkX,
+                                   int sliceChunkZ,
+                                   LevelChunk sliceChunk) {
             int x = firstCellX + cellX * sampleStep;
             int z = firstCellZ + cellZ * sampleStep;
             int sampleX = x + sampleStep / 2;
             int sampleZ = z + sampleStep / 2;
 
-            LevelChunk chunk = level.getChunkSource().getChunk(
-                    sampleX >> 4, sampleZ >> 4, ChunkStatus.FULL, false);
+            int sampleChunkX = SectionPos.blockToSectionCoord(sampleX);
+            int sampleChunkZ = SectionPos.blockToSectionCoord(sampleZ);
+            LevelChunk chunk = sampleChunkX == sliceChunkX && sampleChunkZ == sliceChunkZ
+                    ? sliceChunk
+                    : level.getChunkSource().getChunk(sampleChunkX, sampleChunkZ, ChunkStatus.FULL, false);
             if (chunk == null) {
                 return false;
             }
 
-            int surfaceHeight = level.getHeight(Heightmap.Types.WORLD_SURFACE, sampleX, sampleZ);
+            int surfaceHeight = chunk.getHeight(Heightmap.Types.WORLD_SURFACE, sampleX, sampleZ) + 1;
             if (surfaceHeight <= minBuildHeight) {
                 clearCell(cellX, cellZ);
                 return true;
             }
 
             surfacePos.set(sampleX, surfaceHeight - 1, sampleZ);
-            BlockState surfaceState = level.getBlockState(surfacePos);
+            BlockState surfaceState = chunk.getBlockState(surfacePos);
             boolean waterColumn = isWater(surfaceState);
             MapColor mapColor = surfaceState.getMapColor(level, surfacePos);
             while (mapColor == MapColor.NONE && surfacePos.getY() > minBuildHeight) {
                 surfacePos.move(0, -1, 0);
-                surfaceState = level.getBlockState(surfacePos);
+                surfaceState = chunk.getBlockState(surfacePos);
                 mapColor = surfaceState.getMapColor(level, surfacePos);
             }
 
@@ -770,7 +809,7 @@ final class BlueprintTerrainRenderer implements AutoCloseable {
                 terrainHeight = sampleClientDryTerrainHeight(
                         y -> {
                             surfacePos.set(sampleX, y, sampleZ);
-                            return level.getBlockState(surfacePos);
+                            return chunk.getBlockState(surfacePos);
                         },
                         y -> {
                             int sectionIndex = chunk.getSectionIndex(y);
@@ -781,7 +820,7 @@ final class BlueprintTerrainRenderer implements AutoCloseable {
                                             && (candidate.blocksMotion() || !candidate.getFluidState().isEmpty()));
                         },
                         state -> state.is(BlockTags.LEAVES),
-                        level.getHeight(Heightmap.Types.MOTION_BLOCKING, sampleX, sampleZ),
+                        chunk.getHeight(Heightmap.Types.MOTION_BLOCKING, sampleX, sampleZ) + 1,
                         terrainHeight,
                         minBuildHeight);
                 surfacePos.set(sampleX, colorSampleY, sampleZ);
@@ -799,7 +838,7 @@ final class BlueprintTerrainRenderer implements AutoCloseable {
                     ? sampleClientOceanFloorColumn(
                             y -> {
                                 surfacePos.set(sampleX, y, sampleZ);
-                                return level.getBlockState(surfacePos);
+                                return chunk.getBlockState(surfacePos);
                             },
                             y -> {
                                 int sectionIndex = chunk.getSectionIndex(y);
@@ -818,7 +857,7 @@ final class BlueprintTerrainRenderer implements AutoCloseable {
                 MapColor groundMapColor = groundState.getMapColor(level, groundPos);
                 while (groundMapColor == MapColor.NONE && groundPos.getY() > minBuildHeight) {
                     groundPos.move(0, -1, 0);
-                    groundState = level.getBlockState(groundPos);
+                    groundState = chunk.getBlockState(groundPos);
                     groundMapColor = groundState.getMapColor(level, groundPos);
                 }
                 if (groundMapColor != MapColor.NONE) {

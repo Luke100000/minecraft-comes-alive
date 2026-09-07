@@ -8,7 +8,6 @@ import net.minecraft.world.level.block.Block;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 /** A grouped/open-air village site such as a Graveyard or Town Center. */
 public final class ExternalBuilding extends Building {
@@ -37,15 +36,18 @@ public final class ExternalBuilding extends Building {
 
     public void validateBlocks(Level world) {
         setLastScan(world.getGameTime());
-        for (Map.Entry<net.minecraft.resources.ResourceLocation, List<BlockPos>> positions : getBlocks().entrySet()) {
-            Block recordedBlock = net.minecraft.core.registries.BuiltInRegistries.BLOCK.get(positions.getKey());
-            for (BlockPos pos : positions.getValue()) {
-                if (!net.minecraft.core.registries.BuiltInRegistries.BLOCK
-                        .getKey(world.getBlockState(pos).getBlock()).equals(positions.getKey())) {
-                    removeBlock(recordedBlock, pos);
-                }
+        boolean changed = false;
+        var iterator = blocks.entrySet().iterator();
+        while (iterator.hasNext()) {
+            var positions = iterator.next();
+            changed |= positions.getValue().removeIf(pos -> !net.minecraft.core.registries.BuiltInRegistries.BLOCK
+                    .getKey(world.getBlockState(pos).getBlock()).equals(positions.getKey()));
+            if (positions.getValue().isEmpty()) {
+                iterator.remove();
+                changed = true;
             }
         }
+        if (changed) invalidateBlocksView();
     }
 
     public void addPOI(Level world, BlockPos pos) {

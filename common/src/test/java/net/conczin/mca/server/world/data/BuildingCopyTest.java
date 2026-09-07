@@ -13,7 +13,10 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class BuildingCopyTest {
     @BeforeAll
@@ -35,6 +38,23 @@ class BuildingCopyTest {
         assertThrows(UnsupportedOperationException.class, () -> exposed.get(bookshelf).add(second));
         assertThrows(UnsupportedOperationException.class, () -> exposed.remove(bookshelf));
         assertEquals(List.of(first), building.getBlocks().get(bookshelf));
+        assertSame(exposed, building.getBlocks(), "unchanged POI state should reuse its read-only view");
+
+        building.addBlock(Blocks.BOOKSHELF, second);
+
+        assertNotSame(exposed, building.getBlocks(), "mutation must invalidate the cached read-only view");
+        assertEquals(List.of(first, second), building.getBlocks().get(bookshelf));
+    }
+
+    @Test
+    void removingLastPoiDropsEmptyRegistryBucket() {
+        Building building = new Building(BlockPos.ZERO);
+        BlockPos bookshelf = new BlockPos(1, 2, 3);
+        building.addBlock(Blocks.BOOKSHELF, bookshelf);
+
+        building.removeBlock(Blocks.BOOKSHELF, bookshelf);
+
+        assertTrue(building.getBlocks().isEmpty());
     }
 
     @Test
