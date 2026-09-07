@@ -8,27 +8,40 @@ import net.minecraft.client.renderer.BiomeColors;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.tags.BlockTags;
 import net.minecraft.tags.FluidTags;
 import net.minecraft.util.FastColor;
 import net.minecraft.world.level.ColorResolver;
+import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.level.chunk.status.ChunkStatus;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.material.MapColor;
 import net.minecraft.world.level.material.Fluids;
 
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.function.IntFunction;
 import java.util.function.IntPredicate;
+import java.util.function.LongSupplier;
+import java.util.function.Predicate;
 
 /** Owns world-derived Blueprint terrain sampling, texture creation and cache lifecycle. */
 final class BlueprintTerrainRenderer implements AutoCloseable {
     private static final int SAMPLE_STEP = 1;
     private static final int TILE_BLOCK_SIZE = 128;
+    private static final int SAMPLE_SLICE_BLOCK_SIZE = 16;
+    private static final int SAMPLE_SLICES_PER_AXIS = TILE_BLOCK_SIZE / SAMPLE_SLICE_BLOCK_SIZE;
+    private static final int SAMPLE_SLICE_COUNT = SAMPLE_SLICES_PER_AXIS * SAMPLE_SLICES_PER_AXIS;
     private static final int MAX_CACHED_TILES = 96;
-    private static final int MAX_TILE_SAMPLES_PER_FRAME = 1;
+    private static final long TERRAIN_SAMPLE_BUDGET_NANOS = 1_500_000L;
+    private static final int TEXTURE_REFRESH_SLICE_INTERVAL = 4;
     private static final long INCOMPLETE_TILE_RETRY_TICKS = 20L;
+    private static final long TERRAIN_SLICE_STALE_TICKS = 100L;
     private static final int TERRAIN_ALPHA = 0xff;
     private static final int CONTOUR_COLOR = 0x66000000;
     private static final int CONTOUR_INTERVAL = 4;
@@ -36,7 +49,7 @@ final class BlueprintTerrainRenderer implements AutoCloseable {
     private static final float SLOPE_BRIGHTNESS_PER_BLOCK = 0.055f;
     private static final float MIN_BRIGHTNESS = 0.58f;
     private static final float MAX_BRIGHTNESS = 1.15f;
-    private static final float WATER_BLEND = 0.625f;
+    private static final float WATER_BLEND = 0.80f;
     private static final int NO_WATER_TINT = -1;
 
     private final LinkedHashMap<TileKey, TerrainTile> tiles = new LinkedHashMap<>(16, 0.75f, true);
@@ -53,25 +66,86 @@ final class BlueprintTerrainRenderer implements AutoCloseable {
         int visibleMaxX = centerBlockX + radius;
         int visibleMinZ = centerBlockZ - radius;
         int visibleMaxZ = centerBlockZ + radius;
+        int samplingMinX = visibleMinX - TILE_BLOCK_SIZE;
+        int samplingMaxX = visibleMaxX + TILE_BLOCK_SIZE;
+        int samplingMinZ = visibleMinZ - TILE_BLOCK_SIZE;
+        int samplingMaxZ = visibleMaxZ + TILE_BLOCK_SIZE;
 
         long gameTime = minecraft.level.getGameTime();
-        TileSamplingBudget samplingBudget = new TileSamplingBudget();
-        for (int minX = tileMin(visibleMinX); minX <= visibleMaxX; minX += TILE_BLOCK_SIZE) {
-            for (int minZ = tileMin(visibleMinZ); minZ <= visibleMaxZ; minZ += TILE_BLOCK_SIZE) {
+        LoadedChunkLookup loadedChunks = (chunkX, chunkZ) -> minecraft.level.getChunkSource()
+                .getChunk(chunkX, chunkZ, ChunkStatus.FULL, false) != null;
+        List<TerrainTile> visibleTiles = new ArrayList<>();
+        TileKey visibleSamplingKey = null;
+        TerrainTile visibleSamplingTile = null;
+        double visibleSamplingDistanceSq = Double.POSITIVE_INFINITY;
+        TileKey prefetchSamplingKey = null;
+        TerrainTile prefetchSamplingTile = null;
+        double prefetchSamplingDistanceSq = Double.POSITIVE_INFINITY;
+
+        for (int minX = tileMin(samplingMinX); minX <= samplingMaxX; minX += TILE_BLOCK_SIZE) {
+            for (int minZ = tileMin(samplingMinZ); minZ <= samplingMaxZ; minZ += TILE_BLOCK_SIZE) {
+                int samplingBand = terrainSamplingBand(
+                        minX, minZ, visibleMinX, visibleMaxX, visibleMinZ, visibleMaxZ);
+                if (samplingBand > 1) continue;
+
                 TileKey key = new TileKey(minX, minZ);
                 TerrainTile tile = tiles.get(key);
-                if ((tile == null || tile.shouldRefresh(gameTime)) && samplingBudget.tryAcquire()) {
-                    TerrainTile previous = tile;
-                    TerrainTile sampled = TerrainTile.sample(
-                            minecraft.level, minX, minZ, sampleStep, gameTime, previous);
-                    if (tile != null) releaseTexture(tile);
-                    tile = sampled;
-                    tiles.put(key, tile);
+                if (samplingBand == 0 && tile != null) {
+                    visibleTiles.add(tile);
                 }
-                if (tile != null) {
-                    renderTile(context, tile);
+
+                boolean hasReadySlice = tile == null
+                        ? tileTouchesLoadedChunk(minX, minZ, loadedChunks)
+                        : tile.hasReadySlice(gameTime, viewport.mapCenterX(), viewport.mapCenterZ(), loadedChunks);
+                if (hasReadySlice) {
+                    double distanceSq = tileDistanceSq(minX, minZ, viewport.mapCenterX(), viewport.mapCenterZ());
+                    if (samplingBand == 0 && distanceSq < visibleSamplingDistanceSq) {
+                        visibleSamplingDistanceSq = distanceSq;
+                        visibleSamplingKey = key;
+                        visibleSamplingTile = tile;
+                    } else if (samplingBand == 1 && distanceSq < prefetchSamplingDistanceSq) {
+                        prefetchSamplingDistanceSq = distanceSq;
+                        prefetchSamplingKey = key;
+                        prefetchSamplingTile = tile;
+                    }
                 }
             }
+        }
+
+        if (visibleSamplingKey != null || prefetchSamplingKey != null) {
+            TileSamplingBudget samplingBudget = new TileSamplingBudget();
+            if (visibleSamplingKey != null) {
+                if (visibleSamplingTile == null) {
+                    visibleSamplingTile = new TerrainTile(
+                            visibleSamplingKey.minX(), visibleSamplingKey.minZ(), sampleStep);
+                    tiles.put(visibleSamplingKey, visibleSamplingTile);
+                    visibleTiles.add(visibleSamplingTile);
+                }
+                while (samplingBudget.tryAcquire()) {
+                    if (!visibleSamplingTile.sampleNextSlice(
+                            minecraft.level, viewport.mapCenterX(), viewport.mapCenterZ(), gameTime, loadedChunks)) {
+                        break;
+                    }
+                }
+            }
+
+            if (prefetchSamplingKey != null) {
+                if (prefetchSamplingTile == null) {
+                    prefetchSamplingTile = new TerrainTile(
+                            prefetchSamplingKey.minX(), prefetchSamplingKey.minZ(), sampleStep);
+                    tiles.put(prefetchSamplingKey, prefetchSamplingTile);
+                }
+                while (samplingBudget.tryAcquire()) {
+                    if (!prefetchSamplingTile.sampleNextSlice(
+                            minecraft.level, viewport.mapCenterX(), viewport.mapCenterZ(), gameTime, loadedChunks)) {
+                        break;
+                    }
+                }
+            }
+        }
+
+        for (TerrainTile tile : visibleTiles) {
+            renderTile(context, tile);
         }
         trimCache();
     }
@@ -84,8 +158,144 @@ final class BlueprintTerrainRenderer implements AutoCloseable {
         return SAMPLE_STEP;
     }
 
+    static boolean hasSampledTerrain(int sampledSliceCount) {
+        return sampledSliceCount > 0;
+    }
+
+    static boolean shouldRefreshTexture(int sampledSliceCount) {
+        return sampledSliceCount == 1
+                || sampledSliceCount == SAMPLE_SLICE_COUNT
+                || sampledSliceCount % TEXTURE_REFRESH_SLICE_INTERVAL == 0;
+    }
+
+    static double tileDistanceSq(int minX, int minZ, double focusX, double focusZ) {
+        double deltaX = minX + TILE_BLOCK_SIZE / 2.0D - focusX;
+        double deltaZ = minZ + TILE_BLOCK_SIZE / 2.0D - focusZ;
+        return deltaX * deltaX + deltaZ * deltaZ;
+    }
+
+    static int terrainSamplingBand(int minX,
+                                   int minZ,
+                                   int visibleMinX,
+                                   int visibleMaxX,
+                                   int visibleMinZ,
+                                   int visibleMaxZ) {
+        int maxX = minX + TILE_BLOCK_SIZE - 1;
+        int maxZ = minZ + TILE_BLOCK_SIZE - 1;
+        boolean visible = minX <= visibleMaxX && maxX >= visibleMinX
+                && minZ <= visibleMaxZ && maxZ >= visibleMinZ;
+        if (visible) return 0;
+
+        boolean prefetched = minX <= visibleMaxX + TILE_BLOCK_SIZE
+                && maxX >= visibleMinX - TILE_BLOCK_SIZE
+                && minZ <= visibleMaxZ + TILE_BLOCK_SIZE
+                && maxZ >= visibleMinZ - TILE_BLOCK_SIZE;
+        return prefetched ? 1 : 2;
+    }
+
+    static boolean tileTouchesLoadedChunk(int minX, int minZ, LoadedChunkLookup loadedChunks) {
+        int minChunkX = Math.floorDiv(minX, 16);
+        int maxChunkX = Math.floorDiv(minX + TILE_BLOCK_SIZE - 1, 16);
+        int minChunkZ = Math.floorDiv(minZ, 16);
+        int maxChunkZ = Math.floorDiv(minZ + TILE_BLOCK_SIZE - 1, 16);
+
+        for (int chunkX = minChunkX; chunkX <= maxChunkX; chunkX++) {
+            for (int chunkZ = minChunkZ; chunkZ <= maxChunkZ; chunkZ++) {
+                if (loadedChunks.test(chunkX, chunkZ)) return true;
+            }
+        }
+        return false;
+    }
+
+    static SliceBounds sampleSliceBounds(int sliceIndex) {
+        if (sliceIndex < 0 || sliceIndex >= SAMPLE_SLICE_COUNT) {
+            throw new IllegalArgumentException("sliceIndex out of range: " + sliceIndex);
+        }
+        int sliceX = sliceIndex % SAMPLE_SLICES_PER_AXIS;
+        int sliceZ = sliceIndex / SAMPLE_SLICES_PER_AXIS;
+        int minLocalX = sliceX * SAMPLE_SLICE_BLOCK_SIZE;
+        int minLocalZ = sliceZ * SAMPLE_SLICE_BLOCK_SIZE;
+        return new SliceBounds(
+                minLocalX,
+                minLocalX + SAMPLE_SLICE_BLOCK_SIZE,
+                minLocalZ,
+                minLocalZ + SAMPLE_SLICE_BLOCK_SIZE);
+    }
+
+    static boolean sliceNeedsSampling(long sampledAtGameTime, long retryAfterGameTime, long gameTime) {
+        if (retryAfterGameTime != Long.MIN_VALUE && gameTime < retryAfterGameTime) {
+            return false;
+        }
+        return sampledAtGameTime == Long.MIN_VALUE
+                || gameTime - sampledAtGameTime >= TERRAIN_SLICE_STALE_TICKS;
+    }
+
+    static void recordSliceSampleResult(long[] sampledAtGameTimes,
+                                        long[] retryAfterGameTimes,
+                                        int sliceIndex,
+                                        long gameTime,
+                                        boolean success) {
+        if (success) {
+            sampledAtGameTimes[sliceIndex] = gameTime;
+            retryAfterGameTimes[sliceIndex] = Long.MIN_VALUE;
+        } else {
+            retryAfterGameTimes[sliceIndex] = gameTime + INCOMPLETE_TILE_RETRY_TICKS;
+        }
+    }
+
+    static int nearestReadySlice(int tileMinX,
+                                 int tileMinZ,
+                                 long[] sampledAtGameTimes,
+                                 long[] retryAfterGameTimes,
+                                 long gameTime,
+                                 double focusX,
+                                 double focusZ,
+                                 LoadedChunkLookup loadedChunks) {
+        if (sampledAtGameTimes.length != SAMPLE_SLICE_COUNT
+                || retryAfterGameTimes.length != SAMPLE_SLICE_COUNT) {
+            throw new IllegalArgumentException("expected " + SAMPLE_SLICE_COUNT + " slice states");
+        }
+
+        int nearest = -1;
+        double nearestDistanceSq = Double.POSITIVE_INFINITY;
+        for (int sliceIndex = 0; sliceIndex < SAMPLE_SLICE_COUNT; sliceIndex++) {
+            if (!sliceNeedsSampling(sampledAtGameTimes[sliceIndex], retryAfterGameTimes[sliceIndex], gameTime)) {
+                continue;
+            }
+
+            SliceBounds bounds = sampleSliceBounds(sliceIndex);
+            int chunkX = Math.floorDiv(tileMinX + bounds.minLocalX(), SAMPLE_SLICE_BLOCK_SIZE);
+            int chunkZ = Math.floorDiv(tileMinZ + bounds.minLocalZ(), SAMPLE_SLICE_BLOCK_SIZE);
+            if (!loadedChunks.test(chunkX, chunkZ)) continue;
+
+            double centerX = tileMinX + (bounds.minLocalX() + bounds.maxLocalX()) / 2.0D;
+            double centerZ = tileMinZ + (bounds.minLocalZ() + bounds.maxLocalZ()) / 2.0D;
+            double deltaX = centerX - focusX;
+            double deltaZ = centerZ - focusZ;
+            double distanceSq = deltaX * deltaX + deltaZ * deltaZ;
+            if (distanceSq < nearestDistanceSq) {
+                nearestDistanceSq = distanceSq;
+                nearest = sliceIndex;
+            }
+        }
+        return nearest;
+    }
+
+    static SliceBounds dirtyTextureBounds(int sliceIndex) {
+        SliceBounds slice = sampleSliceBounds(sliceIndex);
+        return new SliceBounds(
+                Math.max(0, slice.minLocalX() - 1),
+                Math.min(TILE_BLOCK_SIZE, slice.maxLocalX() + 1),
+                Math.max(0, slice.minLocalZ() - 1),
+                Math.min(TILE_BLOCK_SIZE, slice.maxLocalZ() + 1));
+    }
+
     private void renderTile(GuiGraphics context, TerrainTile tile) {
-        if (tile.terrainTextureLocation == null) createTexture(tile);
+        if ((tile.textureDirty || tile.terrainTextureLocation == null)
+                && hasSampledTerrain(tile.sampledSliceCount)) {
+            updateTexture(tile);
+            tile.textureDirty = false;
+        }
         if (tile.terrainTextureLocation == null) return;
 
         context.blit(tile.terrainTextureLocation, tile.minX, tile.minZ,
@@ -93,68 +303,76 @@ final class BlueprintTerrainRenderer implements AutoCloseable {
                 TILE_BLOCK_SIZE, TILE_BLOCK_SIZE, TILE_BLOCK_SIZE, TILE_BLOCK_SIZE);
     }
 
-    private void createTexture(TerrainTile tile) {
-        Minecraft minecraft = Minecraft.getInstance();
-        TerrainTile.Cell[][] cells = tile.cells;
-        if (cells.length == 0 || cells[0].length == 0) return;
+    private void updateTexture(TerrainTile tile) {
+        if (tile.terrainTexture == null) {
+            NativeImage terrainImage = new NativeImage(TILE_BLOCK_SIZE, TILE_BLOCK_SIZE, true);
+            for (int sliceIndex = 0; sliceIndex < SAMPLE_SLICE_COUNT; sliceIndex++) {
+                if (!tile.dirtySlices[sliceIndex]) continue;
+                updatePixels(tile, terrainImage, dirtyTextureBounds(sliceIndex));
+            }
 
-        NativeImage terrainImage = new NativeImage(TILE_BLOCK_SIZE, TILE_BLOCK_SIZE, true);
+            DynamicTexture terrainTexture = new DynamicTexture(terrainImage);
+            terrainTexture.setFilter(false, false);
+            tile.terrainTexture = terrainTexture;
+            tile.terrainTextureLocation = Minecraft.getInstance().getTextureManager()
+                    .register("mca_blueprint_terrain", terrainTexture);
+            Arrays.fill(tile.dirtySlices, false);
+            return;
+        }
+
+        NativeImage terrainImage = tile.terrainTexture.getPixels();
+        if (terrainImage == null) return;
+
+        tile.terrainTexture.bind();
+        for (int sliceIndex = 0; sliceIndex < SAMPLE_SLICE_COUNT; sliceIndex++) {
+            if (!tile.dirtySlices[sliceIndex]) continue;
+
+            SliceBounds dirty = dirtyTextureBounds(sliceIndex);
+            updatePixels(tile, terrainImage, dirty);
+            terrainImage.upload(
+                    0,
+                    dirty.minLocalX(), dirty.minLocalZ(),
+                    dirty.minLocalX(), dirty.minLocalZ(),
+                    dirty.maxLocalX() - dirty.minLocalX(),
+                    dirty.maxLocalZ() - dirty.minLocalZ(),
+                    false, false, false, false);
+            tile.dirtySlices[sliceIndex] = false;
+        }
+    }
+
+    private static void updatePixels(TerrainTile tile, NativeImage terrainImage, SliceBounds dirty) {
         int firstCellX = TerrainTile.firstCell(tile.minX, tile.sampleStep);
         int firstCellZ = TerrainTile.firstCell(tile.minZ, tile.sampleStep);
 
-        for (int cellX = 1; cellX < cells.length - 1; cellX++) {
-            for (int cellZ = 1; cellZ < cells[cellX].length - 1; cellZ++) {
-                TerrainTile.Cell cell = cells[cellX][cellZ];
-                if (cell == null) continue;
+        for (int pixelX = dirty.minLocalX(); pixelX < dirty.maxLocalX(); pixelX++) {
+            for (int pixelZ = dirty.minLocalZ(); pixelZ < dirty.maxLocalZ(); pixelZ++) {
+                int blockX = tile.minX + pixelX;
+                int blockZ = tile.minZ + pixelZ;
+                int cellX = Math.floorDiv(blockX - firstCellX, tile.sampleStep);
+                int cellZ = Math.floorDiv(blockZ - firstCellZ, tile.sampleStep);
 
-                int northHeight = tile.heightAt(cellX, cellZ - 1, cell.height);
-                int southHeight = tile.heightAt(cellX, cellZ + 1, cell.height);
-                int westHeight = tile.heightAt(cellX - 1, cellZ, cell.height);
-                int eastHeight = tile.heightAt(cellX + 1, cellZ, cell.height);
+                if (!tile.isCellValid(cellX, cellZ)) {
+                    terrainImage.setPixelRGBA(pixelX, pixelZ, 0);
+                    continue;
+                }
 
+                int height = tile.height(cellX, cellZ);
+                int northHeight = tile.heightAt(cellX, cellZ - 1, height);
+                int southHeight = tile.heightAt(cellX, cellZ + 1, height);
+                int westHeight = tile.heightAt(cellX - 1, cellZ, height);
+                int eastHeight = tile.heightAt(cellX + 1, cellZ, height);
                 float brightness = hillshadeBrightness(westHeight, eastHeight, northHeight, southHeight);
-                int color = composeTerrainAndWater(
-                        cell.terrainColor(), cell.waterTint(), brightness, false);
-                int nativeColor = FastColor.ABGR32.fromArgb32(color);
-                int cellMinX = firstCellX + cellX * tile.sampleStep;
-                int cellMinZ = firstCellZ + cellZ * tile.sampleStep;
-                int minPixelX = Math.max(cellMinX, tile.minX) - tile.minX;
-                int minPixelZ = Math.max(cellMinZ, tile.minZ) - tile.minZ;
-                int maxPixelX = Math.min(cellMinX + tile.sampleStep, tile.maxX()) - tile.minX;
-                int maxPixelZ = Math.min(cellMinZ + tile.sampleStep, tile.maxZ()) - tile.minZ;
-                if (minPixelX >= maxPixelX || minPixelZ >= maxPixelZ) continue;
-
-                for (int pixelX = minPixelX; pixelX < maxPixelX; pixelX++) {
-                    for (int pixelZ = minPixelZ; pixelZ < maxPixelZ; pixelZ++) {
-                        terrainImage.setPixelRGBA(pixelX, pixelZ, nativeColor);
-                    }
-                }
-
-                boolean northContour = cellZ > 0
-                        && Math.floorDiv(cell.height, CONTOUR_INTERVAL)
+                boolean northContour = Math.floorDiv(height, CONTOUR_INTERVAL)
                         != Math.floorDiv(northHeight, CONTOUR_INTERVAL);
-                boolean westContour = cellX > 0
-                        && Math.floorDiv(cell.height, CONTOUR_INTERVAL)
+                boolean westContour = Math.floorDiv(height, CONTOUR_INTERVAL)
                         != Math.floorDiv(westHeight, CONTOUR_INTERVAL);
-                int contourColor = FastColor.ABGR32.fromArgb32(composeTerrainAndWater(
-                        cell.terrainColor(), cell.waterTint(), brightness, true));
 
-                if (northContour && minPixelZ < maxPixelZ) {
-                    for (int pixelX = minPixelX; pixelX < maxPixelX; pixelX++) {
-                        terrainImage.setPixelRGBA(pixelX, minPixelZ, contourColor);
-                    }
-                }
-                if (westContour && minPixelX < maxPixelX) {
-                    for (int pixelZ = minPixelZ; pixelZ < maxPixelZ; pixelZ++) {
-                        terrainImage.setPixelRGBA(minPixelX, pixelZ, contourColor);
-                    }
-                }
+                int color = composeTerrainAndWater(
+                        tile.terrainColor(cellX, cellZ), tile.waterTint(cellX, cellZ), brightness,
+                        northContour || westContour);
+                terrainImage.setPixelRGBA(pixelX, pixelZ, FastColor.ABGR32.fromArgb32(color));
             }
         }
-
-        DynamicTexture terrainTexture = new DynamicTexture(terrainImage);
-        terrainTexture.setFilter(false, false);
-        tile.terrainTextureLocation = minecraft.getTextureManager().register("mca_blueprint_terrain", terrainTexture);
     }
 
     private static int blendContour(int baseColor) {
@@ -224,8 +442,33 @@ final class BlueprintTerrainRenderer implements AutoCloseable {
         return null;
     }
 
-    static int dryTerrainHeight(int motionBlockingHeight, int surfaceHeight, int minBuildHeight) {
-        return motionBlockingHeight > minBuildHeight ? motionBlockingHeight : surfaceHeight;
+    @SuppressWarnings("deprecation")
+    static int sampleClientDryTerrainHeight(IntFunction<BlockState> stateAtY,
+                                            IntPredicate sectionMayContainBlocking,
+                                            Predicate<BlockState> isLeaf,
+                                            int motionBlockingHeight,
+                                            int surfaceHeight,
+                                            int minY) {
+        int y = motionBlockingHeight - 1;
+        while (y >= minY) {
+            int sectionMinY = Math.floorDiv(y, 16) * 16;
+            if (!sectionMayContainBlocking.test(y)) {
+                y = sectionMinY - 1;
+                continue;
+            }
+
+            int scanMinY = Math.max(minY, sectionMinY);
+            while (y >= scanMinY) {
+                BlockState state = stateAtY.apply(y);
+                if (state != null
+                        && !isLeaf.test(state)
+                        && (state.blocksMotion() || !state.getFluidState().isEmpty())) {
+                    return y + 1;
+                }
+                y--;
+            }
+        }
+        return surfaceHeight;
     }
 
     private static boolean isWater(BlockState state) {
@@ -265,6 +508,7 @@ final class BlueprintTerrainRenderer implements AutoCloseable {
         if (tile.terrainTextureLocation != null) {
             Minecraft.getInstance().getTextureManager().release(tile.terrainTextureLocation);
             tile.terrainTextureLocation = null;
+            tile.terrainTexture = null;
         }
     }
 
@@ -277,13 +521,34 @@ final class BlueprintTerrainRenderer implements AutoCloseable {
     private record TileKey(int minX, int minZ) {
     }
 
+    @FunctionalInterface
+    interface LoadedChunkLookup {
+        boolean test(int chunkX, int chunkZ);
+    }
+
+    record SliceBounds(int minLocalX, int maxLocalX, int minLocalZ, int maxLocalZ) {
+    }
+
     static final class TileSamplingBudget {
-        private int remaining = MAX_TILE_SAMPLES_PER_FRAME;
+        private final LongSupplier nanoTime;
+        private final long deadlineNanos;
+        private boolean firstSample = true;
+
+        TileSamplingBudget() {
+            this(System::nanoTime, TERRAIN_SAMPLE_BUDGET_NANOS);
+        }
+
+        private TileSamplingBudget(LongSupplier nanoTime, long budgetNanos) {
+            this.nanoTime = nanoTime;
+            this.deadlineNanos = nanoTime.getAsLong() + budgetNanos;
+        }
 
         boolean tryAcquire() {
-            if (remaining <= 0) return false;
-            remaining--;
-            return true;
+            if (firstSample) {
+                firstSample = false;
+                return true;
+            }
+            return nanoTime.getAsLong() < deadlineNanos;
         }
     }
 
@@ -296,23 +561,38 @@ final class BlueprintTerrainRenderer implements AutoCloseable {
         private final int minX;
         private final int minZ;
         private final int sampleStep;
-        private final long sampledAtGameTime;
-        private final boolean complete;
-        private final Cell[][] cells;
+        private final int xCellCount;
+        private final int zCellCount;
+        private final int[] heights;
+        private final int[] terrainColors;
+        private final int[] waterTints;
+        private final boolean[] validCells;
+        private final long[] sampledAtGameTimes = new long[SAMPLE_SLICE_COUNT];
+        private final long[] retryAfterGameTimes = new long[SAMPLE_SLICE_COUNT];
+        private final boolean[] dirtySlices = new boolean[SAMPLE_SLICE_COUNT];
+        private int sampledSliceCount;
+        private boolean textureDirty;
+        private DynamicTexture terrainTexture;
         private ResourceLocation terrainTextureLocation;
 
-        private TerrainTile(int minX,
-                            int minZ,
-                            int sampleStep,
-                            long sampledAtGameTime,
-                            boolean complete,
-                            Cell[][] cells) {
+        private TerrainTile(int minX, int minZ, int sampleStep) {
             this.minX = minX;
             this.minZ = minZ;
             this.sampleStep = sampleStep;
-            this.sampledAtGameTime = sampledAtGameTime;
-            this.complete = complete;
-            this.cells = cells;
+
+            int firstCellX = firstCell(minX, sampleStep);
+            int firstCellZ = firstCell(minZ, sampleStep);
+            int lastCellX = Math.floorDiv(maxX() - 1, sampleStep) * sampleStep + sampleStep;
+            int lastCellZ = Math.floorDiv(maxZ() - 1, sampleStep) * sampleStep + sampleStep;
+            this.xCellCount = (lastCellX - firstCellX) / sampleStep + 1;
+            this.zCellCount = (lastCellZ - firstCellZ) / sampleStep + 1;
+            int cellCount = xCellCount * zCellCount;
+            this.heights = new int[cellCount];
+            this.terrainColors = new int[cellCount];
+            this.waterTints = new int[cellCount];
+            this.validCells = new boolean[cellCount];
+            Arrays.fill(sampledAtGameTimes, Long.MIN_VALUE);
+            Arrays.fill(retryAfterGameTimes, Long.MIN_VALUE);
         }
 
         private int maxX() {
@@ -323,141 +603,234 @@ final class BlueprintTerrainRenderer implements AutoCloseable {
             return minZ + TILE_BLOCK_SIZE;
         }
 
-        private boolean shouldRefresh(long gameTime) {
-            return !complete && gameTime - sampledAtGameTime >= INCOMPLETE_TILE_RETRY_TICKS;
+        private boolean hasReadySlice(long gameTime,
+                                      double focusX,
+                                      double focusZ,
+                                      LoadedChunkLookup loadedChunks) {
+            return nearestReadySlice(
+                    minX, minZ, sampledAtGameTimes, retryAfterGameTimes,
+                    gameTime, focusX, focusZ, loadedChunks) >= 0;
         }
 
         private int heightAt(int x, int z, int fallbackHeight) {
-            if (x < 0 || z < 0 || x >= cells.length || z >= cells[x].length || cells[x][z] == null) {
-                return fallbackHeight;
-            }
-            return cells[x][z].height;
+            return isCellValid(x, z) ? heights[cellIndex(x, z)] : fallbackHeight;
         }
 
-        private Cell cellAtBlock(int blockX, int blockZ) {
-            int firstCellX = firstCell(minX, sampleStep);
-            int firstCellZ = firstCell(minZ, sampleStep);
-            int cellX = Math.floorDiv(blockX - firstCellX, sampleStep);
-            int cellZ = Math.floorDiv(blockZ - firstCellZ, sampleStep);
-            if (cellX < 0 || cellZ < 0 || cellX >= cells.length || cellZ >= cells[cellX].length) {
-                return null;
-            }
-            return cells[cellX][cellZ];
+        private boolean isCellValid(int x, int z) {
+            return x >= 0 && z >= 0 && x < xCellCount && z < zCellCount && validCells[cellIndex(x, z)];
+        }
+
+        private int height(int x, int z) {
+            return heights[cellIndex(x, z)];
+        }
+
+        private int terrainColor(int x, int z) {
+            return terrainColors[cellIndex(x, z)];
+        }
+
+        private int waterTint(int x, int z) {
+            return waterTints[cellIndex(x, z)];
+        }
+
+        private int cellIndex(int x, int z) {
+            return x * zCellCount + z;
+        }
+
+        private void clearCell(int x, int z) {
+            validCells[cellIndex(x, z)] = false;
+        }
+
+        private void setCell(int x, int z, int height, int terrainColor, int waterTint) {
+            int index = cellIndex(x, z);
+            heights[index] = height;
+            terrainColors[index] = terrainColor;
+            waterTints[index] = waterTint;
+            validCells[index] = true;
         }
 
         private static int firstCell(int tileMin, int sampleStep) {
             return Math.floorDiv(tileMin, sampleStep) * sampleStep - sampleStep;
         }
 
-        @SuppressWarnings("deprecation")
-        private static TerrainTile sample(ClientLevel level,
-                                          int minX,
-                                          int minZ,
-                                          int sampleStep,
-                                          long gameTime,
-                                          TerrainTile previous) {
-            int maxX = minX + TILE_BLOCK_SIZE;
-            int maxZ = minZ + TILE_BLOCK_SIZE;
+        private boolean sampleNextSlice(ClientLevel level,
+                                        double focusX,
+                                        double focusZ,
+                                        long gameTime,
+                                        LoadedChunkLookup loadedChunks) {
+            int sliceIndex = nearestReadySlice(
+                    minX, minZ, sampledAtGameTimes, retryAfterGameTimes,
+                    gameTime, focusX, focusZ, loadedChunks);
+            if (sliceIndex < 0) return false;
+
+            SliceBounds bounds = sampleSliceBounds(sliceIndex);
             int minBuildHeight = level.getMinBuildHeight();
             int firstCellX = firstCell(minX, sampleStep);
             int firstCellZ = firstCell(minZ, sampleStep);
-            int lastCellX = Math.floorDiv(maxX - 1, sampleStep) * sampleStep + sampleStep;
-            int lastCellZ = Math.floorDiv(maxZ - 1, sampleStep) * sampleStep + sampleStep;
-            int xCellCount = (lastCellX - firstCellX) / sampleStep + 1;
-            int zCellCount = (lastCellZ - firstCellZ) / sampleStep + 1;
-            Cell[][] cells = new Cell[xCellCount][zCellCount];
-            boolean complete = true;
-
             BlockPos.MutableBlockPos surfacePos = new BlockPos.MutableBlockPos();
-            for (int cellX = 0; cellX < xCellCount; cellX++) {
-                int x = firstCellX + cellX * sampleStep;
-                int sampleX = x + sampleStep / 2;
-                for (int cellZ = 0; cellZ < zCellCount; cellZ++) {
-                    int z = firstCellZ + cellZ * sampleStep;
-                    int sampleZ = z + sampleStep / 2;
-                    //noinspection deprecation
-                    if (!level.hasChunkAt(sampleX, sampleZ)) {
-                        complete = false;
-                        Cell cached = previous == null ? null : previous.cellAtBlock(sampleX, sampleZ);
-                        if (cached != null) {
-                            cells[cellX][cellZ] = cached;
-                        }
-                        continue;
-                    }
+            boolean samplingSucceeded = true;
 
-                    int surfaceHeight = level.getHeight(Heightmap.Types.WORLD_SURFACE, sampleX, sampleZ);
-                    if (surfaceHeight <= minBuildHeight) {
-                        continue;
-                    }
-
-                    surfacePos.set(sampleX, surfaceHeight - 1, sampleZ);
-                    BlockState surfaceState = level.getBlockState(surfacePos);
-                    boolean waterColumn = isWater(surfaceState);
-                    MapColor mapColor = surfaceState.getMapColor(level, surfacePos);
-                    while (mapColor == MapColor.NONE && surfacePos.getY() > minBuildHeight) {
-                        surfacePos.move(0, -1, 0);
-                        surfaceState = level.getBlockState(surfacePos);
-                        mapColor = surfaceState.getMapColor(level, surfacePos);
-                    }
-
-                    int terrainHeight = surfacePos.getY() + 1;
-                    if (!waterColumn) {
-                        terrainHeight = dryTerrainHeight(
-                                level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, sampleX, sampleZ),
-                                terrainHeight,
-                                minBuildHeight);
-                    }
-                    int baseColor = mapColor == MapColor.NONE ? FALLBACK_COLOR : mapColor.col;
-                    baseColor = biomeTintedColor(level, surfacePos, mapColor, baseColor);
-
-                    int terrainColor = baseColor;
-                    int waterTint = NO_WATER_TINT;
-                    if (waterColumn) {
-                        BlockPos waterPos = new BlockPos(sampleX, surfaceHeight - 1, sampleZ);
-                        waterTint = unblendedBiomeColor(level, waterPos, BiomeColors.WATER_COLOR_RESOLVER);
-                    }
-                    var chunk = waterColumn
-                            ? level.getChunk(sampleX >> 4, sampleZ >> 4)
-                            : null;
-                    ColumnLayers layers = waterColumn
-                            ? sampleClientOceanFloorColumn(
-                                    y -> {
-                                        surfacePos.set(sampleX, y, sampleZ);
-                                        return level.getBlockState(surfacePos);
-                                    },
-                                    y -> {
-                                        int sectionIndex = chunk.getSectionIndex(y);
-                                        return sectionIndex >= 0
-                                                && sectionIndex < chunk.getSectionsCount()
-                                                && chunk.getSection(sectionIndex)
-                                                .maybeHas(candidate -> candidate.blocksMotion());
-                                    },
-                                    surfaceHeight - 1,
-                                    minBuildHeight)
-                            : null;
-                    if (layers != null) {
-                        BlockPos.MutableBlockPos groundPos = new BlockPos.MutableBlockPos(
-                                sampleX, layers.terrainY(), sampleZ);
-                        BlockState groundState = layers.terrainState();
-                        MapColor groundMapColor = groundState.getMapColor(level, groundPos);
-                        while (groundMapColor == MapColor.NONE && groundPos.getY() > minBuildHeight) {
-                            groundPos.move(0, -1, 0);
-                            groundState = level.getBlockState(groundPos);
-                            groundMapColor = groundState.getMapColor(level, groundPos);
-                        }
-                        if (groundMapColor != MapColor.NONE) {
-                            terrainColor = biomeTintedColor(level, groundPos, groundMapColor, groundMapColor.col);
-                            terrainHeight = groundPos.getY() + 1;
-                        } else {
-                            terrainColor = FALLBACK_COLOR;
-                        }
-                    }
-
-                    cells[cellX][cellZ] = new Cell(terrainHeight, terrainColor, waterTint);
+            for (int localX = bounds.minLocalX(); localX < bounds.maxLocalX(); localX++) {
+                for (int localZ = bounds.minLocalZ(); localZ < bounds.maxLocalZ(); localZ++) {
+                    samplingSucceeded &= sampleCell(
+                            level, firstCellX, firstCellZ, localX + 1, localZ + 1,
+                            minBuildHeight, surfacePos);
                 }
             }
 
-            return new TerrainTile(minX, minZ, sampleStep, gameTime, complete, cells);
+            if (samplingSucceeded && bounds.minLocalX() == 0) {
+                for (int localZ = bounds.minLocalZ(); localZ < bounds.maxLocalZ(); localZ++) {
+                    sampleCell(level, firstCellX, firstCellZ, 0, localZ + 1, minBuildHeight, surfacePos);
+                }
+            }
+            if (samplingSucceeded && bounds.maxLocalX() == TILE_BLOCK_SIZE) {
+                int eastCellX = xCellCount - 1;
+                for (int localZ = bounds.minLocalZ(); localZ < bounds.maxLocalZ(); localZ++) {
+                    sampleCell(level, firstCellX, firstCellZ, eastCellX, localZ + 1,
+                            minBuildHeight, surfacePos);
+                }
+            }
+            if (samplingSucceeded && bounds.minLocalZ() == 0) {
+                for (int localX = bounds.minLocalX(); localX < bounds.maxLocalX(); localX++) {
+                    sampleCell(level, firstCellX, firstCellZ, localX + 1, 0, minBuildHeight, surfacePos);
+                }
+            }
+            if (samplingSucceeded && bounds.maxLocalZ() == TILE_BLOCK_SIZE) {
+                int southCellZ = zCellCount - 1;
+                for (int localX = bounds.minLocalX(); localX < bounds.maxLocalX(); localX++) {
+                    sampleCell(level, firstCellX, firstCellZ, localX + 1, southCellZ,
+                            minBuildHeight, surfacePos);
+                }
+            }
+
+            if (samplingSucceeded && bounds.minLocalX() == 0 && bounds.minLocalZ() == 0) {
+                sampleCell(level, firstCellX, firstCellZ, 0, 0, minBuildHeight, surfacePos);
+            }
+            if (samplingSucceeded && bounds.minLocalX() == 0 && bounds.maxLocalZ() == TILE_BLOCK_SIZE) {
+                sampleCell(level, firstCellX, firstCellZ, 0, zCellCount - 1, minBuildHeight, surfacePos);
+            }
+            if (samplingSucceeded && bounds.maxLocalX() == TILE_BLOCK_SIZE && bounds.minLocalZ() == 0) {
+                sampleCell(level, firstCellX, firstCellZ, xCellCount - 1, 0, minBuildHeight, surfacePos);
+            }
+            if (samplingSucceeded
+                    && bounds.maxLocalX() == TILE_BLOCK_SIZE
+                    && bounds.maxLocalZ() == TILE_BLOCK_SIZE) {
+                sampleCell(level, firstCellX, firstCellZ, xCellCount - 1, zCellCount - 1,
+                        minBuildHeight, surfacePos);
+            }
+
+            boolean wasPending = sampledAtGameTimes[sliceIndex] == Long.MIN_VALUE;
+            recordSliceSampleResult(
+                    sampledAtGameTimes, retryAfterGameTimes, sliceIndex, gameTime, samplingSucceeded);
+            if (samplingSucceeded) {
+                if (wasPending) sampledSliceCount++;
+                dirtySlices[sliceIndex] = true;
+                textureDirty |= shouldRefreshTexture(sampledSliceCount);
+            }
+            return true;
+        }
+
+        @SuppressWarnings("deprecation")
+        private boolean sampleCell(ClientLevel level,
+                                   int firstCellX,
+                                   int firstCellZ,
+                                   int cellX,
+                                   int cellZ,
+                                   int minBuildHeight,
+                                   BlockPos.MutableBlockPos surfacePos) {
+            int x = firstCellX + cellX * sampleStep;
+            int z = firstCellZ + cellZ * sampleStep;
+            int sampleX = x + sampleStep / 2;
+            int sampleZ = z + sampleStep / 2;
+
+            LevelChunk chunk = level.getChunkSource().getChunk(
+                    sampleX >> 4, sampleZ >> 4, ChunkStatus.FULL, false);
+            if (chunk == null) {
+                return false;
+            }
+
+            int surfaceHeight = level.getHeight(Heightmap.Types.WORLD_SURFACE, sampleX, sampleZ);
+            if (surfaceHeight <= minBuildHeight) {
+                clearCell(cellX, cellZ);
+                return true;
+            }
+
+            surfacePos.set(sampleX, surfaceHeight - 1, sampleZ);
+            BlockState surfaceState = level.getBlockState(surfacePos);
+            boolean waterColumn = isWater(surfaceState);
+            MapColor mapColor = surfaceState.getMapColor(level, surfacePos);
+            while (mapColor == MapColor.NONE && surfacePos.getY() > minBuildHeight) {
+                surfacePos.move(0, -1, 0);
+                surfaceState = level.getBlockState(surfacePos);
+                mapColor = surfaceState.getMapColor(level, surfacePos);
+            }
+
+            int terrainHeight = surfacePos.getY() + 1;
+            if (!waterColumn) {
+                int colorSampleY = surfacePos.getY();
+                terrainHeight = sampleClientDryTerrainHeight(
+                        y -> {
+                            surfacePos.set(sampleX, y, sampleZ);
+                            return level.getBlockState(surfacePos);
+                        },
+                        y -> {
+                            int sectionIndex = chunk.getSectionIndex(y);
+                            return sectionIndex >= 0
+                                    && sectionIndex < chunk.getSectionsCount()
+                                    && chunk.getSection(sectionIndex).maybeHas(candidate ->
+                                    !candidate.is(BlockTags.LEAVES)
+                                            && (candidate.blocksMotion() || !candidate.getFluidState().isEmpty()));
+                        },
+                        state -> state.is(BlockTags.LEAVES),
+                        level.getHeight(Heightmap.Types.MOTION_BLOCKING, sampleX, sampleZ),
+                        terrainHeight,
+                        minBuildHeight);
+                surfacePos.set(sampleX, colorSampleY, sampleZ);
+            }
+            int baseColor = mapColor == MapColor.NONE ? FALLBACK_COLOR : mapColor.col;
+            baseColor = biomeTintedColor(level, surfacePos, mapColor, baseColor);
+
+            int terrainColor = baseColor;
+            int waterTint = NO_WATER_TINT;
+            if (waterColumn) {
+                BlockPos waterPos = new BlockPos(sampleX, surfaceHeight - 1, sampleZ);
+                waterTint = unblendedBiomeColor(level, waterPos, BiomeColors.WATER_COLOR_RESOLVER);
+            }
+            ColumnLayers layers = waterColumn
+                    ? sampleClientOceanFloorColumn(
+                            y -> {
+                                surfacePos.set(sampleX, y, sampleZ);
+                                return level.getBlockState(surfacePos);
+                            },
+                            y -> {
+                                int sectionIndex = chunk.getSectionIndex(y);
+                                return sectionIndex >= 0
+                                        && sectionIndex < chunk.getSectionsCount()
+                                        && chunk.getSection(sectionIndex)
+                                        .maybeHas(candidate -> candidate.blocksMotion());
+                            },
+                            surfaceHeight - 1,
+                            minBuildHeight)
+                    : null;
+            if (layers != null) {
+                BlockPos.MutableBlockPos groundPos = new BlockPos.MutableBlockPos(
+                        sampleX, layers.terrainY(), sampleZ);
+                BlockState groundState = layers.terrainState();
+                MapColor groundMapColor = groundState.getMapColor(level, groundPos);
+                while (groundMapColor == MapColor.NONE && groundPos.getY() > minBuildHeight) {
+                    groundPos.move(0, -1, 0);
+                    groundState = level.getBlockState(groundPos);
+                    groundMapColor = groundState.getMapColor(level, groundPos);
+                }
+                if (groundMapColor != MapColor.NONE) {
+                    terrainColor = biomeTintedColor(level, groundPos, groundMapColor, groundMapColor.col);
+                    terrainHeight = groundPos.getY() + 1;
+                } else {
+                    terrainColor = FALLBACK_COLOR;
+                }
+            }
+
+            setCell(cellX, cellZ, terrainHeight, terrainColor, waterTint);
+            return true;
         }
 
         private static int biomeTintedColor(ClientLevel level, BlockPos pos, MapColor mapColor, int baseColor) {
@@ -474,9 +847,6 @@ final class BlueprintTerrainRenderer implements AutoCloseable {
 
         private static int unblendedBiomeColor(ClientLevel level, BlockPos pos, ColorResolver resolver) {
             return resolver.getColor(level.getBiome(pos).value(), pos.getX(), pos.getZ());
-        }
-
-        private record Cell(int height, int terrainColor, int waterTint) {
         }
     }
 }

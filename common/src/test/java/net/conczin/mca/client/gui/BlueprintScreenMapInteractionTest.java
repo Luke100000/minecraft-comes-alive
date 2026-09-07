@@ -19,7 +19,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.lang.reflect.Array;
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.List;
@@ -28,6 +28,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.function.IntFunction;
 import java.util.function.IntPredicate;
+import java.util.function.LongSupplier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -169,13 +170,13 @@ class BlueprintScreenMapInteractionTest {
 
     @Test
     void waterColorUsesFixedSeabedVisibleBlend() {
-        assertEquals(0xff9f9f9f,
+        assertEquals(0xffcccccc,
                 BlueprintTerrainRenderer.waterColor(0xff000000, 0xffffff));
     }
 
     @Test
     void waterLayerCompositesAfterTerrainStylingToAvoidHardContourStripes() {
-        assertEquals(0xff4466ab,
+        assertEquals(0xff426ec6,
                 BlueprintTerrainRenderer.composeTerrainAndWater(
                         0xff808080, 0x3f76e4, 1.0F, true));
     }
@@ -200,28 +201,178 @@ class BlueprintScreenMapInteractionTest {
     }
 
     @Test
-    void firstRenderSamplesOnlyOneMissingTerrainTile() {
-        BlueprintTerrainRenderer.TileSamplingBudget budget =
-                new BlueprintTerrainRenderer.TileSamplingBudget();
+    void terrainSamplingBudgetCanContinueWithinFrame() throws Exception {
+        long[] now = {1_000L};
+        BlueprintTerrainRenderer.TileSamplingBudget budget = samplingBudget(() -> now[0], 100L);
 
         assertTrue(budget.tryAcquire());
-        assertFalse(budget.tryAcquire(),
-                "extra visible tiles must be deferred instead of all sampling in the opening frame");
+        now[0] = 1_050L;
+        assertTrue(budget.tryAcquire(),
+                "sampling should continue while the small per-frame time budget remains");
     }
 
     @Test
-    void dryTerrainHeightKeepsPreexistingMotionBlockingHeight() throws Exception {
+    void terrainSamplingBudgetAlwaysAllowsFirstSliceThenStopsAtDeadline() throws Exception {
+        long[] now = {1_000L};
+        BlueprintTerrainRenderer.TileSamplingBudget budget = samplingBudget(() -> now[0], 100L);
+        now[0] = 1_200L;
+
+        assertTrue(budget.tryAcquire(), "the nearest slice must never miss the first frame");
+        assertFalse(budget.tryAcquire(), "additional slices must stop once the deadline is exhausted");
+    }
+
+    @Test
+    void partialTerrainBecomesRenderableAfterFirstSampledSlice() {
+        assertFalse(BlueprintTerrainRenderer.hasSampledTerrain(0));
+        assertTrue(BlueprintTerrainRenderer.hasSampledTerrain(1),
+                "the camera-nearest slice should be drawable immediately");
+    }
+
+    @Test
+    void partialTerrainTextureRefreshIsThrottledBetweenFirstSliceAndCompletion() {
+        assertTrue(BlueprintTerrainRenderer.shouldRefreshTexture(1));
+        assertFalse(BlueprintTerrainRenderer.shouldRefreshTexture(2));
+        assertFalse(BlueprintTerrainRenderer.shouldRefreshTexture(3));
+        assertTrue(BlueprintTerrainRenderer.shouldRefreshTexture(4));
+        assertTrue(BlueprintTerrainRenderer.shouldRefreshTexture(64));
+    }
+
+    @Test
+    void terrainSamplingUsesSixteenBlockSlices() {
+        BlueprintTerrainRenderer.SliceBounds first = BlueprintTerrainRenderer.sampleSliceBounds(0);
+        BlueprintTerrainRenderer.SliceBounds last = BlueprintTerrainRenderer.sampleSliceBounds(63);
+
+        assertEquals(0, first.minLocalX());
+        assertEquals(16, first.maxLocalX());
+        assertEquals(0, first.minLocalZ());
+        assertEquals(16, first.maxLocalZ());
+        assertEquals(112, last.minLocalX());
+        assertEquals(128, last.maxLocalX());
+        assertEquals(112, last.minLocalZ());
+        assertEquals(128, last.maxLocalZ());
+    }
+
+    @Test
+    void terrainSamplingPrioritizesSliceNearestCameraPosition() {
+        long[] sampledAt = new long[64];
+        long[] retryAfter = new long[64];
+        java.util.Arrays.fill(sampledAt, Long.MIN_VALUE);
+        java.util.Arrays.fill(retryAfter, Long.MIN_VALUE);
+        BlueprintTerrainRenderer.LoadedChunkLookup allLoaded = (chunkX, chunkZ) -> true;
+
+        assertEquals(0, BlueprintTerrainRenderer.nearestReadySlice(
+                0, 0, sampledAt, retryAfter, 0L, 4.0D, 4.0D, allLoaded));
+        assertEquals(63, BlueprintTerrainRenderer.nearestReadySlice(
+                0, 0, sampledAt, retryAfter, 0L, 124.0D, 124.0D, allLoaded));
+
+        sampledAt[63] = 0L;
+        assertNotEquals(63,
+                BlueprintTerrainRenderer.nearestReadySlice(
+                        0, 0, sampledAt, retryAfter, 0L, 124.0D, 124.0D, allLoaded));
+    }
+
+    @Test
+    void terrainTilePriorityUsesCameraPosition() {
+        double cameraX = 220.0D;
+        double cameraZ = 64.0D;
+
+        assertTrue(BlueprintTerrainRenderer.tileDistanceSq(128, 0, cameraX, cameraZ)
+                < BlueprintTerrainRenderer.tileDistanceSq(0, 0, cameraX, cameraZ));
+    }
+
+    @Test
+    void terrainPrefetchCoversExactlyOneTileRingOutsideViewport() throws Exception {
         Method method;
         try {
             method = BlueprintTerrainRenderer.class.getDeclaredMethod(
-                    "dryTerrainHeight", int.class, int.class, int.class);
+                    "terrainSamplingBand",
+                    int.class, int.class, int.class, int.class, int.class, int.class);
         } catch (NoSuchMethodException e) {
-            throw new AssertionError("dry terrain must have an explicit regression-tested height selection", e);
+            throw new AssertionError("terrain sampling needs a bounded one-tile prefetch ring", e);
         }
         method.setAccessible(true);
 
-        assertEquals(77, method.invoke(null, 77, 80, -64));
-        assertEquals(80, method.invoke(null, -64, 80, -64));
+        assertEquals(0, method.invoke(null, 0, 0, 0, 127, 0, 127));
+        assertEquals(1, method.invoke(null, -128, 0, 0, 127, 0, 127));
+        assertEquals(1, method.invoke(null, 128, 128, 0, 127, 0, 127));
+        assertEquals(2, method.invoke(null, -256, 0, 0, 127, 0, 127));
+        assertEquals(2, method.invoke(null, 0, 256, 0, 127, 0, 127));
+    }
+
+    @Test
+    void terrainDoesNotScheduleTileWhenNoneOfItsClientChunksAreLoaded() {
+        int[] lookups = {0};
+
+        assertFalse(BlueprintTerrainRenderer.tileTouchesLoadedChunk(0, 0, (chunkX, chunkZ) -> {
+            lookups[0]++;
+            return false;
+        }));
+        assertEquals(64, lookups[0]);
+    }
+
+    @Test
+    void terrainTileBecomesEligibleWhenAnyClientChunkIsLoaded() {
+        assertTrue(BlueprintTerrainRenderer.tileTouchesLoadedChunk(
+                128, -128, (chunkX, chunkZ) -> chunkX == 10 && chunkZ == -6));
+    }
+
+    @Test
+    void nearestPendingTerrainSliceSkipsItsOwnUnloadedChunk() {
+        long[] sampledAt = new long[64];
+        long[] retryAfter = new long[64];
+        java.util.Arrays.fill(sampledAt, Long.MIN_VALUE);
+        java.util.Arrays.fill(retryAfter, Long.MIN_VALUE);
+
+        assertEquals(1, BlueprintTerrainRenderer.nearestReadySlice(
+                0, 0, sampledAt, retryAfter, 0L, 4.0D, 4.0D,
+                (chunkX, chunkZ) -> chunkX == 1 && chunkZ == 0));
+    }
+
+    @Test
+    void failedTerrainSliceStaysPendingWithoutResettingSuccessfulSlices() {
+        long[] sampledAt = new long[64];
+        long[] retryAfter = new long[64];
+        java.util.Arrays.fill(sampledAt, Long.MIN_VALUE);
+        java.util.Arrays.fill(retryAfter, Long.MIN_VALUE);
+        sampledAt[5] = 10L;
+
+        BlueprintTerrainRenderer.recordSliceSampleResult(sampledAt, retryAfter, 0, 20L, false);
+
+        assertEquals(Long.MIN_VALUE, sampledAt[0], "failed slice must remain pending");
+        assertEquals(10L, sampledAt[5], "successful slices must not be reset by another slice failure");
+        assertEquals(40L, retryAfter[0], "failed slice should use the existing 20-tick retry interval");
+    }
+
+    @Test
+    void completedTerrainSliceBecomesStaleAfterFixedRefreshInterval() {
+        assertFalse(BlueprintTerrainRenderer.sliceNeedsSampling(10L, Long.MIN_VALUE, 109L));
+        assertTrue(BlueprintTerrainRenderer.sliceNeedsSampling(10L, Long.MIN_VALUE, 110L),
+                "a completed slice should refresh after 100 game ticks");
+    }
+
+    @Test
+    void dirtyTextureBoundsExpandOnlyOnePixelAndClipToTile() {
+        BlueprintTerrainRenderer.SliceBounds first = BlueprintTerrainRenderer.dirtyTextureBounds(0);
+        assertEquals(0, first.minLocalX());
+        assertEquals(17, first.maxLocalX());
+        assertEquals(0, first.minLocalZ());
+        assertEquals(17, first.maxLocalZ());
+
+        BlueprintTerrainRenderer.SliceBounds last = BlueprintTerrainRenderer.dirtyTextureBounds(63);
+        assertEquals(111, last.minLocalX());
+        assertEquals(128, last.maxLocalX());
+        assertEquals(111, last.minLocalZ());
+        assertEquals(128, last.maxLocalZ());
+    }
+
+    @Test
+    void dryTerrainHeightSkipsLeavesBelowMotionBlockingUpperBound() {
+        BlockState leaves = Blocks.OAK_LEAVES.defaultBlockState();
+        BlockState stone = Blocks.STONE.defaultBlockState();
+        IntFunction<BlockState> stateAtY = y -> y >= 78 ? leaves : y == 77 ? stone : Blocks.AIR.defaultBlockState();
+
+        assertEquals(78, BlueprintTerrainRenderer.sampleClientDryTerrainHeight(
+                stateAtY, y -> true, state -> state.is(Blocks.OAK_LEAVES), 80, 80, -64));
     }
 
     @Test
@@ -243,29 +394,6 @@ class BlueprintScreenMapInteractionTest {
         assertEquals(2, tileKey.getRecordComponents().length);
         assertEquals("minX", tileKey.getRecordComponents()[0].getName());
         assertEquals("minZ", tileKey.getRecordComponents()[1].getName());
-    }
-
-    @Test
-    void terrainTileCanReuseCachedCellForIncompleteRefresh() throws Exception {
-        Class<?> tileClass = Class.forName(BlueprintTerrainRenderer.class.getName() + "$TerrainTile");
-        Class<?> cellClass = Class.forName(BlueprintTerrainRenderer.class.getName() + "$TerrainTile$Cell");
-
-        var cellConstructor = cellClass.getDeclaredConstructor(int.class, int.class, int.class);
-        cellConstructor.setAccessible(true);
-        Object cachedCell = cellConstructor.newInstance(72, 0xff486a3d, -1);
-
-        Object cells = Array.newInstance(cellClass, 3, 3);
-        Array.set(Array.get(cells, 1), 1, cachedCell);
-
-        var tileConstructor = tileClass.getDeclaredConstructor(
-                int.class, int.class, int.class, long.class, boolean.class, cells.getClass());
-        tileConstructor.setAccessible(true);
-        Object cachedTile = tileConstructor.newInstance(0, 0, 1, 0L, true, cells);
-
-        Method cellAtBlock = tileClass.getDeclaredMethod("cellAtBlock", int.class, int.class);
-        cellAtBlock.setAccessible(true);
-
-        assertEquals(cachedCell, cellAtBlock.invoke(cachedTile, 0, 0));
     }
 
     @Test
@@ -467,6 +595,20 @@ class BlueprintScreenMapInteractionTest {
         room.setStructureId(10);
         room.setFloorId(0);
         return room;
+    }
+
+    private static BlueprintTerrainRenderer.TileSamplingBudget samplingBudget(
+            LongSupplier nanoTime,
+            long budgetNanos) throws Exception {
+        Constructor<BlueprintTerrainRenderer.TileSamplingBudget> constructor;
+        try {
+            constructor = BlueprintTerrainRenderer.TileSamplingBudget.class
+                    .getDeclaredConstructor(LongSupplier.class, long.class);
+        } catch (NoSuchMethodException e) {
+            throw new AssertionError("terrain sampling needs a clock-backed time budget", e);
+        }
+        constructor.setAccessible(true);
+        return constructor.newInstance(nanoTime, budgetNanos);
     }
 
     private static StructureFloor floor(int id, int anchorY, int ceilingY, int floorNumber) throws Exception {
