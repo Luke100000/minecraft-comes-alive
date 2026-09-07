@@ -16,7 +16,7 @@ class RegisteredRoomUpdateLineageTest {
         Building right = room(-1, 3, 4);
         Building unrelated = room(-1, 10, 11);
 
-        List<Building> lineage = RoomWorkflow.updateLineage(
+        List<Building> lineage = RegisteredRoomReconciler.updateLineage(
                 selected, List.of(left, right, unrelated), List.of()).orElseThrow();
 
         assertEquals(List.of(left, right), lineage);
@@ -28,7 +28,7 @@ class RegisteredRoomUpdateLineageTest {
         Building mergedFresh = room(-1, 0, 7);
         Building neighbor = room(20, 5, 7);
 
-        assertTrue(RoomWorkflow.updateLineage(
+        assertTrue(RegisteredRoomReconciler.updateLineage(
                 selected, List.of(mergedFresh), List.of(neighbor)).isEmpty());
     }
 

@@ -14,23 +14,36 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.NearestVisibleLivingEntities;
-import net.minecraft.world.entity.ai.sensing.NearestLivingEntitySensor;
+import net.minecraft.world.entity.ai.sensing.Sensor;
+import net.minecraft.world.entity.ai.targeting.TargetingConditions;
 import net.minecraft.world.entity.monster.Enemy;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.phys.AABB;
 
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
 /**
- * Sensor to detect nearby enemies for guards or combat-active villagers.
+ * Villager nearby-entity sensor with dedicated long-range guard enemy acquisition.
  * <p>
- * The shared nearby-entity scan also supplies other villager behaviors. Non-guard villagers skip only
- * guard-target prioritization unless they are following a player or already fighting.
+ * Non-combat villagers keep vanilla's 16-block query. Guards, followed-player defenders, and villagers already
+ * in combat query once at guard range, then derive the normal 16-block nearby memories from that same result.
  */
-public class GuardEnemiesSensor extends NearestLivingEntitySensor<LivingEntity> {
+public class GuardEnemiesSensor extends Sensor<LivingEntity> {
+    private static final double VANILLA_NEARBY_RANGE = 16.0;
     private static final double GUARD_ENEMY_RANGE = 48.0;
     private static final double GUARD_ENEMY_RANGE_SQR = GUARD_ENEMY_RANGE * GUARD_ENEMY_RANGE;
+    private static final TargetingConditions TARGET_CONDITIONS = TargetingConditions.forNonCombat()
+            .range(GUARD_ENEMY_RANGE)
+            .ignoreLineOfSight();
+    private static final TargetingConditions TARGET_CONDITIONS_IGNORE_INVISIBILITY = TargetingConditions.forNonCombat()
+            .range(GUARD_ENEMY_RANGE)
+            .ignoreLineOfSight()
+            .ignoreInvisibilityTesting();
 
     @Override
     public Set<MemoryModuleType<?>> requires() {
@@ -45,34 +58,61 @@ public class GuardEnemiesSensor extends NearestLivingEntitySensor<LivingEntity> 
 
     @Override
     protected void doTick(ServerLevel world, LivingEntity entity) {
-        super.doTick(world, entity);
-
         if (!(entity instanceof VillagerEntityMCA villager)) {
             return;
         }
 
-        // Performance optimization: only scan if the villager is a guard,
-        // is following a player, or has an active attack target.
-        // Otherwise, skip the expensive scan and clear any remaining guard enemy memory.
         boolean shouldScan = villager.isGuard()
                 || villager.getBrain().getMemoryInternal(MemoryModuleTypeMCA.PLAYER_FOLLOWING).isPresent()
                 || villager.getBrain().getMemoryInternal(MemoryModuleType.ATTACK_TARGET).isPresent();
+
+        AABB vanillaBounds = villager.getBoundingBox().inflate(VANILLA_NEARBY_RANGE);
+        AABB scanBounds = shouldScan ? getGuardScanBounds(villager) : vanillaBounds;
+        List<LivingEntity> candidates = world.getEntitiesOfClass(
+                LivingEntity.class,
+                scanBounds,
+                target -> target != villager && target.isAlive()
+        );
+        candidates.sort(Comparator.comparingDouble(villager::distanceToSqr));
+
+        List<LivingEntity> nearbyEntities = new ArrayList<>();
+        for (LivingEntity candidate : candidates) {
+            if (vanillaBounds.intersects(candidate.getBoundingBox())) {
+                nearbyEntities.add(candidate);
+            }
+        }
+        villager.getBrain().setMemory(MemoryModuleType.NEAREST_LIVING_ENTITIES, nearbyEntities);
+        villager.getBrain().setMemory(
+                MemoryModuleType.NEAREST_VISIBLE_LIVING_ENTITIES,
+                new NearestVisibleLivingEntities(villager, nearbyEntities)
+        );
 
         if (!shouldScan) {
             villager.getBrain().eraseMemory(MemoryModuleTypeMCA.NEAREST_GUARD_ENEMY);
             return;
         }
 
-        villager.getBrain().setMemory(MemoryModuleTypeMCA.NEAREST_GUARD_ENEMY, this.getNearestHostile(villager));
+        villager.getBrain().setMemory(MemoryModuleTypeMCA.NEAREST_GUARD_ENEMY, this.getNearestHostile(villager, candidates));
     }
 
-    private Optional<LivingEntity> getNearestHostile(VillagerEntityMCA entity) {
-        return getVisibleMobs(entity).flatMap((list) -> list.find(target -> isGuardEnemy(target, entity))
+    private Optional<LivingEntity> getNearestHostile(VillagerEntityMCA entity, List<LivingEntity> candidates) {
+        return candidates.stream()
+                .filter(target -> isGuardEnemy(target, entity))
                 .filter(target -> isWithinGuardEnemyRange(entity, target))
-                .min((a, b) -> this.compareEntities(entity, a, b)));
+                .filter(target -> isVisibleToGuard(entity, target))
+                .min((a, b) -> this.compareEntities(entity, a, b));
     }
 
-    private boolean isWithinGuardEnemyRange(LivingEntity guard, LivingEntity target) {
+    private AABB getGuardScanBounds(VillagerEntityMCA guard) {
+        AABB bounds = guard.getBoundingBox().inflate(GUARD_ENEMY_RANGE);
+        Optional<Player> followedPlayer = getFollowedPlayer(guard);
+        if (followedPlayer.isPresent()) {
+            bounds = bounds.minmax(followedPlayer.get().getBoundingBox().inflate(GUARD_ENEMY_RANGE));
+        }
+        return bounds;
+    }
+
+    private boolean isWithinGuardEnemyRange(VillagerEntityMCA guard, LivingEntity target) {
         if (target.distanceToSqr(guard) <= GUARD_ENEMY_RANGE_SQR) {
             return true;
         }
@@ -81,8 +121,14 @@ public class GuardEnemiesSensor extends NearestLivingEntitySensor<LivingEntity> 
                 .isPresent();
     }
 
-    private Optional<NearestVisibleLivingEntities> getVisibleMobs(LivingEntity entity) {
-        return entity.getBrain().getMemoryInternal(MemoryModuleType.NEAREST_VISIBLE_LIVING_ENTITIES);
+    private boolean isVisibleToGuard(VillagerEntityMCA guard, LivingEntity target) {
+        LivingEntity rangeAnchor = target.distanceToSqr(guard) <= GUARD_ENEMY_RANGE_SQR
+                ? guard
+                : getFollowedPlayer(guard).map(player -> (LivingEntity) player).orElse(guard);
+        TargetingConditions conditions = guard.getBrain().isMemoryValue(MemoryModuleType.ATTACK_TARGET, target)
+                ? TARGET_CONDITIONS_IGNORE_INVISIBILITY
+                : TARGET_CONDITIONS;
+        return conditions.test(rangeAnchor, target) && guard.getSensing().hasLineOfSight(target);
     }
 
     private int compareEntities(LivingEntity entity, LivingEntity hostile1, LivingEntity hostile2) {

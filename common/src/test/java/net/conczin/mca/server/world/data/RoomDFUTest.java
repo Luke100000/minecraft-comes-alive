@@ -314,9 +314,20 @@ class RoomDFUTest {
     }
 
     @Test
-    void canonicalFloorCellRejectsSurfaceBelowFeet() {
+    void canonicalFloorCellAcceptsSurfaceOnPartialSupportBelowFeet() {
+        CompoundTag serialized = canonicalVillage().save();
+        firstCanonicalFloorCell(serialized).putDouble("surfaceY", 63.5D);
+
+        RoomDFU.Result loaded = RoomDFU.load(serialized);
+
+        assertTrue(loaded.structures().get(20).getFloor(0).orElseThrow().geometry().cells().stream()
+                .anyMatch(cell -> cell.surfaceY() == 63.5D));
+    }
+
+    @Test
+    void canonicalFloorCellRejectsSurfaceBelowSupportingBlock() {
         CompoundTag malformed = canonicalVillage().save();
-        firstCanonicalFloorCell(malformed).putDouble("surfaceY", 63.5D);
+        firstCanonicalFloorCell(malformed).putDouble("surfaceY", 62.999D);
 
         assertThrows(IllegalArgumentException.class, () -> RoomDFU.load(malformed));
     }

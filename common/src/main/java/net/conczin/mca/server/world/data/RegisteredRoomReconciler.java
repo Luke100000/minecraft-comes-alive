@@ -68,6 +68,22 @@ final class RegisteredRoomReconciler {
         return Optional.of(new Result(roomIds, assignments, components.get(playerComponent)));
     }
 
+    static Optional<List<Building>> updateLineage(Building selected,
+                                                  Collection<Building> freshComponents,
+                                                  Collection<Building> otherRooms) {
+        List<Building> lineage = freshComponents.stream()
+                .filter(component -> component.getFloorFootprintIntersectionArea(selected) > 0)
+                .sorted(COMPONENT_ORDER)
+                .toList();
+        if (lineage.isEmpty()) return Optional.empty();
+        for (Building component : lineage) {
+            for (Building other : otherRooms) {
+                if (component.getFloorFootprintIntersectionArea(other) > 0) return Optional.empty();
+            }
+        }
+        return Optional.of(lineage);
+    }
+
     private static final Comparator<Building> COMPONENT_ORDER = Comparator
             .comparingInt((Building room) -> room.getRawPos0().getX())
             .thenComparingInt(room -> room.getRawPos0().getZ())

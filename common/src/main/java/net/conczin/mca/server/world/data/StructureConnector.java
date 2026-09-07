@@ -5,9 +5,6 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.DoorBlock;
-import net.minecraft.world.level.block.FenceGateBlock;
-import net.minecraft.world.level.block.LadderBlock;
-import net.minecraft.world.level.block.TrapDoorBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
 
@@ -23,14 +20,12 @@ final class StructureConnector {
     }
 
     static boolean isConnector(BlockState state) {
-        return state.getBlock() instanceof DoorBlock
-                || state.getBlock() instanceof FenceGateBlock
-                || state.getBlock() instanceof TrapDoorBlock
-                || state.getBlock() instanceof LadderBlock;
+        return FloorConnector.Type.fromBlockState(state) != null;
     }
 
     static boolean isHorizontalBoundary(BlockState state) {
-        return state.getBlock() instanceof DoorBlock || state.getBlock() instanceof FenceGateBlock;
+        FloorConnector.Type type = FloorConnector.Type.fromBlockState(state);
+        return type != null && type.roomBoundary();
     }
 
     /**
@@ -41,14 +36,6 @@ final class StructureConnector {
     static boolean isVertical(Level world, BlockPos pos) {
         return isVerticalElement(world.getBlockState(pos))
                 && !verticalColumnFromConnector(world, pos).isEmpty();
-    }
-
-    private static FloorConnector.Type connectorType(BlockState state) {
-        if (state.getBlock() instanceof LadderBlock) return FloorConnector.Type.LADDER;
-        if (state.getBlock() instanceof TrapDoorBlock) return FloorConnector.Type.TRAPDOOR;
-        if (state.getBlock() instanceof DoorBlock) return FloorConnector.Type.DOOR;
-        if (state.getBlock() instanceof FenceGateBlock) return FloorConnector.Type.GATE;
-        return null;
     }
 
     static BlockPos normalize(BlockPos pos, BlockState state) {
@@ -72,8 +59,7 @@ final class StructureConnector {
             BlockState rawState = world.getBlockState(rawConnector);
             BlockPos connector = normalize(rawConnector, rawState);
             BlockState state = world.getBlockState(connector);
-            if (!isConnector(state)) continue;
-            FloorConnector.Type type = connectorType(state);
+            FloorConnector.Type type = FloorConnector.Type.fromBlockState(state);
             if (type == null) continue;
             floorMembershipCells(connector, geometry)
                     .forEach(floorCell -> result.putIfAbsent(floorCell, type));
@@ -170,13 +156,15 @@ final class StructureConnector {
         for (int y = bottom.getY(); y <= top.getY(); y++) {
             BlockPos element = new BlockPos(connector.getX(), y, connector.getZ());
             column.add(element);
-            traversable |= world.getBlockState(element).getBlock() instanceof LadderBlock;
+            traversable |= FloorConnector.Type.fromBlockState(world.getBlockState(element))
+                    == FloorConnector.Type.LADDER;
         }
         return traversable ? List.copyOf(column) : List.of();
     }
 
     private static boolean isVerticalElement(BlockState state) {
-        return state.getBlock() instanceof LadderBlock || state.getBlock() instanceof TrapDoorBlock;
+        FloorConnector.Type type = FloorConnector.Type.fromBlockState(state);
+        return type != null && type.vertical();
     }
 
     private static List<BlockPos> verticalHandoffCandidates(Level world, BlockPos source) {
@@ -325,7 +313,7 @@ final class StructureConnector {
                 .toList();
 
         FloorHandoff selected = null;
-        Set<BlockPos> selectedFloor = null;
+        FloorGeometry selectedFloor = null;
         int selectedDistance = Integer.MAX_VALUE;
         int selectedY = Integer.MAX_VALUE;
         for (BlockPos candidate : candidates) {
@@ -339,13 +327,12 @@ final class StructureConnector {
                     world, candidate, config.maxBuildingSize, config.maxBuildingRadius);
             if (scan.result() != Building.validationResult.SUCCESS || scan.floor() == null) continue;
 
-            Set<BlockPos> candidateFloor = scan.floor().projection().cells();
             if (selected == null) {
                 selected = new FloorHandoff(candidate.immutable(), scan.floor(), scan.connectedFloors());
-                selectedFloor = candidateFloor;
+                selectedFloor = scan.floor();
                 selectedDistance = distance;
                 selectedY = candidate.getY();
-            } else if (!selectedFloor.equals(candidateFloor)) {
+            } else if (!selectedFloor.sameFootprint(scan.floor())) {
                 return Optional.empty();
             }
         }

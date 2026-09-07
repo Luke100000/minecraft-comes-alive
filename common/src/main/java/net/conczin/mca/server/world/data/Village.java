@@ -35,12 +35,6 @@ public class Village implements Iterable<Building> {
     public static final int MERGE_MARGIN = 64;
     private static final int MOVE_IN_COOLDOWN = 1200;
     private static final long BED_SYNC_TIME = 200;
-    private static final Comparator<AttachmentTarget> ATTACHMENT_TARGET_ORDER = Comparator
-            .comparingInt(AttachmentTarget::gap)
-            .thenComparingInt(AttachmentTarget::buildingId)
-            .thenComparingInt(AttachmentTarget::structureId)
-            .thenComparingInt(AttachmentTarget::floorId);
-
     public final List<ItemStack> storageBuffer = new LinkedList<>();
 
     private final ServerLevel world;
@@ -672,90 +666,23 @@ public class Village implements Iterable<Building> {
             Level level,
             StructureFloor candidate,
             Collection<FloorGeometry> connectedFloors) {
-        return selectAttachmentTarget(candidate,
+        return StructureExpansionPolicy.selectAttachmentTarget(candidate,
                 StructureConnector.verticalConnections(level, candidate, structures.values()),
-                connectedFloors);
+                connectedFloors, structures);
     }
 
     Optional<AttachmentTarget> selectAttachmentTarget(
             StructureFloor candidate,
             Collection<StructureConnector.VerticalConnection> connections) {
-        return selectAttachmentTarget(candidate, connections, List.of());
+        return StructureExpansionPolicy.selectAttachmentTarget(candidate, connections, List.of(), structures);
     }
 
     Optional<AttachmentTarget> selectAttachmentTarget(
             StructureFloor candidate,
             Collection<StructureConnector.VerticalConnection> verticalConnections,
             Collection<FloorGeometry> connectedFloors) {
-        if (candidate == null) return Optional.empty();
-        Set<AttachmentConnection> connections = attachmentConnections(
-                candidate, verticalConnections, connectedFloors);
-        if (hasUnprovenAttachmentOverlap(candidate, connections)) return Optional.empty();
-
-        Map<Integer, AttachmentTarget> nearestByBuilding = new HashMap<>();
-        for (AttachmentConnection connection : connections) {
-            Structure structure = connection.structure();
-            StructureFloor floor = connection.floor();
-            if (structures.get(structure.getId()) != structure) continue;
-            int gap = candidate.attachmentGapTo(floor);
-            if (gap < 0) continue;
-            AttachmentTarget target = new AttachmentTarget(
-                    structure.getLogicalBuildingId(), structure.getId(), floor.id(), gap);
-            nearestByBuilding.merge(target.buildingId(), target,
-                    (first, second) -> ATTACHMENT_TARGET_ORDER.compare(first, second) <= 0 ? first : second);
-        }
-
-        AttachmentTarget nearest = nearestByBuilding.values().stream()
-                .min(ATTACHMENT_TARGET_ORDER).orElse(null);
-        if (nearest == null) return Optional.empty();
-        return nearestByBuilding.values().stream()
-                .anyMatch(target -> target.buildingId() != nearest.buildingId()
-                        && target.gap() == nearest.gap())
-                ? Optional.empty() : Optional.of(nearest);
-    }
-
-    private Set<AttachmentConnection> attachmentConnections(
-            StructureFloor candidate,
-            Collection<StructureConnector.VerticalConnection> verticalConnections,
-            Collection<FloorGeometry> connectedFloors) {
-        LinkedHashSet<AttachmentConnection> connections = new LinkedHashSet<>();
-        if (verticalConnections != null) {
-            for (StructureConnector.VerticalConnection connection : verticalConnections) {
-                connections.add(new AttachmentConnection(connection.structure(), connection.floor()));
-            }
-        }
-        if (connectedFloors == null) return Set.copyOf(connections);
-
-        for (FloorGeometry band : connectedFloors) {
-            if (StructureFloor.sameSemanticBand(candidate.anchorY(), band.anchorY())) continue;
-            for (Structure structure : structures.values()) {
-                for (StructureFloor floor : structure.getFloors()) {
-                    if (StructureFloor.sameSemanticBand(band.anchorY(), floor.anchorY())
-                            && band.projection().intersectionArea(floor.region()) > 0) {
-                        connections.add(new AttachmentConnection(structure, floor));
-                    }
-                }
-            }
-        }
-        return Set.copyOf(connections);
-    }
-
-    private boolean hasUnprovenAttachmentOverlap(
-            StructureFloor candidate,
-            Set<AttachmentConnection> connections) {
-        for (Structure structure : structures.values()) {
-            for (StructureFloor floor : structure.getFloors()) {
-                if (!candidate.overlapsFootprint(floor)
-                        || candidate.verticalGapTo(floor) >= 0) {
-                    continue;
-                }
-                if (candidate.sameSemanticBand(floor)
-                        || !connections.contains(new AttachmentConnection(structure, floor))) {
-                    return true;
-                }
-            }
-        }
-        return false;
+        return StructureExpansionPolicy.selectAttachmentTarget(
+                candidate, verticalConnections, connectedFloors, structures);
     }
 
     Optional<Structure> getInteractionStructureAt(BlockPos pos) {
@@ -938,8 +865,17 @@ public class Village implements Iterable<Building> {
     }
 
     private void applyFloorNumbers(LogicalBuilding logical) {
-        floorNumbers(getBuildingStructures(logical.id()), logical).forEach(
-                (ref, number) -> ref.structure().setFloorNumber(ref.floor().id(), number));
+        StructureFloor ground = groundFloor(logical).orElse(null);
+        if (ground == null) return;
+        List<Structure> members = getBuildingStructures(logical.id());
+        Map<StructureFloor, Integer> numbers = StructureFloor.floorNumbers(
+                members.stream().flatMap(structure -> structure.getFloors().stream()).toList(), ground);
+        for (Structure structure : members) {
+            for (StructureFloor floor : structure.getFloors()) {
+                Integer number = numbers.get(floor);
+                if (number != null) structure.setFloorNumber(floor.id(), number);
+            }
+        }
     }
 
     private void validateBuildingData() {
@@ -1015,15 +951,9 @@ public class Village implements Iterable<Building> {
         return ResidentHomeAssignments.deduplicate(residentHomes) > 0;
     }
 
-    private record FloorRef(Structure structure, StructureFloor floor) {
-    }
-
     private static boolean floorContainsRoomCells(StructureFloor floor, Building room) {
         return !room.getFloorCells().isEmpty()
                 && room.getFloorCells().stream().allMatch(cell -> floor.geometry().cellAt(cell).isPresent());
-    }
-
-    private record AttachmentConnection(Structure structure, StructureFloor floor) {
     }
 
     record AttachmentTarget(int buildingId, int structureId, int floorId, int gap) {
@@ -1046,57 +976,19 @@ public class Village implements Iterable<Building> {
             return Integer.MIN_VALUE;
         }
         members.add(candidate);
-        return floorNumbers(members, logical)
-                .getOrDefault(new FloorRef(candidate, candidateFloor), Integer.MIN_VALUE);
+        StructureFloor ground = groundFloor(logical).orElse(null);
+        if (ground == null) return Integer.MIN_VALUE;
+        return StructureFloor.floorNumbers(
+                        members.stream().flatMap(structure -> structure.getFloors().stream()).toList(), ground)
+                .getOrDefault(candidateFloor, Integer.MIN_VALUE);
     }
 
-    private Map<FloorRef, Integer> floorNumbers(Collection<Structure> members, LogicalBuilding logical) {
-        List<FloorRef> floors = new ArrayList<>();
-        for (Structure structure : members) {
-            for (StructureFloor floor : structure.getFloors()) {
-                floors.add(new FloorRef(structure, floor));
-            }
-        }
-        floors.sort(Comparator.comparingInt((FloorRef ref) -> ref.floor().anchorY())
-                .thenComparingInt(ref -> ref.structure().getId())
-                .thenComparingInt(ref -> ref.floor().id()));
-        if (floors.isEmpty()) return Map.of();
-
-        int tolerance = StructureFloor.BAND_TOLERANCE;
-        List<List<FloorRef>> bands = new ArrayList<>();
-        for (FloorRef ref : floors) {
-            List<FloorRef> band = bands.isEmpty() ? null : bands.getLast();
-            if (band == null || ref.floor().anchorY() - band.getFirst().floor().anchorY() > tolerance) {
-                band = new ArrayList<>();
-                bands.add(band);
-            }
-            band.add(ref);
-        }
-
-        FloorRef ground = groundFloor(logical).orElse(null);
-        if (ground == null) return Map.of();
-        int groundBand = java.util.stream.IntStream.range(0, bands.size())
-                .filter(index -> bands.get(index).stream().anyMatch(ref ->
-                        ref.structure().getId() == ground.structure().getId()
-                                && ref.floor().id() == ground.floor().id()))
-                .findFirst()
-                .orElse(-1);
-        if (groundBand < 0) return Map.of();
-
-        Map<FloorRef, Integer> numbers = new HashMap<>();
-        for (int bandIndex = 0; bandIndex < bands.size(); bandIndex++) {
-            int floorNumber = bandIndex - groundBand;
-            for (FloorRef ref : bands.get(bandIndex)) numbers.put(ref, floorNumber);
-        }
-        return Map.copyOf(numbers);
-    }
-
-    private Optional<FloorRef> groundFloor(LogicalBuilding logical) {
+    private Optional<StructureFloor> groundFloor(LogicalBuilding logical) {
         if (logical == null || logical.mainRoomId() < 0) return Optional.empty();
         Building main = buildings.get(logical.mainRoomId());
         if (!belongsToLogicalBuilding(main, logical.id())) return Optional.empty();
         Structure structure = structures.get(main.getStructureId());
-        return structure.getFloor(main.getFloorId()).map(floor -> new FloorRef(structure, floor));
+        return structure.getFloor(main.getFloorId());
     }
 
 

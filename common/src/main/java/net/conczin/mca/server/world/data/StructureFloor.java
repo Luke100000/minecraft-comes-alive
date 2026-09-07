@@ -8,6 +8,7 @@ import net.minecraft.nbt.Tag;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -50,7 +51,7 @@ public record StructureFloor(int id, int floorNumber, FloorGeometry geometry) {
     }
 
     public int area() {
-        return region().area();
+        return geometry.footprintArea();
     }
 
     public boolean contains(int x, int z) {
@@ -65,8 +66,42 @@ public record StructureFloor(int id, int floorNumber, FloorGeometry geometry) {
         return Math.abs(firstAnchorY - secondAnchorY) <= BAND_TOLERANCE;
     }
 
+    static Map<StructureFloor, Integer> floorNumbers(Collection<StructureFloor> floors,
+                                                     StructureFloor groundFloor) {
+        if (floors == null || groundFloor == null) return Map.of();
+        List<StructureFloor> ordered = floors.stream()
+                .filter(Objects::nonNull)
+                .sorted(Comparator.comparingInt(StructureFloor::anchorY)
+                        .thenComparingInt(StructureFloor::id))
+                .toList();
+        if (ordered.isEmpty()) return Map.of();
+
+        List<List<StructureFloor>> bands = new ArrayList<>();
+        for (StructureFloor floor : ordered) {
+            List<StructureFloor> band = bands.isEmpty() ? null : bands.getLast();
+            if (band == null || floor.anchorY() - band.getFirst().anchorY() > BAND_TOLERANCE) {
+                band = new ArrayList<>();
+                bands.add(band);
+            }
+            band.add(floor);
+        }
+
+        int groundBand = -1;
+        for (int index = 0; index < bands.size() && groundBand < 0; index++) {
+            if (bands.get(index).stream().anyMatch(groundFloor::equals)) groundBand = index;
+        }
+        if (groundBand < 0) return Map.of();
+
+        Map<StructureFloor, Integer> numbers = new HashMap<>();
+        for (int bandIndex = 0; bandIndex < bands.size(); bandIndex++) {
+            int floorNumber = bandIndex - groundBand;
+            for (StructureFloor floor : bands.get(bandIndex)) numbers.put(floor, floorNumber);
+        }
+        return Map.copyOf(numbers);
+    }
+
     boolean overlapsFootprint(StructureFloor other) {
-        return other != null && region().intersectionArea(other.region()) > 0;
+        return other != null && geometry.footprintIntersectionArea(other.geometry) > 0;
     }
 
     boolean overlapsSameSemanticBand(StructureFloor other) {

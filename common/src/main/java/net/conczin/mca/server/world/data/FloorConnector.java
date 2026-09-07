@@ -3,6 +3,11 @@ package net.conczin.mca.server.world.data;
 import net.conczin.mca.util.NbtHelper;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.world.level.block.DoorBlock;
+import net.minecraft.world.level.block.FenceGateBlock;
+import net.minecraft.world.level.block.LadderBlock;
+import net.minecraft.world.level.block.TrapDoorBlock;
+import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.Objects;
 
@@ -33,6 +38,14 @@ public final class FloorConnector {
 
         public boolean roomBoundary() {
             return this == DOOR || this == GATE;
+        }
+
+        static Type fromBlockState(BlockState state) {
+            if (state.getBlock() instanceof LadderBlock) return LADDER;
+            if (state.getBlock() instanceof TrapDoorBlock) return TRAPDOOR;
+            if (state.getBlock() instanceof DoorBlock) return DOOR;
+            if (state.getBlock() instanceof FenceGateBlock) return GATE;
+            return null;
         }
 
         public static Type fromSerializedName(String name) {

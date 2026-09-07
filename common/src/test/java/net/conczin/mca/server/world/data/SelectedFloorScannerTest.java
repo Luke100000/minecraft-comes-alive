@@ -13,14 +13,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class SelectedFloorScannerTest {
     @Test
     void stepDecisionUsesVanillaJumpThreshold() {
-        assertTrue(SelectedFloorScanner.canStep(64.0D, 65.0D));
-        assertFalse(SelectedFloorScanner.canStep(64.0D, 65.25D));
+        assertTrue(FloorGeometry.canStep(64.0D, 65.0D));
+        assertFalse(FloorGeometry.canStep(64.0D, 65.25D));
     }
 
     @Test
     void selectedFloorBandDoesNotClimbIntoAnotherStorey() {
-        assertTrue(SelectedFloorScanner.withinSelectedFloorBand(64, 66));
-        assertFalse(SelectedFloorScanner.withinSelectedFloorBand(64, 67));
+        assertTrue(StructureFloor.sameSemanticBand(64, 66));
+        assertFalse(StructureFloor.sameSemanticBand(64, 67));
     }
 
     @Test
@@ -31,8 +31,10 @@ class SelectedFloorScannerTest {
                 cell(3, 90, 2),
                 cell(0, 91, 3), cell(1, 91, 3), cell(2, 91, 3), cell(3, 91, 3));
 
-        Set<FloorGeometry.Cell> lower = SelectedFloorScanner.selectFloorBand(cells, 90);
-        Set<FloorGeometry.Cell> upper = SelectedFloorScanner.selectFloorBand(cells, 91);
+        Set<FloorGeometry.Cell> lower = SelectedFloorScanner
+                .floorSelection(cells, new BlockPos(3, 90, 2)).selected().cells();
+        Set<FloorGeometry.Cell> upper = SelectedFloorScanner
+                .floorSelection(cells, new BlockPos(0, 91, 3)).selected().cells();
 
         assertEquals(Set.of(88, 89, 90), lower.stream()
                 .map(cell -> cell.feet().getY()).collect(java.util.stream.Collectors.toSet()));
@@ -104,7 +106,8 @@ class SelectedFloorScannerTest {
                 cell(3, 65, 1),
                 cell(3, 66, 2));
 
-        assertEquals(cells, SelectedFloorScanner.selectFloorBand(cells, 65));
+        assertEquals(cells, SelectedFloorScanner
+                .floorSelection(cells, new BlockPos(3, 65, 1)).selected().cells());
     }
 
     @Test

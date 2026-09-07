@@ -4,14 +4,12 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
 import org.junit.jupiter.api.Test;
 
-import java.lang.reflect.Method;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.fail;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class BuildingRoomScannerOwnerTest {
@@ -116,22 +114,12 @@ class BuildingRoomScannerOwnerTest {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
-    void connectorFloorMembershipDependsOnTouchingSurfaceNotVerticalTraversalType() throws Exception {
+    void connectorFloorMembershipDependsOnTouchingSurfaceNotVerticalTraversalType() {
         BlockPos connector = new BlockPos(1, 65, 0);
         FloorGeometry geometry = new FloorGeometry(Set.of(
                 cell(0, 64, 0), cell(2, 64, 0)), Map.of());
-        Method membership;
-        try {
-            membership = StructureConnector.class.getDeclaredMethod(
-                    "floorMembershipCells", BlockPos.class, FloorGeometry.class);
-        } catch (NoSuchMethodException missing) {
-            fail("connector membership must be a geometry operation independent of traversal classification");
-            return;
-        }
-        membership.setAccessible(true);
 
-        Set<BlockPos> cells = (Set<BlockPos>) membership.invoke(null, connector, geometry);
+        Set<BlockPos> cells = StructureConnector.floorMembershipCells(connector, geometry);
 
         assertEquals(Set.of(new BlockPos(1, 64, 0)), cells);
     }

@@ -76,8 +76,8 @@ public final class RoomWorkflow {
             return failedRoom(fresh.result(), source, village);
         }
 
-        Structure refreshed = structure.copy();
-        if (!refreshed.replaceFloorGeometry(floor.id(), fresh.floor())) {
+        Structure refreshed = refreshedStructure(structure, floor.id(), fresh.floor());
+        if (refreshed == null) {
             return failedRoom(Building.validationResult.OVERLAP, source, village);
         }
         StructureFloor refreshedFloor = refreshed.getFloor(floor.id()).orElse(null);
@@ -205,7 +205,8 @@ public final class RoomWorkflow {
                 .filter(room -> room.getId() != expected.getId())
                 .toList();
 
-        List<Building> lineage = updateLineage(expected, freshComponents, otherRooms).orElse(null);
+        List<Building> lineage = RegisteredRoomReconciler
+                .updateLineage(expected, freshComponents, otherRooms).orElse(null);
         if (lineage == null || lineage.isEmpty()) {
             return RegisteredRoomUpdate.failure(Building.validationResult.OVERLAP, source, village);
         }
@@ -217,8 +218,8 @@ public final class RoomWorkflow {
             return RegisteredRoomUpdate.failure(Building.validationResult.OVERLAP, source, village);
         }
 
-        Structure refreshed = structure.copy();
-        if (!refreshed.replaceFloorGeometry(persistedFloor.id(), fresh.floor())) {
+        Structure refreshed = refreshedStructure(structure, persistedFloor.id(), fresh.floor());
+        if (refreshed == null) {
             return RegisteredRoomUpdate.failure(Building.validationResult.OVERLAP, source, village);
         }
 
@@ -232,23 +233,11 @@ public final class RoomWorkflow {
                 playerComponent, matchingTypes);
     }
 
-    static Optional<List<Building>> updateLineage(Building selected,
-                                                  Collection<Building> freshComponents,
-                                                  Collection<Building> otherRooms) {
-        List<Building> lineage = freshComponents.stream()
-                .filter(component -> component.getFloorFootprintIntersectionArea(selected) > 0)
-                .sorted(Comparator.comparingInt((Building room) -> room.getRawPos0().getX())
-                        .thenComparingInt(room -> room.getRawPos0().getZ())
-                        .thenComparingInt(room -> room.getRawPos1().getX())
-                        .thenComparingInt(room -> room.getRawPos1().getZ()))
-                .toList();
-        if (lineage.isEmpty()) return Optional.empty();
-        for (Building component : lineage) {
-            for (Building other : otherRooms) {
-                if (component.getFloorFootprintIntersectionArea(other) > 0) return Optional.empty();
-            }
-        }
-        return Optional.of(lineage);
+    private static Structure refreshedStructure(Structure structure,
+                                                int floorId,
+                                                StructureFloor floor) {
+        Structure refreshed = structure.copy();
+        return refreshed.replaceFloorGeometry(floorId, floor) ? refreshed : null;
     }
 
     private static Set<BlockPos> registeredRoomCells(Village village,
@@ -337,7 +326,7 @@ public final class RoomWorkflow {
 
         Village village = resolved.village();
         Building room = resolved.room();
-        RoomInheritanceUpdate update = analyzeRoomInheritanceUpdate(village, room, enabled);
+        RoomInheritanceUpdate update = RoomInheritanceUpdate.analyze(village, room, enabled);
         if (!update.valid()) {
             return Outcome.failed(Building.validationResult.NOT_IN_BUILDING, source, room.getId());
         }
@@ -348,24 +337,6 @@ public final class RoomWorkflow {
             return Outcome.requiresTypeSelection(source, update.matchingTypes(), room.getId());
         }
         return committed(village.commitRoomInheritanceUpdate(update, selectedType), source, room.getId());
-    }
-
-    static RoomInheritanceUpdate analyzeRoomInheritanceUpdate(Village village,
-                                                              Building room,
-                                                              boolean enabled) {
-        if (village == null || room == null || !room.isFunctionalRoom()
-                || village.getBuilding(room.getId()).orElse(null) != room) {
-            return RoomInheritanceUpdate.invalid(enabled);
-        }
-        boolean mainRoom = village.isMainRoom(room);
-        boolean previousEnabled = mainRoom
-                ? village.isBuildingInheritanceEnabled(room)
-                : room.contributesToMain();
-        List<String> matchingTypes = enabled ? List.of() : village.getMatchingRoomTypes(room).stream()
-                .map(BuildingType::name)
-                .toList();
-        return new RoomInheritanceUpdate(
-                room.getId(), mainRoom, previousEnabled, enabled, matchingTypes);
     }
 
     private Outcome addAttachedRoom(BlockPos source,

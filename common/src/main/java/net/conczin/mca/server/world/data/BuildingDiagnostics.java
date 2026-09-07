@@ -232,10 +232,10 @@ public final class BuildingDiagnostics {
                     .filter(candidate -> candidate.anchorY() == persistentFloor.anchorY())
                     .findFirst().orElse(null);
             if (freshFloor == null) continue;
+            if (persistentFloor.geometry().sameFootprint(freshFloor.geometry())) continue;
 
             Set<BlockPos> persistentCells = persistentFloor.region().cells();
             Set<BlockPos> freshCells = freshFloor.region().cells();
-            if (persistentCells.equals(freshCells)) continue;
 
             geometryMismatch = true;
             LinkedHashSet<BlockPos> added = new LinkedHashSet<>(freshCells);

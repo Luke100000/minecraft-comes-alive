@@ -172,7 +172,7 @@ class VillageFloorSystemTest {
             Building room = village.getBuildings().get(2);
             room.addBlock(Blocks.CRAFTING_TABLE, BlockPos.ZERO);
 
-            RoomInheritanceUpdate update = RoomWorkflow.analyzeRoomInheritanceUpdate(village, room, false);
+            RoomInheritanceUpdate update = RoomInheritanceUpdate.analyze(village, room, false);
 
             assertEquals(List.of("workshop"), update.matchingTypes());
             assertFalse(update.requiresTypeSelection());
@@ -193,7 +193,7 @@ class VillageFloorSystemTest {
             Village village = populatedVillage();
             Building room = village.getBuildings().get(2);
             room.addBlock(Blocks.CRAFTING_TABLE, BlockPos.ZERO);
-            RoomInheritanceUpdate update = RoomWorkflow.analyzeRoomInheritanceUpdate(village, room, false);
+            RoomInheritanceUpdate update = RoomInheritanceUpdate.analyze(village, room, false);
 
             assertEquals(Building.validationResult.INVALID_TYPE,
                     village.commitRoomInheritanceUpdate(update, "not_eligible"));
@@ -210,7 +210,7 @@ class VillageFloorSystemTest {
             Village village = populatedVillage();
             Building room = village.getBuildings().get(2);
             room.addBlock(Blocks.CRAFTING_TABLE, BlockPos.ZERO);
-            RoomInheritanceUpdate update = RoomWorkflow.analyzeRoomInheritanceUpdate(village, room, false);
+            RoomInheritanceUpdate update = RoomInheritanceUpdate.analyze(village, room, false);
 
             assertTrue(update.requiresTypeSelection());
             assertEquals(Building.validationResult.SUCCESS,

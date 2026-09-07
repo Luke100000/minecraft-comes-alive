@@ -23,8 +23,6 @@ import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.function.IntFunction;
-import java.util.function.IntPredicate;
 
 /** Owns world-derived Blueprint terrain sampling, texture creation and cache lifecycle. */
 final class BlueprintTerrainRenderer {
@@ -290,31 +288,6 @@ final class BlueprintTerrainRenderer {
                 : waterColor(color, biomeWaterColor);
     }
 
-    @SuppressWarnings("deprecation")
-    static ColumnLayers sampleClientOceanFloorColumn(IntFunction<BlockState> stateAtY,
-                                                      IntPredicate sectionMayContainFloor,
-                                                      int waterY,
-                                                      int minY) {
-        int y = waterY - 1;
-        while (y >= minY) {
-            int sectionMinY = SectionPos.sectionToBlockCoord(SectionPos.blockToSectionCoord(y));
-            if (!sectionMayContainFloor.test(y)) {
-                y = sectionMinY - 1;
-                continue;
-            }
-
-            int scanMinY = Math.max(minY, sectionMinY);
-            while (y >= scanMinY) {
-                BlockState state = stateAtY.apply(y);
-                if (state != null && state.blocksMotion()) {
-                    return new ColumnLayers(y, waterY, state);
-                }
-                y--;
-            }
-        }
-        return null;
-    }
-
     static int dryTerrainHeight(int noLeavesHeight, int surfaceHeight, int minBuildHeight) {
         return noLeavesHeight > minBuildHeight ? noLeavesHeight : surfaceHeight;
     }
@@ -371,9 +344,6 @@ final class BlueprintTerrainRenderer {
     @FunctionalInterface
     interface LoadedChunkLookup {
         boolean test(int chunkX, int chunkZ);
-    }
-
-    record ColumnLayers(int terrainY, int waterY, BlockState terrainState) {
     }
 
     private static final class TerrainTile {
@@ -503,37 +473,44 @@ final class BlueprintTerrainRenderer {
                 BlockPos waterPos = new BlockPos(sampleX, surfaceHeight - 1, sampleZ);
                 waterTint = unblendedBiomeColor(level, waterPos, BiomeColors.WATER_COLOR_RESOLVER);
             }
-            ColumnLayers layers = waterColumn
-                    ? sampleClientOceanFloorColumn(
-                            y -> {
-                                surfacePos.set(sampleX, y, sampleZ);
-                                return chunk.getBlockState(surfacePos);
-                            },
-                            y -> {
-                                int sectionIndex = chunk.getSectionIndex(y);
-                                return sectionIndex >= 0
-                                        && sectionIndex < chunk.getSectionsCount()
-                                        && chunk.getSection(sectionIndex)
-                                        .maybeHas(candidate -> candidate.blocksMotion());
-                            },
-                            surfaceHeight - 1,
-                            minBuildHeight)
-                    : null;
-            if (layers != null) {
-                BlockPos.MutableBlockPos groundPos = new BlockPos.MutableBlockPos(
-                        sampleX, layers.terrainY(), sampleZ);
-                BlockState groundState = layers.terrainState();
-                MapColor groundMapColor = groundState.getMapColor(level, groundPos);
-                while (groundMapColor == MapColor.NONE && groundPos.getY() > minBuildHeight) {
-                    groundPos.move(0, -1, 0);
-                    groundState = chunk.getBlockState(groundPos);
-                    groundMapColor = groundState.getMapColor(level, groundPos);
+            if (waterColumn) {
+                int y = surfaceHeight - 2;
+                BlockState groundState = null;
+                while (y >= minBuildHeight && groundState == null) {
+                    int sectionMinY = SectionPos.sectionToBlockCoord(SectionPos.blockToSectionCoord(y));
+                    int sectionIndex = chunk.getSectionIndex(y);
+                    if (sectionIndex < 0
+                            || sectionIndex >= chunk.getSectionsCount()
+                            || !chunk.getSection(sectionIndex).maybeHas(BlockState::blocksMotion)) {
+                        y = sectionMinY - 1;
+                        continue;
+                    }
+
+                    int scanMinY = Math.max(minBuildHeight, sectionMinY);
+                    while (y >= scanMinY) {
+                        surfacePos.set(sampleX, y, sampleZ);
+                        BlockState candidate = chunk.getBlockState(surfacePos);
+                        if (candidate.blocksMotion()) {
+                            groundState = candidate;
+                            break;
+                        }
+                        y--;
+                    }
                 }
-                if (groundMapColor != MapColor.NONE) {
-                    terrainColor = biomeTintedColor(level, groundPos, groundMapColor, groundMapColor.col);
-                    terrainHeight = groundPos.getY() + 1;
-                } else {
-                    terrainColor = FALLBACK_COLOR;
+
+                if (groundState != null) {
+                    MapColor groundMapColor = groundState.getMapColor(level, surfacePos);
+                    while (groundMapColor == MapColor.NONE && surfacePos.getY() > minBuildHeight) {
+                        surfacePos.move(0, -1, 0);
+                        groundState = chunk.getBlockState(surfacePos);
+                        groundMapColor = groundState.getMapColor(level, surfacePos);
+                    }
+                    if (groundMapColor != MapColor.NONE) {
+                        terrainColor = biomeTintedColor(level, surfacePos, groundMapColor, groundMapColor.col);
+                        terrainHeight = surfacePos.getY() + 1;
+                    } else {
+                        terrainColor = FALLBACK_COLOR;
+                    }
                 }
             }
 

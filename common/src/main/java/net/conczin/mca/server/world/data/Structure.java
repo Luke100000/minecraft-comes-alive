@@ -266,7 +266,7 @@ public final class Structure implements VillageBuilding {
         }
         for (StructureFloor floor : getFloors()) {
             for (StructureFloor candidate : other.getFloors()) {
-                if (floor.region().intersectionArea(candidate.region()) > 0
+                if (floor.overlapsFootprint(candidate)
                         && exactGeometryOverlaps(floor.geometry(), candidate.geometry())) {
                     return true;
                 }

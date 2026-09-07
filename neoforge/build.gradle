@@ -39,6 +39,12 @@ neoForge {
         server {
             server()
         }
+        gameTestServer {
+            type.set('gameTestServer')
+            gameDirectory = file('run-gametest/')
+            ideName = "NeoForge GameTest Server (${project.path})"
+            systemProperty('neoforge.enabledGameTestNamespaces', "${mod_id},minecraft")
+        }
     }
     mods {
         "${mod_id}" {
@@ -54,6 +60,10 @@ tasks.named('processResources', ProcessResources) {
     from(project(':common').layout.buildDirectory.file('generated/accesstransformer.cfg')) {
         into 'META-INF'
     }
+}
+
+tasks.named('jar') {
+    exclude '**/*GameTests*.class'
 }
 
 sourceSets.main.resources { srcDir 'src/generated/resources' }

@@ -2,6 +2,7 @@ package net.conczin.mca.entity.ai;
 
 import com.mojang.serialization.Codec;
 import net.conczin.mca.MCA;
+import net.conczin.mca.entity.ai.brain.tasks.RangedCombatState;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
@@ -27,6 +28,7 @@ public interface MemoryModuleTypeMCA {
     MemoryModuleType<BlockPos> MOURNING_SITE = register("mourning_site", Optional.of(BlockPos.CODEC));
     MemoryModuleType<GlobalPos> MOURNING_POSITION = register("mourning_position", Optional.of(GlobalPos.CODEC));
     MemoryModuleType<Boolean> FORCED_HOME = register("forced_home", Optional.of(Codec.BOOL));
+    MemoryModuleType<RangedCombatState> RANGED_COMBAT_STATE = register("ranged_combat_state", Optional.empty());
 
     static <U> MemoryModuleType<U> register(String name, Optional<Codec<U>> codec) {
         ResourceLocation id = MCA.locate(name);

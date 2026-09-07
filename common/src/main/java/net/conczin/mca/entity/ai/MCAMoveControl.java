@@ -7,14 +7,11 @@ import net.minecraft.world.entity.ai.control.MoveControl;
 
 /**
  * Owns movement rules shared by every MCA villager movement mode.
- *
- * <p>Specialised controls such as {@link ArcherMoveControl} delegate here so
- * navigation-owned movement is handled consistently.</p>
  */
-class MCAMoveControl extends MoveControl {
+public class MCAMoveControl extends MoveControl {
     private static final double ADJACENT_RAISED_TARGET_EPSILON = 1.0E-6D;
 
-    MCAMoveControl(Mob mob) {
+    public MCAMoveControl(Mob mob) {
         super(mob);
     }
 

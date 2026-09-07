@@ -119,6 +119,26 @@ final class FloorGeometry {
         return BuildingFloorRegion.fromFootprint(y, projected);
     }
 
+    boolean sameFootprint(FloorGeometry other) {
+        return other != null && cellsByColumn.keySet().equals(other.cellsByColumn.keySet());
+    }
+
+    int footprintArea() {
+        return cellsByColumn.size();
+    }
+
+    int footprintIntersectionArea(FloorGeometry other) {
+        if (other == null || cellsByColumn.isEmpty() || other.cellsByColumn.isEmpty()) return 0;
+        Map<Long, List<Cell>> smaller = cellsByColumn.size() <= other.cellsByColumn.size()
+                ? cellsByColumn : other.cellsByColumn;
+        Map<Long, List<Cell>> larger = smaller == cellsByColumn ? other.cellsByColumn : cellsByColumn;
+        int intersection = 0;
+        for (Long column : smaller.keySet()) {
+            if (larger.containsKey(column)) intersection++;
+        }
+        return intersection;
+    }
+
     List<FloorConnector.Marker> connectorMarkers() {
         return connectorTypesByCell.entrySet().stream()
                 .map(entry -> new FloorConnector.Marker(entry.getKey(), entry.getValue()))
@@ -158,7 +178,7 @@ final class FloorGeometry {
             if (ceilingY <= feet.getY()) {
                 throw new IllegalArgumentException("FloorGeometry cell ceiling must be above feet");
             }
-            if (surfaceY < feet.getY() || surfaceY >= ceilingY) {
+            if (surfaceY < feet.getY() - 1.0D || surfaceY >= ceilingY) {
                 throw new IllegalArgumentException("FloorGeometry cell surface must be within its physical height");
             }
             feet = feet.immutable();

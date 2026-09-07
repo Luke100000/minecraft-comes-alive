@@ -172,6 +172,8 @@ public class BowTask<E extends Mob & CrossbowAttackMob> extends Behavior<E> {
     }
 
     private static boolean isEmergencyFleeing(Mob entity) {
-        return entity.getMoveControl() instanceof net.conczin.mca.entity.ai.ArcherMoveControl archerMoveControl && archerMoveControl.isEmergencyFleeing();
+        return RangedCombatState.current(entity)
+                .map(RangedCombatState::suppressesRangedAttack)
+                .orElse(false);
     }
 }

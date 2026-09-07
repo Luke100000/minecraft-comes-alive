@@ -8,10 +8,29 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FloorGeometryTest {
+
+    @Test
+    void footprintComparisonIgnoresCellHeightButPreservesColumns() {
+        FloorGeometry lower = new FloorGeometry(Set.of(
+                new FloorGeometry.Cell(new BlockPos(0, 64, 0), 63.5D, 67),
+                new FloorGeometry.Cell(new BlockPos(1, 64, 0), 64.0D, 67)), Map.of());
+        FloorGeometry upper = new FloorGeometry(Set.of(
+                new FloorGeometry.Cell(new BlockPos(0, 70, 0), 69.5D, 73),
+                new FloorGeometry.Cell(new BlockPos(1, 70, 0), 70.0D, 73)), Map.of());
+        FloorGeometry partial = new FloorGeometry(Set.of(
+                new FloorGeometry.Cell(new BlockPos(1, 80, 0), 80.0D, 83),
+                new FloorGeometry.Cell(new BlockPos(2, 80, 0), 80.0D, 83)), Map.of());
+
+        assertTrue(lower.sameFootprint(upper));
+        assertEquals(1, lower.footprintIntersectionArea(partial));
+        assertFalse(lower.sameFootprint(partial));
+    }
+
     @Test
     void sameColumnCellsAtDifferentHeightsAreBothCanonical() {
         FloorGeometry.Cell lower = cell(2, 88, 3);

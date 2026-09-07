@@ -13,6 +13,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 /** Pure Room topology over one exact FloorGeometry. */
@@ -44,29 +45,9 @@ final class RoomPartitioner {
                         .thenComparingInt(cell -> cell.feet().getY()))
                 .toList();
         for (FloorGeometry.Cell seed : seeds) {
-            if (boundaryCells.contains(seed.feet()) || !visited.add(seed.feet())) continue;
-            LinkedHashSet<FloorGeometry.Cell> componentCells = new LinkedHashSet<>();
-            ArrayDeque<FloorGeometry.Cell> queue = new ArrayDeque<>();
-            queue.addLast(seed);
-
-            while (!queue.isEmpty()) {
-                FloorGeometry.Cell current = queue.removeFirst();
-                componentCells.add(current);
-                for (Direction direction : HORIZONTAL) {
-                    int x = current.feet().getX() + direction.getStepX();
-                    int z = current.feet().getZ() + direction.getStepZ();
-                    for (FloorGeometry.Cell next : geometry.cellsAtColumn(x, z)) {
-                        if (boundaryCells.contains(next.feet())
-                                || visited.contains(next.feet())
-                                || !FloorGeometry.canStep(current.surfaceY(), next.surfaceY())) {
-                            continue;
-                        }
-                        visited.add(next.feet());
-                        queue.addLast(next);
-                    }
-                }
-            }
-            openComponents.add(new Component(componentCells));
+            Set<FloorGeometry.Cell> component = connectedCells(
+                    geometry, seed, visited, cell -> !boundaryCells.contains(cell.feet()));
+            if (!component.isEmpty()) openComponents.add(new Component(component));
         }
 
         List<Component> result = assignBoundaryClusters(geometry, boundaryCells, openComponents);
@@ -122,30 +103,39 @@ final class RoomPartitioner {
                         .thenComparingInt(cell -> cell.feet().getY()))
                 .toList();
         for (FloorGeometry.Cell seed : seeds) {
-            if (!visited.add(seed.feet())) continue;
-            LinkedHashSet<FloorGeometry.Cell> cluster = new LinkedHashSet<>();
-            ArrayDeque<FloorGeometry.Cell> queue = new ArrayDeque<>();
-            queue.addLast(seed);
-            while (!queue.isEmpty()) {
-                FloorGeometry.Cell current = queue.removeFirst();
-                cluster.add(current);
-                for (Direction direction : HORIZONTAL) {
-                    int x = current.feet().getX() + direction.getStepX();
-                    int z = current.feet().getZ() + direction.getStepZ();
-                    for (FloorGeometry.Cell next : geometry.cellsAtColumn(x, z)) {
-                        if (!boundaryCells.contains(next.feet())
-                                || visited.contains(next.feet())
-                                || !FloorGeometry.canStep(current.surfaceY(), next.surfaceY())) {
-                            continue;
-                        }
-                        visited.add(next.feet());
-                        queue.addLast(next);
-                    }
-                }
-            }
+            Set<FloorGeometry.Cell> cluster = connectedCells(
+                    geometry, seed, visited, cell -> boundaryCells.contains(cell.feet()));
             if (!cluster.isEmpty()) result.add(Set.copyOf(cluster));
         }
         return List.copyOf(result);
+    }
+
+    private static Set<FloorGeometry.Cell> connectedCells(FloorGeometry geometry,
+                                                           FloorGeometry.Cell seed,
+                                                           Set<BlockPos> visited,
+                                                           Predicate<FloorGeometry.Cell> included) {
+        if (!included.test(seed) || !visited.add(seed.feet())) return Set.of();
+        LinkedHashSet<FloorGeometry.Cell> component = new LinkedHashSet<>();
+        ArrayDeque<FloorGeometry.Cell> queue = new ArrayDeque<>();
+        queue.addLast(seed);
+        while (!queue.isEmpty()) {
+            FloorGeometry.Cell current = queue.removeFirst();
+            component.add(current);
+            for (Direction direction : HORIZONTAL) {
+                int x = current.feet().getX() + direction.getStepX();
+                int z = current.feet().getZ() + direction.getStepZ();
+                for (FloorGeometry.Cell next : geometry.cellsAtColumn(x, z)) {
+                    if (!included.test(next)
+                            || visited.contains(next.feet())
+                            || !FloorGeometry.canStep(current.surfaceY(), next.surfaceY())) {
+                        continue;
+                    }
+                    visited.add(next.feet());
+                    queue.addLast(next);
+                }
+            }
+        }
+        return Set.copyOf(component);
     }
 
     static Component owner(Collection<Component> adjacent) {
