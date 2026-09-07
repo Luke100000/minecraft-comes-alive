@@ -38,7 +38,7 @@ import java.util.*;
  * <p>The screen supplies one immutable {@link BlueprintMapViewport} per frame and keeps
  * UI state/tooltips. This renderer owns non-terrain map drawing and hover testing.</p>
  */
-final class BlueprintMapRenderer implements AutoCloseable {
+final class BlueprintMapRenderer {
     private static final ResourceLocation ICON_TEXTURES = MCA.locate("textures/buildings.png");
     private static final int TERRAIN_BACKGROUND_COLOR = 0xd0181c22;
     private static final int ROOM_INNER_PADDING = 1;
@@ -648,11 +648,6 @@ final class BlueprintMapRenderer implements AutoCloseable {
 
     private static int withAlpha(int color, int alpha) {
         return (color & 0x00ffffff) | (alpha << 24);
-    }
-
-    @Override
-    public void close() {
-        terrainRenderer.close();
     }
 
     record RenderResult(List<HoverTarget> hoverTargets, int hoveredLogicalBuildingId) {

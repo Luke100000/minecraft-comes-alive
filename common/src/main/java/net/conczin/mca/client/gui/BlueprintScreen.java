@@ -22,6 +22,7 @@ import net.conczin.mca.server.world.data.Village;
 import net.conczin.mca.util.compat.ButtonWidget;
 import net.conczin.mca.util.localization.FlowingText;
 import net.minecraft.ChatFormatting;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
@@ -45,6 +46,10 @@ import java.util.function.Consumer;
 
 @SuppressWarnings("deprecation")
 public class BlueprintScreen extends ExtendedScreen {
+    public static void maintainTerrainCache(Minecraft client) {
+        BlueprintTerrainRenderer.onClientLevelChanged(client.level);
+    }
+
     //gui element Y positions
     private static final int POSITION_TAXES = -60;
     private static final int POSITION_BIRTH = -10;
@@ -1308,12 +1313,6 @@ public class BlueprintScreen extends ExtendedScreen {
 
     protected boolean isMouseWithin(int x, int y, int w, int h) {
         return mouseX >= x && mouseX < x + w && mouseY >= y && mouseY < y + h;
-    }
-
-    @Override
-    public void removed() {
-        mapRenderer.close();
-        super.removed();
     }
 
     public void setVillage(Village village) {

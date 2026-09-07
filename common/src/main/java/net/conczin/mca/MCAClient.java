@@ -1,6 +1,7 @@
 package net.conczin.mca;
 
 import net.conczin.mca.client.gui.SkinLibraryScreen;
+import net.conczin.mca.client.gui.BlueprintScreen;
 import net.conczin.mca.client.resources.ClientSkinCatalog;
 import net.conczin.mca.client.tts.SpeechManager;
 import net.conczin.mca.entity.PlayerDimensions;
@@ -74,6 +75,7 @@ public class MCAClient {
     }
 
     public static void tickClient(Minecraft client) {
+        BlueprintScreen.maintainTerrainCache(client);
         destinyManager.tick(client);
 
         if (KeyBindings.SKIN_LIBRARY.consumeClick()) {
