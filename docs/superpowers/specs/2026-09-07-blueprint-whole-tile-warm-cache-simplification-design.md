@@ -126,7 +126,7 @@ Ready terrain should remain stale-while-revalidate.
 - A refresh samples the whole tile and updates the existing texture.
 - Missing chunks during refresh preserve old valid pixels as described above.
 
-The exact stale interval should initially retain the existing effective value unless runtime testing gives a concrete reason to change it.
+Use `TERRAIN_TILE_STALE_TICKS = 600L` initially (30 seconds at 20 TPS). The current 100-tick value was introduced for cheap slice-level refreshes and has no measured requirement behind it; applying it unchanged to whole 128x128 tile refreshes would create an unnecessarily frequent burst of heavier synchronous work. Runtime testing may tune this later if terrain updates feel either too slow or too costly.
 
 ## Texture lifecycle
 
