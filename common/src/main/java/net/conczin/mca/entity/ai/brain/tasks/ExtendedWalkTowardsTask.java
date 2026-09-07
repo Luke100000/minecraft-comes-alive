@@ -74,14 +74,30 @@ public final class ExtendedWalkTowardsTask {
                             }
 
                             GlobalPos globalPos = context.get(destinationResult);
+                            Optional<BlockPos> resolvedTarget = walkTargetResolver.resolve(world, entity, globalPos);
+                            BlockPos targetPos = resolvedTarget.orElse(globalPos.pos());
+                            int targetCompletionRange = resolvedTarget.isPresent() ? 0 : completionRange;
+                            boolean replacingIntermediateWithFinal = currentWalkTarget
+                                    .map(WalkTarget::getTarget)
+                                    .filter(IntermediateWalkTargetTracker.class::isInstance)
+                                    .isPresent()
+                                    && globalPos.dimension() == world.dimension()
+                                    && targetPos.distManhattan(entity.blockPosition()) <= maxDistance;
+
                             Optional<Long> optional = context.tryGet(cantReachWalkTargetSince);
-                            if (optional.isPresent() && world.getGameTime() - optional.get() < RANDOM_POS_RETRY_COOLDOWN) {
+                            if (replacingIntermediateWithFinal) {
+                                // CANT_REACH belongs to the old long-distance segment. Once that segment has brought
+                                // the villager inside direct range, its retry/timeout state must not reject the final
+                                // destination before this task can publish it.
+                                cantReachWalkTargetSince.erase();
+                            } else if (optional.isPresent()
+                                    && world.getGameTime() - optional.get() < RANDOM_POS_RETRY_COOLDOWN) {
                                 return true;
                             }
-                            if (globalPos.dimension() == world.dimension() && (optional.isEmpty() || world.getGameTime() - optional.get() <= (long) maxRunTime)) {
-                                Optional<BlockPos> resolvedTarget = walkTargetResolver.resolve(world, entity, globalPos);
-                                BlockPos targetPos = resolvedTarget.orElse(globalPos.pos());
-                                int targetCompletionRange = resolvedTarget.isPresent() ? 0 : completionRange;
+                            if (globalPos.dimension() == world.dimension()
+                                    && (replacingIntermediateWithFinal
+                                    || optional.isEmpty()
+                                    || world.getGameTime() - optional.get() <= (long) maxRunTime)) {
                                 if (targetPos.distManhattan(entity.blockPosition()) > maxDistance) {
                                     if (currentWalkTarget.isPresent()) {
                                         return true;
