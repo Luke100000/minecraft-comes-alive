@@ -19,6 +19,7 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class VillageFloorSystemTest {
@@ -29,12 +30,63 @@ class VillageFloorSystemTest {
     }
 
     @Test
+    void registerRoomRejectsEmptyExactFloorOwnership() {
+        Village village = new Village(1, null);
+        Structure structure = structure(10, 10, floor(0, 64));
+        Building main = room(100, 10, 0, true);
+        setRoomCells(main, Set.of(new BlockPos(0, 64, 0)));
+        village.registerStructure(structure, main);
+        Building empty = room(101, 10, 0, true);
+
+        assertThrows(IllegalArgumentException.class, () -> village.registerRoom(empty));
+        assertFalse(village.getBuildings().containsKey(101));
+    }
+
+    @Test
+    void registerStructureRejectsInvalidRoomReferenceWithoutMutation() {
+        Village village = new Village(1, null);
+        Structure existing = structure(10, 10, floor(0, 64));
+        Building existingMain = room(100, 10, 0, true);
+        setRoomCells(existingMain, Set.of(new BlockPos(0, 64, 0)));
+        village.registerStructure(existing, existingMain);
+
+        Structure invalidStructure = structure(20, 20, floor(0, 72));
+        Building invalidRoom = room(200, 999, 0, true);
+        setRoomCells(invalidRoom, Set.of(new BlockPos(0, 72, 0)));
+
+        assertThrows(IllegalArgumentException.class,
+                () -> village.registerStructure(invalidStructure, invalidRoom));
+        assertEquals(Set.of(10), village.getStructures().keySet());
+        assertEquals(Set.of(100), village.getBuildings().keySet());
+        assertTrue(village.getLogicalBuilding(20).isEmpty());
+    }
+
+    @Test
+    void registerStructureRejectsConflictingStructureIdWithoutMutation() {
+        Village village = new Village(1, null);
+        Structure existing = structure(10, 10, floor(0, 64));
+        Building existingMain = room(100, 10, 0, true);
+        setRoomCells(existingMain, Set.of(new BlockPos(0, 64, 0)));
+        village.registerStructure(existing, existingMain);
+
+        Structure conflicting = structure(10, 20, floor(0, 72));
+        Building candidateMain = room(200, 10, 0, true);
+        setRoomCells(candidateMain, Set.of(new BlockPos(0, 72, 0)));
+
+        assertThrows(IllegalArgumentException.class,
+                () -> village.registerStructure(conflicting, candidateMain));
+        assertEquals(existing, village.getStructure(10).orElseThrow());
+        assertFalse(village.getBuildings().containsKey(200));
+        assertTrue(village.getLogicalBuilding(20).isEmpty());
+    }
+
+    @Test
     void floorNumbersAreRelativeToExplicitGroundFloor() {
         Village village = new Village(1, null);
         Structure low = structure(10, 77, floor(0, 40), floor(1, 44));
         Structure high = structure(11, 77, floor(0, 48));
-        village.registerStructure(low, room(100, 10, 1, true));
-        village.registerStructure(high, room(101, 11, 0, true));
+        registerStructure(village, low, room(100, 10, 1, true));
+        registerStructure(village, high, room(101, 11, 0, true));
 
         village.refreshLogicalBuildings();
 
@@ -48,8 +100,8 @@ class VillageFloorSystemTest {
         Village village = new Village(1, null);
         Structure low = structure(10, 77, floor(0, 40), floor(1, 44));
         Structure high = structure(11, 77, floor(0, 48));
-        village.registerStructure(low, room(100, 10, 1, true));
-        village.registerStructure(high, room(101, 11, 0, true));
+        registerStructure(village, low, room(100, 10, 1, true));
+        registerStructure(village, high, room(101, 11, 0, true));
         village.refreshLogicalBuildings();
 
         Village reloaded = new Village(village.save(), null);
@@ -192,8 +244,8 @@ class VillageFloorSystemTest {
                 new StructureFloor(2, 80, 84, 1, region(80)));
         Building originalMain = room(100, 10, 1, true);
         Building upperRoom = room(101, 10, 2, true);
-        village.registerStructure(structure, originalMain);
-        village.registerRoom(upperRoom);
+        registerStructure(village, structure, originalMain);
+        registerRoom(village, upperRoom);
         village.refreshLogicalBuildings();
 
         assertTrue(village.setMainRoom(upperRoom));
@@ -230,7 +282,7 @@ class VillageFloorSystemTest {
         Structure structure = structure(10, 10,
                 new StructureFloor(0, 64, 68, 0, region(64)));
         Building main = room(100, 10, 0, true);
-        village.registerStructure(structure, main);
+        registerStructure(village, structure, main);
 
         village.removeRooms(List.of(main.getId()));
         village.refreshLogicalBuildings();
@@ -245,7 +297,7 @@ class VillageFloorSystemTest {
         StructureFloor existingFloor = new StructureFloor(0, 64, 68, 0, region(64), List.of(
                 new FloorConnector.Marker(new BlockPos(0, 64, 0), FloorConnector.Type.LADDER)));
         Structure structure = structure(10, 10, existingFloor);
-        village.registerStructure(structure, room(100, 10, 0, true));
+        registerStructure(village, structure, room(100, 10, 0, true));
 
         StructureFloor connectedHighFloor = new StructureFloor(1, 76, 80, 0, region(76), List.of(
                 new FloorConnector.Marker(new BlockPos(0, 76, 0), FloorConnector.Type.LADDER)));
@@ -264,7 +316,7 @@ class VillageFloorSystemTest {
         StructureFloor existingFloor = new StructureFloor(0, 64, 68, 0, region(64), List.of(
                 new FloorConnector.Marker(new BlockPos(0, 64, 0), FloorConnector.Type.LADDER)));
         Structure structure = structure(10, 10, existingFloor);
-        village.registerStructure(structure, room(100, 10, 0, true));
+        registerStructure(village, structure, room(100, 10, 0, true));
 
         StructureFloor rescannedSameFloor = new StructureFloor(1, 64, 68, 0, region(64), List.of(
                 new FloorConnector.Marker(new BlockPos(0, 64, 0), FloorConnector.Type.LADDER)));
@@ -282,7 +334,7 @@ class VillageFloorSystemTest {
         StructureFloor staleLower = new StructureFloor(0, 88, 93, 0, region(88), List.of(
                 new FloorConnector.Marker(new BlockPos(0, 88, 0), FloorConnector.Type.LADDER)));
         Structure structure = structure(10, 10, staleLower);
-        village.registerStructure(structure, room(100, 10, 0, true));
+        registerStructure(village, structure, room(100, 10, 0, true));
 
         StructureFloor upper = new StructureFloor(1, 91, 94, 0, region(91), List.of(
                 new FloorConnector.Marker(new BlockPos(0, 91, 0), FloorConnector.Type.LADDER)));
@@ -297,7 +349,7 @@ class VillageFloorSystemTest {
     void walkableStoreyEvidenceCanProveStairFloorAttachment() {
         Village village = new Village(1, null);
         StructureFloor lower = new StructureFloor(0, 88, 91, 0, region(88));
-        village.registerStructure(structure(10, 10, lower), room(100, 10, 0, true));
+        registerStructure(village, structure(10, 10, lower), room(100, 10, 0, true));
 
         StructureFloor upper = new StructureFloor(1, 91, 94, 0, region(91));
         List<FloorGeometry> connectedFloors = List.of(
@@ -315,8 +367,8 @@ class VillageFloorSystemTest {
                 new StructureFloor(0, 88, 93, 0, region(88)));
         Structure upper = structure(11, 10,
                 new StructureFloor(0, 91, 94, 0, region(91)));
-        village.registerStructure(lower, room(100, 10, 0, true));
-        village.registerStructure(upper, room(101, 11, 0, true));
+        registerStructure(village, lower, room(100, 10, 0, true));
+        registerStructure(village, upper, room(101, 11, 0, true));
 
         village.refreshLogicalBuildings();
 
@@ -333,7 +385,7 @@ class VillageFloorSystemTest {
         Village village = new Village(1, null);
         Structure staleLower = structure(10, 10,
                 new StructureFloor(0, 88, 93, 0, region(88)));
-        village.registerStructure(staleLower, room(100, 10, 0, true));
+        registerStructure(village, staleLower, room(100, 10, 0, true));
 
         Structure upper = structure(-1, 10,
                 new StructureFloor(0, 91, 94, 0, region(91)));
@@ -351,8 +403,8 @@ class VillageFloorSystemTest {
                 new FloorConnector.Marker(new BlockPos(0, 64, 0), FloorConnector.Type.LADDER)));
         StructureFloor basementFloor = new StructureFloor(0, 60, 64, -1, region(60), List.of(
                 new FloorConnector.Marker(new BlockPos(0, 60, 0), FloorConnector.Type.LADDER)));
-        village.registerStructure(structure(10, 10, groundFloor), room(100, 10, 0, true));
-        village.registerStructure(structure(11, 10, basementFloor), room(101, 11, 0, true));
+        registerStructure(village, structure(10, 10, groundFloor), room(100, 10, 0, true));
+        registerStructure(village, structure(11, 10, basementFloor), room(101, 11, 0, true));
         village.refreshLogicalBuildings();
 
         StructureFloor rescannedGroundFloor = new StructureFloor(1, 64, 68, 0, region(64), List.of(
@@ -368,13 +420,13 @@ class VillageFloorSystemTest {
     @Test
     void interactionRoomLookupFallsBackToPhysicalRoomGeometryWithoutRecursing() {
         Village village = new Village(1, null);
-        Structure structure = structure(10, 10,
-                new StructureFloor(0, 64, 68, 0, region(64)));
-        Building room = room(100, 10, 0, true);
         BuildingFloorRegion legacyRegion = BuildingFloorRegion.fromFootprint(64, Set.of(
                 new BlockPos(10, 64, 10)));
+        Structure structure = structure(10, 10,
+                new StructureFloor(0, 64, 68, 0, legacyRegion));
+        Building room = room(100, 10, 0, true);
         room.setGeometry(new BlockPos(10, 64, 10), new BlockPos(10, 67, 10), legacyRegion);
-        village.registerStructure(structure, room);
+        registerStructure(village, structure, room);
 
         assertEquals(room, village.findInteractionRoomAt(new BlockPos(10, 64, 10)).orElseThrow());
     }
@@ -386,7 +438,7 @@ class VillageFloorSystemTest {
         Structure structure = structure(10, 10, floor);
         Building room = room(100, 10, 0, true);
         room.setGeometry(new BlockPos(0, 64, 0), new BlockPos(1, 67, 1), region(64));
-        village.registerStructure(structure, room);
+        registerStructure(village, structure, room);
 
         BlockPos supportBlock = new BlockPos(0, 63, 0);
         assertTrue(village.findPhysicalRoomAt(supportBlock).isEmpty());
@@ -419,7 +471,7 @@ class VillageFloorSystemTest {
                 new StructureFloor(3, 64, 70, -1, region(64)),
                 new StructureFloor(7, 74, 80, 0, region(74)),
                 new StructureFloor(9, 84, 90, 1, region(84)));
-        village.registerStructure(structure, room(100, 10, 7, true));
+        registerStructure(village, structure, room(100, 10, 7, true));
 
         assertTrue(structure.replaceFloorGeometry(7,
                 new StructureFloor(0, 75, 82, region(75))));
@@ -440,7 +492,7 @@ class VillageFloorSystemTest {
                 new StructureFloor(4, 76, 80, 1, region(76)),
                 new StructureFloor(5, 80, 84, 2, region(80)));
         Building main = room(100, 10, 3, true);
-        village.registerStructure(structure, main);
+        registerStructure(village, structure, main);
         village.refreshLogicalBuildings();
 
         assertTrue(village.canRemoveFloor(10, -2));
@@ -469,8 +521,8 @@ class VillageFloorSystemTest {
         Structure second = structure(11, 10,
                 new StructureFloor(0, 60, 64, -1, region(60)),
                 new StructureFloor(1, 64, 68, 0, region(64)));
-        village.registerStructure(first, room(100, 10, 1, true));
-        village.registerStructure(second, room(101, 11, 1, true));
+        registerStructure(village, first, room(100, 10, 1, true));
+        registerStructure(village, second, room(101, 11, 1, true));
         village.refreshLogicalBuildings();
 
         assertTrue(village.canRemoveFloor(10, -1));
@@ -491,8 +543,8 @@ class VillageFloorSystemTest {
         Structure second = structure(20, 20,
                 new StructureFloor(0, 64, 68, 0, region(64)),
                 new StructureFloor(1, 72, 76, 1, region(72)));
-        village.registerStructure(first, room(100, 10, 0, true));
-        village.registerStructure(second, room(200, 20, 0, true));
+        registerStructure(village, first, room(100, 10, 0, true));
+        registerStructure(village, second, room(200, 20, 0, true));
         village.refreshLogicalBuildings();
 
         assertTrue(village.removeFloor(10, 1));
@@ -509,8 +561,8 @@ class VillageFloorSystemTest {
                 new StructureFloor(1, 72, 76, 1, region(72)));
         Building main = room(100, 10, 0, true);
         Building upperRoom = room(101, 10, 1, true);
-        village.registerStructure(structure, main);
-        village.registerRoom(upperRoom);
+        registerStructure(village, structure, main);
+        registerRoom(village, upperRoom);
         village.refreshLogicalBuildings();
 
         assertTrue(village.removeRoom(101));
@@ -531,8 +583,8 @@ class VillageFloorSystemTest {
                 new StructureFloor(2, 80, 84, 2, region(80)));
         Building main = room(100, 10, 0, true);
         Building middleRoom = room(101, 10, 1, true);
-        village.registerStructure(structure, main);
-        village.registerRoom(middleRoom);
+        registerStructure(village, structure, main);
+        registerRoom(village, middleRoom);
         village.refreshLogicalBuildings();
 
         assertTrue(village.removeRoom(101));
@@ -559,7 +611,7 @@ class VillageFloorSystemTest {
         Structure current = structure(10, 10, oldFloor);
         Building main = room(100, 10, 0, true);
         main.setGeometry(new BlockPos(0, 64, 0), new BlockPos(1, 67, 0), oldRegion);
-        village.registerStructure(current, main);
+        registerStructure(village, current, main);
 
         BuildingFloorRegion freshRegion = BuildingFloorRegion.fromFootprint(64, Set.of(
                 new BlockPos(0, 64, 0), new BlockPos(1, 64, 0),
@@ -581,9 +633,9 @@ class VillageFloorSystemTest {
 
     private static Village populatedVillage() {
         Village village = new Village(1, null);
-        village.registerStructure(structure(10, 10), room(1, 10, 0, true));
-        village.registerRoom(room(2, 10, 0, true));
-        village.registerRoom(room(3, 10, 0, false));
+        registerStructure(village, structure(10, 10), room(1, 10, 0, true));
+        registerRoom(village, room(2, 10, 0, true));
+        registerRoom(village, room(3, 10, 0, false));
         village.refreshLogicalBuildings();
         return village;
     }
@@ -645,5 +697,39 @@ class VillageFloorSystemTest {
         room.setFloorId(floorId);
         room.setContributesToMain(contributes);
         return room;
+    }
+
+    private static void registerStructure(Village village, Structure structure, Building room) {
+        ensureRoomOwnership(structure, room);
+        village.registerStructure(structure, room);
+    }
+
+    private static void registerRoom(Village village, Building room) {
+        Structure structure = village.getStructure(room.getStructureId()).orElseThrow();
+        ensureRoomOwnership(structure, room);
+        village.registerRoom(room);
+    }
+
+    private static void ensureRoomOwnership(Structure structure, Building room) {
+        if (!room.getFloorCells().isEmpty()) return;
+        StructureFloor floor = structure.getFloor(room.getFloorId()).orElseThrow();
+        BlockPos cell = floor.geometry().cells().stream()
+                .map(FloorGeometry.Cell::feet)
+                .sorted(java.util.Comparator.comparingInt((BlockPos pos) -> pos.getX())
+                        .thenComparingInt(BlockPos::getZ)
+                        .thenComparingInt(BlockPos::getY))
+                .findFirst()
+                .orElseThrow();
+        room.setGeometry(cell, cell, Set.of(cell));
+    }
+
+    private static void setRoomCells(Building room, Set<BlockPos> cells) {
+        BlockPos min = cells.stream().reduce((a, b) -> new BlockPos(
+                Math.min(a.getX(), b.getX()), Math.min(a.getY(), b.getY()), Math.min(a.getZ(), b.getZ())))
+                .orElse(BlockPos.ZERO);
+        BlockPos max = cells.stream().reduce((a, b) -> new BlockPos(
+                Math.max(a.getX(), b.getX()), Math.max(a.getY(), b.getY()), Math.max(a.getZ(), b.getZ())))
+                .orElse(BlockPos.ZERO);
+        room.setGeometry(min, max, cells);
     }
 }

@@ -43,27 +43,40 @@ final class RoomDFU {
         Map<Integer, Building> rooms = new HashMap<>();
         for (Tag value : villageTag.getList("buildings", Tag.TAG_COMPOUND)) {
             Building room = new Building((CompoundTag) value);
-            rooms.put(room.getId(), room);
+            if (room.getFloorCells().isEmpty()) {
+                throw new IllegalArgumentException("Room " + room.getId()
+                        + " has empty canonical floor-cell ownership");
+            }
+            putUnique(rooms, room.getId(), room, "Room");
         }
 
         Map<Integer, ExternalBuilding> external = new HashMap<>();
         for (Tag value : villageTag.getList("externalBuildings", Tag.TAG_COMPOUND)) {
             ExternalBuilding building = new ExternalBuilding((CompoundTag) value);
-            external.put(building.getId(), building);
+            if (rooms.containsKey(building.getId())) {
+                throw new IllegalArgumentException("Duplicate canonical building id " + building.getId());
+            }
+            putUnique(external, building.getId(), building, "External building");
         }
 
         Map<Integer, Structure> structures = new HashMap<>();
         for (Tag value : villageTag.getList("structures", Tag.TAG_COMPOUND)) {
             Structure structure = new Structure((CompoundTag) value);
-            structures.put(structure.getId(), structure);
+            putUnique(structures, structure.getId(), structure, "Structure");
         }
 
         Map<Integer, LogicalBuilding> logicalBuildings = new HashMap<>();
         for (Tag value : villageTag.getList("logicalBuildings", Tag.TAG_COMPOUND)) {
             LogicalBuilding logical = new LogicalBuilding((CompoundTag) value);
-            logicalBuildings.put(logical.id(), logical);
+            putUnique(logicalBuildings, logical.id(), logical, "Logical building");
         }
         return new Result(rooms, external, structures, logicalBuildings);
+    }
+
+    private static <T> void putUnique(Map<Integer, T> target, int id, T value, String kind) {
+        if (target.putIfAbsent(id, value) != null) {
+            throw new IllegalArgumentException("Duplicate canonical " + kind + " id " + id);
+        }
     }
 
     private static Result migrateUpstreamFloorCleanSquash(CompoundTag villageTag) {

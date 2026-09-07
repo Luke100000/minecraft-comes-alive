@@ -88,11 +88,11 @@ class BlueprintMapGeometryTest {
 
         Structure upperStructure = structure(12, 10, 68, 1);
         Building upperRoom = room(3, 12, 0, new BlockPos(2, 68, 0));
-        village.registerStructure(upperStructure, upperRoom);
+        registerStructure(village, upperStructure, upperRoom);
 
         Structure basementStructure = structure(11, 10, 60, -1);
         Building basementRoom = room(2, 11, 0, new BlockPos(1, 60, 0));
-        village.registerStructure(basementStructure, basementRoom);
+        registerStructure(village, basementStructure, basementRoom);
 
         BlueprintMapGeometry map = BlueprintMapGeometry.build(village, null);
         BlueprintMapGeometry.MapGeometry basement = map.get(-1);
@@ -144,7 +144,7 @@ class BlueprintMapGeometryTest {
                 new FloorConnector.Marker(
                         new BlockPos(1, 60, 0), FloorConnector.Type.DOOR));
         Building basementRoom = room(2, 11, 0, new BlockPos(1, 60, 0));
-        village.registerStructure(basementStructure, basementRoom);
+        registerStructure(village, basementStructure, basementRoom);
 
         BlueprintMapGeometry map = BlueprintMapGeometry.build(village, null);
         BlueprintMapGeometry.MapGeometry allFloors = map.get(null);
@@ -224,6 +224,8 @@ class BlueprintMapGeometryTest {
         fromFootprint.setAccessible(true);
         Set<BlockPos> cells = new LinkedHashSet<>();
         cells.add(new BlockPos(0, anchorY, 0));
+        cells.add(new BlockPos(1, anchorY, 0));
+        cells.add(new BlockPos(2, anchorY, 0));
         for (FloorConnector.Marker connector : connectors) {
             cells.add(connector.pos());
         }
@@ -242,6 +244,15 @@ class BlueprintMapGeometryTest {
     }
 
     private static void registerStructure(Village village, Structure structure, Building room) throws Exception {
+        if (room.getFloorCells().isEmpty()) {
+            StructureFloor floor = structure.getFloor(room.getFloorId()).orElseThrow();
+            BlockPos source = room.getSourceBlock();
+            BlockPos cell = new BlockPos(source.getX(), floor.anchorY(), source.getZ());
+            Method setGeometry = Building.class.getDeclaredMethod(
+                    "setGeometry", BlockPos.class, BlockPos.class, java.util.Collection.class);
+            setGeometry.setAccessible(true);
+            setGeometry.invoke(room, cell, cell, Set.of(cell));
+        }
         Method register = Village.class.getDeclaredMethod("registerStructure", Structure.class, Building.class);
         register.setAccessible(true);
         register.invoke(village, structure, room);

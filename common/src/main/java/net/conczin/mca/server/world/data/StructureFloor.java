@@ -136,6 +136,12 @@ public record StructureFloor(int id, int floorNumber, FloorGeometry geometry) {
     private static FloorGeometry.Cell loadCell(CompoundTag tag) {
         BlockPos pos = NbtHelper.decodeBlockPos(tag.get("pos"));
         if (pos == null) throw new IllegalArgumentException("FloorGeometry cell is missing pos");
+        if (!tag.contains("surfaceY", Tag.TAG_DOUBLE)) {
+            throw new IllegalArgumentException("FloorGeometry cell is missing surfaceY");
+        }
+        if (!tag.contains("ceilingY", Tag.TAG_INT)) {
+            throw new IllegalArgumentException("FloorGeometry cell is missing ceilingY");
+        }
         return new FloorGeometry.Cell(pos, tag.getDouble("surfaceY"), tag.getInt("ceilingY"));
     }
 

@@ -208,7 +208,9 @@ class BlueprintTooltipHierarchyTest {
         Method registerStructure = Village.class.getDeclaredMethod(
                 "registerStructure", Structure.class, Building.class);
         registerStructure.setAccessible(true);
+        setRoomGeometry(ground, new BlockPos(0, 64, 0));
         registerStructure.invoke(village, structure, ground);
+        setRoomGeometry(upper, new BlockPos(0, 68, 0));
         village.registerRoom(upper);
         return new Fixture(village, ground, upper);
     }

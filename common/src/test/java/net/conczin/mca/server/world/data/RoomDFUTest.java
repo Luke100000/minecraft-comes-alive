@@ -225,6 +225,100 @@ class RoomDFUTest {
     }
 
     @Test
+    void canonicalRoomWithEmptyFloorCellsIsRejectedAtDfuBoundary() {
+        CompoundTag malformed = canonicalVillage().save();
+        malformed.getList("buildings", net.minecraft.nbt.Tag.TAG_COMPOUND)
+                .getCompound(0).put("floorCells", new ListTag());
+
+        assertThrows(IllegalArgumentException.class, () -> RoomDFU.load(malformed));
+    }
+
+    @Test
+    void duplicateCanonicalRoomIdsAreRejectedBeforeMapInsertion() {
+        CompoundTag malformed = canonicalVillage().save();
+        duplicateFirst(malformed.getList("buildings", net.minecraft.nbt.Tag.TAG_COMPOUND));
+
+        assertThrows(IllegalArgumentException.class, () -> RoomDFU.load(malformed));
+    }
+
+    @Test
+    void duplicateCanonicalExternalBuildingIdsAreRejectedBeforeMapInsertion() {
+        Village village = canonicalVillage();
+        ExternalBuilding external = new ExternalBuilding(new BlockPos(20, 64, 20));
+        external.setId(30);
+        external.setType("graveyard");
+        village.registerExternalBuilding(external);
+        CompoundTag malformed = village.save();
+        duplicateFirst(malformed.getList("externalBuildings", net.minecraft.nbt.Tag.TAG_COMPOUND));
+
+        assertThrows(IllegalArgumentException.class, () -> RoomDFU.load(malformed));
+    }
+
+    @Test
+    void duplicateCanonicalStructureIdsAreRejectedBeforeMapInsertion() {
+        CompoundTag malformed = canonicalVillage().save();
+        duplicateFirst(malformed.getList("structures", net.minecraft.nbt.Tag.TAG_COMPOUND));
+
+        assertThrows(IllegalArgumentException.class, () -> RoomDFU.load(malformed));
+    }
+
+    @Test
+    void duplicateCanonicalLogicalBuildingIdsAreRejectedBeforeMapInsertion() {
+        CompoundTag malformed = canonicalVillage().save();
+        duplicateFirst(malformed.getList("logicalBuildings", net.minecraft.nbt.Tag.TAG_COMPOUND));
+
+        assertThrows(IllegalArgumentException.class, () -> RoomDFU.load(malformed));
+    }
+
+    @Test
+    void canonicalFloorCellMissingSurfaceYIsRejectedAtDfuBoundary() {
+        CompoundTag malformed = canonicalVillage().save();
+        firstCanonicalFloorCell(malformed).remove("surfaceY");
+
+        assertThrows(IllegalArgumentException.class, () -> RoomDFU.load(malformed));
+    }
+
+    @Test
+    void canonicalFloorCellMissingCeilingYIsRejectedAtDfuBoundary() {
+        CompoundTag malformed = canonicalVillage().save();
+        firstCanonicalFloorCell(malformed).remove("ceilingY");
+
+        assertThrows(IllegalArgumentException.class, () -> RoomDFU.load(malformed));
+    }
+
+    @Test
+    void canonicalFloorCellRejectsNonFiniteSurface() {
+        CompoundTag malformed = canonicalVillage().save();
+        firstCanonicalFloorCell(malformed).putDouble("surfaceY", Double.NaN);
+
+        assertThrows(IllegalArgumentException.class, () -> RoomDFU.load(malformed));
+    }
+
+    @Test
+    void canonicalFloorCellRejectsSurfaceBelowFeet() {
+        CompoundTag malformed = canonicalVillage().save();
+        firstCanonicalFloorCell(malformed).putDouble("surfaceY", 63.5D);
+
+        assertThrows(IllegalArgumentException.class, () -> RoomDFU.load(malformed));
+    }
+
+    @Test
+    void canonicalFloorCellRejectsSurfaceAtOrAboveCeiling() {
+        CompoundTag malformed = canonicalVillage().save();
+        firstCanonicalFloorCell(malformed).putDouble("surfaceY", 68.0D);
+
+        assertThrows(IllegalArgumentException.class, () -> RoomDFU.load(malformed));
+    }
+
+    @Test
+    void canonicalFloorCellRejectsCeilingAtOrBelowFeet() {
+        CompoundTag malformed = canonicalVillage().save();
+        firstCanonicalFloorCell(malformed).putInt("ceilingY", 64);
+
+        assertThrows(IllegalArgumentException.class, () -> RoomDFU.load(malformed));
+    }
+
+    @Test
     void canonicalLogicalBuildingMissingInheritanceIsRejectedAtDfuBoundary() {
         CompoundTag malformed = canonicalVillage().save();
         malformed.getList("logicalBuildings", net.minecraft.nbt.Tag.TAG_COMPOUND)
@@ -326,6 +420,19 @@ class RoomDFUTest {
         ListTag list = new ListTag();
         for (CompoundTag tag : tags) list.add(tag);
         return list;
+    }
+
+    private static void duplicateFirst(ListTag list) {
+        list.add(list.getCompound(0).copy());
+    }
+
+    private static CompoundTag firstCanonicalFloorCell(CompoundTag village) {
+        return village.getList("structures", net.minecraft.nbt.Tag.TAG_COMPOUND)
+                .getCompound(0)
+                .getList("floors", net.minecraft.nbt.Tag.TAG_COMPOUND)
+                .getCompound(0)
+                .getList("cells", net.minecraft.nbt.Tag.TAG_COMPOUND)
+                .getCompound(0);
     }
 
     private static CompoundTag legacyRegion(int anchorY, Set<BlockPos> cells) {

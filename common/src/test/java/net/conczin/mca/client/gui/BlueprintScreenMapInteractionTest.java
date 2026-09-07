@@ -455,7 +455,7 @@ class BlueprintScreenMapInteractionTest {
         Building main = room(1);
         registerStructure(village, structure, main);
         Building sideRoom = room(2);
-        village.registerRoom(sideRoom);
+        registerRoom(village, sideRoom);
 
         BlueprintScreen.InheritanceControlState before =
                 BlueprintScreen.inheritanceControlState(village, sideRoom);
@@ -716,8 +716,22 @@ class BlueprintScreenMapInteractionTest {
     }
 
     private static void registerStructure(Village village, Structure structure, Building room) throws Exception {
+        ensureRoomOwnership(structure, room);
         Method register = Village.class.getDeclaredMethod("registerStructure", Structure.class, Building.class);
         register.setAccessible(true);
         register.invoke(village, structure, room);
+    }
+
+    private static void registerRoom(Village village, Building room) throws Exception {
+        Structure structure = village.getStructure(room.getStructureId()).orElseThrow();
+        ensureRoomOwnership(structure, room);
+        village.registerRoom(room);
+    }
+
+    private static void ensureRoomOwnership(Structure structure, Building room) throws Exception {
+        if (!room.getFloorCells().isEmpty()) return;
+        StructureFloor floor = structure.getFloor(room.getFloorId()).orElseThrow();
+        BlockPos cell = floor.region().cells().iterator().next();
+        setRoomGeometry(room, cell);
     }
 }

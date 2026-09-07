@@ -151,6 +151,16 @@ final class FloorGeometry {
 
     record Cell(BlockPos feet, double surfaceY, int ceilingY) {
         Cell {
+            Objects.requireNonNull(feet, "feet");
+            if (!Double.isFinite(surfaceY)) {
+                throw new IllegalArgumentException("FloorGeometry cell surface must be finite");
+            }
+            if (ceilingY <= feet.getY()) {
+                throw new IllegalArgumentException("FloorGeometry cell ceiling must be above feet");
+            }
+            if (surfaceY < feet.getY() || surfaceY >= ceilingY) {
+                throw new IllegalArgumentException("FloorGeometry cell surface must be within its physical height");
+            }
             feet = feet.immutable();
         }
     }

@@ -71,8 +71,8 @@ class RoomTypeResolverTest {
         upperStructure.setLogicalBuildingId(10);
 
         Village village = new Village(1, null);
-        village.registerStructure(groundStructure, main);
-        village.registerStructure(upperStructure, upper);
+        registerStructure(village, groundStructure, main);
+        registerStructure(village, upperStructure, upper);
         village.refreshLogicalBuildings();
 
         RoomTypeResolver.Context context = RoomTypeResolver.create(village).resolve(main);
@@ -98,9 +98,9 @@ class RoomTypeResolverTest {
         restaurant.setLogicalBuildingId(20);
 
         Village village = new Village(1, null);
-        village.registerStructure(innGround, innMain);
-        village.registerStructure(innUpperStructure, innUpper);
-        village.registerStructure(restaurant, restaurantMain);
+        registerStructure(village, innGround, innMain);
+        registerStructure(village, innUpperStructure, innUpper);
+        registerStructure(village, restaurant, restaurantMain);
         village.refreshLogicalBuildings();
 
         RoomTypeResolver.Context context = RoomTypeResolver.create(village).resolve(innMain);
@@ -120,9 +120,9 @@ class RoomTypeResolverTest {
         Structure structure = new Structure(10, BlockPos.ZERO, List.of(floor(64, 68)));
         structure.setLogicalBuildingId(10);
         Village village = new Village(1, null);
-        village.registerStructure(structure, main);
-        village.registerRoom(contributor);
-        village.registerRoom(independent);
+        registerStructure(village, structure, main);
+        registerRoom(village, contributor);
+        registerRoom(village, independent);
         LogicalBuilding logical = village.getLogicalBuilding(10).orElseThrow();
         logical.setInheritanceEnabled(inheritanceEnabled);
         return new Fixture(village, logical, List.of(main, contributor, independent), main, contributor, independent);
@@ -141,6 +141,24 @@ class RoomTypeResolverTest {
     private static StructureFloor floor(int anchorY, int ceilingY) {
         return new StructureFloor(0, anchorY, ceilingY,
                 BuildingFloorRegion.fromFootprint(anchorY, Set.of(new BlockPos(0, anchorY, 0))));
+    }
+
+    private static void registerStructure(Village village, Structure structure, Building room) {
+        ensureRoomOwnership(structure, room);
+        village.registerStructure(structure, room);
+    }
+
+    private static void registerRoom(Village village, Building room) {
+        Structure structure = village.getStructure(room.getStructureId()).orElseThrow();
+        ensureRoomOwnership(structure, room);
+        village.registerRoom(room);
+    }
+
+    private static void ensureRoomOwnership(Structure structure, Building room) {
+        if (!room.getFloorCells().isEmpty()) return;
+        StructureFloor floor = structure.getFloor(room.getFloorId()).orElseThrow();
+        BlockPos cell = floor.geometry().cells().iterator().next().feet();
+        room.setGeometry(cell, cell, Set.of(cell));
     }
 
     private record Fixture(Village village,
