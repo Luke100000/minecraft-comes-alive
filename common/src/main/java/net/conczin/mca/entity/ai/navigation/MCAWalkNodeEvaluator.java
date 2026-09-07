@@ -359,8 +359,14 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
 
     private boolean canSweepStartBoxTo(Node candidate, AABB startBox) {
         AABB destinationBox = getMobBoxAt(candidate);
-        if (destinationBox.minY > startBox.minY + RAISED_START_EPSILON) {
-            return true;
+        AABB sweepBox = startBox;
+        double rise = destinationBox.minY - startBox.minY;
+        if (rise > RAISED_START_EPSILON) {
+            AABB verticalSweep = startBox.expandTowards(0.0D, rise, 0.0D);
+            if (!this.currentContext.level().noBlockCollision(this.mob, verticalSweep)) {
+                return false;
+            }
+            sweepBox = startBox.move(0.0D, rise, 0.0D);
         }
 
         Vec3 travel = new Vec3(
@@ -374,7 +380,6 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
         }
 
         Vec3 step = travel.scale(1.0D / steps);
-        AABB sweepBox = startBox;
         for (int index = 0; index < steps; index++) {
             sweepBox = sweepBox.move(step);
             if (!this.currentContext.level().noBlockCollision(this.mob, sweepBox)) {
